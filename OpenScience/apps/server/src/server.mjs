@@ -3524,6 +3524,7 @@ export function createWebApiApp(overrides = {}) {
     config,
     store,
     runtimeManager,
+    agentRegistry,
     usageLedger,
     authorizePrompt: assertPublicSessionPrompt,
     authorizeMutation: maintenanceService ? (operation) => maintenanceService.withMutation(operation) : null,

@@ -266,8 +266,13 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         };
         const to = routes[String(message.destination)];
         if (!to) return;
+        // A brief from a capability card in the kernel's hero. Bounded here as
+        // well as in the frame: this is a message from another origin, and
+        // `newRuntimeUiIntent` hands whatever it is to the composer.
+        const draft = typeof message.draft === "string" && message.draft && message.draft.length <= 100_000
+          ? message.draft : undefined;
         incoming.current = message.seq;
-        navigate(to, to === "/app/chat" ? { state: { runtimeUiIntent: newRuntimeUiIntent() } } : undefined);
+        navigate(to, to === "/app/chat" ? { state: { runtimeUiIntent: newRuntimeUiIntent(draft) } } : undefined);
       } else if (message.type === "evimed.runtime-ui.ack") {
         const request = currentRequest.current;
         if (!request || message.requestId !== request.requestId || typeof message.ok !== "boolean"

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { CalendarClock, PauseCircle, PlayCircle, Plus, Sparkles } from "lucide-react";
 import { getWebProjectId } from "@/lib/apiClient";
 import { createAgenda, decideDigest, getDigest, listAgendas, listDigests, markDigestOpened, scheduleAgenda, startAgenda, stopAgenda,
   type AgendaRecord, type DigestClaim, type DigestRecord } from "@/lib/autopilotClient";
 import { productErrorMessage } from "@/lib/productClient";
+import { listInbox, type InboxItem } from "@/lib/inboxClient";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -187,6 +188,7 @@ function decisionLabel(digest: DigestRecord, claimId: string): string | null {
 }
 
 export function AutopilotPage() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const digestId = searchParams.get("digest");
   const [agendas, setAgendas] = useState<AgendaRecord[] | null>(null);
@@ -194,6 +196,7 @@ export function AutopilotPage() {
   const [selectedDigest, setSelectedDigest] = useState<DigestRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activityError, setActivityError] = useState<string | null>(null);
+  const [decisions, setDecisions] = useState<InboxItem[]>([]);
   const [followUp, setFollowUp] = useState<{ digestId: string; claimId: string; note: string } | null>(null);
   const [busy, setBusy] = useState(false);
   // The project the form creates in. `load` resolves its own project from the
@@ -220,6 +223,29 @@ export function AutopilotPage() {
       setAgendas([]); setDigests([]); setError(`主动科研状态不可用：${productErrorMessage(loadError)}`);
     }
   }, [digestId]);
+  // 「需要你决定」: the审阅 and 提问 items the inbox is holding. Read here as
+  // well as on the inbox page because §24.9 puts them in the morning briefing —
+  // a decision the loop is waiting on is the one thing on this page that is
+  // blocking tonight's work.
+  useEffect(() => {
+    let active = true;
+    void listInbox({ unread: true })
+      .then((page) => {
+        if (active) setDecisions(page.items.filter((item) => item.noticeType !== "notify").slice(0, 5));
+      })
+      .catch(() => { /* isolated: the briefing is the page, the inbox is a section of it */ });
+    return () => { active = false; };
+  }, []);
+
+  // The page IS the briefing (§24.9), so it opens on one. Addressing it in the
+  // URL rather than selecting it in state keeps every downstream behaviour —
+  // the read record, the decision calls, a link from a notification — on the
+  // one path they were written for.
+  useEffect(() => {
+    if (digestId || !digests.length) return;
+    setSearchParams({ digest: digests[0].id }, { replace: true });
+  }, [digestId, digests, setSearchParams]);
+
   useEffect(() => {
     const requests = generation;
     const views = digestView;
@@ -257,44 +283,107 @@ export function AutopilotPage() {
   const visibleDigests = selectedDigest ? [selectedDigest, ...digests.filter((digest) => digest.id !== selectedDigest.id)] : digests;
   const visibleError = error ?? activityError;
   const today = new Date().toISOString().slice(0, 10);
+
+  /**
+   * The briefing's opening line.
+   *
+   * Only what the records hold: the newest digest's date, what it cost, and
+   * how many findings and leads it carried. §24.9 also asks for the off-peak
+   * saving and a balance runway — neither is on this API, and the one place
+   * not to invent a number is the line a researcher reads before deciding
+   * whether to keep paying for last night.
+   */
+  const latest = digests[0];
+  const summaryLine = latest
+    ? `${latest.payload.date} 的简报：${latest.payload.headlines.length} 条重点发现 · `
+      + `${latest.payload.leads.length} 条待验证线索 · 花费 ¥${latest.payload.costCny}`
+    : "按研究议程运行受额度和停止规则约束的回合，结果仍走普通研究门禁。";
+
+  /**
+   * When the first briefing is due, said in the agenda's own words.
+   *
+   * An active agenda knows its hour and its zone, so the empty state can name
+   * them instead of saying "later". A paused one is waiting on the researcher,
+   * and saying so is the difference between "nothing has happened yet" and
+   * "nothing will happen until you press start".
+   */
+  const scheduled = (agendas ?? []).find((agenda) => agenda.payload.status === "active");
+  const firstRunHint = scheduled
+    ? `「${scheduled.payload.title}」将在每天 ${String(scheduled.payload.scheduleHour).padStart(2, "0")}:00`
+      + `（${scheduled.payload.timeZone}）运行一回合，完成后在这里汇总发现、变化与花费。`
+    : (agendas ?? []).length > 0
+      ? "议程目前是暂停的。按「开始主动科研」之后，它会按设定的时刻运行，第一份简报在那之后出现。"
+      : "完成的主动科研回合会在这里汇总发现、变化与花费。";
   return <main className="h-full overflow-y-auto px-5 py-6"><div className="mx-auto max-w-content-wide space-y-5">
     <header className="flex flex-wrap items-start justify-between gap-3">
-      <div><h1 className="font-serif text-title text-text">主动科研</h1><p className="mt-2 text-ui text-muted">按研究议程运行受额度和停止规则约束的回合，结果仍走普通研究门禁。</p></div>
+      <div>
+        <h1 className="font-serif text-title text-text">主动科研</h1>
+        {/* The one line §24.9 asks the briefing to open with, from numbers the
+          * ledger actually holds. The spec also wants off-peak savings and a
+          * balance runway; neither is on this API, and an invented figure on a
+          * briefing page is the kind a researcher acts on without checking. */}
+        <p className="mt-2 text-ui text-muted">{summaryLine}</p>
+      </div>
       <NewAgendaForm projectId={projectId} busy={busy} onCreated={() => void load()} onError={setError} />
     </header>
     {visibleError && <Card><div role="alert" className="flex items-center justify-between gap-3"><p className="text-ui text-error">{visibleError}</p>
       <Button size="sm" variant="ghost" onClick={() => void load()}>重试</Button></div></Card>}
-    {agendas === null ? <MemorySkeleton /> : agendas.length === 0 ? <EmptyState icon={CalendarClock} title="还没有主动科研议程" description="用右上角的「新建议程」写下方向、回合类型和三档预算。议程创建后默认暂停，只有你主动开始才会运行和产生费用。" />
-      : <section className="space-y-3" aria-label="研究议程">{agendas.map((agenda) => <Card key={agenda.id} title={agenda.payload.title}
-        hint={`${agenda.payload.status === "active" ? "运行中" : "已暂停"} · ${agenda.payload.topics.join("、")}`}><div className="space-y-3">
-        <p className="text-ui-sm text-muted">每日 ¥{agenda.payload.dailyBudgetCny} · 每周 ¥{agenda.payload.weeklyBudgetCny} · 单回合 ¥{agenda.payload.maxEpisodeCny}</p>
-        {agenda.payload.pauseReason && <p className="text-ui-sm text-muted">{agenda.payload.pauseReason}</p>}
-        {pendingFollowUps(agenda) > 0 && <p className="text-ui-sm text-muted">下一回合先回答 {pendingFollowUps(agenda)} 条追问。</p>}
-        <div className="flex flex-wrap gap-2">
-          {agenda.payload.status === "active" ? <><Button size="sm" disabled={busy} onClick={() => void mutate(() => scheduleAgenda(agenda.id, today))}><Sparkles size={13} />立即运行一回合</Button>
-            <Button size="sm" variant="ghost" disabled={busy} onClick={() => void mutate(() => stopAgenda(agenda.id, agenda.revision))}><PauseCircle size={13} />停止</Button></>
-            : <Button size="sm" disabled={busy} onClick={() => void mutate(() => startAgenda(agenda.id, agenda.revision))}><PlayCircle size={13} />开始主动科研</Button>}
-        </div></div></Card>)}</section>}
-    <section className="space-y-3" aria-label="晨间简报"><h2 className="font-serif text-body text-text">晨间简报</h2>
-      {agendas === null ? <MemorySkeleton /> : visibleDigests.length === 0 ? <EmptyState title="还没有简报" description="完成的主动科研回合会在这里汇总发现、变化与花费。" />
-        : visibleDigests.map((digest) => <Card key={digest.id} title={digest.payload.date} hint={`本期花费 ¥${digest.payload.costCny}`}><div className="space-y-4">
-          {selectedDigest?.id !== digest.id ? <Button size="sm" variant="ghost" onClick={() => setSearchParams({ digest: digest.id })}>查看简报</Button>
-            : [...digest.payload.headlines.map((claim) => ({ claim, kind: "重点发现" })), ...digest.payload.leads.map((claim) => ({ claim, kind: "待验证线索" }))].map(({ claim, kind }) => <div key={claim.id} className="rounded-input bg-surface-2 p-3">
-            <p className="text-caption text-muted">{kind}</p><p className="mt-1 text-ui text-text">{claim.statement}</p>
-            <ClaimVerification claim={claim} />
-            {decisionLabel(digest, claim.id) && <p className="mt-1 text-ui-sm text-muted">{decisionLabel(digest, claim.id)}</p>}
-            <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="ghost" aria-label={`采纳${claim.statement}`} disabled={busy} onClick={() => void mutate(() => decideDigest(digest.id, { action: "adopt", claimId: claim.id, note: "" }))}>采纳</Button>
-              <Button size="sm" variant="ghost" aria-label={`驳回${claim.statement}`} disabled={busy} onClick={() => void mutate(() => decideDigest(digest.id, { action: "reject", claimId: claim.id, note: "" }))}>驳回</Button>
-              <Button size="sm" variant="ghost" aria-label={`追问${claim.statement}`} disabled={busy} onClick={() => setFollowUp(followUp?.claimId === claim.id && followUp.digestId === digest.id ? null : { digestId: digest.id, claimId: claim.id, note: "" })}>追问</Button></div>
-            {followUp?.digestId === digest.id && followUp.claimId === claim.id && <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => {
-              event.preventDefault();
-              const note = followUp.note.trim();
-              if (!note) return;
-              void mutate(async () => { await decideDigest(digest.id, { action: "question", claimId: claim.id, note }); setFollowUp(null); });
-            }}>
-              <Input className="min-w-0 flex-1" label="追问" placeholder="想让下一回合先回答什么？" value={followUp.note} onChange={(event) => setFollowUp({ ...followUp, note: event.target.value })} />
-              <Button size="sm" type="submit" disabled={busy || !followUp.note.trim()}>发送追问</Button>
-            </form>}
-          </div>)}</div></Card>)}</section>
+
+    {/* The briefing leads, because the page is the briefing (§24.9). It used to
+      * open on an agenda board with the digests below it, and on 2026-09-15
+      * there was no board either — the page offered 开始 / 停止 / 立即运行 over
+      * a list that could only ever be empty (walk, B4/C4). */}
+    <section className="space-y-3" aria-label="晨间简报">
+      <h2 className="font-serif text-body text-text">晨间简报</h2>
+      {agendas === null ? <MemorySkeleton />
+        : visibleDigests.length === 0
+          ? <EmptyState icon={CalendarClock} title="还没有简报" description={firstRunHint} />
+          : visibleDigests.map((digest) => <Card key={digest.id} title={digest.payload.date} hint={`本期花费 ¥${digest.payload.costCny}`}><div className="space-y-4">
+            {selectedDigest?.id !== digest.id ? <Button size="sm" variant="ghost" onClick={() => setSearchParams({ digest: digest.id })}>查看简报</Button>
+              : [...digest.payload.headlines.map((claim) => ({ claim, kind: "重点发现" })), ...digest.payload.leads.map((claim) => ({ claim, kind: "待验证线索" }))].map(({ claim, kind }) => <div key={claim.id} className="rounded-input bg-surface-2 p-3">
+              <p className="text-caption text-muted">{kind}</p><p className="mt-1 text-ui text-text">{claim.statement}</p>
+              <ClaimVerification claim={claim} />
+              {decisionLabel(digest, claim.id) && <p className="mt-1 text-ui-sm text-muted">{decisionLabel(digest, claim.id)}</p>}
+              <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="ghost" aria-label={`采纳${claim.statement}`} disabled={busy} onClick={() => void mutate(() => decideDigest(digest.id, { action: "adopt", claimId: claim.id, note: "" }))}>采纳</Button>
+                <Button size="sm" variant="ghost" aria-label={`驳回${claim.statement}`} disabled={busy} onClick={() => void mutate(() => decideDigest(digest.id, { action: "reject", claimId: claim.id, note: "" }))}>驳回</Button>
+                <Button size="sm" variant="ghost" aria-label={`追问${claim.statement}`} disabled={busy} onClick={() => setFollowUp(followUp?.claimId === claim.id && followUp.digestId === digest.id ? null : { digestId: digest.id, claimId: claim.id, note: "" })}>追问</Button></div>
+              {followUp?.digestId === digest.id && followUp.claimId === claim.id && <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => {
+                event.preventDefault();
+                const note = followUp.note.trim();
+                if (!note) return;
+                void mutate(async () => { await decideDigest(digest.id, { action: "question", claimId: claim.id, note }); setFollowUp(null); });
+              }}>
+                <Input className="min-w-0 flex-1" label="追问" placeholder="想让下一回合先回答什么？" value={followUp.note} onChange={(event) => setFollowUp({ ...followUp, note: event.target.value })} />
+                <Button size="sm" type="submit" disabled={busy || !followUp.note.trim()}>发送追问</Button>
+              </form>}
+            </div>)}</div></Card>)}
+    </section>
+
+    {/* 「需要你决定」 (§24.9): the审阅 and 提问 items the inbox is holding. They
+      * are here because a decision the loop is waiting on is what blocks
+      * tonight's work; the inbox is still where they are resolved. */}
+    {decisions.length > 0 && <section className="space-y-2" aria-label="需要你决定">
+      <h2 className="font-serif text-body text-text">需要你决定</h2>
+      {decisions.map((item) => <Card key={item.id} title={item.title} hint={item.noticeType === "review" ? "需要审阅" : "等待回答"}>
+        <p className="text-ui text-muted">{item.body}</p>
+        <Button className="mt-2" size="sm" variant="ghost" onClick={() => navigate("/app/inbox")}>去收件箱处理</Button>
+      </Card>)}
+    </section>}
+
+    <section className="space-y-3" aria-label="研究议程">
+      <h2 className="font-serif text-body text-text">研究议程</h2>
+      {agendas === null ? <MemorySkeleton /> : agendas.length === 0
+        ? <EmptyState icon={CalendarClock} title="还没有主动科研议程" description="用右上角的「新建议程」写下方向、回合类型和三档预算。议程创建后默认暂停，只有你主动开始才会运行和产生费用。" />
+        : agendas.map((agenda) => <Card key={agenda.id} title={agenda.payload.title}
+          hint={`${agenda.payload.status === "active" ? "运行中" : "已暂停"} · ${agenda.payload.topics.join("、")}`}><div className="space-y-3">
+          <p className="text-ui-sm text-muted">每日 ¥{agenda.payload.dailyBudgetCny} · 每周 ¥{agenda.payload.weeklyBudgetCny} · 单回合 ¥{agenda.payload.maxEpisodeCny}</p>
+          {agenda.payload.pauseReason && <p className="text-ui-sm text-muted">{agenda.payload.pauseReason}</p>}
+          {pendingFollowUps(agenda) > 0 && <p className="text-ui-sm text-muted">下一回合先回答 {pendingFollowUps(agenda)} 条追问。</p>}
+          <div className="flex flex-wrap gap-2">
+            {agenda.payload.status === "active" ? <><Button size="sm" disabled={busy} onClick={() => void mutate(() => scheduleAgenda(agenda.id, today))}><Sparkles size={13} />立即运行一回合</Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => void mutate(() => stopAgenda(agenda.id, agenda.revision))}><PauseCircle size={13} />停止</Button></>
+              : <Button size="sm" disabled={busy} onClick={() => void mutate(() => startAgenda(agenda.id, agenda.revision))}><PlayCircle size={13} />开始主动科研</Button>}
+          </div></div></Card>)}
+    </section>
   </div></main>;
 }

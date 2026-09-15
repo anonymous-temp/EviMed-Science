@@ -2,7 +2,7 @@
 import { createServer } from "node:http";
 import { SEAMS } from "@evimed/harness-port";
 
-import { errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, runtimeUiMethodFromPath } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, capabilityBrief, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, runtimeUiMethodFromPath } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { HttpError, readBody } from "./security.mjs";
@@ -163,10 +163,10 @@ function destroyUpgrade(socket, status, code) {
 }
 
 /**
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null }} deps
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null }} deps
  * @returns {{ server: import('node:http').Server, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, usageLedger = null, authorizePrompt = null, authorizeMutation = null }) {
+export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, authorizeMutation = null }) {
   async function authorizePromptSession(project, payload) {
     if (!authorizePrompt) return;
     // The existing native wire uses payload.args.request on both HTTP RPC and
@@ -210,6 +210,46 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
     try { return runtimeUiOrigins(config).shellOrigin; } catch { return ""; }
   };
   const shellOrigin = noticeShellOrigin();
+
+  /**
+   * The capability cards the kernel's blank-session hero offers, resolved once.
+   *
+   * Carried in the frame's bootstrap object rather than fetched by the frame:
+   * the hero renders on first paint, and a card grid that arrives a round-trip
+   * later is a start screen that changes under the reader. It is also the only
+   * way the plugin can have them at all — its body is serialized with
+   * `toString()` into a browser bundle that may import nothing, and it sits on
+   * an origin with no session of ours.
+   *
+   * Names come from `@evimed/domain`'s display table, so the cards inside the
+   * frame and the 「科研能力」 page outside it say the same words. A capability
+   * the table has no name for is left out rather than shown by its id: a start
+   * screen is the wrong place to meet `dataset-research-scoping`.
+   *
+   * @returns {Promise<{ id: string, title: string, category: string, brief: string }[]>}
+   */
+  let capabilityCards = null;
+  async function heroCapabilities() {
+    if (capabilityCards) return capabilityCards;
+    if (!agentRegistry) return (capabilityCards = []);
+    try {
+      const registry = await agentRegistry;
+      capabilityCards = registry.list()
+        .map((agent) => ({ agent, display: CAPABILITY_DISPLAY[agent.id] }))
+        .filter((entry) => entry.display)
+        .map(({ agent, display }) => ({
+          id: agent.id,
+          title: display.title,
+          category: display.category,
+          brief: capabilityBrief(display.title, display.starterPrompts[0] ?? ""),
+        }))
+        .sort((left, right) => left.category.localeCompare(right.category, "zh") || left.title.localeCompare(right.title, "zh"));
+    } catch {
+      // A catalogue that cannot be read costs the cards, never the session.
+      capabilityCards = [];
+    }
+    return capabilityCards;
+  }
 
   /**
    * @param {any} req @param {any} res
@@ -290,7 +330,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
     if (pathname === "/__evimed_bootstrap.js" && ["GET", "HEAD"].includes(req.method)) {
       const { installRuntimeUiTransport } = await import("@evimed/harness-port/runtime-ui-transport");
       await revalidate();
-      const source = runtimeUiBootstrapSource({ version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix, shellOrigin: runtimeUiOrigins(config).shellOrigin, cwd: runtimeManager.runtimeWorkspaceRoot(project) }, installRuntimeUiTransport);
+      const source = runtimeUiBootstrapSource({ version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix, shellOrigin: runtimeUiOrigins(config).shellOrigin, cwd: runtimeManager.runtimeWorkspaceRoot(project), capabilities: await heroCapabilities() }, installRuntimeUiTransport);
       res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Content-Length": String(Buffer.byteLength(source)), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
       res.end(req.method === "HEAD" ? undefined : source);
       return;
