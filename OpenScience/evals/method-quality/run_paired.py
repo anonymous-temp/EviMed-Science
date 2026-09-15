@@ -577,6 +577,19 @@ class PlatformClient:
         url = f"{self.base}/api/memory/records/{urllib.parse.quote(record_id)}"
         return unwrap(self._call("PATCH", url, patch), "memory record update")
 
+    def memory_record_versions(self) -> dict[str, int]:
+        """Every structured memory record this account holds, id -> version.
+
+        There is no GET for one record; the list route is what exists, and one
+        call answers for all of an arm's ids at once."""
+        listed = unwrap(self._call("GET", f"{self.base}/api/memory/records?pageSize=200&status=active,pending,superseded,archived"), "memory records")
+        rows = listed if isinstance(listed, list) else (listed or {}).get("items") or []
+        versions: dict[str, int] = {}
+        for row in rows:
+            if isinstance(row, dict) and isinstance(row.get("id"), str) and isinstance(row.get("version"), int):
+                versions[row["id"]] = row["version"]
+        return versions
+
     def start_runtime(self) -> str:
         runtime_url = unwrap(self._call("POST", f"{self.base}/api/commands/start_runtime", {}, timeout=300), "start_runtime")
         if not isinstance(runtime_url, str) or not runtime_url.startswith("http"):
@@ -1408,6 +1421,29 @@ def plan_cells(config: dict[str, Any], briefs: dict[str, dict[str, Any]]) -> lis
     return [cell for pair in pairs for cell in pair]
 
 
+# The version each record was last left at BY THIS RUN, per record id.
+#
+# `expectedVersion` is an optimistic-concurrency precondition, and a paired
+# evaluation patches the same records once per cell — twelve times for a
+# 2x2x3 — so every write after the first sees a version one higher than the
+# one before. Read as a frozen constant it can only ever be right for the
+# first cell: on 2026-09-15 the first cell applied its arm, bumped all four
+# records 1 -> 2, and the remaining eleven died on `memory_conflict` before
+# dispatching anything.
+#
+# Keeping the config's number as the precondition for the FIRST write and the
+# server's returned version thereafter is what preserves the guard. Its point
+# is "refuse if somebody else changed this underneath us", and that still
+# fires: a third party's write moves the version past what this dict holds and
+# the next PATCH is refused.
+_APPLIED_RECORD_VERSIONS: dict[str, int] = {}
+
+
+def reset_applied_record_versions() -> None:
+    """Forget what this process wrote. Called by tests; a fresh run starts empty."""
+    _APPLIED_RECORD_VERSIONS.clear()
+
+
 def apply_method_snapshot(client: PlatformClient, arm: dict[str, Any], project_id: str, trial_ttl_ms: int = TRIAL_TTL_MS) -> dict[str, Any]:
     """Put the arm's state on the server before the run starts.
 
@@ -1423,12 +1459,44 @@ def apply_method_snapshot(client: PlatformClient, arm: dict[str, Any], project_i
     describe.
     """
     applied = []
-    for record in arm["methodSnapshot"]["records"]:
+    records = arm["methodSnapshot"]["records"]
+    unseen = [record["id"] for record in records if record["id"] not in _APPLIED_RECORD_VERSIONS]
+    if unseen:
+        # One list call, at the first use of any record in this process. The
+        # config's `expectedVersion` is what the author believed when they wrote
+        # it; the server's is what is true now, and a paired run that has already
+        # written these records once has moved it itself.
+        current = client.memory_record_versions()
+        for record in records:
+            if record["id"] in _APPLIED_RECORD_VERSIONS:
+                continue
+            seen = current.get(record["id"])
+            if seen is None:
+                raise EvalError(
+                    f"memory record {record['id']} is not in this account's records; "
+                    "an arm cannot be applied to a record the logged-in user does not hold",
+                )
+            if seen != record["expectedVersion"]:
+                # Reported, not fatal. The number in the config documents the
+                # state its author saw; the run is still a valid comparison as
+                # long as both arms write the same records, and the report
+                # carries what was actually found.
+                print(
+                    f"notice: {record['id']} is at version {seen}; the config expected "
+                    f"{record['expectedVersion']}. Using the server's.",
+                    file=sys.stderr,
+                )
+            _APPLIED_RECORD_VERSIONS[record["id"]] = seen
+    for record in records:
+        expected = _APPLIED_RECORD_VERSIONS[record["id"]]
         updated = client.patch_memory_record(record["id"], {
             "status": record["status"],
-            "expectedVersion": record["expectedVersion"],
+            "expectedVersion": expected,
         })
-        applied.append({"id": record["id"], "status": record["status"], "version": (updated or {}).get("version")})
+        version = (updated or {}).get("version")
+        if isinstance(version, int):
+            _APPLIED_RECORD_VERSIONS[record["id"]] = version
+        applied.append({"id": record["id"], "status": record["status"], "version": version, "expectedVersion": expected})
     trial_ids = arm["methodSnapshot"]["trialMethodIds"]
     trial: dict[str, Any]
     if trial_ids:
@@ -1681,6 +1749,9 @@ class PairedRunner:
         return record
 
     def execute(self, rerun: bool = False) -> list[dict[str, Any]]:
+        # A batch starts from what the server says, not from what a previous
+        # batch in this process left behind.
+        reset_applied_record_versions()
         plans = plan_cells(self.config, self.briefs)
         pending: list[dict[str, Any]] = []
         completed: list[dict[str, Any]] = []

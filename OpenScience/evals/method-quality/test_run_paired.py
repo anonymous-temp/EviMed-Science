@@ -33,6 +33,12 @@ class FakeBackend(runner.Transport):
     """
 
     def __init__(self, briefs, outcomes, artifacts=None, tool_calls=None):
+        # Every record this account holds starts at version 1; a PATCH moves it,
+        # exactly as the control plane's optimistic concurrency does. Listed
+        # explicitly rather than conjured on read: `apply_method_snapshot` stops
+        # when an arm names a record the account does not hold, and a store that
+        # invents one on demand could never exercise that.
+        self.memory_versions = {"mem_1": 1, "mem_2": 1}
         self.prompts = {runner.brief_prompt(brief): brief_id for brief_id, brief in briefs.items()}
         self.outcomes = outcomes
         self.artifacts = artifacts or {}
@@ -68,8 +74,16 @@ class FakeBackend(runner.Transport):
             return 200, {"data": {"id": body["id"]}}, {}
         if path == "/api/files/upload":
             return 200, {"data": {"path": body["filename"]}}, {}
+        if path == "/api/memory/records" and method == "GET":
+            # The version each record is at right now. `apply_method_snapshot`
+            # reads this once, at the first use of any record in the process.
+            with self.lock:
+                return 200, {"data": [{"id": name, "version": version} for name, version in self.memory_versions.items()]}, {}
         if path.startswith("/api/memory/records/"):
-            return 200, {"data": {"id": path.rsplit("/", 1)[-1], "version": body["expectedVersion"] + 1}}, {}
+            name = path.rsplit("/", 1)[-1]
+            with self.lock:
+                self.memory_versions[name] = body["expectedVersion"] + 1
+                return 200, {"data": {"id": name, "version": self.memory_versions[name]}}, {}
         if path == "/api/methods/trial" and method == "PUT":
             expires = "2099-01-01T00:00:00.000Z"
             with self.lock:
@@ -925,3 +939,116 @@ class JudgeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecordVersionTracking(unittest.TestCase):
+    """`expectedVersion` is a precondition, and a paired run writes the same
+    records once per cell. Frozen, it is right for exactly the first cell."""
+
+    def setUp(self):
+        runner.reset_applied_record_versions()
+
+    def test_the_first_write_reads_the_server_and_later_writes_use_what_came_back(self):
+        sent = []
+
+        class Client:
+            def memory_record_versions(self):
+                return {"rec_1": 1}
+
+            def patch_memory_record(self, record_id, patch):
+                sent.append((record_id, patch["status"], patch["expectedVersion"]))
+                return {"version": patch["expectedVersion"] + 1}
+
+            def clear_method_trial(self, _project_id):
+                pass
+
+        arm = lambda status: {"methodSnapshot": {
+            "records": [{"id": "rec_1", "status": status, "expectedVersion": 1}],
+            "trialMethodIds": [], "capabilitySkillsDir": None,
+        }}
+        client = Client()
+        runner.apply_method_snapshot(client, arm("active"), "p1")
+        runner.apply_method_snapshot(client, arm("pending"), "p1")
+        runner.apply_method_snapshot(client, arm("active"), "p1")
+        self.assertEqual([entry[2] for entry in sent], [1, 2, 3])
+
+    def test_a_third_party_write_still_refuses(self):
+        # The guard's whole point. This run wrote 2; someone else moved it to 5;
+        # the next PATCH sends 2 and the server refuses it.
+        refused = []
+
+        class Client:
+            def __init__(self):
+                self.server_version = 1
+
+            def memory_record_versions(self):
+                return {"rec_1": self.server_version}
+
+            def patch_memory_record(self, record_id, patch):
+                if patch["expectedVersion"] != self.server_version:
+                    refused.append(patch["expectedVersion"])
+                    raise runner.EvalError("HTTP 409: memory_conflict")
+                self.server_version += 1
+                return {"version": self.server_version}
+
+            def clear_method_trial(self, _project_id):
+                pass
+
+        arm = {"methodSnapshot": {
+            "records": [{"id": "rec_1", "status": "active", "expectedVersion": 1}],
+            "trialMethodIds": [], "capabilitySkillsDir": None,
+        }}
+        client = Client()
+        runner.apply_method_snapshot(client, arm, "p1")
+        client.server_version = 5
+        with self.assertRaises(runner.EvalError):
+            runner.apply_method_snapshot(client, arm, "p1")
+        self.assertEqual(refused, [2])
+
+    def test_a_config_version_that_no_longer_holds_is_reported_and_the_server_wins(self):
+        # The number in the config documents the state its author saw. A paired
+        # run that has already written these records once has moved it itself,
+        # so treating it as fatal would make the eval unrepeatable — and saying
+        # nothing would hide a record somebody else edited.
+        sent = []
+
+        class Client:
+            def memory_record_versions(self):
+                return {"rec_1": 7}
+
+            def patch_memory_record(self, record_id, patch):
+                sent.append(patch["expectedVersion"])
+                return {"version": patch["expectedVersion"] + 1}
+
+            def clear_method_trial(self, _project_id):
+                pass
+
+        arm = {"methodSnapshot": {
+            "records": [{"id": "rec_1", "status": "active", "expectedVersion": 2}],
+            "trialMethodIds": [], "capabilitySkillsDir": None,
+        }}
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            applied = runner.apply_method_snapshot(Client(), arm, "p1")
+        self.assertEqual(sent, [7])
+        self.assertEqual(applied["records"][0]["expectedVersion"], 7)
+        self.assertIn("the config expected 2", stderr.getvalue())
+
+    def test_a_record_the_account_does_not_hold_stops_the_run(self):
+        class Client:
+            def memory_record_versions(self):
+                return {}
+
+            def patch_memory_record(self, record_id, patch):
+                raise AssertionError("must not patch a record the account does not hold")
+
+            def clear_method_trial(self, _project_id):
+                pass
+
+        arm = {"methodSnapshot": {
+            "records": [{"id": "rec_missing", "status": "active", "expectedVersion": 1}],
+            "trialMethodIds": [], "capabilitySkillsDir": None,
+        }}
+        with self.assertRaises(runner.EvalError):
+            runner.apply_method_snapshot(Client(), arm, "p1")
+
