@@ -321,6 +321,11 @@ export class DshRuntimeAdapter {
     const pages = [];
     /** @type {number | undefined} */
     let beforeSeq;
+    // Whether the walk backwards reached the start of the session, as the
+    // kernel reports it. This is the only truthful truncation signal: the loop
+    // reads newest-first and stops when `hasMore` is false, so a run that ends
+    // with `hasMore` still true is one the page bound cut off.
+    let exhausted = false;
     for (let page = 0; page < maxPages; page += 1) {
       const value = await this.call(
         "session/page",
@@ -329,12 +334,12 @@ export class DshRuntimeAdapter {
       );
       const pageEntries = Array.isArray(value?.records) ? value.records : [];
       pages.unshift(pageEntries);
-      if (!value?.hasMore || !pageEntries.length) break;
+      if (!value?.hasMore || !pageEntries.length) { exhausted = true; break; }
       const firstSeq = Number(pageEntries[0]?.event?.seq ?? NaN);
       if (!Number.isFinite(firstSeq)) break;
       beforeSeq = firstSeq;
     }
-    return normalizeTranscript(sessionId, pages.flat());
+    return { ...normalizeTranscript(sessionId, pages.flat()), exhausted };
   }
 
   /** @param {{ sessionId: string, signal?: AbortSignal }} input @returns {Promise<Record<string, any>[]>} */

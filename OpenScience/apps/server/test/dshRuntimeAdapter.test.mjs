@@ -871,8 +871,29 @@ test("the transcript is read through to its head sequence, page by page, back to
   // earliest work as never done. Compared against the same records read in one
   // go, which is the property — "the walk loses nothing" — rather than a census
   // of one recording.
-  assert.deepEqual(transcript, normalizeTranscript(RECORDED_SESSION, golden.history));
+  assert.deepEqual(transcript, { ...normalizeTranscript(RECORDED_SESSION, golden.history), exhausted: true });
   assert.equal(transcript.lastSeq, head);
+  // Whether the walk reached the start of the session, said by the reader that
+  // did the walking. It is the only truthful truncation signal: the receipt
+  // used to derive one by comparing the highest event sequence against the
+  // highest message sequence, which differ on every session that ends on a
+  // turn-end, and so marked every finished run partial.
+  assert.equal(transcript.exhausted, true);
+});
+
+test("a walk stopped by the page bound says it did not reach the start", async () => {
+  // `hasMore` still true when the loop runs out of pages. The negative control
+  // for the assertion above: without it, a reader that always claimed to be
+  // exhausted would pass every case in this file.
+  const head = 9_999;
+  const page = { records: [{ event: { seq: 4_000, kind: "message" }, message: { id: "m", role: "assistant", parts: [] } }], hasMore: true };
+  const transport = scriptedTransport({
+    "session/list": { ok: true, value: { items: [{ sessionId: RECORDED_SESSION, projections: { asOfSeq: head } }] } },
+    "session/page": { ok: true, value: page },
+  });
+  const adapter = new DshRuntimeAdapter(transport);
+  const transcript = await adapter.transcript({ sessionId: RECORDED_SESSION, maxPages: 2 });
+  assert.equal(transcript.exhausted, false);
 });
 
 test("a session the kernel never heard of is said so, not returned as an empty run", async () => {

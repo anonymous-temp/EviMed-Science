@@ -3642,6 +3642,11 @@ export class RuntimeManager {
       const pages = [];
       /** @type {number | undefined} */
       let beforeSeq;
+      // Whether the walk backwards reached the start of the session. See the
+      // note on the adapter's copy: this is the only truthful truncation
+      // signal, and deriving one by comparing sequence numbers instead
+      // reported every finished run as truncated.
+      let exhausted = false;
       // 200 pages x 25 messages bounds a transcript at 5000 messages -- the
       // page shrink above must not quietly shrink the whole readable run.
       for (let page = 0; page < 200; page += 1) {
@@ -3676,12 +3681,12 @@ export class RuntimeManager {
         }
         const pageEntries = Array.isArray(value?.records) ? value.records : [];
         pages.unshift(pageEntries);
-        if (!value?.hasMore || !pageEntries.length) break;
+        if (!value?.hasMore || !pageEntries.length) { exhausted = true; break; }
         const firstSeq = Number(pageEntries[0]?.event?.seq ?? NaN);
         if (!Number.isFinite(firstSeq)) break;
         beforeSeq = firstSeq;
       }
-      return normalizeTranscript(sessionId, pages.flat());
+      return { ...normalizeTranscript(sessionId, pages.flat()), exhausted };
     } finally {
       this.endProxy(project);
     }

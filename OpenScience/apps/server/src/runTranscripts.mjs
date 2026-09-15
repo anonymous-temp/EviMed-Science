@@ -199,9 +199,23 @@ function describeSession(session) {
   const messages = transcript.messages ?? [];
   const lastSeq = Number.isSafeInteger(transcript.lastSeq) ? transcript.lastSeq : -1;
   const throughSeq = messages.length ? Math.max(...messages.map((message) => message.seq)) : -1;
-  // The kernel's own paging is what could have stopped early, and it says so by
-  // handing back a highest sequence below the one the session claims to hold.
-  const truncated = lastSeq >= 0 && throughSeq >= 0 && throughSeq < lastSeq;
+  // Whether the kernel's paging reached the start of the session, as the reader
+  // reports it.
+  //
+  // This used to be `throughSeq < lastSeq`, and those two numbers are taken
+  // over different populations: `lastSeq` is the highest sequence among ALL
+  // events the reader saw, `throughSeq` the highest among the MESSAGES the
+  // transcript exposes. A session almost always ends on a turn-end or a tool
+  // event rather than a message, so the test was true for essentially every
+  // finished run. Measured 2026-09-15 on a complete transcript of 41 messages:
+  // lastSeq 107, throughSeq 104, recorded `partial(page_bound)` with a claimed
+  // gap "from seq 105" that did not exist. Every run in the ledger carried it,
+  // which means the distillation corpus was entirely partial and a paired
+  // evaluation excluded all twelve of its cells for `transcript_partial`.
+  //
+  // The sequence numbers stay in the record: they are useful, and they are the
+  // evidence for this paragraph. They are not a truncation test.
+  const truncated = transcript.exhausted === false;
   return {
     record: {
       sessionId: session.sessionId,

@@ -33,13 +33,17 @@ function message(seq, text) {
   };
 }
 
-function transcript(sessionId, messages, { subagents = [], lastSeq } = {}) {
+function transcript(sessionId, messages, { subagents = [], lastSeq, exhausted = true } = {}) {
   return {
     sessionId,
     messages,
     turnEnd: null,
     subagents,
     lastSeq: lastSeq ?? (messages.length ? messages[messages.length - 1].seq : -1),
+    // What the reader says about whether it reached the start of the session.
+    // Defaulted true because that is what a normal read is; the truncated case
+    // passes false explicitly.
+    exhausted,
   };
 }
 
@@ -159,7 +163,7 @@ test("a subagent session that can no longer be read is recorded as a partial tra
 
 test("a session whose paging stopped short of its own head sequence is recorded as partial with the sequence it stopped at", () => {
   const runtime = delegatingRun();
-  const paged = transcript("ses_child_a", [message(3, "search"), message(4, "quote")], { lastSeq: 4210 });
+  const paged = transcript("ses_child_a", [message(3, "search"), message(4, "quote")], { lastSeq: 4210, exhausted: false });
   const sessions = [
     { sessionId: "ses_root", parentSessionId: null, label: "root", capability: null, error: null, transcript: runtime.sessions.get("ses_root") },
     { sessionId: "ses_child_a", parentSessionId: "ses_root", label: "subagent", capability: null, error: null, transcript: paged },
@@ -179,6 +183,30 @@ test("a session whose paging stopped short of its own head sequence is recorded 
     messages: 2,
     truncated: true,
   });
+});
+
+test("a session that ends on a non-message event is complete, not truncated", () => {
+  // The regression this file exists to hold. `lastSeq` counts ALL events and
+  // `throughSeq` only the messages, so a session ending on a turn-end or a tool
+  // event has `throughSeq < lastSeq` while missing nothing at all. Deriving
+  // truncation from that comparison marked essentially every finished run
+  // `partial(page_bound)`: measured in production on a complete transcript of
+  // 41 messages — lastSeq 107, throughSeq 104, a claimed gap from seq 105 that
+  // did not exist. The distillation corpus was entirely partial and a paired
+  // evaluation excluded all twelve of its cells because of it.
+  const ended = transcript("ses_root", [message(103, "answer"), message(104, "delivered")], { lastSeq: 107 });
+  const { header } = serializeRunTranscript({
+    runId: "run_ends_on_event",
+    capturedAt: CAPTURED_AT,
+    sessions: [{ sessionId: "ses_root", parentSessionId: null, label: "root", capability: null, error: null, transcript: ended }],
+  });
+  assert.equal(header.completeness, "complete");
+  assert.deepEqual(header.missing, []);
+  // The numbers stay on the record: they are useful, and they are the evidence
+  // for the paragraph above. They are just not a truncation test.
+  assert.equal(header.sessions[0].lastSeq, 107);
+  assert.equal(header.sessions[0].throughSeq, 104);
+  assert.equal(header.sessions[0].truncated, false);
 });
 
 test("a run whose root session yields nothing is unavailable rather than an empty success", () => {
