@@ -1808,10 +1808,17 @@ class PairedRunner:
                 record = self.run_cell(local.client, local.runtime_url, plan)
             except HiddenReferenceLeak:
                 raise
-            except (EvalError, KeyError, ValueError) as error:
+            except (EvalError, KeyError, ValueError, OSError) as error:
                 # Per-cell isolation: one unreachable server or one refused
                 # dispatch must not throw away the cells that already cost real
                 # model spend. `complete` stays false, so the next pass retries.
+                #
+                # `OSError` covers the socket and TLS failures that arrive raw
+                # rather than wrapped — `TimeoutError` and `ssl.SSLError` are
+                # both subclasses. One read timeout on a long poll ended a
+                # twelve-cell batch on 2026-09-15 after six cells had already
+                # been paid for, which is exactly the loss this clause exists
+                # to prevent and did not.
                 record = {
                     "schemaVersion": SCHEMA_VERSION,
                     "complete": False,
