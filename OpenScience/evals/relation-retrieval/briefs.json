@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "clinical-evidence-synthesis",
+  "note": "Three briefs for relation-addressed retrieval (literature_search `relation`, PubTator3). Each one is a question where keyword search returns co-mention and the relation returns assertion. The concept identifiers and the counts in `why` were read off the live PubTator3 API on 2026-09-15 and are the state of that index on that day, not a target: a run is graded on whether it addressed the retrieval correctly and reported what came back, never on reproducing a number. What these briefs exist to measure is the thing the 2026-09-15 ruling took from `dsh-pubmed` — whether a relation query finds evidence a keyword query misses, and whether a run can tell a sparse relation from a broken one.",
+  "briefs": [
+    {
+      "id": "relation-001-metformin-repurposing-oncology",
+      "title": "二甲双胍抗肿瘤的文献里,哪些是真的在讲治疗关系",
+      "why": "Repurposing questions are where keyword search is worst: `metformin AND cancer` returns every paper where a diabetic cohort happened to have tumours alongside every paper actually testing metformin as an antineoplastic. PubTator3 records `treat` between @CHEMICAL_Metformin and @DISEASE_Neoplasms in 2277 papers (2026-09-15); the keyword query returns an order of magnitude more, most of it co-mention. The brief measures whether the run reaches for the relation rather than filtering co-mention by hand.",
+      "inputs": {
+        "question": "二甲双胍作为抗肿瘤药物重定位的证据有多强?请只纳入真正把二甲双胍作为肿瘤治疗来研究的文献,排除糖尿病队列中恰好合并肿瘤的观察性报告。",
+        "reviewType": "scoping",
+        "intervention": "metformin",
+        "outcomes": ["tumour response", "overall survival", "progression-free survival"]
+      },
+      "mustDo": [
+        "Obtain the concept identifiers with term_normalize's annotate option before composing the retrieval, rather than typing an @CHEMICAL_ string from memory",
+        "Address literature_search with relation {subject: @CHEMICAL_Metformin, type: treat, object: @DISEASE_Neoplasms} rather than by keyword alone",
+        "State in the report that the relation retrieval returns papers PubTator3 records the relation in, which is an index's assertion about a paper and not a finding about metformin",
+        "Run at least one keyword retrieval as well and say how the two sets differ, because the claim being made is that they differ"
+      ],
+      "mustNotDo": [
+        "Present the PubTator3 relation count as the number of studies supporting metformin in oncology",
+        "Treat a paper's presence in a `treat` relation as evidence the treatment worked",
+        "Report the free-text question as if it had narrowed the relation retrieval — it is not sent"
+      ],
+      "gradedOn": "Whether the relation was used at all, whether the two retrievals were compared, and whether the index's assertion stayed distinguishable from the clinical claim."
+    },
+    {
+      "id": "relation-002-pembrolizumab-myocarditis-causation",
+      "title": "帕博利珠单抗与心肌炎:检索到的是关联还是归因",
+      "why": "Immune-related adverse events are reported as case reports scattered across oncology and cardiology, so a keyword search is both noisy and incomplete. PubTator3 records `cause` between @CHEMICAL_pembrolizumab and @DISEASE_Myocarditis in 95 papers (2026-09-15) and records 907 `cause` targets for the drug overall. The brief measures the harder discipline: the relation is named `cause`, and a run must not let the index's label become the report's causal claim.",
+      "inputs": {
+        "question": "帕博利珠单抗相关心肌炎的文献证据有哪些?请说明这些报道属于什么证据类型,以及它们能在多大程度上支持因果归因。",
+        "reviewType": "rapid",
+        "intervention": "pembrolizumab",
+        "outcomes": ["myocarditis", "immune-related adverse events"],
+        "careSetting": "oncology inpatient"
+      },
+      "mustDo": [
+        "Address the retrieval with relation {subject: @CHEMICAL_pembrolizumab, type: cause, object: @DISEASE_Myocarditis}",
+        "Name the study design of each retrieved record from the record itself, not from the relation type",
+        "State explicitly that `cause` is PubTator3's label for a textual assertion in a paper, and carries no causal inference of its own",
+        "Report the case-report-dominated evidence base as what it is, including what it cannot establish"
+      ],
+      "mustNotDo": [
+        "Write that the literature establishes causation because the relation type is `cause`",
+        "Infer incidence, risk or a denominator from the number of retrieved papers",
+        "Attach practical safety advice to a claim whose only support is the relation label"
+      ],
+      "gradedOn": "Whether the run separated the index's relation label from a causal claim, and whether the evidence type was read off the records."
+    },
+    {
+      "id": "relation-003-clopidogrel-interaction-sparse",
+      "title": "氯吡格雷的药物相互作用:关系式检索返回很少,这是结果还是故障",
+      "why": "The negative control. @CHEMICAL_Clopidogrel has 4 `drug_interact` records in PubTator3 (2026-09-15), all with a single supporting publication — while the clopidogrel/omeprazole interaction is one of the best-documented PK interactions in cardiology. So this is a real index gap, not an outage, and not an absence of evidence. A run that reports 'no meaningful interactions found' has failed; a run that reports a failure has also failed. This is the case that stops relation retrieval from being adopted as a replacement rather than an instrument.",
+      "inputs": {
+        "question": "氯吡格雷有哪些临床上重要的药物相互作用?请说明你的检索覆盖到了什么、没覆盖到什么。",
+        "reviewType": "rapid",
+        "intervention": "clopidogrel",
+        "outcomes": ["antiplatelet effect", "major adverse cardiovascular events", "bleeding"]
+      },
+      "mustDo": [
+        "Address the relation retrieval and report the small result as a result, naming the query that produced it",
+        "Distinguish a sparse index from an unavailable source, and say which one this is",
+        "Fall back to keyword and label retrieval for the interaction question, and say why the fallback was needed",
+        "Name the clopidogrel–proton-pump-inhibitor interaction from a source that does document it, or state that none was retrieved"
+      ],
+      "mustNotDo": [
+        "Conclude that clopidogrel has few clinically important interactions because the relation query returned four records",
+        "Report the sparse result as a tool failure or a source outage",
+        "Retry the same relation query repeatedly instead of changing instrument"
+      ],
+      "gradedOn": "Whether sparse, absent and broken stayed three different findings, and whether the run changed instrument instead of re-asking."
+    }
+  ]
+}

@@ -93,7 +93,7 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
    * renders them, and a malformed entry must cost that entry, not the hero.
    */
   const capabilities = (Array.isArray(frame.capabilities) ? frame.capabilities : [])
-    .filter((entry) => entry && typeof entry.id === 'string' && typeof entry.title === 'string'
+    .filter((/** @type {any} */ entry) => entry && typeof entry.id === 'string' && typeof entry.title === 'string'
       && typeof entry.category === 'string' && typeof entry.brief === 'string'
       && entry.title && entry.brief && entry.brief.length <= 100_000)
     .slice(0, 24);
@@ -160,7 +160,7 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
     }, `科研能力 · ${capabilities.length} 项`),
     h('div', {
       style: { display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '6px 0 2px' },
-    }, capabilities.map((capability) => h('button', {
+    }, capabilities.map((/** @type {any} */ capability) => h('button', {
       key: capability.id,
       type: 'button',
       title: `${capability.category} · ${capability.title}`,
@@ -272,15 +272,22 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
       // Verified in the live frame with the right panel both open (680 + 528)
       // and closed (1208 + 0) before it was written here.
       //
-      // The two resize handles share one class, so this takes the right
-      // panel's drag with the sidebar's. That panel is still opened, closed
-      // and made fullscreen from the conversation header, which is where its
-      // contract says its controls live; a stray 8 px drag target over the
-      // conversation would be worse.
+      // The two resize handles carry one class, so hiding by class took the
+      // right panel's drag with the sidebar's. They are distinguishable by
+      // position instead: the frame's children are the three columns, the
+      // overlay layer, then the handles, so the sidebar's handle is the one
+      // directly after the overlay layer and the right panel's is the one
+      // after that. Read off the live frame in both states, which is also
+      // where the earlier claim that they were indistinguishable came from:
+      // with the panel closed there is only ONE handle in the DOM, and an
+      // nth-of-type rule would have hidden the overlay layer instead.
+      //
+      //   panel open   handle[prev=overlayLayer] none, handle[prev=handle] 8px col-resize
+      //   panel closed handle[prev=overlayLayer] none, and no second handle
       '[class$="_sidebarCol"]{display:none !important}',
       '[class$="_centerCol"]{grid-column:1 / 3 !important}',
       '[class$="_rightbarCol"]{grid-column:3 !important}',
-      '[class$="_handle"]{display:none !important}',
+      '[class$="_overlayLayer"] + [class$="_handle"]{display:none !important}',
     ].join('\n');
     doc.head.appendChild(style);
     ctx.effect(() => () => { style.remove(); }, 'evimed-shell: stylesheet');

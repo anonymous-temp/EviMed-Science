@@ -337,6 +337,10 @@ test("the workflow that gates every PR runs the gates ci:web runs", async () => 
     "lint:domain": /pnpm lint\b/,
     "lint:port": /pnpm lint\b/,
     "lint:socket": /pnpm lint\b/,
+    // `test:mcp` split into two suites on 2026-09-15 (the research server and
+    // the memory adapter). The workflow runs the parent, which runs both.
+    "test:mcp:research": /pnpm test:mcp\b/,
+    "test:mcp:memory": /pnpm test:mcp\b/,
   };
 
   const required = [...new Set(leaves("ci:web"))];
@@ -1806,12 +1810,17 @@ test("a capability's two skill copies never drift apart by more than their known
   // dataset-research-scoping 28→26 (profile_dataset.py, preflight.py) and
   // research-topic-selection 28→27 (preflight.py) — one line each, matching
   // the lines changed. Convergence, so the bound gets tighter, not looser.
+  // Raised again on 2026-09-15 in the same one direction: the sufficiency-audit
+  // section went into clinical-evidence-synthesis (+25) and the
+  // number-provenance section into dataset-research-scoping (+15), both in the
+  // two trees a run actually reads. `runtime/skills/evimed/` is the deleted
+  // kernel's copy and is not edited, by plan.
   const knownDivergence = {
     "adr-analysis": 18,
     "bibliometric-analysis": 18,
-    "clinical-evidence-synthesis": 45,
+    "clinical-evidence-synthesis": 70,
     "comprehensive-drug-evaluation": 18,
-    "dataset-research-scoping": 26,
+    "dataset-research-scoping": 41,
     "drug-selection": 18,
     // The hosted-input/replay changes propagated all 18 pre-delivery and
     // revision-notes lines into the retained copy; none was removed. All three

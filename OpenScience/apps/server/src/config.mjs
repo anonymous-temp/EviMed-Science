@@ -1331,6 +1331,15 @@ export function loadConfig(overrides = {}) {
     agentRunMonitorStallMs: Number(
       overrides.agentRunMonitorStallMs ?? process.env.OPEN_SCIENCE_AGENT_RUN_MONITOR_STALL_MS ?? 900_000,
     ),
+    // The subsystem's own switch, and the one an operator reaches for. The
+    // three underneath it (extraction, the index provider, the learning loop)
+    // are finer controls and none of them is the whole thing: extraction off
+    // still serves records, an index off still recalls by term match.
+    memoryEnabled: overrides.memoryEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_ENABLED", true),
+    // Off by default: turning it on publishes an account's memory to whoever
+    // holds an API key. A deployment decides that, never a default.
+    agentMemoryApiEnabled:
+      overrides.agentMemoryApiEnabled ?? boolEnv("OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED", false),
     memoryExtractionEnabled:
       overrides.memoryExtractionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED", true),
     // Extraction runs after the reply is already delivered, so a generous budget

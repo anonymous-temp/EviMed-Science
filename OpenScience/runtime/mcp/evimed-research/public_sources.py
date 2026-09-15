@@ -597,6 +597,131 @@ def _crossref(query, limit):
     return {"summary": "Retrieved %d traceable Crossref records." % len(items), "data": {"items": items}, "sources": sources}
 
 
+# PubTator3 (NIH/NCBI). Two things it gives us that nothing else here does:
+# a concept identifier for a free-text term, and literature retrieval addressed
+# by a *relation* between two concepts rather than by words that co-occur.
+# The upstream `dsh-pubmed` plugin exposes twenty-five tools over the same
+# service; what we take is the substance behind two of them, on the two tools
+# that already exist (2026-09-15 ruling, ecosystem shortlist §12).
+PUBTATOR_RELATION_TYPES = (
+    "treat", "cause", "prevent", "inhibit", "stimulate", "interact",
+    "drug_interact", "associate", "compare", "cotreat",
+    "positive_correlate", "negative_correlate",
+)
+
+# `@CHEMICAL_Metformin`, `@DISEASE_Diabetes_Mellitus_Type_2`, `@GENE_1017`.
+_PUBTATOR_CONCEPT_RE = re.compile(r"^@[A-Z]+_[A-Za-z0-9_,.:+-]{1,180}$")
+
+
+def _pubtator_base():
+    return _base("EVIMED_PUBTATOR_BASE_URL", "https://www.ncbi.nlm.nih.gov/research/pubtator3-api")
+
+
+def pubtator3_annotate(term, limit=5):
+    """Free text -> PubTator3 concept identifiers. Returns [] when nothing matches.
+
+    Annotation, not normalization: the curated vocabulary still decides the
+    preferred term. What this adds is an identifier a later relation query can
+    be addressed with, and the MeSH id behind it."""
+    text = " ".join(str(term or "").strip().split())
+    if not text:
+        return []
+    url = _url(_pubtator_base(), "entity/autocomplete/", {"query": text[:200], "limit": max(1, min(int(limit), 10))})
+    records = _list(_get_json_value(url, accepted=("application/json", "text/json")))
+    annotations = []
+    for record in records:
+        record = _dict(record)
+        concept_id = str(record.get("_id") or "").strip()
+        if not _PUBTATOR_CONCEPT_RE.match(concept_id):
+            continue
+        annotation = {
+            "conceptId": concept_id,
+            "biotype": str(record.get("biotype") or "").strip() or None,
+            "name": str(record.get("name") or "").strip() or None,
+            "vocabulary": str(record.get("db") or "").strip() or None,
+            "vocabularyId": str(record.get("db_id") or "").strip() or None,
+        }
+        annotations.append({key: value for key, value in annotation.items() if value is not None})
+    return annotations[: max(1, min(int(limit), 10))]
+
+
+def pubtator3_relations(concept_id, relation_type=None, limit=10):
+    """Relations PubTator3 records for one concept, with the publication count
+    behind each. The count is evidence of how much literature asserts the
+    relation; it is not a claim that the relation holds."""
+    if not _PUBTATOR_CONCEPT_RE.match(str(concept_id or "")):
+        raise PublicSourceError("pubtator_concept_invalid", "A PubTator3 concept identifier looks like @CHEMICAL_Metformin.")
+    params = {"e1": concept_id}
+    if relation_type:
+        if relation_type not in PUBTATOR_RELATION_TYPES:
+            raise PublicSourceError("pubtator_relation_invalid", "The relation type is not one PubTator3 records.")
+        params["type"] = relation_type
+    url = _url(_pubtator_base(), "relations", params)
+    rows = []
+    for record in _list(_get_json_value(url, accepted=("application/json", "text/json"))):
+        record = _dict(record)
+        source_id = str(record.get("source") or "").strip()
+        target_id = str(record.get("target") or "").strip()
+        if not source_id or not target_id:
+            continue
+        publications = record.get("publications")
+        rows.append({
+            "type": str(record.get("type") or "").strip(),
+            "source": source_id,
+            "target": target_id,
+            "publications": publications if isinstance(publications, int) else None,
+        })
+    return rows[: max(1, min(int(limit), 50))]
+
+
+def pubtator3_relation_literature(subject, relation_type=None, obj=None, limit=10):
+    """Literature addressed by a relation between two concepts.
+
+    `relations:<type>|<e1>|<e2>` is PubTator3's own query language; `ANY` is its
+    wildcard. Results are bibliographic metadata and carry the same warning
+    every other public literature path does."""
+    for value in (subject, obj):
+        if value is not None and not _PUBTATOR_CONCEPT_RE.match(str(value)):
+            raise PublicSourceError("pubtator_concept_invalid", "A PubTator3 concept identifier looks like @CHEMICAL_Metformin.")
+    if relation_type is not None and relation_type not in PUBTATOR_RELATION_TYPES:
+        raise PublicSourceError("pubtator_relation_invalid", "The relation type is not one PubTator3 records.")
+    query = "relations:%s|%s|%s" % (relation_type or "ANY", subject, obj or "ANY")
+    url = _url(_pubtator_base(), "search/", {"text": query})
+    payload = _dict(_get_json_value(url, accepted=("application/json", "text/json")))
+    items = []
+    sources = []
+    for record in _list(payload.get("results"))[: max(1, min(int(limit), 50))]:
+        record = _dict(record)
+        pmid = str(record.get("pmid") or record.get("_id") or "").strip()
+        if not pmid.isdigit():
+            continue
+        title = str(record.get("title") or "Untitled PubTator3 record").strip()
+        record_url = "https://pubmed.ncbi.nlm.nih.gov/%s/" % urllib.parse.quote(pmid)
+        doi = str(record.get("doi") or "").strip()
+        authors = [str(item) for item in _list(record.get("authors")) if str(item).strip()]
+        items.append({
+            "id": "PMID:%s" % pmid,
+            "pmid": pmid,
+            "title": title,
+            "journal": record.get("journal") or None,
+            "publicationDate": record.get("meta_date_publication") or None,
+            "authors": authors[:20],
+            **({"doi": doi} if doi else {}),
+            "url": record_url,
+        })
+        sources.append(_source("PMID:%s" % pmid, title, record_url, "pubtator3"))
+    total = payload.get("count")
+    return {
+        "summary": "Retrieved %d records PubTator3 records the relation `%s` in." % (len(items), query),
+        "data": {
+            "items": items,
+            "relationQuery": query,
+            **({"totalMatching": total} if isinstance(total, int) else {}),
+        },
+        "sources": sources,
+    }
+
+
 def evimed_evidence_configured():
     """Whether this deployment can reach the private evidence API at all.
 
@@ -1229,6 +1354,26 @@ def _bibliographic_metadata_only(result):
 def literature(arguments):
     query = arguments["query"]
     limit = arguments.get("limit", 10)
+    # A relation query is addressed by concept identifiers, not by words, so no
+    # keyword database can serve it and there is nothing to fall back to. It
+    # answers the question keyword search cannot: which papers assert that this
+    # drug treats this disease, as opposed to which papers mention both.
+    relation = _dict(arguments.get("relation")) if arguments.get("relation") else None
+    if relation:
+        result = _bibliographic_metadata_only(pubtator3_relation_literature(
+            relation.get("subject"),
+            relation.get("type"),
+            relation.get("object"),
+            limit,
+        ))
+        # Measured against the live API: `relations:...|A|B AND <words>` returns
+        # zero rather than filtering, so the two cannot be combined. Saying so
+        # is what stops a run reading a relation result as if its query had
+        # narrowed it.
+        result["warnings"].append(
+            "Retrieval was addressed by the relation alone; the free-text query was not sent, because PubTator3 does not combine the two."
+        )
+        return result
     databases = arguments.get("databases") or ["internal", "pubmed"]
     if "internal" in databases:
         try:

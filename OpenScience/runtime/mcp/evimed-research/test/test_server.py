@@ -234,6 +234,58 @@ class ToolContractTests(unittest.TestCase):
             "scope": scope,
         })
 
+    def test_term_normalize_stays_offline_unless_annotation_is_asked_for(self):
+        with mock.patch.object(self.server.public_sources, "pubtator3_annotate") as annotate:
+            plain = self.server.call_tool("term_normalize", {"term": "心肌梗死", "domain": "adverse_event"})
+        annotate.assert_not_called()
+        self.assertNotIn("annotations", plain["data"])
+
+        annotations = [{"conceptId": "@DISEASE_Myocardial_Infarction", "biotype": "disease"}]
+        with mock.patch.object(self.server.public_sources, "pubtator3_annotate", return_value=annotations):
+            annotated = self.server.call_tool(
+                "term_normalize", {"term": "心肌梗死", "domain": "adverse_event", "annotate": True}
+            )
+        self.assert_contract(annotated)
+        self.assertEqual(annotated["status"], "success")
+        self.assertEqual(annotated["data"]["preferred"], "myocardial infarction")
+        self.assertEqual(annotated["data"]["annotations"], annotations)
+
+    def test_an_annotation_outage_leaves_the_normalization_standing(self):
+        # Principle 19: the deterministic half succeeded, so it is delivered.
+        # Swallowing the failure silently would be the other defect — the run
+        # would be left with no identifier and no reason.
+        unavailable = self.server.public_sources.PublicSourceError("public_source_unavailable", "offline", True)
+        with mock.patch.object(self.server.public_sources, "pubtator3_annotate", side_effect=unavailable):
+            result = self.server.call_tool("term_normalize", {"term": "心肌梗死", "annotate": True})
+        self.assert_contract(result)
+        self.assertEqual(result["status"], "warning")
+        self.assertEqual(result["data"]["preferred"], "myocardial infarction")
+        self.assertTrue(any("PubTator3" in text for text in result["warnings"]))
+
+    def test_a_relation_query_is_refused_rather_than_answered_by_keyword_search(self):
+        with mock.patch.object(self.server.public_sources, "enabled", return_value=False):
+            with mock.patch.object(self.server, "_adapter_call") as adapter:
+                refused = self.server.call_tool("literature_search", {
+                    "query": "metformin", "relation": {"subject": "@CHEMICAL_Metformin"},
+                })
+        adapter.assert_not_called()
+        self.assertEqual(refused["status"], "error")
+        self.assertEqual(refused["error"]["code"], "public_source_unsupported")
+
+    def test_a_relation_query_bypasses_a_configured_private_adapter(self):
+        # The adapter is the normal route for literature_search and takes
+        # precedence over the public connector. A relation is addressed by
+        # concept identifiers no private adapter knows, so this one call has to
+        # leave that route rather than be answered by a search that dropped it.
+        with mock.patch.dict(os.environ, {"EVIMED_LITERATURE_SEARCH_URL": "https://adapter.invalid/search"}):
+            with mock.patch.object(self.server, "_public_adapter_call", return_value={"status": "success"}) as public, \
+                 mock.patch.object(self.server, "_adapter_call") as adapter:
+                self.server.call_tool("literature_search", {
+                    "query": "metformin", "relation": {"subject": "@CHEMICAL_Metformin"},
+                })
+        adapter.assert_not_called()
+        self.assertEqual(public.call_args.args[0], "literature_search")
+
     def test_drug_term_normalize_prefers_the_rxnorm_vocabulary(self):
         resolution = {"rxcui": "1191", "preferred": "Aspirin", "synonyms": ["Aspirin", "Acetylsalicylic Acid"]}
         with mock.patch.object(self.server.public_sources, "rxnorm_resolve", return_value=resolution):

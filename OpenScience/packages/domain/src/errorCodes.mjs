@@ -178,10 +178,13 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "upstream_failed",
   "public_source_document_path_forbidden",
   "public_source_document_request_forbidden",
+  "public_source_api_path_forbidden",
+  "public_source_api_request_forbidden",
   "public_source_gateway_credential_profile_forbidden",
   "public_source_gateway_graphql_forbidden",
   "public_source_gateway_url_forbidden",
   "public_source_pdf_host_forbidden",
+  "public_source_pdf_host_unresolved",
   "public_source_gateway_token_invalid",
   // The GEO probe. Everything here means "this deployment could not put the
   // question to the vendor", which is a limitation to state in the report — a
@@ -248,6 +251,12 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "public_source_gateway_method_invalid",
   "public_source_gateway_url_invalid",
   "public_source_gateway_variables_invalid",
+  // A relation query addressed with something that is not a PubTator3 concept
+  // identifier, or with a relation type PubTator3 does not record. Both are the
+  // run holding the instrument wrong: normalize the term again with `annotate`
+  // and the identifier comes back. Nothing was asked of the source.
+  "pubtator_concept_invalid",
+  "pubtator_relation_invalid",
   // Named like a refusal, answered as a 400: the runtime tried to supply
   // credentials itself, which it must never do. That is the runtime
   // misbehaving, not a source declining to be read.
@@ -820,6 +829,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^full_text_/, '这篇文献的全文取不到。报告会把它记为限制，而不是当作读过。'],
   [/^official_page_/, '这个官方页面取不到。报告会把它记为限制。'],
   [/^public_source_/, '公共数据源这次没能给出结果。'],
+  [/^pubtator_/, '关系式检索的概念标识或关系类型不对，用 term_normalize 的 annotate 取一次标识再试。'],
   [/^web_search_/, '网页检索这次没能完成。'],
   [/^adapter_/, '专有数据接口这次没能给出结果。'],
   // Added because 64 codes matched no family and no entry, so they rendered as

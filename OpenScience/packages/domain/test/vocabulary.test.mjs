@@ -813,6 +813,7 @@ test("every check id a contract module raises is registered on GATE_CHECK_IDS", 
     "appraisalContract.mjs",
     "manuscriptContract.mjs",
     "researchTopicContract.mjs",
+    "datasetScopingContract.mjs",
     "sourceUnderstanding.mjs",
     "methodSkill.mjs",
     "methodGraph.mjs",
@@ -839,7 +840,7 @@ test("every check id a contract module raises is registered on GATE_CHECK_IDS", 
   // test exists to prevent one level down.
   assert.ok(walked >= 40, `only ${walked} check attributions found across ${modules.length} modules — the scan did not read them`);
   assert.ok(raisedBy.size >= 25, `only ${raisedBy.size} distinct check ids found — the scan did not read the modules`);
-  for (const name of ["appraisalContract.mjs", "manuscriptContract.mjs", "researchTopicContract.mjs", "contractRegistry.mjs"]) {
+  for (const name of ["appraisalContract.mjs", "manuscriptContract.mjs", "researchTopicContract.mjs", "datasetScopingContract.mjs", "contractRegistry.mjs"]) {
     assert.ok(
       [...raisedBy.values()].some((sources) => sources.includes(name)),
       `${name} contributed no check id — the scan skipped it`,
@@ -859,6 +860,12 @@ test("every check id a contract module raises is registered on GATE_CHECK_IDS", 
     "appraisal-citation-coverage", "appraisal-table-rendered",
   ]) {
     assert.ok(raisedBy.has(id), `the appraisal contract no longer raises "${id}" — either it was removed, or the scan stopped seeing it`);
+    assert.ok(axis.has(id), `"${id}" is raised and unregistered`);
+  }
+
+  // The dataset-scoping pair, by name for the same reason.
+  for (const id of ["dataset-profile-parse", "dataset-number-provenance"]) {
+    assert.ok(raisedBy.has(id), `the dataset-scoping contract no longer raises "${id}"`);
     assert.ok(axis.has(id), `"${id}" is raised and unregistered`);
   }
 

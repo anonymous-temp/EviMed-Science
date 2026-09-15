@@ -416,6 +416,36 @@ Screen the returned records, deduplicate them, and inspect enough relevant sourc
 
 Do not inflate counts with duplicates, irrelevant records, editorials, or title-only results.
 
+### Sufficiency audit: what the search still does not cover
+
+After a round of searching, before deciding the search is done, write down what
+the retrieved set covers and what it does not. Three lines, in the question
+ledger:
+
+1. **Coverage.** Which sub-questions of the review now have usable evidence, and
+   from which source class. A sub-question covered only by the source class that
+   is least able to answer it is not covered.
+2. **Gaps.** Which sub-questions have none — separating "searched and found
+   nothing" from "not yet searched" and from "the source that would answer it
+   was unavailable". These three lead to different next rounds and reading them
+   as one is how a review stops early.
+3. **Next queries.** For each gap, the query you will run next, and what would
+   make you stop asking. A gap with no next query is a declared limitation; say
+   so in the report rather than leaving it to look like an oversight.
+
+Run this after every round, not once at the end. Its value is that it makes the
+decision to stop into a statement someone else can check: a reviewer reading the
+audit can see which gaps were closed by evidence and which by fatigue.
+
+When a gap is about a relation between two named things rather than about a
+topic — whether this drug is reported to treat this disease, whether this
+exposure is reported to cause this outcome — a keyword query returns
+co-mention and buries the assertion. `mcp__evimed__literature_search`'s
+`relation` argument retrieves by the relation instead; get the concept
+identifiers from `mcp__evimed__term_normalize` with `annotate`. A small result
+there is a sparse index, not an absence of evidence, and the rule above still
+holds: your searches bound what you found.
+
 ### Reading what you retrieved
 
 A literature search of twenty records runs to roughly seventy kilobytes, most of

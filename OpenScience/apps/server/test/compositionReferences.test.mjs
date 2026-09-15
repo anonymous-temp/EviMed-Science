@@ -329,8 +329,8 @@ test("a `name:` inside a config block is not read as the row's plugin name", () 
 test("the patch's override rows are collected as host-row references, not lost", async () => {
   // cordis.patch.yml names zero @deepseek-ai packages, so a checker that only
   // looked for those would read the file, find nothing, and report success —
-  // the shape of every silent pass in this repository. Its four override rows
-  // are the references it does make.
+  // the shape of every silent pass in this repository. Its override rows are
+  // the references it does make.
   const collected = collectReferences({
     presetText: await readFile(path.join(repoRoot, SOURCE_FILES.preset), "utf8"),
     patchText: await readFile(path.join(repoRoot, SOURCE_FILES.patch), "utf8"),
@@ -339,7 +339,9 @@ test("the patch's override rows are collected as host-row references, not lost",
   });
   const patchReferences = collected.references.filter((reference) => reference.file === SOURCE_FILES.patch);
   const hostRows = patchReferences.filter((reference) => reference.kind === "host-row-id").map((reference) => reference.specifier);
-  assert.deepEqual(hostRows.sort(), ["hmr", "open-in-app", "plugin-package-inventory-deepseek", "session-telemetry-otel", "tool-web", "ui-open-in-app", "web-fetch-http"]);
+  // `web` joined them on 2026-09-15: the row is no longer only disabled
+  // underneath, it is configured to name our own provider.
+  assert.deepEqual(hostRows.sort(), ["hmr", "open-in-app", "plugin-package-inventory-deepseek", "session-telemetry-otel", "tool-web", "ui-open-in-app", "web", "web-fetch-http"]);
   assert.ok(collected.hostRowIds.size > 40, `the dumped host composition read as only ${collected.hostRowIds.size} rows`);
 });
 

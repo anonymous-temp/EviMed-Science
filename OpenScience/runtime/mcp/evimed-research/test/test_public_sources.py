@@ -1169,3 +1169,94 @@ class RecordUrlIsCitableOrAbsent(unittest.TestCase):
         source = pathlib.Path(sources.__file__).read_text(encoding="utf-8")
         self.assertNotIn('record_url = _first_text(record.get("url"))', source)
         self.assertNotIn('record.get("url"), endpoint', source)
+
+
+# Payloads below are the live 2026-09-15 responses, trimmed. PubTator3's
+# `publications` is a count, not a list, and its search returns
+# `meta_date_publication` rather than a date field — both were guessed wrong
+# before the wire was read.
+PUBTATOR_AUTOCOMPLETE = [
+    {"_id": "@CHEMICAL_Metformin", "biotype": "chemical", "db_id": "D008687", "db": "ncbi_mesh",
+     "name": "Metformin", "match": "Matched on name <m>Metformin</m>"},
+    {"_id": "@CHEMICAL_Glucovance", "biotype": "chemical", "db_id": "C417231", "db": "ncbi_mesh",
+     "name": "Glucovance", "match": "Multiple matches"},
+    {"no_id": "not a concept"},
+]
+
+PUBTATOR_SEARCH = {
+    "results": [
+        {"_id": "36619226", "pmid": 36619226, "pmcid": "PMC9812811",
+         "title": "A Review of the Impact of Pharmacogenetics and Metabolomics on the Efficacy of Metformin in Type 2 Diabetes",
+         "journal": "Int J Med Sci", "authors": ["Damanhouri ZA", "Alkreathy HM"],
+         "date": "2023-01-01T00:00:00Z", "doi": "10.7150/ijms.77206",
+         "meta_date_publication": "2023", "score": 50276.344},
+        {"_id": "no-pmid", "title": "dropped"},
+    ],
+    "count": 2277,
+}
+
+
+class PubTator3Tests(unittest.TestCase):
+    def test_annotation_returns_concept_identifiers_and_drops_unidentified_rows(self):
+        with mock.patch.object(sources, "_get_json_value", return_value=PUBTATOR_AUTOCOMPLETE) as request:
+            annotations = sources.pubtator3_annotate("metformin", limit=5)
+
+        self.assertTrue(request.call_args.args[0].startswith(
+            "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/entity/autocomplete/?"
+        ))
+        self.assertEqual([item["conceptId"] for item in annotations],
+                         ["@CHEMICAL_Metformin", "@CHEMICAL_Glucovance"])
+        self.assertEqual(annotations[0]["vocabularyId"], "D008687")
+
+    def test_relation_counts_are_counts(self):
+        payload = [
+            {"type": "treat", "source": "@CHEMICAL_Metformin",
+             "target": "@DISEASE_Diabetes_Mellitus_Type_2", "publications": 8437},
+            {"type": "treat", "source": "", "target": "@DISEASE_Obesity", "publications": 1},
+        ]
+        with mock.patch.object(sources, "_get_json_value", return_value=payload):
+            rows = sources.pubtator3_relations("@CHEMICAL_Metformin", "treat")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["publications"], 8437)
+
+    def test_a_forged_concept_identifier_is_refused_before_any_request(self):
+        with mock.patch.object(sources, "_get_json_value") as request:
+            for bad in ("metformin", "@CHEMICAL_Metformin/../../etc", "@lower_case"):
+                with self.assertRaises(sources.PublicSourceError):
+                    sources.pubtator3_relations(bad)
+            with self.assertRaises(sources.PublicSourceError):
+                sources.pubtator3_relations("@CHEMICAL_Metformin", "cures")
+        request.assert_not_called()
+
+    def test_relation_retrieval_says_the_free_text_query_was_not_sent(self):
+        # Measured: `relations:...|A|B AND <words>` returns zero rather than
+        # narrowing, so the query cannot ride along. A run that was not told
+        # would read these records as if its own words had filtered them.
+        with mock.patch.object(sources, "_get_json_value", return_value=PUBTATOR_SEARCH) as request:
+            result = sources.literature({
+                "query": "metformin in pancreatic cancer",
+                "limit": 10,
+                "relation": {"subject": "@CHEMICAL_Metformin", "type": "treat", "target": None,
+                             "object": "@DISEASE_Neoplasms"},
+            })
+
+        sent = request.call_args.args[0]
+        self.assertIn("relations%3Atreat%7C%40CHEMICAL_Metformin%7C%40DISEASE_Neoplasms", sent)
+        self.assertNotIn("pancreatic", sent)
+        self.assertEqual([item["id"] for item in result["data"]["items"]], ["PMID:36619226"])
+        self.assertEqual(result["data"]["totalMatching"], 2277)
+        self.assertEqual(result["sources"][0]["source"], "pubtator3")
+        self.assertTrue(any("free-text query was not sent" in text for text in result["warnings"]))
+
+    def test_a_relation_never_reaches_a_keyword_database(self):
+        with mock.patch.object(sources, "_evimed_literature_records") as evimed, \
+             mock.patch.object(sources, "_pubmed") as pubmed, \
+             mock.patch.object(sources, "_get_json_value", return_value=PUBTATOR_SEARCH):
+            sources.literature({
+                "query": "anything",
+                "databases": ["internal", "pubmed"],
+                "relation": {"subject": "@CHEMICAL_Metformin"},
+            })
+        evimed.assert_not_called()
+        pubmed.assert_not_called()
+

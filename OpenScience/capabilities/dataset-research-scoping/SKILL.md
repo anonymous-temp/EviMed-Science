@@ -752,6 +752,25 @@ statement is one sentence long.
 
 Phases 0–4 feed Phases 5–6. Do not skip ahead to candidate questions.
 
+### Every number in the prose came from the profile
+
+The numbers in these documents describe a dataset that is on disk beside them,
+so each of them is checkable against `data-profile.json` and the ones that are
+not stand out. Before delivering, read your own prose for numerals and settle
+each one:
+
+- it is in the profile — leave it;
+- it is *nearly* in the profile — a row count of 4830 beside a profiled 4820 —
+  correct it, or say in the text what the difference is (a subset, a later cut,
+  a derived figure), because a near miss is the shape a stale number leaves;
+- it came from somewhere else — a paper, a registry, the researcher's own
+  message — attribute it there in the sentence that uses it;
+- it is a quantity worth having — profile it, so the next reader can check it
+  the same way.
+
+Years, dates, list numbering and identifiers with digits in them (HbA1c, ICD-10)
+are not quantities and need none of this.
+
 ### The deliverables are sections of one document
 
 The files are how the work is stored; a document is how it is read. A researcher

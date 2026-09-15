@@ -95,7 +95,9 @@ function message(id, text) {
 
 function modelFetch(candidateFactory) {
   return async (_input, init) => {
-    assert.match(init.headers.Authorization, /^Bearer /);
+    // Header names are lowercase now: the call goes through
+    // `callModelForControlPlane`, which is also what reserves and settles it.
+    assert.match(init.headers.authorization, /^Bearer /);
     const request = JSON.parse(String(init.body));
     const payload = JSON.parse(request.messages[1].content);
     return Response.json({
@@ -779,4 +781,146 @@ test("what the extractor refused reaches the run's audit line and its quality no
   // own injection.
   assert.match(serverSource, /excluded=\$\{memoryResult\.excluded\.map\(/, "the refusals do not reach the audit ledger");
   assert.match(serverSource, /未读取 \$\{memoryResult\.excluded\.map\(/, "the refusals do not reach the zero-extraction notice");
+});
+
+test("extraction is reserved and settled on the usage ledger, like every other model call", async () => {
+  // It used to reach the provider straight from memoryIntelligence with the
+  // deployment's key: not reserved, not settled, absent from
+  // `evimed_usage.model_requests`, and outside the account's rolling caps. An
+  // operator's usage export showed every token a run spent and none of what the
+  // platform spent thinking about the run afterwards.
+  const store = new MemoryStoreDouble();
+  /** @type {any[]} */ const ledgerCalls = [];
+  const usageLedger = {
+    async reserveModel(input) { ledgerCalls.push(["reserve", input]); return { id: "res_1" }; },
+    async settleModel(userId, id, input) { ledgerCalls.push(["settle", userId, id, input]); },
+    async markUncertain(userId, id, code) { ledgerCalls.push(["uncertain", userId, id, code]); },
+    async release(userId, id, code) { ledgerCalls.push(["release", userId, id, code]); },
+  };
+  const intelligence = new MemoryIntelligence(config, store, {
+    usageLedger,
+    fetchImpl: async (_input, init) => {
+      const payload = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
+      const source = payload.sources[0];
+      return Response.json({
+        id: "chatcmpl-abc",
+        choices: [{ message: { content: JSON.stringify({ candidates: [{
+          scope: "user", kind: "preference", key: "preference.output_language",
+          value: "zh", summary: "用中文回答", origin: "explicit", confidence: 1,
+          importance: 0.6, sensitive: false, sourceRef: source.sourceRef, evidenceQuote: "用中文",
+        }] }) } }],
+        usage: { prompt_tokens: 1200, prompt_cache_hit_tokens: 200, prompt_cache_miss_tokens: 1000, completion_tokens: 340 },
+      });
+    },
+  });
+  await intelligence.recordRun(project(), run("run_metered"), [message("m1", "请用中文回答。")]);
+
+  const reserve = ledgerCalls.find((entry) => entry[0] === "reserve")?.[1];
+  assert.ok(reserve, "extraction did not reserve");
+  assert.equal(reserve.userId, project().userId);
+  assert.equal(reserve.projectId, project().id);
+  assert.equal(reserve.runId, "run_metered");
+  assert.ok(reserve.estimatedCost >= 0);
+
+  const settle = ledgerCalls.find((entry) => entry[0] === "settle");
+  assert.ok(settle, "extraction did not settle");
+  // The provider's own count, not the estimate. A reservation settled against
+  // an estimate reads in the ledger exactly like one settled against a
+  // measurement, which is what `markUncertain` exists to keep apart.
+  assert.deepEqual(settle[3].usage, { cacheHitTokens: 200, cacheMissTokens: 1000, completionTokens: 340 });
+  assert.equal(settle[3].providerRequestId, "chatcmpl-abc");
+  assert.ok(!ledgerCalls.some((entry) => entry[0] === "uncertain" || entry[0] === "release"));
+});
+
+test("a provider answer with no usage is uncertain, not settled at the estimate", async () => {
+  const store = new MemoryStoreDouble();
+  /** @type {any[]} */ const ledgerCalls = [];
+  const usageLedger = {
+    async reserveModel() { return { id: "res_2" }; },
+    async settleModel(...args) { ledgerCalls.push(["settle", ...args]); },
+    async markUncertain(...args) { ledgerCalls.push(["uncertain", ...args]); },
+    async release(...args) { ledgerCalls.push(["release", ...args]); },
+  };
+  const intelligence = new MemoryIntelligence(config, store, {
+    usageLedger,
+    fetchImpl: async () => Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] }),
+  });
+  await intelligence.recordRun(project(), run("run_nousage"), [message("m1", "请用中文回答。")]);
+  assert.equal(ledgerCalls.filter((entry) => entry[0] === "settle").length, 0);
+  assert.equal(ledgerCalls.find((entry) => entry[0] === "uncertain")?.[3], "response_usage_missing");
+});
+
+test("a provider that refuses releases the reservation instead of leaving it against the cap", async () => {
+  // The run keeps its deterministic candidates — the extraction failing is not
+  // the run failing — and the account does not keep paying for a call that was
+  // never accepted.
+  const store = new MemoryStoreDouble();
+  /** @type {any[]} */ const ledgerCalls = [];
+  const usageLedger = {
+    async reserveModel() { return { id: "res_3" }; },
+    async settleModel(...args) { ledgerCalls.push(["settle", ...args]); },
+    async markUncertain(...args) { ledgerCalls.push(["uncertain", ...args]); },
+    async release(...args) { ledgerCalls.push(["release", ...args]); },
+  };
+  const intelligence = new MemoryIntelligence(config, store, {
+    usageLedger,
+    fetchImpl: async () => new Response("no", { status: 429 }),
+  });
+  const result = await intelligence.recordRun(project(), run("run_refused"), [message("m1", "请用中文回答。")]);
+  assert.equal(result.source, "deterministic");
+  assert.ok(result.extractionError);
+  // Dispatched and then refused: the provider answered, so the call reached it
+  // and `uncertain` is the honest terminal state — a release would claim the
+  // provider never saw it.
+  assert.equal(ledgerCalls.find((entry) => entry[0] === "uncertain")?.[3], "provider_response_incomplete");
+});
+
+test("the run's own brief is never read as something the researcher said", async () => {
+  // Production, 2026-09-06: ten records on one account, each a whole task brief
+  // stored as a durable `explicit` user preference at importance 0.75. The
+  // brief is injected by run-policy wrapped in `<evimed-brief>`, and it arrives
+  // carrying `source: "user"` because a user did, at one remove, cause it —
+  // so the sender check that already existed could not see it.
+  const brief = [
+    "<evimed-brief>",
+    "请以《Therapeutic Reference Range for Aripiprazole in Schizophrenia》为题完成一份中文科研综述报告。",
+    "请记住核对原始全文并保留可核验的引用。",
+    "</evimed-brief>",
+  ].join("\n");
+  const { sources, excluded } = conversationMemorySources([
+    { id: "m1", role: "user", source: "user", parts: [{ type: "text", text: brief }] },
+    { id: "m2", role: "user", source: "user", parts: [{ type: "text", text: "请记住，我只要中文。" }] },
+  ], "s1");
+  assert.deepEqual(sources.map((source) => source.text), ["请记住，我只要中文。"]);
+  // Reported, not dropped silently: "nothing extractable" and "all of it was
+  // our own injection" are the same zero and only one is a working run.
+  assert.deepEqual(excluded, [{ reason: "injected", count: 1 }]);
+});
+
+test("the deterministic fallback proposes, and cannot activate a memory on its own", async () => {
+  // Its trigger is a keyword wall over open language, so what it produces is a
+  // guess that matched a word. `explicit` is the one origin that skips
+  // corroboration, and minting it here is what let ten guesses become ten
+  // active memories.
+  const store = new MemoryStoreDouble();
+  const intelligence = new MemoryIntelligence({ ...config, deepseekApiKey: "" }, store, {});
+  const result = await intelligence.recordRun(project(), run("run_det"), [
+    message("m1", "请记住，以后回答都用中文。"),
+  ]);
+  assert.equal(result.source, "deterministic");
+  const recorded = [...store.records.values()].filter((record) => record.kind !== "run_summary");
+  assert.ok(recorded.length >= 1, "the fallback proposed nothing");
+  for (const record of recorded) {
+    assert.equal(record.origin, "inferred", `${record.key} was minted as ${record.origin}`);
+    assert.equal(record.status, "pending", `${record.key}活性化 without corroboration`);
+  }
+});
+
+test("a message too long to be a fact is not read as one", async () => {
+  const store = new MemoryStoreDouble();
+  const intelligence = new MemoryIntelligence({ ...config, deepseekApiKey: "" }, store, {});
+  const long = `请记住这些要求。${"细节".repeat(700)}`;
+  assert.ok(long.length > 1_200);
+  const result = await intelligence.recordRun(project(), run("run_long"), [message("m1", long)]);
+  assert.equal(result.proposed, 0, "a 1,400-character message is a task, not a preference");
 });

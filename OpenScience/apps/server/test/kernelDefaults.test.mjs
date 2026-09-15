@@ -76,8 +76,10 @@ test("every setting the runtime depends on still holds in the composition the im
   // 150 at 0.1.2-rc.1, 157 at 0.1.5-rc.2: eight rows added (open-in-app and
   // its UI half, workspace-files, file-upload, resources, and the right
   // sidebar with its files and document-preview tabs) less the
-  // tool-str-replace-editor row upstream dropped.
-  assert.equal(report.counts.baselineRows, 157, "the recorded composition includes the native client, citation bundle and ECO03 plugin probe");
+  // tool-str-replace-editor row upstream dropped. 158 on 2026-09-15: the
+  // `evimed-web` row, which registers the platform's provider for the kernel's
+  // web registry — ours, not upstream's.
+  assert.equal(report.counts.baselineRows, 158, "the recorded composition includes the native client, citation bundle and ECO03 plugin probe");
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.rows.filter(row => row.id === "evimed-plugin-probe").length, 1);
   assert.equal(baseline.byId.get("evimed-plugin-probe").name, "@evimed/dsh-socket/plugins/plugin-probe");
@@ -138,7 +140,14 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "tool-web.config.fetch=false",
       "tool-web.config.searchTimeoutMs=60000",
       "ui-open-in-app.disabled=true",
+      // Sorted, and `-` sorts before `.`, so the disabled row comes first.
       "web-fetch-http.disabled=true",
+      // 2026-09-15: the composition stopped protecting the web row by absence
+      // alone and started naming a provider of its own — one that goes to the
+      // control-plane gateway. Both halves, because a patch row replaces
+      // `config` whole.
+      "web.config.fetchProvider=evimed-gateway",
+      "web.config.searchProvider=evimed-gateway",
     ],
     "every host-scope override the bundle patch makes should become an invariant",
   );
@@ -222,8 +231,12 @@ test("a difference is classified before it is reported: ours fails, theirs is a 
   const baselineText = await readFile(source("baseline"), "utf8");
   const dump = await mutatedCopy("alpha5-dump.json", baselineText, (text) =>
     text
-      // (b) an upstream default we hold no opinion about
-      .replace("    fetchProvider: http\n", "    fetchProvider: builtin\n")
+      // (b) an upstream default we hold no opinion about. It used to be
+      // `web.config.fetchProvider`, which stopped being an example of one on
+      // 2026-09-15 when the composition started naming our own provider there
+      // — so the case moved to a key we really do not set, and the old one
+      // became the (a) case below, where a drifted invariant fails.
+      .replace("    argumentsPreviewChars: 500\n", "    argumentsPreviewChars: 400\n")
       // (c) a row the baseline has never seen
       .replace("- id: tools\n", "- id: tool-web-fetch\n  name: '@deepseek-ai/dsh-tool-web-fetch'\n  config:\n    enabled: true\n- id: tools\n")
       // (c) a key the baseline has never seen, on a row it has
@@ -233,9 +246,9 @@ test("a difference is classified before it is reported: ours fails, theirs is a 
   const report = await checkKernelDefaults({ dump });
   const byAddress = new Map(report.differences.map((entry) => [entry.key ? `${entry.row}.${entry.key}` : entry.row, entry]));
 
-  assert.equal(byAddress.get("web.config.fetchProvider")?.klass, "upstream-default");
-  assert.equal(byAddress.get("web.config.fetchProvider")?.before, "http");
-  assert.equal(byAddress.get("web.config.fetchProvider")?.after, "builtin");
+  assert.equal(byAddress.get("repeat-tool-reminder.config.argumentsPreviewChars")?.klass, "upstream-default");
+  assert.equal(byAddress.get("repeat-tool-reminder.config.argumentsPreviewChars")?.before, "500");
+  assert.equal(byAddress.get("repeat-tool-reminder.config.argumentsPreviewChars")?.after, "400");
   assert.equal(byAddress.get("tool-web-fetch")?.klass, "unknown");
   assert.equal(byAddress.get("tool-web.config.fetchTimeoutMs")?.klass, "unknown");
 
@@ -247,7 +260,7 @@ test("a difference is classified before it is reported: ours fails, theirs is a 
   // as a dropped one.
   const text = formatReport(report);
   assert.match(text, /upstream default moved/);
-  assert.match(text, /web\.config\.fetchProvider: http -> builtin/);
+  assert.match(text, /repeat-tool-reminder\.config\.argumentsPreviewChars: 500 -> 400/);
   assert.match(text, /the baseline has never seen/);
   assert.match(text, /tool-web-fetch/);
 });

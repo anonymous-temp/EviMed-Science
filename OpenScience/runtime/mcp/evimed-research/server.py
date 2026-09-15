@@ -379,7 +379,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "term_normalize",
-        "description": "Normalize a medical term using a deterministic bilingual vocabulary.",
+        "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization.",
         "inputSchema": object_schema(
             {
                 "term": STRING,
@@ -387,6 +387,7 @@ TOOL_DEFINITIONS = [
                     "type": "string",
                     "enum": ["general", "drug", "disease", "indication", "adverse_event"],
                 },
+                "annotate": {"type": "boolean"},
             },
             ("term",),
         ),
@@ -422,10 +423,18 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "literature_search",
-        "description": "Search configured literature sources through the EviMed evidence adapter. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+        "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
         "inputSchema": object_schema(
             {
                 "query": STRING,
+                "relation": object_schema(
+                    {
+                        "subject": {"type": "string", "pattern": "^@[A-Z]+_[A-Za-z0-9_,.:+-]{1,180}$"},
+                        "type": {"type": "string", "enum": list(public_sources.PUBTATOR_RELATION_TYPES)},
+                        "object": {"type": "string", "pattern": "^@[A-Z]+_[A-Za-z0-9_,.:+-]{1,180}$"},
+                    },
+                    ("subject",),
+                ),
                 "limit": EVIMED_SEARCH_LIMIT,
                 "dateFrom": DATE,
                 "dateTo": DATE,
@@ -1798,17 +1807,43 @@ def call_tool(name, arguments):
             )
             return success("Normalized the supplied term against the RxNorm vocabulary.", data=data)
         data = _normalize_term(arguments["term"])
+        annotation_warnings = []
         if name == "term_normalize":
             data["domain"] = arguments.get("domain", "general")
+            # An identifier, not a second opinion on the preferred term: the
+            # curated vocabulary still decides that. What the annotation buys is
+            # an address a relation query can be sent to.
+            #
+            # Off unless asked for. This tool is otherwise deterministic and
+            # offline, and runs call it in loops; defaulting the annotation on
+            # would put an NCBI round trip behind every one of those calls
+            # without anything in the run saying so.
+            if arguments.get("annotate") and public_sources.enabled():
+                try:
+                    annotations = public_sources.pubtator3_annotate(arguments["term"])
+                    if annotations:
+                        data["annotations"] = annotations
+                except public_sources.PublicSourceError as error:
+                    annotation_warnings.append(
+                        "PubTator3 annotation was unavailable (%s); the curated normalization is unaffected." % error
+                    )
         else:
             data["domain"] = "drug"
             data["vocabulary"] = "curated-local" if normalized_key in TERM_VOCABULARY else "unresolved"
         data = _data_with_provenance(data, name, arguments, _scope())
         if normalized_key in TERM_VOCABULARY:
+            if annotation_warnings:
+                return warning(
+                    "Normalized the supplied term against the curated vocabulary.",
+                    annotation_warnings,
+                    ["Retry the annotation, or address a relation query with an identifier obtained another way."],
+                    data=data,
+                )
             return success("Normalized the supplied term against the curated vocabulary.", data=data)
         return warning(
             "No curated normalization exists for this term; returned the input unchanged.",
-            ["The returned preferred term and synonyms are the unmodified input, not an authoritative normalization."],
+            ["The returned preferred term and synonyms are the unmodified input, not an authoritative normalization."]
+            + annotation_warnings,
             ["Verify the term against an authoritative terminology (for example UMLS, RxNorm, or MeSH) before relying on it."],
             data=data,
         )
@@ -1823,6 +1858,20 @@ def call_tool(name, arguments):
         if arguments.get("action") == "status":
             return _managed_status_with_wait(meta_agent.status_job, arguments)
         return meta_agent.call(arguments)
+    if name == "literature_search" and arguments.get("relation"):
+        # Addressed by concept identifiers, so no private literature adapter can
+        # serve it however it is configured: this one call goes to the public
+        # connector or is refused, rather than being silently answered by a
+        # keyword search that dropped the relation.
+        if not public_sources.enabled():
+            return failure(
+                "public_source_unsupported",
+                "Relation retrieval needs the public connectors, which are disabled in this deployment.",
+                False,
+                "Stop and search by keyword instead.",
+                ["Use the query form of literature_search, or ask an operator to enable public connectors."],
+            )
+        return _public_adapter_call(name, arguments)
     if name in specialist_jobs.SPECS and not os.environ.get(ADAPTER_ENV[name], "").strip():
         if arguments.get("action") == "status":
             return _managed_status_with_wait(

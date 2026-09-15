@@ -41,6 +41,32 @@
         "writing_journal_profile"
       ],
       "why": "Deterministic, zero-network. Protects numbers, citations, claim strength, negation and scope from being changed by language polishing, and detects working-context residue leaking into deliverables — the same family as our own leakage bans, from the other side. Version 1.7.0 was never published; 2.0.1 is the first currently published candidate tested here. Reclassified from the skills lane because its SKILL.md calls its own tools, so the prose cannot be taken alone."
+    },
+    {
+      "name": "@changfenhuang/dsh-annotation",
+      "repo": "omdsh-dev/dsh-annotation",
+      "version": "1.4.10",
+      "registers": [],
+      "why": "Select a passage in a reply, annotate it, send the annotations with the next message as plain text prepended to the user turn. The manuscript-review interaction we lack; the Node half is empty and nothing leaves the container. Risk to watch: its peer is the bare `cordis` package, not `@deepseek-ai/cordis`, which is the exact failure the two 2026-09-06 rejections had. Queued 2026-09-15."
+    },
+    {
+      "name": "dsh-mermaid",
+      "repo": "MrmoLabs/dsh-mermaid",
+      "version": "0.4.0",
+      "registers": [],
+      "why": "Client-only Mermaid renderer for fenced diagrams in replies (PRISMA flow, study-selection trees). No peers, no network. The counts in a diagram still have to come from the screening ledger, not be typed by the model. Queued 2026-09-15."
+    },
+    {
+      "name": "dsh-data-quality",
+      "repo": "PerryLink/dsh-data-quality",
+      "version": "0.3.10",
+      "registers": [
+        "data_profile",
+        "data_clean",
+        "data_verify",
+        "data_report"
+      ],
+      "why": "Deterministic in-process profiling and, the part we lack, `data_verify`: numbers quoted in a document checked against a dataset snapshot with a tolerance and a four-value verdict. csv/tsv/json/jsonl only, so it complements rather than replaces `profile_dataset.py`. We do not `inject` its `dataQuality` service; only the model calls the tools. Queued 2026-09-15."
     }
   ],
   "lastCompatibilityTest": {
