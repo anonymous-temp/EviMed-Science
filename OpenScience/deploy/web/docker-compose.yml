@@ -395,6 +395,14 @@ services:
       OPEN_SCIENCE_LEARNING_WINDOW:
       OPEN_SCIENCE_LEARNING_CONCURRENCY:
       OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND:
+      # Who may put a method on trial, and who sees the operations page. Both
+      # are id allowlists that `config.mjs` reads and that no compose file
+      # passed, so both were empty in every deployment however the operator set
+      # them: the trial route answered 403 to everyone and the ops tab could not
+      # appear at all. Compose passes environment item by item — a lever that is
+      # not on the list does nothing and says nothing.
+      OPEN_SCIENCE_LEARNING_EVALUATION_USERS:
+      OPEN_SCIENCE_OPERATOR_USERS:
       OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY:
