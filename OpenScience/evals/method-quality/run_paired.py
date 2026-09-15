@@ -1549,6 +1549,19 @@ def apply_method_snapshot(client: PlatformClient, arm: dict[str, Any], project_i
     }
 
 
+def release_id_of(environment: Any) -> str:
+    """The release a measurement was taken on, as readiness reports it.
+
+    Empty when a deployment does not track one; the dispatch id then falls back
+    to what it always was, which is correct for a deployment that cannot tell
+    two builds apart anyway.
+    """
+    checks = (environment or {}).get("checks") if isinstance(environment, dict) else None
+    release = (checks or {}).get("release") if isinstance(checks, dict) else None
+    value = (release or {}).get("releaseId") if isinstance(release, dict) else None
+    return str(value or "")
+
+
 def verify_environment(arm: dict[str, Any], environment: Any) -> dict[str, list[str]]:
     """What the arm declared, checked against the server that ran it.
 
@@ -1646,6 +1659,7 @@ class PairedRunner:
         cost_source: str = "usage-route",
         private_grant: dict[str, Any] | None = None,
         fixtures: list[dict[str, str]] | None = None,
+        release_id: str = "",
     ):
         self.project_id = project_id or str((config.get("project") or {}).get("id") or "")
         self.config = config
@@ -1662,6 +1676,8 @@ class PairedRunner:
         self.executed = 0
         self.private_grant = private_grant
         self.fixtures = fixtures or []
+        # Part of every dispatch id. See the note where it is used.
+        self.release_id = release_id
 
     def run_cell(self, client: PlatformClient, runtime_url: str, plan: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -1689,7 +1705,19 @@ class PairedRunner:
             "compactionPolicy": arm["compactionPolicy"],
             "startedAt": now_iso(),
         }
-        dispatch_id = f"mq_{plan['arm']}_{plan['repeat']}_{sha256_text(record['cell'] + self.config['digest'])[:16]}"
+        # The control plane deduplicates by `dispatchId`, so a deterministic id
+        # makes a re-run idempotent — it returns the run the first batch
+        # produced rather than dispatching a new one. That is right when the
+        # thing being re-run is the same measurement, and wrong when the
+        # control plane underneath it has changed.
+        #
+        # On 2026-09-15 a batch was re-run specifically because the deployment
+        # had been fixed, and every cell silently scored the run from the
+        # previous build: no dispatch reached the ledger and the report would
+        # have described runs nobody had just made. The release id is what makes
+        # those two different measurements, and it is read off `/api/ready`
+        # rather than declared.
+        dispatch_id = f"mq_{plan['arm']}_{plan['repeat']}_{sha256_text(record['cell'] + self.config['digest'] + self.release_id)[:16]}"
         if self.private_grant:
             cell = client.evaluation_cell({
                 **{key: self.private_grant[key] for key in ("userId", "projectId", "methodId", "candidateDigest", "mountedDigest", "snapshotDigest")},
@@ -2377,6 +2405,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             project_id=project_id,
             private_grant=private_grant,
             fixtures=private_fixtures,
+            release_id=release_id_of(environment),
             log=say,
         )
         batch.execute(rerun=args.rerun)
