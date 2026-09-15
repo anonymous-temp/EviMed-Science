@@ -86,16 +86,22 @@ export async function apply(ctx, config) {
   ctx.provide('evimedCapabilities', capabilities, true)
   ctx.effect(() => registerSection(ctx, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text }))
 
-  // Provided whether or not the persona loads, so a reader of the projection
-  // can tell "this deployment injects nothing" from "this key is missing".
   const persona = await loadAnswerPersona(ctx, config.answerPersonaDir)
-  ctx.provide('evimedInjectedSkills', persona ? [ANSWER_PERSONA_SKILL] : [], true)
   if (persona) {
     ctx.effect(() => registerSection(ctx, {
       name: ANSWER_PERSONA_SECTION_NAME,
       order: ANSWER_PERSONA_SECTION_ORDER,
       text: persona,
     }))
+    // Told to the host composition rather than published as a service of our
+    // own. This plugin is a row of an agent preset, and the kernel refuses to
+    // mount a preset whose rows publish process-global services — the build
+    // smoke caught exactly that (`row(s) published process-global service(s)
+    // [evimedInjectedSkills]`). Calling a service the host provides is both
+    // allowed and the direction the fact travels: the run-state projection is
+    // written on the host side, and the control plane's completion gate reads
+    // it from there.
+    ctx.get('evimedDiagnostics')?.injectedSkill?.(ANSWER_PERSONA_SKILL)
   }
 }
 

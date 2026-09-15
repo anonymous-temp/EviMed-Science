@@ -119,35 +119,47 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
     const Nothing = () => null;
 
     /**
-     * The fifteen research capabilities, on the screen a new task starts from.
+     * The fifteen research capabilities, one row above the composer.
      *
-     * `conversation.hero.agentPreset` is the kernel's own words: "agent-preset
-     * control staged for a New Session". In the hosted composition there is no
-     * preset to pick — one preset is composed, and the panel that would change
-     * it is refused — so the seat was a control that did nothing on the first
-     * screen anyone sees. What belongs there is what the platform can actually
-     * do: an empty composer asks a researcher to know what to type, and a page
-     * of capability cards behind a navigation row is a page most of them never
-     * opened (2026-09-15 walk, P2-1).
+     * They were a navigation row and a page of cards, which is a page most
+     * researchers never opened; what an empty composer asks instead is that
+     * you already know what to type (2026-09-15 walk, P2-1). This is the
+     * catalogue where the typing happens.
      *
-     * A card fills the brief and names the capability in it — a suggestion the
-     * delivery gate reads as a high-confidence expectation (§9.4), not a
-     * binding: the sentence is editable and the same conversation may go on to
-     * ask for something else. The brief comes from `@evimed/domain`, the same
-     * function the 「科研能力」 page calls, because two spellings of it would be
-     * two different expectations.
+     * `conversation.input.dock` and not the blank-session hero, for a reason
+     * worth writing down: the hero's own seat is `conversation.hero.agentPreset`,
+     * and `ui-agent-preset` is one of the fourteen rows this deployment
+     * disables — a disabled row declares no slot, so occupying it registered
+     * nothing and rendered nothing, silently. Measured on the deployed build
+     * before this line was written. The dock is declared by `ui-conversation`,
+     * which the hosted composition must load for there to be a conversation at
+     * all. A list slot is registered with an `id` — `key`, which the right
+     * sidebar's tab slot takes, is refused here with `requires options.id`,
+     * and the refusal is caught, so the dock simply did not appear.
      *
-     * Clicking leaves through the shell: the hero has no session yet (the slot
-     * is root-scoped), so there is no composer to write into. The shell opens a
-     * new task carrying the draft, which is the path the capability page has
-     * always taken.
+     * Always visible rather than only on a blank session, which is the honest
+     * reading of §9.8 anyway: a capability is a suggestion, not a binding, and
+     * the turn where someone realises they want a Meta-analysis is usually not
+     * the first one.
+     *
+     * A card fills the brief and names the capability in it — a high-confidence
+     * expectation the delivery gate reads (§9.4). The brief comes from
+     * `@evimed/domain`, the same function the 「科研能力」 page calls: two
+     * spellings would be two different expectations.
+     *
+     * The click leaves through the shell rather than writing the draft here.
+     * The shell opens a task carrying it, which is the path the capability page
+     * has always taken and the only one that also works from the hero, where
+     * there is no session yet to write into.
      */
-    const HeroCapabilities = () => h('div', {
-      style: { display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '44rem', margin: '0 auto' },
+    const CapabilityDock = () => h('details', {
+      style: { width: '100%', margin: '0 0 6px' },
     },
-    h('div', { style: { fontSize: '13px', opacity: 0.6 } }, '或从一项科研能力开始'),
+    h('summary', {
+      style: { cursor: 'pointer', fontSize: '12px', opacity: 0.6, listStyle: 'none', padding: '2px 0' },
+    }, `科研能力 · ${capabilities.length} 项`),
     h('div', {
-      style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(11rem, 1fr))', gap: '8px' },
+      style: { display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '6px 0 2px' },
     }, capabilities.map((capability) => h('button', {
       key: capability.id,
       type: 'button',
@@ -155,72 +167,34 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
       onClick: () => {
         try { target.__EVIMED_SHELL__?.navigate?.('new-task', capability.brief); } catch { /* no channel, no navigation */ }
       },
-      style: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px',
-        padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(127,127,127,0.25)',
-        background: 'transparent', color: 'inherit', cursor: 'pointer', textAlign: 'left', font: 'inherit' },
-    },
-    h('span', { style: { fontSize: '13px', fontWeight: 500 } }, capability.title),
-    h('span', { style: { fontSize: '11px', opacity: 0.55 } }, capability.category)))));
+      style: { padding: '4px 10px', borderRadius: '999px', border: '1px solid rgba(127,127,127,0.28)',
+        background: 'transparent', color: 'inherit', cursor: 'pointer', font: 'inherit', fontSize: '12px' },
+    }, capability.title))));
 
     /**
-     * The left column, replaced by a rail.
+     * The left column, removed.
      *
      * The kernel's own left column is a second navigation: brand, new session,
      * a workspace tree and the session list — all of which the hosted shell
-     * already shows, under different words (任务 / 会话 / 运行). Side by side
-     * with the shell's sidebar that made the session page read as three shells
-     * nested in each other, which is the first thing an operator said about it
-     * (2026-09-15 walk, A1/A6).
+     * already shows one column to the left, under different words (任务 /
+     * 会话 / 运行). Side by side that is what made the session page read as
+     * three shells nested in each other, which is the first thing an operator
+     * said about it (2026-09-15 walk, A1/A6).
      *
      * Occupying `sidebar` replaces the column outright — the layout package's
-     * own contract says so, and says the seats it declares go with it. The
-     * column cannot be removed entirely: closed, the frame still reserves a
-     * 56 px rail. So this renders that rail, with the one control the kernel's
-     * column had that the shell's does not duplicate — start a new task — and
-     * closes itself once on first paint, because the frame opens it at 280 px.
+     * own contract says so, and says the seats it declares go with it. What it
+     * does not do is take the column's WIDTH: the frame sizes that from its own
+     * store, so an occupant that renders nothing leaves 280 px of empty column
+     * (measured on the deployed build, 2026-09-15). `ctx.layout.toggleSidebar`
+     * would close it to a 56 px rail, and did not fire from inside the
+     * occupant; the rule below removes the column instead, which is the better
+     * outcome anyway — there is nothing in it the shell does not already offer.
      *
-     * Navigation leaves through the bridge's channel, which owns the sequence
-     * the shell validates. If the bridge is not present this renders a rail
-     * with no actions rather than throwing: the conversation is what matters.
+     * Presentation only, and the same handle the two rules beside it use: a
+     * CSS-module class has a stable suffix and a hashed prefix. If upstream
+     * renames it the column comes back, which is a cosmetic regression and not
+     * a broken page.
      */
-    // Hook-free on purpose. The kernel hands this bundle React through the
-    // loader's `require`, and how much of React that object carries is the
-    // loader's business, not ours: `createElement` is the only member the
-    // brand occupants have ever needed. One closure flag and a deferred call
-    // do what a `useRef` + `useEffect` pair would, without widening what this
-    // file assumes about its host.
-    let railCollapseRequested = false;
-    const Rail = ({ collapsed }) => {
-      if (!railCollapseRequested && !collapsed) {
-        railCollapseRequested = true;
-        // Deferred out of the render pass: `toggleSidebar` writes the layout
-        // store, and writing another component's store while rendering is the
-        // one thing React asks you not to do. Once only — a researcher who
-        // reopens the column keeps it open.
-        try {
-          target.setTimeout?.(() => {
-            try { ctx.layout?.toggleSidebar?.(); } catch { /* geometry is cosmetic */ }
-          }, 0);
-        } catch { /* no timer, no auto-collapse; the rail still renders */ }
-      }
-      const go = (destination) => () => {
-        try { target.__EVIMED_SHELL__?.navigate?.(destination); } catch { /* no channel, no navigation */ }
-      };
-      return h('div', {
-        style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
-          height: '100%', padding: '12px 0', boxSizing: 'border-box' },
-      },
-      h('button', { type: 'button', onClick: go('new-task'), title: '新任务', 'aria-label': '新任务',
-        style: { display: 'grid', placeItems: 'center', width: '28px', height: '28px', padding: 0,
-          border: 'none', borderRadius: '8px', background: 'transparent', cursor: 'pointer', color: 'inherit' } },
-      h('svg', { xmlns: 'http://www.w3.org/2000/svg', viewBox: '0 0 24 24', width: 16, height: 16,
-        fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', 'aria-hidden': 'true' },
-      h('path', { d: 'M12 5v14M5 12h14' }))),
-      // The mark sits at the foot rather than the head: the product's own
-      // brand is already at the top of the shell's sidebar, one column left,
-      // and two of them stacked is the duplication this rail exists to end.
-      h('div', { style: { marginTop: 'auto', opacity: 0.55 } }, h(Mark, { size: 18 })));
-    };
     // A single slot renders its LOWEST-priority registration and refuses a
     // second one at the same priority. The kernel's own occupants register at
     // the default 0 — the workspace picker always, the official brand in an
@@ -239,9 +213,9 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
       yield ctx.slots.register({ name: 'sidebar.brand.name', priority: below }, Name);
     })));
     guarded('hero brand', () => ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({ name: 'conversation.hero.brand.mark', priority: below }, Mark)));
-    guarded('sidebar rail', () => ctx.slots.inject('sidebar', () => ctx.slots.register({ name: 'sidebar', priority: below }, Rail)));
+    guarded('sidebar column', () => ctx.slots.inject('sidebar', () => ctx.slots.register({ name: 'sidebar', priority: below }, Nothing)));
     if (capabilities.length) {
-      guarded('hero capabilities', () => ctx.slots.inject('conversation.hero.agentPreset', () => ctx.slots.register({ name: 'conversation.hero.agentPreset', priority: below }, HeroCapabilities)));
+      guarded('capability dock', () => ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({ name: 'conversation.input.dock', id: 'evimed-capabilities' }, CapabilityDock)));
     }
     // The picker is a popup the chip opens; an occupant that renders nothing
     // leaves the chip (the bound workspace's name) and removes the choice.
@@ -283,6 +257,30 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
       'button[aria-label="Add workspace"],button[aria-label="添加工作区"]{display:none !important}',
       '[class$="_previewBadge"]:empty{display:none !important}',
       '[class$="_heroWorkspaceRow"]{display:none !important}',
+      // The left column, which `sidebar` occupies with nothing.
+      //
+      // Occupying the slot replaces the column's CONTENT; the frame still
+      // sizes the column from its own store, so on its own that leaves 280 px
+      // of empty gutter between the product's navigation and the conversation
+      // (measured on the deployed build, 2026-09-15). `ctx.layout.toggleSidebar`
+      // would narrow it and did not fire from inside the occupant.
+      //
+      // Removing the column from flow shifts the remaining items up a track —
+      // the conversation landed in the 280 px sidebar track and the right
+      // column took the 1fr one, also measured — so each is pinned to the
+      // track it belongs in and the conversation spans the two on the left.
+      // Verified in the live frame with the right panel both open (680 + 528)
+      // and closed (1208 + 0) before it was written here.
+      //
+      // The two resize handles share one class, so this takes the right
+      // panel's drag with the sidebar's. That panel is still opened, closed
+      // and made fullscreen from the conversation header, which is where its
+      // contract says its controls live; a stray 8 px drag target over the
+      // conversation would be worse.
+      '[class$="_sidebarCol"]{display:none !important}',
+      '[class$="_centerCol"]{grid-column:1 / 3 !important}',
+      '[class$="_rightbarCol"]{grid-column:3 !important}',
+      '[class$="_handle"]{display:none !important}',
     ].join('\n');
     doc.head.appendChild(style);
     ctx.effect(() => () => { style.remove(); }, 'evimed-shell: stylesheet');

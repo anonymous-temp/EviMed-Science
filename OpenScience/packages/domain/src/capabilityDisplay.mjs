@@ -155,9 +155,14 @@ export function capabilityTitle(id) {
  * orchestrator reads the brief, and a person can edit or delete the naming
  * line — which is exactly the difference between a suggestion and a binding.
  *
+ * One newline and not two. The composer is a Lexical editor, and it renders
+ * each newline as its own paragraph: the blank line this used to carry arrived
+ * in the real composer as five empty lines above the brief (2026-09-15 walk,
+ * E5, and again in the deployed build before this was changed).
+ *
  * @param {string} title the capability's own title @param {string} prompt the starter brief
  * @returns {string}
  */
 export function capabilityBrief(title, prompt) {
-  return `请以「${title}」能力完成以下任务：\n\n${prompt}`
+  return `请以「${title}」能力完成以下任务：\n${prompt}`
 }
