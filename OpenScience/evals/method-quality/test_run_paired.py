@@ -1062,3 +1062,16 @@ class RecordVersionTracking(unittest.TestCase):
             with self.assertRaises(runner.EvalError):
                 runner.apply_method_snapshot(Client([9, 11]), arm, "p1")
         self.assertEqual(len(attempts), 2, "a second conflict ends the batch rather than looping")
+
+
+class NetworkFailureIsolation(unittest.TestCase):
+    """A lost network call costs a cell, not a batch."""
+
+    def test_a_raw_socket_timeout_fails_one_cell_and_the_batch_continues(self):
+        # `TimeoutError` and `ssl.SSLError` are `OSError` subclasses and arrive
+        # raw, not wrapped in `EvalError`. One of them ended a twelve-cell batch
+        # after six cells had already been paid for.
+        self.assertTrue(issubclass(TimeoutError, OSError))
+        source = RUNNER_FILE.read_text(encoding="utf-8")
+        marker = "except (EvalError, KeyError, ValueError, OSError) as error:"
+        self.assertIn(marker, source, "the per-cell isolation clause no longer catches raw socket failures")

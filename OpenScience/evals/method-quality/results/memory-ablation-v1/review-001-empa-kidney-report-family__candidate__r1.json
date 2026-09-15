@@ -31,7 +31,7 @@
       "argRatio": null,
       "firstDivergenceTurn": null,
       "note": "§6.3.7: never a reward, never part of the verdict.",
-      "observedCalls": 6,
+      "observedCalls": 0,
       "perTurn": [],
       "role": "diagnostic",
       "toolMatchedTurns": 0,
@@ -45,7 +45,7 @@
   },
   "family": "review-001-empa-kidney-report-family",
   "familySource": "brief-id",
-  "finishedAt": "2026-09-15T12:49:06Z",
+  "finishedAt": "2026-09-15T13:16:30Z",
   "judge": null,
   "methodSnapshot": {
     "capabilitySkillsDir": null,
@@ -55,28 +55,28 @@
     ],
     "records": [
       {
-        "expectedVersion": 16,
+        "expectedVersion": 28,
         "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
         "status": "active",
-        "version": 17
+        "version": 29
       },
       {
-        "expectedVersion": 16,
+        "expectedVersion": 21,
         "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
         "status": "active",
-        "version": 17
+        "version": 22
       },
       {
-        "expectedVersion": 16,
+        "expectedVersion": 21,
         "id": "jY7Dttzw4nQbQUwdXPYwKU",
         "status": "active",
-        "version": 17
+        "version": 22
       },
       {
-        "expectedVersion": 16,
+        "expectedVersion": 20,
         "id": "nyHQFcTbHUAiVfxKYDLFnQ",
         "status": "active",
-        "version": 17
+        "version": 21
       }
     ],
     "trial": {
@@ -97,13 +97,14 @@
     "methodsLoaded": [],
     "model": "deepseek/deepseek-flash",
     "qualityNotices": [
-      "Reference [4] is listed but never cited in the text."
+      "Reference [4] is listed but never cited in the text.",
+      "记忆已记录但暂缓生效 1 条：1 条因由模型推断而非你明确要求记住，需在至少 2 次不同运行中累计 3 次独立观察，或经本人确认后才会转为生效。记录与证据都已保存，可在记忆管理中确认后启用。"
     ],
     "repairRounds": {
       "content": 0,
       "structural": 0
     },
-    "sessionId": "session-9dd2eef8-b7b9-4ac1-ba7b-6d07ca5b5c1f",
+    "sessionId": "session-0e7c6ed3-52c7-4ae5-bdab-37e9d2ce940d",
     "status": "succeeded",
     "transcript": {
       "bytes": 96012,
@@ -124,7 +125,7 @@
     "safety": 1.0,
     "taskUtility": 1.0
   },
-  "startedAt": "2026-09-15T12:48:16Z",
+  "startedAt": "2026-09-15T13:16:06Z",
   "usage": {
     "cacheHitTokens": 0.0,
     "cacheMissTokens": 0.0,
