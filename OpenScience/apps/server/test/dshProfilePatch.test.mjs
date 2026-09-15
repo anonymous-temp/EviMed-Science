@@ -168,16 +168,21 @@ test("the patch only names rows that exist in the host composition", async () =>
 test("every deployment value the preset reads is a value the container is given", async () => {
   // The preset's `!!js` expressions and this mapping are one contract in two
   // files. A name on one side only leaves a plugin on its default, silently.
-  const preset = await readFile(
-    new URL("../../../packages/socket/presets/evimed-universal/agent.cordis.yml", import.meta.url),
-    "utf8",
-  );
+  // Both files, because both are rows this environment feeds: the agent preset
+  // and the bundle's own host patch. Scanning only the preset is how
+  // `EVIMED_WEB_SEARCH_GATEWAY_URL` could be read by the `evimed-web` row in
+  // `cordis.patch.yml` while nothing provided it — the row registered a fetch
+  // provider and silently no search one.
+  const sources = await Promise.all([
+    readFile(new URL("../../../packages/socket/presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8"),
+    readFile(new URL("../../../packages/socket/cordis.patch.yml", import.meta.url), "utf8"),
+  ]);
   const provided = runtimeEnvironment(input);
-  const read = new Set([...preset.matchAll(/process\.env\.([A-Z0-9_]+)/g)].map((match) => match[1]));
+  const read = new Set(sources.flatMap((text) => [...text.matchAll(/process\.env\.([A-Z0-9_]+)/g)].map((match) => match[1])));
 
-  assert.ok(read.size >= 10, `the preset reads ${read.size} names; this test expected the rows to be bound`);
+  assert.ok(read.size >= 10, `the rows read ${read.size} names; this test expected them to be bound`);
   for (const name of read) {
-    assert.ok(name in provided, `the preset reads ${name} and nothing provides it`);
+    assert.ok(name in provided, `a row reads ${name} and nothing provides it`);
   }
   for (const name of Object.keys(provided)) {
     assert.ok(read.has(name), `${name} is provided and no row reads it`);
@@ -409,4 +414,25 @@ test("the hosted browser application ships without the panels that change the de
   for (const id of HOSTED_DISABLED_BROWSER_PANELS) {
     assert.doesNotMatch(local, new RegExp(`- id: ${id}`), `${id} must stay available off the hosted surface`);
   }
+});
+
+test("the container is given both halves of the web registry, or neither", async () => {
+  // `evimed-web` reads `EVIMED_WEB_SEARCH_GATEWAY_URL` and
+  // `EVIMED_PUBLIC_SOURCE_GATEWAY_URL` from the container environment. Until
+  // 2026-09-15 the patch carried only the second, so the row registered a fetch
+  // provider and silently never registered a search one — measured on a live
+  // production runtime, not inferred.
+  const withSearch = runtimeEnvironment({
+    ...input,
+    publicSourceGatewayUrl: "http://open-science-web:8787/internal/sources/v1/fetch",
+    webSearchGatewayUrl: "http://open-science-web:8787/internal/search/v1/query",
+  });
+  assert.equal(withSearch.EVIMED_WEB_SEARCH_GATEWAY_URL, "http://open-science-web:8787/internal/search/v1/query");
+  assert.equal(withSearch.EVIMED_PUBLIC_SOURCE_GATEWAY_URL, "http://open-science-web:8787/internal/sources/v1/fetch");
+
+  // A deployment with no metasearch backend passes an empty string rather than
+  // omitting the key: the row then registers nothing for search and says so,
+  // which is the documented "no backend" value.
+  const withoutSearch = runtimeEnvironment({ ...input, publicSourceGatewayUrl: "http://open-science-web:8787/internal/sources/v1/fetch" });
+  assert.equal(withoutSearch.EVIMED_WEB_SEARCH_GATEWAY_URL, "");
 });
