@@ -41,7 +41,7 @@ describe("WebSecurityCard", () => {
 
     render(<WebSecurityCard />);
 
-    expect(await screen.findByText("托管安全")).toBeInTheDocument();
+    expect(await screen.findByText("安全事件")).toBeInTheDocument();
     expect(screen.getByText("auth.login")).toBeInTheDocument();
     expect(screen.getByText("failed")).toBeInTheDocument();
     expect(screen.getByText("invalid_credentials")).toBeInTheDocument();

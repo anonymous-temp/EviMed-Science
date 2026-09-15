@@ -22,7 +22,19 @@ const CHECK_LABELS: Record<string, string> = {
   backup: "备份",
   runtime: "运行时沙箱",
   kernel: "内核策略",
-  saasProfile: "SaaS Profile",
+  saasProfile: "SaaS 配置档",
+  // Six checks the deployment grew after this table was written, each of which
+  // therefore fell through to `?? key` and printed its own camelCase name in
+  // the middle of a Chinese list (2026-09-15 walk, E3). The fallback is right —
+  // an untranslated check is visibly untranslated — but a readiness board whose
+  // labels drift from the server's check list will keep producing this, so the
+  // test asserts every key `/api/ready` reports has an entry here.
+  memoryIndex: "记忆检索索引",
+  usageLedger: "用量账本",
+  inbox: "收件箱",
+  documentParser: "文档解析",
+  openList: "网盘接入",
+  relationalIntegrity: "关系完整性",
 };
 
 export function WebReadinessCard() {

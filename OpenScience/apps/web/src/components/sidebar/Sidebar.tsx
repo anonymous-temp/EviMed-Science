@@ -4,20 +4,17 @@ import {
   Bot,
   Bell,
   Brain,
-  Layers,
   FlaskConical,
   FolderTree,
-  ListFilter,
   Orbit,
-  NotebookPen,
   PanelLeft,
   Search,
-  Settings,
   SquarePen,
   UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
+import { listInbox } from "@/lib/inboxClient";
 import { runDotClass, runTitle } from "@/lib/runPresentation";
 import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { ProjectSwitcher } from "@/components/sidebar/ProjectSwitcher";
@@ -28,7 +25,7 @@ import evimedMark from "@/assets/evimed-mark.svg";
  *  back past it re-expands. Sits below SIDEBAR_MIN so there is a clear "snap". */
 const COLLAPSE_BELOW = 140;
 
-/** How many recent runs the sidebar lists before sending people to the ledger. */
+/** How many recent tasks the sidebar lists before sending people to the ledger. */
 const RECENT_RUNS = 12;
 
 interface NavItem {
@@ -37,17 +34,27 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
+/**
+ * Six destinations, plus the account in the footer.
+ *
+ * It was ten here and two in the footer, with no grouping and no hierarchy, and
+ * three of the ten were the same body of material seen three ways while two
+ * more differed by one word (2026-09-15 walk, C1/C3/C5/C8). Resource pages that
+ * are views of one thing became tabs on that thing; the inbox became the bell
+ * above, because one notification does not earn a permanent row.
+ *
+ * This is the only navigation in the product. The kernel's own left column,
+ * which used to sit beside it inside the session frame, is occupied by nothing
+ * in the hosted composition — two navigations for one workbench is what made
+ * the session page read as three shells.
+ */
 const NAV: NavItem[] = [
   { to: "/app/chat", label: "新任务", icon: <SquarePen size={16} /> },
   { to: "/app/runs", label: "运行记录", icon: <FlaskConical size={16} /> },
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} /> },
-  { to: "/app/sources", label: "资料整理", icon: <ListFilter size={16} /> },
+  { to: "/app/memory", label: "记忆", icon: <Brain size={16} /> },
   { to: "/app/autopilot", label: "主动科研", icon: <Orbit size={16} /> },
-  { to: "/app/notebooks", label: "科研笔记本", icon: <NotebookPen size={16} /> },
-  { to: "/app/memory", label: "科研记忆", icon: <Brain size={16} /> },
-  { to: "/app/capsules", label: "记忆胶囊", icon: <Layers size={16} /> },
-  { to: "/app/inbox", label: "收件箱", icon: <Bell size={16} /> },
-  { to: "/app/capabilities", label: "能力模板", icon: <Bot size={16} /> },
+  { to: "/app/capabilities", label: "科研能力", icon: <Bot size={16} /> },
 ];
 
 export function Sidebar() {
@@ -61,6 +68,21 @@ export function Sidebar() {
   const dragging = dragWidth !== null;
   const [query, setQuery] = useState("");
   const [runs, setRuns] = useState<WebAgentRun[] | null>(null);
+  const [unread, setUnread] = useState(0);
+
+  // The inbox's unread count, for the bell. Polled on the same cadence as the
+  // run list and isolated the same way: a count that cannot be read is shown
+  // as no badge, never as an error in a sidebar.
+  useEffect(() => {
+    let active = true;
+    const load = () =>
+      listInbox({ unread: true })
+        .then((page) => { if (active) setUnread(page.items.length); })
+        .catch(() => { /* isolated: no badge rather than a broken sidebar */ });
+    void load();
+    const timer = setInterval(load, 60_000);
+    return () => { active = false; clearInterval(timer); };
+  }, []);
 
   // The recent-runs list, refreshed while the shell is open. This used to be a
   // list of the kernel's own sessions, mirrored into the browser; the kernel's
@@ -135,10 +157,23 @@ export function Sidebar() {
               EviMed
             </div>
             <button
+              onClick={() => navigate("/app/inbox")}
+              aria-label={unread > 0 ? `收件箱，${unread} 条未读` : "收件箱"}
+              title="收件箱"
+              className="relative ml-auto self-center rounded p-1 text-text hover:bg-surface-2"
+            >
+              <Bell size={14} strokeWidth={1.5} />
+              {unread > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-accent px-1 text-caption font-medium text-accent-fg">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              )}
+            </button>
+            <button
               onClick={toggleSidebar}
               aria-label="收起侧边栏"
               title="收起侧边栏 (Ctrl+B)"
-              className="ml-auto self-center rounded p-1 text-text hover:bg-surface-2"
+              className="self-center rounded p-1 text-text hover:bg-surface-2"
             >
               <PanelLeft size={14} strokeWidth={1.5} />
             </button>
@@ -160,7 +195,7 @@ export function Sidebar() {
         </nav>
 
         <div className="mt-4 flex-1 overflow-y-auto px-3 pb-2">
-          <div className="px-2 py-1 text-xs font-medium tracking-wider text-muted">最近运行</div>
+          <div className="px-2 py-1 text-xs font-medium tracking-wider text-muted">最近任务</div>
           {(runs?.length ?? 0) > 0 && (
             <label className="relative mb-1 block">
               <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
@@ -169,22 +204,29 @@ export function Sidebar() {
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="搜索运行"
+                placeholder="搜索任务"
                 className="h-7 w-full rounded-input border border-border bg-bg pl-7 pr-2 text-xs text-text outline-none placeholder:text-muted focus:border-accent"
               />
             </label>
           )}
-          {runs === null && <div className="px-2 py-2 text-xs text-muted">正在读取运行记录…</div>}
+          {runs === null && <div className="px-2 py-2 text-xs text-muted">正在读取…</div>}
           {runs !== null && runs.length === 0 && (
-            <div className="px-2 py-2 text-xs text-muted">还没有运行记录</div>
+            <div className="px-2 py-2 text-xs text-muted">还没有任务</div>
           )}
           {runs !== null && runs.length > 0 && rows.length === 0 && (
-            <div className="px-2 py-2 text-xs text-muted">没有匹配的运行</div>
+            <div className="px-2 py-2 text-xs text-muted">没有匹配的任务</div>
           )}
+          {/* Back into the conversation, not into the ledger row about it.
+            * This list is the only session list the product has now that the
+            * kernel's own left column is occupied by nothing, so it has to open
+            * the thing itself; a run with no addressable session still has its
+            * ledger entry, which is where those go. */}
           {rows.map((run) => (
             <NavLink
               key={run.id}
-              to={`/app/runs?run=${encodeURIComponent(run.id)}`}
+              to={/^[A-Za-z0-9_-]{1,160}$/.test(run.sessionId)
+                ? `/app/chat/${encodeURIComponent(run.sessionId)}`
+                : `/app/runs?run=${encodeURIComponent(run.id)}`}
               className="flex items-center gap-2 rounded-input py-1 pl-2 pr-2 text-ui text-text/90 hover:bg-surface-2"
             >
               <span
@@ -197,17 +239,14 @@ export function Sidebar() {
         </div>
 
         <div className="flex flex-col border-t border-border px-3 py-3">
+          {/* One footer row. 「设置」 was the second, and it was the deployment
+            * console as much as the product's settings; it is a tab of this
+            * page now, beside usage, credentials and the operator's board. */}
           <NavRow
             icon={<UserRound size={15} />}
-            label="账户与额度"
+            label="账户与设置"
             active={location.pathname.startsWith("/app/account")}
             onClick={() => navigate("/app/account")}
-          />
-          <NavRow
-            icon={<Settings size={15} />}
-            label="设置"
-            active={location.pathname.startsWith("/app/settings")}
-            onClick={() => navigate("/app/settings")}
           />
         </div>
       </aside>

@@ -5,17 +5,22 @@ import { fetchWebConnectors, type WebConnector } from "@/lib/apiClient";
 import { Button } from "@/components/ui/Button";
 
 /**
- * The one-time nudge after login: sources the deployment has not configured
+ * The one-time card after login: sources the deployment has not configured
  * and that need a key, listed by name with what each one unlocks.
  *
- * It appears only when there is something to do, and "稍后再说" is honoured
- * for a week in this browser — a prompt that returns on every page load
- * teaches people to dismiss prompts. A source the deployment has configured,
- * one the researcher already filled in, or one that works without a key
- * never appears here.
+ * It appears only when there is something to do, at most once per browser, and
+ * never on the session page. It used to sit above every route including the
+ * conversation, where it took 120 px off the top of the kernel frame and
+ * greeted a new account with seven English source names before anything else
+ * (2026-09-15 walk, B5); dismissing it hid it for a week, and then it came
+ * back. Once dismissed — by either button or the close control — it is done,
+ * because the same seven sources are a permanent tab on the account page and a
+ * banner that returns is a banner people stop reading.
  */
 export const CONNECTOR_PROMPT_SNOOZE_KEY = "openScience.connectorPrompt.snoozedUntil";
-const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+/** Far enough that "dismissed" means dismissed. Kept as a timestamp rather
+ *  than a flag so a browser that already snoozed is not asked again first. */
+const SNOOZE_MS = 100 * 365 * 24 * 60 * 60 * 1000;
 
 export function ConnectorPrompt() {
   const navigate = useNavigate();
@@ -68,7 +73,7 @@ export function ConnectorPrompt() {
             variant="primary"
             onClick={() => {
               setPending([]);
-              navigate("/app/account#connectors");
+              navigate("/app/account?tab=connectors");
             }}
           >
             去配置

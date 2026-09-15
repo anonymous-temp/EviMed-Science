@@ -2724,11 +2724,17 @@ test("production auth rejects anonymous requests and accepts login cookies", asy
     });
     assert.equal(body.csrfToken, loggedIn.csrfToken);
 
-    // What the deployment serves as its session surface, decided here and not
-    // by a build flag: the views read different sources, and a deployment that
-    // serves the kernel's own application serves it from an origin only the
+    // Where the kernel's own application is served, decided here and not by a
+    // build flag: a deployment that serves it serves it from an origin only the
     // server knows. Empty here because this app does not serve it.
-    assert.deepEqual(body.runtime, { kernel: "dsh", sessionView: "run-stream", uiOrigin: "" });
+    //
+    // `sessionView` left on 2026-09-15: one view has existed since the second
+    // was retired, and the field was kept for browser bundles older than the
+    // server. Nothing has read it on either side since — `rememberRuntimeProfile`
+    // deliberately ignores it — so it was a field describing a choice that no
+    // longer exists (walk, A5).
+    assert.deepEqual(body.runtime, { kernel: "dsh", uiOrigin: "" });
+    assert.equal(body.operator, false, "an account the deployment did not name is not offered the ops page");
 
     const securityLog = await readFile(path.join(app.config.dataDir, ".openscience", "security.jsonl"), "utf8");
     assert.ok(

@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { errorCodeOutcome } from "@evimed/domain";
+import { errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
 import { createWebRuntimeUiFrame, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, getWebProjectId, webErrorMessage, WebApiError, webRuntimeProfile, type WebRuntimeUiFrame } from "@/lib/apiClient";
-import { runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { Button } from "@/components/ui/Button";
 
 /** Why this surface is showing an alert instead of the research session. */
@@ -16,6 +16,9 @@ interface FrameFailure {
   /** A ceiling or a hold. The account page is where the position is stated and
    *  where the ceiling is raised, so it is the offered action instead. */
   capped: boolean;
+  /** A concurrency ceiling rather than a spend one: the action that helps is
+   *  stopping a session that is already running, not raising a quota. */
+  ledger?: boolean;
 }
 
 /** A failure this surface observed itself — a timer, a native error frame —
@@ -50,6 +53,21 @@ function refusedFrame(error: unknown): FrameFailure {
   // ended session and the shell moves to the login route — so a retry here
   // would race that, not fix it.
   return { text, retryable: !capped && error.status !== 401, capped };
+}
+
+/**
+ * A refusal the frame's own document announced.
+ *
+ * The runtime-UI origin serves a notice page when the session cannot be
+ * opened, and that page now posts the code and the sentence it rendered. The
+ * codes worth acting on differently are the ceilings: a session refused
+ * because the deployment is already at its runtime limit is waited out or
+ * freed, and pointing at the run ledger is the only action that helps.
+ */
+function noticedFrame(code: string, detail: string): FrameFailure {
+  const text = detail || errorCodeMessage(code);
+  const capped = errorCodeOutcome(code) === "capped";
+  return { text, retryable: true, capped, ledger: capped };
 }
 
 /** The native application stays on its own origin and immutable project frame. */
@@ -206,6 +224,17 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== origin || event.source !== iframe.current?.contentWindow) return;
       const message = event.data;
+      // A notice page carries no frame claims and no sequence: it is served
+      // INSTEAD of the kernel's application, so the bridge that owns those
+      // never loaded. Origin and source are the check; the payload only
+      // selects which sentence is shown. Before this existed the shell learned
+      // nothing from a refusal and waited out its own 30 s deadline, which
+      // then blamed a slow cold start for a ceiling the server had already
+      // named (2026-09-15 walk, A8).
+      if (message?.type === "evimed.runtime-ui.notice" && message.version === 1 && typeof message.code === "string") {
+        setError(noticedFrame(message.code, typeof message.detail === "string" ? message.detail : ""));
+        return;
+      }
       if (!message || message.version !== 1 || message.frameId !== binding.frameId || message.projectId !== projectId
         || !Number.isSafeInteger(message.seq) || message.seq <= incoming.current) return;
       if (message.type === "evimed.runtime-ui.ready") {
@@ -226,6 +255,19 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
           if (!recoveryAttempted.current) { recoveryAttempted.current = true; renewBinding.current?.(); }
           else setLeaseError("研究连接暂时无法恢复，请重试");
         } else setError(frameFailure("研究会话没有完成初始化，请重试。"));
+      } else if (message.type === "evimed.runtime-ui.shell-navigate") {
+        // The rail inside the frame asking the shell to move. A closed
+        // vocabulary, mapped here: the frame runs third-party-composed code on
+        // its own origin, so a destination it could spell freely would be a
+        // redirect it could choose.
+        const routes: Record<string, string> = {
+          "new-task": "/app/chat", runs: "/app/runs", knowledge: "/app/files",
+          memory: "/app/memory", capabilities: "/app/capabilities", account: "/app/account",
+        };
+        const to = routes[String(message.destination)];
+        if (!to) return;
+        incoming.current = message.seq;
+        navigate(to, to === "/app/chat" ? { state: { runtimeUiIntent: newRuntimeUiIntent() } } : undefined);
       } else if (message.type === "evimed.runtime-ui.ack") {
         const request = currentRequest.current;
         if (!request || message.requestId !== request.requestId || typeof message.ok !== "boolean"
@@ -279,17 +321,19 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-ui-sm text-error">
           <p>{error.text}</p>
           {error.retryable && <Button variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>}
-          {error.capped && <Button variant="ghost" onClick={() => navigate("/app/account")}>查看账户与额度</Button>}
+          {error.ledger
+            ? <Button variant="ghost" onClick={() => navigate("/app/runs")}>去运行记录</Button>
+            : error.capped && <Button variant="ghost" onClick={() => navigate("/app/account")}>查看账户与额度</Button>}
         </div>
       ) : (
         <>
           {navigated && (leaseError || !ready || (renewing && binding && binding.expiresAt <= Date.now())) && (
-            <div role={leaseError ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg/90 text-ui-sm text-muted">
+            <div role={leaseError ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui-sm text-muted">
               <p>{leaseError ?? "正在恢复研究连接…"}</p>
               {leaseError && <Button variant="ghost" onClick={() => renewBinding.current?.()} disabled={renewing}>重新连接</Button>}
             </div>
           )}
-          {(!navigated || pending) && <div role="status" className="absolute inset-0 z-10 flex items-center justify-center bg-bg/90 text-ui-sm text-muted">
+          {(!navigated || pending) && <div role="status" className="absolute inset-0 z-10 flex items-center justify-center bg-bg text-ui-sm text-muted">
             {pending ? "正在打开研究任务…" : "正在启动研究运行时…"}
           </div>}
           {binding && <iframe

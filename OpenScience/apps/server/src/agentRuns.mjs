@@ -1043,6 +1043,16 @@ function injectedSkills(projection) {
       if (typeof name === "string" && name.trim()) injected.add(name.trim());
     }
   }
+  // Skills the composition put into the session's own system prompt rather
+  // than leaving the model to fetch. Written by the run (the socket's
+  // `evimed-guidance` provides the list and `evimed-store` projects it), so
+  // this is the run's own receipt that the method was in front of it — the
+  // same authority the delegation records above carry, not a claim from
+  // configuration. Absent in an older runtime image, which reads as "nothing
+  // was injected" and leaves the check exactly as it was.
+  for (const name of projection?.injectedSkills ?? []) {
+    if (typeof name === "string" && name.trim()) injected.add(name.trim());
+  }
   return injected;
 }
 
@@ -1718,8 +1728,12 @@ async function specialistCompletionOutcome(
           // literally means. Unlike a bookkeeping gap between the report and
           // its apparatus, a reader cannot see that it was skipped.
           qualityUnverified: true,
+          // Said in the product's language, because this sentence is shown to
+          // the researcher on the run ledger and in their inbox — it was
+          // English, and it was the first thing a first-time user read about
+          // their own first answer (2026-09-15 walk, B8).
           qualityIssues: [
-            `The ${agent.skill} skill was not loaded in this turn; the reply was delivered without managed-persona verification.`,
+            `本轮没有加载「${agent.skill}」方法，回答按未经人设校验交付。内容本身未被判定有误，可直接阅读；如需严格校验，重新提问即可。`,
           ],
         };
       }

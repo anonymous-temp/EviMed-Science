@@ -29,7 +29,23 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
-const RELEASE_RE = /^evimed-\d{8}-[0-9a-f]{7,40}$/;
+/**
+ * What a release directory is called.
+ *
+ * Two forms, because the deployment line changed and the script did not. The
+ * dated form `evimed-YYYYMMDD-<rev>` is what the host's own deploy script
+ * cuts; the bare revision `f000cf96af5e` is what the 2026-09-14 redeploy wrote.
+ * Matching only the first meant the weekly timer reported `0 releases, 0 kept,
+ * 0 removed` against a directory holding ten of them — a retention job that
+ * had quietly stopped retaining anything and said so in words that read like
+ * success (2026-09-15 walk, B6).
+ */
+const DATED_RELEASE_RE = /^evimed-\d{8}-[0-9a-f]{7,40}$/;
+const BARE_RELEASE_RE = /^[0-9a-f]{7,40}$/;
+/** @param {string} name */
+function isRelease(name) {
+  return DATED_RELEASE_RE.test(name) || BARE_RELEASE_RE.test(name);
+}
 const IMAGE_REPOS = ["open-science-web", "evimed-runtime-dsh"];
 
 function usage() {
@@ -93,7 +109,7 @@ export async function plan(releasesDir, keep, heldBy = mountedReleases) {
   await assertReleasesDir(releasesDir);
   const entries = await fsp.readdir(releasesDir, { withFileTypes: true });
   const named = entries
-    .filter((entry) => entry.isDirectory() && RELEASE_RE.test(entry.name))
+    .filter((entry) => entry.isDirectory() && isRelease(entry.name))
     .map((entry) => entry.name);
   const releases = await sortByBuildTime(releasesDir, named);
   const newest = new Set(releases.slice(-keep));
@@ -131,7 +147,14 @@ async function sortByBuildTime(releasesDir, names) {
       const manifest = JSON.parse(await fsp.readFile(path.join(releasesDir, name, "OpenScience/deploy/web/release-manifest.json"), "utf8"));
       createdAt = typeof manifest?.source?.createdAt === "string" ? manifest.source.createdAt : "";
     } catch { /* no manifest, or unreadable: the name decides */ }
-    return { name, key: `${name.slice(7, 15)}T${createdAt || "00:00:00.000Z"}#${name}` };
+    // One axis for both name forms: an ISO instant. The dated form can supply
+    // a day from its own name when its manifest is unreadable; the bare
+    // revision form carries no date at all, so its manifest is the only
+    // source and a missing one sorts oldest — a removal candidate rather than
+    // something permanently "newest" and therefore permanently kept.
+    const day = DATED_RELEASE_RE.test(name) ? name.slice(7, 15) : "";
+    const named = day ? `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}T00:00:00.000Z` : "";
+    return { name, key: `${createdAt || named || "0000-00-00T00:00:00.000Z"}#${name}` };
   }));
   return keyed.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)).map((entry) => entry.name);
 }
@@ -148,7 +171,7 @@ async function currentRelease(releasesDir) {
   try {
     const target = await fsp.realpath(path.join(path.dirname(releasesDir), "current"));
     const name = path.basename(target);
-    return path.dirname(target) === (await fsp.realpath(releasesDir)) && RELEASE_RE.test(name) ? name : null;
+    return path.dirname(target) === (await fsp.realpath(releasesDir)) && isRelease(name) ? name : null;
   } catch {
     return null;
   }

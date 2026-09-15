@@ -77,6 +77,22 @@ test("an off-peak window is parsed, wraps midnight, and a typo costs the discoun
     assert.equal(parseWindow(bad), null, bad);
   }
   assert.equal(withinWindow(null, new Date("2026-09-07T12:00:00")), true, "no window means always");
+
+  // The window's numbers are the operator's clock, not the container's. The
+  // web image ships with no `TZ`, so `22:00-09:00` written in Beijing time was
+  // being evaluated in UTC — 06:00 to 17:00 China time, the working day.
+  const midnightBeijing = new Date("2026-09-07T16:00:00.000Z");
+  assert.equal(withinWindow(night, midnightBeijing, "Asia/Shanghai"), true, "00:00 Beijing is inside 22:00-09:00");
+  assert.equal(withinWindow(night, midnightBeijing, "UTC"), false, "16:00 UTC is not");
+  const noonBeijing = new Date("2026-09-07T04:00:00.000Z");
+  assert.equal(withinWindow(night, noonBeijing, "Asia/Shanghai"), false, "midday Beijing is outside");
+  assert.equal(withinWindow(night, noonBeijing, "UTC"), true, "04:00 UTC is inside, which is the defect");
+  // A zone name this build cannot resolve must not stop the loop.
+  assert.equal(
+    withinWindow(night, midnightBeijing, "Mars/Olympus"),
+    withinWindow(night, midnightBeijing),
+    "an unknown zone falls back to the process clock",
+  );
 });
 
 test("inside the window a consolidate job reaches the consolidation and finishes", async () => {

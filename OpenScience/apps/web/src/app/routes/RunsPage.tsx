@@ -19,11 +19,13 @@ import { formatDateTime } from "@/lib/format";
 import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import {
   runDidNotDeliver,
+  runTitle,
   summarizeQualityNotices,
   undeliveredFiles,
   webRunOutcome,
   WEB_RUN_STATUS_LABEL,
 } from "@/lib/runPresentation";
+import { capabilityTitle } from "@/lib/researchAgentUi";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 
@@ -191,7 +193,7 @@ function RunsEmptyState({ filtered }: { filtered: boolean }) {
       title="尚无运行记录"
       description={
         <>
-          当科研 Agent 运行代码时（例如 <span className="font-mono text-text">python train.py</span>
+          当 EviMed 运行代码时（例如 <span className="font-mono text-text">python train.py</span>
           ），执行方案和产物会记录于此。
         </>
       }
@@ -408,9 +410,25 @@ function HostedRunsView() {
   );
 }
 
+/**
+ * What produced this run, in the product's words.
+ *
+ * The tag used to be the raw capability id rendered `uppercase`, so the ledger
+ * read `开放域 · CLINICAL-EVIDENCE-SYNTHESIS` — a Chinese connective joined to
+ * a shouted English identifier. The catalog's own Chinese title is available
+ * from the id without a fetch; an id this build has no name for falls back to
+ * the id rather than to silence, because an unnamed capability is worth seeing.
+ */
+function capabilityLabel(run: WebAgentRun): string {
+  const agent = run.effectiveAgentId ?? run.agentId;
+  if (!agent) return run.mode === "specialist" ? "专项科研" : "开放域科研";
+  const name = capabilityTitle(agent) ?? agent;
+  return run.mode === "open-domain" ? `开放域 · ${name}` : name;
+}
+
 /** A hosted ledger row — same visual language as the desktop `RunRow`, but the
- *  main text is the run id, the tag names the specialist/open-domain agent,
- *  and artifacts download through the web API. */
+ *  main text is the run's brief, the tag names the capability in the product's
+ *  words, and artifacts download through the web API. */
 function WebRunRow({
   run,
   open,
@@ -453,21 +471,17 @@ function WebRunRow({
         />
         {/* The question, when the run recorded one. The list was keyed on the
           * run id alone, so thirty analyses read as thirty hashes and telling
-          * them apart meant opening each one. */}
+          * them apart meant opening each one. When no brief was recorded
+          * `runTitle` says so; the id stays in the tooltip and in the
+          * diagnostics row, where it is labelled. */}
         <span
-          className={cn(
-            "min-w-0 flex-1 truncate text-ui",
-            run.question ? "" : "font-mono",
-            failed ? "text-text/70" : "text-text",
-          )}
+          className={cn("min-w-0 flex-1 truncate text-ui", failed ? "text-text/70" : "text-text")}
           title={run.question ? `${run.question}\n${run.id}` : run.id}
         >
-          {run.question || run.id}
+          {runTitle(run)}
         </span>
-        <span className="shrink-0 text-caption font-semibold uppercase tracking-wide text-accent">
-          {run.effectiveAgentId
-            ? `${run.mode === "open-domain" ? "开放域 · " : ""}${run.effectiveAgentId}`
-            : run.mode === "specialist" ? run.agentId : "开放域科研"}
+        <span className="shrink-0 text-caption font-semibold tracking-wide text-accent">
+          {capabilityLabel(run)}
         </span>
         {run.durationMs != null && (
           <span className="shrink-0 tabular-nums text-xs text-muted">{formatDuration(run.durationMs)}</span>
@@ -480,19 +494,34 @@ function WebRunRow({
       {open && (
         <div className="ml-6 mb-1 space-y-3 border-l border-border-faint pl-4 pt-1 text-xs">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Chip title="模型">{run.model}</Chip>
-            {run.mode === "specialist" && run.agentId && <Chip title="专项科研 Agent">{run.agentId}</Chip>}
-            {run.mode === "open-domain" && run.effectiveAgentId && (
-              <Chip title="开放域自动路由专项">{run.effectiveAgentId}</Chip>
-            )}
-            <Chip title="会话">{run.sessionId}</Chip>
-            {run.question && <Chip title="运行 ID">{run.id}</Chip>}
+            {capabilityLabel(run) && <Chip title="所用能力">{capabilityLabel(run)}</Chip>}
             {run.phase && WEB_RUN_PHASE_LABEL[run.phase] && (
               <Chip title={`运行阶段（由账本记录派生，不单独存储）：${run.phase}`}>
                 {WEB_RUN_PHASE_LABEL[run.phase]}
               </Chip>
             )}
           </div>
+
+          {/* Identifiers, folded.
+            *
+            * These four — the run id, the kernel's session id, the model id and
+            * the raw capability id — were four chips on the open row, so the
+            * first thing a researcher read about their own work was
+            * `ses_0722bc34fffeRehfLDGbxJn4I3` (§23.2 rule 11 forbids exactly
+            * this). They are still here, because support asks for them and
+            * because a reader who wants to know which model answered is
+            * entitled to; they are behind one disclosure and labelled. */}
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted hover:text-text">技术标识（供排查使用）</summary>
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-caption text-muted">
+              <dt className="font-sans">运行</dt><dd className="truncate">{run.id}</dd>
+              <dt className="font-sans">会话</dt><dd className="truncate">{run.sessionId}</dd>
+              <dt className="font-sans">模型</dt><dd className="truncate">{run.model}</dd>
+              {(run.effectiveAgentId ?? run.agentId) && (
+                <><dt className="font-sans">能力</dt><dd className="truncate">{run.effectiveAgentId ?? run.agentId}</dd></>
+              )}
+            </dl>
+          </details>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
             <Action icon={<RotateCcw size={12} />} onClick={onReproduce} title="起草提示，复查该运行的证据与产物并尝试复现">

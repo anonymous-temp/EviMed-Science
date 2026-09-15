@@ -1056,7 +1056,9 @@ test("an answer-mode turn delivers unverified (not failed) when its answer skill
     assert.equal(run.status, "succeeded");
     assert.equal(run.errorCode, null);
     assert.equal(run.verification, "unverified");
-    assert.match(run.qualityNotices.join("\n"), /open-domain-answer skill was not loaded/);
+    // The sentence is shown to the researcher, on the run ledger and in
+    // their inbox, so it is in the product's language (2026-09-15 walk, B8).
+    assert.match(run.qualityNotices.join("\n"), /没有加载「open-domain-answer」方法/);
   });
 });
 
@@ -6562,7 +6564,7 @@ test("a control-plane mounted persona satisfies skillsLoaded with no skill tool 
     // This is the notice that fired on 11 of 17 production answer-line runs.
     assert.equal(unmounted.status, "succeeded");
     assert.equal(unmounted.verification, "unverified");
-    assert.match(unmounted.qualityNotices.join("\n"), /open-domain-answer skill was not loaded/);
+    assert.match(unmounted.qualityNotices.join("\n"), /没有加载「open-domain-answer」方法/);
     assert.equal(first.id, unmounted.id);
 
     // The same turn, with the control plane having mounted the body.
@@ -6634,7 +6636,7 @@ test("a mounted name the control plane never recorded does not pass the check", 
     }];
     const finished = await store.reconcileSession(project, binding.sessionId);
     assert.equal(finished.verification, "unverified");
-    assert.match(finished.qualityNotices.join("\n"), /open-domain-answer skill was not loaded/);
+    assert.match(finished.qualityNotices.join("\n"), /没有加载「open-domain-answer」方法/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

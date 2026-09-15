@@ -147,6 +147,7 @@ export function advanceEvidence(record, event, patch = {}) {
  * @property {{ total: number, byStatus: Record<string, number> }} evidence
  * @property {Record<string, any>[]} gateRuns
  * @property {Record<string, any>[]} subagents
+ * @property {string[]} injectedSkills
  * @property {string[]} qualityNotices
  * @property {string[]} degraded
  */
@@ -164,6 +165,7 @@ export const RUN_STATE_FORMAT_VERSION = 1
  *   evidence: readonly Record<string, any>[],
  *   gateRuns?: readonly Record<string, any>[],
  *   subagents?: readonly Record<string, any>[],
+ *   injectedSkills?: readonly string[],
  *   qualityNotices?: readonly string[],
  *   degraded?: readonly string[],
  *   now: string,
@@ -203,6 +205,13 @@ export function projectRunState(input) {
     evidence: { total: (input.evidence ?? []).length, byStatus },
     gateRuns: [...(input.gateRuns ?? [])].sort((left, right) => Number(left.attempt ?? 0) - Number(right.attempt ?? 0)),
     subagents: [...(input.subagents ?? [])],
+    // Skill bodies this deployment put into the session's own context rather
+    // than leaving the model to fetch with the `skill` tool. Written by the
+    // run, read by the control plane's completion gate, which counts an
+    // injected skill as a loaded one — the check asks whether the method was
+    // in front of the model, and a section of the system prompt is as in front
+    // of it as a tool result is.
+    injectedSkills: [...(input.injectedSkills ?? [])],
     qualityNotices: [...(input.qualityNotices ?? [])],
     degraded: [...(input.degraded ?? [])],
   }

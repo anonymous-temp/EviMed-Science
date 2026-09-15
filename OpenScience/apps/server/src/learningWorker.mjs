@@ -28,7 +28,7 @@ export class LearningWorker {
   /**
    * @param {{jobs: any, distillation: any, consolidation: any, resolveProject?: (job: any) => Promise<any>,
    *          resolveRun?: (project: any, job: any) => Promise<any>, maintain?: () => Promise<void>,
-   *          enabled?: boolean, window?: string,
+   *          enabled?: boolean, window?: string, windowTimeZone?: string,
    *          pollMs?: number, leaseMs?: number, reconcileMs?: number, now?: () => Date}} dependencies
    */
   constructor({
@@ -40,6 +40,9 @@ export class LearningWorker {
     maintain = async () => {},
     enabled = true,
     window: activeWindow = "",
+    // Which zone the window's numbers are written in. Empty means the process
+    // clock, which is what this did before and is right for a local run.
+    windowTimeZone = "",
     pollMs = 5000,
     leaseMs = 900_000,
     reconcileMs = 300_000,
@@ -61,6 +64,7 @@ export class LearningWorker {
     this.maintain = maintain;
     this.enabled = enabled;
     this.window = parseWindow(activeWindow);
+    this.windowTimeZone = String(windowTimeZone ?? "");
     this.pollMs = pollMs;
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
@@ -92,7 +96,7 @@ export class LearningWorker {
   /** Whether the loop may spend money right now. @returns {string | null} */
   claimBlockedReason() {
     if (!this.enabled) return "learning_disabled";
-    if (!withinWindow(this.window, this.now())) return "outside_learning_window";
+    if (!withinWindow(this.window, this.now(), this.windowTimeZone)) return "outside_learning_window";
     return null;
   }
 
@@ -271,15 +275,49 @@ export function parseWindow(value) {
 /**
  * Windows wrap midnight, which is the only case that matters: the off-peak
  * window this exists for is 22:00 to 09:00.
+ *
+ * The zone is an argument because it was implicitly the process's. The web
+ * container ships with no `TZ`, so a clock reading came back UTC while the
+ * operator had written `22:00-09:00` meaning Beijing; the loop was therefore
+ * armed for 06:00–17:00 China time — the working day, the exact opposite of
+ * the off-peak band the window exists to hit (2026-09-15 walk, B3). It cost
+ * nothing only because the deployment had no trajectories to learn from yet.
+ *
+ * A zone this build cannot resolve falls back to the process's own clock with
+ * a named throw handled by the caller, rather than silently picking one.
+ *
  * @param {LearningWindow} window
  * @param {Date} now
+ * @param {string} [timeZone] IANA zone the window's numbers are written in.
  * @returns {boolean}
  */
-export function withinWindow(window, now) {
+export function withinWindow(window, now, timeZone = "") {
   if (!window) return true;
-  const minutes = now.getHours() * 60 + now.getMinutes();
+  const minutes = zonedMinutes(now, timeZone);
   if (window.startMinutes < window.endMinutes) return minutes >= window.startMinutes && minutes < window.endMinutes;
   return minutes >= window.startMinutes || minutes < window.endMinutes;
+}
+
+/**
+ * Minutes past midnight in the given zone, or in the process's own zone when
+ * none is given or the given one is not a zone this build knows.
+ * @param {Date} now @param {string} timeZone @returns {number}
+ */
+function zonedMinutes(now, timeZone) {
+  if (timeZone) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+      }).formatToParts(now);
+      const hour = Number(parts.find((part) => part.type === "hour")?.value);
+      const minute = Number(parts.find((part) => part.type === "minute")?.value);
+      if (Number.isInteger(hour) && Number.isInteger(minute)) return hour * 60 + minute;
+    } catch {
+      // An unknown zone name is a configuration error, not a reason to stop
+      // the loop; the process clock is what this did before the argument.
+    }
+  }
+  return now.getHours() * 60 + now.getMinutes();
 }
 
 /** @param {number} minutes @returns {string} */

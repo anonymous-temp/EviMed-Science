@@ -98,9 +98,9 @@ export function WebAccountCard({
     <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="font-serif text-body text-text">托管账户</h2>
+          <h2 className="font-serif text-body text-text">账户</h2>
           <p className="mt-0.5 truncate text-xs text-muted">
-            {account ? `${account.name || account.id} · ${account.id}` : "当前托管会话"}
+            {account ? `${account.name || account.id} · ${account.id}` : "当前登录会话"}
           </p>
         </div>
         <button
@@ -120,7 +120,7 @@ export function WebAccountCard({
           </p>
         ) : !account ? (
           <p className="rounded-input border border-border bg-surface-2 px-3 py-2.5 text-ui text-muted">
-            当前没有登录托管账户。
+            当前没有登录账户。
           </p>
         ) : (
           <>

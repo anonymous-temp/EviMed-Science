@@ -26,7 +26,7 @@ export function WebTasksCard() {
     try {
       setTasks(await listWebTasks());
     } catch (e) {
-      toast.error(`无法读取托管任务：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法读取后台任务：${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setLoading(false);
     }
@@ -52,7 +52,7 @@ export function WebTasksCard() {
     <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="font-serif text-body text-text">托管任务</h2>
+          <h2 className="font-serif text-body text-text">后台任务</h2>
           <p className="mt-0.5 text-xs text-muted">当前项目的任务队列</p>
         </div>
         <button

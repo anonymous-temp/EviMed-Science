@@ -97,15 +97,30 @@ describe("RunsPage (hosted web)", () => {
 
   it("groups runs under sticky day labels and expands the newest with its recipe", async () => {
     renderPage();
-    expect(await screen.findByText("run-1")).toBeInTheDocument();
+    // Neither run recorded a brief, so each is titled by the capability that
+    // produced it — in the product's words. The row used to lead with the run
+    // id and tag it with a shouted `CLINICAL-EVIDENCE-SYNTHESIS` beside a
+    // Chinese connective (2026-09-15 walk, D1/D2).
+    expect(await screen.findByText("临床证据深度分析")).toBeInTheDocument();
     expect(screen.getByText("今天")).toBeInTheDocument();
-    expect(screen.getByText("run-2")).toBeInTheDocument();
-    expect(screen.getByText("开放域 · clinical-evidence-synthesis")).toBeInTheDocument();
-    // The newest row is expanded: meta chips, actions, and its artifact.
-    expect(screen.getByText("deepseek-chat")).toBeInTheDocument();
-    // The agent names both the row tag and the expanded detail chip.
-    expect(screen.getAllByText("meta-analysis").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("开放域 · 临床证据深度分析")).toBeInTheDocument();
+    expect(screen.queryByText(/clinical-evidence-synthesis/i)).not.toBeInTheDocument();
+    // The newest row is expanded: its title, its tag and its capability chip.
+    expect(screen.getAllByText("自动化 Meta 分析").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("output/report.docx")).toBeInTheDocument();
+    // The model id, the session id and the run id are still here, behind one
+    // labelled disclosure rather than as four chips on the open row.
+    expect(screen.getByText("技术标识（供排查使用）")).toBeInTheDocument();
+    expect(screen.getByText("deepseek-chat")).toBeInTheDocument();
+    expect(screen.getByText("ses-1")).toBeInTheDocument();
+  });
+
+  // A ledger row from before the `question` column, with no capability either:
+  // the last thing left is the id, and an id is the absence of a name.
+  it("says a run recorded no brief instead of using its id as a title", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({ agentId: null, question: null })]);
+    renderPage();
+    expect(await screen.findByText("未记录题面的运行")).toBeInTheDocument();
   });
 
   // Every link into this page names the run it means. Without honouring it a
@@ -114,7 +129,7 @@ describe("RunsPage (hosted web)", () => {
   // exactly these links.
   it("opens the run a ?run= link names, not the newest one", async () => {
     renderPage("/app/runs?run=run-2");
-    await screen.findByText("run-2");
+    await screen.findByText("临床证据深度分析");
     // run-2 is the older, failed run; its expanded detail is what proves the
     // link won over the default.
     expect(await screen.findByTitle(`错误码：${TIMED_OUT}`)).toBeInTheDocument();
@@ -126,7 +141,8 @@ describe("RunsPage (hosted web)", () => {
     await screen.findByText("run-1");
     await userEvent.click(screen.getByRole("button", { name: /失败/ }));
     await waitFor(() => expect(screen.queryByText("run-1")).not.toBeInTheDocument());
-    expect(screen.getByText("run-2")).toBeInTheDocument();
+    // The one surviving row, now expanded: its tag and its capability chip.
+    expect(screen.getAllByText("开放域 · 临床证据深度分析").length).toBe(2);
     // The failed row explains itself in its expanded detail. It used to print
     // the raw code, which is a server term in the wrong language for a reader.
     expect(screen.getByTitle(`错误码：${TIMED_OUT}`)).toBeInTheDocument();
@@ -302,7 +318,9 @@ describe("RunsPage (hosted web)", () => {
     })]);
     renderPage();
     expect(await screen.findByText("速效救心丸开封后多久失效？")).toBeInTheDocument();
-    expect(screen.getByTitle("运行 ID")).toHaveTextContent("run-1");
+    expect(screen.getByText("技术标识（供排查使用）")).toBeInTheDocument();
+    expect(screen.getByText("run-1")).toBeInTheDocument();
+    expect(screen.getByText("ses-1")).toBeInTheDocument();
   });
 
   it("finds a run by what was asked, not only by its id", async () => {

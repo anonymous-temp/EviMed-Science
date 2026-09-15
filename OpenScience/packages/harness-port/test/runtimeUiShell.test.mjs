@@ -56,11 +56,12 @@ test('the shell injects exactly the slot registry and the locale runtime', () =>
   assert.deepEqual(inject, ['slots', 'locale']);
 });
 
-test('the three brand slots and the hero workspace picker are occupied, nothing else', () => {
+test('the left column, the three brand slots and the hero workspace picker are occupied, nothing else', () => {
   const f = fixture();
   apply(f.ctx, {}, f.target, f.require);
   assert.deepEqual(Object.keys(f.occupants).sort(), [
-    'conversation.hero.brand.mark', 'conversation.hero.workspace', 'sidebar.brand.mark', 'sidebar.brand.name',
+    'conversation.hero.brand.mark', 'conversation.hero.workspace', 'sidebar',
+    'sidebar.brand.mark', 'sidebar.brand.name',
   ]);
   // The mark honours the size its host surface asks for, as the kernel's own
   // mark does, and names the product for assistive technology.
@@ -72,6 +73,52 @@ test('the three brand slots and the hero workspace picker are occupied, nothing 
   assert.equal(f.occupants['sidebar.brand.name']({}).children[0], 'EviMed');
   // An occupant that renders nothing is how a popup slot is withdrawn.
   assert.equal(f.occupants['conversation.hero.workspace']({}), null);
+  // `sidebar` is the whole left column, and occupying it replaces the column
+  // rather than adding to it (the layout package's own contract says so). The
+  // rail is what takes its place: one control, and the mark at the foot.
+  const rail = f.occupants.sidebar({ collapsed: true });
+  assert.equal(rail.type, 'div');
+  const button = rail.children.find((/** @type {any} */ child) => child?.type === 'button');
+  assert.equal(button.props['aria-label'], '新任务');
+  let navigated = null;
+  f.target.__EVIMED_SHELL__ = { navigate: (/** @type {string} */ destination) => { navigated = destination; } };
+  button.props.onClick();
+  assert.equal(navigated, 'new-task');
+  // Without the bridge there is no channel, and a click must still not throw:
+  // the conversation is what this frame is for.
+  delete f.target.__EVIMED_SHELL__;
+  assert.doesNotThrow(() => button.props.onClick());
+});
+
+// The frame opens the column at its 280 px default and the rail is 56 px of
+// content, so it closes itself — once. `SIDEBAR_COLLAPSED` is the floor: the
+// column cannot be removed, only narrowed.
+test('the rail closes the kernel column once and never fights a reopen', () => {
+  /** @type {number} */ let toggles = 0;
+  /** @type {(() => void)[]} */ const deferred = [];
+  const f = fixture();
+  f.ctx.layout = { toggleSidebar: () => { toggles++; } };
+  f.target.setTimeout = (/** @type {() => void} */ fn) => { deferred.push(fn); return 0; };
+  apply(f.ctx, {}, f.target, f.require);
+
+  f.occupants.sidebar({ collapsed: false });
+  f.occupants.sidebar({ collapsed: false });
+  assert.equal(deferred.length, 1, 'one collapse request, however many renders');
+  for (const fn of deferred) fn();
+  assert.equal(toggles, 1);
+
+  // Reopened by the researcher: rendered expanded again, and left alone.
+  f.occupants.sidebar({ collapsed: false });
+  assert.equal(deferred.length, 1);
+});
+
+test('a layout service without the toggle costs the geometry, not the rail', () => {
+  const f = fixture();
+  /** @type {(() => void)[]} */ const deferred = [];
+  f.target.setTimeout = (/** @type {() => void} */ fn) => { deferred.push(fn); return 0; };
+  apply(f.ctx, {}, f.target, f.require);
+  assert.doesNotThrow(() => f.occupants.sidebar({ collapsed: false }));
+  assert.doesNotThrow(() => { for (const fn of deferred) fn(); });
   // Every occupant sits below the kernel's default priority: single slots
   // render the lowest, and a collision at 0 fails the whole loader entry.
   for (const [name, priority] of Object.entries(f.priorities)) assert.ok(priority < 0, `${name} registered at ${priority}`);
@@ -84,7 +131,7 @@ test('a slot the kernel refuses costs that slot, never the bridge sharing the bu
     f.occupants[spec.name] = component; return () => {};
   };
   assert.doesNotThrow(() => apply(f.ctx, {}, f.target, f.require));
-  assert.deepEqual(Object.keys(f.occupants).sort(), ['conversation.hero.brand.mark', 'sidebar.brand.mark', 'sidebar.brand.name']);
+  assert.deepEqual(Object.keys(f.occupants).sort(), ['conversation.hero.brand.mark', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name']);
   assert.deepEqual(f.selected, [EVIMED_LOCALE], 'the language still applies after a slot failure');
 });
 
@@ -109,7 +156,7 @@ test('a locale runtime without the documented surface still gets zh, not a crash
   const f = fixture({ localeApi: false });
   apply(f.ctx, {}, f.target, f.require);
   assert.deepEqual(f.selected, []);
-  assert.deepEqual(Object.keys(f.occupants).length, 4, 'the brand does not depend on the language');
+  assert.deepEqual(Object.keys(f.occupants).length, 5, 'the brand does not depend on the language');
 });
 
 test('a language-pack failure falls back to the kernel zh rather than to the browser', () => {

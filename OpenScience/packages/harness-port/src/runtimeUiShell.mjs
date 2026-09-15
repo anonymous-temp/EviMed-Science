@@ -9,11 +9,22 @@
  * the same shape as the official one: no DOM patching, no CSS by hashed class
  * name, only the composition surfaces the kernel documents.
  *
- * Three things it does, and why each is here rather than in our own page:
+ * Four things it does, and why each is here rather than in our own page:
  *
+ *  - The left column. `sidebar` is the whole navigation column, and the layout
+ *    package's own contract says occupying it replaces that column rather than
+ *    adding to it. The hosted product has one navigation, in the shell around
+ *    this frame; the kernel's second one — brand, new session, workspace tree,
+ *    session list — was the same information under different words beside it.
+ *    A rail takes its place (the frame reserves 56 px even closed, so this is
+ *    the smallest the column gets).
  *  - Brand. The EviMed mark occupies the sidebar mark, the sidebar name and
  *    the conversation hero; the kernel's fish and wordmark fall back only
- *    where nothing occupies the slot, so this leaves nothing of theirs.
+ *    where nothing occupies the slot, so this leaves nothing of theirs. The
+ *    two sidebar brand seats are declared by the column this file replaces, so
+ *    they are dead while the rail is registered — kept because they are what
+ *    the page falls back to if the rail registration ever does not take, and
+ *    the kernel's own wordmark appearing there would be worse than dead code.
  *  - Language. The kernel ships `zh` and `en` and picks by the browser's
  *    `navigator` on a non-loopback page, where the user cannot switch (the
  *    General settings row is disabled in the hosted composition). A Chinese
@@ -96,6 +107,66 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
     };
     const Name = () => h('span', { style: { fontWeight: 600, letterSpacing: '0.01em' } }, 'EviMed');
     const Nothing = () => null;
+
+    /**
+     * The left column, replaced by a rail.
+     *
+     * The kernel's own left column is a second navigation: brand, new session,
+     * a workspace tree and the session list — all of which the hosted shell
+     * already shows, under different words (任务 / 会话 / 运行). Side by side
+     * with the shell's sidebar that made the session page read as three shells
+     * nested in each other, which is the first thing an operator said about it
+     * (2026-09-15 walk, A1/A6).
+     *
+     * Occupying `sidebar` replaces the column outright — the layout package's
+     * own contract says so, and says the seats it declares go with it. The
+     * column cannot be removed entirely: closed, the frame still reserves a
+     * 56 px rail. So this renders that rail, with the one control the kernel's
+     * column had that the shell's does not duplicate — start a new task — and
+     * closes itself once on first paint, because the frame opens it at 280 px.
+     *
+     * Navigation leaves through the bridge's channel, which owns the sequence
+     * the shell validates. If the bridge is not present this renders a rail
+     * with no actions rather than throwing: the conversation is what matters.
+     */
+    // Hook-free on purpose. The kernel hands this bundle React through the
+    // loader's `require`, and how much of React that object carries is the
+    // loader's business, not ours: `createElement` is the only member the
+    // brand occupants have ever needed. One closure flag and a deferred call
+    // do what a `useRef` + `useEffect` pair would, without widening what this
+    // file assumes about its host.
+    let railCollapseRequested = false;
+    const Rail = ({ collapsed }) => {
+      if (!railCollapseRequested && !collapsed) {
+        railCollapseRequested = true;
+        // Deferred out of the render pass: `toggleSidebar` writes the layout
+        // store, and writing another component's store while rendering is the
+        // one thing React asks you not to do. Once only — a researcher who
+        // reopens the column keeps it open.
+        try {
+          target.setTimeout?.(() => {
+            try { ctx.layout?.toggleSidebar?.(); } catch { /* geometry is cosmetic */ }
+          }, 0);
+        } catch { /* no timer, no auto-collapse; the rail still renders */ }
+      }
+      const go = (destination) => () => {
+        try { target.__EVIMED_SHELL__?.navigate?.(destination); } catch { /* no channel, no navigation */ }
+      };
+      return h('div', {
+        style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+          height: '100%', padding: '12px 0', boxSizing: 'border-box' },
+      },
+      h('button', { type: 'button', onClick: go('new-task'), title: '新任务', 'aria-label': '新任务',
+        style: { display: 'grid', placeItems: 'center', width: '28px', height: '28px', padding: 0,
+          border: 'none', borderRadius: '8px', background: 'transparent', cursor: 'pointer', color: 'inherit' } },
+      h('svg', { xmlns: 'http://www.w3.org/2000/svg', viewBox: '0 0 24 24', width: 16, height: 16,
+        fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', 'aria-hidden': 'true' },
+      h('path', { d: 'M12 5v14M5 12h14' }))),
+      // The mark sits at the foot rather than the head: the product's own
+      // brand is already at the top of the shell's sidebar, one column left,
+      // and two of them stacked is the duplication this rail exists to end.
+      h('div', { style: { marginTop: 'auto', opacity: 0.55 } }, h(Mark, { size: 18 })));
+    };
     // A single slot renders its LOWEST-priority registration and refuses a
     // second one at the same priority. The kernel's own occupants register at
     // the default 0 — the workspace picker always, the official brand in an
@@ -114,6 +185,7 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
       yield ctx.slots.register({ name: 'sidebar.brand.name', priority: below }, Name);
     })));
     guarded('hero brand', () => ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({ name: 'conversation.hero.brand.mark', priority: below }, Mark)));
+    guarded('sidebar rail', () => ctx.slots.inject('sidebar', () => ctx.slots.register({ name: 'sidebar', priority: below }, Rail)));
     // The picker is a popup the chip opens; an occupant that renders nothing
     // leaves the chip (the bound workspace's name) and removes the choice.
     guarded('workspace picker', () => ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register({ name: 'conversation.hero.workspace', priority: below }, Nothing)));

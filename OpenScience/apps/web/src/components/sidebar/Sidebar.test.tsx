@@ -8,12 +8,15 @@ import { Sidebar } from "./Sidebar";
 const mocks = vi.hoisted(() => ({
   runs: [] as WebAgentRun[],
   listWebAgentRuns: vi.fn(),
+  listInbox: vi.fn(),
 }));
 
 vi.mock("@/lib/apiClient", () => ({
   listWebAgentRuns: mocks.listWebAgentRuns,
   getWebProjectId: () => "default",
 }));
+
+vi.mock("@/lib/inboxClient", () => ({ listInbox: mocks.listInbox }));
 
 vi.mock("@/lib/store", () => ({
   SIDEBAR_MIN: 220,
@@ -81,6 +84,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.runs = [];
   mocks.listWebAgentRuns.mockImplementation(async () => mocks.runs);
+  mocks.listInbox.mockResolvedValue({ items: [], nextCursor: null });
 });
 
 describe("Sidebar navigation", () => {
@@ -95,10 +99,13 @@ describe("Sidebar navigation", () => {
     expect(second.sessionId).not.toBe(first.sessionId);
   });
 
+  // Six rows and one footer row. Ten rows with no grouping described the
+  // implementation's modules, not the researcher's work (2026-09-15 walk, C8),
+  // and three of them were views of one body of material.
   it("lists the workbench destinations in order and navigates to each", async () => {
     renderSidebar();
 
-    const order = ["新任务", "运行记录", "知识库", "科研笔记本", "科研记忆", "能力模板"];
+    const order = ["新任务", "运行记录", "知识库", "记忆", "主动科研", "科研能力"];
     const buttons = order.map((label) => screen.getByRole("button", { name: label }));
     for (let i = 1; i < buttons.length; i += 1) {
       expect(
@@ -106,30 +113,44 @@ describe("Sidebar navigation", () => {
       ).toBeTruthy();
     }
 
-    await userEvent.click(screen.getByRole("button", { name: "科研笔记本" }));
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/notebooks");
+    await userEvent.click(screen.getByRole("button", { name: "知识库" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/files");
 
-    await userEvent.click(screen.getByRole("button", { name: "能力模板" }));
+    await userEvent.click(screen.getByRole("button", { name: "科研能力" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/capabilities");
 
-    await userEvent.click(screen.getByRole("button", { name: "账户与额度" }));
+    await userEvent.click(screen.getByRole("button", { name: "账户与设置" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/account");
-
-    await userEvent.click(screen.getByRole("button", { name: "设置" }));
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/settings");
   });
 
-  it("carries the brand and the project switcher above the nav", async () => {
+  // The rows that used to be here and are now tabs of one of the six. The
+  // inbox is not in this list: it is still reachable, as the bell above.
+  it("no longer offers a row for a view of another destination", async () => {
+    renderSidebar();
+    for (const gone of ["资料整理", "科研笔记本", "科研记忆", "记忆胶囊", "能力模板", "设置", "账户与额度"]) {
+      expect(screen.queryByRole("button", { name: gone })).not.toBeInTheDocument();
+    }
+    await screen.findByText("还没有任务");
+  });
+
+  it("carries the brand, the inbox bell and the project switcher above the nav", async () => {
+    mocks.listInbox.mockResolvedValue({ items: [{ id: "n1" }, { id: "n2" }], nextCursor: null });
     renderSidebar();
     expect(screen.getByRole("img", { name: "EviMed" })).toBeInTheDocument();
     expect(screen.getByTestId("project-switcher")).toBeInTheDocument();
-    // Let the ledger read settle so the assertion above is not racing it.
-    await screen.findByText("还没有运行记录");
+    // One old notification did not earn a permanent navigation row; an unread
+    // count does earn a badge.
+    const bell = await screen.findByRole("button", { name: "收件箱，2 条未读" });
+    await userEvent.click(bell);
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/inbox");
   });
 });
 
 describe("Sidebar recent runs", () => {
-  it("lists runs from the ledger and links each to the run it names", async () => {
+  // Back into the conversation. This is the product's only session list now
+  // that the kernel's own left column is a rail, so it has to open the thing
+  // itself rather than the ledger row about it.
+  it("lists runs from the ledger and opens the conversation each belongs to", async () => {
     mocks.runs = [
       run({ id: "run-1", question: "阿司匹林一级预防的证据" }),
       run({ id: "run-2", question: "二甲双胍的不良反应信号" }),
@@ -137,8 +158,15 @@ describe("Sidebar recent runs", () => {
     renderSidebar();
 
     const first = await screen.findByRole("link", { name: /阿司匹林一级预防的证据/ });
-    expect(first).toHaveAttribute("href", "/app/runs?run=run-1");
+    expect(first).toHaveAttribute("href", "/app/chat/ses-run-1");
     expect(screen.getByRole("link", { name: /二甲双胍的不良反应信号/ })).toBeInTheDocument();
+  });
+
+  // A run whose session id is not addressable still has a ledger entry.
+  it("falls back to the ledger for a run with no addressable session", async () => {
+    mocks.runs = [run({ id: "run-1", question: "早期的运行", sessionId: "not a session id" })];
+    renderSidebar();
+    expect(await screen.findByRole("link", { name: /早期的运行/ })).toHaveAttribute("href", "/app/runs?run=run-1");
   });
 
   // The whole reason this list replaced the kernel's session list: a session
@@ -176,12 +204,12 @@ describe("Sidebar recent runs", () => {
 
     await userEvent.clear(screen.getByRole("searchbox", { name: "搜索运行记录" }));
     await userEvent.type(screen.getByRole("searchbox", { name: "搜索运行记录" }), "不存在");
-    expect(screen.getByText("没有匹配的运行")).toBeInTheDocument();
+    expect(screen.getByText("没有匹配的任务")).toBeInTheDocument();
   });
 
   it("says so when the account has no runs yet", async () => {
     renderSidebar();
-    expect(await screen.findByText("还没有运行记录")).toBeInTheDocument();
+    expect(await screen.findByText("还没有任务")).toBeInTheDocument();
   });
 
   // A ledger that cannot be read is not an empty ledger. Reporting it as one
@@ -194,6 +222,6 @@ describe("Sidebar recent runs", () => {
     mocks.listWebAgentRuns.mockRejectedValue(new Error("boom"));
     await new Promise((resolve) => setTimeout(resolve, 0));
     await waitFor(() => expect(screen.getByRole("link", { name: /已经读到的运行/ })).toBeInTheDocument());
-    expect(screen.queryByText("还没有运行记录")).not.toBeInTheDocument();
+    expect(screen.queryByText("还没有任务")).not.toBeInTheDocument();
   });
 });

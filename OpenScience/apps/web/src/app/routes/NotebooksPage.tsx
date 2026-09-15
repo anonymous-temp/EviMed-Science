@@ -16,7 +16,8 @@ import { toast } from "@/lib/toast";
  * folders, newest first. Desktop kernels run in the notebook's own folder;
  * hosted Web keeps notebook execution behind a server-side sandbox gate.
  */
-export function NotebooksPage() {
+/** @param embedded rendered as one view of 知识库; the hub owns the title. */
+export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [entries, setEntries] = useState<NotebookEntry[]>([]);
   /** Open notebook + the tree its path resolves in ("base" = listed here;
    *  "workspace" = just created in the active session folder). */
@@ -71,7 +72,7 @@ export function NotebooksPage() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-8 py-6">
         <div className="flex items-center gap-3">
-          <h1 className="font-serif text-xl text-text">科研笔记本</h1>
+          {!embedded && <h1 className="font-serif text-xl text-text">计算笔记本</h1>}
           <div className="flex-1" />
           <div className="relative" ref={menuRef}>
             <Button
@@ -109,7 +110,7 @@ export function NotebooksPage() {
         </div>
         <p className="mt-1 text-sm text-muted">
           {hasWebApi
-            ? "管理项目中的真实 .ipynb 文件；Python 或 R 单元格在服务端隔离内核中执行，科研 Agent 可处理同一份文件。"
+            ? "管理项目中的真实 .ipynb 文件；Python 或 R 单元格在服务端隔离环境中执行，EviMed 可处理同一份文件。"
             : "管理所有科研会话中的 Jupyter 笔记本；单元格在笔记本目录的本地 Python 或 R 内核中执行。"}
         </p>
 
@@ -118,8 +119,8 @@ export function NotebooksPage() {
             <div className="rounded-card border border-border bg-surface p-5 text-sm text-muted">
               {hasWebApi
                 ? hasWebApi
-                  ? "暂无笔记本。可以新建、从知识库上传，或让科研 Agent 生成。"
-                  : "暂无笔记本。可以新建，或让科研 Agent 生成。"
+                  ? "暂无笔记本。可以新建、从知识库上传，或在对话里让 EviMed 生成。"
+                  : "暂无笔记本。可以新建，或在对话里让 EviMed 生成。"
                 : "当前未配置可用的笔记本后端。"}
             </div>
           )}

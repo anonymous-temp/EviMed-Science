@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, Outlet } from "react-router";
+import { Navigate, Outlet, useLocation } from "react-router";
 import { Loader2, PanelLeft } from "lucide-react";
 import { isMacPlatform } from "@/lib/platform";
 import { Sidebar } from "@/components/sidebar/Sidebar";
@@ -13,6 +13,7 @@ import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "
 
 export function AppShell() {
   const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
+  const location = useLocation();
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
 
   // Cmd/Ctrl+B toggles the sidebar, matching the button's tooltip.
@@ -84,7 +85,10 @@ export function AppShell() {
             </button>
           </div>
         )}
-        <ConnectorPrompt />
+        {/* Never over the session. The conversation is the product's main
+            surface and the frame inside it is the whole page; a banner above
+            it is 120 px taken from the thing someone came here to use. */}
+        {!location.pathname.startsWith("/app/chat") && <ConnectorPrompt />}
         <div className="min-h-0 flex-1">
           <Outlet />
         </div>

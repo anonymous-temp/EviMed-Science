@@ -33,6 +33,10 @@ vi.mock("@/components/settings/UsageCard", () => ({
 vi.mock("@/components/settings/ConnectorsCard", () => ({
   ConnectorsCard: () => <div>数据源凭据</div>,
 }));
+// The other two tabs are whole pages with their own tests. Mocked so this file
+// tests the account destination, not everything reachable from it.
+vi.mock("./SettingsPage", () => ({ SettingsPage: () => <div>项目与插件设置</div> }));
+vi.mock("./OpsPage", () => ({ OpsPage: () => <div>部署运维台</div> }));
 
 describe("AccountPage", () => {
   beforeEach(() => {
@@ -48,7 +52,7 @@ describe("AccountPage", () => {
     });
   });
 
-  it("offers a three-way appearance control", async () => {
+  it("names the account and offers self-service", async () => {
     render(
       <MemoryRouter>
         <AccountPage />
@@ -56,55 +60,59 @@ describe("AccountPage", () => {
     );
 
     expect(await screen.findByText("Alice")).toBeInTheDocument();
-    expect(screen.getByText("外观")).toBeInTheDocument();
-    const group = screen.getByRole("radiogroup", { name: "外观主题" });
-    expect(group).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "浅色" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "深色" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "跟随系统" })).toBeInTheDocument();
-    // Default preference is system, so that segment is the checked one.
-    expect(screen.getByRole("radio", { name: "跟随系统" })).toHaveAttribute("aria-checked", "true");
-  });
-
-  it("persists an explicit theme choice from the hosted page", async () => {
-    render(
-      <MemoryRouter>
-        <AccountPage />
-      </MemoryRouter>,
-    );
-
-    fireEvent.click(await screen.findByRole("radio", { name: "深色" }));
-    expect(useUiStore.getState().theme).toBe("dark");
-    expect(window.localStorage.getItem("ai4s.theme")).toBe("dark");
-  });
-
-  it("names the tenant and offers account self-service", async () => {
-    render(
-      <MemoryRouter>
-        <AccountPage />
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByText("tenant: alice")).toBeInTheDocument();
+    // 「tenant: alice」 was a runtime word and a raw id used as a label.
+    expect(screen.getByText("账号 alice")).toBeInTheDocument();
+    expect(screen.queryByText(/^tenant:/)).not.toBeInTheDocument();
     expect(screen.getByText("托管账户自助管理")).toBeInTheDocument();
-    // What the account has spent belongs with the account, not with the
-    // deployment's settings.
+    // What the account has spent belongs with the account.
     expect(screen.getByText("本月用量")).toBeInTheDocument();
   });
 
-  // Everything about how the deployment runs moved to /app/settings. Keeping a
-  // second copy here is how two pages drift into disagreeing about one system.
-  it("leaves the deployment's own operational surface to the settings page", async () => {
+  // One destination, four views. Credentials and settings were two more
+  // top-level rows pointing at the same thing (2026-09-15 walk, C7/C8).
+  it("gathers usage, data sources and settings as tabs of one destination", async () => {
     render(
       <MemoryRouter>
         <AccountPage />
       </MemoryRouter>,
     );
 
-    await screen.findByText("tenant: alice");
-    for (const moved of ["托管项目自助管理", "资源与配额", "隐私与数据流向", "SaaS 部署就绪"]) {
-      expect(screen.queryByText(moved)).not.toBeInTheDocument();
-    }
+    await screen.findByText("Alice");
+    fireEvent.click(screen.getByRole("tab", { name: "数据源" }));
+    expect(screen.getByText("数据源凭据")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "设置" }));
+    expect(screen.getByText("项目与插件设置")).toBeInTheDocument();
+  });
+
+  // Presentation only — every route the page calls authorizes itself — but an
+  // account the deployment did not name as an operator is not offered it.
+  it("offers the operations board only to an operator account", async () => {
+    render(
+      <MemoryRouter>
+        <AccountPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Alice");
+    expect(screen.queryByRole("tab", { name: "运维台" })).not.toBeInTheDocument();
+  });
+
+  it("offers the operations board when the control plane says this account is one", async () => {
+    mocks.fetchWebMe.mockResolvedValue({
+      user: { id: "alice", name: "Alice", tenantId: "alice" },
+      tenant: { id: "alice", model: "individual-account", role: "owner" },
+      operator: true,
+      project: { id: "default", name: "Default Project" },
+      projects: [{ id: "default", name: "Default Project" }],
+    });
+    render(
+      <MemoryRouter>
+        <AccountPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("tab", { name: "运维台" }));
+    expect(screen.getByText("部署运维台")).toBeInTheDocument();
   });
 });
 
@@ -192,7 +200,7 @@ describe("AccountPage budget ceilings", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText("tenant: alice");
+    await screen.findByText("账号 alice");
     expect(screen.queryByText("额度已达上限")).not.toBeInTheDocument();
     expect(screen.queryByText(/已占用/)).not.toBeInTheDocument();
   });

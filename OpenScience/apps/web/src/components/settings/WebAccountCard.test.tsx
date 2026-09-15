@@ -101,6 +101,6 @@ describe("WebAccountCard", () => {
     await waitFor(() => expect(mocks.logoutWeb).toHaveBeenCalledTimes(1));
     expect(onSignedOut).toHaveBeenCalledTimes(1);
     expect(mocks.toastSuccess).toHaveBeenCalledWith("已退出登录。");
-    expect(await screen.findByText("当前没有登录托管账户。")).toBeInTheDocument();
+    expect(await screen.findByText("当前没有登录账户。")).toBeInTheDocument();
   });
 });

@@ -102,7 +102,7 @@ describe("CapabilitiesPage", () => {
         </Routes>
       </MemoryRouter>,
     );
-    expect(screen.getByText("能力模板仅在 EviMed 在线工作空间中可用")).toBeInTheDocument();
+    expect(screen.getByText("科研能力仅在 EviMed 在线工作空间中可用")).toBeInTheDocument();
     expect(screen.getByText("请在 EviMed 在线工作空间中使用此功能。")).toBeInTheDocument();
     expect(mocks.listWebResearchAgents).not.toHaveBeenCalled();
   });
@@ -126,7 +126,7 @@ describe("CapabilitiesPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("heading", { name: "能力模板" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "科研能力" })).toBeInTheDocument();
     expect(await screen.findByText("药品安全性分析")).toBeInTheDocument();
     expect(screen.getByText("超说明书用药分析")).toBeInTheDocument();
     expect(screen.getByText("自动化 Meta 分析")).toBeInTheDocument();
@@ -151,11 +151,11 @@ describe("CapabilitiesPage", () => {
     );
     await screen.findByText("药品安全性分析");
 
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索能力模板" }), "超说明书");
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索科研能力" }), "超说明书");
     expect(screen.queryByText("药品安全性分析")).not.toBeInTheDocument();
     expect(screen.getByText("超说明书用药分析")).toBeInTheDocument();
 
-    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索能力模板" }));
+    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索科研能力" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "按分类筛选" }), "药物警戒");
     expect(screen.getByText("药品安全性分析")).toBeInTheDocument();
     expect(screen.queryByText("超说明书用药分析")).not.toBeInTheDocument();

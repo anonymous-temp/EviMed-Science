@@ -13,7 +13,7 @@ export function WebErrorsCard() {
     try {
       setEvents(await listWebErrorEvents(20));
     } catch (e) {
-      toast.error(`无法读取托管错误：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法读取错误账本：${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setLoading(false);
     }
@@ -27,7 +27,7 @@ export function WebErrorsCard() {
     <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="font-serif text-body text-text">托管错误</h2>
+          <h2 className="font-serif text-body text-text">错误账本</h2>
           <p className="mt-0.5 text-xs text-muted">该项目最近失败的 API 请求</p>
         </div>
         <button

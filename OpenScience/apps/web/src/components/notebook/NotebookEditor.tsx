@@ -224,7 +224,7 @@ export function NotebookEditor({
         <button
           className="text-text hover:opacity-60"
           aria-label="从磁盘重新加载"
-          title="重新加载科研 Agent 对文件的修改"
+          title="重新加载 EviMed 对文件的修改"
           onClick={() => void load()}
         >
           <RefreshCw size={14} strokeWidth={1.5} />
