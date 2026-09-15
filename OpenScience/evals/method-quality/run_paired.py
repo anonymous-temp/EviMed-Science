@@ -1489,10 +1489,40 @@ def apply_method_snapshot(client: PlatformClient, arm: dict[str, Any], project_i
             _APPLIED_RECORD_VERSIONS[record["id"]] = seen
     for record in records:
         expected = _APPLIED_RECORD_VERSIONS[record["id"]]
-        updated = client.patch_memory_record(record["id"], {
-            "status": record["status"],
-            "expectedVersion": expected,
-        })
+        try:
+            updated = client.patch_memory_record(record["id"], {
+                "status": record["status"],
+                "expectedVersion": expected,
+            })
+        except EvalError as error:
+            # One retry against fresh state, and only for a version conflict.
+            #
+            # The platform writes these records itself: memory extraction runs
+            # after every finished run and upserts the very records an ablation
+            # manipulates. Measured on 2026-09-15 — nine of twelve cells died
+            # here, on a record the extractor had moved from version 14 to 19
+            # between cells. The guard is doing its job; what it is guarding
+            # against is expected here, so it is re-read and re-applied once
+            # rather than ending the batch.
+            #
+            # Once. A second conflict means something is writing continuously
+            # and the arm cannot be said to have been applied at all.
+            if "memory_conflict" not in str(error):
+                raise
+            current = client.memory_record_versions().get(record["id"])
+            print(
+                f"notice: {record['id']} moved to version {current} while this batch ran "
+                f"(expected {expected}); re-applying once. Memory extraction writes these "
+                "records too — run an ablation with extraction off.",
+                file=sys.stderr,
+            )
+            if current is None:
+                raise
+            updated = client.patch_memory_record(record["id"], {
+                "status": record["status"],
+                "expectedVersion": current,
+            })
+            expected = current
         version = (updated or {}).get("version")
         if isinstance(version, int):
             _APPLIED_RECORD_VERSIONS[record["id"]] = version

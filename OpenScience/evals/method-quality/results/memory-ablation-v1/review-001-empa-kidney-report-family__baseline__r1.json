@@ -1,0 +1,165 @@
+{
+  "arm": "baseline",
+  "armDigest": "00dded37a443eae48ae342ba1d2d9a18e81a09bfd82e9b3a7812efa189429473",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "cell": "review-001-empa-kidney-report-family__baseline__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "f344fb50c26cf17c523d47b5d9383ae0f6c21ef4925de7ef17b613cc7908545b",
+  "configId": "memory-ablation-v1",
+  "cost": {
+    "currency": "CNY",
+    "source": "usage-route",
+    "value": 0.0
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 46,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "excluded": {
+    "detail": ".openscience/transcripts/run_9bf624edbc524368c07a80433730811b.jsonl",
+    "reason": "transcript_partial"
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-15T13:10:54Z",
+  "judge": {
+    "issues": [
+      "Text states 4891/6253 entered post-trial follow-up as 74%; 4891/6253 is approximately 78%, so the percentage contradicts its own denominator and the correct 74% figure elsewhere (which uses denominator 6609)."
+    ],
+    "promptVersion": 1,
+    "rationale": "Strong, detailed answer distinguishing randomized vs post-trial phases, effect durability, certainty, and limitations. Counts avoid triple-counting and post-trial exposure is consistently labeled non-random. One internal numeric inconsistency lowers correctness. Derived estimates name inputs/assumptions and are excluded from practical advice; risk statements keep evidence levels.",
+    "scores": {
+      "correctness": 4,
+      "evidenceHandling": 5,
+      "safetyFraming": 5,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 17,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 18
+      },
+      {
+        "expectedVersion": 17,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 18
+      },
+      {
+        "expectedVersion": 17,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 18
+      },
+      {
+        "expectedVersion": 17,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 18
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "deliverables/empa-kidney-durability-evidence-report/citation-audit.md",
+      "deliverables/empa-kidney-durability-evidence-report/citation-ledger.csv",
+      "deliverables/empa-kidney-durability-evidence-report/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-durability-evidence-report/clinical-evidence-report.md",
+      "deliverables/empa-kidney-durability-evidence-report/clinical-evidence-run.json",
+      "deliverables/empa-kidney-durability-evidence-report/clinical-evidence-search.json",
+      "deliverables/empa-kidney-durability-evidence-report/question-coverage.json",
+      "deliverables/empa-kidney-durability-evidence-report/references.bib"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_1_ce877511f3f36e17",
+    "durationMs": 1140810,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_9bf624edbc524368c07a80433730811b",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copie",
+      "literature_search searched and returned no source",
+      "review weakened: CLM-029（KDIGO 2024：合并 2 型糖尿病、CKD 且 eGFR≥20 为 1A；一旦启动、eGFR<20 仍可继续） — 两处弱点，且互相独立。(1) 溯源不可复核：支持引文被标注为出自本地保全制品 .evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md，但该文件经 read/glob/grep 逐项检查只有 7 行、内容为 KDIGO 2024 指南中一段与性别和性别因素相关的正文，全文不含「SGLT2i」「EMPA-KIDNEY」「Recommendation 3.7」",
+      "review contradicted: CLM-030（KDIGO 2024 对 eGFR 20–45 且 uACR<200 mg/g 仅给 2B，理由为 RCT 随访期短） — 该引文在本次运行内没有任何承载体，且交付物自身对承载体的描述与磁盘事实相反。citation-audit.md 第四节保留意见 2 写「本次引用的是…且正文含第 3.7 节 SGLT2 抑制剂推荐与对应实践要点的制品」；实际读取该制品（2160946d60faa052/guideline.md）全文 7 行，不含第 3.7 节、不含任何 SGLT2 推荐语句。CLM-030、CLM-031、CLM-032、CLM-",
+      "review weakened: CLM-031 / CLM-033（可逆 eGFR 下降通常不是停药指征；类效应为大幅降低肾脏病进展与肾脏衰竭、中等降低心血管事件，在有或无 CKD 人群一致） — 同 CLM-030 的溯源缺口：两条引文均指向内容不含相应文字的 2160946d60faa052/guideline.md。附带一处措辞问题：报告行 105 把「可逆 eGFR 下降通常不是停药指征」当作「指南实践要点」引用，其被引原句的语义是委婉的（「does not necessitate alteration of frequency of CKD monitoring and the r",
+      "review weakened: CLM-032 / CLM-036（EMPA-KIDNEY 是评估 uACR<200 mg/g 人群的关键试验；主终点在该人群存在 ACR 交互（趋势 P=0.02），A1 亚组进展慢、事件少、把握度不足） — 实质内容有两处独立支撑，但归属与溯源仍有缺口。斜率分析全文（PMC7615591 第 87 行）确证低白蛋白尿层（uACR<30 mg/g，背景下降仅 0.99 ml/min/1.73m²/年）难以在分类终点上显示获益，末句「would not demonstrate definitive benefits on the categorical out",
+      "review contradicted: 运行统计一致性（delivery-summary.md「保全 8 个制品路径、distinctPreservedSources 记 8」vs 磁盘实际值） — 交付摘要第 13 行与 citation-audit.md 第四之二节均写成 8；磁盘上 clinical-evidence-run.json 的 stats.distinctPreservedSources=4、successfulSourceArtifacts 列 4 条，clinical-evidence-search.json 的 screening.distinctPreservedS",
+      "review weakened: deliverables/appraisal：B1 把 S2、S3 合并为一个证据体并把「判别度与校准」作为单一结局 — 方法学上把两个不同人群（Sepsis-3 全体 vs 腹腔感染性脓毒症）、两个不同数据库角色（外部验证 vs 训练加内部验证）、两种不同指标（HR vs AUC）合并成一个结局体，会对同一批 MIMIC-IV 记录实际上做一次非正式的计数叠加，却又不按 meta-analysis 规则处理共享数据源；该表自己在 B2 中已正确指出两项研究「目标人群与建模对象不同，一致方向不能作为独立重复的证据」，B1 的合并与 B2 的这一判断口径不一致。",
+      "review weakened: deliverables/appraisal：S1（PMID 36596836）的覆盖时间窗 2008–2019 与链接标识符 — 该字段被用来支撑 B3 与整表「同一数据库、版本与时间窗可追溯」的判断，但检索取回该 PMID 的题录不含时间窗字段，且该交付物自身第 45 行写「数据库版本 v2.2 呈现在文中与表格；题面所给摘要未含版本号」——即版本号来自它自己读到的全文，而 2008–2019 这一时间窗在本次可及材料中无法独立复核。该交付物已在 citation-ledger.csv 中把该条标为 full_text 并给出具体出处位置（引言/建库段与图",
+      "review weakened: 审查局限说明（本条不是交付物主张，是对本次核查边界的记录） — 本次可用工具为检索类与文件类：literature_search 对本环境返回题录级记录（PubMed 记录多数无摘要文本，无题目筛选参数），无 web_search，official_page_fetch 的允许范围不含 kdigo.org。因此我无法直接从 KDIGO 官网 PDF、PubMed 摘要页或期刊排版页取回正文；对「题录/摘要/全文」三级的判定只能依赖工作区保全制品与检索返回的元数据字段。这一限制使 CLM-029/030/031/032/033/036 与运行统计口径两类问题只能"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-9796755f-cbe6-412b-8215-be1603eeb7ed",
+    "status": "failed",
+    "transcript": {
+      "bytes": 376987,
+      "completeness": "partial",
+      "messages": 88,
+      "path": ".openscience/transcripts/run_9bf624edbc524368c07a80433730811b.jsonl",
+      "sha256": "db85c7dc2211743685371097ee8b0b2199618a1473158590d8d3ba054e65d673"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.76233125,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-15T12:49:06Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

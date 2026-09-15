@@ -972,39 +972,6 @@ class RecordVersionTracking(unittest.TestCase):
         runner.apply_method_snapshot(client, arm("active"), "p1")
         self.assertEqual([entry[2] for entry in sent], [1, 2, 3])
 
-    def test_a_third_party_write_still_refuses(self):
-        # The guard's whole point. This run wrote 2; someone else moved it to 5;
-        # the next PATCH sends 2 and the server refuses it.
-        refused = []
-
-        class Client:
-            def __init__(self):
-                self.server_version = 1
-
-            def memory_record_versions(self):
-                return {"rec_1": self.server_version}
-
-            def patch_memory_record(self, record_id, patch):
-                if patch["expectedVersion"] != self.server_version:
-                    refused.append(patch["expectedVersion"])
-                    raise runner.EvalError("HTTP 409: memory_conflict")
-                self.server_version += 1
-                return {"version": self.server_version}
-
-            def clear_method_trial(self, _project_id):
-                pass
-
-        arm = {"methodSnapshot": {
-            "records": [{"id": "rec_1", "status": "active", "expectedVersion": 1}],
-            "trialMethodIds": [], "capabilitySkillsDir": None,
-        }}
-        client = Client()
-        runner.apply_method_snapshot(client, arm, "p1")
-        client.server_version = 5
-        with self.assertRaises(runner.EvalError):
-            runner.apply_method_snapshot(client, arm, "p1")
-        self.assertEqual(refused, [2])
-
     def test_a_config_version_that_no_longer_holds_is_reported_and_the_server_wins(self):
         # The number in the config documents the state its author saw. A paired
         # run that has already written these records once has moved it itself,
@@ -1052,3 +1019,46 @@ class RecordVersionTracking(unittest.TestCase):
         with self.assertRaises(runner.EvalError):
             runner.apply_method_snapshot(Client(), arm, "p1")
 
+
+    def test_a_conflict_is_re_read_and_re_applied_once(self):
+        # The platform writes these records itself — extraction runs after every
+        # finished run — so a conflict mid-batch is expected rather than
+        # exceptional. Twice in a row is not, and ends the batch.
+        attempts = []
+
+        class Client:
+            def __init__(self, moves):
+                self.server_version = 1
+                self.moves = list(moves)
+
+            def memory_record_versions(self):
+                return {"rec_1": self.server_version}
+
+            def patch_memory_record(self, record_id, patch):
+                attempts.append(patch["expectedVersion"])
+                if self.moves:
+                    self.server_version = self.moves.pop(0)
+                if patch["expectedVersion"] != self.server_version:
+                    raise runner.EvalError('HTTP 409: {"code":"memory_conflict"}')
+                self.server_version += 1
+                return {"version": self.server_version}
+
+            def clear_method_trial(self, _project_id):
+                pass
+
+        arm = {"methodSnapshot": {
+            "records": [{"id": "rec_1", "status": "active", "expectedVersion": 1}],
+            "trialMethodIds": [], "capabilitySkillsDir": None,
+        }}
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            runner.apply_method_snapshot(Client([9]), arm, "p1")
+        self.assertEqual(attempts, [1, 9], "the second attempt must use the version the server now holds")
+        self.assertIn("re-applying once", stderr.getvalue())
+
+        attempts.clear()
+        runner.reset_applied_record_versions()
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(runner.EvalError):
+                runner.apply_method_snapshot(Client([9, 11]), arm, "p1")
+        self.assertEqual(len(attempts), 2, "a second conflict ends the batch rather than looping")

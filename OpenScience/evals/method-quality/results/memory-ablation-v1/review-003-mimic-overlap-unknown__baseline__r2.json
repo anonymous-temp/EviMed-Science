@@ -1,0 +1,15 @@
+{
+  "arm": "baseline",
+  "armDigest": "00dded37a443eae48ae342ba1d2d9a18e81a09bfd82e9b3a7812efa189429473",
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "cell": "review-003-mimic-overlap-unknown__baseline__r2",
+  "complete": false,
+  "configDigest": "f344fb50c26cf17c523d47b5d9383ae0f6c21ef4925de7ef17b613cc7908545b",
+  "error": "PATCH /api/memory/records/be8c54de-1ff0-4a37-b809-8bb407d32886 -> HTTP 409: {\"error\":\"Structured memory changed before this update was applied.\",\"code\":\"memory_conflict\",\"requestId\":\"req_4aa4af053278db02f1b4980c1c7bc037\"}",
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-15T13:11:00Z",
+  "repeat": 2,
+  "schemaVersion": 1
+}
