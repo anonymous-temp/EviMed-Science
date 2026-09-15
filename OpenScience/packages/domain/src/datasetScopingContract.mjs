@@ -131,7 +131,8 @@ function collectNumbers(value, into, depth = 0) {
   }
 }
 
-/** The prose, with the numerals that are not quantities removed first. */
+/** The prose, with the numerals that are not quantities removed first.
+ * @param {string} text @returns {string} */
 function scannableProse(text) {
   return text
     .replace(FENCED_BLOCK, ' ')
@@ -140,13 +141,15 @@ function scannableProse(text) {
 }
 
 /** Decimal places a written number claims. `23.40` claims two, and matching it
- * against `23.4` at one place would accept a snapshot value of 23.44. */
+ * against `23.4` at one place would accept a snapshot value of 23.44.
+ * @param {string} literal @returns {number} */
 function precisionOf(literal) {
   const dot = literal.indexOf('.')
   return dot === -1 ? 0 : literal.length - dot - 1
 }
 
-/** Whether `candidate` rounds to `written` at the precision `written` claims. */
+/** Whether `candidate` rounds to `written` at the precision `written` claims.
+ * @param {number} candidate @param {number} written @param {number} places @returns {boolean} */
 function roundsTo(candidate, written, places) {
   const factor = 10 ** places
   return Math.round(candidate * factor) / factor === Math.round(written * factor) / factor

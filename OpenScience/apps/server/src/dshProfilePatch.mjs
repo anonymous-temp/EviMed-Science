@@ -91,6 +91,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} [revisionGatewayUrl]
  * @property {{revision:number,enabled:boolean,settings:{timeoutMs:number}}} [pluginConfig]
  * @property {string} [publicSourceGatewayUrl]
+ * @property {string} [webSearchGatewayUrl]
  * @property {string} [modelGatewayTokenFile]
  * @property {string} workloadTokenFile
  * @property {string} bundleVersion
@@ -461,7 +462,7 @@ function presetRows(input) {
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'answerPersonaDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string> }} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'answerPersonaDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string> }} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}

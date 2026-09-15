@@ -160,7 +160,7 @@ async function call(ctx, config, endpoint, body, signal) {
     // next moves.
     let code = 'web_gateway_failed'
     try {
-      const failure = await response.json()
+      const failure = /** @type {any} */ (await response.json())
       if (typeof failure?.code === 'string') code = failure.code
     } catch { /* a non-JSON failure keeps the generic code */ }
     throw new WebError(code, `平台网关返回 ${response.status}（${code}）。`)
