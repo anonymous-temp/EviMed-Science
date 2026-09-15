@@ -58,6 +58,11 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/evals\/method-quality\/(reports|results)\//,
+    why: "an evaluation report records the kernel a measurement was taken on; re-dating it claims the number came from a version that never produced it",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/apps\/server\/test\/fixtures\/dsh\/golden-frames\.json$/,
     why: "the frames were recorded off this exact binary; re-dating them claims evidence from a kernel they never saw",
   },

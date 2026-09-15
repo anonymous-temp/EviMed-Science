@@ -488,6 +488,11 @@ export function runtimeEnvironment(input) {
     EVIMED_CAPSULE_GATEWAY_URL: input.capsuleGatewayUrl,
     EVIMED_REVISION_AUTHORIZE_URL: input.revisionGatewayUrl ?? "",
     EVIMED_PUBLIC_SOURCE_GATEWAY_URL: input.publicSourceGatewayUrl ?? "",
+    // The other half of the kernel's web registry. Absent until 2026-09-15,
+    // which is why `evimed-web` registered a fetch provider and no search one
+    // however the deployment was configured: the row reads this variable and
+    // the container was never given it.
+    EVIMED_WEB_SEARCH_GATEWAY_URL: input.webSearchGatewayUrl ?? "",
     EVIMED_MODEL_GATEWAY_TOKEN_FILE: input.modelGatewayTokenFile ?? "",
     EVIMED_WORKLOAD_TOKEN_FILE: input.workloadTokenFile,
     EVIMED_BUNDLE_VERSION: input.bundleVersion,

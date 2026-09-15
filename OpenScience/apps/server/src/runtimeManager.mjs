@@ -1628,6 +1628,33 @@ function modelGatewayProviderUrl(config) {
 }
 
 /** @param {any} config */
+/**
+ * The open-web search gateway, as the runtime is allowed to know it.
+ *
+ * Empty unless the deployment actually has a metasearch backend: a runtime that
+ * can reach the route but gets nothing back is worse than one that cannot,
+ * because a run reads an unreachable channel as a channel where nobody said
+ * anything. Same rule the MCP environment already applied — this exists because
+ * the *container* environment did not apply it and did not carry the variable
+ * at all, so `evimed-web` registered its fetch provider and silently never
+ * registered its search one.
+ *
+ * @param {any} config @returns {string}
+ */
+export function webSearchGatewayProviderUrl(config) {
+  if (!String(config.webSearchUrl ?? "").trim()) return "";
+  const value = String(config.webSearchGatewayInternalUrl ?? "").trim();
+  if (!value) return "";
+  let url;
+  try { url = new URL(value); } catch {
+    throw new HttpError(500, "runtime_web_search_gateway_url_invalid", "Web-search gateway internal URL is invalid.");
+  }
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    throw new HttpError(500, "runtime_web_search_gateway_url_invalid", "Web-search gateway internal URL is invalid.");
+  }
+  return url.href;
+}
+
 export function publicSourceGatewayProviderUrl(config) {
   const value = String(config.publicSourceGatewayInternalUrl ?? "").trim();
   if (!value) return "";
@@ -1716,6 +1743,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     capsuleGatewayUrl: capsuleGatewayProviderUrl(config),
     revisionGatewayUrl: revisionGatewayProviderUrl(config),
     publicSourceGatewayUrl: publicSourceGatewayProviderUrl(config),
+    webSearchGatewayUrl: webSearchGatewayProviderUrl(config),
     pluginConfig: plan.pluginConfig,
     modelGatewayTokenFile: config.modelGatewaySigningSecret
       ? (plan.sandboxMode === "docker" ? `${runtimeDshHome}/${modelGatewayTokenFileName}` : path.join(plan.dshHomeDir, modelGatewayTokenFileName))
@@ -2005,6 +2033,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   capsuleGatewayUrl = capsuleGatewayProviderUrl(config),
   revisionGatewayUrl = revisionGatewayProviderUrl(config),
   publicSourceGatewayUrl = publicSourceGatewayProviderUrl(config),
+  webSearchGatewayUrl = webSearchGatewayProviderUrl(config),
   pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } },
 } = {}) {
   const sandboxMode = config.runtimeSandboxMode;
@@ -2203,6 +2232,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           capsuleGatewayUrl,
           revisionGatewayUrl,
           publicSourceGatewayUrl,
+          webSearchGatewayUrl,
           pluginConfig,
           // The API owns issuance; the isolated controller owns this argv and
           // deliberately has no signing keys. Both processes name the same
