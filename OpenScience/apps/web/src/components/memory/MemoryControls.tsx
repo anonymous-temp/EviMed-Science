@@ -89,7 +89,7 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
       label: "回答时参考记忆",
       on: !settings.recallPaused,
       detail: settings.recallPaused
-        ? "已暂停：回答不再参考任何记忆，记忆本身没有删除。"
+        ? "已暂停：回答不再参考科研记忆，记忆本身没有删除。方法胶囊按各自的启用状态使用。"
         : "EviMed 会按当前问题挑选相关记忆作为背景。",
       toggle: () => void change("recall", { recallPaused: !settings.recallPaused },
         settings.recallPaused ? "回答会重新参考记忆" : "回答已暂停参考记忆，记忆本身没有删除"),

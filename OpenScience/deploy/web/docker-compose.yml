@@ -272,6 +272,17 @@ services:
       OPEN_SCIENCE_SESSION_TTL_MS: ${OPEN_SCIENCE_SESSION_TTL_MS:-604800000}
       OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED: ${OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED:-true}
       OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: ${OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS:-30000}
+      # Three memory switches the server read and no compose file passed, so
+      # setting them in .env did nothing and said nothing (2026-09-16).
+      # Value-less, so an unset one stays absent and config.mjs's own default
+      # applies (see deploymentEnvReachesTheContainer.test.mjs).
+      OPEN_SCIENCE_MEMORY_ENABLED:
+      # Publishes an account's memory to whoever holds one of its API keys;
+      # off unless a deployment decides otherwise (docs/AGENT_MEMORY_API.md).
+      OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED:
+      # Comma-separated project id prefixes extraction never writes for, e.g.
+      # `eval-memory-ablation` so a paired evaluation's arms hold still.
+      OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES:
       # Which component ranks a recall. `openviking` is what this stack starts;
       # `builtin` is the term matcher, which needs nothing deployed and is what
       # a recall falls back to when the index is unreachable.
