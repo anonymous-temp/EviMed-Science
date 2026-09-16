@@ -20,7 +20,24 @@ export const DURABLE_RECALL_KINDS = new Set(["profile", "preference", "behavior"
 
 // The profile must not crowd out memories that are relevant to this particular
 // question, so it gets at most half the recall budget and episodic matches keep
-// the rest.
+// the rest. It is a **reservation**, not only a ceiling: the same half is also
+// the profile's floor, claimed before any episode is considered.
+//
+// Hidden knowledge: it used to be a ceiling alone, and that is not symmetric.
+// Ranking is score-descending, and an episodic `run_summary` of an earlier
+// attempt at the same question matches many query terms while a profile record
+// matches none — scoring ~1.8 against double digits. So episodes were selected
+// first and the 20 000-character budget was gone before the first durable row
+// was reached. Measured 2026-09-16 on production: the `cdss-access` account
+// held 44 active project-scope run summaries against 5 user-scope durable
+// records, and every `memory.md` written for that project contained run
+// summaries only — the researcher's profile, preferences and corrections were
+// unreachable, silently, and the memory ablation's two arms consequently
+// delivered byte-identical context.
+//
+// `researchMemory.relevant()` already documents this exact failure and fixes it
+// for the *fetch* (durable records get their own query). This is the same fix
+// one layer down, for the *selection*.
 export const DURABLE_RECALL_BUDGET_SHARE = 0.5;
 
 /**
@@ -30,33 +47,51 @@ export const DURABLE_RECALL_BUDGET_SHARE = 0.5;
  * @param {{ contextLimit: number, contextMaxChars: number }} budget
  */
 export function selectWithinBudget(ranked, { contextLimit, contextMaxChars }) {
-  const durableSlots = Math.max(1, Math.floor(contextLimit * DURABLE_RECALL_BUDGET_SHARE));
+  // Never more than the caller asked for, and never a reservation a zero
+  // budget cannot honour: `Math.max(1, ...)` exists so a budget of one still
+  // admits one durable row, and the `min` keeps it from inventing a slot when
+  // the caller asked for none.
+  const durableSlots = Math.min(contextLimit, Math.max(1, Math.floor(contextLimit * DURABLE_RECALL_BUDGET_SHARE)));
   const durableChars = Math.floor(contextMaxChars * DURABLE_RECALL_BUDGET_SHARE);
 
-  const selected = [];
+  /** @type {Map<number, { memo: any, content: string }>} */
+  const picked = new Map();
   let total = 0;
-  let durableCount = 0;
-  let durableTotal = 0;
-  for (const row of ranked) {
-    if (selected.length >= contextLimit) break;
-    const durable = DURABLE_RECALL_KINDS.has(row.memo.kind);
-    // Cap the profile's share so a question-specific memory still fits.
-    if (durable && (durableCount >= durableSlots || durableTotal >= durableChars)) continue;
-    const remaining = Math.min(
-      contextMaxChars - total,
-      durable ? durableChars - durableTotal : contextMaxChars,
-    );
-    if (remaining <= 0) continue;
-    const content = row.memo.content.slice(0, remaining);
-    if (!content) continue;
-    selected.push({ ...row.memo, content });
-    total += content.length;
-    if (durable) {
-      durableCount += 1;
-      durableTotal += content.length;
+
+  /** One pass over the ranked list, taking only the rows this pass is for.
+   * @param {boolean} wantDurable @param {number} slotCeiling @param {number} charCeiling */
+  const take = (wantDurable, slotCeiling, charCeiling) => {
+    let count = 0;
+    let used = 0;
+    for (const [index, row] of ranked.entries()) {
+      if (picked.has(index)) continue;
+      if (DURABLE_RECALL_KINDS.has(row.memo.kind) !== wantDurable) continue;
+      if (picked.size >= contextLimit || count >= slotCeiling) break;
+      const remaining = Math.min(contextMaxChars - total, charCeiling - used);
+      if (remaining <= 0) break;
+      const content = row.memo.content.slice(0, remaining);
+      if (!content) continue;
+      picked.set(index, { memo: row.memo, content });
+      total += content.length;
+      used += content.length;
+      count += 1;
     }
-  }
-  return selected;
+  };
+
+  // The profile first, against its reservation. Taking it first is the whole
+  // point: a ceiling checked while walking one shared list can only ever be
+  // reached after the episodes above it have already spent the budget.
+  take(true, durableSlots, durableChars);
+  // Then everything else, against what is left — including whatever the
+  // profile did not use, so an account with no profile is not charged for one.
+  take(false, contextLimit, contextMaxChars - total);
+
+  // Emitted in rank order, not in selection order: the prompt numbers these
+  // `index="1..n"`, and a reader should see them ranked as they were scored.
+  return [...picked.keys()].sort((left, right) => left - right).map((index) => {
+    const entry = /** @type {{ memo: any, content: string }} */ (picked.get(index));
+    return { ...entry.memo, content: entry.content };
+  });
 }
 
 /** What a recalled memory contributes to the prompt.

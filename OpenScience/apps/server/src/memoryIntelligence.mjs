@@ -575,6 +575,27 @@ export class MemoryIntelligence {
 
   async recordRun(project, run, messages = []) {
     const { sources, excluded } = conversationMemorySources(messages, run.sessionId);
+    // The switch covers this too.
+    //
+    // It did not, and the asymmetry was invisible from outside: `this.enabled`
+    // gated only the model call below, so a deployment that turned memory
+    // extraction off still wrote one `run_summary` record per run, forever. An
+    // operator reading "extraction disabled" and then watching
+    // `evimed_memory.records` grow by one row per run would be right to call
+    // that broken — and a memory ablation run with extraction off was still
+    // accumulating the episodes it was trying to hold still: by 2026-09-16 the
+    // eval account held 44 of them, each carrying a previous cell's full answer
+    // to the very brief the next cell was about to be asked.
+    //
+    // A run summary is extracted memory; "off" has to mean no memory is
+    // written. Recall of what already exists is a different switch
+    // (`memoryEnabled`) and is deliberately untouched here.
+    if (!this.enabled) {
+      return {
+        runSummary: null, extracted: 0, activated: 0, source: "disabled", proposed: 0, rejected: 0,
+        rejectionReasons: [], pending: 0, pendingReasons: [], conflicts: [], extractionError: null, excluded,
+      };
+    }
     const runSummary = await this.#recordRunSummary(project, run, sources);
     if (sources.length === 0) {
       return {

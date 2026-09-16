@@ -924,3 +924,36 @@ test("a message too long to be a fact is not read as one", async () => {
   const result = await intelligence.recordRun(project(), run("run_long"), [message("m1", long)]);
   assert.equal(result.proposed, 0, "a 1,400-character message is a task, not a preference");
 });
+
+test("extraction disabled writes no memory at all, run summary included", async () => {
+  // The switch used to gate only the model call: a deployment with extraction
+  // off still gained one `run_summary` row per run, forever. It made the off
+  // position of the switch unobservable from the database, and it silently
+  // accumulated the episodes an ablation was trying to hold still — 44 of them
+  // on the eval account by 2026-09-16, each carrying a previous cell's full
+  // answer to the brief the next cell was about to be asked.
+  const client = new MemoryStoreDouble();
+  let called = false;
+  const intelligence = new MemoryIntelligence({ ...config, memoryExtractionEnabled: false }, client, {
+    fetchImpl: async () => { called = true; return Response.json({ choices: [] }); },
+  });
+  const result = await intelligence.recordRun(project(), run("run_disabled"), [message("m1", "我是临床药师。")]);
+  assert.equal(called, false, "no model call");
+  assert.equal(result.source, "disabled", "the caller can tell a setting from an empty conversation");
+  assert.equal(result.runSummary, null);
+  assert.equal(result.extracted, 0);
+  assert.equal(client.records.size, 0, "not one row was written");
+});
+
+test("extraction enabled still writes the run summary for a conversation with nothing to learn", async () => {
+  // The other half of the same property: `disabled` must not become the excuse
+  // that stops episodic memory on a normal deployment.
+  const client = new MemoryStoreDouble();
+  const intelligence = new MemoryIntelligence(config, client, {
+    fetchImpl: async () => Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] }),
+  });
+  const result = await intelligence.recordRun(project(), run("run_enabled"), [message("m1", "你好。")]);
+  assert.notEqual(result.source, "disabled");
+  assert.ok(result.runSummary, "an ordinary run still records what it was about");
+  assert.ok([...client.records.values()].some((record) => record.kind === "run_summary"));
+});

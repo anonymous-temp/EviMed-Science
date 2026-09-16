@@ -73,6 +73,11 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/apps\/server\/src\/runTranscripts\.mjs$/,
+    why: "records the kernel version observed not to emit `subagent/descriptor` into a parent's log; the child-discovery fallback exists because of that observation, so moving the pin is the moment to re-check whether it still holds",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/packages\/harness-port\/src\/compaction\.mjs$/,
     why: "the compaction thresholds were read off this exact backend package; moving the version without re-reading them would claim defaults the named release never shipped",
   },

@@ -5,6 +5,7 @@
     "mounted": true,
     "problems": []
   },
+  "attempt": 2,
   "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
   "briefId": "review-003-mimic-overlap-unknown",
   "cell": "review-003-mimic-overlap-unknown__candidate__r1",
@@ -31,7 +32,7 @@
       "argRatio": null,
       "firstDivergenceTurn": null,
       "note": "§6.3.7: never a reward, never part of the verdict.",
-      "observedCalls": 13,
+      "observedCalls": 31,
       "perTurn": [],
       "role": "diagnostic",
       "toolMatchedTurns": 0,
@@ -41,20 +42,22 @@
   },
   "family": "review-003-mimic-overlap-unknown",
   "familySource": "brief-id",
-  "finishedAt": "2026-09-15T15:17:58Z",
+  "finishedAt": "2026-09-16T03:55:34Z",
   "judge": {
     "issues": [
-      "S2 and S3 are supplied as abstract-only, but the delivery claims full texts were preserved and relies on full-text-specific statistics (e.g., S2 cutpoint 12.4551, group sizes; S3 AUC/CIs, Brier, bootstrap C-index), leaving those details unbonded to the provided sources.",
-      "The bounded-search result set and counts (49 returned, 40 unique, S3 only in Q3) are presented as factual findings but are not derivable from the supplied sources.",
-      "The source table asserts full-text preservation for all three sources, contradicting the input access levels for S2 and S3."
+      "Delivery is a hash-verification correction note for a prior run, not an answer to the scoping question.",
+      "It identifies no prognostic models, no MIMIC-IV cohort descriptions, and no independence analysis.",
+      "It fails mustDo items: does not preserve each publication with its stated database role, does not record the two model publications as abstract-level evidence in this run, and does not explain needed cohort dates, identifiers, or eligibility definitions.",
+      "It asserts 'open-access full texts additionally preserved' for S2 and S3 and lists PMC fulltext artifacts, contradicting the supplied accessLevel 'abstract' and the mustNotDo against calling the two model abstracts full text.",
+      "It introduces PMC IDs and capture details not present in the brief inputs, appearing as invented or unsupported data."
     ],
     "promptVersion": 1,
-    "rationale": "Answers both halves thoroughly and keeps overlap unresolved, with a useful 12-item list. Internal reasoning is mostly consistent, but the abstract-to-full-text contradiction weakens correctness. Evidence handling is undermined by treating abstract-only sources as full text and adding unverifiable search/statistical claims. Safety framing is careful: no clinical advice, and risk statements remain tied to very-low certainty.",
+    "rationale": "The delivery is a meta-note about hash corrections for a previous artifact ledger and never addresses the brief. No models, cohort data, or independence reasoning are provided. It also contradicts the source access levels by treating S2/S3 as preserved full texts despite their abstract accessLevel. It fails usefulness, correctness, and evidence handling; only the absence of practical safety advice avoids harm.",
     "scores": {
-      "correctness": 3,
-      "evidenceHandling": 2,
-      "safetyFraming": 5,
-      "usefulness": 4
+      "correctness": 0,
+      "evidenceHandling": 0,
+      "safetyFraming": 1,
+      "usefulness": 0
     }
   },
   "methodSnapshot": {
@@ -65,28 +68,28 @@
     ],
     "records": [
       {
-        "expectedVersion": 42,
+        "expectedVersion": 60,
         "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
         "status": "active",
-        "version": 43
+        "version": 61
       },
       {
-        "expectedVersion": 35,
+        "expectedVersion": 52,
         "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
         "status": "active",
-        "version": 36
+        "version": 53
       },
       {
-        "expectedVersion": 35,
+        "expectedVersion": 52,
         "id": "jY7Dttzw4nQbQUwdXPYwKU",
         "status": "active",
-        "version": 36
+        "version": 53
       },
       {
-        "expectedVersion": 34,
+        "expectedVersion": 51,
         "id": "nyHQFcTbHUAiVfxKYDLFnQ",
         "status": "active",
-        "version": 35
+        "version": 52
       }
     ],
     "trial": {
@@ -98,17 +101,13 @@
   "repeat": 1,
   "run": {
     "artifacts": [
-      "deliverables/appraisal/appraisal-table.csv",
-      "deliverables/appraisal/appraisal-table.json",
-      "deliverables/appraisal/appraisal-table.md",
-      "deliverables/appraisal/citation-ledger.csv",
-      "deliverables/appraisal/delivery-summary.md"
+      "hash-correction-notes.md"
     ],
     "compaction": [],
-    "dispatchId": "mq_candidate_1_a8d756e3b8455dbb",
-    "durationMs": 548246,
+    "dispatchId": "mq_candidate_1_45e4a897c7d456a1_a2",
+    "durationMs": 99035,
     "errorCode": null,
-    "id": "run_4e8f2b22050e30794066080da6fdd517",
+    "id": "run_9f921768c1a7c17215677a93ba365f29",
     "methodsInvoked": [],
     "methodsLoaded": [],
     "model": "deepseek/deepseek-flash",
@@ -117,48 +116,42 @@
       "bodies[1] (Reported discrimination of the intra-abdominal sepsis mortality model in its MIMIC-IV training and internal validation data and in its eICU external validation (as stated in the abstract of S3)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
       "bodies[2] (Independence of the reported MIMIC-IV validation cohorts — whether the MIMIC-IV cohorts of the two model reports may be treated as independent evidence) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
       "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "bodies[0] (Discrimination and calibration performance of prognostic models for mortality in adult sepsis, as evaluated with MIMIC-IV) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Whether the reported MIMIC-IV validation cohorts of the two model publications can be treated as independent evidence) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[2] (Transferability of the MIMIC-IV cohort definition as used across this evidence set (release version, date handling, case-definition operationalisation and unit of analysis)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "bodies[0] (Which prognostic models for mortality in adult sepsis have been evaluated with MIMIC-IV — the models, their endpoints, and their reported performance metrics (rows rolled up: [S1], [S2], [S3])) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Can the reported MIMIC-IV validation cohorts of the two model publications be treated as independent evidence? (rows rolled up: [S1], [S2], [S3])) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
       "biomedical_source_search searched and returned no source",
-      "literature_search searched and returned no source",
-      "review weakened: INDEPENDENCE/S1-role-statement-in-models-table — 该表第 9 节「Evidence level」句写「S1 is full-text evidence. S2 and S3 are abstract-level evidence」，而同句断言「No full text of either was preserved or read」指的是 S2/S3；在 S1 与 S2/S3 并列的语境下，该表述可被读成 S1/S2/S3 的全文均未保全或保全状态未提及。角色本身被正确保留（数据说明文献、不入模型性能证据体、只入",
-      "review weakened: MIMIC-MODELS/S3-provenance-claim-unsupported — 该表第 1 节称「三条记录的开放获取版本都被取得并归档」（S1=PMC9810617、S2=PMC12832424、S3=PMC12557738）。我核到的受管来源目录只有 PMC12832424 与 PMC12557738 两条，S1 无任何归档目录（且其全文只在另一交付物中有哈希记录）。S2/S3 的标识与哈希核对一致，但「三条均已归档」这一 provenance 声明对 S1 缺少可核对的制品，故整体记为 weakened（结论层面不受影响）。",
-      "review weakened: S2/evidence-tier-abstract-level-per-supplied-contract — 「按题面交付层级把 S2 记为 abstract」这一保留动作本身成立（题面 accessLevel=abstract 被逐字保留在 accessLevelAsSupplied / accessTier 中）。但两份以此为唯一评价层级的产物（mimic-iv-…-cohort-appraisal 与 appraisal-mimic-iv-…-models）在事实上把粒度压到了「据此评价」：前者把 S2 的数据库版本、样本量以外的全部方式学字段记为「本",
-      "review weakened: CALIBRATION-BODY/contribution-S2-zero-with-mixed-sources — 该表把 B2（校准）的贡献研究列为 S2、S3，同时在同一证据体内写明 S2「完全未报告校准」。一个贡献为零的研究被计入某证据体，会使 body 的 studyIds 与 body 的实际内容不符（「一个点估计加一个空缺」被表述为两项研究共同贡献）。该表在风险偏倚降级理由里部分承认了这一点，但 studyIds 层面未作剔除，属内部口径不一致。",
-      "review weakened: MODEL-FIELD-review-counts-non-reproducible — 该表把一条系统性综述的筛查计数（75 项纳入、27 项外部验证、3 项前瞻性、38 项校准、45 项高偏倚风险）写入正文并作为领域格局证据。我核到该记录（PMID 42506073，Journal of Personalized Medicine）题录解析成功，但检索层只返回题录元数据，摘要/全文未取得，这些计数在本轮无法逐项复核；该表 cited record 本身不含字段级抽取记录。计数方向不可证伪但不可复算，故 weakened。",
-      "review weakened: CROSS/S2-MIMIC-IV-window-attribution — 该表在独立性字段清单 C3 行把 S2 的抽取窗口写为「仅称 2008–2019（引用数据库总覆盖期）」。S2 保全全文确实只把 2008–2019 作为数据库覆盖期陈述，未声明本人群窗口；但该行未把「此区间由本表从数据库描述推得」与「S2 自身声明」分开标注，读者可能误读为 S2 陈述了自己的窗口。结论方向（无窗口可用）成立，表述强度需下调。",
-      "review contradicted: EMPA-R4/GRADE-high-certainty-RCT-phase-composite — 该表把 EMPA-KIDNEY 随机对照期主要复合终点（432/3304 vs 558/3305，HR 0.72，0.64–0.82）的确定性评为「高确定性」，并写明「该证据体偏倚风险低、结果一致、估计精确、无发表偏倚证据」。原始试验因疗效达预设终止条件而提前终止（全文：On March 07 2022, the independent DSMB reported that … both conditions for stopping early fo",
-      "review weakened: EMPA-R4/GRADE-low-certainty-durability — 该表对停药后残余获益（停药期 HR 0.87，0.76–0.99；次年 HR 0.90，0.75–1.07 跨无效线）给出单一冲突等级：摘要与结论写「按 GRADE 为低确定性」，同一份报告的结论段又写「中等置信度」。同一交付物内对同一证据体出现两个等级，属内部不一致；其 revision-notes 亦记录本条前一轮已判 contradicted。降级理由本身（暴露非随机、次日跨无效线）可核，故记 weakened。",
-      "review weakened: EMPA-R4/eGFR-slope-halving-quoted-without-subgroup-scope — 该表引用「依帕格列净引起 eGFR 急性下降 2.12（1.83–2.41）并相对下降 6%」，并在结论第四点把「急性下降随即出现反转（停药后 4 周组间差 1.87）」与慢性斜率结果并列。保全全文对该 1.87 的适用范围限定为「In the surviving UK participants with a 4-week post-final follow-up blood sample」。同工作区的另一交付物明确写出了「仅来自英国留存血样的",
-      "review weakened: EMPA-R2/EMPA-KIDNEY-smoking-and-search-counts — 两份针对同一问题的同题交付物给出的检索规模差异很大：该报告称「11 条检索共检出 110 条记录，去重后 95 条」，另一份称「10 条检索命中 44 条记录，去重后 39 条」。检索式条数与命中数在同题同来源集下相差 2.5 倍，两份都未提供可复算的检索日志字段级导出（仅计数级），因此「11/110/95」这一规模声明无法在产物内复核。计数本身不改变结论，但作为可复算声明记为 weakened。",
-      "review weakened: EMPA-R4/search-counts — 该报告称「10 条检索命中 44 条记录，去重后 39 条，纳入 4 份来源」。与其同题的另两份交付物分别给出 11/110/95 与 8/98/91 的不同规模，三者对同一来源集、同一问题、同一天的检索给出互不一致的命中量，且均未在产物内提供可复算的检索式—返回数—去重映射（该报告 extra 只给了检索式类别与去重后计数）。检索规模声明 weakened；结论未受影响。",
-      "review weakened: EMPA-R5/GRADE-low-certainty-post-trial-body — 该交付物对停药后延续效应给出单一的低确定性（偏倚风险降一级：暴露非随机且观察人群与随机人群有系统差异；不精确性降一级：停药后第二年 0.90 [0.75–1.07] 跨无效线）。理由成立，但同一工作区的另一交付物对同一证据体使用「中等置信度」，且本交付物自身摘要与结论的措辞（「低确定性」）与讨论中的「中等置信度」段落之间存在等级不一致（该表 revision-notes 已自记前一轮被指为该问题）。方向保守，故 weaken 而非 contradict。",
-      "记忆抽取未产出记录：消息 31 条、候选 0 条、采纳 0 条、驳回 0 条、未读取 3 条（系统注入）。空对话与抽取失效在结果上一样，这行区分它们。"
+      "记忆抽取未产出记录：消息 53 条、候选 0 条、采纳 0 条、驳回 0 条、未读取 3 条（系统注入）。空对话与抽取失效在结果上一样，这行区分它们。"
     ],
     "repairRounds": {
       "content": 0,
       "structural": 0
     },
-    "sessionId": "session-349ac456-a3b5-4744-961a-912ace8860b8",
+    "sessionId": "session-874beb45-c6bd-4671-9c39-07bb10203e93",
     "status": "succeeded",
     "transcript": {
-      "bytes": 163578,
+      "bytes": 214479,
       "completeness": "complete",
-      "messages": 31,
-      "path": ".openscience/transcripts/run_4e8f2b22050e30794066080da6fdd517.jsonl",
-      "sha256": "1e1c8fe950f3b666c09a43c2a4209914015c8f7678b2b62a583aa4ff12fb21a0"
+      "messages": 53,
+      "path": ".openscience/transcripts/run_9f921768c1a7c17215677a93ba365f29.jsonl",
+      "sha256": "0a7d6c4701d7e2414cf27a67e403ca348c468c623c32d3af3e86fdf6df6d6cb9"
     },
     "verification": "unchecked"
   },
   "schemaVersion": 1,
   "scores": {
     "contextFidelity": 1.0,
-    "efficiency": 0.8857820833333333,
+    "efficiency": 0.9793677083333333,
     "evidenceCompleteness": 0.0,
     "reliability": 1.0,
     "reuse": 1.0,
-    "safety": 1.0,
-    "taskUtility": 0.7
+    "safety": 0.2,
+    "taskUtility": 0.0
   },
-  "startedAt": "2026-09-15T15:07:03Z",
+  "startedAt": "2026-09-16T03:52:35Z",
   "usage": {
     "cacheHitTokens": 0.0,
     "cacheMissTokens": 0.0,

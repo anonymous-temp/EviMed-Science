@@ -35,7 +35,7 @@ import { createHash } from "node:crypto";
 import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { hasSensitiveText } from "@evimed/domain";
+import { SOCKET_TOOL_NAMES, hasSensitiveText } from "@evimed/domain";
 import { HttpError, readTextFileNoFollow, safeId, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
 /** Directory under a project's meta root that holds one file per finished run. */
@@ -60,6 +60,10 @@ export const TRANSCRIPT_RETENTION_DAYS = 90;
 /** Every reason a session's messages are not all here. */
 export const TRANSCRIPT_MISSING_REASONS = Object.freeze([
   "page_bound", "history_unavailable", "child_unreadable", "size_bound",
+  // A delegation the parent made whose child this capture never even got the
+  // id of. Distinct from `child_unreadable`, which is a child we knew about and
+  // failed to read: this one is the capture not knowing what it missed.
+  "child_undiscovered",
 ]);
 
 /** Completeness of the record, in the order it degrades. */
@@ -135,15 +139,33 @@ function relativeTranscriptPath(project, runId) {
  * @param {{ sessionTranscript: (project: any, sessionId: string, options: any) => Promise<any> }} runtimeManager
  * @param {any} project
  * @param {{ sessionId: string }} run
- * @param {{ maxSessions?: number }} [options]
+ * @param {{ maxSessions?: number, children?: readonly { sessionId: string, parentSessionId?: string, label?: string, capability?: string|null }[] }} [options]
  * @returns {Promise<CollectedSession[]>}
  */
 export async function collectRunTranscripts(runtimeManager, project, run, options = {}) {
   const maxSessions = options.maxSessions ?? 64;
   /** @type {CollectedSession[]} */
   const collected = [];
+  // Two independent sources for the children, because the first one has never
+  // worked. `transcript.subagents` is filled only from `subagent/descriptor`
+  // events in the parent's log, and DSH 0.1.5-rc.2 does not put them there:
+  // measured 2026-09-16, all 26 transcripts of one project reported zero
+  // children while three of four sampled parents plainly called
+  // `evimed_delegate`. The stored record was an orchestrator saying "delegate"
+  // and then "done", with the work missing — and it still called itself
+  // complete. The caller passes the ids the control plane already holds in the
+  // run's own `.evimed-run/state.json` projection; the event path stays because
+  // a kernel that starts emitting descriptors should not need a change here.
+  const seeded = (Array.isArray(options.children) ? options.children : [])
+    .map((child) => ({
+      sessionId: String(child?.sessionId ?? "").trim(),
+      parentSessionId: String(child?.parentSessionId ?? run.sessionId),
+      label: String(child?.label ?? "subagent"),
+      capability: child?.capability == null ? null : String(child.capability),
+    }))
+    .filter((child) => child.sessionId && child.sessionId !== run.sessionId);
   /** @type {{ sessionId: string, parentSessionId: string|null, label: string, capability: string|null }[]} */
-  const queue = [{ sessionId: run.sessionId, parentSessionId: null, label: "root", capability: null }];
+  const queue = [{ sessionId: run.sessionId, parentSessionId: null, label: "root", capability: null }, ...seeded];
   const seen = new Set();
   while (queue.length && collected.length < maxSessions) {
     const next = /** @type {{ sessionId: string, parentSessionId: string|null, label: string, capability: string|null }} */ (queue.shift());
@@ -316,6 +338,18 @@ export function serializeRunTranscript({ runId, capturedAt, sessions, maxBytes =
       messages += 1;
     }
   }
+  // The claim this file makes about itself, checked against the run's own
+  // account of what it did. Every accepted delegation is a child session, so a
+  // capture holding fewer children than the parent delegated is missing the
+  // work — and until this check existed it said `complete` anyway, because a
+  // gap was only ever recorded for a session someone tried to read. A closed
+  // vocabulary (one tool name from the domain) rather than a judgement about
+  // the text, which is the only kind of scan allowed to reach a verdict here.
+  const delegations = countAcceptedDelegations(sessions);
+  const children = records.filter((record) => record.parentSessionId != null).length;
+  if (delegations > children) {
+    missing.push({ sessionId: runId, fromSeq: 0, reason: "child_undiscovered" });
+  }
   // Applied to the serialized body, because the number that matters is the one
   // on disk. Dropping trailing sessions rather than trailing messages keeps
   // every session that is present whole; a half-read session is the state this
@@ -342,6 +376,30 @@ export function serializeRunTranscript({ runId, capturedAt, sessions, maxBytes =
   }
   const header = JSON.parse(text.slice(0, text.indexOf("\n")));
   return { text, header, messages };
+}
+
+/**
+ * How many delegations the parent actually got a child out of.
+ *
+ * Counts the tool calls that completed: a refused delegation (an unknown
+ * capability, an unmet dependency, a constructor that threw) never started a
+ * child and must not be reported as a missing one.
+ *
+ * @param {readonly CollectedSession[]} sessions
+ * @returns {number}
+ */
+function countAcceptedDelegations(sessions) {
+  let accepted = 0;
+  for (const session of sessions) {
+    if (session.parentSessionId != null) continue;
+    for (const message of session.transcript?.messages ?? []) {
+      for (const part of message?.parts ?? []) {
+        if (part?.type !== "tool" || part?.tool !== SOCKET_TOOL_NAMES.delegate) continue;
+        if (part?.status === "completed") accepted += 1;
+      }
+    }
+  }
+  return accepted;
 }
 
 /** @param {TranscriptGap[]} gaps @returns {TranscriptGap[]} */
