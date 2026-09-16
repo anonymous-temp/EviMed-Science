@@ -791,6 +791,13 @@ export class MemoryIntelligence {
         // project-scoped memory's project is the record's own and does not
         // vary, so both cases are stable under the key above.
         projectId: conflict.scope === "user" ? null : project.id,
+        // Name the record, and offer the way to it. Without these the notice
+        // said a memory had been rewritten and left the reader to find it in a
+        // list (review, M4①). The decision itself stays on the memory page,
+        // where confirming, correcting and deleting already live together with
+        // the evidence and the revision history.
+        source: { type: "memory", id: conflict.recordId },
+        actions: [{ id: "open", label: "查看这条记忆", style: "primary" }],
         idempotencyKey: `memory-value-replaced:${conflict.recordId}:${conflict.identity}`,
       });
     } catch (error) {

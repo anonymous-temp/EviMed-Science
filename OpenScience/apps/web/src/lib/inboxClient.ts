@@ -4,7 +4,7 @@ export interface InboxAction { id: string; label: string; style: "neutral" | "pr
 export interface InboxItem {
   id: string;
   projectId?: string | null;
-  source?: { type: "run" | "thread" | "share" | "system" | "digest"; id: string } | null;
+  source?: { type: "run" | "thread" | "share" | "system" | "digest" | "memory"; id: string } | null;
   noticeType: "notify" | "question" | "review";
   priority: number;
   title: string;

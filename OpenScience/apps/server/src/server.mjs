@@ -2796,8 +2796,13 @@ export function createWebApiApp(overrides = {}) {
           });
           // Before the prompt goes out, like the brief: a mount the ledger has
           // not recorded cannot be told apart from one that never happened.
-          if (prepared.mountedSkills.length > 0) {
-            await agentRuns.recordLearning(ctx.project, dispatchedRun.id, { mountedSkills: prepared.mountedSkills });
+          // The same rule for what was recalled: a memory this dispatch used
+          // and the ledger never named is one the researcher cannot audit.
+          if (prepared.mountedSkills.length > 0 || prepared.memories.length > 0) {
+            await agentRuns.recordLearning(ctx.project, dispatchedRun.id, {
+              ...(prepared.mountedSkills.length > 0 ? { mountedSkills: prepared.mountedSkills } : {}),
+              ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
+            });
           }
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             text: promptText,

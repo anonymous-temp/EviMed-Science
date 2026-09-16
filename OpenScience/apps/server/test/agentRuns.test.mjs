@@ -6829,3 +6829,53 @@ test("with nothing fresh anywhere, a stale package is still reported stale", asy
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a dispatch's recalled memories are on the run, as ids and kinds and never as values", async () => {
+  // The recall existed only as `memory.md` inside the run's container: a
+  // researcher reading an answer could not see what the platform had used about
+  // them, and "why did it assume that?" was answerable only by reading a
+  // filesystem (2026-09-16 review, M4③).
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-recall-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_recall", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => [],
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "turn_recall" },
+      async () => ({ accepted: true }));
+
+    await store.recordLearning(project, run.id, {
+      recalledMemories: [
+        { id: "mem_a", kind: "preference", scope: "user", value: "PRIVATE VALUE" },
+        { id: "mem_b", kind: "behavior", scope: "user" },
+        { id: "", kind: "preference", scope: "user" },
+      ],
+    });
+    const [stored] = await store.list(project);
+    assert.deepEqual(stored.recalledMemories, [
+      { id: "mem_a", kind: "preference", scope: "user" },
+      { id: "mem_b", kind: "behavior", scope: "user" },
+    ], "an id-less row is dropped, and no value is carried");
+
+    // The ledger is a file in the project workspace; a memory's content belongs
+    // in the memory store, where deleting it deletes it.
+    const text = await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8");
+    assert.ok(!text.includes("PRIVATE VALUE"), "a memory's value reached the run ledger");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

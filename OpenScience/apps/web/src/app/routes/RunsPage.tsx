@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import {
   ChevronDown,
   ChevronRight,
@@ -191,6 +191,21 @@ function DaySection({ label, children }: { label: string; children: ReactNode })
 }
 
 /** The ledger's two empty states: nothing recorded yet, or nothing matches. */
+/** The memory kinds, in the researcher's words. Values are never shown here —
+ *  a memory's content lives in one place, where deleting it deletes it. */
+const MEMORY_KIND_LABELS: Record<string, string> = {
+  profile: "画像",
+  preference: "偏好",
+  behavior: "工作习惯",
+  correction: "你做过的纠正",
+  project_fact: "项目事实",
+  analysis: "分析口径",
+  decision: "已定的决策",
+  follow_up: "待跟进",
+  run_summary: "过往运行摘要",
+  note: "科研记忆",
+};
+
 /** Statuses a run is still in. Drives the refresh above; a finished ledger is
  *  not re-read. */
 const ACTIVE_RUN_STATUSES: ReadonlySet<WebAgentRunStatus> = new Set([
@@ -678,6 +693,30 @@ function WebRunRow({
                 ))}
               </ul>
             </div>
+          )}
+
+          {/* What the platform knew about this researcher and used here. The
+            * count is the point — an answer that silently drew on a stored
+            * preference and an answer that did not must not look the same. */}
+          {(run.recalledMemories?.length ?? 0) > 0 && (
+            <details>
+              <summary className="cursor-pointer select-none text-caption font-medium uppercase tracking-wider text-muted hover:text-text">
+                个性化依据 {run.recalledMemories?.length} 条
+              </summary>
+              <div className="mt-1 space-y-0.5 text-caption text-muted">
+                <p>这次运行读取了你的这些长期记忆。内容在「记忆」里，可以随时修改或删除。</p>
+                <ul className="space-y-0.5">
+                  {run.recalledMemories?.map((memory) => (
+                    <li key={memory.id}>
+                      <Link to="/app/memory" className="hover:text-link">
+                        {MEMORY_KIND_LABELS[memory.kind] ?? memory.kind}
+                        {memory.scope === "project" ? "（本项目）" : ""}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </details>
           )}
 
           {hasArtifacts && (

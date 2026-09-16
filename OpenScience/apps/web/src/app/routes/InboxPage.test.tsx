@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { InboxPage } from "./InboxPage";
 import * as api from "@/lib/inboxClient";
+import { MemoryRouter } from "react-router";
 
 vi.mock("@/lib/inboxClient");
 const review: api.InboxItem = {
@@ -23,7 +24,7 @@ it("opens the exact digest without resolving its notice or hiding an already-rea
     actions: [{ id: "open", label: "查看简报", style: "neutral" as const }],
     readAt: "2026-09-06T00:01:00Z", resolvedAt: "2026-09-06T00:01:00Z" };
   vi.mocked(api.listInbox).mockResolvedValue({ items: [digestNotice], nextCursor: null });
-  render(<InboxPage />);
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
   const link = await screen.findByRole("link", { name: "查看简报" });
   expect(link).toHaveAttribute("href", "/app/autopilot?digest=digest-owned");
   expect(api.resolveInboxItem).not.toHaveBeenCalled();
@@ -32,7 +33,7 @@ it("opens the exact digest without resolving its notice or hiding an already-rea
 
 it("shows blocking reviews first and resolves a selected action", async () => {
   vi.mocked(api.resolveInboxItem).mockResolvedValue({ ...review, revision: 2, resolvedAt: "2026-09-06T00:01:00Z", resolution: { actionId: "adopt" } });
-  render(<InboxPage />);
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
   expect(await screen.findByText("审阅一个研究结论")).toBeInTheDocument();
   expect(screen.getByText("需要审阅")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "采纳" }));
@@ -44,7 +45,7 @@ it("marks an informational item read and preserves errors for retry", async () =
   const notice: api.InboxItem = { ...review, id: "notice-one", noticeType: "notify", priority: 2, title: "研究完成", actions: [] };
   vi.mocked(api.listInbox).mockResolvedValue({ items: [notice], nextCursor: null });
   vi.mocked(api.markInboxRead).mockRejectedValue(new Error("network"));
-  render(<InboxPage />);
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
   await userEvent.click(await screen.findByRole("button", { name: "标为已读" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("操作未完成，请重试。");
   expect(screen.getByRole("button", { name: "标为已读" })).toBeInTheDocument();
@@ -52,7 +53,7 @@ it("marks an informational item read and preserves errors for retry", async () =
 
 it("filters unread items and has a truthful empty state", async () => {
   vi.mocked(api.listInbox).mockResolvedValue({ items: [], nextCursor: null });
-  render(<InboxPage />);
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
   await userEvent.click(screen.getByRole("radio", { name: "未读" }));
   await waitFor(() => expect(api.listInbox).toHaveBeenLastCalledWith({ unread: true }));
   expect(await screen.findByText("没有未读消息")).toBeInTheDocument();
@@ -65,7 +66,7 @@ it("discards a late page after changing filters and prevents duplicate page requ
     if (cursor) return new Promise((resolve) => { finishPage = resolve; });
     return { items: [review], nextCursor: "old-page" };
   });
-  render(<InboxPage />);
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
   const more = await screen.findByRole("button", { name: "加载更多" });
   await userEvent.click(more);
   expect(more).toBeDisabled();
@@ -82,7 +83,7 @@ it("removes a read item from the unread view and ignores a late mutation after r
   vi.mocked(api.listInbox).mockResolvedValue({ items: [notice], nextCursor: null });
   let finishRead!: (value: api.InboxItem) => void;
   vi.mocked(api.markInboxRead).mockImplementation(() => new Promise((resolve) => { finishRead = resolve; }));
-  render(<InboxPage />);
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
   await userEvent.click(screen.getByRole("radio", { name: "未读" }));
   const read = await screen.findByRole("button", { name: "标为已读" });
   await userEvent.click(read);
@@ -101,7 +102,7 @@ it("does not leak an old mutation failure or busy state into a reloaded filter",
   vi.mocked(api.listInbox).mockResolvedValue({ items: [notice], nextCursor: null });
   let failRead!: (error: Error) => void;
   vi.mocked(api.markInboxRead).mockImplementation(() => new Promise((_resolve, reject) => { failRead = reject; }));
-  render(<InboxPage />);
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
   await userEvent.click(screen.getByRole("radio", { name: "未读" }));
   await userEvent.click(await screen.findByRole("button", { name: "标为已读" }));
   await userEvent.click(screen.getByRole("radio", { name: "全部" }));
@@ -125,7 +126,7 @@ it("opens the run a notice names, and keeps that link after the notice is handle
     readAt: "2026-09-06T00:01:00Z", resolvedAt: "2026-09-06T00:01:00Z" };
   vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice], nextCursor: null });
 
-  render(<InboxPage />);
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
 
   const link = await screen.findByRole("link", { name: "查看运行" });
   expect(link).toHaveAttribute("href", "/app/runs?run=run_abc123");
@@ -147,7 +148,7 @@ it("says which outcome a finished run had, and that its files are still there", 
     actions: [{ id: "open", label: "查看运行", style: "primary" as const }] };
   vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice], nextCursor: null });
 
-  render(<InboxPage />);
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
 
   expect(await screen.findByText("研究已交付，待你复核")).toBeInTheDocument();
   expect(screen.getByText(/需要你自己复核后再使用/)).toBeInTheDocument();

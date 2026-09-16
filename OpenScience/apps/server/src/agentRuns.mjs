@@ -471,6 +471,7 @@ function foldEvents(events) {
         ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
         ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
         ...(event.mountedSkills ? { mountedSkills: normalizeMountedSkills(event.mountedSkills) } : {}),
+        ...(event.recalledMemories ? { recalledMemories: normalizeRecalledMemories(event.recalledMemories) } : {}),
         // `attempts` has been published to the browser since the repair loop
         // shipped and has always been 0, because nothing ever folded it. The
         // repair count is the number it was always meant to carry.
@@ -541,6 +542,30 @@ function normalizeMountedSkills(value) {
     .filter((item) => typeof item === "string" && item.trim())
     .map((item) => item.trim().slice(0, 160));
   return names.length > 0 ? [...new Set(names)].slice(0, 32) : undefined;
+}
+
+/**
+ * The durable memories a dispatch recalled, as the run detail shows them.
+ *
+ * Ids, kinds and scopes only — never the values. The ledger is a file in the
+ * project workspace and a memory's content belongs in one place, the memory
+ * store, where deleting it deletes it. What a reader needs here is "three
+ * things you told us were used", with a link to go read them.
+ */
+function normalizeRecalledMemories(value) {
+  if (!Array.isArray(value)) return undefined;
+  const rows = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const id = typeof item.id === "string" ? item.id.trim().slice(0, 120) : "";
+    if (!id) continue;
+    rows.push(Object.freeze({
+      id,
+      kind: typeof item.kind === "string" ? item.kind.trim().slice(0, 48) : "note",
+      scope: typeof item.scope === "string" ? item.scope.trim().slice(0, 16) : "user",
+    }));
+  }
+  return rows.length > 0 ? rows.slice(0, 16) : undefined;
 }
 
 function normalizeMethodDigests(value) {
@@ -3341,7 +3366,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any}} patch
+   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any}} patch
    */
   async recordLearning(project, rawRunId, patch) {
     const runId = safeId(rawRunId, "agent run id");
@@ -3360,6 +3385,25 @@ export class AgentRunStore {
         ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
         ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
         ...(patch.mountedSkills ? { mountedSkills: patch.mountedSkills } : current.mountedSkills ? { mountedSkills: current.mountedSkills } : {}),
+        // Which durable memories this dispatch actually recalled.
+        //
+        // The recall happened at dispatch and then existed only as a file in
+        // the workspace (`memory.md`), so a researcher reading an answer had no
+        // way to see what the platform had used about them, and a support
+        // question about "why did it assume that" could only be answered by
+        // reading a container's filesystem (2026-09-16 review, M4③). Recorded
+        // like `mountedSkills` and for the same reason: something the ledger
+        // has not recorded cannot be told apart from something that never
+        // happened.
+        //
+        // Normalized on the way IN, not only on the way out. Folding drops the
+        // extra keys when the ledger is read, but the event is what gets
+        // written to `runs.jsonl` — so a caller handing over whole memory rows
+        // would put their values in a file in the project workspace, where
+        // deleting the memory would not delete them.
+        ...(patch.recalledMemories
+          ? { recalledMemories: normalizeRecalledMemories(patch.recalledMemories) ?? [] }
+          : current.recalledMemories ? { recalledMemories: current.recalledMemories } : {}),
         ...(patch.repairRounds
           ? { repairRounds: { content: patch.repairRounds.content ?? 0, structural: patch.repairRounds.structural ?? 0 } }
           : current.repairRounds ? { repairRounds: current.repairRounds } : {}),

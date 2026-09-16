@@ -502,7 +502,18 @@ test("a restated preference takes effect at once, and the memory it replaced is 
   assert.equal(notifications.rows.size, 1);
   const notice = notifications.attempts[0];
   assert.equal(notice.noticeType, "notify", "a question would promise a decision nothing acts on");
-  assert.equal(notice.actions, undefined, "an inbox action with no handler is a button that does nothing");
+  // The notice names the record and offers the one thing there is to do with
+  // it: go read it. Until 2026-09-16 it named neither, so the inbox said a
+  // memory had been rewritten and left the reader to find it by hand among
+  // everything the account holds (review, M4①).
+  //
+  // Still no resolver-backed action, and for the original reason: the change
+  // has already happened, so a button that posts a decision would promise one
+  // nothing acts on. `open` is a link — the inbox renders it as one, the way it
+  // already does for a run and a digest — not a resolution.
+  assert.deepEqual(notice.source, { type: "memory", id: notice.source?.id });
+  assert.ok(typeof notice.source?.id === "string" && notice.source.id.length > 0, "the notice names no record");
+  assert.deepEqual(notice.actions, [{ id: "open", label: "查看这条记忆", style: "primary" }]);
   assert.equal(notice.userId, "user_1");
   assert.match(notice.body, /回答请用中文/);
   assert.match(notice.body, /回答请用英文/);
@@ -596,7 +607,14 @@ test("the notice's key names exactly what the notice says, so observing one chan
   assert.equal(notifications.attempts[0].idempotencyKey, notifications.attempts[2].idempotencyKey);
   assert.notEqual(notifications.attempts[0].idempotencyKey, notifications.attempts[1].idempotencyKey);
   for (const attempt of notifications.attempts) {
-    assert.equal(attempt.source, undefined, "a run-scoped source under a run-stable key is the 409");
+    // The source may name the RECORD and must never name the run. The service
+    // re-checks a repeated idempotency key against the whole notice, so a
+    // source that varied per run would make two observations of one change
+    // disagree — which is the 409 this loop exists to keep out. The record id
+    // is already in the key, so it is stable by construction.
+    assert.equal(attempt.source?.type, "memory");
+    assert.equal(attempt.source?.id, notifications.attempts[0].source?.id,
+      "a run-scoped source under a run-stable key is the 409");
     assert.equal(attempt.projectId, null, "a user-scoped memory belongs to no project");
   }
 });

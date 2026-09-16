@@ -45,7 +45,10 @@ function source(value) {
     throw new HttpError(400, "notification_payload_invalid", "Invalid source.");
   }
   const item = /** @type {Record<string, any>} */ (value);
-  if (Object.keys(item).sort().join(",") !== "id,type" || !["run", "thread", "share", "system", "digest"].includes(item.type)) {
+  // `memory` arrived 2026-09-16: a notice about a memory that named no memory
+  // left the inbox saying a record had changed and offering no way to reach it
+  // (review, M4①).
+  if (Object.keys(item).sort().join(",") !== "id,type" || !["run", "thread", "share", "system", "digest", "memory"].includes(item.type)) {
     throw new HttpError(400, "notification_payload_invalid", "Invalid source.");
   }
   return { type: item.type, id: productId(item.id, "source") };
