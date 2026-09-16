@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { FilePreviewInspector as FilePreviewInspectorT } from "@ai4s/shared";
 import { FilePreviewInspector, PreviewError } from "./FilePreviewInspector";
+import { readArtifact } from "@/lib/artifactFile";
 
 // The markdown tests below carry inline `content`, so they never hit
 // readArtifact — this mock only feeds the binary-file test.
@@ -50,6 +51,19 @@ describe("FilePreviewInspector — markdown", () => {
     // The heading is real document markup, not raw "# Findings" text.
     expect(await screen.findByRole("heading", { name: "Findings" })).toBeInTheDocument();
     expect(screen.queryByText("# Findings")).not.toBeInTheDocument();
+  });
+
+  it("reads a clinical report's matrix beside it, so each finding opens what it rests on", async () => {
+    vi.mocked(readArtifact).mockImplementationOnce(async (path: string) => path === "deliverables/d1/clinical-evidence-matrix.json"
+      ? { path, mime: "application/json", encoding: "utf8", size: 1, data: JSON.stringify({ claims: [
+        { claimId: "CLM-001", claim: "MIMIC-IV 是单一机构数据库。", claimType: "direct", supportQuote: "covering a decade", sourceTitle: "MIMIC-IV" },
+      ] }) }
+      : null);
+    render(<FilePreviewInspector data={{ ...md, path: "deliverables/d1/clinical-evidence-report.md", filename: "clinical-evidence-report.md",
+      content: "MIMIC-IV 为单一机构数据库 [1]<!-- claim:CLM-001 -->。" }} onClose={() => {}} />);
+    await userEvent.click(await screen.findByRole("button", { name: "查看这句话的依据（1 条主张）" }));
+    expect(await screen.findByText("“covering a decade”")).toBeInTheDocument();
+    expect(vi.mocked(readArtifact)).toHaveBeenCalledWith("deliverables/d1/clinical-evidence-matrix.json", undefined);
   });
 
   it("toggles to the raw source under the source tab", async () => {

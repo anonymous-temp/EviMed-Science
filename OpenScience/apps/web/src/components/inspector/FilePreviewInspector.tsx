@@ -16,6 +16,7 @@ import { hasWebApi } from "@/lib/apiClient";
 import { parseTableFile } from "@/lib/csv";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
+import { claimMatrixPathFor, parseClaimMatrix, type ClaimEvidence } from "@/lib/claimCitations";
 import { ProvenancePanel } from "./ProvenancePanel";
 import { TablePreview } from "./TablePreview";
 import { canChart } from "@/lib/tableChart";
@@ -90,6 +91,23 @@ export function FilePreviewInspector({
   const [url, setUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(data.content ?? null);
   const [bytes, setBytes] = useState<ArrayBuffer | null>(null);
+  // A clinical evidence report's matrix, read beside it so each sentence can
+  // open what it rests on. Best effort: without it the report still reads.
+  const [claims, setClaims] = useState<Map<string, ClaimEvidence> | null>(null);
+  useEffect(() => {
+    setClaims(null);
+    const matrixPath = kind === "markdown" ? claimMatrixPathFor(data.path) : null;
+    if (!matrixPath) return;
+    let cancelled = false;
+    readArtifact(matrixPath, data.root)
+      .then((file) => {
+        if (cancelled || !file || file.encoding !== "utf8") return;
+        const parsed = parseClaimMatrix(file.data);
+        if (parsed.size > 0) setClaims(parsed);
+      })
+      .catch(() => { /* no matrix, no citations; the report itself is unaffected */ });
+    return () => { cancelled = true; };
+  }, [data.path, data.root, kind]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"preview" | "code">(kind === "text" ? "code" : "preview");
@@ -242,6 +260,7 @@ export function FilePreviewInspector({
               filename={data.filename}
               path={data.path}
               language={data.language}
+              claims={claims}
             />
           </Suspense>
         )}
@@ -259,6 +278,7 @@ function Body({
   filename,
   path,
   language,
+  claims,
 }: {
   kind: PreviewKind;
   url: string | null;
@@ -268,6 +288,7 @@ function Body({
   filename: string;
   path: string;
   language?: string;
+  claims?: Map<string, ClaimEvidence> | null;
 }) {
   if (kind === "docx" || kind === "xlsx" || kind === "pptx") {
     // Office views scroll internally (the outer pane never does), so they
@@ -373,7 +394,7 @@ function Body({
     return text !== null ? (
       <div className="min-h-full px-6 py-8">
         <div className="mx-auto max-w-content rounded-sm bg-white px-12 py-11 shadow-[0_1px_4px_rgba(0,0,0,.25)] max-sm:px-6 max-sm:py-7">
-          <MarkdownViewer variant="document">{text}</MarkdownViewer>
+          <MarkdownViewer variant="document" claims={claims ?? undefined}>{text}</MarkdownViewer>
         </div>
       </div>
     ) : (
