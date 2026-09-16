@@ -3091,3 +3091,51 @@ test("a launch plan carries one plugin's configuration, and a second bundle's ca
     "the saved configuration must reach the container's environment",
   );
 });
+
+test("a subagent session is read at the address the kernel's own catalogue gives it, for every caller", async () => {
+  // The address used to be resolved inside the transcript collector only. The
+  // delivery gate reads the same child sessions through `sessionMessages`, kept
+  // asking at the bare id, had the refusal swallowed, and so never saw a source
+  // file a child had preserved — every clinical-evidence run that delegated its
+  // full-text retrieval was refused for it. Resolving here is what makes the
+  // two readers the same reader.
+  const manager = new RuntimeManager({});
+  manager.runtimes.set(`${project.userId}:${project.id}`, { modelGatewayTokenJti: "gen-1" });
+  /** @type {{method: string, args: any}[]} */ const calls = [];
+  manager.callKernel = async (/** @type {any} */ _r, /** @type {any} */ _p, /** @type {string} */ method, /** @type {any} */ args) => {
+    calls.push({ method, args });
+    if (method === "subagents/list") {
+      // `SubagentCatalog` as the kernel declares it: `entries`, keyed on `id`.
+      return { parentAvailable: true, entries: [
+        { kind: "child", id: "child-1", mode: "one-shot", activity: "inactive", hasChildren: false },
+        { kind: "diagnostic", id: "child-broken", reason: "unavailable" },
+      ] };
+    }
+    if (method === "session/list") return { items: [{ sessionId: "child-1", projections: { asOfSeq: 3 } }, { sessionId: "root-1", projections: { asOfSeq: 3 } }] };
+    if (method === "session/page") {
+      if (args.request.address.kind === "session" && args.request.address.sessionId === "child-1") {
+        throw Object.assign(new Error("subagent Sessions require their durable parent address"), { code: "runtime_session_error" });
+      }
+      return { entries: [], hasMore: false };
+    }
+    throw new Error(`unexpected kernel method ${method}`);
+  };
+
+  await manager.sessionTranscript(project, "child-1", { wake: false, parentSessionId: "root-1" });
+  const page = calls.find((call) => call.method === "session/page");
+  assert.deepEqual(page?.args.request.address, {
+    kind: "subagent", parentSessionId: "root-1", childSessionId: "child-1", mode: "one-shot",
+  });
+
+  // `sessionMessages` is the gate's reader; it must reach the same address.
+  calls.length = 0;
+  await manager.sessionMessages(project, "child-1", { wake: false, parentSessionId: "root-1" });
+  assert.equal(calls.find((call) => call.method === "session/page")?.args.request.address.kind, "subagent");
+
+  // A root has no parent and is read at its own id; a diagnostic row gives no
+  // address, so that read goes out at the bare id rather than a guessed mode.
+  calls.length = 0;
+  await manager.sessionTranscript(project, "root-1", { wake: false });
+  assert.equal(calls.find((call) => call.method === "session/page")?.args.request.address.kind, "session");
+  assert.equal(await manager.subagentAddressFor(project, "root-1", "child-broken"), null);
+});

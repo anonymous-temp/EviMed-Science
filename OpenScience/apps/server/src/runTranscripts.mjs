@@ -36,7 +36,6 @@ import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { SOCKET_TOOL_NAMES, hasSensitiveText } from "@evimed/domain";
-import { subagentAddress } from "./dshRuntimeAdapter.mjs";
 import { HttpError, readTextFileNoFollow, safeId, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
 /** Directory under a project's meta root that holds one file per finished run. */
@@ -138,7 +137,7 @@ function relativeTranscriptPath(project, runId) {
  * transcript is worth keeping even when one delegate's session has already been
  * reaped.
  *
- * @param {{ sessionTranscript: (project: any, sessionId: string, options: any) => Promise<any>, subagentCatalogue?: (project: any, parentSessionId: string) => Promise<any[]> }} runtimeManager
+ * @param {{ sessionTranscript: (project: any, sessionId: string, options: any) => Promise<any> }} runtimeManager
  * @param {any} project
  * @param {{ sessionId: string }} run
  * @param {{ maxSessions?: number, children?: readonly { sessionId: string, parentSessionId?: string, label?: string, capability?: string|null }[] }} [options]
@@ -169,39 +168,6 @@ export async function collectRunTranscripts(runtimeManager, project, run, option
   /** @type {{ sessionId: string, parentSessionId: string|null, label: string, capability: string|null }[]} */
   const queue = [{ sessionId: run.sessionId, parentSessionId: null, label: "root", capability: null }, ...seeded];
   const seen = new Set();
-  /**
-   * One `subagents/list` per parent, cached.
-   *
-   * A subagent session cannot be read at its own id: the kernel refuses it by
-   * name — `session/agent-busy`, "subagent Sessions require their durable
-   * parent address" — and wants `{kind:'subagent', parentSessionId,
-   * childSessionId, mode}`. `mode` is part of what it authorizes against, so
-   * the address is taken from the kernel's own catalogue rather than composed
-   * from a guess; the envelope below is assembled only when the catalogue gives
-   * the parts without it.
-   *
-   * @type {Map<string, Promise<Map<string, Record<string, any>>>>}
-   */
-  const catalogues = new Map();
-  const addressOf = async (parentSessionId, childSessionId) => {
-    if (typeof runtimeManager.subagentCatalogue !== "function") return null;
-    if (!catalogues.has(parentSessionId)) {
-      catalogues.set(parentSessionId, runtimeManager.subagentCatalogue(project, parentSessionId)
-        .then((rows) => {
-          /** @type {Map<string, Record<string, any>>} */
-          const byChild = new Map();
-          for (const row of Array.isArray(rows) ? rows : []) {
-            const id = String(row?.id ?? row?.childSessionId ?? "");
-            if (id) byChild.set(id, row);
-          }
-          return byChild;
-        })
-        .catch(() => new Map()));
-    }
-    const row = (await catalogues.get(parentSessionId))?.get(String(childSessionId));
-    return row ? subagentAddress(parentSessionId, row) : null;
-  };
-
   while (queue.length && collected.length < maxSessions) {
     const next = /** @type {{ sessionId: string, parentSessionId: string|null, label: string, capability: string|null }} */ (queue.shift());
     if (!next.sessionId || seen.has(next.sessionId)) continue;
@@ -209,10 +175,15 @@ export async function collectRunTranscripts(runtimeManager, project, run, option
     let transcript = null;
     let error = null;
     try {
-      const address = next.parentSessionId ? await addressOf(next.parentSessionId, next.sessionId) : null;
+      // A subagent session is read under its parent's address, which the
+      // runtime manager resolves from the kernel's own catalogue — in one place,
+      // for every reader. This collector used to resolve it privately, and the
+      // delivery gate's reader of the same sessions was left asking at the bare
+      // id, so the gate never saw a file a child had preserved.
+      //
       // `wake: false` throughout: waking a container to read a run that has
       // already finished would restart the very thing whose exit ended it.
-      transcript = await runtimeManager.sessionTranscript(project, next.sessionId, { wake: false, address });
+      transcript = await runtimeManager.sessionTranscript(project, next.sessionId, { wake: false, parentSessionId: next.parentSessionId });
     } catch (err) {
       // Both, when there are both. The code alone is what was recorded before,
       // and for the failure that mattered it was `runtime_session_error` —
@@ -231,6 +202,19 @@ export async function collectRunTranscripts(runtimeManager, project, run, option
         label: child.label ?? "subagent",
         capability: child.capability ?? null,
       });
+    }
+    // Every child this session's own delegation receipts name.
+    //
+    // The seed list comes from the run projection, which keeps one child per
+    // deliverable — so when a deliverable is delegated a second time (a repair,
+    // or a "don't redo it" continuation after the submission cap), the second
+    // child replaces the first, and the first is the one that did the research.
+    // On the 2026-09-16 v6 batch that lost the researching child of three of
+    // twelve runs, and the gap check then correctly called the transcript
+    // partial. The receipts in the conversation itself name every child the
+    // kernel actually created, which is also exactly what the gap check counts.
+    for (const childSessionId of delegatedChildren(transcript)) {
+      queue.push({ sessionId: childSessionId, parentSessionId: next.sessionId, label: "subagent", capability: null });
     }
   }
   return collected;
@@ -439,6 +423,33 @@ export function serializeRunTranscript({ runId, capturedAt, sessions, maxBytes =
  * @param {readonly CollectedSession[]} sessions
  * @returns {number}
  */
+/**
+ * The child session ids a transcript's own completed `evimed_delegate` calls
+ * returned, in order, without repeats. A call whose output does not parse or
+ * names no child proves nothing and is skipped.
+ *
+ * @param {any} transcript
+ * @returns {string[]}
+ */
+function delegatedChildren(transcript) {
+  /** @type {string[]} */
+  const ids = [];
+  for (const message of transcript?.messages ?? []) {
+    for (const part of message?.parts ?? []) {
+      if (part?.type !== "tool" || part?.tool !== SOCKET_TOOL_NAMES.delegate || part?.status !== "completed") continue;
+      let result;
+      try {
+        result = typeof part.output === "string" ? JSON.parse(part.output) : part.output;
+      } catch {
+        continue;
+      }
+      const id = result?.ok === true ? String(result?.data?.childSessionId ?? "").trim() : "";
+      if (id && !ids.includes(id)) ids.push(id);
+    }
+  }
+  return ids.slice(0, 64);
+}
+
 function countAcceptedDelegations(sessions) {
   let accepted = 0;
   for (const session of sessions) {

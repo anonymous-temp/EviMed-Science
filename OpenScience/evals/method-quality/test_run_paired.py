@@ -1,5 +1,6 @@
 """Offline tests for the paired method-quality runner. No server, no model."""
 
+import base64
 import contextlib
 import importlib.util
 import io
@@ -45,6 +46,9 @@ class FakeBackend(runner.Transport):
         self.artifacts = artifacts or {}
         self.tool_calls = tool_calls or {}
         self.requests = []
+        # (method, path, project header) — which project each request acted in.
+        self.scoped = []
+        self.projects = []
         self.dispatches = []
         self.sessions = {}
         # What each research session was bound to. The real server routes a
@@ -71,13 +75,17 @@ class FakeBackend(runner.Transport):
         path = "/" + path.split("?", 1)[0]
         with self.lock:
             self.requests.append((method, path, json.dumps(body, ensure_ascii=False, sort_keys=True) if body is not None else ""))
+            self.scoped.append((method, path, (headers or {}).get("X-Open-Science-Project")))
         if path == "/api/auth/login":
             return 200, {"data": {"csrfToken": "csrf-token"}}, {"set-cookie": "session=fake; Path=/"}
         if path == "/api/ready":
             return 200, {"data": {"ok": True, "runtimeCompactionPolicy": "basic"}}, {}
         if path == "/api/projects" and method == "GET":
-            return 200, {"data": []}, {}
+            with self.lock:
+                return 200, {"data": [{"id": project_id} for project_id in self.projects]}, {}
         if path == "/api/projects" and method == "POST":
+            with self.lock:
+                self.projects.append(body["id"])
             return 200, {"data": {"id": body["id"]}}, {}
         if path == "/api/files/upload":
             return 200, {"data": {"path": body["filename"]}}, {}
@@ -1262,6 +1270,85 @@ class AFinishedRunIsReadAfterItsLastWrite(unittest.TestCase):
         cells = self.harness.make_runner(backend).execute()
         for cell in cells:
             self.assertEqual(cell["excluded"]["reason"], "transcript_missing")
+
+
+class EachCellStartsInAWorkspaceNoOtherCellHasTouched(unittest.TestCase):
+    """A cell's project is its own, not the batch's.
+
+    On 2026-09-16 the twelve cells of memory-ablation-v6 shared one project:
+    seven runs read other cells' deliverable folders, a baseline cell copied the
+    candidate cell's accepted package into its own folder, and the one receipt
+    file at the workspace root collected deliverables from runs of both briefs.
+    """
+
+    def setUp(self):
+        self.stack = tempfile.TemporaryDirectory()
+        self.addCleanup(self.stack.cleanup)
+        self.harness = Harness(self.stack.name, ["fam-001-a"], families={"fam-001-a": "fam"})
+        self.harness.config["repeats"] = 2
+        self.outcomes = {("fam-001-a", arm): succeeded() for arm in ("baseline", "candidate")}
+        self.artifacts = {"deliverables/report.md": "# Report\n\nA finding [PMID:1]."}
+
+    def per_cell(self):
+        self.harness.config["projectPerCell"] = True
+        runner_ = self.harness.make_runner(FakeBackend(self.harness.briefs, self.outcomes, artifacts=self.artifacts))
+        runner_.fixtures = [{"path": "knowledge-base/fixture.txt", "data": base64.b64encode(b"fixture").decode("ascii")}]
+        return runner_
+
+    def test_every_cell_dispatches_in_a_project_of_its_own_that_it_created(self):
+        batch = self.per_cell()
+        backend = batch.client_factory().transport.inner
+        cells = batch.execute()
+        self.assertEqual(len(cells), 4)
+        dispatched_in = [project for method, path, project in backend.scoped if path == "/api/agent-runs/dispatch"]
+        self.assertEqual(len(dispatched_in), 4)
+        self.assertEqual(len(set(dispatched_in)), 4, "two cells shared a workspace")
+        self.assertNotIn("eval-project", dispatched_in)
+        self.assertEqual(sorted(backend.projects), sorted(dispatched_in), "a cell ran in a project nobody created")
+        self.assertEqual(sorted(cell["projectId"] for cell in cells), sorted(dispatched_in))
+        for project in dispatched_in:
+            self.assertRegex(project, r"^eval-project-[0-9a-f]{8}$")
+            self.assertIn(("POST", "/api/files/upload", project), backend.scoped, "the fixture was not given to the cell")
+        # The usage route answers only inside the run's own project.
+        usage_scopes = [project for method, path, project in backend.scoped if path.endswith("/usage")]
+        self.assertEqual(sorted(usage_scopes), sorted(dispatched_in))
+
+    def test_each_cells_runtime_is_stopped_before_the_next_cell_starts_one(self):
+        batch = self.per_cell()
+        backend = batch.client_factory().transport.inner
+        batch.execute()
+        started = None
+        for method, path, project in backend.scoped:
+            if path == "/api/commands/start_runtime":
+                self.assertIsNone(started, f"{project} started a runtime while {started}'s was still running")
+                started = project
+            elif path == "/api/commands/stop_runtime" and project == started:
+                started = None
+        self.assertIsNone(started, "the last cell's runtime was left running")
+
+    def test_a_cell_measured_again_does_not_start_in_the_workspace_its_last_attempt_left(self):
+        batch = self.per_cell()
+        backend = batch.client_factory().transport.inner
+        first = {cell["cell"]: cell["projectId"] for cell in batch.execute()}
+        second = {cell["cell"]: cell["projectId"] for cell in batch.execute(rerun=True)}
+        self.assertEqual(first.keys(), second.keys())
+        for cell, project in first.items():
+            self.assertNotEqual(project, second[cell])
+        self.assertEqual(len(set(backend.projects)), 8)
+
+    def test_a_batch_without_the_flag_keeps_its_one_project_and_its_digest(self):
+        backend = FakeBackend(self.harness.briefs, self.outcomes, artifacts=self.artifacts)
+        cells = self.harness.make_runner(backend).execute()
+        self.assertEqual({cell["projectId"] for cell in cells}, {"eval-project"})
+        self.assertEqual(backend.projects, [])
+        self.assertNotIn("projectPerCell", runner.load_config(self.harness.config_file, self.harness.splits))
+
+    def test_the_flag_is_a_boolean_or_the_config_is_refused(self):
+        raw = json.loads(self.harness.config_file.read_text(encoding="utf-8"))
+        raw["projectPerCell"] = "yes"
+        self.harness.config_file.write_text(json.dumps(raw), encoding="utf-8")
+        with self.assertRaisesRegex(runner.EvalError, "projectPerCell"):
+            runner.load_config(self.harness.config_file, self.harness.splits)
 
 
 class OutageInterruptsRatherThanScores(unittest.TestCase):

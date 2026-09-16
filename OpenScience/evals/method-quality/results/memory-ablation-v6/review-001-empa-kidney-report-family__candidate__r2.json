@@ -1,0 +1,181 @@
+{
+  "arm": "candidate",
+  "armDigest": "51827d59ca5a556a2c95a8db7fba7dd75097220cd4505262c5f0910a8c92f7ba",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__candidate__r2",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "25b0f8b2dc915a05e48f46474c970194413a68c370ef92bdb234b317b6be2f34",
+  "configId": "memory-ablation-v6",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 46,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T17:03:46Z",
+  "judge": {
+    "issues": [
+      "Internal contradiction: audit states distinctPreservedSources=4 and four preserved documents, but closing summary states the correct count is 13; deliverable not reconciled.",
+      "Actual search query strings are not shown; only record counts (14 searches, 113/82/76) are reported, so 'actual searches' under mustDo is only partially declared.",
+      "KDIGO Recommendation 3.7.1 is paraphrased as limited to type 2 diabetes without quoting the source text, creating a possible source mismatch.",
+      "Clinical practice section includes direct symptom-triggered 'seek immediate care' advice that goes beyond the evidence-synthesis bound."
+    ],
+    "promptVersion": 1,
+    "rationale": "Strong phase-separated analysis, one-study counting, non-randomized post-trial framing, and declared unregistered protocol meet the core mustDo/mustNotDo items. However, the deliverable has an unresolved preserved-document count contradiction, does not list actual runnable query strings, and includes practical safety advice plus an unverified paraphrased guideline recommendation, so it is not fully reliable.",
+    "scores": {
+      "correctness": 3,
+      "evidenceHandling": 4,
+      "safetyFraming": 4,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 90,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 91
+      },
+      {
+        "expectedVersion": 83,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 84
+      },
+      {
+        "expectedVersion": 83,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 84
+      },
+      {
+        "expectedVersion": 82,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 83
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 2,
+  "run": {
+    "artifacts": [
+      "deliverables/empa-kidney-durability-evidence-dossier/citation-audit.md",
+      "deliverables/empa-kidney-durability-evidence-dossier/citation-ledger.csv",
+      "deliverables/empa-kidney-durability-evidence-dossier/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-durability-evidence-dossier/clinical-evidence-report.md",
+      "deliverables/empa-kidney-durability-evidence-dossier/clinical-evidence-run.json",
+      "deliverables/empa-kidney-durability-evidence-dossier/clinical-evidence-search.json",
+      "deliverables/empa-kidney-durability-evidence-dossier/question-coverage.json",
+      "deliverables/empa-kidney-durability-evidence-dossier/references.bib",
+      "delivery-summary.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_2_1a9169f6e419dab2",
+    "durationMs": 3711937,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_c60de5fdedae10165470513215aafdb8",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copie",
+      "claims[0].claim numeric fact 10 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 131 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 2 处是同一条（Report line 164、Report line 166）：这是一处决定，改一次就能全部修好。",
+      "Review methods: searchCoverage[5] is unavailable: 指南来源对该主题仅返回结构化题录字段，未随附可读文本；按该主题在 PubMed 检索到的唯一一条记录，其开放获取全文检索返回未配置的服务凭据，未取得文本. This does not establish absence of evidence.",
+      "Review methods: searchCoverage[6] is unavailable: Crossref 以 DOI 字符串检索未解析到目标记录，返回的两条记录与本综述无关；题录核对改由 OpenAlex 完成. This does not establish absence of evidence.",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "clinical-evidence-report.md line 138: one arm is concluded to take the other's place or to beat it (个体标识符清单与完整提取代码则受数据使用协议限制，通常只能由原研究者在自身授权范围内核对 [1]<!-- claim:CLM-009 -->。), and the report never says whether a direct comparison between them exists. Fill the 是否存在直接比较研究 axis either way — head-to-head ",
+      "claims[20].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[20].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[45].claim numeric fact 7 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 69 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 154 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 156 numeric facts 5, 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 7 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 3 处是同一条（Report line 21、Report line 150、Report line 172）：这是一处决定，改一次就能全部修好。",
+      "Review methods: searchCoverage[5] is unavailable: The Chinese-language search returned no records and no Chinese full-text database is configured in this deployment; the gap is reported as a coverage limitation rather than as absence of evidence.. This does not establish absence of evidence.",
+      "Review methods: searchCoverage[6] is unavailable: No dataset or trial reporting off-treatment kidney or cardiovascular outcomes for an SGLT2 inhibitor other than the EMPA-KIDNEY post-trial period was retrieved; an individual participant-level meta-analysis of empagliflozin kidney outcomes (PMID 4108",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "clinical-evidence-report.md line 121: one arm is concluded to take the other's place or to beat it (慢性 eGFR 斜率因间接性（替代终点）评为中确定性；), and the report never says whether a direct comparison between them exists. Fill the 是否存在直接比较研究 axis either way — head-to-head evidence with its citation, or 未检索到 with wha",
+      "claims[20].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[20].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "literature_search searched and returned no source"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-6287852c-56e0-4494-a4e0-e54358a1d162",
+    "status": "failed",
+    "transcript": {
+      "bytes": 6348571,
+      "completeness": "complete",
+      "messages": 1490,
+      "path": ".openscience/transcripts/run_c60de5fdedae10165470513215aafdb8.jsonl",
+      "sha256": "4ff7fe724759719c684952dbd6d79cd081133f69ecf95a139bf647bf74292d9a"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.3126042592592593,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 0.8,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T16:00:30Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

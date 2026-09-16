@@ -1,0 +1,190 @@
+{
+  "arm": "candidate",
+  "armDigest": "51827d59ca5a556a2c95a8db7fba7dd75097220cd4505262c5f0910a8c92f7ba",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__candidate__r0",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "25b0f8b2dc915a05e48f46474c970194413a68c370ef92bdb234b317b6be2f34",
+  "configId": "memory-ablation-v6",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 10,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T14:17:43Z",
+  "judge": {
+    "issues": [],
+    "promptVersion": 1,
+    "rationale": "Directly answers the durability question with clear separation of randomized active-phase evidence from observational post-trial follow-up, counts NCT03594110 as one primary study, and discloses searches, eligibility, and protocol status. Claims are citation-bonded and derived estimates are labelled with inputs and assumptions. Safety statements preserve evidence levels and avoid unsafe advice from derived estimates. No concrete defects identified.",
+    "scores": {
+      "correctness": 5,
+      "evidenceHandling": 5,
+      "safetyFraming": 5,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 85,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 86
+      },
+      {
+        "expectedVersion": 78,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 79
+      },
+      {
+        "expectedVersion": 78,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 79
+      },
+      {
+        "expectedVersion": 77,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 78
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 0,
+  "run": {
+    "artifacts": [
+      "deliverables/empa-kidney-durability/citation-audit.md",
+      "deliverables/empa-kidney-durability/citation-ledger.csv",
+      "deliverables/empa-kidney-durability/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-durability/clinical-evidence-report.md",
+      "deliverables/empa-kidney-durability/clinical-evidence-run.json",
+      "deliverables/empa-kidney-durability/clinical-evidence-search.json",
+      "deliverables/empa-kidney-durability/question-coverage.json",
+      "deliverables/empa-kidney-durability/references.bib"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_0_107ec4679ab52b61",
+    "durationMs": 1464914,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_52661623e8e4e98f15c08129fee40aed",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/PMC5975470/3c62c3fcd488fc148c650e7b56bd5cbdb3138d67a086673010f8fbdac95b7d29/capture.json, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copi",
+      "claims[0].claim numeric fact 10 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 131 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 2 处是同一条（Report line 164、Report line 166）：这是一处决定，改一次就能全部修好。",
+      "Review methods: searchCoverage[5] is unavailable: 指南来源对该主题仅返回结构化题录字段，未随附可读文本；按该主题在 PubMed 检索到的唯一一条记录，其开放获取全文检索返回未配置的服务凭据，未取得文本. This does not establish absence of evidence.",
+      "Review methods: searchCoverage[6] is unavailable: Crossref 以 DOI 字符串检索未解析到目标记录，返回的两条记录与本综述无关；题录核对改由 OpenAlex 完成. This does not establish absence of evidence.",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "clinical-evidence-report.md line 138: one arm is concluded to take the other's place or to beat it (个体标识符清单与完整提取代码则受数据使用协议限制，通常只能由原研究者在自身授权范围内核对 [1]<!-- claim:CLM-009 -->。), and the report never says whether a direct comparison between them exists. Fill the 是否存在直接比较研究 axis either way — head-to-head ",
+      "claims[20].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[20].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[45].claim numeric fact 7 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 69 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 154 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 156 numeric facts 5, 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 7 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 3 处是同一条（Report line 21、Report line 150、Report line 172）：这是一处决定，改一次就能全部修好。",
+      "Review methods: searchCoverage[5] is unavailable: The Chinese-language search returned no records and no Chinese full-text database is configured in this deployment; the gap is reported as a coverage limitation rather than as absence of evidence.. This does not establish absence of evidence.",
+      "Review methods: searchCoverage[6] is unavailable: No dataset or trial reporting off-treatment kidney or cardiovascular outcomes for an SGLT2 inhibitor other than the EMPA-KIDNEY post-trial period was retrieved; an individual participant-level meta-analysis of empagliflozin kidney outcomes (PMID 4108",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "clinical-evidence-report.md line 121: one arm is concluded to take the other's place or to beat it (慢性 eGFR 斜率因间接性（替代终点）评为中确定性；), and the report never says whether a direct comparison between them exists. Fill the 是否存在直接比较研究 axis either way — head-to-head evidence with its citation, or 未检索到 with wha",
+      "literature_search searched and returned no source",
+      "biomedical_source_search searched and returned no source",
+      "review weakened: empa-kidney-durability-evidence-report/CLM-002 — 点估计与区间本身正确，但该产物把它评为「中等确定性」并写明降级理由是「不精确：基于 990 例首次主要结局而非计划的 1070 例」。源文（PMID 36331190）记载提前终止是 DSMB 依 624 例首次主要结局作出，属提前终止（favourable stopping）而非样本量／精确度不足；990 例是最终分析的事件数，不是终止时的事件数。同一运行内另一产物（empakidney-durability-review）引用了正确的 624 例，两份产物对同",
+      "review weakened: empa-kidney-durability-evidence-report/CLM-005 — 手稿版本 76%（32–120%）与 28%（19–38%）确为作者手稿数值，但产物自己承认手稿与索引摘要相差约 10 个百分点而未解决；在未取得发表版正文核对之前，只能作为版本差异记录，不能作为可引用的亚组估计。",
+      "review weakened: empa-kidney-durability-evidence-report/CLM-010 — 「660 例生物阻抗亚组中液体超负荷降低 0.24 L」来自生物阻抗亚组研究（PMC7615589），原文该亚组的体重差为 −0.7 kg（−1.3 至 −0.1），而产物给出的 −0.9 kg 与收缩压 −2.6 mmHg 来自全试验队列。同一句把亚组分母（660 例）与全队列分母（6609 例）的估计并列，读者会把它读作同一分析集的结果。",
+      "review contradicted: empa-kidney-durability-evidence-report/CLM-013 — 产物称「试验在预设期中分析时提前终止，基于 990 例首次主要结局而非计划的 1070 例」。PMID 36331190 原文：「On March 07 2022, the independent DSMB reported that based on 624 first primary outcomes, both conditions for stopping early for efficacy were met at the formal inte",
+      "review weakened: empa-kidney-durability-evidence-report/CLM-023 — 「随机化受试者只计一次、不累加」本身成立（各报告分母同为 3304/3305）；但同一产物在报告数上自相矛盾：第 2.5 节与结果段写「6 份报告描述同一主研究」，第 1 节与第 2.1 节则把 3 份指定出版物按「1 项主研究的 3 份报告」计数、并称补充检索新增 2 份（合计 5 份）。计数单位在同一文内不一致。",
+      "review contradicted: empakidney-durability-review/CLM-002 — 产物称主要复合结局为「随机化期（中位 2.0 年）内」432/3304 对 558/3305；同一产物 CLM-022 引文为「0.72, 0.64-0.82; 990 outcomes」。990 例事件是随机化期加试验后随访前段的合计（PMID 39453837：This comprised a 28% overall reduction… (990 outcomes)），而随机化期终止时的事件数为 624 例（PMID 36331190）。把 990 例口径写成「中位 2",
+      "review contradicted: empakidney-durability-review/CLM-006 — 产物把 0.84（95% CI 0.67 至 1.07）标注为「心力衰竭住院或心血管死亡」。PMID 36331190 原文确为「no statistically significant effect on the composite of hospitalization for heart failure or death from cardiovascular causes (hazard ratio, 0.84; 95% CI 0.67 to 1.07; P=0.15)",
+      "review weakened: empakidney-durability-review/CLM-015 — 慢性斜率差 1.37（1.16–1.59）、相对降低 50%（42–58%）本身与 PMID 38061371 原文一致；但产物对同一取值给出两套措辞：一处称「由每年 −2.75 改善至 −1.37」（净差 1.38），另一处称组间差 1.37。源文所述为组间差 1.37（安慰剂组约 −2.75/年），「改善至」在此处是简写而非错误，但同文并用两种说法会诱导读者把组间差读成绝对速率。",
+      "review weakened: empakidney-durability-review/CLM-044 — 57/1000（SE 14）与 45/1000（SE 14）取自 PMID 39453837 的 Kaplan-Meier 绝对差；但产物据此写「约五分之四的绝对获益仍在」并以「维持」形容，而同文 4.2 节自认 12/1000 的变化小于一个标准误、与「完全没有持续」相容。同一数据在两处得到强度不同的表述。",
+      "review weakened: empa-kidney-durability/CLM-009 — 总斜率 0.75（0.54–0.96）与慢性斜率 1.37（1.16–1.59）两值均见于源文（PMID 36331190 与 PMID 38061371），但产物把两个取自不同报告、量纲与符号约定不同的斜率差并列在同一比较中，未标明总斜率取自主报告、慢性斜率取自二次分析，读者可能误认为同一模型的两行输出。",
+      "review weakened: empa-kidney-durability/CLM-012 — 「停药后 4 周急性下降逆转、两组相差 1.87 mL/min/1.73 m²」与 PMID 39453837 及 eGFR 二次分析（PMID 38061371）自述 the acute eGFR dip… reversed within 4 weeks after discontinuation 一致；但该测量来自英国亚组、受试者数未报告、仅一个国家，产物在结论段把它作为一般性事实陈述（启动后 2 个月内 eGFR 会出现幅度约 6% 的急性下降，停药后 4 周复查时该下降逆转），亚组限定被",
+      "review weakened: empa-kidney-durability/CLM-042 — 产物由停药 4 周后原恩格列净组 eGFR 仍高 1.87 mL/min/1.73 m²，推出「与单纯血流动力学解释不符，提示停药后仍存在结构性差异」。源文（PMID 39453837）对该亚组的定位是急性 eGFR 下降在停药 4 周内逆转，并以「不能解释 ESKD 上的持续获益」作出机制未明的陈述，而非结构性差异的推断。该推断已标〔推导〕并列出限制，但方向上强于源文。",
+      "review weakened: ce-report/CLM-034 — 「版本 v2.0、v2.2 与 v3.0 并存」成立，但版本归属在各产物间未对齐：本产物把 v3.0 归给 PMC13505126（肿瘤相关脓毒症），scoping 报告把 v3.0 归给脓毒症相关脑病（PMID 41107845），本产物同表又未列出后者的版本。同一数据库版本字段在不同产物间互相不符，削弱了「版本字段可逐项比对」这一论证的可操作性。",
+      "review contradicted: ce-report/CLM-035 — 产物结论写「这些研究报告的 MIMIC-IV 验证队列能否被当作彼此独立的证据——答案是否定的，理由在证据而不在临床：独立性无法核实」。同一运行内另两份产物（mimic4-sepsis-mortality-models/CLM-047、mimic-iv-sepsis-prognostic-models-scoping/CLM-026）在同一实体上明确写「既不判重叠，也不判独立」。「无法核实」推不出「不能计为独立证据」，三份产物对同一问题给出「未解决」与「否」两种强度不同的答案。",
+      "review weakened: mimic4-sepsis-mortality-models/CLM-043 — 「同一数据库名下出现 V.2.0、V.2.2 与含 2020–2022 年记录的 version 3.0」成立（PMC12534946 原文），但产物在他处把三者表述为同一版本下记录池不同的同时，又把 2008–2019 年区间当作多项研究的队列年份，未区分「库的覆盖期」与「分析的纳入期」；该区分正是它自己第七节所要求的字段。",
+      "review contradicted: mimic4-sepsis-mortality-models/CLM-047 — 产物结论第二部分写「这些研究所报告的 MIMIC-IV 验证队列在本轮证据基础上不足以支持把它们当作相互独立的证据」，随后以「未解决」支持该结论。以「未解决」为前提得不出「不足以支持计为独立」这一否定性判定；同一运行的 ce-report（CLM-035）对同一实体给出更强表述「答案是否定的」，而 scoping 报告（CLM-026）只写「既不判重叠也不判独立」。三份产物在同一实体上给出三种强度不同的结论。"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-636f1c51-acdf-40d8-b246-d2fd17796a09",
+    "status": "failed",
+    "transcript": {
+      "bytes": 2036728,
+      "completeness": "complete",
+      "messages": 364,
+      "path": ".openscience/transcripts/run_52661623e8e4e98f15c08129fee40aed.jsonl",
+      "sha256": "91495ce55a78802fb3bc2422b3a5d1be743288ae48b5a9f3308ba4aa362821da"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.7287196296296297,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T13:50:04Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

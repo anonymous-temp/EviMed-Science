@@ -539,6 +539,7 @@ test("canceling a runtime session records the active AgentRun as canceled", asyn
       },
     });
     const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
     const canceled = await store.cancelSession(project, binding.sessionId);
     assert.equal(canceled.id, started.id);
     assert.equal(canceled.status, "canceled");
@@ -575,6 +576,7 @@ test("canceling waits for the observer even when the terminal ledger write fails
     });
     store.scheduleMonitor = () => {};
     const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
     let observerExited = false;
     let releaseObserver;
     const observer = new Promise((resolve) => { releaseObserver = resolve; });
@@ -857,7 +859,8 @@ test("the notices a package was accepted with reach the ledger on both paths", a
       }],
     }, null, 2), "utf8");
 
-    await dispatch("turn_accepted_notices");
+    const dispatched = await dispatch("turn_accepted_notices");
+    await relabelReceipt(project, dispatched.id);
     appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
     const run = await store.reconcileSession(project, binding.sessionId);
     assert.equal(run.status, "succeeded", (run.qualityNotices ?? []).join(" | "));
@@ -962,7 +965,8 @@ test("a run whose files drifted from its receipt does not ship, container alive 
       }],
     }, null, 2), "utf8");
 
-    await dispatch("turn_receipt_drift");
+    const dispatched = await dispatch("turn_receipt_drift");
+    await relabelReceipt(project, dispatched.id);
     appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
     const run = await store.reconcileSession(project, binding.sessionId);
     assert.equal(run.status, "failed", "a package no gate has seen must not ship");
@@ -1011,7 +1015,8 @@ test("a receipt whose digests still match does not block an ordinary success", a
       }],
     }, null, 2), "utf8");
 
-    await dispatch("turn_receipt_intact");
+    const dispatched = await dispatch("turn_receipt_intact");
+    await relabelReceipt(project, dispatched.id);
     appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
     const run = await store.reconcileSession(project, binding.sessionId);
     assert.equal(run.status, "succeeded", (run.qualityNotices ?? []).join(" | "));
@@ -2021,6 +2026,7 @@ test("server monitor owns terminal state and records only existing structured ar
     });
 
     const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
     assert.equal(started.status, "running");
     for (let attempt = 0; attempt < 50; attempt += 1) {
       const run = (await store.list(project))[0];
@@ -2072,6 +2078,7 @@ test("a completed tool step cannot finish a busy multi-step run and artifacts ar
     });
 
     const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
     history = [{
       info: { id: "msg_tool_step", role: "assistant", time: { completed: Date.now() } },
       parts: [
@@ -2501,6 +2508,7 @@ test("fails baseline history closed and uses a persisted message cursor instead 
 
     baselineFails = false;
     const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
     await new Promise((resolve) => setTimeout(resolve, 10));
     assert.equal((await store.list(project))[0].status, "running");
     // The ledger is JSONL and now carries progress events too, so take the
@@ -5250,6 +5258,7 @@ test("a run whose container is already gone is judged from its receipt, not fail
       monitorIntervalMs: 60_000,
     });
     const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
     // Asserted on the ledger rather than on this call's return value: `start`
     // also schedules the monitor, which reconciles on its own, and the run's
     // recorded outcome is what the rest of the system reads either way.
@@ -5423,6 +5432,7 @@ test("the container exiting judges from the durable record too, not just a later
       monitorIntervalMs: 60_000,
     });
     const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
     // The container exits. This, not a reconcile, is what the runtime reports.
     await store.closeProject(project, "failed");
     const finished = (await store.list(project)).find((item) => item.id === started.id);
@@ -5466,6 +5476,7 @@ test("a container that exits with nothing durable still says what the run last k
       monitorIntervalMs: 60_000,
     });
     const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
     // The projection is written only now, and the monitor is quiesced first.
     //
     // This assertion is about what the BRIDGE contributes, but it reads the
@@ -5601,7 +5612,7 @@ test("the preserved accepted bytes can be read back, and only by their own diges
     await writeFile(path.join(project.workspaceDir, relative), accepted);
     await writeFile(path.join(project.workspaceDir, workspaceLayout.receiptFile), JSON.stringify({
       formatVersion: 1,
-      runId: "kernel-run-1",
+      runId: "run_control",
       bundleVersion: "1.0.0",
       domainVersion: "1.0.0",
       entries: [{
@@ -5680,7 +5691,7 @@ test("server repair preserves accepted bytes outside the runtime workspace", asy
     await writeFile(path.join(project.workspaceDir, unrelatedRelative), unrelated);
     const receipt = {
       formatVersion: 1,
-      runId: "kernel-run-1",
+      runId: "run_control",
       bundleVersion: "1.0.0",
       domainVersion: "1.0.0",
       entries: [{
@@ -5710,7 +5721,7 @@ test("server repair preserves accepted bytes outside the runtime workspace", asy
     const authorization = result.authorizations[0];
     assert.deepEqual(
       { runId: authorization.runId, deliverableId: authorization.deliverableId },
-      { runId: "kernel-run-1", deliverableId: "review" },
+      { runId: "run_control", deliverableId: "review" },
     );
     assert.match(authorization.acceptedDigest, /^[0-9a-f]{64}$/);
     const lifecycle = {
@@ -5884,6 +5895,7 @@ test("a package written and never submitted is not reported as a stopped runtime
         monitorIntervalMs: 60_000,
       });
       const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
       await store.closeProject(project, "failed");
       return (await store.list(project)).find((item) => item.id === started.id);
     };
@@ -5992,6 +6004,7 @@ test("a receipt naming a file that no longer matches its digest is refused, not 
       monitorIntervalMs: 60_000,
     });
     const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
     await store.reconcileSession(project, binding.sessionId).catch(() => {});
     const finished = (await store.list(project)).find((item) => item.id === started.id);
     assert.equal(finished?.status, "failed");
@@ -6060,6 +6073,7 @@ test("a restarted control plane adopts runs a previous process left running", as
       onRunFinished: async () => {},
     });
     const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
 
     // A second store over the same directory is the restarted process. The
     // ledger says running; the container is not there to answer.
@@ -6149,10 +6163,31 @@ async function withSpecialistRun(fn) {
 }
 
 /** @param {string} workspaceDir @param {string} digest */
-async function writeReceiptNaming(workspaceDir, digest) {
+/**
+ * Re-label the workspace receipt as `runId`'s own.
+ *
+ * A receipt is written by the run that owns it and carries that run's id: every
+ * control-plane dispatch writes the ledger id into the run index the runtime
+ * reads, and the runtime stamps it on the receipt. These fixtures used to write
+ * a receipt under a made-up id before the run existed, which only worked while
+ * the reader never compared the two — and that is exactly the gap that let one
+ * run be credited with another run's accepted package.
+ */
+async function relabelReceipt(project, runId) {
+  const file = path.join(project.workspaceDir, "delivery-receipt.json");
+  let receipt;
+  try {
+    receipt = JSON.parse(await readFile(file, "utf8"));
+  } catch {
+    return; // no receipt in this fixture: nothing to relabel
+  }
+  await writeFile(file, JSON.stringify({ ...receipt, runId }, null, 2), "utf8");
+}
+
+async function writeReceiptNaming(workspaceDir, digest, runId = "run_live") {
   await writeFile(path.join(workspaceDir, "delivery-receipt.json"), JSON.stringify({
     formatVersion: 1,
-    runId: "run_live",
+    runId,
     bundleVersion: "0.1.0",
     domainVersion: "0.1.0",
     entries: [{
@@ -6178,9 +6213,9 @@ test("a package edited after its receipt is re-judged, not destroyed", async () 
   // domain gate over the bytes on disk, so the honest answer is to amend and
   // say which files moved.
   await withSpecialistRun(async ({ project, dispatch, appendHistory, binding, store }) => {
-    await dispatch("turn_amend");
+    const dispatched = await dispatch("turn_amend");
     await writeFile(path.join(project.workspaceDir, "note.md"), "# repaired after the verdict\n", "utf8");
-    await writeReceiptNaming(project.workspaceDir, "0".repeat(64));
+    await writeReceiptNaming(project.workspaceDir, "0".repeat(64), dispatched.id);
     appendHistory([{ type: "text", text: "done" }]);
 
     const run = await store.reconcileSession(project, binding.sessionId);
@@ -6198,8 +6233,8 @@ test("a package edited after its receipt into something that fails is still refu
   // conditional on the current bytes passing. Remove the required output and
   // the same drift must still be refused, with nothing shipped.
   await withSpecialistRun(async ({ project, dispatch, appendHistory, binding, store }) => {
-    await dispatch("turn_amend_fail");
-    await writeReceiptNaming(project.workspaceDir, "0".repeat(64));
+    const dispatched = await dispatch("turn_amend_fail");
+    await writeReceiptNaming(project.workspaceDir, "0".repeat(64), dispatched.id);
     appendHistory([{ type: "text", text: "done" }]);
 
     const run = await store.reconcileSession(project, binding.sessionId);
@@ -6344,7 +6379,7 @@ test("delegated evidence comes from kernel-owned child histories named by comple
     parts: [{ type: "tool", tool: "mcp__evimed__open_access_full_text", state: { status: "completed", output: "{}" } }],
   };
   const reads = [];
-  const messages = await readDelegatedAssistantMessagesForTest(
+  const { assistants: messages } = await readDelegatedAssistantMessagesForTest(
     {},
     [toolMessage("child-session-1"), toolMessage("failed-child", false), {
       info: { id: "forged", role: "assistant", time: { created: 1, completed: 2 } },
@@ -6358,6 +6393,46 @@ test("delegated evidence comes from kernel-owned child histories named by comple
 
   assert.deepEqual(reads, ["child-session-1"]);
   assert.deepEqual(messages, [childEvidence]);
+});
+
+test("a delegated child is read under its parent's address, and one that cannot be read is named", async () => {
+  // The kernel refuses a subagent session read at its own id. This reader used
+  // to ask at the bare id and swallow the refusal, so the delivery gate built
+  // its source-provenance map from the root session alone — and refused a
+  // clinical-evidence run for "a path no evidence tool reported preserving"
+  // about a file its child had preserved. On 2026-09-16 that failed ten of the
+  // twelve runs of a paired evaluation, the first of them in a fresh project.
+  const delegation = (childSessionId) => ({
+    info: { id: `delegate-${childSessionId}`, role: "assistant", time: { created: 1, completed: 2 } },
+    parts: [{
+      type: "tool", tool: "evimed_delegate",
+      state: { status: "completed", output: JSON.stringify({ ok: true, data: { childSessionId } }) },
+    }],
+  });
+  const fetched = {
+    info: { id: "child-fetch", role: "assistant", time: { created: 3, completed: 4 } },
+    parts: [delegation("grandchild-1").parts[0], { type: "tool", tool: "mcp__evimed__open_access_full_text", state: { status: "completed", output: "{}" } }],
+  };
+  const reads = [];
+  const { assistants, unreadable } = await readDelegatedAssistantMessagesForTest(
+    {},
+    [delegation("child-1"), delegation("child-gone")],
+    async (_project, sessionId, options) => {
+      reads.push({ sessionId, parentSessionId: options.parentSessionId });
+      if (!options.parentSessionId) throw Object.assign(new Error("subagent Sessions require their durable parent address"), { code: "runtime_session_error" });
+      if (sessionId === "child-gone") throw Object.assign(new Error("session is gone"), { code: "runtime_session_not_found" });
+      return sessionId === "child-1" ? [fetched] : [];
+    },
+    "root-session",
+  );
+
+  assert.deepEqual(reads, [
+    { sessionId: "child-1", parentSessionId: "root-session" },
+    { sessionId: "child-gone", parentSessionId: "root-session" },
+    { sessionId: "grandchild-1", parentSessionId: "child-1" },
+  ], "a nested child is addressed under the child that delegated it, not under the root");
+  assert.ok(assistants.includes(fetched), "the child's own preserving tool call reaches the gate");
+  assert.deepEqual(unreadable, ["child-gone"], "a child that cannot be read is named, not skipped in silence");
 });
 
 test("a prior run projection in the same session cannot prove current-run sources", () => {

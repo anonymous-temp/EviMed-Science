@@ -1,0 +1,193 @@
+{
+  "arm": "baseline",
+  "armDigest": "e35f4c197e8c879f679b599075a4704775a085373aac369e3cc42c02b49d06c8",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__baseline__r2",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "25b0f8b2dc915a05e48f46474c970194413a68c370ef92bdb234b317b6be2f34",
+  "configId": "memory-ablation-v6",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 23,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T15:04:04Z",
+  "judge": {
+    "issues": [
+      "Derived overlap bound uses a sampling-frame size of 34,677 attributed to refs 9/12, whose table entries are 27,134 and 14,240, so the arithmetic input is unsupported/internally inconsistent.",
+      "The abstract states the two MIMIC-IV cohorts are only available at abstract level, although the same delivery later reports the open-access full texts were preserved."
+    ],
+    "promptVersion": 1,
+    "rationale": "Highly thorough scoping review; database roles are preserved and the two model sources remain abstract-level; same-database inference is correctly blocked in both directions. Minor internal issues: the derived overlap bound cites a frame size (34,677) that conflicts with the cited table counts (27,134 and 14,240), and one abstract-level wording conflicts with the later statement that full texts were preserved. Safety framing is appropriately methodological, not clinical advice on a derived estimate.",
+    "scores": {
+      "correctness": 4,
+      "evidenceHandling": 4,
+      "safetyFraming": 5,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 87,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 88
+      },
+      {
+        "expectedVersion": 80,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 81
+      },
+      {
+        "expectedVersion": 80,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 81
+      },
+      {
+        "expectedVersion": 79,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 80
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 2,
+  "run": {
+    "artifacts": [
+      "deliverables/mimic4-sepsis-model-scoping/citation-audit.md",
+      "deliverables/mimic4-sepsis-model-scoping/citation-ledger.csv",
+      "deliverables/mimic4-sepsis-model-scoping/clinical-evidence-matrix.json",
+      "deliverables/mimic4-sepsis-model-scoping/clinical-evidence-report.md",
+      "deliverables/mimic4-sepsis-model-scoping/clinical-evidence-run.json",
+      "deliverables/mimic4-sepsis-model-scoping/clinical-evidence-search.json",
+      "deliverables/mimic4-sepsis-model-scoping/question-coverage.json",
+      "deliverables/mimic4-sepsis-model-scoping/references.bib",
+      "deliverables/mimic4-sepsis-model-scoping/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_2_d00e06caf44bd355",
+    "durationMs": 1566193,
+    "errorCode": "specialist_evidence_repair_snapshot_failed",
+    "id": "run_87a76ef39bdf75758207e6d69d965d9f",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "The accepted package could not be preserved outside the runtime workspace before repair, so no revision was authorized.",
+      "claims[0].claim numeric fact 10 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 131 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 2 处是同一条（Report line 164、Report line 166）：这是一处决定，改一次就能全部修好。",
+      "Review methods: searchCoverage[5] is unavailable: 指南来源对该主题仅返回结构化题录字段，未随附可读文本；按该主题在 PubMed 检索到的唯一一条记录，其开放获取全文检索返回未配置的服务凭据，未取得文本. This does not establish absence of evidence.",
+      "Review methods: searchCoverage[6] is unavailable: Crossref 以 DOI 字符串检索未解析到目标记录，返回的两条记录与本综述无关；题录核对改由 OpenAlex 完成. This does not establish absence of evidence.",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "clinical-evidence-report.md line 138: one arm is concluded to take the other's place or to beat it (个体标识符清单与完整提取代码则受数据使用协议限制，通常只能由原研究者在自身授权范围内核对 [1]<!-- claim:CLM-009 -->。), and the report never says whether a direct comparison between them exists. Fill the 是否存在直接比较研究 axis either way — head-to-head ",
+      "claims[20].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[20].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[45].claim numeric fact 7 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 69 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 154 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 156 numeric facts 5, 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 7 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 3 处是同一条（Report line 21、Report line 150、Report line 172）：这是一处决定，改一次就能全部修好。",
+      "Review methods: searchCoverage[5] is unavailable: The Chinese-language search returned no records and no Chinese full-text database is configured in this deployment; the gap is reported as a coverage limitation rather than as absence of evidence.. This does not establish absence of evidence.",
+      "Review methods: searchCoverage[6] is unavailable: No dataset or trial reporting off-treatment kidney or cardiovascular outcomes for an SGLT2 inhibitor other than the EMPA-KIDNEY post-trial period was retrieved; an individual participant-level meta-analysis of empagliflozin kidney outcomes (PMID 4108",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "clinical-evidence-report.md line 121: one arm is concluded to take the other's place or to beat it (慢性 eGFR 斜率因间接性（替代终点）评为中确定性；), and the report never says whether a direct comparison between them exists. Fill the 是否存在直接比较研究 axis either way — head-to-head evidence with its citation, or 未检索到 with wha",
+      "claims[20].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[20].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "literature_search searched and returned no source",
+      "review weakened: P1-V4 — Stated as 'unresolved' by every deliverable, and that direction is right on the public record. But the claim is stated without the qualifier that it describes what these reports disclose, not the cohorts themselves: both full texts do disclose a MIMIC-IV version (2.2 in each",
+      "review contradicted: P1-V5 — ce-report, mimic4-sepsis-model-scoping and mimic4-sepsis-mortality-models call both supplied publications abstract-level evidence; d1-scoping-report and mimic-iv-sepsis-prognostic-models-scoping call the same two publications full-text ('两条模型来源的证据层级为全文级'; table 1 records",
+      "review weakened: P1-V6 — Abstract-level statements that neither supplied abstract names the MIMIC-IV version are literally true of the abstracts (the intra-abdominal abstract gives 2008-2019 as the database range only; the HALP abstract says only 'the MIMIC-IV database'). I verified the same field i",
+      "review contradicted: R2.5 — mimic4-sepsis-mortality-models line 99 states that of the 8 studies only 1 used MIMIC-IV as an external validation cohort while '其余 7 项都以 MIMIC-IV 作为模型开发数据' - but its own table (lines 77-84) lists the HALP study as MIMIC-IV external validation, and the same paragraph's ow",
+      "review weakened: R2.8 — d1-scoping-report states that only two MIMIC-IV version coverage intervals could be verified from accessible sources (2.2 and 3.1). Verified correct: PMC12534946 gives version 3.0 with 2020-2022 records, PMC12043699 gives v3.1 covering 2008-2022, and the data descriptor cover",
+      "review weakened: R2.9 — mimic4-sepsis-model-scoping's bound for the two supplied cohorts (intersection between 0 and 1,300, using 73,181 ICU stays, with sensitivity to 50,920 unique ICU patients and 431,231 admissions) is arithmetically sound and its assumptions are stated; independence-verdict-brie",
+      "review weakened: R2.10 — Hospital-level identifier lists are absent from every report read this run; I confirmed for all full texts I checked that none contains a stay_id, hadm_id or subject_id listing or hash. The claim is weakened only by its scope wording: as a blanket statement about 'the report",
+      "review weakened: R4.2 — The claim that the two abstracts do not name a MIMIC-IV version is true as stated of the abstracts themselves, which I re-read. It is weakened as a statement about the study record, because both full texts do name the version (2.2 in each), verified directly; and it is weaken",
+      "review weakened: R4.3 — The intra-abdominal abstract does not give the 910/390 split, the six named predictors, the SOFA AUC, or the eICU-CRD version - all confirmed by reading the abstract. The weakening is one-sided: the same abstract does report the development-plus-internal-validation role, the ",
+      "review weakened: R4.6 — The substantive point - eICU is the derivation cohort in one supplied study and the external validation cohort in the other - is correct and verified. The weakening is that the same observation is stated at different evidence tiers depending on the deliverable (abstract in th",
+      "review contradicted: R4.7 — Where a deliverable states or implies that the MIMIC-IV version field for the two supplied publications is unavailable anywhere in the record, that is contradicted by the preserved full texts, both of which name MIMIC-IV 2.2; I located both statements directly and they ar",
+      "review weakened: R4.8 — The causal story (version differences change the record pool, so 'both used MIMIC-IV' neither implies one cohort nor disjoint cohorts) is sound and source-supported. The specific version-gap claim that version 3.0 adds 2020-2022 records holds for one study in the corpus (PMC1",
+      "review contradicted: R5.1 — d1-scoping-report and mimic-iv-sepsis-prognostic-models-scoping both assign the two supplied publications to the full-text tier despite the task brief's requirement to keep them at abstract level until full text is preserved and its explicit prohibition on calling the two",
+      "review contradicted: R5.4 — The run's delivery-summary.md describes a different deliverable set entirely: it lists one deliverable, 'Durability of empagliflozin's kidney and cardiovascular effects in adults with CKD: EMPA-KIDNEY active-trial and post-trial follow-up evidence synthesis', submitted tw"
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-ab20dc2b-9b54-4929-9f1d-4027d5c639d3",
+    "status": "failed",
+    "transcript": {
+      "bytes": 2272066,
+      "completeness": "complete",
+      "messages": 361,
+      "path": ".openscience/transcripts/run_87a76ef39bdf75758207e6d69d965d9f.jsonl",
+      "sha256": "a0b68a9527912cfe9150568ef005fbcf2c65467539d6840666c114b4a52825c6"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.7099642592592592,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T14:34:58Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

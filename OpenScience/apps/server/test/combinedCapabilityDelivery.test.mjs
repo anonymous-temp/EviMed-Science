@@ -632,16 +632,6 @@ test("the live gate repairs the failing capability's item and leaves the other c
     attempt: 1,
     notices: [],
   });
-  await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
-    formatVersion: 1,
-    runId: "combined_live_owner",
-    bundleVersion: "0.1.0",
-    domainVersion: "0.1.0",
-    entries: [
-      receiptEntry(EVIDENCE, clinicalFiles, new Date().toISOString()),
-      receiptEntry(BIBLIOMETRIC, new Map([[BIBLIOMETRIC_FILE, BIBLIOMETRIC_TEXT]]), new Date().toISOString()),
-    ],
-  }));
 
   const binding = { sessionId: "ses_combined_live", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
   let history = [];
@@ -675,6 +665,19 @@ test("the live gate repairs the failing capability's item and leaves the other c
     effectiveAgentVersion: "1.0.0",
     effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
   }, sendPrompt);
+
+  // Written by the run, so it carries the run's id: the gate ignores a receipt
+  // another run left at the workspace root.
+  await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
+    formatVersion: 1,
+    runId: run.id,
+    bundleVersion: "0.1.0",
+    domainVersion: "0.1.0",
+    entries: [
+      receiptEntry(EVIDENCE, clinicalFiles, new Date().toISOString()),
+      receiptEntry(BIBLIOMETRIC, new Map([[BIBLIOMETRIC_FILE, BIBLIOMETRIC_TEXT]]), new Date().toISOString()),
+    ],
+  }));
 
   // The run's own plan index, naming both capabilities as accepted locally.
   // Written because a real run writes one and its absence would make the

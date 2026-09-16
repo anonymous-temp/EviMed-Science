@@ -28,6 +28,7 @@ import {
   normalizeTranscript,
   transcriptToLedgerMessages,
   sessionListItems,
+  subagentAddress,
   subagentListItems,
 } from "./dshRuntimeAdapter.mjs";
 import {
@@ -3595,17 +3596,11 @@ export class RuntimeManager {
    * always read. The projection is a migration step with a stated end (see
    * `transcriptToLedgerMessages`), not a permanent compatibility layer.
    */
-  async sessionMessages(project, sessionId, { wake = true } = {}) {
-    const transcript = await this.sessionTranscript(project, sessionId, { wake });
+  async sessionMessages(project, sessionId, { wake = true, parentSessionId = null } = {}) {
+    const transcript = await this.sessionTranscript(project, sessionId, { wake, parentSessionId });
     return transcriptToLedgerMessages(transcript);
   }
 
-  /**
-   * The run as `@evimed/domain` describes it: the kernel's event log,
-   * normalized into the one vocabulary every caller reads.
-   * @param {Record<string, any>} project @param {string} sessionId @param {{ wake?: boolean }} options
-   * @returns {Promise<import('@evimed/domain').RunTranscript>}
-   */
   /**
    * The kernel's catalogue of one session's direct children, with the address
    * each one must be read at.
@@ -3628,10 +3623,43 @@ export class RuntimeManager {
     }
   }
 
-  async sessionTranscript(project, sessionId, { wake = true, address = null } = {}) {
+  /**
+   * The address a direct child of `parentSessionId` must be read at, or null
+   * when the kernel's catalogue does not list it. Never composed from a guess:
+   * the kernel checks the mode against the child's descriptor.
+   *
+   * @param {Record<string, any>} project @param {string} parentSessionId @param {string} childSessionId
+   */
+  async subagentAddressFor(project, parentSessionId, childSessionId) {
+    const rows = await this.subagentCatalogue(project, parentSessionId);
+    const row = rows.find((item) => String(item?.id ?? item?.childSessionId ?? "") === String(childSessionId));
+    return row ? subagentAddress(parentSessionId, row) : null;
+  }
+
+  /**
+   * The run as `@evimed/domain` describes it: the kernel's event log,
+   * normalized into the one vocabulary every caller reads.
+   *
+   * A subagent session cannot be read at its own id — the kernel refuses it with
+   * "subagent Sessions require their durable parent address" — so a caller that
+   * knows the session's parent passes `parentSessionId` and the address is
+   * resolved here, from the kernel's own `subagents/list`. Resolved in ONE place
+   * on purpose: the first fix composed the address inside the transcript
+   * collector only, and the delivery gate's own reader of delegated sessions
+   * kept asking at the bare id, swallowed the refusal, and so never saw a single
+   * source file a child had preserved. Every clinical-evidence run that
+   * delegated its full-text retrieval was refused for "a path no evidence tool
+   * reported preserving" that a child had in fact preserved.
+   */
+  async sessionTranscript(project, sessionId, { wake = true, address = null, parentSessionId = null } = {}) {
     const runtime = wake ? await this.start(project) : this.runtimes.get(this.key(project));
     if (!runtime) {
       throw new HttpError(409, "runtime_not_running", "Runtime is not running for session history monitoring.");
+    }
+    // Before this call's own proxy slot is taken: the catalogue read takes one
+    // of its own, and a nested pair would count double against the capacity.
+    if (!address && parentSessionId) {
+      address = await this.subagentAddressFor(project, parentSessionId, sessionId);
     }
     this.beginProxy(project);
     try {

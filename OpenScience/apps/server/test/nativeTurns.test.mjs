@@ -420,7 +420,7 @@ test("a legacy basename receipt resolves only within its named deliverable and v
   await mkdir(path.join(f.project.workspaceDir, "deliverables", "d1"), { recursive: true });
   await writeFile(path.join(f.project.workspaceDir, "deliverables", "d1", "report.md"), report);
   await writeFile(path.join(f.project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
-    formatVersion: 1, runId: "kernel_owner", bundleVersion: "1", domainVersion: "1", entries: [{
+    formatVersion: 1, runId: run.id, bundleVersion: "1", domainVersion: "1", entries: [{
       deliverableId: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", acceptedAt: new Date().toISOString(), attempt: 1, notices: [],
       files: [{ path: "report.md", sha256: createHash("sha256").update(report).digest("hex"), bytes: Buffer.byteLength(report) }],
     }],
@@ -438,7 +438,7 @@ test("a receipt cannot borrow a different deliverable's path even with a matchin
   await mkdir(path.join(f.project.workspaceDir, "deliverables", "other"), { recursive: true });
   await writeFile(path.join(f.project.workspaceDir, "deliverables", "other", "report.md"), report);
   await writeFile(path.join(f.project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
-    formatVersion: 1, runId: "kernel_owner", bundleVersion: "1", domainVersion: "1", entries: [{
+    formatVersion: 1, runId: run.id, bundleVersion: "1", domainVersion: "1", entries: [{
       deliverableId: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", acceptedAt: new Date().toISOString(), attempt: 1, notices: [],
       files: [{ path: "deliverables/other/report.md", sha256: createHash("sha256").update(report).digest("hex"), bytes: Buffer.byteLength(report) }],
     }],
@@ -540,4 +540,48 @@ test("a genuinely later successful complete_run replaces an earlier rejection in
   f.restart();
   const finished = await f.store.finishFromDurableRecord(f.project, (await f.runs())[0]);
   assert.equal(finished.status, "succeeded");
+});
+
+test("a dispatched run is not credited with a receipt another run of the project wrote", async (t) => {
+  // The receipt is one file at the workspace root, shared by every run of the
+  // project. Read on production 2026-09-16: one receipt holding five entries
+  // accepted by five different runs, all filed under the last run's id — and a
+  // dispatched run trusted whatever it found there, so the control plane
+  // snapshotted a previous run's package as this run's accepted work.
+  const f = await setup(t, []);
+  const binding = { sessionId: fixture.sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+  const { run } = await f.store.reserveRun(f.project, binding, { dispatchId: "someone-elses-receipt", baselineCursor: null });
+  const report = "A package a previous run delivered.\n";
+  await mkdir(path.join(f.project.workspaceDir, "deliverables", "d1"), { recursive: true });
+  await writeFile(path.join(f.project.workspaceDir, "deliverables", "d1", "report.md"), report);
+  const receiptFor = (runId) => JSON.stringify({
+    formatVersion: 1, runId, bundleVersion: "1", domainVersion: "1", entries: [{
+      deliverableId: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", acceptedAt: new Date().toISOString(), attempt: 1, notices: [],
+      files: [{ path: "deliverables/d1/report.md", sha256: createHash("sha256").update(report).digest("hex"), bytes: Buffer.byteLength(report) }],
+    }],
+  });
+
+  await writeFile(path.join(f.project.workspaceDir, "delivery-receipt.json"), receiptFor("run_a_previous_run"));
+  const credited = await f.store.finishFromDurableRecord(f.project, run);
+  assert.notEqual(credited.status, "succeeded", "a previous run's accepted package is not this run's delivery");
+  assert.deepEqual(credited.artifacts, []);
+});
+
+test("the same receipt, written by this run, is its delivery", async (t) => {
+  // The negative control: the check refuses a stranger's receipt, not receipts.
+  const f = await setup(t, []);
+  const binding = { sessionId: fixture.sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+  const { run } = await f.store.reserveRun(f.project, binding, { dispatchId: "own-receipt", baselineCursor: null });
+  const report = "This run's package.\n";
+  await mkdir(path.join(f.project.workspaceDir, "deliverables", "d1"), { recursive: true });
+  await writeFile(path.join(f.project.workspaceDir, "deliverables", "d1", "report.md"), report);
+  await writeFile(path.join(f.project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
+    formatVersion: 1, runId: run.id, bundleVersion: "1", domainVersion: "1", entries: [{
+      deliverableId: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", acceptedAt: new Date().toISOString(), attempt: 1, notices: [],
+      files: [{ path: "deliverables/d1/report.md", sha256: createHash("sha256").update(report).digest("hex"), bytes: Buffer.byteLength(report) }],
+    }],
+  }));
+  const finished = await f.store.finishFromDurableRecord(f.project, run);
+  assert.equal(finished.status, "succeeded");
+  assert.deepEqual(finished.artifacts, ["deliverables/d1/report.md"]);
 });
