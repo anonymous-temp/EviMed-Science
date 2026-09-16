@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { inboxErrorMessage, listInbox, markInboxRead, resolveInboxItem, type InboxItem } from "@/lib/inboxClient";
 import { PageTitle } from "@/components/layout/PageTitle";
+import { Link } from "react-router";
 
 const TYPE_LABEL = { review: "需要审阅", question: "等待回答", notify: "通知" } as const;
 
@@ -127,17 +128,26 @@ function InboxCard({ item, busy, onRead, onResolve }: {
       <div><h2 className="text-body font-medium text-text">{item.title}</h2><p className="mt-1 whitespace-pre-wrap text-ui text-muted">{item.body}</p></div>
       {availableActions.length > 0 && <div className="flex flex-wrap gap-2">{availableActions.map((action) => {
         const variant: ButtonVariant = action.style === "danger" ? "danger" : action.style === "primary" ? "primary" : "ghost";
+        // `Link`, not `<a href>`: a bare anchor inside the shell reloaded the
+        // whole application to move between two of its own pages (U10).
         if (item.source?.type === "digest" && action.id === "open") {
-          return <a key={action.id} className={buttonClasses({ size: "sm", variant })}
-            href={`/app/autopilot?digest=${encodeURIComponent(item.source.id)}`}>{action.label}</a>;
+          return <Link key={action.id} className={buttonClasses({ size: "sm", variant })}
+            to={`/app/autopilot?digest=${encodeURIComponent(item.source.id)}`}>{action.label}</Link>;
         }
         // A run notice's only useful action is reaching the run. RunsPage has
         // taken `?run=` since the sidebar started linking to it; the inbox was
         // the one surface that named a run and then offered no way to open it,
         // so the reader had to find it by hand in a list ordered by time.
         if (item.source?.type === "run" && action.id === "open") {
-          return <a key={action.id} className={buttonClasses({ size: "sm", variant })}
-            href={`/app/runs?run=${encodeURIComponent(item.source.id)}`}>{action.label}</a>;
+          return <Link key={action.id} className={buttonClasses({ size: "sm", variant })}
+            to={`/app/runs?run=${encodeURIComponent(item.source.id)}`}>{action.label}</Link>;
+        }
+        // A memory notice's useful action is reaching that memory, where the
+        // confirm, correct and delete controls already are, with the evidence
+        // and the revision history beside them.
+        if (item.source?.type === "memory" && action.id === "open") {
+          return <Link key={action.id} className={buttonClasses({ size: "sm", variant })}
+            to={`/app/memory?record=${encodeURIComponent(item.source.id)}`}>{action.label}</Link>;
         }
         return <Button key={action.id} size="sm" variant={variant} loading={busy} onClick={() => void onResolve(action.id)}>{action.label}</Button>;
       })}</div>}

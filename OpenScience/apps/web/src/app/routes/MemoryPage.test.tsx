@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryPage } from "./MemoryPage";
+import { MemoryRouter } from "react-router";
 
 const api = vi.hoisted(() => ({
   fetchMemoryStatus: vi.fn(),
@@ -109,7 +110,7 @@ describe("MemoryPage", () => {
   });
 
   it("shows connected memory records and creates a new research memory", async () => {
-    render(<MemoryPage />);
+    render(<MemoryRouter><MemoryPage /></MemoryRouter>);
     // Exact text: the store is part of the control plane and has no account of
     // its own, so the pill states the connection and nothing else -- even when
     // the payload still carries one (see the mock above).
@@ -126,7 +127,7 @@ describe("MemoryPage", () => {
 
   it("keeps disconnected state explicit instead of rendering an empty connected dashboard", async () => {
     api.fetchMemoryStatus.mockResolvedValue({ configured: true, connected: false, code: "memory_schema_unavailable" });
-    render(<MemoryPage />);
+    render(<MemoryRouter><MemoryPage /></MemoryRouter>);
     expect(await screen.findByText("科研记忆尚未就绪")).toBeInTheDocument();
     expect(screen.getAllByText(/科研记忆库结构未就绪/).length).toBeGreaterThan(0);
     expect(api.listResearchMemories).not.toHaveBeenCalled();
@@ -155,7 +156,7 @@ describe("MemoryPage", () => {
       connected: false,
       code,
     });
-    const { container } = render(<MemoryPage />);
+    const { container } = render(<MemoryRouter><MemoryPage /></MemoryRouter>);
     // Wait for the status to land before reading the pill. While the request is
     // in flight there is no status yet, so the pill already shows the generic
     // sentence -- asserting it directly would pass every negative row on the
@@ -167,7 +168,7 @@ describe("MemoryPage", () => {
 
   it("points desktop users to the hosted workspace (no backend, no reconnect loop)", async () => {
     api.hasWebApi = false;
-    render(<MemoryPage />);
+    render(<MemoryRouter><MemoryPage /></MemoryRouter>);
     expect(await screen.findByText("科研记忆尚未就绪")).toBeInTheDocument();
     expect(screen.getByText(/科研记忆仅在 EviMed 在线工作空间中可用，请在 EviMed 在线工作空间中使用此功能。/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "重新连接" })).not.toBeInTheDocument();
@@ -177,7 +178,7 @@ describe("MemoryPage", () => {
 
   it("shows a card-grid skeleton while the connection status resolves", () => {
     api.fetchMemoryStatus.mockReturnValue(new Promise(() => {}));
-    const { container } = render(<MemoryPage />);
+    const { container } = render(<MemoryRouter><MemoryPage /></MemoryRouter>);
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
     expect(screen.queryByText("科研记忆尚未就绪")).not.toBeInTheDocument();
   });
@@ -203,7 +204,7 @@ describe("a stored brief is not a preference, and a sensitive record is not acce
         status: "active",
       })],
     }));
-    render(<MemoryPage />);
+    render(<MemoryRouter><MemoryPage /></MemoryRouter>);
     expect(await screen.findByText("请以《某某》为题完成证据评审。")).toBeInTheDocument();
     expect(screen.getByText("疑似任务题面，非你的陈述")).toBeInTheDocument();
   });
@@ -215,7 +216,7 @@ describe("a stored brief is not a preference, and a sensitive record is not acce
     mocks.fetchMemoryProfile.mockResolvedValue(profile({
       preference: [structured({ id: "mem_sensitive", summary: "我在服用某种药物。", status: "pending", sensitive: true })],
     }));
-    render(<MemoryPage />);
+    render(<MemoryRouter><MemoryPage /></MemoryRouter>);
     await userEvent.click(await screen.findByRole("button", { name: /确认/ }));
     expect(await screen.findByText("确认这条敏感记忆？")).toBeInTheDocument();
     expect(mocks.updateStructuredMemory).not.toHaveBeenCalled();

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input, Textarea } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { useSearchParams } from "react-router";
 
 type MemoryState = "normal" | "archived";
 
@@ -81,6 +82,11 @@ function profileFromRecords(records: WebStructuredMemory[]): WebMemoryProfile {
 
 /** @param embedded rendered as one view of 记忆; the hub owns the title. */
 export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
+  // `?record=` is how an inbox notice points at the memory it is about. The
+  // notice used to name a rewritten memory and offer no way to reach it, so the
+  // reader had to find it by hand among everything the account holds (M4①).
+  const [searchParams] = useSearchParams();
+  const highlightId = searchParams.get("record");
   const [status, setStatus] = useState<WebMemoryStatus | null>(null);
   const [items, setItems] = useState<WebResearchMemory[]>([]);
   const [profile, setProfile] = useState<WebMemoryProfile | null>(null);
@@ -280,6 +286,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
               <MemoryProfileOverview
                 profile={profile}
                 busyId={structuredBusyId}
+                highlightId={highlightId}
                 onUpdate={(record, update) => void mutateStructured(record, update)}
                 onDelete={setPendingStructuredDelete}
               />
@@ -459,11 +466,14 @@ const SECTION_PREVIEW = 5;
 function MemoryProfileOverview({
   profile,
   busyId,
+  highlightId,
   onUpdate,
   onDelete,
 }: {
   profile: WebMemoryProfile;
   busyId: string | null;
+  /** The record an inbox notice pointed at, via `?record=`. */
+  highlightId: string | null;
   onUpdate: (
     record: WebStructuredMemory,
     update: Partial<Pick<WebStructuredMemory, "value" | "summary" | "status">>,
@@ -473,6 +483,10 @@ function MemoryProfileOverview({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const highlighted = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (highlightId) highlighted.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [highlightId]);
   const [confirming, setConfirming] = useState<{
     record: WebStructuredMemory;
     update: Partial<Pick<WebStructuredMemory, "value" | "summary" | "status">>;
@@ -504,6 +518,10 @@ function MemoryProfileOverview({
       <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         {sections.map((section) => {
           const records = section.records.filter((record) => ["active", "pending"].includes(record.status));
+          // A notice that names a record must not land on a section that shows
+          // the first five of twelve and hides the one it meant.
+          const holdsHighlight = highlightId !== null && records.some((record) => record.id === highlightId);
+          const shown = expanded.has(section.title) || holdsHighlight ? records : records.slice(0, SECTION_PREVIEW);
           return (
             <article key={section.title} className="rounded-card border border-border bg-surface p-4 shadow-card">
               <div className="mb-3 flex items-center justify-between gap-2">
@@ -514,8 +532,15 @@ function MemoryProfileOverview({
                 <p className="text-ui-sm text-muted">尚无稳定记录</p>
               ) : (
                 <div className="space-y-3">
-                  {(expanded.has(section.title) ? records : records.slice(0, SECTION_PREVIEW)).map((record) => (
-                    <div key={record.id} className="rounded-input bg-surface-2 p-3">
+                  {shown.map((record) => (
+                    <div
+                      key={record.id}
+                      ref={record.id === highlightId ? highlighted : undefined}
+                      className={cn(
+                        "rounded-input bg-surface-2 p-3",
+                        record.id === highlightId && "ring-2 ring-accent",
+                      )}
+                    >
                       {editingId === record.id ? (
                         <Textarea
                           value={editingValue}
@@ -615,7 +640,7 @@ function MemoryProfileOverview({
                   {/* The count in the header was the section's total and the
                       list showed five, with nothing saying so (2026-09-16
                       review, M6). */}
-                  {records.length > SECTION_PREVIEW && (
+                  {records.length > SECTION_PREVIEW && !holdsHighlight && (
                     <button
                       type="button"
                       onClick={() => setExpanded((current) => {

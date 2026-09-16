@@ -630,6 +630,17 @@ export interface WebAgentRun {
   /** How many times the researcher steered this run mid-flight. */
   corrections?: number;
   /**
+   * The durable memories this dispatch recalled — ids, kinds and scopes, never
+   * values.
+   *
+   * Until 2026-09-16 the recall existed only as a file inside the run's
+   * container, so a researcher reading an answer could not see what the
+   * platform had used about them, and "why did it assume that?" was answerable
+   * only by reading a filesystem. Absent on older ledger rows; `[]` never
+   * appears, because a dispatch that recalled nothing writes no field.
+   */
+  recalledMemories?: { id: string; kind: string; scope: string }[];
+  /**
    * The phase projection's own diagnostics, attached by `AgentRuns.list()`
    * (agentRuns.mjs:2593). Typed here because the server already sends them and
    * an untyped field is invisible to `tsc` — a later reader would otherwise
