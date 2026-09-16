@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { capsuleEntryLabel } from "@/lib/capsuleText";
 import { Input, inputClasses } from "@/components/ui/Input";
 import {
   downloadCapsuleExport, exportCapsule, importCapsule, listCapsuleExports, previewCapsuleImport,
@@ -104,7 +105,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
           <p className="text-ui-sm text-text">{preview.issuerTrust === "verified" ? "来源身份已由本服务验证" : "作者身份未验证（外部自签名）"}</p>
           <p className="text-ui-sm text-muted">在线状态：{preview.hostedStatus === "revoked" ? "已撤销，无法导入" : preview.hostedStatus === "active" ? "有效" : "未知，无法核验外部撤销状态"} · {preview.entries.length} 条内容</p>
           {preview.newerSnapshotId && <p className="text-ui-sm text-warn">发布者已有更新快照，可向发布者索取新版本。</p>}
-          {preview.entries.map(entry => <details key={entry.id} className="text-ui-sm"><summary>{entry.factKind} · 来源版本 {entry.version}</summary><p className="mt-2 whitespace-pre-wrap text-text">{entry.content}</p></details>)}
+          {preview.entries.map(entry => <details key={entry.id} className="text-ui-sm"><summary>{capsuleEntryLabel(entry.factKind)} · 来源版本 {entry.version}</summary><p className="mt-2 whitespace-pre-wrap text-text">{entry.content}</p></details>)}
           <Input label="导入后的胶囊名称" value={importTitle} disabled={busy} maxLength={150} onChange={event => setImportTitle(event.target.value)} />
           <p className="text-caption text-muted">将新建胶囊；条目全部待确认，不自动启用，也不会执行包内方法。</p>
           <Button disabled={busy || !preview.canImport || !importTitle.trim()} onClick={() => void perform(async () => {

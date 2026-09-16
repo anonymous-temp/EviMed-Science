@@ -116,7 +116,7 @@ export function AccountPage() {
   return (
     <WorkbenchTabs
       title="账户"
-      description="你的个人租户、用量、数据源凭据与项目设置。"
+      description="你的账号、用量、数据源凭据与项目设置。"
       tabs={tabs}
     />
   );

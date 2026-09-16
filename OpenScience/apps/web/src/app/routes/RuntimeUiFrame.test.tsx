@@ -6,7 +6,7 @@ import { SessionRoute } from "./SessionRoute";
 import { WebApiError } from "@/lib/apiClient";
 import { apply as applyNativeBridge } from "../../../../../packages/harness-port/src/runtimeUiBridge.mjs";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 // Only the four frame calls and the profile are stubbed. Everything else is the
 // real module on purpose: `WebApiError` has to be the same class the component
 // tests with `instanceof`, and `webErrorMessage` has to be the real projection
@@ -16,7 +16,7 @@ vi.mock("@/lib/apiClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   hasWebApi: true, fetchWebMe: () => Promise.resolve({}), webRuntimeProfile: () => mocks.profile,
   getWebProjectId: () => mocks.projectId, createWebRuntimeUiFrame: mocks.create, releaseWebRuntimeUiFrame: mocks.release,
-  renewWebRuntimeUiFrame: mocks.renew,
+  renewWebRuntimeUiFrame: mocks.renew, listWebAgentRuns: mocks.listRuns,
 }));
 const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
 function PathProbe() {
@@ -39,6 +39,7 @@ function emit(frame: HTMLIFrameElement, data: Record<string, unknown>, origin = 
 beforeEach(() => {
   window.localStorage.clear(); mocks.create.mockReset(); mocks.renew.mockReset(); mocks.release.mockReset(); mocks.release.mockResolvedValue(undefined); mocks.projectId = "default";
   mocks.create.mockResolvedValue(binding);
+  mocks.listRuns.mockReset(); mocks.listRuns.mockResolvedValue([]);
   mocks.renew.mockImplementation(async () => ({ ...binding, expiresAt: Date.now() + 300_000 }));
   mocks.profile.uiOrigin = "https://host.example:8443";
 });
@@ -128,7 +129,8 @@ describe("native frame identity and readiness", () => {
         effect: (setup: () => () => void) => { dispose = setup(); },
       }, {}, {
         __EVIMED_FRAME__: { version: 1, frameId: binding.frameId, projectId: "default", shellOrigin: origin, cwd: "/workspace" },
-        parent, addEventListener: (_type: string, fn: typeof listener) => { listener = fn; }, removeEventListener() {},
+        // Keyed by type, as a browser is: the bridge listens for keys as well as messages.
+        parent, addEventListener: (type: string, fn: typeof listener) => { if (type === "message") listener = fn; }, removeEventListener() {},
       });
     });
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
@@ -177,9 +179,43 @@ describe("native frame identity and readiness", () => {
     unmount(); expect(mocks.release).toHaveBeenCalledWith("frame-a");
   });
 
+  it("runs the shell's own shortcuts when the frame forwards them, and puts focus in the opened conversation", async () => {
+    // 2026-09-16 review, U8: with focus inside the cross-origin frame the
+    // shell's window listeners hear no key, so the bridge forwards a closed set.
+    const { useUiStore } = await import("@/lib/store");
+    const { SHORTCUT_HELP_TOGGLE_EVENT } = await import("@/components/ui/ShortcutHelp");
+    useUiStore.setState({ paletteOpen: false, sidebarCollapsed: false });
+    const { container } = mount();
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const command = post.mock.calls[0][0];
+    const focus = vi.spyOn(frame, "focus");
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: command.requestId, ok: true, sessionId: command.intent.sessionId });
+    await waitFor(() => expect(focus).toHaveBeenCalled());
+
+    const help = vi.fn();
+    window.addEventListener(SHORTCUT_HELP_TOGGLE_EVENT, help);
+    emit(frame, { type: "evimed.runtime-ui.shell-shortcut", seq: 3, shortcut: "command-palette" });
+    expect(useUiStore.getState().paletteOpen).toBe(true);
+    emit(frame, { type: "evimed.runtime-ui.shell-shortcut", seq: 4, shortcut: "sidebar" });
+    expect(useUiStore.getState().sidebarCollapsed).toBe(true);
+    emit(frame, { type: "evimed.runtime-ui.shell-shortcut", seq: 5, shortcut: "shortcuts" });
+    expect(help).toHaveBeenCalledTimes(1);
+    emit(frame, { type: "evimed.runtime-ui.shell-shortcut", seq: 6, shortcut: "navigate-anywhere" });
+    emit(frame, { type: "evimed.runtime-ui.shell-shortcut", seq: 7, shortcut: "sidebar" }, "https://evil.example");
+    expect(useUiStore.getState().sidebarCollapsed).toBe(true);
+    expect(help).toHaveBeenCalledTimes(1);
+    window.removeEventListener(SHORTCUT_HELP_TOGGLE_EVENT, help);
+  });
+
   it("offers retry on frame failure without silently switching dispatchers", async () => {
     mocks.create.mockRejectedValueOnce(new Error("Unavailable")); mount();
     expect(await screen.findByRole("alert")).toHaveTextContent("研究会话暂时无法连接");
+    // Focus lands on the one thing to do next (U8).
+    await waitFor(() => expect(screen.getByRole("button", { name: "重试" })).toHaveFocus());
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
   });
@@ -286,6 +322,42 @@ describe("native frame identity and readiness", () => {
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: false, error: "NAVIGATION_FAILED" });
     expect(await screen.findByRole("alert")).toHaveTextContent("研究任务暂时无法打开");
     expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/unknown-session");
+    // Retrying asks for the same task again; a new task is the other way out (U9).
+    await userEvent.click(screen.getByRole("button", { name: "新建任务" }));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/chat$/));
+  });
+
+  it("does not mount the frame, and so creates nothing, until it knows whether there is a task to resume", async () => {
+    // U9: the lookup and the frame used to race, and a frame that won created
+    // an empty task the lookup then navigated away from.
+    let answer!: (runs: unknown[]) => void;
+    mocks.listRuns.mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+    const { container } = mount();
+    expect(await screen.findByText("正在打开最近的任务…")).toBeInTheDocument();
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(mocks.create).not.toHaveBeenCalled();
+    await act(async () => { answer([{ sessionId: "session-recent" }]); });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-recent"));
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0][0].intent).toEqual({ kind: "open", sessionId: "session-recent" });
+  });
+
+  it("makes a task chosen inside the frame a history entry that Back returns from", async () => {
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+    emit(frame, { type: "evimed.runtime-ui.session", seq: 3, sessionId: "session-native" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-native"));
+    await userEvent.click(screen.getByText("Back"));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a"));
   });
 
   it("recovers an established frame without recreating its document or navigation", async () => {
@@ -311,7 +383,7 @@ describe("native frame identity and readiness", () => {
   it("releases late frame cookies without mounting a disposed response", async () => {
     let resolveFrame!: (value: typeof binding) => void;
     mocks.create.mockImplementation(() => new Promise(resolve => { resolveFrame = resolve; }));
-    const { unmount } = mount(); unmount();
+    const { unmount } = mount(null, "/app/chat/session-a"); unmount();
     await act(async () => resolveFrame(binding));
     expect(mocks.release).toHaveBeenCalledWith("frame-a");
   });

@@ -24,7 +24,11 @@ describe("DataFlowCard", () => {
     expect(screen.getByText(/服务端内核沙箱/)).toBeInTheDocument();
     expect(screen.getByText(/浏览器、工作区、日志与导出内容都不会收到它/)).toBeInTheDocument();
     expect(screen.getByText(/不会由浏览器直连模型提供方/)).toBeInTheDocument();
-    expect(screen.getByText(/科学连接器只能通过服务端固定来源网关/)).toBeInTheDocument();
+    expect(screen.getByText(/科学数据源只能通过服务端的固定来源网关/)).toBeInTheDocument();
+    // The platform's own words and paths are under 技术标识, not in the prose (U13).
+    expect(screen.queryByText(/Skills 与 MCP/)).not.toBeInTheDocument();
+    expect(screen.getByText("技术标识")).toBeInTheDocument();
+    expect(screen.getByText("/workspace/default")).toBeInTheDocument();
     expect(screen.queryByText("留在本机")).not.toBeInTheDocument();
   });
 });

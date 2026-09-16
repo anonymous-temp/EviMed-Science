@@ -35,6 +35,10 @@ export function SessionRoute() {
   // current project. What this decides is only whether the arrival was
   // deliberate, and an intent for another project is still a deliberate one.
   const wantsNewTask = Boolean((location.state as { runtimeUiIntent?: unknown } | null)?.runtimeUiIntent);
+  // While the lookup below is out, the frame is not mounted. Mounted, it would
+  // start creating a session of its own and the lookup's answer would arrive
+  // after it — one more empty task per visit (2026-09-16 review, U9).
+  const [resolving, setResolving] = useState(() => !sessionId && !wantsNewTask);
 
   // Land on the conversation you were last in, not on a new empty one.
   //
@@ -45,18 +49,23 @@ export function SessionRoute() {
   // and only that; an ordinary visit resumes, and resumes nothing only when
   // there is nothing to resume.
   useEffect(() => {
-    if (sessionId || wantsNewTask) return;
+    if (sessionId || wantsNewTask) { setResolving(false); return; }
     let active = true;
+    setResolving(true);
+    // A ledger that cannot be read, or does not answer, falls through to
+    // creating a session, which is the behaviour this replaced: never a
+    // blocked session page.
+    const giveUp = setTimeout(() => { if (active) setResolving(false); }, 8_000);
     void listWebAgentRuns()
       .then((runs) => {
         if (!active) return;
         const recent = runs.find((run) => /^[A-Za-z0-9_-]{1,160}$/.test(run.sessionId));
         if (recent) navigate(`/app/chat/${encodeURIComponent(recent.sessionId)}`, { replace: true });
+        else setResolving(false);
       })
-      // A ledger that cannot be read falls through to creating one, which is
-      // the behaviour this replaced: never a blocked session page.
-      .catch(() => {});
-    return () => { active = false; };
+      .catch(() => { if (active) setResolving(false); })
+      .finally(() => clearTimeout(giveUp));
+    return () => { active = false; clearTimeout(giveUp); };
   }, [sessionId, wantsNewTask, navigate]);
 
   useEffect(() => {
@@ -75,6 +84,13 @@ export function SessionRoute() {
   // 「内核界面暂时不可用」 (A3).
   // The tab is named the same in all three states — a page that renames itself
   // while it loads makes the browser's tab strip flicker.
+  if (uiOrigin && resolving) {
+    return (
+      <div role="status" className="flex h-full items-center justify-center text-ui-sm text-muted">
+        <PageTitle page="研究会话" />正在打开最近的任务…
+      </div>
+    );
+  }
   if (uiOrigin) return <><PageTitle page="研究会话" /><RuntimeUiFrame /></>;
   if (loading) {
     return (

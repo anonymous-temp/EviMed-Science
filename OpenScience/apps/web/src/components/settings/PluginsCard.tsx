@@ -12,6 +12,17 @@ import {
 } from "@/lib/apiClient";
 
 interface Draft { revision: number; enabled: boolean; timeout: string }
+
+/**
+ * What a researcher calls a plugin. The id and the tool names it registers are
+ * the platform's words (2026-09-16 walk, U13); they stay reachable under
+ * 「技术标识」 for whoever needs to quote them. A plugin nobody has named yet
+ * shows its id rather than nothing.
+ */
+const PLUGIN_NAMES: Record<string, string> = {
+  "dsh-cite": "文献引用核对",
+};
+export const pluginDisplayName = (id: string) => PLUGIN_NAMES[id] ?? id;
 const toDraft = (config: WebPluginConfiguration): Draft => ({ revision: config.revision, enabled: config.enabled, timeout: config.settings.timeoutMs === undefined ? "" : String(config.settings.timeoutMs) });
 const phaseLabels: Record<WebPluginState["phase"], string> = {
   saved: "已保存，首次启动后验证生效",
@@ -247,11 +258,15 @@ function PluginPanel({ projectId, plugin, fetching, loadError, mutating, lifetim
   };
 
   return (
-    <section aria-label={`插件 ${plugin.id}`} className="space-y-4">
+    <section aria-label={`插件 ${pluginDisplayName(plugin.id)}`} className="space-y-4">
       <div>
-        <h3 className="text-ui font-semibold text-text">{plugin.id}</h3>
+        <h3 className="text-ui font-semibold text-text">{pluginDisplayName(plugin.id)}</h3>
         <p className="mt-1 text-ui-sm text-muted">已安装版本 {plugin.binaryVersion}</p>
-        {plugin.tools.length > 0 && <p className="text-ui-sm text-muted">提供的工具：{plugin.tools.join("、")}</p>}
+        <details className="text-ui-sm text-muted">
+          <summary className="cursor-pointer select-none">技术标识</summary>
+          <p className="mt-1">插件标识 <span className="font-mono">{plugin.id}</span></p>
+          {plugin.tools.length > 0 && <p>提供的工具：<span className="font-mono">{plugin.tools.join("、")}</span></p>}
+        </details>
         <p className="text-ui-sm text-muted">{availabilityText(plugin)}</p>
         {plugin.availableUpdate && (
           <>
@@ -296,7 +311,7 @@ function PluginPanel({ projectId, plugin, fetching, loadError, mutating, lifetim
               <p className="text-ui-sm font-medium text-text">在此项目中启用</p>
               <p className="mt-1 text-ui-sm text-muted">禁用后，此项目将不再加载该插件提供的工具。</p>
             </div>
-            <Button variant="ghost" size="sm" role="switch" aria-checked={draft.enabled} aria-label={`启用插件 ${plugin.id}`} disabled={formDisabled} onClick={() => setDraft({ ...draft, enabled: !draft.enabled })}>{draft.enabled ? "已启用" : "已禁用"}</Button>
+            <Button variant="ghost" size="sm" role="switch" aria-checked={draft.enabled} aria-label={`启用插件 ${pluginDisplayName(plugin.id)}`} disabled={formDisabled} onClick={() => setDraft({ ...draft, enabled: !draft.enabled })}>{draft.enabled ? "已启用" : "已禁用"}</Button>
           </div>
           {timeoutField && (
             <div className="max-w-sm">
@@ -339,7 +354,7 @@ function PluginPanel({ projectId, plugin, fetching, loadError, mutating, lifetim
           It is not irreversible — the history keeps every revision and the
           switch above turns the plugin back on — and the dialog says so
           instead of offering an undo the apply loop could not honour. */}
-      {removeOpen && desired && <ConfirmDialog title={`移除 ${plugin.id}`} body={`将停用该插件，并把此项目的配置恢复为默认值，创建新的配置版本。插件程序仍在运行时镜像中，配置历史保留，可随时重新启用。`} confirmLabel="移除插件" onCancel={() => setRemoveOpen(false)} onConfirm={() => {
+      {removeOpen && desired && <ConfirmDialog title={`移除 ${pluginDisplayName(plugin.id)}`} body={`将停用该插件，并把此项目的配置恢复为默认值，创建新的配置版本。插件程序仍在运行时镜像中，配置历史保留，可随时重新启用。`} confirmLabel="移除插件" onCancel={() => setRemoveOpen(false)} onConfirm={() => {
         if (!mutationDisabled && !dirty) void mutate((signal) => removeWebPlugin(projectId, plugin.id, { expectedRevision: desired.revision }, signal));
       }} />}
     </section>

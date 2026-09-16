@@ -4,6 +4,8 @@ import { errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
 import { createWebRuntimeUiFrame, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, getWebProjectId, webErrorMessage, WebApiError, webRuntimeProfile, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { Button } from "@/components/ui/Button";
+import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
+import { useUiStore } from "@/lib/store";
 
 /** Why this surface is showing an alert instead of the research session. */
 interface FrameFailure {
@@ -19,6 +21,9 @@ interface FrameFailure {
   /** A concurrency ceiling rather than a spend one: the action that helps is
    *  stopping a session that is already running, not raising a quota. */
   ledger?: boolean;
+  /** A specific task could not be opened: offer a new one beside the retry,
+   *  which would only ask for the same task again. */
+  newTask?: boolean;
 }
 
 /** A failure this surface observed itself — a timer, a native error frame —
@@ -84,6 +89,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   const { sessionId } = useParams<{ sessionId: string }>();
   const mirroredSession = useRef<{ sessionId: string; attempt: number } | null>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
+  const retryButton = useRef<HTMLButtonElement>(null);
   const [binding, setBinding] = useState<WebRuntimeUiFrame | null>(null);
   const [ready, setReady] = useState(false);
   const [readyGeneration, setReadyGeneration] = useState(0);
@@ -273,13 +279,26 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
           ? message.draft : undefined;
         incoming.current = message.seq;
         navigate(to, to === "/app/chat" ? { state: { runtimeUiIntent: newRuntimeUiIntent(draft) } } : undefined);
+      } else if (message.type === "evimed.runtime-ui.shell-shortcut") {
+        // A shell shortcut pressed while focus was inside the frame (U8). The
+        // same closed set the bridge forwards; anything else is dropped.
+        const ui = useUiStore.getState();
+        const shortcuts: Record<string, () => void> = {
+          "command-palette": () => ui.setPaletteOpen(!ui.paletteOpen),
+          sidebar: () => ui.toggleSidebar(),
+          shortcuts: () => window.dispatchEvent(new Event(SHORTCUT_HELP_TOGGLE_EVENT)),
+        };
+        const run = shortcuts[String(message.shortcut)];
+        if (!run) return;
+        incoming.current = message.seq;
+        run();
       } else if (message.type === "evimed.runtime-ui.ack") {
         const request = currentRequest.current;
         if (!request || message.requestId !== request.requestId || typeof message.ok !== "boolean"
           || (message.ok && (typeof message.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(message.sessionId)
             || (request.kind === "open" && message.sessionId !== request.sessionId)))) return;
         incoming.current = message.seq;
-        if (!message.ok) { setError(frameFailure("研究任务暂时无法打开")); return; }
+        if (!message.ok) { setError({ ...frameFailure("研究任务暂时无法打开"), newTask: request.kind === "open" }); return; }
         currentRequest.current = null; setPending(false); setNavigated(true);
         mirroredSession.current = { sessionId: message.sessionId, attempt };
         // Remove only this acknowledged request. A later navigation intent
@@ -294,7 +313,12 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         incoming.current = message.seq;
         if (currentRequest.current || !navigated || mirroredSession.current?.sessionId === message.sessionId) return;
         mirroredSession.current = message.sessionId === null ? null : { sessionId: message.sessionId, attempt };
-        navigate(message.sessionId === null ? "/app/chat" : `/app/chat/${encodeURIComponent(message.sessionId)}`, { replace: true, state: null });
+        // Pushed, not replaced: choosing another task inside the frame is a
+        // navigation the reader expects Back to undo (U9). A native clear is a
+        // deliberate new task, and says so, so the route does not go looking
+        // for a recent task to resume instead.
+        if (message.sessionId === null) navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } });
+        else navigate(`/app/chat/${encodeURIComponent(message.sessionId)}`, { state: null });
       }
     };
     window.addEventListener("message", onMessage);
@@ -314,6 +338,19 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
     }, origin);
   }, [ready, readyGeneration, error, binding, intent, projectId, origin]);
 
+  // Focus goes where the next keystroke belongs (U8): into the conversation
+  // once it is open — unless the reader already put focus somewhere else in the
+  // shell — and onto 「重试」 when opening failed, instead of staying on
+  // whatever had it before the page changed under it.
+  useEffect(() => {
+    if (!navigated || pending || error || !ready) return;
+    const active = document.activeElement;
+    if (!active || active === document.body) iframe.current?.focus();
+  }, [navigated, pending, error, ready]);
+  useEffect(() => {
+    if (error?.retryable) retryButton.current?.focus();
+  }, [error]);
+
   useEffect(() => {
     if (!pending || error) return;
     const timeout = setTimeout(() => setError(frameFailure("研究任务暂时无法打开")), 20_000);
@@ -325,7 +362,8 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
       {error ? (
         <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-ui-sm text-error">
           <p>{error.text}</p>
-          {error.retryable && <Button variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>}
+          {error.retryable && <Button ref={retryButton} variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>}
+          {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建任务</Button>}
           {error.ledger
             ? <Button variant="ghost" onClick={() => navigate("/app/runs")}>去运行记录</Button>
             : error.capped && <Button variant="ghost" onClick={() => navigate("/app/account")}>查看账户与额度</Button>}

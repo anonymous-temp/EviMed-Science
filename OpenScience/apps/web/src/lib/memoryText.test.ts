@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { looksInjected, memoryExcerpt, readableMemory } from "./memoryText";
+import { evidenceSourceLabel, looksInjected, memoryExcerpt, readableMemory } from "./memoryText";
 
 describe("a stored memory that is really a machine's own text", () => {
   // Eleven of these were active on the operator's account on 2026-09-16, each
@@ -27,5 +27,14 @@ describe("a stored memory that is really a machine's own text", () => {
   it("is case-insensitive and survives a repeated marker", () => {
     expect(looksInjected("<EVIMED-BRIEF>x</EVIMED-BRIEF>")).toBe(true);
     expect(readableMemory("<system-reminder>a</system-reminder> b <system-reminder>c</system-reminder>")).toBe("a b c");
+  });
+});
+
+describe("where a memory's evidence came from", () => {
+  // M6: the store's enum was printed as-is under each quote.
+  it("reads as a phrase, and never as the store's identifier", () => {
+    expect(evidenceSourceLabel("conversation_message")).toBe("对话中的原话");
+    expect(evidenceSourceLabel("agent_run")).toBe("一次运行的记录");
+    expect(evidenceSourceLabel("something_new")).toBe("其他来源");
   });
 });

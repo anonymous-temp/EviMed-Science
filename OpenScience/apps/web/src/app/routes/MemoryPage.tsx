@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { webErrorMessage, createResearchMemory, deleteResearchMemory, deleteStructuredMemory, fetchMemoryProfile, fetchMemoryStatus, hasWebApi, listResearchMemories, updateResearchMemory, updateStructuredMemory, type WebMemoryProfile, type WebMemoryStatus, type WebResearchMemory, type WebStructuredMemory } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
-import { looksInjected, memoryExcerpt } from "@/lib/memoryText";
+import { evidenceSourceLabel, looksInjected, memoryExcerpt } from "@/lib/memoryText";
 import { toast } from "@/lib/toast";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -139,13 +139,17 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
     void load(state);
   }, [load, state]);
 
+  // Deferred, and each card's Markdown memoized below: every keystroke in the
+  // search box or the draft used to re-parse every card's Markdown on the page
+  // (2026-09-16 review, U11).
+  const deferredQuery = useDeferredValue(query);
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = deferredQuery.trim().toLowerCase();
     if (!needle) return items;
     return items.filter((item) =>
       item.content.toLowerCase().includes(needle) || item.tags.some((tag) => tag.toLowerCase().includes(needle))
     );
-  }, [items, query]);
+  }, [items, deferredQuery]);
 
   const create = async () => {
     const content = draft.trim();
@@ -404,7 +408,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
                         </div>
                       </div>
                     ) : (
-                      <MarkdownViewer className="text-body">{item.content}</MarkdownViewer>
+                      <NoteMarkdown content={item.content} />
                     )}
 
                     {item.tags.length > 0 && (
@@ -461,6 +465,11 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
     </div>
   );
 }
+
+/** A note's rendered Markdown, re-parsed only when its text changes. */
+const NoteMarkdown = memo(function NoteMarkdown({ content }: { content: string }) {
+  return <MarkdownViewer className="text-body">{content}</MarkdownViewer>;
+});
 
 /** How many records a section shows before it offers the rest. */
 const SECTION_PREVIEW = 5;
@@ -576,7 +585,7 @@ function MemoryProfileOverview({
                             {record.evidence.slice(-3).reverse().map((evidence) => (
                               <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
                                 <p className="text-text/80">“{evidence.quote}”</p>
-                                <p className="mt-0.5">{evidence.sourceType} · {formatTime(evidence.observedAt)}</p>
+                                <p className="mt-0.5">{evidenceSourceLabel(evidence.sourceType)} · {formatTime(evidence.observedAt)}</p>
                               </div>
                             ))}
                             {record.revisions.length > 0 && (

@@ -28,10 +28,7 @@ export function DataFlowCard({
             <HardDrive size={14} className="text-ok" aria-hidden="true" /> {hosted ? "存储在项目工作区" : "留在本机"}
           </div>
           <ul className="mt-2 list-disc space-y-1.5 pl-4 text-ui leading-relaxed text-muted">
-            <li>
-              你的工作区文件与原始数据
-              {workspace && <span className="font-mono text-xs"> ({workspace})</span>}。
-            </li>
+            <li>你的工作区文件与原始数据。</li>
             <li>
               {hosted
                 ? "代码执行仅在服务端内核沙箱启用时运行。"
@@ -67,11 +64,17 @@ export function DataFlowCard({
           </ul>
           <p className="mt-2 text-xs text-muted">
             {hosted
-              ? "平台的 Skills 与 MCP 由平台审核和统一部署；科学连接器只能通过服务端固定来源网关访问外部数据。"
+              ? "平台提供的技能与数据连接都经过审核、统一部署；科学数据源只能通过服务端的固定来源网关访问外部数据。"
               : "你添加的技能与 MCP 服务器可能自行发起网络请求 — 安装前请先审查。"}
           </p>
         </div>
       </div>
+      {workspace && (
+        <details className="border-t border-border px-5 py-3 text-caption text-muted">
+          <summary className="cursor-pointer select-none">技术标识</summary>
+          <p className="mt-1">工作区路径 <span className="font-mono">{workspace}</span></p>
+        </details>
+      )}
     </section>
   );
 }

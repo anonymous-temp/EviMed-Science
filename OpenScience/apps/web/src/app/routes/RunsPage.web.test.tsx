@@ -109,7 +109,9 @@ describe("RunsPage (hosted web)", () => {
     expect(screen.queryByText(/clinical-evidence-synthesis/i)).not.toBeInTheDocument();
     // The newest row is expanded: its title, its tag and its capability chip.
     expect(screen.getAllByText("自动化 Meta 分析").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("output/report.docx")).toBeInTheDocument();
+    // The file reads by its name; the folder stays beside it (U13).
+    expect(screen.getByText("report.docx")).toBeInTheDocument();
+    expect(screen.getByText("output")).toBeInTheDocument();
     // The model id, the session id and the run id are still here, behind one
     // labelled disclosure rather than as four chips on the open row.
     expect(screen.getByText("技术标识（供排查使用）")).toBeInTheDocument();
@@ -213,7 +215,7 @@ describe("RunsPage (hosted web)", () => {
 
   it("downloads an artifact through the web API when clicked", async () => {
     renderPage();
-    await userEvent.click(await screen.findByRole("button", { name: /output\/report\.docx/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /report\.docx/ }));
     expect(downloadArtifact).toHaveBeenCalledWith("output/report.docx", "workspace");
   });
 
@@ -303,7 +305,7 @@ describe("RunsPage (hosted web)", () => {
     })]);
     renderPage();
     expect(await screen.findByText(/未通过核验的文件（2）/)).toBeInTheDocument();
-    expect(screen.getByText("deliverables/clinical-evidence-report.md")).toBeInTheDocument();
+    expect(screen.getByText("clinical-evidence-report.md")).toBeInTheDocument();
     // Never dressed as accepted work: the marker carries the same weight as
     // the path, because a refused package presented like an accepted one is
     // the failure the gate exists to prevent, moved into the UI.

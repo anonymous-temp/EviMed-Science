@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError, type WebPluginState } from "@/lib/apiClient";
-import { PluginsCard } from "./PluginsCard";
+import { PluginsCard, pluginDisplayName } from "./PluginsCard";
 
 const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), saveWebPlugin: vi.fn(), listWebPluginRevisions: vi.fn(), rollbackWebPlugin: vi.fn(), retryWebPlugin: vi.fn(), removeWebPlugin: vi.fn() }));
 vi.mock("@/lib/apiClient", async (original) => ({ ...await original<typeof import("@/lib/apiClient")>(), ...api }));
@@ -29,7 +29,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 async function ready() { return screen.findByRole("spinbutton", { name: "请求超时（毫秒）" }); }
-const panel = (id: string) => screen.getByRole("region", { name: `插件 ${id}` });
+const panel = (id: string) => screen.getByRole("region", { name: `插件 ${pluginDisplayName(id)}` });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -69,7 +69,9 @@ describe("PluginsCard", () => {
     api.saveWebPlugin.mockResolvedValue(notes({ desired: { revision: 1, enabled: false, settings: {} }, phase: "pending" }));
     render(<PluginsCard projectId="alpha" />);
     await ready();
-    expect(screen.getByRole("heading", { name: "dsh-cite" })).toBeInTheDocument();
+    // A named plugin reads by its name; its id stays under 技术标识.
+    expect(screen.getByRole("heading", { name: "文献引用核对" })).toBeInTheDocument();
+    expect(within(panel("dsh-cite")).getByText("dsh-cite")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "dsh-notes" })).toBeInTheDocument();
     expect(within(panel("dsh-notes")).getByText("已安装版本 1.0.0")).toBeInTheDocument();
     // A plugin with no settings of its own gets no settings form, only its switch.
@@ -163,7 +165,7 @@ describe("PluginsCard", () => {
     api.saveWebPlugin.mockResolvedValue(saved);
     render(<PluginsCard projectId="alpha" />);
     fireEvent.change(await ready(), { target: { value: "4000" } });
-    fireEvent.click(screen.getByRole("switch", { name: "启用插件 dsh-cite" }));
+    fireEvent.click(screen.getByRole("switch", { name: "启用插件 文献引用核对" }));
     expect(api.saveWebPlugin).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
     await waitFor(() => expect(api.saveWebPlugin).toHaveBeenCalledTimes(1));

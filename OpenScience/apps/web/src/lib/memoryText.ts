@@ -41,6 +41,21 @@ export function readableMemory(text: string): string {
   return out.trim();
 }
 
+/**
+ * Where a piece of evidence came from, in the reader's words. The stored value
+ * is the store's enum (`conversation_message`, `agent_run`), which the memory
+ * page used to print as-is (2026-09-16 review, M6). An enum this table does not
+ * know yet still reads as a sentence rather than as an identifier.
+ */
+const EVIDENCE_SOURCE_LABELS: Record<string, string> = {
+  conversation_message: "对话中的原话",
+  agent_run: "一次运行的记录",
+};
+
+export function evidenceSourceLabel(sourceType: string): string {
+  return EVIDENCE_SOURCE_LABELS[sourceType] ?? "其他来源";
+}
+
 /** A long stored value, shortened for a card without pretending to summarize. */
 export function memoryExcerpt(text: string, max = 400): string {
   const readable = readableMemory(text);
