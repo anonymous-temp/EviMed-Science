@@ -453,15 +453,15 @@ export function reflectionDue(accumulatedImportance, threshold = MEMORY_REFLECTI
  * to spend a budget. It is not evidence of anything.
  * @param {MethodRecord} method
  * @param {PromotionOptions} [options]
- * @returns {{eligible: boolean, reason: string}}
+ * @returns {{eligible: boolean, reason: string, detail: PromotionDetail}}
  */
 export function evaluationEligible(method, options = {}) {
   const minTrajectories = options.minTrajectories ?? METHOD_INDUCTION_MIN_TRAJECTORIES
   const minRuns = options.minRuns ?? MEMORY_PROMOTION_MIN_RUNS
-  if (method?.provenance?.origin === 'explicit') return { eligible: true, reason: 'explicit origin' }
+  if (method?.provenance?.origin === 'explicit') return { eligible: true, reason: 'explicit origin', detail: { code: 'explicit_origin' } }
   const learning = method?.learning
   if (learning?.digest !== method?.digest) {
-    return { eligible: false, reason: 'the body changed since these observations, so the counters were reset' }
+    return { eligible: false, reason: 'the body changed since these observations, so the counters were reset', detail: { code: 'counters_reset' } }
   }
   // Two thresholds that had collapsed into one. Observations are deduplicated by
   // family, so `successfulFamilies().length` *is* the successful-trajectory
@@ -470,14 +470,25 @@ export function evaluationEligible(method, options = {}) {
   // enforced it. The independence that constant is about is between runs.
   const trajectories = successfulFamilies(learning)
   if (trajectories.length < minTrajectories) {
-    return { eligible: false, reason: `${trajectories.length} successful trajectories; ${minTrajectories} are needed` }
+    return { eligible: false, reason: `${trajectories.length} successful trajectories; ${minTrajectories} are needed`,
+      detail: { code: 'trajectories_needed', have: trajectories.length, need: minTrajectories } }
   }
   const runs = successfulRuns(learning)
   if (runs.length < minRuns) {
-    return { eligible: false, reason: `those trajectories all came from ${runs.length} run(s); ${minRuns} are needed` }
+    return { eligible: false, reason: `those trajectories all came from ${runs.length} run(s); ${minRuns} are needed`,
+      detail: { code: 'runs_needed', have: runs.length, need: minRuns } }
   }
-  return { eligible: true, reason: `${trajectories.length} successful trajectories across ${runs.length} runs` }
+  return { eligible: true, reason: `${trajectories.length} successful trajectories across ${runs.length} runs`,
+    detail: { code: 'evidence_sufficient', trajectories: trajectories.length, runs: runs.length } }
 }
+
+/**
+ * One line of a promotion verdict as a code and its numbers, beside the
+ * sentence. The sentences are the log's and the agent's; a researcher reads
+ * these in their own language, and a page that pattern-matched the English to
+ * translate it would break the first time a sentence was reworded.
+ * @typedef {{ code: string, [key: string]: string | number | string[] }} PromotionDetail
+ */
 
 /**
  * Whether a candidate may become effective, and if not, exactly what is missing.
@@ -488,51 +499,55 @@ export function evaluationEligible(method, options = {}) {
  * system is not learning" and "it has two of the three run families it needs".
  * @param {MethodRecord} method
  * @param {PromotionOptions} [options]
- * @returns {{status: string, reasons: string[], missing: string[]}}
+ * @returns {{status: string, reasons: string[], missing: string[], missingDetails: PromotionDetail[]}}
  */
 export function promotionVerdict(method, options = {}) {
   /** @type {string[]} */
   const reasons = []
   /** @type {string[]} */
   const missing = []
+  /** @type {PromotionDetail[]} the same lines as `missing`, as codes, in the same order */
+  const missingDetails = []
+  /** @param {string} sentence @param {PromotionDetail} detail */
+  const lack = (sentence, detail) => { missing.push(sentence); missingDetails.push(detail) }
   const learning = method?.learning ?? emptyLearning(method?.digest ?? '')
 
   const conflicts = unresolvedConflicts(learning.relations)
   if (conflicts.length) {
-    missing.push(`${conflicts.length} unresolved conflict(s) with ${conflicts.map((entry) => entry.target).join(', ')}`)
+    lack(`${conflicts.length} unresolved conflict(s) with ${conflicts.map((entry) => entry.target).join(', ')}`,
+      { code: 'conflicts', count: conflicts.length, targets: conflicts.map((entry) => String(entry.target)) })
   }
 
   if (method?.provenance?.origin === 'explicit') {
     reasons.push('explicit origin: the researcher stated this, so it takes effect immediately and is rolled back by restoring the previous revision')
-    return { status: missing.length ? 'candidate' : 'approved', reasons, missing }
+    return { status: missing.length ? 'candidate' : 'approved', reasons, missing, missingDetails }
   }
 
   const eligibility = evaluationEligible(method, options)
-  if (!eligibility.eligible) missing.push(eligibility.reason)
+  if (!eligibility.eligible) lack(eligibility.reason, eligibility.detail)
   else reasons.push(eligibility.reason)
 
   const evaluations = learning.evaluations ?? []
   const latest = evaluations.length ? evaluations[evaluations.length - 1] : null
   if (!latest) {
-    missing.push('no paired evaluation has been run against a frozen baseline')
+    lack('no paired evaluation has been run against a frozen baseline', { code: 'no_evaluation' })
   } else if (!METHOD_PASSING_VERDICTS.includes(latest.verdict)) {
-    missing.push(`the last evaluation returned ${latest.verdict}`)
+    lack(`the last evaluation returned ${latest.verdict}`, { code: 'evaluation_not_passing', verdict: String(latest.verdict) })
   } else if (latest.candidateDigest !== learning.digest) {
     // Either it names no candidate text at all, or it names text this method
     // no longer holds. Both are the same fact for a promotion: this verdict is
     // not about what would be mounted.
-    missing.push(latest.candidateDigest
-      ? 'the last evaluation measured a revision this method no longer holds'
-      : 'the last evaluation does not name the text it measured')
+    if (latest.candidateDigest) lack('the last evaluation measured a revision this method no longer holds', { code: 'evaluation_stale_revision' })
+    else lack('the last evaluation does not name the text it measured', { code: 'evaluation_unnamed_text' })
   } else if (!options.currentBaselineDigest?.trim()) {
-    missing.push('the current baseline is unavailable; a fresh comparison is required before promotion')
+    lack('the current baseline is unavailable; a fresh comparison is required before promotion', { code: 'baseline_unavailable' })
   } else if (latest.baselineDigest !== options.currentBaselineDigest) {
-    missing.push('the last evaluation was measured against a baseline that has since moved')
+    lack('the last evaluation was measured against a baseline that has since moved', { code: 'baseline_moved' })
   } else {
     reasons.push(`evaluation ${latest.verdict} against ${latest.baselineDigest}`)
   }
 
-  return { status: missing.length ? 'candidate' : 'approved', reasons, missing }
+  return { status: missing.length ? 'candidate' : 'approved', reasons, missing, missingDetails }
 }
 
 /* -------------------------------------------------------------- retirement */
