@@ -879,19 +879,20 @@ function DeliverableFeedback({ runId, path }: { runId: string; path: string }) {
  *  the marker carries the same weight as the path, because a reader must not
  *  be able to take one of these for graded work. */
 function ArtifactRow({ path, unverified }: { path: string; unverified?: boolean }) {
+  // The file's name is what a reader recognizes; the folder it sits in is the
+  // workspace's bookkeeping (2026-09-16 walk, U13), kept beside it, quieter.
+  const slash = path.lastIndexOf("/");
+  const name = slash >= 0 ? path.slice(slash + 1) : path;
+  const folder = slash > 0 ? path.slice(0, slash) : "";
   return (
     <button
       onClick={() => void downloadArtifact(path, "workspace")}
-      title={unverified ? "下载此文件（未通过核验）" : "下载此产物文件"}
+      title={unverified ? `下载 ${path}（未通过核验）` : `下载 ${path}`}
       className="group flex w-full items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-surface-2"
     >
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate font-mono group-hover:text-link",
-          unverified ? "text-warn" : "text-text",
-        )}
-      >
-        {path}
+      <span className="min-w-0 flex-1 truncate">
+        <span className={cn("group-hover:text-link", unverified ? "text-warn" : "text-text")}>{name}</span>
+        {folder && <span className="ml-2 font-mono text-caption text-muted">{folder}</span>}
       </span>
       {unverified && <span className="shrink-0 text-caption text-warn">未经核验</span>}
       <ExternalLink size={11} className="shrink-0 text-muted opacity-0 group-hover:opacity-100" aria-hidden="true" />

@@ -70,7 +70,7 @@ export function UsageCard() {
           )}
           {(usage.uncertainCalls ?? 0) > 0 && (
             <p className="mt-3 text-caption text-warn">
-              {usage.uncertainCalls} 次调用等待供应商用量核对，暂按预留金额 {Number(usage.reservedCost ?? 0).toFixed(2)} {usage.currency} 占用额度。
+              {usage.uncertainCalls} 次调用的实际用量还在核对，先按预估的 {Number(usage.reservedCost ?? 0).toFixed(2)} {usage.currency} 计入额度，核对后自动更正。
             </p>
           )}
           <p className="mt-3 text-caption text-muted">折算金额仅用于额度保护和成本透明，不是账单，也不会触发收款。</p>

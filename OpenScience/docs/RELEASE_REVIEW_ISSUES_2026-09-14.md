@@ -42,7 +42,7 @@ Evidence is primarily under `/tmp/evimed-release-20260910/`; `/private/tmp/` pat
 | MR-02 | fixed-in-code | Empty plots and false-success delivery were repaired; complete live MR acceptance remains pending. |
 | EXT-01 | ops-constraint | GEO lacks the real provider endpoint/access configuration; full-tool certification is incomplete. |
 | MEM-01 | ops-constraint | Deployment uses supported builtin recall over PostgreSQL; OpenViking/DashScope semantic recall is unconfigured. |
-| MEM-02 | live-known-issue | Migration dry-run found 31 importable and 37 unmapped records; import/purge was not executed and all legacy rows remain retained. |
+| MEM-02 | decided 2026-09-16: not imported | Read row by row, none of the 68 legacy records is worth carrying: 11 are the brief-as-preference pollution, 2 already exist in the canonical store, 55 are per-run summaries of July–September runs. All rows stay retained and unread. |
 | LEARN-01 | unverified | Full live learning, effective costs/budgets, scheduling window, and concurrency are not established. |
 | BILL-01 | fixed-in-code | The historical Flash alias pricing omission is repaired in current source; live cost validation is tracked under LEARN-01. |
 | UX-01 | unverified | Basic public availability/readiness passed; authenticated native production E2E and all-capability acceptance remain unobserved. |
@@ -182,7 +182,7 @@ The independently reviewed `prepare-host-config-v2` artifact assumes the OpenVik
 
 ### MEM-02 — Legacy-memory migration has unmapped records and was not executed
 
-**Status: live-known-issue; canonical-store code merged, migration incomplete.**
+**Status: decided 2026-09-16 — not imported, rows retained (see Decision below).**
 
 Upstream main `05cf3914d3c8168dbf2670ff21f265bcf8409676` was integrated through `4900ea3e8c4d08a5de294f92a2cbffa8b2035727`. Canonical research memory now belongs to the control plane's `evimed_memory` PostgreSQL schema. The source removes the retired Memos/MemOS composition and provides the migration and index-publication paths.
 
@@ -191,6 +191,14 @@ The actual migration dry-run covered **2 accounts and 68 records: 31 importable 
 **Impact:** the deployed API and builtin PostgreSQL recall do not establish that historical notes/records have been carried into the new canonical schema. Zero quarantine does not mean zero unresolved attribution.
 
 **Follow-up backlog:** resolve the existing unmapped attribution through the supported migration process without inventing ownership, dropping rows, or assigning data to another account. Record any later import/purge and count/ownership verification separately.
+
+**Decision (2026-09-16): not imported.** The 2026-09-16 review (M6) asked for a decision, and reading the 68 rows on production settled it without touching ownership:
+
+- **11 user-scope `preference` rows** all have the key shape `<kind>.explicit.<16 hex>` that only the extractor's deterministic fallback produced, and all are 1,064–4,000 characters: they are the same whole-task-brief pollution archived in the canonical store the same day (8 still carry the `<evimed-brief>` marker, 3 had it stripped). Importing them would restore exactly what was just removed.
+- **2 pending rows** (`profile.work_domain`, `behavior.question_format_pico`) already exist in the canonical store as records of their own.
+- **55 project-scope `run_summary` rows** summarize runs from 2026-07-22 to 2026-09-10 under the retired namespaces. The canonical store keeps its own summaries, and since 8996eff4b keeps one per question rather than one per run; importing per-run episodes of old runs would reintroduce the recall pollution M3 removed.
+
+Nothing is purged: the table is retained exactly as it was, read by no code path, and any later deletion is a retention decision to record here separately.
 
 **Evidence:** the deployment migration dry-run recorded in `/tmp/evimed-release-20260910/release-state.json` and the operator's final deployment evidence; `PROGRESS.md`, 2026-09-13 15:05 and 2026-09-14 13:42; deployment-map “Memory migration” section.
 

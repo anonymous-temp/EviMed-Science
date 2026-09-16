@@ -199,7 +199,34 @@ export function apply(ctx, _config, target = globalThis) {
     },
   };
 
+  /**
+   * The shell's three shortcuts, forwarded while focus is in this document
+   * (2026-09-16 review, U8). The frame is another origin, so with focus here
+   * the shell's own window listeners never hear a key — and the first click on
+   * the chat page puts focus here. A closed set, and only keys the kernel left
+   * unhandled: a key the application used for itself stays its own, and `?`
+   * typed into a field is text.
+   * @param {any} event
+   */
+  function keydown(event) {
+    if (!event || event.defaultPrevented || event.altKey) return;
+    const key = String(event.key ?? '');
+    const modifier = Boolean(event.metaKey || event.ctrlKey);
+    let shortcut = null;
+    if (modifier && !event.shiftKey && key.toLowerCase() === 'k') shortcut = 'command-palette';
+    else if (modifier && !event.shiftKey && key.toLowerCase() === 'b') shortcut = 'sidebar';
+    else if (!modifier && key === '?') {
+      const element = event.target;
+      if (element && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable)) return;
+      shortcut = 'shortcuts';
+    }
+    if (!shortcut) return;
+    event.preventDefault();
+    post('shell-shortcut', { shortcut });
+  }
+
   target.addEventListener('message', message);
+  target.addEventListener('keydown', keydown);
   const unsubscribe = ctx.sessions.list.subscribe(sessionChanged);
   const unsubscribeGeneration = ctx.connection.generation.subscribe(() => {
     if (!ctx.connection.generation.getSnapshot()) unavailable();
@@ -209,7 +236,8 @@ export function apply(ctx, _config, target = globalThis) {
   void boot.then(() => establish(), () => post('error', { error: 'NATIVE_NOT_READY' }));
   ctx.effect(() => () => {
     disposed = true; ready = false;
-    target.removeEventListener('message', message); unsubscribe(); unsubscribeGeneration();
+    target.removeEventListener('message', message); target.removeEventListener('keydown', keydown);
+    unsubscribe(); unsubscribeGeneration();
     pendingNavigation = undefined;
     if (target.__EVIMED_SHELL__) delete target.__EVIMED_SHELL__;
     requests.clear(); target.__DSH_TRANSPORT__?.dispose?.();

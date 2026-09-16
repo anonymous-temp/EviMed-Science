@@ -32,7 +32,7 @@ function fixture() {
   const navigate = (overrides = {}, event = {}) => listeners.get('message')({ origin: frame.shellOrigin, source: parent,
     data: { type: 'evimed.runtime-ui.navigate', version: 1, frameId: frame.frameId, projectId: frame.projectId,
       requestId: 'request-a', seq: 1, intent: { kind: 'create', sessionId: 'session-new', draft: 'Review this evidence' }, ...overrides }, ...event });
-  return { ctx, target, sent, calls, navigate, replaceGeneration() { generation = {}; generationListener(); } };
+  return { ctx, target, sent, calls, listeners, navigate, replaceGeneration() { generation = {}; generationListener(); } };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
@@ -252,4 +252,37 @@ test('a known legacy session is adopted in place without replacing its identity 
   assert.deepEqual(f.calls, [['create', 'session-a'], ['open', 'session-a']]);
   assert.ok(f.sent.some(row => row.message.ok && row.message.sessionId === 'session-a'));
   f.ctx.dispose();
+});
+
+test('the shell shortcuts pressed inside the frame are forwarded, and only those the application left unhandled', async () => {
+  // 2026-09-16 review, U8: with focus in this cross-origin document the shell's
+  // own listeners hear nothing.
+  const f = fixture();
+  apply(f.ctx, {}, f.target); await settle();
+  const keydown = f.listeners.get('keydown');
+  assert.equal(typeof keydown, 'function', 'the bridge must listen for keys');
+  const press = (/** @type {Record<string, unknown>} */ fields) => {
+    const event = { key: '', metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, defaultPrevented: false,
+      target: { tagName: 'DIV', isContentEditable: false }, prevented: false, preventDefault() { this.prevented = true; }, ...fields };
+    keydown(event);
+    return event;
+  };
+  const forwarded = () => f.sent.filter(row => row.message.type === 'evimed.runtime-ui.shell-shortcut').map(row => row.message.shortcut);
+
+  assert.equal(press({ key: 'k', metaKey: true }).prevented, true);
+  press({ key: 'B', ctrlKey: true });
+  press({ key: '?' });
+  assert.deepEqual(forwarded(), ['command-palette', 'sidebar', 'shortcuts']);
+
+  press({ key: 'k', metaKey: true, defaultPrevented: true });
+  press({ key: '?', target: { tagName: 'TEXTAREA', isContentEditable: false } });
+  press({ key: '?', target: { tagName: 'DIV', isContentEditable: true } });
+  press({ key: 'k', metaKey: true, shiftKey: true });
+  press({ key: 'b', altKey: true, metaKey: true });
+  press({ key: 'x', metaKey: true });
+  assert.deepEqual(forwarded(), ['command-palette', 'sidebar', 'shortcuts'], 'a handled key, typed text and other chords stay in the frame');
+  assert.ok(f.sent.every(row => row.origin === 'https://app.example'));
+
+  f.ctx.dispose();
+  assert.equal(f.listeners.get('keydown'), undefined, 'the listener leaves with the bridge');
 });

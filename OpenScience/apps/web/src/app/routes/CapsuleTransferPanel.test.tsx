@@ -18,6 +18,9 @@ it("previews an uploaded encrypted capsule before explicit candidate import",asy
   await userEvent.click(screen.getByRole("button",{name:"解密并预览"}));
   expect(await screen.findByText("作者身份未验证（外部自签名）")).toBeInTheDocument();
   expect(screen.getByText("Preserve uncertainty")).toBeInTheDocument();
+  // The kind reads as the page names it, not as the stored enum (U11).
+  expect(screen.getByText("研究方法 · 来源版本 2")).toBeInTheDocument();
+  expect(screen.queryByText(/method_preference/)).not.toBeInTheDocument();
   expect(api.importCapsule).not.toHaveBeenCalled();
   await userEvent.click(screen.getByRole("button",{name:"确认导入为待确认条目"}));
   await waitFor(()=>expect(api.importCapsule).toHaveBeenCalledWith(expect.objectContaining({expectedDigest:preview.archiveSha256,confirmed:true})));

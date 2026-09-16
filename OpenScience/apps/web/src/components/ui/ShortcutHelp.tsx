@@ -2,9 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { isMacPlatform } from "@/lib/platform";
 
-/** Global `?` (Shift+/) cheat sheet. Lists every keyboard shortcut the app
- *  currently binds so they are discoverable in-product; Esc/click-outside
- *  closes it and focus returns to whatever had it before. */
+/** Toggles the cheat sheet from outside it: the chat frame forwards `?` when
+ *  focus is inside it, where this component's own listener cannot hear it. */
+export const SHORTCUT_HELP_TOGGLE_EVENT = "evimed:shortcut-help-toggle";
+
+/** Global `?` (Shift+/) cheat sheet. Lists every keyboard shortcut the shell
+ *  binds so they are discoverable in-product; Esc/click-outside closes it and
+ *  focus returns to whatever had it before. */
 export function ShortcutHelp() {
   const [open, setOpen] = useState(false);
   // Mirror for the one-time global listener below (avoids re-binding per open).
@@ -31,8 +35,13 @@ export function ShortcutHelp() {
         setOpen(false);
       }
     };
+    const onToggle = () => setOpen((v) => !v);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(SHORTCUT_HELP_TOGGLE_EVENT, onToggle);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(SHORTCUT_HELP_TOGGLE_EVENT, onToggle);
+    };
   }, []);
 
   // Focus the panel on open; hand focus back to the previously focused element
@@ -54,12 +63,11 @@ export function ShortcutHelp() {
     { keys: `${mod}B`, description: "收起 / 展开侧边栏" },
     { keys: `${mod}K`, description: "打开命令面板" },
     { keys: "?", description: "打开 / 关闭本面板" },
-    { keys: "Esc", description: "关闭弹层；在会话页中断正在运行的任务" },
-    { keys: "Enter", description: "发送消息" },
-    { keys: "Shift+Enter", description: "消息换行" },
-    { keys: "↑ / ↓", description: "选择斜杠命令；输入框开头按 ↑ 翻看历史输入" },
-    { keys: "Tab", description: "补全选中的斜杠命令" },
+    { keys: "Esc", description: "关闭弹层" },
   ];
+  // The composer's own keys (send, new line, slash commands) belong to the
+  // conversation surface, which lists and handles them itself. This table used
+  // to repeat those of a composer that no longer exists (2026-09-16 review, U8).
 
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- click-outside dismisses the panel; the keyboard equivalent is the global Escape handler above.
@@ -100,6 +108,9 @@ export function ShortcutHelp() {
               </li>
             ))}
           </ul>
+          <p className="border-t border-border px-4 py-2 text-caption text-muted">
+            对话输入框里的按键（发送、换行、斜杠命令）由对话界面自己处理。
+          </p>
         </div>
       </div>
     </div>

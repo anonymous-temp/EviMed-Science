@@ -8,20 +8,14 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { MemorySkeleton } from "@/components/cards/Skeletons";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { cn } from "@/lib/cn";
+import { CAPSULE_ENTRY_TYPES, capsuleEntryLabel } from "@/lib/capsuleText";
 import {
   activateCapsule, addCapsuleEntry, createCapsule, listCapsuleEntries, listCapsules,
   productErrorMessage, restoreCapsule, trashCapsule, updateCapsuleEntry,
   type CapsuleEntry, type CapsuleRecord,
 } from "@/lib/productClient";
 
-const ENTRY_TYPES = [
-  { value: "method_preference", label: "研究方法", layer: "methods" },
-  { value: "writing_style", label: "写作偏好", layer: "profile" },
-  { value: "preference", label: "一般偏好", layer: "profile" },
-  { value: "expertise", label: "背景知识", layer: "knowledge" },
-  { value: "project_fact", label: "项目事实", layer: "knowledge" },
-  { value: "correction", label: "经验教训", layer: "episodes" },
-];
+const ENTRY_TYPES = CAPSULE_ENTRY_TYPES;
 const STATUS_LABEL: Record<string, string> = { candidate: "待确认", approved: "已采用", retired: "已停用" };
 
 /** @param embedded rendered as one view of 记忆; the hub owns the title. */
@@ -38,7 +32,7 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [content, setContent] = useState("");
-  const [entryType, setEntryType] = useState(ENTRY_TYPES[0].value);
+  const [entryType, setEntryType] = useState<string>(ENTRY_TYPES[0].value);
   const [mode, setMode] = useState("own");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,7 +176,7 @@ function EntryCard({ entry, busy, onUpdate }: { entry: CapsuleEntry; busy: boole
   const status = entry.payload.status;
   useEffect(() => { if (!editing) setValue(entry.payload.content); }, [entry.payload.content, editing]);
   return <article className="space-y-3 rounded-card border border-border p-4">
-    <div className="flex items-center justify-between gap-2 text-ui-sm"><span className="text-muted">{ENTRY_TYPES.find((item) => item.value === entry.payload.factKind)?.label ?? "研究记录"} · 版本 {entry.revision}</span>
+    <div className="flex items-center justify-between gap-2 text-ui-sm"><span className="text-muted">{capsuleEntryLabel(entry.payload.factKind)} · 版本 {entry.revision}</span>
       <span className={status === "candidate" ? "text-warn" : "text-muted"}>{STATUS_LABEL[status] ?? status}</span></div>
     {editing ? <><Textarea label="修订条目" disabled={busy} value={value} onChange={(event) => setValue(event.target.value)} maxLength={20000} rows={4} />
       <details className="text-ui-sm text-muted"><summary>当前已保存内容</summary><p className="mt-2 whitespace-pre-wrap">{entry.payload.content}</p></details></> : <p className="whitespace-pre-wrap text-ui text-text">{entry.payload.content}</p>}

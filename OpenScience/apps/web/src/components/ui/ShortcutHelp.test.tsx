@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ShortcutHelp } from "./ShortcutHelp";
 
@@ -20,8 +20,10 @@ describe("ShortcutHelp", () => {
     expect(dialog).toBeInTheDocument();
     expect(screen.getByText("⌘K")).toBeInTheDocument();
     expect(screen.getByText("⌘B")).toBeInTheDocument();
-    expect(screen.getByText("Shift+Enter")).toBeInTheDocument();
     expect(screen.getByText("打开命令面板")).toBeInTheDocument();
+    // The retired composer's keys are not listed as the shell's (U8).
+    expect(screen.queryByText("Shift+Enter")).not.toBeInTheDocument();
+    expect(screen.getByText(/由对话界面自己处理/)).toBeInTheDocument();
     // The panel takes focus so Esc/screen readers start here.
     expect(dialog).toHaveFocus();
   });
@@ -42,6 +44,13 @@ describe("ShortcutHelp", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+
+  it("opens when the chat frame forwards ? from inside it", async () => {
+    const { SHORTCUT_HELP_TOGGLE_EVENT } = await import("./ShortcutHelp");
+    render(<ShortcutHelp />);
+    act(() => { window.dispatchEvent(new Event(SHORTCUT_HELP_TOGGLE_EVENT)); });
+    expect(screen.getByRole("dialog", { name: "键盘快捷键" })).toBeInTheDocument();
   });
 
   it("never steals ? from a field the user is typing into", () => {
