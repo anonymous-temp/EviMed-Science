@@ -6879,3 +6879,58 @@ test("a dispatch's recalled memories are on the run, as ids and kinds and never 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a partial transcript says which session is missing and why, on the run itself", async () => {
+  // `persistRunTranscript` always returned the gaps; the ledger's receipt
+  // normalizer dropped them, so a run said `partial` and nothing else. The
+  // reason lived only in a header line inside the project's data volume —
+  // diagnosing the kernel refusing a subagent addressed at its own id needed an
+  // ssh session, and a paired evaluation excluding a cell as
+  // `transcript_partial` could not say which child or why.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-gaps-"));
+  try {
+    const project = {
+      id: "project-1", userId: "user-1", rootDir: root,
+      workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_gaps", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro", monitorIntervalMs: 60_000, monitorMaxPolls: 20,
+      readSessionHistory: async () => [], readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "turn_gaps" }, async () => ({ accepted: true }));
+
+    const refusal = "runtime_session_error: subagent Sessions require their durable parent address";
+    await store.recordLearning(project, run.id, {
+      transcript: {
+        path: ".openscience/transcripts/run.jsonl", completeness: "partial", bytes: 10,
+        sha256: "a".repeat(64), messages: 27,
+        missing: [
+          { sessionId: "4c80d30a-cc9f-4c69-8fce-ea8239180993", fromSeq: 0, reason: "child_unreadable", detail: refusal },
+          { sessionId: "", fromSeq: 0, reason: "child_unreadable" },
+          { sessionId: "x", reason: "" },
+        ],
+      },
+    });
+    const [stored] = await store.list(project);
+    assert.equal(stored.transcript.completeness, "partial");
+    assert.deepEqual(stored.transcript.missing, [
+      { sessionId: "4c80d30a-cc9f-4c69-8fce-ea8239180993", fromSeq: 0, reason: "child_unreadable", detail: refusal },
+    ], "a gap without a session or a reason is dropped; the kernel's own sentence survives");
+
+    // Bounded: the ledger is a file, and a run with a hundred unreadable
+    // children must not write a hundred gap rows into it.
+    const many = Array.from({ length: 40 }, (_, index) => ({ sessionId: `child-${index}`, fromSeq: 0, reason: "child_unreadable", detail: "x".repeat(900) }));
+    await store.recordLearning(project, run.id, {
+      transcript: { path: ".openscience/transcripts/run.jsonl", completeness: "partial", bytes: 10, sha256: "b".repeat(64), messages: 1, missing: many },
+    });
+    const [bounded] = await store.list(project);
+    assert.equal(bounded.transcript.missing.length, 16);
+    assert.equal(bounded.transcript.missing[0].detail.length, 200);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

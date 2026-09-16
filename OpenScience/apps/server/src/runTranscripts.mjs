@@ -36,6 +36,7 @@ import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { SOCKET_TOOL_NAMES, hasSensitiveText } from "@evimed/domain";
+import { subagentAddress } from "./dshRuntimeAdapter.mjs";
 import { HttpError, readTextFileNoFollow, safeId, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
 /** Directory under a project's meta root that holds one file per finished run. */
@@ -186,23 +187,19 @@ export async function collectRunTranscripts(runtimeManager, project, run, option
     if (typeof runtimeManager.subagentCatalogue !== "function") return null;
     if (!catalogues.has(parentSessionId)) {
       catalogues.set(parentSessionId, runtimeManager.subagentCatalogue(project, parentSessionId)
-        .then((items) => {
+        .then((rows) => {
           /** @type {Map<string, Record<string, any>>} */
           const byChild = new Map();
-          for (const item of Array.isArray(items) ? items : []) {
-            const id = String(item?.address?.childSessionId ?? item?.childSessionId ?? "");
-            if (id) byChild.set(id, item);
+          for (const row of Array.isArray(rows) ? rows : []) {
+            const id = String(row?.id ?? row?.childSessionId ?? "");
+            if (id) byChild.set(id, row);
           }
           return byChild;
         })
         .catch(() => new Map()));
     }
-    const entry = (await catalogues.get(parentSessionId))?.get(String(childSessionId));
-    if (!entry) return null;
-    if (entry.address && entry.address.kind === "subagent") return entry.address;
-    const mode = String(entry.mode ?? entry.address?.mode ?? "");
-    if (mode !== "one-shot" && mode !== "continuable") return null;
-    return { kind: "subagent", parentSessionId, childSessionId: String(childSessionId), mode };
+    const row = (await catalogues.get(parentSessionId))?.get(String(childSessionId));
+    return row ? subagentAddress(parentSessionId, row) : null;
   };
 
   while (queue.length && collected.length < maxSessions) {
