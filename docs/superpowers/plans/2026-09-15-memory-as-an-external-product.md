@@ -72,7 +72,7 @@ key 存在 `evimed_agent.api_keys`：只存 SHA-256，明文只在创建那一�
 问题由用户提出：「记忆是不是应该默认生效，加了路由之后是不是变成路由选择性生效？」核对代码后的答案是三层：
 
 1. **默认生效，路由不是开关。** 每轮 dispatch 前 `memorySubstrate.recall` 无条件跑一次（聊天与 autopilot 两条路），选择性来自相关性排序与预算（8 条 / 20k 字符、画像类最多占一半），路由只决定交给哪个能力。
-2. **但委派之后记忆到不了子代理。** 召回块经 `context.md` 注入 root 的用户槽；`buildDelegation` 只取题面、技能正文、胶囊方法、输入参数。子代理工具集里没有 `evimed_capsule_recall`（15 个清单无一列它，内核 `tools.restrict` 遮掉），而它继承了父预设的指引段，读得到「先查记忆」却调不到。27 份生产转录里该工具 4 次调用全在 root。
+2. **但委派之后记忆到不了子代理。** 召回块经 `context.md` 注入 root 的用户槽；`buildDelegation` 只取题面、技能正文、胶囊方法、输入参数。子代理工具集里没有 `evimed_capsule_recall`（15 个清单无一列它，内核 `tools.restrict` 遮掉），而它继承了父预设的指引段，读得到「先查记忆」却调不到。27 份生产转录里该工具 4 次调用全在 root。（**2026-09-16 更正**：其中「子会话 0 次」是空证据——后来查明转录从来就没收集过子会话，见下节。结论仍成立，但依据是代码而非这份数据。）
 3. **而且该工具只搜一半。** `evimed_capsule_recall` 与 `/api/agent-memory/v1/recall` 走 `capsuleService.recall`，只搜胶囊事实；`evimed_memory.records`（画像、偏好、行为、纠正）只经 `memorySubstrate.recall` 推进 root。两个库、两条召回路。
 
 这解释了第一次消融：候选臂激活的四条记录只到规划者，到写作者的是规划者的转述——taskUtility、efficiency 上去，evidenceCompleteness 0.27→0.00。
@@ -82,3 +82,11 @@ key 存在 `evimed_agent.api_keys`：只存 SHA-256，明文只在创建那一�
 **对第三节的影响：** 第 1 件（消融）要在带这个改动的发布上重跑才算数——现有 8/12 格的数字测的是「记忆放进规划者提示词」；harness 已修好轮询与重试身份（`--rerun-excluded`）。第 2、3 件不变。
 
 参照：Claude Code 子代理默认不载入 auto-memory，由子代理定义里的 `memory:` 显式选入，工具默认全继承（code.claude.com/docs/en/sub-agents）；Anthropic 多代理研究系统要求给每个子代理明确的目标、输出格式、工具指引与边界，发现只以摘要回传（anthropic.com/engineering/multi-agent-research-system）；Governed Shared Memory for Multi-Agent LLM Systems（arXiv 2606.24535）指出多代理共享记忆需要 scope 与 provenance 回答「这个代理该不该看到这一版」。
+
+### 2026-09-16 补：转录里根本没有子会话，所以这件事无法从转录验证
+
+修完并发布后去验证「记忆是否真的进了子代理」，发现一个**既有的、更深的**缺陷：`collectRunTranscripts` 只从父会话日志的 `subagent/descriptor` 事件发现子会话，而 rc.2 的父日志不发这个事件。消融项目 26 份转录全部 0 个子会话，但抽查四份里有三份父转录明明调用了 `evimed_delegate`。委派发生了、活是子代理干的，转录只留下编排日志——而且 `completeness` 仍报 `complete`、`missing: []`，因为「从没被发现的子会话」不产生 gap。
+
+影响：蒸馏语料学的是缺了主体的记录；评测的转录完整性判据与 `turnCoverage` 都建立在这份记录上；本次「记忆进子代理」的改动无法用转录自证。
+
+修法方向（未做，留给下一轮裁决）：子会话 id 控制面已有两条现成来源——run mirror 的 `projection.subagents`（`agentRuns.mjs:4203` 已在用）和适配器的 `subagents/list`（`dshRuntimeAdapter.mjs:346`）；改用其中之一，并在取不到子会话时记 gap 而不是报 complete。
