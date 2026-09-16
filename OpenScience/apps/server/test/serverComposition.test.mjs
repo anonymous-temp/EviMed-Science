@@ -599,7 +599,8 @@ test("startup arms every recurring sweep, and each timer really drives its own s
 
 test("a maintenance pause clears every recurring timer and reopening re-arms them", async (t) => {
   const fixture = await composedApp(t);
-  assert.ok(live(fixture.armed).length >= RECURRING_SWEEPS.length, "startup armed fewer timers than there are sweeps");
+  const armedAtStartup = live(fixture.armed).length;
+  assert.ok(armedAtStartup >= RECURRING_SWEEPS.length, "startup armed fewer timers than there are sweeps");
 
   await fixture.app.maintenanceService.request({ requestId: "composition-pause", ttlSeconds: 60 });
   assert.deepEqual(
@@ -618,13 +619,13 @@ test("a maintenance pause clears every recurring timer and reopening re-arms the
   // more of those (the memory-index drain, 2026-09-16) the threshold was
   // reached while capsule cleanup was still being re-armed — so the assertions
   // below ran against a half-resumed deployment and blamed the sweep.
-  let previous = -1;
-  const rearmed = await waitFor(async () => {
-    const count = live(fixture.armed).length;
-    const stable = count >= RECURRING_SWEEPS.length && count === previous;
-    previous = count;
-    return stable;
-  });
+  //
+  // A count that held still for one 5 ms poll was not enough either: under a
+  // full-suite load (2026-09-16) two polls read the same count while capsule
+  // cleanup, re-armed after an awaited step, was still on its way. What
+  // "finished" means is that every timer startup armed is armed again, so that
+  // is the count waited for.
+  const rearmed = await waitFor(async () => live(fixture.armed).length >= armedAtStartup, 10_000);
   assert.ok(rearmed, "recurring work was never re-armed after maintenance reopened");
 
   // Re-armed, and re-armed to the same work: a resume that recreated four

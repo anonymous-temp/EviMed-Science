@@ -176,6 +176,59 @@ export function sessionListItems(value) {
 }
 
 /**
+ * A socket tool's result, as the kernel records it in a session's history.
+ *
+ * The kernel renders a tool's structured result to text before the model or
+ * the transcript sees it: `ok` with the data as indented JSON on the lines
+ * after it, or `failed: <code>` with one `- (<severity>) <code> <message>` line
+ * per issue. Read off a production transcript on 2026-09-16 (`evimed_plan`,
+ * `evimed_delegate`, `evimed_submit_deliverable`, `evimed_review_run`,
+ * `evimed_capsule_recall` all in that form). Every reader of these results
+ * parsed bare `{"ok": …}` JSON — the shape their hand-written test fixtures
+ * used — so on live runs the gate never found a delegated child, the transcript
+ * walk never followed one, and native workflow evidence was never established.
+ *
+ * Bare JSON with an `ok` field is still accepted: it is what the kernel's
+ * structured event carries in some paths and what older histories hold. An MCP
+ * tool's output is JSON of a different shape and is not read here.
+ *
+ * @param {unknown} output
+ * @returns {{ ok: boolean, data?: any, code?: string, issues?: { severity: string, code: string, message: string }[] } | null}
+ */
+export function socketToolResult(output) {
+  if (typeof output !== "string") return null;
+  const text = output.replace(/^\s+/, "");
+  if (text.startsWith("{")) {
+    try {
+      const value = JSON.parse(text);
+      return value && typeof value === "object" && !Array.isArray(value) && typeof value.ok === "boolean" ? value : null;
+    } catch {
+      return null;
+    }
+  }
+  const newline = text.indexOf("\n");
+  const head = (newline < 0 ? text : text.slice(0, newline)).trim();
+  const body = newline < 0 ? "" : text.slice(newline + 1);
+  if (head === "ok") {
+    if (!body.trim()) return { ok: true, data: null };
+    try {
+      return { ok: true, data: JSON.parse(body) };
+    } catch {
+      return { ok: true, data: body };
+    }
+  }
+  const failed = /^failed:\s*([A-Za-z0-9_.:-]+)/.exec(head);
+  if (!failed) return null;
+  /** @type {{ severity: string, code: string, message: string }[]} */
+  const issues = [];
+  for (const line of body.split("\n")) {
+    const issue = /^- \(([^)]+)\) (\S+)(?: (.*))?$/.exec(line.trim());
+    if (issue) issues.push({ severity: issue[1], code: issue[2], message: issue[3] ?? "" });
+  }
+  return { ok: false, code: failed[1], issues };
+}
+
+/**
  * The child rows of a `subagents/list` answer.
  *
  * A separate reader from `sessionListItems`, and it had to be: the two shapes do

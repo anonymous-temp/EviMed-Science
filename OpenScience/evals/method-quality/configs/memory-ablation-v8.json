@@ -1,0 +1,113 @@
+{
+  "id": "memory-ablation-v8",
+  "capability": "clinical-evidence-synthesis",
+  "briefsFile": "evals/clinical-review-quality/briefs.json",
+  "hiddenDir": "evals/clinical-review-quality/hidden",
+  "briefs": [
+    "review-001-empa-kidney-report-family",
+    "review-003-mimic-overlap-unknown"
+  ],
+  "repeats": 3,
+  "seed": 20260908,
+  "concurrency": 1,
+  "margin": 0.02,
+  "bootstrapSamples": 2000,
+  "timeoutMinutes": 90,
+  "pollSeconds": 5,
+  "budget": {
+    "costCap": 12.0,
+    "latencyCapMs": 5400000
+  },
+  "project": {
+    "id": "eval-memory-ablation-v8",
+    "name": "记忆消融配对评测 v8"
+  },
+  "projectPerCell": true,
+  "fixtures": [],
+  "judge": {
+    "enabled": true,
+    "model": "deepseek-v4-pro"
+  },
+  "baseline": {
+    "methodSnapshot": {
+      "id": "memory-off",
+      "records": [
+        {
+          "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+          "expectedVersion": 94,
+          "_key": "preference.response_length",
+          "status": "pending"
+        },
+        {
+          "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+          "expectedVersion": 87,
+          "_key": "preference.output_language",
+          "status": "pending"
+        },
+        {
+          "id": "jY7Dttzw4nQbQUwdXPYwKU",
+          "expectedVersion": 87,
+          "_key": "profile.work_domain",
+          "status": "pending"
+        },
+        {
+          "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+          "expectedVersion": 86,
+          "_key": "behavior.question_format_pico",
+          "status": "pending"
+        }
+      ],
+      "capabilitySkillsDir": null
+    },
+    "compactionPolicy": "basic"
+  },
+  "candidate": {
+    "methodSnapshot": {
+      "id": "memory-on",
+      "records": [
+        {
+          "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+          "expectedVersion": 94,
+          "_key": "preference.response_length",
+          "status": "active"
+        },
+        {
+          "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+          "expectedVersion": 87,
+          "_key": "preference.output_language",
+          "status": "active"
+        },
+        {
+          "id": "jY7Dttzw4nQbQUwdXPYwKU",
+          "expectedVersion": 87,
+          "_key": "profile.work_domain",
+          "status": "active"
+        },
+        {
+          "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+          "expectedVersion": 86,
+          "_key": "behavior.question_format_pico",
+          "status": "active"
+        }
+      ],
+      "capabilitySkillsDir": null
+    },
+    "compactionPolicy": "basic"
+  },
+  "_note": "The memory ablation: the same briefs with the project's four user-scope memory records active and with them parked. EvoMemBench's finding is the hypothesis worth testing — memory helps hard tasks and can hurt easy ones — so the two arms are expected to differ by brief rather than uniformly.",
+  "_supersedes": "SUPERSEDES memory-ablation-v7, stopped after its first cell because that cell showed the batch would measure a parse defect again. Three of v6's four fixes held on the live run (the receipt belonged to its run, the transcript was complete, the cell had a project of its own), but the provenance refusal came back word for word: the child session had preserved `.evimed-sources/PMC10286378/.../fulltext.md` and the gate still said no tool had. Cause, read off the transcript: the kernel records a socket tool's result as rendered text - `ok` and the data as indented JSON, or `failed: <code>` and one `- (<severity>) <code> <message>` line per issue - and every server reader of those results parsed bare `{\"ok\": ...}` JSON, the shape their hand-written fixtures used. So the gate never found the delegated child, the transcript walk never followed one, and native workflow evidence was never established on any live run. One parser (`socketToolResult`) now reads the live form; the fixtures render results the way the kernel does, checked against verbatim production samples. The same cell's repair prompt was also refused 68 ms after it was authorized, with the reason swallowed by an empty catch: a refused repair now names its code and message, and a refusal that can clear (`runtime_session_error`, `plugin_apply_in_progress`) is sent again after 1.5 s and 4 s before the run fails.",
+  "_projectIsNew": "Every cell's project is new; see `_projectPerCell`.",
+  "_seedingNote": "Why this account and not the operator's. `sxjxw-research` has ten user-scope records with `origin: explicit` and `importance: 0.75`, and every one of them is a whole task brief that the extractor's deterministic fallback stored verbatim (2026-09-06; root cause fixed 2026-09-15, the rows left for the operator to decide about). An ablation on those would measure whether injecting a stale aripiprazole brief into an unrelated review helps, which is not the question. Four clean records is a thin ablation and the report should say so; it is not a thin ablation dressed as a thick one.",
+  "_cost": "2 briefs x 2 arms x 3 repeats = 12 clinical-evidence-synthesis runs at concurrency 1, bounded by timeoutMinutes 90 and the $12 costCap. Note that the per-run cost this harness reads is NOT trustworthy on this deployment: every row of `evimed_usage.model_requests` has `run_id` NULL, because an ordinary run's model calls carry no run id, so `GET /api/runs/:id/usage` answers zero for every run. The runner now records such a cost as `unattributed` rather than as free, and the efficiency dimension rests on latency alone until the attribution is fixed.",
+  "_sharedRecord": "The baseline arm is not zero memory, and the report must say so. `cdss-access` holds five user-scope durable records; four are the ones these arms toggle, and the fifth is `behavior.structured_review_brief` (origin `explicit`, importance 0.9, active) — the record the extractor created during the 2026-09-15 batch by learning the evaluator's own brief format. It is left alone at the operator's instruction, so it is recalled in BOTH arms and is constant between them: it does not bias the contrast, but it does mean the baseline reads one durable record rather than none. Decide about that row before any batch that wants a true zero-memory arm.",
+  "_budgetArithmetic": "What the arms will actually deliver, stated before the run so the report cannot be fitted to it. The deployment recalls at most 8 memories per dispatch (OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT) and reserves half of that — 4 slots, 10 000 characters — for durable kinds (profile / preference / behavior / correction). With a fresh project there are no episodes, so: BASELINE delivers the one shared durable record (`behavior.structured_review_brief`); CANDIDATE has five active durable records and 4 slots, so it delivers the shared one plus three of the four toggled records — not all four. The contrast is therefore 1 durable record against 4, not 0 against 4. Verify rather than assume: after the first cell, read the host's `.evimed-brief/sessions/<id>/memory.md` and list the blocks by kind and scope; that file is what reached the model.",
+  "_notesStore": "The v3 prediction was incomplete in one respect and this records the correction rather than hiding it: both arms also received a `kind: note` block, which is not in `evimed_memory.records` at all - it lives in `evimed_memory.notes`, a second store the v3 inventory did not count. It was constant across the arms and so did not bias the contrast, but it was itself pollution: a 2026-07-20 summary of a run that FAILED (`runtime_session_error`, 80 s, zero artifacts) from the retired memos-era run logging, served to the model as the researcher's own saved memory. `researchMemory.deleteProjectMemory` says outright that nothing writes a note with the `evimed-agent-run` tag any more. It is archived as of 2026-09-16. One note remains on this account - an acceptance memory about antimicrobial safety reporting - and it may or may not match a given brief; if it appears it appears in BOTH arms.",
+  "_extractionSwitch": "No deployment-wide switch this time. `OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES=eval-memory-ablation` ships with release `evimed-81b40910b584-1`, so extraction writes nothing for this project while the rest of the deployment keeps learning normally. v1 through v3 flipped the global switch by hand around the batch - twice that meant recreating the web container of a live deployment, and the failure mode when the second flip is forgotten is a memory page that stays empty and looks exactly like nothing being worth remembering. Verify before the batch: `docker exec web-open-science-web-1 printenv OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES`.",
+  "_routeWasNeverPinned": "Retrospective, read off each project's `runs.jsonl` on 2026-09-16. v1: 27 runs = 5 `clinical-evidence-synthesis`, 9 `evidence-appraisal`, 13 `open-domain-answer`. v2: 2 / 0 / 1. v3: 1 / 2 / 2. Every earlier batch averaged its arms over a per-cell mixture of three capabilities chosen by an LLM classifier. v1's published deltas were already void for the recall-budget reason in its own `_supersedes`; this is a second, independent reason, and it applies to v2 and v3 as well. v5 binds each session `{mode: 'specialist', agentId, agentVersion}` with the version read from `/api/agents` at batch start, which routes by `session-binding` and never consults the classifier - and a cell whose run nevertheless executed a different capability is excluded as `route_not_pinned` rather than averaged in.",
+  "_judgeIsRequired": "A cell the judge did not score is excluded as `judge_unavailable` whenever the config enables the judge. That exclusion used to apply only to private evaluation grants, so a legacy-arm batch scored judge-less cells with `score_cell`'s fallbacks - taskUtility 1.0 for 'succeeded', evidenceCompleteness 0.0 for 'not verified' - which look exactly like results and cannot differ between the arms.",
+  "_measuredOnV5": "The one v5 cell verified all three of v5's fixes end to end, on a run that delegated: route `clinical-evidence-synthesis / session-binding`; transcript complete with the root (37 messages) AND its child (331 messages, not truncated) - the first delegated child any batch has ever read in full; the judge scored it (correctness 3, evidenceHandling 2, safetyFraming 4, usefulness 4); the candidate arm recalled 4 memories. The run itself failed at the delivery gate (`specialist_evidence_repair_failed`), which is a product outcome and scores as one: reliability and taskUtility 0.",
+  "_dimensionsThatCannotSpeak": "Stated before the run so the report cannot lean on them. Two of the seven dimensions carry no information about memory in this configuration. `reuse`: no method snapshot is mounted, so the formula reduces to `1.0 if accepted else 0.0` - reliability counted a second time. `contextFidelity`: 1.0 unless a run loses a compaction handle or overflows its context, which neither arm is expected to do. Both will read `non_inferior` without that meaning anything. The dimensions that can move with memory are taskUtility, evidenceCompleteness, reliability, efficiency (latency only - cost is unattributed on this deployment) and safety.",
+  "_projectPerCell": "Each cell runs in `eval-memory-ablation-v7-<8 hex>`, derived from the cell id, the config digest, the release id and the attempt, so a cell measured again does not start in the workspace its failed attempt left. The extraction exclusion prefix `eval-memory-ablation` covers these ids. The four toggled records are user-scope, so every project reads them - which is what makes a project per cell possible without changing what the arms recall. No batch project is created: it would hold nothing and still count against the account's limit of 20 projects.",
+  "_supersedesV6": "SUPERSEDES memory-ablation-v6, which completed all twelve cells and is inconclusive for a reason that is not memory: every run in both arms failed at the delivery gate (reliability 0.000 against 0.000), three cells were excluded as transcript_partial, and the cells were not independent. Read off the host afterwards, four defects produced that, all fixed in the release this batch runs on. (1) The gate's source-provenance check read a delegated child session at its bare id; the kernel refuses that ('subagent Sessions require their durable parent address'), the error was swallowed, and every source the child had preserved counted as never preserved - so `specialist_evidence_provenance_failed` fired on packages whose sources were real. The reader now resolves the child's address from `subagents/list` and names any child it still cannot read in the verdict. (2) `delivery-receipt.json` sits at the workspace root and the writer appended to whatever it found - v6's ended holding five deliverables from runs of both briefs under the last run's id, and at cell 9's finish the gate read cell 8's receipt as its own; the writer is now scoped to its own runId and the reader ignores a receipt another run wrote. (3) The transcript collector followed only one delegation per parent, so a parent that delegated twice lost its first child and the run read as partial; it now follows every completed delegate call. (4) The cells shared one project: seven of twelve runs read other cells' deliverable folders (a lower bound: three transcripts lacked their first helper), and a baseline cell copied the candidate cell's accepted package into its own folder, so that pair compared a package with a copy of itself. `projectPerCell` gives every cell its own new project, created by the runner, with its runtime stopped when the cell ends.",
+  "_measuredOnV7": "Cell 1 (review-003 candidate r1) verified on the host: route clinical-evidence-synthesis@2.11.0 by session-binding; recall 4 durable blocks (the shared structured_review_brief, question_format_pico, work_domain, output_language; response_length did not fit), matching `_budgetArithmetic`; transcript complete (root 23 + child 227 messages); receipt runId equal to the run id with one entry; the cell's workspace held only its own deliverable. The run failed at the gate on the parse defect above plus 19 claims whose numeric facts were not present in their quoted support and one search-log notice - content issues a repair round exists for. Its score is not cited."
+}

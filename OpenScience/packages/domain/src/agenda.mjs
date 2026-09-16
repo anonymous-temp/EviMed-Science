@@ -105,7 +105,7 @@ export const USER_SIGNALS = Object.freeze({ followUp: 1, adopt: 0.6, upvote: 0.3
  * but three adoptions outweigh one rejection, so rejecting a single lead as
  * out of scope does not park a direction the user is otherwise following.
  *
- * @param {Array<{ action?: string }> | undefined} decisions
+ * @param {Array<{ action?: string, claimId?: string }> | undefined} decisions
  * @returns {{ score: number, decided: number, rejected: boolean }}
  */
 export function userSignalScore(decisions) {
