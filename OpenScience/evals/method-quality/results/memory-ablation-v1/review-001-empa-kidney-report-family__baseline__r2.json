@@ -1,0 +1,193 @@
+{
+  "arm": "baseline",
+  "armDigest": "00dded37a443eae48ae342ba1d2d9a18e81a09bfd82e9b3a7812efa189429473",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "cell": "review-001-empa-kidney-report-family__baseline__r2",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "f344fb50c26cf17c523d47b5d9383ae0f6c21ef4925de7ef17b613cc7908545b",
+  "configId": "memory-ablation-v1",
+  "cost": {
+    "currency": "CNY",
+    "source": "usage-route",
+    "value": 0.0
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 14,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-15T16:23:43Z",
+  "judge": {
+    "issues": [
+      "Derived estimate mislabels relative risk reductions (13%/28%) as absolute risk reduction.",
+      "Guideline statement on KDIGO recommendation strength by albuminuria is cited to post-trial follow-up report [2] rather than guideline source [4].",
+      "MustDo 'actual searches' is only summarized by count and concepts; the 10 actual query strings are not shown.",
+      "Clinical practice bullet overstates KDIGO 2024 as '1A级推荐 CKD 成人使用 SGLT2 抑制剂', conflicting with later caveat that strength varies by albuminuria."
+    ],
+    "promptVersion": 1,
+    "rationale": "Thorough synthesis; clearly separates three reports as one primary study and distinguishes randomized from post-trial observation, satisfying core mustDo/mustNotDo items. But there are concrete errors: an absolute/relative risk reduction mislabel, a source-type citation mismatch for a guideline claim, and incomplete reporting of actual search strings. Safety framing is largely cautious, though one KDIGO bullet overstates recommendation breadth.",
+    "scores": {
+      "correctness": 3,
+      "evidenceHandling": 3,
+      "safetyFraming": 4,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 51,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 52
+      },
+      {
+        "expectedVersion": 44,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 45
+      },
+      {
+        "expectedVersion": 44,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 45
+      },
+      {
+        "expectedVersion": 43,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 44
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 2,
+  "run": {
+    "artifacts": [
+      "deliverables/empa-kidney-durability/citation-audit.md",
+      "deliverables/empa-kidney-durability/citation-ledger.csv",
+      "deliverables/empa-kidney-durability/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-durability/clinical-evidence-report.md",
+      "deliverables/empa-kidney-durability/clinical-evidence-run.json",
+      "deliverables/empa-kidney-durability/clinical-evidence-search.json",
+      "deliverables/empa-kidney-durability/question-coverage.json",
+      "deliverables/empa-kidney-durability/references.bib",
+      "delivery-summary.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_2_2e74b50809109f5d",
+    "durationMs": 1055500,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_195a0204fcbf18704b0023d03cf6c8ac",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copie",
+      "bodies[0] (Reported prognostic association of the HALP score with in-hospital mortality in the MIMIC-IV sepsis cohort (as stated in the abstract of S2)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Reported discrimination of the intra-abdominal sepsis mortality model in its MIMIC-IV training and internal validation data and in its eICU external validation (as stated in the abstract of S3)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[2] (Independence of the reported MIMIC-IV validation cohorts — whether the MIMIC-IV cohorts of the two model reports may be treated as independent evidence) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "bodies[0] (Discrimination and calibration performance of prognostic models for mortality in adult sepsis, as evaluated with MIMIC-IV) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Whether the reported MIMIC-IV validation cohorts of the two model publications can be treated as independent evidence) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[2] (Transferability of the MIMIC-IV cohort definition as used across this evidence set (release version, date handling, case-definition operationalisation and unit of analysis)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "bodies[0] (Which prognostic models for mortality in adult sepsis have been evaluated with MIMIC-IV — the models, their endpoints, and their reported performance metrics (rows rolled up: [S1], [S2], [S3])) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Can the reported MIMIC-IV validation cohorts of the two model publications be treated as independent evidence? (rows rolled up: [S1], [S2], [S3])) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "literature_search searched and returned no source",
+      "review contradicted: EM-25 — Three EMPA deliverables grade the same randomised-period kidney composite differently. `empa-kidney-durability-clinical-evidence-report` states '该判断的置信度为中等' and explicitly withholds a high grade ('无发表偏倚证据，按 GRADE 评为高确定性' appears only after the reviews forced a wording ch",
+      "review contradicted: EM-26 — The same report grades the randomised-period kidney effect 中等确定性 on one page and calls the body '偏倚风险低、结果一致、估计精确、无发表偏倚证据，按 GRADE 评为高确定性' in the discussion, i.e. it withdraws the early-termination downgrade. The report's own revision-notes record that the run's review alr",
+      "review weakened: EM-27 — The claim that the descriptor 'does not publish the build script' conflicts with the descriptor full text ('Custom Structured Query Language (SQL) scripts were used to transform the data'; MIMIC Code Repository issues 'used to improve the build process'). The descriptor does",
+      "review weakened: EM-28 — Depends on KDIGO 2024 text. The preserved guideline artifact (`.evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md`) now contains only a sex-and-gender excerpt, and `official_page_fetch` does not allow the kdigo.org route, so no recommendation text could be re-ve",
+      "review contradicted: EM-29 — This report claims no retraction or correction notice was encountered for any of the three records, and its own citation-ledger records no correction row. Another deliverable in the same run records two author corrections for the same paper (see EM-30). The two statement",
+      "review weakened: EM-30 — The two correction identifiers (PMID 36646711, PMID 37072428) and their DOIs did not return as resolvable records in my searches, and the preservation file for these corrections is not present. The claim is specific and falsifiable and is the more defensible of the pair (EM-",
+      "review weakened: EM-31 — Guideline-derived (see EM-28). The claim is drawn from the same broken quote chain; the 2B suggestion for eGFR 20-45 with uACR<200 is a well-established KDIGO position and is attributed consistently by two reports, but the source text could not be re-verified in this run.",
+      "review weakened: EM-32 — Guideline-derived (see EM-28). The claim that KDIGO 2024 gives a 'more general 1A recommendation for adults with CKD' is supported by a supportQuote in one report's evidence matrix and independently matches my knowledge of the guideline, but the recommended text could not be",
+      "review weakened: EM-33 — Omitting the general CKD-adult 1A recommendation is a selection decision rather than a false statement, and the report does cite the 2B suggestion and the post-trial follow-up. But it frames KDIGO as giving '1A 与 2B 两级推荐' without the third recommendation that two other EMPA ",
+      "review contradicted: EM-34 — 'Omission' is too weak a description. The report's practice points state the indication for CKD adults '以现行指南为准：KDIGO 2024 CKD 指南推荐 2 型糖尿病合并 CKD 且 eGFR 不低于 20 mL/min/1.73m² 者使用（1A），并将该推荐扩展为适用于 CKD 成人', i.e. the general 1A recommendation is present in the practice section",
+      "review weakened: EM-35 — The downstream arithmetic is sound (2.12 vs 1.87 vs 0.8 all reproduce). The percentage is weakened for two reasons I can check: the 4-week reversal figure comes from 'the surviving UK participants with a 4-week post-final follow-up blood sample', a subgroup of survivors, whi",
+      "review contradicted: EM-38 — This report claims there is no validated link between eGFR slope and hard outcomes, but the prespecified secondary-analysis full text it itself cites states the opposite premise: the eGFR-decline component is 'now accepted by regulatory authorities as a valid surrogate o",
+      "review contradicted: EM-40 — This report asserts that the randomised allocation '保留了随机化带来的可比性' because 43% vs 40% post-trial SGLT2i use is balanced. All three other EMPA deliverables state that the post-trial exposure is non-random and that prescribing behaviour is the reason for the balance, and th",
+      "review weakened: EM-42 — The claim that KDIGO's planned-break points motivated a head-to-head comparison of continuing vs discontinuing is not confirmable from the source, and the preserved artifact could not be re-verified (see EM-28). The substantive point - that no randomised comparison of contin",
+      "review contradicted: EM-43 — Four independent runs of one task produced four reports whose pooled GRADE, certainty language, guideline enumeration, and slope-surrogate treatment disagree (EM-25/EM-26, EM-34/EM-35, EM-38/EM-40). Effect estimates, counts and the three focus constraints agree throughou",
+      "review weakened: EM-45 — The final clause - that the early termination should NOT be treated as a bias source - is a permissible position (the boundary was prespecified and met on protocol), but it is not established by anything in the artefact: the report names no source for it, and the three other",
+      "review weakened: EM-46 — Depends on whether the eGFR-slope analyses in the secondary analysis are prespecified or exploratory. The secondary-analysis paper describes the slope analyses as 'prespecified subgroups' of eGFR, uACR etc. while treating the slope itself as a tertiary outcome, and one EMPA ",
+      "review contradicted: MM-01 — This appraisal asserts the two model publications were abstract-level and that 'No full text of either was preserved or read'. Three other appraisals of the same source set state the open-access full texts (PMC12832424, PMC12557738) were retained and read, and one of the",
+      "review contradicted: MM-05 — This appraisal flatly asserts there is '没有任何筛查阶段…读取正文', while three other appraisals of the same set state that full texts were retained and read, with content-hash receipts on disk. For the same source set and the same question, two of the five appraisals cannot both be",
+      "review weakened: MM-07 — Two appraisals of the same source set reach opposite conclusions about whether distributional differences in imprecision ratings exist: this one says S2 is 'serious' on all three domains while another says S2 imprecision is 'moderate', and a third says S2 imprecision is 'unc",
+      "review weakened: MM-08 — This is a third distinct imprecision rating for the same source (unclear, versus moderate in MM-09 and serious in MM-07). 'Unclear' is at least defensible under the report's own rule that missing information is not the same as a wide interval, and it matches the ratings othe",
+      "review weakened: MM-09 — Third distinct rating for the same source. The reasoning offered (the narrow primary intervals are not the problem; the robustness analyses cross the null) is coherent and reproduces against the full-text figures one other appraisal also cites (subdistribution HR 0.878, 0.75",
+      "review contradicted: MM-11 — One appraisal writes the 390 figure as '推算：1,300 − 910，假设 1,300 例即训练集与内部验证集之和' while two others flag that the abstract's 1,300/264 deaths against a training set of n=910 do not reconcile and book a risk-of-bias step for it. The same arithmetic fact is a flagged defect in",
+      "review contradicted: MM-14 — This appraisal asserts the evidence base already carries the shape of a double count, i.e. that the two MIMIC-IV cohorts plausibly share the same patients counted once as external validation and once as training/internal validation. Every other appraisal of the same sour",
+      "记忆抽取未产出记录：消息 29 条、候选 0 条、采纳 0 条、驳回 0 条、未读取 3 条（系统注入）。空对话与抽取失效在结果上一样，这行区分它们。"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-821e4e66-a833-4324-8cb7-0c8d7b19406e",
+    "status": "failed",
+    "transcript": {
+      "bytes": 268210,
+      "completeness": "complete",
+      "messages": 29,
+      "path": ".openscience/transcripts/run_195a0204fcbf18704b0023d03cf6c8ac.jsonl",
+      "sha256": "1bf761daeef190e8350a3862193964b742d2926dde01c2a908302fe07238575f"
+    },
+    "verification": "unchecked"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.7801041666666666,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 0.8,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-15T16:04:08Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "arm": "candidate",
+  "armDigest": "7bc6e830c479b1a20c925583e957afe906b1b5a3984182a20ba350deeb50d237",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "cell": "review-001-empa-kidney-report-family__candidate__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "f344fb50c26cf17c523d47b5d9383ae0f6c21ef4925de7ef17b613cc7908545b",
+  "configId": "memory-ablation-v1",
+  "cost": {
+    "currency": "CNY",
+    "source": "usage-route",
+    "value": 0.0
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 0,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "excluded": {
+    "detail": ".openscience/transcripts/run_e781223ad3e7e83920364d377901dbcb.jsonl",
+    "reason": "transcript_unavailable"
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-15T16:27:18Z",
+  "judge": null,
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 53,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 54
+      },
+      {
+        "expectedVersion": 46,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 47
+      },
+      {
+        "expectedVersion": 46,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 47
+      },
+      {
+        "expectedVersion": 45,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 46
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 1,
+  "run": {
+    "artifacts": [],
+    "compaction": [],
+    "dispatchId": "mq_candidate_1_ac5da679c26d2943",
+    "durationMs": 569339,
+    "errorCode": "runtime_canceled",
+    "id": "run_e781223ad3e7e83920364d377901dbcb",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "这次运行没有通过交付前的质量门，因此下面的文件标记为「未经核验」——它们是运行真实写出来的成果，没有被删除，可以直接查看和取用，只是还没有拿到质量门的通过判定。上面的退回理由说明了差在哪里；按它修好后重新提交，同一份成果就会变成已核验。",
+      "literature_search searched and returned no source",
+      "记忆抽取未产出记录：消息 0 条、候选 0 条、采纳 0 条、驳回 0 条。空对话与抽取失效在结果上一样，这行区分它们。"
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-983a45cf-604e-4d9f-966b-48eee803d24a",
+    "status": "canceled",
+    "transcript": {
+      "bytes": 441,
+      "completeness": "unavailable",
+      "messages": 0,
+      "path": ".openscience/transcripts/run_e781223ad3e7e83920364d377901dbcb.jsonl",
+      "sha256": "2f39b59640e67bebb599a813cd5cab36540b37a1caa27df774ee94dcf4a0cdfa"
+    },
+    "verification": "unchecked"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.8813877083333334,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-15T16:26:58Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

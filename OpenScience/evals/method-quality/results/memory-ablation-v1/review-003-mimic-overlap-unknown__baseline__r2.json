@@ -1,0 +1,173 @@
+{
+  "arm": "baseline",
+  "armDigest": "00dded37a443eae48ae342ba1d2d9a18e81a09bfd82e9b3a7812efa189429473",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "cell": "review-003-mimic-overlap-unknown__baseline__r2",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "f344fb50c26cf17c523d47b5d9383ae0f6c21ef4925de7ef17b613cc7908545b",
+  "configId": "memory-ablation-v1",
+  "cost": {
+    "currency": "CNY",
+    "source": "usage-route",
+    "value": 0.0
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 12,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-15T16:44:27Z",
+  "judge": {
+    "issues": [
+      "Treats the two abstract-level model sources as full-text evidence: labels them 'full_text（本次另保存开放获取全文）' and uses full-text-only fields, contrary to the brief's source access levels and mustNotDo.",
+      "Asserts that full texts were saved and verified (PMC12832424, PMC12557738) although no full text is present in the supplied sources, leaving those full-text-derived claims unbonded and unverified."
+    ],
+    "promptVersion": 1,
+    "rationale": "Delivers a thorough scoping appraisal, keeps patient-cohort overlap correctly unresolved, and explains the required identifiers, dates, and eligibility definitions. Safety framing is appropriate. However it upgrades the two abstract-level model sources to full text and relies on full-text-only details, violating the brief's access-level/mustNotDo instructions and weakening evidence bonding.",
+    "scores": {
+      "correctness": 3,
+      "evidenceHandling": 3,
+      "safetyFraming": 5,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 58,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 59
+      },
+      {
+        "expectedVersion": 51,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 52
+      },
+      {
+        "expectedVersion": 51,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 52
+      },
+      {
+        "expectedVersion": 50,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 51
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 2,
+  "run": {
+    "artifacts": [
+      "deliverables/mimic-iv-sepsis-model-independence-appraisal/appraisal-table.csv",
+      "deliverables/mimic-iv-sepsis-model-independence-appraisal/appraisal-table.json",
+      "deliverables/mimic-iv-sepsis-model-independence-appraisal/appraisal-table.md",
+      "deliverables/mimic-iv-sepsis-model-independence-appraisal/citation-ledger.csv",
+      "delivery-summary.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_2_ceb13e88b494bbc1",
+    "durationMs": 696089,
+    "errorCode": null,
+    "id": "run_efd6844b3f4c3efaeca82ea3619d14f4",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "bodies[0] (Reported prognostic association of the HALP score with in-hospital mortality in the MIMIC-IV sepsis cohort (as stated in the abstract of S2)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Reported discrimination of the intra-abdominal sepsis mortality model in its MIMIC-IV training and internal validation data and in its eICU external validation (as stated in the abstract of S3)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[2] (Independence of the reported MIMIC-IV validation cohorts — whether the MIMIC-IV cohorts of the two model reports may be treated as independent evidence) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "bodies[0] (Discrimination and calibration performance of prognostic models for mortality in adult sepsis, as evaluated with MIMIC-IV) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Whether the reported MIMIC-IV validation cohorts of the two model publications can be treated as independent evidence) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[2] (Transferability of the MIMIC-IV cohort definition as used across this evidence set (release version, date handling, case-definition operationalisation and unit of analysis)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "bodies[0] (Which prognostic models for mortality in adult sepsis have been evaluated with MIMIC-IV — the models, their endpoints, and their reported performance metrics (rows rolled up: [S1], [S2], [S3])) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Can the reported MIMIC-IV validation cohorts of the two model publications be treated as independent evidence? (rows rolled up: [S1], [S2], [S3])) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "review contradicted: CUR-HASH-S1-RECEIPT — S1 条目（appraisal-table.json accessLevelNote 与 citation-ledger.csv notes）把 4fc8f92d751072a6d7ad5ac31a3a77d2ae820053d4875d6b58c751d99eacff6e 标为所保全全文的 SHA-256；该值实为保全回执中的版本标识（capture.json 的 version，也是目录名），而同一回执记载的 fulltext.md 摘要为 c6161af8b9c7587b91832eea9862ba9e",
+      "review contradicted: CUR-HASH-S3-RECEIPT — S3 条目标注的 SHA-256 3fbde5540eeee1bfcf2aaffd9ad8e74a1912462acef0da8b16ee8a8b56df4dc4 同样是 capture.json 的 version（目录名），并非制品摘要；该回执记载的 fulltext.md 摘要为 2223686d9ebd20c889d7c05d66e2022c6dd9d07c83ecdbd9f5be72642e17d437（fulltext.xml 为 15f0001715e4f564bad0097c9b0f1854d",
+      "review contradicted: LEG-MODELS-ACCESS-S2S3 — deliverables/appraisal-mimic-iv-sepsis-mortality-models 断言「No full text of either was preserved or read, and no methods section, results section, supplement or table of either was inspected」（appraisal-table.md §9，另见其 delivery-summary 第 3 条、revision-notes",
+      "review weakened: CUR-B1B2-IMPRECISION-DOMAIN — B1/B2 把 imprecision 降 1 步，理由是「重叠比例没有点估计，也没有区间」。该结局本身不是效应量，没有可对照决策阈值的区间，按 GRADE 口径这是该域不适用，而非精度不足；同一工作区对同一结局的处理正是「considered and not acted on」。记 0 步或 1 步对最终等级无影响（2−1−1=0 与 2−3=−1 均触下限 very-low），故结论未被推翻，但域归属与理由不成立，属 weakened。",
+      "review weakened: CUR-B3-INDIRECTNESS-ZERO — 同一交付物内部对「moderate」映射不一致：B3 的间接性理由写「人群与结局两个轴与问题一致（成人脓毒症 ICU 人群、院内死亡）」，并把 S3 的人群收窄改记到偏倚风险域、间接性记 0 步；但 appraisal-table.csv/json 的 S3 行恰恰把该人群收窄评为 indirectness=moderate（「在人群轴上与问题有一段距离」）。同一份表里 S2、S3 的 imprecision=moderate 各记 1 步，而 S3 的 indirectness=moderate 记 0 ",
+      "review weakened: CUR-S2-INDIRECTNESS-LOW — 该评级为同源评价中的孤例。工作区内六份针对同一三篇来源的既往评价（appraisal-mimic-iv-sepsis-mortality-models、appraisal-mimic-iv-sepsis-mortality-independence、mimic-iv-sepsis-prognostic-model-appraisal、mimic-iv-sepsis-mortality-model-appraisal、appraisal、mimic-iv-sepsis-mortality-model-cohor",
+      "review weakened: CUR-S3-INDIRECTNESS-MODERATE — S3 间接性记 moderate（理由：IAS 亚组窄于成人脓毒症）。同一来源上六份既往评价均记 serious（除人群轴外还计入「唯一外部验证在 eICU，MIMIC-IV 只作开发与内部验证」这一验证轴距离）。所依据的事实（IAS 是成人脓毒症的亚组、eICU 为外部验证臂）在 S3 全文中可核验，故不是事实错误；但标签比同源评价低一档，且交付物把同一事实在 B3 记 0 步、在本行记 moderate，处置自相矛盾。",
+      "review weakened: CUR-S1-ROB-LOW — S1 偏倚风险记 low，理由结句为「这一篇里没有更容易出错的步骤」。该结句与来源不符：S1 全文自述其院外死亡信息来自对马萨诸塞州生命统计登记库的概率匹配（候选 150,832 人，最终匹配 65,805 人，43.6%，自述「We aimed to maximize sensitivity in the linkage process」，未报告灵敏度/特异度评价），另有未量化的患者级日期偏移。既往评价中三份记 moderate（single-centre、内部自查非外部核验、上述链接质量），一份记 unclear。就交付物",
+      "review weakened: CUR-S3-IMPRECISION-MODERATE — 理由承认「外部验证 AUC 0.846（0.772–0.919）建立在 149 例、33 例死亡上，区间宽」「内部验证集（n=390）与 bootstrap 校正 C-index 0.767 均无区间」，并据此记 moderate；同源评价中有三份基于同一事实记 serious（「区间宽到可容纳相反结论」），两份记 moderate。核对来源：S3 全文确实只给 0.795（训练）、0.846（外部）两个区间与无区间的 0.767，作者亦自述 33 例事件「may limit the stabilit",
+      "review weakened: CUR-SCOPE-SEARCH-PROVENANCE — 第四节所称「在 PubMed 上以 MIMIC-IV + sepsis + mortality + prediction model/external validation 为主题检索，返回上限 10 条」在本交付物内无任何可核对凭据：文件清单只有 appraisal-table.{md,json,csv}、citation-ledger.csv、delivery-summary.md、revision-notes.md，没有检索台账，命中数与截断状态无法复核（同源的既往交付物均附 search-lo",
+      "review weakened: LEG-MODELS-S3-PARTITION — deliverables/appraisal-mimic-iv-sepsis-mortality-models 称 S3 的两个 MIMIC-IV 分母「do not reconcile ... without explaining the difference」，并在表格中写「1,300 patients with 264 deaths against a training set of n = 910, with no rule connecting them」，结论是「the partition of ",
+      "review contradicted: LEG-INDEP-S2-DIRECTION — deliverables/appraisal-mimic-iv-sepsis-mortality-independence 的 S2 偏倚风险理由称「the derivation/validation direction is presented inconsistently ... the direction in which the threshold is derived cannot be established from the report alone」。S2 保全全文（摘要 METHODS",
+      "记忆抽取未产出记录：消息 25 条、候选 0 条、采纳 0 条、驳回 0 条、未读取 3 条（系统注入）。空对话与抽取失效在结果上一样，这行区分它们。"
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-4f49c0d2-4dec-431b-a8e6-876f2c76670e",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 195978,
+      "completeness": "complete",
+      "messages": 25,
+      "path": ".openscience/transcripts/run_efd6844b3f4c3efaeca82ea3619d14f4.jsonl",
+      "sha256": "f0266df3021dd80b03f96dea448e9fe9745032a5059605b48b9df3d6c0b0867d"
+    },
+    "verification": "unchecked"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.8549814583333333,
+    "evidenceCompleteness": 0.0,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 1.0,
+    "taskUtility": 0.7
+  },
+  "startedAt": "2026-09-15T16:31:09Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

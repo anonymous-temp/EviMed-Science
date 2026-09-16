@@ -1,0 +1,139 @@
+{
+  "arm": "candidate",
+  "armDigest": "7bc6e830c479b1a20c925583e957afe906b1b5a3984182a20ba350deeb50d237",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "cell": "review-003-mimic-overlap-unknown__candidate__r0",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "f344fb50c26cf17c523d47b5d9383ae0f6c21ef4925de7ef17b613cc7908545b",
+  "configId": "memory-ablation-v1",
+  "cost": {
+    "currency": "CNY",
+    "source": "usage-route",
+    "value": 0.0
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 19,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-15T15:44:15Z",
+  "judge": null,
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 46,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 47
+      },
+      {
+        "expectedVersion": 39,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 40
+      },
+      {
+        "expectedVersion": 39,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 40
+      },
+      {
+        "expectedVersion": 38,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 39
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 0,
+  "run": {
+    "artifacts": [],
+    "compaction": [],
+    "dispatchId": "mq_candidate_0_905716211bba5901",
+    "durationMs": 64778,
+    "errorCode": null,
+    "id": "run_b74ba3341122d2285f75c6770d96c04d",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "bodies[0] (Reported prognostic association of the HALP score with in-hospital mortality in the MIMIC-IV sepsis cohort (as stated in the abstract of S2)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Reported discrimination of the intra-abdominal sepsis mortality model in its MIMIC-IV training and internal validation data and in its eICU external validation (as stated in the abstract of S3)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[2] (Independence of the reported MIMIC-IV validation cohorts — whether the MIMIC-IV cohorts of the two model reports may be treated as independent evidence) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "bodies[0] (Discrimination and calibration performance of prognostic models for mortality in adult sepsis, as evaluated with MIMIC-IV) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Whether the reported MIMIC-IV validation cohorts of the two model publications can be treated as independent evidence) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[2] (Transferability of the MIMIC-IV cohort definition as used across this evidence set (release version, date handling, case-definition operationalisation and unit of analysis)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "记忆抽取未产出记录：消息 34 条、候选 0 条、采纳 0 条、驳回 0 条、未读取 3 条（系统注入）。空对话与抽取失效在结果上一样，这行区分它们。"
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-edb8947f-52c1-4549-abd7-04a93d897a62",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 366959,
+      "completeness": "complete",
+      "messages": 34,
+      "path": ".openscience/transcripts/run_b74ba3341122d2285f75c6770d96c04d.jsonl",
+      "sha256": "8b1be7ff4cab64b85383605b5710cdc1fb84071fd2d4122f7f202f78b16a696f"
+    },
+    "verification": "unchecked"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.9865045833333334,
+    "evidenceCompleteness": 0.0,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 1.0,
+    "taskUtility": 1.0
+  },
+  "startedAt": "2026-09-15T15:42:50Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}
