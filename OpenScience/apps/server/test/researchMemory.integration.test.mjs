@@ -390,7 +390,7 @@ test("export carries every surface and purge empties exactly one account", optio
   await store.upsertRecord(beta, record({ key: "profile.role", kind: "profile", value: "Another user", status: "active" }));
 
   const exported = await store.exportUserMemory(alpha);
-  assert.deepEqual(Object.keys(exported).sort(), ["manualMemos", "records", "version"]);
+  assert.deepEqual(Object.keys(exported).sort(), ["manualMemos", "records", "settings", "version"]);
   assert.equal(exported.version, 1);
   assert.equal(exported.records.length, 1);
   assert.deepEqual(exported.manualMemos.map((memo) => memo.state), ["normal", "archived"],
@@ -443,7 +443,7 @@ test("deleting an account deletes its memory, and the integrity audit knows the 
     [doomed])).rows[0].count, 0);
 
   const audit = await relationalIntegrity(database);
-  for (const name of ["memory_records_user", "memory_notes_user"]) {
+  for (const name of ["memory_records_user", "memory_notes_user", "memory_settings_user"]) {
     assert.ok(!audit.missing.includes(name), `${name} must be a declared foreign key`);
     assert.equal(audit.counts[name], 0, `${name} must hold no orphans`);
   }

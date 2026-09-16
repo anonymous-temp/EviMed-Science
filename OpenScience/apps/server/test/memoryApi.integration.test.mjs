@@ -130,6 +130,68 @@ test("a pending inference is confirmed by the researcher, and a raced edit is re
   assert.equal((await (await fetch(`${base}/api/memory/profile`, { headers })).json()).data.records.length, 0);
 });
 
+test("the researcher's switches pause learning and recall without deleting, and a reset deletes without touching them", options, async (t) => {
+  // 2026-09-16 review, M4④: pause vs reset, and a project of its own.
+  const { app, base, headers, user } = await fixture(t);
+  const put = (body) => fetch(`${base}/api/memory/settings`, { method: "PUT", headers, body: JSON.stringify(body) });
+  const read = async () => (await (await fetch(`${base}/api/memory/settings`, { headers })).json()).data;
+
+  assert.deepEqual(await read(), { learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null },
+    "an account that set nothing has every switch off");
+
+  // Two tabs flipping different switches at the same moment both win.
+  const [learning, projects] = await Promise.all([put({ learningPaused: true }), put({ pausedProjects: ["default", "default"] })]);
+  assert.equal(learning.status, 200);
+  assert.equal(projects.status, 200);
+  const both = await read();
+  assert.equal(both.learningPaused, true);
+  assert.equal(both.recallPaused, false);
+  assert.deepEqual(both.pausedProjects, ["default"], "a repeated id is one project");
+
+  for (const [body, why] of [
+    [{ learningPaused: "yes" }, "a switch is a boolean"],
+    [{ pausedProjects: ["../escape"] }, "a paused project is a project id"],
+    [{ somethingElse: true }, "an unknown setting is refused by name"],
+  ]) {
+    const refused = await put(body);
+    assert.equal(refused.status, 400, why);
+    assert.equal((await refused.json()).code, "memory_settings_invalid", why);
+  }
+
+  const record = await app.researchMemory.upsertRecord(user.id, {
+    scope: "user", scopeId: "", kind: "preference", key: "response.language",
+    value: "Answer in Chinese.", summary: "Chinese answers.", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.9, sensitive: false,
+  }, { sourceType: "conversation_message", sourceRef: "sessions/s1/messages/m1", quote: "请用中文回答。", observedAt: new Date().toISOString(), weight: 1 });
+  assert.ok(record.id);
+
+  // Paused for this project: nothing recalled here, even for a matching query.
+  assert.deepEqual(await app.memorySubstrate.recall(user.id, "Chinese answers language", { projectId: "default" }), []);
+  await put({ pausedProjects: [] });
+  const recalled = await app.memorySubstrate.recall(user.id, "Chinese answers language", { projectId: "default" });
+  assert.ok(recalled.length > 0, "with the project unpaused the same query recalls the record");
+  await put({ recallPaused: true });
+  assert.deepEqual(await app.memorySubstrate.recall(user.id, "Chinese answers language", { projectId: "default" }), [],
+    "paused recall holds for every project");
+
+  const note = await fetch(`${base}/api/memory/memos`, { method: "POST", headers, body: JSON.stringify({ content: "a note to be reset" }) });
+  assert.equal(note.status, 201);
+
+  const unconfirmed = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({}) });
+  assert.equal(unconfirmed.status, 400);
+  assert.equal((await unconfirmed.json()).code, "memory_reset_confirmation_required");
+  assert.equal((await app.researchMemory.listAllRecords(user.id)).length, 1, "a refused reset deletes nothing");
+
+  const reset = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({ confirm: "reset" }) });
+  assert.equal(reset.status, 200);
+  assert.deepEqual((await reset.json()).data, { structured: 1, manual: 1 });
+  assert.equal((await app.researchMemory.listAllRecords(user.id)).length, 0);
+  assert.equal((await app.researchMemory.listAllMemos(user.id)).length, 0);
+  const after = await read();
+  assert.equal(after.learningPaused, true, "a reset is a clean slate, not a change to the switches");
+  assert.equal(after.recallPaused, true);
+});
+
 test("deleting a project deletes its memory and leaves personal memory alone", options, async (t) => {
   const { app, base, headers, user } = await fixture(t);
   const projectId = "project-memory-delete";

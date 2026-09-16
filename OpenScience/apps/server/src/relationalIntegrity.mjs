@@ -10,6 +10,7 @@ const orphanChecks = Object.freeze([
   ["inbox_preferences_user", "SELECT count(*)::integer AS count FROM evimed_inbox.preferences p LEFT JOIN evimed_control.users u ON u.id=p.user_id WHERE u.id IS NULL"],
   ["memory_records_user", "SELECT count(*)::integer AS count FROM evimed_memory.records r LEFT JOIN evimed_control.users u ON u.id=r.user_id WHERE u.id IS NULL"],
   ["memory_notes_user", "SELECT count(*)::integer AS count FROM evimed_memory.notes n LEFT JOIN evimed_control.users u ON u.id=n.user_id WHERE u.id IS NULL"],
+  ["memory_settings_user", "SELECT count(*)::integer AS count FROM evimed_memory.settings s LEFT JOIN evimed_control.users u ON u.id=s.user_id WHERE u.id IS NULL"],
   ["usage_model_requests_user", "SELECT count(*)::integer AS count FROM evimed_usage.model_requests r LEFT JOIN evimed_control.users u ON u.id=r.user_id WHERE u.id IS NULL"],
   ["usage_model_requests_project", "SELECT count(*)::integer AS count FROM evimed_usage.model_requests r LEFT JOIN evimed_control.projects p ON p.user_id=r.user_id AND p.id=r.project_id WHERE p.id IS NULL"],
 ]);
@@ -26,6 +27,7 @@ const relationships = Object.freeze([
   ["inbox_preferences_user", "evimed_inbox", "preferences", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
   ["memory_records_user", "evimed_memory", "records", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
   ["memory_notes_user", "evimed_memory", "notes", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
+  ["memory_settings_user", "evimed_memory", "settings", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
   ["usage_model_requests_user", "evimed_usage", "model_requests", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
   ["usage_model_requests_project", "evimed_usage", "model_requests", "FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id)"],
 ]);

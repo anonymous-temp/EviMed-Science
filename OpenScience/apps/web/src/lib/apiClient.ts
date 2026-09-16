@@ -494,6 +494,20 @@ export interface WebMemoryStatus {
   structured?: boolean;
 }
 
+/**
+ * The researcher's own switches over their memory. Pausing deletes nothing;
+ * `resetMemory` is the separate, explicit act that does.
+ */
+export interface WebMemorySettings {
+  /** No run writes a new memory. */
+  learningPaused: boolean;
+  /** No run is handed a memory. */
+  recallPaused: boolean;
+  /** Projects where memory is neither written nor used. */
+  pausedProjects: string[];
+  updatedAt: string | null;
+}
+
 export interface WebResearchMemory {
   id: string;
   content: string;
@@ -1273,6 +1287,35 @@ export async function deleteResearchMemory(id: string): Promise<void> {
   if (!hasWebApi) throw new BackendUnavailableError("memory.delete");
   const res = await fetchWithWebAuth(apiUrl(`/memory/memos/${encodeURIComponent(id)}`), { method: "DELETE" });
   await parseApiResponse<boolean>(res);
+}
+
+export async function fetchMemorySettings(): Promise<WebMemorySettings> {
+  if (!hasWebApi) throw new BackendUnavailableError("memory.settings");
+  const res = await fetchWithWebAuth(apiUrl("/memory/settings"));
+  return parseApiResponse<WebMemorySettings>(res);
+}
+
+export async function updateMemorySettings(
+  patch: Partial<Pick<WebMemorySettings, "learningPaused" | "recallPaused" | "pausedProjects">>,
+): Promise<WebMemorySettings> {
+  if (!hasWebApi) throw new BackendUnavailableError("memory.settings.update");
+  const res = await fetchWithWebAuth(apiUrl("/memory/settings"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  return parseApiResponse<WebMemorySettings>(res);
+}
+
+/** Deletes every memory record and note this account holds; the switches stay. */
+export async function resetMemory(): Promise<{ structured: number; manual: number }> {
+  if (!hasWebApi) throw new BackendUnavailableError("memory.reset");
+  const res = await fetchWithWebAuth(apiUrl("/memory/reset"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm: "reset" }),
+  });
+  return parseApiResponse<{ structured: number; manual: number }>(res);
 }
 
 export async function fetchMemoryProfile(): Promise<WebMemoryProfile> {

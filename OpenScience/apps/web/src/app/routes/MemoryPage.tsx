@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input, Textarea } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { MemoryControls } from "@/components/memory/MemoryControls";
 import { useSearchParams } from "react-router";
 
 type MemoryState = "normal" | "archived";
@@ -282,6 +283,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
           <MemorySkeleton />
         ) : connected ? (
           <>
+            <MemoryControls onReset={() => void load(state)} />
             {profile && (
               <MemoryProfileOverview
                 profile={profile}
