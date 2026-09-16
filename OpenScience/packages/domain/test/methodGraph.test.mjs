@@ -176,6 +176,28 @@ test("tau decides who gets an evaluation, and it is about spending money", () =>
 
 /* --------------------------------------------------------- the promotion table */
 
+test("what a candidate still lacks is given as codes a page can put in the reader's language, line for line", () => {
+  // The sentences are English and written for the log; the methods page reads
+  // these instead of pattern-matching them (2026-09-16 review, P2 #15).
+  const unevaluated = promotionVerdict(method({ learning: threeSuccesses() }));
+  assert.equal(unevaluated.missingDetails.length, unevaluated.missing.length);
+  assert.deepEqual(unevaluated.missingDetails.map((detail) => detail.code), ["no_evaluation"]);
+
+  const young = promotionVerdict(method({ learning: emptyLearning(DIGEST_A) }));
+  assert.equal(young.missingDetails.length, young.missing.length);
+  assert.equal(young.missingDetails[0].code, "trajectories_needed");
+  assert.equal(young.missingDetails[0].have, 0);
+  assert.ok(Number(young.missingDetails[0].need) > 0);
+
+  const lost = promotionVerdict(method({
+    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "worse" }),
+  }));
+  assert.deepEqual(lost.missingDetails, [{ code: "evaluation_not_passing", verdict: "worse" }]);
+
+  const explicit = promotionVerdict(method({ provenance: { origin: "explicit" } }));
+  assert.deepEqual(explicit.missingDetails, []);
+});
+
 test("an explicitly taught method takes effect immediately", () => {
   const verdict = promotionVerdict(method({ provenance: { origin: "explicit" } }));
   assert.equal(verdict.status, "approved");

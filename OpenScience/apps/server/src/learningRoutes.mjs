@@ -76,7 +76,7 @@ export function methodView(document) {
     evaluations: payload.learning?.evaluations ?? [],
     // The two lists a person actually needs: why it is effective, or what it is
     // still waiting for. Never a bare "pending".
-    promotion: { status: verdict.status, reasons: verdict.reasons, missing: verdict.missing },
+    promotion: { status: verdict.status, reasons: verdict.reasons, missing: verdict.missing, missingDetails: verdict.missingDetails },
     body: payload.body ?? "",
     createdAt: document.createdAt,
     updatedAt: document.updatedAt,
