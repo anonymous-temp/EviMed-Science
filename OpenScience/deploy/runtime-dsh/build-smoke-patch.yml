@@ -179,3 +179,5 @@
   disabled: true
 - id: ui-sidebar-documentpreview
   disabled: true
+- id: ui-trajectory
+  disabled: true

@@ -571,6 +571,15 @@ export class MemoryIntelligence {
     // the time the pro model takes.
     this.model = String(config.memoryExtractionModel || config.deepseekModel || "");
     this.runSummaryTtlMs = Math.max(0, Number(config.memoryRunSummaryTtlDays ?? 90)) * 24 * 60 * 60 * 1_000;
+    this.excludedProjectPrefixes = Array.isArray(config.memoryExtractionExcludedProjectPrefixes)
+      ? config.memoryExtractionExcludedProjectPrefixes.map(String).filter(Boolean)
+      : [];
+  }
+
+  /** Whether extraction writes anything for this project. See the config key. */
+  #excludedProject(project) {
+    const id = String(project?.id ?? "");
+    return id !== "" && this.excludedProjectPrefixes.some((prefix) => id.startsWith(prefix));
   }
 
   async recordRun(project, run, messages = []) {
@@ -590,9 +599,11 @@ export class MemoryIntelligence {
     // A run summary is extracted memory; "off" has to mean no memory is
     // written. Recall of what already exists is a different switch
     // (`memoryEnabled`) and is deliberately untouched here.
-    if (!this.enabled) {
+    if (!this.enabled || this.#excludedProject(project)) {
       return {
-        runSummary: null, extracted: 0, activated: 0, source: "disabled", proposed: 0, rejected: 0,
+        runSummary: null, extracted: 0, activated: 0,
+        source: this.enabled ? "project_excluded" : "disabled",
+        proposed: 0, rejected: 0,
         rejectionReasons: [], pending: 0, pendingReasons: [], conflicts: [], extractionError: null, excluded,
       };
     }

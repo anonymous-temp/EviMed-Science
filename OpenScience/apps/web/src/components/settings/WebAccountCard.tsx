@@ -31,7 +31,7 @@ export function WebAccountCard({
       setAccount(me?.user ?? null);
       setDeleted(false);
     } catch (e) {
-      toast.error(`无法读取托管账户：${webErrorMessage(e)}`);
+      toast.error(`无法读取账户：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }
@@ -49,7 +49,7 @@ export function WebAccountCard({
       downloadBlob(blob, `evimed-account-${safeFilename(account.id)}.tar.gz`);
       toast.success("账户归档已导出。");
     } catch (e) {
-      toast.error(`无法导出托管账户：${webErrorMessage(e)}`);
+      toast.error(`无法导出账户：${webErrorMessage(e)}`);
     } finally {
       setBusy(null);
     }
@@ -70,7 +70,7 @@ export function WebAccountCard({
       onAccountDeleted?.();
       toast.success("账户已删除。");
     } catch (e) {
-      toast.error(`无法删除托管账户：${webErrorMessage(e)}`);
+      toast.error(`无法删除账户：${webErrorMessage(e)}`);
     } finally {
       setBusy(null);
     }
@@ -165,7 +165,7 @@ export function WebAccountCard({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-ui font-medium text-text">删除 {account.id}？</p>
                     <p className="mt-1 text-xs leading-5 text-muted">
-                      将删除该账户及其全部托管项目、工作区、任务状态、运行时状态与日志。
+                      将删除该账户及其全部项目、工作区、任务状态、运行时状态与日志。
                     </p>
                   </div>
                   <button

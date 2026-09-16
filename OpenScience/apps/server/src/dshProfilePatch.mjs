@@ -97,7 +97,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} bundleVersion
  * @property {string} dshVersion
  * @property {{ deliveryAttemptLimit: number, maxParallelChildren: number, maxSteps: number, maxTokens: number, evidenceStaleMinutes: number, screeningBatchSize: number }} limits
- * @property {{ hosted: boolean, askUser: boolean, review: boolean, capsule: boolean, requiredEnforcement: 'full'|'partial' }} flags
+ * @property {{ hosted: boolean, askUser: boolean, review: boolean, capsule: boolean, operator?: boolean, requiredEnforcement: 'full'|'partial' }} flags
  */
 
 /**
@@ -259,13 +259,37 @@ export function renderProfilePatch(input) {
  */
 function hostedBrowserPanelRows(input) {
   if (!input.flags?.hosted) return [];
+  const ids = input.flags.operator
+    ? HOSTED_DISABLED_BROWSER_PANELS
+    : [...HOSTED_DISABLED_BROWSER_PANELS, ...OPERATOR_ONLY_BROWSER_PANELS];
   return [
     "",
     "# Panels the hosted browser application does not show; see",
     "# apps/server/src/dshProfilePatch.mjs for why each one.",
-    ...HOSTED_DISABLED_BROWSER_PANELS.flatMap((id) => [`- id: ${id}`, "  disabled: true"]),
+    ...ids.flatMap((id) => [`- id: ${id}`, "  disabled: true"]),
   ];
 }
+
+/**
+ * Panels a researcher account does not get and an operator does.
+ *
+ * One row so far. The kernel's trajectory tab renders the assembled system
+ * prompt, the `<system-reminder>` blocks, the injected run context and every
+ * tool call's raw JSON, and it rendered them for everybody (2026-09-16 walk,
+ * U5). For an operator diagnosing a run that is the most useful surface the
+ * kernel has; for a researcher it is the product's prompts, in English, in a
+ * tab labelled 「轨迹」.
+ *
+ * Say plainly what this does and does not do: it removes the affordance, not
+ * the data. The kernel streams those frames to the browser over the session
+ * socket whether or not a tab draws them, so someone who opens devtools still
+ * sees them. Stopping that means the kernel not sending them, which is upstream
+ * of this codebase. This is the accidental-exposure half, and the pairing test
+ * records it as exactly that rather than as a boundary.
+ */
+export const OPERATOR_ONLY_BROWSER_PANELS = Object.freeze([
+  "ui-trajectory",
+]);
 
 /**
  * The row ids of those panels, as the composition names them.

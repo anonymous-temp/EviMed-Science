@@ -40,9 +40,9 @@ describe("WebResourcesCard", () => {
     expect(screen.getByText("2 个进行中")).toBeInTheDocument();
     expect(screen.getByText("运行中")).toBeInTheDocument();
     expect(screen.getByText("64 MB")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "启动托管运行时" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "重启托管运行时" })).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: "停止托管运行时" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "启动研究运行时" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重启研究运行时" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "停止研究运行时" })).not.toBeDisabled();
     await waitFor(() => expect(mocks.fetchWebMetrics).toHaveBeenCalledTimes(1));
   });
 
@@ -54,10 +54,10 @@ describe("WebResourcesCard", () => {
     render(<WebResourcesCard />);
 
     expect(await screen.findByText("已停止")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "启动托管运行时" }));
+    fireEvent.click(screen.getByRole("button", { name: "启动研究运行时" }));
 
     await waitFor(() => expect(mocks.startWebRuntime).toHaveBeenCalledTimes(1));
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("托管运行时已启动。");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("研究运行时已启动。");
     await waitFor(() => expect(mocks.fetchWebMetrics).toHaveBeenCalledTimes(2));
   });
 
@@ -70,15 +70,15 @@ describe("WebResourcesCard", () => {
     render(<WebResourcesCard />);
 
     expect(await screen.findByText("运行中")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "重启托管运行时" }));
+    fireEvent.click(screen.getByRole("button", { name: "重启研究运行时" }));
 
     await waitFor(() => expect(mocks.restartWebRuntime).toHaveBeenCalledTimes(1));
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("托管运行时已重启。");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("研究运行时已重启。");
 
-    fireEvent.click(screen.getByRole("button", { name: "停止托管运行时" }));
+    fireEvent.click(screen.getByRole("button", { name: "停止研究运行时" }));
 
     await waitFor(() => expect(mocks.stopWebRuntime).toHaveBeenCalledTimes(1));
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("托管运行时已停止。");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("研究运行时已停止。");
     await waitFor(() => expect(mocks.fetchWebMetrics).toHaveBeenCalledTimes(3));
   });
 });

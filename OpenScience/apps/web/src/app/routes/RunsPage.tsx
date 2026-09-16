@@ -15,6 +15,7 @@ import { downloadArtifact } from "@/lib/artifactFile";
 import {
   getWebProjectId,
   listWebAgentRuns,
+  reportWebDeliverableFeedback,
   webErrorMessage,
   type WebAgentRun,
   type WebAgentRunStatus,
@@ -688,6 +689,7 @@ function WebRunRow({
                 {run.artifacts.map((path) => (
                   <li key={path}>
                     <ArtifactRow path={path} />
+                    <DeliverableFeedback runId={run.id} path={path} />
                   </li>
                 ))}
               </ul>
@@ -733,6 +735,103 @@ function RunVerdict({ run }: { run: WebAgentRun }) {
         {outcome.headline}
       </p>
       {outcome.detail && <p className="text-text/70">{outcome.detail}</p>}
+    </div>
+  );
+}
+
+/**
+ * Did this file turn out to be useful, and did it need editing?
+ *
+ * This is the learning loop's first producer. `POST /api/feedback/events` has
+ * existed since the loop was built and `reportWebDeliverableFeedback` has
+ * existed in the client, but nothing on any page called either: on 2026-09-16
+ * production held 92 feedback events, every one of them a memory inference
+ * being accepted, and zero `deliverable-adopted` or `deliverable-edited`. Zero
+ * distillation jobs had ever been queued, so the method library was empty not
+ * because nothing was worth learning but because nobody could say so.
+ *
+ * 「我改过」 takes a sentence, because that sentence is the whole signal: what a
+ * researcher changed is what the distilled method has to learn, and "edited"
+ * with no reason distils to nothing.
+ *
+ * Reporting twice is possible — the ledger is not read back here, so the
+ * buttons reset on reload. The server owns deduplication; this surface does not
+ * pretend to.
+ */
+function DeliverableFeedback({ runId, path }: { runId: string; path: string }) {
+  const [state, setState] = useState<"idle" | "editing" | "sending" | "adopted" | "edited">("idle");
+  const [note, setNote] = useState("");
+  const [failure, setFailure] = useState<string | null>(null);
+
+  const send = async (trigger: "deliverable-adopted" | "deliverable-edited", summary?: string) => {
+    setState("sending");
+    setFailure(null);
+    try {
+      await reportWebDeliverableFeedback({ trigger, runId, path, summary });
+      setState(trigger === "deliverable-adopted" ? "adopted" : "edited");
+    } catch (error) {
+      setFailure(webErrorMessage(error, { fallback: "反馈没有记录下来，请稍后重试。" }));
+      setState("idle");
+    }
+  };
+
+  if (state === "adopted" || state === "edited") {
+    return (
+      <p className="px-1 pb-1 text-caption text-muted">
+        {state === "adopted" ? "已记录：这份成果被采纳。" : "已记录：这份成果做过修改。"}
+      </p>
+    );
+  }
+
+  return (
+    <div className="px-1 pb-1">
+      {state === "editing" ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="sr-only" htmlFor={`edited-${runId}-${path}`}>改了什么</label>
+          <input
+            id={`edited-${runId}-${path}`}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="改了什么？一句话即可"
+            className="min-h-6 min-w-0 flex-1 rounded-input border border-border bg-surface px-2 py-1 text-ui-sm text-text"
+          />
+          <button
+            type="button"
+            disabled={note.trim().length === 0}
+            onClick={() => void send("deliverable-edited", note.trim())}
+            className="min-h-6 rounded-input border border-border px-2 py-1 text-ui-sm text-text hover:bg-surface-2 disabled:opacity-50"
+          >
+            提交
+          </button>
+          <button
+            type="button"
+            onClick={() => { setState("idle"); setNote(""); }}
+            className="min-h-6 rounded-input px-2 py-1 text-ui-sm text-muted hover:bg-surface-2"
+          >
+            取消
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={state === "sending"}
+            onClick={() => void send("deliverable-adopted")}
+            className="min-h-6 rounded-input border border-border px-2 py-1 text-ui-sm text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+          >
+            采纳
+          </button>
+          <button
+            type="button"
+            disabled={state === "sending"}
+            onClick={() => setState("editing")}
+            className="min-h-6 rounded-input border border-border px-2 py-1 text-ui-sm text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+          >
+            我改过
+          </button>
+        </div>
+      )}
+      {failure && <p role="alert" className="mt-1 text-caption text-error">{failure}</p>}
     </div>
   );
 }

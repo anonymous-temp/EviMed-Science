@@ -25,7 +25,7 @@ function fixture({ framed = true, withReact = true, localeApi = true, capabiliti
   const target = {
     __EVIMED_FRAME__: framed ? { version: 1, frameId: 'frame-a', projectId: 'project-a', shellOrigin: 'https://app.example', cwd: '/workspace', capabilities } : undefined,
     parent: {},
-    document: { head, createElement: () => {
+    document: { head, title: 'DeepSeek Harness', querySelector: () => null, createElement: () => {
       /** @type {{attributes: Record<string, string>, textContent: string, setAttribute: (k: string, v: string) => void, remove: () => void}} */
       const node = { attributes: {}, textContent: '', setAttribute(k, v) { node.attributes[k] = v; }, remove() {} };
       return node;
@@ -206,8 +206,12 @@ test('without React the brand is left to the kernel fallback and the language st
 test('the hidden controls are named by their accessible names in both shipped languages', () => {
   const f = fixture();
   apply(f.ctx, {}, f.target, f.require);
-  assert.equal(f.styles.length, 1);
-  const css = f.styles[0].textContent;
+  // One stylesheet, and exactly one. The shell appends a `<link rel="icon">`
+  // to the same head, so the sheet is selected rather than assumed to be the
+  // only thing there.
+  const sheets = f.styles.filter((/** @type {any} */ node) => 'data-evimed-shell' in (node.attributes ?? {}));
+  assert.equal(sheets.length, 1);
+  const css = sheets[0].textContent;
   assert.match(css, /aria-label="Add workspace"/);
   assert.match(css, /aria-label="添加工作区"/);
   assert.match(css, /_previewBadge"\]:empty/);
@@ -215,17 +219,29 @@ test('the hidden controls are named by their accessible names in both shipped la
   // its popup through the slot the shell occupies, so withdrawing the popup
   // left a button that opens nothing.
   assert.match(css, /_heroWorkspaceRow"\]\{display:none/);
-  assert.equal(f.styles[0].attributes['data-evimed-shell'], '');
+  assert.equal(sheets[0].attributes['data-evimed-shell'], '');
 });
 
-test('outside the hosted frame the shell does nothing', () => {
+test('a page the control plane did not serve is left alone', () => {
   const f = fixture({ framed: false });
   apply(f.ctx, {}, f.target, f.require);
   assert.deepEqual(Object.keys(f.occupants), []);
   assert.deepEqual(f.selected, []);
   assert.equal(f.styles.length, 0);
+  assert.equal(f.target.document.title, 'DeepSeek Harness', 'a page that is not ours keeps its own name');
+});
+
+test('a page the control plane served is branded whether or not it is embedded', () => {
+  // The guard used to also require `parent !== self`, so opening the frame's
+  // address in a tab got the kernel unbranded: its whale in the sidebar, its
+  // own title, and the swimming fish on an empty conversation. One condition,
+  // one uncovered path (2026-09-16 review, §4.1 item 8).
   const own = fixture();
   own.target.parent = own.target;
   apply(own.ctx, {}, own.target, own.require);
-  assert.deepEqual(Object.keys(own.occupants), []);
+  assert.ok(Object.keys(own.occupants).length > 0, 'the brand slots are occupied at the top level too');
+  assert.equal(own.target.document.title, 'EviMed 研究会话');
+  const icon = own.styles.find((/** @type {any} */ node) => node.attributes?.rel === 'icon');
+  assert.ok(icon, "the document's icon is replaced, not left as the kernel's whale");
+  assert.match(String(icon.attributes.href), /^data:image\/svg\+xml,/);
 });

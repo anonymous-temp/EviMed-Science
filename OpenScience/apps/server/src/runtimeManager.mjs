@@ -1771,6 +1771,12 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
       // Not a setting: the capsule is active when a recall endpoint is
       // configured, and the plugin reports its own absence.
       capsule: Boolean(capsuleGatewayProviderUrl(config)),
+      // Who this runtime belongs to decides whether the kernel's trajectory
+      // panel is mounted. It renders the assembled system prompt, the injected
+      // run context and every tool's raw JSON; useful for diagnosing a run,
+      // and not something a researcher account should be handed. The same list
+      // `/api/me` reads to decide which menu the shell draws.
+      operator: config.operatorUsers.includes(String(project.userId ?? "")),
       requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
     },
   };
@@ -2257,6 +2263,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
             askUser: Boolean(config.runtimeAskUserEnabled),
             review: Boolean(config.runtimeReviewEnabled),
             capsule: Boolean(capsuleGatewayUrl),
+            operator: config.operatorUsers.includes(String(project.userId ?? "")),
             requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
           },
           limits: {

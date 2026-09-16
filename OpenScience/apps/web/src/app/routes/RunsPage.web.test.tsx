@@ -2,17 +2,19 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { WebAgentRun } from "@/lib/apiClient";
+import { WebApiError, type WebAgentRun } from "@/lib/apiClient";
 import { webRunOutcome } from "@/lib/runPresentation";
 import { RunsPage } from "./RunsPage";
 
 // The hosted ledger: RunsPage picks HostedRunsView when a web API exists
 // outside Tauri. The command boundary is mocked; the UI under test is real.
 const listWebAgentRuns = vi.fn();
+const reportWebDeliverableFeedback = vi.fn();
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   hasWebApi: true,
   listWebAgentRuns: () => listWebAgentRuns(),
+  reportWebDeliverableFeedback: (input: unknown) => reportWebDeliverableFeedback(input),
 }));
 
 const downloadArtifact = vi.fn();
@@ -350,5 +352,52 @@ describe("RunsPage (hosted web)", () => {
     // row has to ask "is it over" before it asks "how did it go", or a healthy
     // 40-minute analysis is captioned 「这次没有完成」.
     expect(screen.queryByText(/这次没有完成/)).not.toBeInTheDocument();
+  });
+});
+
+describe("deliverable feedback — the learning loop's first producer", () => {
+  // Until 2026-09-16 `POST /api/feedback/events` and `reportWebDeliverableFeedback`
+  // both existed and nothing called either: production held 92 feedback events,
+  // all of them memory inferences being accepted, and zero deliverable events.
+  // The method library was empty because nobody could say a deliverable was
+  // good, not because nothing was.
+  it("records an adoption against the run and the file", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({ id: "run_1", artifacts: ["deliverables/report.md"] })]);
+    render(<MemoryRouter><RunsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole("button", { name: "采纳" }));
+    await waitFor(() => expect(reportWebDeliverableFeedback).toHaveBeenCalledWith({
+      trigger: "deliverable-adopted",
+      runId: "run_1",
+      path: "deliverables/report.md",
+      summary: undefined,
+    }));
+    expect(await screen.findByText("已记录：这份成果被采纳。")).toBeInTheDocument();
+  });
+
+  it("asks what changed, because an edit with no reason distils to nothing", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({ id: "run_1", artifacts: ["deliverables/report.md"] })]);
+    render(<MemoryRouter><RunsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole("button", { name: "我改过" }));
+    const submit = screen.getByRole("button", { name: "提交" });
+    expect(submit).toBeDisabled();
+    await userEvent.type(screen.getByPlaceholderText("改了什么？一句话即可"), "把剂量表换成了指南的口径");
+    await userEvent.click(submit);
+    await waitFor(() => expect(reportWebDeliverableFeedback).toHaveBeenCalledWith({
+      trigger: "deliverable-edited",
+      runId: "run_1",
+      path: "deliverables/report.md",
+      summary: "把剂量表换成了指南的口径",
+    }));
+  });
+
+  it("a refusal is a Chinese sentence and the buttons come back", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({ id: "run_1", artifacts: ["deliverables/report.md"] })]);
+    reportWebDeliverableFeedback.mockRejectedValue(
+      new WebApiError("nope", { status: 503, code: "runtime_unavailable" }),
+    );
+    render(<MemoryRouter><RunsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole("button", { name: "采纳" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("运行时出现问题，稍后重试。");
+    expect(screen.getByRole("button", { name: "采纳" })).toBeEnabled();
   });
 });

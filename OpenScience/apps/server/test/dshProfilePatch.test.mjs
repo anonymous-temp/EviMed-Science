@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 
-import { EVIMED_PRESET, HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
+import { EVIMED_PRESET, HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, OPERATOR_ONLY_BROWSER_PANELS, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
 
 const input = {
   modelGatewayUrl: "https://open-science-web:8787/internal/model/v1",
@@ -212,6 +212,33 @@ test("every row the patch overrides is a row the image's own composition has", a
   for (const [, id] of patch.matchAll(/^- id: (\S+)/gm)) {
     if (inserted.has(id)) continue;
     assert.ok(composed.has(id), `the patch overrides "${id}", which the composition does not have`);
+  }
+});
+
+test("the trajectory panel is an operator's, and a researcher's runtime does not mount it", async () => {
+  // It renders the assembled system prompt, the `<system-reminder>` blocks, the
+  // injected run context and every tool call's raw JSON. Until 2026-09-16 every
+  // account got it, in a tab labelled 「轨迹」.
+  const researcher = renderProfilePatch({ ...input, flags: { ...input.flags, hosted: true, operator: false } });
+  const operator = renderProfilePatch({ ...input, flags: { ...input.flags, hosted: true, operator: true } });
+  assert.ok(OPERATOR_ONLY_BROWSER_PANELS.length > 0, "nothing is operator-only, so this test walked nothing");
+  for (const id of OPERATOR_ONLY_BROWSER_PANELS) {
+    assert.match(researcher, new RegExp(`- id: ${id}\\n  disabled: true`), `${id} is still mounted for a researcher`);
+    assert.doesNotMatch(operator, new RegExp(`- id: ${id}\\n  disabled: true`), `${id} is what an operator diagnoses a run with`);
+  }
+
+  // The row ids are the composition's, not ours. A renamed row upstream must
+  // fail here rather than quietly stop disabling anything.
+  const baselinePath = new URL("../../../deploy/runtime-dsh/dump-config.baseline.json", import.meta.url);
+  let baseline;
+  try {
+    baseline = await readFile(baselinePath, "utf8");
+  } catch {
+    return; // recorded in the image; see the acceptance step in docs/WEB_DEPLOYMENT.md
+  }
+  const composed = new Set([...baseline.matchAll(/^- id: (\S+)/gm)].map((match) => match[1]));
+  for (const id of OPERATOR_ONLY_BROWSER_PANELS) {
+    assert.ok(composed.has(id), `the patch disables "${id}", which the composition does not have`);
   }
 });
 

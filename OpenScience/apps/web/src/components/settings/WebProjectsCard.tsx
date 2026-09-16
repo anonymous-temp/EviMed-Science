@@ -29,7 +29,7 @@ export function WebProjectsCard({
       setProjects(items);
       setCurrentId(getWebProjectId());
     } catch (e) {
-      toast.error(`无法读取托管项目：${webErrorMessage(e)}`);
+      toast.error(`无法读取项目：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }
@@ -48,7 +48,7 @@ export function WebProjectsCard({
       onProjectChange?.(project);
     } catch (e) {
       setCurrentId(getWebProjectId());
-      toast.error(`无法切换托管项目：${webErrorMessage(e)}`);
+      toast.error(`无法切换项目：${webErrorMessage(e)}`);
     } finally {
       setSwitchingId(null);
     }
@@ -70,7 +70,7 @@ export function WebProjectsCard({
       setNewName("");
       await switchProject(project);
     } catch (e) {
-      toast.error(`无法创建托管项目：${webErrorMessage(e)}`);
+      toast.error(`无法创建项目：${webErrorMessage(e)}`);
     } finally {
       setSwitchingId(null);
     }
@@ -86,7 +86,7 @@ export function WebProjectsCard({
       );
       toast.success(`已导出 ${project.name}。`);
     } catch (e) {
-      toast.error(`无法导出托管项目：${webErrorMessage(e)}`);
+      toast.error(`无法导出项目：${webErrorMessage(e)}`);
     } finally {
       setBusyProjectId(null);
     }
@@ -115,7 +115,7 @@ export function WebProjectsCard({
       }
       toast.success(`已删除 ${project.name}。`);
     } catch (e) {
-      toast.error(`无法删除托管项目：${webErrorMessage(e)}`);
+      toast.error(`无法删除项目：${webErrorMessage(e)}`);
     } finally {
       setBusyProjectId(null);
     }
@@ -146,7 +146,7 @@ export function WebProjectsCard({
       <div className="px-5 py-4">
         <div className="overflow-hidden rounded-input border border-border">
           {projects.length === 0 ? (
-            <p className="bg-surface px-3 py-2.5 text-ui text-muted">未找到托管项目。</p>
+            <p className="bg-surface px-3 py-2.5 text-ui text-muted">未找到项目。</p>
           ) : (
             projects.map((project, index) => {
               const selected = project.id === currentId;

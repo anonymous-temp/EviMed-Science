@@ -283,7 +283,20 @@ export function AutopilotPage() {
   };
   const visibleDigests = selectedDigest ? [selectedDigest, ...digests.filter((digest) => digest.id !== selectedDigest.id)] : digests;
   const visibleError = error ?? activityError;
-  const today = new Date().toISOString().slice(0, 10);
+  /**
+   * Today, in the agenda's own zone.
+   *
+   * `toISOString().slice(0, 10)` is the UTC date, and the create form already
+   * records the researcher's zone precisely because the two differ: between
+   * 00:00 and 08:00 Beijing time it names yesterday, so 「立即运行一回合」
+   * scheduled the previous day's episode (2026-09-16 walk, U7). Read per
+   * agenda, because two agendas may not share a zone.
+   */
+  const todayIn = (timeZone?: string) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
 
   /**
    * The briefing's opening line.
@@ -382,7 +395,7 @@ export function AutopilotPage() {
           {agenda.payload.pauseReason && <p className="text-ui-sm text-muted">{agenda.payload.pauseReason}</p>}
           {pendingFollowUps(agenda) > 0 && <p className="text-ui-sm text-muted">下一回合先回答 {pendingFollowUps(agenda)} 条追问。</p>}
           <div className="flex flex-wrap gap-2">
-            {agenda.payload.status === "active" ? <><Button size="sm" disabled={busy} onClick={() => void mutate(() => scheduleAgenda(agenda.id, today))}><Sparkles size={13} />立即运行一回合</Button>
+            {agenda.payload.status === "active" ? <><Button size="sm" disabled={busy} onClick={() => void mutate(() => scheduleAgenda(agenda.id, todayIn(agenda.payload.timeZone)))}><Sparkles size={13} />立即运行一回合</Button>
               <Button size="sm" variant="ghost" disabled={busy} onClick={() => void mutate(() => stopAgenda(agenda.id, agenda.revision))}><PauseCircle size={13} />停止</Button></>
               : <Button size="sm" disabled={busy} onClick={() => void mutate(() => startAgenda(agenda.id, agenda.revision))}><PlayCircle size={13} />开始主动科研</Button>}
           </div></div></Card>)}

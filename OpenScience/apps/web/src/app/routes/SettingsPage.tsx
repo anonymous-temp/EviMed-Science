@@ -49,7 +49,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
 
         <WebProjectsCard onProjectChange={(project) => { projectChanged.current = true; setProjectId(project.id); }} />
         <PluginsCard projectId={projectId} />
-        <DataFlowCard hosted model="平台托管模型" workspace={`/workspace/${projectId}`} />
+        <DataFlowCard hosted model="平台提供的模型" workspace={`/workspace/${projectId}`} />
 
         <Card className="mt-5" title="外观" hint="主题保存在本浏览器中，跟随系统会随系统明暗自动切换。">
           <ThemeSegmentedControl />

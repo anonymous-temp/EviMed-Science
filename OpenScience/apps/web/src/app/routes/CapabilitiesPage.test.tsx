@@ -179,7 +179,7 @@ describe("CapabilitiesPage", () => {
         </Routes>
       </MemoryRouter>,
     );
-    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析模板/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析能力/ }));
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
     expect(screen.getByTestId("location")).not.toHaveTextContent("agent=");
