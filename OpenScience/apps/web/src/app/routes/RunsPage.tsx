@@ -515,9 +515,15 @@ function HostedRunsView() {
  * from the id without a fetch; an id this build has no name for falls back to
  * the id rather than to silence, because an unnamed capability is worth seeing.
  */
+/** The answer line every unrouted open-domain question runs on (server:
+ *  `OPEN_DOMAIN_ANSWER_AGENT_ID`). It is not one of the catalog's capabilities,
+ *  so the catalog has no title for it, and the ledger showed its id. */
+const OPEN_DOMAIN_ANSWER_AGENT_ID = "open-domain-answer";
+
 function capabilityLabel(run: WebAgentRun): string {
   const agent = run.effectiveAgentId ?? run.agentId;
   if (!agent) return run.mode === "specialist" ? "专项科研" : "开放域科研";
+  if (agent === OPEN_DOMAIN_ANSWER_AGENT_ID) return "开放域问答";
   const name = capabilityTitle(agent) ?? agent;
   return run.mode === "open-domain" ? `开放域 · ${name}` : name;
 }
