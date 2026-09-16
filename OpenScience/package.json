@@ -30,6 +30,7 @@
     "test:server": "pnpm --filter @ai4s/server test",
     "test:web": "pnpm test:mcp && pnpm test:acceptance-ledger && pnpm test:eval-briefs && pnpm test:specialist-driver && pnpm test:release-audit && pnpm test:phi-masking && pnpm test:packages && pnpm test:server && pnpm lint:server && pnpm lint:domain && pnpm lint:port && pnpm lint:socket && pnpm typecheck:domain && pnpm typecheck:port && pnpm typecheck:socket && pnpm typecheck:server && pnpm typecheck && pnpm test",
     "test:web:e2e": "pnpm --filter @ai4s/server test:e2e",
+    "walk:ui": "node scripts/ops/ui-walk.mjs",
     "audit:hosted-compliance": "node scripts/ops/audit-hosted-compliance.mjs",
     "audit:saas-alignment": "node scripts/ops/audit-saas-alignment.mjs",
     "audit:source-secrets": "node scripts/ops/audit-source-secrets.mjs",

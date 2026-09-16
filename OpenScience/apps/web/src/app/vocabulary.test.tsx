@@ -82,6 +82,14 @@ describe("runtime vocabulary never leads a surface", () => {
     expect(visible).toContain("开放域");
   });
 
+  it("names the open-domain answer line in words, not by its id", async () => {
+    // Seen at 390 px in the 2026-09-16 scripted walk: 「开放域 · open-domain-answer」.
+    listWebAgentRuns.mockResolvedValue([{ ...leakyRun(), effectiveAgentId: "open-domain-answer", effectiveRuntimeAgent: null }]);
+    render(<MemoryRouter initialEntries={["/app/runs"]}><RunsPage /></MemoryRouter>);
+    const row = await screen.findByRole("button", { name: /开放域问答/ });
+    expect(row.textContent).not.toMatch(/open-domain-answer/);
+  });
+
   it("keeps the identifiers reachable, labelled, behind one disclosure", async () => {
     listWebAgentRuns.mockResolvedValue([leakyRun()]);
     render(<MemoryRouter initialEntries={["/app/runs"]}><RunsPage /></MemoryRouter>);
