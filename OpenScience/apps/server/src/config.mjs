@@ -689,6 +689,15 @@ export function loadConfig(overrides = {}) {
     runtimeIdleTimeoutMs: Number(
       overrides.runtimeIdleTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_IDLE_TIMEOUT_MS ?? 30 * 60_000,
     ),
+    // How long a deliberate stop may spend reading the transcripts of the runs
+    // it is about to finish, before it gives up and closes the container
+    // anyway. A bound rather than a budget: the capture is best effort, and a
+    // container held open waiting for a pathological run's history is worse
+    // than the `history_unavailable` this replaces. Timeouts are audited
+    // (`run.transcript.prestop`), never silent.
+    runtimePreStopTranscriptTimeoutMs: Number(
+      overrides.runtimePreStopTranscriptTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_PRE_STOP_TRANSCRIPT_TIMEOUT_MS ?? 15_000,
+    ),
     runtimeQuotaCheckIntervalMs: Number(
       overrides.runtimeQuotaCheckIntervalMs ?? process.env.OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS ?? 30_000,
     ),

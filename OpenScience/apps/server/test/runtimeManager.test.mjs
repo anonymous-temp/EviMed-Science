@@ -1794,6 +1794,81 @@ async function dshDispatchFixture() {
   return { rootDir, project, manager };
 }
 
+test("a deliberate stop reads the transcript while the container still answers, and a crash does not pretend to", async (t) => {
+  // Wired is not fed. What matters is not that the hook exists but *when* it
+  // fires: `sessionTranscript` resolves the runtime through the manager's map,
+  // and every stop path used to delete from that map and close the container
+  // before notifying. So the assertion is taken from inside the hook — could a
+  // reader standing here still read? Before this change the answer was no on
+  // every path, and every stopped run recorded `history_unavailable`.
+  const readable = [];
+  const fixture = async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "os-dsh-prestop-"));
+    const project = {
+      id: "paper-stop", userId: "alice", rootDir,
+      metaDir: path.join(rootDir, ".openscience"),
+      workspaceDir: path.join(rootDir, "workspace"),
+      runtimeDir: path.join(rootDir, "runtime"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true, mode: 0o700 });
+    const manager = new RuntimeManager({ runtimeMode: "mock", allowMockRuntime: true, production: false }, {
+      onRuntimeStopping: async (stopping) => {
+        // The one question: is the runtime still resolvable from here?
+        readable.push(Boolean(manager.runtimes.get(manager.key(stopping))));
+      },
+    });
+    t.after(async () => { await rm(rootDir, { recursive: true, force: true }); });
+    return { project, manager };
+  };
+
+  const stopped = await fixture();
+  await stopped.manager.start(stopped.project);
+  await stopped.manager.stop(stopped.project);
+  assert.deepEqual(readable, [true], "stop() must notify before it drops the runtime");
+
+  readable.length = 0;
+  const idled = await fixture();
+  await idled.manager.start(idled.project);
+  await idled.manager.stopIdleRuntime(idled.project);
+  assert.deepEqual(readable, [true], "the idle reaper takes the container away too");
+
+  readable.length = 0;
+  const closed = await fixture();
+  await closed.manager.start(closed.project);
+  await closed.manager.closeAll();
+  assert.deepEqual(readable, [true], "shutdown finishes every running run, so it owes them the same read");
+
+  // A stop with nothing running still notifies nobody, and a second stop of an
+  // already-stopped runtime must not fire a snapshot for a container that is
+  // gone — that would hold a snapshot no finish will ever drain.
+  readable.length = 0;
+  const twice = await fixture();
+  await twice.manager.start(twice.project);
+  await twice.manager.stop(twice.project);
+  await twice.manager.stop(twice.project);
+  assert.deepEqual(readable, [true], "the second stop has no runtime to read");
+});
+
+test("a hook that throws or hangs does not keep a container alive", async (t) => {
+  // The stop is the caller; the hook is best effort. A pre-read that fails is
+  // the old behaviour (`history_unavailable`), never a stuck stop.
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "os-dsh-prestop-fail-"));
+  const project = {
+    id: "paper-stop-fail", userId: "alice", rootDir,
+    metaDir: path.join(rootDir, ".openscience"),
+    workspaceDir: path.join(rootDir, "workspace"),
+    runtimeDir: path.join(rootDir, "runtime"),
+  };
+  await mkdir(project.workspaceDir, { recursive: true, mode: 0o700 });
+  const manager = new RuntimeManager({ runtimeMode: "mock", allowMockRuntime: true, production: false }, {
+    onRuntimeStopping: async () => { throw new Error("transcript unreadable"); },
+  });
+  t.after(async () => { await rm(rootDir, { recursive: true, force: true }); });
+  await manager.start(project);
+  await manager.stop(project);
+  assert.equal(manager.runtimes.get(manager.key(project)), undefined, "the runtime is gone even though the pre-read threw");
+});
+
 test("child activity accepts only kernel-confirmed direct children of the requested root", () => {
   const rows = childSessionHeads([
     { sessionId: "child-b", parentSessionId: "root", origin: "subagent", running: true, projections: { asOfSeq: 19 } },

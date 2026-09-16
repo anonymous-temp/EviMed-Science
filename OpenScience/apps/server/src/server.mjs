@@ -15,7 +15,7 @@ import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore } from "./agentRuns.mjs";
-import { collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
+import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
@@ -1130,8 +1130,65 @@ export function createWebApiApp(overrides = {}) {
     },
   });
   let agentRuns;
+  // Transcripts read by `onRuntimeStopping` and drained by `onRunFinished`.
+  // Declared beside the store they belong to rather than inside either hook:
+  // the two halves are a handoff, and a Map owned by one of them would read as
+  // that one's private state.
+  const preStopTranscripts = new PreStopTranscripts();
   const runtimeManager = new RuntimeManager(config, {
     agentRegistry,
+    // Read the conversations while the container is still answering.
+    //
+    // `onRuntimeStop` below is what finishes these runs, and it runs after the
+    // container is gone — so the capture inside `onRunFinished` found nothing
+    // and every stopped run recorded `unavailable`. This is the same read, one
+    // step earlier, held until that finish takes it.
+    //
+    // Bounded here rather than in the manager: the manager guarantees only that
+    // the hook is awaited before the container goes, and a stop that waited on
+    // a pathological history would hold a container open for minutes. On
+    // timeout the capture is abandoned and the run records `history_unavailable`
+    // exactly as it did before — the failure mode is the old behaviour, never a
+    // stuck stop.
+    onRuntimeStopping: async (project) => {
+      if (!agentRuns) return;
+      let running = [];
+      try {
+        running = (await agentRuns.list(project)).filter((run) => run.status === "running");
+      } catch {
+        return;
+      }
+      if (!running.length) return;
+      let timer;
+      const deadline = new Promise((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), config.runtimePreStopTranscriptTimeoutMs);
+        timer.unref?.();
+      });
+      const capture = (async () => {
+        for (const run of running) {
+          // Final by construction: the container this was read from is being
+          // killed, so the run cannot produce another message.
+          preStopTranscripts.put(run.id, await collectRunTranscripts(runtimeManager, project, run));
+        }
+        return "captured";
+      })();
+      try {
+        const outcome = await Promise.race([capture, deadline]);
+        if (outcome === "timeout") {
+          await securityAudit(config, "run.transcript.prestop", "failed", {
+            userId: project.userId, projectId: project.id,
+            code: `timeout:${running.length}`,
+          });
+        }
+      } catch (error) {
+        await securityAudit(config, "run.transcript.prestop", "failed", {
+          userId: project.userId, projectId: project.id,
+          code: typeof error?.code === "string" ? error.code : "transcript_unreadable",
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    },
     onRuntimeStop: (project, status) => {
       runtimeEventPump.detach(project);
       // Returned, not fired-and-forgotten here: `notifyRuntimeStop` already
@@ -1354,7 +1411,11 @@ export function createWebApiApp(overrides = {}) {
       // not report for itself fails invisibly.
       await trackLearningWrite((async () => {
         try {
-          const sessions = await collectRunTranscripts(runtimeManager, project, run);
+          // A stop already read this one while its container was alive. That
+          // snapshot is the whole conversation; a live read here would answer
+          // `runtime_not_running` and record a gap that does not exist.
+          const sessions = preStopTranscripts.take(run.id)
+            ?? await collectRunTranscripts(runtimeManager, project, run);
           const receipt = await persistRunTranscript({ project, run, sessions });
           await agentRuns.recordLearning(project, run.id, { transcript: receipt });
           if (receipt.completeness !== "complete") {
