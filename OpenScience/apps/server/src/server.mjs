@@ -89,7 +89,7 @@ import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
-import { MemoryIntelligence } from "./memoryIntelligence.mjs";
+import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
@@ -1538,10 +1538,13 @@ export function createWebApiApp(overrides = {}) {
       // ledger, which no API exposes. Appended only when the count is zero, so
       // an ordinary run gains no notice, and readable through /api/agent-runs
       // where the batch can collect the distribution.
-      // `disabled` is not "extracted nothing": the deployment asked for no
-      // memory writes and got none, which is a setting rather than an outcome
-      // worth a notice on every single run.
-      if (memoryResult.extracted === 0 && memoryResult.source !== "disabled") {
+      // A skipped write is not "extracted nothing": the deployment asked for no
+      // memory writes here and got none, which is a setting rather than an
+      // outcome worth a notice on every single run — and the notice marks the
+      // run unchecked. `MEMORY_WRITE_SKIPPED_SOURCES` names both skip sources;
+      // testing for one of them is how every run of an excluded evaluation
+      // project came to be stamped with it.
+      if (memoryResult.extracted === 0 && !MEMORY_WRITE_SKIPPED_SOURCES.has(memoryResult.source)) {
         await agentRuns.appendQualityNotices(project, run.id, [
           `记忆抽取未产出记录：消息 ${messages.length} 条、候选 ${memoryResult.proposed} 条、`
           + `采纳 ${memoryResult.extracted} 条、驳回 ${memoryResult.rejected} 条`
@@ -1551,7 +1554,15 @@ export function createWebApiApp(overrides = {}) {
           + `${memoryResult.excluded?.length ? `、未读取 ${memoryResult.excluded.map((item) => `${item.count} 条（${item.reason === "injected" ? "系统注入" : "回合未完成"}）`).join("")}` : ""}`
           + `${memoryResult.extractionError ? `（抽取报错：${memoryResult.extractionError}）` : ""}`
           + "。空对话与抽取失效在结果上一样，这行区分它们。",
-        ], { unchecked: true }).catch(() => {});
+        // A notice, not a verification downgrade. `unchecked` means a layer of
+        // the delivery gate did not run, and the researcher's inbox renders it
+        // as 「有质量检查没有运行，无法确认是否达标」. Memory extraction is not a
+        // gate layer, and extracting nothing is — in this block's own words — a
+        // legitimate outcome, so every clean, fully-gated run whose conversation
+        // held no durable fact was being told its checks had not run. It also
+        // zeroed evidenceCompleteness in paired evaluations that score "accepted
+        // and not unchecked".
+        ]).catch(() => {});
       }
       // A record that was stored and then parked as `pending` looks, from the
       // outside, exactly like memory that is not learning: it is not recalled,

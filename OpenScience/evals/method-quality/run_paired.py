@@ -134,6 +134,11 @@ POLL_FAILURE_BACKOFF_CAP_SECONDS = 60
 # measurement and not a result; it is the batch being interrupted. So an outage
 # pauses the cell and waits the control plane out, and only a control plane
 # that never comes back turns into a recorded failure.
+# How long to wait, after a run's terminal status, for the writes that follow
+# it (the transcript receipt, then the run-finished notices). Sub-second in
+# practice; bounded so a run whose receipt never lands still ends.
+SETTLE_POLL_SECONDS = 2
+SETTLE_WAIT_SECONDS = 60
 CONTROL_PLANE_OUTAGE_RETRIES = 2
 CONTROL_PLANE_WAIT_SECONDS = 1800
 CONTROL_PLANE_PROBE_SECONDS = 15
@@ -744,6 +749,43 @@ class PlatformClient:
             if time.monotonic() >= deadline:
                 raise EvalError(f"run {run_id} did not reach a terminal state within {timeout_seconds}s")
             sleep(poll_seconds)
+
+    def settled_run(self, run: dict[str, Any], sleep: Callable[[float], None]) -> dict[str, Any]:
+        """The run once the server has finished writing what follows `finished`.
+
+        A terminal status is not the last write. Measured on the 2026-09-16 v5
+        batch: `finished` landed first with `verification: null`, the transcript
+        receipt 241 ms later, and the run-finished quality notices 297 ms later.
+        The runner stopped at the first terminal status it saw, polling every
+        5 s, so a poll landing in that gap read a run with no transcript — which
+        skipped the `transcript_*` exclusion outright — and a verification that
+        was about to change. Whether a partial transcript was excluded depended
+        on the millisecond the poll landed.
+
+        So after the terminal status this re-reads until the transcript receipt
+        is present, bounded; a receipt that never arrives is left absent and the
+        cell is then excluded as `transcript_missing` rather than scored.
+        """
+        if run.get("transcript"):
+            # One more read even so: the notices land after the receipt.
+            sleep(SETTLE_POLL_SECONDS)
+            fresh = next((item for item in self.list_runs() if item.get("id") == run.get("id")), None)
+            return fresh or run
+        waited = 0.0
+        while waited < SETTLE_WAIT_SECONDS:
+            sleep(SETTLE_POLL_SECONDS)
+            waited += SETTLE_POLL_SECONDS
+            try:
+                fresh = next((item for item in self.list_runs() if item.get("id") == run.get("id")), None)
+            except (TransportError, HttpFailure, OSError):
+                continue
+            if fresh and fresh.get("transcript"):
+                sleep(SETTLE_POLL_SECONDS)
+                again = next((item for item in self.list_runs() if item.get("id") == run.get("id")), None)
+                return again or fresh
+            if fresh:
+                run = fresh
+        return run
 
     def _poll_failure(self, run_id: str, failures: int, error: Exception, deadline: float, poll_seconds: float, sleep: Callable[[float], None]) -> int:
         failures += 1
@@ -1916,6 +1958,7 @@ class PairedRunner:
             poll_seconds=self.config["pollSeconds"],
             sleep=self.sleep,
         )
+        run = client.settled_run(run, sleep=self.sleep)
         record["run"] = {
             "id": run.get("id"),
             "sessionId": session_id,
@@ -2008,7 +2051,12 @@ class PairedRunner:
         # count what it dropped instead of quietly shrinking.
         transcript_receipt = record["run"]["transcript"] or {}
         completeness = str(transcript_receipt.get("completeness") or "")
-        if completeness and completeness != "complete":
+        if not completeness:
+            # No receipt at all, even after settling. Skipping the check here is
+            # how a run could be scored without anyone knowing whether its
+            # transcript — and so its delegated work — was ever captured.
+            record["excluded"] = {"reason": "transcript_missing", "detail": "no transcript receipt on the run after it finished"}
+        elif completeness != "complete":
             # Which session, and the reader's own words for why. The server
             # carries the gaps onto the run since 2026-09-16; before that this
             # detail was only the file's path, and finding out that the kernel
