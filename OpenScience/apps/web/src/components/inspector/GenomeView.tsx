@@ -65,9 +65,9 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
     return () => ro.disconnect();
   }, []);
 
-  if (!format) return <div className="p-4 text-sm text-muted">这不是可识别的基因组注释文件。</div>;
+  if (!format) return <div className="p-4 text-ui text-muted">这不是可识别的基因组注释文件。</div>;
   if (!data || data.features.length === 0 || !contig || !view)
-    return <div className="p-4 text-sm text-muted">此 {format.toUpperCase()} 文件中未找到特征。</div>;
+    return <div className="p-4 text-ui text-muted">此 {format.toUpperCase()} 文件中未找到特征。</div>;
 
   const extent = { start: Math.max(0, contig.min - 1), end: contig.max + 1 };
   const span = Math.max(MIN_SPAN, view.end - view.start);
@@ -106,13 +106,13 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
 
   return (
     <div className="flex h-full flex-col bg-surface">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-caption">
         <span className="flex items-center gap-1 font-medium text-muted">
           <Dna size={13} aria-hidden="true" /> {format.toUpperCase()}
         </span>
         {data.contigs.length > 1 ? (
           <select
-            className="rounded-input border border-border bg-surface px-2 py-1 text-xs text-text outline-none focus:border-accent/50"
+            className="rounded-input border border-border bg-surface px-2 py-1 text-caption text-text outline-none focus:border-accent/50"
             value={contigIdx}
             onChange={(e) => setContigIdx(Number(e.target.value))}
             aria-label="序列片段"

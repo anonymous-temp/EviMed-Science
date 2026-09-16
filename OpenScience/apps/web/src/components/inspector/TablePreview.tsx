@@ -9,7 +9,7 @@ export function TablePreview({ table }: { table: TableData }) {
   return (
     <div className="p-3">
       <div className="overflow-x-auto rounded-input border border-border bg-surface">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full border-collapse text-ui">
           <thead>
             <tr className="border-b border-border text-left text-muted">
               {table.columns.map((c, i) => (
@@ -33,7 +33,7 @@ export function TablePreview({ table }: { table: TableData }) {
         </table>
       </div>
       {table.truncated && (
-        <div className="py-2 text-center text-xs text-muted">Showing the first {table.rows.length} rows</div>
+        <div className="py-2 text-center text-caption text-muted">Showing the first {table.rows.length} rows</div>
       )}
     </div>
   );

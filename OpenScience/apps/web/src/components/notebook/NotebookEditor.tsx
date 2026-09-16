@@ -207,9 +207,9 @@ export function NotebookEditor({
         <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-caption font-medium uppercase tracking-wide text-muted">
           {language === "r" ? "R" : "Python"}
         </span>
-        <span className="shrink-0 text-xs text-muted">{saved ? "已保存" : "未保存"}</span>
+        <span className="shrink-0 text-caption text-muted">{saved ? "已保存" : "未保存"}</span>
         <div className="flex-1" />
-        <span className="hidden shrink-0 text-xs text-muted xl:inline">
+        <span className="hidden shrink-0 text-caption text-muted xl:inline">
           Shift/⌘+Enter 在服务端隔离内核中运行单元格
         </span>
         <button
@@ -244,15 +244,15 @@ export function NotebookEditor({
       )}
       <div ref={scrollRef} onScroll={onScroll} className={cn("flex-1 overflow-y-auto", showHistory && "hidden")}>
         <div className="mx-auto max-w-3xl px-6 py-5">
-          {error && <div className="text-sm text-error">{error}</div>}
+          {error && <div className="text-ui text-error">{error}</div>}
           {!error && !cells && (
-            <div className="flex items-center gap-2 text-sm text-muted">
+            <div className="flex items-center gap-2 text-ui text-muted">
               <Loader2 size={14} className="animate-spin" aria-hidden="true" /> 正在加载…
             </div>
           )}
           {cells?.map((cell) => (
             <div key={cell.index} className="group mb-4">
-              <div className="mb-1 flex items-center gap-2 text-xs text-muted">
+              <div className="mb-1 flex items-center gap-2 text-caption text-muted">
                 <span className="font-mono">[{cell.index}]</span>
                 <span>{cell.language}</span>
                 {isCodeLanguage(cell.language) && kernelActionsEnabled &&
@@ -260,7 +260,7 @@ export function NotebookEditor({
                     // Always visible while running (not hover-gated): a hung
                     // cell must offer a way out without restarting the app.
                     <button
-                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-error hover:bg-surface-2"
+                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-caption text-error hover:bg-surface-2"
                       aria-label={`停止单元格 ${cell.index}`}
                       title="停止服务端隔离执行"
                       onClick={() => void stop()}
@@ -270,7 +270,7 @@ export function NotebookEditor({
                     </button>
                   ) : (
                     <button
-                      className="hidden items-center gap-1 rounded px-1.5 py-0.5 text-xs hover:bg-surface-2 hover:text-text group-hover:flex"
+                      className="hidden items-center gap-1 rounded px-1.5 py-0.5 text-caption hover:bg-surface-2 hover:text-text group-hover:flex"
                       aria-label={`运行单元格 ${cell.index}`}
                       onClick={() => void run(cell)}
                       disabled={running !== null}
@@ -315,7 +315,7 @@ export function NotebookEditor({
           ))}
           {cells && (
             <button
-              className="flex items-center gap-1.5 rounded-input border border-dashed border-border px-3 py-1.5 text-xs text-muted hover:bg-surface-2 hover:text-text"
+              className="flex items-center gap-1.5 rounded-input border border-dashed border-border px-3 py-1.5 text-caption text-muted hover:bg-surface-2 hover:text-text"
               onClick={addCell}
             >
               <Plus size={12} aria-hidden="true" /> 添加单元格

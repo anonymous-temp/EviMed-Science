@@ -103,9 +103,9 @@ export function ProjectSwitcher() {
         <div className="absolute left-3 right-3 z-20 mt-1 rounded-card border border-border bg-surface py-1 shadow-pop">
           <div className="max-h-64 overflow-y-auto">
             {loading && projects.length === 0 && (
-              <div className="px-3 py-2 text-xs text-muted">正在读取项目…</div>
+              <div className="px-3 py-2 text-caption text-muted">正在读取项目…</div>
             )}
-            {error && <div className="px-3 py-2 text-xs text-error">{error}</div>}
+            {error && <div className="px-3 py-2 text-caption text-error">{error}</div>}
             {projects.map((project) => (
               <button
                 key={project.id}
@@ -142,7 +142,7 @@ export function ProjectSwitcher() {
                   }}
                   placeholder="新项目名"
                   aria-label="新项目名"
-                  className="h-7 w-full rounded-input border border-border bg-bg px-2 text-xs text-text outline-none placeholder:text-muted focus:border-accent"
+                  className="h-7 w-full rounded-input border border-border bg-bg px-2 text-caption text-text outline-none placeholder:text-muted focus:border-accent"
                 />
               </div>
             ) : (
@@ -158,7 +158,7 @@ export function ProjectSwitcher() {
             )}
           </div>
 
-          {failure && <div className="px-3 pb-2 pt-1 text-xs text-error">{failure}</div>}
+          {failure && <div className="px-3 pb-2 pt-1 text-caption text-error">{failure}</div>}
         </div>
       )}
     </div>

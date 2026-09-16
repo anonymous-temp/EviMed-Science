@@ -96,17 +96,17 @@ function signInMessage(error: unknown): string {
       <div className="w-full max-w-[420px]">
         <div className="mb-8 flex items-center justify-center gap-2.5">
           <img src={evimedMark} alt="EviMed" className="h-9 w-9" />
-          <span className="font-serif text-2xl font-semibold tracking-tight">EviMed</span>
+          <span className="font-serif text-display font-semibold tracking-tight">EviMed</span>
         </div>
 
         <section className="rounded-card border border-border bg-surface px-7 py-8 shadow-card sm:px-9">
           <div className="text-center">
-            <div className="text-xs font-medium tracking-[0.18em] text-accent">循证医学科研智能体</div>
+            <div className="text-caption font-medium tracking-[0.18em] text-accent">循证医学科研智能体</div>
             <PageTitle page="登录" />
-            <h1 className="mt-3 font-serif text-2xl font-semibold">
+            <h1 className="mt-3 font-serif text-display font-semibold">
               {registering ? "注册 EviMed" : "登录 EviMed"}
             </h1>
-            <p className="mt-2 text-sm leading-6 text-muted">
+            <p className="mt-2 text-ui leading-6 text-muted">
               {registering
                 ? "注册后你会得到一个独立的科研空间，别人看不到你的项目和数据"
                 : "进入你的个人知识库与科研工作空间"}
@@ -116,7 +116,7 @@ function signInMessage(error: unknown): string {
           {methods?.mode === "oidc" ? (
             <a
               href={getWebOidcStartUrl("/app/chat")}
-              className={buttonClasses({ className: "mt-7 h-11 w-full gap-2 text-sm" })}
+              className={buttonClasses({ className: "mt-7 h-11 w-full gap-2 text-ui" })}
             >
               {methods.oidc?.label ?? "统一身份登录"}
               <ArrowRight size={15} aria-hidden="true" />
@@ -124,7 +124,7 @@ function signInMessage(error: unknown): string {
           ) : (
             <form className="mt-7 space-y-4" onSubmit={submit}>
               <div>
-                <label htmlFor="login-username" className="mb-1.5 block text-sm font-medium">账号</label>
+                <label htmlFor="login-username" className="mb-1.5 block text-ui font-medium">账号</label>
                 <div className="relative">
                   <UserRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={15} aria-hidden="true" />
                   <Input
@@ -134,12 +134,12 @@ function signInMessage(error: unknown): string {
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
                     placeholder="请输入账号"
-                    className="h-11 bg-bg pl-10 text-sm"
+                    className="h-11 bg-bg pl-10 text-ui"
                   />
                 </div>
               </div>
               <div>
-                <label htmlFor="login-password" className="mb-1.5 block text-sm font-medium">密码</label>
+                <label htmlFor="login-password" className="mb-1.5 block text-ui font-medium">密码</label>
                 <div className="relative">
                   <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={15} aria-hidden="true" />
                   <Input
@@ -149,17 +149,17 @@ function signInMessage(error: unknown): string {
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="请输入密码"
-                    className="h-11 bg-bg pl-10 text-sm"
+                    className="h-11 bg-bg pl-10 text-ui"
                   />
                 </div>
               </div>
-              <Button type="submit" loading={submitting} className="h-11 w-full gap-2 text-sm">
+              <Button type="submit" loading={submitting} className="h-11 w-full gap-2 text-ui">
                 {registering ? "注册并进入" : "登录"}
               </Button>
               {methods?.selfRegistration && (
                 <button
                   type="button"
-                  className="w-full text-center text-sm text-link hover:underline"
+                  className="w-full text-center text-ui text-link hover:underline"
                   onClick={() => {
                     setRegistering((value) => !value);
                     setError(null);
@@ -171,9 +171,9 @@ function signInMessage(error: unknown): string {
             </form>
           )}
 
-          {error && <div className="mt-4 text-center text-sm text-error" role="alert">{error}</div>}
+          {error && <div className="mt-4 text-center text-ui text-error" role="alert">{error}</div>}
         </section>
-        <p className="mt-5 text-center text-xs text-muted">
+        <p className="mt-5 text-center text-caption text-muted">
           仅用于科研辅助，不替代临床诊疗或专业判断；关键结论需回溯原始证据
         </p>
       </div>

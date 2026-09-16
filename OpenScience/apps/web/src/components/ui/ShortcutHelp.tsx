@@ -86,7 +86,7 @@ export function ShortcutHelp() {
           className="w-full max-w-md rounded-card border border-border bg-surface shadow-pop outline-none"
         >
           <header className="flex items-center gap-2 border-b border-border px-4 py-3">
-            <h2 className="flex-1 text-sm font-medium text-text">键盘快捷键</h2>
+            <h2 className="flex-1 text-ui font-medium text-text">键盘快捷键</h2>
             <button
               onClick={() => setOpen(false)}
               aria-label="关闭快捷键面板"
@@ -101,7 +101,7 @@ export function ShortcutHelp() {
                 key={row.keys}
                 className="flex items-center gap-3 border-b border-border py-2 text-ui last:border-b-0"
               >
-                <kbd className="w-28 shrink-0 rounded bg-surface-2 px-1.5 py-0.5 text-center font-mono text-xs text-text ring-1 ring-border">
+                <kbd className="w-28 shrink-0 rounded bg-surface-2 px-1.5 py-0.5 text-center font-mono text-caption text-text ring-1 ring-border">
                   {row.keys}
                 </kbd>
                 <span className="text-muted">{row.description}</span>

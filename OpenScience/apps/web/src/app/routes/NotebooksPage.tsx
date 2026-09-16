@@ -72,7 +72,7 @@ export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {})
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-8 py-6">
         <div className="flex items-center gap-3">
-          {!embedded && <h1 className="font-serif text-xl text-text">计算笔记本</h1>}
+          {!embedded && <h1 className="font-serif text-display text-text">计算笔记本</h1>}
           <div className="flex-1" />
           <div className="relative" ref={menuRef}>
             <Button
@@ -92,14 +92,14 @@ export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {})
               >
                 <button
                   role="menuitem"
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text hover:bg-surface-2"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-text hover:bg-surface-2"
                   onClick={() => void createNew("python")}
                 >
                   <NotebookPen size={13} className="text-muted" aria-hidden="true" /> Python 笔记本
                 </button>
                 <button
                   role="menuitem"
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text hover:bg-surface-2"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-text hover:bg-surface-2"
                   onClick={() => void createNew("r")}
                 >
                   <NotebookPen size={13} className="text-muted" aria-hidden="true" /> R 笔记本
@@ -108,7 +108,7 @@ export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {})
             )}
           </div>
         </div>
-        <p className="mt-1 text-sm text-muted">
+        <p className="mt-1 text-ui text-muted">
           {hasWebApi
             ? "管理项目中的真实 .ipynb 文件；Python 或 R 单元格在服务端隔离环境中执行，EviMed 可处理同一份文件。"
             : "管理所有科研会话中的 Jupyter 笔记本；单元格在笔记本目录的本地 Python 或 R 内核中执行。"}
@@ -116,7 +116,7 @@ export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {})
 
         <div className="mt-5 space-y-1.5">
           {entries.length === 0 && (
-            <div className="rounded-card border border-border bg-surface p-5 text-sm text-muted">
+            <div className="rounded-card border border-border bg-surface p-5 text-ui text-muted">
               {hasWebApi
                 ? hasWebApi
                   ? "暂无笔记本。可以新建、从知识库上传，或在对话里让 EviMed 生成。"
@@ -135,13 +135,13 @@ export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {})
                 className="flex w-full items-center gap-2.5 rounded-card border border-border bg-surface px-4 py-2.5 text-left hover:bg-surface-2"
               >
                 <NotebookPen size={15} className="shrink-0 text-muted" aria-hidden="true" />
-                <span className="truncate text-sm text-text">{name}</span>
+                <span className="truncate text-ui text-text">{name}</span>
                 {folder && (
                   <span className="max-w-[40%] truncate rounded bg-surface-2 px-1.5 py-0.5 text-caption text-muted">
                     {folder}
                   </span>
                 )}
-                <span className="ml-auto shrink-0 text-xs text-muted">
+                <span className="ml-auto shrink-0 text-caption text-muted">
                   {formatDateTime(e.modified * 1000, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </span>
               </button>

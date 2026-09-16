@@ -177,8 +177,8 @@ export function FilePreviewInspector({
     <div className="flex h-full flex-col">
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <PaneTitlebarInset />
-        <span className="truncate text-sm font-medium text-text">{data.filename}</span>
-        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted">{data.artifact}</span>
+        <span className="truncate text-ui font-medium text-text">{data.filename}</span>
+        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-caption text-muted">{data.artifact}</span>
         {canToggle && (
           <div className="ml-2 flex items-center gap-1 rounded-input bg-surface-2 p-0.5">
             <ToggleBtn active={tab === "preview"} onClick={() => setTab("preview")}>
@@ -216,7 +216,7 @@ export function FilePreviewInspector({
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto bg-surface-2">
         {showHistory && <ProvenancePanel path={data.path} language={data.language} />}
         {!showHistory && loading && (
-          <div className="flex items-center gap-2 p-4 text-sm text-muted">
+          <div className="flex items-center gap-2 p-4 text-ui text-muted">
             <Loader2 size={15} className="animate-spin" aria-hidden="true" /> 正在加载 {data.filename}…
           </div>
         )}
@@ -466,7 +466,7 @@ function Body({
 }
 
 function Note({ text }: { text: string }) {
-  return <div className="p-4 text-sm text-muted">{text}</div>;
+  return <div className="p-4 text-ui text-muted">{text}</div>;
 }
 
 /** Tabular file preview with a Table ↔ Chart toggle. The Chart tab appears only
@@ -539,13 +539,13 @@ export function PreviewError({
     }
   };
 
-  if (!tooLarge) return <div className="p-4 text-sm text-muted">{error}</div>;
+  if (!tooLarge) return <div className="p-4 text-ui text-muted">{error}</div>;
   const ExternalActionIcon = externalActionKind === "download" ? Download : ExternalLink;
   const externalActionDescription =
     externalActionKind === "download" ? "下载后在本地查看" : "使用系统应用打开";
   return (
     <div className="p-4">
-      <div className="rounded-card border border-border bg-surface p-4 text-sm text-muted">
+      <div className="rounded-card border border-border bg-surface p-4 text-ui text-muted">
         <div className="mb-1 font-medium text-text">{filename} 文件过大，无法直接预览</div>
         <p className="mb-3">
           为避免大文件影响页面响应，在线预览设有大小限制。你可以在不加载完整文件的情况下读取结构、规模、样本和关键指标，
@@ -651,7 +651,7 @@ function ToggleBtn({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-1 rounded px-2 py-1 text-xs",
+        "flex items-center gap-1 rounded px-2 py-1 text-caption",
         active ? "bg-surface text-text shadow-card" : "text-muted hover:text-text",
       )}
     >

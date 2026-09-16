@@ -29,7 +29,7 @@ export function WebAuditCard() {
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-body text-text">操作审计</h2>
-          <p className="mt-0.5 text-xs text-muted">该工作区最近的项目操作</p>
+          <p className="mt-0.5 text-caption text-muted">该工作区最近的项目操作</p>
         </div>
         <button
           className="flex h-7 w-7 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-50"

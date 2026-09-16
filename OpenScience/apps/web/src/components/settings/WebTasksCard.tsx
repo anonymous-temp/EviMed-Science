@@ -54,7 +54,7 @@ export function WebTasksCard() {
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-body text-text">后台任务</h2>
-          <p className="mt-0.5 text-xs text-muted">当前项目的任务队列</p>
+          <p className="mt-0.5 text-caption text-muted">当前项目的任务队列</p>
         </div>
         <button
           className="flex h-7 w-7 items-center justify-center rounded-input text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-50"
@@ -85,7 +85,7 @@ export function WebTasksCard() {
                 <span className="hidden max-w-[9rem] truncate font-mono text-caption text-muted sm:block">
                   {task.id}
                 </span>
-                <span className={cn("text-xs font-medium", TONE[task.status])}>
+                <span className={cn("text-caption font-medium", TONE[task.status])}>
                   {task.status.replace("_", " ")}
                 </span>
                 <span className="hidden font-mono text-caption text-muted sm:inline">

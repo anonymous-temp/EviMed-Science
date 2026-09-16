@@ -99,7 +99,7 @@ export function WebAccountCard({
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-body text-text">账户</h2>
-          <p className="mt-0.5 truncate text-xs text-muted">
+          <p className="mt-0.5 truncate text-caption text-muted">
             {account ? `${account.name || account.id} · ${account.id}` : "当前登录会话"}
           </p>
         </div>
@@ -164,7 +164,7 @@ export function WebAccountCard({
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-ui font-medium text-text">删除 {account.id}？</p>
-                    <p className="mt-1 text-xs leading-5 text-muted">
+                    <p className="mt-1 text-caption leading-5 text-muted">
                       将删除该账户及其全部项目、工作区、任务状态、运行时状态与日志。
                     </p>
                   </div>
@@ -199,14 +199,14 @@ export function WebAccountCard({
                 </div>
                 <div className="mt-3 flex justify-end gap-2">
                   <button
-                    className="h-8 rounded-input border border-border px-3 text-xs text-muted hover:bg-surface hover:text-text disabled:opacity-50"
+                    className="h-8 rounded-input border border-border px-3 text-caption text-muted hover:bg-surface hover:text-text disabled:opacity-50"
                     onClick={() => setConfirmingDelete(false)}
                     disabled={deleting}
                   >
                     取消
                   </button>
                   <button
-                    className="h-8 rounded-input bg-error px-3 text-xs font-medium text-error-fg hover:opacity-90 disabled:opacity-50"
+                    className="h-8 rounded-input bg-error px-3 text-caption font-medium text-error-fg hover:opacity-90 disabled:opacity-50"
                     onClick={() => void confirmDelete()}
                     disabled={deleteDisabled}
                     aria-label="确认删除账户"

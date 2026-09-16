@@ -18,7 +18,7 @@ export function DataFlowCard({
     <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
       <header className="border-b border-border px-5 py-3">
         <h2 className="font-serif text-body text-text">隐私与数据流向</h2>
-        <p className="mt-0.5 text-xs text-muted">
+        <p className="mt-0.5 text-caption text-muted">
           {hosted ? "项目工作区的存储与模型提供方流量。" : "哪些数据留在本机，以及究竟哪些会离开本机。"}
         </p>
       </header>
@@ -49,7 +49,7 @@ export function DataFlowCard({
         <div>
           <div className="flex items-center gap-1.5 text-ui font-medium text-text">
             <Send size={14} className="text-warn" aria-hidden="true" /> 发送给你的模型提供方
-            <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-muted">
+            <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-caption text-muted">
               {model ?? "未配置模型"}
             </span>
           </div>
@@ -62,7 +62,7 @@ export function DataFlowCard({
             </li>
             <li>提供方保留哪些数据由其自身数据政策决定。</li>
           </ul>
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-2 text-caption text-muted">
             {hosted
               ? "平台提供的技能与数据连接都经过审核、统一部署；科学数据源只能通过服务端的固定来源网关访问外部数据。"
               : "你添加的技能与 MCP 服务器可能自行发起网络请求 — 安装前请先审查。"}

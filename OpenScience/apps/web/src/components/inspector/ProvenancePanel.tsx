@@ -98,7 +98,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
 
   if (records === null) {
     return (
-      <div className="flex items-center gap-2 p-4 text-sm text-muted">
+      <div className="flex items-center gap-2 p-4 text-ui text-muted">
         <Loader2 size={15} className="animate-spin" aria-hidden="true" /> 正在加载版本记录…
       </div>
     );
@@ -106,7 +106,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
 
   if (records.length === 0) {
     return (
-      <div className="p-4 text-sm text-muted">
+      <div className="p-4 text-ui text-muted">
         暂无版本记录。科研助手每次写入 <span className="font-mono text-text">{path}</span> 时，
         系统都会记录对应的代码、模型和来源对话。
       </div>
@@ -120,7 +120,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
         return (
           <li key={r.version} className="rounded-input border border-border bg-surface">
             <button
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-ui"
               onClick={() => setExpanded(open ? null : r.version)}
               aria-expanded={open}
             >
@@ -129,16 +129,16 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
               ) : (
                 <ChevronRight size={14} className="shrink-0 text-muted" aria-hidden="true" />
               )}
-              <span className="rounded bg-surface-2 px-1.5 text-xs font-medium text-text">
+              <span className="rounded bg-surface-2 px-1.5 text-caption font-medium text-text">
                 v{r.version}
               </span>
-              <span className="font-mono text-xs text-muted">{r.tool}</span>
+              <span className="font-mono text-caption text-muted">{r.tool}</span>
               <span className="flex-1" />
-              <span className="text-xs text-muted">{formatTs(r.ts)}</span>
+              <span className="text-caption text-muted">{formatTs(r.ts)}</span>
             </button>
             {open && (
               <div className="space-y-2 border-t border-border px-3 py-2.5">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                <div className="flex flex-wrap items-center gap-2 text-caption text-muted">
                   {r.model && (
                     <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">{r.model}</span>
                   )}
@@ -192,7 +192,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                       pip freeze · {r.env.packages.count} 个依赖包
                     </div>
                     {lockfile.text === null ? (
-                      <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-muted">
+                      <div className="flex items-center gap-2 px-2.5 py-2 text-caption text-muted">
                         <Loader2 size={12} className="animate-spin" aria-hidden="true" /> 正在加载…
                       </div>
                     ) : (
@@ -205,7 +205,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                 {r.content ? (
                   <CodeViewer code={r.content} language={language} />
                 ) : (
-                  <div className={cn("text-xs text-muted")}>
+                  <div className={cn("text-caption text-muted")}>
                     此版本未记录文本内容（可能是二进制文件或由代码运行生成）。
                   </div>
                 )}

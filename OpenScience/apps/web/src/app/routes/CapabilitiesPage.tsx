@@ -99,7 +99,7 @@ export function CapabilitiesPage() {
           <div className="max-w-2xl">
             {/* `uppercase` on a line that is already Chinese did nothing to
               * the Chinese and shouted the one English word in it. */}
-            <div className="mb-2 flex items-center gap-2 text-xs font-medium tracking-[0.16em] text-accent">
+            <div className="mb-2 flex items-center gap-2 text-caption font-medium tracking-[0.16em] text-accent">
               <Bot size={14} aria-hidden="true" /> EviMed 能力目录
             </div>
             {/* 「能力模板」 read as document templates. These are the fifteen
@@ -111,8 +111,8 @@ export function CapabilitiesPage() {
               * than a binding; that is still true, and the sentence below says
               * it, which is where it belongs. */}
             <PageTitle page="科研能力" />
-            <h1 className="font-serif text-2xl font-semibold tracking-tight text-text">科研能力</h1>
-            <p className="mt-2 text-sm leading-6 text-muted">
+            <h1 className="font-serif text-display font-semibold tracking-tight text-text">科研能力</h1>
+            <p className="mt-2 text-ui leading-6 text-muted">
               选一项能力，它会把题面填进对话框并点名该能力；你可以随意修改，也可以在同一次对话里接着要别的产出。
               这是建议，不是绑定。
             </p>
@@ -127,14 +127,14 @@ export function CapabilitiesPage() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="搜索科研能力"
-                className="h-9 w-full rounded-input border border-border bg-surface pl-9 pr-3 text-sm text-text outline-none placeholder:text-muted focus:border-accent"
+                className="h-9 w-full rounded-input border border-border bg-surface pl-9 pr-3 text-ui text-text outline-none placeholder:text-muted focus:border-accent"
               />
             </label>
             <select
               aria-label="按分类筛选"
               value={category}
               onChange={(event) => setCategory(event.target.value)}
-              className="h-9 rounded-input border border-border bg-surface px-3 text-sm text-text outline-none focus:border-accent"
+              className="h-9 rounded-input border border-border bg-surface px-3 text-ui text-text outline-none focus:border-accent"
             >
               <option value="all">全部分类</option>
               {categories.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -149,7 +149,7 @@ export function CapabilitiesPage() {
             * the alternative to a retry button is asking the reader to reload
             * the whole app. */}
           {!loading && error && (
-            <div role="alert" className="my-5 flex flex-wrap items-center gap-3 rounded-input border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
+            <div role="alert" className="my-5 flex flex-wrap items-center gap-3 rounded-input border border-error/30 bg-error/10 px-4 py-3 text-ui text-error">
               <span className="min-w-0 flex-1 break-words">无法加载能力目录：{error}</span>
               <Button size="sm" variant="ghost" onClick={() => setReloads((value) => value + 1)}>
                 <RefreshCw size={12} aria-hidden /> 重试
@@ -186,22 +186,22 @@ function AgentRow({ agent, onOpen }: { agent: WebResearchAgent; onOpen: () => vo
       aria-label={`使用${ui.title}能力`}
       className="group grid w-full grid-cols-[3rem_minmax(0,1fr)_auto] gap-4 py-6 text-left transition-colors hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
     >
-      <div className="flex h-9 w-9 items-center justify-center rounded-input bg-surface-2 font-mono text-xs font-semibold tracking-wide text-accent ring-1 ring-border">
+      <div className="flex h-9 w-9 items-center justify-center rounded-input bg-surface-2 font-mono text-caption font-semibold tracking-wide text-accent ring-1 ring-border">
         {ui.code}
       </div>
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted">
           <span className="font-medium tracking-[0.12em] text-accent">{ui.category}</span>
           <span className="inline-flex items-center gap-1"><Clock3 size={12} aria-hidden="true" /> 约 {ui.estimatedMinutes[0]}–{ui.estimatedMinutes[1]} 分钟</span>
           {supportsFiles && <span className="inline-flex items-center gap-1"><FileCheck2 size={12} aria-hidden="true" /> 支持知识库资料</span>}
         </div>
         <h2 className="mt-2 text-title font-semibold text-text">{ui.title}</h2>
-        <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">{ui.description}</p>
+        <p className="mt-1 max-w-3xl text-ui leading-6 text-muted">{ui.description}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {outputLabels.map((label) => (
             <span key={label} className="rounded-full bg-surface-2 px-2 py-0.5 text-caption font-medium text-muted ring-1 ring-border">{label}</span>
           ))}
-          <span className="truncate text-xs text-muted/80">示例：{ui.starterPrompts[0]}</span>
+          <span className="truncate text-caption text-muted/80">示例：{ui.starterPrompts[0]}</span>
         </div>
       </div>
       <div className="flex h-full items-center px-3 text-muted transition-transform group-hover:translate-x-1 group-hover:text-accent">

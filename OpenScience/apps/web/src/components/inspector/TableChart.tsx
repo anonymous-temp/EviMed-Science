@@ -25,7 +25,7 @@ export function TableChart({ table }: { table: ParsedTable }) {
   const [ys, setYs] = useState<number[]>(def?.yIndexes ?? []);
 
   if (!def) {
-    return <div className="p-4 text-sm text-muted">没有可用于绘图的数值列。</div>;
+    return <div className="p-4 text-ui text-muted">没有可用于绘图的数值列。</div>;
   }
 
   const numericCols = cols.filter((c) => c.numeric);

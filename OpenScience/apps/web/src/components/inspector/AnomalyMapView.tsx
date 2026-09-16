@@ -22,7 +22,7 @@ export function AnomalyMapView({ filename, text }: { filename: string; text: str
   if (parsed.error || !parsed.grid) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <div className="flex max-w-sm items-start gap-2 rounded-card border border-border bg-surface p-4 text-sm text-muted">
+        <div className="flex max-w-sm items-start gap-2 rounded-card border border-border bg-surface p-4 text-ui text-muted">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" aria-hidden="true" />
           <span>无法读取此异常网格——{parsed.error ?? "未知格式"}。</span>
         </div>

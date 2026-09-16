@@ -111,10 +111,10 @@ export function CommandPalette() {
           <Command.Input
             ref={inputRef}
             placeholder="搜索操作…"
-            className="w-full border-b border-border bg-transparent px-4 py-3 text-sm text-text outline-none placeholder:text-muted"
+            className="w-full border-b border-border bg-transparent px-4 py-3 text-ui text-text outline-none placeholder:text-muted"
           />
           <Command.List className="max-h-80 overflow-y-auto p-2">
-            <Command.Empty className="px-3 py-6 text-center text-sm text-muted">
+            <Command.Empty className="px-3 py-6 text-center text-ui text-muted">
               未找到匹配操作。
             </Command.Empty>
             <PaletteGroup heading="导航" items={navigation} />
@@ -130,18 +130,18 @@ function PaletteGroup({ heading, items }: { heading: string; items: Action[] }) 
   return (
     <Command.Group
       heading={heading}
-      className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted"
+      className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted"
     >
       {items.map((a) => (
         <Command.Item
           key={a.id}
           value={a.label}
           onSelect={a.run}
-          className="flex cursor-pointer items-center gap-3 rounded-input px-3 py-2 text-sm text-text data-[selected=true]:bg-surface-2"
+          className="flex cursor-pointer items-center gap-3 rounded-input px-3 py-2 text-ui text-text data-[selected=true]:bg-surface-2"
         >
           <span className="text-muted">{a.icon}</span>
           {a.label}
-          {a.hint && <span className="ml-auto text-xs text-muted">{a.hint}</span>}
+          {a.hint && <span className="ml-auto text-caption text-muted">{a.hint}</span>}
         </Command.Item>
       ))}
     </Command.Group>

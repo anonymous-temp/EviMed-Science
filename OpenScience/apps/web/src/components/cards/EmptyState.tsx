@@ -24,8 +24,8 @@ export function EmptyState({
   return (
     <div className={cn("flex flex-col items-center justify-center px-6 py-10 text-center", className)}>
       {Icon && <Icon size={22} strokeWidth={1.5} className="text-muted" aria-hidden />}
-      <p className={cn("text-sm font-medium text-text", Icon && "mt-2")}>{title}</p>
-      {description && <div className="mt-1 max-w-sm text-xs leading-5 text-muted">{description}</div>}
+      <p className={cn("text-ui font-medium text-text", Icon && "mt-2")}>{title}</p>
+      {description && <div className="mt-1 max-w-sm text-caption leading-5 text-muted">{description}</div>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
