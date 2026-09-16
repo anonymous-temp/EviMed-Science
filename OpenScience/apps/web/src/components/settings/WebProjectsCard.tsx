@@ -66,6 +66,9 @@ export function WebProjectsCard({
     try {
       const project = await createWebProject(id, name);
       setProjects(await listWebProjects());
+      // The sidebar's switcher reads the shared store; without this it kept
+      // the list from before the create (2026-09-16 review, D2).
+      void useProjectStore.getState().load();
       setNewId("");
       setNewName("");
       await switchProject(project);
@@ -100,6 +103,7 @@ export function WebProjectsCard({
       await deleteWebProject(project.id);
       const items = await listWebProjects();
       setProjects(items);
+      void useProjectStore.getState().load();
       setPendingDelete(null);
       if (currentId === project.id) {
         const nextProject = items.find((item) => item.id === "default") ?? items[0];

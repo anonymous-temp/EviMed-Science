@@ -845,6 +845,7 @@ export function setWebProjectId(projectId: string): void {
 }
 
 function clearWebSessionState(): void {
+  webMeShared = null;
   webCsrfToken = null;
   webCsrfRefresh = null;
   // A ceiling belongs to the account that hit it, so it leaves with the session.
@@ -861,6 +862,7 @@ function notifyWebSessionEnded(): void {
 }
 
 function notifyWebSessionStarted(): void {
+  invalidateWebMe();
   if (typeof window !== "undefined") window.dispatchEvent(new Event(WEB_SESSION_STARTED_EVENT));
 }
 
@@ -1112,7 +1114,7 @@ export async function releaseWebRuntimeUiFrame(frameId: string): Promise<void> {
   await parseApiResponse(res);
 }
 
-export async function fetchWebMe(): Promise<{
+export interface WebMe {
   user: { id: string; name: string; tenantId?: string };
   tenant?: { id: string; model: "individual-account"; role: "owner" };
   /** Whether this deployment offers this account the operations page. The
@@ -1123,28 +1125,51 @@ export async function fetchWebMe(): Promise<{
   projects: WebProject[];
   csrfToken?: string;
   runtime?: WebRuntimeProfile;
-} | null> {
+}
+
+/** How long one answer to `/api/me` serves every caller that asks for the same project. */
+const WEB_ME_REUSE_MS = 2_000;
+let webMeShared: { projectId: string; at: number; value: Promise<WebMe | null> } | null = null;
+
+/** Forget the shared `/api/me` answer: the account, its session or its projects changed. */
+export function invalidateWebMe(): void {
+  webMeShared = null;
+}
+
+/**
+ * The signed-in account and the project it resolved.
+ *
+ * Shared, briefly (2026-09-16 review, D2): one navigation asked `/api/me` up to
+ * four times — the shell's auth gate, the chat route, the account page and the
+ * project store each on their own. Callers asking for the same project within
+ * two seconds share one request (and one in-flight promise); a failure is never
+ * shared, and a login, logout or project change forgets the answer at once.
+ */
+export async function fetchWebMe(): Promise<WebMe | null> {
   if (!hasWebApi) return null;
+  const projectId = getWebProjectId();
+  const now = Date.now();
+  if (webMeShared && webMeShared.projectId === projectId && now - webMeShared.at < WEB_ME_REUSE_MS) {
+    return webMeShared.value;
+  }
+  const value = readWebMe(projectId);
+  const entry = { projectId, at: now, value };
+  webMeShared = entry;
+  value.catch(() => { if (webMeShared === entry) webMeShared = null; });
+  return value;
+}
+
+async function readWebMe(projectId: string): Promise<WebMe | null> {
   const res = await fetchWithWebAuth(apiUrl("/me"), {
     credentials: "include",
-    headers: { "X-Open-Science-Project": getWebProjectId() },
+    headers: { "X-Open-Science-Project": projectId },
   });
   if (res.status === 401) {
     clearWebSessionState();
     return null;
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const body = (await res.json()) as {
-    data: {
-      user: { id: string; name: string; tenantId?: string };
-      tenant?: { id: string; model: "individual-account"; role: "owner" };
-      operator?: boolean;
-      project: WebProject;
-      projects: WebProject[];
-      csrfToken?: string;
-      runtime?: WebRuntimeProfile;
-    };
-  };
+  const body = (await res.json()) as { data: WebMe };
   rememberCsrfToken(body.data);
   rememberRuntimeProfile(body.data.runtime);
   return body.data;
@@ -1219,7 +1244,9 @@ export async function createWebProject(id: string, name = id): Promise<WebProjec
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id, name }),
   });
-  return parseApiResponse<WebProject>(res);
+  const created = await parseApiResponse<WebProject>(res);
+  invalidateWebMe();
+  return created;
 }
 
 /**
@@ -1527,6 +1554,7 @@ export async function deleteWebProject(projectId: string): Promise<void> {
     body: JSON.stringify({ confirm: projectId }),
   });
   await parseApiResponse<{ id: string }>(res);
+  invalidateWebMe();
 }
 
 export async function deleteWebAccount(confirm: string, password?: string): Promise<void> {
