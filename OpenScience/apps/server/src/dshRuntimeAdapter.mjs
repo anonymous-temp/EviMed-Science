@@ -176,18 +176,51 @@ export function sessionListItems(value) {
 }
 
 /**
- * The entries of a `subagents/list` answer.
+ * The child rows of a `subagents/list` answer.
  *
- * A separate reader from `sessionListItems` rather than a shared one, because
- * the two are separate wire shapes that happen to agree today; a reader named
- * after one of them and used for both is how a divergence upstream becomes a
- * silent empty list. One reader per shape is the same rule, applied twice.
+ * A separate reader from `sessionListItems`, and it had to be: the two shapes do
+ * NOT agree. `session/list` answers `{ items }`; this one answers
+ * `SubagentCatalog { entries, parentAvailable }`, and its rows key the child on
+ * `id` — not `childSessionId`, which is the field name the *address* uses. This
+ * reader was first written from the address's vocabulary and consequently
+ * matched nothing, which is invisible: an empty catalogue and a catalogue that
+ * cannot be read look the same from here.
+ *
+ * `kind: 'diagnostic'` rows are dropped. They carry an id and no mode, and they
+ * exist precisely to say the kernel could not read that child — treating one as
+ * a child would compose an address the kernel then refuses.
+ *
+ * `items` and a bare array are still accepted: the pin is a developer preview,
+ * and a reader that only knows the shape it was born with fails closed at the
+ * next rc for no reason.
  *
  * @param {any} value @returns {Record<string, any>[]}
  */
 export function subagentListItems(value) {
-  if (Array.isArray(value)) return value;
-  return Array.isArray(value?.items) ? value.items : [];
+  const rows = Array.isArray(value) ? value
+    : Array.isArray(value?.entries) ? value.entries
+      : Array.isArray(value?.items) ? value.items
+        : [];
+  return rows.filter((row) => row && typeof row === "object" && row.kind !== "diagnostic");
+}
+
+/**
+ * The address one catalogue row must be read at, or null when the row does not
+ * say.
+ *
+ * Never composed from a guess. `validateAddress` checks the mode against the
+ * child's own descriptor and refuses a mismatch as `subagent/unauthorized` —
+ * which is indistinguishable, from the reader's side, from the child being
+ * gone.
+ *
+ * @param {string} parentSessionId @param {any} row
+ * @returns {{kind: 'subagent', parentSessionId: string, childSessionId: string, mode: string} | null}
+ */
+export function subagentAddress(parentSessionId, row) {
+  const childSessionId = String(row?.id ?? row?.childSessionId ?? "");
+  const mode = String(row?.mode ?? "");
+  if (!childSessionId || (mode !== "one-shot" && mode !== "continuable")) return null;
+  return { kind: "subagent", parentSessionId: String(parentSessionId), childSessionId, mode };
 }
 
 export class DshRuntimeAdapter {

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { subagentAddress, subagentListItems } from "../src/dshRuntimeAdapter.mjs";
 import {
   PreStopTranscripts,
   TRANSCRIPT_MISSING_REASONS,
@@ -74,6 +75,8 @@ class FakeRuntime {
 
   async subagentCatalogue(_project, parentSessionId) {
     this.catalogueCalls.push(parentSessionId);
+    // The manager unwraps `SubagentCatalog` before this point, so the double
+    // hands back rows — but they are the kernel's rows, keyed on `id`.
     return this.catalogue.get(parentSessionId) ?? [];
   }
 
@@ -119,9 +122,14 @@ function delegatingRun() {
     ses_child_a: transcript("ses_child_a", [message(3, "search"), message(4, "quote")]),
     ses_child_b: transcript("ses_child_b", [message(5, "parse the source")]),
   }, {
+    // `SubagentListEntry` as the kernel declares it (dsh-subagent
+    // control-types.d.ts, 0.1.5-rc.2): the child id is `id`, NOT
+    // `childSessionId` — that name belongs to the ADDRESS. Written from the
+    // address's vocabulary, this reader matched nothing, and an unreadable
+    // catalogue is indistinguishable from an empty one.
     ses_root: [
-      { childSessionId: "ses_child_a", mode: "one-shot" },
-      { childSessionId: "ses_child_b", mode: "one-shot" },
+      { kind: "child", id: "ses_child_a", mode: "one-shot", activity: "inactive", hasChildren: false },
+      { kind: "child", id: "ses_child_b", mode: "one-shot", activity: "inactive", hasChildren: false },
     ],
   });
 }
@@ -168,6 +176,55 @@ test("a run's own session and both of its subagent sessions are collected whole 
     // would restart the very thing whose exit ended the run.
     assert.deepEqual([...new Set(runtime.calls.map((call) => call.options.wake))], [false]);
   });
+});
+
+test("the subagent catalogue is read in the kernel's own vocabulary", () => {
+  // Transcribed from `@deepseek-ai/dsh-subagent` 0.1.5-rc.2,
+  // `lib/types/control-types.d.ts` — not inferred:
+  //
+  //   interface SubagentCatalog { entries: readonly SubagentListEntry[]; parentAvailable: boolean }
+  //   type SubagentListEntry =
+  //       { kind: 'child'; id: SessionId; activity; hasChildren } & ({ mode: 'one-shot' } | { mode: 'continuable' })
+  //     | { kind: 'diagnostic'; id: SessionId; reason }
+  //
+  // Two names in that block are traps. The envelope is `entries`, where
+  // `session/list` uses `items`; and the child is `id`, where the ADDRESS calls
+  // the same value `childSessionId`. Written from the address's vocabulary this
+  // reader matched nothing, every delegated child fell back to an address the
+  // kernel refuses, and the only visible symptom was `child_unreadable` — which
+  // is also what a genuinely missing child looks like.
+  const catalog = {
+    parentAvailable: true,
+    entries: [
+      { kind: "child", id: "child-a", mode: "one-shot", activity: "inactive", hasChildren: false },
+      { kind: "child", id: "child-b", mode: "continuable", label: "appraisal", activity: "running", hasChildren: false },
+      { kind: "diagnostic", id: "child-c", reason: "unavailable" },
+    ],
+  };
+  const rows = subagentListItems(catalog);
+  assert.deepEqual(rows.map((row) => row.id), ["child-a", "child-b"], "a diagnostic row is not a child");
+
+  assert.deepEqual(subagentAddress("parent-1", rows[0]), {
+    kind: "subagent", parentSessionId: "parent-1", childSessionId: "child-a", mode: "one-shot",
+  });
+  assert.deepEqual(subagentAddress("parent-1", rows[1]), {
+    kind: "subagent", parentSessionId: "parent-1", childSessionId: "child-b", mode: "continuable",
+  });
+
+  // A row that does not state a mode yields no address. The kernel checks the
+  // mode against the child's own descriptor and refuses a mismatch as
+  // `subagent/unauthorized`, which reads exactly like the child being gone — so
+  // a guess here would be indistinguishable from the bug it replaced.
+  assert.equal(subagentAddress("parent-1", { kind: "child", id: "child-d" }), null);
+  assert.equal(subagentAddress("parent-1", { kind: "child", id: "child-d", mode: "whatever" }), null);
+  assert.equal(subagentAddress("parent-1", { kind: "child", mode: "one-shot" }), null);
+
+  // Older and newer envelopes are tolerated rather than assumed away: the pin
+  // is a developer preview and a reader that only knows one shape fails closed
+  // at the next rc for no reason.
+  assert.equal(subagentListItems({ items: catalog.entries }).length, 2);
+  assert.equal(subagentListItems(catalog.entries).length, 2);
+  assert.deepEqual(subagentListItems(null), []);
 });
 
 test("a subagent session is read at the address the kernel publishes, not at its own id", async () => {
@@ -468,8 +525,8 @@ test("collection follows a grandchild session that a subagent announced", async 
       }),
       ses_grandchild: transcript("ses_grandchild", [message(3, "the work happened here")]),
     }, {
-      ses_root: [{ childSessionId: "ses_child_a", mode: "one-shot" }],
-      ses_child_a: [{ childSessionId: "ses_grandchild", mode: "one-shot" }],
+      ses_root: [{ kind: "child", id: "ses_child_a", mode: "one-shot" }],
+      ses_child_a: [{ kind: "child", id: "ses_grandchild", mode: "one-shot" }],
     });
 
     const sessions = await collectRunTranscripts(runtime, project, { id: "run_deep", sessionId: "ses_root" });

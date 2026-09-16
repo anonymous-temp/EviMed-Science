@@ -8,6 +8,7 @@ import pathlib
 import tempfile
 import threading
 import unittest
+import urllib.parse
 
 
 RUNNER_FILE = pathlib.Path(__file__).resolve().parent / "run_paired.py"
@@ -46,6 +47,12 @@ class FakeBackend(runner.Transport):
         self.requests = []
         self.dispatches = []
         self.sessions = {}
+        # What each research session was bound to. The real server routes a
+        # specialist binding by `session-binding` and an open-domain one through
+        # the router; this double does the same, so a runner that binds wrongly
+        # produces a mis-routed run here exactly as it did in production.
+        self.bindings = {}
+        self.registry = {"test-capability": {"id": "test-capability", "version": "1.0.0", "runtimeAgent": "evimed-test-capability"}}
         self.runs = {}
         self.counter = 0
         # The trial the server currently holds for the eval project, so a test
@@ -104,7 +111,11 @@ class FakeBackend(runner.Transport):
             return 200, {"data": None}, {}
         if path.endswith("/api/runtime/sessions") and method == "POST":
             return 200, {"data": {"id": self._next("ses")}}, {}
+        if path == "/api/agents" and method == "GET":
+            return 200, {"data": list(self.registry.values())}, {}
         if path.startswith("/api/research-sessions/"):
+            with self.lock:
+                self.bindings[path.rsplit("/", 1)[-1]] = dict(body or {})
             return 200, {"data": {"ok": True}}, {}
         if path == "/api/agent-runs/dispatch":
             brief_id = self.prompts[body["text"]]
@@ -112,9 +123,13 @@ class FakeBackend(runner.Transport):
             run_id = self._next("run")
             outcome = dict(self.outcomes[(brief_id, arm)])
             with self.lock:
+                binding = self.bindings.get(body["sessionId"]) or {}
+                routed = ({"effectiveAgentId": binding.get("agentId"), "effectiveRouteReason": "session-binding"}
+                          if binding.get("mode") == "specialist"
+                          else {"effectiveAgentId": "open-domain-answer", "effectiveRouteReason": "unrouted:open-domain"})
                 self.dispatches.append({"runId": run_id, "briefId": brief_id, "arm": arm, "sessionId": body["sessionId"]})
                 self.sessions[body["sessionId"]] = (brief_id, arm)
-                self.runs[run_id] = {"id": run_id, **outcome}
+                self.runs[run_id] = {"id": run_id, **routed, **outcome}
             return 200, {"data": {"id": run_id}}, {}
         if path == "/api/agent-runs":
             with self.lock:
@@ -1101,6 +1116,97 @@ class ZeroCostIsNotAMeasurement(unittest.TestCase):
         without = runner.score_cell({"durationMs": 500}, {}, None, budget, None)
         self.assertAlmostEqual(with_cost["efficiency"], 0.75, places=6)
         self.assertAlmostEqual(without["efficiency"], 0.5, places=6)
+
+
+class EveryCellMeasuresTheCapabilityItNames(unittest.TestCase):
+    """The capability a cell measures is bound, not left to the router.
+
+    On 2026-09-16 the runner bound each session as open-domain and sent the
+    brief as text. The router sent three of the first four
+    `clinical-evidence-synthesis` cells to `open-domain-answer` — twice because
+    the LLM classifier returned no verdict — and those runs deliver no files, so
+    the judge never ran and every score was a fallback constant identical across
+    the arms.
+    """
+
+    def setUp(self):
+        self.stack = tempfile.TemporaryDirectory()
+        self.addCleanup(self.stack.cleanup)
+        self.harness = Harness(self.stack.name, ["fam-001-a"], families={"fam-001-a": "fam"})
+        self.outcomes = {("fam-001-a", "baseline"): succeeded(), ("fam-001-a", "candidate"): succeeded()}
+        self.artifacts = {"deliverables/report.md": "# Report\n\nA finding with a citation [PMID:1]."}
+
+    def judge(self, _system, _user):
+        return '{"usefulness": 4, "correctness": 4, "evidenceHandling": 4, "safetyFraming": 4}'
+
+    def test_each_session_is_bound_to_the_capability_at_its_current_registry_version(self):
+        backend = FakeBackend(self.harness.briefs, self.outcomes, artifacts=self.artifacts)
+        backend.registry["test-capability"]["version"] = "7.3.1"
+        cells = self.harness.make_runner(backend, judge_call=self.judge).execute()
+        self.assertTrue(backend.bindings, "no session was bound at all")
+        for binding in backend.bindings.values():
+            self.assertEqual(binding, {"mode": "specialist", "agentId": "test-capability", "agentVersion": "7.3.1"},
+                             "the version is read from the registry, not declared in the config")
+        for cell in cells:
+            self.assertNotIn("excluded", cell, "a correctly bound cell is a measurement")
+            self.assertEqual(cell["capability"], {"id": "test-capability", "version": "7.3.1"})
+
+    def test_a_run_that_executed_some_other_capability_is_excluded_rather_than_averaged_in(self):
+        backend = FakeBackend(self.harness.briefs, self.outcomes, artifacts=self.artifacts)
+        # The server ignored the binding and routed the text anyway.
+        original = backend.request
+
+        def misrouting(method, url, body=None, headers=None, timeout=60):
+            status, payload, response_headers = original(method, url, body=body, headers=headers, timeout=timeout)
+            if urllib.parse.urlsplit(url).path == "/api/agent-runs" and method == "GET":
+                for run in payload["data"]:
+                    run["effectiveAgentId"] = "open-domain-answer"
+                    run["effectiveRouteReason"] = "unrouted:open-domain:classifier:empty_content"
+            return status, payload, response_headers
+
+        backend.request = misrouting
+        cells = self.harness.make_runner(backend, judge_call=self.judge).execute()
+        for cell in cells:
+            self.assertEqual(cell["excluded"]["reason"], "route_not_pinned")
+            self.assertIn("open-domain-answer", cell["excluded"]["detail"])
+            self.assertIn("classifier:empty_content", cell["excluded"]["detail"])
+
+    def test_a_capability_the_registry_does_not_hold_stops_the_cell_with_its_name(self):
+        backend = FakeBackend(self.harness.briefs, self.outcomes, artifacts=self.artifacts)
+        backend.registry.clear()
+        cells = self.harness.make_runner(backend, judge_call=self.judge).execute()
+        for cell in cells:
+            self.assertFalse(cell["complete"])
+            self.assertIn("test-capability", cell["error"])
+
+    def test_a_cell_the_judge_did_not_score_is_not_a_measurement_whoever_ran_the_batch(self):
+        # Legacy-arm batch (no private grant), judge enabled, a run that
+        # delivered nothing to read: until 2026-09-16 this was scored with
+        # `score_cell`'s fallback constants and counted.
+        outcomes = {key: succeeded(artifacts=[]) for key in self.outcomes}
+        backend = FakeBackend(self.harness.briefs, outcomes, artifacts=self.artifacts)
+        self.harness.config["judge"] = {"enabled": True, "model": "judge-model"}
+        cells = self.harness.make_runner(backend, judge_call=self.judge).execute()
+        for cell in cells:
+            self.assertEqual(cell["excluded"], {"reason": "judge_unavailable", "detail": "no delivered file to judge"})
+
+
+class APartialTranscriptSaysWhy(unittest.TestCase):
+    def test_the_exclusion_names_the_missing_session_and_the_kernels_reason(self):
+        stack = tempfile.TemporaryDirectory()
+        self.addCleanup(stack.cleanup)
+        harness = Harness(stack.name, ["fam-001-a"], families={"fam-001-a": "fam"})
+        refusal = "runtime_session_error: subagent Sessions require their durable parent address"
+        partial = succeeded(transcript={
+            "path": ".openscience/transcripts/run.jsonl", "completeness": "partial", "bytes": 10,
+            "sha256": "a" * 64, "messages": 27,
+            "missing": [{"sessionId": "child-1", "fromSeq": 0, "reason": "child_unreadable", "detail": refusal}],
+        })
+        outcomes = {("fam-001-a", "baseline"): partial, ("fam-001-a", "candidate"): partial}
+        cells = harness.make_runner(FakeBackend(harness.briefs, outcomes)).execute()
+        for cell in cells:
+            self.assertEqual(cell["excluded"]["reason"], "transcript_partial")
+            self.assertEqual(cell["excluded"]["detail"], f"child-1: child_unreadable ({refusal})")
 
 
 class OutageInterruptsRatherThanScores(unittest.TestCase):

@@ -1,0 +1,108 @@
+{
+  "id": "memory-ablation-v5",
+  "capability": "clinical-evidence-synthesis",
+  "briefsFile": "evals/clinical-review-quality/briefs.json",
+  "hiddenDir": "evals/clinical-review-quality/hidden",
+  "briefs": [
+    "review-001-empa-kidney-report-family",
+    "review-003-mimic-overlap-unknown"
+  ],
+  "repeats": 3,
+  "seed": 20260908,
+  "concurrency": 1,
+  "margin": 0.02,
+  "bootstrapSamples": 2000,
+  "timeoutMinutes": 90,
+  "pollSeconds": 5,
+  "budget": {
+    "costCap": 12.0,
+    "latencyCapMs": 5400000
+  },
+  "project": {
+    "id": "eval-memory-ablation-v5",
+    "name": "记忆消融配对评测 v5"
+  },
+  "fixtures": [],
+  "judge": {
+    "enabled": true,
+    "model": "deepseek-v4-pro"
+  },
+  "baseline": {
+    "methodSnapshot": {
+      "id": "memory-off",
+      "records": [
+        {
+          "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+          "expectedVersion": 76,
+          "_key": "preference.response_length",
+          "status": "pending"
+        },
+        {
+          "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+          "expectedVersion": 70,
+          "_key": "preference.output_language",
+          "status": "pending"
+        },
+        {
+          "id": "jY7Dttzw4nQbQUwdXPYwKU",
+          "expectedVersion": 70,
+          "_key": "profile.work_domain",
+          "status": "pending"
+        },
+        {
+          "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+          "expectedVersion": 69,
+          "_key": "behavior.question_format_pico",
+          "status": "pending"
+        }
+      ],
+      "capabilitySkillsDir": null
+    },
+    "compactionPolicy": "basic"
+  },
+  "candidate": {
+    "methodSnapshot": {
+      "id": "memory-on",
+      "records": [
+        {
+          "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+          "expectedVersion": 76,
+          "_key": "preference.response_length",
+          "status": "active"
+        },
+        {
+          "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+          "expectedVersion": 70,
+          "_key": "preference.output_language",
+          "status": "active"
+        },
+        {
+          "id": "jY7Dttzw4nQbQUwdXPYwKU",
+          "expectedVersion": 70,
+          "_key": "profile.work_domain",
+          "status": "active"
+        },
+        {
+          "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+          "expectedVersion": 69,
+          "_key": "behavior.question_format_pico",
+          "status": "active"
+        }
+      ],
+      "capabilitySkillsDir": null
+    },
+    "compactionPolicy": "basic"
+  },
+  "_note": "The memory ablation: the same briefs with the project's four user-scope memory records active and with them parked. EvoMemBench's finding is the hypothesis worth testing — memory helps hard tasks and can hurt easy ones — so the two arms are expected to differ by brief rather than uniformly.",
+  "_supersedes": "SUPERSEDES memory-ablation-v4, stopped at 3 of 12 cells for two reasons, only the first of which v4 was launched to test. (1) The subagent-transcript fix in 81b40910b did not work: it keyed the kernel's catalogue on names the kernel does not publish. `subagents/list` answers `SubagentCatalog { entries, parentAvailable }` with rows keyed on `id`; the reader looked for `{ items }` and `childSessionId`, matched nothing, and every delegated child fell back to the address the kernel refuses. The one v4 cell that delegated came back `transcript_partial` with the kernel's refusal in its gap detail. Its test double had been written in the same wrong vocabulary, so the tests passed against the broken reader; they now fail against it. (2) THE ROUTE WAS NEVER PINNED, and this is the larger finding. The runner bound every session `{mode: 'open-domain'}` and sent the brief as text, so the capability each cell measured was whatever the router chose that minute. v4: 3 of its first 4 runs went to `open-domain-answer`, twice with `classifier:empty_content`. Those runs deliver no files, so the judge never ran, and the harness scored them with fallback constants identical across the arms instead of excluding them.",
+  "_projectIsNew": "Fresh project again. `eval-memory-ablation-v4` holds 0 records - the per-project extraction exclusion held all batch - but v5 is a different measurement procedure (pinned route, required judge), and a fresh id keeps the two attributable. Check before reusing: group `evimed_memory.records` by `scope_id`.",
+  "_seedingNote": "Why this account and not the operator's. `sxjxw-research` has ten user-scope records with `origin: explicit` and `importance: 0.75`, and every one of them is a whole task brief that the extractor's deterministic fallback stored verbatim (2026-09-06; root cause fixed 2026-09-15, the rows left for the operator to decide about). An ablation on those would measure whether injecting a stale aripiprazole brief into an unrelated review helps, which is not the question. Four clean records is a thin ablation and the report should say so; it is not a thin ablation dressed as a thick one.",
+  "_cost": "2 briefs x 2 arms x 3 repeats = 12 clinical-evidence-synthesis runs at concurrency 1, bounded by timeoutMinutes 90 and the $12 costCap. Note that the per-run cost this harness reads is NOT trustworthy on this deployment: every row of `evimed_usage.model_requests` has `run_id` NULL, because an ordinary run's model calls carry no run id, so `GET /api/runs/:id/usage` answers zero for every run. The runner now records such a cost as `unattributed` rather than as free, and the efficiency dimension rests on latency alone until the attribution is fixed.",
+  "_sharedRecord": "The baseline arm is not zero memory, and the report must say so. `cdss-access` holds five user-scope durable records; four are the ones these arms toggle, and the fifth is `behavior.structured_review_brief` (origin `explicit`, importance 0.9, active) — the record the extractor created during the 2026-09-15 batch by learning the evaluator's own brief format. It is left alone at the operator's instruction, so it is recalled in BOTH arms and is constant between them: it does not bias the contrast, but it does mean the baseline reads one durable record rather than none. Decide about that row before any batch that wants a true zero-memory arm.",
+  "_budgetArithmetic": "What the arms will actually deliver, stated before the run so the report cannot be fitted to it. The deployment recalls at most 8 memories per dispatch (OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT) and reserves half of that — 4 slots, 10 000 characters — for durable kinds (profile / preference / behavior / correction). With a fresh project there are no episodes, so: BASELINE delivers the one shared durable record (`behavior.structured_review_brief`); CANDIDATE has five active durable records and 4 slots, so it delivers the shared one plus three of the four toggled records — not all four. The contrast is therefore 1 durable record against 4, not 0 against 4. Verify rather than assume: after the first cell, read the host's `.evimed-brief/sessions/<id>/memory.md` and list the blocks by kind and scope; that file is what reached the model.",
+  "_notesStore": "The v3 prediction was incomplete in one respect and this records the correction rather than hiding it: both arms also received a `kind: note` block, which is not in `evimed_memory.records` at all - it lives in `evimed_memory.notes`, a second store the v3 inventory did not count. It was constant across the arms and so did not bias the contrast, but it was itself pollution: a 2026-07-20 summary of a run that FAILED (`runtime_session_error`, 80 s, zero artifacts) from the retired memos-era run logging, served to the model as the researcher's own saved memory. `researchMemory.deleteProjectMemory` says outright that nothing writes a note with the `evimed-agent-run` tag any more. It is archived as of 2026-09-16. One note remains on this account - an acceptance memory about antimicrobial safety reporting - and it may or may not match a given brief; if it appears it appears in BOTH arms.",
+  "_extractionSwitch": "No deployment-wide switch this time. `OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES=eval-memory-ablation` ships with release `evimed-81b40910b584-1`, so extraction writes nothing for this project while the rest of the deployment keeps learning normally. v1 through v3 flipped the global switch by hand around the batch - twice that meant recreating the web container of a live deployment, and the failure mode when the second flip is forgotten is a memory page that stays empty and looks exactly like nothing being worth remembering. Verify before the batch: `docker exec web-open-science-web-1 printenv OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES`.",
+  "_routeWasNeverPinned": "Retrospective, read off each project's `runs.jsonl` on 2026-09-16. v1: 27 runs = 5 `clinical-evidence-synthesis`, 9 `evidence-appraisal`, 13 `open-domain-answer`. v2: 2 / 0 / 1. v3: 1 / 2 / 2. Every earlier batch averaged its arms over a per-cell mixture of three capabilities chosen by an LLM classifier. v1's published deltas were already void for the recall-budget reason in its own `_supersedes`; this is a second, independent reason, and it applies to v2 and v3 as well. v5 binds each session `{mode: 'specialist', agentId, agentVersion}` with the version read from `/api/agents` at batch start, which routes by `session-binding` and never consults the classifier - and a cell whose run nevertheless executed a different capability is excluded as `route_not_pinned` rather than averaged in.",
+  "_judgeIsRequired": "A cell the judge did not score is excluded as `judge_unavailable` whenever the config enables the judge. That exclusion used to apply only to private evaluation grants, so a legacy-arm batch scored judge-less cells with `score_cell`'s fallbacks - taskUtility 1.0 for 'succeeded', evidenceCompleteness 0.0 for 'not verified' - which look exactly like results and cannot differ between the arms.",
+  "_measuredOnV4": "What v4 did establish before it stopped, verified twice independently (the host's `memory.md` and the run ledger's `recalledMemories`): candidate 4 durable blocks, baseline 1 - `behavior.structured_review_brief` shared, `preference.response_length` the one dropped from four slots. No fifth block: the legacy run note is archived. The manipulation is real and it reaches the model."
+}

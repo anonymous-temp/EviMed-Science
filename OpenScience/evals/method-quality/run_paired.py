@@ -695,6 +695,22 @@ class PlatformClient:
             raise EvalError("dispatch returned no run id")
         return run_id
 
+    def research_agent(self, agent_id: str) -> dict[str, Any]:
+        """The registry's current entry for one capability: id, version, runtime agent.
+
+        Read rather than declared in the config, because a specialist binding is
+        refused unless its version matches the registry's current one — a
+        version written into a pre-registered config goes stale the day the
+        capability ships a patch.
+        """
+        listed = unwrap(self._call("GET", f"{self.base}/api/agents"), "research agents")
+        for item in listed or []:
+            if isinstance(item, dict) and item.get("id") == agent_id:
+                return item
+        raise EvalError(
+            f"capability {agent_id!r} is not in this deployment's registry; the batch cannot pin its route to it"
+        )
+
     def list_runs(self, limit: int = 200) -> list[dict[str, Any]]:
         listed = unwrap(self._call("GET", f"{self.base}/api/agent-runs?limit={int(limit)}"), "agent run list")
         return [item for item in (listed or []) if isinstance(item, dict)]
@@ -1784,6 +1800,13 @@ class PairedRunner:
         self.fixtures = fixtures or []
         # Part of every dispatch id. See the note where it is used.
         self.release_id = release_id
+        self._pinned_capability: dict[str, Any] | None = None
+
+    def pinned_capability(self, client: "PlatformClient") -> dict[str, Any]:
+        """The capability every cell of this batch is bound to, read once."""
+        if self._pinned_capability is None:
+            self._pinned_capability = client.research_agent(str(self.config["capability"]))
+        return self._pinned_capability
 
     def wait_out_outage(self, cell: str, error: BaseException) -> PlatformClient | None:
         """Pause until the control plane answers again, then hand back a client.
@@ -1873,7 +1896,19 @@ class PairedRunner:
             record["methodSnapshot"] = apply_method_snapshot(client, arm, self.project_id)
             runtime_url = client.start_runtime()
             session_id = client.create_session(runtime_url)
-            client.bind_session(session_id, {"mode": "open-domain"})
+            # Bound to the capability under test, not left to the router.
+            #
+            # This used to bind `{"mode": "open-domain"}` and send the brief as
+            # text, so which capability a cell measured was whatever the router
+            # decided that minute. On 2026-09-16 it sent three of the first four
+            # `clinical-evidence-synthesis` cells to `open-domain-answer` — twice
+            # because the LLM classifier returned no verdict at all — and those
+            # runs deliver no files, so the judge never ran and every score was a
+            # fallback constant, identical across the arms. A specialist binding
+            # routes by `session-binding` and never consults the classifier.
+            agent = self.pinned_capability(client)
+            client.bind_session(session_id, {"mode": "specialist", "agentId": agent["id"], "agentVersion": agent["version"]})
+            record["capability"] = {"id": agent["id"], "version": agent["version"]}
             run_id = client.dispatch({"sessionId": session_id, "dispatchId": dispatch_id, "text": brief_prompt(brief)})
         run = client.wait_for_run(
             run_id,
@@ -1911,7 +1946,9 @@ class PairedRunner:
             TURN_COVERAGE_KEY: turn_coverage(reference.golden_trace() if reference else [], observed),
         }
         judge_result = None
-        judge_call = client.evaluation_judge if self.private_grant and (self.config["judge"] or {}).get("enabled") else self.judge_call
+        judge_enabled = bool((self.config["judge"] or {}).get("enabled"))
+        judge_call = client.evaluation_judge if self.private_grant and judge_enabled else self.judge_call
+        judged_nothing = False
         if judge_call is not None:
             delivery = delivery_text(run, client.read_artifact)
             if delivery.strip():
@@ -1919,9 +1956,36 @@ class PairedRunner:
                     judge_result = judge_delivery(brief, delivery, judge_call, sleep=self.sleep)
                 except EvalError as error:
                     record["judgeError"] = str(error)[:300]
+            else:
+                judged_nothing = True
         record["judge"] = judge_result
-        if self.private_grant and (self.config["judge"] or {}).get("enabled") and judge_result is None:
-            record["excluded"] = {"reason": "judge_unavailable"}
+        # A config that enables the judge and a cell the judge did not score is
+        # not a measurement, whoever launched the batch.
+        #
+        # This exclusion used to apply only to private evaluation grants. A
+        # legacy-arm batch with the judge enabled therefore scored every
+        # judge-less cell with `score_cell`'s fallback constants — taskUtility
+        # 1.0 for "succeeded", evidenceCompleteness 0.0 for "not verified" —
+        # which are identical across the arms and look exactly like results.
+        # Three cells of the 2026-09-16 v4 batch were counted that way.
+        if judge_enabled and judge_result is None:
+            record["excluded"] = {
+                "reason": "judge_unavailable",
+                "detail": "no delivered file to judge" if judged_nothing else (record.get("judgeError") or "judge returned nothing"),
+            }
+
+        # The route the run actually took, checked rather than assumed. A cell
+        # whose run did not execute the capability under test measured some
+        # other capability, and averaging it in would be comparing the arms on
+        # a mixture of two products.
+        if not self.private_grant:
+            taken = str(run.get("effectiveAgentId") or run.get("agentId") or "")
+            reason = str(run.get("effectiveRouteReason") or "")
+            if taken != str(self.config["capability"]):
+                record["excluded"] = {
+                    "reason": "route_not_pinned",
+                    "detail": f"ran {taken or 'no capability'} ({reason or 'no route reason'}), not {self.config['capability']}",
+                }
         usage = load_usage_lookup(None, client)(str(run.get("id") or "")) if self.private_grant else self.usage_lookup(str(run.get("id") or ""))
         cost = usage["cost"] if usage else None
         record["usage"] = usage
@@ -1945,7 +2009,18 @@ class PairedRunner:
         transcript_receipt = record["run"]["transcript"] or {}
         completeness = str(transcript_receipt.get("completeness") or "")
         if completeness and completeness != "complete":
-            record["excluded"] = {"reason": f"transcript_{completeness}", "detail": transcript_receipt.get("path")}
+            # Which session, and the reader's own words for why. The server
+            # carries the gaps onto the run since 2026-09-16; before that this
+            # detail was only the file's path, and finding out that the kernel
+            # had refused a subagent addressed at its own id took an ssh session.
+            gaps = [gap for gap in (transcript_receipt.get("missing") or []) if isinstance(gap, dict)]
+            record["excluded"] = {
+                "reason": f"transcript_{completeness}",
+                "detail": "; ".join(
+                    f"{gap.get('sessionId')}: {gap.get('reason')}" + (f" ({gap.get('detail')})" if gap.get("detail") else "")
+                    for gap in gaps[:4]
+                ) or transcript_receipt.get("path"),
+            }
         # The arm, read back off the run rather than assumed from the request.
         # A cell whose arm was not applied is not a null result; it is not a
         # measurement of this arm at all, and scoring it as one is how a change

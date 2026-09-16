@@ -517,13 +517,51 @@ function normalizeTranscriptReceipt(value) {
   if (!["complete", "partial", "unavailable"].includes(completeness)) return undefined;
   if (typeof value.path !== "string" || !value.path || value.path.length > 512) return undefined;
   if (typeof value.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(value.sha256)) return undefined;
+  const missing = normalizeTranscriptGaps(value.missing);
   return {
     path: value.path,
     completeness,
     bytes: Number.isSafeInteger(value.bytes) && value.bytes >= 0 ? value.bytes : 0,
     sha256: value.sha256,
     messages: Number.isSafeInteger(value.messages) && value.messages >= 0 ? value.messages : 0,
+    ...(missing ? { missing } : {}),
   };
+}
+
+/**
+ * Why a transcript is not complete, carried onto the run.
+ *
+ * `persistRunTranscript` has always returned the gaps and this normalizer has
+ * always dropped them, so the run record said `partial` and nothing else. The
+ * reason lived only in the header line of a file inside the project's data
+ * volume: diagnosing the kernel refusing a subagent addressed at its own id took
+ * an ssh session into the host, and a paired evaluation excluding a cell as
+ * `transcript_partial` could not say which child, or why, in its own results.
+ *
+ * Bounded like everything else written to the ledger: a run with a hundred
+ * unreadable children records the first sixteen, and every string has a cap.
+ *
+ * @param {unknown} value
+ * @returns {{sessionId: string, fromSeq: number, reason: string, detail?: string}[] | undefined}
+ */
+function normalizeTranscriptGaps(value) {
+  if (!Array.isArray(value)) return undefined;
+  /** @type {{sessionId: string, fromSeq: number, reason: string, detail?: string}[]} */
+  const gaps = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const sessionId = typeof item.sessionId === "string" ? item.sessionId.slice(0, 120) : "";
+    const reason = typeof item.reason === "string" ? item.reason.slice(0, 48) : "";
+    if (!sessionId || !reason) continue;
+    gaps.push({
+      sessionId,
+      fromSeq: Number.isSafeInteger(item.fromSeq) && item.fromSeq >= 0 ? item.fromSeq : 0,
+      reason,
+      ...(typeof item.detail === "string" && item.detail ? { detail: item.detail.slice(0, 200) } : {}),
+    });
+    if (gaps.length >= 16) break;
+  }
+  return gaps.length > 0 ? gaps : undefined;
 }
 
 /** @param {any} value @returns {{name: string, digest: string, seq?: number}[] | undefined} */
