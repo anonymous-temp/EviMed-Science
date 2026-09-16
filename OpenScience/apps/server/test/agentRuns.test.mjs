@@ -30,6 +30,7 @@ import { runStateFileFor, workspaceLayout } from "@evimed/domain";
 import { deepResearchPackage, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 import { HttpError } from "../src/security.mjs";
+import { kernelToolText } from "./helpers/kernelToolText.mjs";
 
 /**
  * A completed `skill` tool call as the kernel reports one: the result is the
@@ -3220,6 +3221,157 @@ test("delivers a package whose only gap is bookkeeping, and does not stamp it un
   }
 });
 
+test("sources a delegated child preserved count for the parent's package, read from the delegation as the kernel records it", async () => {
+  // 2026-09-16, memory-ablation v7 cell 1: the child preserved the full text
+  // and the gate still refused the path, because the root's \`evimed_delegate\`
+  // result is recorded as \`ok\\n{…}\` text and the reader parsed only bare JSON
+  // — so it found no child to read at any address. Same package as the test
+  // above, with every retrieval moved into a delegated child.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-delegated-sources-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_delegated_sources",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    const pkg = deepResearchPackage();
+    // Break ONLY the degradable citation-audit documentation-completeness check.
+    pkg.citationAuditText = pkg.citationAuditText.replace(
+      "Correction and retraction checks: no correction or retraction notice was identified for the included records.\n\n",
+      "",
+    );
+    let history = [];
+    let childHistory = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+            { path: "clinical-evidence-search.json", required: true },
+            { path: "references.bib", required: true },
+            { path: "citation-ledger.csv", required: true },
+            { path: "citation-audit.md", required: true },
+            { path: "question-coverage.json", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async (_project, sessionId, options = {}) => {
+        if (sessionId === "child-sources") {
+          // Only under the parent's address, as the kernel serves a subagent.
+          if (options.parentSessionId !== "ses_delegated_sources") throw Object.assign(new Error("subagent Sessions require their durable parent address"), { code: "runtime_session_error" });
+          return childHistory;
+        }
+        return history;
+      },
+      readSessionStatus: async () => "idle",
+      // No repair budget: go straight to the terminal delivery decision.
+      maxClinicalRepairAttempts: 0,
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_delegated_sources",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async () => ({ accepted: true }));
+
+    const deliverables = new Map([
+      ["clinical-evidence-report.md", pkg.reportText],
+      ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
+      ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
+      ["clinical-evidence-search.json", pkg.searchLogText],
+      ["references.bib", pkg.referencesText],
+      ["citation-ledger.csv", pkg.citationLedgerText],
+      ["citation-audit.md", pkg.citationAuditText],
+      ["question-coverage.json", pkg.questionCoverageText],
+    ]);
+    for (const [relative, content] of deliverables) {
+      await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
+    }
+    for (const [artifactPath, content] of Object.entries(pkg.sourceArtifacts)) {
+      await mkdir(path.join(project.workspaceDir, path.dirname(artifactPath)), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, artifactPath), content, "utf8");
+    }
+
+    const retrievalParts = Object.entries(pkg.sourceArtifacts).map(([artifactPath, content]) => ({
+      type: "tool",
+      tool: "evimed-research_evimed_open_access_full_text",
+      state: {
+        status: "completed",
+        output: JSON.stringify({
+          status: "success",
+          artifacts: [artifactPath],
+          data: { artifactSha256s: { [artifactPath]: createHash("sha256").update(content, "utf8").digest("hex") } },
+        }),
+      },
+    }));
+    const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
+      type: "tool",
+      tool: "evimed-research_evimed_literature_search",
+      state: { status: "completed", input: { query: entry.query } },
+    }));
+    childHistory = [{
+      info: { id: "msg_child_sources", role: "assistant", time: { completed: Date.now() } },
+      parts: [...retrievalParts, { type: "text", text: "Sources preserved." }],
+    }];
+    history = [{
+      info: { id: "msg_delegated_sources", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        {
+          type: "tool",
+          tool: "evimed_delegate",
+          state: { status: "completed", output: kernelToolText({ ok: true, data: { deliverableId: "d1", childSessionId: "child-sources" } }) },
+        },
+        ...searchParts,
+        ...[...deliverables.keys()].map((filePath) => ({
+          type: "tool",
+          tool: "write",
+          state: { status: "completed", input: { filePath } },
+        })),
+        { type: "text", text: "Completed." },
+      ],
+    }];
+
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.id, run.id);
+    // Only a process-documentation gap remained: deliver, do not discard.
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.errorCode, null);
+    // And do not stamp. "Unverified" is a statement about the evidence, and it
+    // used to fire on any remaining issue — so a package whose only notices
+    // were a gate bug of ours carried the same mark as one with a quotation
+    // absent from its source. A mark that means everything means nothing.
+    assert.notEqual(finished.verification, "unverified");
+    assert.ok(finished.qualityNotices.length > 0);
+    assert.match(finished.qualityNotices.join("\n"), /citation-audit\.md must document/);
+    assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("one plain-HTTP citation is a notice on a delivered package, not a reason to discard it", async () => {
   // Two complete production reports were discarded over one link each — a
   // CQVIP journal record, and http://purl.obolibrary.org/obo/CHEBI_28093,
@@ -3540,6 +3692,326 @@ test("a provenance rejection is repaired rather than discarded", async () => {
     assert.equal(repairPrompts.length, 1, "a repair prompt was sent");
     assert.match(repairPrompts[0], /\.evimed-sources\/official-pages\/source-a\/page\.md/);
     assert.match(repairPrompts[0], /no evidence tool reported preserving that file/);
+
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a repair the runtime refuses fails the run with the refusal named, not in silence", async () => {
+  // 2026-09-16, memory-ablation v7 cell 1: the repair was refused 68 ms after it
+  // was authorized, and the ledger, the audit log and the container output held
+  // nothing about why — the catch around the send was empty.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-repair-refused-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_repair_refused",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    let history = [];
+    const repairPrompts = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      maxClinicalRepairAttempts: 1,
+      repairRetryDelaysMs: [0, 0],
+      readSessionHistory: async () => {
+        if (history.length) await new Promise((resolve) => setTimeout(resolve, 10));
+        return history;
+      },
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_repair_refused",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async (_session, _record, repairText = null) => {
+      if (repairText) {
+        repairPrompts.push(repairText);
+        throw Object.assign(new Error("Session is busy with another turn."), { code: "runtime_session_error" });
+      }
+      return { accepted: true };
+    });
+
+    // A receipt naming a source no retrieval tool reported preserving: the
+    // package is otherwise written and on disk.
+    const source = ".evimed-sources/official-pages/source-a/page.md";
+    await mkdir(path.join(project.workspaceDir, path.dirname(source)), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, source), "Preserved source text.", "utf8");
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# 报告\n\n正文。", "utf8");
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims: [] }), "utf8");
+    await writeFile(
+      path.join(project.workspaceDir, "clinical-evidence-run.json"),
+      JSON.stringify({ successfulSourceArtifacts: [source] }),
+      "utf8",
+    );
+    history = [{
+      info: { id: "msg_repair_refused", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+          type: "tool",
+          tool: "write",
+          state: { status: "completed", input: { filePath } },
+        })),
+        { type: "text", text: "Completed." },
+      ],
+    }];
+
+    // The monitor scheduled at dispatch polls immediately and reconciles on its
+    // own, so under load it can be the one that spends the repair attempt.
+    // Either way the observable behaviour is the same and is what this pins: a
+    // repair prompt goes back naming the path to correct, instead of the
+    // finished package being discarded.
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.id, run.id);
+    assert.equal(repairPrompts.length, 3, "a transient refusal is sent again, a bounded number of times");
+    assert.equal(finished.status, "failed");
+    assert.equal(finished.errorCode, "specialist_evidence_repair_failed");
+    const notices = finished.qualityNotices.join("\n");
+    assert.match(notices, /no evidence tool reported preserving that file/, "the issue it was meant to repair is still named");
+    assert.match(notices, /repair request could not be dispatched after 3 attempts \(runtime_session_error: Session is busy with another turn\.\)/);
+
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a repair refused once while the turn settles goes through on the next attempt", async () => {
+  // 2026-09-16, memory-ablation v7 cell 1: the repair was refused 68 ms after it
+  // was authorized, and the ledger, the audit log and the container output held
+  // nothing about why — the catch around the send was empty.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-repair-retried-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_repair_retried",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    let history = [];
+    const repairPrompts = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      maxClinicalRepairAttempts: 1,
+      repairRetryDelaysMs: [0, 0],
+      readSessionHistory: async () => {
+        if (history.length) await new Promise((resolve) => setTimeout(resolve, 10));
+        return history;
+      },
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_repair_retried",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async (_session, _record, repairText = null) => {
+      if (repairText) {
+        repairPrompts.push(repairText);
+        if (repairPrompts.length === 1) throw Object.assign(new Error("Session is busy with another turn."), { code: "runtime_session_error" });
+      }
+      return { accepted: true };
+    });
+
+    // A receipt naming a source no retrieval tool reported preserving: the
+    // package is otherwise written and on disk.
+    const source = ".evimed-sources/official-pages/source-a/page.md";
+    await mkdir(path.join(project.workspaceDir, path.dirname(source)), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, source), "Preserved source text.", "utf8");
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# 报告\n\n正文。", "utf8");
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims: [] }), "utf8");
+    await writeFile(
+      path.join(project.workspaceDir, "clinical-evidence-run.json"),
+      JSON.stringify({ successfulSourceArtifacts: [source] }),
+      "utf8",
+    );
+    history = [{
+      info: { id: "msg_repair_retried", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+          type: "tool",
+          tool: "write",
+          state: { status: "completed", input: { filePath } },
+        })),
+        { type: "text", text: "Completed." },
+      ],
+    }];
+
+    // The monitor scheduled at dispatch polls immediately and reconciles on its
+    // own, so under load it can be the one that spends the repair attempt.
+    // Either way the observable behaviour is the same and is what this pins: a
+    // repair prompt goes back naming the path to correct, instead of the
+    // finished package being discarded.
+    const repairing = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(repairing.id, run.id);
+    assert.equal(repairPrompts.length, 2);
+    assert.equal(repairing.status, "running", "the repair went out on the second attempt and the run is repairing");
+
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a repair refused for good is not sent again", async () => {
+  // 2026-09-16, memory-ablation v7 cell 1: the repair was refused 68 ms after it
+  // was authorized, and the ledger, the audit log and the container output held
+  // nothing about why — the catch around the send was empty.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-repair-final-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_repair_final",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    let history = [];
+    const repairPrompts = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      maxClinicalRepairAttempts: 1,
+      repairRetryDelaysMs: [0, 0],
+      readSessionHistory: async () => {
+        if (history.length) await new Promise((resolve) => setTimeout(resolve, 10));
+        return history;
+      },
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_repair_final",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async (_session, _record, repairText = null) => {
+      if (repairText) {
+        repairPrompts.push(repairText);
+        throw Object.assign(new Error("The run is no longer accepting repair prompts."), { code: "agent_run_active", status: 409 });
+      }
+      return { accepted: true };
+    });
+
+    // A receipt naming a source no retrieval tool reported preserving: the
+    // package is otherwise written and on disk.
+    const source = ".evimed-sources/official-pages/source-a/page.md";
+    await mkdir(path.join(project.workspaceDir, path.dirname(source)), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, source), "Preserved source text.", "utf8");
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# 报告\n\n正文。", "utf8");
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims: [] }), "utf8");
+    await writeFile(
+      path.join(project.workspaceDir, "clinical-evidence-run.json"),
+      JSON.stringify({ successfulSourceArtifacts: [source] }),
+      "utf8",
+    );
+    history = [{
+      info: { id: "msg_repair_final", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+          type: "tool",
+          tool: "write",
+          state: { status: "completed", input: { filePath } },
+        })),
+        { type: "text", text: "Completed." },
+      ],
+    }];
+
+    // The monitor scheduled at dispatch polls immediately and reconciles on its
+    // own, so under load it can be the one that spends the repair attempt.
+    // Either way the observable behaviour is the same and is what this pins: a
+    // repair prompt goes back naming the path to correct, instead of the
+    // finished package being discarded.
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.id, run.id);
+    assert.equal(repairPrompts.length, 1, "a refusal that cannot clear is not retried");
+    assert.equal(finished.status, "failed");
+    assert.equal(finished.errorCode, "specialist_evidence_repair_failed");
+    const notices = finished.qualityNotices.join("\n");
+    assert.match(notices, /no evidence tool reported preserving that file/, "the issue it was meant to repair is still named");
+    assert.match(notices, /repair request could not be dispatched \(agent_run_active: The run is no longer accepting repair prompts\.\)/);
 
     await store.closeProject(project, "canceled");
   } finally {
@@ -6371,7 +6843,9 @@ test("delegated evidence comes from kernel-owned child histories named by comple
     parts: [{
       type: "tool",
       tool: "evimed_delegate",
-      state: { status: "completed", output: JSON.stringify({ ok, data: { deliverableId: "d1", childSessionId } }) },
+      state: { status: "completed", output: ok
+        ? kernelToolText({ ok: true, data: { deliverableId: "d1", childSessionId } })
+        : kernelToolText({ ok: false, code: "delegation_failed", issues: [{ code: "delegation_failed", message: "The child did not start." }] }) },
     }],
   });
   const childEvidence = {
@@ -6406,7 +6880,7 @@ test("a delegated child is read under its parent's address, and one that cannot 
     info: { id: `delegate-${childSessionId}`, role: "assistant", time: { created: 1, completed: 2 } },
     parts: [{
       type: "tool", tool: "evimed_delegate",
-      state: { status: "completed", output: JSON.stringify({ ok: true, data: { childSessionId } }) },
+      state: { status: "completed", output: kernelToolText({ ok: true, data: { childSessionId } }) },
     }],
   });
   const fetched = {

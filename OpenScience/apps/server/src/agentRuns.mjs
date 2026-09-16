@@ -18,6 +18,7 @@ import {
   coverageJudgeContext,
   validateClinicalEvidencePackage,
 } from "./clinicalEvidenceQuality.mjs";
+import { socketToolResult } from "./dshRuntimeAdapter.mjs";
 // The three classifications of a failure — repairable package, recoverable
 // source, terminal source — moved into the domain when the run side started
 // needing them too. They are re-exported here because the ledger's callers and
@@ -828,7 +829,8 @@ function nativeWorkflowEvidence(run, history) {
   const delegates = new Set();
   for (const message of history) for (const part of message.parts ?? []) {
     if (part.type !== "tool" || part.state?.status !== "completed") continue;
-    const result = parsedToolResult(part);
+    // The kernel's rendered text, not bare JSON: see `socketToolResult`.
+    const result = socketToolResult(part.state?.output);
     if (!result || typeof result.ok !== "boolean") continue;
     const start = Number(message.info?.time?.created);
     const end = Number(part.state.completedAt);
@@ -963,7 +965,7 @@ function delegatedChildSessionIds(messages) {
   for (const message of messages) {
     for (const part of message?.parts ?? []) {
       if (part?.type !== "tool" || part?.tool !== "evimed_delegate" || part?.state?.status !== "completed") continue;
-      const result = parsedToolResult(part);
+      const result = socketToolResult(part?.state?.output);
       const raw = result?.ok === true ? result?.data?.childSessionId : null;
       try {
         const id = storedKernelRequestId(raw);
@@ -1189,6 +1191,59 @@ function successfullyLoadedSkills(messages) {
 function skillContentDelivered(output, name) {
   if (typeof output !== "string") return false;
   return output.trimStart().startsWith(`<skill_content name="${name}">`);
+}
+
+/**
+ * Refusals a repair prompt is sent again for. Both can clear within seconds —
+ * the kernel still settling the turn that just ended, a plugin configuration
+ * being applied — and a refused repair costs the run its whole package.
+ */
+const TRANSIENT_REPAIR_REFUSALS = new Set(["runtime_session_error", "plugin_apply_in_progress"]);
+
+/**
+ * Send one repair prompt, again after a short wait when the refusal can be
+ * transient, a bounded number of times.
+ *
+ * On 2026-09-16 a repair was refused 68 ms after it was authorized, half a
+ * second after the run's last message, and the send sat in an empty catch — so
+ * the run failed with its package and nothing anywhere said why. Every attempt
+ * that fails is returned, so the run can name the refusal.
+ *
+ * @param {(text: string) => Promise<any>} sender @param {string} text @param {number[]} delaysMs
+ * @returns {Promise<{ accepted: boolean, failures: unknown[] }>}
+ */
+async function sendRepair(sender, text, delaysMs) {
+  /** @type {unknown[]} */
+  const failures = [];
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const result = await sender(text);
+      if (result?.accepted !== false) return { accepted: true, failures };
+      failures.push(null);
+      return { accepted: false, failures };
+    } catch (error) {
+      failures.push(error);
+      const code = /** @type {any} */ (error)?.code;
+      if (/** @type {any} */ (error)?.definitivelyRejected === true || !TRANSIENT_REPAIR_REFUSALS.has(code) || attempt >= delaysMs.length) {
+        return { accepted: false, failures };
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(delaysMs[attempt]) || 0)));
+    }
+  }
+}
+
+/**
+ * Why a repair prompt did not reach the run, as one notice line: how many
+ * times it was sent, and the last refusal's code and a bounded message.
+ * @param {unknown[]} failures
+ */
+function repairDispatchFailure(failures) {
+  const last = /** @type {any} */ (failures.at(-1));
+  const tries = failures.length === 1 ? "" : ` after ${failures.length} attempts`;
+  if (!last) return `The repair request was not accepted by the runtime${tries} (accepted: false), so no repair was attempted.`;
+  const code = typeof last?.code === "string" ? last.code : "unknown";
+  const message = String(last?.message ?? last).replace(/\s+/g, " ").slice(0, 240);
+  return `The repair request could not be dispatched${tries} (${code}: ${message}), so no repair was attempted.`;
 }
 
 function parsedToolErrorCode(part) {
@@ -2899,6 +2954,8 @@ export class AgentRunStore {
     // thing without a second polling loop.
     this.onRunStateChanged = options.onRunStateChanged ?? (() => {});
     this.maxClinicalRepairAttempts = options.maxClinicalRepairAttempts ?? 2;
+    // Waits before sending a refused repair again; see `sendRepair`.
+    this.repairRetryDelaysMs = Array.isArray(options.repairRetryDelaysMs) ? options.repairRetryDelaysMs : [1_500, 4_000];
     if (!Number.isSafeInteger(this.maxClinicalRepairAttempts) || this.maxClinicalRepairAttempts < 0) {
       throw new TypeError("AgentRunStore maxClinicalRepairAttempts must be a non-negative integer.");
     }
@@ -4030,6 +4087,7 @@ export class AgentRunStore {
           && typeof repairSender === "function";
         if (canRepair) {
           let revision;
+          let repairRefusal = "";
           try {
             revision = await snapshotAcceptedPackageForRepair(project, run, await this.runtimeGeneration(project));
           } catch {
@@ -4065,14 +4123,18 @@ export class AgentRunStore {
               const previous = sizes.length > 0 && beforeRepair > 0 && beforeRepair < sizes[0]
                 ? { startSize: sizes[0], currentSize: beforeRepair, lost: sizes[0] - beforeRepair }
                 : null;
-              const repair = await repairSender(run.effectiveAgentId === "clinical-evidence-synthesis"
+              const repair = await sendRepair(repairSender, run.effectiveAgentId === "clinical-evidence-synthesis"
                 ? clinicalEvidenceRepairPrompt(completion.qualityIssues, previous, revision.revisionRequired)
-                : specialistRepairPrompt(repairAgent, completion.qualityIssues, revision.revisionRequired));
-              if (repair?.accepted !== false) return run;
-            } catch { /* a rejected repair remains a terminal, fail-closed outcome */ }
+                : specialistRepairPrompt(repairAgent, completion.qualityIssues, revision.revisionRequired), this.repairRetryDelaysMs);
+              if (repair.accepted) return run;
+              // Still fail-closed, but no longer silent: see `sendRepair`.
+              repairRefusal = repairDispatchFailure(repair.failures);
+            } catch (error) {
+              repairRefusal = repairDispatchFailure([error]);
+            }
             terminal.status = "failed";
             terminal.errorCode = "specialist_evidence_repair_failed";
-            terminal.qualityNotices = completion.qualityIssues;
+            terminal.qualityNotices = [...completion.qualityIssues, repairRefusal];
           }
         } else if (completion.qualityDegradable) {
           // Repairs are exhausted or unavailable and only process-documentation
@@ -4122,13 +4184,12 @@ export class AgentRunStore {
         if (canResubmit) {
           this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
           this.clinicalRepairBaselineCursors.set(run.id, messageId(assistants.at(-1)));
-          try {
-            const repair = await repairSender(clinicalEvidenceResubmitPrompt(unaccepted.map((item) => String(item.id))));
-            if (repair?.accepted !== false) return run;
-          } catch { /* a refused resubmission remains a fail-closed outcome */ }
+          const repair = await sendRepair(repairSender, clinicalEvidenceResubmitPrompt(unaccepted.map((item) => String(item.id))), this.repairRetryDelaysMs);
+          if (repair.accepted) return run;
+          const refusal = repairDispatchFailure(repair.failures);
           terminal.status = "failed";
           terminal.errorCode = "specialist_evidence_repair_failed";
-          terminal.qualityNotices = ["The server accepted the current package, but the run-side receipt resubmission could not be dispatched."];
+          terminal.qualityNotices = ["The server accepted the current package, but the run-side receipt resubmission could not be dispatched.", refusal];
         }
       }
     }

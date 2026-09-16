@@ -1,0 +1,179 @@
+{
+  "arm": "candidate",
+  "armDigest": "be602f9edabd2a04c4022412a2421645ebead246230a354e40f58835e5cf73fc",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__candidate__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "578855cd4bb8d55b50e4a5d2246a5bc7eb10838d25b7d1dac49b39e9fbb6ce4b",
+  "configId": "memory-ablation-v7",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 10,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T18:08:24Z",
+  "judge": {
+    "issues": [
+      "Treats PMID 41602009 and PMID 41146378 as full_text and cites them as such, contradicting the brief's abstract-level access and violating mustDo/mustNotDo.",
+      "Dismisses the abstract-level caveat by asserting no abstract-only sources exist, despite the brief identifying two abstract-level sources."
+    ],
+    "promptVersion": 1,
+    "rationale": "Thoroughly answers the scoping question and correctly leaves overlap unresolved, with needed fields tabulated. Derived estimates name methods and assumptions; safety framing is cautious. However, it converts the two abstract-identified model publications to full-text evidence and quotes them extensively, breaching the abstract-level evidence rule and weakening source-type fidelity.",
+    "scores": {
+      "correctness": 3,
+      "evidenceHandling": 3,
+      "safetyFraming": 5,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 91,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 92
+      },
+      {
+        "expectedVersion": 85,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 86
+      },
+      {
+        "expectedVersion": 85,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 86
+      },
+      {
+        "expectedVersion": 84,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 85
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v7-545d9b64",
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "deliverables/mimic-sepsis-prognosis-scoping/citation-audit.md",
+      "deliverables/mimic-sepsis-prognosis-scoping/citation-ledger.csv",
+      "deliverables/mimic-sepsis-prognosis-scoping/clinical-evidence-matrix.json",
+      "deliverables/mimic-sepsis-prognosis-scoping/clinical-evidence-report.md",
+      "deliverables/mimic-sepsis-prognosis-scoping/clinical-evidence-run.json",
+      "deliverables/mimic-sepsis-prognosis-scoping/clinical-evidence-search.json",
+      "deliverables/mimic-sepsis-prognosis-scoping/question-coverage.json",
+      "deliverables/mimic-sepsis-prognosis-scoping/references.bib"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_1_b84484a2eb92bd92",
+    "durationMs": 969513,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_fb43cb32590bf489f199e9135f98a66e",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/PMC10286378/df0862ed929a0ac21816f4f579d5e63437742fcf01f0961e2be45ff62986ad6c/fulltext.md, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copi",
+      "claims[0].claim numeric fact 10 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[4].claim numeric fact 231 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[4].claim numeric fact 181 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[4].claim numeric fact 733 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[4].claim numeric fact 920 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[6].claim numeric fact 3 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[7].claim numeric fact 859 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[9].claim numeric fact 625 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[22].claim numeric fact 300 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[26].claim numeric fact 796 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[31].claim numeric fact 499 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[31].claim numeric fact 599 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[34].claim numeric fact 390 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[39].claim numeric fact 280 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[39].claim numeric fact 798 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[39].claim numeric fact 668 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[42].claim numeric fact 777 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[45].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[49].claim numeric fact 333 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "literature_search searched and returned no source"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-2e3f9b38-9d4e-4300-b380-de6e572a8017",
+    "status": "failed",
+    "transcript": {
+      "bytes": 1945426,
+      "completeness": "complete",
+      "messages": 250,
+      "path": ".openscience/transcripts/run_fb43cb32590bf489f199e9135f98a66e.jsonl",
+      "sha256": "0e11c068f21e4571300c4777f6e7438c95aff023e5897461b0b8a4a75cc73311"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.8204605555555555,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T17:51:17Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

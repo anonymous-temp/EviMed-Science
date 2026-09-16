@@ -19,6 +19,7 @@ import {
   transcriptExcerpt,
   transcriptPath,
 } from "../src/runTranscripts.mjs";
+import { kernelToolText } from "./helpers/kernelToolText.mjs";
 
 const CAPTURED_AT = "2026-09-07T04:00:00.000Z";
 
@@ -285,7 +286,7 @@ test("a deliverable delegated twice keeps both children, not just the one the pr
   await withProject(async (project) => {
     const delegation = (childSessionId, seq) => ({
       ...message(seq, "delegate"),
-      parts: [{ type: "tool", tool: "evimed_delegate", status: "completed", output: JSON.stringify({ ok: true, data: { childSessionId } }) }],
+      parts: [{ type: "tool", tool: "evimed_delegate", status: "completed", output: kernelToolText({ ok: true, data: { childSessionId } }) }],
     });
     const runtime = new FakeRuntime({
       ses_root: transcript("ses_root", [delegation("ses_researcher", 1), delegation("ses_repairer", 2)]),

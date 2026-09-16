@@ -36,6 +36,7 @@ import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { SOCKET_TOOL_NAMES, hasSensitiveText } from "@evimed/domain";
+import { socketToolResult } from "./dshRuntimeAdapter.mjs";
 import { HttpError, readTextFileNoFollow, safeId, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
 /** Directory under a project's meta root that holds one file per finished run. */
@@ -437,12 +438,9 @@ function delegatedChildren(transcript) {
   for (const message of transcript?.messages ?? []) {
     for (const part of message?.parts ?? []) {
       if (part?.type !== "tool" || part?.tool !== SOCKET_TOOL_NAMES.delegate || part?.status !== "completed") continue;
-      let result;
-      try {
-        result = typeof part.output === "string" ? JSON.parse(part.output) : part.output;
-      } catch {
-        continue;
-      }
+      // The kernel's rendered text (`ok` + JSON), not bare JSON: see
+      // `socketToolResult`. A structured value is taken as it is.
+      const result = typeof part.output === "string" ? socketToolResult(part.output) : part.output;
       const id = result?.ok === true ? String(result?.data?.childSessionId ?? "").trim() : "";
       if (id && !ids.includes(id)) ids.push(id);
     }

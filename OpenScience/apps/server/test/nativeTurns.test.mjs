@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { normalizeTranscript, transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
+import { kernelToolText } from "./helpers/kernelToolText.mjs";
 
 const fixture = JSON.parse(await readFile(new URL("./fixtures/dsh/native-turn-frames.json", import.meta.url), "utf8"));
 const question = (event) => event.data.content.map((part) => part.text ?? "").join(" ");
@@ -352,7 +353,7 @@ function workflowEvents(accepted) {
     const callId = `call_${seq}`;
     pairs.push({ type: "tool/call", seq, time: at, data: { turn: 2, step: 1, callId, name, arguments: args } });
     pairs.push({ type: "tool/result", seq: seq + 1, time: at + 5, data: { turn: 2, step: 1,
-      message: { source: { callId }, content: [{ type: "tool-result", content: [{ type: "text", text: JSON.stringify(result) }] }] },
+      message: { source: { callId }, content: [{ type: "tool-result", content: [{ type: "text", text: kernelToolText(result) }] }] },
     } });
   };
   add(145, "evimed_plan", { action: "write", clarifications: ["Synthetic current-turn plan"], deliverables: [item] },
