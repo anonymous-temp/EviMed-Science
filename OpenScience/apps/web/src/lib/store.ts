@@ -9,11 +9,11 @@ const INSPECTOR_WIDTH_KEY = "ai4s.inspector.width";
 
 export const SIDEBAR_MIN = 184;
 export const SIDEBAR_MAX = 340;
-export const SIDEBAR_DEFAULT = 232;
+const SIDEBAR_DEFAULT = 232;
 
 export const INSPECTOR_MIN = 360;
 export const INSPECTOR_MAX = 960;
-export const INSPECTOR_DEFAULT = 560;
+const INSPECTOR_DEFAULT = 560;
 
 /** Persisted preference. "system" defers to the OS color scheme — the live
  *  media-query listener lives in ThemeProvider, not here. Legacy saved values

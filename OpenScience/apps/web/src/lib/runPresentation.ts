@@ -258,20 +258,3 @@ export function summarizeQualityNotices(notices: string[]): NoticeSummary {
   };
 }
 
-/**
- * Hand each group as many detail lines as the budget still allows.
- *
- * `Number.POSITIVE_INFINITY` renders everything. The returned `hidden` counts
- * are what the caller must show; there is no silent remainder.
- */
-export function budgetNoticeDetails(
-  groups: NoticeGroup[],
-  budget: number,
-): { group: NoticeGroup; shown: string[]; hidden: number }[] {
-  let left = budget;
-  return groups.map((group) => {
-    const take = Math.max(0, Math.min(group.items.length, left));
-    left -= take;
-    return { group, shown: group.items.slice(0, take), hidden: group.items.length - take };
-  });
-}

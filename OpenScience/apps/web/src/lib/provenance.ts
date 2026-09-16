@@ -2,12 +2,9 @@
 // calls into version records in `.openscience/provenance.jsonl`, and read them
 // back for the artifact History view. Pure derivation is separated from the
 // Tauri bridge so it can be unit-tested without a desktop shell.
-import { parseFailureMessage } from "@/lib/errorText";
-
 import type { ToolUpdatedEvent } from "@/lib/kernelEvents";
 import type { ProvenanceRecord } from "@ai4s/shared";
 import { hasWebApi, invokeCommand } from "./apiClient";
-import { logDebug } from "./backend";
 import { deriveArtifact } from "./artifacts";
 
 export interface ProvenanceInput {
@@ -38,32 +35,6 @@ export function provenanceInputFromEvent(event: ToolUpdatedEvent): ProvenanceInp
   const log =
     title && !title.endsWith(artifact.filename) ? title : `${event.tool} → ${artifact.path}`;
   return { callId: event.callId, path: artifact.path, tool: event.tool, content: artifact.content, log };
-}
-
-/** Append a version record (desktop only). Recording must never break the chat flow. */
-export async function recordProvenance(
-  input: ProvenanceInput,
-  sessionId: string | undefined,
-  model: string | null,
-): Promise<void> {
-  if (!hasWebApi) return;
-  try {
-    await invokeCommand("record_provenance", {
-      path: input.path,
-      callId: input.callId,
-      tool: input.tool,
-      content: input.content ?? null,
-      diff: null,
-      log: input.log,
-      sessionId: sessionId ?? null,
-      model: model ?? null,
-    });
-    void logDebug(`provenance ✓ ${input.path}`);
-  } catch (e) {
-    // Best-effort — the conversation goes on — but a failure must be visible
-    // in the diagnostic log, or a silently broken audit trail looks healthy.
-    void logDebug(`provenance FAILED for ${input.path}: ${parseFailureMessage(e, "该溯源记录")}`);
-  }
 }
 
 /** All recorded versions of one artifact, oldest first ([] in browser dev). */
