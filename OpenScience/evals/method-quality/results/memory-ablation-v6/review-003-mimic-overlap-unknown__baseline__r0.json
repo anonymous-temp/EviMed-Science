@@ -1,0 +1,197 @@
+{
+  "arm": "baseline",
+  "armDigest": "e35f4c197e8c879f679b599075a4704775a085373aac369e3cc42c02b49d06c8",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__baseline__r0",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "25b0f8b2dc915a05e48f46474c970194413a68c370ef92bdb234b317b6be2f34",
+  "configId": "memory-ablation-v6",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 23,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "excluded": {
+    "detail": "run_cf0fb80f650c264a3c1edcaa39941c5f: child_undiscovered",
+    "reason": "transcript_partial"
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T13:50:04Z",
+  "judge": {
+    "issues": [
+      "Delivery falsely claims DOI 10.1038/s41597-022-01899-x returned records with a particle-physics journal prefix; 10.1038 is Nature/Scientific Data prefix, so the Crossref-failure statement is wrong/fabricated.",
+      "Self-audit asserts 76/76 verbatim quote matches and 0 mismatches without accessible underlying artifacts, making a non-verifiable meta-claim part of the delivery."
+    ],
+    "promptVersion": 1,
+    "rationale": "The delivery answers the scoping question, preserves the three sources and abstract-level roles, leaves overlap unresolved, and explains required cohort dates/identifiers/eligibility. It avoids treating abstracts as full text and avoids same-database equivalence. Derived estimates name inputs/assumptions. Safety framing is cautious. Correctness is reduced by an obviously false DOI prefix claim.",
+    "scores": {
+      "correctness": 3,
+      "evidenceHandling": 5,
+      "safetyFraming": 5,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 84,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 85
+      },
+      {
+        "expectedVersion": 77,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 78
+      },
+      {
+        "expectedVersion": 77,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 78
+      },
+      {
+        "expectedVersion": 76,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 77
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 0,
+  "run": {
+    "artifacts": [
+      "deliverables/independence-verdict-brief/citation-audit.md",
+      "deliverables/independence-verdict-brief/citation-ledger.csv",
+      "deliverables/independence-verdict-brief/clinical-evidence-matrix.json",
+      "deliverables/independence-verdict-brief/clinical-evidence-report.md",
+      "deliverables/independence-verdict-brief/clinical-evidence-run.json",
+      "deliverables/independence-verdict-brief/clinical-evidence-search.json",
+      "deliverables/independence-verdict-brief/question-coverage.json",
+      "deliverables/independence-verdict-brief/references.bib"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_0_ec8d07566d13a7fc",
+    "durationMs": 2724509,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_cf0fb80f650c264a3c1edcaa39941c5f",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/PMC9810617/4fc8f92d751072a6d7ad5ac31a3a77d2ae820053d4875d6b58c751d99eacff6e/fulltext.md, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copie",
+      "claims[0].claim numeric fact 10 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 131 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 2 处是同一条（Report line 164、Report line 166）：这是一处决定，改一次就能全部修好。",
+      "Review methods: searchCoverage[5] is unavailable: 指南来源对该主题仅返回结构化题录字段，未随附可读文本；按该主题在 PubMed 检索到的唯一一条记录，其开放获取全文检索返回未配置的服务凭据，未取得文本. This does not establish absence of evidence.",
+      "Review methods: searchCoverage[6] is unavailable: Crossref 以 DOI 字符串检索未解析到目标记录，返回的两条记录与本综述无关；题录核对改由 OpenAlex 完成. This does not establish absence of evidence.",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "clinical-evidence-report.md line 138: one arm is concluded to take the other's place or to beat it (个体标识符清单与完整提取代码则受数据使用协议限制，通常只能由原研究者在自身授权范围内核对 [1]<!-- claim:CLM-009 -->。), and the report never says whether a direct comparison between them exists. Fill the 是否存在直接比较研究 axis either way — head-to-head ",
+      "literature_search searched and returned no source",
+      "biomedical_source_search searched and returned no source",
+      "review contradicted: mimic4-sepsis-mortality-models::CLM-045 — 该主张前半（表 1 所列 8 项、其中 7 项以 MIMIC-IV 为开发数据）与本交付物表格一致；但同一句断言「仅 1 项把 MIMIC-IV 用作外部验证」被同语料 independence-verdict-brief 表 1 与 ce-report 表 1 直接否证：两者都把脓毒症相关凝血病模型登记为以 MIMIC-IV 作外部验证集，故至少 2 项。计数错误落在同一句话内，主张不能原样成立。",
+      "review contradicted: mimic-iv-sepsis-prognostic-models-scoping::CLM-025 — 该表与摘要把 HALP 死亡模型与腹内感染性脓毒症模型登记为「全文」层级。两文确实有开放获取全文（PMC12832424、PMC12557738），工作区即存有可读全文，故「文本可及」站得住；但同一批交付物（independence-verdict-brief、mimic4-sepsis-mortality-models、ce-report 的来源清单）把二者登记为 accessLevel=abstract，并据此断言「摘要未载版本号」。同一语料对",
+      "review contradicted: mimic-iv-sepsis-prognostic-models-scoping::CLM-016 — 该行把脓毒症相关血小板减少列线图记为 MIMIC-IV V.2.0。可解析来源 PMID 40789730 只到题录层，题名不足以判定版本；而同语料 independence-verdict-brief 表 1 与 mimic4-sepsis-mortality-models 表 1 均把同一研究记为 V.2.2 / version 2.2。同一研究在两份交付物中被赋予两个不同版本号，且无一份给出可解析来源核对。",
+      "review weakened: mimic-iv-sepsis-prognostic-models-scoping::CLM-023 — 「至少三个发行版本（V.2.0、V.2.2、version 3.0）」这一层站得住：version 3.0 的表述可在工作区可读全文 PMC12534946 第 23 行逐字核对（MIMIC-IV database (version 3.0)，含 2020–2022 年记录，补充 version 2.2）。削弱之处在于版本清单由各研究自述版本号拼合，而同语料对同一研究给出不同版本号（见本表 CLM-016），枚举建立在不一致的版本归属上。",
+      "review weakened: independence-verdict-brief::CLM-056 — 「MIMIC 来源数据出现在 75 项研究中的 69 项」在可解析来源 PMID 42506073 的题录与摘要中无法定位：摘要给出 75 项纳入、27 项外部验证、3 项前瞻、38 项校准、64 项可解释性，未给出 69 这一数据库分布数字。该数字需全文才能核，本轮仅到题录与摘要层级，故不能算已核实。",
+      "review weakened: independence-verdict-brief::CLM-052 — 「以 CareVue 子集与入院时间界定 MIMIC-IV 中 2012–2019 年患者」在可解析来源 PMID 38172962 的摘要中无法定位：摘要只写到 the overlapping in the MIMIC-IV was excluded。具体去重叠机制需正文或补充材料，本轮不可核实；该细节在本语料内仅此一份交付物提出，无第二来源佐证。",
+      "review contradicted: empa-kidney-durability-evidence-report::CLM-020 — 该主张含两段。其一「除本试验外无来源报告停药后结局」在措辞上尚可成立。其二「该 meta 分析所纳入的 4 项 CKD 试验…无一在停药后继续观察受试者」，用「无一」把所引来源描述成「没有任何试验有过停药后观察」。可解析来源 PMID 39453837 本身就是同一试验的两年停药后随访报告，而同语料 empakidney-durability-review §3.8 明确记载该停药后随访属试验自身计划的一部分（预设斜率分析写作时即记有另两年停药后随访正在",
+      "review weakened: empa-kidney-durability-evidence-report::CLM-021 — 「可取信的持久性结论仅限停药后约最初 6 至 12 个月」这一推导的输入（前 6 个月、第 1 年、第 2 年三个区间）与来源一致，方法（区间是否排除 1.0）自洽，交付物亦自陈该推导未作多重性校正、仅为近似值。削弱之处在结论的表述强度：同语料 empakidney-durability-review §3.9 对同一时间窗估计给出极低确定性，并强调三个时间窗来自同一人群相互重叠的窗口、彼此不独立，本交付物未在结论处同步该限制。",
+      "review weakened: empakidney-durability-review::CLM-004 — 「因疗效提前终止」这一事实层面站得住，但用于计量的终止时事件数在本语料内互相矛盾：本报告称终止时已有 624 例首次主要结局，empa-kidney-durability-evidence-report 的确定性表称其基于 990 例首次主要结局而非计划的 1,070 例（990 与 1,070 均有支撑引文可定位）。624 与 990 指向同一终点同一试验的不同计数，本轮无法在可解析来源中判定孰为终止时点计数，故该主张的具体数值不可核实。",
+      "review weakened: empakidney-durability-review::CLM-028 — 末次当地 eGFR 绝对差 0.8（0.1–1.4）mL/min/1.73 m2、限于未达终末期肾病者：数值确在试验后报告中，交付物亦写明以当地实验室肌酐测量并参照当地基线，标注正确。削弱之处在于 empa-kidney-durability-evidence-report 把同一测量作为「试验后 eGFR 用本地实验室肌酐、而试验内用中心化检测，恰在最关键的停药窗口内增加测量变异」的限制陈述，两文对同一来源同一限制的强调不一致；本主张单看成立，但作为跨交付物证据体的一部分，其可比",
+      "review weakened: ce-report::CLM-010 — 「eICU 标识符无法回溯、也无法与其他数据库按标识符匹配」这一性质本身可从 eICU 描述论文的结构说明读出；但相关的「未检索到任何已发表的对照表可将 eICU 标识符与 MIMIC-IV 标识符相互映射」是否定性检索结论，本轮无独立来源可校对，交付物已自陈检索不穷尽。故按已核实部分成立、按绝对化部分削弱。",
+      "review weakened: d1-scoping-report::CLM-007 — 预期重叠约 95 例的推算（3,726 × 1,300 ÷ 50,920）算术正确，输入（HALP 验证队列 3,726 例、腹内感染队列 1,300 例、描述论文 ICU 患者 50,920）均可核。但该推算的方法学预设（两次抽取相互独立、目标人群口径与描述论文一致）在同语料中被另一交付物以更强形式处理：ce-report 只给上界并拒绝给出点估计，理由是可解析证据无法区分独立抽样与嵌套子集。该点估计在语料内不被其他交付物承认，属被削弱而非被否证。",
+      "review weakened: d1-scoping-report::CLM-029 — 该交付物把老年脓毒症脑病模型记为 MIMIC-IV v3.1、3,156 例、XGBoost 测试集 AUC 0.898：可解析来源 PMID 40313459 摘要原文支持 MIMIC IV database version 3.1、3,156 例、7:3 划分、五模型、AUC 0.898、十折交叉验证，皆可对上。削弱之处在于同语料另一交付物把同一亚群记为 version 3.0 并称其含 2020–2022 年记录（来源为另一篇 PMID 41107845），两篇被不同交付物用作同一条「版本异质性」",
+      "review weakened: d1-scoping-report::CLM-036 — 该主张（HALP 与 28 天死亡研究纳入 2,968 例、28 天内 809 例死亡、排除 ICU 停留短于 48 小时者）与 mimic4-sepsis-mortality-models、independence-verdict-brief 的转述一致，三份交付物同向。但该文全文未落入工作区可读来源清单，本轮只能核到可解析题录（PMID 40065235），题录层级不足以核对 2,968/809 与排除规则，故只能记为未经独立核实。",
+      "review contradicted: family::searchlog-arithmetic — 「检索日志与回执统计量一致」这一被三份交付物明确断言的性质，至少在两份交付物中被算术否证。mimic4-sepsis-mortality-models：摘要与回执称 16 条检索命中 179 条，而 clinical-evidence-search.json 的 16 条 queries resultsRetrieved 之和实为 200；evaluation-run.json 还自述 recordsIdentified「逐条取自 queries[].resultsRetrieved」之和为",
+      "review contradicted: family::protocol-deviation — mimic-iv-sepsis-prognostic-models-scoping 正文方法节写明「问题界定、来源分层与判定规则在本轮开始前确定，未在运行中调整」，而其自身检索日志 reviewMethods.protocol.deviations 恰恰记录了一处运行中偏离（原计划按给定三条锚点来源归纳，实际扩展为可复现检索）。正文的「未作调整」与该文件内的偏离记录直接冲突：同一交付物内两处对同一事实给出相反陈述。",
+      "review contradicted: family::evidence-tier-HALP-and-IAS — 关于同一实体的证据层级，语料内出现互斥判定：mimic-iv-sepsis-prognostic-models-scoping 把 HALP 死亡模型（PMID 41602009）与腹内感染性脓毒症模型（PMID 41146378）记为全文级；independence-verdict-brief、mimic4-sepsis-mortality-models 与 d1-scoping-report 记为摘要级；ce-report 在同一份交付物内同时保留「来源清单登记为摘要级」与「",
+      "review contradicted: family::external-validation-count — 关于「有几项研究把 MIMIC-IV 用作外部验证队列」，语料内出现互斥计数：mimic4-sepsis-mortality-models 称仅 1 项；independence-verdict-brief 表 1 至少列 2 项（HALP 院内死亡模型、脓毒症相关凝血病模型）；ce-report 表 1 列 2 项（HALP 与凝血病模型，均以 MIMIC-IV 为验证）。同一实体同一问题在同一语料内得到 1 与 2 两个确定性计数，且两处都以「有限」「数项」等模糊措辞包装。",
+      "review contradicted: family::empa-guideline-status — 同一份 EMPA-KIDNEY 材料对 KDIGO 2024 指南给出互斥状态：empa-kidney-durability-evidence-report 的检索受限记录称该指南以 KDIGO 过滤指南来源检索返回了仅有片段文本的记录（因而可读作「已检索未取得推荐意见」）；empakidney-durability-review 也称指南来源返回的记录只带有一段不含推荐意见的片段文本，而其 revision-notes 又记载该指南记录并未列入任何 included 或 excluded",
+      "review weakened: family::ARDS-external-cohort — 脓毒症相关 ARDS 模型的外部队列被描述为「辽宁某三甲/三级医院，n = 225，117 例住院期间死亡、108 例存活」，在 independence-verdict-brief 与 mimic4-sepsis-mortality-models 中同向一致，并伴随「两个数据集采用同一套纳入排除标准」「数据源完全独立」等设计层声明。但该研究全文产物未落入工作区可读来源清单，本轮只能核到可解析题录（PMID 39027620），题录层级不足以核对 225/117/108 与该组设计声明，故记为未经独"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-42305b83-ed7a-4730-b3ce-5f074f4df8ed",
+    "status": "failed",
+    "transcript": {
+      "bytes": 2778765,
+      "completeness": "partial",
+      "messages": 466,
+      "missing": [
+        {
+          "fromSeq": 0,
+          "reason": "child_undiscovered",
+          "sessionId": "run_cf0fb80f650c264a3c1edcaa39941c5f"
+        }
+      ],
+      "path": ".openscience/transcripts/run_cf0fb80f650c264a3c1edcaa39941c5f.jsonl",
+      "sha256": "fcb5793c91aebef597b70d4a23323b344b1f983058ce0bb041713d5510a3ba1d"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.4954612962962963,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T13:02:37Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

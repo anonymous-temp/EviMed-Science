@@ -82,16 +82,24 @@ class FakeRuntime {
 
   async sessionTranscript(project, sessionId, options) {
     this.calls.push({ sessionId, options });
+    // What `runtimeManager.sessionTranscript` does with a named parent: look the
+    // child up in the kernel's catalogue and read it at the address found
+    // there. Modelled here so the collector is tested against the resolution
+    // it actually relies on, not against a shortcut.
+    let address = options?.address ?? null;
+    if (!address && options?.parentSessionId) {
+      const rows = subagentListItems({ entries: await this.subagentCatalogue(project, options.parentSessionId) });
+      const row = rows.find((item) => String(item.id) === String(sessionId));
+      address = row ? subagentAddress(options.parentSessionId, row) : null;
+    }
     // The kernel refuses a subagent session addressed at its own id, and that
-    // refusal is the whole reason the address exists. Reproduced here so a
-    // caller that drops the address fails this double the way it fails the
-    // kernel.
-    // Whether this session IS a subagent is the kernel's own fact, read off the
-    // session header — not off our catalogue. A catalogue read that came back
-    // empty does not make a child into a root.
+    // refusal is the whole reason the address exists. Whether this session IS a
+    // subagent is the kernel's own fact, read off the session header — not off
+    // our catalogue. A catalogue read that came back empty does not make a child
+    // into a root.
     const isSubagent = [...this.sessions.values()].some((value) => !(value instanceof Error)
       && (value?.subagents ?? []).some((child) => child.sessionId === sessionId));
-    if (isSubagent && options?.address?.kind !== "subagent") {
+    if (isSubagent && address?.kind !== "subagent") {
       const error = new Error("subagent Sessions require their durable parent address");
       error.code = "runtime_session_error";
       throw error;
@@ -244,12 +252,10 @@ test("a subagent session is read at the address the kernel publishes, not at its
 
     assert.equal(receipt.completeness, "complete");
     const byId = new Map(runtime.calls.map((call) => [call.sessionId, call.options]));
-    assert.equal(byId.get("ses_root")?.address, null, "the root is not a subagent and has no parent address");
-    assert.deepEqual(byId.get("ses_child_a")?.address, {
-      kind: "subagent", parentSessionId: "ses_root", childSessionId: "ses_child_a", mode: "one-shot",
-    });
-    // One catalogue read per parent, not one per child.
-    assert.deepEqual(runtime.catalogueCalls, ["ses_root"]);
+    assert.equal(byId.get("ses_root")?.parentSessionId, null, "the root is not a subagent and names no parent");
+    assert.equal(byId.get("ses_child_a")?.parentSessionId, "ses_root",
+      "the collector names the parent and leaves the address to the runtime manager, which every reader shares");
+    assert.equal(byId.get("ses_child_a")?.address, undefined, "the collector no longer composes an address of its own");
   });
 });
 
@@ -267,6 +273,38 @@ test("a child the catalogue does not list is a recorded gap, not a guessed addre
     assert.equal(child?.transcript, null, "no address, so no read was attempted at the wrong one");
     assert.match(String(child?.error), /runtime_session_error: subagent Sessions require their durable parent address/,
       "the recorded reason names the defect, not just its error code");
+  });
+});
+
+test("a deliverable delegated twice keeps both children, not just the one the projection kept", async () => {
+  // The run projection keeps one child per deliverable, so a second delegation
+  // of the same deliverable — a repair, or a continuation after the submission
+  // cap — overwrote the first child, which is the one that did the research.
+  // Three of the twelve runs of the 2026-09-16 v6 batch lost that child. The
+  // parent's own delegation receipts name every child the kernel created.
+  await withProject(async (project) => {
+    const delegation = (childSessionId, seq) => ({
+      ...message(seq, "delegate"),
+      parts: [{ type: "tool", tool: "evimed_delegate", status: "completed", output: JSON.stringify({ ok: true, data: { childSessionId } }) }],
+    });
+    const runtime = new FakeRuntime({
+      ses_root: transcript("ses_root", [delegation("ses_researcher", 1), delegation("ses_repairer", 2)]),
+      ses_researcher: transcript("ses_researcher", [message(3, "searched and appraised")]),
+      ses_repairer: transcript("ses_repairer", [message(4, "fixed one citation")]),
+    }, {
+      ses_root: [
+        { kind: "child", id: "ses_researcher", mode: "one-shot" },
+        { kind: "child", id: "ses_repairer", mode: "one-shot" },
+      ],
+    });
+    // The projection seed names only the last child, as it does in production.
+    const sessions = await collectRunTranscripts(runtime, project, { id: "run_twice", sessionId: "ses_root" }, {
+      children: [{ sessionId: "ses_repairer", parentSessionId: "ses_root" }],
+    });
+    const receipt = await persistRunTranscript({ project, run: { id: "run_twice", sessionId: "ses_root" }, sessions, now: new Date(CAPTURED_AT) });
+
+    assert.deepEqual(sessions.map((entry) => entry.sessionId).sort(), ["ses_repairer", "ses_researcher", "ses_root"]);
+    assert.equal(receipt.completeness, "complete", "two delegations, two children collected: nothing is missing");
   });
 });
 

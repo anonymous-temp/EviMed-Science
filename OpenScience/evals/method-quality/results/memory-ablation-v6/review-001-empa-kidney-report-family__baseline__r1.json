@@ -1,0 +1,177 @@
+{
+  "arm": "baseline",
+  "armDigest": "e35f4c197e8c879f679b599075a4704775a085373aac369e3cc42c02b49d06c8",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__baseline__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "25b0f8b2dc915a05e48f46474c970194413a68c370ef92bdb234b317b6be2f34",
+  "configId": "memory-ablation-v6",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 11,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T12:41:45Z",
+  "judge": {
+    "issues": [
+      "Internal audit states 43 direct claims in one place and 41 direct claims in another.",
+      "Conclusion overstates cardiovascular durability: post-trial cardiovascular outcomes were not separately reported and active-trial cardiovascular effects were not established, so 'kidney and cardiovascular effects durability for months' is not fully supported.",
+      "Delivery opens with internal parent-side check log and delivery-status metadata that are not part of the requested report."
+    ],
+    "promptVersion": 1,
+    "rationale": "The review fully covers the brief: design, searches, eligibility, protocol status, one-study counting, and randomized vs post-trial separation. Claims are sourced and derived estimates named. Minor defects: an internal claim-count inconsistency, a broad conclusion that overstates CV durability, and extraneous workflow logs. No unsafe practical advice.",
+    "scores": {
+      "correctness": 4,
+      "evidenceHandling": 5,
+      "safetyFraming": 5,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 82,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 83
+      },
+      {
+        "expectedVersion": 75,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 76
+      },
+      {
+        "expectedVersion": 75,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 76
+      },
+      {
+        "expectedVersion": 74,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 75
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "build/notes-check.md",
+      "deliverables/empakidney-durability-review/citation-audit.md",
+      "deliverables/empakidney-durability-review/citation-ledger.csv",
+      "deliverables/empakidney-durability-review/clinical-evidence-matrix.json",
+      "deliverables/empakidney-durability-review/clinical-evidence-report.md",
+      "deliverables/empakidney-durability-review/clinical-evidence-run.json",
+      "deliverables/empakidney-durability-review/clinical-evidence-search.json",
+      "deliverables/empakidney-durability-review/question-coverage.json",
+      "deliverables/empakidney-durability-review/references.bib",
+      "delivery-summary.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_1_0b111b903e6c0427",
+    "durationMs": 1456500,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_f113a046f6410e1966003059130f1f64",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copie",
+      "review weakened: EK-14 绝对获益：随机化期结束时每 1000 例减少 57 例、试验后期结束减少 45 例（SE 14） — 本条 57/45 与 SE 标注为〔推导〕，但我在任何可解析来源中均未核到这两个绝对值（试验后报告的可及正文我只核到 HR、区间与百分比）。作为推导它在方法上自洽（45/57≈0.79，差值 12 小于约 19.8 的合并 SE），但输入值本身不可核验，只能算弱支持。",
+      "review weakened: EK-15 全随访期「死亡或终末期肾病」复合结局 0.82 (0.70–0.96)、16.9% vs 19.6% — 数值与原文相符（\"a 19% reduction in the risk of the key secondary composite outcome of death from any cause or ESKD (16.9% vs. 19.6%: 0.81, 0.72-0.90), including a hazard ratio of 0.82 (0.70-0.96) for the post-trial period\"），但报告把该结局",
+      "review weakened: EK-18 表 4 中「肾脏病进展」合并随访期一栏填 0.79 (0.72–0.87)、23.5% vs 27.1% — 23.5% vs 27.1% 与 0.79 均取自原文，但原文的定语是整个随访期（\"The effect on the primary outcome during the entire follow-up period included a 21% reduction in the risk of the secondary outcomes of kidney disease progression (23.5% vs. 27.1%: ",
+      "review weakened: F-04 2026 年可核查记录中 5 篇 MIMIC-IV 脓毒症死亡模型；无其他试验的停药后数据 — 该组 5 篇的构成与兄弟报告不一致（见 C-1/C-8）：PMID 39141286 在本次检索中可解析且明确以 MIMIC-IV 1.0 开发死亡模型（27,134 例），未被计入本报告的 5 篇。报告已自认 5 篇是「由可保存性决定的下界」，故为弱支持而非直接错误。",
+      "review contradicted: F-05 各篇使用 v2.0 (5,6)、v2.2 (3,4)、v3.0 (7) — 同一组研究在另一份产物中被赋予另一套版本，且与全文不符：PMID 37696627 全文明写 MIMIC IV **V.2.0**，而本报告称其为 MIMIC-IV **3.0** 并要求其时间窗为 2008–2021；v2.2 被归属于 PMID 41602009 与 PMID 41146378（与全文相符），PMID 38755721 被列入「两份使用 v2.0」之一。我可在全文中核到的只有 V.2.0 与 2.2（及另一产物的 1.0、3.1、v2.0）。",
+      "review contradicted: F-08 严重感染合并器官功能障碍的院内病死率为 15–30% — 所引来源 PMID 41146378 的院内病死率在可核正文中是 45.8%（<65 岁）与 54.2%（≥65 岁），其引言给出的区间是腹腔感染 20–29%；「15–30%」在保全全文中找不到对应表述。区间数字不得挂在未陈述它的来源上。",
+      "review weakened: F-09 疑似脓毒症属需立即临床评估、风险评分不得用于推迟评估 — 语句本身是合理的安全提示，但所引来源 PMID 41146378 只写 \"Delays in intervention are associated with increased mortality, underscoring the need for timely risk stratification\"，且该文正式结论已撤回原摘要中的效能表述。报告自认「本次检索未引用任何针对本问题的指南推荐」，故这条急症提示缺可解析的直接来源支撑。",
+      "review weakened: D1-01 检索到 5 个以 MIMIC-IV 评估的成人脓毒症死亡预后模型（含脓毒症相关脑病模型） — 该 5 篇与兄弟报告的 5 篇不是同一组：本报告纳入 PMID 39141286（MIMIC-IV 1.0，27,134 例）、排除 PMID 38755721（14,240 例）；兄弟报告相反。PMID 40313459 的主结局为脑病发生、28 天死亡仅作组间比较，本报告纳入它而兄弟报告以「不报告死亡结局的模型」为由排除，两边对同一篇的收录决定互斥。",
+      "review weakened: D1-09 「全部模型的 MIMIC-IV 队列在时间窗、首诊次规则与结局口径上存在结构性重叠」 — 时间窗在多数研究中一致（2008–2019）、「仅保留首次 ICU 入住」也在多数研究中出现，方向不算错。但报告把 PMID 39141286 的年份列为「未报告」，又把 PMID 40313459 记在 2008–2022 的不同区间下，因此「全部模型」在时间窗口径上并非全部一致：该判断只能限于声明了同一区间的那几篇。",
+      "review weakened: D1-12 两篇指定模型的证据层级为全文级；引文审计称「9 条纳入来源全部为全文层级」 — 两份来源的正文确实被保全并阅读，层级提升本身有据。但同一产物的引文审计另写「早期版本区间未能从可及来源核实」、并声明「abstract 在本审计中不被当作 metadata-only 的同义词」，而兄弟产物就同两份文件给出相反的登记层级（abstract 登记、事后提升），同一事实在两处无法复现同一层级；引文审计的「9 条全部全文级」与该产物自身对登记层级的处理也不完全自洽。",
+      "review contradicted: C-1 同一组五篇 MIMIC-IV 脓毒症死亡队列的版本归属与队列计数：两份产物互相矛盾 — 冲突对。ce-report 称 5 篇为 1300 [41146378]、3,726 [41602009]、3,777 [42638098]、3,796 [37696627]、14 240 [38755721]，版本为 v2.0 [37696627][38755721]、v2.2 [41146378][41602009]、v3.0 [42638098]；d1 一侧把最大队列写成 27,134（PMID 39141286）、把 14,240 那篇排除，并把版本",
+      "review weakened: C-2 队列规模差异的可解释性：一份称不可调和，一份称可由脓毒症定义差异解释 — 冲突对。ce-report 明写「所报告的队列规模之间的差异，没有任何已陈述的规则可以调和」；d1 则称「样本量差别恰好可以由此（Sepsis-3 的三种操作化路径）解释」。后者对「定义差异可解释数量级差异」这一强命题无来源支撑，仅属推测，故该侧较弱；冲突本身成立。",
+      "review weakened: C-3 两篇指定模型来源的登记层级：摘要级 vs 全文级 — 冲突对。ce-report 用整段论证其来源清单登记为 abstract、而本次运行保存并阅读了完整正文，并称「仅按来源清单阅读的读者所面对的层级低于本次运行」；d1 在证据表中声明同两份来源「完整正文均已阅读并核对，证据层级为全文级」，并把该层级变化记入引文审计。同一事实在两处给出相反的层级登记（见表征与引用），读者无法据此判断哪个层级可复现。",
+      "review weakened: C-4 同一项试验的报告数：3 份报告 vs 6 份报告 — 冲突对（口径冲突）。empakidney-durability-review 全文与证据矩阵 CLM-048 一律写「1 项随机对照试验、该试验的 3 份报告」；empa-kidney-durability-evidence-report 写「同一项随机试验的 6 份报告」并另计 1 项 meta 分析。二者都保持「NCT03594110 = 1 项主研究、6609 只计一次」，但同一任务下报告数相差一倍，且 6 份那侧的收录决定（并入设计报告、按原发肾病分析与亚组研究）与 3 份那侧的「不含停药后",
+      "review weakened: C-5 同一试验全随访期「死亡或 ESKD」复合结局的标签与数值 — 冲突对（同实体、不同取值）。d1 写「终末期肾病或心血管死亡的复合结局降至 0.73 (0.59 至 0.89)」并按 [4] 归属；可核数字为：ESKD 或心血管死亡 0.73 (0.59–0.89) 属随机化期，而「死亡或 ESKD」在全随访期为 0.81 (0.72–0.90)、试验后期为 0.82 (0.70–0.96)。兄弟产物把 0.82 挂到「死亡或 ESKD」上正确，d1 的 0.73 归属把两个不同的复合结局混在同一句；[4]（PMID 38061372）可及摘要支持 0.",
+      "review weakened: C-8 同一 MIMIC-IV「死亡模型 5 篇」文献群：两份产物的纳入集合不一致 — 冲突对。两份产物都称「5 个/5 篇以 MIMIC-IV 评估的成人脓毒症死亡模型」，但集合内容不同：d1 把脑病预测模型（PMID 40313459，主结局为脑病）算作死亡模型、把 14,240 那篇排除；ce-report 反之。同一实体（该文献群的构成）在两个结论上不兼容，且各自据此给出「规模最大的 MIMIC-IV 队列」为 27,134 或 14,240。"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-7c0ccb87-f821-4f42-95fd-211038ed1d81",
+    "status": "failed",
+    "transcript": {
+      "bytes": 2277110,
+      "completeness": "complete",
+      "messages": 360,
+      "path": ".openscience/transcripts/run_f113a046f6410e1966003059130f1f64.jsonl",
+      "sha256": "b944d7e321c9a8aaf0f905d0c68651408026914f6d245c9e278cfb345b5c7d05"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.7302777777777778,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T12:15:23Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

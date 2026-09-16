@@ -974,29 +974,59 @@ function delegatedChildSessionIds(messages) {
   return ids.slice(0, 32);
 }
 
-/** Read authenticated kernel histories for delegated children, including nested children. */
-async function readDelegatedAssistantMessages(project, parentMessages, readSessionHistory) {
-  const queue = delegatedChildSessionIds(parentMessages);
+/**
+ * Read authenticated kernel histories for delegated children, including nested
+ * children.
+ *
+ * Each child is read under its parent's address. It used to be read at its own
+ * id, which the kernel refuses for a subagent session — and the refusal was
+ * swallowed here, so the delivery gate built its source-provenance map from the
+ * root session alone. A clinical-evidence run whose child fetched a full text
+ * was then refused for listing "a path no evidence tool reported preserving",
+ * about a file that child had preserved: on 2026-09-16 that one sentence failed
+ * ten of the twelve runs of a paired evaluation, the first of them in a fresh
+ * project where nothing else could have written the file.
+ *
+ * A child that still cannot be read is returned by name rather than skipped in
+ * silence, so the gate can say its verdict rests on an incomplete run.
+ *
+ * @param {Record<string, any>} project
+ * @param {any[]} parentMessages
+ * @param {(project: Record<string, any>, sessionId: string, options: {wake: boolean, parentSessionId: string | null}) => Promise<any>} readSessionHistory
+ * @param {string | null} [rootSessionId] the session `parentMessages` belong to
+ * @returns {Promise<{ assistants: any[], unreadable: string[] }>}
+ */
+async function readDelegatedAssistantMessages(project, parentMessages, readSessionHistory, rootSessionId = null) {
+  /** @type {{ sessionId: string, parentSessionId: string | null }[]} */
+  const queue = delegatedChildSessionIds(parentMessages).map((sessionId) => ({ sessionId, parentSessionId: rootSessionId }));
   const seen = new Set();
   const assistants = [];
+  /** @type {string[]} */
+  const unreadable = [];
   while (queue.length && seen.size < 32) {
-    const sessionId = queue.shift();
-    if (!sessionId || seen.has(sessionId)) continue;
-    seen.add(sessionId);
+    const next = /** @type {{ sessionId: string, parentSessionId: string | null }} */ (queue.shift());
+    if (!next.sessionId || seen.has(next.sessionId)) continue;
+    seen.add(next.sessionId);
     let history;
     try {
-      history = await readSessionHistory(project, sessionId, { wake: false });
+      history = await readSessionHistory(project, next.sessionId, { wake: false, parentSessionId: next.parentSessionId });
     } catch {
+      unreadable.push(next.sessionId);
       continue;
     }
-    if (!Array.isArray(history)) continue;
+    if (!Array.isArray(history)) {
+      unreadable.push(next.sessionId);
+      continue;
+    }
     const completed = history.filter((message) => messageId(message) && messageRole(message) === "assistant" && assistantFinished(message));
     assistants.push(...completed);
     for (const child of delegatedChildSessionIds(completed)) {
-      if (!seen.has(child) && !queue.includes(child) && seen.size + queue.length < 32) queue.push(child);
+      if (!seen.has(child) && !queue.some((item) => item.sessionId === child) && seen.size + queue.length < 32) {
+        queue.push({ sessionId: child, parentSessionId: next.sessionId });
+      }
     }
   }
-  return assistants;
+  return { assistants, unreadable };
 }
 
 // Tools whose job is to go and fetch from outside. Whether one succeeds depends
@@ -2276,6 +2306,13 @@ async function readDeliveryReceipt(project, run = null) {
   // malformed one must read as "no receipt" rather than as an accepted run.
   const validated = validateDeliveryReceipt(parsed);
   if (!validated.ok) return null;
+  // Another run's receipt is no receipt. Only native turns were ever checked
+  // against their run; every other run trusted the workspace's one receipt file
+  // whole, and that file is shared by every run of the project — so a run could
+  // be credited, or snapshotted, with a package a previous run had delivered.
+  // A dispatched run's receipt carries the control plane's own run id, which is
+  // what this compares.
+  if (run && !run.nativeTurn && run.id && validated.receipt.runId !== run.id) return null;
   const receipt = run?.nativeTurn ? scopeNativeReceipt(validated.receipt, run) : validated.receipt;
   return receipt ? (await verifiedReceiptArtifacts(project, receipt)).receipt : null;
 }
@@ -3859,7 +3896,8 @@ export class AgentRunStore {
     const allAssistants = history
       .slice(baselineIndex + 1)
       .filter((message) => messageId(message) && messageRole(message) === "assistant" && assistantFinished(message));
-    const delegatedAssistants = await readDelegatedAssistantMessages(project, allAssistants, this.readSessionHistory);
+    const delegated = await readDelegatedAssistantMessages(project, allAssistants, this.readSessionHistory, sessionId);
+    const delegatedAssistants = delegated.assistants;
     const allRunAssistants = [...allAssistants, ...delegatedAssistants];
     const repairBaselineCursor = this.clinicalRepairBaselineCursors.get(run.id) ?? null;
     const repairBaselineIndex = repairBaselineCursor == null
@@ -3917,6 +3955,26 @@ export class AgentRunStore {
         );
       } catch {
         completion = { artifacts: [], errorCode: "specialist_contract_unavailable" };
+      }
+      // A provenance verdict reached without some of the run is said to be one.
+      //
+      // The check refuses a source path that no preserving tool reported in
+      // this run, and "this run" is only what could be read of it. When a
+      // delegated session could not be read, the file the refusal names may be
+      // exactly one that session preserved — so the issue carries which
+      // sessions were missing, and the run is not accused of typing a path it
+      // may well have copied. The verdict itself is unchanged: this states what
+      // the verdict rests on, it does not soften it.
+      if (completion.errorCode === "specialist_evidence_provenance_failed" && delegated.unreadable.length > 0) {
+        completion = {
+          ...completion,
+          qualityIssues: [
+            ...(completion.qualityIssues ?? []),
+            `This check could read only part of the run: ${delegated.unreadable.length} delegated session(s) `
+            + `(${delegated.unreadable.slice(0, 4).join(", ")}) could not be read, so a source one of them preserved `
+            + "is not visible here. Re-list the paths from the preserving tools' own output.",
+          ],
+        };
       }
       artifacts = [...new Set([...artifacts, ...completion.artifacts])].sort();
       if (completion.errorCode) {
@@ -5073,9 +5131,9 @@ export function scopeNativeProjectionForTest(projection, run) {
 }
 
 /** Test seam: child histories are the source-provenance boundary, not workspace projection JSON.
- * @param {Record<string, any>} project @param {Record<string, any>[]} messages @param {Function} reader */
-export function readDelegatedAssistantMessagesForTest(project, messages, reader) {
-  return readDelegatedAssistantMessages(project, messages, reader);
+ * @param {Record<string, any>} project @param {Record<string, any>[]} messages @param {any} reader @param {string | null} [rootSessionId] */
+export function readDelegatedAssistantMessagesForTest(project, messages, reader, rootSessionId = null) {
+  return readDelegatedAssistantMessages(project, messages, reader, rootSessionId);
 }
 
 /** Test seam: repair snapshots live in control-plane-private project metadata. */

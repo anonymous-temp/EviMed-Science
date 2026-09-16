@@ -1,0 +1,174 @@
+{
+  "arm": "candidate",
+  "armDigest": "51827d59ca5a556a2c95a8db7fba7dd75097220cd4505262c5f0910a8c92f7ba",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__candidate__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "25b0f8b2dc915a05e48f46474c970194413a68c370ef92bdb234b317b6be2f34",
+  "configId": "memory-ablation-v6",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 49,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T11:13:55Z",
+  "judge": {
+    "issues": [
+      "Dual evidence-level labels for the two seed model publications (abstract in source inventory vs full_text in evidence matrix/search log) are disclosed but create conflicting records and depend on claimed full-text preservation not shown in the delivered brief.",
+      "The audit references external artifact files and hashes that are not part of the delivery, making some verification claims uncheckable from the delivered text.",
+      "Unrequested clinical practice advice and 'when to seek care' guidance go beyond the scoping review question, though they do not rest on derived estimates."
+    ],
+    "promptVersion": 1,
+    "rationale": "Answers the scoping question deeply: five MIMIC-IV sepsis models, versions, cohort sizes, eligibility rules, and the fields needed to test overlap. Correctly leaves overlap unresolved and treats same-database use as neutral. Evidence is typed, cited, and derived estimates name assumptions. Main limitations are dual abstract/full_text labeling and reliance on external artifacts; clinical advice is extra but safely framed.",
+    "scores": {
+      "correctness": 5,
+      "evidenceHandling": 4,
+      "safetyFraming": 5,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 79,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 80
+      },
+      {
+        "expectedVersion": 72,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 73
+      },
+      {
+        "expectedVersion": 72,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 73
+      },
+      {
+        "expectedVersion": 71,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 72
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "deliverables/ce-report/citation-audit.md",
+      "deliverables/ce-report/citation-ledger.csv",
+      "deliverables/ce-report/clinical-evidence-matrix.json",
+      "deliverables/ce-report/clinical-evidence-report.md",
+      "deliverables/ce-report/clinical-evidence-run.json",
+      "deliverables/ce-report/clinical-evidence-search.json",
+      "deliverables/ce-report/question-coverage.json",
+      "deliverables/ce-report/references.bib"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_1_92c4a4e49f11c45a",
+    "durationMs": 1303100,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_9d499848527f5fd6d2bb41c4bfa91379",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/PMC9810617/4fc8f92d751072a6d7ad5ac31a3a77d2ae820053d4875d6b58c751d99eacff6e/fulltext.md, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copie",
+      "literature_search searched and returned no source",
+      "review contradicted: PAIR-1 (evidence-level label: abstract-level vs full_text) — Two labels exist for the same two publications, and the higher one is the correct one. (a) The report's Methods (clinical-evidence-report.md:56), its 摘要 (line 13) and question-coverage.json 2.3/2.4/2.5/3.1 (status 'ans",
+      "review contradicted: PAIR-2 (run-receipt statistics: 70 vs 76 vs 13) — The reported screening quantities do not reconcile with the stored files. (a) clinical-evidence-run.json stats = {totalSearches 14, recordsIdentified 72, recordsAfterDeduplication 70, sourcesIncluded 7, distinctPreservedSources 7",
+      "review contradicted: PAIR-3 (eligibility rules vs actual exclusions) — The search log states its own exclusion rules and then breaks them. reviewMethods.eligibility.exclusionCriteria in clinical-evidence-search.json admit only five reasons, one being 'Duplicate record already retrieved by an earlier",
+      "review weakened: PAIR-4 (MIMIC-IV cohort independence: source claim vs report's assessment) — The report's 结论 (line 16) and CLM-035 conclude that the two seed MIMIC-IV cohorts cannot be treated as independent evidence (overlap unresolved), while the cited source itself asserts independence: referenc",
+      "review weakened: CLM-035 — The core verdict holds: the MIMIC-IV cohorts of PMID 41602009 (3,726) and PMID 41146378 (1,300) are recorded as unresolved, both named conditions are correctly failed in both directions, shared database name is treated as neutral both ways, and the missing field is named a",
+      "review weakened: CLM-038 — The observation is correctly framed as an absence-of-report limited to the preserved copies, and I confirmed it as far as it can be confirmed: none of the five model articles exposes a cohort-level extraction window narrower than its database's own span, and none lists sub",
+      "review weakened: CLM-031 — Every quantity and every stated eligibility difference is supported by the sources: 1,300 (intra-abdominal, with 264 deaths), 3,726 (HALP), 3,777 (tumour-related sepsis, '3777 cases for the development of the model'), 3,796 (sepsis-and-cancer), 14,240 = 9,968 + 4,272 with ",
+      "review weakened: CLM-008 — The headline figures verify verbatim: 'The database comprises 200,859 patient unit encounters for 139,367 unique patients admitted between 2014 and 2015. Patients were admitted to one of 335 units at 208 hospitals located throughout the US.' Two components of the claim are",
+      "review weakened: CLM-043 — Verified verbatim: 'After applying the data inclusion and exclusion criteria, we obtained a total of 2,418 cases from the EICU cohort and 192 cases from the Guangxi cohort.' The report cites this as the external-validation counts of the tumour-related sepsis model, which i",
+      "review weakened: CLM-044 — Verified as quoted: the HALP article's introduction reads 'remains a leading cause of mortality in intensive care units worldwide, with in-hospital mortality rates of 15–30%', and the matrix itself notes the range is carried from the source's introduction with its own cita",
+      "review weakened: QA-QUALITYCHECKS — clinical-evidence-run.json declares eight qualityChecks all true, including 'searchReproducibility': true and 'contradictionOrArithmeticChecks': true. Two of those declarations are not supported by the stored files: the search log's rows do not reconcile with its ",
+      "review contradicted: STMT-abstract-level-satisfaction — The package asserts in three places that the abstract-level requirement was satisfied for both model publications: the report's 摘要 (line 13) and Methods (line 56) state they are recorded at their declared level or that only abstract-supported s",
+      "review contradicted: STMT-run-receipt-reconciliation — revision-notes.md states that the run-receipt reconciliation 'was never confirmed as satisfied by the gate' and that the arithmetic 'was re-verified by hand: 14 queries summing to 72 hits, 70 unique records after two duplicates, 7 included, 7 di",
+      "review weakened: PAIR-5 (MIMIC-IV population denominators: 382,278 vs descriptor counts) — Two MIMIC-IV population figures for overlapping periods appear without being reconciled: reference 6 states 'MIMIC-IV v2.0包括2008至2019年入住ICU的382 278名患者的医疗信息' (attributed, and correctly reported as attributed in"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-6d32a97f-3a7d-4d68-b114-c5fe6774d01a",
+    "status": "failed",
+    "transcript": {
+      "bytes": 2349323,
+      "completeness": "complete",
+      "messages": 336,
+      "path": ".openscience/transcripts/run_9d499848527f5fd6d2bb41c4bfa91379.jsonl",
+      "sha256": "5e25df1650281a869b630d05fab2c276316353701a5f9a96cc7530cfb8323d76"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.7586851851851852,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T10:48:59Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

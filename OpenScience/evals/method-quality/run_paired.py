@@ -941,6 +941,13 @@ def load_config(
         "baseline": normalize_arm(raw.get("baseline"), "config.baseline"),
         "candidate": normalize_arm(raw.get("candidate"), "config.candidate"),
     }
+    # Carried only when set: the digest covers every key, and a key added with
+    # a default would re-measure every batch already on disk.
+    if "projectPerCell" in raw:
+        if not isinstance(raw["projectPerCell"], bool):
+            raise EvalError("config.projectPerCell must be true or false")
+        if raw["projectPerCell"]:
+            config["projectPerCell"] = True
     if not config["briefs"]:
         raise EvalError("config.briefs must name at least one brief")
     if config["repeats"] < 1:
@@ -1876,12 +1883,48 @@ class PairedRunner:
         self.log(f"[give-up] {cell}: control plane still unreachable after {CONTROL_PLANE_WAIT_SECONDS}s")
         return None
 
+    def cell_project(self, client: PlatformClient, cell: str, attempt: int) -> str:
+        """The project a legacy-arm cell runs in, created and scoped here.
+
+        One project for the whole batch was the original design, and on
+        2026-09-16 it made the cells of memory-ablation-v6 into one experiment
+        instead of twelve: every run of a project shares its workspace, so seven
+        of twelve runs read other cells' deliverable folders, a baseline cell
+        copied the candidate cell's accepted package into its own folder, and
+        the one receipt file at the workspace root ended holding five
+        deliverables from runs of both briefs under the last run's id.
+        `projectPerCell` gives each cell a fresh project — the only
+        state the arms are then meant to share is the account's own memory,
+        which is exactly the variable under test.
+
+        The attempt and the release are in the id for the reason they are in the
+        dispatch id: a cell measured again after a failure would otherwise start
+        in the workspace its failed attempt left behind.
+        """
+        if not self.config.get("projectPerCell"):
+            return self.project_id
+        suffix = sha256_text(f"{cell}{self.config['digest']}{self.release_id}#{attempt}")[:8]
+        project_id = f"{self.project_id[:55]}-{suffix}"
+        client.ensure_project(project_id, f"{self.config['id']} · {cell}"[:80])
+        client.scope_to_project(project_id)
+        for fixture in self.fixtures:
+            client.upload(str(fixture["path"]), base64.b64decode(fixture["data"]))
+        return project_id
+
     def run_cell(self, client: PlatformClient, runtime_url: str, plan: dict[str, Any]) -> dict[str, Any]:
         try:
             return self._run_cell(client, runtime_url, plan)
         finally:
             if self.private_grant:
                 client.close_evaluation_cell()
+            elif self.config.get("projectPerCell"):
+                # A cell's runtime holds one of the account's runtime slots, and
+                # the next cell starts in a different project, where its own
+                # `stop_runtime` cannot reach this one.
+                try:
+                    client.stop_runtime()
+                except (EvalError, OSError):
+                    pass
 
     def _run_cell(self, client: PlatformClient, runtime_url: str, plan: dict[str, Any]) -> dict[str, Any]:
         brief = self.briefs[plan["briefId"]]
@@ -1934,8 +1977,10 @@ class PairedRunner:
             run_id, session_id = cell["runId"], cell["sessionId"]
             record["methodSnapshot"] = {"frozen": self.private_grant["snapshotDigest"], "projectId": cell["projectId"]}
         else:
+            cell_project = self.cell_project(client, record["cell"], attempt)
+            record["projectId"] = cell_project
             client.stop_runtime()
-            record["methodSnapshot"] = apply_method_snapshot(client, arm, self.project_id)
+            record["methodSnapshot"] = apply_method_snapshot(client, arm, cell_project)
             runtime_url = client.start_runtime()
             session_id = client.create_session(runtime_url)
             # Bound to the capability under test, not left to the router.
@@ -2029,7 +2074,11 @@ class PairedRunner:
                     "reason": "route_not_pinned",
                     "detail": f"ran {taken or 'no capability'} ({reason or 'no route reason'}), not {self.config['capability']}",
                 }
-        usage = load_usage_lookup(None, client)(str(run.get("id") or "")) if self.private_grant else self.usage_lookup(str(run.get("id") or ""))
+        # The usage route answers only for runs of the project a request is
+        # scoped to, so a run in its own project is looked up through the
+        # client scoped there.
+        own_project = bool(self.private_grant or self.config.get("projectPerCell"))
+        usage = load_usage_lookup(None, client)(str(run.get("id") or "")) if own_project else self.usage_lookup(str(run.get("id") or ""))
         cost = usage["cost"] if usage else None
         record["usage"] = usage
         # A usage record of all zeros is not a measurement of zero. See
@@ -2169,8 +2218,10 @@ class PairedRunner:
             self.log(f"[{'done' if record.get('complete') else 'error'}] {record['cell']}")
             return record
 
-        # Legacy arm mutations share one project; serialize them. Private jobs
-        # allocate a new project and runtime per cell, so their arms cannot race.
+        # Legacy arm mutations write the account's own memory records, which
+        # every project reads, so legacy cells run one at a time even in
+        # projects of their own. Private jobs freeze their arm per cell, so
+        # their arms cannot race.
         workers = max(1, min(self.config["concurrency"], 4)) if self.private_grant else 1
         if pending:
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
@@ -2660,8 +2711,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise SystemExit("The configured evaluation exceeds its private job cell budget.")
         else:
             primary.login(username, password)
-            primary.ensure_project(project_id, project_name)
-            primary.scope_to_project(project_id)
+            if not config.get("projectPerCell"):
+                # With a project per cell the batch id is only their prefix: a
+                # batch project nothing runs in would still count against the
+                # account's project limit.
+                primary.ensure_project(project_id, project_name)
+                primary.scope_to_project(project_id)
             environment = primary.readiness()
             if args.method:
                 method = primary.method(args.method)
@@ -2674,7 +2729,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             source = Path(fixture["file"])
             if not source.is_absolute():
                 source = REPO_ROOT / source
-            if private_grant:
+            if private_grant or config.get("projectPerCell"):
+                # Uploaded into each cell's own project instead of once.
                 private_fixtures.append({"path": str(fixture["path"]), "data": base64.b64encode(source.read_bytes()).decode("ascii")})
             else:
                 primary.upload(str(fixture["path"]), source.read_bytes())

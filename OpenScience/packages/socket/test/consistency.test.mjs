@@ -1130,6 +1130,28 @@ test("a completed native workflow may plan again and its receipt names actual wo
   assert.equal(receipt.entries[0].files[0].path, "deliverables/d2/brief.md");
 });
 
+test("a receipt carries only its own run's entries, never a previous run's", async () => {
+  // The receipt is one file at the workspace root. The writer used to keep
+  // every entry already in it and stamp the whole file with the current run's
+  // id, so a project's receipt became a pile of other runs' accepted packages
+  // filed under whichever run wrote last — read on production 2026-09-16 as
+  // five entries from five runs under one id.
+  const f = await nativePolicyFixture({ briefId: "ordinary_owner" });
+  await f.step(1);
+  f.files.set(`/workspace/${workspaceLayout.receiptFile}`, JSON.stringify({
+    formatVersion: 1, runId: "run_a_previous_run", bundleVersion: "0", domainVersion: "0",
+    entries: [{ deliverableId: "old-deliverable", contractKind: "research-brief", capability: "research-brief", files: [], acceptedAt: "2026-01-01T00:00:00.000Z", attempt: 1, notices: [] }],
+  }));
+  await f.execute("evimed_plan", { action: "write", clarifications: ["A report"], deliverables: [{ id: "d2", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }] });
+  f.files.set("/workspace/deliverables/d2/brief.md", "# Report\nA synthetic summary.\n");
+  assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d2" })).value.ok, true);
+
+  const receipt = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
+  assert.notEqual(receipt.runId, "run_a_previous_run");
+  assert.deepEqual(receipt.entries.map((/** @type {any} */ entry) => entry.deliverableId), ["d2"],
+    "a previous run's accepted deliverable must not reappear under this run's id");
+});
+
 test("an accepted deliverable needs one control-plane authorization before a fresh receipt", async () => {
   /** @type {{ authorization: string|undefined, body: Record<string, string> }[]} */
   const requests = [];

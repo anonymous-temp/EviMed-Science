@@ -1266,7 +1266,18 @@ async function collectSourceArtifacts(ctx, entry, call) {
 async function writeReceipt(ctx, entry, receiptEntry, bundleVersion, call) {
   const cwd = entry.cwd || call.cwd
   const existing = parseJson(await readFileAt(ctx, cwd, workspaceLayout.receiptFile) ?? '')
-  const entries = Array.isArray(existing?.entries) ? existing.entries.filter((/** @type {any} */ item) => item.deliverableId !== receiptEntry.deliverableId) : []
+  // Only this run's entries carry over. The receipt is one file at the
+  // workspace root, and this used to keep every entry already in it and stamp
+  // the whole file with the current run's id — so a project's receipt became a
+  // pile of other runs' accepted packages filed under whichever run wrote last.
+  // Read on production 2026-09-16: one receipt holding five entries accepted
+  // between 13:43 and 17:02 by five different runs, all labelled as the last.
+  // The control plane then snapshotted a previous run's package as this run's
+  // accepted work, and failed the repair with `repair_snapshot_failed`.
+  const sameRun = existing?.runId === entry.runId
+  const entries = sameRun && Array.isArray(existing?.entries)
+    ? existing.entries.filter((/** @type {any} */ item) => item.deliverableId !== receiptEntry.deliverableId)
+    : []
   const receipt = {
     // The domain's constant, not a literal. The reader parses this file
     // against a version it imports; a second copy here is a number that can be
