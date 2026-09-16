@@ -81,6 +81,42 @@ describe("apiClient", () => {
     expect(tabB.getItem("openScience.projectId")).toBe("project-b");
   });
 
+  it("shares one /api/me answer across a navigation's callers, per project, and never shares a failure", async () => {
+    // 2026-09-16 review, D2: one navigation asked /api/me up to four times.
+    const me = (project: string) => responseJson({ user: { id: "alice", name: "Alice" }, project: { id: project, name: project }, projects: [] });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) =>
+      me(new Headers((init as RequestInit | undefined)?.headers).get("X-Open-Science-Project") ?? "default"));
+    const client = await loadClient("/api");
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+
+    const [first, second] = await Promise.all([client.fetchWebMe(), client.fetchWebMe()]);
+    await client.fetchWebMe();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(first).toBe(second);
+
+    client.setWebProjectId("project-b");
+    expect((await client.fetchWebMe())?.project.id).toBe("project-b");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    now += 2_500;
+    await client.fetchWebMe();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 500 }));
+    now += 2_500;
+    await expect(client.fetchWebMe()).rejects.toThrow("HTTP 500");
+    await client.fetchWebMe();
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+
+    // A POST reads a CSRF token first (its own /me request), then creates.
+    fetchMock.mockResolvedValueOnce(csrfMeResponse()).mockResolvedValueOnce(responseJson({ id: "project-c", name: "C" }));
+    await client.createWebProject("project-c");
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+    await client.fetchWebMe();
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+  });
+
   it("reports no command backend without web API config", async () => {
     const client = await loadClient();
 

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   deleteWebProject: vi.fn(),
   fetchWebMe: vi.fn(),
   select: vi.fn(),
+  load: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
 }));
@@ -32,7 +33,7 @@ vi.mock("@/lib/apiClient", () => ({
 
 vi.mock("@/lib/projects", () => ({
   useProjectStore: {
-    getState: () => ({ select: mocks.select }),
+    getState: () => ({ select: mocks.select, load: mocks.load }),
   },
 }));
 
@@ -110,6 +111,8 @@ describe("WebProjectsCard", () => {
     );
     await waitFor(() => expect(mocks.projectId).toBe("review_2026"));
     expect(await screen.findByText("Review 2026")).toBeInTheDocument();
+    // The sidebar's switcher reads the shared store, which is refreshed too.
+    expect(mocks.load).toHaveBeenCalled();
   });
 
   it("validates hosted project ids before calling the API", async () => {
@@ -149,5 +152,6 @@ describe("WebProjectsCard", () => {
     await waitFor(() => expect(mocks.deleteWebProject).toHaveBeenCalledWith("paper1"));
     await waitFor(() => expect(screen.queryByText("Paper 1")).not.toBeInTheDocument());
     expect(mocks.toastSuccess).toHaveBeenCalledWith("已删除 Paper 1。");
+    expect(mocks.load).toHaveBeenCalled();
   });
 });
