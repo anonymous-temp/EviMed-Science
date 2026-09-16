@@ -40,10 +40,22 @@ export function runTitle(run: WebAgentRun): string {
   const question = run.question?.trim();
   if (question) return question;
   const agent = run.effectiveAgentId ?? run.agentId;
-  const named = capabilityTitle(agent);
+  const named = runAgentName(agent);
   if (named) return named;
   if (agent) return agent;
   return "未记录题面的运行";
+}
+
+/** The answer line every unrouted open-domain question runs on (server:
+ *  `OPEN_DOMAIN_ANSWER_AGENT_ID`). It is not a catalog capability, so the
+ *  catalog has no title for it and the ledger printed its id (seen in the
+ *  2026-09-16 scripted walk). */
+export const OPEN_DOMAIN_ANSWER_AGENT_ID = "open-domain-answer";
+
+/** What produced a run, in the product's words, or null for an id with no name. */
+export function runAgentName(agent: string | null | undefined): string | null {
+  if (agent === OPEN_DOMAIN_ANSWER_AGENT_ID) return "开放域问答";
+  return capabilityTitle(agent);
 }
 
 /* ------------------------------------------------------------------ */
