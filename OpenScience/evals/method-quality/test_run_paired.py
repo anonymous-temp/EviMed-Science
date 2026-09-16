@@ -1209,6 +1209,61 @@ class APartialTranscriptSaysWhy(unittest.TestCase):
             self.assertEqual(cell["excluded"]["detail"], f"child-1: child_unreadable ({refusal})")
 
 
+class AFinishedRunIsReadAfterItsLastWrite(unittest.TestCase):
+    """`finished` is not the server's last write for a run.
+
+    On the 2026-09-16 v5 batch the terminal status landed with
+    `verification: null`, the transcript receipt 241 ms later and the
+    run-finished notices 297 ms after that. A poll landing in the gap read no
+    transcript, which skipped the `transcript_*` exclusion entirely.
+    """
+
+    def setUp(self):
+        self.stack = tempfile.TemporaryDirectory()
+        self.addCleanup(self.stack.cleanup)
+        self.harness = Harness(self.stack.name, ["fam-001-a"], families={"fam-001-a": "fam"})
+
+    def late_receipt_backend(self, outcome, receipt_after_reads):
+        backend = FakeBackend(self.harness.briefs, {("fam-001-a", "baseline"): outcome, ("fam-001-a", "candidate"): outcome})
+        original = backend.request
+        reads = {"count": 0}
+        held = {}
+
+        def request(method, url, body=None, headers=None, timeout=60):
+            status, payload, response_headers = original(method, url, body=body, headers=headers, timeout=timeout)
+            if urllib.parse.urlsplit(url).path == "/api/agent-runs" and method == "GET":
+                reads["count"] += 1
+                for run in payload["data"]:
+                    if "transcript" in run and run["id"] not in held:
+                        held[run["id"]] = run.pop("transcript")
+                    if reads["count"] > receipt_after_reads and run["id"] in held:
+                        run["transcript"] = held[run["id"]]
+            return status, payload, response_headers
+
+        backend.request = request
+        return backend
+
+    def test_a_partial_transcript_that_lands_after_finished_is_still_excluded(self):
+        partial = succeeded(transcript={
+            "path": ".openscience/transcripts/run.jsonl", "completeness": "partial", "bytes": 10,
+            "sha256": "a" * 64, "messages": 3,
+            "missing": [{"sessionId": "child-1", "fromSeq": 0, "reason": "child_unreadable"}],
+        })
+        # The receipt appears only on the third read of the run list — after
+        # the runner has already seen the terminal status.
+        backend = self.late_receipt_backend(partial, receipt_after_reads=2)
+        cells = self.harness.make_runner(backend).execute()
+        for cell in cells:
+            self.assertEqual(cell["excluded"]["reason"], "transcript_partial",
+                             "read in the gap, this cell used to be scored as if its transcript were fine")
+
+    def test_a_receipt_that_never_arrives_excludes_the_cell_instead_of_skipping_the_check(self):
+        backend = self.late_receipt_backend(succeeded(), receipt_after_reads=10_000)
+        cells = self.harness.make_runner(backend).execute()
+        for cell in cells:
+            self.assertEqual(cell["excluded"]["reason"], "transcript_missing")
+
+
 class OutageInterruptsRatherThanScores(unittest.TestCase):
     """A control plane that goes away mid-batch has interrupted the measurement,
     not produced one.

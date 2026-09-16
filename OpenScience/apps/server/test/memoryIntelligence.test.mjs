@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { MEMORY_PROMOTION_MIN_OCCURRENCES, MEMORY_PROMOTION_MIN_RUNS } from "@evimed/domain";
-import { MemoryIntelligence, conversationMemorySources } from "../src/memoryIntelligence.mjs";
+import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence, conversationMemorySources } from "../src/memoryIntelligence.mjs";
 
 class MemoryStoreDouble {
   constructor() {
@@ -1004,6 +1004,48 @@ test("a prefix matches by prefix and an unrelated project keeps its memory", asy
     const result = await intelligence.recordRun({ id, userId: "user_1" }, run(`run_${id}`), [message("m1", "你好。")]);
     assert.equal(result.source === "project_excluded", expected, `${id} was classified wrong`);
   }
+});
+
+test("every source that means a write was skipped by setting is one the run-finished notice honours", async () => {
+  // The notice "记忆抽取未产出记录" marks a run `verification: "unchecked"`. It
+  // is right for a run whose extraction ran and found nothing, and wrong for a
+  // run whose deployment chose not to extract. The notice tested
+  // `source !== "disabled"`; the per-project exclusion returned a second skip
+  // source, so every run of an excluded evaluation project was stamped with it
+  // — and on briefs with no hidden reference the paired eval scores
+  // evidenceCompleteness as "accepted and not unchecked", which flattened that
+  // dimension to 0.0 in both arms of memory-ablation-v5.
+  const client = new MemoryStoreDouble();
+  const fetchImpl = async () => Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] });
+
+  const disabled = await new MemoryIntelligence({ ...config, memoryExtractionEnabled: false }, client, { fetchImpl })
+    .recordRun(project(), run("run_disabled_source"), [message("m1", "你好。")]);
+  const excluded = await new MemoryIntelligence({ ...config, memoryExtractionExcludedProjectPrefixes: ["eval-"] }, client, { fetchImpl })
+    .recordRun({ id: "eval-anything", userId: "user_1" }, run("run_excluded_source"), [message("m1", "你好。")]);
+  const ordinary = await new MemoryIntelligence(config, client, { fetchImpl })
+    .recordRun(project(), run("run_ordinary_source"), [message("m1", "你好。")]);
+
+  assert.ok(MEMORY_WRITE_SKIPPED_SOURCES.has(disabled.source), `${disabled.source} is a skip the notice must honour`);
+  assert.ok(MEMORY_WRITE_SKIPPED_SOURCES.has(excluded.source), `${excluded.source} is a skip the notice must honour`);
+  assert.ok(!MEMORY_WRITE_SKIPPED_SOURCES.has(ordinary.source),
+    "a run whose extraction actually ran is not a skip; its zero is worth the notice");
+});
+
+test("the run-finished notice reads the shared set, not a single literal", async () => {
+  // A second skip source was added once and the notice missed it. Read the
+  // composition root, because the notice's condition is the thing that drifted.
+  const source = await readFile(new URL("../src/server.mjs", import.meta.url), "utf8");
+  const at = source.indexOf("记忆抽取未产出记录");
+  assert.ok(at > 0, "the notice moved; this test must follow it");
+  const condition = source.slice(Math.max(0, at - 1_200), at);
+  assert.match(condition, /MEMORY_WRITE_SKIPPED_SOURCES\.has\(memoryResult\.source\)/);
+  assert.doesNotMatch(condition, /memoryResult\.source !== "disabled"/);
+
+  // And it does not downgrade the run's verification. `unchecked` means a gate
+  // layer did not run; the inbox tells the researcher so. Extracting nothing is
+  // a legitimate outcome, not a skipped check.
+  const call = source.slice(at, source.indexOf(".catch(", at) + 20);
+  assert.doesNotMatch(call, /unchecked:\s*true/, "a memory notice must not mark a gated run as unchecked");
 });
 
 test("extraction enabled still writes the run summary for a conversation with nothing to learn", async () => {

@@ -542,6 +542,23 @@ function excerpt(value) {
   return String(value ?? "").replace(/\s+/gu, " ").trim().slice(0, 120);
 }
 
+/**
+ * The `recordRun` sources that mean "this deployment chose not to write memory
+ * here", as opposed to "extraction ran and found nothing".
+ *
+ * One set, because the two readings drive different things downstream. A run
+ * that extracted nothing gets a quality notice saying so, and that notice marks
+ * the run `verification: "unchecked"`. When the per-project exclusion arrived
+ * as a second skip source, the notice kept testing `source !== "disabled"`, so
+ * every run of an excluded evaluation project was stamped "extraction produced
+ * nothing" — the exact misreading that notice exists to prevent — and marked
+ * unchecked. On a brief with no hidden reference, `run_paired.py` scores
+ * evidenceCompleteness as "accepted and not unchecked", so memory-ablation-v5
+ * was flattening that dimension to 0.0 in both arms. A new skip source goes
+ * here, or it will do the same.
+ */
+export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded"]));
+
 export class MemoryIntelligence {
   /** @param {any} config @param {any} memoryStore
    *  @param {{fetchImpl?:any,notifications?:any,audit?:any,usageLedger?:any}} dependencies */
