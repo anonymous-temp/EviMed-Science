@@ -13,7 +13,7 @@ import {
   kernelReset,
   type KernelLanguage,
 } from "@/lib/kernel";
-import { hasWebApi } from "@/lib/apiClient";
+import { webErrorMessage, hasWebApi } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { cn } from "@/lib/cn";
@@ -68,7 +68,7 @@ export function NotebookEditor({
       setCells(parseIpynb(f.data));
       setSaved(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(webErrorMessage(e));
     }
   }, [path, root]);
 
@@ -106,7 +106,7 @@ export function NotebookEditor({
       rawRef.current = out; // our own write is not an external change
       setSaved(true);
     } catch (e) {
-      toast.error(`无法保存：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法保存：${webErrorMessage(e)}`);
     }
   }, [path, root]);
 
@@ -147,7 +147,7 @@ export function NotebookEditor({
       update(cell.index, {
         output: interruptRef.current
           ? INTERRUPTED_MESSAGE
-          : `内核错误：${e instanceof Error ? e.message : String(e)}`,
+          : `内核错误：${webErrorMessage(e)}`,
       });
     } finally {
       interruptRef.current = false;

@@ -1,6 +1,11 @@
 import { useMemo } from "react";
 import hljs from "highlight.js/lib/common";
-import "highlight.js/styles/github.css";
+// The token-mapped palette, not a stock highlight.js theme. `styles/github.css`
+// used to be imported here; it sets its own `.hljs` background, so every code
+// panel in this viewer stayed white paper in dark mode while the surface around
+// it went dark (2026-09-16 walk, V4). The shared theme inherits the surface and
+// draws its colours from the design tokens, so it follows `data-theme`.
+import "@/components/markdown-viewer/hljs-theme.css";
 
 interface Props {
   code: string;

@@ -1,5 +1,6 @@
 import { saveTextFile } from "./backend";
 import { toast } from "./toast";
+import { parseFailureMessage } from "@/lib/errorText";
 
 /** Save text as a file via a Blob download. No-op outside the browser. */
 export function downloadText(filename: string, text: string, mime = "text/plain"): void {
@@ -44,6 +45,6 @@ export async function saveTextWithFeedback(
     }
     // "canceled": the user closed the dialog — no feedback needed.
   } catch (err) {
-    toast.error(`无法保存 ${filename}：${err instanceof Error ? err.message : String(err)}`);
+    toast.error(`无法保存 ${filename}：${parseFailureMessage(err, "该下载内容")}`);
   }
 }

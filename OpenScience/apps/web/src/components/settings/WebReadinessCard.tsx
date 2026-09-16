@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, CircleDashed, RefreshCw, XCircle } from "lucide-react";
-import { fetchWebReadiness, type WebReadiness, type WebReadinessCheck } from "@/lib/apiClient";
+import { webErrorMessage, fetchWebReadiness, type WebReadiness, type WebReadinessCheck } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 
@@ -46,7 +46,7 @@ export function WebReadinessCard() {
     try {
       setReadiness(await fetchWebReadiness());
     } catch (e) {
-      toast.error(`无法读取部署就绪状态：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法读取部署就绪状态：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }

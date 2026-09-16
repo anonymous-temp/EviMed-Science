@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, Bot, Clock3, FileCheck2, RefreshCw, Search, ServerCrash } from "lucide-react";
 import { useNavigate } from "react-router";
 import { capabilityBrief } from "@evimed/domain";
-import { hasWebApi, listWebResearchAgents, type WebResearchAgent, type WebResearchAgentOutput } from "@/lib/apiClient";
+import { webErrorMessage, hasWebApi, listWebResearchAgents, type WebResearchAgent, type WebResearchAgentOutput } from "@/lib/apiClient";
 import { researchAgentUi } from "@/lib/researchAgentUi";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { AgentsSkeleton } from "@/components/cards/Skeletons";
 import { Button } from "@/components/ui/Button";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { PageTitle } from "@/components/layout/PageTitle";
 
 /**
  * Capability templates (§9.8).
@@ -56,7 +57,7 @@ export function CapabilitiesPage() {
         if (active) setAgents(catalog);
       })
       .catch((reason) => {
-        if (active) setError(reason instanceof Error ? reason.message : String(reason));
+        if (active) setError(webErrorMessage(reason));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -109,6 +110,7 @@ export function CapabilitiesPage() {
               * them from "agents" because a pick became a suggestion rather
               * than a binding; that is still true, and the sentence below says
               * it, which is where it belongs. */}
+            <PageTitle page="科研能力" />
             <h1 className="font-serif text-2xl font-semibold tracking-tight text-text">科研能力</h1>
             <p className="mt-2 text-sm leading-6 text-muted">
               选一项能力，它会把题面填进对话框并点名该能力；你可以随意修改，也可以在同一次对话里接着要别的产出。

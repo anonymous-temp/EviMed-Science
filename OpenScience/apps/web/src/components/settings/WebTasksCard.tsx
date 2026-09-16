@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, X } from "lucide-react";
-import { cancelWebTask, listWebTasks, type WebTask, type WebTaskStatus } from "@/lib/apiClient";
+import { webErrorMessage, cancelWebTask, listWebTasks, type WebTask, type WebTaskStatus } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 
@@ -26,7 +26,7 @@ export function WebTasksCard() {
     try {
       setTasks(await listWebTasks());
     } catch (e) {
-      toast.error(`无法读取后台任务：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法读取后台任务：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }
@@ -42,7 +42,7 @@ export function WebTasksCard() {
       const task = await cancelWebTask(id);
       setTasks((items) => items.map((item) => (item.id === id ? task : item)));
     } catch (e) {
-      toast.error(`无法取消任务：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法取消任务：${webErrorMessage(e)}`);
     } finally {
       setCanceling(null);
     }

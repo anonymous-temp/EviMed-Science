@@ -4,6 +4,8 @@
 // source. The viewer highlights those spans — every quote is sliced straight
 // from the source text, so a code can never point at an invented quote.
 
+import { parseFailureMessage } from "@/lib/errorText";
+
 export interface QCodeSource {
   id: string;
   title?: string;
@@ -52,7 +54,7 @@ export function parseQCode(text: string): QCodeParsed {
   try {
     raw = JSON.parse(text);
   } catch (e) {
-    throw new Error(`not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
+    throw new Error(`not valid JSON: ${parseFailureMessage(e, "该量子线路")}`);
   }
   if (!raw || typeof raw !== "object") throw new Error("expected a JSON object");
   const obj = raw as Record<string, unknown>;

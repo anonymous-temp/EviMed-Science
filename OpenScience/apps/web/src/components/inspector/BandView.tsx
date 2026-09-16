@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { parseEigenval, type BandData } from "@/lib/bands";
+import { parseFailureMessage } from "@/lib/errorText";
 
 /**
  * Materials band-structure viewer (P1-3): plots each band's energy across the
@@ -13,7 +14,7 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
     try {
       return { data: parseEigenval(new TextDecoder().decode(bytes)), error: null };
     } catch (e) {
-      return { data: null, error: e instanceof Error ? e.message : String(e) };
+      return { data: null, error: parseFailureMessage(e, "该能带文件") };
     }
   }, [bytes]);
 

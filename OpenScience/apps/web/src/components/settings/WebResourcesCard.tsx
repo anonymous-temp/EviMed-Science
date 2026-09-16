@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Play, RefreshCw, RotateCw, Square } from "lucide-react";
-import { fetchWebMetrics, restartWebRuntime, startWebRuntime, stopWebRuntime, type WebMetrics } from "@/lib/apiClient";
+import { webErrorMessage, fetchWebMetrics, restartWebRuntime, startWebRuntime, stopWebRuntime, type WebMetrics } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 
@@ -14,7 +14,7 @@ export function WebResourcesCard() {
     try {
       setMetrics(await fetchWebMetrics());
     } catch (e) {
-      toast.error(`无法读取托管资源：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法读取托管资源：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }
@@ -31,7 +31,7 @@ export function WebResourcesCard() {
       setMetrics(await fetchWebMetrics());
       toast.success("托管运行时已启动。");
     } catch (e) {
-      toast.error(`无法启动托管运行时：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法启动托管运行时：${webErrorMessage(e)}`);
     } finally {
       setRuntimeAction(null);
     }
@@ -44,7 +44,7 @@ export function WebResourcesCard() {
       setMetrics(await fetchWebMetrics());
       toast.success("托管运行时已重启。");
     } catch (e) {
-      toast.error(`无法重启托管运行时：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法重启托管运行时：${webErrorMessage(e)}`);
     } finally {
       setRuntimeAction(null);
     }
@@ -57,7 +57,7 @@ export function WebResourcesCard() {
       setMetrics(await fetchWebMetrics());
       toast.success("托管运行时已停止。");
     } catch (e) {
-      toast.error(`无法停止托管运行时：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法停止托管运行时：${webErrorMessage(e)}`);
     } finally {
       setRuntimeAction(null);
     }

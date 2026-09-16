@@ -1,15 +1,29 @@
+import { lazy } from "react";
 import { createBrowserRouter, Navigate, useParams, type RouteObject } from "react-router";
 import { AppShell } from "./layout/AppShell";
-import { SessionRoute } from "./routes/SessionRoute";
-import { KnowledgePage } from "./routes/KnowledgePage";
-import { AutopilotPage } from "./routes/AutopilotPage";
-import { CapabilitiesPage } from "./routes/CapabilitiesPage";
-import { InboxPage } from "./routes/InboxPage";
-import { MemoryHubPage } from "./routes/MemoryHubPage";
 import { LoginPage } from "./routes/LoginPage";
-import { AccountPage } from "./routes/AccountPage";
-import { RunsPage } from "./routes/RunsPage";
 import { NotFound } from "./routes/NotFound";
+
+/**
+ * Every workbench page is its own chunk.
+ *
+ * Until 2026-09-16 there were none: one entry chunk of 1,874,636 B carried
+ * three.js, highlight.js and react-markdown, and the login page downloaded all
+ * of it before it could show a password field (2026-09-16 walk, D1). Login and
+ * the 404 stay eager — they are what a browser lands on before it has an
+ * account, and a spinner there would be the first thing anyone sees.
+ *
+ * `AppShell` renders the fallback for these (`Suspense`), so a chunk still in
+ * flight shows the shell with its navigation rather than a blank page.
+ */
+const SessionRoute = lazy(() => import("./routes/SessionRoute").then((m) => ({ default: m.SessionRoute })));
+const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({ default: m.KnowledgePage })));
+const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({ default: m.AutopilotPage })));
+const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
+const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
+const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
+const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ default: m.AccountPage })));
+const RunsPage = lazy(() => import("./routes/RunsPage").then((m) => ({ default: m.RunsPage })));
 
 /**
  * One prefix for the workbench, so that everything outside it — the login

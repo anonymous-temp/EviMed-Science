@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, ShieldCheck } from "lucide-react";
 import { parseQCode, segmentsFor, type QCodeParsed } from "@/lib/qcode";
 import { cn } from "@/lib/cn";
+import { parseFailureMessage } from "@/lib/errorText";
 
 /**
  * Qualitative-coding two-way traceback viewer (P1-3, social science). Renders
@@ -25,7 +26,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
     try {
       return { doc: parseQCode(text), error: null };
     } catch (e) {
-      return { doc: null, error: e instanceof Error ? e.message : String(e) };
+      return { doc: null, error: parseFailureMessage(e, "该量子线路文件") };
     }
   }, [text]);
 

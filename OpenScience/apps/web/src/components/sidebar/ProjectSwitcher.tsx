@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronsUpDown, FolderGit2, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useProjectStore } from "@/lib/projects";
+import { webErrorMessage } from "@/lib/apiClient";
 
 /** What a project id may look like — mirrors the control plane's `safeId`. */
 const PROJECT_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
@@ -57,7 +58,7 @@ export function ProjectSwitcher() {
       await select(projectId);
       setOpen(false);
     } catch (err) {
-      setFailure(err instanceof Error ? err.message : String(err));
+      setFailure(webErrorMessage(err, { fallback: "无法切换到这个项目，请稍后重试。" }));
     } finally {
       setBusy(false);
     }
@@ -77,7 +78,7 @@ export function ProjectSwitcher() {
       setCreating(false);
       await select(id);
     } catch (err) {
-      setFailure(err instanceof Error ? err.message : String(err));
+      setFailure(webErrorMessage(err, { fallback: "无法创建项目，请稍后重试。" }));
     } finally {
       setBusy(false);
     }

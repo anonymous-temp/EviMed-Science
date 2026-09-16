@@ -6,7 +6,6 @@ import { SessionRoute } from "./SessionRoute";
 import { WebApiError } from "@/lib/apiClient";
 import { apply as applyNativeBridge } from "../../../../../packages/harness-port/src/runtimeUiBridge.mjs";
 
-vi.mock("@/components/run/RunSidePanel", () => ({ RunSidePanel: () => <aside>run panel</aside> }));
 const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 // Only the four frame calls and the profile are stubbed. Everything else is the
 // real module on purpose: `WebApiError` has to be the same class the component

@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router";
 import { fetchWebMe, listWebAgentRuns, webRuntimeProfile } from "@/lib/apiClient";
 import { RuntimeUiFrame } from "./RuntimeUiFrame";
 import { Button } from "@/components/ui/Button";
+import { PageTitle } from "@/components/layout/PageTitle";
 
 /**
  * The session surface is the kernel's own application, and nothing else.
@@ -72,12 +73,19 @@ export function SessionRoute() {
   // sentence rendered over a page that is already saying something else, which
   // is how 「正在启动研究运行时…」 came to sit on top of the kernel's own
   // 「内核界面暂时不可用」 (A3).
-  if (uiOrigin) return <RuntimeUiFrame />;
+  // The tab is named the same in all three states — a page that renames itself
+  // while it loads makes the browser's tab strip flicker.
+  if (uiOrigin) return <><PageTitle page="研究会话" /><RuntimeUiFrame /></>;
   if (loading) {
-    return <div role="status" className="flex h-full items-center justify-center text-ui-sm text-muted">正在启动研究运行时…</div>;
+    return (
+      <div role="status" className="flex h-full items-center justify-center text-ui-sm text-muted">
+        <PageTitle page="研究会话" />正在启动研究运行时…
+      </div>
+    );
   }
   return (
     <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-ui-sm text-error">
+      <PageTitle page="研究会话" />
       <p>研究会话暂时无法连接</p>
       <Button variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>
     </div>

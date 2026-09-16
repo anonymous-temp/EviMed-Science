@@ -1,10 +1,15 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UsageCard } from "./UsageCard";
+import { WebApiError } from "@/lib/apiClient";
 
 const mocks = vi.hoisted(() => ({ fetchWebAccountUsage: vi.fn() }));
 
-vi.mock("@/lib/apiClient", () => ({
+// The error dictionary (`webErrorMessage`) lives in this module and the code
+// under test calls it, so the real exports come through and only the calls
+// this test drives are replaced.
+vi.mock("@/lib/apiClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   fetchWebAccountUsage: mocks.fetchWebAccountUsage,
 }));
 
@@ -55,9 +60,11 @@ describe("UsageCard", () => {
   });
 
   it("reports a read failure instead of showing zero usage", async () => {
-    mocks.fetchWebAccountUsage.mockRejectedValue(new Error("HTTP 503"));
+    mocks.fetchWebAccountUsage.mockRejectedValue(
+      new WebApiError("HTTP 503", { status: 503, code: "runtime_unavailable" }),
+    );
     render(<UsageCard />);
-    expect(await screen.findByText(/读取用量失败：HTTP 503/)).toBeInTheDocument();
+    expect(await screen.findByText(/读取用量失败：运行时出现问题，稍后重试。/)).toBeInTheDocument();
     expect(screen.queryByText("本月还没有模型调用。")).not.toBeInTheDocument();
   });
 });

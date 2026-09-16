@@ -20,17 +20,25 @@ export default {
         error: "var(--error)",
         "error-fg": "var(--error-fg)",
       },
+      // Latin faces first (they carry the metrics the type scale was measured
+      // against), Chinese faces after them. Neither stack named a CJK face
+      // until 2026-09-16, so `font-serif` — 31 uses, all of them Chinese page
+      // titles — fell to SimSun on Windows and to the system serif on macOS.
       fontFamily: {
-        serif: ["'Source Serif 4'", "Georgia", "serif"],
-        sans: ["Inter", "system-ui", "sans-serif"],
+        serif: ["'Source Serif 4'", "Georgia", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", "serif"],
+        sans: ["Inter", "system-ui", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", "sans-serif"],
         mono: ["'JetBrains Mono'", "ui-monospace", "monospace"],
       },
       // Semantic type scale (design spec §3). Arbitrary `text-[*px]` values are
       // banned in components by ESLint; use these six rungs instead.
+      // The two smallest rungs were 11px and 12.5px, below the size at which a
+      // Chinese glyph's strokes stay separable on a 1x display (2026-09-16
+      // walk, V2). Raised to 12px and 13px; line heights go up with them,
+      // because CJK needs more leading than Latin at the same size.
       fontSize: {
-        caption: ["11px", "1.4"], // badges, meta info, timestamps
-        "ui-sm": ["12.5px", "1.45"], // secondary buttons, chips, helper rows
-        ui: ["13.5px", "1.5"], // default UI text, list rows
+        caption: ["12px", "1.5"], // badges, meta info, timestamps
+        "ui-sm": ["13px", "1.5"], // secondary buttons, chips, helper rows
+        ui: ["13.5px", "1.55"], // default UI text, list rows
         body: ["15px", "1.65"], // chat / markdown body copy
         title: ["20px", "1.3"], // page titles (serif)
         display: ["26px", "1.25"], // brand-level titles, empty states (serif)

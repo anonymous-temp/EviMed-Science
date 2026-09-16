@@ -6,6 +6,7 @@ import { Button, buttonClasses, type ButtonVariant } from "@/components/ui/Butto
 import { Card } from "@/components/ui/Card";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { inboxErrorMessage, listInbox, markInboxRead, resolveInboxItem, type InboxItem } from "@/lib/inboxClient";
+import { PageTitle } from "@/components/layout/PageTitle";
 
 const TYPE_LABEL = { review: "需要审阅", question: "等待回答", notify: "通知" } as const;
 
@@ -86,6 +87,7 @@ export function InboxPage() {
 
   return <div className="h-full overflow-y-auto">
     <main className="mx-auto w-full max-w-content space-y-5 px-6 py-8">
+      <PageTitle page="收件箱" />
       <header><h1 className="font-serif text-title text-text">收件箱</h1><p className="mt-2 text-ui text-muted">审阅和提问排在前面；普通通知随后显示。</p></header>
       <SegmentedControl value={filter} onChange={(value) => setFilter(value)} aria-label="消息筛选"
         options={[{ value: "all", label: "全部" }, { value: "unread", label: "未读" }]} />

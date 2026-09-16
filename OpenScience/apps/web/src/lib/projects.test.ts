@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { WebApiError } from "@/lib/apiClient";
 
 const mocks = vi.hoisted(() => ({
   projectId: "default",
@@ -8,7 +9,11 @@ const mocks = vi.hoisted(() => ({
   assign: vi.fn(),
 }));
 
-vi.mock("@/lib/apiClient", () => ({
+// The error dictionary (`webErrorMessage`) lives in this module and the code
+// under test calls it, so the real exports come through and only the calls
+// this test drives are replaced.
+vi.mock("@/lib/apiClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   hasWebApi: true,
   getWebProjectId: () => mocks.projectId,
   setWebProjectId: (id: string) => {
@@ -63,12 +68,17 @@ describe("project store", () => {
   });
 
   it("keeps the list readable as an error rather than as an empty account", async () => {
-    mocks.listWebProjects.mockRejectedValue(new Error("gateway down"));
+    // What the refusal *says* comes from the one dictionary, not from the
+    // control plane's English `Error.message` — a researcher reading
+    // "gateway down" learns nothing they can act on (2026-09-16 walk, U4).
+    mocks.listWebProjects.mockRejectedValue(
+      new WebApiError("gateway down", { status: 503, code: "runtime_unavailable" }),
+    );
     const store = await freshStore();
 
     await store.getState().load();
 
-    expect(store.getState().error).toBe("gateway down");
+    expect(store.getState().error).toBe("运行时出现问题，稍后重试。");
     expect(store.getState().projects).toEqual([]);
     expect(store.getState().loading).toBe(false);
   });

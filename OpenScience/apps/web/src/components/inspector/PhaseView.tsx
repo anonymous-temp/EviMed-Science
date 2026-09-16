@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { parsePhaseDiagram, type PhaseDiagram } from "@/lib/phase";
+import { parseFailureMessage } from "@/lib/errorText";
 
 /**
  * Binary phase-diagram viewer (P1-3, materials): plots formation energy per atom
@@ -14,7 +15,7 @@ export function PhaseView({ filename, text }: { filename: string; text: string }
     try {
       return { pd: parsePhaseDiagram(text), error: null };
     } catch (e) {
-      return { pd: null, error: e instanceof Error ? e.message : String(e) };
+      return { pd: null, error: parseFailureMessage(e, "该相图文件") };
     }
   }, [text]);
 

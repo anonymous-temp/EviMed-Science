@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, NotebookPen, Plus } from "lucide-react";
 import { addTextToWorkspace } from "@/lib/backend";
-import { hasWebApi } from "@/lib/apiClient";
+import { webErrorMessage, hasWebApi } from "@/lib/apiClient";
 import { listNotebooks, type NotebookEntry } from "@/lib/artifactFile";
 import { formatDateTime } from "@/lib/format";
 import { emptyIpynb } from "@/lib/notebook-file";
@@ -50,7 +50,7 @@ export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {})
       await refresh();
       setOpen({ path: name, root: "workspace" });
     } catch (err) {
-      toast.error(`无法创建笔记本：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`无法创建笔记本：${webErrorMessage(err)}`);
     }
   };
 

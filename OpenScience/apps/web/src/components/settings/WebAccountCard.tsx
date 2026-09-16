@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Download, LogOut, RefreshCw, Trash2, UserRound, X } from "lucide-react";
-import { deleteWebAccount, exportWebAccount, fetchWebMe, logoutWeb } from "@/lib/apiClient";
+import { webErrorMessage, deleteWebAccount, exportWebAccount, fetchWebMe, logoutWeb } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 
@@ -31,7 +31,7 @@ export function WebAccountCard({
       setAccount(me?.user ?? null);
       setDeleted(false);
     } catch (e) {
-      toast.error(`无法读取托管账户：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法读取托管账户：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }
@@ -49,7 +49,7 @@ export function WebAccountCard({
       downloadBlob(blob, `evimed-account-${safeFilename(account.id)}.tar.gz`);
       toast.success("账户归档已导出。");
     } catch (e) {
-      toast.error(`无法导出托管账户：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法导出托管账户：${webErrorMessage(e)}`);
     } finally {
       setBusy(null);
     }
@@ -70,7 +70,7 @@ export function WebAccountCard({
       onAccountDeleted?.();
       toast.success("账户已删除。");
     } catch (e) {
-      toast.error(`无法删除托管账户：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法删除托管账户：${webErrorMessage(e)}`);
     } finally {
       setBusy(null);
     }
@@ -84,7 +84,7 @@ export function WebAccountCard({
       onSignedOut?.();
       toast.success("已退出登录。");
     } catch (e) {
-      toast.error(`无法退出登录：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法退出登录：${webErrorMessage(e)}`);
     } finally {
       setBusy(null);
     }

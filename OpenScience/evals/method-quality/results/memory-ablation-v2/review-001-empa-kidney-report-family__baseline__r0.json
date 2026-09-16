@@ -1,0 +1,16 @@
+{
+  "arm": "baseline",
+  "armDigest": "8d3c256941c9a12c0647815271a4f4d39d3d738f37715322a3cfae80b3d7af16",
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "cell": "review-001-empa-kidney-report-family__baseline__r0",
+  "complete": false,
+  "configDigest": "37cff3d9e546243419a5f3c145eb04c7773e5969aec40eaa42f96375dc5bbc22",
+  "error": "POST /api/commands/stop_runtime -> HTTP 502: <html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T05:44:25Z",
+  "repeat": 0,
+  "schemaVersion": 1
+}

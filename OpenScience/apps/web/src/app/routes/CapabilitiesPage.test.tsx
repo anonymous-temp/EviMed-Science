@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CapabilitiesPage, capabilityBrief } from "./CapabilitiesPage";
+import { WebApiError } from "@/lib/apiClient";
 
 const agents = [
   {
@@ -73,7 +74,11 @@ const mocks = vi.hoisted(() => ({
   hasWebApi: true,
 }));
 
-vi.mock("@/lib/apiClient", () => ({
+// The error dictionary (`webErrorMessage`) lives in this module and the code
+// under test calls it, so the real exports come through and only the calls
+// this test drives are replaced.
+vi.mock("@/lib/apiClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   get hasWebApi() {
     return mocks.hasWebApi;
   },
@@ -189,13 +194,15 @@ describe("CapabilitiesPage", () => {
   });
 
   it("offers a retry when the catalogue could not be loaded, rather than a dead error line", async () => {
-    mocks.listWebResearchAgents.mockRejectedValueOnce(new Error("HTTP 503"));
+    mocks.listWebResearchAgents.mockRejectedValueOnce(
+      new WebApiError("HTTP 503", { status: 503, code: "runtime_unavailable" }),
+    );
     render(
       <MemoryRouter>
         <CapabilitiesPage />
       </MemoryRouter>,
     );
-    expect(await screen.findByRole("alert")).toHaveTextContent("HTTP 503");
+    expect(await screen.findByRole("alert")).toHaveTextContent("运行时出现问题，稍后重试。");
 
     mocks.listWebResearchAgents.mockResolvedValue(agents);
     await userEvent.click(screen.getByRole("button", { name: /重试/ }));

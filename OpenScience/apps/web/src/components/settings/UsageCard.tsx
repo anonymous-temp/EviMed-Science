@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchWebAccountUsage, type WebUsageSummary } from "@/lib/apiClient";
+import { webErrorMessage, fetchWebAccountUsage, type WebUsageSummary } from "@/lib/apiClient";
 import { Card } from "@/components/ui/Card";
 
 /**
@@ -19,7 +19,7 @@ export function UsageCard() {
         if (active) setUsage(value);
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(webErrorMessage(err));
       });
     return () => {
       active = false;

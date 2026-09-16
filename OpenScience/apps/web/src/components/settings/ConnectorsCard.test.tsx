@@ -9,7 +9,11 @@ const mocks = vi.hoisted(() => ({
   removeWebConnectorCredential: vi.fn(),
 }));
 
-vi.mock("@/lib/apiClient", () => ({
+// The error dictionary (`webErrorMessage`) lives in this module and the code
+// under test calls it, so the real exports come through and only the calls
+// this test drives are replaced.
+vi.mock("@/lib/apiClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   fetchWebConnectors: mocks.fetchWebConnectors,
   saveWebConnectorCredential: mocks.saveWebConnectorCredential,
   removeWebConnectorCredential: mocks.removeWebConnectorCredential,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ClipboardList, RefreshCw } from "lucide-react";
-import { listWebAuditLog, type WebAuditRecord } from "@/lib/apiClient";
+import { webErrorMessage, listWebAuditLog, type WebAuditRecord } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 
@@ -13,7 +13,7 @@ export function WebAuditCard() {
     try {
       setEvents(await listWebAuditLog(20));
     } catch (e) {
-      toast.error(`无法读取操作审计日志：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法读取操作审计日志：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }

@@ -14,6 +14,7 @@ import {
 } from "@/lib/apiClient";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { PageTitle } from "@/components/layout/PageTitle";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -86,6 +87,7 @@ export function LoginPage() {
         <section className="rounded-card border border-border bg-surface px-7 py-8 shadow-card sm:px-9">
           <div className="text-center">
             <div className="text-xs font-medium tracking-[0.18em] text-accent">循证医学科研智能体</div>
+            <PageTitle page="登录" />
             <h1 className="mt-3 font-serif text-2xl font-semibold">
               {registering ? "注册 EviMed" : "登录 EviMed"}
             </h1>

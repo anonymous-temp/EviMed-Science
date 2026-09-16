@@ -14,7 +14,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { createResearchMemory, deleteResearchMemory, deleteStructuredMemory, fetchMemoryProfile, fetchMemoryStatus, hasWebApi, listResearchMemories, updateResearchMemory, updateStructuredMemory, type WebMemoryProfile, type WebMemoryStatus, type WebResearchMemory, type WebStructuredMemory } from "@/lib/apiClient";
+import { webErrorMessage, createResearchMemory, deleteResearchMemory, deleteStructuredMemory, fetchMemoryProfile, fetchMemoryStatus, hasWebApi, listResearchMemories, updateResearchMemory, updateStructuredMemory, type WebMemoryProfile, type WebMemoryStatus, type WebResearchMemory, type WebStructuredMemory } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
@@ -49,8 +49,11 @@ function formatTime(value: string | null) {
   }).format(date);
 }
 
+/** One Chinese sentence for a refusal on this page, from the shared dictionary.
+ *  It used to hand back `Error.message`, which is how 「抽取报错: This operation
+ *  was aborted」 reached a researcher (2026-09-16 walk, U4). */
 function actionError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return webErrorMessage(error, { fallback: "操作未完成，请重试。" });
 }
 
 const structuredKinds = [

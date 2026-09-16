@@ -1,0 +1,103 @@
+{
+  "id": "memory-ablation-v3",
+  "capability": "clinical-evidence-synthesis",
+  "briefsFile": "evals/clinical-review-quality/briefs.json",
+  "hiddenDir": "evals/clinical-review-quality/hidden",
+  "briefs": [
+    "review-001-empa-kidney-report-family",
+    "review-003-mimic-overlap-unknown"
+  ],
+  "repeats": 3,
+  "seed": 20260908,
+  "concurrency": 1,
+  "margin": 0.02,
+  "bootstrapSamples": 2000,
+  "timeoutMinutes": 90,
+  "pollSeconds": 5,
+  "budget": {
+    "costCap": 12.0,
+    "latencyCapMs": 5400000
+  },
+  "project": {
+    "id": "eval-memory-ablation-v3",
+    "name": "记忆消融配对评测 v3"
+  },
+  "fixtures": [],
+  "judge": {
+    "enabled": true,
+    "model": "deepseek-v4-pro"
+  },
+  "baseline": {
+    "methodSnapshot": {
+      "id": "memory-off",
+      "records": [
+        {
+          "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+          "expectedVersion": 66,
+          "_key": "preference.response_length",
+          "status": "pending"
+        },
+        {
+          "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+          "expectedVersion": 60,
+          "_key": "preference.output_language",
+          "status": "pending"
+        },
+        {
+          "id": "jY7Dttzw4nQbQUwdXPYwKU",
+          "expectedVersion": 60,
+          "_key": "profile.work_domain",
+          "status": "pending"
+        },
+        {
+          "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+          "expectedVersion": 59,
+          "_key": "behavior.question_format_pico",
+          "status": "pending"
+        }
+      ],
+      "capabilitySkillsDir": null
+    },
+    "compactionPolicy": "basic"
+  },
+  "candidate": {
+    "methodSnapshot": {
+      "id": "memory-on",
+      "records": [
+        {
+          "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+          "expectedVersion": 66,
+          "_key": "preference.response_length",
+          "status": "active"
+        },
+        {
+          "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+          "expectedVersion": 60,
+          "_key": "preference.output_language",
+          "status": "active"
+        },
+        {
+          "id": "jY7Dttzw4nQbQUwdXPYwKU",
+          "expectedVersion": 60,
+          "_key": "profile.work_domain",
+          "status": "active"
+        },
+        {
+          "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+          "expectedVersion": 59,
+          "_key": "behavior.question_format_pico",
+          "status": "active"
+        }
+      ],
+      "capabilitySkillsDir": null
+    },
+    "compactionPolicy": "basic"
+  },
+  "_note": "The memory ablation: the same briefs with the project's four user-scope memory records active and with them parked. EvoMemBench's finding is the hypothesis worth testing — memory helps hard tasks and can hurt easy ones — so the two arms are expected to differ by brief rather than uniformly.",
+  "_supersedes": "SUPERSEDES memory-ablation-v2, which measured one cell out of twelve and is inconclusive. Two things ended it, and only one was the platform's. (1) A host-wide Docker daemon restart at 2026-09-16T05:38Z stopped every container on the shared host; ten cells died inside the same minute on `POST /api/commands/stop_runtime -> HTTP 502`, and the baseline column came out empty. The runner now waits a control-plane outage out (`CONTROL_PLANE_OUTAGE_RETRIES`) instead of recording it as a score, because an unreachable server says nothing about the arm. (2) `timeoutMinutes: 45` was below the capability's own measured range. `clinical-evidence-synthesis` has run 41-61 minutes in production since 2026-09-08, and the one v2 baseline cell that reached the platform ran the full 45 minutes without converging while its candidate pair finished in 58 seconds. A timeout inside the distribution does not measure the arms, it measures the timeout - and it would have cut the memory-off arm systematically, which is the arm expected to be slower. 90 minutes clears the observed range with margin, and `latencyCapMs` moves with it so the efficiency dimension is scaled to the real spread rather than flooring every cell at zero. The v2 config and its one scored cell stay on disk as the record of that batch.",
+  "_projectIsNew": "The project id is fresh again, and it is the precondition that makes the arms differ. Project-scope records are scoped by `scopeId`, so a new project starts with none, and with extraction off none accumulate during the batch. Verified for v2 before this rewrite: `eval-memory-ablation-v2` finished its batch holding ZERO records, so the extraction switch did hold this time - that is the first live confirmation that `recordRun`'s disabled branch covers run summaries. Do not re-use this project id for a second batch without re-checking: group `evimed_memory.records` by `scope_id`, and read the host's `.evimed-brief/sessions/*/memory.md` for what actually reached the model.",
+  "_seedingNote": "Why this account and not the operator's. `sxjxw-research` has ten user-scope records with `origin: explicit` and `importance: 0.75`, and every one of them is a whole task brief that the extractor's deterministic fallback stored verbatim (2026-09-06; root cause fixed 2026-09-15, the rows left for the operator to decide about). An ablation on those would measure whether injecting a stale aripiprazole brief into an unrelated review helps, which is not the question. Four clean records is a thin ablation and the report should say so; it is not a thin ablation dressed as a thick one.",
+  "_cost": "2 briefs x 2 arms x 3 repeats = 12 clinical-evidence-synthesis runs at concurrency 1, each bounded by timeoutMinutes 90 and the $12 costCap. Against a production server these are real runs on a real account's budget. Worst case is long by construction: twelve cells that each use their whole window is 18 hours. The observed shape is not that - the candidate arm finished one cell in 58 seconds - but the batch is run detached for that reason.",
+  "_sharedRecord": "The baseline arm is not zero memory, and the report must say so. `cdss-access` holds five user-scope durable records; four are the ones these arms toggle, and the fifth is `behavior.structured_review_brief` (origin `explicit`, importance 0.9, active) — the record the extractor created during the 2026-09-15 batch by learning the evaluator's own brief format. It is left alone at the operator's instruction, so it is recalled in BOTH arms and is constant between them: it does not bias the contrast, but it does mean the baseline reads one durable record rather than none. Decide about that row before any batch that wants a true zero-memory arm.",
+  "_budgetArithmetic": "What the arms will actually deliver, stated before the run so the report cannot be fitted to it. The deployment recalls at most 8 memories per dispatch (OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT) and reserves half of that — 4 slots, 10 000 characters — for durable kinds (profile / preference / behavior / correction). With a fresh project there are no episodes, so: BASELINE delivers the one shared durable record (`behavior.structured_review_brief`); CANDIDATE has five active durable records and 4 slots, so it delivers the shared one plus three of the four toggled records — not all four. The contrast is therefore 1 durable record against 4, not 0 against 4. Verify rather than assume: after the first cell, read the host's `.evimed-brief/sessions/<id>/memory.md` and list the blocks by kind and scope; that file is what reached the model."
+}

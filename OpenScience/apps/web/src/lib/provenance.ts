@@ -2,6 +2,8 @@
 // calls into version records in `.openscience/provenance.jsonl`, and read them
 // back for the artifact History view. Pure derivation is separated from the
 // Tauri bridge so it can be unit-tested without a desktop shell.
+import { parseFailureMessage } from "@/lib/errorText";
+
 import type { ToolUpdatedEvent } from "@/lib/kernelEvents";
 import type { ProvenanceRecord } from "@ai4s/shared";
 import { hasWebApi, invokeCommand } from "./apiClient";
@@ -60,7 +62,7 @@ export async function recordProvenance(
   } catch (e) {
     // Best-effort — the conversation goes on — but a failure must be visible
     // in the diagnostic log, or a silently broken audit trail looks healthy.
-    void logDebug(`provenance FAILED for ${input.path}: ${e instanceof Error ? e.message : String(e)}`);
+    void logDebug(`provenance FAILED for ${input.path}: ${parseFailureMessage(e, "该溯源记录")}`);
   }
 }
 

@@ -82,11 +82,19 @@ body,
   height: 100%;
 }
 
+/* The UI baseline language is Simplified Chinese and neither font stack named
+   a Chinese face (2026-09-16 walk, V1): `Inter, system-ui` left every Chinese
+   glyph to whatever the browser picked by itself, which on Windows is the
+   1990s bitmap-hinted SimSun and differs machine to machine. The Latin faces
+   stay first so numbers, DOIs and identifiers keep the metrics the design
+   tokens were measured against, and the CJK faces follow for the glyphs Inter
+   does not carry. Kept in one place: `tailwind.config.js` reads the same two
+   lists through `fontFamily`. */
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: Inter, system-ui, sans-serif;
+  font-family: Inter, system-ui, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
