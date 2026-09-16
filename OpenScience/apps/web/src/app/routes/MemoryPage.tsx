@@ -443,7 +443,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
       {pendingDelete && (
         <ConfirmDialog
           title="删除这条科研记忆？"
-          body="删除后无法恢复，后续问答与科研任务也不会再检索到它。"
+          body="删除后无法恢复，后续问答与科研任务也不会再检索到它。不会删除写下它时的对话与运行记录。"
           confirmLabel="删除"
           onConfirm={() => void remove()}
           onCancel={() => setPendingDelete(null)}
@@ -452,7 +452,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
       {pendingStructuredDelete && (
         <ConfirmDialog
           title="删除这条结构化记忆？"
-          body="删除后，用户画像和后续科研问答都不会再使用这条信息。"
+          body="删除这条记忆及其依据与修订记录，用户画像和后续科研问答都不会再使用它，检索索引中的副本随后移除。不会删除产生它的对话与运行记录；同样的内容以后若再次出现，可能会被重新学到。"
           confirmLabel="删除"
           onConfirm={() => void removeStructured()}
           onCancel={() => setPendingStructuredDelete(null)}
