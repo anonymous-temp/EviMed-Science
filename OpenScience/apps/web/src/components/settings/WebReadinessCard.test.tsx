@@ -81,7 +81,7 @@ describe("WebReadinessCard", () => {
     expect(screen.getByText("local · 2 个用户")).toBeInTheDocument();
     expect(screen.getByText("protected · 必需")).toBeInTheDocument();
     expect(screen.getByText("2026.07.10-release.1 · v0.1.3 · 1234567890ab")).toBeInTheDocument();
-    expect(screen.getByText("50 MiB 文件 · 1 GiB 项目 · 2 任务 · 64 代理 · 30s 配额检查")).toBeInTheDocument();
+    expect(screen.getByText("50 MB 文件 · 1 GB 项目 · 2 任务 · 64 代理 · 30s 配额检查")).toBeInTheDocument();
     expect(screen.getByText("local · 保留 30 天 · 已加密 · 恢复演练")).toBeInTheDocument();
     expect(screen.getByText("kernel · docker · bridge · explicitly_allowed · acknowledged")).toBeInTheDocument();
     expect(screen.getByText("SaaS 配置档")).toBeInTheDocument();

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { ALLOWED_EFFECT_MEASURES, AUTOPILOT_TASK_TYPES, digestPlacement, directionVerdict, REFUTATION_VERDICTS,
-  STOPPING_RULES, tierRaiseAllowed, userSignalScore, validateAgendaClaim } from "@evimed/domain";
+  STOPPING_RULES, standingVerdict, tierRaiseAllowed, userSignalScore, validateAgendaClaim } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /** @param {unknown} value @param {string} field @param {number} max */
@@ -790,8 +790,10 @@ export class AutopilotService {
    */
   async answerRefutedAdoption(userId, digest, claim) {
     if (claim.refutation !== "refuted") return null;
-    const adopted = [...(digest.payload.decisions ?? [])].reverse()
-      .find((decision) => decision.claimId === claim.id && decision.action === "adopt");
+    // The standing verdict, not the latest adopt: an adoption the researcher
+    // already withdrew is not one to take back again, or to ask them about.
+    const standing = standingVerdict(digest.payload.decisions, claim.id);
+    const adopted = standing?.action === "adopt" ? standing : null;
     if (!adopted) return null;
     const entryId = adopted.memory?.entryId;
     if (this.capsules && typeof entryId === "string" && entryId) {
@@ -1046,7 +1048,7 @@ export class AutopilotService {
   async decide(userId, digestId, input) {
     const digest = await this.getDigest(userId, digestId);
     const action = text(input.action, "decision action", 32);
-    if (!["adopt", "reject", "question"].includes(action)) throw new HttpError(400, "autopilot_payload_invalid", "Digest action is invalid.");
+    if (!["adopt", "reject", "question", "withdraw"].includes(action)) throw new HttpError(400, "autopilot_payload_invalid", "Digest action is invalid.");
     const claimId = text(input.claimId, "claim id", 160);
     const claim = [...(digest.payload.headlines ?? []), ...(digest.payload.leads ?? [])].find((item) => item.id === claimId);
     if (!claim) throw new HttpError(404, "autopilot_claim_not_found", "Digest claim is unavailable.");
@@ -1055,7 +1057,9 @@ export class AutopilotService {
     // Before the decision is written, not after: a capsule that is unreachable
     // must not leave the researcher retrying a decision that was already
     // recorded, so the memory outcome rides the same single write.
-    const memory = await this.rememberDecision(userId, digest, claim, { action, note });
+    const memory = action === "withdraw"
+      ? await this.forgetDecision(userId, digest, claimId)
+      : await this.rememberDecision(userId, digest, claim, { action, note });
     const decision = { action, claimId, note, at: this.now().toISOString(), memory };
     const saved = await this.documents.put(userId, "digest", digest.id, {
       ...digest.payload,
@@ -1096,6 +1100,31 @@ export class AutopilotService {
       return { status: "candidate", entryId: saved?.id ?? null };
     } catch (error) {
       return { status: "failed", code: typeof error?.code === "string" ? error.code : "capsule_note_failed" };
+    }
+  }
+
+  /**
+   * Undo the latest standing adopt or reject on one finding (2026-09-16 review,
+   * U17): one click wrote a candidate memory and moved the direction's score,
+   * and neither could be taken back. The withdrawal is appended rather than the
+   * verdict erased, so the digest's record still says what happened; the score
+   * nets it out (`userSignalScore`), and the candidate memory the verdict
+   * created is retracted — retired if it was never approved, marked if it was,
+   * because an approval is the researcher's own later decision.
+   *
+   * @param {string} userId @param {any} digest @param {string} claimId
+   * @returns {Promise<{status:string,reason?:string,entryId?:string,code?:string}>}
+   */
+  async forgetDecision(userId, digest, claimId) {
+    const standing = standingVerdict(digest.payload.decisions, claimId);
+    if (!standing) throw new HttpError(409, "autopilot_nothing_to_withdraw", "There is no decision on this finding to undo.");
+    const entryId = standing.memory?.status === "candidate" ? standing.memory.entryId : null;
+    if (!entryId || !this.capsules) return { status: "skipped", reason: "nothing_remembered" };
+    try {
+      await this.capsules.retractNote(userId, entryId, { reason: "研究者撤销了对这条发现的决定" });
+      return { status: "retracted", entryId };
+    } catch (error) {
+      return { status: "failed", code: typeof error?.code === "string" ? error.code : "capsule_retract_failed" };
     }
   }
 

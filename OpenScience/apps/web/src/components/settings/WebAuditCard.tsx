@@ -3,6 +3,7 @@ import { ClipboardList, RefreshCw } from "lucide-react";
 import { webErrorMessage, listWebAuditLog, type WebAuditRecord } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
+import { formatClock, humanSize } from "@/lib/format";
 
 export function WebAuditCard() {
   const [events, setEvents] = useState<WebAuditRecord[]>([]);
@@ -64,9 +65,9 @@ export function WebAuditCard() {
                   {event.target ?? event.command ?? "项目"}
                 </span>
                 <span className="hidden w-16 shrink-0 text-right font-mono text-caption text-muted sm:block">
-                  {formatBytes(event.bytes)}
+                  {event.bytes ? humanSize(event.bytes) : ""}
                 </span>
-                <span className="shrink-0 font-mono text-caption text-muted">{formatTime(event.createdAt)}</span>
+                <span className="shrink-0 font-mono text-caption text-muted">{formatClock(event.createdAt)}</span>
               </div>
             ))
           )}
@@ -82,15 +83,4 @@ function statusTone(status: WebAuditRecord["status"]) {
   return "text-muted";
 }
 
-function formatBytes(value: number | null | undefined) {
-  if (!Number.isFinite(value) || !value) return "";
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
-  return `${Math.round(value / (1024 * 1024))} MB`;
-}
 
-function formatTime(value: string) {
-  const time = new Date(value);
-  if (Number.isNaN(time.getTime())) return "";
-  return time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}

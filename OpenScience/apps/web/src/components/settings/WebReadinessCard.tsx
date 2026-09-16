@@ -3,6 +3,7 @@ import { CheckCircle2, CircleDashed, RefreshCw, XCircle } from "lucide-react";
 import { webErrorMessage, fetchWebReadiness, type WebReadiness, type WebReadinessCheck } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
+import { humanSize } from "@/lib/format";
 
 const CHECK_LABELS: Record<string, string> = {
   dataDir: "数据卷",
@@ -157,8 +158,8 @@ function readinessDetail(key: string, check: WebReadinessCheck): string {
   }
   if (key === "resources") {
     return [
-      check.maxFileBytes != null ? `${formatBytes(Number(check.maxFileBytes))} 文件` : null,
-      check.maxProjectBytes != null ? `${formatBytes(Number(check.maxProjectBytes))} 项目` : null,
+      Number(check.maxFileBytes) > 0 ? `${humanSize(Number(check.maxFileBytes))} 文件` : null,
+      Number(check.maxProjectBytes) > 0 ? `${humanSize(Number(check.maxProjectBytes))} 项目` : null,
       check.maxConcurrentTasks != null ? `${check.maxConcurrentTasks} 任务` : null,
       check.maxRuntimeProxyConnections != null ? `${check.maxRuntimeProxyConnections} 代理` : null,
       check.runtimeQuotaCheckIntervalMs != null
@@ -187,15 +188,3 @@ function readinessDetail(key: string, check: WebReadinessCheck): string {
   return "可用";
 }
 
-function formatBytes(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "invalid";
-  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-  let next = value;
-  let unit = 0;
-  while (next >= 1024 && unit < units.length - 1) {
-    next /= 1024;
-    unit += 1;
-  }
-  const text = next >= 10 || unit === 0 ? next.toFixed(0) : next.toFixed(1);
-  return `${text.replace(/\.0$/, "")} ${units[unit]}`;
-}
