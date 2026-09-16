@@ -441,6 +441,23 @@ test("a researcher's digest decisions score the direction, and one rejection out
   assert.deepEqual(userSignalScore([{ action: "opened" }, {}]), { score: 0, decided: 0, rejected: false });
 });
 
+test("withdrawing a verdict undoes exactly that claim's latest adopt or reject, and nothing when there is none", async () => {
+  // 2026-09-16 review, U17: 驳回 was one click with no way back.
+  const { userSignalScore, standingVerdict } = await import("../index.mjs");
+  const reject = { action: "reject", claimId: "c1" };
+  assert.equal(userSignalScore([reject]).rejected, true);
+  assert.deepEqual(userSignalScore([reject, { action: "withdraw", claimId: "c1" }]), { score: 0, decided: 0, rejected: false });
+  // Another claim's withdrawal undoes nothing here.
+  assert.equal(userSignalScore([reject, { action: "withdraw", claimId: "c2" }]).rejected, true);
+  // Latest first: adopt then reject, withdraw once, the adoption stands.
+  const sequence = [{ action: "adopt", claimId: "c1", at: "1" }, { action: "reject", claimId: "c1", at: "2" }, { action: "withdraw", claimId: "c1" }];
+  assert.deepEqual(userSignalScore(sequence), { score: 0.6, decided: 1, rejected: false });
+  assert.equal(standingVerdict(sequence, "c1").at, "1");
+  assert.equal(standingVerdict([...sequence, { action: "withdraw", claimId: "c1" }], "c1"), null);
+  // A question is not a verdict and is never withdrawn by this.
+  assert.deepEqual(userSignalScore([{ action: "question", claimId: "c1" }, { action: "withdraw", claimId: "c1" }]), { score: 1, decided: 1, rejected: false });
+});
+
 test("triage picks a depth for a reason it can state, and indexing is complete by construction", async () => {
   const { chooseDepth, indexCompleteness, distillationCompleteness, outputBelowFloor } = await import("../index.mjs");
   const own = chooseDepth({ sourceType: "published-paper-other", authorship: "self", value: {} });

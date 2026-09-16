@@ -5,6 +5,7 @@ import { getWebProjectId } from "@/lib/apiClient";
 import { createAgenda, decideDigest, getDigest, listAgendas, listDigests, markDigestOpened, scheduleAgenda, startAgenda, stopAgenda,
   type AgendaRecord, type DigestClaim, type DigestRecord } from "@/lib/autopilotClient";
 import { productErrorMessage } from "@/lib/productClient";
+import { toast } from "@/lib/toast";
 import { listInbox, type InboxItem } from "@/lib/inboxClient";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -179,9 +180,18 @@ function ClaimVerification({ claim }: { claim: DigestClaim }) {
   return <p className={label.refuted ? "mt-1 text-caption text-error" : "mt-1 text-caption text-muted"}>{label.text}</p>;
 }
 
-/** What the researcher last said about a finding; a rejection is echoed back as the promise it makes. */
+/** What the researcher last said about a finding; a rejection is echoed back as the promise it makes.
+ *  A withdrawal takes back that claim's latest adopt or reject, as the score does. */
 function decisionLabel(digest: DigestRecord, claimId: string): string | null {
-  const last = [...(digest.payload.decisions ?? [])].reverse().find((decision) => decision.claimId === claimId);
+  const standing: DigestRecord["payload"]["decisions"] = [];
+  for (const decision of digest.payload.decisions ?? []) {
+    if (decision.claimId !== claimId) continue;
+    if (decision.action !== "withdraw") { standing.push(decision); continue; }
+    for (let index = standing.length - 1; index >= 0; index -= 1) {
+      if (standing[index].action === "adopt" || standing[index].action === "reject") { standing.splice(index, 1); break; }
+    }
+  }
+  const last = standing.at(-1);
   if (!last) return null;
   if (last.action === "adopt") return "已采纳";
   if (last.action === "reject") return "已记住：不再按这个方向";
@@ -286,6 +296,17 @@ export function AutopilotPage() {
     catch (operationError) { if (current === generation.current) setError(productErrorMessage(operationError)); }
     finally { setBusy(false); }
   };
+  // 采纳 writes a candidate memory and 驳回 parks the direction at its next
+  // episode, each from one click, so each says so and offers the way back
+  // (2026-09-16 review, U17).
+  const decide = async (id: string, claimId: string, action: "adopt" | "reject") => {
+    let recorded = false;
+    await mutate(async () => { await decideDigest(id, { action, claimId, note: "" }); recorded = true; });
+    if (!recorded) return;
+    toast.success(action === "adopt" ? "已采纳，记为待你确认的记忆" : "已驳回：之后不再按这个方向", {
+      action: { label: "撤销", onClick: () => void mutate(() => decideDigest(id, { action: "withdraw", claimId, note: "" })) },
+    });
+  };
   const visibleDigests = selectedDigest ? [selectedDigest, ...digests.filter((digest) => digest.id !== selectedDigest.id)] : digests;
   const visibleError = error ?? activityError;
   /**
@@ -376,8 +397,8 @@ export function AutopilotPage() {
               <p className="text-caption text-muted">{kind}</p><p className="mt-1 text-ui text-text">{claim.statement}</p>
               <ClaimVerification claim={claim} />
               {decisionLabel(digest, claim.id) && <p className="mt-1 text-ui-sm text-muted">{decisionLabel(digest, claim.id)}</p>}
-              <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="ghost" aria-label={`采纳${claim.statement}`} disabled={busy} onClick={() => void mutate(() => decideDigest(digest.id, { action: "adopt", claimId: claim.id, note: "" }))}>采纳</Button>
-                <Button size="sm" variant="ghost" aria-label={`驳回${claim.statement}`} disabled={busy} onClick={() => void mutate(() => decideDigest(digest.id, { action: "reject", claimId: claim.id, note: "" }))}>驳回</Button>
+              <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="ghost" aria-label={`采纳${claim.statement}`} disabled={busy} onClick={() => void decide(digest.id, claim.id, "adopt")}>采纳</Button>
+                <Button size="sm" variant="ghost" aria-label={`驳回${claim.statement}`} disabled={busy} onClick={() => void decide(digest.id, claim.id, "reject")}>驳回</Button>
                 <Button size="sm" variant="ghost" aria-label={`追问${claim.statement}`} disabled={busy} onClick={() => setFollowUp(followUp?.claimId === claim.id && followUp.digestId === digest.id ? null : { digestId: digest.id, claimId: claim.id, note: "" })}>追问</Button></div>
               {followUp?.digestId === digest.id && followUp.claimId === claim.id && <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => {
                 event.preventDefault();

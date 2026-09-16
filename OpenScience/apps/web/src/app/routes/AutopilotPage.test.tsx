@@ -105,6 +105,26 @@ describe("AutopilotPage", () => {
     await waitFor(() => expect(mocks.decideDigest).toHaveBeenCalledWith("digest-one", { action: "reject", claimId: "claim-two", note: "" }));
   });
 
+  it("offers to undo a decision, and a withdrawn verdict no longer reads as decided", async () => {
+    // 2026-09-16 review, U17: one click wrote a memory candidate or parked the direction.
+    const { Toaster } = await import("@/components/ui/Toaster");
+    const { useToastStore } = await import("@/lib/toast");
+    // The toast store is module state: earlier tests' toasts are still in it.
+    act(() => { useToastStore.setState({ toasts: [] }); });
+    renderView(<MemoryRouter initialEntries={["/app/autopilot?digest=digest-one"]}><AutopilotPage /><Toaster /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole("button", { name: "驳回待验证线索" }));
+    await userEvent.click(await screen.findByRole("button", { name: "撤销" }));
+    await waitFor(() => expect(mocks.decideDigest).toHaveBeenLastCalledWith("digest-one", { action: "withdraw", claimId: "claim-two", note: "" }));
+
+    const withdrawn = { ...digest, payload: { ...digest.payload, decisions: [
+      { action: "reject", claimId: "claim-two", note: "" }, { action: "withdraw", claimId: "claim-two", note: "" },
+    ] } };
+    mocks.listDigests.mockResolvedValue({ items: [withdrawn], nextCursor: null });
+    mocks.getDigest.mockResolvedValue(withdrawn);
+    await userEvent.click(screen.getByRole("button", { name: "采纳新增直接证据" }));
+    await waitFor(() => expect(screen.queryByText("已记住：不再按这个方向")).not.toBeInTheDocument());
+  });
+
   it("sends a follow-up question with its text and shows what was already decided", async () => {
     const decided = { ...digest, payload: { ...digest.payload, decisions: [{ action: "reject", claimId: "claim-two", note: "" }] } };
     mocks.listDigests.mockResolvedValue({ items: [decided], nextCursor: null });

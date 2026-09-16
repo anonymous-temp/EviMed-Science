@@ -3,6 +3,7 @@ import { AlertTriangle, RefreshCw } from "lucide-react";
 import { webErrorMessage, listWebErrorEvents, type WebErrorEvent } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
+import { formatClock } from "@/lib/format";
 
 export function WebErrorsCard() {
   const [events, setEvents] = useState<WebErrorEvent[]>([]);
@@ -64,7 +65,7 @@ export function WebErrorsCard() {
                 <span className="hidden max-w-[10rem] truncate font-mono text-caption text-muted md:block">
                   {event.requestId ?? "无请求 id"}
                 </span>
-                <span className="shrink-0 font-mono text-caption text-muted">{formatTime(event.createdAt)}</span>
+                <span className="shrink-0 font-mono text-caption text-muted">{formatClock(event.createdAt)}</span>
               </div>
             ))
           )}
@@ -74,8 +75,3 @@ export function WebErrorsCard() {
   );
 }
 
-function formatTime(value: string) {
-  const time = new Date(value);
-  if (Number.isNaN(time.getTime())) return "";
-  return time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}

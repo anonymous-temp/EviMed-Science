@@ -3,6 +3,7 @@ import { Play, RefreshCw, RotateCw, Square } from "lucide-react";
 import { webErrorMessage, fetchWebMetrics, restartWebRuntime, startWebRuntime, stopWebRuntime, type WebMetrics } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
+import { formatClock, humanSize } from "@/lib/format";
 
 export function WebResourcesCard() {
   const [metrics, setMetrics] = useState<WebMetrics | null>(null);
@@ -78,7 +79,7 @@ export function WebResourcesCard() {
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-body text-text">运行资源</h2>
           <p className="mt-0.5 text-xs text-muted">
-            {metrics ? `${metrics.project.name} · ${formatTime(metrics.createdAt)}` : "当前项目与服务端进程"}
+            {metrics ? `${metrics.project.name} · ${formatClock(metrics.createdAt)}` : "当前项目与服务端进程"}
           </p>
         </div>
         <button
@@ -92,14 +93,14 @@ export function WebResourcesCard() {
         </button>
       </header>
       <div className="grid gap-3 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="存储" value={max ? `${formatBytes(used)} / ${formatBytes(max)}` : formatBytes(used)} detail={pct == null ? "无配额" : `已用 ${pct}%`} />
+        <Metric label="存储" value={max ? `${humanSize(used)} / ${humanSize(max)}` : humanSize(used)} detail={pct == null ? "无配额" : `已用 ${pct}%`} />
         <Metric label="任务" value={`${runningTasks} 个进行中`} detail={`共 ${metrics?.tasks.total ?? 0} 条`} />
         <Metric
           label="运行时"
           value={metrics?.runtime.running ? "运行中" : metrics?.runtime.stale ? "失联" : "已停止"}
           detail={runtimeDetail(metrics)}
         />
-        <Metric label="服务端内存" value={formatBytes(metrics?.server.memory.rssBytes ?? 0)} detail={metrics ? `pid ${metrics.server.pid}` : "未加载"} />
+        <Metric label="服务端内存" value={humanSize(metrics?.server.memory.rssBytes ?? 0)} detail={metrics ? `pid ${metrics.server.pid}` : "未加载"} />
       </div>
       <div className="flex flex-wrap gap-2 border-t border-border px-5 py-3">
         <button
@@ -157,21 +158,4 @@ function runtimeDetail(metrics: WebMetrics | null) {
   return runtime.kind ?? runtime.sandboxMode ?? "未启动";
 }
 
-function formatBytes(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let n = value;
-  let i = 0;
-  while (n >= 1024 && i < units.length - 1) {
-    n /= 1024;
-    i++;
-  }
-  const formatted = Number.isInteger(n) || n >= 10 || i === 0 ? String(Math.round(n)) : n.toFixed(1);
-  return `${formatted} ${units[i]}`;
-}
 
-function formatTime(value: string) {
-  const time = new Date(value);
-  if (Number.isNaN(time.getTime())) return "";
-  return time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}

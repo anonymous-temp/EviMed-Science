@@ -274,6 +274,34 @@ test("a digest separates headlines from leads and records user decisions", async
   assert.equal(decision.payload.decisions[0].claimId, "claim-two");
 });
 
+test("a verdict can be withdrawn: the direction's score nets it out and the candidate memory it created is retired", async () => {
+  // 2026-09-16 review, U17.
+  const { service, capsules } = fixture();
+  const created = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const digest = await service.createDigest("user-one", active.id, {
+    date: "2026-09-06", episodeIds: ["episode-one"], costCny: 1,
+    claims: [{ id: "claim-two", statement: "Unverified lead", type: "synthesized", tier: "unverified", what_would_change: "New trial" }],
+  });
+  await assert.rejects(() => service.decide("user-one", digest.id, { action: "withdraw", claimId: "claim-two" }), { code: "autopilot_nothing_to_withdraw" });
+
+  const rejected = await service.decide("user-one", digest.id, { action: "reject", claimId: "claim-two", note: "" });
+  const entryId = rejected.payload.decisions[0].memory.entryId;
+  assert.equal(rejected.payload.decisions[0].memory.status, "candidate");
+  assert.equal((await service.get("user-one", active.id)).payload.userSignal.rejected, true);
+
+  const withdrawn = await service.decide("user-one", digest.id, { action: "withdraw", claimId: "claim-two" });
+  assert.deepEqual(withdrawn.payload.decisions.map((item) => item.action), ["reject", "withdraw"], "the record keeps what happened");
+  assert.deepEqual(withdrawn.payload.decisions[1].memory, { status: "retracted", entryId });
+  const signal = (await service.get("user-one", active.id)).payload.userSignal;
+  assert.equal(signal.rejected, false);
+  assert.equal(signal.decided, 0);
+  const entries = await capsules.documents.list("user-one", "fact", {});
+  const entry = (entries.items ?? entries).find((item) => item.id === entryId);
+  assert.equal(entry.payload.status, "retired", "a candidate nobody approved leaves with the verdict that made it");
+  await assert.rejects(() => service.decide("user-one", digest.id, { action: "withdraw", claimId: "claim-two" }), { code: "autopilot_nothing_to_withdraw" });
+});
+
 test("a net-negative digest decision parks the direction before its next episode, and restarting overrides it", async () => {
   let at = new Date("2026-09-06T01:00:00.000Z");
   const { service, jobs } = fixture({ now: () => at });

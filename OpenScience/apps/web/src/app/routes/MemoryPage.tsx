@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { webErrorMessage, createResearchMemory, deleteResearchMemory, deleteStructuredMemory, fetchMemoryProfile, fetchMemoryStatus, hasWebApi, listResearchMemories, updateResearchMemory, updateStructuredMemory, type WebMemoryProfile, type WebMemoryStatus, type WebResearchMemory, type WebStructuredMemory } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
+import { formatDateTime } from "@/lib/format";
 import { evidenceSourceLabel, looksInjected, memoryExcerpt } from "@/lib/memoryText";
 import { toast } from "@/lib/toast";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
@@ -44,12 +45,7 @@ function formatTime(value: string | null) {
   if (!value) return "刚刚";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "刚刚";
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  return formatDateTime(date, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 /** One Chinese sentence for a refusal on this page, from the shared dictionary.

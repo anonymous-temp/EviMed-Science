@@ -3,6 +3,7 @@ import { RefreshCw, X } from "lucide-react";
 import { webErrorMessage, cancelWebTask, listWebTasks, type WebTask, type WebTaskStatus } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
+import { formatClock } from "@/lib/format";
 
 const TONE: Record<WebTaskStatus, string> = {
   queued: "text-muted",
@@ -88,7 +89,7 @@ export function WebTasksCard() {
                   {task.status.replace("_", " ")}
                 </span>
                 <span className="hidden font-mono text-caption text-muted sm:inline">
-                  {formatTime(task.startedAt ?? task.queuedAt ?? task.createdAt)}
+                  {formatClock(task.startedAt ?? task.queuedAt ?? task.createdAt)}
                 </span>
                 {!TERMINAL.has(task.status) && (
                   <button
@@ -110,9 +111,3 @@ export function WebTasksCard() {
   );
 }
 
-function formatTime(value: string | null) {
-  if (!value) return "";
-  const time = new Date(value);
-  if (Number.isNaN(time.getTime())) return "";
-  return time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}

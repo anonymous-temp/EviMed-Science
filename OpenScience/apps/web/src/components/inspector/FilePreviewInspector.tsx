@@ -205,7 +205,7 @@ export function FilePreviewInspector({
           title={fileActionTitle}
           onClick={() => void runFileAction()}
         >
-          <FileActionIcon size={14} strokeWidth={1.5} />
+          <FileActionIcon size={14} strokeWidth={1.5} aria-hidden="true" />
         </button>
         {controls}
         <button className="text-text hover:opacity-60" aria-label="关闭预览" onClick={onClose}>
@@ -566,7 +566,7 @@ export function PreviewError({
             className="inline-flex items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-1.5 text-ui text-text hover:bg-surface"
             onClick={onOpenExternally}
           >
-            <ExternalActionIcon size={13} /> {externalActionLabel}
+            <ExternalActionIcon size={13} aria-hidden="true" /> {externalActionLabel}
           </button>
         </div>
         {probeError && <div className="mt-3 text-ui text-error">{probeError}</div>}

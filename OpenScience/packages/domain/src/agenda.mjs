@@ -112,14 +112,44 @@ export function userSignalScore(decisions) {
   const weights = /** @type {Readonly<Record<string, number>>} */ (USER_SIGNALS)
   let score = 0
   let decided = 0
+  /** @type {Map<string, number[]>} each claim's standing verdict weights, latest last */
+  const verdicts = new Map()
   for (const decision of Array.isArray(decisions) ? decisions : []) {
+    // A withdrawal undoes the claim's latest standing adopt or reject, as if it
+    // had not been clicked (2026-09-16 review, U17). One with nothing to undo
+    // is not a signal.
+    if (decision?.action === 'withdraw') {
+      const weight = verdicts.get(String(decision?.claimId ?? ''))?.pop()
+      if (weight == null) continue
+      score -= weight
+      decided -= 1
+      continue
+    }
     const action = decision?.action === 'question' ? 'followUp' : decision?.action
     const weight = typeof action === 'string' && Object.hasOwn(weights, action) ? weights[action] : null
     if (weight == null) continue
     score += weight
     decided += 1
+    if (action === 'adopt' || action === 'reject') {
+      const key = String(decision?.claimId ?? '')
+      verdicts.set(key, [...(verdicts.get(key) ?? []), weight])
+    }
   }
   return { score: Math.round(score * 100) / 100, decided, rejected: decided > 0 && score < 0 }
+}
+
+/**
+ * The adopt or reject a withdrawal of `claimId` would undo, or null.
+ * @param {readonly any[] | undefined} decisions @param {string} claimId
+ */
+export function standingVerdict(decisions, claimId) {
+  /** @type {any[]} */ const stack = []
+  for (const decision of Array.isArray(decisions) ? decisions : []) {
+    if (String(decision?.claimId ?? '') !== claimId) continue
+    if (decision?.action === 'adopt' || decision?.action === 'reject') stack.push(decision)
+    else if (decision?.action === 'withdraw') stack.pop()
+  }
+  return stack.at(-1) ?? null
 }
 
 /**

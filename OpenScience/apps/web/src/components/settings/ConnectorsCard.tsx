@@ -121,7 +121,7 @@ export function ConnectorsCard() {
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`获取 ${connector.title} 凭据`}
-                  className="flex shrink-0 items-center gap-1 text-caption text-accent hover:underline"
+                  className="flex min-h-6 shrink-0 items-center gap-1 text-caption text-accent hover:underline"
                 >
                   获取
                   <ExternalLink size={12} aria-hidden="true" />
