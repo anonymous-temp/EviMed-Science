@@ -87,7 +87,13 @@ describe("AutopilotPage", () => {
     expect(screen.getByText("每日 ¥20 · 每周 ¥80 · 单回合 ¥8")).toBeInTheDocument();
     expect(screen.getByText("新增直接证据")).toBeInTheDocument();
     expect(screen.getAllByText("待验证线索").length).toBeGreaterThan(0);
+    // Running costs money on one click, so it says what it may cost first
+    // (2026-09-16 review, U17) — and the date is the agenda's own, not UTC:
+    // `toISOString()` named yesterday between 00:00 and 08:00 Beijing time.
     await userEvent.click(screen.getByRole("button", { name: "立即运行一回合" }));
+    expect(await screen.findByText("现在就跑一回合？")).toBeInTheDocument();
+    expect(mocks.scheduleAgenda).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "开始这一回合" }));
     await waitFor(() => expect(mocks.scheduleAgenda).toHaveBeenCalledWith("agenda-one", expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)));
   });
 

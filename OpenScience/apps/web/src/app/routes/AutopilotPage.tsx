@@ -7,6 +7,7 @@ import { createAgenda, decideDigest, getDigest, listAgendas, listDigests, markDi
 import { productErrorMessage } from "@/lib/productClient";
 import { listInbox, type InboxItem } from "@/lib/inboxClient";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -199,6 +200,10 @@ export function AutopilotPage() {
   const [activityError, setActivityError] = useState<string | null>(null);
   const [decisions, setDecisions] = useState<InboxItem[]>([]);
   const [followUp, setFollowUp] = useState<{ digestId: string; claimId: string; note: string } | null>(null);
+  /** The agenda a researcher asked to run now, held until they confirm the
+   *  spend. Running is the one control on this page that costs money on a
+   *  single click. */
+  const [running, setRunning] = useState<AgendaRecord | null>(null);
   const [busy, setBusy] = useState(false);
   // The project the form creates in. `load` resolves its own project from the
   // selected digest, which may belong to another one; a new agenda always
@@ -328,7 +333,19 @@ export function AutopilotPage() {
     : (agendas ?? []).length > 0
       ? "议程目前是暂停的。按「开始主动科研」之后，它会按设定的时刻运行，第一份简报在那之后出现。"
       : "完成的主动科研回合会在这里汇总发现、变化与花费。";
+  const runDialog = running ? <ConfirmDialog
+    title="现在就跑一回合？"
+    body={`「${running.payload.title}」会立即开始一次主动科研回合，按上限最多花费 ¥${running.payload.maxEpisodeCny}（每日上限 ¥${running.payload.dailyBudgetCny}）。结果会作为简报出现在这一页。`}
+    confirmLabel="开始这一回合"
+    onCancel={() => setRunning(null)}
+    onConfirm={() => {
+      const agenda = running;
+      setRunning(null);
+      void mutate(() => scheduleAgenda(agenda.id, todayIn(agenda.payload.timeZone)));
+    }}
+  /> : null;
   return <main className="h-full overflow-y-auto px-5 py-6"><div className="mx-auto max-w-content-wide space-y-5">
+    {runDialog}
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <PageTitle page="主动科研" />
@@ -395,7 +412,13 @@ export function AutopilotPage() {
           {agenda.payload.pauseReason && <p className="text-ui-sm text-muted">{agenda.payload.pauseReason}</p>}
           {pendingFollowUps(agenda) > 0 && <p className="text-ui-sm text-muted">下一回合先回答 {pendingFollowUps(agenda)} 条追问。</p>}
           <div className="flex flex-wrap gap-2">
-            {agenda.payload.status === "active" ? <><Button size="sm" disabled={busy} onClick={() => void mutate(() => scheduleAgenda(agenda.id, todayIn(agenda.payload.timeZone)))}><Sparkles size={13} aria-hidden="true" />立即运行一回合</Button>
+            {/* Spending is confirmed; a verdict is not.
+              * 「立即运行一回合」 starts a paid episode on one click, so it says
+              * what it may cost first (2026-09-16 review, U17). 「采纳 / 驳回」
+              * are deliberately left one-click: `rememberDecision` writes a
+              * capsule CANDIDATE, which takes effect only once confirmed — so
+              * a dialog there would guard a step that already has a gate. */}
+            {agenda.payload.status === "active" ? <><Button size="sm" disabled={busy} onClick={() => setRunning(agenda)}><Sparkles size={13} aria-hidden="true" />立即运行一回合</Button>
               <Button size="sm" variant="ghost" disabled={busy} onClick={() => void mutate(() => stopAgenda(agenda.id, agenda.revision))}><PauseCircle size={13} aria-hidden="true" />停止</Button></>
               : <Button size="sm" disabled={busy} onClick={() => void mutate(() => startAgenda(agenda.id, agenda.revision))}><PlayCircle size={13} aria-hidden="true" />开始主动科研</Button>}
           </div></div></Card>)}
