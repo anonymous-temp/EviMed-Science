@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { MEMORY_PROMOTION_MIN_OCCURRENCES, MEMORY_PROMOTION_MIN_RUNS, mcpToolBaseName } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
+import { memoryPausedFor } from "./researchMemory.mjs";
 
 const candidateKinds = new Set([
   "profile",
@@ -557,7 +558,7 @@ function excerpt(value) {
  * was flattening that dimension to 0.0 in both arms. A new skip source goes
  * here, or it will do the same.
  */
-export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded"]));
+export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "paused"]));
 
 export class MemoryIntelligence {
   /** @param {any} config @param {any} memoryStore
@@ -621,6 +622,14 @@ export class MemoryIntelligence {
         runSummary: null, extracted: 0, activated: 0,
         source: this.enabled ? "project_excluded" : "disabled",
         proposed: 0, rejected: 0,
+        rejectionReasons: [], pending: 0, pendingReasons: [], conflicts: [], extractionError: null, excluded,
+      };
+    }
+    // The researcher's own switch, for the account or for this project. Read
+    // per run rather than cached: "pause" has to hold from the next run on.
+    if ((await memoryPausedFor(this.memoryStore, project.userId, project.id)).learning) {
+      return {
+        runSummary: null, extracted: 0, activated: 0, source: "paused", proposed: 0, rejected: 0,
         rejectionReasons: [], pending: 0, pendingReasons: [], conflicts: [], extractionError: null, excluded,
       };
     }
@@ -829,6 +838,17 @@ export class MemoryIntelligence {
     const question = lastUser?.text.slice(0, 4_000) ?? "";
     const answer = lastAssistant?.text.slice(0, 8_000) ?? "";
     const sensitive = sensitivePattern.test(`${question}\n${answer}`);
+    // One summary per question, not per run (2026-09-16 review, M3). Keyed by
+    // run, every attempt at the same question stayed a separate record until
+    // its TTL, and all of them matched the next attempt's query — so the model
+    // was handed its own earlier answers, several deep, as memory. Keyed by the
+    // question, a repeat updates the one record: the latest answer is what
+    // recall serves, the earlier ones are its revision history, and the store
+    // stops growing with repetition. A run with no user message has nothing to
+    // repeat and keeps its own key.
+    const questionDigest = question
+      ? createHash("sha256").update(question.normalize("NFKC").replace(/\s+/g, " ").trim()).digest("hex").slice(0, 16)
+      : null;
     const value = JSON.stringify({
       runId: run.id,
       projectId: project.id,
@@ -847,13 +867,14 @@ export class MemoryIntelligence {
       finishedAt: run.finishedAt,
       durationMs: run.durationMs,
       question,
+      questionDigest,
       answer,
     });
     return this.memoryStore.upsertRecord(project.userId, {
       scope: "project",
       scopeId: project.id,
       kind: "run_summary",
-      key: `run.${run.id}`.toLowerCase(),
+      key: questionDigest ? `run.question.${questionDigest}` : `run.${run.id}`.toLowerCase(),
       value,
       summary: question
         ? `Conversation about: ${question.slice(0, 240)}`

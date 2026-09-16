@@ -120,6 +120,26 @@ test("a deployment that selects nothing keeps the term matcher, unchanged", asyn
   assert.deepEqual(recalled.map((row) => row.id), ["fallback"]);
 });
 
+test("a researcher who paused recall, for the account or for this project, is handed no memories", async () => {
+  // 2026-09-16 review, M4④. Checked before either path, so the switch holds
+  // whichever index is serving.
+  for (const settings of [
+    { learningPaused: false, recallPaused: true, pausedProjects: [] },
+    { learningPaused: false, recallPaused: false, pausedProjects: [PROJECT] },
+  ]) {
+    const store = { ...fakeStore([]), configured: true, settings: async () => settings };
+    const substrate = new MemorySubstrate({}, { store });
+    assert.deepEqual(await substrate.recall(USER, "kidney outcomes", { projectId: PROJECT }), []);
+    assert.equal(store.calls.relevant, 0, "a paused recall must not reach the store's matcher");
+  }
+  const elsewhere = { ...fakeStore([]), configured: true, settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: ["another-project"] }) };
+  const substrate = new MemorySubstrate({}, { store: elsewhere });
+  assert.equal((await substrate.recall(USER, "kidney outcomes", { projectId: PROJECT })).length, 1, "pausing one project leaves the others alone");
+  const learningOnly = { ...fakeStore([]), configured: true, settings: async () => ({ learningPaused: true, recallPaused: false, pausedProjects: [] }) };
+  assert.equal((await new MemorySubstrate({}, { store: learningOnly }).recall(USER, "kidney outcomes", { projectId: PROJECT })).length, 1,
+    "pausing learning is not pausing recall");
+});
+
 test("an unknown provider name falls back rather than composing a broken deployment", () => {
   const substrate = new MemorySubstrate({ memoryIndexProvider: "not-a-provider" }, { store: fakeStore([]) });
   assert.equal(substrate.provider, "builtin");

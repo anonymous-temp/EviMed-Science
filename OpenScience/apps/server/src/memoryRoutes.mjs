@@ -42,6 +42,7 @@ import {
  * @param {{
  *   config: any,
  *   researchMemory: any,
+ *   memorySubstrate?: any,
  *   feedbackEvents: any,
  *   store: any,
  *   context: (req: any, res: any) => Promise<any>,
@@ -52,7 +53,7 @@ import {
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createMemoryRoutes({
-  config, researchMemory, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
+  config, researchMemory, memorySubstrate = null, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
 }) {
   const enabled = config.memoryEnabled !== false;
   return async function memoryRoutes(req, res) {
@@ -68,6 +69,52 @@ export function createMemoryRoutes({
     if (pathname === "/api/memory/status" && req.method === "GET") {
       await store.ensureUser(req, res);
       sendJson(res, 200, { data: await researchMemory.status() });
+      return true;
+    }
+
+    // The researcher's own switches (2026-09-16 review, M4④). Pausing deletes
+    // nothing: learning paused means no run writes a memory, recall paused
+    // means no run is handed one, and a paused project is both, for that
+    // project only.
+    if (pathname === "/api/memory/settings" && req.method === "GET") {
+      const ctx = await context(req, res);
+      sendJson(res, 200, { data: await researchMemory.settings(ctx.user.id) });
+      return true;
+    }
+
+    if (pathname === "/api/memory/settings" && req.method === "PUT") {
+      const ctx = await context(req, res);
+      const body = assertObject(await readJson(req, config.maxJsonBytes), "memory settings");
+      const unknown = Object.keys(body).filter((field) => !["learningPaused", "recallPaused", "pausedProjects"].includes(field));
+      if (unknown.length > 0) {
+        throw new HttpError(400, "memory_settings_invalid", `Unknown memory setting(s): ${unknown.sort().join(", ")}.`);
+      }
+      const settings = await researchMemory.updateSettings(ctx.user.id, body);
+      await audit(ctx, "memory.settings.update", "completed", {
+        learningPaused: settings.learningPaused, recallPaused: settings.recallPaused, pausedProjects: settings.pausedProjects.length,
+      });
+      sendJson(res, 200, { data: settings });
+      return true;
+    }
+
+    // Everything the account remembers, deleted. The switches are left as they
+    // are: a reset is a clean slate, not a change of mind about learning.
+    if (pathname === "/api/memory/reset" && req.method === "POST") {
+      const ctx = await context(req, res);
+      const body = assertObject(await readJson(req, config.maxJsonBytes), "memory reset");
+      if (body.confirm !== "reset") {
+        throw new HttpError(400, "memory_reset_confirmation_required", "Resetting memory requires confirm: \"reset\".");
+      }
+      // The derived index first, and awaited, for the reason project deletion
+      // gives: a recall index that still answers with deleted memories is a
+      // copy of deleted data, so its failure fails the reset while the records
+      // are still there to retry with. Once more after the rows are gone, for
+      // an index job that re-published one in between.
+      if (memorySubstrate) await memorySubstrate.forgetUser(ctx.user.id);
+      const removed = await researchMemory.purgeUserMemory(ctx.user.id);
+      if (memorySubstrate) await memorySubstrate.forgetUser(ctx.user.id).catch(() => false);
+      await audit(ctx, "memory.reset", "completed", removed);
+      sendJson(res, 200, { data: removed });
       return true;
     }
 

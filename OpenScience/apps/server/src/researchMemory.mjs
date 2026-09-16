@@ -5,6 +5,7 @@ import {
   MEMORY_EVIDENCE_LIMIT,
   MEMORY_KINDS,
   MEMORY_ORIGINS,
+  MEMORY_PAUSED_PROJECT_LIMIT,
   MEMORY_REVISION_LIMIT,
   MEMORY_SCOPES,
   MEMORY_STATUSES,
@@ -373,6 +374,50 @@ function canonicalKeyLock(userId, record) {
 }
 
 /** @param {any} row */
+/** The switches an account has set, or every switch off when it has set none.
+ *  @param {any} row */
+function publicSettings(row) {
+  return {
+    learningPaused: row?.learning_paused === true,
+    recallPaused: row?.recall_paused === true,
+    pausedProjects: Array.isArray(row?.paused_projects) ? row.paused_projects.map(String) : [],
+    updatedAt: row?.updated_at ? new Date(row.updated_at).toISOString() : null,
+  };
+}
+
+const projectIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
+
+/** @param {unknown} value */
+function pausedProjectList(value) {
+  if (!Array.isArray(value)) throw new HttpError(400, "memory_settings_invalid", "pausedProjects must be a list of project ids.");
+  const ids = [...new Set(value.map((item) => String(item ?? "").trim()))];
+  if (ids.some((id) => !projectIdPattern.test(id))) {
+    throw new HttpError(400, "memory_settings_invalid", "pausedProjects holds something that is not a project id.");
+  }
+  if (ids.length > MEMORY_PAUSED_PROJECT_LIMIT) {
+    throw new HttpError(400, "memory_settings_invalid", `At most ${MEMORY_PAUSED_PROJECT_LIMIT} projects can be paused.`);
+  }
+  return ids;
+}
+
+/**
+ * Whether memory may be written, and read, for one account in one project.
+ *
+ * Read through a function rather than off the store directly because not every
+ * store has the switches: a deployment without the control-plane database has
+ * no memory to pause, and the doubles the extraction tests use predate them.
+ * Both read as "nothing paused", which is the behaviour before the switches.
+ *
+ * @param {any} store @param {string} userId @param {string | null} projectId
+ * @returns {Promise<{ learning: boolean, recall: boolean }>} true = paused
+ */
+export async function memoryPausedFor(store, userId, projectId) {
+  if (typeof store?.settings !== "function" || store.configured === false) return { learning: false, recall: false };
+  const settings = await store.settings(userId);
+  const projectPaused = Boolean(projectId) && settings.pausedProjects.includes(String(projectId));
+  return { learning: settings.learningPaused || projectPaused, recall: settings.recallPaused || projectPaused };
+}
+
 function publicRecord(row) {
   const evidence = Array.isArray(row.evidence) ? row.evidence : [];
   const revisions = Array.isArray(row.revisions) ? row.revisions : [];
@@ -751,6 +796,50 @@ export class ResearchMemoryStore {
     return Number(result.rowCount ?? 0);
   }
 
+  // --------------------------------------------------------------- settings
+
+  /**
+   * The researcher's own switches (2026-09-16 review, M4④): stop learning new
+   * memories, stop using memories in answers, and projects where neither
+   * happens. Nothing is deleted by any of them; reset is a separate, explicit
+   * act.
+   * @param {string} userId
+   */
+  async settings(userId) {
+    const result = await this.#query("SELECT * FROM evimed_memory.settings WHERE user_id=$1", [assertUserId(userId)]);
+    return publicSettings(result.rows[0] ?? null);
+  }
+
+  /**
+   * Change some switches and leave the rest as they are, in one statement: two
+   * tabs flipping different switches at once must both win.
+   * @param {string} userId
+   * @param {{ learningPaused?: unknown, recallPaused?: unknown, pausedProjects?: unknown }} patch
+   */
+  async updateSettings(userId, patch) {
+    const owner = assertUserId(userId);
+    /** @param {unknown} value @param {string} name */
+    const flag = (value, name) => {
+      if (value === undefined) return null;
+      if (typeof value !== "boolean") throw new HttpError(400, "memory_settings_invalid", `${name} must be true or false.`);
+      return value;
+    };
+    const learning = flag(patch?.learningPaused, "learningPaused");
+    const recall = flag(patch?.recallPaused, "recallPaused");
+    const projects = patch?.pausedProjects === undefined ? null : pausedProjectList(patch.pausedProjects);
+    const result = await this.#query(`INSERT INTO evimed_memory.settings AS s
+        (user_id, learning_paused, recall_paused, paused_projects, updated_at)
+      VALUES ($1, COALESCE($2::boolean, false), COALESCE($3::boolean, false), COALESCE($4::text[], '{}'),
+        date_trunc('second', clock_timestamp()))
+      ON CONFLICT (user_id) DO UPDATE SET
+        learning_paused = COALESCE($2::boolean, s.learning_paused),
+        recall_paused = COALESCE($3::boolean, s.recall_paused),
+        paused_projects = COALESCE($4::text[], s.paused_projects),
+        updated_at = date_trunc('second', clock_timestamp())
+      RETURNING *`, [owner, learning, recall, projects]);
+    return publicSettings(result.rows[0]);
+  }
+
   // ------------------------------------------------------------------ notes
 
   /** @param {string} userId @param {{ state?: string, pageSize?: number }} options */
@@ -942,12 +1031,13 @@ export class ResearchMemoryStore {
 
   /** @param {string} userId */
   async exportUserMemory(userId) {
-    const [records, current, archived] = await Promise.all([
+    const [records, current, archived, settings] = await Promise.all([
       this.listAllRecords(userId),
       this.listAllMemos(userId, { state: "normal" }),
       this.listAllMemos(userId, { state: "archived" }),
+      this.settings(userId),
     ]);
-    return { version: 1, records, manualMemos: [...current, ...archived] };
+    return { version: 1, records, manualMemos: [...current, ...archived], settings };
   }
 
   /** What an account's memory amounts to, without deleting any of it.

@@ -245,6 +245,46 @@ test("memory extraction rejects a plausible but unsupported model claim", async 
   assert.equal([...store.records.values()].filter((record) => record.kind === "run_summary").length, 1);
 });
 
+test("a researcher who paused learning, for the account or for this project, gets nothing written", async () => {
+  // 2026-09-16 review, M4④. No run summary and no model call: paused means no
+  // memory is written, and the notice path reads "paused" as a setting.
+  for (const settings of [
+    { learningPaused: true, recallPaused: false, pausedProjects: [] },
+    { learningPaused: false, recallPaused: false, pausedProjects: ["project_1"] },
+  ]) {
+    const store = new MemoryStoreDouble();
+    store.configured = true;
+    store.settings = async () => settings;
+    let modelCalls = 0;
+    const intelligence = new MemoryIntelligence(config, store, { fetchImpl: async () => { modelCalls += 1; throw new Error("no model call expected"); } });
+    const result = await intelligence.recordRun(project(), run(), [message("user_1", "请记住：我偏好先看一手研究。")]);
+    assert.equal(result.source, "paused");
+    assert.ok(MEMORY_WRITE_SKIPPED_SOURCES.has(result.source), "a paused write must not raise the 'extraction produced nothing' notice");
+    assert.equal(store.records.size, 0);
+    assert.equal(modelCalls, 0);
+  }
+});
+
+test("a question asked again updates its one run summary instead of adding another", async () => {
+  // 2026-09-16 review, M3: summaries were keyed by run, so every attempt at a
+  // question stayed a record of its own and all of them were recalled into the
+  // next attempt. Keyed by the question, the latest answer is served and the
+  // earlier ones are the record's revisions.
+  const store = new MemoryStoreDouble();
+  const intelligence = new MemoryIntelligence(config, store, { fetchImpl: modelFetch(() => []) });
+  const summaries = () => [...store.records.values()].filter((record) => record.kind === "run_summary");
+
+  await intelligence.recordRun(project(), run("run_1", "2026-07-22T01:01:00.000Z"), [message("user_1", "SGLT2 抑制剂 对 CKD 的长期获益？")]);
+  await intelligence.recordRun(project(), run("run_2", "2026-07-22T02:01:00.000Z"), [message("user_2", "  SGLT2 抑制剂  对 CKD 的长期获益？\n")]);
+  assert.equal(summaries().length, 1, "the same question, differently spaced, is one summary");
+  assert.equal(JSON.parse(summaries()[0].value).runId, "run_2", "the latest attempt is what recall serves");
+  assert.equal(summaries()[0].revisions.length, 1, "the earlier attempt is kept as a revision, not dropped");
+  assert.match(summaries()[0].key, /^run\.question\.[0-9a-f]{16}$/);
+
+  await intelligence.recordRun(project(), run("run_3", "2026-07-22T03:01:00.000Z"), [message("user_3", "另一个问题：GLP-1 与体重")]);
+  assert.equal(summaries().length, 2, "a different question is its own summary");
+});
+
 test("inferred memory remains pending until enough exact observations in separate runs", async () => {
   const store = new MemoryStoreDouble();
   const intelligence = new MemoryIntelligence(config, store, {

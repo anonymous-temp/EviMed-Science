@@ -898,7 +898,7 @@ export function createWebApiApp(overrides = {}) {
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
   const memoryRoutes = createMemoryRoutes({
-    config, researchMemory, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
+    config, researchMemory, memorySubstrate, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
   });
   const agentApiKeys = productDatabase ? new AgentApiKeyStore(productDatabase) : null;
   const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit });

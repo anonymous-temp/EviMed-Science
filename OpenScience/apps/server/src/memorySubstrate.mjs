@@ -6,6 +6,7 @@ import {
   recallTargets,
 } from "./openVikingClient.mjs";
 import { recallContent, searchTokens, selectWithinBudget } from "./memoryRecallPolicy.mjs";
+import { memoryPausedFor } from "./researchMemory.mjs";
 import { HttpError } from "./security.mjs";
 import { TERMINAL_INDEX_FAILURES } from "./memoryIndexWorker.mjs";
 
@@ -155,6 +156,10 @@ export class MemorySubstrate {
    * @param {{ projectId?: string|null, sessionId?: string|null }} scope
    */
   async recall(userId, query, { projectId = null, sessionId = null } = {}) {
+    // The researcher's own switch, for the account or for this project
+    // (2026-09-16 review, M4④). Before either path, so a paused account gets no
+    // memories whichever index is serving.
+    if ((await memoryPausedFor(this.store, userId, projectId)).recall) return [];
     if (!this.active) return this.store.relevant(userId, query, { projectId, sessionId });
     try {
       return await this.#rankedRecall(userId, query, { projectId, sessionId });

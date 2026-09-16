@@ -13,6 +13,9 @@ const api = vi.hoisted(() => ({
   deleteResearchMemory: vi.fn(),
   updateStructuredMemory: vi.fn(),
   deleteStructuredMemory: vi.fn(),
+  fetchMemorySettings: vi.fn(),
+  updateMemorySettings: vi.fn(),
+  resetMemory: vi.fn(),
   hasWebApi: true,
 }));
 
@@ -28,6 +31,11 @@ vi.mock("@/lib/apiClient", () => ({
   deleteResearchMemory: api.deleteResearchMemory,
   updateStructuredMemory: api.updateStructuredMemory,
   deleteStructuredMemory: api.deleteStructuredMemory,
+  fetchMemorySettings: api.fetchMemorySettings,
+  updateMemorySettings: api.updateMemorySettings,
+  resetMemory: api.resetMemory,
+  getWebProjectId: () => "project-a",
+  webErrorMessage: (_error: unknown, overrides?: { fallback?: string }) => overrides?.fallback ?? "操作未完成，请重试。",
 }));
 
 vi.mock("@/lib/toast", () => ({
@@ -107,6 +115,36 @@ describe("MemoryPage", () => {
       tags: [],
     }));
     api.updateResearchMemory.mockImplementation(async (_id: string, update: object) => ({ ...existing, ...update }));
+    api.fetchMemorySettings.mockResolvedValue({ learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: null });
+    api.updateMemorySettings.mockImplementation(async (patch: object) => ({
+      learningPaused: false, recallPaused: false, pausedProjects: [], updatedAt: "2026-09-16T18:00:00.000Z", ...patch,
+    }));
+    api.resetMemory.mockResolvedValue({ structured: 3, manual: 1 });
+  });
+
+  it("pauses learning, recall and this project without deleting anything, and resets only after saying what goes", async () => {
+    // 2026-09-16 review, M4④: pause and reset are different acts.
+    render(<MemoryRouter><MemoryPage /></MemoryRouter>);
+    const learning = await screen.findByRole("switch", { name: "从对话中学习新记忆" });
+    expect(learning).toHaveAttribute("aria-checked", "true");
+
+    await userEvent.click(learning);
+    expect(api.updateMemorySettings).toHaveBeenLastCalledWith({ learningPaused: true });
+    await waitFor(() => expect(screen.getByRole("switch", { name: "从对话中学习新记忆" })).toHaveAttribute("aria-checked", "false"));
+    expect(screen.getByText(/已暂停：之后的对话不会写入新记忆，已有记忆保留/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("switch", { name: "当前项目使用记忆" }));
+    expect(api.updateMemorySettings).toHaveBeenLastCalledWith({ pausedProjects: ["project-a"] });
+    expect(api.resetMemory).not.toHaveBeenCalled();
+    expect(api.deleteStructuredMemory).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "重置全部记忆" }));
+    expect(await screen.findByText(/不会删除对话与运行记录、交付文件、知识库来源和方法胶囊/)).toBeInTheDocument();
+    expect(api.resetMemory).not.toHaveBeenCalled();
+    const loadsBefore = api.listResearchMemories.mock.calls.length;
+    await userEvent.click(screen.getByRole("button", { name: "全部删除" }));
+    await waitFor(() => expect(api.resetMemory).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.listResearchMemories.mock.calls.length).toBeGreaterThan(loadsBefore));
   });
 
   it("shows connected memory records and creates a new research memory", async () => {

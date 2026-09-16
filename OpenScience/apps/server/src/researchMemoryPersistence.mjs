@@ -35,6 +35,9 @@ export const MEMORY_NOTE_STATES = Object.freeze(["normal", "archived"]);
  *  import script, a future one — cannot make a record unbounded. */
 export const MEMORY_EVIDENCE_LIMIT = 64;
 export const MEMORY_REVISION_LIMIT = 32;
+/** How many projects one account may pause memory for. A project id list, so
+ *  bounded like every other array this schema stores. */
+export const MEMORY_PAUSED_PROJECT_LIMIT = 100;
 
 /** @param {readonly string[]} values */
 function vocabulary(values) {
@@ -93,6 +96,15 @@ CREATE TABLE IF NOT EXISTS evimed_memory.notes (
 );
 CREATE INDEX IF NOT EXISTS memory_notes_order_idx ON evimed_memory.notes
   (user_id, state, pinned DESC, updated_at DESC, id DESC);
+-- The researcher's own switches over their memory. No row means every switch
+-- is off, which is how the platform behaved before the switches existed.
+CREATE TABLE IF NOT EXISTS evimed_memory.settings (
+  user_id text PRIMARY KEY REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  learning_paused boolean NOT NULL DEFAULT false,
+  recall_paused boolean NOT NULL DEFAULT false,
+  paused_projects text[] NOT NULL DEFAULT '{}' CHECK (cardinality(paused_projects) <= ${MEMORY_PAUSED_PROJECT_LIMIT}),
+  updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
+);
 DO $foreign_keys$
 BEGIN
   IF NOT EXISTS (
