@@ -3783,7 +3783,7 @@ export class RuntimeManager {
    * the pinned kernel rather than read from its documentation.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ text: string, system?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer' }} input
+   * @param {{ text: string, system?: string | null, memoryContext?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer' }} input
    * @returns {Promise<void>}
    */
   async dispatchPrompt(project, sessionId, input) {
@@ -3796,7 +3796,7 @@ export class RuntimeManager {
     }
   }
 
-  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue" }) {
+  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, memoryContext = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue" }) {
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) {
       const error = new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
@@ -3806,6 +3806,12 @@ export class RuntimeManager {
     if (runtime.modelGatewayScope && !allowBounded) this.assertInteractiveRuntimeAvailable(project);
     if (typeof system === "string" && system.trim()) {
       await this.writeRunContextFile(project, system, { sessionId: strictContext ? sessionId : null, required: strictContext });
+    }
+    // Written even when empty: on the shared path a dispatch that recalled
+    // nothing must not leave the previous dispatch's memories for a child to
+    // inherit.
+    if (typeof memoryContext === "string") {
+      await this.writeRunMemoryFile(project, memoryContext, { sessionId: strictContext ? sessionId : null, required: strictContext });
     }
     if (typeof runId === "string" && runId) {
       await this.writeRunBriefIndex(project, runId, {
@@ -3874,6 +3880,31 @@ export class RuntimeManager {
     try {
       await write();
     } catch { /* isolated: evimed_run_context_write_failures_total */ }
+  }
+
+  /**
+   * Materializes the recalled memories beside the research context.
+   *
+   * The context already carries them, for the root. This copy is for the
+   * socket's delegation: a child never sees `context.md`, and until this file
+   * existed the only memory a child got was whatever its parent paraphrased
+   * into the brief excerpt. Same isolation rule as the context file — losing
+   * it degrades the child's context rather than invalidating the run.
+   * @param {Record<string, any>} project @param {string} memoryContext
+   * @returns {Promise<void>}
+   */
+  async writeRunMemoryFile(project, memoryContext, { sessionId = null, required = false } = {}) {
+    const write = async () => {
+      const session = sessionId == null ? null : safeId(sessionId, "session id");
+      const relative = session ? `.evimed-brief/sessions/${session}/memory.md` : workspaceLayout.briefMemoryFile;
+      const file = path.join(project.workspaceDir, relative);
+      await writeFileAtomicNoFollow(project.workspaceDir, file, memoryContext, { encoding: "utf8", mode: 0o444 });
+    };
+    if (required) return write();
+    // isolated: evimed_run_memory_write_failures_total
+    try {
+      await write();
+    } catch { /* isolated: evimed_run_memory_write_failures_total */ }
   }
 
   /**

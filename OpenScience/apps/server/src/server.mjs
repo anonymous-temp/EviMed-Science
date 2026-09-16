@@ -1065,7 +1065,7 @@ export function createWebApiApp(overrides = {}) {
   // worth remembering, through the same quote-integrity checks a run of ours
   // goes through. There is no route that writes a record directly.
   const agentMemoryRoutes = createAgentMemoryRoutes({
-    config, apiKeys: agentApiKeys, store, researchMemory, capsules: capsuleService, memoryIntelligence,
+    config, apiKeys: agentApiKeys, store, researchMemory, capsules: capsuleService, memoryIntelligence, memorySubstrate,
   });
   const specialistClassifier = new SpecialistClassifier(config, {
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
@@ -1806,7 +1806,7 @@ export function createWebApiApp(overrides = {}) {
           });
           return runtimeManager.dispatchPrompt(scoped, session.id, {
             text: `<evimed-autopilot-verification>${verification.verificationId}</evimed-autopilot-verification>\n${budgetMarker}\n${prompt}`,
-            system: prepared.system, agent: selected.runtimeAgent, strictContext: true,
+            system: prepared.system, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
             model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
             requestId: dispatchedRun.kernelRequestIds?.at(-1),
           });
@@ -1894,7 +1894,7 @@ export function createWebApiApp(overrides = {}) {
             });
             return runtimeManager.dispatchPrompt(project, session.id, {
               text: `<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}\n${promptText}`,
-              system: prepared.system, agent: selected.runtimeAgent, strictContext: true,
+              system: prepared.system, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
               model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),
             });
@@ -1943,7 +1943,7 @@ export function createWebApiApp(overrides = {}) {
       },
     });
   }
-  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService });
+  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
@@ -2727,6 +2727,7 @@ export function createWebApiApp(overrides = {}) {
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             text: promptText,
             system: prepared.system,
+            memoryContext: prepared.memoryContext,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
             model: `deepseek/${config.deepseekModel}`,
             runId: dispatchedRun.id,

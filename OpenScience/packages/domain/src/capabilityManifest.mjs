@@ -44,6 +44,14 @@ export const DELEGATION_BASE_TOOLS = Object.freeze([
   'grep',
   'skill',
   'evimed_submit_deliverable',
+  // Memory is the researcher's, not the orchestrator's: the child does the work
+  // a memory is about, so it gets the same pull channel the root has. The
+  // socket registers this tool on every deployment — answering
+  // `capsule_unavailable` where no memory service is configured — precisely so
+  // the name is always one `tools.restrict()` knows. Measured before it was
+  // added: 27 production transcripts, 4 calls, all from root sessions, none
+  // from a child, because no child could see it.
+  'evimed_capsule_recall',
 ])
 
 /**

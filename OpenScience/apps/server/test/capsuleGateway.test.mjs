@@ -6,7 +6,7 @@ import test from "node:test";
 import { RuntimeManager, issueEviMedWorkloadToken } from "../src/runtimeManager.mjs";
 import { createCapsuleGatewayHandler } from "../src/capsuleGateway.mjs";
 
-async function fixture(t) {
+async function fixture(t, { memorySubstrate = null } = {}) {
   const dir = await mkdtemp("/tmp/evimed-capsule-gateway-");
   const secret = randomBytes(32).toString("hex");
   const project = { userId: "owner", id: "project-one" };
@@ -27,7 +27,7 @@ async function fixture(t) {
   const authorized = new Promise((resolve) => { authorize = resolve; });
   const store = { userById: async () => exists ? { id: project.userId } : null,
     requireProject: async (user, id) => { assert.equal(user.id, project.userId); assert.equal(id, project.id); authorize(); return project; } };
-  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service });
+  const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service, memorySubstrate });
   const server = createServer((req, res) => { void handler(req, res); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); await rm(dir, { recursive: true, force: true }); });
@@ -88,4 +88,38 @@ test("an authorized slow request is revoked before memory mutation after runtime
   request.end(JSON.stringify({ factKind: "preference", content: "Late unauthorized note" }));
   assert.equal(await response, 401);
   assert.equal(f.calls.length, 0);
+});
+
+test("a recall through the gateway reaches the records as well as the capsule, and says which store answered", async (t) => {
+  // The tool the runtime holds promised `scope: all` from the day it was
+  // written; the gateway answered from capsule facts alone. A delegated child
+  // asking about the researcher therefore never saw the records the extractor
+  // keeps — the memory the root had been handed in its own prompt.
+  const substrateCalls = [];
+  const memorySubstrate = {
+    async recall(userId, query, scope) {
+      substrateCalls.push({ userId, query, scope });
+      return [{ id: "record:r1", content: "回答尽量简短", kind: "preference", scope: "user", memoryType: "structured", updatedAt: "2026-09-01T00:00:00.000Z" }];
+    },
+  };
+  const f = await fixture(t, { memorySubstrate });
+  const all = await (await f.request("recall", { query: "简短" })).json();
+  assert.deepEqual(all.items.map((item) => [item.source, item.id]), [["memory", "record:r1"]]);
+  assert.deepEqual(all.sources, { memory: 1, capsule: 0 });
+  assert.equal(all.contextOnly, true);
+  assert.equal(substrateCalls[0].userId, "owner");
+  assert.equal(substrateCalls[0].scope.projectId, "project-one", "the project comes from the workload credential, never the body");
+  assert.equal(f.calls.filter((call) => call.action === "recall").length, 1);
+
+  const conversation = await (await f.request("recall", { query: "简短", scope: "conversation" })).json();
+  assert.deepEqual(conversation.sources, { memory: 1, capsule: 0 });
+  assert.equal(f.calls.filter((call) => call.action === "recall").length, 1, "conversation never asks the capsule");
+
+  const capsule = await (await f.request("recall", { query: "简短", scope: "capsule" })).json();
+  assert.deepEqual(capsule.sources, { memory: 0, capsule: 0 });
+  assert.equal(substrateCalls.length, 2, "capsule never asks the records");
+
+  const agenda = await f.request("recall", { query: "简短", scope: "agenda" });
+  assert.equal(agenda.status, 400);
+  assert.match(await agenda.text(), /capsule_scope_unavailable/);
 });

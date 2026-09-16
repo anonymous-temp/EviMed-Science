@@ -83,7 +83,10 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             limit: { type: "integer", minimum: 1, maximum: 50, default: 10 },
             factKinds: { type: "array", items: { $ref: "#/components/schemas/FactKind" } },
             since: { type: "string", format: "date-time" },
-            scope: { type: "string", enum: ["all", "capsule", "conversation", "agenda"], default: "all" },
+            scope: {
+              type: "string", enum: ["all", "capsule", "conversation", "agenda"], default: "all",
+              description: "`conversation`: the structured records and notes the platform keeps for this account; `capsule`: the facts of its active capsules; `all`: both. `agenda` is reserved and currently refused.",
+            },
           },
         },
         NoteRequest: {
@@ -143,7 +146,7 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
       "/recall": {
         post: {
           summary: "Search this account's memory",
-          description: "Returns records with their provenance. A record whose origin is `inferred` is the platform's own guess and has not been confirmed by anyone.",
+          description: "Searches both forms of this account's memory — the structured records the platform keeps (profile, preferences, behaviours, corrections, notes) and the facts of its active capsules — and returns each item with `source` (`memory` or `capsule`) and its provenance. Memory records come first, then capsule facts; `limit` bounds the union. A record whose origin is `inferred` is the platform's own guess and has not been confirmed by anyone.",
           security: [{ agentApiKey: ["memory.read"] }],
           requestBody: jsonBody({ $ref: "#/components/schemas/RecallRequest" }),
           responses: { 200: { description: "Matching memory, hydrated from the record store." }, 400: errorResponse("Malformed request."), ...common },

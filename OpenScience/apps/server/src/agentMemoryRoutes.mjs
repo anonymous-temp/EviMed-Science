@@ -1,4 +1,5 @@
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
+import { recallAcrossMemory } from "./memoryRecall.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
 
@@ -66,11 +67,11 @@ function fields(body, allowed) {
 /**
  * @param {{
  *   config: any, apiKeys: any, store: any, researchMemory: any, capsules: any,
- *   memoryIntelligence: any, audit?: ((event: any) => void) | null,
+ *   memoryIntelligence: any, memorySubstrate?: any, audit?: ((event: any) => void) | null,
  * }} dependencies
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
-export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory, capsules, memoryIntelligence }) {
+export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory, capsules, memoryIntelligence, memorySubstrate = null }) {
   const enabled = config.agentMemoryApiEnabled === true;
   /** @type {Map<string, {until: number, count: number}>} */
   const windows = new Map();
@@ -144,14 +145,13 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
       if (input.scope !== undefined && !["all", "capsule", "conversation", "agenda"].includes(input.scope)) {
         throw new HttpError(400, "agent_memory_payload_invalid", "Invalid memory scope.");
       }
-      const result = await capsules.recall(user.id, {
+      const result = await recallAcrossMemory({ capsules, memorySubstrate }, user, {
         query: boundedString(input.query, "query", 2_000),
         projectId: await projectOf(input.projectId),
         limit: Math.max(1, Math.min(50, Number(input.limit ?? 10))),
         factKinds: input.factKinds ?? [],
         since: input.since ?? null,
         scope: input.scope ?? "all",
-        accountCreatedAt: user.accountCreatedAt,
       });
       sendJson(res, 200, { data: result });
       return true;

@@ -33,6 +33,7 @@ import {
   defineTool,
   guardTools,
   injectContext,
+  listDirAt,
   onPreStep,
   onSessionEvent,
   onSessionStart,
@@ -230,6 +231,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         startedAt: new Date().toISOString(),
         cwd: '',
         briefText: null,
+        memoryText: null,
+        knowledgeEntries: 0,
         contextInjected: false,
         contextRevision: '',
         contextInjection: null,
@@ -611,6 +614,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           capsuleMethods: ctx.get('evimedCapsuleMethods') ?? [],
           inputs: args.inputs ?? {},
           toolFilter: delegationToolFilter(manifest, { allowBash: true }),
+          memoryText: entry.memoryText ?? null,
+          knowledgeEntries: Number(entry.knowledgeEntries ?? 0),
         })
         // Recorded as soon as the child has actually started, and again when it settles. The
         // `subagents` medium had no writer at all: `projectRunState` published
@@ -1126,7 +1131,14 @@ async function injectBriefRevision(ctx, agent, entry, config) {
     ?? await readFileAt(ctx, cwd, workspaceLayout.briefContextFile)
   const capsule = await readFileAt(ctx, cwd, workspaceLayout.capsuleProfileFile)
   const agenda = await readFileAt(ctx, cwd, workspaceLayout.agendaFile)
+  // Not injected here: the recalled memories are already inside `context`,
+  // which is. Kept on the entry so a delegation can hand its child the block
+  // the root was given, instead of the parent's paraphrase of it.
+  const memory = await readFileAt(ctx, cwd, `${sessionBriefDir}/memory.md`)
+    ?? await readFileAt(ctx, cwd, workspaceLayout.briefMemoryFile)
   entry.briefText = brief
+  entry.memoryText = typeof memory === 'string' && memory.trim() ? memory : null
+  entry.knowledgeEntries = (await listDirAt(ctx, cwd, workspaceLayout.knowledgeDir)).length
   const parts = []
   if (brief) parts.push(`<evimed-brief>\n${brief}\n</evimed-brief>`)
   if (context) parts.push(context)
@@ -1154,6 +1166,8 @@ function resetRunState(entry, runId) {
   entry.runId = runId
   entry.startedAt = new Date().toISOString()
   entry.briefText = null
+  entry.memoryText = null
+  entry.knowledgeEntries = 0
   entry.plan = null
   entry.items = []
   entry.budget = { steps: 0, tokens: 0, children: 0 }

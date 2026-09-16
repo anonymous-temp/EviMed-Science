@@ -1850,6 +1850,17 @@ test("dispatchPrompt materializes the research context beside the run id", async
   assert.equal(written.runId, "run_brief_2");
   assert.match(written.contextRevision, /^req_/);
   assert.equal(await readFile(path.join(project.workspaceDir, ".evimed-brief", "context.md"), "utf8"), "# Brief\n");
+  // A dispatch that says nothing about memory writes no memory file.
+  const memoryFile = path.join(project.workspaceDir, ".evimed-brief", "memory.md");
+  await assert.rejects(readFile(memoryFile, "utf8"));
+  // The recalled memories ride beside the context, for the socket to hand to
+  // every delegated child; and an empty recall clears the previous one rather
+  // than leaving it for the next dispatch's children to inherit.
+  const block = "<evimed-memory index=\"1\" id=\"record:r1\">回答尽量简短</evimed-memory>\n";
+  await manager.dispatchPrompt(project, "ses_general", { text: "again", system: "# Brief\n", memoryContext: block, runId: "run_brief_3" });
+  assert.equal(await readFile(memoryFile, "utf8"), block);
+  await manager.dispatchPrompt(project, "ses_general", { text: "third", system: "# Brief\n", memoryContext: "", runId: "run_brief_4" });
+  assert.equal(await readFile(memoryFile, "utf8"), "");
 });
 
 test("a reserved session receives strict context before its first DSH create", async (t) => {
@@ -1861,7 +1872,7 @@ test("a reserved session receives strict context before its first DSH create", a
   const session = await manager.reserveRuntimeSession(project);
   assert.equal(await manager.sessionStatus(project, session.id), "idle");
   await manager.dispatchPrompt(project, session.id, {
-    text: "bounded episode", system: "# Session context\n", runId: "run_strict_1", requestId: "req_strict_1", strictContext: true,
+    text: "bounded episode", system: "# Session context\n", memoryContext: "# Session memory\n", runId: "run_strict_1", requestId: "req_strict_1", strictContext: true,
   });
   const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", session.id);
   assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), {
@@ -1869,6 +1880,7 @@ test("a reserved session receives strict context before its first DSH create", a
     contextRevision: "req_strict_1",
   });
   assert.equal(await readFile(path.join(root, "context.md"), "utf8"), "# Session context\n");
+  assert.equal(await readFile(path.join(root, "memory.md"), "utf8"), "# Session memory\n", "strict context keeps the memory session-scoped too");
 });
 
 test("a follow-up and repair commit distinct session context revisions", async (t) => {

@@ -64,7 +64,7 @@ function fixture(overrides = {}) {
       return { proposed: 2, extracted: 1, activated: 0, pending: 1, rejected: 1 };
     },
   };
-  const routes = createAgentMemoryRoutes({ config: { ...config, ...overrides.config }, apiKeys, store, researchMemory, capsules, memoryIntelligence });
+  const routes = createAgentMemoryRoutes({ config: { ...config, ...overrides.config }, apiKeys, store, researchMemory, capsules, memoryIntelligence, memorySubstrate: overrides.memorySubstrate ?? null });
   return { routes, calls };
 }
 
@@ -159,4 +159,21 @@ test("the description is built from the vocabularies the handlers validate again
   // reads it rather than only where it is enforced.
   assert.match(document.info.description, /stays `pending`/);
   assert.equal(agentMemoryOpenApi({ basePath: "/x", rateLimitPerMinute: 7 }).servers[0].url, "/x");
+});
+
+test("recall answers from the records as well as the capsule, and each item says where it came from", async () => {
+  // The same promise the runtime tool makes: an external agent's `recall`
+  // reaches the account's structured memory, not only the capsule facts, and
+  // can tell the two apart by `source` rather than by guessing from the shape.
+  const memorySubstrate = {
+    async recall() { return [{ id: "record:r1", content: "回答尽量简短", kind: "preference", scope: "user", memoryType: "structured" }]; },
+  };
+  const { routes, calls } = fixture({ memorySubstrate });
+  const res = response();
+  await routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "简短" }), res);
+  assert.equal(res.captured.status, 200);
+  assert.deepEqual(res.captured.body.data.items.map((item) => [item.source, item.id]), [["memory", "record:r1"]]);
+  assert.deepEqual(res.captured.body.data.sources, { memory: 1, capsule: 0 });
+  assert.equal(res.captured.body.data.contextOnly, true);
+  assert.equal(calls.find((entry) => entry[0] === "recall")[2].scope, "capsule", "the capsule half is asked for the capsule only");
 });

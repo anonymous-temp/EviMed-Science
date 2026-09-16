@@ -119,6 +119,13 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 
 ARMS = ("baseline", "candidate")
 ACTIVE_RUN_STATES = frozenset({"queued", "dispatching", "running"})
+# How many consecutive unreachable polls a wait tolerates before the cell is
+# given up on, and the longest single back-off between them. Eight polls with
+# doubling back-off capped at a minute is about six minutes of outage on top
+# of each request's own timeout — long enough for a container recreate or a
+# WAN hiccup, short enough that a dead server still ends the batch.
+POLL_FAILURE_LIMIT = 8
+POLL_FAILURE_BACKOFF_CAP_SECONDS = 60
 COMPACTION_POLICIES = ("basic", "structured")
 
 # §7: seven dimensions, and they do not offset each other. A cost improvement
@@ -175,6 +182,12 @@ COMPLETENESS_CHECK_CLASSES = frozenset({"completeness", ""})
 
 class EvalError(RuntimeError):
     """A failure with an actionable message."""
+
+
+class TransportError(EvalError):
+    """The server could not be reached, or answered with something that was not
+    the API. Says nothing about the run on the other side, which is why a poll
+    loop may wait it out where every other `EvalError` ends the cell."""
 
 
 class HttpFailure(EvalError):
@@ -454,7 +467,7 @@ class UrllibTransport(Transport):
             detail = error.read(64_000).decode("utf-8", "replace")
             raise HttpFailure(method, url, error.code, detail) from error
         except urllib.error.URLError as error:
-            raise EvalError(
+            raise TransportError(
                 f"{method} {url} failed: {error.reason}. Is an OpenScience server running there? "
                 "(start one with `pnpm dev:server`)"
             ) from error
@@ -464,7 +477,7 @@ class UrllibTransport(Transport):
         try:
             return status, json.loads(text), response_headers
         except json.JSONDecodeError as error:
-            raise EvalError(f"{method} {url} returned non-JSON: {text[:200]}") from error
+            raise TransportError(f"{method} {url} returned non-JSON: {text[:200]}") from error
 
 
 class LeakGuardTransport(Transport):
@@ -639,13 +652,40 @@ class PlatformClient:
 
     def wait_for_run(self, run_id: str, timeout_seconds: int, poll_seconds: float, sleep: Callable[[float], None]) -> dict[str, Any]:
         deadline = time.monotonic() + timeout_seconds
+        # A poll that cannot reach the server says nothing about the run, which
+        # is still alive on the other side. Until 2026-09-16 the first
+        # unreachable poll ended the cell; six live runs were abandoned that way
+        # in one batch, and the next cell's `stop_runtime()` then killed them —
+        # two came back `runtime_canceled`, two `succeeded` with a transcript the
+        # control plane could no longer read. The resume re-attached to those
+        # dead runs by dispatch id and measured nothing. So transport failures
+        # and server-side 5xx are waited out, up to a bound; everything else —
+        # a 4xx, a malformed run — still ends the cell at once.
+        failures = 0
         while True:
-            run = next((item for item in self.list_runs() if item.get("id") == run_id), None)
+            try:
+                run = next((item for item in self.list_runs() if item.get("id") == run_id), None)
+            except (TransportError, OSError) as error:
+                failures = self._poll_failure(run_id, failures, error, deadline, poll_seconds, sleep)
+                continue
+            except HttpFailure as error:
+                if error.status < 500:
+                    raise
+                failures = self._poll_failure(run_id, failures, error, deadline, poll_seconds, sleep)
+                continue
+            failures = 0
             if run and run.get("status") not in ACTIVE_RUN_STATES:
                 return run
             if time.monotonic() >= deadline:
                 raise EvalError(f"run {run_id} did not reach a terminal state within {timeout_seconds}s")
             sleep(poll_seconds)
+
+    def _poll_failure(self, run_id: str, failures: int, error: Exception, deadline: float, poll_seconds: float, sleep: Callable[[float], None]) -> int:
+        failures += 1
+        if failures > POLL_FAILURE_LIMIT or time.monotonic() >= deadline:
+            raise EvalError(f"run {run_id}: {failures} consecutive polls failed; last: {str(error)[:200]}") from error
+        sleep(min(poll_seconds * (2 ** failures), POLL_FAILURE_BACKOFF_CAP_SECONDS))
+        return failures
 
     def session_transcript(self, session_id: str) -> dict[str, Any]:
         url = f"{self.base}/api/runtime/sessions/{urllib.parse.quote(session_id)}/transcript"
@@ -1373,6 +1413,23 @@ def cell_path(results_dir: Path, config_id: str, brief_id: str, arm: str, repeat
     return results_dir / config_id / f"{cell_id(brief_id, arm, repeat)}.json"
 
 
+def read_cell_attempt(path: Path) -> int:
+    """How many times this cell has been dispatched so far, from whatever is
+    on disk — a finished record, an excluded one, or an error. Zero when there
+    is nothing. A file written before the field existed counts as one attempt,
+    which is what it was."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if not isinstance(data, dict):
+        return 0
+    try:
+        return max(1, int(data.get("attempt") or 1))
+    except (TypeError, ValueError):
+        return 1
+
+
 def read_completed_cell(path: Path, arm_digest: str, brief_digest: str) -> dict[str, Any] | None:
     """A cell counts as done only if it finished AND was produced by this experiment.
 
@@ -1718,6 +1775,16 @@ class PairedRunner:
         # those two different measurements, and it is read off `/api/ready`
         # rather than declared.
         dispatch_id = f"mq_{plan['arm']}_{plan['repeat']}_{sha256_text(record['cell'] + self.config['digest'] + self.release_id)[:16]}"
+        # A second attempt at the same cell on the same build is a new dispatch.
+        # Without the suffix the control plane's deduplication hands back the
+        # previous attempt's run — which, when that attempt failed, is exactly
+        # the run that was abandoned or killed — and the resume measures a
+        # corpse. The first attempt keeps the plain id so cells already on disk
+        # stay attributable.
+        attempt = max(1, int(plan.get("attempt") or 1))
+        record["attempt"] = attempt
+        if attempt > 1:
+            dispatch_id = f"{dispatch_id}_a{attempt}"
         if self.private_grant:
             cell = client.evaluation_cell({
                 **{key: self.private_grant[key] for key in ("userId", "projectId", "methodId", "candidateDigest", "mountedDigest", "snapshotDigest")},
@@ -1806,7 +1873,7 @@ class PairedRunner:
         record["complete"] = True
         return record
 
-    def execute(self, rerun: bool = False) -> list[dict[str, Any]]:
+    def execute(self, rerun: bool = False, rerun_excluded: bool = False) -> list[dict[str, Any]]:
         # A batch starts from what the server says, not from what a previous
         # batch in this process left behind.
         reset_applied_record_versions()
@@ -1816,12 +1883,18 @@ class PairedRunner:
         for plan in plans:
             path = cell_path(self.results_dir, self.config["id"], plan["briefId"], plan["arm"], plan["repeat"])
             existing = None if rerun else read_completed_cell(path, plan["armDigest"], plan["briefDigest"])
+            # An excluded cell is complete and is not a measurement: it is on
+            # disk so the report can count it. Re-measuring it is a choice the
+            # operator makes by flag, because it costs a run.
+            if existing is not None and rerun_excluded and existing.get("excluded"):
+                self.log(f"[redo] {existing['cell']} (excluded: {existing['excluded'].get('reason')})")
+                existing = None
             if existing is not None:
                 self.skipped += 1
                 completed.append(existing)
                 self.log(f"[skip] {existing['cell']} (already on disk)")
             else:
-                pending.append(plan)
+                pending.append({**plan, "attempt": read_cell_attempt(path) + 1})
 
         lock = threading.Lock()
         local = threading.local()
@@ -1859,6 +1932,7 @@ class PairedRunner:
                     "configDigest": self.config["digest"],
                     "armDigest": plan["armDigest"],
                     "briefDigest": plan["briefDigest"],
+                    "attempt": max(1, int(plan.get("attempt") or 1)),
                     "error": str(error)[:500],
                     "finishedAt": now_iso(),
                 }
@@ -2230,6 +2304,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="account export JSON; joins per-run cost and tokens by runId. Optional: without it the "
                              "per-run usage route is used, which is what a live evaluation should rely on.")
     parser.add_argument("--rerun", action="store_true", help="ignore the cells already on disk and measure every one again")
+    parser.add_argument("--rerun-excluded", action="store_true", help="measure again only the cells on disk that were excluded (canceled runs, unreadable transcripts); each gets a fresh dispatch")
     parser.add_argument("--report-only", action="store_true", help="aggregate the cells already on disk; run nothing")
     parser.add_argument("--dry-run", action="store_true", help="print the cell plan and what resume would skip")
     parser.add_argument("--use-holdout", action="store_true", help="allow briefs registered in the holdout split")
@@ -2408,7 +2483,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             release_id=release_id_of(environment),
             log=say,
         )
-        batch.execute(rerun=args.rerun)
+        batch.execute(rerun=args.rerun, rerun_excluded=args.rerun_excluded)
         say(f"cells: {batch.executed} executed, {batch.skipped} resumed from disk")
         cells = load_cells(args.results_dir, config["id"])
 
