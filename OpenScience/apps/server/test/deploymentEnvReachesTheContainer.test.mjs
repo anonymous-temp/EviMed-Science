@@ -88,6 +88,13 @@ const operatorLevers = {
   OPEN_SCIENCE_MEMORY_INDEX_STRICT: ["open-science-web"],
   OPEN_SCIENCE_OPENVIKING_URL: ["open-science-web"],
   OPEN_SCIENCE_OPENVIKING_ACCOUNT: ["open-science-web"],
+  // Read by config.mjs and passed by no compose file until 2026-09-16: turning
+  // memory off, opening the agent memory API, or excluding an evaluation's
+  // projects from extraction all did nothing from .env. The last one reached
+  // production only through a private override's environment map.
+  OPEN_SCIENCE_MEMORY_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES: ["open-science-web"],
 };
 
 async function composeFiles() {
