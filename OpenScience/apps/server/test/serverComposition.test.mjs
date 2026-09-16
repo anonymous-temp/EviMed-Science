@@ -445,7 +445,32 @@ async function composedApp(t, overrides = {}) {
    * the full wait and returns an empty list, which is what makes "no armed
    * interval drives this sweep" a real verdict rather than a missed match.
    */
+  /** Wait until nothing already in flight is still moving a counter.
+   *
+   *  Without this the baseline is taken while a previous entry's work is still
+   *  landing, and that work is then attributed to THIS callback. It surfaced
+   *  when a second claimer appeared on the product job queue (the memory-index
+   *  drain, 2026-09-16): the set of armed intervals changed, the order they are
+   *  fired in changed with it, and capsule cleanup started being credited to
+   *  the autopilot's timer. The race was always there; one more timer made it
+   *  reproducible. */
+  const settle = async () => {
+    let previous = JSON.stringify(evidence());
+    let quiet = 0;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const current = JSON.stringify(evidence());
+      // Five consecutive quiet samples, not one: the work being waited out
+      // reaches the database, and a single matching pair is satisfied by the
+      // gap between two of its own queries.
+      quiet = current === previous ? quiet + 1 : 0;
+      previous = current;
+      if (quiet >= 5) return;
+    }
+  };
+
   const drive = async (entry) => {
+    await settle();
     const before = evidence();
     const advanced = () => Object.keys(before).filter((key) => evidence()[key] > before[key]);
     entry.callback();
@@ -453,12 +478,22 @@ async function composedApp(t, overrides = {}) {
     return advanced();
   };
 
-  /** Every currently armed interval, mapped to the sweep key it drives. */
+  /**
+   * Every currently armed interval, mapped to the sweep keys it drives.
+   *
+   * A list per key, not one entry: firing an interval and watching a counter is
+   * attribution by observation, and slow work started by one entry can land
+   * while the next is being watched. Keeping every candidate and asserting that
+   * ONE of them has the right cadence is the same property without the race —
+   * which a second claimer on the product job queue (the memory-index drain,
+   * 2026-09-16) made reproducible rather than introduced.
+   */
   const drivers = async () => {
-    /** @type {Map<string, { handle: any, callback: any, delay: any, cleared: boolean }>} */
+    /** @type {Map<string, { handle: any, callback: any, delay: any, cleared: boolean }[]>} */
     const found = new Map();
     for (const entry of live(armed)) {
-      for (const key of await drive(entry)) found.set(key, entry);
+      const keys = await drive(entry);
+      for (const key of keys) found.set(key, [...(found.get(key) ?? []), entry]);
     }
     return found;
   };
@@ -555,9 +590,10 @@ test("startup arms every recurring sweep, and each timer really drives its own s
   // swapped.
   const drivers = await fixture.drivers();
   for (const sweep of RECURRING_SWEEPS) {
-    const driver = drivers.get(sweep.key);
-    assert.ok(driver, `no armed interval drives ${sweep.name}`);
-    assert.equal(driver.delay, sweep.intervalMs, `${sweep.name} is armed at the wrong cadence`);
+    const candidates = drivers.get(sweep.key) ?? [];
+    assert.ok(candidates.length > 0, `no armed interval drives ${sweep.name}`);
+    assert.ok(candidates.some((entry) => entry.delay === sweep.intervalMs),
+      `${sweep.name} is armed at the wrong cadence: ${candidates.map((entry) => entry.delay).join()} != ${sweep.intervalMs}`);
   }
 });
 
@@ -573,17 +609,32 @@ test("a maintenance pause clears every recurring timer and reopening re-arms the
   );
 
   await fixture.app.maintenanceService.release({ requestId: "composition-pause" });
-  // The resume is fired from the maintenance listener, not awaited by release.
-  const rearmed = await waitFor(async () => live(fixture.armed).length >= RECURRING_SWEEPS.length);
+  // The resume is fired from the maintenance listener, not awaited by release,
+  // so this waits for re-arming to FINISH rather than for a count.
+  //
+  // It used to wait for `live(armed).length >= RECURRING_SWEEPS.length`, which
+  // reads as "all of them" only while the composition arms exactly one interval
+  // per sweep. It does not: durable workers arm their own polls, and with one
+  // more of those (the memory-index drain, 2026-09-16) the threshold was
+  // reached while capsule cleanup was still being re-armed — so the assertions
+  // below ran against a half-resumed deployment and blamed the sweep.
+  let previous = -1;
+  const rearmed = await waitFor(async () => {
+    const count = live(fixture.armed).length;
+    const stable = count >= RECURRING_SWEEPS.length && count === previous;
+    previous = count;
+    return stable;
+  });
   assert.ok(rearmed, "recurring work was never re-armed after maintenance reopened");
 
   // Re-armed, and re-armed to the same work: a resume that recreated four
   // timers pointing at nothing would satisfy a count.
   const drivers = await fixture.drivers();
   for (const sweep of RECURRING_SWEEPS) {
-    const driver = drivers.get(sweep.key);
-    assert.ok(driver, `${sweep.name} was not re-armed after maintenance reopened`);
-    assert.equal(driver.delay, sweep.intervalMs, `${sweep.name} was re-armed at the wrong cadence`);
+    const candidates = drivers.get(sweep.key) ?? [];
+    assert.ok(candidates.length > 0, `${sweep.name} was not re-armed after maintenance reopened`);
+    assert.ok(candidates.some((entry) => entry.delay === sweep.intervalMs),
+      `${sweep.name} was re-armed at the wrong cadence: ${candidates.map((entry) => entry.delay).join()} != ${sweep.intervalMs}`);
   }
 });
 
@@ -633,8 +684,18 @@ test("the composed autopilot worker asks the queue for verification work and can
     /^WITH exhausted AS \( SELECT id FROM evimed_product\.jobs/.test(call.sql)
     && Array.isArray(call.values[0]) && call.values[0].includes("verify")));
   assert.ok(claimed, "the composed worker never asked the job queue for verification work");
-  const claim = fixture.pool.calls.find((call) => /^WITH exhausted AS \( SELECT id FROM evimed_product\.jobs/.test(call.sql));
+  // Two workers claim from this queue now — the memory-index worker drains the
+  // rows a `builtin` deployment will never index (2026-09-16, M5) — so the
+  // autopilot's claim is selected by the kinds it asks for rather than by being
+  // the only one on the table.
+  const claim = fixture.pool.calls.find((call) => /^WITH exhausted AS \( SELECT id FROM evimed_product\.jobs/.test(call.sql)
+    && Array.isArray(call.values[0]) && call.values[0].includes("verify"));
   assert.deepEqual(claim.values[0], ["episode", "verify"]);
+
+  const drain = fixture.pool.calls.find((call) => /^WITH exhausted AS \( SELECT id FROM evimed_product\.jobs/.test(call.sql)
+    && Array.isArray(call.values[0]) && call.values[0].includes("memory-index"));
+  assert.deepEqual(drain?.values[0], ["memory-index", "memory-record-index"],
+    "with no index provider composed, nothing else would ever claim these and they accumulate forever");
 });
 
 // ---------------------------------------------------------------------------
@@ -1369,7 +1430,12 @@ test("the memory extractor the composition root built reports a rewritten memory
   assert.equal(notices.length, 1, "the conflict notice never reached evimed_inbox.notifications");
   assert.equal(notices[0].user_id, USER_ID);
   assert.equal(notices[0].notice_type, "notify", "the change already happened; there is nothing left to ask");
-  assert.deepEqual(notices[0].actions, [], "an inbox action nothing implements is a button that does nothing");
+  // One action, and it is a link rather than a resolution: the change has
+  // already happened, so a button that posts a decision would promise one
+  // nothing acts on. Without it the inbox said a memory had been rewritten and
+  // gave no way to reach it (2026-09-16 review, M4①).
+  assert.deepEqual(notices[0].actions, [{ id: "open", label: "查看这条记忆", style: "primary" }]);
+  assert.equal(notices[0].source?.type, "memory", "the notice names no record");
   assert.equal(notices[0].project_id, null, "a user-scoped memory belongs to no project");
   assert.match(notices[0].body, /回答请用中文/);
   assert.match(notices[0].body, /回答请用英文/);

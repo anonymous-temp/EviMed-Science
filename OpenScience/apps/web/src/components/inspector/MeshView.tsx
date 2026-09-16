@@ -261,7 +261,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
 
       <div className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border/70 bg-surface/90 p-1 shadow-card backdrop-blur">
         <div className="flex items-center gap-1 px-1.5 text-xs font-medium text-muted">
-          <Box size={13} /> 3D
+          <Box size={13} aria-hidden="true" /> 3D
         </div>
         <div className="flex rounded bg-surface-2 p-0.5">
           {[
@@ -291,7 +291,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
           title="重置视图"
           className="flex h-7 w-7 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
         >
-          <RotateCcw size={13} />
+          <RotateCcw size={13} aria-hidden="true" />
         </button>
       </div>
 
@@ -309,7 +309,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
       {notice && !rendering && !error && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 max-w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-input border border-warn/40 bg-surface/95 px-4 py-3 text-center text-sm text-text shadow-card backdrop-blur">
           <div className="mb-1 flex items-center justify-center gap-1.5 font-medium text-warn">
-            <AlertTriangle size={14} /> File problem
+            <AlertTriangle size={14} aria-hidden="true" /> File problem
           </div>
           {notice}
         </div>

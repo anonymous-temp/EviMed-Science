@@ -216,15 +216,25 @@ class HiddenReferenceLeak(EvalError):
     """
 
 
-def usage_was_billable(usage: dict[str, float]) -> bool:
-    """Did this run actually spend anything the ledger should have priced?
+def usage_is_a_measurement(usage: dict[str, float]) -> bool:
+    """Did the ledger actually price this run, or does it simply hold nothing?
 
-    Read off the usage row itself rather than assumed: calls, or any token
-    counter, above zero. A run with none of those really did cost nothing.
+    A row of zeros is the second. Measured on production 2026-09-16: in the
+    three hours covering a batch, `evimed_usage.model_requests` held 726 rows
+    and 9.81 CNY of settled spend, and EVERY ONE of them had `run_id = NULL` —
+    an ordinary run's model calls carry no run id, so `GET /api/runs/:id/usage`
+    answers `cost 0, calls 0, tokens 0` for every run there has ever been. That
+    is not "this run was free", it is "nobody asked this question of a ledger
+    that could answer it", and scoring it as free handed the efficiency
+    dimension a cost term of 1.0.
+
+    So a usage record counts only when something in it is non-zero. A model
+    call that genuinely cost nothing does not exist: every priced model has a
+    non-zero rate and every completed call has output tokens.
     """
     return any(
         float(usage.get(key) or 0.0) > 0
-        for key in ("calls", "cacheHitTokens", "cacheMissTokens", "outputTokens")
+        for key in ("cost", "calls", "cacheHitTokens", "cacheMissTokens", "outputTokens")
     )
 
 
@@ -1915,16 +1925,16 @@ class PairedRunner:
         usage = load_usage_lookup(None, client)(str(run.get("id") or "")) if self.private_grant else self.usage_lookup(str(run.get("id") or ""))
         cost = usage["cost"] if usage else None
         record["usage"] = usage
-        # A settled total of zero over calls that demonstrably happened is not
-        # a measurement of zero — it is the provider's usage not yet reconciled,
-        # settled at a reservation that was itself zero. Scoring it as free
-        # handed the efficiency dimension a free 1.0 on the one cell that
-        # survived the 2026-09-16 batch. Drop the term rather than invent it;
-        # latency still carries efficiency, and the report says the cost was
-        # not available.
+        # A usage record of all zeros is not a measurement of zero. See
+        # `usage_is_a_measurement`: on this deployment no ordinary run's model
+        # calls carry a run id at all, so the route answers zero for every run
+        # and scoring it as free gives the efficiency dimension a cost term of
+        # 1.0 it did not earn. Drop the term rather than invent it; latency
+        # still carries efficiency, and the report says the cost was not
+        # available.
         cost_source = self.cost_source if usage else "unavailable"
-        if usage is not None and cost == 0.0 and usage_was_billable(usage):
-            cost, cost_source = None, "unsettled-zero"
+        if usage is not None and not usage_is_a_measurement(usage):
+            cost, cost_source = None, "unattributed"
         record["cost"] = {"value": cost, "currency": "CNY", "source": cost_source}
         if self.private_grant and usage is None:
             record["excluded"] = {"reason": "usage_unsettled_or_unavailable"}

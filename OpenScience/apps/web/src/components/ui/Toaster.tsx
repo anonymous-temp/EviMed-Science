@@ -55,9 +55,9 @@ function ToastCard({
       )}
     >
       {isError ? (
-        <XCircle size={15} className="shrink-0 text-error" />
+        <XCircle size={15} className="shrink-0 text-error" aria-hidden="true" />
       ) : (
-        <CheckCircle2 size={15} className="shrink-0 text-ok" />
+        <CheckCircle2 size={15} className="shrink-0 text-ok" aria-hidden="true" />
       )}
       <button
         type="button"
@@ -85,7 +85,7 @@ function ToastCard({
         className="shrink-0 text-muted hover:text-text"
         onClick={onDismiss}
       >
-        <X size={14} />
+        <X size={14} aria-hidden="true" />
       </button>
     </div>
   );

@@ -1082,12 +1082,18 @@ class ZeroCostIsNotAMeasurement(unittest.TestCase):
     ledger row. The one cell that survived the 2026-09-16 batch reported
     `cost: 0.0` for a run that had made model calls."""
 
-    def test_a_zero_total_over_real_calls_is_not_a_cost(self):
-        self.assertTrue(runner.usage_was_billable({"calls": 2, "cacheHitTokens": 0}))
-        self.assertTrue(runner.usage_was_billable({"calls": 0, "outputTokens": 812}))
+    def test_a_priced_row_is_a_measurement(self):
+        self.assertTrue(runner.usage_is_a_measurement({"cost": 0.42, "calls": 0}))
+        self.assertTrue(runner.usage_is_a_measurement({"calls": 2, "cacheHitTokens": 0}))
+        self.assertTrue(runner.usage_is_a_measurement({"calls": 0, "outputTokens": 812}))
 
-    def test_a_run_that_really_spent_nothing_still_reads_as_zero(self):
-        self.assertFalse(runner.usage_was_billable({"calls": 0, "cacheHitTokens": 0, "outputTokens": 0}))
+    def test_a_row_of_zeros_is_the_ledger_holding_nothing(self):
+        # Production's actual shape on 2026-09-16: 726 settled rows, 9.81 CNY,
+        # every one with `run_id = NULL`, so the per-run route answers zero for
+        # every run there has ever been.
+        self.assertFalse(runner.usage_is_a_measurement(
+            {"cost": 0.0, "calls": 0, "cacheHitTokens": 0, "cacheMissTokens": 0, "outputTokens": 0},
+        ))
 
     def test_dropping_the_term_leaves_efficiency_on_latency_alone(self):
         budget = {"latencyCapMs": 1000, "costCap": 10}

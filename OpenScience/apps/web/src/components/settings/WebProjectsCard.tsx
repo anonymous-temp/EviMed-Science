@@ -140,7 +140,7 @@ export function WebProjectsCard({
           title="刷新项目列表"
           aria-label="刷新项目列表"
         >
-          <RefreshCw size={13} className={cn(loading && "animate-spin")} />
+          <RefreshCw size={13} className={cn(loading && "animate-spin")} aria-hidden="true" />
         </button>
       </header>
       <div className="px-5 py-4">
@@ -176,7 +176,7 @@ export function WebProjectsCard({
                       <span className="block truncate font-mono text-caption text-muted">{project.id}</span>
                     </span>
                     {selected ? (
-                      <Check size={14} className="shrink-0 text-ok" />
+                      <Check size={14} className="shrink-0 text-ok" aria-hidden="true" />
                     ) : (
                       <span className="shrink-0 text-xs text-muted">
                         {switching ? "切换中…" : "使用"}
@@ -190,7 +190,7 @@ export function WebProjectsCard({
                     title={`导出 ${project.name}`}
                     aria-label={`导出 ${project.name}`}
                   >
-                    <Download size={13} className={cn(busy && "animate-pulse")} />
+                    <Download size={13} className={cn(busy && "animate-pulse")} aria-hidden="true" />
                   </button>
                   <button
                     className={cn(iconButtonCls, "hover:text-error")}
@@ -199,7 +199,7 @@ export function WebProjectsCard({
                     title={project.id === "default" ? "默认项目不可删除" : `删除 ${project.name}`}
                     aria-label={`删除 ${project.name}`}
                   >
-                    <Trash2 size={13} />
+                    <Trash2 size={13} aria-hidden="true" />
                   </button>
                 </div>
               );
@@ -223,7 +223,7 @@ export function WebProjectsCard({
                 title="取消删除"
                 aria-label="取消项目删除"
               >
-                <X size={13} />
+                <X size={13} aria-hidden="true" />
               </button>
             </div>
             <div className="mt-3 flex justify-end gap-2">
@@ -273,7 +273,7 @@ export function WebProjectsCard({
             type="submit"
             disabled={controlsDisabled || !newId.trim()}
           >
-            <FolderPlus size={13} />
+            <FolderPlus size={13} aria-hidden="true" />
             创建
           </button>
         </form>

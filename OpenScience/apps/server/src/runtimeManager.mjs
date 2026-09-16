@@ -28,6 +28,7 @@ import {
   normalizeTranscript,
   transcriptToLedgerMessages,
   sessionListItems,
+  subagentListItems,
 } from "./dshRuntimeAdapter.mjs";
 import {
   HttpError,
@@ -1776,7 +1777,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
       // run context and every tool's raw JSON; useful for diagnosing a run,
       // and not something a researcher account should be handed. The same list
       // `/api/me` reads to decide which menu the shell draws.
-      operator: config.operatorUsers.includes(String(project.userId ?? "")),
+      operator: Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(project.userId ?? "")),
       requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
     },
   };
@@ -2263,7 +2264,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
             askUser: Boolean(config.runtimeAskUserEnabled),
             review: Boolean(config.runtimeReviewEnabled),
             capsule: Boolean(capsuleGatewayUrl),
-            operator: config.operatorUsers.includes(String(project.userId ?? "")),
+            operator: Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(project.userId ?? "")),
             requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
           },
           limits: {
@@ -3605,7 +3606,29 @@ export class RuntimeManager {
    * @param {Record<string, any>} project @param {string} sessionId @param {{ wake?: boolean }} options
    * @returns {Promise<import('@evimed/domain').RunTranscript>}
    */
-  async sessionTranscript(project, sessionId, { wake = true } = {}) {
+  /**
+   * The kernel's catalogue of one session's direct children, with the address
+   * each one must be read at.
+   *
+   * @param {Record<string, any>} project @param {string} parentSessionId
+   * @returns {Promise<Record<string, any>[]>}
+   */
+  async subagentCatalogue(project, parentSessionId) {
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime) return [];
+    this.beginProxy(project);
+    try {
+      return await this.withRuntimeDeadline(
+        (signal) => this.callKernel(runtime, project, "subagents/list", { parentSessionId }, signal),
+        "runtime_history_unavailable",
+        "Runtime subagent catalogue did not answer in time.",
+      ).then(subagentListItems);
+    } finally {
+      this.endProxy(project);
+    }
+  }
+
+  async sessionTranscript(project, sessionId, { wake = true, address = null } = {}) {
     const runtime = wake ? await this.start(project) : this.runtimes.get(this.key(project));
     if (!runtime) {
       throw new HttpError(409, "runtime_not_running", "Runtime is not running for session history monitoring.");
@@ -3665,7 +3688,17 @@ export class RuntimeManager {
           value = await this.withRuntimeDeadline(
             (signal) => this.callKernel(runtime, project, "session/page", {
               request: {
-                address: { kind: "session", sessionId },
+                // A subagent session cannot be read at its own id. The kernel
+                // refuses it by name — `session/agent-busy`, "subagent Sessions
+                // require their durable parent address" — and wants
+                // `{kind:'subagent', parentSessionId, childSessionId, mode}`
+                // instead. Every delegated child read as `child_unreadable`
+                // until 2026-09-16 for exactly this, which made every run that
+                // delegated report `completeness: partial` and dropped every
+                // cell of a paired evaluation. The address is the one the
+                // kernel's own `subagents/list` publishes, never one composed
+                // here, because `mode` has to match the descriptor.
+                address: address ?? { kind: "session", sessionId },
                 throughSeq,
               // The kernel pages by MESSAGE, but each page carries every
               // assistant/chunk delta between its messages. A real run's

@@ -120,7 +120,7 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
           {embedded
             ? <p className="max-w-2xl text-ui text-muted">保存研究方法、偏好与经验，在后续研究中继续使用。</p>
             : <div><h1 className="font-serif text-title text-text">方法胶囊</h1><p className="mt-2 text-ui text-muted">保存研究方法、偏好与经验，在后续研究中继续使用。</p></div>}
-          <div className="flex gap-2"><Button variant="ghost" disabled={busy} onClick={() => setTransferring(value => !value)}>分享与导入</Button><Button disabled={busy} onClick={() => setCreating((value) => !value)}><Plus size={15} />新建胶囊</Button></div>
+          <div className="flex gap-2"><Button variant="ghost" disabled={busy} onClick={() => setTransferring(value => !value)}>分享与导入</Button><Button disabled={busy} onClick={() => setCreating((value) => !value)}><Plus size={15} aria-hidden="true" />新建胶囊</Button></div>
         </header>
         <fieldset disabled={busy}><SegmentedControl value={view} onChange={(value) => { setView(value); setSelected(null); }} aria-label="胶囊列表"
           options={[{ value: "active", label: "我的胶囊" }, { value: "trash", label: "回收站" }]} /></fieldset>
@@ -146,7 +146,7 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
               })}>加载更多胶囊</Button>}
             </div>
             {current && <Card className="lg:col-span-2" title={current.payload.title} hint="胶囊提供背景和方法，不改变研究证据的校验规则。">
-              {view === "trash" ? <Button loading={busy} onClick={() => void perform(async () => { await restoreCapsule(current.id, current.revision); await reload(); setNotice("胶囊已恢复，可在我的胶囊中查看。"); })}><RotateCcw size={15} />恢复胶囊</Button> : <div className="space-y-5">
+              {view === "trash" ? <Button loading={busy} onClick={() => void perform(async () => { await restoreCapsule(current.id, current.revision); await reload(); setNotice("胶囊已恢复，可在我的胶囊中查看。"); })}><RotateCcw size={15} aria-hidden="true" />恢复胶囊</Button> : <div className="space-y-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <select aria-label="使用方式" disabled={busy} className={inputClasses({ className: "w-auto" })} value={mode} onChange={(event) => setMode(event.target.value)}>
                     <option value="own">主要胶囊</option><option value="guest">参考胶囊</option><option value="blend">合并参考</option>

@@ -189,9 +189,9 @@ export function MaximizePaneButton() {
       onClick={() => setInspectorMaximized(!inspectorMaximized)}
     >
       {inspectorMaximized ? (
-        <Minimize2 size={14} strokeWidth={1.5} />
+        <Minimize2 size={14} strokeWidth={1.5} aria-hidden="true" />
       ) : (
-        <Maximize2 size={14} strokeWidth={1.5} />
+        <Maximize2 size={14} strokeWidth={1.5} aria-hidden="true" />
       )}
     </button>
   );

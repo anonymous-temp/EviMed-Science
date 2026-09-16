@@ -182,10 +182,10 @@ export function FilePreviewInspector({
         {canToggle && (
           <div className="ml-2 flex items-center gap-1 rounded-input bg-surface-2 p-0.5">
             <ToggleBtn active={tab === "preview"} onClick={() => setTab("preview")}>
-              <Eye size={13} /> 预览
+              <Eye size={13} aria-hidden="true" /> 预览
             </ToggleBtn>
             <ToggleBtn active={tab === "code"} onClick={() => setTab("code")}>
-              <Code2 size={13} /> 源文件
+              <Code2 size={13} aria-hidden="true" /> 源文件
             </ToggleBtn>
           </div>
         )}
@@ -197,7 +197,7 @@ export function FilePreviewInspector({
           aria-pressed={showHistory}
           onClick={() => setShowHistory((v) => !v)}
         >
-          <History size={14} strokeWidth={1.5} />
+          <History size={14} strokeWidth={1.5} aria-hidden="true" />
         </button>
         <button
           className="text-text hover:opacity-60"
@@ -209,7 +209,7 @@ export function FilePreviewInspector({
         </button>
         {controls}
         <button className="text-text hover:opacity-60" aria-label="关闭预览" onClick={onClose}>
-          <X size={14} strokeWidth={1.5} />
+          <X size={14} strokeWidth={1.5} aria-hidden="true" />
         </button>
       </header>
 
@@ -217,7 +217,7 @@ export function FilePreviewInspector({
         {showHistory && <ProvenancePanel path={data.path} language={data.language} />}
         {!showHistory && loading && (
           <div className="flex items-center gap-2 p-4 text-sm text-muted">
-            <Loader2 size={15} className="animate-spin" /> 正在加载 {data.filename}…
+            <Loader2 size={15} className="animate-spin" aria-hidden="true" /> 正在加载 {data.filename}…
           </div>
         )}
         {!showHistory && !loading && error && (
@@ -558,7 +558,7 @@ export function PreviewError({
               onClick={() => void inspect()}
               disabled={probing}
             >
-              {probing ? <Loader2 size={13} className="animate-spin" /> : <FileSearch size={13} />}
+              {probing ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <FileSearch size={13} aria-hidden="true" />}
               轻量检查文件
             </button>
           )}

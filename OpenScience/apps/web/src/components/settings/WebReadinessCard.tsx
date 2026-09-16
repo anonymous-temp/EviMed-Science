@@ -84,7 +84,7 @@ export function WebReadinessCard() {
           title="刷新就绪状态"
           aria-label="刷新就绪状态"
         >
-          <RefreshCw size={13} className={cn(loading && "animate-spin")} />
+          <RefreshCw size={13} className={cn(loading && "animate-spin")} aria-hidden="true" />
         </button>
       </header>
       <div className="px-5 py-4">
@@ -101,11 +101,11 @@ export function WebReadinessCard() {
                 )}
               >
                 {check.skipped ? (
-                  <CircleDashed size={14} className="shrink-0 text-muted" />
+                  <CircleDashed size={14} className="shrink-0 text-muted" aria-hidden="true" />
                 ) : check.ok ? (
-                  <CheckCircle2 size={14} className="shrink-0 text-ok" />
+                  <CheckCircle2 size={14} className="shrink-0 text-ok" aria-hidden="true" />
                 ) : (
-                  <XCircle size={14} className="shrink-0 text-error" />
+                  <XCircle size={14} className="shrink-0 text-error" aria-hidden="true" />
                 )}
                 <span className="w-32 shrink-0 font-medium text-text">{label}</span>
                 <span

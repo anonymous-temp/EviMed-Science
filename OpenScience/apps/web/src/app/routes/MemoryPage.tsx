@@ -261,7 +261,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
           <div>
             {!embedded && (
               <div className="mb-2 flex items-center gap-2 text-ui-sm font-medium tracking-[0.12em] text-accent">
-                <Brain size={15} /> 个人科研记忆
+                <Brain size={15} aria-hidden="true" /> 个人科研记忆
               </div>
             )}
             {!embedded && <h1 className="font-serif text-display font-semibold tracking-tight text-text">科研记忆</h1>}
@@ -321,7 +321,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
               />
               <div className="relative sm:w-72">
                 <label htmlFor="memory-search" className="sr-only">搜索科研记忆</label>
-                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
                 <Input
                   id="memory-search"
                   value={query}
@@ -348,7 +348,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
                   <article key={item.id} className="group rounded-card border border-border bg-surface p-5 shadow-card transition-shadow hover:shadow-pop">
                     <div className="mb-4 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 text-caption text-muted">
-                        {item.pinned && <span className="inline-flex items-center gap-1 font-medium text-accent"><Pin size={11} /> 置顶</span>}
+                        {item.pinned && <span className="inline-flex items-center gap-1 font-medium text-accent"><Pin size={11} aria-hidden="true" /> 置顶</span>}
                         <span>{formatTime(item.updatedAt ?? item.createdAt)}</span>
                       </div>
                       <div className="flex items-center opacity-60 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
@@ -357,7 +357,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
                             label={item.pinned ? "取消置顶" : "置顶"}
                             disabled={busyId === item.id}
                             onClick={() => void mutate(item, { pinned: !item.pinned })}
-                            icon={item.pinned ? <PinOff size={14} /> : <Pin size={14} />}
+                            icon={item.pinned ? <PinOff size={14} aria-hidden="true" /> : <Pin size={14} aria-hidden="true" />}
                           />
                         )}
                         <MemoryAction
@@ -367,15 +367,15 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
                             setEditingId(item.id);
                             setEditingContent(item.content);
                           }}
-                          icon={<Pencil size={14} />}
+                          icon={<Pencil size={14} aria-hidden="true" />}
                         />
                         <MemoryAction
                           label={state === "normal" ? "归档" : "恢复"}
                           disabled={busyId === item.id}
                           onClick={() => void mutate(item, { state: state === "normal" ? "archived" : "normal" })}
-                          icon={state === "normal" ? <Archive size={14} /> : <ArchiveRestore size={14} />}
+                          icon={state === "normal" ? <Archive size={14} aria-hidden="true" /> : <ArchiveRestore size={14} aria-hidden="true" />}
                         />
-                        <MemoryAction label="删除" disabled={busyId === item.id} onClick={() => setPendingDelete(item)} icon={<Trash2 size={14} />} danger />
+                        <MemoryAction label="删除" disabled={busyId === item.id} onClick={() => setPendingDelete(item)} icon={<Trash2 size={14} aria-hidden="true" />} danger />
                       </div>
                     </div>
 
@@ -689,7 +689,7 @@ function MemoryAction({
         danger && "hover:bg-error/10 hover:text-error",
       )}
     >
-      {disabled ? <Loader2 size={14} className="animate-spin" /> : icon}
+      {disabled ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : icon}
     </button>
   );
 }

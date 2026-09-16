@@ -88,7 +88,7 @@ function RunsHeader({ description }: { description: ReactNode }) {
   return (
     <header className="mb-4 flex items-start gap-3">
       <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-input bg-accent/10 text-accent">
-        <FlaskConical size={17} strokeWidth={1.75} />
+        <FlaskConical size={17} strokeWidth={1.75} aria-hidden="true" />
       </div>
       <div className="min-w-0 flex-1">
         <PageTitle page="运行记录" />
@@ -133,7 +133,7 @@ function RunsFilterBar({
   return (
     <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 bg-bg/95 px-1 py-2 backdrop-blur">
       <div className="relative min-w-[12rem] flex-1">
-        <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+        <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
         <input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
@@ -541,9 +541,9 @@ function WebRunRow({
         aria-expanded={open}
       >
         {open ? (
-          <ChevronDown size={13} className="shrink-0 text-muted" />
+          <ChevronDown size={13} className="shrink-0 text-muted" aria-hidden="true" />
         ) : (
-          <ChevronRight size={13} className="shrink-0 text-muted opacity-40 group-hover:opacity-100" />
+          <ChevronRight size={13} className="shrink-0 text-muted opacity-40 group-hover:opacity-100" aria-hidden="true" />
         )}
         <span
           className={cn(
@@ -607,10 +607,10 @@ function WebRunRow({
           </details>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-            <Action icon={<RotateCcw size={12} />} onClick={onReproduce} title="起草提示，复查该运行的证据与产物并尝试复现">
+            <Action icon={<RotateCcw size={12} aria-hidden="true" />} onClick={onReproduce} title="起草提示，复查该运行的证据与产物并尝试复现">
               复查与复现
             </Action>
-            <Action icon={<MessageSquare size={12} />} onClick={onOpenConversation} title="打开产生此次运行的对话">
+            <Action icon={<MessageSquare size={12} aria-hidden="true" />} onClick={onOpenConversation} title="打开产生此次运行的对话">
               打开对话
             </Action>
             {run.durationMs != null && <span className="text-muted">耗时 {formatDuration(run.durationMs)}</span>}
@@ -639,7 +639,7 @@ function WebRunRow({
           {(run.verification != null || notices.total > 0) && (
             <div className="rounded-card border border-border-faint bg-surface-2/40 p-2">
               <div className="mb-1 flex items-center gap-1.5 text-caption font-medium uppercase tracking-wider text-muted">
-                <ScrollText size={12} />
+                <ScrollText size={12} aria-hidden="true" />
                 {run.verification === "unverified" && "已交付，但未完成核验"}
                 {/* Not the same statement, and it used to render as the absence
                   * of any statement: a layer of the gate did not run here, so
@@ -722,7 +722,7 @@ function WebRunRow({
           {hasArtifacts && (
             <div>
               <div className="mb-1 flex items-center gap-1 text-caption font-medium uppercase tracking-wider text-muted">
-                <FileOutput size={12} /> 产物
+                <FileOutput size={12} aria-hidden="true" /> 产物
               </div>
               <ul className="space-y-0.5">
                 {run.artifacts.map((path) => (
@@ -744,7 +744,7 @@ function WebRunRow({
           {!hasArtifacts && undelivered && undelivered.length > 0 && (
             <div>
               <div className="mb-1 flex items-center gap-1 text-caption font-medium uppercase tracking-wider text-warn">
-                <FileOutput size={12} /> 未通过核验的文件（{undelivered.length}）
+                <FileOutput size={12} aria-hidden="true" /> 未通过核验的文件（{undelivered.length}）
               </div>
               <p className="mb-1 text-text/70">
                 本次运行写出了这些文件，但它们没有通过质量门，因此没有作为成果发布。文件没有被删除，可以下载后自行判断；引用前请逐条核对。
@@ -894,7 +894,7 @@ function ArtifactRow({ path, unverified }: { path: string; unverified?: boolean 
         {path}
       </span>
       {unverified && <span className="shrink-0 text-caption text-warn">未经核验</span>}
-      <ExternalLink size={11} className="shrink-0 text-muted opacity-0 group-hover:opacity-100" />
+      <ExternalLink size={11} className="shrink-0 text-muted opacity-0 group-hover:opacity-100" aria-hidden="true" />
     </button>
   );
 }

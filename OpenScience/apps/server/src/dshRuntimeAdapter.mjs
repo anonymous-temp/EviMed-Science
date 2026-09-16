@@ -175,6 +175,21 @@ export function sessionListItems(value) {
   return Array.isArray(value?.items) ? value.items : [];
 }
 
+/**
+ * The entries of a `subagents/list` answer.
+ *
+ * A separate reader from `sessionListItems` rather than a shared one, because
+ * the two are separate wire shapes that happen to agree today; a reader named
+ * after one of them and used for both is how a divergence upstream becomes a
+ * silent empty list. One reader per shape is the same rule, applied twice.
+ *
+ * @param {any} value @returns {Record<string, any>[]}
+ */
+export function subagentListItems(value) {
+  if (Array.isArray(value)) return value;
+  return Array.isArray(value?.items) ? value.items : [];
+}
+
 export class DshRuntimeAdapter {
   /**
    * @param {WireTransport} transport
@@ -344,8 +359,7 @@ export class DshRuntimeAdapter {
 
   /** @param {{ sessionId: string, signal?: AbortSignal }} input @returns {Promise<Record<string, any>[]>} */
   async subagents({ sessionId, signal }) {
-    const value = await this.call("subagents/list", { parentSessionId: sessionId }, { signal });
-    return Array.isArray(value?.items) ? value.items : [];
+    return subagentListItems(await this.call("subagents/list", { parentSessionId: sessionId }, { signal }));
   }
 
   /**

@@ -37,7 +37,7 @@ export function WebSecurityCard() {
           title="刷新安全事件"
           aria-label="刷新安全事件"
         >
-          <RefreshCw size={13} className={cn(loading && "animate-spin")} />
+          <RefreshCw size={13} className={cn(loading && "animate-spin")} aria-hidden="true" />
         </button>
       </header>
       <div className="px-5 py-4">
@@ -54,9 +54,9 @@ export function WebSecurityCard() {
                 )}
               >
                 {event.status === "failed" ? (
-                  <ShieldX size={13} className="shrink-0 text-error" />
+                  <ShieldX size={13} className="shrink-0 text-error" aria-hidden="true" />
                 ) : (
-                  <ShieldCheck size={13} className="shrink-0 text-accent" />
+                  <ShieldCheck size={13} className="shrink-0 text-accent" aria-hidden="true" />
                 )}
                 <span className="w-20 shrink-0 font-mono text-caption text-text">{event.action}</span>
                 <span

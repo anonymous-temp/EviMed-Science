@@ -467,7 +467,8 @@ test("fresh files without witnessed workflow tools cannot silently bypass an una
   const run = (await f.runs())[0];
   assert.equal(run.status, "failed");
   assert.equal(run.errorCode, "specialist_deliverable_not_accepted");
-  assert.ok(run.qualityNotices.some((notice) => notice.includes("could not be attributed")));
+  assert.ok(run.qualityNotices.some((notice) => notice.includes("无法确认交付是否通过验收")),
+    "the one gate notice a researcher could see is Chinese now (2026-09-16 walk, U4)");
 });
 
 test("a current native receipt with a legacy basename survives offline recovery from the actual nested path", async (t) => {
