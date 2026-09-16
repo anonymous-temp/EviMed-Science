@@ -3522,7 +3522,7 @@ export class AgentRunStore {
           : rejected.length ? "specialist_deliverable_not_accepted" : "runtime_stopped",
         artifacts: [],
         qualityNotices: [
-          ...(projection.state === "unattributed" ? ["Native workflow state could not be attributed to this input; delivery acceptance remains unverified."] : []),
+          ...(projection.state === "unattributed" ? ["内核没有把这次运行的工作状态对应到本次请求，因此无法确认交付是否通过验收。"] : []),
           ...unsubmitted.map((entry) => `交付物「${entry.id}」的文件已经写好（${entry.files} 个），但从未提交校验，因此没有通过质量门。`),
           ...(unsubmitted.length ? [] : rejected.map((entry) => (
             `交付物「${entry.id}」提交了 ${Number(entry.attempts ?? 0)} 次，每次都被契约校验拒绝，因此产物未经质量门。`
@@ -4055,7 +4055,7 @@ export class AgentRunStore {
           terminal.status = "failed";
           terminal.errorCode = "specialist_deliverable_not_accepted";
           terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...nativeWorkflowNotices(proof),
-            ...(projection.state === "unattributed" ? ["Native workflow state could not be attributed to this input; delivery acceptance remains unverified."] : []),
+            ...(projection.state === "unattributed" ? ["内核没有把这次运行的工作状态对应到本次请求，因此无法确认交付是否通过验收。"] : []),
           ];
         }
       }

@@ -4,6 +4,8 @@
 // convex hull — the entries on it are thermodynamically stable; entries above
 // it are metastable, with an energy above hull. Pure, offline.
 
+import { parseFailureMessage } from "@/lib/errorText";
+
 export interface PhaseEntryIn {
   formula: string;
   composition: Record<string, number>;
@@ -69,7 +71,7 @@ export function parsePhaseDiagram(text: string): PhaseDiagram {
   try {
     raw = JSON.parse(text);
   } catch (e) {
-    throw new Error(`not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
+    throw new Error(`not valid JSON: ${parseFailureMessage(e, "该相图数据")}`);
   }
   const obj = raw as { elements?: string[]; entries?: PhaseEntryIn[] };
   const elements = obj.elements ?? [];

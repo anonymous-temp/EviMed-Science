@@ -12,9 +12,9 @@ function Location() {
   return <div data-testid="location">{location.pathname + location.search}</div>;
 }
 
-const renderPrompt = () =>
+const renderPrompt = (at = "/app/runs") =>
   render(
-    <MemoryRouter initialEntries={["/app/chat"]}>
+    <MemoryRouter initialEntries={[at]}>
       <ConnectorPrompt />
       <Location />
     </MemoryRouter>,
@@ -38,6 +38,27 @@ describe("ConnectorPrompt", () => {
     await userEvent.click(screen.getByRole("button", { name: "去配置" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/account?tab=connectors");
     expect(screen.queryByRole("region", { name: "数据源凭据提示" })).not.toBeInTheDocument();
+    // 「去配置」 is the button that means "yes, I am dealing with this", and
+    // until 2026-09-16 it was the one that did not record the dismissal — so
+    // the banner was back on the next navigation (walk, U2).
+    expect(Number(localStorage.getItem(CONNECTOR_PROMPT_SNOOZE_KEY))).toBeGreaterThan(Date.now());
+  });
+
+  it.each([
+    ["the conversation", "/app/chat"],
+    ["the connectors tab it points at", "/app/account?tab=connectors"],
+    ["an address that routes nowhere", "/app/does-not-exist"],
+  ])("never appears over %s", async (_what, path) => {
+    mocks.fetchWebConnectors.mockResolvedValue([pending]);
+    renderPrompt(path);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole("region", { name: "数据源凭据提示" })).not.toBeInTheDocument();
+  });
+
+  it("still appears on the account page's other tabs", async () => {
+    mocks.fetchWebConnectors.mockResolvedValue([pending]);
+    renderPrompt("/app/account?tab=settings");
+    expect(await screen.findByRole("region", { name: "数据源凭据提示" })).toBeInTheDocument();
   });
 
   it("stays silent when every source is served, when the store is absent, and after 稍后再说", async () => {

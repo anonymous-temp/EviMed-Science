@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
-import { listWebErrorEvents, type WebErrorEvent } from "@/lib/apiClient";
+import { webErrorMessage, listWebErrorEvents, type WebErrorEvent } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 
@@ -13,7 +13,7 @@ export function WebErrorsCard() {
     try {
       setEvents(await listWebErrorEvents(20));
     } catch (e) {
-      toast.error(`无法读取错误账本：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法读取错误账本：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { createWebProject, fetchWebMe, getWebProjectId, hasWebApi, listWebProjects, setWebProjectId, type WebProject } from "@/lib/apiClient";
+import { webErrorMessage, createWebProject, fetchWebMe, getWebProjectId, hasWebApi, listWebProjects, setWebProjectId, type WebProject } from "@/lib/apiClient";
 
 /**
  * The projects this account owns, and which one the shell is looking at.
@@ -48,7 +48,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (resolved !== current) setWebProjectId(resolved);
       set({ projects, currentId: resolved, loading: false });
     } catch (error) {
-      set({ loading: false, error: error instanceof Error ? error.message : String(error) });
+      set({ loading: false, error: webErrorMessage(error) });
     }
   },
 

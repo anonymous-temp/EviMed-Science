@@ -126,6 +126,17 @@ ACTIVE_RUN_STATES = frozenset({"queued", "dispatching", "running"})
 # WAN hiccup, short enough that a dead server still ends the batch.
 POLL_FAILURE_LIMIT = 8
 POLL_FAILURE_BACKOFF_CAP_SECONDS = 60
+# The poll loop above tolerates an outage that lands while a run is being
+# watched. Every other call a cell makes — `start_runtime`, `stop_runtime`, the
+# transcript read — had no tolerance at all, and on 2026-09-16 a host-wide
+# Docker daemon restart took ten of twelve cells with a single
+# `POST /api/commands/stop_runtime -> HTTP 502`. A cell lost that way is not a
+# measurement and not a result; it is the batch being interrupted. So an outage
+# pauses the cell and waits the control plane out, and only a control plane
+# that never comes back turns into a recorded failure.
+CONTROL_PLANE_OUTAGE_RETRIES = 2
+CONTROL_PLANE_WAIT_SECONDS = 1800
+CONTROL_PLANE_PROBE_SECONDS = 15
 COMPACTION_POLICIES = ("basic", "structured")
 
 # §7: seven dimensions, and they do not offset each other. A cost improvement
@@ -203,6 +214,34 @@ class HiddenReferenceLeak(EvalError):
     instead of being caught and counted: a run that was shown the reference and
     a run that was not are not the same experiment.
     """
+
+
+def usage_was_billable(usage: dict[str, float]) -> bool:
+    """Did this run actually spend anything the ledger should have priced?
+
+    Read off the usage row itself rather than assumed: calls, or any token
+    counter, above zero. A run with none of those really did cost nothing.
+    """
+    return any(
+        float(usage.get(key) or 0.0) > 0
+        for key in ("calls", "cacheHitTokens", "cacheMissTokens", "outputTokens")
+    )
+
+
+def is_control_plane_outage(error: BaseException) -> bool:
+    """True when the failure is the server being unreachable or broken.
+
+    Such a failure says nothing about the measurement: the cell may not have
+    started, or may be running on the other side of a proxy that is answering
+    502. Either way the honest reading is "the batch was interrupted", not
+    "this arm scored zero". Everything else — a 4xx, a refused dispatch, a
+    malformed brief — is about this cell and ends it.
+    """
+    if isinstance(error, TransportError):
+        return True
+    if isinstance(error, HttpFailure):
+        return error.status >= 500
+    return isinstance(error, (TimeoutError, ConnectionError))
 
 
 def now_iso() -> str:
@@ -1736,6 +1775,32 @@ class PairedRunner:
         # Part of every dispatch id. See the note where it is used.
         self.release_id = release_id
 
+    def wait_out_outage(self, cell: str, error: BaseException) -> PlatformClient | None:
+        """Pause until the control plane answers again, then hand back a client.
+
+        Returns None when it never came back within `CONTROL_PLANE_WAIT_SECONDS`,
+        which is the point at which "interrupted" does become "failed": a batch
+        that waits forever reports nothing at all.
+        """
+        # Time is counted in injected sleeps rather than off the clock, so the
+        # bound is a property a test can exercise instead of a wall-clock wait.
+        waited = 0.0
+        self.log(f"[pause] {cell}: control plane unreachable ({str(error)[:160]}); waiting for it")
+        while waited < CONTROL_PLANE_WAIT_SECONDS:
+            self.sleep(CONTROL_PLANE_PROBE_SECONDS)
+            waited += CONTROL_PLANE_PROBE_SECONDS
+            try:
+                client = self.client_factory()
+                client.readiness()
+            except Exception as probe_error:  # noqa: BLE001 - classified on the next line
+                if is_control_plane_outage(probe_error) or isinstance(probe_error, OSError):
+                    continue
+                raise
+            self.log(f"[resume] {cell}: control plane answered; measuring it again")
+            return client
+        self.log(f"[give-up] {cell}: control plane still unreachable after {CONTROL_PLANE_WAIT_SECONDS}s")
+        return None
+
     def run_cell(self, client: PlatformClient, runtime_url: str, plan: dict[str, Any]) -> dict[str, Any]:
         try:
             return self._run_cell(client, runtime_url, plan)
@@ -1850,7 +1915,17 @@ class PairedRunner:
         usage = load_usage_lookup(None, client)(str(run.get("id") or "")) if self.private_grant else self.usage_lookup(str(run.get("id") or ""))
         cost = usage["cost"] if usage else None
         record["usage"] = usage
-        record["cost"] = {"value": cost, "currency": "CNY", "source": self.cost_source if usage else "unavailable"}
+        # A settled total of zero over calls that demonstrably happened is not
+        # a measurement of zero — it is the provider's usage not yet reconciled,
+        # settled at a reservation that was itself zero. Scoring it as free
+        # handed the efficiency dimension a free 1.0 on the one cell that
+        # survived the 2026-09-16 batch. Drop the term rather than invent it;
+        # latency still carries efficiency, and the report says the cost was
+        # not available.
+        cost_source = self.cost_source if usage else "unavailable"
+        if usage is not None and cost == 0.0 and usage_was_billable(usage):
+            cost, cost_source = None, "unsettled-zero"
+        record["cost"] = {"value": cost, "currency": "CNY", "source": cost_source}
         if self.private_grant and usage is None:
             record["excluded"] = {"reason": "usage_unsettled_or_unavailable"}
         record["scores"] = score_cell(run, deterministic, judge_result, self.config["budget"], cost)
@@ -1899,43 +1974,62 @@ class PairedRunner:
         lock = threading.Lock()
         local = threading.local()
 
+        def measure(plan: dict[str, Any]) -> dict[str, Any]:
+            """One cell, with a control-plane outage waited out rather than scored."""
+            attempt = max(1, int(plan.get("attempt") or 1))
+            outages = 0
+            while True:
+                if getattr(local, "client", None) is None:
+                    local.client = self.client_factory()
+                    local.runtime_url = ""
+                try:
+                    return self.run_cell(local.client, local.runtime_url, {**plan, "attempt": attempt})
+                except HiddenReferenceLeak:
+                    raise
+                except (EvalError, KeyError, ValueError, OSError) as error:
+                    # An outage is the batch being interrupted, not a score.
+                    # Wait for the server, then measure the cell again under a
+                    # fresh dispatch id — re-using the old one would hand back
+                    # the run the outage abandoned.
+                    if is_control_plane_outage(error) and outages < CONTROL_PLANE_OUTAGE_RETRIES:
+                        outages += 1
+                        revived = self.wait_out_outage(cell_id(plan["briefId"], plan["arm"], plan["repeat"]), error)
+                        if revived is not None:
+                            local.client = revived
+                            local.runtime_url = ""
+                            attempt += 1
+                            continue
+                    # Per-cell isolation: one unreachable server or one refused
+                    # dispatch must not throw away the cells that already cost
+                    # real model spend. `complete` stays false, so the next pass
+                    # retries.
+                    #
+                    # `OSError` covers the socket and TLS failures that arrive
+                    # raw rather than wrapped — `TimeoutError` and `ssl.SSLError`
+                    # are both subclasses. One read timeout on a long poll ended
+                    # a twelve-cell batch on 2026-09-15 after six cells had
+                    # already been paid for, which is exactly the loss this
+                    # clause exists to prevent and did not.
+                    return {
+                        "schemaVersion": SCHEMA_VERSION,
+                        "complete": False,
+                        "cell": cell_id(plan["briefId"], plan["arm"], plan["repeat"]),
+                        "briefId": plan["briefId"],
+                        "family": plan["family"],
+                        "familySource": plan["familySource"],
+                        "arm": plan["arm"],
+                        "repeat": plan["repeat"],
+                        "configDigest": self.config["digest"],
+                        "armDigest": plan["armDigest"],
+                        "briefDigest": plan["briefDigest"],
+                        "attempt": attempt,
+                        "error": str(error)[:500],
+                        "finishedAt": now_iso(),
+                    }
+
         def worker(plan: dict[str, Any]) -> dict[str, Any] | None:
             path = cell_path(self.results_dir, self.config["id"], plan["briefId"], plan["arm"], plan["repeat"])
-            if getattr(local, "client", None) is None:
-                client = self.client_factory()
-                local.client = client
-                local.runtime_url = ""
-            try:
-                record = self.run_cell(local.client, local.runtime_url, plan)
-            except HiddenReferenceLeak:
-                raise
-            except (EvalError, KeyError, ValueError, OSError) as error:
-                # Per-cell isolation: one unreachable server or one refused
-                # dispatch must not throw away the cells that already cost real
-                # model spend. `complete` stays false, so the next pass retries.
-                #
-                # `OSError` covers the socket and TLS failures that arrive raw
-                # rather than wrapped — `TimeoutError` and `ssl.SSLError` are
-                # both subclasses. One read timeout on a long poll ended a
-                # twelve-cell batch on 2026-09-15 after six cells had already
-                # been paid for, which is exactly the loss this clause exists
-                # to prevent and did not.
-                record = {
-                    "schemaVersion": SCHEMA_VERSION,
-                    "complete": False,
-                    "cell": cell_id(plan["briefId"], plan["arm"], plan["repeat"]),
-                    "briefId": plan["briefId"],
-                    "family": plan["family"],
-                    "familySource": plan["familySource"],
-                    "arm": plan["arm"],
-                    "repeat": plan["repeat"],
-                    "configDigest": self.config["digest"],
-                    "armDigest": plan["armDigest"],
-                    "briefDigest": plan["briefDigest"],
-                    "attempt": max(1, int(plan.get("attempt") or 1)),
-                    "error": str(error)[:500],
-                    "finishedAt": now_iso(),
-                }
+            record = measure(plan)
             write_json_atomic(path, record)
             with lock:
                 self.executed += 1

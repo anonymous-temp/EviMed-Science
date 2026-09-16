@@ -1077,6 +1077,131 @@ class NetworkFailureIsolation(unittest.TestCase):
         self.assertIn(marker, source, "the per-cell isolation clause no longer catches raw socket failures")
 
 
+class ZeroCostIsNotAMeasurement(unittest.TestCase):
+    """The efficiency dimension must not be handed a free point by an unsettled
+    ledger row. The one cell that survived the 2026-09-16 batch reported
+    `cost: 0.0` for a run that had made model calls."""
+
+    def test_a_zero_total_over_real_calls_is_not_a_cost(self):
+        self.assertTrue(runner.usage_was_billable({"calls": 2, "cacheHitTokens": 0}))
+        self.assertTrue(runner.usage_was_billable({"calls": 0, "outputTokens": 812}))
+
+    def test_a_run_that_really_spent_nothing_still_reads_as_zero(self):
+        self.assertFalse(runner.usage_was_billable({"calls": 0, "cacheHitTokens": 0, "outputTokens": 0}))
+
+    def test_dropping_the_term_leaves_efficiency_on_latency_alone(self):
+        budget = {"latencyCapMs": 1000, "costCap": 10}
+        with_cost = runner.score_cell({"durationMs": 500}, {}, None, budget, 0.0)
+        without = runner.score_cell({"durationMs": 500}, {}, None, budget, None)
+        self.assertAlmostEqual(with_cost["efficiency"], 0.75, places=6)
+        self.assertAlmostEqual(without["efficiency"], 0.5, places=6)
+
+
+class OutageInterruptsRatherThanScores(unittest.TestCase):
+    """A control plane that goes away mid-batch has interrupted the measurement,
+    not produced one.
+
+    On 2026-09-16 a host-wide Docker daemon restart turned ten of twelve cells
+    into `POST /api/commands/stop_runtime -> HTTP 502` and the report came out
+    with an empty baseline column. The poll loop already waited out an outage
+    that landed while a run was being watched; every other call a cell makes had
+    no tolerance at all.
+    """
+
+    class ProbeBackend(runner.Transport):
+        """Answers `/api/ready` and refuses everything else, so a test states
+        exactly what the control plane does while the batch is paused."""
+
+        def __init__(self, outcomes):
+            self.outcomes = list(outcomes)
+            self.probes = 0
+
+        def request(self, method, url, body=None, headers=None, timeout=60):
+            if url.endswith("/api/ready"):
+                self.probes += 1
+                outcome = self.outcomes.pop(0) if self.outcomes else None
+                if outcome is not None:
+                    raise outcome
+                return 200, {"data": {"status": "ok", "release": {"id": "rel-1"}}}, {}
+            raise AssertionError(f"the paused batch called {method} {url}")
+
+    def setUp(self):
+        self.stack = tempfile.TemporaryDirectory()
+        self.addCleanup(self.stack.cleanup)
+        self.harness = Harness(self.stack.name, ["fam-001-a"], families={"fam-001-a": "fam"})
+
+    def build(self, cell_errors, probe_outcomes):
+        backend = self.ProbeBackend(probe_outcomes)
+        paired = self.harness.make_runner(backend)
+        self.attempts = []
+        errors = list(cell_errors)
+
+        def run_cell(_client, _runtime_url, plan):
+            self.attempts.append((runner.cell_id(plan["briefId"], plan["arm"], plan["repeat"]), plan["attempt"]))
+            if errors:
+                raise errors.pop(0)
+            return {
+                "schemaVersion": runner.SCHEMA_VERSION,
+                "complete": True,
+                "cell": runner.cell_id(plan["briefId"], plan["arm"], plan["repeat"]),
+                "briefId": plan["briefId"],
+                "arm": plan["arm"],
+                "repeat": plan["repeat"],
+                "attempt": plan["attempt"],
+                "configDigest": paired.config["digest"],
+                "armDigest": plan["armDigest"],
+                "briefDigest": plan["briefDigest"],
+            }
+
+        paired.run_cell = run_cell
+        return paired, backend
+
+    def attempts_of(self, cell):
+        return [attempt for recorded, attempt in self.attempts if recorded == cell]
+
+    def test_a_502_pauses_the_cell_and_measures_it_again_under_a_new_dispatch(self):
+        outage = runner.HttpFailure("POST", "http://control.invalid/api/commands/stop_runtime", 502, "<html>502</html>")
+        paired, backend = self.build([outage], [None])
+        cells = paired.execute()
+        interrupted = self.attempts[0][0]
+        self.assertEqual(
+            self.attempts_of(interrupted),
+            [1, 2],
+            "the retry must be a new attempt, or the control plane's dispatch id hands back the abandoned run",
+        )
+        self.assertTrue(all(cell["complete"] for cell in cells))
+        self.assertGreaterEqual(backend.probes, 1, "the batch must have waited on readiness, not retried blind")
+
+    def test_a_refused_dispatch_is_about_this_cell_and_is_not_waited_out(self):
+        refusal = runner.HttpFailure("POST", "http://control.invalid/api/agent-runs/dispatch", 429, "rate_limited")
+        paired, backend = self.build([refusal] * 8, [None])
+        cells = paired.execute()
+        for cell, _attempt in self.attempts:
+            self.assertEqual(self.attempts_of(cell), [1], "a 4xx is this cell's answer; retrying it spends money again")
+        self.assertEqual(backend.probes, 0)
+        self.assertTrue(all(not cell["complete"] for cell in cells))
+        self.assertIn("429", cells[0]["error"])
+
+    def test_a_control_plane_that_never_comes_back_is_finally_recorded_as_a_failure(self):
+        # The wait is bounded, and the bound is what keeps "paused" from
+        # becoming "hung": a batch that waits forever reports nothing at all.
+        outage = runner.TransportError("GET http://control.invalid/api/ready failed: Connection refused")
+        paired, backend = self.build([outage] * 8, [outage] * 10_000)
+        cells = paired.execute()
+        self.assertTrue(all(not cell["complete"] for cell in cells))
+        probes_per_cell = int(runner.CONTROL_PLANE_WAIT_SECONDS // runner.CONTROL_PLANE_PROBE_SECONDS)
+        self.assertEqual(backend.probes, probes_per_cell * len(cells))
+        for cell, _attempt in self.attempts:
+            self.assertEqual(self.attempts_of(cell), [1], "a wait that gave up does not re-dispatch")
+
+    def test_an_outage_is_classified_by_what_it_says_about_the_run(self):
+        self.assertTrue(runner.is_control_plane_outage(runner.TransportError("unreachable")))
+        self.assertTrue(runner.is_control_plane_outage(runner.HttpFailure("POST", "http://c/x", 502, "")))
+        self.assertTrue(runner.is_control_plane_outage(TimeoutError("read timed out")))
+        self.assertFalse(runner.is_control_plane_outage(runner.HttpFailure("POST", "http://c/x", 409, "")))
+        self.assertFalse(runner.is_control_plane_outage(runner.EvalError("dispatch returned no run id")))
+
+
 class PollingOutlivesTheNetwork(unittest.TestCase):
     """An unreachable poll says nothing about the run, which is still alive."""
 

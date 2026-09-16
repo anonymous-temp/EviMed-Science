@@ -44,6 +44,17 @@ module.exports = {
               "Arbitrary px font sizes are banned in components. Use the semantic type scale: text-caption / text-ui-sm / text-ui / text-body / text-title / text-display (see fontSize in tailwind.config.js).",
           },
           {
+            // `X instanceof Error ? X.message : String(X)` is how the control
+            // plane's English text reached researchers — 56 sites in 33 files
+            // on 2026-09-16, two of them visible in one walk. `webErrorMessage`
+            // is the one dictionary; a surface that needs different words
+            // passes `overrides` to it.
+            selector:
+              "ConditionalExpression > BinaryExpression[operator='instanceof'][right.name='Error']",
+            message:
+              "Do not render a raw Error.message. Use webErrorMessage(error, { fallback }) from @/lib/apiClient (or productErrorMessage) so every refusal reads as one Chinese sentence.",
+          },
+          {
             selector:
               "JSXAttribute[name.name='className'] Literal[value=/rounded-\\[\\d+px\\]/]",
             message:

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, Download, FolderPlus, RefreshCw, Trash2, X } from "lucide-react";
-import { createWebProject, deleteWebProject, exportWebProject, fetchWebMe, getWebProjectId, listWebProjects, setWebProjectId, type WebProject } from "@/lib/apiClient";
+import { webErrorMessage, createWebProject, deleteWebProject, exportWebProject, fetchWebMe, getWebProjectId, listWebProjects, setWebProjectId, type WebProject } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
@@ -29,7 +29,7 @@ export function WebProjectsCard({
       setProjects(items);
       setCurrentId(getWebProjectId());
     } catch (e) {
-      toast.error(`无法读取托管项目：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法读取托管项目：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }
@@ -48,7 +48,7 @@ export function WebProjectsCard({
       onProjectChange?.(project);
     } catch (e) {
       setCurrentId(getWebProjectId());
-      toast.error(`无法切换托管项目：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法切换托管项目：${webErrorMessage(e)}`);
     } finally {
       setSwitchingId(null);
     }
@@ -70,7 +70,7 @@ export function WebProjectsCard({
       setNewName("");
       await switchProject(project);
     } catch (e) {
-      toast.error(`无法创建托管项目：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法创建托管项目：${webErrorMessage(e)}`);
     } finally {
       setSwitchingId(null);
     }
@@ -86,7 +86,7 @@ export function WebProjectsCard({
       );
       toast.success(`已导出 ${project.name}。`);
     } catch (e) {
-      toast.error(`无法导出托管项目：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法导出托管项目：${webErrorMessage(e)}`);
     } finally {
       setBusyProjectId(null);
     }
@@ -115,7 +115,7 @@ export function WebProjectsCard({
       }
       toast.success(`已删除 ${project.name}。`);
     } catch (e) {
-      toast.error(`无法删除托管项目：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法删除托管项目：${webErrorMessage(e)}`);
     } finally {
       setBusyProjectId(null);
     }

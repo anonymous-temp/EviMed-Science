@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { parseFits, pixelToWorld, type FitsImage, type FitsResult } from "@/lib/fits";
 import { cn } from "@/lib/cn";
+import { parseFailureMessage } from "@/lib/errorText";
 
 /**
  * Native FITS viewer for astronomy (P1-3): renders a 2-D image HDU to a canvas
@@ -52,7 +53,7 @@ export function FitsView({ filename, bytes }: { filename: string; bytes: ArrayBu
     try {
       return { result: parseFits(bytes), error: null };
     } catch (e) {
-      return { result: null, error: e instanceof Error ? e.message : String(e) };
+      return { result: null, error: parseFailureMessage(e, "该 FITS 文件") };
     }
   }, [bytes]);
 

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { parseDoscar, type DosData } from "@/lib/dos";
 import { cn } from "@/lib/cn";
+import { parseFailureMessage } from "@/lib/errorText";
 
 /**
  * Native density-of-states viewer for materials (P1-3): renders a VASP DOSCAR
@@ -14,7 +15,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
     try {
       return { dos: parseDoscar(new TextDecoder().decode(bytes)), error: null };
     } catch (e) {
-      return { dos: null, error: e instanceof Error ? e.message : String(e) };
+      return { dos: null, error: parseFailureMessage(e, "该态密度文件") };
     }
   }, [bytes]);
 

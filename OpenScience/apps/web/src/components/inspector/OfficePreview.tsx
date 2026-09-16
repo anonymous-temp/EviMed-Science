@@ -13,6 +13,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useScrollMemory } from "@/lib/scrollMemory";
 import type { SheetHtml } from "@/lib/xlsx";
+import { parseFailureMessage } from "@/lib/errorText";
 
 /** Document-neutral canvas: black text, CJK-aware fonts, light gray backdrop. */
 const BASE_CSS = `
@@ -63,7 +64,7 @@ function RenderState({ error, loading }: { error: string | null; loading: boolea
   return null;
 }
 
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const message = (e: unknown) => (parseFailureMessage(e, "该 Office 文档"));
 
 export function DocxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: string }) {
   const { hostRef, page } = useShadowPage();

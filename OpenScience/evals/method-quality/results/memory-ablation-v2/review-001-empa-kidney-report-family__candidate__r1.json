@@ -1,0 +1,16 @@
+{
+  "arm": "candidate",
+  "armDigest": "fe0db68a1b2111f245aa9dee2ea50a89c141270d0cf21b96e7f78f5e6a65481b",
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "cell": "review-001-empa-kidney-report-family__candidate__r1",
+  "complete": false,
+  "configDigest": "37cff3d9e546243419a5f3c145eb04c7773e5969aec40eaa42f96375dc5bbc22",
+  "error": "run run_c04119a8a98a46cc9cf3d07fca6c2dd6: 9 consecutive polls failed; last: GET /api/agent-runs -> HTTP 502: <html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T05:44:22Z",
+  "repeat": 1,
+  "schemaVersion": 1
+}

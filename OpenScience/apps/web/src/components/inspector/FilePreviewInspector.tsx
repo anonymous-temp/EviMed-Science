@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Code2, Download, Eye, ExternalLink, FileSearch, History, Loader2, X } from "lucide-react";
 import type { FilePreviewInspector as FilePreviewInspectorT, FileRoot } from "@ai4s/shared";
 import { previewKindForName, type PreviewKind } from "@/lib/artifacts";
@@ -18,22 +18,45 @@ import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { ProvenancePanel } from "./ProvenancePanel";
 import { TablePreview } from "./TablePreview";
-import { TableChart } from "./TableChart";
 import { canChart } from "@/lib/tableChart";
-import { DocxView, PptxView, XlsxView } from "./OfficePreview";
-import { MoleculeView } from "./MoleculeView";
-import { MeshView } from "./MeshView";
-import { GenomeView } from "./GenomeView";
-import { FitsView } from "./FitsView";
-import { DosView } from "./DosView";
-import { BandView } from "./BandView";
-import { QCodeView } from "./QCodeView";
-import { AnomalyMapView } from "./AnomalyMapView";
-import { PhaseView } from "./PhaseView";
+
+/**
+ * One chunk per specialist viewer.
+ *
+ * These are the heaviest modules in the frontend — `MeshView` alone pulls all
+ * of three.js — and every one of them was in the entry bundle, so a browser
+ * showing the login form downloaded a 3-D renderer it would use only if
+ * somebody opened a mesh (2026-09-16 walk, D1). A preview is opened one kind at
+ * a time, which is exactly the shape `lazy` is for.
+ */
+const TableChart = lazy(() => import("./TableChart").then((m) => ({ default: m.TableChart })));
+const DocxView = lazy(() => import("./OfficePreview").then((m) => ({ default: m.DocxView })));
+const PptxView = lazy(() => import("./OfficePreview").then((m) => ({ default: m.PptxView })));
+const XlsxView = lazy(() => import("./OfficePreview").then((m) => ({ default: m.XlsxView })));
+const MoleculeView = lazy(() => import("./MoleculeView").then((m) => ({ default: m.MoleculeView })));
+const MeshView = lazy(() => import("./MeshView").then((m) => ({ default: m.MeshView })));
+const GenomeView = lazy(() => import("./GenomeView").then((m) => ({ default: m.GenomeView })));
+const FitsView = lazy(() => import("./FitsView").then((m) => ({ default: m.FitsView })));
+const DosView = lazy(() => import("./DosView").then((m) => ({ default: m.DosView })));
+const BandView = lazy(() => import("./BandView").then((m) => ({ default: m.BandView })));
+const QCodeView = lazy(() => import("./QCodeView").then((m) => ({ default: m.QCodeView })));
+const AnomalyMapView = lazy(() => import("./AnomalyMapView").then((m) => ({ default: m.AnomalyMapView })));
+const PhaseView = lazy(() => import("./PhaseView").then((m) => ({ default: m.PhaseView })));
+
+/** What a viewer chunk's arrival looks like inside the preview pane. */
+function ViewerFallback() {
+  return (
+    <div className="flex h-full min-h-0 items-center justify-center gap-2 text-ui-sm text-muted" role="status" aria-live="polite">
+      <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+      正在载入查看器…
+    </div>
+  );
+}
 import { useScrollMemory } from "@/lib/scrollMemory";
 import { cn } from "@/lib/cn";
 import { PaneTitlebarInset } from "./RightPane";
 import { toast } from "@/lib/toast";
+import { parseFailureMessage } from "@/lib/errorText";
 
 const HTML_PREVIEW_SANDBOX = "";
 
@@ -85,7 +108,7 @@ export function FilePreviewInspector({
         await openArtifactExternally(data.path, data.root);
       }
     } catch (e) {
-      toast.error(`无法处理 ${data.filename}：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法处理 ${data.filename}：${parseFailureMessage(e, "该文件")}`);
     }
   };
 
@@ -128,7 +151,7 @@ export function FilePreviewInspector({
           else setError("当前文件暂不支持在线预览。");
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) setError(parseFailureMessage(e, "该文件"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -209,16 +232,18 @@ export function FilePreviewInspector({
           />
         )}
         {!showHistory && !loading && !error && (
-          <Body
-            kind={kind}
-            url={url}
-            text={text}
-            bytes={bytes}
-            showCode={tab === "code"}
-            filename={data.filename}
-            path={data.path}
-            language={data.language}
-          />
+          <Suspense fallback={<ViewerFallback />}>
+            <Body
+              kind={kind}
+              url={url}
+              text={text}
+              bytes={bytes}
+              showCode={tab === "code"}
+              filename={data.filename}
+              path={data.path}
+              language={data.language}
+            />
+          </Suspense>
         )}
       </div>
     </div>
@@ -463,7 +488,9 @@ function TableView({ table }: { table: import("@/lib/csv").ParsedTable }) {
       )}
       <div className="min-h-0 flex-1 overflow-auto">
         {view === "chart" && chartable ? (
-          <TableChart table={table} />
+          <Suspense fallback={<ViewerFallback />}>
+            <TableChart table={table} />
+          </Suspense>
         ) : (
           <TablePreview table={table} />
         )}
@@ -506,7 +533,7 @@ export function PreviewError({
     try {
       setPointer(await probeLargeFile(path, root));
     } catch (e) {
-      setProbeError(e instanceof Error ? e.message : String(e));
+      setProbeError(parseFailureMessage(e, "该文件"));
     } finally {
       setProbing(false);
     }

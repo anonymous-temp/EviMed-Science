@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { divergingColor, parseAnomaly, type AnomalyGrid } from "@/lib/anomaly";
+import { parseFailureMessage } from "@/lib/errorText";
 
 /**
  * Climate-anomaly map (P1-3, earth): renders a gridded `.anom` field on an
@@ -14,7 +15,7 @@ export function AnomalyMapView({ filename, text }: { filename: string; text: str
     try {
       return { grid: parseAnomaly(text), error: null };
     } catch (e) {
-      return { grid: null, error: e instanceof Error ? e.message : String(e) };
+      return { grid: null, error: parseFailureMessage(e, "该异常图文件") };
     }
   }, [text]);
 

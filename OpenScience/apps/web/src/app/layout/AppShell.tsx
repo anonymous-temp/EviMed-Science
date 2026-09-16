@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Navigate, Outlet, useLocation } from "react-router";
+import { Suspense, useEffect, useState } from "react";
+import { Navigate, Outlet } from "react-router";
 import { Loader2, PanelLeft } from "lucide-react";
 import { isMacPlatform } from "@/lib/platform";
 import { Sidebar } from "@/components/sidebar/Sidebar";
@@ -13,8 +13,17 @@ import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "
 
 export function AppShell() {
   const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
-  const location = useLocation();
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
+
+  // Below `lg` the sidebar is a drawer over the content, not a column beside
+  // it, so it starts closed: at 390 px it kept its full width and left the
+  // content a sliver (2026-09-16 walk, U1). Only on mount, and only when the
+  // viewport is narrow — a desktop browser keeps whatever the person chose.
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+      useUiStore.getState().setSidebarCollapsed(true);
+    }
+  }, []);
 
   // Cmd/Ctrl+B toggles the sidebar, matching the button's tooltip.
   useEffect(() => {
@@ -60,7 +69,7 @@ export function AppShell() {
 
   if (authState === "checking") {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-bg text-muted">
+      <div className="flex h-dvh w-screen items-center justify-center bg-bg text-muted">
         <Loader2 size={18} className="animate-spin" aria-label="正在检查登录状态" />
       </div>
     );
@@ -70,8 +79,20 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-bg text-text">
+    // `h-dvh`, not `h-screen`: on a phone `100vh` is the viewport without the
+    // browser's own toolbars, so the last row of every page sat under them.
+    <div className="flex h-dvh w-screen overflow-hidden bg-bg text-text">
       <Sidebar />
+      {/* The drawer's backdrop. Only below `lg`, where the sidebar overlays the
+          content instead of sitting beside it. */}
+      {!sidebarCollapsed && (
+        <button
+          type="button"
+          aria-label="关闭侧边栏"
+          onClick={() => setSidebarCollapsed(true)}
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+        />
+      )}
       <main className="flex min-w-0 flex-1 flex-col">
         {sidebarCollapsed && (
           <div className="flex h-12 shrink-0 items-center pl-2">
@@ -85,12 +106,16 @@ export function AppShell() {
             </button>
           </div>
         )}
-        {/* Never over the session. The conversation is the product's main
-            surface and the frame inside it is the whole page; a banner above
-            it is 120 px taken from the thing someone came here to use. */}
-        {!location.pathname.startsWith("/app/chat") && <ConnectorPrompt />}
+        {/* Which pages it may appear on is the prompt's own decision — an
+            allowlist there, rather than a path test here, is what keeps it off
+            the 404 page and off the connectors tab it points at. Never over the
+            session: the conversation is the product's main surface and the
+            frame inside it is the whole page. */}
+        <ConnectorPrompt />
         <div className="min-h-0 flex-1">
-          <Outlet />
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
       {/* Every shell form gets the palette and the shortcut cheat sheet — the
@@ -98,6 +123,17 @@ export function AppShell() {
       <CommandPalette />
       <ShortcutHelp />
       <Toaster />
+    </div>
+  );
+}
+
+/** What a route chunk's arrival looks like. Content-shaped rather than a
+ *  spinner, so the page does not jump when it lands. */
+function RouteFallback() {
+  return (
+    <div className="flex h-full items-center justify-center bg-bg text-muted" role="status" aria-live="polite">
+      <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+      <span className="ml-2 text-ui-sm">正在载入…</span>
     </div>
   );
 }

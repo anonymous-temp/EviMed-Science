@@ -19,7 +19,7 @@ import {
 import { extOf, extToKind, previewKindForName, type PreviewKind } from "@/lib/artifacts";
 import { listDir, type DirEntry } from "@/lib/artifactFile";
 import { addFilesToWorkspace, uploadFilesToWorkspace } from "@/lib/backend";
-import { getWebProjectId, hasWebApi } from "@/lib/apiClient";
+import { webErrorMessage, getWebProjectId, hasWebApi } from "@/lib/apiClient";
 import { useFileDrop } from "@/lib/useFileDrop";
 import { baseName } from "@/lib/format";
 import { NotebookEditor } from "@/components/notebook/NotebookEditor";
@@ -73,7 +73,7 @@ export function FilesPage() {
         setEntries([]);
         return;
       }
-      setError(e instanceof Error ? e.message : String(e));
+      setError(webErrorMessage(e));
       setEntries([]);
     }
   }, []);
@@ -103,7 +103,7 @@ export function FilesPage() {
         toast.success(`已上传 ${names.length} 个文件。`);
       }
     } catch (e) {
-      toast.error(`文件上传失败：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`文件上传失败：${webErrorMessage(e)}`);
     } finally {
       setUploading(false);
     }
@@ -293,7 +293,7 @@ export function SessionFilesPane({
       })
       .catch((e) => {
         if (!cancelled()) {
-          setError(e instanceof Error ? e.message : String(e));
+          setError(webErrorMessage(e));
           setEntries([]);
         }
       });
@@ -316,7 +316,7 @@ export function SessionFilesPane({
         toast.success(`已上传 ${names.length} 个文件。`);
       }
     } catch (e) {
-      toast.error(`文件上传失败：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`文件上传失败：${webErrorMessage(e)}`);
     } finally {
       setUploading(false);
     }

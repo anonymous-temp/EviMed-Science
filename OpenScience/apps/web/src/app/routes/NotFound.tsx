@@ -1,10 +1,12 @@
 import { Link } from "react-router";
 import { Compass } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
+import { PageTitle } from "@/components/layout/PageTitle";
 
 export function NotFound() {
   return (
     <div className="flex h-full flex-col items-center justify-center">
+      <PageTitle page="页面不存在" />
       <EmptyState
         icon={Compass}
         title="404 · 页面不存在"

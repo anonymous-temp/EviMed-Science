@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import {
   ChevronDown,
@@ -12,7 +12,13 @@ import {
   Search,
 } from "lucide-react";
 import { downloadArtifact } from "@/lib/artifactFile";
-import { getWebProjectId, listWebAgentRuns, type WebAgentRun, type WebAgentRunStatus } from "@/lib/apiClient";
+import {
+  getWebProjectId,
+  listWebAgentRuns,
+  webErrorMessage,
+  type WebAgentRun,
+  type WebAgentRunStatus,
+} from "@/lib/apiClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { formatDateTime } from "@/lib/format";
@@ -27,7 +33,7 @@ import {
 } from "@/lib/runPresentation";
 import { capabilityTitle } from "@/lib/researchAgentUi";
 import { cn } from "@/lib/cn";
-import { toast } from "@/lib/toast";
+import { PageTitle } from "@/components/layout/PageTitle";
 
 type SincePreset = "24h" | "7d" | "30d";
 
@@ -84,6 +90,7 @@ function RunsHeader({ description }: { description: ReactNode }) {
         <FlaskConical size={17} strokeWidth={1.75} />
       </div>
       <div className="min-w-0 flex-1">
+        <PageTitle page="运行记录" />
         <h1 className="font-serif text-xl leading-tight text-text">运行记录</h1>
         <p className="mt-0.5 text-sm text-muted">{description}</p>
       </div>
@@ -183,6 +190,33 @@ function DaySection({ label, children }: { label: string; children: ReactNode })
 }
 
 /** The ledger's two empty states: nothing recorded yet, or nothing matches. */
+/** Statuses a run is still in. Drives the refresh above; a finished ledger is
+ *  not re-read. */
+const ACTIVE_RUN_STATUSES: ReadonlySet<WebAgentRunStatus> = new Set([
+  "queued",
+  "dispatching",
+  "running",
+  "canceling",
+] as WebAgentRunStatus[]);
+const RUNS_POLL_MS = 20_000;
+
+/** A read that failed, said as a read that failed. */
+function RunsLoadError({ message, onRetry, stale }: { message: string; onRetry: () => void; stale: boolean }) {
+  return (
+    <div role="alert" className="mt-3 rounded-card border border-border bg-surface px-4 py-3">
+      <p className="text-ui text-text">{stale ? "刷新运行记录失败，下面显示的是上一次读到的内容。" : "无法读取运行记录。"}</p>
+      <p className="mt-1 text-ui-sm text-muted">{message}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-2 min-h-6 rounded-input border border-border px-3 py-1 text-ui-sm text-text hover:bg-surface-2"
+      >
+        重试
+      </button>
+    </div>
+  );
+}
+
 function RunsEmptyState({ filtered }: { filtered: boolean }) {
   if (filtered) {
     return <EmptyState icon={Search} title="没有符合筛选条件的运行记录。" className="mt-8" />;
@@ -224,23 +258,54 @@ function HostedRunsView() {
   const [expanded, setExpanded] = useState<string | null>(deepLinked);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    let active = true;
-    void listWebAgentRuns()
-      .then((value) => {
-        if (!active) return;
-        setRuns(value);
-        setExpanded((current) => current ?? newestRun(value)?.id ?? null);
-      })
-      .catch((error) => {
-        if (!active) return;
-        setRuns([]);
-        toast.error(`无法加载运行记录：${error instanceof Error ? error.message : String(error)}`);
-      });
-    return () => {
-      active = false;
-    };
+  // The ledger is a trust surface, so a failed read says so.
+  //
+  // It used to set `runs = []` and show 「尚无运行记录」 (2026-09-16 walk, U3):
+  // a control plane that could not be reached and an account that has never
+  // run anything rendered the same page, and the second reading is the one
+  // people believe. The error is kept in its own state so the rows already on
+  // screen survive a failed refresh — a poll that misses must not empty a page
+  // that is correct.
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(async (): Promise<boolean> => {
+    try {
+      const value = await listWebAgentRuns();
+      setRuns(value);
+      setExpanded((current) => current ?? newestRun(value)?.id ?? null);
+      setLoadError(null);
+      return true;
+    } catch (error) {
+      setLoadError(webErrorMessage(error, { fallback: "无法读取运行记录，请检查网络后重试。" }));
+      return false;
+    }
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // While something is running the page refreshes itself. It used to fetch once
+  // and never again, so 「最近进展 X 分钟前」 froze at whatever it said when the
+  // page opened while the sidebar beside it polled every 20 s and disagreed.
+  // Gated on visibility: a background tab polling a ledger is spend with nobody
+  // reading it.
+  const hasActiveRun = (runs ?? []).some((run) => ACTIVE_RUN_STATUSES.has(run.status));
+  useEffect(() => {
+    if (!hasActiveRun) return;
+    let timer: ReturnType<typeof setTimeout>;
+    let stopped = false;
+    const tick = async () => {
+      if (stopped) return;
+      if (document.visibilityState === "visible") await load();
+      if (!stopped) timer = setTimeout(() => void tick(), RUNS_POLL_MS);
+    };
+    timer = setTimeout(() => void tick(), RUNS_POLL_MS);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [hasActiveRun, load]);
 
   // Debounce the search box so each keystroke doesn't refilter the ledger.
   useEffect(() => {
@@ -385,9 +450,11 @@ function HostedRunsView() {
           />
         )}
 
-        {runs === null && <RunsSkeleton />}
+        {runs === null && loadError === null && <RunsSkeleton />}
 
-        {runs !== null && rows.length === 0 && <RunsEmptyState filtered={anyFilter} />}
+        {loadError !== null && <RunsLoadError message={loadError} onRetry={() => void load()} stale={(runs?.length ?? 0) > 0} />}
+
+        {runs !== null && loadError === null && rows.length === 0 && <RunsEmptyState filtered={anyFilter} />}
 
         <div className="mt-1">
           {groups.map(([label, items]) => (

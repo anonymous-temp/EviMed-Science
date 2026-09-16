@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NotebookEditor } from "./NotebookEditor";
+import { WebApiError } from "@/lib/apiClient";
 
 const mocks = vi.hoisted(() => ({
   kernelExecute: vi.fn(),
@@ -72,10 +73,12 @@ describe("NotebookEditor · stopping a hung cell", () => {
   });
 
   it("a genuine kernel crash still reports the error, not an interruption", async () => {
-    mocks.kernelExecute.mockRejectedValue(new Error("kernel exited unexpectedly"));
+    mocks.kernelExecute.mockRejectedValue(
+      new WebApiError("kernel exited unexpectedly", { status: 503, code: "runtime_unavailable" }),
+    );
     render(<NotebookEditor path="analysis.ipynb" />);
     await userEvent.click(await screen.findByLabelText("运行单元格 1"));
-    expect(await screen.findByText(/内核错误：kernel exited unexpectedly/)).toBeInTheDocument();
+    expect(await screen.findByText(/内核错误：运行时出现问题，稍后重试。/)).toBeInTheDocument();
   });
 
   it("reports a missing kernel backend without desktop-only wording", async () => {

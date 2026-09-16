@@ -10,6 +10,7 @@ import {
   type MoleculeStyleMode,
 } from "@/lib/molecule";
 import { cn } from "@/lib/cn";
+import { parseFailureMessage } from "@/lib/errorText";
 
 const STYLE_OPTIONS: Array<{ value: MoleculeStyleMode; label: string }> = [
   { value: "stick", label: "球棍" },
@@ -96,7 +97,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
           }
         });
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) setError(parseFailureMessage(e, "该分子结构文件"));
       } finally {
         if (!cancelled) setRendering(false);
       }

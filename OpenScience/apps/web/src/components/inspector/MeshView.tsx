@@ -5,6 +5,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { extOf } from "@/lib/artifacts";
 import { cn } from "@/lib/cn";
+import { parseFailureMessage } from "@/lib/errorText";
 
 /**
  * Interactive 3D viewer for mesh / CAD-export files (stl, obj, ply, gltf, glb),
@@ -215,7 +216,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : String(e));
+          setError(parseFailureMessage(e, "该三维模型文件"));
           setRendering(false);
         }
       }

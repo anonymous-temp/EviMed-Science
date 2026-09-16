@@ -144,11 +144,17 @@ export function Sidebar() {
     <div
       className={cn(
         "relative h-full shrink-0 overflow-hidden",
+        // Below `lg` there is no room for a persistent column — at 390 px this
+        // kept its full width and left the content a sliver (2026-09-16 walk,
+        // U1). There it becomes an overlay drawer above the content, capped at
+        // most of the viewport so it never pushes the page sideways; from `lg`
+        // up it is the resizable column it has always been.
+        "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:max-w-[85vw] max-lg:shadow-pop",
         !dragging && "transition-[width] duration-200 ease-out",
       )}
       style={{ width: sidebarCollapsed ? 0 : width }}
     >
-      <aside className="flex h-full flex-col border-r border-border bg-surface" style={{ width }}>
+      <aside className="flex h-full max-w-full flex-col border-r border-border bg-surface" style={{ width }}>
         <div className="px-4 pb-3 pt-4">
           <div className="flex items-baseline gap-1.5">
             <img src={evimedMark} alt="EviMed" className="h-[21px] w-[21px] self-center" />

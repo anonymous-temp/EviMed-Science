@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, ShieldCheck, ShieldX } from "lucide-react";
-import { listWebSecurityEvents, type WebSecurityEvent } from "@/lib/apiClient";
+import { webErrorMessage, listWebSecurityEvents, type WebSecurityEvent } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 
@@ -13,7 +13,7 @@ export function WebSecurityCard() {
     try {
       setEvents(await listWebSecurityEvents(20));
     } catch (e) {
-      toast.error(`无法读取托管安全日志：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法读取托管安全日志：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }

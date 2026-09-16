@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectSwitcher } from "./ProjectSwitcher";
+import { WebApiError } from "@/lib/apiClient";
 
 const state = {
   projects: [
@@ -52,12 +53,12 @@ describe("ProjectSwitcher", () => {
   // A switch that fails has to say so in the menu. Closing on failure would
   // read as success against a project the account never moved to.
   it("keeps the menu open and shows why a switch failed", async () => {
-    state.select.mockRejectedValue(new Error("该项目当前不可用。"));
+    state.select.mockRejectedValue(new WebApiError("project unavailable", { status: 503, code: "runtime_unavailable" }));
     render(<ProjectSwitcher />);
     await userEvent.click(screen.getByRole("button", { name: "当前项目：Default Project" }));
     await userEvent.click(screen.getByRole("option", { name: /Paper 1/ }));
 
-    expect(await screen.findByText("该项目当前不可用。")).toBeInTheDocument();
+    expect(await screen.findByText("运行时出现问题，稍后重试。")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /Paper 1/ })).toBeInTheDocument();
   });
 

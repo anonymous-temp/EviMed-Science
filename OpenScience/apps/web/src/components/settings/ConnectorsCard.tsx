@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, KeyRound, Trash2 } from "lucide-react";
-import {
+import { webErrorMessage,
   fetchWebConnectors,
   removeWebConnectorCredential,
   saveWebConnectorCredential,
@@ -33,7 +33,7 @@ export function ConnectorsCard() {
         setConnectors(list);
         setError(null);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) => setError(webErrorMessage(err)));
 
   useEffect(() => {
     let active = true;
@@ -42,7 +42,7 @@ export function ConnectorsCard() {
         if (active) setConnectors(list);
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(webErrorMessage(err));
       });
     return () => {
       active = false;
@@ -63,7 +63,7 @@ export function ConnectorsCard() {
       );
       await reload();
     } catch (err) {
-      toast.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`保存失败：${webErrorMessage(err)}`);
     } finally {
       setBusy(null);
     }
@@ -76,7 +76,7 @@ export function ConnectorsCard() {
       toast.success(`已移除你的 ${connector.title} 凭据。`);
       await reload();
     } catch (err) {
-      toast.error(`移除失败：${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`移除失败：${webErrorMessage(err)}`);
     } finally {
       setBusy(null);
     }
