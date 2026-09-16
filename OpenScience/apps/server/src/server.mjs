@@ -2623,7 +2623,7 @@ export function createWebApiApp(overrides = {}) {
 
       if (pathname === "/api/agent-runs" && req.method === "GET") {
         const ctx = await context(req, res);
-        sendJson(res, 200, { data: await agentRuns.recover(ctx.project) });
+        sendJson(res, 200, { data: await agentRuns.withPlanProgress(ctx.project, await agentRuns.recover(ctx.project)) });
         return;
       }
 

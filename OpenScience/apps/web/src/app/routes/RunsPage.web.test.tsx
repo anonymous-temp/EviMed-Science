@@ -97,6 +97,34 @@ describe("RunsPage (hosted web)", () => {
     ]);
   });
 
+  it("opens a deliverable in place instead of only downloading it", async () => {
+    // 2026-09-16 review, P2 #14: a run's output was a list of paths to download.
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "预览 report.docx" }));
+    expect(await screen.findByRole("dialog", { name: "预览 report.docx" })).toBeInTheDocument();
+    expect(downloadArtifact).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "预览 report.docx" })).toBeNull();
+  });
+
+  it("shows a running run's deliverables as steps, and a finished run without them", async () => {
+    // 2026-09-16 review, P2 #14.
+    listWebAgentRuns.mockResolvedValue([webRun({
+      id: "run-live", status: "running", finishedAt: null, durationMs: null, artifacts: [], observedToolCalls: 12,
+      planItems: [
+        { id: "d1", title: "证据综述报告", status: "accepted", attempts: 1 },
+        { id: "d2", title: "文献计量分析", status: "rejected", attempts: 2 },
+        { id: "d3", title: "方法学附录", status: "planned", attempts: 0 },
+      ],
+    } as Partial<WebAgentRun>)]);
+    renderPage();
+    const steps = await screen.findByRole("list", { name: "交付进度" });
+    expect(screen.getByText("交付进度 1/3")).toBeInTheDocument();
+    expect(steps).toHaveTextContent("证据综述报告已通过");
+    expect(steps).toHaveTextContent("文献计量分析需修改 · 第 2 次提交");
+    expect(steps).toHaveTextContent("方法学附录待开始");
+  });
+
   it("groups runs under sticky day labels and expands the newest with its recipe", async () => {
     renderPage();
     // Neither run recorded a brief, so each is titled by the capability that
@@ -215,7 +243,7 @@ describe("RunsPage (hosted web)", () => {
 
   it("downloads an artifact through the web API when clicked", async () => {
     renderPage();
-    await userEvent.click(await screen.findByRole("button", { name: /report\.docx/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /^下载 report\.docx/ }));
     expect(downloadArtifact).toHaveBeenCalledWith("output/report.docx", "workspace");
   });
 
@@ -310,7 +338,7 @@ describe("RunsPage (hosted web)", () => {
     // the path, because a refused package presented like an accepted one is
     // the failure the gate exists to prevent, moved into the UI.
     expect(screen.getAllByText("未经核验")).toHaveLength(2);
-    await userEvent.click(screen.getByRole("button", { name: /clinical-evidence-report\.md/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^下载 clinical-evidence-report\.md/ }));
     expect(downloadArtifact).toHaveBeenCalledWith("deliverables/clinical-evidence-report.md", "workspace");
   });
 

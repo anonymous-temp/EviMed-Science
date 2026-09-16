@@ -669,6 +669,22 @@ export interface WebAgentRun {
    */
   phaseIllegalTransitions?: number;
   phaseNotices?: string[];
+  /**
+   * The deliverables a running run is working through, from its own plan
+   * projection. Sent for running runs only; a finished run's outcome is its
+   * artifacts.
+   */
+  planItems?: WebRunPlanItem[];
+}
+
+export type WebRunPlanItemStatus = "planned" | "queued" | "delegated" | "submitted" | "accepted" | "rejected" | "failed";
+
+export interface WebRunPlanItem {
+  id: string;
+  title: string;
+  status: WebRunPlanItemStatus;
+  /** Submissions so far; above one means the gate sent it back at least once. */
+  attempts: number;
 }
 
 
