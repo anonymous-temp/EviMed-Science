@@ -1077,6 +1077,90 @@ class NetworkFailureIsolation(unittest.TestCase):
         self.assertIn(marker, source, "the per-cell isolation clause no longer catches raw socket failures")
 
 
+class PollingOutlivesTheNetwork(unittest.TestCase):
+    """An unreachable poll says nothing about the run, which is still alive."""
+
+    class Flaky(runner.Transport):
+        """Fails the first `failures` polls the way the WAN did, then answers."""
+
+        def __init__(self, failures, terminal_after=1, error=None):
+            self.failures = failures
+            self.terminal_after = terminal_after
+            self.error = error or TimeoutError("read timed out")
+            self.polls = 0
+
+        def request(self, method, url, body=None, headers=None, timeout=60):
+            self.polls += 1
+            if self.polls <= self.failures:
+                raise self.error
+            status = "succeeded" if self.polls >= self.failures + self.terminal_after else "running"
+            return 200, {"data": [{"id": "run-1", "status": status}]}, {}
+
+    def test_transient_failures_are_waited_out_and_the_run_is_still_found(self):
+        transport = self.Flaky(failures=3)
+        client = runner.PlatformClient(transport, "http://local.invalid")
+        naps = []
+        run = client.wait_for_run("run-1", timeout_seconds=600, poll_seconds=5, sleep=naps.append)
+        self.assertEqual(run["status"], "succeeded")
+        self.assertEqual(transport.polls, 4)
+        # Doubling back-off from the poll interval, never above the cap.
+        self.assertEqual(naps, [10, 20, 40])
+
+    def test_a_server_side_5xx_is_transient_and_a_4xx_is_not(self):
+        transport = self.Flaky(failures=1, error=runner.HttpFailure("GET", "/api/agent-runs", 502, "bad gateway"))
+        client = runner.PlatformClient(transport, "http://local.invalid")
+        self.assertEqual(client.wait_for_run("run-1", 600, 5, lambda _seconds: None)["status"], "succeeded")
+        transport = self.Flaky(failures=1, error=runner.HttpFailure("GET", "/api/agent-runs", 401, "session expired"))
+        client = runner.PlatformClient(transport, "http://local.invalid")
+        with self.assertRaises(runner.HttpFailure):
+            client.wait_for_run("run-1", 600, 5, lambda _seconds: None)
+
+    def test_a_dead_server_still_ends_the_cell(self):
+        transport = self.Flaky(failures=runner.POLL_FAILURE_LIMIT + 1)
+        client = runner.PlatformClient(transport, "http://local.invalid")
+        naps = []
+        with self.assertRaises(runner.EvalError) as caught:
+            client.wait_for_run("run-1", 600, 5, naps.append)
+        self.assertIn("consecutive polls failed", str(caught.exception))
+        self.assertEqual(len(naps), runner.POLL_FAILURE_LIMIT)
+        self.assertTrue(all(nap <= runner.POLL_FAILURE_BACKOFF_CAP_SECONDS for nap in naps))
+
+    def test_unreachable_and_non_json_answers_are_transport_errors(self):
+        # `EvalError` also names logic failures that must end a cell at once;
+        # only the transport's own two are waited out.
+        self.assertTrue(issubclass(runner.TransportError, runner.EvalError))
+        source = RUNNER_FILE.read_text(encoding="utf-8")
+        self.assertIn("raise TransportError(\n                f\"{method} {url} failed:", source)
+        self.assertIn('raise TransportError(f"{method} {url} returned non-JSON', source)
+
+
+class SecondAttemptsAreNewDispatches(unittest.TestCase):
+    """A cell whose first attempt died must not be re-attached to its corpse."""
+
+    def test_the_attempt_count_is_read_off_whatever_is_on_disk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "cell.json"
+            self.assertEqual(runner.read_cell_attempt(path), 0, "nothing on disk: first attempt next")
+            path.write_text(json.dumps({"complete": False, "error": "read timed out"}), encoding="utf-8")
+            self.assertEqual(runner.read_cell_attempt(path), 1, "a record from before the field is one attempt")
+            path.write_text(json.dumps({"complete": True, "attempt": 3, "excluded": {"reason": "transcript_unavailable"}}), encoding="utf-8")
+            self.assertEqual(runner.read_cell_attempt(path), 3)
+            path.write_text("not json", encoding="utf-8")
+            self.assertEqual(runner.read_cell_attempt(path), 0)
+
+    def test_a_later_attempt_carries_a_suffix_and_the_first_does_not(self):
+        # The first attempt keeps the plain id so every cell already on disk
+        # stays attributable to the run it came from.
+        source = RUNNER_FILE.read_text(encoding="utf-8")
+        self.assertIn('dispatch_id = f"{dispatch_id}_a{attempt}"', source)
+        self.assertIn('pending.append({**plan, "attempt": read_cell_attempt(path) + 1})', source)
+
+    def test_excluded_cells_are_re_measured_only_by_flag(self):
+        source = RUNNER_FILE.read_text(encoding="utf-8")
+        self.assertIn('parser.add_argument("--rerun-excluded"', source)
+        self.assertIn('if existing is not None and rerun_excluded and existing.get("excluded"):', source)
+
+
 class DispatchIdentity(unittest.TestCase):
     """A cell measured on a different build is a different measurement."""
 

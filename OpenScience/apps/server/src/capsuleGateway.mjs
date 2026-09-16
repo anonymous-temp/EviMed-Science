@@ -1,11 +1,15 @@
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
+import { recallAcrossMemory } from "./memoryRecall.mjs";
 import { HttpError, readJson, sendError, sendJson } from "./security.mjs";
 
 export const CAPSULE_GATEWAY_PATH = "/internal/capsules/v1";
 
 /** The workload credential, never a caller-supplied field, fixes account and project.
- * @param {{ runtimeManager: any, store: any, service: any }} dependencies */
-export function createCapsuleGatewayHandler({ runtimeManager, store, service }) {
+ *
+ * `memorySubstrate` is the research-memory half of a recall; without it the
+ * gateway answers from capsule facts alone, as it did before 2026-09-16.
+ * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any }} dependencies */
+export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null }) {
   const windows = new Map();
   /** @param {any} req @param {any} res @param {(failure:any)=>void} [onFailure] */
   return async (req, res, onFailure) => {
@@ -48,8 +52,8 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service }) 
         if (body.scope !== undefined && !["all", "capsule", "conversation", "agenda"].includes(body.scope)) {
           throw new HttpError(400, "capsule_payload_invalid", "Invalid memory scope.");
         }
-        sendJson(res, 200, await service.recall(currentUser.id, {
-          ...body, projectId: identity.projectId, accountCreatedAt: currentUser.accountCreatedAt,
+        sendJson(res, 200, await recallAcrossMemory({ capsules: service, memorySubstrate }, currentUser, {
+          ...body, projectId: identity.projectId,
         }));
       } else {
         // A model's claim that its input was explicit is not a user's approval.

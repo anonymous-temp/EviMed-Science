@@ -87,6 +87,24 @@ test("injects relevant memory records as untrusted research context", async () =
   });
 });
 
+test("the recalled memory is returned on its own for the run's memory file, and is empty when nothing was recalled", async () => {
+  // One renderer, two readers: the root sees the block inside its research
+  // context, and the socket hands the same bytes to every delegated child. A
+  // second rendering here would be the drift that lets the child's memory
+  // stop matching the root's without anything going red.
+  await withProject(async (project) => {
+    const some = await prepareResearchContext(project, { mode: "open-domain" }, config, {
+      memories: [{ id: "memo_1", content: "回答尽量简短", kind: "preference", scope: "user", memoryType: "structured" }],
+    });
+    assert.match(some.memoryContext, /<evimed-memory index="1" id="memo_1" type="structured" kind="preference" scope="user">/);
+    assert.match(some.memoryContext, /回答尽量简短/);
+    assert.ok(some.system.includes(some.memoryContext), "the file is the block the root reads, not a second rendering");
+    const none = await prepareResearchContext(project, { mode: "open-domain" }, config, { memories: [] });
+    assert.equal(none.memoryContext, "");
+    assert.match(none.system, /未检索到相关科研记忆/);
+  });
+});
+
 test("injects the live specialist registry into open-domain routing without forcing unrelated calls", async () => {
   await withProject(async (project) => {
     const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config, {

@@ -20,6 +20,10 @@ export const SOURCES_DIR = '.evimed-sources'
 export const DELIVERABLES_DIR = 'deliverables'
 /** Read-only mount point for authorized dataset partitions (§24.5). */
 export const DATA_DIR = 'data'
+/** The researcher's personal knowledge base, synced read-only into the
+ *  workspace by the control plane before each dispatch. Named here so the
+ *  root prompt, the delegation prompt and the sync agree on one directory. */
+export const KNOWLEDGE_DIR = '.evimed-knowledge'
 /**
  * Where the workspace is mounted inside the runtime container.
  *
@@ -45,10 +49,17 @@ export const workspaceLayout = Object.freeze({
   sourcesDir: SOURCES_DIR,
   deliverablesDir: DELIVERABLES_DIR,
   dataDir: DATA_DIR,
+  knowledgeDir: KNOWLEDGE_DIR,
   /** Question the control plane holds; the workspace copy is a read-only mirror. */
   briefFile: `${BRIEF_DIR}/research-brief.md`,
   /** Knowledge slices + memory + capability catalogue, injected for each dispatch revision. */
   briefContextFile: `${BRIEF_DIR}/context.md`,
+  /** The memories the control plane recalled for this dispatch, rendered the
+   *  way the root sees them. The root already receives them inside `context.md`;
+   *  this copy exists so a delegation can hand its child the same block
+   *  verbatim — the child never sees `context.md`, and a parent's paraphrase of
+   *  a memory is a memory without provenance. Empty when nothing was recalled. */
+  briefMemoryFile: `${BRIEF_DIR}/memory.md`,
   /** Run identity handed into the container. */
   briefIndexFile: `${BRIEF_DIR}/index.json`,
   /** The only plan artifact in the whole system (§7.1). */

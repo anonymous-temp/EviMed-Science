@@ -64,9 +64,10 @@ export {
   isRegulatedContractKind,
 } from './src/contractKinds.mjs'
 
-// workspaceLayout — 15 exports
+// workspaceLayout — 16 exports
 export {
   BRIEF_DIR,
+  KNOWLEDGE_DIR,
   CAPSULE_DIR,
   DATA_DIR,
   DELIVERABLES_DIR,
