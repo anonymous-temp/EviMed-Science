@@ -4,6 +4,9 @@ import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/cn";
 import { CodeBlock } from "./CodeBlock";
+import { ClaimCitation } from "./ClaimCitation";
+import { claimIdsFromHref, linkClaimMarkers, type ClaimEvidence } from "@/lib/claimCitations";
+import { sanitizeAssistantText } from "@/lib/sanitizeAssistantText";
 
 /** Two contexts render markdown: chat bubbles (theme colors, compact) and the
  *  file-preview "paper" (document-neutral black-on-white, editorial scale —
@@ -64,12 +67,22 @@ export function MarkdownViewer({
   children,
   className,
   variant = "chat",
+  claims,
 }: {
   children: string;
   className?: string;
   variant?: Variant;
+  /** A report's evidence matrix, by claim id: each run of claim markers in the
+   *  text becomes a citation that opens what the sentence rests on. */
+  claims?: Map<string, ClaimEvidence>;
 }) {
   const s = STYLES[variant];
+  // Claim markers become citations when there is a matrix to open; whatever
+  // bookkeeping is left — HTML comments and bracket claim markers outside code —
+  // is removed rather than printed. react-markdown renders a raw `<!-- … -->` as
+  // visible text, so every report opened without its matrix showed the reader
+  // `<!-- claim:CLM-001 -->` after each finding (2026-09-16).
+  const source = sanitizeAssistantText(claims ? linkClaimMarkers(children) : children);
   return (
     <div className={cn(s.root, className)}>
       <ReactMarkdown
@@ -78,11 +91,15 @@ export function MarkdownViewer({
         remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
           p: ({ children }) => <p className={s.p}>{children}</p>,
-          a: ({ children, href }) => (
-            <a href={href} className={s.a}>
-              {children}
-            </a>
-          ),
+          a: ({ children, href }) => {
+            const ids = claims ? claimIdsFromHref(href) : null;
+            if (ids && claims) return <ClaimCitation ids={ids} claims={claims} />;
+            return (
+              <a href={href} className={s.a}>
+                {children}
+              </a>
+            );
+          },
           code: ({ children }) => <code className={s.code}>{children}</code>,
           // Block code: the fence is highlighted and gets a copy button. The
           // language and raw text come from the inner <code> element's props
@@ -123,7 +140,7 @@ export function MarkdownViewer({
           td: ({ children }) => <td className={s.td}>{children}</td>,
         }}
       >
-        {children}
+        {source}
       </ReactMarkdown>
     </div>
   );
