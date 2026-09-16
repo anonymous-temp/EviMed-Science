@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input, inputClasses } from "@/components/ui/Input";
 import {
   downloadCapsuleExport, exportCapsule, importCapsule, listCapsuleExports, previewCapsuleImport,
@@ -19,6 +20,10 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
   const [history, setHistory] = useState<CapsuleExportSnapshot[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  /** The snapshot a researcher asked to revoke, held until they confirm.
+   *  Revoking is permanent — every copy already handed out stops importing —
+   *  and it was one click with no confirmation (2026-09-16 review, U11). */
+  const [revoking, setRevoking] = useState<CapsuleExportSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +57,22 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
   });
 
   return <Card title="分享与导入" hint="默认只分享已采用的研究方法与工作偏好。原始来源文档、账户标识和运行记录不会随包导出。">
+    {revoking && <ConfirmDialog
+      title="撤销这份快照？"
+      body={`撤销后，这份快照在本服务上不能再被导入，且无法恢复；已经下载到别处的离线副本收不回来。快照时间 ${new Date(revoking.createdAt).toLocaleString()}，共 ${revoking.entryCount} 条。`}
+      confirmLabel="撤销快照"
+      onCancel={() => setRevoking(null)}
+      onConfirm={() => {
+        const snapshot = revoking;
+        const owner = capsuleId;
+        setRevoking(null);
+        // The button that opened this dialog only exists inside `capsuleId &&`,
+        // so `owner` is a string here; narrowing it keeps that true rather than
+        // asserting it.
+        if (!owner) return;
+        void perform(async () => { await revokeCapsuleExport(owner, snapshot); setRefresh(value => value + 1); });
+      }}
+    />}
     <div className="space-y-5">
       <p className="text-ui-sm text-muted">撤销仅对本服务上的快照生效，已下载的离线副本无法收回。更新会生成新的独立快照。</p>
       {error && <div role="alert" className="space-y-2 text-ui-sm text-error"><p>{error}</p><Button variant="ghost" disabled={busy} onClick={() => { setError(null); setRefresh(value => value + 1); }}>刷新记录</Button></div>}
@@ -99,7 +120,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
           <p className="text-caption text-muted">分享范围：{snapshot.scopes.map(scope => ({ workstyle: "工作方式", "+profile": "个人背景", "+knowledge": "知识与项目事实" })[scope] ?? scope).join("、")}</p>
           <div className="flex flex-wrap gap-2"><Button size="sm" variant="ghost" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
             <Button size="sm" variant="ghost" disabled={busy || !exportPassword} onClick={() => void createExport(snapshot.id, snapshot.scopes)}>更新快照</Button>
-            <Button size="sm" variant="ghost" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(async () => { await revokeCapsuleExport(capsuleId, snapshot); setRefresh(value => value + 1); })}>撤销此快照</Button></div>
+            <Button size="sm" variant="ghost" disabled={busy || snapshot.status === "revoked"} onClick={() => setRevoking(snapshot)}>撤销此快照</Button></div>
         </div>)}
         {historyCursor && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void perform(async () => { const page = await listCapsuleExports(capsuleId, historyCursor); if (currentCapsuleId.current === capsuleId) { setHistory(items => [...items, ...page.items]); setHistoryCursor(page.nextCursor); } })}>更多导出记录</Button>}
       </section>}

@@ -132,7 +132,7 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
           <Textarea label="用途说明" disabled={busy} value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={2} />
           <div className="flex gap-2"><Button type="submit" loading={busy} disabled={!title.trim()}>创建</Button><Button variant="ghost" onClick={() => setCreating(false)}>取消</Button></div>
         </form></Card>}
-        {loading ? <MemorySkeleton /> : capsules.length === 0 ? (error ? null : <EmptyState icon={Brain} title={view === "trash" ? "回收站为空" : "还没有记忆胶囊"}
+        {loading ? <MemorySkeleton /> : capsules.length === 0 ? (error ? null : <EmptyState icon={Brain} title={view === "trash" ? "回收站为空" : "还没有方法胶囊"}
           description={view === "trash" ? "移入回收站的胶囊可以在这里恢复。" : "从一条常用的研究方法或写作偏好开始。"} />) : (
           <div className="grid items-start gap-5 lg:grid-cols-3">
             <div className="space-y-2">
