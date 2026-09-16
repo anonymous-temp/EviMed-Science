@@ -1168,7 +1168,8 @@ export function createWebApiApp(overrides = {}) {
         for (const run of running) {
           // Final by construction: the container this was read from is being
           // killed, so the run cannot produce another message.
-          preStopTranscripts.put(run.id, await collectRunTranscripts(runtimeManager, project, run));
+          const children = await agentRuns.childSessionsOf(project, run).catch(() => []);
+          preStopTranscripts.put(run.id, await collectRunTranscripts(runtimeManager, project, run, { children }));
         }
         return "captured";
       })();
@@ -1414,8 +1415,12 @@ export function createWebApiApp(overrides = {}) {
           // A stop already read this one while its container was alive. That
           // snapshot is the whole conversation; a live read here would answer
           // `runtime_not_running` and record a gap that does not exist.
+          // The children come from the run's own projection, not from the
+          // parent's event log — see `collectRunTranscripts`. Read before the
+          // capture so both the live path and the pre-stop path get them.
+          const children = await agentRuns.childSessionsOf(project, run).catch(() => []);
           const sessions = preStopTranscripts.take(run.id)
-            ?? await collectRunTranscripts(runtimeManager, project, run);
+            ?? await collectRunTranscripts(runtimeManager, project, run, { children });
           const receipt = await persistRunTranscript({ project, run, sessions });
           await agentRuns.recordLearning(project, run.id, { transcript: receipt });
           if (receipt.completeness !== "complete") {
@@ -1527,7 +1532,10 @@ export function createWebApiApp(overrides = {}) {
       // ledger, which no API exposes. Appended only when the count is zero, so
       // an ordinary run gains no notice, and readable through /api/agent-runs
       // where the batch can collect the distribution.
-      if (memoryResult.extracted === 0) {
+      // `disabled` is not "extracted nothing": the deployment asked for no
+      // memory writes and got none, which is a setting rather than an outcome
+      // worth a notice on every single run.
+      if (memoryResult.extracted === 0 && memoryResult.source !== "disabled") {
         await agentRuns.appendQualityNotices(project, run.id, [
           `记忆抽取未产出记录：消息 ${messages.length} 条、候选 ${memoryResult.proposed} 条、`
           + `采纳 ${memoryResult.extracted} 条、驳回 ${memoryResult.rejected} 条`

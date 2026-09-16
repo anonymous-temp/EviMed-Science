@@ -7,6 +7,7 @@ import test from "node:test";
 
 import {
   PreStopTranscripts,
+  TRANSCRIPT_MISSING_REASONS,
   collectRunTranscripts,
   persistRunTranscript,
   pruneRunTranscripts,
@@ -498,4 +499,111 @@ test("a snapshot nobody drains is evicted rather than held for the life of the p
   refreshed.put("run_3", sessions("c"));
   assert.equal(refreshed.take("run_2"), null, "run_1 was re-put, so run_2 became the oldest");
   assert.deepEqual(refreshed.take("run_1"), sessions("a2"));
+});
+
+// --- children ---------------------------------------------------------------
+//
+// The capture used to find children only through `subagent/descriptor` events
+// in the parent's log, which this kernel does not emit. Every transcript of a
+// delegating run therefore held the orchestrator alone — and still called
+// itself complete, because a gap was only recorded for a session someone tried
+// to read.
+
+function delegatingRoot(sessionId, { accepted = 1, failed = 0 } = {}) {
+  const parts = [];
+  for (let index = 0; index < accepted; index += 1) parts.push({ type: "tool", tool: "evimed_delegate", status: "completed" });
+  for (let index = 0; index < failed; index += 1) parts.push({ type: "tool", tool: "evimed_delegate", status: "error" });
+  return {
+    sessionId,
+    parentSessionId: null,
+    label: "root",
+    capability: null,
+    error: null,
+    transcript: {
+      sessionId,
+      messages: [{ role: "assistant", source: "assistant", seq: 1, time: 1, turn: 1, step: 1, parts }],
+      lastSeq: 1,
+      exhausted: true,
+      subagents: [],
+    },
+  };
+}
+
+function childSession(sessionId, parentSessionId, messages = 1) {
+  return {
+    sessionId,
+    parentSessionId,
+    label: "d1",
+    capability: "clinical-evidence-synthesis",
+    error: null,
+    transcript: {
+      sessionId,
+      messages: Array.from({ length: messages }, (_unused, index) => ({
+        role: "assistant", source: "assistant", seq: index, time: index, turn: 1, step: index,
+        parts: [{ type: "text", text: "child work" }],
+      })),
+      lastSeq: messages - 1,
+      exhausted: true,
+      subagents: [],
+    },
+  };
+}
+
+test("a delegation whose child was never discovered is a recorded gap, not a complete transcript", () => {
+  const { header } = serializeRunTranscript({
+    runId: "run_1",
+    capturedAt: CAPTURED_AT,
+    sessions: [delegatingRoot("root-1", { accepted: 2 })],
+  });
+  assert.equal(header.completeness, "partial", "an orchestrator-only record of a delegating run is not complete");
+  assert.deepEqual(header.missing.map((gap) => gap.reason), ["child_undiscovered"]);
+  assert.ok(TRANSCRIPT_MISSING_REASONS.includes("child_undiscovered"));
+});
+
+test("the same run with its children collected is complete", () => {
+  const { header } = serializeRunTranscript({
+    runId: "run_1",
+    capturedAt: CAPTURED_AT,
+    sessions: [delegatingRoot("root-1", { accepted: 2 }), childSession("child-a", "root-1"), childSession("child-b", "root-1")],
+  });
+  assert.equal(header.completeness, "complete");
+  assert.deepEqual(header.missing, []);
+  assert.equal(header.sessions.filter((record) => record.parentSessionId != null).length, 2);
+});
+
+test("a refused delegation started no child, so it is not counted as a missing one", () => {
+  // `evimed_delegate` answers with an error for an unknown capability or an
+  // unmet dependency. Counting those would make every such run permanently
+  // partial and teach the corpus that work is missing when none was done.
+  const { header } = serializeRunTranscript({
+    runId: "run_1",
+    capturedAt: CAPTURED_AT,
+    sessions: [delegatingRoot("root-1", { accepted: 0, failed: 3 })],
+  });
+  assert.equal(header.completeness, "complete");
+  assert.deepEqual(header.missing, []);
+});
+
+test("children the caller seeds are fetched even though the parent log names none", async () => {
+  const asked = [];
+  const runtimeManager = {
+    async sessionTranscript(_project, sessionId) {
+      asked.push(sessionId);
+      return { sessionId, messages: [], lastSeq: -1, exhausted: true, subagents: [] };
+    },
+  };
+  const collected = await collectRunTranscripts(runtimeManager, {}, { id: "run_1", sessionId: "root-1" }, {
+    children: [
+      { sessionId: "child-a", label: "d1", capability: "clinical-evidence-synthesis" },
+      { sessionId: "child-b" },
+      // Refused by construction: an empty id, and the root itself — seeding
+      // either would make the walk re-read or loop on the parent.
+      { sessionId: "   " },
+      { sessionId: "root-1" },
+    ],
+  });
+  assert.deepEqual(asked, ["root-1", "child-a", "child-b"]);
+  assert.deepEqual(collected.map((session) => session.parentSessionId), [null, "root-1", "root-1"]);
+  assert.equal(collected[1].capability, "clinical-evidence-synthesis", "the capability travels with the child, for the corpus");
+  assert.equal(collected[2].label, "subagent", "a child with no label still has a usable one");
 });

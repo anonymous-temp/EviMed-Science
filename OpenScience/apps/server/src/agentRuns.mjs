@@ -4869,6 +4869,44 @@ export class AgentRunStore {
     return { adopted };
   }
 
+  /**
+   * Every child session this run started, for the transcript capture.
+   *
+   * The run-side projection is the only place that knows them: the kernel does
+   * not emit `subagent/descriptor` into the parent's log at this pin, so the
+   * transcript walk finds no children on its own and records the orchestrator
+   * alone. `runSideActivity` reads the same file but filters to `running`
+   * children, which at finish time is none of them — this wants all of them,
+   * settled included, because a settled child is exactly the one whose work
+   * needs keeping.
+   *
+   * Returns `[]` for a run that never delegated and for a projection that
+   * cannot be read; the caller's own delegation count is what turns the second
+   * case into a recorded gap rather than a silent one.
+   *
+   * @param {Record<string, any>} project @param {Record<string, any>} run
+   * @returns {Promise<{ sessionId: string, label: string, capability: string|null }[]>}
+   */
+  async childSessionsOf(project, run) {
+    const read = await readRunStateProjection(project, project.workspaceDir, run);
+    if (read.state !== "read") return [];
+    const seen = new Set();
+    /** @type {{ sessionId: string, label: string, capability: string|null }[]} */
+    const children = [];
+    for (const child of read.projection?.subagents ?? []) {
+      const sessionId = typeof child?.childSessionId === "string" ? child.childSessionId.trim() : "";
+      if (!sessionId || seen.has(sessionId)) continue;
+      seen.add(sessionId);
+      children.push({
+        sessionId,
+        label: typeof child?.deliverableId === "string" && child.deliverableId ? child.deliverableId : "subagent",
+        capability: typeof child?.capability === "string" && child.capability ? child.capability : null,
+      });
+      if (children.length >= 64) break;
+    }
+    return children;
+  }
+
   async closeProject(project, status = "canceled") {
     const runs = await this.list(project);
     for (const run of runs.filter((item) => item.status === "running")) {
