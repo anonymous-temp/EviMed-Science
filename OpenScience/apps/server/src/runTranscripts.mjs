@@ -172,6 +172,66 @@ export async function collectRunTranscripts(runtimeManager, project, run, option
 }
 
 /**
+ * Transcripts read while the container was still alive, held until the runs
+ * they belong to are finished.
+ *
+ * Hidden knowledge: `onRunFinished` says "this is the only moment the
+ * conversation is still readable", and on the ordinary path it is right — the
+ * terminal write has not released the container yet. Every *deliberate* stop
+ * broke that assumption in the same shape: `stop()`, `closeAll()`, the
+ * workload-token-refresh failure and the quota guard all remove the runtime
+ * from the manager's map and close the container, and only then notify, which
+ * is what finishes the runs. By the time the capture ran there was nothing to
+ * read, so every run finished by a stop recorded `unavailable
+ * (history_unavailable)`. Measured 2026-09-16 on the production volume: 6 of 27
+ * transcripts, and three of those six were `succeeded` — delivered packages the
+ * distillation corpus can never learn from.
+ *
+ * So the snapshot is taken one step earlier, while the container is alive, and
+ * waits here. It is final by construction: the container it was read from is
+ * being killed, so the run cannot produce another message.
+ *
+ * Read-once, and capped. A snapshot is drained by the finish it was taken for,
+ * which follows within the same stop; the cap is for the case where that finish
+ * never arrives (a ledger that cannot be read mid-loop), so a missed drain
+ * costs one eviction rather than holding megabytes for the process's life.
+ */
+export class PreStopTranscripts {
+  /** @param {{ maxRuns?: number }} [options] */
+  constructor({ maxRuns = 8 } = {}) {
+    /** @type {Map<string, CollectedSession[]>} */
+    this.byRun = new Map();
+    // A project runs a couple of runs at once, not eight. The cap is the
+    // failure bound, not the working set.
+    this.maxRuns = Math.max(1, maxRuns);
+  }
+
+  /** @param {string} runId @param {CollectedSession[]} sessions */
+  put(runId, sessions) {
+    if (!runId || !Array.isArray(sessions) || sessions.length === 0) return;
+    this.byRun.delete(runId);
+    this.byRun.set(runId, sessions);
+    // Insertion-ordered, so the first key is the oldest snapshot.
+    while (this.byRun.size > this.maxRuns) {
+      const oldest = this.byRun.keys().next().value;
+      if (oldest === undefined) break;
+      this.byRun.delete(oldest);
+    }
+  }
+
+  /** @param {string} runId @returns {CollectedSession[] | null} */
+  take(runId) {
+    const sessions = this.byRun.get(runId) ?? null;
+    if (sessions) this.byRun.delete(runId);
+    return sessions;
+  }
+
+  get size() {
+    return this.byRun.size;
+  }
+}
+
+/**
  * @param {CollectedSession} session
  * @returns {{ record: TranscriptSessionRecord, gaps: TranscriptGap[] }}
  */

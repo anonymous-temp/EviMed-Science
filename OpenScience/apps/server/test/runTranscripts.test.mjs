@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  PreStopTranscripts,
   collectRunTranscripts,
   persistRunTranscript,
   pruneRunTranscripts,
@@ -448,4 +449,53 @@ test("a collection that stopped at the root would fail every claim the complete 
     assert.match(walked.text, /"sessionId":"ses_child_a"/);
     assert.match(walked.text, /"text":"search"/);
   });
+});
+
+test("a pre-stop snapshot is read once by the finish it was taken for", () => {
+  // The handoff the whole fix rests on: `onRuntimeStopping` reads while the
+  // container answers, `onRunFinished` drains. Reading twice would mean a
+  // second run persisting the first one's conversation.
+  const held = new PreStopTranscripts();
+  const sessions = [{ sessionId: "s1", parentSessionId: null, label: "root", capability: null, transcript: null, error: null }];
+  assert.equal(held.take("run_1"), null, "nothing was stopped, so nothing is held");
+  held.put("run_1", sessions);
+  assert.equal(held.size, 1);
+  assert.deepEqual(held.take("run_1"), sessions);
+  assert.equal(held.take("run_1"), null, "the snapshot is gone once its run has used it");
+  assert.equal(held.size, 0);
+});
+
+test("an empty capture is not a snapshot, so the finish still reads for itself", () => {
+  // `collectRunTranscripts` returning nothing means the stop learned nothing.
+  // Holding that as a snapshot would make `onRunFinished` prefer an empty
+  // record over a live read — the failure this whole path exists to remove,
+  // reintroduced from the other side.
+  const held = new PreStopTranscripts();
+  held.put("run_1", []);
+  held.put("run_2", /** @type {any} */ (null));
+  held.put("", [{ sessionId: "s1" }]);
+  assert.equal(held.size, 0);
+  assert.equal(held.take("run_1"), null);
+});
+
+test("a snapshot nobody drains is evicted rather than held for the life of the process", () => {
+  // A drain that never arrives — a ledger unreadable mid-loop — must cost one
+  // eviction, not megabytes per stop forever.
+  const held = new PreStopTranscripts({ maxRuns: 2 });
+  const sessions = (id) => [{ sessionId: id, parentSessionId: null, label: "root", capability: null, transcript: null, error: null }];
+  held.put("run_1", sessions("a"));
+  held.put("run_2", sessions("b"));
+  held.put("run_3", sessions("c"));
+  assert.equal(held.size, 2);
+  assert.equal(held.take("run_1"), null, "the oldest snapshot is the one evicted");
+  assert.ok(held.take("run_2"));
+  assert.ok(held.take("run_3"));
+  // Re-putting a run refreshes its place in the queue rather than keeping two.
+  const refreshed = new PreStopTranscripts({ maxRuns: 2 });
+  refreshed.put("run_1", sessions("a"));
+  refreshed.put("run_2", sessions("b"));
+  refreshed.put("run_1", sessions("a2"));
+  refreshed.put("run_3", sessions("c"));
+  assert.equal(refreshed.take("run_2"), null, "run_1 was re-put, so run_2 became the oldest");
+  assert.deepEqual(refreshed.take("run_1"), sessions("a2"));
 });

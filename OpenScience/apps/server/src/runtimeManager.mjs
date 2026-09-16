@@ -2551,6 +2551,7 @@ export class RuntimeManager {
     setWorkloadTimer = setTimeout,
     clearWorkloadTimer = clearTimeout,
     onRuntimeStop = async () => {},
+    onRuntimeStopping = async () => {},
     onSessionAbort = async () => {},
     onRuntimeStart = () => {},
   } = {}) {
@@ -2603,6 +2604,8 @@ export class RuntimeManager {
     this.clearWorkloadTimer = clearWorkloadTimer;
     /** @type {(project: any, status: any) => any} */
     this.onRuntimeStop = onRuntimeStop;
+    /** @type {(project: Record<string, any>) => Promise<void>} */
+    this.onRuntimeStopping = onRuntimeStopping;
     /** @type {(project: any, sessionId: any) => any} */
     this.onSessionAbort = onSessionAbort;
     /** @type {(project: any, runtime: any) => any} */
@@ -3949,6 +3952,34 @@ export class RuntimeManager {
     return { id: randomId("session_"), kernel: RUNTIME_KERNEL_NAME };
   }
 
+  /**
+   * Last call before a deliberate stop takes the container away.
+   *
+   * `notifyRuntimeStop` is the wrong moment for anything that has to *read* the
+   * runtime: by then this manager has already dropped the runtime from its map
+   * and closed the container, so `sessionTranscript` refuses. That ordering is
+   * correct — the finish pipeline it drives makes model calls, and holding a
+   * container open for those would be worse — but it left the run transcripts
+   * of every stopped run unreadable.
+   *
+   * So this fires one step earlier: the runtime is still in the map and the
+   * container is still answering. Only deliberate stops call it. A crashed or
+   * exited container is genuinely unreadable and says so.
+   *
+   * The hook is awaited, so it owes the caller its own bound; a stop must not
+   * wait on it indefinitely. Failure is isolated: a stop that cannot pre-read
+   * still has to stop.
+   * @param {Record<string, any>} project
+   * @returns {Promise<void>}
+   */
+  async notifyRuntimeStopping(project) {
+    try {
+      await this.onRuntimeStopping(project);
+    } catch {
+      /* isolated: evimed_runtime_stopping_notify_failures_total */
+    }
+  }
+
   notifyRuntimeStop(project, runtime, status) {
     if (!runtime.stopNotification) {
       runtime.stopNotification = Promise.resolve()
@@ -4091,6 +4122,9 @@ export class RuntimeManager {
       await this.pluginService?.clearPromptAdmissions(project);
       return;
     }
+    // Before the delete: `sessionTranscript` resolves the runtime through this
+    // map, so a reader one line further down already has nothing to read.
+    await this.notifyRuntimeStopping(project);
     this.runtimes.delete(key);
     this.deactivateModelGatewayRuntime(runtime);
     this.clearIdleTimer(key);
@@ -4135,6 +4169,7 @@ export class RuntimeManager {
     for (const key of this.runtimeQuotaMonitors.keys()) this.clearQuotaMonitor(key);
     for (const key of this.evimedWorkloadRefreshTimers.keys()) this.clearEviMedWorkloadRefresh(key);
     const runtimes = [...this.runtimes.values()];
+    await Promise.allSettled(runtimes.map((runtime) => this.notifyRuntimeStopping(runtime.project)));
     this.runtimes.clear();
     for (const runtime of runtimes) {
       runtime.closedByManager = true;
@@ -4675,6 +4710,7 @@ export class RuntimeManager {
       }, this.config);
       return true;
     } catch (error) {
+      await this.notifyRuntimeStopping(project);
       this.runtimes.delete(key);
       this.clearIdleTimer(key);
       this.clearQuotaMonitor(key);
@@ -4868,6 +4904,7 @@ export class RuntimeManager {
       this.runtimeActivity.delete(key);
       return;
     }
+    await this.notifyRuntimeStopping(project);
     this.runtimes.delete(key);
     this.deactivateModelGatewayRuntime(runtime);
     this.clearIdleTimer(key);
@@ -5056,6 +5093,7 @@ export class RuntimeManager {
     const stopping = (async () => {
       const runtime = this.runtimes.get(key);
       if (!runtime) return false;
+      await this.notifyRuntimeStopping(project);
       this.runtimes.delete(key);
       this.deactivateModelGatewayRuntime(runtime);
       this.clearIdleTimer(key);
