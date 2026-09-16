@@ -129,7 +129,7 @@ export function WebProjectsCard({
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-body text-text">项目</h2>
-          <p className="mt-0.5 truncate text-xs text-muted">
+          <p className="mt-0.5 truncate text-caption text-muted">
             {currentProject ? `${currentProject.name} · ${currentProject.id}` : currentId}
           </p>
         </div>
@@ -178,7 +178,7 @@ export function WebProjectsCard({
                     {selected ? (
                       <Check size={14} className="shrink-0 text-ok" aria-hidden="true" />
                     ) : (
-                      <span className="shrink-0 text-xs text-muted">
+                      <span className="shrink-0 text-caption text-muted">
                         {switching ? "切换中…" : "使用"}
                       </span>
                     )}
@@ -212,7 +212,7 @@ export function WebProjectsCard({
             <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-ui font-medium text-text">删除 {pendingDelete.name}？</p>
-                <p className="mt-1 text-xs leading-5 text-muted">
+                <p className="mt-1 text-caption leading-5 text-muted">
                   将删除该项目的全部工作区文件、项目元数据、任务状态、运行时状态与日志。
                 </p>
               </div>
@@ -228,14 +228,14 @@ export function WebProjectsCard({
             </div>
             <div className="mt-3 flex justify-end gap-2">
               <button
-                className="h-8 rounded-input border border-border px-3 text-xs text-muted hover:bg-surface hover:text-text disabled:opacity-50"
+                className="h-8 rounded-input border border-border px-3 text-caption text-muted hover:bg-surface hover:text-text disabled:opacity-50"
                 onClick={() => setPendingDelete(null)}
                 disabled={busyProjectId === pendingDelete.id}
               >
                 取消
               </button>
               <button
-                className="h-8 rounded-input bg-error px-3 text-xs font-medium text-error-fg hover:opacity-90 disabled:opacity-50"
+                className="h-8 rounded-input bg-error px-3 text-caption font-medium text-error-fg hover:opacity-90 disabled:opacity-50"
                 onClick={() => void confirmDeleteProject()}
                 disabled={busyProjectId === pendingDelete.id}
               >
@@ -277,7 +277,7 @@ export function WebProjectsCard({
             创建
           </button>
         </form>
-        {createError && <p className="mt-2 text-xs text-error">{createError}</p>}
+        {createError && <p className="mt-2 text-caption text-error">{createError}</p>}
       </div>
     </section>
   );

@@ -54,10 +54,10 @@ function useShadowPage(extraCss = "") {
 }
 
 function RenderState({ error, loading }: { error: string | null; loading: boolean }) {
-  if (error) return <div className="p-4 text-sm text-muted">{error}</div>;
+  if (error) return <div className="p-4 text-ui text-muted">{error}</div>;
   if (loading)
     return (
-      <div className="flex items-center gap-2 p-4 text-sm text-muted">
+      <div className="flex items-center gap-2 p-4 text-ui text-muted">
         <Loader2 size={15} className="animate-spin" aria-hidden="true" /> 正在渲染…
       </div>
     );
@@ -175,7 +175,7 @@ export function XlsxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
   const onScroll = useScrollMemory(wrapRef, scrollKey, !!(page && sheet));
 
   if (error || !sheets) return <RenderState error={error} loading={!sheets} />;
-  if (sheets.length === 0) return <div className="p-4 text-sm text-muted">此工作簿中没有工作表。</div>;
+  if (sheets.length === 0) return <div className="p-4 text-ui text-muted">此工作簿中没有工作表。</div>;
   return (
     <div className="flex h-full flex-col">
       {sheets.length > 1 && (
@@ -185,7 +185,7 @@ export function XlsxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
               key={s.name}
               onClick={() => setActive(i)}
               className={cn(
-                "rounded px-2 py-1 text-xs",
+                "rounded px-2 py-1 text-caption",
                 i === active ? "bg-surface text-text shadow-card" : "text-muted hover:text-text",
               )}
             >
@@ -197,7 +197,7 @@ export function XlsxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
       <div ref={wrapRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto">
         <div ref={hostRef} />
       </div>
-      <div className="border-t border-border px-4 py-1.5 text-xs text-muted">
+      <div className="border-t border-border px-4 py-1.5 text-caption text-muted">
         {sheet?.truncated ? "预览内容已截断 · " : ""}暂不渲染内嵌图表。
       </div>
     </div>

@@ -92,8 +92,8 @@ function RunsHeader({ description }: { description: ReactNode }) {
       </div>
       <div className="min-w-0 flex-1">
         <PageTitle page="运行记录" />
-        <h1 className="font-serif text-xl leading-tight text-text">运行记录</h1>
-        <p className="mt-0.5 text-sm text-muted">{description}</p>
+        <h1 className="font-serif text-display leading-tight text-text">运行记录</h1>
+        <p className="mt-0.5 text-ui text-muted">{description}</p>
       </div>
     </header>
   );
@@ -138,7 +138,7 @@ function RunsFilterBar({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={searchPlaceholder}
-          className="w-full rounded-input border border-border bg-surface py-1.5 pl-8 pr-3 text-sm text-text outline-none placeholder:text-muted focus:border-accent"
+          className="w-full rounded-input border border-border bg-surface py-1.5 pl-8 pr-3 text-ui text-text outline-none placeholder:text-muted focus:border-accent"
         />
       </div>
       {chips.map((chip) => (
@@ -152,7 +152,7 @@ function RunsFilterBar({
           accent={chip.accent}
         />
       ))}
-      <div className="flex shrink-0 items-center rounded-full border border-border bg-surface p-0.5 text-xs">
+      <div className="flex shrink-0 items-center rounded-full border border-border bg-surface p-0.5 text-caption">
         {(["all", "24h", "7d", "30d"] as const).map((k) => {
           const active = (since ?? "all") === k;
           return (
@@ -170,7 +170,7 @@ function RunsFilterBar({
         })}
       </div>
       {anyFilter && (
-        <button className="text-xs text-link hover:underline" onClick={onClear}>
+        <button className="text-caption text-link hover:underline" onClick={onClear}>
           清除
         </button>
       )}
@@ -567,15 +567,15 @@ function WebRunRow({
           {capabilityLabel(run)}
         </span>
         {run.durationMs != null && (
-          <span className="shrink-0 tabular-nums text-xs text-muted">{formatDuration(run.durationMs)}</span>
+          <span className="shrink-0 tabular-nums text-caption text-muted">{formatDuration(run.durationMs)}</span>
         )}
-        <span className="w-16 shrink-0 text-right text-xs text-muted" title={absoluteTs(ts)}>
+        <span className="w-16 shrink-0 text-right text-caption text-muted" title={absoluteTs(ts)}>
           {relativeTs(ts)}
         </span>
       </button>
 
       {open && (
-        <div className="ml-6 mb-1 space-y-3 border-l border-border-faint pl-4 pt-1 text-xs">
+        <div className="ml-6 mb-1 space-y-3 border-l border-border-faint pl-4 pt-1 text-caption">
           <div className="flex flex-wrap items-center gap-1.5">
             {capabilityLabel(run) && <Chip title="所用能力">{capabilityLabel(run)}</Chip>}
             {run.phase && WEB_RUN_PHASE_LABEL[run.phase] && (
@@ -594,7 +594,7 @@ function WebRunRow({
             * this). They are still here, because support asks for them and
             * because a reader who wants to know which model answered is
             * entitled to; they are behind one disclosure and labelled. */}
-          <details className="text-xs">
+          <details className="text-caption">
             <summary className="cursor-pointer text-muted hover:text-text">技术标识（供排查使用）</summary>
             <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-caption text-muted">
               <dt className="font-sans">运行</dt><dd className="truncate">{run.id}</dd>
@@ -657,14 +657,14 @@ function WebRunRow({
                 * design), and this paragraph used to promise downloadable
                 * artifacts directly above an empty artifact list. */}
               {run.verification === "unverified" && (
-                <p className="mb-1.5 text-xs text-text/80">
+                <p className="mb-1.5 text-caption text-text/80">
                   {hasArtifacts
                     ? "产物可以照常下载和阅读；以下各点是本次分析未能自证的部分，请在引用前自行核对。"
                     : "本次没有文件产出；以下各点是本次分析未能自证的部分，请在引用前自行核对。"}
                 </p>
               )}
               {run.verification === "unchecked" && (
-                <p className="mb-1.5 text-xs text-text/80">
+                <p className="mb-1.5 text-caption text-text/80">
                   {hasArtifacts ? "产物可以照常下载和阅读；" : ""}
                   本次交付有一层核验根本没有执行，以下说明是哪一层、为什么没执行。 没有发现问题不等于检查过。
                 </p>
@@ -672,7 +672,7 @@ function WebRunRow({
               <ul className="space-y-2">
                 {notices.groups.map((group) => (
                   <li key={`${group.mustFix}-${group.label}`}>
-                    <div className="flex items-center gap-1.5 text-xs">
+                    <div className="flex items-center gap-1.5 text-caption">
                       {group.mustFix && (
                         <span className="shrink-0 rounded bg-error/10 px-1 py-px text-caption font-medium text-error">
                           必须修正
@@ -1007,7 +1007,7 @@ function FacetChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-xs transition-colors",
+        "flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-caption transition-colors",
         active
           ? accent
             ? "border-accent bg-accent/10 text-accent"

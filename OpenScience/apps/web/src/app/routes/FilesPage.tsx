@@ -120,7 +120,7 @@ export function FilesPage() {
     <div {...dropProps} className="relative flex h-full min-h-0">
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-bg/70 backdrop-blur-sm">
-          <div className="flex items-center gap-2 rounded-card border-2 border-dashed border-accent bg-surface px-6 py-4 text-sm font-medium text-accent">
+          <div className="flex items-center gap-2 rounded-card border-2 border-dashed border-accent bg-surface px-6 py-4 text-ui font-medium text-accent">
             <Upload size={15} aria-hidden="true" />
             松开以上传到个人知识库
           </div>
@@ -175,7 +175,7 @@ export function FilesPage() {
 
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {entries === null && <FilesSkeleton />}
-          {error && <div className="p-2 text-sm text-error">{error}</div>}
+          {error && <div className="p-2 text-ui text-error">{error}</div>}
           {entries && entries.length === 0 && !error && (
             hasWebApi ? (
               <EmptyState
@@ -339,10 +339,10 @@ export function SessionFilesPane({
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <PaneTitlebarInset />
         <Folder size={14} strokeWidth={1.5} className="shrink-0 text-text" aria-hidden="true" />
-        <span className="truncate text-sm font-medium text-text" title={workspace ?? undefined}>
+        <span className="truncate text-ui font-medium text-text" title={workspace ?? undefined}>
           {baseName(workspace)}
         </span>
-        <span className="text-xs text-muted">本次任务文件</span>
+        <span className="text-caption text-muted">本次任务文件</span>
         <div className="flex-1" />
         {controls}
         {hasWebApi && (
@@ -384,7 +384,7 @@ export function SessionFilesPane({
       )}
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {entries === null && <FilesSkeleton />}
-        {error && <div className="p-2 text-sm text-error">{error}</div>}
+        {error && <div className="p-2 text-ui text-error">{error}</div>}
         {entries && entries.length === 0 && !error && (
           <EmptyState icon={FolderOpen} title="本次任务还没有文件" className="px-2 py-8" />
         )}

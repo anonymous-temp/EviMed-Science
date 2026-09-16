@@ -160,7 +160,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
     v.render();
   }, []);
 
-  if (!format) return <div className="p-4 text-sm text-muted">这不是可识别的化学结构文件。</div>;
+  if (!format) return <div className="p-4 text-ui text-muted">这不是可识别的化学结构文件。</div>;
 
   return (
     <div
@@ -181,7 +181,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
         className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border/70 bg-surface/90 p-1 shadow-card backdrop-blur"
         data-molecule-controls="true"
       >
-        <div className="flex items-center gap-1 px-1.5 text-xs font-medium text-muted">
+        <div className="flex items-center gap-1 px-1.5 text-caption font-medium text-muted">
           <Atom size={13} aria-hidden="true" /> 3D
         </div>
         <div className="flex rounded bg-surface-2 p-0.5">
@@ -191,7 +191,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
               type="button"
               onClick={() => setStyleMode(o.value)}
               className={cn(
-                "rounded px-2 py-1 text-xs font-medium transition-colors",
+                "rounded px-2 py-1 text-caption font-medium transition-colors",
                 styleMode === o.value ? "bg-surface text-text shadow-card" : "text-muted hover:text-text",
               )}
             >
@@ -210,13 +210,13 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
         </button>
       </div>
 
-      <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border/70 bg-surface/90 px-3 py-1.5 text-xs text-muted shadow-card backdrop-blur">
+      <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border/70 bg-surface/90 px-3 py-1.5 text-caption text-muted shadow-card backdrop-blur">
         <span className="font-medium text-text">{format.toUpperCase()}</span>
         {atomCount !== null && <span className="ml-2">{atomCount} 个原子</span>}
       </div>
 
       {(rendering || error) && (
-        <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border/70 bg-surface/95 px-3 py-1.5 text-xs text-muted shadow-card backdrop-blur">
+        <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border/70 bg-surface/95 px-3 py-1.5 text-caption text-muted shadow-card backdrop-blur">
           {rendering ? "正在渲染结构…" : error}
         </div>
       )}

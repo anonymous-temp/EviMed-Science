@@ -210,7 +210,7 @@ export function Sidebar() {
         </nav>
 
         <div className="mt-4 flex-1 overflow-y-auto px-3 pb-2">
-          <div className="px-2 py-1 text-xs font-medium tracking-wider text-muted">最近任务</div>
+          <div className="px-2 py-1 text-caption font-medium tracking-wider text-muted">最近任务</div>
           {(runs?.length ?? 0) > 0 && (
             <label className="relative mb-1 block">
               <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
@@ -220,16 +220,16 @@ export function Sidebar() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="搜索任务"
-                className="h-7 w-full rounded-input border border-border bg-bg pl-7 pr-2 text-xs text-text outline-none placeholder:text-muted focus:border-accent"
+                className="h-7 w-full rounded-input border border-border bg-bg pl-7 pr-2 text-caption text-text outline-none placeholder:text-muted focus:border-accent"
               />
             </label>
           )}
-          {runs === null && <div className="px-2 py-2 text-xs text-muted">正在读取…</div>}
+          {runs === null && <div className="px-2 py-2 text-caption text-muted">正在读取…</div>}
           {runs !== null && runs.length === 0 && (
-            <div className="px-2 py-2 text-xs text-muted">还没有任务</div>
+            <div className="px-2 py-2 text-caption text-muted">还没有任务</div>
           )}
           {runs !== null && runs.length > 0 && rows.length === 0 && (
-            <div className="px-2 py-2 text-xs text-muted">没有匹配的任务</div>
+            <div className="px-2 py-2 text-caption text-muted">没有匹配的任务</div>
           )}
           {/* Back into the conversation, not into the ledger row about it.
             * This list is the only session list the product has now that the

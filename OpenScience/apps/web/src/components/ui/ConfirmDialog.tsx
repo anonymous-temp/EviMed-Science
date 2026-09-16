@@ -52,7 +52,7 @@ export function ConfirmDialog({
     // and the keyboard equivalent is Escape. role="presentation" keeps it
     // out of the accessibility tree.
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -64,22 +64,22 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-label={title}
         aria-describedby={bodyId}
-        className="w-[360px] rounded-card border border-border bg-surface p-4 shadow-card"
+        className="w-full max-w-sm rounded-card border border-border bg-surface p-4 shadow-card"
       >
-        <div className="text-sm font-medium text-text">{title}</div>
-        <p id={bodyId} className="mt-1.5 text-sm text-muted">
+        <div className="text-ui font-medium text-text">{title}</div>
+        <p id={bodyId} className="mt-1.5 text-ui text-muted">
           {body}
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <button
             ref={cancelRef}
-            className="rounded-input border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-2"
+            className="rounded-input border border-border px-3 py-1.5 text-ui text-text hover:bg-surface-2"
             onClick={onCancel}
           >
             取消
           </button>
           <button
-            className="rounded-input bg-error px-3 py-1.5 text-sm font-medium text-error-fg hover:opacity-90"
+            className="rounded-input bg-error px-3 py-1.5 text-ui font-medium text-error-fg hover:opacity-90"
             onClick={onConfirm}
           >
             {confirmLabel}
