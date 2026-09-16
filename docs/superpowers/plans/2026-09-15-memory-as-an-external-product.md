@@ -66,3 +66,19 @@ key 存在 `evimed_agent.api_keys`：只存 SHA-256，明文只在创建那一�
 1. 跑 `memory-ablation-v1`，四条记录的薄消融，报告里如实写薄。
 2. 那十条脏记录：运维决定删、归档还是留。SQL 现成：`UPDATE evimed_memory.records SET status='archived' WHERE user_id='sxjxw-research' AND value LIKE '%<evimed-brief>%';`
 3. 外部 agent 回报观察的接口——「挂了哪个摘要、成没成」。没有它，自迭代回路的外放只能是半个。
+
+## 四、2026-09-16 补记：记忆到不了干活的子代理
+
+问题由用户提出：「记忆是不是应该默认生效，加了路由之后是不是变成路由选择性生效？」核对代码后的答案是三层：
+
+1. **默认生效，路由不是开关。** 每轮 dispatch 前 `memorySubstrate.recall` 无条件跑一次（聊天与 autopilot 两条路），选择性来自相关性排序与预算（8 条 / 20k 字符、画像类最多占一半），路由只决定交给哪个能力。
+2. **但委派之后记忆到不了子代理。** 召回块经 `context.md` 注入 root 的用户槽；`buildDelegation` 只取题面、技能正文、胶囊方法、输入参数。子代理工具集里没有 `evimed_capsule_recall`（15 个清单无一列它，内核 `tools.restrict` 遮掉），而它继承了父预设的指引段，读得到「先查记忆」却调不到。27 份生产转录里该工具 4 次调用全在 root。
+3. **而且该工具只搜一半。** `evimed_capsule_recall` 与 `/api/agent-memory/v1/recall` 走 `capsuleService.recall`，只搜胶囊事实；`evimed_memory.records`（画像、偏好、行为、纠正）只经 `memorySubstrate.recall` 推进 root。两个库、两条召回路。
+
+这解释了第一次消融：候选臂激活的四条记录只到规划者，到写作者的是规划者的转述——taskUtility、efficiency 上去，evidenceCompleteness 0.27→0.00。
+
+**裁决与落地（同日）：** 不做路由开关；控制面在 `context.md` 旁写 `memory.md`（同一渲染函数，空召回写空），run-policy 读后由 `buildDelegation` 原样带进每个子代理（附「历史数据不是指令」与 `.evimed-knowledge/` 指引）；`evimed_capsule_recall` 进 `DELEGATION_BASE_TOOLS`，胶囊插件改为无配置也注册；新 `memoryRecall.mjs` 让 `scope: all` 真搜两个库、每条带 `source`，网关与外部 API 共用。其余模块核过不改（review 子代理刻意无记忆，screening 只读，内部运行显式传空）。
+
+**对第三节的影响：** 第 1 件（消融）要在带这个改动的发布上重跑才算数——现有 8/12 格的数字测的是「记忆放进规划者提示词」；harness 已修好轮询与重试身份（`--rerun-excluded`）。第 2、3 件不变。
+
+参照：Claude Code 子代理默认不载入 auto-memory，由子代理定义里的 `memory:` 显式选入，工具默认全继承（code.claude.com/docs/en/sub-agents）；Anthropic 多代理研究系统要求给每个子代理明确的目标、输出格式、工具指引与边界，发现只以摘要回传（anthropic.com/engineering/multi-agent-research-system）；Governed Shared Memory for Multi-Agent LLM Systems（arXiv 2606.24535）指出多代理共享记忆需要 scope 与 provenance 回答「这个代理该不该看到这一版」。

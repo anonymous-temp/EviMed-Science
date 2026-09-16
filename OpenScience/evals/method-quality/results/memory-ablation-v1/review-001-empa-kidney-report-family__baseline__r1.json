@@ -1,0 +1,186 @@
+{
+  "arm": "baseline",
+  "armDigest": "00dded37a443eae48ae342ba1d2d9a18e81a09bfd82e9b3a7812efa189429473",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "cell": "review-001-empa-kidney-report-family__baseline__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "f344fb50c26cf17c523d47b5d9383ae0f6c21ef4925de7ef17b613cc7908545b",
+  "configId": "memory-ablation-v1",
+  "cost": {
+    "currency": "CNY",
+    "source": "usage-route",
+    "value": 0.0
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 0,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "excluded": {
+    "detail": ".openscience/transcripts/run_495831e5e23f3a7c568dd25ff8a90039.jsonl",
+    "reason": "transcript_unavailable"
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-15T16:28:50Z",
+  "judge": {
+    "issues": [
+      "Delivery addresses a wholly different question: sepsis prognostic models in MIMIC-IV, not EMPA-KIDNEY/empagliflozin durability in CKD.",
+      "None of the required sources (PMID 36331190, PMID 39453837, PMID 38061371, KDIGO 2024) are used; unrelated MIMIC-IV publications are substituted.",
+      "MustDo requirements are unmet: no review design, searches, eligibility or protocol status for EMPA-KIDNEY; no separate handling of three publications with NCT03594110 as one primary study; no guideline exclusion from primary-study count; no randomized vs post-trial distinction.",
+      "No EMPA-KIDNEY outcome data or durability assessment is provided.",
+      "Appended Chinese-language section and revision notes are off-topic and not part of a coherent answer to the brief."
+    ],
+    "promptVersion": 1,
+    "rationale": "The delivery entirely misses the brief. It appraises sepsis mortality models using MIMIC-IV whereas the brief asks about the EMPA-KIDNEY trial and post-trial follow-up of empagliflozin in CKD. Required sources and mustDo constraints are absent, so usefulness, correctness and evidence handling for this brief are zero. Safety framing is only non-harmful but irrelevant, hence 1.",
+    "scores": {
+      "correctness": 0,
+      "evidenceHandling": 0,
+      "safetyFraming": 1,
+      "usefulness": 0
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 54,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 55
+      },
+      {
+        "expectedVersion": 47,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 48
+      },
+      {
+        "expectedVersion": 47,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 48
+      },
+      {
+        "expectedVersion": 46,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 47
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "deliverables/appraisal-mimic-iv-sepsis-mortality-models/appraisal-table.csv",
+      "deliverables/appraisal-mimic-iv-sepsis-mortality-models/appraisal-table.json",
+      "deliverables/appraisal-mimic-iv-sepsis-mortality-models/appraisal-table.md",
+      "deliverables/appraisal-mimic-iv-sepsis-mortality-models/citation-ledger.csv",
+      "deliverables/appraisal-mimic-iv-sepsis-mortality-models/delivery-summary.md",
+      "deliverables/appraisal-mimic-iv-sepsis-mortality-models/revision-notes.md",
+      "deliverables/appraisal/appraisal-table.csv",
+      "deliverables/appraisal/appraisal-table.json",
+      "deliverables/appraisal/appraisal-table.md",
+      "deliverables/appraisal/citation-ledger.csv",
+      "deliverables/appraisal/delivery-summary.md",
+      "deliverables/appraisal/revision-notes.md",
+      "deliverables/mimic-iv-sepsis-mortality-model-cohort-appraisal/appraisal-table.csv",
+      "deliverables/mimic-iv-sepsis-mortality-model-cohort-appraisal/appraisal-table.json",
+      "deliverables/mimic-iv-sepsis-mortality-model-cohort-appraisal/appraisal-table.md",
+      "deliverables/mimic-iv-sepsis-mortality-model-cohort-appraisal/citation-ledger.csv",
+      "deliverables/mimic-iv-sepsis-mortality-model-cohort-appraisal/delivery-summary.md",
+      "deliverables/mimic-iv-sepsis-mortality-model-cohort-appraisal/revision-notes.md",
+      "deliverables/mimic-iv-sepsis-prognostic-model-appraisal/appraisal-table.csv",
+      "deliverables/mimic-iv-sepsis-prognostic-model-appraisal/appraisal-table.json",
+      "deliverables/mimic-iv-sepsis-prognostic-model-appraisal/appraisal-table.md",
+      "deliverables/mimic-iv-sepsis-prognostic-model-appraisal/citation-ledger.csv",
+      "deliverables/mimic-iv-sepsis-prognostic-model-appraisal/delivery-summary.md",
+      "deliverables/mimic-iv-sepsis-prognostic-model-appraisal/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_1_cad0fe0c14b792f5",
+    "durationMs": 222756,
+    "errorCode": null,
+    "id": "run_495831e5e23f3a7c568dd25ff8a90039",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "bodies[0] (Reported prognostic association of the HALP score with in-hospital mortality in the MIMIC-IV sepsis cohort (as stated in the abstract of S2)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Reported discrimination of the intra-abdominal sepsis mortality model in its MIMIC-IV training and internal validation data and in its eICU external validation (as stated in the abstract of S3)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[2] (Independence of the reported MIMIC-IV validation cohorts — whether the MIMIC-IV cohorts of the two model reports may be treated as independent evidence) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "bodies[0] (Discrimination and calibration performance of prognostic models for mortality in adult sepsis, as evaluated with MIMIC-IV) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Whether the reported MIMIC-IV validation cohorts of the two model publications can be treated as independent evidence) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[2] (Transferability of the MIMIC-IV cohort definition as used across this evidence set (release version, date handling, case-definition operationalisation and unit of analysis)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "计划中的交付物「Durability of empagliflozin's kidney and cardiovascular effects in adults with CKD: systematic review of the active EMPA-KIDNEY trial (NCT03594110) and its post-trial follow-up」（empa-kidney-durability）没有通过验收，本次运行没有交付它；其余通过验收的内容不受影响。",
+      "literature_search searched and returned no source",
+      "记忆抽取未产出记录：消息 0 条、候选 0 条、采纳 0 条、驳回 0 条。空对话与抽取失效在结果上一样，这行区分它们。"
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-ab18ac2c-9bf2-4aa1-a7d3-c77a8cb72e5d",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 441,
+      "completeness": "unavailable",
+      "messages": 0,
+      "path": ".openscience/transcripts/run_495831e5e23f3a7c568dd25ff8a90039.jsonl",
+      "sha256": "c10709f18257d790a1ea4c50f131a4053db04084a152cbdd65e9451378d6623f"
+    },
+    "verification": "unchecked"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.9535925000000001,
+    "evidenceCompleteness": 0.0,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 0.2,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-15T16:27:18Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

@@ -1,0 +1,175 @@
+{
+  "arm": "baseline",
+  "armDigest": "00dded37a443eae48ae342ba1d2d9a18e81a09bfd82e9b3a7812efa189429473",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "cell": "review-003-mimic-overlap-unknown__baseline__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "f344fb50c26cf17c523d47b5d9383ae0f6c21ef4925de7ef17b613cc7908545b",
+  "configId": "memory-ablation-v1",
+  "cost": {
+    "currency": "CNY",
+    "source": "usage-route",
+    "value": 0.0
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 13,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-15T15:28:59Z",
+  "judge": {
+    "issues": [
+      "S3 is described as a multivariable logistic regression/nomogram, but the risk-of-bias section references survival models and hospital length of stay as a time axis, an internal contradiction.",
+      "S2 and S3 were supplied at abstract access level, yet the delivery claims full texts were preserved/read and uses full-text-only details and estimates, which risks upgrading evidence beyond the preserved source.",
+      "The bounded scoping pass reports that the two supplied model publications were not retrieved by any query, so the 'which models' answer is capped and incomplete for a scoping review.",
+      "The delivery references structured files (appraisal-table.json, citation-ledger.csv, etc.) that are not included in the delivered text."
+    ],
+    "promptVersion": 1,
+    "rationale": "Comprehensive and mostly compliant: it preserves source roles, leaves cohort overlap unresolved symmetrically, explains needed fields, and avoids treating the same public database as proof either way. Safety framing is clean. Main defects are an internal S3 design contradiction, abstract-to-full-text upgrading without supplied full text, and an incomplete capped scoping pass. These reduce correctness and usefulness but not the core answer.",
+    "scores": {
+      "correctness": 3,
+      "evidenceHandling": 4,
+      "safetyFraming": 5,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 43,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 44
+      },
+      {
+        "expectedVersion": 36,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 37
+      },
+      {
+        "expectedVersion": 36,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 37
+      },
+      {
+        "expectedVersion": 35,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 36
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "deliverables/mimic-iv-sepsis-prognostic-model-appraisal/appraisal-table.csv",
+      "deliverables/mimic-iv-sepsis-prognostic-model-appraisal/appraisal-table.json",
+      "deliverables/mimic-iv-sepsis-prognostic-model-appraisal/appraisal-table.md",
+      "deliverables/mimic-iv-sepsis-prognostic-model-appraisal/citation-ledger.csv",
+      "deliverables/mimic-iv-sepsis-prognostic-model-appraisal/delivery-summary.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_1_d36f13ecc0b4fc9b",
+    "durationMs": 549462,
+    "errorCode": null,
+    "id": "run_53421a6cbdc685dbbda36fe413a52042",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "bodies[0] (Reported prognostic association of the HALP score with in-hospital mortality in the MIMIC-IV sepsis cohort (as stated in the abstract of S2)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Reported discrimination of the intra-abdominal sepsis mortality model in its MIMIC-IV training and internal validation data and in its eICU external validation (as stated in the abstract of S3)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[2] (Independence of the reported MIMIC-IV validation cohorts — whether the MIMIC-IV cohorts of the two model reports may be treated as independent evidence) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "bodies[0] (Discrimination and calibration performance of prognostic models for mortality in adult sepsis, as evaluated with MIMIC-IV) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[1] (Whether the reported MIMIC-IV validation cohorts of the two model publications can be treated as independent evidence) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "bodies[2] (Transferability of the MIMIC-IV cohort definition as used across this evidence set (release version, date handling, case-definition operationalisation and unit of analysis)) cites no studies. The rolled-up judgement has to say which rows it rolled up.",
+      "3 appraised study/studies are in no body: S1, S2, S3. Put each one under the outcome it speaks to, or mark it appraised: false with the reason it does not.",
+      "review contradicted: MIMIC-A-EVL — 『PMID 41602009 与 41146378 两篇均未取回全文，全部判断止于摘要；未阅读任一方法或结果章节』（appraisal-mimic-iv-sepsis-mortality-models，表 §3/§9 及 revision-notes『Neither was fetched』）。同一工作区内实际保存了这两篇的开放获取全文：.evimed-sources/PMC12832424/.../fulltext.md 与 .evimed-sources/PMC12557738/.../fulltext.md 均在本次运",
+      "review contradicted: MIMIC-C-EVL — 『S2/S3 的 highest level inspected = full-text，全文按研究识别、队列、方法、结果、局限、数据可得性章节阅读』（mimic-iv-sepsis-prognostic-model-appraisal §What the set contains 与两张 field-by-field 表），并在 B1/B2 的降级理由里使用只在全文存在的字段。按本次审查口径，摘要层级记录不得升级为全文；且该升级与 A、B 两件的记录直接冲突，使同一实体在本次运行内出现两种互斥的证据层级。",
+      "review contradicted: MIMIC-D-EVL — 『本次运行保全了三条来源的开放获取全文；S2、S3 的字段级来源按「可核实于保全全文者记为全文层级」处理，偏倚风险判断建立在正文方法学段之上』（appraisal §二、§四）。该表述把评价基础整体上移到全文，与 A、B 的摘要层级记录相互排斥，也与本次审查口径（不得升级）不一致。",
+      "review contradicted: MIMIC-E-EVL — 『UPGRADED IN THIS RUN：S2、S3 由摘要层级升级为全文，全文用于本评价』，并在 appraisalBasis 中写明『两份来源在本轮工具定稿之后才取得全文』（appraisal-mimic-iv-sepsis-mortality-independence JSON）。升级动作本身有 content-hash 回执、可核验；被判为不成立的是把它当作本次运行的合法评价基础：它违反本次审查收到的『不得升级』口径，且其自述的『工具先定稿、来源后到』恰说明现行确定性判断与所用证据层级不匹配。",
+      "review contradicted: MIMIC-E-DIR — 『S2 的推导/验证方向表述不一致，仅凭该报告无法确定阈值在哪一侧推导』（E 的 S2 riskOfBias）。保留全文明确写：primary analysis 在 eICU-CRD，『External validation was performed using MIMIC-IV 2.2』；摘要本身也把 eICU 标为 derivation cohort、MIMIC-IV 标为 validation cohort。该事实在摘要层即可确定，全文层更无歧义，故理由与所引来源冲突。",
+      "review weakened: MIMIC-A-REL — A 的独立性字段清单把『MIMIC-IV release version』列为 absent，并称『没有发行版本就没有可比对象，跨版本队列既不能求交也不能宣告不相交』。就摘要层而言『not reported in abstract』成立，但本次运行内两篇报告的全文均写明版本（S2＝MIMIC-IV 2.2；S3＝MIMIC-IV V.2.2），且同为 2.2；因此该字段不是缺失字段，判定只能落回标识符清单、anchor_year_group 分布与取数日期。结论（unresolved）不变，理由被削弱。",
+      "review weakened: MIMIC-B-REL — B 的 B1 间接性降级称『判定独立性所需的字段没有一条落在现有记录上：S2、S3 均未报告 MIMIC-IV 发行版本』。两篇全文（已在本运行落盘）分别写明 2.2 与 V.2.2，同版本这一事实可直接核对；把发行版本继续计入缺失字段会夸大缺口。B1 的未解决结论仍成立（患者级标识符、anchor_year_group、取数日期确实缺失）。",
+      "review weakened: MIMIC-A-PROBAST — 『PROBAST 未适用，因为三来源中两篇为摘要层，其 signalling questions 无法据摘要回答』（A 的 §2、局限 4）。该理由的事实前提在同一运行内不成立——两篇的开放获取全文当期已保全，E 甚至以『工具先定稿』给出另一个不同的未适用理由。不套用量表本身可接受，但所给理由与运行状态不符。",
+      "review contradicted: MIMIC-A-1300 — 『1,300 例（含 264 死亡）与训练集 n = 910 两个分母不能调和，训练/内部验证的记录级划分无法重建』（A 的 S3 riskOfBias 与 §7）。同一摘要层数字即可调和：1,300 − 910 = 390，B 正是用同一摘要数字推出内部验证集 n = 390 并标注为推算（mimic-iv-sepsis-mortality-model-cohort-appraisal CSV/JSON）。真正不可获知的是逐条记录的划分与种子，而不是分母的闭合，A 把两者混为一谈。",
+      "review weakened: MIMIC-A-ARITH — A 的独立性体 B3 记为 low − 1（riskOfBias）− 1（indirectness）+ 0 = very-low，即 2 步，并明确『不精确性不适用、0 步』。其内部算术自洽；但与同为本次运行的 C（low − 3 步，含 imprecision 1 步）对同一判定、同一来源集给出的步数互斥。两条不能同时作为本次运行对同一判断的交代。终值 very-low 一致，故只削弱不推翻。",
+      "review weakened: MIMIC-C-ARITH2 — C 的独立性体 B2 记为 low − riskOfBias 1 − indirectness 1 − imprecision 1 = very-low（3 步），理由是把两队列患者共享比例当作 0 至 1 全域的估计量而记不精确。算术自洽，但与 A、E（明确不精确性 0 步）、B（imprecision 0 步）互斥。仅步数冲突，终值与未解决状态不受影响。",
+      "review weakened: MIMIC-E-ARITH — E 的独立性体 B3 记为 low − 1（riskOfBias）− 1（indirectness）+ 0（imprecision）+ 0（publicationBias）= very-low，并在字段层写明『独立性不是效应估计，没有区间可比』。算术自洽且理由正当，但与 C、D 的 3 步版本在同一次运行内并存，构成同一判断的两套降级口径。",
+      "review contradicted: MIMIC-C-ARITH1 — C 的 B1 逐条列出 riskOfBias 1 步、indirectness 1 步、imprecision 1 步（共 3 步），其算术串却写『low (2 steps down, 0 steps up) -> very-low』（md 与 JSON 的 arithmetic 字段同）。列出的降级与自述步数不符，属可自检的内部算术错误。因 low 起步即触底，very-low 的终值不变。",
+      "review weakened: MIMIC-C-BODY — C 的 B1 结局为『Discrimination and calibration performance…as evaluated with MIMIC-IV』，rolled-up studies 记为 S2、S3；但同一文件已认定 S2『没有判别度或校准度量』。D 以相反理由把 S2 明确排除在判别度体之外，并写明『把没有测量的研究计入，会把「没有测量」读成「测量了且结果良好」』。以此为准，C 的纳入与其自身发现相抵，影响 B1 的间接性理由强度（1 步）的成立。",
+      "review weakened: MIMIC-D-IMP — D 把 S2 的不精确性记为 moderate，理由为『主要关联估计的区间较窄且远离无效值：完全校正 HR 0.85（95% CI 0.74–0.98）』。该区间上界 0.98 紧贴无效线 1.00，『远离无效值』与所引数字不符；B 与 C 对同一估计记 serious（上界贴近 1、且竞争风险敏感性分析跨 1），D 的表述把该区间的可解释性写高了一档。",
+      "review weakened: MIMIC-B-IMP3 — B 把 S3 的不精确性记为 moderate（『训练集 AUC 0.795 区间窄且远离 0.5』）。A、C、D、E 对同一组估计均记 serious：外部验证 AUC 0.846（0.772–0.919）建立在 149 例/33 死亡上，区间与训练集区间大范围重叠，校准仅有 Brier 0.126 而无区间。B 自身的 B2 体又对同一来源记 imprecision 1 步降级，评级与降级口径不一致。",
+      "review weakened: MIMIC-C-NEST — C 在『The uncertainty is symmetric』一节写：两篇均报 MIMIC-IV v2.2、均引 2008–2019，且 S3 的腹腔感染脓毒症人群被界定为 S2 所用成人脓毒症总体的码子集，『which makes substantial overlap plausible』。该推断本身未越界（同段落随后明写两方向均未被证明、overlap 保持未解决），但 E 把同一推断单列为 INF-1『untested inference，不出现在任何结论中』，D 亦单列『待检假设，不是本表结论』；C 把它放在对称性论",
+      "review contradicted: EMPA-E3-HIGH — E3（empa-kidney-durability-clinical-evidence-report）对同一实体——EMPA-KIDNEY 随机对照期主要复合终点——评为『高确定性』：摘要称『按 GRADE 为高确定性』，讨论称『偏倚风险低、结果一致、估计精确、无发表偏倚证据，按 GRADE 评为高确定性』，未记任何降级。同一次运行内 E1、E2 对完全相同的证据体均评为『中等确定性』，唯一降级理由是该试验因疗效达到预设终止条件而提前结束。试验确于 2022-03-07 依 DSMB 正式期中分析的两项预设条件提前终止（保",
+      "review weakened: EMPA-E2-DOM — E2 把随机对照期肾脏效应的『中等确定性』归因于『来自一项偏倚风险低、结果精确的试验，但仅来自单一项试验』。『仅一项试验』不属于 GRADE 的五个降级域（偏倚风险、不一致性、间接性、不精确性、发表偏倚）中的任何一个；同一文件另一处又明写提前终止『属设计既有的限制而非偏倚来源』，与 E1 就同一事实所作的偏倚风险降级相反。终值（中等）可保留，降级归因不可核。",
+      "review contradicted: EMPA-E3-INT — E3 对同一判断——『停药后约 12 个月内仍可观察到的额外心肾获益』——给出两个互斥等级：摘要写『按 GRADE 为低确定性，降级理由为间接性（该阶段暴露不再随机）与不精确（次年风险比跨无效线）』；讨论与结论写『该判断的置信度为中等』／『（中等置信度，受试验期后观察性质限制）』。两处未给出可调和的口径差异说明，属同一交付物内自相矛盾。",
+      "review contradicted: EMPA-E2-INT — E2 在『持久性的时间结构』同一节内先写『可得的两篇报告一致支持停用试验药后短期内获益维持且幅度衰减，该综合性结论的置信度为中等』，紧接下一段对同一证据体（『停药后短期获益维持这一证据体』）写『自随机对照试验证据起步，因暴露非随机降一级，又因第 2 年区间含 1 再降一级，评为低确定性』。同一实体、相邻段落、两个不相容的等级。",
+      "review weakened: EMPA-E3-YEAR — E3 的参考文献 [2] 著录为『N Engl J Med. 2024』，并在 citation-audit 中称『书目数据库记录为 2024、欧洲 PMC 索引标注为 2025』。本审查以 PMID 39453837 检索该书目记录，返回的出版日期为 2025 Feb 20（The New England journal of medicine，DOI 10.1056/NEJMoa2409183），E1 亦著录为 2025 Feb 20。条目标识可解析，年份字段取 2024 与可解析记录不符。另注：三件 EMA 交付物对同一问题"
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-6fb33959-f19e-4b84-9f22-9bfe94e54cbc",
+    "status": "succeeded",
+    "transcript": null,
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.88552875,
+    "evidenceCompleteness": 0.8,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 1.0,
+    "taskUtility": 0.7
+  },
+  "startedAt": "2026-09-15T15:17:58Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}
