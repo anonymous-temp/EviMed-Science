@@ -7483,3 +7483,42 @@ test("a partial transcript says which session is missing and why, on the run its
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a running run carries the deliverables it is working through, and a finished one does not", async () => {
+  // 2026-09-16 review, P2 #14: the runs page's step list reads these.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-plan-progress-"));
+  try {
+    const project = {
+      id: "project-1", userId: "user-1", rootDir: root,
+      workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_plan_progress", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, { model: "deepseek/deepseek-v4-pro", monitorIntervalMs: 60_000, monitorMaxPolls: 1 });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "turn_plan_progress" }, async () => ({ accepted: true }));
+
+    const stateDir = path.join(project.workspaceDir, ".evimed-run", "runs", run.id);
+    await mkdir(stateDir, { recursive: true });
+    await writeFile(path.join(stateDir, "state.json"), JSON.stringify({
+      formatVersion: 1, runId: run.id,
+      plan: { revision: 1, items: [
+        { id: "d1", title: "证据综述", status: "accepted", attempts: 1 },
+        { id: "d2", title: "x".repeat(400), status: "delegated", attempts: 0 },
+        { id: "d3", status: "not-a-state" },
+      ] },
+    }));
+
+    const [withPlan] = await store.withPlanProgress(project, await store.list(project));
+    assert.deepEqual(withPlan.planItems.map((item) => [item.id, item.status, item.attempts]), [["d1", "accepted", 1], ["d2", "delegated", 0], ["d3", "planned", 0]]);
+    assert.equal(withPlan.planItems[1].title.length, 160, "a title is bounded");
+    assert.equal(withPlan.planItems[2].title, "d3", "an untitled deliverable is named by its id");
+
+    await store.finishInternal(project, run.id, { status: "failed", errorCode: "runtime_canceled", artifacts: [] });
+    const [finished] = await store.withPlanProgress(project, await store.list(project));
+    assert.equal(finished.planItems, undefined, "a finished run's outcome is its artifacts, not a step list");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

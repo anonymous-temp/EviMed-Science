@@ -1,17 +1,23 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import {
+  AlertCircle,
+  Check,
   ChevronDown,
   ChevronRight,
+  Circle,
   ExternalLink,
   FileOutput,
   FlaskConical,
+  Loader2,
   MessageSquare,
   RotateCcw,
   ScrollText,
   Search,
+  X,
 } from "lucide-react";
 import { downloadArtifact } from "@/lib/artifactFile";
+import { extOf, extToKind } from "@/lib/artifacts";
 import {
   getWebProjectId,
   listWebAgentRuns,
@@ -19,6 +25,7 @@ import {
   webErrorMessage,
   type WebAgentRun,
   type WebAgentRunStatus,
+  type WebRunPlanItem,
 } from "@/lib/apiClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
@@ -263,6 +270,9 @@ function RunsEmptyState({ filtered }: { filtered: boolean }) {
  */
 function HostedRunsView() {
   const [runs, setRuns] = useState<WebAgentRun[] | null>(null); // null = loading
+  // A deliverable opened in place: a report, its matrix, a table — with the
+  // same viewers the files page uses, instead of download-only rows.
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>({ search: "" });
   const [debounced, setDebounced] = useState("");
   // `?run=` is how every link into this page names the run it means — the
@@ -449,47 +459,50 @@ function HostedRunsView() {
   }, [deepLinked]);
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl px-8 py-8">
-        <RunsHeader description="记录开放域与专项科研任务的执行状态、模型、耗时和成果文件。" />
+    <FilePreviewContext.Provider value={setPreviewPath}>
+      <div className="h-full overflow-y-auto">
+        <div className="mx-auto max-w-3xl px-8 py-8">
+          <RunsHeader description="记录开放域与专项科研任务的执行状态、模型、耗时和成果文件。" />
 
-        {(rows.length > 0 || anyFilter) && (
-          <RunsFilterBar
-            search={filter.search}
-            searchPlaceholder="搜索专项、模型、会话或产物文件…"
-            onSearchChange={(value) => setFilter((f) => ({ ...f, search: value }))}
-            chips={chips}
-            since={filter.since}
-            onSinceChange={(since) => setFilter((f) => ({ ...f, since }))}
-            anyFilter={anyFilter}
-            onClear={() => setFilter({ search: "" })}
-          />
-        )}
+          {(rows.length > 0 || anyFilter) && (
+            <RunsFilterBar
+              search={filter.search}
+              searchPlaceholder="搜索专项、模型、会话或产物文件…"
+              onSearchChange={(value) => setFilter((f) => ({ ...f, search: value }))}
+              chips={chips}
+              since={filter.since}
+              onSinceChange={(since) => setFilter((f) => ({ ...f, since }))}
+              anyFilter={anyFilter}
+              onClear={() => setFilter({ search: "" })}
+            />
+          )}
 
-        {runs === null && loadError === null && <RunsSkeleton />}
+          {runs === null && loadError === null && <RunsSkeleton />}
 
-        {loadError !== null && <RunsLoadError message={loadError} onRetry={() => void load()} stale={(runs?.length ?? 0) > 0} />}
+          {loadError !== null && <RunsLoadError message={loadError} onRetry={() => void load()} stale={(runs?.length ?? 0) > 0} />}
 
-        {runs !== null && loadError === null && rows.length === 0 && <RunsEmptyState filtered={anyFilter} />}
+          {runs !== null && loadError === null && rows.length === 0 && <RunsEmptyState filtered={anyFilter} />}
 
-        <div className="mt-1">
-          {groups.map(([label, items]) => (
-            <DaySection key={label} label={label}>
-              {items.map((run) => (
-                <WebRunRow
-                  key={run.id}
-                  run={run}
-                  open={expanded === run.id}
-                  onToggle={() => setExpanded((e) => (e === run.id ? null : run.id))}
-                  onReproduce={() => reproduce(run)}
-                  onOpenConversation={() => navigate(`/app/chat/${run.sessionId}`)}
-                />
-              ))}
-            </DaySection>
-          ))}
+          <div className="mt-1">
+            {groups.map(([label, items]) => (
+              <DaySection key={label} label={label}>
+                {items.map((run) => (
+                  <WebRunRow
+                    key={run.id}
+                    run={run}
+                    open={expanded === run.id}
+                    onToggle={() => setExpanded((e) => (e === run.id ? null : run.id))}
+                    onReproduce={() => reproduce(run)}
+                    onOpenConversation={() => navigate(`/app/chat/${run.sessionId}`)}
+                  />
+                ))}
+              </DaySection>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+      {previewPath && <RunFilePreview path={previewPath} onClose={() => setPreviewPath(null)} />}
+    </FilePreviewContext.Provider>
   );
 }
 
@@ -623,6 +636,8 @@ function WebRunRow({
               </span>
             )}
           </div>
+
+          {run.status === "running" && run.planItems && run.planItems.length > 0 && <PlanSteps items={run.planItems} />}
 
           {/* What happened, said once, from the one dictionary.
             * This row used to hold a 20-key table whose default sentence was
@@ -878,25 +893,118 @@ function DeliverableFeedback({ runId, path }: { runId: string; path: string }) {
 /** One downloadable file. `unverified` marks a file the gate did not accept;
  *  the marker carries the same weight as the path, because a reader must not
  *  be able to take one of these for graded work. */
+const FilePreviewInspector = lazy(() => import("@/components/inspector/FilePreviewInspector").then((m) => ({ default: m.FilePreviewInspector })));
+
+/** Opens a run's file in place; absent outside the runs page. */
+const FilePreviewContext = createContext<((path: string) => void) | null>(null);
+
+/**
+ * A deliverable previewed beside the ledger (2026-09-16 review, P2 #14: a
+ * run's output was a list of paths to download). The viewer is the one the
+ * files page uses, so a clinical report opens with its citations.
+ */
+function RunFilePreview({ path, onClose }: { path: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const filename = path.slice(path.lastIndexOf("/") + 1);
+  return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- a click on the backdrop itself closes the panel; Escape is the keyboard equivalent, bound above.
+    <div
+      className="fixed inset-0 z-40 flex justify-end bg-black/20"
+      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`预览 ${filename}`}
+        className="h-full w-full max-w-content-wide border-l border-border bg-bg shadow-pop"
+      >
+        <Suspense fallback={<p className="p-6 text-ui text-muted">正在打开预览…</p>}>
+          <FilePreviewInspector
+            data={{ variant: "file", path, filename, artifact: extToKind(extOf(filename)), root: "workspace" }}
+            onClose={onClose}
+          />
+        </Suspense>
+      </div>
+    </div>
+  );
+}
+
+const PLAN_ITEM_LABEL: Record<WebRunPlanItem["status"], string> = {
+  planned: "待开始", queued: "排队中", delegated: "进行中", submitted: "检查中",
+  accepted: "已通过", rejected: "需修改", failed: "未完成",
+};
+
+/**
+ * The deliverables of a run still working, as steps (2026-09-16 review, P2
+ * #14). A thirteen-minute analysis showed a phase chip and a tool-call count;
+ * which of its deliverables were done, being checked or sent back was only in
+ * the kernel's own view.
+ */
+function PlanSteps({ items }: { items: WebRunPlanItem[] }) {
+  const icon = (status: WebRunPlanItem["status"]) => {
+    if (status === "accepted") return <Check size={13} className="text-ok" aria-hidden="true" />;
+    if (status === "rejected") return <AlertCircle size={13} className="text-warn" aria-hidden="true" />;
+    if (status === "failed") return <X size={13} className="text-error" aria-hidden="true" />;
+    if (status === "planned") return <Circle size={11} className="text-muted" aria-hidden="true" />;
+    return <Loader2 size={13} className="animate-spin text-accent" aria-hidden="true" />;
+  };
+  const done = items.filter((item) => item.status === "accepted").length;
+  return (
+    <div>
+      <div className="mb-1 text-caption font-medium text-muted">交付进度 {done}/{items.length}</div>
+      <ol aria-label="交付进度" className="space-y-1">
+        {items.map((item) => (
+          <li key={item.id} className="flex items-center gap-2">
+            <span className="flex w-4 shrink-0 justify-center">{icon(item.status)}</span>
+            <span className="min-w-0 flex-1 truncate text-text">{item.title}</span>
+            <span className="shrink-0 text-caption text-muted">
+              {PLAN_ITEM_LABEL[item.status] ?? item.status}
+              {item.attempts > 1 ? ` · 第 ${item.attempts} 次提交` : ""}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function ArtifactRow({ path, unverified }: { path: string; unverified?: boolean }) {
   // The file's name is what a reader recognizes; the folder it sits in is the
   // workspace's bookkeeping (2026-09-16 walk, U13), kept beside it, quieter.
   const slash = path.lastIndexOf("/");
   const name = slash >= 0 ? path.slice(slash + 1) : path;
   const folder = slash > 0 ? path.slice(0, slash) : "";
+  const preview = useContext(FilePreviewContext);
   return (
-    <button
-      onClick={() => void downloadArtifact(path, "workspace")}
-      title={unverified ? `下载 ${path}（未通过核验）` : `下载 ${path}`}
-      className="group flex w-full items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-surface-2"
-    >
-      <span className="min-w-0 flex-1 truncate">
-        <span className={cn("group-hover:text-link", unverified ? "text-warn" : "text-text")}>{name}</span>
-        {folder && <span className="ml-2 font-mono text-caption text-muted">{folder}</span>}
-      </span>
-      {unverified && <span className="shrink-0 text-caption text-warn">未经核验</span>}
-      <ExternalLink size={11} className="shrink-0 text-muted opacity-0 group-hover:opacity-100" aria-hidden="true" />
-    </button>
+    <div className="flex items-center gap-1">
+      <button
+        onClick={() => void downloadArtifact(path, "workspace")}
+        aria-label={unverified ? `下载 ${name}（未通过核验）` : `下载 ${name}`}
+        title={unverified ? `下载 ${path}（未通过核验）` : `下载 ${path}`}
+        className="group flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-surface-2"
+      >
+        <span className="min-w-0 flex-1 truncate">
+          <span className={cn("group-hover:text-link", unverified ? "text-warn" : "text-text")}>{name}</span>
+          {folder && <span className="ml-2 font-mono text-caption text-muted">{folder}</span>}
+        </span>
+        {unverified && <span className="shrink-0 text-caption text-warn">未经核验</span>}
+        <ExternalLink size={11} className="shrink-0 text-muted opacity-0 group-hover:opacity-100" aria-hidden="true" />
+      </button>
+      {preview && (
+        <button
+          type="button"
+          onClick={() => preview(path)}
+          aria-label={`预览 ${name}`}
+          className="min-h-6 shrink-0 rounded-input px-2 text-caption text-accent hover:bg-surface-2"
+        >
+          预览
+        </button>
+      )}
+    </div>
   );
 }
 

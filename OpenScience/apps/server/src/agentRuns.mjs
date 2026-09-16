@@ -3139,6 +3139,36 @@ export class AgentRunStore {
       .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
   }
 
+  /**
+   * The deliverables each running run is working through, for the runs page's
+   * step list (2026-09-16 review, P2 #14): a thirteen-minute run showed a phase
+   * chip and a tool-call count, and nothing about which of its deliverables
+   * were done. Read from the run's own projection file and only for runs still
+   * running — a finished run's outcome is its artifacts — and for at most three
+   * of them per request. Best effort: an unreadable projection adds nothing.
+   * @param {Record<string, any>} project @param {Record<string, any>[]} runs
+   */
+  async withPlanProgress(project, runs) {
+    let budget = 3;
+    return Promise.all(runs.map(async (run) => {
+      if (run.status !== "running" || budget <= 0) return run;
+      budget -= 1;
+      // `readRunStateProjection` answers every failure with a state, never a throw.
+      const read = /** @type {{ state: string, projection?: any }} */ (await readRunStateProjection(project, project.workspaceDir, run));
+      const items = read.state === "read" && Array.isArray(read.projection?.plan?.items) ? read.projection.plan.items : null;
+      if (!items?.length) return run;
+      return {
+        ...run,
+        planItems: items.slice(0, 12).map((/** @type {any} */ item) => ({
+          id: String(item?.id ?? "").slice(0, 120),
+          title: String(item?.title ?? item?.id ?? "").slice(0, 160),
+          status: PLAN_ITEM_STATES.includes(item?.status) ? item.status : "planned",
+          attempts: Number.isSafeInteger(item?.attempts) ? item.attempts : 0,
+        })),
+      };
+    }));
+  }
+
   async recover(project) {
     let runs = await this.list(project);
     for (const run of runs.filter((item) => item.status === "running")) {
