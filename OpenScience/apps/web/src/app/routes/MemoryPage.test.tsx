@@ -247,6 +247,25 @@ describe("a stored brief is not a preference, and a sensitive record is not acce
     expect(screen.getByText("疑似任务题面，非你的陈述")).toBeInTheDocument();
   });
 
+  it("says where a memory's evidence came from in words, never as the store's enum", async () => {
+    // M6, and the vocabulary regression extended past the run ledger (D5).
+    mocks.fetchMemoryProfile.mockResolvedValue(profile({
+      preference: [structured({
+        id: "mem_evidence",
+        summary: "回答使用中文",
+        evidence: [{ fingerprint: "f1", sourceType: "conversation_message", sourceRef: "sessions/s1/messages/m1",
+          quote: "请用中文回答。", observedAt: "2026-09-16T08:00:00.000Z", weight: 1 }],
+      })],
+    }));
+    render(<MemoryRouter><MemoryPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("查看依据与变更"));
+    // Prove the evidence rendered before asserting what it does not say.
+    expect(screen.getByText("“请用中文回答。”")).toBeInTheDocument();
+    expect(screen.getByText(/对话中的原话/)).toBeInTheDocument();
+    expect(screen.queryByText(/conversation_message/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sessions\/s1/)).not.toBeInTheDocument();
+  });
+
   it("asks before a sensitive pending record takes effect, by either path", async () => {
     // The 「确认」 button was hidden for a sensitive record while 「修正」 wrote
     // `status: "active"` regardless, so the only way to accept one was the path
