@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { webErrorMessage, createResearchMemory, deleteResearchMemory, deleteStructuredMemory, fetchMemoryProfile, fetchMemoryStatus, hasWebApi, listResearchMemories, updateResearchMemory, updateStructuredMemory, type WebMemoryProfile, type WebMemoryStatus, type WebResearchMemory, type WebStructuredMemory } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
+import { looksInjected, memoryExcerpt } from "@/lib/memoryText";
 import { toast } from "@/lib/toast";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -452,6 +453,9 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
   );
 }
 
+/** How many records a section shows before it offers the rest. */
+const SECTION_PREVIEW = 5;
+
 function MemoryProfileOverview({
   profile,
   busyId,
@@ -468,6 +472,11 @@ function MemoryProfileOverview({
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [confirming, setConfirming] = useState<{
+    record: WebStructuredMemory;
+    update: Partial<Pick<WebStructuredMemory, "value" | "summary" | "status">>;
+  } | null>(null);
   const sections = [
     { title: "用户画像", records: [...profile.groups.profile, ...profile.groups.behavior] },
     { title: "偏好习惯", records: profile.groups.preference },
@@ -477,6 +486,15 @@ function MemoryProfileOverview({
 
   return (
     <section className="mt-7" aria-label="结构化用户记忆">
+      {confirming && (
+        <ConfirmDialog
+          title="确认这条敏感记忆？"
+          body={`生效后，它会在后续研究中被读取并影响回答：${memoryExcerpt(confirming.update.summary || confirming.record.summary || confirming.record.value, 120)}`}
+          confirmLabel="确认生效"
+          onConfirm={() => { onUpdate(confirming.record, confirming.update); setConfirming(null); }}
+          onCancel={() => setConfirming(null)}
+        />
+      )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-serif text-title font-semibold text-text">EviMed 对你的持续理解</h2>
@@ -496,7 +514,7 @@ function MemoryProfileOverview({
                 <p className="text-ui-sm text-muted">尚无稳定记录</p>
               ) : (
                 <div className="space-y-3">
-                  {records.slice(0, 5).map((record) => (
+                  {(expanded.has(section.title) ? records : records.slice(0, SECTION_PREVIEW)).map((record) => (
                     <div key={record.id} className="rounded-input bg-surface-2 p-3">
                       {editingId === record.id ? (
                         <Textarea
@@ -506,13 +524,21 @@ function MemoryProfileOverview({
                           className="min-h-24 bg-bg text-ui-sm"
                         />
                       ) : (
-                        <p className="text-ui-sm text-text">{record.summary || record.value}</p>
+                        <p className="text-ui-sm text-text">{memoryExcerpt(record.summary || record.value)}</p>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-muted">
                         <span>{record.evidenceCount} 条证据</span>
                         <span>置信度 {Math.round(record.confidence * 100)}%</span>
                         {record.sensitive && <span className="text-error">敏感</span>}
                         {record.status === "pending" && <span className="text-accent">待确认</span>}
+                        {/* A record whose text carries a machine marker was not
+                            something this person said. The extractor no longer
+                            creates these, and the eleven that existed are
+                            archived; a row that arrives from an import still
+                            gets told apart from a preference. */}
+                        {looksInjected(record.summary || record.value) && (
+                          <span className="text-warn">疑似任务题面，非你的陈述</span>
+                        )}
                       </div>
                       {(record.evidence.length > 0 || record.revisions.length > 0) && (
                         <details className="mt-2 text-caption text-muted">
@@ -540,7 +566,9 @@ function MemoryProfileOverview({
                               size="sm"
                               disabled={!editingValue.trim() || busyId === record.id}
                               onClick={() => {
-                                onUpdate(record, { value: editingValue.trim(), summary: editingValue.trim(), status: "active" });
+                                const update = { value: editingValue.trim(), summary: editingValue.trim(), status: "active" as const };
+                                if (record.status === "pending" && record.sensitive) setConfirming({ record, update });
+                                else onUpdate(record, update);
                                 setEditingId(null);
                               }}
                             >
@@ -560,8 +588,21 @@ function MemoryProfileOverview({
                             <Pencil size={13} aria-hidden="true" /> 修正
                           </Button>
                         )}
-                        {record.status === "pending" && !record.sensitive && (
-                          <Button size="sm" variant="ghost" disabled={busyId === record.id} onClick={() => onUpdate(record, { status: "active" })}>
+                        {/* Sensitive pending records used to have no 「确认」
+                            button — and 「修正」 wrote `status: "active"`
+                            anyway, so the only way to accept one was through
+                            the path that did not ask (2026-09-16 review, M4②).
+                            Both paths now go through the same dialog. */}
+                        {record.status === "pending" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busyId === record.id}
+                            onClick={() => {
+                              if (record.sensitive) setConfirming({ record, update: { status: "active" } });
+                              else onUpdate(record, { status: "active" });
+                            }}
+                          >
                             <Check size={13} aria-hidden="true" /> 确认
                           </Button>
                         )}
@@ -571,6 +612,23 @@ function MemoryProfileOverview({
                       </div>
                     </div>
                   ))}
+                  {/* The count in the header was the section's total and the
+                      list showed five, with nothing saying so (2026-09-16
+                      review, M6). */}
+                  {records.length > SECTION_PREVIEW && (
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((current) => {
+                        const next = new Set(current);
+                        if (next.has(section.title)) next.delete(section.title);
+                        else next.add(section.title);
+                        return next;
+                      })}
+                      className="min-h-6 w-full rounded-input px-2 py-1 text-ui-sm text-muted hover:bg-surface-2 hover:text-text"
+                    >
+                      {expanded.has(section.title) ? "收起" : `还有 ${records.length - SECTION_PREVIEW} 条`}
+                    </button>
+                  )}
                 </div>
               )}
             </article>

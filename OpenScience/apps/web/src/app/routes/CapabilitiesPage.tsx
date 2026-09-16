@@ -183,7 +183,7 @@ function AgentRow({ agent, onOpen }: { agent: WebResearchAgent; onOpen: () => vo
     <button
       type="button"
       onClick={onOpen}
-      aria-label={`使用${ui.title}模板`}
+      aria-label={`使用${ui.title}能力`}
       className="group grid w-full grid-cols-[3rem_minmax(0,1fr)_auto] gap-4 py-6 text-left transition-colors hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
     >
       <div className="flex h-9 w-9 items-center justify-center rounded-input bg-surface-2 font-mono text-xs font-semibold tracking-wide text-accent ring-1 ring-border">

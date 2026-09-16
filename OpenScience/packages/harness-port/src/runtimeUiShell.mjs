@@ -52,6 +52,19 @@
 /** Services this plugin needs: the slot registry and the locale runtime. */
 export const inject = ['slots', 'locale'];
 
+/**
+ * The product's mark as a data URL, for the document's icon.
+ *
+ * Inline because this module is bundled into the frame's own page and has no
+ * asset pipeline behind it; the same geometry as the React `Mark` below.
+ */
+export const EVIMED_FAVICON =
+  'data:image/svg+xml,'
+  + "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E"
+  + "%3Crect width='48' height='48' rx='10' fill='%231f6f5c'/%3E"
+  + "%3Cpath d='M15 24h18M24 15v18' stroke='white' stroke-width='5' stroke-linecap='round'/%3E"
+  + '%3C/svg%3E';
+
 /** The private-use tag of the product's language pack; falls back to `zh`. */
 export const EVIMED_LOCALE = 'zh-x-evimed';
 
@@ -76,7 +89,15 @@ export const EVIMED_DICTIONARIES = Object.freeze({
  */
 export function apply(ctx, _config, target = globalThis, require = undefined) {
   const frame = target.__EVIMED_FRAME__;
-  if (!frame || frame.version !== 1 || target.parent === target) return;
+  // `__EVIMED_FRAME__` is the control plane's own bootstrap object, so its
+  // presence — not the window's position — is what says this page is ours.
+  //
+  // The guard used to also require `target.parent !== target`, which meant that
+  // opening the frame's address in a tab got the kernel unbranded: its whale
+  // mark in the sidebar, its own `DeepSeek Harness` title, and the swimming
+  // fish on an empty conversation (2026-09-16 review, §4.1 item 8). One
+  // condition, one uncovered path.
+  if (!frame || frame.version !== 1) return;
 
   const dictionaries = {
     conversation: {
@@ -241,6 +262,28 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
   // --- controls the deployment does not offer -----------------------------
   const doc = target.document;
   if (doc && typeof doc.createElement === 'function' && doc.head) {
+    // The document's own name and icon.
+    //
+    // Invisible inside an iframe — the shell's frame carries its own accessible
+    // name — and the whole page when the address is opened directly, where the
+    // tab read `DeepSeek Harness` under a whale favicon. The kernel's packages
+    // are MIT and its brand package documents exactly this substitution ("a
+    // deployment with its own brand composes a different package into the same
+    // slots"); DeepSeek's platform terms §5.2 forbid using their marks without
+    // permission and impose no attribution duty, so carrying their mark is the
+    // wrong default rather than the polite one.
+    //
+    // Presentation only, like the stylesheet below it: no DOM of the kernel's
+    // is patched and `node_modules` is untouched.
+    try {
+      doc.title = 'EviMed 研究会话';
+      const icon = doc.querySelector('link[rel~="icon"]') ?? doc.createElement('link');
+      icon.setAttribute('rel', 'icon');
+      icon.setAttribute('type', 'image/svg+xml');
+      icon.setAttribute('href', EVIMED_FAVICON);
+      if (!icon.parentNode) doc.head.appendChild(icon);
+    } catch { /* a document that refuses either is still a working conversation */ }
+
     const style = doc.createElement('style');
     style.setAttribute('data-evimed-shell', '');
     // Accessible names in both shipped languages, from the kernel's own

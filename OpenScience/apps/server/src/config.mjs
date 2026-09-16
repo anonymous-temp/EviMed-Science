@@ -1351,6 +1351,22 @@ export function loadConfig(overrides = {}) {
       overrides.agentMemoryApiEnabled ?? boolEnv("OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED", false),
     memoryExtractionEnabled:
       overrides.memoryExtractionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED", true),
+    // Projects extraction never writes for, by id prefix. Empty by default.
+    //
+    // A paired evaluation manipulates the very records extraction upserts, so
+    // it has to run with extraction off — and until now the only way to do that
+    // was the deployment-wide switch above, flipped by hand before the batch
+    // and flipped back after it. Twice in two days that was a container
+    // recreate in the middle of a live deployment, and the failure mode when
+    // somebody forgets the second flip is a memory page that stays empty
+    // forever and looks exactly like "nothing worth remembering happened".
+    //
+    // A prefix rather than an exact id because an eval allocates one project
+    // per batch (`eval-memory-ablation-v3`, then v4); the operator registers
+    // `eval-` once.
+    memoryExtractionExcludedProjectPrefixes: String(overrides.memoryExtractionExcludedProjectPrefixes
+      ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES ?? "")
+      .split(",").map((value) => value.trim()).filter(Boolean),
     // Extraction runs after the reply is already delivered, so a generous budget
     // costs the user nothing. The measured request takes 40-46s against
     // deepseek-v4-pro, so the old 30s ceiling aborted every single one.

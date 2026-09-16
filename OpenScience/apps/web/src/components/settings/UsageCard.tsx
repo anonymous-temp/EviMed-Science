@@ -32,7 +32,7 @@ export function UsageCard() {
     <Card
       className="mt-5"
       title="本月用量"
-      hint={usage ? `统计自 ${month}，按 DeepSeek 峰谷价折算；首发阶段不收款。` : "统计本月的模型调用与额度占用；首发阶段不收款。"}
+      hint={usage ? `统计自 ${month}，按模型供应商价目折算；首发阶段不收款。` : "统计本月的模型调用与额度占用；首发阶段不收款。"}
     >
       {error && <p className="text-ui text-error">读取用量失败：{error}</p>}
       {!error && !usage && <p className="text-ui text-muted">正在读取…</p>}

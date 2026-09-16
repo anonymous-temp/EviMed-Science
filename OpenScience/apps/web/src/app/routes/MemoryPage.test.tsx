@@ -43,6 +43,35 @@ const existing = {
   updatedAt: "2026-07-17T02:00:00.000Z",
 };
 
+/** A structured record with only the fields the overview reads. */
+function structured(overrides: Record<string, unknown>) {
+  return {
+    id: "mem_1", scope: "user", kind: "preference", key: "preference.x",
+    value: "", summary: "", status: "active", origin: "inferred",
+    confidence: 1, importance: 0.5, sensitive: false, evidenceCount: 1,
+    evidence: [], revisions: [], version: 1,
+    ...overrides,
+  };
+}
+
+/** A profile whose named groups carry the given records. */
+function profile(groups: Record<string, unknown[]>) {
+  const empty = {
+    profile: [], preference: [], behavior: [], project_fact: [], analysis: [],
+    decision: [], correction: [], follow_up: [], run_summary: [],
+  };
+  const merged = { ...empty, ...groups };
+  const all = Object.values(merged).flat();
+  return {
+    records: all,
+    groups: merged,
+    activeCount: all.filter((record) => (record as { status: string }).status === "active").length,
+    pendingCount: all.filter((record) => (record as { status: string }).status === "pending").length,
+  };
+}
+
+const mocks = api;
+
 describe("MemoryPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -151,5 +180,50 @@ describe("MemoryPage", () => {
     const { container } = render(<MemoryPage />);
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
     expect(screen.queryByText("科研记忆尚未就绪")).not.toBeInTheDocument();
+  });
+});
+
+describe("a stored brief is not a preference, and a sensitive record is not accepted by accident", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.hasWebApi = true;
+    api.fetchMemoryStatus.mockResolvedValue({ configured: true, connected: true, code: null, structured: true });
+    api.listResearchMemories.mockResolvedValue([]);
+    api.updateStructuredMemory.mockImplementation(async (record: object, update: object) => ({ ...record, ...update }));
+  });
+
+  // Eleven whole `<evimed-brief>` task briefs were stored as durable
+  // preferences at confidence 100% and rendered verbatim, tag and all
+  // (2026-09-16 review, M1). The rows are archived; the display half is here.
+  it("shows the content without the machine's envelope, and says what it is", async () => {
+    mocks.fetchMemoryProfile.mockResolvedValue(profile({
+      preference: [structured({
+        id: "mem_brief",
+        summary: "<evimed-brief> 请以《某某》为题完成证据评审。</evimed-brief>",
+        status: "active",
+      })],
+    }));
+    render(<MemoryPage />);
+    expect(await screen.findByText("请以《某某》为题完成证据评审。")).toBeInTheDocument();
+    expect(screen.getByText("疑似任务题面，非你的陈述")).toBeInTheDocument();
+  });
+
+  it("asks before a sensitive pending record takes effect, by either path", async () => {
+    // The 「确认」 button was hidden for a sensitive record while 「修正」 wrote
+    // `status: "active"` regardless, so the only way to accept one was the path
+    // that did not ask (M4②).
+    mocks.fetchMemoryProfile.mockResolvedValue(profile({
+      preference: [structured({ id: "mem_sensitive", summary: "我在服用某种药物。", status: "pending", sensitive: true })],
+    }));
+    render(<MemoryPage />);
+    await userEvent.click(await screen.findByRole("button", { name: /确认/ }));
+    expect(await screen.findByText("确认这条敏感记忆？")).toBeInTheDocument();
+    expect(mocks.updateStructuredMemory).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "确认生效" }));
+    await waitFor(() => expect(mocks.updateStructuredMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "mem_sensitive" }),
+      expect.objectContaining({ status: "active" }),
+    ));
   });
 });

@@ -945,6 +945,49 @@ test("extraction disabled writes no memory at all, run summary included", async 
   assert.equal(client.records.size, 0, "not one row was written");
 });
 
+test("an excluded project writes no memory while the deployment keeps extracting", async () => {
+  // A paired evaluation manipulates the records extraction upserts, so it must
+  // run with extraction off — and the only way to do that was the
+  // deployment-wide switch, flipped by hand around the batch. Twice in two days
+  // that meant recreating the web container of a live deployment, and the
+  // failure mode when the second flip is forgotten is a memory page that stays
+  // empty and looks like "nothing worth remembering happened".
+  const client = new MemoryStoreDouble();
+  let called = false;
+  const intelligence = new MemoryIntelligence(
+    { ...config, memoryExtractionExcludedProjectPrefixes: ["eval-memory-ablation"] },
+    client,
+    { fetchImpl: async () => { called = true; return Response.json({ choices: [] }); } },
+  );
+
+  const excluded = await intelligence.recordRun(
+    { id: "eval-memory-ablation-v3", userId: "user_1" }, run("run_eval"), [message("m1", "我是临床药师。")],
+  );
+  assert.equal(called, false, "no model call for an excluded project");
+  assert.equal(excluded.source, "project_excluded", "and it does not read as the deployment switch being off");
+  assert.equal(excluded.runSummary, null);
+  assert.equal(client.records.size, 0, "not one row was written");
+
+  // The rest of the deployment is untouched: this is the property the
+  // deployment-wide switch could not give.
+  const ordinary = await intelligence.recordRun(project(), run("run_ordinary"), [message("m1", "你好。")]);
+  assert.notEqual(ordinary.source, "project_excluded");
+  assert.ok(ordinary.runSummary, "an ordinary project still records what its run was about");
+});
+
+test("a prefix matches by prefix and an unrelated project keeps its memory", async () => {
+  const client = new MemoryStoreDouble();
+  const intelligence = new MemoryIntelligence(
+    { ...config, memoryExtractionExcludedProjectPrefixes: ["eval-"] },
+    client,
+    { fetchImpl: async () => Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] }) },
+  );
+  for (const [id, expected] of [["eval-anything", true], ["evaluation-notes", false], ["my-eval-project", false]]) {
+    const result = await intelligence.recordRun({ id, userId: "user_1" }, run(`run_${id}`), [message("m1", "你好。")]);
+    assert.equal(result.source === "project_excluded", expected, `${id} was classified wrong`);
+  }
+});
+
 test("extraction enabled still writes the run summary for a conversation with nothing to learn", async () => {
   // The other half of the same property: `disabled` must not become the excuse
   // that stops episodic memory on a normal deployment.

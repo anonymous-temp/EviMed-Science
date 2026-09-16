@@ -19,13 +19,13 @@ export function DataFlowCard({
       <header className="border-b border-border px-5 py-3">
         <h2 className="font-serif text-body text-text">隐私与数据流向</h2>
         <p className="mt-0.5 text-xs text-muted">
-          {hosted ? "托管工作区的存储与模型提供方流量。" : "哪些数据留在本机，以及究竟哪些会离开本机。"}
+          {hosted ? "项目工作区的存储与模型提供方流量。" : "哪些数据留在本机，以及究竟哪些会离开本机。"}
         </p>
       </header>
       <div className="grid gap-5 px-5 py-4 sm:grid-cols-2">
         <div>
           <div className="flex items-center gap-1.5 text-ui font-medium text-text">
-            <HardDrive size={14} className="text-ok" /> {hosted ? "存储在托管工作区" : "留在本机"}
+            <HardDrive size={14} className="text-ok" /> {hosted ? "存储在项目工作区" : "留在本机"}
           </div>
           <ul className="mt-2 list-disc space-y-1.5 pl-4 text-ui leading-relaxed text-muted">
             <li>
@@ -39,7 +39,7 @@ export function DataFlowCard({
             </li>
             <li>
               {hosted
-                ? "会话元数据、溯源记录、审计日志与任务事件都存储在所选托管项目下。"
+                ? "会话元数据、溯源记录、审计日志与任务事件都存储在所选项目下。"
                 : "会话历史与溯源记录保存在应用私有数据目录中。"}
             </li>
             <li>
@@ -67,7 +67,7 @@ export function DataFlowCard({
           </ul>
           <p className="mt-2 text-xs text-muted">
             {hosted
-              ? "托管 Skills 与 MCP 由平台审核和统一部署；科学连接器只能通过服务端固定来源网关访问外部数据。"
+              ? "平台的 Skills 与 MCP 由平台审核和统一部署；科学连接器只能通过服务端固定来源网关访问外部数据。"
               : "你添加的技能与 MCP 服务器可能自行发起网络请求 — 安装前请先审查。"}
           </p>
         </div>

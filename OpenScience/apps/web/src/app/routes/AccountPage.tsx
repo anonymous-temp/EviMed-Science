@@ -49,7 +49,11 @@ export function AccountPage() {
   const overview = (
     <div className="h-full overflow-y-auto bg-bg">
       <div className="mx-auto max-w-content px-8 py-8">
-        <Card title="个人租户边界" hint="一期 SaaS 采用个人账号即租户；项目是租户内的隔离单元。">
+        {/* "个人租户边界" / "一期 SaaS 采用个人账号即租户" / "独立空间" were the
+            design's words for the reader, not the reader's (2026-09-16 walk,
+            U13). What a researcher needs to know is that their work is theirs
+            and that projects do not see each other. */}
+        <Card title="你的账号与项目" hint="每个账号的数据彼此独立；同一账号下的项目也各自隔离，互相看不到对方的文件与运行记录。">
           <div className="flex items-center gap-4">
             <div className="grid h-11 w-11 place-items-center rounded-full bg-surface-2 text-accent">
               <UserRound size={20} />
@@ -61,7 +65,7 @@ export function AccountPage() {
               </div>
             </div>
             <div className="flex items-center gap-1.5 rounded-full bg-ok/10 px-2.5 py-1 text-caption font-medium text-ok">
-              <ShieldCheck size={13} /> 独立空间
+              <ShieldCheck size={13} /> 数据独立
             </div>
           </div>
         </Card>

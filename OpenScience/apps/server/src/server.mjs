@@ -688,8 +688,14 @@ export function createWebApiApp(overrides = {}) {
   // provider is selected and reachable — never as a second thing to configure.
   const memoryIndexing = productDatabase && productJobs && memorySubstrate.active
     ? new MemoryIndexing({ database: productDatabase, openViking: openVikingClient, jobs: productJobs, rerank: memoryRerank }) : null;
-  const memoryIndexWorker = memoryIndexing
-    ? new MemoryIndexWorker({ jobs: productJobs, indexing: memoryIndexing, substrate: memorySubstrate,
+  // Composed whenever there is a queue, not only when there is an index. The
+  // database trigger that enqueues `memory-index` jobs fires on every capsule
+  // and fact write — a Postgres trigger cannot read this config — so a
+  // `builtin` deployment produced jobs nobody would ever claim. With no
+  // indexing the worker drains them and records why (M5, 2026-09-16).
+  const memoryIndexWorker = productJobs
+    ? new MemoryIndexWorker({ jobs: productJobs, indexing: memoryIndexing,
+      substrate: memoryIndexing ? memorySubstrate : null,
       pollMs: config.memoryIndexPollMs, leaseMs: config.memoryIndexLeaseMs,
       reconcileMs: config.memoryIndexReconcileMs }) : null;
   // What the researcher did, and the one producer that reads it back. Both

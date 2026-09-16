@@ -10,6 +10,7 @@ import {
   loginWeb,
   registerWeb,
   WebApiError,
+  webErrorMessage,
   type WebAuthMethods,
 } from "@/lib/apiClient";
 import { Button, buttonClasses } from "@/components/ui/Button";
@@ -48,6 +49,20 @@ export function LoginPage() {
     };
   }, [navigate]);
 
+/**
+ * Why the sign-in did not go through.
+ *
+ * Every failure used to read 「账号或密码错误」 (2026-09-16 walk, U12), including
+ * rate limiting, a 5xx and a dropped connection — so someone locked out by the
+ * auth rate limiter retyped a correct password until the window expired. Only
+ * a 401 is a wrong credential; everything else goes to the shared dictionary,
+ * which knows about `Retry-After`.
+ */
+function signInMessage(error: unknown): string {
+  if (error instanceof WebApiError && error.status === 401) return "账号或密码错误，请重新输入。";
+  return webErrorMessage(error, { fallback: "登录没有完成，请检查网络后重试。" });
+}
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!username.trim() || !password) {
@@ -62,7 +77,7 @@ export function LoginPage() {
       else await loginWeb(username.trim(), password);
       navigate("/app/chat", { replace: true });
     } catch (err) {
-      setError(registering ? registrationMessage(err) : "账号或密码错误，请重新输入。");
+      setError(registering ? registrationMessage(err) : signInMessage(err));
     } finally {
       setSubmitting(false);
     }

@@ -13,7 +13,7 @@ export function WebSecurityCard() {
     try {
       setEvents(await listWebSecurityEvents(20));
     } catch (e) {
-      toast.error(`无法读取托管安全日志：${webErrorMessage(e)}`);
+      toast.error(`无法读取安全日志：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }

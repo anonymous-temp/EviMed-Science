@@ -574,6 +574,54 @@ test("a worker with no substrate still reconciles the half it has", async () => 
   assert.equal(worker.status().lastError, null);
 });
 
+test("with no index provider the worker drains the queue instead of letting it grow", async () => {
+  // `MEMORY_INDEX_PROVIDER=builtin` composes no index, but the database trigger
+  // that enqueues these jobs fires on every capsule and fact write regardless —
+  // a Postgres trigger cannot read a Node config. Nothing was constructed to
+  // claim them, so they accumulated silently: two had been queued since
+  // 2026-09-15 when the 2026-09-16 review found them (M5).
+  const claimed = [
+    { id: "job-capsule", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-index", payload: { capsuleId: "c" } },
+    { id: "job-record", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-record-index", payload: { recordId: "r" } },
+  ];
+  const finished = [];
+  const jobs = {
+    async claim() { return claimed.shift() ?? null; },
+    async renew() { return true; },
+    async finish(userId, id, leaseToken, result) { finished.push([id, result]); return result; },
+    async fail(...args) { finished.push(["fail", ...args]); },
+  };
+  const worker = new MemoryIndexWorker({ jobs, indexing: null, pollMs: 60_000, reconcileMs: 60_000 });
+
+  assert.equal(worker.draining, true);
+  assert.deepEqual(worker.kinds, ["memory-index", "memory-record-index"], "with no index, neither half has a claimer");
+  await worker.tick();
+  await worker.tick();
+  assert.deepEqual(finished, [
+    ["job-capsule", { skipped: "no_index_provider" }],
+    ["job-record", { skipped: "no_index_provider" }],
+  ], "the job rows say why they were closed rather than disappearing");
+
+  // And reconcile has nothing to reconcile against, rather than throwing on a
+  // null index every interval.
+  await worker.reconcile();
+  assert.equal(worker.lastError, null);
+});
+
+test("an index provider still does the indexing rather than draining", async () => {
+  const jobs = {
+    async claim() { return { id: "job", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-index", payload: { capsuleId: "c" } }; },
+    async renew() { return true; },
+    async finish() { throw new Error("a composed index must not drain its own queue"); },
+  };
+  const ran = [];
+  const indexing = { async rebuild(job) { ran.push(job.id); return { status: "published" }; }, async reconcile() {} };
+  const worker = new MemoryIndexWorker({ jobs, indexing, pollMs: 60_000, reconcileMs: 60_000 });
+  assert.equal(worker.draining, false);
+  await worker.tick();
+  assert.deepEqual(ran, ["job"]);
+});
+
 test("worker refuses invalid timer configuration before it can create a busy loop", () => {
   assert.throws(() => new MemoryIndexWorker({ jobs: {}, indexing: {}, pollMs: 0 }), /Invalid memory index poll interval/);
   assert.throws(() => new MemoryIndexWorker({ jobs: {}, indexing: {}, leaseMs: 500 }), /Invalid memory index lease interval/);

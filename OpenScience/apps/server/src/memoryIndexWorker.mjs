@@ -54,7 +54,20 @@ export class MemoryIndexWorker {
     // Claim only what this worker can run. Without a substrate the record half
     // is not composed, and claiming its jobs would lease work nothing here can
     // do — worse than leaving them queued, which at least stays visible.
-    this.kinds = substrate ? ["memory-index", "memory-record-index"] : ["memory-index"];
+    // No indexing at all is a third state, and it is the deployment's normal
+    // one: `MEMORY_INDEX_PROVIDER=builtin` composes no index, so nothing was
+    // constructed to claim these jobs — while the database trigger that
+    // enqueues them fires on every capsule and fact write regardless, because a
+    // Postgres trigger cannot read a Node config. Two had been sitting queued
+    // since 2026-09-15 with no claimer and no signal (2026-09-16 review, M5).
+    //
+    // Draining beats both leaving them and never enqueuing them: the job rows
+    // record why they were closed, and the index a `builtin` deployment does
+    // not have is fully rebuildable from PostgreSQL anyway
+    // (`pnpm rebuild:memory-index --all`), so nothing is lost if a provider is
+    // configured later.
+    this.draining = !indexing;
+    this.kinds = (substrate || this.draining) ? ["memory-index", "memory-record-index"] : ["memory-index"];
     this.workerId = `memory-index-${randomUUID()}`;
     this.timer = null;
     this.reconcileTimer = null;
@@ -94,9 +107,11 @@ export class MemoryIndexWorker {
     }, Math.max(1000, Math.floor(this.leaseMs / 3)));
     renewal.unref();
     try {
-      const result = job.kind === "memory-record-index"
-        ? await this.substrate.indexRecord(job)
-        : await this.indexing.rebuild(job);
+      const result = this.draining
+        ? await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: "no_index_provider" })
+        : job.kind === "memory-record-index"
+          ? await this.substrate.indexRecord(job)
+          : await this.indexing.rebuild(job);
       this.lastError = null;
       this.lastCompletedAt = new Date().toISOString();
       return result;
@@ -122,8 +137,10 @@ export class MemoryIndexWorker {
     // Both halves, because both can be left behind by the same outage: the
     // capsule ledger re-arms from what it published, the record half from the
     // jobs its writers enqueued.
+    // Nothing to reconcile against when there is no index; draining is the
+    // whole of the work.
     this.reconciling = Promise.all([
-      this.indexing.reconcile(),
+      this.indexing ? this.indexing.reconcile() : null,
       this.substrate ? this.substrate.reconcileRecords() : null,
     ]).catch((error) => {
       this.lastError = typeof error?.code === "string" ? error.code : "memory_index_reconcile_failed";

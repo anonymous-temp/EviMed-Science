@@ -18,9 +18,9 @@ describe("DataFlowCard", () => {
     expect(screen.getByText("未配置模型")).toBeInTheDocument();
   });
 
-  it("uses hosted wording for web deployments", () => {
+  it("names where the data lives without the deployment word", () => {
     render(<DataFlowCard model={null} workspace="/workspace/default" hosted />);
-    expect(screen.getByText("存储在托管工作区")).toBeInTheDocument();
+    expect(screen.getByText("存储在项目工作区")).toBeInTheDocument();
     expect(screen.getByText(/服务端内核沙箱/)).toBeInTheDocument();
     expect(screen.getByText(/浏览器、工作区、日志与导出内容都不会收到它/)).toBeInTheDocument();
     expect(screen.getByText(/不会由浏览器直连模型提供方/)).toBeInTheDocument();

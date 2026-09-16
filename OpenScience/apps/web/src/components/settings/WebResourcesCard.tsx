@@ -14,7 +14,7 @@ export function WebResourcesCard() {
     try {
       setMetrics(await fetchWebMetrics());
     } catch (e) {
-      toast.error(`无法读取托管资源：${webErrorMessage(e)}`);
+      toast.error(`无法读取资源：${webErrorMessage(e)}`);
     } finally {
       setLoading(false);
     }
@@ -29,9 +29,9 @@ export function WebResourcesCard() {
     try {
       await startWebRuntime();
       setMetrics(await fetchWebMetrics());
-      toast.success("托管运行时已启动。");
+      toast.success("研究运行时已启动。");
     } catch (e) {
-      toast.error(`无法启动托管运行时：${webErrorMessage(e)}`);
+      toast.error(`无法启动研究运行时：${webErrorMessage(e)}`);
     } finally {
       setRuntimeAction(null);
     }
@@ -42,9 +42,9 @@ export function WebResourcesCard() {
     try {
       await restartWebRuntime();
       setMetrics(await fetchWebMetrics());
-      toast.success("托管运行时已重启。");
+      toast.success("研究运行时已重启。");
     } catch (e) {
-      toast.error(`无法重启托管运行时：${webErrorMessage(e)}`);
+      toast.error(`无法重启研究运行时：${webErrorMessage(e)}`);
     } finally {
       setRuntimeAction(null);
     }
@@ -55,9 +55,9 @@ export function WebResourcesCard() {
     try {
       await stopWebRuntime();
       setMetrics(await fetchWebMetrics());
-      toast.success("托管运行时已停止。");
+      toast.success("研究运行时已停止。");
     } catch (e) {
-      toast.error(`无法停止托管运行时：${webErrorMessage(e)}`);
+      toast.error(`无法停止研究运行时：${webErrorMessage(e)}`);
     } finally {
       setRuntimeAction(null);
     }
@@ -106,8 +106,8 @@ export function WebResourcesCard() {
           className={runtimeButtonCls}
           onClick={() => void startRuntime()}
           disabled={controlsDisabled || runtimeRunning}
-          title="启动托管运行时"
-          aria-label="启动托管运行时"
+          title="启动研究运行时"
+          aria-label="启动研究运行时"
         >
           <Play size={13} className={cn(runtimeAction === "start" && "animate-pulse")} />
           启动
@@ -116,8 +116,8 @@ export function WebResourcesCard() {
           className={runtimeButtonCls}
           onClick={() => void restartRuntime()}
           disabled={controlsDisabled}
-          title="重启托管运行时"
-          aria-label="重启托管运行时"
+          title="重启研究运行时"
+          aria-label="重启研究运行时"
         >
           <RotateCw size={13} className={cn(runtimeAction === "restart" && "animate-spin")} />
           重启
@@ -126,8 +126,8 @@ export function WebResourcesCard() {
           className={cn(runtimeButtonCls, "hover:text-error")}
           onClick={() => void stopRuntime()}
           disabled={controlsDisabled || !runtimeRunning}
-          title="停止托管运行时"
-          aria-label="停止托管运行时"
+          title="停止研究运行时"
+          aria-label="停止研究运行时"
         >
           <Square size={13} className={cn(runtimeAction === "stop" && "animate-pulse")} />
           停止

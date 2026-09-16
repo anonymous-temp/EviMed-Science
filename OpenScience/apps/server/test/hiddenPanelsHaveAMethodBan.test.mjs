@@ -22,7 +22,7 @@ import test from "node:test";
 
 import { RUNTIME_UI_DENIED_HOST_ROUTES, RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
 
-import { HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET } from "../src/dshProfilePatch.mjs";
+import { HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, OPERATOR_ONLY_BROWSER_PANELS } from "../src/dshProfilePatch.mjs";
 
 /**
  * What stops each hidden panel from being reached another way.
@@ -65,6 +65,18 @@ const WHAT_STOPS_IT = {
   // opened.
   "ui-sidebar-files": { namespace: "workspaceFiles" },
   "ui-sidebar-documentpreview": { namespace: "workspaceFiles" },
+  // Operator-only rather than hidden, and the reason is worth stating without
+  // flattering it: this removes the affordance, not the data. The kernel
+  // streams the prompt, the reminders and the raw tool JSON to the browser over
+  // the session socket whether or not a tab draws them, so devtools still show
+  // them. Not sending them is upstream of this codebase. What this buys is that
+  // a researcher does not meet the product's English prompts by clicking a tab
+  // called 「轨迹」; what it does not buy is confidentiality.
+  "ui-trajectory": {
+    cosmetic: "the trajectory tab draws frames the client already received over the session socket, so hiding it stops "
+      + "accidental exposure and not a determined reader; the data stops flowing only if the kernel stops sending it, "
+      + "which is upstream. Operators keep it because it is how a run is diagnosed.",
+  },
 };
 
 const namespaces = new Set(RUNTIME_UI_DENIED_NAMESPACES);
@@ -73,7 +85,7 @@ const hostRoutes = new Set(RUNTIME_UI_DENIED_HOST_ROUTES);
 
 test("every hidden panel has something that stops what it does, not just what it draws", () => {
   assert.ok(HOSTED_DISABLED_BROWSER_PANELS.length >= 10, "no panels were read, so this test walked nothing");
-  for (const panel of HOSTED_DISABLED_BROWSER_PANELS) {
+  for (const panel of [...HOSTED_DISABLED_BROWSER_PANELS, ...OPERATOR_ONLY_BROWSER_PANELS]) {
     const stop = WHAT_STOPS_IT[panel];
     assert.ok(stop, `${panel} is hidden and nothing here says what stops it being reached; hiding a panel hides a button`);
     if (stop.namespace) {
@@ -98,7 +110,7 @@ test("every hidden panel has something that stops what it does, not just what it
 test("the pairing has no entries for panels that are not hidden", () => {
   // Otherwise it accumulates reasons about panels nobody disables, and the
   // next reader cannot tell which of them are load-bearing.
-  const hidden = new Set(HOSTED_DISABLED_BROWSER_PANELS);
+  const hidden = new Set([...HOSTED_DISABLED_BROWSER_PANELS, ...OPERATOR_ONLY_BROWSER_PANELS]);
   for (const panel of Object.keys(WHAT_STOPS_IT)) {
     assert.ok(hidden.has(panel), `${panel} is paired here but is not on the disabled list`);
   }
