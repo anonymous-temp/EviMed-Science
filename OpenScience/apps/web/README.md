@@ -11,11 +11,12 @@ client (`packages/sdk`) were deleted on 2026-09-04, so this is the whole client.
 - `src/app/` — `router.tsx` (every route under `/app`, plus the pre-prefix
   redirects), `layout/AppShell.tsx` (auth gate, sidebar, palette),
   `routes/` (one file per page), `providers/`.
-- `src/components/` — `sidebar/` (nav, project switcher), `run/` (the run
-  ledger's cards and the side panel beside the conversation),
-  `notebook/`, `inspector/` (scientific file previews), `settings/` (the cards
-  the settings and account pages compose), `cards/`, `command-palette/`,
-  `code-viewer/`, `markdown-viewer/`, `ui/` (the primitives).
+- `src/components/` — `sidebar/` (nav, project switcher, recent tasks),
+  `layout/` (page titles), `memory/` (the memory switches), `sources/` (the
+  knowledge base's understanding panel), `notebook/`, `inspector/` (scientific
+  file previews), `settings/` (the cards the settings and account pages
+  compose), `cards/`, `command-palette/`, `code-viewer/`, `markdown-viewer/`,
+  `ui/` (the primitives).
 - `src/lib/` — `apiClient.ts` (the only place an HTTP call to the control plane
   is made), `projects.ts` (which project the shell is looking at), `backend.ts`
   (the command endpoint), `store.ts` (UI preferences), plus the scientific
@@ -24,9 +25,12 @@ client (`packages/sdk`) were deleted on 2026-09-04, so this is the whole client.
 ## The session surface
 
 `/app/chat` frames the kernel's own browser application, served on its own
-origin (`/api/me` names it as `runtime.uiOrigin`). A deployment that does not
-serve it — or a browser that cannot reach that origin — renders this app's own
-run-stream view instead. See `routes/SessionRoute.tsx`.
+origin (`/api/me` names it as `runtime.uiOrigin`); `routes/RuntimeUiFrame.tsx`
+holds the frame and its message bridge. There is no second conversation view:
+a deployment that does not serve the kernel's application, or a browser that
+cannot reach its origin, gets an explicit unavailable state with a retry. The
+run ledger (`/app/runs`) is where finished work is read. See
+`routes/SessionRoute.tsx`.
 
 ## Commands
 

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Maximize2, Minimize2 } from "lucide-react";
 import { INSPECTOR_MAX, INSPECTOR_MIN, useUiStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
 
@@ -175,24 +174,3 @@ export function PaneTitlebarInset() {
   return <div data-tauri-drag-region className="w-[62px] shrink-0 self-stretch" />;
 }
 
-/** Maximize / restore toggle for the pane's header row (session pages only —
- *  full-page viewers like the Files page have nothing to maximize over). */
-export function MaximizePaneButton() {
-  const inspectorMaximized = useUiStore((s) => s.inspectorMaximized);
-  const setInspectorMaximized = useUiStore((s) => s.setInspectorMaximized);
-  const label = inspectorMaximized ? "还原面板" : "最大化面板";
-  return (
-    <button
-      className="text-text hover:opacity-60"
-      aria-label={label}
-      title={label}
-      onClick={() => setInspectorMaximized(!inspectorMaximized)}
-    >
-      {inspectorMaximized ? (
-        <Minimize2 size={14} strokeWidth={1.5} aria-hidden="true" />
-      ) : (
-        <Maximize2 size={14} strokeWidth={1.5} aria-hidden="true" />
-      )}
-    </button>
-  );
-}

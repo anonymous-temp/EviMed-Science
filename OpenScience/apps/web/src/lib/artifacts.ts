@@ -78,29 +78,9 @@ export function extractArtifactRefs(markdown: string): string[] {
   return out;
 }
 
-const MIME: Record<string, string> = {
-  pdf: "application/pdf",
-  html: "text/html", htm: "text/html",
-  svg: "image/svg+xml",
-  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
-  mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", mov: "video/quicktime", ogv: "video/ogg",
-  csv: "text/csv", tsv: "text/tab-separated-values",
-  md: "text/markdown", tex: "text/x-tex", json: "application/json",
-  py: "text/x-python", r: "text/x-r", txt: "text/plain",
-  bed: "text/plain", bedgraph: "text/plain", bdg: "text/plain",
-  gff: "text/plain", gff3: "text/plain", gtf: "text/plain", vcf: "text/plain",
-  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-};
-
 export function extOf(filename: string): string {
   const dot = filename.lastIndexOf(".");
   return dot >= 0 ? filename.slice(dot + 1).toLowerCase() : "";
-}
-
-export function mimeForExt(ext: string): string {
-  return MIME[ext.toLowerCase()] ?? "application/octet-stream";
 }
 
 export type PreviewKind =
@@ -125,10 +105,10 @@ export type PreviewKind =
   | "phase";
 
 /** 3D mesh / CAD formats rendered by the three.js viewer. */
-export const MESH_EXTS = ["stl", "obj", "ply", "gltf", "glb"];
+const MESH_EXTS = ["stl", "obj", "ply", "gltf", "glb"];
 
 /** FITS astronomy formats rendered by the native FITS viewer. */
-export const FITS_EXTS = ["fits", "fit", "fts"];
+const FITS_EXTS = ["fits", "fit", "fts"];
 
 /** How a file should be previewed, from its extension. This is the previewer
  *  registry: native webview viewers first (pdf/html/image via the local file
@@ -186,14 +166,6 @@ export function fileInspectorFromBlock(
     language: a.language ?? EXT_LANG[extOf(a.filename)],
     content: a.content,
   };
-}
-
-/** Stable identity for the same artifact as seen inside the hosted runtime
- * (`/workspace/...`) or by the workspace-relative SaaS file boundary. */
-export function artifactWorkspaceKey(path: string): string {
-  const normalized = path.replace(/\\/g, "/");
-  if (normalized.startsWith("/workspace/")) return normalized.slice("/workspace/".length);
-  return normalized.replace(/^\.\//, "");
 }
 
 /** A minimal artifact block for a file referenced in prose (path only, no inline content). */

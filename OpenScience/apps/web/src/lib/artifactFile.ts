@@ -30,15 +30,6 @@ export async function previewUrl(path: string, root?: FileRoot): Promise<string 
   return invokeCommand<string>("preview_url", { path, root });
 }
 
-/** Resolve a file mentioned in an agent message to a real workspace-relative
- *  path. Agent prose may name a file without its directory ("index.html" for
- *  "canvas-project/index.html"); the backend finds it by basename. Returns
- *  null when no such file exists; echoes the path back in browser dev. */
-export async function resolveArtifactPath(path: string): Promise<string | null> {
-  if (!hasWebApi) return path;
-  return invokeCommand<string | null>("resolve_artifact", { path });
-}
-
 /** Open a root-relative file in the OS default application (desktop only). */
 export async function openArtifactExternally(path: string, root?: FileRoot): Promise<void> {
   if (!hasWebApi) return;
@@ -155,12 +146,6 @@ export async function writeWorkspaceFile(
 ): Promise<void> {
   if (!hasWebApi) throw new Error("no desktop or web backend is configured");
   await invokeCommand("write_workspace_file", { path, content, root });
-}
-
-/** Build a `data:` URL from a read artifact for <img>/<iframe>/pdf.js. */
-export function toDataUrl(f: ArtifactFile): string {
-  if (f.encoding === "base64") return `data:${f.mime};base64,${f.data}`;
-  return `data:${f.mime};charset=utf-8,${encodeURIComponent(f.data)}`;
 }
 
 /** Decode a base64 artifact into raw bytes for binary renderers (docx/xlsx/pptx). */
