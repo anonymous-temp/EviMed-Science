@@ -78,13 +78,32 @@ export class MemoryIndexWorker {
   }
 
   start() {
-    if (this.timer) return;
-    this.timer = setInterval(() => { void this.tick().catch(() => {}); }, this.pollMs);
+    if (this.reconcileTimer) return;
+    // Draining arms no poll timer of its own.
+    //
+    // Indexing polls at the configured cadence because a capsule publish should
+    // be searchable promptly. Draining has nobody waiting on it: the queue it
+    // clears receives a row only when a capsule or fact is written, and closing
+    // those rows changes nothing anyone can see. A second always-armed interval
+    // for that is a cost with no reader — so the drain rides the reconcile
+    // sweep, which is what housekeeping already is.
+    if (!this.draining) {
+      this.timer = setInterval(() => { void this.tick().catch(() => {}); }, this.pollMs);
+      this.timer.unref();
+    }
     this.reconcileTimer = setInterval(() => { void this.reconcile(); }, this.reconcileMs);
-    this.timer.unref();
     this.reconcileTimer.unref();
-    void this.tick().catch(() => {});
+    if (!this.draining) void this.tick().catch(() => {});
     void this.reconcile();
+  }
+
+  /** Close every queued job this deployment will never index. Bounded, because
+   *  an unbounded drain on a queue something is still filling never returns. */
+  async drainQueue(limit = 64) {
+    for (let closed = 0; closed < limit; closed += 1) {
+      if (!(await this.tick())) return closed;
+    }
+    return limit;
   }
 
   async tick() {
@@ -137,10 +156,10 @@ export class MemoryIndexWorker {
     // Both halves, because both can be left behind by the same outage: the
     // capsule ledger re-arms from what it published, the record half from the
     // jobs its writers enqueued.
-    // Nothing to reconcile against when there is no index; draining is the
-    // whole of the work.
+    // With no index there is nothing to reconcile against, and draining the
+    // queue is the whole of the sweep.
     this.reconciling = Promise.all([
-      this.indexing ? this.indexing.reconcile() : null,
+      this.draining ? this.drainQueue() : this.indexing.reconcile(),
       this.substrate ? this.substrate.reconcileRecords() : null,
     ]).catch((error) => {
       this.lastError = typeof error?.code === "string" ? error.code : "memory_index_reconcile_failed";

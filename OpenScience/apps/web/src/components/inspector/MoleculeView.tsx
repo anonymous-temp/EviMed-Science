@@ -182,7 +182,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
         data-molecule-controls="true"
       >
         <div className="flex items-center gap-1 px-1.5 text-xs font-medium text-muted">
-          <Atom size={13} /> 3D
+          <Atom size={13} aria-hidden="true" /> 3D
         </div>
         <div className="flex rounded bg-surface-2 p-0.5">
           {styleOptions.map((o) => (
@@ -206,7 +206,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
           title="重置视图"
           className="flex h-7 w-7 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text"
         >
-          <RotateCcw size={13} />
+          <RotateCcw size={13} aria-hidden="true" />
         </button>
       </div>
 

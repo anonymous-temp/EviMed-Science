@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router";
+import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import {
   Bot,
   Bell,
@@ -49,12 +49,12 @@ interface NavItem {
  * the session page read as three shells.
  */
 const NAV: NavItem[] = [
-  { to: "/app/chat", label: "新任务", icon: <SquarePen size={16} /> },
-  { to: "/app/runs", label: "运行记录", icon: <FlaskConical size={16} /> },
-  { to: "/app/files", label: "知识库", icon: <FolderTree size={16} /> },
-  { to: "/app/memory", label: "记忆", icon: <Brain size={16} /> },
-  { to: "/app/autopilot", label: "主动科研", icon: <Orbit size={16} /> },
-  { to: "/app/capabilities", label: "科研能力", icon: <Bot size={16} /> },
+  { to: "/app/chat", label: "新任务", icon: <SquarePen size={16} aria-hidden="true" /> },
+  { to: "/app/runs", label: "运行记录", icon: <FlaskConical size={16} aria-hidden="true" /> },
+  { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
+  { to: "/app/memory", label: "记忆", icon: <Brain size={16} aria-hidden="true" /> },
+  { to: "/app/autopilot", label: "主动科研", icon: <Orbit size={16} aria-hidden="true" /> },
+  { to: "/app/capabilities", label: "科研能力", icon: <Bot size={16} aria-hidden="true" /> },
 ];
 
 export function Sidebar() {
@@ -80,7 +80,10 @@ export function Sidebar() {
         .then((page) => { if (active) setUnread(page.items.length); })
         .catch(() => { /* isolated: no badge rather than a broken sidebar */ });
     void load();
-    const timer = setInterval(load, 60_000);
+    // Only while someone is looking. Both of this sidebar's polls ran on every
+    // route including the conversation and kept running in a background tab
+    // (2026-09-16 review, D3); a badge nobody can see is spend with no reader.
+    const timer = setInterval(() => { if (document.visibilityState === "visible") void load(); }, 60_000);
     return () => { active = false; clearInterval(timer); };
   }, []);
 
@@ -102,10 +105,15 @@ export function Sidebar() {
           if (active) setRuns((current) => current ?? []);
         });
     void load();
-    const timer = setInterval(load, 20_000);
+    const timer = setInterval(() => { if (document.visibilityState === "visible") void load(); }, 20_000);
+    // And a catch-up when the tab comes back, so returning to it does not show
+    // a list frozen at whatever it said when the reader left.
+    const onVisible = () => { if (document.visibilityState === "visible") void load(); };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       active = false;
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
@@ -168,7 +176,7 @@ export function Sidebar() {
               title="收件箱"
               className="relative ml-auto self-center rounded p-1 text-text hover:bg-surface-2"
             >
-              <Bell size={14} strokeWidth={1.5} />
+              <Bell size={14} strokeWidth={1.5} aria-hidden="true" />
               {unread > 0 && (
                 <span className="absolute -right-0.5 -top-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-accent px-1 text-caption font-medium text-accent-fg">
                   {unread > 99 ? "99+" : unread}
@@ -181,7 +189,7 @@ export function Sidebar() {
               title="收起侧边栏 (Ctrl+B)"
               className="self-center rounded p-1 text-text hover:bg-surface-2"
             >
-              <PanelLeft size={14} strokeWidth={1.5} />
+              <PanelLeft size={14} strokeWidth={1.5} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -192,10 +200,11 @@ export function Sidebar() {
           {NAV.map((item) => (
             <NavRow
               key={item.to}
+              to={item.to}
               icon={item.icon}
               label={item.label}
               active={location.pathname.startsWith(item.to)}
-              onClick={() => navigate(item.to, item.to === "/app/chat" ? { state: { runtimeUiIntent: newRuntimeUiIntent() } } : undefined)}
+              freshState={item.to === "/app/chat" ? () => ({ runtimeUiIntent: newRuntimeUiIntent() }) : undefined}
             />
           ))}
         </nav>
@@ -204,7 +213,7 @@ export function Sidebar() {
           <div className="px-2 py-1 text-xs font-medium tracking-wider text-muted">最近任务</div>
           {(runs?.length ?? 0) > 0 && (
             <label className="relative mb-1 block">
-              <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+              <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
               <span className="sr-only">搜索运行记录</span>
               <input
                 type="search"
@@ -249,10 +258,10 @@ export function Sidebar() {
             * console as much as the product's settings; it is a tab of this
             * page now, beside usage, credentials and the operator's board. */}
           <NavRow
-            icon={<UserRound size={15} />}
+            to="/app/account"
+            icon={<UserRound size={15} aria-hidden="true" />}
             label="账户与设置"
             active={location.pathname.startsWith("/app/account")}
-            onClick={() => navigate("/app/account")}
           />
         </div>
       </aside>
@@ -281,20 +290,50 @@ export function Sidebar() {
   );
 }
 
+/**
+ * One destination.
+ *
+ * A link, not a button: middle-click, open-in-new-tab and copy-address are what
+ * people expect of navigation and a `<button>` has none of them, and assistive
+ * technology gets `aria-current` for free (2026-09-16 review, U10). `active` is
+ * still passed in rather than read from `NavLink`'s own matcher, because the
+ * rows match by prefix — `/app/chat/:sessionId` is still 「新任务」.
+ */
 function NavRow({
+  to,
   icon,
   label,
   active = false,
-  onClick,
+  freshState,
 }: {
+  to: string;
   icon: React.ReactNode;
   label: string;
   active?: boolean;
-  onClick: () => void;
+  /**
+   * Router state minted at the moment of the click, not at render.
+   *
+   * 「新任务」 carries a `runtimeUiIntent` that must differ on every activation —
+   * two clicks in a row are two requests for a new session, and a value read
+   * once at render would make the second one a repeat of the first. Computed
+   * here rather than passed as `state` for exactly that reason.
+   */
+  freshState?: () => unknown;
 }) {
+  const navigate = useNavigate();
   return (
-    <button
-      onClick={onClick}
+    <Link
+      to={to}
+      onClick={(event) => {
+        if (!freshState) return;
+        // A modified click is the browser's to handle — that is the whole
+        // point of this being a link.
+        if (event.defaultPrevented || event.button !== 0) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        navigate(to, { state: freshState() });
+      }}
+      aria-current={active ? "page" : undefined}
       className={cn(
         "flex items-center gap-2 rounded-input px-2 py-1.5 text-ui hover:bg-surface-2",
         active ? "bg-surface-2 font-medium text-text" : "text-text",
@@ -302,6 +341,6 @@ function NavRow({
     >
       <span className="text-muted">{icon}</span>
       <span>{label}</span>
-    </button>
+    </Link>
   );
 }

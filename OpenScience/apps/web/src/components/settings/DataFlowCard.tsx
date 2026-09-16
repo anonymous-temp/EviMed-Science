@@ -25,7 +25,7 @@ export function DataFlowCard({
       <div className="grid gap-5 px-5 py-4 sm:grid-cols-2">
         <div>
           <div className="flex items-center gap-1.5 text-ui font-medium text-text">
-            <HardDrive size={14} className="text-ok" /> {hosted ? "存储在项目工作区" : "留在本机"}
+            <HardDrive size={14} className="text-ok" aria-hidden="true" /> {hosted ? "存储在项目工作区" : "留在本机"}
           </div>
           <ul className="mt-2 list-disc space-y-1.5 pl-4 text-ui leading-relaxed text-muted">
             <li>
@@ -51,7 +51,7 @@ export function DataFlowCard({
         </div>
         <div>
           <div className="flex items-center gap-1.5 text-ui font-medium text-text">
-            <Send size={14} className="text-warn" /> 发送给你的模型提供方
+            <Send size={14} className="text-warn" aria-hidden="true" /> 发送给你的模型提供方
             <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-muted">
               {model ?? "未配置模型"}
             </span>

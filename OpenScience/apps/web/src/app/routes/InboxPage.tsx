@@ -123,7 +123,7 @@ function InboxCard({ item, busy, onRead, onResolve }: {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2"><span className="text-caption font-medium text-accent">{TYPE_LABEL[item.noticeType]}</span>
           {item.count > 1 && <span className="text-caption text-muted">合并 {item.count} 条</span>}</div>
-        {completed && <span className="flex items-center gap-1 text-caption text-ok"><CheckCircle2 size={13} />已处理</span>}
+        {completed && <span className="flex items-center gap-1 text-caption text-ok"><CheckCircle2 size={13} aria-hidden="true" />已处理</span>}
       </div>
       <div><h2 className="text-body font-medium text-text">{item.title}</h2><p className="mt-1 whitespace-pre-wrap text-ui text-muted">{item.body}</p></div>
       {availableActions.length > 0 && <div className="flex flex-wrap gap-2">{availableActions.map((action) => {

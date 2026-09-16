@@ -90,9 +90,9 @@ beforeEach(() => {
 describe("Sidebar navigation", () => {
   it("makes repeated new-task clicks distinct native requests even on the same route", async () => {
     renderSidebar();
-    await userEvent.click(screen.getByRole("button", { name: "新任务" }));
+    await userEvent.click(screen.getByRole("link", { name: "新任务" }));
     const first = JSON.parse(screen.getByTestId("intent").textContent!);
-    await userEvent.click(screen.getByRole("button", { name: "新任务" }));
+    await userEvent.click(screen.getByRole("link", { name: "新任务" }));
     const second = JSON.parse(screen.getByTestId("intent").textContent!);
     expect(first).toMatchObject({ kind: "create", projectId: "default" });
     expect(second.requestId).not.toBe(first.requestId);
@@ -106,20 +106,20 @@ describe("Sidebar navigation", () => {
     renderSidebar();
 
     const order = ["新任务", "运行记录", "知识库", "记忆", "主动科研", "科研能力"];
-    const buttons = order.map((label) => screen.getByRole("button", { name: label }));
+    const buttons = order.map((label) => screen.getByRole("link", { name: label }));
     for (let i = 1; i < buttons.length; i += 1) {
       expect(
         buttons[i - 1].compareDocumentPosition(buttons[i]) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     }
 
-    await userEvent.click(screen.getByRole("button", { name: "知识库" }));
+    await userEvent.click(screen.getByRole("link", { name: "知识库" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/files");
 
-    await userEvent.click(screen.getByRole("button", { name: "科研能力" }));
+    await userEvent.click(screen.getByRole("link", { name: "科研能力" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/capabilities");
 
-    await userEvent.click(screen.getByRole("button", { name: "账户与设置" }));
+    await userEvent.click(screen.getByRole("link", { name: "账户与设置" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/account");
   });
 

@@ -94,9 +94,9 @@ export function ProjectSwitcher() {
         aria-label={`当前项目：${label}`}
         className="flex w-full items-center gap-2 rounded-input border border-border px-2 py-1.5 text-ui text-text hover:bg-surface-2"
       >
-        <FolderGit2 size={14} strokeWidth={1.5} className="shrink-0 text-muted" />
+        <FolderGit2 size={14} strokeWidth={1.5} className="shrink-0 text-muted" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-        <ChevronsUpDown size={13} strokeWidth={1.5} className="shrink-0 text-muted" />
+        <ChevronsUpDown size={13} strokeWidth={1.5} className="shrink-0 text-muted" aria-hidden="true" />
       </button>
 
       {open && (
@@ -119,8 +119,7 @@ export function ProjectSwitcher() {
                 <Check
                   size={13}
                   strokeWidth={2}
-                  className={cn("shrink-0", project.id === currentId ? "text-accent" : "invisible")}
-                />
+                  className={cn("shrink-0", project.id === currentId ? "text-accent" : "invisible")} aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate">{project.name}</span>
               </button>
             ))}
@@ -153,7 +152,7 @@ export function ProjectSwitcher() {
                 onClick={() => setCreating(true)}
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-ui text-text hover:bg-surface-2 disabled:opacity-50"
               >
-                <Plus size={13} strokeWidth={1.5} className="shrink-0 text-muted" />
+                <Plus size={13} strokeWidth={1.5} className="shrink-0 text-muted" aria-hidden="true" />
                 <span>新建项目</span>
               </button>
             )}

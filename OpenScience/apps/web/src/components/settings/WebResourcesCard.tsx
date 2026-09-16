@@ -88,7 +88,7 @@ export function WebResourcesCard() {
           title="刷新资源状态"
           aria-label="刷新资源状态"
         >
-          <RefreshCw size={13} className={cn(loading && "animate-spin")} />
+          <RefreshCw size={13} className={cn(loading && "animate-spin")} aria-hidden="true" />
         </button>
       </header>
       <div className="grid gap-3 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -109,7 +109,7 @@ export function WebResourcesCard() {
           title="启动研究运行时"
           aria-label="启动研究运行时"
         >
-          <Play size={13} className={cn(runtimeAction === "start" && "animate-pulse")} />
+          <Play size={13} className={cn(runtimeAction === "start" && "animate-pulse")} aria-hidden="true" />
           启动
         </button>
         <button
@@ -119,7 +119,7 @@ export function WebResourcesCard() {
           title="重启研究运行时"
           aria-label="重启研究运行时"
         >
-          <RotateCw size={13} className={cn(runtimeAction === "restart" && "animate-spin")} />
+          <RotateCw size={13} className={cn(runtimeAction === "restart" && "animate-spin")} aria-hidden="true" />
           重启
         </button>
         <button
@@ -129,7 +129,7 @@ export function WebResourcesCard() {
           title="停止研究运行时"
           aria-label="停止研究运行时"
         >
-          <Square size={13} className={cn(runtimeAction === "stop" && "animate-pulse")} />
+          <Square size={13} className={cn(runtimeAction === "stop" && "animate-pulse")} aria-hidden="true" />
           停止
         </button>
       </div>

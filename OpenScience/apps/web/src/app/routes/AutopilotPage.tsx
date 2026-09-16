@@ -101,7 +101,7 @@ function NewAgendaForm({ projectId, busy, onCreated, onError }: {
 
   if (!open) {
     return (
-      <Button size="sm" disabled={busy} onClick={() => setOpen(true)}><Plus size={13} />新建议程</Button>
+      <Button size="sm" disabled={busy} onClick={() => setOpen(true)}><Plus size={13} aria-hidden="true" />新建议程</Button>
     );
   }
 
@@ -395,9 +395,9 @@ export function AutopilotPage() {
           {agenda.payload.pauseReason && <p className="text-ui-sm text-muted">{agenda.payload.pauseReason}</p>}
           {pendingFollowUps(agenda) > 0 && <p className="text-ui-sm text-muted">下一回合先回答 {pendingFollowUps(agenda)} 条追问。</p>}
           <div className="flex flex-wrap gap-2">
-            {agenda.payload.status === "active" ? <><Button size="sm" disabled={busy} onClick={() => void mutate(() => scheduleAgenda(agenda.id, todayIn(agenda.payload.timeZone)))}><Sparkles size={13} />立即运行一回合</Button>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => void mutate(() => stopAgenda(agenda.id, agenda.revision))}><PauseCircle size={13} />停止</Button></>
-              : <Button size="sm" disabled={busy} onClick={() => void mutate(() => startAgenda(agenda.id, agenda.revision))}><PlayCircle size={13} />开始主动科研</Button>}
+            {agenda.payload.status === "active" ? <><Button size="sm" disabled={busy} onClick={() => void mutate(() => scheduleAgenda(agenda.id, todayIn(agenda.payload.timeZone)))}><Sparkles size={13} aria-hidden="true" />立即运行一回合</Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => void mutate(() => stopAgenda(agenda.id, agenda.revision))}><PauseCircle size={13} aria-hidden="true" />停止</Button></>
+              : <Button size="sm" disabled={busy} onClick={() => void mutate(() => startAgenda(agenda.id, agenda.revision))}><PlayCircle size={13} aria-hidden="true" />开始主动科研</Button>}
           </div></div></Card>)}
     </section>
   </div></main>;

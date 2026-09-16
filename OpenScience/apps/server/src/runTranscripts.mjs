@@ -86,6 +86,7 @@ export const TRANSCRIPT_COMPLETENESS = Object.freeze(["complete", "partial", "un
  * @property {string} sessionId
  * @property {number} fromSeq
  * @property {string} reason
+ * @property {string} [detail] the reader's own words for why, when there are any
  */
 
 /**
@@ -136,7 +137,7 @@ function relativeTranscriptPath(project, runId) {
  * transcript is worth keeping even when one delegate's session has already been
  * reaped.
  *
- * @param {{ sessionTranscript: (project: any, sessionId: string, options: any) => Promise<any> }} runtimeManager
+ * @param {{ sessionTranscript: (project: any, sessionId: string, options: any) => Promise<any>, subagentCatalogue?: (project: any, parentSessionId: string) => Promise<any[]> }} runtimeManager
  * @param {any} project
  * @param {{ sessionId: string }} run
  * @param {{ maxSessions?: number, children?: readonly { sessionId: string, parentSessionId?: string, label?: string, capability?: string|null }[] }} [options]
@@ -167,6 +168,43 @@ export async function collectRunTranscripts(runtimeManager, project, run, option
   /** @type {{ sessionId: string, parentSessionId: string|null, label: string, capability: string|null }[]} */
   const queue = [{ sessionId: run.sessionId, parentSessionId: null, label: "root", capability: null }, ...seeded];
   const seen = new Set();
+  /**
+   * One `subagents/list` per parent, cached.
+   *
+   * A subagent session cannot be read at its own id: the kernel refuses it by
+   * name — `session/agent-busy`, "subagent Sessions require their durable
+   * parent address" — and wants `{kind:'subagent', parentSessionId,
+   * childSessionId, mode}`. `mode` is part of what it authorizes against, so
+   * the address is taken from the kernel's own catalogue rather than composed
+   * from a guess; the envelope below is assembled only when the catalogue gives
+   * the parts without it.
+   *
+   * @type {Map<string, Promise<Map<string, Record<string, any>>>>}
+   */
+  const catalogues = new Map();
+  const addressOf = async (parentSessionId, childSessionId) => {
+    if (typeof runtimeManager.subagentCatalogue !== "function") return null;
+    if (!catalogues.has(parentSessionId)) {
+      catalogues.set(parentSessionId, runtimeManager.subagentCatalogue(project, parentSessionId)
+        .then((items) => {
+          /** @type {Map<string, Record<string, any>>} */
+          const byChild = new Map();
+          for (const item of Array.isArray(items) ? items : []) {
+            const id = String(item?.address?.childSessionId ?? item?.childSessionId ?? "");
+            if (id) byChild.set(id, item);
+          }
+          return byChild;
+        })
+        .catch(() => new Map()));
+    }
+    const entry = (await catalogues.get(parentSessionId))?.get(String(childSessionId));
+    if (!entry) return null;
+    if (entry.address && entry.address.kind === "subagent") return entry.address;
+    const mode = String(entry.mode ?? entry.address?.mode ?? "");
+    if (mode !== "one-shot" && mode !== "continuable") return null;
+    return { kind: "subagent", parentSessionId, childSessionId: String(childSessionId), mode };
+  };
+
   while (queue.length && collected.length < maxSessions) {
     const next = /** @type {{ sessionId: string, parentSessionId: string|null, label: string, capability: string|null }} */ (queue.shift());
     if (!next.sessionId || seen.has(next.sessionId)) continue;
@@ -174,11 +212,19 @@ export async function collectRunTranscripts(runtimeManager, project, run, option
     let transcript = null;
     let error = null;
     try {
+      const address = next.parentSessionId ? await addressOf(next.parentSessionId, next.sessionId) : null;
       // `wake: false` throughout: waking a container to read a run that has
       // already finished would restart the very thing whose exit ended it.
-      transcript = await runtimeManager.sessionTranscript(project, next.sessionId, { wake: false });
+      transcript = await runtimeManager.sessionTranscript(project, next.sessionId, { wake: false, address });
     } catch (err) {
-      error = String(err?.code ?? err?.message ?? "unreadable");
+      // Both, when there are both. The code alone is what was recorded before,
+      // and for the failure that mattered it was `runtime_session_error` —
+      // true, generic, and useless: the sentence next to it
+      // ("subagent Sessions require their durable parent address") is the one
+      // that names the defect.
+      const code = String(err?.code ?? "");
+      const message = String(err?.message ?? "");
+      error = [code, message].filter(Boolean).join(": ") || "unreadable";
     }
     collected.push({ ...next, transcript, error });
     for (const child of transcript?.subagents ?? []) {
@@ -275,6 +321,14 @@ function describeSession(session) {
         sessionId: session.sessionId,
         fromSeq: 0,
         reason: session.parentSessionId ? "child_unreadable" : "history_unavailable",
+        // Why, in the kernel's own words.
+        //
+        // The collector has always recorded the error and this has always
+        // dropped it, so every unreadable child read as `child_unreadable` and
+        // nothing more. Diagnosing the one that mattered — the kernel refusing
+        // a subagent addressed at its own id — took a live probe against a
+        // running container, because the stored record could not say it.
+        ...(session.error ? { detail: String(session.error).slice(0, 200) } : {}),
       }],
     };
   }

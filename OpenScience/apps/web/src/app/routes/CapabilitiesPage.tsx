@@ -100,7 +100,7 @@ export function CapabilitiesPage() {
             {/* `uppercase` on a line that is already Chinese did nothing to
               * the Chinese and shouted the one English word in it. */}
             <div className="mb-2 flex items-center gap-2 text-xs font-medium tracking-[0.16em] text-accent">
-              <Bot size={14} /> EviMed 能力目录
+              <Bot size={14} aria-hidden="true" /> EviMed 能力目录
             </div>
             {/* 「能力模板」 read as document templates. These are the fifteen
               * specialist research capabilities — drug safety, meta-analysis,
@@ -119,7 +119,7 @@ export function CapabilitiesPage() {
           </div>
           <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
             <label className="relative min-w-64 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} />
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} aria-hidden="true" />
               <span className="sr-only">搜索科研能力</span>
               <input
                 type="search"
@@ -192,8 +192,8 @@ function AgentRow({ agent, onOpen }: { agent: WebResearchAgent; onOpen: () => vo
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
           <span className="font-medium tracking-[0.12em] text-accent">{ui.category}</span>
-          <span className="inline-flex items-center gap-1"><Clock3 size={12} /> 约 {ui.estimatedMinutes[0]}–{ui.estimatedMinutes[1]} 分钟</span>
-          {supportsFiles && <span className="inline-flex items-center gap-1"><FileCheck2 size={12} /> 支持知识库资料</span>}
+          <span className="inline-flex items-center gap-1"><Clock3 size={12} aria-hidden="true" /> 约 {ui.estimatedMinutes[0]}–{ui.estimatedMinutes[1]} 分钟</span>
+          {supportsFiles && <span className="inline-flex items-center gap-1"><FileCheck2 size={12} aria-hidden="true" /> 支持知识库资料</span>}
         </div>
         <h2 className="mt-2 text-title font-semibold text-text">{ui.title}</h2>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">{ui.description}</p>
@@ -205,7 +205,7 @@ function AgentRow({ agent, onOpen }: { agent: WebResearchAgent; onOpen: () => vo
         </div>
       </div>
       <div className="flex h-full items-center px-3 text-muted transition-transform group-hover:translate-x-1 group-hover:text-accent">
-        <ArrowRight size={17} />
+        <ArrowRight size={17} aria-hidden="true" />
       </div>
     </button>
   );

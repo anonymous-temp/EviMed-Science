@@ -102,7 +102,7 @@ export function AppShell() {
               title={`展开侧边栏 (${isMac ? "⌘B" : "Ctrl+B"})`}
               className="fade-in rounded p-1 text-text hover:bg-surface-2"
             >
-              <PanelLeft size={14} strokeWidth={1.5} />
+              <PanelLeft size={14} strokeWidth={1.5} aria-hidden="true" />
             </button>
           </div>
         )}

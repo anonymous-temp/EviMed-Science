@@ -95,14 +95,14 @@ export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {})
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text hover:bg-surface-2"
                   onClick={() => void createNew("python")}
                 >
-                  <NotebookPen size={13} className="text-muted" /> Python 笔记本
+                  <NotebookPen size={13} className="text-muted" aria-hidden="true" /> Python 笔记本
                 </button>
                 <button
                   role="menuitem"
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-text hover:bg-surface-2"
                   onClick={() => void createNew("r")}
                 >
-                  <NotebookPen size={13} className="text-muted" /> R 笔记本
+                  <NotebookPen size={13} className="text-muted" aria-hidden="true" /> R 笔记本
                 </button>
               </div>
             )}
@@ -134,7 +134,7 @@ export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {})
                 onClick={() => setOpen({ path: e.path, root: "base" })}
                 className="flex w-full items-center gap-2.5 rounded-card border border-border bg-surface px-4 py-2.5 text-left hover:bg-surface-2"
               >
-                <NotebookPen size={15} className="shrink-0 text-muted" />
+                <NotebookPen size={15} className="shrink-0 text-muted" aria-hidden="true" />
                 <span className="truncate text-sm text-text">{name}</span>
                 {folder && (
                   <span className="max-w-[40%] truncate rounded bg-surface-2 px-1.5 py-0.5 text-caption text-muted">

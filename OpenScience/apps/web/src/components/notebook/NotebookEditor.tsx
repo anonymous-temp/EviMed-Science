@@ -199,10 +199,10 @@ export function NotebookEditor({
         <PaneTitlebarInset />
         {onBack && (
           <button className="text-text hover:opacity-60" aria-label="返回科研笔记本" onClick={onBack}>
-            <ArrowLeft size={14} strokeWidth={1.5} />
+            <ArrowLeft size={14} strokeWidth={1.5} aria-hidden="true" />
           </button>
         )}
-        <NotebookPen size={14} strokeWidth={1.5} className="shrink-0 text-text" />
+        <NotebookPen size={14} strokeWidth={1.5} className="shrink-0 text-text" aria-hidden="true" />
         <h1 className="truncate text-ui font-medium text-text">{path}</h1>
         <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-caption font-medium uppercase tracking-wide text-muted">
           {language === "r" ? "R" : "Python"}
@@ -219,7 +219,7 @@ export function NotebookEditor({
           aria-pressed={showHistory}
           onClick={() => setShowHistory((v) => !v)}
         >
-          <History size={14} strokeWidth={1.5} />
+          <History size={14} strokeWidth={1.5} aria-hidden="true" />
         </button>
         <button
           className="text-text hover:opacity-60"
@@ -227,12 +227,12 @@ export function NotebookEditor({
           title="重新加载 EviMed 对文件的修改"
           onClick={() => void load()}
         >
-          <RefreshCw size={14} strokeWidth={1.5} />
+          <RefreshCw size={14} strokeWidth={1.5} aria-hidden="true" />
         </button>
         {controls}
         {onClose && (
           <button className="text-text hover:opacity-60" aria-label="关闭检查器" onClick={onClose}>
-            <X size={14} strokeWidth={1.5} />
+            <X size={14} strokeWidth={1.5} aria-hidden="true" />
           </button>
         )}
       </div>
@@ -247,7 +247,7 @@ export function NotebookEditor({
           {error && <div className="text-sm text-error">{error}</div>}
           {!error && !cells && (
             <div className="flex items-center gap-2 text-sm text-muted">
-              <Loader2 size={14} className="animate-spin" /> 正在加载…
+              <Loader2 size={14} className="animate-spin" aria-hidden="true" /> 正在加载…
             </div>
           )}
           {cells?.map((cell) => (
@@ -265,7 +265,7 @@ export function NotebookEditor({
                       title="停止服务端隔离执行"
                       onClick={() => void stop()}
                     >
-                      <Square size={10} fill="currentColor" />
+                      <Square size={10} fill="currentColor" aria-hidden="true" />
                       停止
                     </button>
                   ) : (
@@ -275,7 +275,7 @@ export function NotebookEditor({
                       onClick={() => void run(cell)}
                       disabled={running !== null}
                     >
-                      <Play size={11} />
+                      <Play size={11} aria-hidden="true" />
                       运行
                     </button>
                   ))}
@@ -284,7 +284,7 @@ export function NotebookEditor({
                   aria-label={`删除单元格 ${cell.index}`}
                   onClick={() => removeCell(cell.index)}
                 >
-                  <Trash2 size={11} />
+                  <Trash2 size={11} aria-hidden="true" />
                 </button>
               </div>
               <textarea
@@ -318,7 +318,7 @@ export function NotebookEditor({
               className="flex items-center gap-1.5 rounded-input border border-dashed border-border px-3 py-1.5 text-xs text-muted hover:bg-surface-2 hover:text-text"
               onClick={addCell}
             >
-              <Plus size={12} /> 添加单元格
+              <Plus size={12} aria-hidden="true" /> 添加单元格
             </button>
           )}
         </div>

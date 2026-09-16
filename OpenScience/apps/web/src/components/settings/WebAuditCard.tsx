@@ -37,7 +37,7 @@ export function WebAuditCard() {
           title="刷新审计事件"
           aria-label="刷新审计事件"
         >
-          <RefreshCw size={13} className={cn(loading && "animate-spin")} />
+          <RefreshCw size={13} className={cn(loading && "animate-spin")} aria-hidden="true" />
         </button>
       </header>
       <div className="px-5 py-4">
@@ -53,7 +53,7 @@ export function WebAuditCard() {
                   index > 0 && "border-t border-border",
                 )}
               >
-                <ClipboardList size={13} className={cn("shrink-0", statusTone(event.status))} />
+                <ClipboardList size={13} className={cn("shrink-0", statusTone(event.status))} aria-hidden="true" />
                 <span className="w-24 shrink-0 truncate font-mono text-caption text-text" title={event.action ?? ""}>
                   {event.action ?? "操作"}
                 </span>

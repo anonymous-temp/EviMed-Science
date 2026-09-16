@@ -64,13 +64,35 @@ const subagent = (sessionId, capability) => ({
  * collector that never asked for a child look exactly like one that did.
  */
 class FakeRuntime {
-  constructor(sessions) {
+  constructor(sessions, catalogue = {}) {
     this.sessions = new Map(Object.entries(sessions));
+    /** `subagents/list` per parent, as the kernel publishes it. */
+    this.catalogue = new Map(Object.entries(catalogue));
+    this.catalogueCalls = [];
     this.calls = [];
+  }
+
+  async subagentCatalogue(_project, parentSessionId) {
+    this.catalogueCalls.push(parentSessionId);
+    return this.catalogue.get(parentSessionId) ?? [];
   }
 
   async sessionTranscript(project, sessionId, options) {
     this.calls.push({ sessionId, options });
+    // The kernel refuses a subagent session addressed at its own id, and that
+    // refusal is the whole reason the address exists. Reproduced here so a
+    // caller that drops the address fails this double the way it fails the
+    // kernel.
+    // Whether this session IS a subagent is the kernel's own fact, read off the
+    // session header — not off our catalogue. A catalogue read that came back
+    // empty does not make a child into a root.
+    const isSubagent = [...this.sessions.values()].some((value) => !(value instanceof Error)
+      && (value?.subagents ?? []).some((child) => child.sessionId === sessionId));
+    if (isSubagent && options?.address?.kind !== "subagent") {
+      const error = new Error("subagent Sessions require their durable parent address");
+      error.code = "runtime_session_error";
+      throw error;
+    }
     const answer = this.sessions.get(sessionId);
     if (answer instanceof Error) throw answer;
     if (!answer) {
@@ -96,6 +118,11 @@ function delegatingRun() {
     }),
     ses_child_a: transcript("ses_child_a", [message(3, "search"), message(4, "quote")]),
     ses_child_b: transcript("ses_child_b", [message(5, "parse the source")]),
+  }, {
+    ses_root: [
+      { childSessionId: "ses_child_a", mode: "one-shot" },
+      { childSessionId: "ses_child_b", mode: "one-shot" },
+    ],
   });
 }
 
@@ -143,6 +170,49 @@ test("a run's own session and both of its subagent sessions are collected whole 
   });
 });
 
+test("a subagent session is read at the address the kernel publishes, not at its own id", async () => {
+  // The kernel refuses `{kind:'session'}` for a subagent by name:
+  // `session/agent-busy`, "subagent Sessions require their durable parent
+  // address". Every delegated child read as `child_unreadable` until
+  // 2026-09-16 for exactly that, which made every run that delegated report
+  // `completeness: partial` — and dropped every cell of a paired evaluation,
+  // because a run with a partial transcript is not a measurement.
+  //
+  // `mode` is part of what the kernel authorizes against, so the address comes
+  // from its own `subagents/list` rather than from a guess here.
+  await withProject(async (project) => {
+    const runtime = delegatingRun();
+    const sessions = await collectRunTranscripts(runtime, project, { id: "run_addressed", sessionId: "ses_root" });
+    const receipt = await persistRunTranscript({ project, run: { id: "run_addressed", sessionId: "ses_root" }, sessions, now: new Date(CAPTURED_AT) });
+
+    assert.equal(receipt.completeness, "complete");
+    const byId = new Map(runtime.calls.map((call) => [call.sessionId, call.options]));
+    assert.equal(byId.get("ses_root")?.address, null, "the root is not a subagent and has no parent address");
+    assert.deepEqual(byId.get("ses_child_a")?.address, {
+      kind: "subagent", parentSessionId: "ses_root", childSessionId: "ses_child_a", mode: "one-shot",
+    });
+    // One catalogue read per parent, not one per child.
+    assert.deepEqual(runtime.catalogueCalls, ["ses_root"]);
+  });
+});
+
+test("a child the catalogue does not list is a recorded gap, not a guessed address", async () => {
+  // Composing an address without the kernel's `mode` would be a guess, and a
+  // wrong `mode` is refused as `subagent/unauthorized` — which reads exactly
+  // like the child being gone. An unlisted child is left unread and said so.
+  await withProject(async (project) => {
+    const runtime = new FakeRuntime({
+      ses_root: transcript("ses_root", [message(1, "delegate")], { subagents: [subagent("ses_child_a", "x")] }),
+      ses_child_a: transcript("ses_child_a", [message(2, "work")]),
+    }, { ses_root: [] });
+    const sessions = await collectRunTranscripts(runtime, project, { id: "run_unlisted", sessionId: "ses_root" });
+    const child = sessions.find((entry) => entry.sessionId === "ses_child_a");
+    assert.equal(child?.transcript, null, "no address, so no read was attempted at the wrong one");
+    assert.match(String(child?.error), /runtime_session_error: subagent Sessions require their durable parent address/,
+      "the recorded reason names the defect, not just its error code");
+  });
+});
+
 test("a subagent session that can no longer be read is recorded as a partial transcript, not a smaller complete one", async () => {
   await withProject(async (project) => {
     const runtime = delegatingRun();
@@ -154,8 +224,14 @@ test("a subagent session that can no longer be read is recorded as a partial tra
     const { header, records } = await readLines(project, run.id);
 
     assert.equal(receipt.completeness, "partial");
-    assert.deepEqual(receipt.missing, [{ sessionId: "ses_child_b", fromSeq: 0, reason: "child_unreadable" }]);
-    assert.equal(sessions[2].error, "runtime_session_not_found");
+    // The gap carries the reader's own words. Diagnosing the one that
+    // mattered — the kernel refusing a subagent addressed at its own id —
+    // needed a live probe against a running container, because the stored
+    // record said only `child_unreadable`.
+    assert.deepEqual(receipt.missing, [
+      { sessionId: "ses_child_b", fromSeq: 0, reason: "child_unreadable", detail: "runtime_session_not_found: session is gone" },
+    ]);
+    assert.equal(sessions[2].error, "runtime_session_not_found: session is gone");
     assert.deepEqual(header.sessions.map((entry) => entry.sessionId), ["ses_root", "ses_child_a", "ses_child_b"]);
     assert.deepEqual(records.filter((entry) => entry.sessionId === "ses_root").map((entry) => entry.seq), [1, 2]);
     assert.deepEqual(records.filter((entry) => entry.sessionId === "ses_child_a").map((entry) => entry.seq), [3, 4]);
@@ -224,7 +300,9 @@ test("a run whose root session yields nothing is unavailable rather than an empt
   });
 
   assert.equal(rootGone.header.completeness, "unavailable");
-  assert.deepEqual(rootGone.header.missing, [{ sessionId: "ses_root", fromSeq: 0, reason: "history_unavailable" }]);
+  assert.deepEqual(rootGone.header.missing, [
+    { sessionId: "ses_root", fromSeq: 0, reason: "history_unavailable", detail: "runtime_not_running" },
+  ]);
   assert.equal(rootGone.messages, 0);
   assert.equal(rootEmpty.header.completeness, "unavailable");
   assert.equal(rootEmpty.messages, 0);
@@ -389,6 +467,9 @@ test("collection follows a grandchild session that a subagent announced", async 
         subagents: [{ sessionId: "ses_grandchild", parentSessionId: "ses_child_a", label: "subagent", capability: "source-understanding" }],
       }),
       ses_grandchild: transcript("ses_grandchild", [message(3, "the work happened here")]),
+    }, {
+      ses_root: [{ childSessionId: "ses_child_a", mode: "one-shot" }],
+      ses_child_a: [{ childSessionId: "ses_grandchild", mode: "one-shot" }],
     });
 
     const sessions = await collectRunTranscripts(runtime, project, { id: "run_deep", sessionId: "ses_root" });

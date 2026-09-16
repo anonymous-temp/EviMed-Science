@@ -56,7 +56,7 @@ export function AccountPage() {
         <Card title="你的账号与项目" hint="每个账号的数据彼此独立；同一账号下的项目也各自隔离，互相看不到对方的文件与运行记录。">
           <div className="flex items-center gap-4">
             <div className="grid h-11 w-11 place-items-center rounded-full bg-surface-2 text-accent">
-              <UserRound size={20} />
+              <UserRound size={20} aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="truncate text-body font-medium text-text">{identity.name || "EviMed 用户"}</div>
@@ -65,7 +65,7 @@ export function AccountPage() {
               </div>
             </div>
             <div className="flex items-center gap-1.5 rounded-full bg-ok/10 px-2.5 py-1 text-caption font-medium text-ok">
-              <ShieldCheck size={13} /> 数据独立
+              <ShieldCheck size={13} aria-hidden="true" /> 数据独立
             </div>
           </div>
         </Card>
@@ -83,7 +83,7 @@ export function AccountPage() {
           >
             <div className="flex items-start gap-3">
               <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warn/10 text-warn">
-                <WalletMinimal size={17} />
+                <WalletMinimal size={17} aria-hidden="true" />
               </div>
               <div className="min-w-0">
                 <p className="text-ui text-text">{describeWebUsageBudget(budgetRefusal)}</p>

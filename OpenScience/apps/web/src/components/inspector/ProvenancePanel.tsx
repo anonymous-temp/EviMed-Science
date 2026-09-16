@@ -99,7 +99,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
   if (records === null) {
     return (
       <div className="flex items-center gap-2 p-4 text-sm text-muted">
-        <Loader2 size={15} className="animate-spin" /> 正在加载版本记录…
+        <Loader2 size={15} className="animate-spin" aria-hidden="true" /> 正在加载版本记录…
       </div>
     );
   }
@@ -125,9 +125,9 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
               aria-expanded={open}
             >
               {open ? (
-                <ChevronDown size={14} className="shrink-0 text-muted" />
+                <ChevronDown size={14} className="shrink-0 text-muted" aria-hidden="true" />
               ) : (
-                <ChevronRight size={14} className="shrink-0 text-muted" />
+                <ChevronRight size={14} className="shrink-0 text-muted" aria-hidden="true" />
               )}
               <span className="rounded bg-surface-2 px-1.5 text-xs font-medium text-text">
                 v{r.version}
@@ -162,7 +162,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                       title="查看此版本的 Python 依赖锁定文件"
                       aria-pressed={lockfile?.hash === r.env.packages.hash}
                     >
-                      <Package size={11} /> {r.env.packages.count} 个依赖包
+                      <Package size={11} aria-hidden="true" /> {r.env.packages.count} 个依赖包
                     </button>
                   )}
                   {r.log && <span className="truncate">{r.log}</span>}
@@ -173,7 +173,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                       onClick={() => reproduce(r)}
                       title="生成复现此版本并比较结果的任务"
                     >
-                      <RotateCcw size={12} /> 复现
+                      <RotateCcw size={12} aria-hidden="true" /> 复现
                     </button>
                   )}
                   {r.sessionId && (
@@ -182,7 +182,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                       onClick={() => navigate(`/app/chat/${r.sessionId}`)}
                       title="打开此版本的来源对话"
                     >
-                      <MessageSquare size={12} /> 打开对话
+                      <MessageSquare size={12} aria-hidden="true" /> 打开对话
                     </button>
                   )}
                 </div>
@@ -193,7 +193,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                     </div>
                     {lockfile.text === null ? (
                       <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-muted">
-                        <Loader2 size={12} className="animate-spin" /> 正在加载…
+                        <Loader2 size={12} className="animate-spin" aria-hidden="true" /> 正在加载…
                       </div>
                     ) : (
                       <pre className="max-h-48 overflow-auto px-2.5 py-2 font-mono text-caption leading-relaxed text-text">

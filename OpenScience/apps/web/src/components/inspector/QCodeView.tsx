@@ -37,7 +37,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
     return (
       <div className="flex h-full items-center justify-center p-6">
         <div className="flex max-w-sm items-start gap-2 rounded-card border border-border bg-surface p-4 text-sm text-muted">
-          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" />
+          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" aria-hidden="true" />
           <span>无法读取此编码文件——{parsed.error ?? "未知格式"}。</span>
         </div>
       </div>
@@ -52,7 +52,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
           {filename} · {doc.sources.length} 个来源 · {doc.codes.length} 个编码
         </span>
         <span className="inline-flex items-center gap-1 text-caption text-ok" title="高亮内容来自原文精确片段，引用直接截取自来源，不由模型生成。">
-          <ShieldCheck size={13} /> 引用均为来源原文片段
+          <ShieldCheck size={13} aria-hidden="true" /> 引用均为来源原文片段
         </span>
       </div>
 
@@ -98,7 +98,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
         <div className="min-w-0 flex-1 overflow-y-auto p-4">
           {doc.warnings.length > 0 && (
             <div className="mb-3 flex items-start gap-2 rounded-card border border-warn/30 bg-warn/10 p-2 text-ui-sm text-muted">
-              <AlertTriangle size={13} className="mt-0.5 shrink-0 text-warn" />
+              <AlertTriangle size={13} className="mt-0.5 shrink-0 text-warn" aria-hidden="true" />
               <div>
                 {doc.warnings.length} 条批注被跳过或标记：
                 <ul className="mt-1 list-inside list-disc">

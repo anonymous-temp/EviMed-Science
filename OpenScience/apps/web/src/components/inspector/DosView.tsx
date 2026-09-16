@@ -26,7 +26,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
     return (
       <div className="flex h-full items-center justify-center p-6">
         <div className="flex max-w-sm items-start gap-2 rounded-card border border-border bg-surface p-4 text-sm text-muted">
-          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" />
+          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warn" aria-hidden="true" />
           <span>无法读取此 DOSCAR 文件——{parsed.error ?? "未知格式"}。</span>
         </div>
       </div>
