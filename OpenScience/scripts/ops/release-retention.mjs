@@ -46,7 +46,34 @@ const BARE_RELEASE_RE = /^[0-9a-f]{7,40}$/;
 function isRelease(name) {
   return DATED_RELEASE_RE.test(name) || BARE_RELEASE_RE.test(name);
 }
-const IMAGE_REPOS = ["open-science-web", "evimed-runtime-dsh"];
+/**
+ * The image repositories a release is built into, and how a tag names its
+ * release.
+ *
+ * `open-science-web:<release>` is tagged by the release alone. The runtime is
+ * `open-science-runtime:dsh-<kernel>-uv-<uv>-<release>`, so its tag only ENDS
+ * with the release. The list used to read `evimed-runtime-dsh`, a repository
+ * that stopped existing with the 2026-09-14 redeploy, and an exact-tag match:
+ * `--images` reported success and removed nothing, and the 6 GB runtime images
+ * were cleared by hand instead — by the same hands that then removed release
+ * directories this script would have refused to (2026-09-17).
+ */
+const IMAGE_REPOS = ["open-science-web", "open-science-runtime", "evimed-runtime-dsh"];
+
+/**
+ * Which of the host's image tags belong to a release.
+ * @param {readonly string[]} tags every `repository:tag` on the host
+ * @param {string} release @returns {string[]}
+ */
+export function releaseImageTags(tags, release) {
+  return tags.filter((entry) => {
+    const split = entry.lastIndexOf(":");
+    if (split <= 0) return false;
+    const repository = entry.slice(0, split);
+    const tag = entry.slice(split + 1);
+    return IMAGE_REPOS.includes(repository) && (tag === release || tag.endsWith(`-${release}`));
+  });
+}
 
 function usage() {
   console.error("Usage: release-retention.mjs prune RELEASES_DIR [--keep N] [--images] [--apply]");
@@ -70,12 +97,19 @@ async function assertReleasesDir(dir) {
 }
 
 /**
- * Every release directory a container still names, by any mount source.
+ * Every release directory a container still names: by a mount source, or as
+ * the compose directory it was created from.
  *
  * Read from `docker inspect` over all containers including stopped ones. If
  * docker cannot be reached this throws rather than returning an empty set:
  * an empty set here would read as "nothing is in use" and delete the live
  * release, so the honest failure is to refuse.
+ *
+ * The compose labels count as well as the mounts (2026-09-17). PostgreSQL, the
+ * six engines and the document parser mount nothing from a release, so by
+ * mounts alone the directory whose compose files and `.env` created them read
+ * as unused — and once it was gone they could be restarted but not recreated
+ * as they were.
  *
  * @param {string} releasesDir @returns {Promise<Set<string>>}
  */
@@ -83,19 +117,33 @@ export async function mountedReleases(releasesDir) {
   const { stdout: ids } = await run("docker", ["ps", "-aq"]);
   const containers = ids.split("\n").map((line) => line.trim()).filter(Boolean);
   const held = new Set();
-  const prefix = path.resolve(releasesDir) + path.sep;
   for (const container of containers) {
     const { stdout } = await run("docker", [
-      "inspect", "-f", "{{range .Mounts}}{{.Source}}\n{{end}}", container,
+      "inspect", "-f",
+      "{{range .Mounts}}{{.Source}}\n{{end}}"
+        + "{{index .Config.Labels \"com.docker.compose.project.working_dir\"}}\n"
+        + "{{index .Config.Labels \"com.docker.compose.project.config_files\"}}\n",
+      container,
     ]);
-    for (const source of stdout.split("\n")) {
-      const value = source.trim();
-      if (!value.startsWith(prefix)) continue;
-      const name = value.slice(prefix.length).split(path.sep)[0];
-      if (name) held.add(name);
-    }
+    for (const name of releasesNamedBy(releasesDir, stdout.split(/[\n,]/))) held.add(name);
   }
   return held;
+}
+
+/**
+ * The releases a list of host paths falls under.
+ * @param {string} releasesDir @param {readonly string[]} paths @returns {Set<string>}
+ */
+export function releasesNamedBy(releasesDir, paths) {
+  const prefix = path.resolve(releasesDir) + path.sep;
+  const named = new Set();
+  for (const entry of paths) {
+    const value = entry.trim();
+    if (!value.startsWith(prefix)) continue;
+    const name = value.slice(prefix.length).split(path.sep)[0];
+    if (name) named.add(name);
+  }
+  return named;
 }
 
 /**
@@ -199,9 +247,10 @@ async function removeRelease(dir, name) {
 async function pruneImages(removable, apply) {
   const removed = [];
   const refused = [];
+  const { stdout } = await run("docker", ["images", "--format", "{{.Repository}}:{{.Tag}}"]);
+  const present = stdout.split("\n").map((line) => line.trim()).filter(Boolean);
   for (const release of removable) {
-    for (const repo of IMAGE_REPOS) {
-      const tag = `${repo}:${release}`;
+    for (const tag of releaseImageTags(present, release)) {
       if (!apply) { removed.push(tag); continue; }
       try {
         await run("docker", ["rmi", tag]);

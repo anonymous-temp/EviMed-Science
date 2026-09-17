@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, symlink, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { plan } from "../../../scripts/ops/release-retention.mjs";
+import { plan, releaseImageTags, releasesNamedBy } from "../../../scripts/ops/release-retention.mjs";
 
 /**
  * A releases directory holding the given ids, newest last.
@@ -126,4 +126,38 @@ test("the release `current` points at is kept even when it is neither newest nor
   const result = await plan(dir, 1, async () => new Set());
   assert.equal(result.keep.get("evimed-20260901-aaaaaaa"), "current");
   assert.deepEqual(result.remove, ["evimed-20260902-bbbbbbb", "evimed-20260903-ccccccc"]);
+});
+
+test("a release is held by the compose directory a container was created from, not only by its mounts", () => {
+  // 2026-09-17, on the host: PostgreSQL and the engines mount nothing from a
+  // release, so `releases/39111b6b4821` — the compose files and `.env` they were
+  // created from — read as unused and was removed from under them.
+  const held = releasesNamedBy("/srv/evimed-science/releases", [
+    "/srv/evimed-science/shared/secrets/postgres-password.txt",
+    "/srv/evimed-science/releases/a48c91c265af/OpenScience/deploy/web/monitoring/prometheus.json",
+    "/srv/evimed-science/releases/39111b6b4821/OpenScience/deploy/web",
+    " /srv/evimed-science/releases/39111b6b4821/OpenScience/deploy/web/docker-compose.yml",
+    "/srv/evimed-science/releases-old/zzz/x",
+    "",
+  ]);
+  assert.deepEqual([...held].sort(), ["39111b6b4821", "a48c91c265af"]);
+});
+
+test("a release's images are found under the names this deployment actually tags them with", () => {
+  // `--images` matched `evimed-runtime-dsh:<release>`, a repository that no
+  // longer exists, so it reported success over images it never touched.
+  const tags = [
+    "open-science-web:526261d6a154",
+    "open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26-526261d6a154",
+    "open-science-web:a7af1f75e3d5",
+    "open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26-a7af1f75e3d5",
+    "szmi-open-science-web:526261d6a154",
+    "postgres:16.14-bookworm",
+    "open-science-web:<none>",
+  ];
+  assert.deepEqual(releaseImageTags(tags, "526261d6a154"), [
+    "open-science-web:526261d6a154",
+    "open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26-526261d6a154",
+  ]);
+  assert.deepEqual(releaseImageTags(tags, "6a154"), [], "a suffix of a revision is not that revision");
 });
