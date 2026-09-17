@@ -686,9 +686,18 @@ test("a snapshot nobody drains is evicted rather than held for the life of the p
 // itself complete, because a gap was only recorded for a session someone tried
 // to read.
 
-function delegatingRoot(sessionId, { accepted = 1, failed = 0 } = {}) {
+/** `accepted` delegations name a child each (or the ids given); `refused` ones
+ *  are what the tool answers for an unknown deliverable on the live wire — a
+ *  completed call whose text is `failed: <code>`; `failed` ones threw. */
+function delegatingRoot(sessionId, { accepted = 1, failed = 0, refused = 0, childIds = null } = {}) {
   const parts = [];
-  for (let index = 0; index < accepted; index += 1) parts.push({ type: "tool", tool: "evimed_delegate", status: "completed" });
+  for (let index = 0; index < accepted; index += 1) {
+    const childSessionId = childIds?.[index] ?? `${sessionId}-child-${index}`;
+    parts.push({ type: "tool", tool: "evimed_delegate", status: "completed", output: kernelToolText({ ok: true, data: { childSessionId } }) });
+  }
+  for (let index = 0; index < refused; index += 1) {
+    parts.push({ type: "tool", tool: "evimed_delegate", status: "completed", output: kernelToolText({ ok: false, code: "deliverable_unknown", issues: [{ severity: "required", code: "deliverable_unknown", message: "计划里没有交付物「x」。" }] }) });
+  }
   for (let index = 0; index < failed; index += 1) parts.push({ type: "tool", tool: "evimed_delegate", status: "error" });
   return {
     sessionId,
@@ -759,6 +768,39 @@ test("a refused delegation started no child, so it is not counted as a missing o
   });
   assert.equal(header.completeness, "complete");
   assert.deepEqual(header.missing, []);
+});
+
+test("a delegation the tool refused is a completed call that started no child", () => {
+  // v8 ablation, 2026-09-16: six completed `evimed_delegate` calls, one of them
+  // `failed: deliverable_unknown`, and all five children collected. Counting
+  // every completed call recorded `child_undiscovered`, and the paired
+  // evaluation excluded the cell as a partial transcript.
+  const { header } = serializeRunTranscript({
+    runId: "run_1",
+    capturedAt: CAPTURED_AT,
+    sessions: [
+      delegatingRoot("root-1", { accepted: 5, refused: 1 }),
+      ...[0, 1, 2, 3, 4].map((index) => childSession(`root-1-child-${index}`, "root-1")),
+    ],
+  });
+  assert.equal(header.completeness, "complete");
+  assert.deepEqual(header.missing, []);
+});
+
+test("two delegations answered with the same child are one child", () => {
+  const { header } = serializeRunTranscript({
+    runId: "run_1",
+    capturedAt: CAPTURED_AT,
+    sessions: [delegatingRoot("root-1", { accepted: 2, childIds: ["child-a", "child-a"] }), childSession("child-a", "root-1")],
+  });
+  assert.equal(header.completeness, "complete");
+});
+
+test("an accepted delegation whose child id cannot be read still counts as a child to find", () => {
+  const root = delegatingRoot("root-1", { accepted: 1 });
+  root.transcript.messages[0].parts[0].output = "ok";
+  const { header } = serializeRunTranscript({ runId: "run_1", capturedAt: CAPTURED_AT, sessions: [root] });
+  assert.deepEqual(header.missing.map((gap) => gap.reason), ["child_undiscovered"]);
 });
 
 test("children the caller seeds are fetched even though the parent log names none", async () => {

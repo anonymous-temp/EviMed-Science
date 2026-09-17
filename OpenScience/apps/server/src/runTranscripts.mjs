@@ -415,16 +415,6 @@ export function serializeRunTranscript({ runId, capturedAt, sessions, maxBytes =
 }
 
 /**
- * How many delegations the parent actually got a child out of.
- *
- * Counts the tool calls that completed: a refused delegation (an unknown
- * capability, an unmet dependency, a constructor that threw) never started a
- * child and must not be reported as a missing one.
- *
- * @param {readonly CollectedSession[]} sessions
- * @returns {number}
- */
-/**
  * The child session ids a transcript's own completed `evimed_delegate` calls
  * returned, in order, without repeats. A call whose output does not parse or
  * names no child proves nothing and is skipped.
@@ -448,18 +438,38 @@ function delegatedChildren(transcript) {
   return ids.slice(0, 64);
 }
 
+/**
+ * How many children the parent's delegations started.
+ *
+ * A delegation the tool refused (an unknown deliverable, an unmet dependency)
+ * is a completed call on the live wire whose text is `failed: <code>`, and it
+ * started no child. Counting every completed call reported a run whose five
+ * children were all collected as missing a sixth, and the paired evaluation
+ * excluded it as partial (v8 ablation, 2026-09-16). A call that threw started
+ * nothing either. Two calls answered with the same child are one child; an
+ * accepted call whose child id cannot be read still counts, because it started
+ * work nobody can find.
+ *
+ * @param {readonly CollectedSession[]} sessions
+ * @returns {number}
+ */
 function countAcceptedDelegations(sessions) {
-  let accepted = 0;
+  const children = new Set();
+  let unnamed = 0;
   for (const session of sessions) {
     if (session.parentSessionId != null) continue;
     for (const message of session.transcript?.messages ?? []) {
       for (const part of message?.parts ?? []) {
-        if (part?.type !== "tool" || part?.tool !== SOCKET_TOOL_NAMES.delegate) continue;
-        if (part?.status === "completed") accepted += 1;
+        if (part?.type !== "tool" || part?.tool !== SOCKET_TOOL_NAMES.delegate || part?.status !== "completed") continue;
+        const result = typeof part.output === "string" ? socketToolResult(part.output) : part.output;
+        if (result?.ok === false) continue;
+        const id = result?.ok === true ? String(result?.data?.childSessionId ?? "").trim() : "";
+        if (id) children.add(id);
+        else unnamed += 1;
       }
     }
   }
-  return accepted;
+  return children.size + unnamed;
 }
 
 /** @param {TranscriptGap[]} gaps @returns {TranscriptGap[]} */
