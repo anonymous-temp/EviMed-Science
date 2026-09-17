@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Put a built release in front on the serving host.
 #
-#   host-release-switch.sh <NEW_SHORT> [--no-prune]
+#   host-release-switch.sh <NEW_SHORT> [--no-prune | --plan]
+#
+# `--plan` moves `current`, prints which services would be recreated, and stops:
+# the list is the thing to read before a switch that might touch PostgreSQL.
 #
 # What it holds, each line of it learnt the hard way (2026-09-14 .. 09-17):
 #
@@ -21,20 +24,27 @@
 #   3. The DeepSeek release receipt is minted again once web answers as the new
 #      release. Recreated together with web, its first mint races web's start,
 #      fails, and is not retried for twelve hours: readiness sits at 23/24.
+#      And only after the backup container's start-up backup has ended: a mint
+#      creates and removes a `gate-<hex>` project, the backup refuses a data
+#      tree that changes under it (by design), and the two were being started
+#      in the same minute — `backup_scheduler_unhealthy` for the five minutes
+#      until its retry (first run of this script, 2026-09-17).
 #   4. Nothing is left referring to a path that is not there. Checked, not
 #      assumed, and the switch fails loudly if it is.
 #   5. Old releases and their images go through release-retention.mjs, which
 #      refuses anything a container still names. Never `rm -rf`: that is how
 #      item 1 happened.
 set -euo pipefail
-NEW="${1:?usage: host-release-switch.sh <NEW_SHORT> [--no-prune]}"
+NEW="${1:?usage: host-release-switch.sh <NEW_SHORT> [--no-prune | --plan]}"
 PRUNE=1; [ "${2:-}" = "--no-prune" ] && PRUNE=0
+PLAN=0; [ "${2:-}" = "--plan" ] && PLAN=1
 ROOT="${EVIMED_ROOT:-/srv/evimed-science}"
 PROJECT="${EVIMED_COMPOSE_PROJECT:-web}"
 REL="${ROOT}/releases/${NEW}"
 OVERRIDE="${ROOT}/shared/ops-source-${NEW}/compose.builtin.override.yml"
 WEB_CONTAINER="${PROJECT}-open-science-web-1"
 RECEIPT_CONTAINER="${PROJECT}-open-science-release-receipt-1"
+BACKUP_CONTAINER="${PROJECT}-open-science-backup-1"
 # Compose reads `.env` from the project directory itself. Sourcing it in bash
 # must not be attempted: `OPEN_SCIENCE_OIDC_SCOPES=openid profile email` is a
 # legal compose value and an illegal shell assignment.
@@ -68,6 +78,7 @@ while read -r service hash; do
   if [ "$have" != "$hash" ]; then changed+=("$service"); echo "  changed: ${service}"; fi
 done <<< "$hashes"
 echo "  ${#changed[@]} service(s) to recreate"
+[ "$PLAN" -eq 0 ] || { echo "=== plan only: nothing recreated; current now names ${NEW} ==="; exit 0; }
 
 if [ "${#changed[@]}" -gt 0 ]; then
   echo "=== recreate them ==="
@@ -79,8 +90,19 @@ for _ in $(seq 1 60); do
   docker exec "$WEB_CONTAINER" node -e "fetch('http://127.0.0.1:8787/api/health').then(r=>r.json()).then(j=>process.exit(j.data&&j.data.releaseId==='evimed-${NEW}-1'?0:1)).catch(()=>process.exit(1))" && break
   sleep 5
 done
+# The backup's start-up cycle, if that container was recreated: wait for it to
+# say how it ended, so the mint below does not change the tree under it.
+if printf '%s\n' "${changed[@]:-}" | grep -qx "open-science-backup"; then
+  since=$(docker inspect -f '{{.State.StartedAt}}' "$BACKUP_CONTAINER")
+  for _ in $(seq 1 60); do
+    docker logs --since "$since" "$BACKUP_CONTAINER" 2>&1 | grep -qE '"event":"backup\.(completed|failed)"' && break
+    sleep 5
+  done
+fi
 docker restart "$RECEIPT_CONTAINER" >/dev/null
-for _ in $(seq 1 40); do
+# Eight minutes: long enough for the backup scheduler's own five-minute retry,
+# should its start-up cycle have failed on the first mint attempt after all.
+for _ in $(seq 1 80); do
   ready=$(docker exec "$WEB_CONTAINER" node -e "fetch('http://127.0.0.1:8787/api/ready').then(r=>r.json()).then(j=>{const c=j.data.checks;const bad=Object.keys(c).filter(k=>c[k]&&c[k].ok===false);console.log((j.data.ok?'ok ':'notok ')+Object.keys(c).length+' '+bad.join(','))}).catch(()=>console.log('unreachable'))" 2>/dev/null || echo unreachable)
   case "$ready" in ok*) break ;; esac
   sleep 6
@@ -88,15 +110,20 @@ done
 echo "readiness: ${ready}"
 
 echo "=== nothing refers to a path that is not there ==="
+# A bind source, and the compose directory a container was created from: the
+# second is what it would be recreated from, and a container whose definition
+# is gone can be restarted but not rebuilt as it was.
 missing=0
 for container in $(docker ps -a --filter "label=com.docker.compose.project=${PROJECT}" --format '{{.Names}}'); do
+  created_from=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$container")
+  if [ -n "$created_from" ] && [ ! -d "$created_from" ]; then echo "  MISSING ${container}: created from ${created_from}"; missing=$((missing + 1)); fi
   while IFS= read -r source; do
     [ -n "$source" ] || continue
     if [ ! -e "$source" ]; then echo "  MISSING ${container}: ${source}"; missing=$((missing + 1)); fi
   done < <(docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}}{{println}}{{end}}{{end}}' "$container")
 done
 [ "$missing" -eq 0 ] || { echo "${missing} bind source(s) do not exist; fix before pruning anything"; exit 1; }
-echo "  every bind source exists"
+echo "  every bind source and compose directory exists"
 
 case "$ready" in ok*) ;; *) echo "readiness is not ok; leaving old releases in place"; exit 1 ;; esac
 

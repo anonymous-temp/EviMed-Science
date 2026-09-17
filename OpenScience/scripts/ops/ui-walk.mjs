@@ -46,9 +46,26 @@ const ROUTES = [
 ];
 const VIEWPORTS = [["desktop", { width: 1440, height: 900 }], ["phone", { width: 390, height: 844 }]];
 const LEAKS = [
-  /\brun_[0-9a-f]{32}\b/, /\bses_[A-Za-z0-9]{8,}/, /deepseek\//i, /\b[A-Z][A-Z-]{9,}\b/,
+  /\brun_[0-9a-f]{32}\b/, /\bses_[A-Za-z0-9]{8,}/, /deepseek\//i,
   /\bundefined\b/, /\bNaN\b/, /\[object /, /<!--\s*claim/i,
 ];
+
+/**
+ * A capability id printed as a SHOUTED key, from the deployment's own catalogue.
+ *
+ * This was `/\b[A-Z][A-Z-]{9,}\b/`, an open pattern over page text, and on
+ * 2026-09-17 it failed the inbox for naming the EMPA-KIDNEY trial — a run's own
+ * question, in a product whose subject matter is trials with acronyms like
+ * that. What it was written to catch is a closed vocabulary (the 2026-09-16
+ * walk found `CLINICAL-EVIDENCE-SYNTHESIS` used as a title), so it is asked of
+ * the catalogue instead of guessed from the shape of a word.
+ * @param {string[]} ids @returns {RegExp[]}
+ */
+function shoutedCapabilityKeys(ids) {
+  return ids
+    .filter((id) => /^[a-z][a-z0-9-]{3,}$/.test(id))
+    .map((id) => new RegExp(`\\b${id.toUpperCase().replace(/-/g, "[-_ ]")}\\b`));
+}
 
 function required(name) {
   const value = process.env[name]?.trim();
@@ -111,6 +128,16 @@ async function main() {
       console.error(`login answered ${login.status()}; nothing was walked.`);
       return 2;
     }
+    // The catalogue the leak check is derived from. An unreadable catalogue
+    // fails the walk: silently checking against no ids would pass every page.
+    const catalogue = await context.request.get(`${base}/api/agents`);
+    const agents = catalogue.ok() ? (await catalogue.json())?.data : null;
+    const ids = Array.isArray(agents) ? agents.map((agent) => String(agent?.id ?? "")).filter(Boolean) : [];
+    if (ids.length < 5) {
+      console.error(`the capability catalogue answered ${catalogue.status()} with ${ids.length} ids; nothing was walked.`);
+      return 2;
+    }
+    const leaks = [...LEAKS, ...shoutedCapabilityKeys([...ids, "open-domain-answer"])];
     const page = await context.newPage();
     let current = "";
     const consoleErrors = {};
@@ -125,7 +152,7 @@ async function main() {
           await page.goto(`${base}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
           await page.waitForTimeout(3_000);
           await page.screenshot({ path: path.join(out, `${current}.png`) });
-          const measured = await page.evaluate(measure, LEAKS.map((re) => [re.source, re.flags]));
+          const measured = await page.evaluate(measure, leaks.map((re) => [re.source, re.flags]));
           report.pages[current] = { route, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [] };
           if (measured.leakHits.length) failures.push(`${current}: runtime vocabulary on the page: ${measured.leakHits.join(", ")}`);
           if (measured.unnamedControls.length) failures.push(`${current}: ${measured.unnamedControls.length} control(s) without a name`);
