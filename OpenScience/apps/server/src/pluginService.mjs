@@ -395,8 +395,7 @@ export class PluginService {
         return pluginState(entry, row, { availability, maxTimeoutMs: this.maxTimeoutMs, verified: verifiedHere });
       });
     };
-    const current = this.admission.getStore();
-    return current?.projectKey === `${project.userId}:${project.id}` ? read(current.client) : this.database.transaction(read);
+    return this.borrowAdmission(`${project.userId}:${project.id}`, read) ?? this.database.transaction(read);
   }
   /** @param {any} owner @param {any} project @param {any} input @param {string} pluginId */
   async save(owner, project, input, pluginId = PLUGIN_ID) {
@@ -500,6 +499,27 @@ export class PluginService {
       if (state.desired.revision > 0) await this.retry(project.userId, project, entry.id);
     }
   }
+  /** Runs `use` on the transaction of the admission this call is nested in, or
+   *  returns null when there is none to lend.
+   *
+   *  AsyncLocalStorage hands the store to everything started inside `run`,
+   *  including work that outlives it: a run monitor is scheduled inside the
+   *  dispatch admission and sends its repair prompt minutes later. Lending that
+   *  store's client then queried a connection the transaction had released —
+   *  "Client was closed and is not queryable" once the pool idled it out,
+   *  somebody else's connection before that — so no repair prompt was
+   *  dispatched (v8 ablation, 2026-09-16). A store lends its client only while
+   *  its transaction is open, and the transaction commits only after the work
+   *  it lent the client to has finished.
+   *  @template T @param {string} projectKey @param {(client: any) => Promise<T>} use
+   *  @returns {Promise<T> | null} */
+  borrowAdmission(projectKey, use) {
+    const current = this.admission.getStore();
+    if (current?.projectKey !== projectKey || !current.open) return null;
+    const borrowed = use(current.client);
+    current.borrowers.add(borrowed);
+    return borrowed.finally(() => current.borrowers.delete(borrowed));
+  }
   /** A shared transaction lock surrounds prompt acceptance; apply takes its exclusive counterpart.
    * @param {any} project @param {() => Promise<any>} operation @param {{prompt?:boolean}} options */
   async withAdmission(project, operation, { prompt = false } = {}) {
@@ -520,17 +540,22 @@ export class PluginService {
         throw error;
       }
     };
-    const current = this.admission.getStore();
-    if (current?.projectKey === projectKey) return accept(current.client);
+    const nested = this.borrowAdmission(projectKey, accept);
+    if (nested) return nested;
     const outcome = await this.database.transaction(async client => {
       const lock = await client.query("SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1,0)) AS acquired", [`plugin-project:${projectKey}`]);
       if (!lock.rows[0].acquired) throw new HttpError(423, "plugin_apply_in_progress", "Plugin settings are being applied; retry shortly.");
       await this.scope(project.userId, project, client);
-      return this.admission.run({ projectKey, client }, async () => {
+      const store = { projectKey, client, open: true, borrowers: new Set() };
+      return this.admission.run(store, async () => {
         try { return { value: await accept(client) }; }
         // Commit an unknown acceptance receipt before surfacing its transport
         // error. The shared lock excludes apply until that receipt is durable.
         catch (error) { return { error }; }
+        finally {
+          store.open = false;
+          await Promise.allSettled([...store.borrowers]);
+        }
       });
     });
     if (outcome.error) throw outcome.error;
