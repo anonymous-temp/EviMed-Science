@@ -782,6 +782,39 @@ test("a delegation constructor failure leaves the item retriable and records no 
   assert.equal(f.childRows.size, 0, "a child that never started cannot be recorded as running");
 });
 
+test("a deliverable whose submissions are spent is not delegated again, and the run is told to finish", async () => {
+  // memory-ablation v10 cell 2 (2026-09-17): three submissions spent by 12:41, a
+  // second child started for the same deliverable, and the run was still going
+  // half an hour later. Attempts are counted per deliverable, so that child
+  // could research and write and then be refused at its first submit. What the
+  // run wrote is delivered marked either way; the useful next step is to end.
+  let children = 0;
+  const f = await nativePolicyFixture({
+    briefId: "delegation_owner",
+    deliveryAttemptLimit: 1,
+    // No separate allowance for an unreadable package, so the one submission
+    // below is charged as the ordinary attempt it stands in for.
+    structuralAttemptAllowance: 0,
+    subagentStart: () => { children += 1; return { id: `child-${children}`, result: Promise.resolve({ stopReason: "completed", output: "done" }) }; },
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded research brief"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  // One submission, refused: the deliverable has no files.
+  const refused = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+  assert.equal(refused.value.ok, false);
+
+  const again = await f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  assert.equal(again.value.ok, false);
+  assert.equal(again.value.code, "deliverable_attempts_spent");
+  assert.match(again.value.issues[0].message, /evimed_complete_run\{partial:true\}/);
+  assert.match(again.value.issues[0].message, /按「未核验」交付/);
+  assert.equal(children, 0, "no child is started for a deliverable that can no longer submit");
+});
+
 test("a successful delegation receipt exposes the kernel-owned child session id", async () => {
   const f = await nativePolicyFixture({
     briefId: "delegation_owner",
