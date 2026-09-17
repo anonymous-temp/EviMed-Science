@@ -1,0 +1,173 @@
+{
+  "arm": "baseline",
+  "armDigest": "7973e501246dc945956fcf1b93dc07a39458b43822bb309a3de94594cf734da3",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__baseline__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "1301c2d979c6a68751c1b62b6cd03ed7c8362f5f1a08f8c5cddeed353f5f6a27",
+  "configId": "memory-ablation-v8",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 82,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T19:49:10Z",
+  "judge": {
+    "issues": [],
+    "promptVersion": 1,
+    "rationale": "Answers both parts fully: maps MIMIC-IV sepsis mortality models and assesses independence correctly as unresolved. Preserves stated database roles, explains needed dates/identifiers/eligibility fields, and avoids treating shared database as proof of overlap or independence. Derived 34.9% upper bound names inputs, method, assumptions, and sensitivity; risk statements stay evidence-level. Abstract-to-full-text upgrade is disclosed and does not call abstracts full text.",
+    "scores": {
+      "correctness": 5,
+      "evidenceHandling": 5,
+      "safetyFraming": 5,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 95,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 96
+      },
+      {
+        "expectedVersion": 88,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 89
+      },
+      {
+        "expectedVersion": 88,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 89
+      },
+      {
+        "expectedVersion": 87,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 88
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v8-f2311c46",
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "deliverables/mimic-iv-sepsis-prognostic-models/citation-audit.md",
+      "deliverables/mimic-iv-sepsis-prognostic-models/citation-ledger.csv",
+      "deliverables/mimic-iv-sepsis-prognostic-models/clinical-evidence-matrix.json",
+      "deliverables/mimic-iv-sepsis-prognostic-models/clinical-evidence-report.md",
+      "deliverables/mimic-iv-sepsis-prognostic-models/clinical-evidence-run.json",
+      "deliverables/mimic-iv-sepsis-prognostic-models/clinical-evidence-search.json",
+      "deliverables/mimic-iv-sepsis-prognostic-models/question-coverage.json",
+      "deliverables/mimic-iv-sepsis-prognostic-models/references.bib",
+      "deliverables/mimic-iv-sepsis-prognostic-models/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_1_1d5bb9f89bb01f83",
+    "durationMs": 1468272,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_c4e9a779b4b75566714261a41929fdc3",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/evimed-guidelines/46ccdfba7dee4c19/guideline.md, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.",
+      "The repair request could not be dispatched (unknown: Client was closed and is not queryable), so no repair was attempted.",
+      "literature_search searched and returned no source",
+      "review contradicted: ART-1 — Only one deliverable (`mimic-iv-sepsis-prognostic-models`, contractKind clinical-evidence-report) exists under `deliverables/`, so there is no cross-deliverable material to reconcile. But this run's own state is inconsistent with its product: `.evimed-run/runs/run_c4e9a7",
+      "review weakened: CLM-004 — The quoted sentence supports only subject_id/hadm_id linkage; the claim's added clause '标识符层级由此分为患者、住院与 ICU 停留三级' is established elsewhere in the same paper (stay_id definitions, events tables) rather than by the quote. The triplet is verifiable, but the quote does not by ",
+      "review contradicted: CLM-009 — Two defects on one claimId. (1) Attribution: the report cites CLM-009 at `clinical-evidence-report.md` line 141 for '该数据库是否存在与 MIMIC-IV 来源机构重合的病例，在数据描述文献中没有记载', but CLM-009's supportQuote is the HALP paper's inclusion/exclusion sentence — nothing in it concerns institu",
+      "review weakened: CLM-010 — Both parts verify (PMC12557738: \"extracted from MIMIC-IV (V.2.2)\"; training n=910 / internal validation n=390, 7:3). The claim itself inserts the 1,300 figure that the same paper's Results uses for the identical training cohort — verifiable, but the claim reports the sourc",
+      "review weakened: CLM-015 — The source sentence reads: \"all patient identifiers have been regenerated for MIMIC-IV. As a result, it is not possible to link patients across the databases using an identifier such as subject_id, even though MIMIC-III and MIMIC-IV have an overlap in their data collection",
+      "review contradicted: CLM-016 — One claimId carries two propositions with different evidentiary homes. Its matrix `referenceNumber` is 3 (MIMIC-IV descriptor, PMID 36596836), yet the eICU half ('覆盖美国大陆 208 家医院') exists only in a `supportingSources` entry from PMID 41146378 — and the MIMIC-IV descript",
+      "review weakened: CLM-019 — The rule is accurately transcribed from the review's Methods (\"For studies originating from the same cohort, only a single representative study was included … preferentially selecting the study with the largest sample size\"). But the review's own implementation departs fro",
+      "review weakened: CLM-028 — The quoted abstract of PMC10069590 does say 2008–2021 with MIMIC-IV V.1.0 — and the report labels it as the study's own abstract wording, so the quote is faithful. But the report elevates it into a substantive 'time-range disagreement' (lines 79, 104, 118) without noting t",
+      "review weakened: CLM-036 — PMC12557738 does contain \"In the training cohort (MIMIC-IV, n=1300)\", and 1,300 is also used in the Results section heading — so the 910-vs-1300 inconsistency is real. But the claim's framing '该研究将同一训练队列记为 n=1300' presumes identity of object: the source's own split (910 tr",
+      "review weakened: CLM-037 — PMC11019967 confirms TRIPOD+AI provides harmonised guidance for regression or ML model studies and presents \"the expanded 27 item checklist\" — both parts verify. But the source says twice, verbatim, that \"The new checklist supersedes the TRIPOD 2015 checklist, which should",
+      "review weakened: CLM-039 — Arithmetic checks: 1300/3726 = 34.9%, 910/3726 = 24.4%. The derivation's stated assumption is that both cohorts share the same sampling frame (MIMIC-IV v2.2 ICU stays), established only from the two papers' self-reported version strings, not from the database. More importa",
+      "review weakened: CLM-040 — Derived claim. The premises verify (patient-level date offset; three-year anchor_year_group; papers quoting the descriptor's release range; one paper's abstract/body range disagreement). But '日期比对没有鉴别力' is stronger than the premises: source [5] states an actual analysis wi",
+      "review weakened: CLM-042 — The item list is quoted faithfully from PMC13412256 and correctly attributed to that review rather than to TRIPOD+AI. Two problems remain. First, CLM-043's own `uncertainty` field in the matrix still says the 15,396 study '目前只到达文献正文级记录，未在本报告中逐字核验', which is stale — PMC1006",
+      "review weakened: REF-METADATA — Spot-checked against independent PubMed lookups: PMID 41602009, 41146378, 42359097, 40189694, 36972970 and 38755721 all resolve, and the DOIs in `references.bib` and the report match the index records exactly (my initial suspicion that refs 8 and 9 carried foreign DOI"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-c805227a-e336-482d-9eff-edf0eb56c595",
+    "status": "failed",
+    "transcript": {
+      "bytes": 2551338,
+      "completeness": "complete",
+      "messages": 522,
+      "path": ".openscience/transcripts/run_c4e9a779b4b75566714261a41929fdc3.jsonl",
+      "sha256": "f81de005d43d790fae4dc8f23542ac95818340f4f95b1754a6fcc0a96ad724d0"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.7280977777777777,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T19:23:23Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

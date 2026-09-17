@@ -1,0 +1,211 @@
+{
+  "arm": "candidate",
+  "armDigest": "05d7659d92077a53b0a5bd4fdca75148ee16aeb4611db93312c68d51536db0bb",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__candidate__r2",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "1301c2d979c6a68751c1b62b6cd03ed7c8362f5f1a08f8c5cddeed353f5f6a27",
+  "configId": "memory-ablation-v8",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 23,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T22:41:22Z",
+  "judge": {
+    "issues": [
+      "Body says '有三份记录' then enumerates six records; later says '其余八份文献' but lists nine references.",
+      "Clinical-practice bullet claims no included record reported decision-curve/net-benefit analysis, contradicting its own earlier statement that PMID 41146378 had decision curve and clinical impact curve as secondary outcomes.",
+      "Abstract's '死亡率互不相容'/'排除共同病例定义' is an analytical inference presented with citations rather than marked as derived.",
+      "Limitations say the two central abstracts could only be obtained at abstract level, while revision notes state full texts were preserved."
+    ],
+    "promptVersion": 1,
+    "rationale": "Answers the scoping question thoroughly with clearly unresolved cohort independence and needed identifiers/dates. Internal count and contradiction defects lower correctness but do not undermine the main adjudication. Evidence typing is strong, though some comparative mortality claims lack derived markers. Safety framing is appropriately cautious and non-directive.",
+    "scores": {
+      "correctness": 4,
+      "evidenceHandling": 4,
+      "safetyFraming": 5,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 103,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 104
+      },
+      {
+        "expectedVersion": 96,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 97
+      },
+      {
+        "expectedVersion": 96,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 97
+      },
+      {
+        "expectedVersion": 95,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 96
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v8-3a1c6aa4",
+  "repeat": 2,
+  "run": {
+    "artifacts": [
+      ".work/build_coverage2.py",
+      ".work/build_inventory.py",
+      ".work/build_matrix.py",
+      ".work/build_rest.py",
+      ".work/build_run.py",
+      ".work/build_searchlog.py",
+      ".work/candidates.py",
+      ".work/check_coverage.py",
+      ".work/extract_new_quotes.py",
+      ".work/extract_quotes.py",
+      ".work/final_check.py",
+      ".work/inline_inventory.py",
+      ".work/patch1.py",
+      ".work/patch_report.py",
+      ".work/patch_report2.py",
+      ".work/patch_report3.py",
+      ".work/show_new_abstracts.py",
+      ".work/update_run.py",
+      ".work/verify_quotes.py",
+      ".work/verify_report.py",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/agenda-delta.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/citation-audit.md",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/citation-ledger.csv",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-matrix.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-report.md",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-run.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-search.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/question-coverage.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/references.bib",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_2_1c365771efe01c1e",
+    "durationMs": 1134576,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_76bef921a256d4607425d7a213744cc7",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/evimed-guidelines/00366ec0605bf45d/guideline.md, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.",
+      "The repair request could not be dispatched (unknown: Client was closed and is not queryable), so no repair was attempted.",
+      "Report line 27 numeric facts 2, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 64 numeric facts 29 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 67 numeric facts 494 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 69 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 77 numeric facts 11, 10 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 79 numeric facts 231, 181, 920, 519, 274 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 83 numeric facts 6, 8 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 105 numeric facts 240 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 107 numeric facts 13174 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 110 numeric facts 29 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 124 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 127 numeric facts 3, 5, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 159 numeric facts 28, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.",
+      "citation-audit.md must reference at least one real audited source identifier from the evidence matrix.",
+      "Report line 29 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them. 另有 3 处是同一条（Report line 139、Report line 149、Report line 151）：这是一处决定，改一次就能全部修好。",
+      "Report line 71 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 4 处是同一条（Report line 81、Report line 131、Report line 147、Report line 176）：这是一处决定，改一次就能全部修好。",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "review contradicted: Report statement: only one study wrote MIMIC-IV v2.2, two wrote V.1.0/2.0, 'the other eight wrote no version' — False, and false against artifacts preserved by this very run. The in-ICU mortality study (PMID 42110642, record 5) states in its preserved full text (PMC13154749, lin",
+      "review weakened: CLM-040 set-theoretic lower bound 3,726 + 1,300 − 73,181 = −68,155; overlap anywhere from 0% to 100% compatible — The arithmetic is right (3,726 + 1,300 − 73,181 = −68,155; the sensitivity alternatives −45,894 and 0 also check out), and a negative bound is vacuous for every denomina",
+      "review weakened: Access-level labelling: all eleven model publications appraised at abstract level (report line 41; matrix accessLevel='abstract'; Q2.3/3.2/4.1) — No file mislabels the two central records as full text (FOCUS-1 passes), and the labelling is uniform and internally declared. But the de",
+      "review contradicted: Report/adjudication claim that record 5 (PMID 42110642) reports no database version — The preserved full text of PMC13154749, line 29, states: 'This study was conducted based on clinical records of sepsis patients who meet the diagnostic criteria of the Sepsis-3 definition obtai",
+      "review contradicted: Report statement that HALP's MIMIC-IV validation cohort has no database version and its relations are undeterminable — The preserved full text of PMC12832424 states the validation database explicitly: 'External validation was performed using the Medical Information Mart for Inte",
+      "review weakened: CLM-047 (elderly persistent S-AKI: MIMIC-IV V.1.0, 2008-2021, 1519 patients) and the adjudication's 'most complete record' weighting — The quote is faithful: the record (PMC10069590) does say 'between 2008 and 2021 ... MIMIC-IV database (V.1.0)' and '1519 patients'. But the record i",
+      "review weakened: CLM-043 and CLM-038 (54.58% in-ICU mortality vs 38.6% database one-year ICU mortality: difference 16 points, ratio 1.41; therefore no single common case definition) — Both numbers are verified (54.58% from PMID 42110642; 38.6% from the v2.2 descriptor table) and the arithmetic is ri",
+      "review weakened: Coverage: '11 model publications' as the count of adult sepsis mortality prognostic models evaluated with MIMIC-IV — The tally is internally consistent (12 sources, 11 model publications, adjudication rows match), and the limitations section does describe the count as the property o",
+      "review weakened: Reference-level dates and identifiers internally consistent — Mostly consistent, with specific defects. Consistent: reference 3 (DOI 2025, BMJ Open 2025), 7 (Heliyon 2024), 9 (PLOS ONE 2024), 10 (BMJ Open 2023), 11 (JIM 2023), 12 (Frontiers in Digital Health 2026 DOI with connector "
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-642ca480-3d91-4cc3-90f0-2a57a44f7e87",
+    "status": "failed",
+    "transcript": {
+      "bytes": 1876764,
+      "completeness": "complete",
+      "messages": 330,
+      "path": ".openscience/transcripts/run_76bef921a256d4607425d7a213744cc7.jsonl",
+      "sha256": "212e5e6df474a1acf5f8e840806a4b75cfbb108bf8c80ad2e36b24f31037574e"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.7898933333333333,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T22:20:59Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

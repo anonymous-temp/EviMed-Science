@@ -1,0 +1,174 @@
+{
+  "arm": "baseline",
+  "armDigest": "7973e501246dc945956fcf1b93dc07a39458b43822bb309a3de94594cf734da3",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__baseline__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "1301c2d979c6a68751c1b62b6cd03ed7c8362f5f1a08f8c5cddeed353f5f6a27",
+  "configId": "memory-ablation-v8",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 51,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T20:26:40Z",
+  "judge": {
+    "issues": [
+      "Embedded parent-agent/revision notes disclose that run-receipt statistics were not cleared and post-submission repairs were not gate-validated, so the declared search/deduplication counts remain unverified.",
+      "The deliverable is overloaded with citation-audit and internal process notes before and after the actual report, obscuring the requested answer."
+    ],
+    "promptVersion": 1,
+    "rationale": "Directly answers the durability question, separates randomized active-trial effects from observational post-trial exposure, counts three reports as one primary study and the guideline as context, and labels derived estimates. Evidence typing and source bonding are strong; derived estimates are not used in practical points. Main weaknesses are the disclosed unvalidated gate/statistics status and process noise.",
+    "scores": {
+      "correctness": 4,
+      "evidenceHandling": 5,
+      "safetyFraming": 5,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 97,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 98
+      },
+      {
+        "expectedVersion": 90,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 91
+      },
+      {
+        "expectedVersion": 90,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 91
+      },
+      {
+        "expectedVersion": 89,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 90
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v8-31b5678b",
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "deliverables/empa-kidney-durability-evidence-report/agenda-delta.json",
+      "deliverables/empa-kidney-durability-evidence-report/citation-audit.md",
+      "deliverables/empa-kidney-durability-evidence-report/citation-ledger.csv",
+      "deliverables/empa-kidney-durability-evidence-report/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-durability-evidence-report/clinical-evidence-report.md",
+      "deliverables/empa-kidney-durability-evidence-report/clinical-evidence-run.json",
+      "deliverables/empa-kidney-durability-evidence-report/clinical-evidence-search.json",
+      "deliverables/empa-kidney-durability-evidence-report/delivery-summary.md",
+      "deliverables/empa-kidney-durability-evidence-report/question-coverage.json",
+      "deliverables/empa-kidney-durability-evidence-report/references.bib",
+      "deliverables/empa-kidney-durability-evidence-report/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_1_d8208917b1e615a6",
+    "durationMs": 1148441,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_30fe14dde310725dc7b2bc437fd02146",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.",
+      "The repair request could not be dispatched (unknown: Client was closed and is not queryable), so no repair was attempted.",
+      "review weakened: CLM-021 — 保全作者稿件确含 76% (32–120) 与 28% (19–38)，但检索到的可解析 PubMed 记录 PMID 38061371 摘要对同一预设亚组比较给出 86% (36–136) 与 29% (19–38)。claim 在正文以作者稿件为准并披露差异，方向与总体结论不受影响，但同一文献两个版本对同一实体给出不同数值，该条只能部分成立。",
+      "review weakened: CLM-028 — claim 本身与矩阵 quote（「4891 of 6609 randomized participants (74%) entered the post-trial period」）可在保全全文中逐字核到，检索到的 PubMed 摘要亦述 4891 (74%)。但同一 claim 在 citation-ledger.csv 第 28 行的 quote 作「were enrolled in the post-trial period」，该措辞只见于 PubMed 收录的已发表摘要，不在该行自己命名的保全产物 PMC7616743 中；re",
+      "review weakened: CLM-035 — claim 数值（865/3304、1001/3305、HR 0.79, 0.72–0.87）在保全全文中逐字可核，且被已发表摘要独立复述；但 clinical-evidence-matrix.json 中该条 supportQuote 填入的是另一段完全无关文字（「The three EMPA-KIDNEY publications… entered the post-trial period」），该条在其矩阵层面没有承载自己数值的引文。",
+      "review weakened: CLM-040 — 合并期数值（3.8% vs 4.9%；0.75, 0.59–0.95；5.3% vs 5.3%；0.97, 0.79–1.20；301 vs 336；0.86, 0.74–1.01）在保全全文中逐字可核。但同一 claim 的 uncertainty（「the post-trial period is not separately estimable from this source」）与同一交付物正文第 135 行「试验后期间下降 13%（HR 0.87，0.76–0.99）」及第 8 行要点把 0.87 归入试验后期间，构成同一实体上的",
+      "review weakened: CLM-052 — 该条命名的产物 .evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md 在本运行中是被截断的片段（保留文本为妊娠与性别差异段落），对其引文「However, in this guideline, we offer a more general 1A recommendation for adults with CKD.」逐串检索未命中，故在本运行内无法用其命名产物核对。KDIGO 2024 体系存在并在指南中给出 SGLT2i 推荐这一点有外部旁证，但该条 quote ",
+      "review weakened: CLM-053 — 同上：保全指南产物中检不到「Recommendation 3.7.1…」原文，无法在本次运行内对该条逐字核对。T2D/CKD/eGFR≥20 使用 SGLT2i 的 1A 推荐在本运行检索到的二次文献语境中不矛盾，但不足以把该条升为可核。",
+      "review weakened: CLM-054 — 保全指南产物中检不到「Recommendation 3.7.3…」原文；该条与 CLM-052/053 同源同问题。",
+      "review weakened: CLM-055 — 保全指南产物中检不到「falls below 20」相关实践要点原文；该条与 CLM-052/053 同源同问题。",
+      "review weakened: CLM-056 — 保全指南产物中检不到「does not necessitate alteration of frequency of CKD monitoring」原文；该条与 CLM-052/053 同源同问题。",
+      "review weakened: CLM-057 — 保全指南产物中检不到「Note that adults with polycystic kidney disease were excluded from the large CKD trials testing SGLT2i.」原文；ADPKD 被排除这一点在保全的 EMPA-KIDNEY 作者稿件（CLM-026）中有独立支撑，故结论方向可信，但该条对其自身命名产物的引文溯源不可核。",
+      "review weakened: RUN-RECEIPT-STATS — clinical-evidence-run.json 的 stats（totalSearches=10、recordsIdentified=90、recordsAfterDeduplication=81、sourcesIncluded=4、distinctPreservedSources=4）与 clinical-evidence-search.json 及其 queries[] 逐条加和（20+10+15+15+10+10+1+3+1+5=90；10 条检索−1 个内部重复=9 个去重，90−9=81）以及正文方法学段"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-2138dced-f29c-4ea1-8417-340e92d3cd2f",
+    "status": "failed",
+    "transcript": {
+      "bytes": 2250115,
+      "completeness": "complete",
+      "messages": 355,
+      "path": ".openscience/transcripts/run_30fe14dde310725dc7b2bc437fd02146.jsonl",
+      "sha256": "9fd0f716698ffd4d630a51393cd928d18739425ca572bafa91585445749ed2d7"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.7873257407407408,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T20:06:30Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}
