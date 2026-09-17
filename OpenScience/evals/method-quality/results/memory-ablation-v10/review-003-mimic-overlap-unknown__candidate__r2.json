@@ -1,0 +1,193 @@
+{
+  "arm": "candidate",
+  "armDigest": "d30cbb66712427289737fb6fe9471171cdd4cd93593f52f3f87503d768141f55",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.12.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__candidate__r2",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "6d658a06630fe5ec8ab9a26b77d99ff28dccdfc19726d5aec63639be6442ebf5",
+  "configId": "memory-ablation-v10",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 11,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T15:59:03Z",
+  "judge": {
+    "issues": [
+      "Reclassifies PMID 41602009 and PMID 41146378 from abstract to full_text and makes full-text-level claims, contrary to brief's requirement to keep them abstract-level until full text is preserved and not call the abstracts full text.",
+      "Derived overlap interval 0-1,300 is presented as 'determined' but depends on the assumed source pool N and is mathematically uninformative; delivery's own post-review notes (R1/R2) acknowledge this error was not fixed.",
+      "States included sources have no conflicting results, while its own review notes identify contradictions (R3) about HALP threshold and independence wording.",
+      "Contains multiple acknowledged uncorrected defects in the frozen deliverable (R4-R6), reducing internal consistency.",
+      "Report says 'four studies' while listing five model studies, a noted wording defect."
+    ],
+    "promptVersion": 1,
+    "rationale": "The delivery answers the scoping question deeply and safely frames uncertainty, leaving cohort overlap unresolved. However, it violates an explicit mustNotDo by treating the two provided abstracts as full text and changing their evidence level, and it preserves known errors in the overlap derivation and conflict statements. Usefulness is high; correctness and evidence handling are hurt by these uncorrected defects.",
+    "scores": {
+      "correctness": 2,
+      "evidenceHandling": 2,
+      "safetyFraming": 5,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 127,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 128
+      },
+      {
+        "expectedVersion": 122,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 123
+      },
+      {
+        "expectedVersion": 122,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 123
+      },
+      {
+        "expectedVersion": 121,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 122
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v10-a0928c88",
+  "repeat": 2,
+  "run": {
+    "artifacts": [
+      "deliverables/evidence-review/citation-audit.md",
+      "deliverables/evidence-review/citation-ledger.csv",
+      "deliverables/evidence-review/clinical-evidence-matrix.json",
+      "deliverables/evidence-review/clinical-evidence-report.md",
+      "deliverables/evidence-review/clinical-evidence-run.json",
+      "deliverables/evidence-review/clinical-evidence-search.json",
+      "deliverables/evidence-review/question-coverage.json",
+      "deliverables/evidence-review/references.bib",
+      "deliverables/evidence-review/revision-notes.md",
+      "review-response-notes.md",
+      "work/dedup_count.py",
+      "work/quotes.py",
+      "work/selfcheck.py",
+      "work/verify_quotes.py"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_2_596b7c6d197a2a6e",
+    "durationMs": 906806,
+    "errorCode": null,
+    "id": "run_ce046d87f439eb4d21b5b2979c6c78a6",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "claims[1].claim numeric fact 231 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[1].claim numeric fact 181 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[1].claim numeric fact 733 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[1].claim numeric fact 920 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[2].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[5].claim numeric fact 2008-2019 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[6].claim numeric fact 625 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[8].claim numeric fact 4 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[10].claim numeric fact 968 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[11].claim numeric fact 0 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[13].claim numeric fact 300 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[20].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[21].claim numeric fact 288 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[21].claim numeric fact 622 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[21].claim numeric fact 666 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[24].claim numeric fact 367 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[24].claim numeric fact 859 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[30].claim numeric fact 14240 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "Evidence matrix claim CLM-021 is not cited by the report.",
+      "Report line 7 numeric facts 9, 17 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "literature_search searched and returned no source",
+      "review weakened: CLM-035 (重叠例数可被确定在 0 至 1,300 例之间) — 集合基数推导的算术是对的，但报告的表述掩盖了推导本身最关键的信息。代入 N=35,010 得下界 3,726+1,300−35,010 = −29,984（矩阵 method 字段自己写了出来）：下界为负意味着已报告的上界与下界互相矛盾——即 N=35,010 这个来源池容不下两个队列，若真有任何一项研究报告的初筛计数成立，则必有来源池容量假设被违反。报告却把它换算成'实际下界取 0'并称为'确定'在 0 至 1,300 之间（正文第 100、136 行），于是把一个'前提不成立'的信号呈",
+      "review weakened: CLM-025／026／027 (eICU-CRD 规模与'独立数据集合'陈述) — 逐字核对无误：'…for 139,367 unique patients admitted between 2014 and 2015…335 units at 208 hospitals'。此处削弱的是结论的适用范围：该句原文是 'The source hospital of MIMIC-III does not participate in the eICU program, so eICU-CRD is a completely independent set of d",
+      "review contradicted: PROTOCOL-01 (材料与方法的证据层级声明与任务给定声明不一致，且未提级给上级) — task-plan.json 第 5 行把 PMID:41602009 与 PMID:41146378 记为 'accessLevel=abstract'，并写明 '在全文被保存以前只能记为摘要级证据'；clinical-evidence-search.json 与矩阵则把这两条记为 full_text（报告第 39、67 行亦称按完整文本核对）。revision-notes 第 7–17 行引用了题面的两条约束（'逐一保留其声明的数据库角色与证据层级，不得改",
+      "review contradicted: INTERNAL-CONSISTENCY-01 (修订说明第五节：本地等价核查'结果为零问题') — .evimed-run/state.json 的 gateRuns[0] 记录了同一次提交的 42 条待处理通告（全部 severity=advisory，含 review-methods-schema 不合格、coverage-degraded、多处 report-number-unanchored／unsupported），且 metrics.reviewCoverage = {present: true, schemaValid: false}。",
+      "review contradicted: INTERNAL-CONSISTENCY-02 (讨论：'本次纳入的来源之间没有彼此矛盾的结果') — 报告自己在同段转述了冲突。被引来源 PMID:41602009 的讨论段逐字写道 '…offers superior scale and rigor through external validation in an independent database'，即该文把'换一个数据库'直接当作独立性来源；这与报告的核心结论（同一公共数据库既不构成相同也不构成独立的证明）直接冲突。此外，同一段还记载 HALP 论文报告的拐点约 12.45（摘要逐字：'"
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-f84ec31c-3cc5-4668-97e8-112ba94d17b3",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 1853933,
+      "completeness": "complete",
+      "messages": 183,
+      "path": ".openscience/transcripts/run_ce046d87f439eb4d21b5b2979c6c78a6.jsonl",
+      "sha256": "64bea4388a52f8497998a911c976c07659a9c0fa69ee31ca2d1b031f60133762"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.832072962962963,
+    "evidenceCompleteness": 0.4,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 1.0,
+    "taskUtility": 0.6000000000000001
+  },
+  "startedAt": "2026-09-17T15:42:32Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

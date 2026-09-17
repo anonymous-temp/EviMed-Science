@@ -1,0 +1,185 @@
+{
+  "arm": "baseline",
+  "armDigest": "09a6fcf784b9cf54d22734a90c364a1c6a308728d4d408d4d10cac6ca94fed96",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.12.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__baseline__r0",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "6d658a06630fe5ec8ab9a26b77d99ff28dccdfc19726d5aec63639be6442ebf5",
+  "configId": "memory-ablation-v10",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 17,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T14:44:36Z",
+  "judge": {
+    "issues": [
+      "Results section 5 contradicts itself: it first says neither abstract reports unique patient/admission counts, then immediately says the abstracts give cohort sizes of 3,726 and 1,300 patients.",
+      "The delivery uses and cites as full-text sources PROBAST+AI (PMID 40127903) and the eICU descriptor (PMID 30204154), which are not among the three sources supplied in the brief, so those claims fall outside the designated source set and cannot be verified from the input."
+    ],
+    "promptVersion": 1,
+    "rationale": "The delivery answers the brief: it inventories the two model publications, records them as abstract-level evidence, refuses to treat shared database use as proof of overlap or independence, states overlap unresolved, and explains the dates, identifiers, and eligibility definitions needed. Derived estimates are clearly marked with inputs and assumptions, and the practical section avoids clinical advice on derived figures. Minor defects: an internal contradiction about cohort-size reporting and reliance on two extra sources not supplied in the brief.",
+    "scores": {
+      "correctness": 4,
+      "evidenceHandling": 5,
+      "safetyFraming": 5,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 123,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 124
+      },
+      {
+        "expectedVersion": 118,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 119
+      },
+      {
+        "expectedVersion": 118,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 119
+      },
+      {
+        "expectedVersion": 117,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 118
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v10-acd6ed19",
+  "repeat": 0,
+  "run": {
+    "artifacts": [
+      "build_coverage.py",
+      "build_ledgers.py",
+      "build_matrix.py",
+      "deliverables/mimic4-sepsis-prognosis-scoping/citation-audit.md",
+      "deliverables/mimic4-sepsis-prognosis-scoping/citation-ledger.csv",
+      "deliverables/mimic4-sepsis-prognosis-scoping/clinical-evidence-matrix.json",
+      "deliverables/mimic4-sepsis-prognosis-scoping/clinical-evidence-report.md",
+      "deliverables/mimic4-sepsis-prognosis-scoping/clinical-evidence-run.json",
+      "deliverables/mimic4-sepsis-prognosis-scoping/clinical-evidence-search.json",
+      "deliverables/mimic4-sepsis-prognosis-scoping/question-coverage.json",
+      "deliverables/mimic4-sepsis-prognosis-scoping/references.bib",
+      "deliverables/mimic4-sepsis-prognosis-scoping/revision-notes.md",
+      "delivery-summary-mimic4-sepsis-prognosis-scoping.md",
+      "tools_quote_check.py"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_0_eafc9b924614deb7",
+    "durationMs": 720499,
+    "errorCode": null,
+    "id": "run_2a5cd672a383e74fa201213c9d279506",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "The academic report is missing a required section matching /(?:^|\\n)##\\s+.*(?:临床|证据|Evidence|Clinical)/i.",
+      "The academic report line 1 carries 22 consecutive words of untranslated source prose: # Prognostic models for mortality in adult sepsis evaluated with MIMIC-IV: database roles, evide…. The body states each finding in Chinese with its numbered citation; a reader who wants the original wording follows",
+      "The academic report line 5 carries 36 consecutive words of untranslated source prose: **Purpose.** To map the prognostic models for mortality in adult sepsis whose evaluation has bee…. The body states each finding in Chinese with its numbered citation; a reader who wants the original wording follows",
+      "The academic report line 7 carries 87 consecutive words of untranslated source prose: **Methods.** Scoping review with a pre-stated eligibility protocol and a documented search of tw…. The body states each finding in Chinese with its numbered citation; a reader who wants the original wording follows",
+      "The academic report line 9 carries 15 consecutive words of untranslated source prose: **Results.** MIMIC-IV v2.2 comprises 431,231 hospital admissions for 180,733 unique patients and…. The body states each finding in Chinese with its numbered citation; a reader who wants the original wording follows",
+      "claims[3].claim numeric fact 38.6 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[13].claim numeric fact 300 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 60 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 140 numeric facts 726 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 159 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 167 numeric facts 726 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 171 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 173 numeric facts 95 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Review methods: reviewMethods must be an object with schemaVersion 1; leave the existing source and query ledgers intact while repairing it.",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "literature_search searched and returned no source",
+      "review weakened: CLM-017 — The PROBAST+AI definition is quoted faithfully and the framework is a legitimate appraisal basis. But it is then used as the decisive criterion for declining to promote the HALP MIMIC-IV result, and that publication is a biomarker-association study rather than a fitted pro",
+      "review weakened: CLM-018 — Both quoted requirements are stated correctly for prediction models with a development phase. The problem is the inference drawn from them: the report asserts that two publications both citing MIMIC-IV 'can therefore stand in the relationship the framework calls data leaka",
+      "review weakened: CLM-023 — The role-reversal half is confirmed independently: HALP abstract says MIMIC-IV is the validation cohort, intra-abdominal abstract says MIMIC-IV is the training and internal validation database. Both abstracts were retrieved live and are quoted exactly. The claim's second h",
+      "review weakened: INDEPENDENCE-CONCLUSION — No cross-artifact contradiction was found between the report, the matrix, the citation ledger, the search log, the coverage ledger and the revision notes: the matrix carries no claim asserting overlap or disjointness, the search log and citation audit both ",
+      "review weakened: CLM-PRACTICAL — The practical section's first, second, third and fourth bullets follow from verified source facts and are correctly framed as method requirements rather than patient advice; no individualized treatment recommendation appears. The fifth bullet is the one at risk: it s"
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-e8d2ec58-7865-4feb-8d33-49d4ea74146e",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 1375484,
+      "completeness": "complete",
+      "messages": 194,
+      "path": ".openscience/transcripts/run_2a5cd672a383e74fa201213c9d279506.jsonl",
+      "sha256": "394e45447073d975e1fff7f6384b7058816452e5f18b4ae648e1af2e79aaed7a"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.8665742592592592,
+    "evidenceCompleteness": 1.0,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 1.0,
+    "taskUtility": 0.9
+  },
+  "startedAt": "2026-09-17T14:30:15Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

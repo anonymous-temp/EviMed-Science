@@ -1,0 +1,209 @@
+{
+  "arm": "baseline",
+  "armDigest": "09a6fcf784b9cf54d22734a90c364a1c6a308728d4d408d4d10cac6ca94fed96",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.12.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__baseline__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "6d658a06630fe5ec8ab9a26b77d99ff28dccdfc19726d5aec63639be6442ebf5",
+  "configId": "memory-ablation-v10",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 75,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T13:12:44Z",
+  "judge": {
+    "issues": [
+      "Dual abstract/full-text registry for PMIDs 41602009 and 41146378 is not consistent with the brief's accessLevel=abstract and blurs the 'record as abstract-level until full text preserved' boundary.",
+      "The scoping review does not enumerate all included models/studies in a table or list; broad subgroup claims rest on title-level non-preserved records, so the 'what models' question is only partially answered.",
+      "Extensive citation-audit and revision-note sections are not the research answer and reduce readability/usefulness of the deliverable.",
+      "Metadata discrepancy for PMID 41602009 (publication year 2026 vs DOI 2025) is disclosed but not resolved."
+    ],
+    "promptVersion": 1,
+    "rationale": "Answers the brief at depth and correctly leaves cohort overlap unresolved while explaining needed dates, identifiers, and eligibility definitions. Claim typing and derived-estimate assumptions are excellent, and safety statements keep evidence level. Main weaknesses are the ambiguous dual abstract/full-text handling of the two abstract-level model sources, incomplete enumeration of included models, and extraneous audit sections. Safety framing is appropriately cautious.",
+    "scores": {
+      "correctness": 4,
+      "evidenceHandling": 5,
+      "safetyFraming": 5,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 119,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 120
+      },
+      {
+        "expectedVersion": 114,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 115
+      },
+      {
+        "expectedVersion": 114,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 115
+      },
+      {
+        "expectedVersion": 113,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 114
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v10-b59284b2",
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "build_ledger.py",
+      "build_matrix.py",
+      "build_rest.py",
+      "build_run.py",
+      "dedup_count.py",
+      "deliverables/mimic-iv-sepsis-mortality-prognosis-scoping/citation-audit.md",
+      "deliverables/mimic-iv-sepsis-mortality-prognosis-scoping/citation-ledger.csv",
+      "deliverables/mimic-iv-sepsis-mortality-prognosis-scoping/clinical-evidence-matrix.json",
+      "deliverables/mimic-iv-sepsis-mortality-prognosis-scoping/clinical-evidence-report.md",
+      "deliverables/mimic-iv-sepsis-mortality-prognosis-scoping/clinical-evidence-run.json",
+      "deliverables/mimic-iv-sepsis-mortality-prognosis-scoping/clinical-evidence-search.json",
+      "deliverables/mimic-iv-sepsis-mortality-prognosis-scoping/question-coverage.json",
+      "deliverables/mimic-iv-sepsis-mortality-prognosis-scoping/references.bib",
+      "deliverables/mimic-iv-sepsis-mortality-prognosis-scoping/revision-notes.md",
+      "locate_lines.py",
+      "meta_extract.py",
+      "verify_pack.py"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_1_82f004227f26cdda",
+    "durationMs": 2421001,
+    "errorCode": null,
+    "id": "run_3c357a2847679cfc79819cee7330689e",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "SAFETY — Every practical-action step or bullet must cite at least one evidence-matrix claim.",
+      "MUST FIX — Reading retrieved evidence was delegated to a subagent 1 time(s); a subagent replies in prose, so quotations taken from it are not the source's wording. Read tool-output files with the read tool. Delegate a question, never a document.",
+      "MUST FIX — claims[29].supportQuote was not found in its preserved source artifact.",
+      "MUST FIX — claims[41].supportingSources[0].supportQuote was not found in its preserved source artifact.",
+      "MUST FIX — Report line 131 states derived result CLM-047 without marking it as derived. Label it 〔推导〕 so it is not read as a measurement.",
+      "claims[1].claim numeric fact 10 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[2].claim numeric fact 231 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[2].claim numeric fact 733 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[2].claim numeric fact 181 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[2].claim numeric fact 920 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[3].claim numeric fact 519 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[3].claim numeric fact 974 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[8].claim numeric fact 859 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[10].claim numeric fact 0.74 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[14].claim numeric fact 4 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[19].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[20].claim numeric fact 300 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[27].claim numeric fact 300 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[30].claim numeric fact 3 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[35].claim numeric fact 859 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[35].claim numeric fact 367 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 15 numeric facts 726 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 25 numeric facts 8, 4 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 33 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 63 numeric facts 1, 218, 24.6, 274, 38.6, 832, 805, 43.6 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 65 numeric facts 3 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 75 numeric facts 625, 4 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 76 numeric facts 2, 300, 149 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 84 numeric facts 28, 90, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 88 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 92 numeric facts 8 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 107 numeric facts 8, 4 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 115 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 121 numeric facts 242, 969, 300, 34.9, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 127 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 135 numeric facts 4, 1, 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 141 numeric facts 181 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 143 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 147 numeric facts 90, 28, 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 149 numeric facts 4 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-e8612788-b573-461c-814e-4f338b1b9aa7",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 3420680,
+      "completeness": "complete",
+      "messages": 598,
+      "path": ".openscience/transcripts/run_3c357a2847679cfc79819cee7330689e.jsonl",
+      "sha256": "2a5611bea1857c743734d0fcb092b5f4d0aeace780ac6a61dad224510501852e"
+    },
+    "verification": "unverified"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.5516664814814816,
+    "evidenceCompleteness": 0.0,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 1.0,
+    "taskUtility": 0.8
+  },
+  "startedAt": "2026-09-17T12:29:51Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

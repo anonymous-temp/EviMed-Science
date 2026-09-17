@@ -1,0 +1,196 @@
+{
+  "arm": "baseline",
+  "armDigest": "09a6fcf784b9cf54d22734a90c364a1c6a308728d4d408d4d10cac6ca94fed96",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.12.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__baseline__r2",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "6d658a06630fe5ec8ab9a26b77d99ff28dccdfc19726d5aec63639be6442ebf5",
+  "configId": "memory-ablation-v10",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 7,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T15:42:31Z",
+  "judge": {
+    "issues": [
+      "Derived cohort-overlap interval (0–1,300) is stated as not to enter practice recommendations, yet it appears in the Clinical Practice Points, contradicting the report and its revision note.",
+      "Clinical Practice Points presents the derived interval as practical guidance without restating its inputs/assumptions/sensitivity, so an evidence-level boundary is presented with more confidence than the body supports.",
+      "The two initially abstract-only model sources are upgraded to full-text evidence based on claimed retrieval; the provided inputs do not independently establish that full text was preserved, risking a mustNotDo breach if preservation did not occur."
+    ],
+    "promptVersion": 1,
+    "rationale": "The delivery answers both scoping questions thoroughly, preserves stated database roles, leaves cohort overlap unresolved, and names the fields needed for independence. Internal contradiction around the derived interval weakens correctness. Evidence handling is generally typed with stated assumptions, but the practice point repeats a derived estimate without that context. Safety framing avoids clinical advice but includes a derived estimate in practical guidance. The abstract-to-fulltext upgrade is conditionally acceptable but unverified.",
+    "scores": {
+      "correctness": 4,
+      "evidenceHandling": 4,
+      "safetyFraming": 4,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 126,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 127
+      },
+      {
+        "expectedVersion": 121,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 122
+      },
+      {
+        "expectedVersion": 121,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 122
+      },
+      {
+        "expectedVersion": 120,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 121
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v10-96498f95",
+  "repeat": 2,
+  "run": {
+    "artifacts": [
+      ".work/build_candidates.py",
+      ".work/build_ledgers.py",
+      ".work/build_matrix.py",
+      ".work/build_search_log.py",
+      ".work/patch_matrix.py",
+      ".work/refs.py",
+      ".work/refs2.py",
+      ".work/verify.py",
+      "deliverables/mimic4-sepsis-prognosis-scoping/citation-audit.md",
+      "deliverables/mimic4-sepsis-prognosis-scoping/citation-ledger.csv",
+      "deliverables/mimic4-sepsis-prognosis-scoping/clinical-evidence-matrix.json",
+      "deliverables/mimic4-sepsis-prognosis-scoping/clinical-evidence-report.md",
+      "deliverables/mimic4-sepsis-prognosis-scoping/clinical-evidence-run.json",
+      "deliverables/mimic4-sepsis-prognosis-scoping/clinical-evidence-search.json",
+      "deliverables/mimic4-sepsis-prognosis-scoping/question-coverage.json",
+      "deliverables/mimic4-sepsis-prognosis-scoping/references.bib",
+      "deliverables/mimic4-sepsis-prognosis-scoping/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_2_301db2e8942eacd2",
+    "durationMs": 1000986,
+    "errorCode": null,
+    "id": "run_0b966dbb19acab7285060da6da7b0b2b",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "claims[7].claim numeric fact 231 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[7].claim numeric fact 181 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[7].claim numeric fact 733 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[7].claim numeric fact 920 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[10].claim numeric fact 4 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[14].claim numeric fact 625 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[17].claim numeric fact 300 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[20].claim numeric fact 2012-2019 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[24].claim numeric fact 798 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[28].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[29].claim numeric fact 226 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[29].claim numeric fact 661 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[33].claim numeric fact 134 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[35].claim numeric fact 288 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[40].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[40].claim numeric fact 9 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 7 numeric facts 8 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 17 numeric facts 3 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 29 numeric facts 10, 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 79 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "biomedical_source_search searched and returned no source",
+      "review contradicted: CLM-010 — 三层冲突：(1) 题面对 PMID 41602009 声明 accessLevel=abstract 并要求 '在全文未被保存之前不得升级为全文'，而该主张所在矩阵行的 accessLevel 字段为 full_text，accessLevelLedger.realisedAccessLevel 为 full_text，search.json sourceRecords.accessLevel 为 full_text，run.json 将其列为 full-text 工件；(2) 报告自身 line 232 记载 '在保存全文之前，这",
+      "review contradicted: CLM-016 — 与 CLM-010 同源的层级冲突（同一文献 41146378 / PMC12557738）：题面声明 abstract，矩阵 accessLevel=full_text，accessLevelLedger.realisedAccessLevel=full_text。该主张所需的 7:3 分组、n=910/n=390、eICU-CRD V.2.0 均不在摘要内（外部核查 PubMed 41602009/41146378 返回的记录与题面声明的摘要字段不含这些细节），即该主张的成立完全依赖被升级后的全文，而题面要求 '在全文被保存之前",
+      "review weakened: CLM-021 — 来源 line 23 逐字核对通过。但报告在 line 134/136 将这一做法描述为同一中心不同数据库之间重叠的 '可执行样板'，并称 '同样的做法在两个 MIMIC-IV 研究之间也可以使用'；来源句只涉及 MIMIC-III 与 MIMIC-IV 沿真实时间轴的限制（使用 MIMIC-III CareVue 子集与入科时间），不能直接迁移到同一库内两项研究的重叠排除（同一库内不存在可作为切分依据的第二个时间轴）。报告在 line 136 末句已作限定（'该研究并未报告它与同一数据库内其他 MIMIC-IV 研究之间是否存在重叠'），",
+      "review weakened: CLM-038 — 来源句逐字核对通过：'All clinical data for this study were obtained from two distinct sources: the MIMIC IV v2.0 [13] and the ICU of a large tertiary hospital in Liaoning Province, China. These two datasets are completely independent.' 但该句是研究者的自我声明，其可检验性依赖两侧机构不同这一事实；报告在 line 140 用 '",
+      "review contradicted: CLM-042 — 逐表核验 5/3 的分配本身成立：外部验证=[2][4][6]，推导与内部验证=[3][5][7][8][9]，与表 1、line 83、line 242 一致。但同一实体（MIMIC-IV 验证队列能否作为独立证据）上的结论方向自相矛盾：报告摘要（line 21）与结论（line 244）判定 '不能' 被当作相互独立的证据（在当前记录下），而讨论 line 194 写明 '两边都缺的时候，方向性的判断——无论偏向相同还是偏向独立——都没有依据。本审查因此不对任何一对队列给出方向'，line 74 的矩阵 verdict 亦为 u",
+      "review weakened: CLM-043 — 四个版本号逐项可核验：v0.4=CLM-036（PMC13154749 line 29）、v1.0=CLM-034（PMC12009225 line 27）、v2.0=CLM-026（PMC11103058 line 17）+CLM-038（PMC467048）、v2.2=CLM-016（PMC12557738）。但列出的五条支撑引文中没有任何一条包含 '四种版本' 的集合陈述，该集合是由五条独立来源的主张重组而成，属合成主张的 normal 做法，confidence 标 high 偏乐观。另有一个可复核的边界问题：MIMIC-IV v3",
+      "review contradicted: CLM-046 — 该推导的可核验宽度与其自身证据冲突。矩阵 root 的 requiredFieldsChecklist 记载 '年龄阈值与入科次序规则'=available、'ICU 停留时长下限与排除标准'=available、'结局定义与随访窗口'=available（matrix line 100/105/110），而 CLM-046 的结论是这些字段 '均不可得'；同一交付物的 CLM-017 又逐字记录了 [3] 的 ICD-9→ICD-10 映射、Sepsis-3.0+SOFA≥2、仅取首次入科与 <18 岁排除。再者，报告 line "
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-b4df5857-0b47-4ae1-9e80-eb0d634fdfcb",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 1800543,
+      "completeness": "complete",
+      "messages": 271,
+      "path": ".openscience/transcripts/run_0b966dbb19acab7285060da6da7b0b2b.jsonl",
+      "sha256": "c9e55e2d474dd38b5f935ba39318f1b7a6f58b36b689f33c06b932e724646408"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.8146322222222222,
+    "evidenceCompleteness": 0.8,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 0.8,
+    "taskUtility": 0.9
+  },
+  "startedAt": "2026-09-17T15:22:25Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

@@ -1,0 +1,190 @@
+{
+  "arm": "candidate",
+  "armDigest": "d30cbb66712427289737fb6fe9471171cdd4cd93593f52f3f87503d768141f55",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.12.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__candidate__r0",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "6d658a06630fe5ec8ab9a26b77d99ff28dccdfc19726d5aec63639be6442ebf5",
+  "configId": "memory-ablation-v10",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 7,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T14:30:13Z",
+  "judge": {
+    "issues": [
+      "The two model sources (PMID 41602009 and PMID 41146378) are upgraded to full-text evidence despite the brief listing them as abstract and the mustNotDo prohibition against calling abstracts full text; the claimed 'open-access peer-reviewed full text preserved' is unsupported by the provided inputs.",
+      "The citation audit asserts verbatim support from preserved full text but includes no preserved full-text excerpts for those abstracts, making the evidence-level upgrade unverifiable.",
+      "Additional references (4-9) are asserted as full text or guideline text without preserved text, so their claims are not bonded to verifiable sources."
+    ],
+    "promptVersion": 1,
+    "rationale": "The delivery answers the scoping question thoroughly, preserves database roles, leaves cohort overlap unresolved, and explains needed identifiers and fields; derived estimates are labeled with assumptions. However, it violates the brief by reclassifying the two abstract-level model publications as full-text without verifiable preserved full text, undermining correctness and evidence handling. Safety framing remains appropriately cautious and does not base practical advice on derived estimates.",
+    "scores": {
+      "correctness": 2,
+      "evidenceHandling": 2,
+      "safetyFraming": 5,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 122,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 123
+      },
+      {
+        "expectedVersion": 117,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 118
+      },
+      {
+        "expectedVersion": 117,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 118
+      },
+      {
+        "expectedVersion": 116,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 117
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v10-23f045db",
+  "repeat": 0,
+  "run": {
+    "artifacts": [
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/citation-audit.md",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/citation-ledger.csv",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-matrix.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-report.md",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-run.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-search.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/question-coverage.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/references.bib",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/revision-notes.md",
+      "work/build_coverage.py",
+      "work/build_logs.py",
+      "work/build_matrix.py",
+      "work/records_inline.json",
+      "work/register_fix.py",
+      "work/scan_numerals.py",
+      "work/verify_quotes.py",
+      "work/verify_quotes2.py",
+      "work/verify_quotes3.py"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_0_2592a8362c4e76b4",
+    "durationMs": 1454841,
+    "errorCode": null,
+    "id": "run_2f27a8e9d561fac0e45b5a108a2f15f8",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "claims[1].claim numeric fact 10 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[5].claim numeric fact 181 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[5].claim numeric fact 920 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[6].claim numeric fact 519 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[7].claim numeric fact 859 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[9].claim numeric fact 625 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[11].claim numeric fact 4 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[19].claim numeric fact 300 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[20].claim numeric fact 0.758-0.831 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[20].claim numeric fact 0.772-0.919 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[31].claim numeric fact 968 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[47].claim numeric fact 9 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[49].claim numeric fact 390 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[49].claim numeric fact 880 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[49].claim numeric fact 510 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[50].claim numeric fact 911 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[53].claim numeric fact 113 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 61 numeric facts 3, 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 69 numeric facts 95 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 72 numeric facts 300, 264, 33 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "literature_search searched and returned no source"
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-90f43bb5-3cc1-4b38-9b1d-c4d538868318",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 2102440,
+      "completeness": "complete",
+      "messages": 318,
+      "path": ".openscience/transcripts/run_2f27a8e9d561fac0e45b5a108a2f15f8.jsonl",
+      "sha256": "262578fa1dd33152b2647fc70b9f53f1db4227ad535d784da05355c6105ad600"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.730585,
+    "evidenceCompleteness": 0.4,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 1.0,
+    "taskUtility": 0.6000000000000001
+  },
+  "startedAt": "2026-09-17T14:03:34Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

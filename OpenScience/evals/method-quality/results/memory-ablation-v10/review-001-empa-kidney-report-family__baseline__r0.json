@@ -1,0 +1,195 @@
+{
+  "arm": "baseline",
+  "armDigest": "09a6fcf784b9cf54d22734a90c364a1c6a308728d4d408d4d10cac6ca94fed96",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.12.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__baseline__r0",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "6d658a06630fe5ec8ab9a26b77d99ff28dccdfc19726d5aec63639be6442ebf5",
+  "configId": "memory-ablation-v10",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 5,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T15:22:24Z",
+  "judge": {
+    "issues": [
+      "Evidence-matrix claim counts are internally inconsistent: states 59 total but direct 50 + synthesized 3 + derived 3 = 56; later implies 56 direct/synthesized claims.",
+      "One clinical-practice bullet adds an unsourced imperative to immediately evaluate adjudicated safety events and asserts that evaluation need does not depend on prior symptom resolution."
+    ],
+    "promptVersion": 1,
+    "rationale": "Thorough answer: six sub-questions addressed, randomized vs post-trial observation separated, one primary study counted, searches/protocol declared. Derived estimates are labelled with inputs/assumptions and excluded from practice points. Minor flaws: audit claim counts conflict, and one unsourced clinical imperative slightly weakens safety framing.",
+    "scores": {
+      "correctness": 4,
+      "evidenceHandling": 5,
+      "safetyFraming": 4,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 125,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 126
+      },
+      {
+        "expectedVersion": 120,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 121
+      },
+      {
+        "expectedVersion": 120,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 121
+      },
+      {
+        "expectedVersion": 119,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 120
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v10-7651d51e",
+  "repeat": 0,
+  "run": {
+    "artifacts": [
+      "build_aux.py",
+      "build_coverage.py",
+      "build_matrix.py",
+      "check_numerals.py",
+      "check_package.py",
+      "deliverables/empa-kidney-durability-evidence/citation-audit.md",
+      "deliverables/empa-kidney-durability-evidence/citation-ledger.csv",
+      "deliverables/empa-kidney-durability-evidence/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-durability-evidence/clinical-evidence-report.md",
+      "deliverables/empa-kidney-durability-evidence/clinical-evidence-run.json",
+      "deliverables/empa-kidney-durability-evidence/clinical-evidence-search.json",
+      "deliverables/empa-kidney-durability-evidence/question-coverage.json",
+      "deliverables/empa-kidney-durability-evidence/references.bib",
+      "deliverables/empa-kidney-durability-evidence/revision-notes.md",
+      "patch_numerals.py"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_0_6ee2d15f8bf84eaf",
+    "durationMs": 922654,
+    "errorCode": null,
+    "id": "run_f24f1662267e41c8a3cb5d24db7115cd",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "GRADE 等级与降级理由不自洽——第 189 行「第一层是活性期随机化比较确立的肾脏获益。6609 例患者的主要复合终点风险比 0.72（95% CI 0.64–0.82），肾脏病进展 0.71（95% CI 0.62–0.81），终末期肾病…」同句断言了证据缺陷（如方法学质量偏低、偏倚风险高、存在不一致或间接性），却给出含「高」的确定性等级。任何一项降级都排除「高」，请改等级或删除该缺陷断言。（只写出五个降级领域的名称并说明未因其降级——如「偏倚风险低、结果一致、估计精确、无发表偏倚证据」——不触发本条。）",
+      "claims[0].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[21].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[53].claim numeric fact 6609 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[55].claim numeric fact 0.6-1.19 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "Report line 5 numeric facts 6 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 9 numeric facts 0.64-0.82 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 10 numeric facts 0.62-0.81, 0.59-0.89 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 11 numeric facts 0.67-1.07, 0.7-1.08 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 12 numeric facts 0.78-0.95 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 13 numeric facts 0.54-0.96, 1.16-1.59 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 14 numeric facts 1.83-2.41 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 27 numeric facts 4891, 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 98 numeric facts 6609, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 102 numeric facts 6609, 63.8, 33, 54, 14.5, 10, 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 103 numeric facts 14, 34, 57, 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 104 numeric facts 6609, 10, 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 107 numeric facts 6609 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 111 numeric facts 0.64-0.82 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 113 numeric facts 10, 40, 0.62-0.81, 0.6-1.19, 0.59-0.89 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "literature_search searched and returned no source",
+      "guideline_search searched and returned no source",
+      "review weakened: CLM-004 — 数字与引文均命中 PMC7614055，但同一句在报告摘要第 11 行写成「两者均未达统计学显著」，字面抹去了「未达统计学显著」修饰的是心力衰竭住院/心血管死亡复合终点与全因死亡这两个终点，而非「恩格列净对二者无效」；原文为「There was no statistically significant effect on the composite of hospitalization for heart failure or death from cardiovascular causes (HR 0.84; 95% CI 0.67 to",
+      "review weakened: CLM-042 — 引文逐字命中 PMC7615591 讨论段，但主张把来源的「Contrary to some international guidelines which only suggest (rather than recommend) using SGLT2 inhibitors in patients without diabetes and without significant albuminuria (uACR <200 mg/g)」落成中文「部分国际指南对无糖尿病且无显著白蛋白尿者只作『建议』而非『推荐』」。来源在同一句中还附带了「th",
+      "review weakened: CLM-044 — 核心事实（KDIGO 2024 把 SGLT2i 推荐扩展到广泛 CKD 人群）方向正确且来源可解析——PubMed 38490803 确为 KDIGO 2024 CKD 指南本身（Kidney Int 2024;105(4S):S117-S314），该指南确以 SGLT2i 为 CKD 药物治疗推荐。但本条的引用链是断的：matrix 与 citation-ledger 把 sourceUrl/identifier 写作 https://pubmed.ncbi.nlm.nih.gov/38490803/，而该 PMID 指向的是 KDIG",
+      "review weakened: CLM-045 — 与 CLM-044 同一处问题：引文（「启动或使用SGLT2i不需要改变CKD监测的频率，SGLT2启动时eGFR的可逆性下降不是停药指标」）声称来自参考文献表第 4 条的中文解读文本，而 matrix/ledger 的 sourceUrl 指向 PMID 38490803（KDIGO 指南本身）。指南原文未获取（run.json failedSources、citation-audit 第 2 节如实登记），我也无法独立解析到该中文解读或指南条目原文。「启动时 eGFR 可逆性下降不是停药指标」这一方向与随机化证据（CLM-035/038",
+      "review weakened: CLM-062 — 两段数字均可解析：活性期 0.84 (0.60–1.19) 出自 PMC7614055，全程 0.75 (0.59–0.95) 出自 PMC7616743 并被独立检索所得摘要复现。「两段使用同一定义与同一裁定程序」也有直接来源——PMC7616743「reported deaths underwent central review and categorization by blinded clinician adjudicators following the same pre-specified definitions develop",
+      "review weakened: GRADE 确定性等级自洽性（报告第 7、23、189、195、207 行） — 同一属性（活性期随机化比较的确定性等级）在同一交付物内出现两处不相容表述。摘要第 23 行与讨论第 189 行：主要复合终点「未对任何 GRADE 领域降级，按 GRADE 为高确定性」；但讨论同一段与局限性第 207 行同时承认「试验因疗效明确而提前终止，提前终止对效应量的高估风险无法用现有公开数据排除」。提前终止属风险偏倚领域内的既知问题，与「未对任何领域降级」不能并列。这是提交回执 notices 已点名的问题（第 56 条）在冻结正文中仍可检出，说明该处未按回执要求改净。",
+      "review weakened: 样本内实体冲突对 1：首发主要结局绝对获益（PMC7616743 结果段 vs 讨论段） — 同一实体、同一报告、互相矛盾的两条陈述：结果段与 Table S6 给出每 1000 例少 57 例（SE 14，活性期末）与少 45 例（SE 14，全程末），而讨论段称「absolute benefits both for the primary outcome and for the key secondary outcome of death or ESKD were initially maintained」。注意另两项绝对差反而扩大（ESKD 26→25；",
+      "review weakened: 样本内实体冲突对 2：活性期「亚组一致」的表述范围 — 报告摘要第 23 行与结论均称「结论在预设亚组间一致」，来源 PMC7614055 亦有「benefits were consistent in patients with or without diabetes and regardless of eGFR at randomization」，故并非误引；但同一来源紧接着写「There was some evidence that the proportional risk reduction may be larger in those with hi"
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-b3e609e8-b7f9-45b0-9935-1abdbf532ef9",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 1487058,
+      "completeness": "complete",
+      "messages": 188,
+      "path": ".openscience/transcripts/run_f24f1662267e41c8a3cb5d24db7115cd.jsonl",
+      "sha256": "5f6a0cfb4be7cf740343ffabf779fde4295a10ffa8f4b4e359a0edde94dba899"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.8291381481481481,
+    "evidenceCompleteness": 1.0,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 0.8,
+    "taskUtility": 0.9
+  },
+  "startedAt": "2026-09-17T15:05:04Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}
