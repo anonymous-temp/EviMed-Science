@@ -12,21 +12,11 @@
  * @module clinicalEvidenceQuality
  */
 
-/**
- * One line of a report as the coverage judge sees it. Re-exported by name
- * because a `export { ... } from` re-exports values, and a JSDoc typedef is not
- * a value — a consumer importing this type would otherwise resolve nothing.
- * @typedef {{ line: number, section: string, text: string }} CoverageJudgeLine
- */
-
 export {
   clinicalEvidencePackageErrorCode,
   citationIntegrityIssues,
   numberedReferenceNumbers,
   numberedReferenceCount,
-  briefCollapse,
-  briefTermPresent,
-  coverageJudgeContext,
   validateClinicalEvidencePackage,
   clinicalCheckTier,
   claimVerification,

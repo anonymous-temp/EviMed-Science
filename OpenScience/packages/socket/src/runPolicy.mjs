@@ -352,20 +352,16 @@ export function delegatableItems(plan, items) {
 /**
  * Runs the delivery gate on one deliverable.
  *
- * The brief handed in is the read-only copy of the control plane's question.
- * The workspace copy is passed separately and only compared, so a run that
- * edited its own question is visible rather than rewarded.
+ * The brief handed in is the control plane's copy of the question, never the
+ * workspace copy the run can edit.
  *
  * @param {{
  *   contractKind: string,
  *   files: Map<string, string>,
  *   expectedOutputs?: readonly {path: string, required: boolean}[],
  *   briefText?: string | null,
- *   workspaceBriefText?: string | null,
  *   matrix?: any,
- *   runReceipt?: any,
  *   sourceArtifacts?: Record<string, string>,
- *   executedSearchQueries?: readonly string[] | null,
  *   staleEvidenceCount?: number,
  * }} input
  * @returns {ReturnType<typeof runGate>}

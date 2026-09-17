@@ -57,7 +57,6 @@ export const GATE_CHECK_IDS = Object.freeze([
   // never did: a run receipt of `{ this is not json` and a one-column
   // `signals.csv` both used to pass with zero findings.
   'structured-output',
-  'coverage-degraded',
   // The two halves of "clinical content, non-clinical contract": the narrow
   // blocking trigger and the wide notice that measures what promoting a name
   // into it would cost.
@@ -132,16 +131,9 @@ export const GATE_CHECK_IDS = Object.freeze([
  * @property {string} contractKind
  * @property {Map<string, string>} files          relative path inside the deliverable dir -> text
  * @property {readonly {path: string, required: boolean}[]} [expectedOutputs]
- * @property {string | null} [briefText]          the server's copy of the question
- * @property {string | null} [workspaceBriefText] the run's copy, compared not trusted
+ * @property {string | null} [briefText]          the dispatcher's copy of the question
  * @property {any} [matrix]
- * @property {any} [runReceipt]
  * @property {Record<string, string>} [sourceArtifacts]
- * @property {readonly string[] | null} [executedSearchQueries] null when the run
- *   executed no searches, which is what `validateClinicalEvidencePackage`
- *   defaults it to. Declared without the null for a long time, so the socket's
- *   own declaration of the same input — which does allow it — did not match, and
- *   nothing noticed because `packages/socket` was never typechecked in CI.
  * @property {number} [staleEvidenceCount]
  * @property {string} [finalReplyText]
  */
@@ -262,31 +254,16 @@ function validateClinicalEvidenceReport(input) {
   //
   // Reported before the content rules run, because a repair loop has bounded
   // attempts and spending them on the symptom is how a fixable package dies.
-  const parseIssues = [];
-  for (const [file, parsed, provided] of [
-    ["clinical-evidence-matrix.json", json(input, "clinical-evidence-matrix.json"), input.matrix],
-    ["clinical-evidence-run.json", json(input, "clinical-evidence-run.json"), input.runReceipt],
-  ]) {
-    if (provided == null && parsed === undefined) {
-      parseIssues.push(issue("deliverable_rejected", `${file} is not valid JSON. Fix the syntax first: a value containing a double quote must escape it (\\"), and every string must close before the next key.`, { check: "deliverable-json-parse" }));
-    }
-  }
-  if (parseIssues.length) {
-    return { ok: false, contractKind: input.contractKind, issues: parseIssues, metrics: {}, errorCode: "deliverable_rejected" };
+  const matrix = input.matrix ?? json(input, 'clinical-evidence-matrix.json')
+  if (matrix === undefined) {
+    const parseIssue = issue("deliverable_rejected", `clinical-evidence-matrix.json is not valid JSON. Fix the syntax first: a value containing a double quote must escape it (\\"), and every string must close before the next key.`, { check: "deliverable-json-parse" })
+    return { ok: false, contractKind: input.contractKind, issues: [parseIssue], metrics: {}, errorCode: "deliverable_rejected" }
   }
   const result = validateClinicalEvidencePackage({
     reportText: text(input, 'clinical-evidence-report.md'),
-    matrix: input.matrix ?? json(input, 'clinical-evidence-matrix.json'),
-    runReceipt: input.runReceipt ?? json(input, 'clinical-evidence-run.json'),
+    matrix,
     sourceArtifacts: input.sourceArtifacts ?? {},
-    executedSearchQueries: input.executedSearchQueries ?? null,
-    searchLogText: text(input, 'clinical-evidence-search.json'),
-    referencesText: text(input, 'references.bib'),
-    citationLedgerText: text(input, 'citation-ledger.csv'),
-    citationAuditText: text(input, 'citation-audit.md'),
-    questionCoverageText: text(input, 'question-coverage.json'),
     briefText: input.briefText ?? null,
-    workspaceBriefText: input.workspaceBriefText ?? null,
   })
   // The gate's own distinction between blocking and degradable is preserved,
   // not flattened. A degradable finding is one the run cannot repair and the
@@ -299,57 +276,27 @@ function validateClinicalEvidenceReport(input) {
   //
   // It used to be left out, on the stated grounds that "the clinical validator
   // already has a message for every file it needs". Nothing tested that claim
-  // and it was false for three of the eight: with `citation-ledger.csv`,
-  // `references.bib` or `citation-audit.md` absent, this gate returned ok=true
-  // with zero required issues, and the server's own check then failed the run
-  // with `specialist_required_output_missing`. Two gates, one package, opposite
-  // verdicts — exactly the drift the single-implementation rule exists to stop.
+  // and it was false: with a required companion file absent this gate returned
+  // ok=true, and the server's own check then failed the run with
+  // `specialist_required_output_missing` — two gates, one package, opposite
+  // verdicts, and it cost RQ-03 two full runs. Not a second implementation:
+  // `requiredOutputIssues` is the function every contract kind calls, over the
+  // `expectedOutputs` the capability manifest supplies and the server mirrors.
   //
-  // It cost RQ-03 two full runs. Both spent all three repair attempts on
-  // citation binding, were told nothing about the two files they had never
-  // created, and died at the server boundary after the attempts were gone.
-  //
-  // Not a second implementation: `requiredOutputIssues` is the same function
-  // every other contract kind calls, reading the same `expectedOutputs` the
-  // capability manifest supplies and the server's `agent.outputs` mirrors. And
-  // it cannot be stricter than the server, because it is the server's list.
-  // Only the files this contract's own validator has nothing to say about.
-  //
-  // Adding the manifest check wholesale reported every absence twice -- once
-  // as "X is missing." and once in the validator's own words -- which is the
-  // opposite of the rule this contract kind is built on: one absent file is
-  // one problem, not two. Three existing tests said so, and they were right.
-  //
-  // So the two are complementary, not stacked. The validator speaks for the
-  // files it knows (report, matrix, run receipt, coverage ledger); the manifest
-  // speaks for the rest, which is how citation-ledger.csv, references.bib and
-  // citation-audit.md went unmentioned while the server failed the run for
-  // them.
-  // "Already spoken for" means the validator BLOCKS on that file's absence, not
-  // merely that its name appears somewhere. Matching on the name alone let a
-  // rule about `citation-ledger.csv`'s header column order — advisory, and
-  // about a file that exists — suppress the report that the file is missing
-  // entirely. The gate then passed a package the server would reject, which is
-  // the exact drift this change was made to close.
+  // Complementary, not stacked: one absent file is one problem, not two. The
+  // validator speaks for the files it blocks on (the report); the manifest
+  // speaks for the rest. "Already spoken for" means the validator BLOCKS on
+  // that file's absence, not merely that its name appears in some message —
+  // matching on the name alone once let an advisory about a file that exists
+  // suppress the report that another was missing.
   const blockedOn = new Set(result.blockingIssues ?? []);
   /** @param {string} relative @returns {boolean} */
   const namedByValidator = (relative) => [...blockedOn].some((message) => String(message).includes(relative));
   // Every required file the validator is not already blocking on, including
-  // when the report itself is one of them.
-  //
-  // This withheld the whole list while the report was absent, reasoning that
-  // the other absences were downstream of it. They are not: citation-ledger.csv,
-  // references.bib and citation-audit.md are independent files, and a run told
-  // about all of them writes all of them in one round. A run told only about
-  // the report writes the report and spends another attempt discovering the
-  // rest — which is the exact condition the manifest check was added to end,
-  // reintroduced for the first submission of every run. RQ-03's rerun spent
-  // gate 1 on the report and gate 2 on four more files, two of five attempts,
-  // and never reached the quote checks at all.
-  //
-  // The nine complaints an absent report used to draw are handled where they
-  // arise, in the validator's own early return. `namedByValidator` keeps the
-  // report from being reported twice here.
+  // when the report itself is one of them: a run told about every missing file
+  // writes them in one round, and one told only about the report spends another
+  // attempt discovering the rest. The complaints an absent report used to draw
+  // are handled in the validator's own early return.
   const manifestIssues = requiredOutputIssues(input)
     .filter((entry) => !namedByValidator(String(entry.path ?? "")));
   const issues = [
@@ -368,9 +315,6 @@ function validateClinicalEvidenceReport(input) {
         // paying for. Absent where the raising code did not declare them.
         { severity: blocking.has(finding.text) ? 'required' : 'advisory', check: finding.check, rule: finding.rule, line: finding.line },
       )),
-    ...(result.coverageDegradedNotice
-      ? [issue('clinical_evidence_notice', String(result.coverageDegradedNotice), { severity: 'advisory', check: 'coverage-degraded' })]
-      : []),
     // Findings that rest on a judgement no pattern can make. They reach the run
     // while it can still act, and can never withhold a package.
     ...clinicalEvidenceAdvisoryNotes(text(input, 'clinical-evidence-report.md'))
@@ -383,14 +327,12 @@ function validateClinicalEvidenceReport(input) {
     issues,
     metrics: {
       ...verificationGateMetrics({
-        matrix: input.matrix ?? json(input, 'clinical-evidence-matrix.json'),
-        citationLedgerText: text(input, 'citation-ledger.csv'),
+        matrix,
         staleEvidenceCount: input.staleEvidenceCount ?? 0,
       }),
       // A measurement, not a rule: which section serves which question is not
       // decidable here, so the run is handed the shares and applies the rule.
       sectionShares: reportSectionShares(text(input, 'clinical-evidence-report.md')),
-      reviewCoverage: 'reviewCoverage' in result ? result.reviewCoverage : { present: false },
     },
     errorCode: required.length ? (errorCode ?? 'deliverable_rejected') : null,
   }

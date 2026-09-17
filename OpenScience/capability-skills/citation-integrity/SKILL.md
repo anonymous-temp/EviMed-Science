@@ -20,10 +20,13 @@ whether the source directly supports, qualifies, or conflicts with it. Flag
 secondary citations where the primary source is available. Respect license and
 quotation limits; paraphrase while preserving the source's meaning.
 
-Write `citation-ledger.csv`, `references.bib`, and `citation-audit.md`. The audit
-must list unresolved, duplicate, retracted, corrected, metadata-only, and
-claim-mismatched references. Do not report a clean audit while any material
-claim remains unsupported.
+Write only the citation files your deliverable's contract lists. Where it lists
+`citation-ledger.csv` or `citation-audit.md`, the audit names unresolved,
+duplicate, retracted, corrected, metadata-only, and claim-mismatched references.
+A clinical evidence package lists neither: its evidence matrix carries every
+claim-to-source binding, and a retracted or corrected source that matters is
+named in the report itself. Never report a clean audit while any material claim
+remains unsupported.
 
 ## Exact-paper reconstruction gate
 

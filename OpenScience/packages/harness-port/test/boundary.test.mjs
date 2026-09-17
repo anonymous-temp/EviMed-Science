@@ -157,11 +157,11 @@ test("no source file reads as binary, because a file that does is a file nobody 
   // opened. Two weaker versions of this line were written first: one counted
   // the loop over roots rather than the reads, so deleting the `walk()` call
   // left it green; the next asserted a round-number floor, which is a guess
-  // dressed as a check. Naming the file that motivated the rule proves the
-  // sweep reached it — and that this file, which every binary-skipping search
-  // tool used to drop, is now readable as text.
+  // dressed as a check. Naming a file on the delivery path proves the sweep
+  // reached `apps`. (The file that motivated the rule, coverageJudge.mjs, was
+  // deleted on 2026-09-17 together with the question ledger it judged.)
   for (const proof of [
-    path.join("apps", "server", "src", "coverageJudge.mjs"),
+    path.join("apps", "server", "src", "agentRuns.mjs"),
     // The second file to hide, and the one that proves the sweep now reaches
     // past `apps` and `packages`. Without this line the widened root list could
     // be deleted and nothing would notice.

@@ -4,7 +4,6 @@
 // attribute is the ESM way to say "this file is data", and it keeps the rules
 // exactly one file rather than one file plus a loader.
 import clinicalSafetyRulesData from "./clinical-safety-rules.json" with { type: "json" };
-import { REVIEW_METHOD_CHECK_IDS, reviewMethodsFindings } from "./reviewMethods.mjs";
 
 const claimFields = Object.freeze([
   "claimId",
@@ -330,19 +329,15 @@ class IssueLog {
  * @type {readonly string[]}
  */
 export const clinicalEvidenceCheckIds = Object.freeze([
-  ...REVIEW_METHOD_CHECK_IDS,
   "emergency-trigger-conditioned",
   "appraisal-declaration",
-  "screening-ledger",
   "citation-closure",
   "attributed-stance",
   "regulatory-article",
   "clinical-safety-rules",
   "citation-integrity",
   "manuscript-register",
-  "comparative-structure",
   "synthesized-claim",
-  "question-coverage",
   "report-present",
   "report-sections",
   "practical-section",
@@ -375,28 +370,9 @@ export const clinicalEvidenceCheckIds = Object.freeze([
   "record-identifier-leak",
   "practical-derived-claim",
   "practical-claim-anchor",
-  "workspace-brief-mismatch",
-  "search-log-schema",
-  "search-log-queries",
-  "search-log-execution-match",
-  "search-database-breadth",
-  "screening-flow-coherence",
-  "source-record-access-level",
-  "run-receipt-statistics",
   "reference-list-duplication",
   "reference-number-unresolved",
-  "bibliography-entry-count",
-  "bibliography-source-url",
-  "citation-ledger-schema",
-  "citation-ledger-rows",
-  "citation-audit-dimensions",
-  "citation-audit-identifier",
   "claim-inline-citation",
-  "run-receipt-shape",
-  "run-receipt-status",
-  "run-receipt-source-artifacts",
-  "deep-research-source-count",
-  "run-receipt-quality-checks",
   "advisory-notes",
 ]);
 
@@ -425,16 +401,18 @@ export const clinicalEvidenceCheckIds = Object.freeze([
  *     the run, and named to the reader first. Not withheld either: these rules
  *     are patterns over prose whose false-positive rate nobody has measured,
  *     and principle 4 asks for that distribution before a rule may block.
- *   - `silent` — the package describing itself: ledgers, counts and status
- *     fields the model was asked to type and the gate then compared. The check
- *     still runs and is counted (`silencedChecks`), which is the distribution a
- *     later decision needs, but it reports nothing to the run or the reader.
- *     Scheduled for deletion, with the files they read, once a gate-off control
- *     run confirms nothing is lost.
  *
  * Anything not named is `advisory`: said to the run as a suggestion and to the
  * reader as a notice.
- * @type {Readonly<Record<string, 'blocking' | 'safety' | 'silent'>>}
+ *
+ * The bookkeeping itself is gone. For one batch it was a third tier, `silent`
+ * (run and counted, reported to nobody), while memory-ablation v10 ran the same
+ * twelve cells without it; then the checks were deleted together with the six
+ * files they read — the search log, the run receipt, the question ledger, the
+ * citation ledger, the citation audit and references.bib. A package is the
+ * report and the matrix. What the run searched and preserved is the platform's
+ * own record (the evidence ledger), not a file the model types.
+ * @type {Readonly<Record<string, 'blocking' | 'safety'>>}
  */
 export const CLINICAL_CHECK_TIERS = Object.freeze({
   "report-present": "blocking",
@@ -455,27 +433,9 @@ export const CLINICAL_CHECK_TIERS = Object.freeze({
   "claim-emergency-support": "safety",
   "practical-derived-claim": "safety",
   "practical-claim-anchor": "safety",
-  "question-coverage": "silent",
-  "workspace-brief-mismatch": "silent",
-  "comparative-structure": "silent",
-  "search-log-schema": "silent",
-  "search-log-queries": "silent",
-  "search-log-execution-match": "silent",
-  "search-database-breadth": "silent",
-  "screening-flow-coherence": "silent",
-  "run-receipt-shape": "silent",
-  "run-receipt-status": "silent",
-  "run-receipt-statistics": "silent",
-  "run-receipt-source-artifacts": "silent",
-  "run-receipt-quality-checks": "silent",
-  "deep-research-source-count": "silent",
-  "citation-ledger-schema": "silent",
-  "citation-ledger-rows": "silent",
-  "citation-audit-dimensions": "silent",
-  "citation-audit-identifier": "silent",
 });
 
-/** @param {string | null | undefined} check @returns {'blocking' | 'safety' | 'advisory' | 'silent'} */
+/** @param {string | null | undefined} check @returns {'blocking' | 'safety' | 'advisory'} */
 export function clinicalCheckTier(check) {
   return CLINICAL_CHECK_TIERS[String(check ?? "")] ?? "advisory";
 }
@@ -843,117 +803,6 @@ function declaredAppraisalIssues(reportText) {
 // Attribution: the check every finding of this function is recorded under.
 checkedBy(declaredAppraisalIssues, "appraisal-declaration");
 
-// --- Screening numbers and the source set are rendered, never restated -----
-// clinical-evidence-search.json is checked against itself and against the run
-// receipt — two machine-written files — and never against the two things a
-// reader actually sees: the sentence stating the flow, and the numbered
-// reference list. One delivered report wrote 191/116/25 while its own log said
-// 203/125/24 and its own citation audit said 24; every existing check passed,
-// because nobody read the prose. Six others kept a record at included:false
-// while numbering it in 参考文献 and citing it in the body, which
-// sourcesIncluded === includedRecords.length still satisfies.
-//
-// A flow term is a run-flow number only when the clause anchors it: two or more
-// flow terms together, or a term carrying its noun (记录/题录/文献, 来源), or a
-// verb with no per-study reading (完成 N 次检索, 去重后 N 条). Without that,
-// 「注册临床试验命中 0 条」 (a per-query hit count) and 「纳入 46 篇系统评价」 (a
-// cited review's own count) are read as the run's screening totals.
-/** @typedef {'totalSearches'|'recordsIdentified'|'recordsAfterDeduplication'|'sourcesIncluded'} ScreeningFlowKey */
-
-/** @type {readonly { key: ScreeningFlowKey, anchored: boolean, pattern: RegExp }[]} */
-const screeningFlowPatterns = Object.freeze([
-  { key: "totalSearches", anchored: true, pattern: /(?:共|合计|总计)?\s*(?:完成|执行|进行)\s*(?<n>\d+)\s*(?:次|条|组)\s*(?<noun>检索式?|查询)/g },
-  { key: "recordsIdentified", anchored: false, pattern: /(?:命中|获得|检出|检索到|识别)\s*(?<n>\d+)\s*条\s*(?<noun>记录|题录|文献)?/g },
-  { key: "recordsAfterDeduplication", anchored: true, pattern: /去重(?:[^，。；\n]{0,14})?后(?:余|剩余|保留|得到)?\s*(?<n>\d+)\s*(?<noun>条|篇|个)/g },
-  { key: "sourcesIncluded", anchored: false, pattern: /纳入\s*(?<n>\d+)\s*(?:条|个|篇|份)\s*(?<noun>来源|证据来源)?/g },
-]);
-/** @type {Readonly<Record<ScreeningFlowKey, string>>} */
-const screeningFlowNames = Object.freeze({
-  totalSearches: "检索式条数",
-  recordsIdentified: "命中记录数",
-  recordsAfterDeduplication: "去重后记录数",
-  sourcesIncluded: "纳入来源数",
-});
-
-/** A stated flow quantity that disagrees with the ledger, and the source set
- *  the numbered reference list does not match.
- *  @param {any} reportText @param {any} searchLog
- *  @returns {({ leg: 'A', key: ScreeningFlowKey, stated: number, held: number, clause: string }
- *    | { leg: 'B1', numbers: number[] }
- *    | { leg: 'B2', listed: number, included: number })[]}
- *
- *  A discriminated union rather than one shape with eight optional fields: the
- *  consumer already branches on `leg`, and with optionals that branch narrowed
- *  nothing, so every read of `finding.key` was a possibly-undefined the code
- *  then had to pretend about.
- */
-function screeningLedgerFindings(reportText, searchLog) {
-  const text = String(reportText ?? "");
-  const headings = [...text.matchAll(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*/gi)];
-  // Bound once: `headings.length` does not narrow `headings.at(-1)`, and a
-  // match's own `index` is optional in the type even though the engine always
-  // sets it.
-  const lastHeading = headings.at(-1);
-  const referencesStart = lastHeading?.index ?? text.length;
-  const body = text.slice(0, referencesStart);
-  // From just past the heading line to the next level-two heading: the entries
-  // themselves, never the heading and never whatever follows the list.
-  const referenceBlock = lastHeading
-    ? text.slice(referencesStart + lastHeading[0].length).split(/\n##\s+/)[0]
-    : "";
-  /** @type {Record<ScreeningFlowKey, number | null>} */
-  const held = {
-    totalSearches: Array.isArray(searchLog?.queries) ? searchLog.queries.length : null,
-    recordsIdentified: Number.isInteger(searchLog?.screening?.recordsIdentified) ? searchLog.screening.recordsIdentified : null,
-    recordsAfterDeduplication: Number.isInteger(searchLog?.screening?.recordsAfterDeduplication) ? searchLog.screening.recordsAfterDeduplication : null,
-    sourcesIncluded: Number.isInteger(searchLog?.screening?.sourcesIncluded) ? searchLog.screening.sourcesIncluded : null,
-  };
-  /** @type {ReturnType<typeof screeningLedgerFindings>} */
-  const findings = [];
-  for (const clause of proseWithoutCode(body).split(/[。；;!?\n]/)) {
-    /** @type {{ key: ScreeningFlowKey, value: number, anchored: boolean }[]} */
-    const matches = [];
-    for (const { key, anchored, pattern } of screeningFlowPatterns) {
-      for (const match of clause.matchAll(pattern)) {
-        matches.push({ key, value: Number(match.groups?.n), anchored: anchored || Boolean(match.groups?.noun) });
-      }
-    }
-    if (matches.length < 2 && !matches.some((match) => match.anchored)) continue;
-    for (const match of matches) {
-      if (held[match.key] == null || held[match.key] === match.value) continue;
-      // Only the disagreeing quantity is named: a report whose other three
-      // numbers are right must not be sent back to rewrite a correct sentence.
-      // The `== null` guard on the line above is what rules out null here;
-      // TypeScript does not carry that narrowing across the `continue`.
-      findings.push({ leg: "A", key: match.key, stated: match.value, held: /** @type {number} */ (held[match.key]), clause: excerpt(clause) });
-    }
-  }
-  const includedRefs = new Set();
-  for (const record of Array.isArray(searchLog?.sourceRecords) ? searchLog.sourceRecords : []) {
-    if (record?.included === true && Number.isInteger(record?.referenceNumber)) includedRefs.add(record.referenceNumber);
-  }
-  const listed = new Set();
-  for (const line of referenceBlock.split("\n")) {
-    const match = /^\s*(\d+)[.、]\s+\S/.exec(line);
-    if (match) listed.add(Number(match[1]));
-  }
-  if (!listed.size || !includedRefs.size) return findings;
-  const cited = new Set();
-  for (const line of proseWithoutCode(body).split("\n")) {
-    for (const number of closureCitationNumbers(line)) cited.add(number);
-  }
-  const uncovered = [...new Set([...listed, ...cited])].filter((number) => !includedRefs.has(number)).sort((a, b) => a - b);
-  if (uncovered.length) findings.push({ leg: "B1", numbers: uncovered });
-  // The raw listed set, not the de-duplicated count: padding is already its own
-  // finding, and de-duplicating here would let a padded list satisfy both.
-  if (held.sourcesIncluded != null && listed.size !== held.sourcesIncluded) {
-    findings.push({ leg: "B2", listed: listed.size, included: held.sourcesIncluded });
-  }
-  return findings;
-}
-// Attribution: the check every finding of this function is recorded under.
-checkedBy(screeningLedgerFindings, "screening-ledger");
-
 // --- Reference-table closure: nothing floats, no number is an orphan -------
 // citationIntegrityIssues() already computes the orphan and dangling
 // directions, and it is dead code for this product line: it runs only when an
@@ -962,7 +811,7 @@ checkedBy(screeningLedgerFindings, "screening-ledger");
 // citationsResolvable / evidenceClaimsTraceable / skillsLoaded. The gate itself
 // checks only matrix→reference and duplicate padding, and preflight compared
 // counts, which rewards padding. These clauses close the loop in both
-// directions and hold the excluded set to its own bookkeeping.
+// directions.
 const citationNumberListPattern = /\[(\d{1,3}(?:\s*[,，、\-–—]\s*\d{1,3})*)\]/g;
 const bareCitationNumberList = /^\s*\d{1,3}(?:\s*[,，、\-–—]\s*\d{1,3})*\s*$/;
 const bracketSpanPattern = /\[([^[\]\n]{1,200})\]/g;
@@ -1025,21 +874,17 @@ function allowedReferenceNumbers(claim) {
 }
 
 /** Reference-table closure in both directions, identifiers standing in for
- *  citations, per-line anchor/number pairing, and the excluded set's own
- *  bookkeeping.
- *  @param {any} reportText @param {Map<any, any>} claimsById @param {any} searchLog
+ *  citations, and per-line anchor/number pairing.
+ *  @param {any} reportText @param {Map<any, any>} claimsById
  *  @returns {({ clause: 'A', number: number, body: string }
  *    | { clause: 'B', number: number }
  *    | { clause: 'C', line: number, bracket: string }
- *    | { clause: 'D', line: number, claimId: string, cited: number[], allowed: number[] }
- *    | { clause: 'E1', index: number }
- *    | { clause: 'E2', index: number, number: number })[]}
+ *    | { clause: 'D', line: number, claimId: string, cited: number[], allowed: number[] })[]}
  *
- *  A discriminated union, for the reason the screening findings are one: the
- *  consumer branches on `clause`, and with every field optional that branch
- *  narrowed nothing.
+ *  A discriminated union: the consumer branches on `clause`, and with every
+ *  field optional that branch narrowed nothing.
  */
-function citationClosureFindings(reportText, claimsById, searchLog) {
+function citationClosureFindings(reportText, claimsById) {
   const text = String(reportText ?? "");
   // The LAST reference heading, as preflight already does: reportSection uses
   // the first, and a report naming its reference list twice would be cut in
@@ -1102,16 +947,6 @@ function citationClosureFindings(reportText, claimsById, searchLog) {
         cited: [...onLine].sort((a, b) => a - b),
         allowed: [...allowed].sort((a, b) => a - b),
       });
-    }
-  }
-  const sourceRecords = Array.isArray(searchLog?.sourceRecords) ? searchLog.sourceRecords : [];
-  for (const [index, record] of sourceRecords.entries()) {
-    if (record?.included === true) continue;
-    if (typeof record?.exclusionReason !== "string" || !record.exclusionReason.trim()) {
-      findings.push({ clause: "E1", index });
-    }
-    if (Number.isInteger(record?.referenceNumber) && entries.has(record.referenceNumber)) {
-      findings.push({ clause: "E2", index, number: record.referenceNumber });
     }
   }
   return findings;
@@ -1506,7 +1341,7 @@ const namedAppraisalInstrumentPattern = /GRADE|WHO[-‑\s]?UMC|Naranjo|诺氏|Ro
 // 为起点 (in the repository fixture) is ordinary methods prose.
 const selfReferentialNarrationPattern = /学术化版本|作为被评价对象|(?:本报告|本文)[^。；\n]{0,16}(?:判定条件|交付判据|达标判据|验收依据|任务书|评分口径)|(?:本报告|本文)[^。；\n]{0,10}拒绝[^。；\n]{0,24}(?:判据|验收|达标|指标)|(?:本文|本报告|本研究|本综述|全文)[^。；\n]{0,16}(?:以[^。；\n]{0,16}为(?:读者|受众|阅读对象)|面向[^。；\n]{0,14}(?:读者|受众|医师|医生|药师|同行|从业者)|写给[^。；\n]{0,14}(?:读者|受众|医师|医生|药师|同行|参考|阅读)|(?:目标)?(?:读者|受众)(?:群体?|对象)?\s*(?:为|是|包括))/;
 // A verbatim support quote is a traceability device. Its home is supportQuote in
-// the evidence matrix and in the citation ledger, where it is machine-checked
+// the evidence matrix, where it is machine-checked
 // against the preserved artifact; pasted into the body behind a 原文： label it
 // is checked by nobody and reads as a matrix copied into a manuscript. One
 // delivered report carried nine of them, three in a single paragraph.
@@ -1578,31 +1413,12 @@ const negativeVerdictPattern = /(?:无效|无疗效|没有疗效|无临床(?:价
 // that names its own evidence bar and recommends against use has made a
 // recommendation, and the paper is citing it.
 const attributedRecommendationPattern = /(?:指南|共识|说明书|标签|药监|监管|批准|建议书|WHO|FDA|EMA|NMPA|NICE)/;
-// --- Comparative structure -------------------------------------------------
-// A comparison fails in ways no sentence-level rule can see, because the defect
-// is the shape of the document. Two of those are decidable from the document
-// alone; the rest — whether the arms were merged into one PICO, whether the
-// axes are commensurable, whether a section outweighs its rank — need to know
-// which nouns are the compared arms, which no pattern can read off the text.
-// They are reported to the run as preflight advice instead.
-//
-// The first decidable one: the title announces a comparison and the body never
-// puts the arms side by side. Reviewing arm A's literature, then arm B's, then
-// closing with a shared verdict is not a comparison — the two accounts never
-// meet, and the verdict is supplied by whichever arm had the thinner file. Only
-// the absence of the matrix is asserted here: a table with an axis column and
-// one column per arm. Nothing is claimed about its rows, since an axis's
-// wording belongs to the domain.
-//
-// 对比剂 (contrast agent) is an ordinary pharmacology noun that contains 对比,
-// so it is anchored away from it.
-const comparativeTitlePattern = /比较|对比(?!剂)|优劣|孰优|头对头|head[-\s]?to[-\s]?head|versus|(?<![A-Za-z])vs\.?(?![A-Za-z])/i;
-// The second: the report states that no direct comparison was found and then
-// concludes that one arm may take the other's place. That is not a judgement
-// about how strong evidence has to be — it is the report contradicting itself,
-// and the licence a substitution claim needs is exactly the comparison the
-// report has just said does not exist.
-const directComparisonAbsentPattern = /(?:未检索到|未能检索到|未检索出|未发现|未找到|未见|尚未检索到|缺乏|缺少|尚无|没有|不存在)[^。；\n]{0,30}(?:头对头|直接比较|直接对比|head[-\s]?to[-\s]?head)|(?:头对头|直接比较|直接对比|head[-\s]?to[-\s]?head)[^。；\n]{0,30}(?:未检索到|未能检索到|缺乏|缺少|尚无|没有|不存在|空缺|阙如)/i;
+// --- Substitution conclusions ----------------------------------------------
+// A sentence concluding that one compared arm may take the other's place.
+// Which nouns are the compared arms is not decidable from the text, so this is
+// read only by clinicalEvidenceAdvisoryNotes, as advice. It used to back a
+// withholding check as well (`comparative-structure`), which fired on
+// 「替代终点」, a surrogate endpoint, and was deleted on 2026-09-17.
 // Swapping one arm for the other is stated by the verb alone, and 优于 is
 // relational by itself. A bare comparative adjective is not: 该人群的依从性更好
 // compares a property of one population against nothing in particular, and
@@ -1648,7 +1464,6 @@ const nonMedicineObjectPattern = /专业评估|规范评估|医疗评估|临床�
 // other, is evidence the paper is passing on, and the citation checks hold it
 // to its source.
 const attributedComparisonPattern = /指南|共识|说明书|标签|药监|监管|批准|建议书|WHO|FDA|EMA|NMPA|NICE|该(?:研究|试验|综述|分析|队列|荟萃)|一项[^。；\n]{0,12}(?:研究|试验)|荟萃分析|Meta\s?分析|系统评价|系统综述/i;
-const deepResearchProfile = "academic_deep_research_v1";
 // What separates a package that must be withheld from one that may be delivered
 // with its gaps declared is whether a reader could tell.
 //
@@ -1667,12 +1482,6 @@ const deepResearchProfile = "academic_deep_research_v1";
 // carry claim indices and line numbers, so they can never appear in it; they are
 // classified by shape in degradableIssue().
 const degradableQualityIssues = new Set([
-  "references.bib must contain a bibliography entry for every numbered report reference.",
-  "references.bib must contain a bibliography entry for every cited source URL.",
-  "citation-ledger.csv must have a header naming claimId, referenceNumber and supportQuote columns (any order, extra columns allowed) and one row per evidence-matrix claim.",
-  "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.",
-  "citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.",
-  "citation-audit.md must reference at least one real audited source identifier from the evidence matrix.",
   "Deep-research reports must hide internal claim IDs in HTML comments and show standard numbered citations to readers.",
 ]);
 // Gaps a reader can see, or that sit between the report and its apparatus rather
@@ -1694,13 +1503,6 @@ const bookkeepingIssuePatterns = Object.freeze([
   // practical section, where it carries a different prefix and blocks, because
   // that section is read as instruction.
   /^Report line \d+ anchors claim /,
-  // The exclusion ledger inside clinical-evidence-search.json. This is the
-  // search apparatus describing itself, not a claim about medicine, and it is
-  // the same report-to-apparatus bookkeeping as the entries above. Blocking on
-  // it also judged 22 delivered packages by a field the spec did not have when
-  // they were written, which is a way of failing work for not predicting a
-  // later rule.
-  /^clinical-evidence-search\.json 的 sourceRecords\[\d+\] 标记为 "included": false/,
   /^The academic report is missing a required section matching /,
   /^The academic report contains (?:runtime or retrieval-process|operational failure) prose/,
   // An appraisal instrument promised in 资料与方法 that never rated anything in
@@ -1723,25 +1525,8 @@ const bookkeepingIssuePatterns = Object.freeze([
 const clinicalEvidenceIssueCodes = Object.freeze([
   { pattern: /^临床实践要点第 \d+ 行把/, code: "practical_emergency_trigger_conditioned_on_medication_response" },
   { pattern: /^报告正文第 \d+ 行以条款级方式引用/, code: "regulatory_article_without_official_source" },
-  { pattern: /^检索流程数与纳入来源集合由|^参考文献表共 \d+ 条编号条目/, code: "specialist_screening_ledger_mismatch" },
   // 资料与方法声明了… is degradable and never reaches this list.
   { pattern: /^GRADE 等级与降级理由不自洽/, code: "declared-appraisal-must-execute" },
-  // The question-coverage ledger. Four codes, because the four defects are
-  // repaired in four different places: the ledger's own shape, an entry that
-  // points nowhere, a sentence that contradicts a registered gap, and a brief
-  // question the ledger does not account for at all.
-  { pattern: /^question-coverage\.json 台账格式无效|^工作区里的题面只读副本/, code: "specialist_question_coverage_invalid" },
-  // An entry that does not transcribe the question its id names is a defect in
-  // the ledger, not in the report the entry points at.
-  { pattern: /^question-coverage\.json 条目 .*的 question 不是题面第 \d+ 问的原文/, code: "specialist_question_coverage_invalid" },
-  // Anchored on this family's own sentence shape, not on the words 「登记为
-  // gap」 anywhere in the message: another coverage notice whose *advice* said
-  // to register something as a gap was classified as this defect.
-  { pattern: /^question-coverage\.json 条目 [^\n]{0,120}）登记为 gap，/, code: "specialist_question_coverage_gap_overstated" },
-  { pattern: /^question-coverage\.json 条目 /, code: "specialist_question_coverage_unsupported" },
-  // Was 「摘要重述研究范围时把问题数…」, a comparison between two numbers the run
-  // wrote itself. Same code, now earned by a comparison against the brief.
-  { pattern: /^题面第 \d+ 问在 question-coverage\.json 中没有任何条目/, code: "specialist_question_coverage_understated" },
 ]);
 
 /** The run-level error code for a package's blocking issues.
@@ -1972,19 +1757,6 @@ function normalizedPassage(value) {
 /** @param {unknown} value @returns {boolean} */
 function validSupportingPassage(value) {
   return normalizedPassage(value).replace(/\s+/g, "").length > 0;
-}
-
-// A search is identified by its terms. Retyping the same search into the log
-// without its phrase quotes, or with different spacing, is a transcription
-// difference — treating it as a search that never ran would accuse the agent of
-// inventing provenance it did not invent. The terms themselves must still match.
-/** @param {unknown} value @returns {string} */
-function normalizedSearchQuery(value) {
-  return String(value ?? "")
-    .replace(/[‘’“”"'＂＇]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
 }
 
 // A coarse projection used only to diagnose an unmarked gap after quotation
@@ -2477,11 +2249,6 @@ function hasClaimMarker(value) {
   return reportClaimIds(value).length > 0;
 }
 
-/** @param {unknown} value @returns {number} */
-function bibliographyEntryCount(value) {
-  return [...String(value ?? "").matchAll(/^@[A-Za-z]+\s*\{/gm)].length;
-}
-
 const referenceEntryPattern = /^\s*(?:\[(\d{1,3})\]|(\d{1,3})[.、])\s+(\S.*)$/;
 
 /** Every identifier an entry carries, normalised so the same work matches
@@ -2651,16 +2418,6 @@ export function numberedReferenceCount(reportText) {
     counted += 1;
   }
   return counted;
-}
-
-/** @param {string} value @returns {Record<string, any> | null} */
-function parseJsonObject(value) {
-  try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
 }
 
 // Bibliographic identifiers are letters-then-digits too, and they belong in a
@@ -2914,7 +2671,7 @@ function manuscriptRegisterIssues(reportText) {
       quotations += 1;
       issues.push(
         `The academic report line ${lineNumber} pastes a source quotation into the body behind a 原文： label: ${excerpt(line)}. `
-        + "A verbatim quote is a traceability device: it lives in the evidence matrix's supportQuote field and the citation ledger's supportQuote column, "
+        + "A verbatim quote is a traceability device: it lives in the evidence matrix's supportQuote field, "
         + "where it is checked against the preserved artifact — in the body it is checked by nobody and adds no verifiability. "
         + "State the finding in Chinese in the paper's own voice with its numbered citation, and where the exact wording is itself the object of analysis, "
         + 'quote a short phrase inside quotation marks, grammatically inside the Chinese sentence (该说明书将适应症限定为"气滞血瘀型冠心病心绞痛"[7]).',
@@ -2956,43 +2713,6 @@ function manuscriptRegisterIssues(reportText) {
 // Attribution: the check every finding of this function is recorded under.
 checkedBy(manuscriptRegisterIssues, "manuscript-register");
 
-/** The cells of a markdown table row, or [] when the line is not one.
- *  @param {string} line
- */
-function tableCells(line) {
-  const text = String(line ?? "");
-  if ((text.match(/\|/g)?.length ?? 0) < 2) return [];
-  return text.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
-}
-
-/** @param {string} line */
-function tableDelimiterRow(line) {
-  const text = String(line ?? "").trim();
-  return /^[\s:|-]+$/.test(text) && text.includes("-") && (text.match(/\|/g)?.length ?? 0) >= 2;
-}
-
-/** Does the body carry a table that could be the comparison matrix — an axis
- *  column plus one column per arm, filled for more than one row?
- *
- *  Three columns and two rows is the smallest such table, and it accepts the
- *  transposed layout (arms as rows, axes as columns) as readily as the usual
- *  one. A table of something else entirely satisfies this too; that is the
- *  intended direction of the error, since the alternative is guessing which
- *  columns are the arms and withholding a package on the guess.
- *  @param {string} text
- */
-function hasComparisonMatrix(text) {
-  const lines = String(text ?? "").split("\n");
-  for (const [index, line] of lines.entries()) {
-    if (index === 0 || !tableDelimiterRow(line)) continue;
-    if (tableCells(lines[index - 1]).length < 3) continue;
-    let rows = 0;
-    for (let next = index + 1; next < lines.length && tableCells(lines[next]).length >= 2; next += 1) rows += 1;
-    if (rows >= 2) return true;
-  }
-  return false;
-}
-
 /** A sentence concluding that one arm may take the other's place or beats it,
  *  or "" when the sentence writes a bridge link that is marked unestablished,
  *  or the clause carrying the verb is negated, asks rather than answers,
@@ -3027,84 +2747,6 @@ function substitutionConclusion(line) {
   return "";
 }
 
-/** The two defects of a comparison that are decidable from the document alone:
- *  a comparison the title announces and the body never carries out, and a
- *  substitution claim the report has already said it has no evidence for.
- *
- *  Read outside the reference list (a cited title may announce anybody's
- *  comparison) and outside 检索与方法 (a search strategy names comparators it
- *  searched for, and a methods sentence concludes nothing). Both sections are
- *  blanked rather than removed, so a reported line number is the line the
- *  author will find in the file.
- *  @param {any} reportText
- */
-function comparativeStructureIssues(reportText) {
-  const text = String(reportText ?? "");
-  const issues = [];
-  const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "";
-  const body = withoutReportSections(
-    withoutReportSections(text, "参考文献|参考来源|References?"),
-    "检索|方法|Methods?",
-  );
-  if (title && comparativeTitlePattern.test(title) && !hasComparisonMatrix(body)) {
-    issues.push(
-      `The academic report is titled as a comparison (${excerpt(title)}) but no table in the analysis body sets the arms side by side. `
-      + "Reviewing one arm's literature, then the other's, and closing with a shared verdict is not a comparison: the two accounts never meet, "
-      + "and the verdict comes from whichever arm had the thinner file. Fix the axes first, then fill every arm on every axis — "
-      + "核准适用场景 / 急性按需使用证据（研究对象、结局、起效时间）/ 长期治疗证据 / 人群反应差异 / 安全性与禁忌 / 是否存在直接比较研究 / 该维度可支持的结论边界 — "
-      + "as a table with one column per arm and the boundary as its last column. An axis with nothing behind it is a result, written 未检索到 with what was searched; "
-      + "it stays inside its row and never becomes the verdict of the table, and each factual cell carries its numbered citation and hidden claim marker.",
-    );
-  }
-  const absent = firstMatchingLine(body, directComparisonAbsentPattern);
-  if (absent) {
-    for (const [index, line] of body.split("\n").entries()) {
-      const conclusion = substitutionConclusion(line);
-      if (!conclusion) continue;
-      issues.push(
-        `The academic report line ${index + 1} concludes that one arm can take the other's place (${conclusion}), `
-        + `while line ${absent.line} states that the direct comparison behind such a conclusion was not found (${absent.text}). `
-        + "A mechanism that acts on one arm is not evidence about the other, and an arm never tested for it is untested rather than immune. "
-        + "Write the chain out one link per line in 讨论, each marked 已建立 or 未建立 with the evidence or the missing study behind the mark "
-        + "(该变异在目标人群中常见 / 携带者对 A 的反应降低 / B 不经该通路 / 低反应者改用 B 后结局更好 / B 可在该场景替代 A), "
-        + "and stop the conclusion at the last established link: 该差异提示院外用药效果可能存在显著个体差异，另一药具有不同的组成与证据路径，"
-        + "其在该亚群中的相对价值仍需直接临床研究验证。",
-      );
-      break;
-    }
-  }
-  return issues;
-}
-// Attribution: the check every finding of this function is recorded under.
-checkedBy(comparativeStructureIssues, "comparative-structure");
-
-// A CSV record is not a line: a quoted support quote may hold commas, doubled
-// quotes, and newlines, and the ledger is written by a csv writer that quotes
-// exactly that way. Counting lines therefore counted the wrong thing.
-/** @param {unknown} text @returns {string[][]} */
-function parseCsvRecords(text) {
-  const source = String(text ?? "").replace(/\r\n?/g, "\n");
-  const records = [];
-  let record = [];
-  let field = "";
-  let quoted = false;
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index];
-    if (quoted) {
-      if (char !== '"') field += char;
-      else if (source[index + 1] === '"') { field += '"'; index += 1; }
-      else quoted = false;
-      continue;
-    }
-    if (char === '"') quoted = true;
-    else if (char === ",") { record.push(field); field = ""; }
-    else if (char === "\n") { record.push(field); records.push(record); record = []; field = ""; }
-    else field += char;
-  }
-  if (field || record.length) { record.push(field); records.push(record); }
-  return records.filter((row) => row.some((cell) => cell.trim()));
-}
-
 /** @param {unknown} value @returns {Set<number>} */
 function standardCitationNumbers(value) {
   const numbers = new Set();
@@ -3136,17 +2778,6 @@ function validSourceArtifactPath(value) {
     && !value.split("/").some((part) => part === "" || part === "." || part === "..");
 }
 
-/** @param {unknown} value @returns {string | null} */
-function sourceArtifactIdentity(value) {
-  if (!validSourceArtifactPath(value)) return null;
-  const parts = value.split("/");
-  const fileName = parts.at(-1)?.toLowerCase() ?? "";
-  if (["fulltext.md", "fulltext.xml", "page.md", "page.html"].includes(fileName)) {
-    return parts.slice(0, -1).join("/");
-  }
-  return value;
-}
-
 // Validates a cross-source ("synthesized") claim: the conclusion itself has no
 // single verbatim home, so every supporting source must independently satisfy
 // the same artifact/quote/URL checks a direct claim gets, and claim numbers
@@ -3155,7 +2786,6 @@ function sourceArtifactIdentity(value) {
  * @param {Record<string, any>} value
  * @param {{
  *   label: string,
- *   deepResearch: boolean,
  *   reportReferenceNumbers: Set<number>,
  *   successfulArtifacts: Set<string>,
  *   artifactText: Map<string, string>,
@@ -3166,24 +2796,22 @@ function sourceArtifactIdentity(value) {
  */
 function validateSynthesizedClaim(
   value,
-  { label, deepResearch, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, issues },
+  { label, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, issues },
 ) {
   if (!synthesizedConfidenceLevels.has(value.confidence)) {
     issues.push(`${label}.confidence must be one of high, moderate, low for a synthesized claim.`);
   }
-  if (deepResearch) {
-    if (!Number.isInteger(value.referenceNumber) || !reportReferenceNumbers.has(value.referenceNumber)) {
-      issues.push(`${label}.referenceNumber must resolve to a numbered report reference.`);
-    }
-    const referenceNumbers = Array.isArray(value.referenceNumbers) ? value.referenceNumbers : [];
-    if (
-      referenceNumbers.length < 2
-      || referenceNumbers.some((entry) => !Number.isInteger(entry) || !reportReferenceNumbers.has(entry))
-    ) {
-      issues.push(`${label}.referenceNumbers must list at least two numbered report references.`);
-    } else if (Number.isInteger(value.referenceNumber) && !referenceNumbers.includes(value.referenceNumber)) {
-      issues.push(`${label}.referenceNumber must be one of its referenceNumbers.`);
-    }
+  if (!Number.isInteger(value.referenceNumber) || !reportReferenceNumbers.has(value.referenceNumber)) {
+    issues.push(`${label}.referenceNumber must resolve to a numbered report reference.`);
+  }
+  const referenceNumbers = Array.isArray(value.referenceNumbers) ? value.referenceNumbers : [];
+  if (
+    referenceNumbers.length < 2
+    || referenceNumbers.some((entry) => !Number.isInteger(entry) || !reportReferenceNumbers.has(entry))
+  ) {
+    issues.push(`${label}.referenceNumbers must list at least two numbered report references.`);
+  } else if (Number.isInteger(value.referenceNumber) && !referenceNumbers.includes(value.referenceNumber)) {
+    issues.push(`${label}.referenceNumber must be one of its referenceNumbers.`);
   }
   const sources = Array.isArray(value.supportingSources) ? value.supportingSources : [];
   if (sources.length < 2) {
@@ -3227,7 +2855,7 @@ function validateSynthesizedClaim(
       }
       seenArtifacts.add(source.artifactPath);
       if (!successfulArtifacts.has(source.artifactPath)) {
-        issues.push(`${sourceLabel}.artifactPath is not listed as a successful source artifact for this run.`);
+        issues.push(`${sourceLabel}.artifactPath is not listed as a successful source artifact for this run: no evidence tool in this run reported preserving that file, or its text could not be read back. Cite the exact .evimed-sources/ path a preserving tool returned, or preserve the source first.`);
       } else {
         const quoteProblem = supportQuoteIssue(artifactText, sourceLabel, source.artifactPath, source.supportQuote);
         if (quoteProblem) issues.push(quoteProblem);
@@ -3266,976 +2894,6 @@ function validateSynthesizedClaim(
 // Attribution: the check every finding this function pushes is recorded under.
 checkedBy(validateSynthesizedClaim, "synthesized-claim");
 
-// --- The question-coverage ledger -------------------------------------------
-//
-// The commonest confirmed defect in delivered work is a sub-question that
-// disappears from the body without a word: of the 47 findings a coverage
-// re-audit of thirty packages could not attribute to any existing check, 38
-// were that one shape. A brief names five questions; the report answers three
-// and the abstract rewrites the scope as three.
-//
-// The gate used to be unable to check that, because it never saw the brief, and
-// every rule here had to be a self-consistency rule instead: does the run's own
-// account contradict the run's own report. Measured over 30 delivered packages
-// against 55 hand-verified coverage defects, that cost almost everything — 2 of
-// 55 caught, and one of the three notices it did raise was a false one. Of the
-// 53 it missed, 36 needed nothing but the brief.
-//
-// So the brief now arrives here (briefText). It comes from the server's own
-// copy, held in memory on the run record from the moment of dispatch — never
-// from the workspace, because a run that supplies its own brief is setting its
-// own exam. It is deliberately not written to the run ledger: that file has a
-// byte ceiling a burst of progress events has already burst once, at 1048462 of
-// 1048576, and the run after it could not start.
-//
-// Two things follow from holding it only in memory:
-//
-//   * After a server restart the brief for an in-flight run is gone. The
-//     brief-derived rules then do not run at all and the self-consistency rules
-//     below carry the check on their own, with coverageDegradedNotice saying so
-//     in words. Degrading silently would be the one outcome worse than either:
-//     a package delivered as if it had been checked against the brief.
-//   * The run gets its own read-only copy in the workspace so it can act on the
-//     brief while it works, and preflight.py reads that one. The gate never
-//     does. If the two differ, the gate says so — the copy the run can edit is
-//     not evidence about anything except the run.
-//
-// The run still declares its own account — question-coverage.json, one entry per
-// atomic sub-question — and the self-consistency rules still check that account
-// against the report's own lines, the claim anchors in them, and the search log
-// the retrieval tools wrote. A run cannot write "answered" without a report line
-// that carries evidence, and cannot write "gap" without a search that actually
-// ran: "I looked and found nothing" is falsifiable, because the log is written
-// by the tools rather than by the model. What the brief adds is the other half:
-// whether that account is an account of the questions that were actually asked.
-const coverageStatuses = new Set(["answered", "gap"]);
-// A sentence saying what this paper set out to do. Naming a quantity as an
-// objective is not reporting one: RQ-11's 目的 sentence says it will count the
-// aetiological proportions, and reading that as a proportion told the author
-// to rewrite a statement of intent as a gap declaration.
-const coverageObjectiveSentence = /(?:^|[|\s])(?:\*\*)?目的(?:\*\*)?|本文(?:旨在|拟|试图|将)|本研究(?:旨在|拟|试图)|(?:旨在|意在)(?:清点|量化|评价|回答|梳理|核查)/;
-const coverageIsoDate = /^\d{4}-\d{2}-\d{2}$/;
-const coverageAnchorPattern = /<!--\s*claim:CLM-[0-9]{3,6}\s*-->|\[claim:CLM-[0-9]{3,6}\]/;
-const coverageExcludedSection = /参考文献|参考来源|References?|局限|Limitations?/i;
-// The three places a reader takes away an answer. A gap written as a finding
-// anywhere else is at least surrounded by its own qualifications; here it is
-// the takeaway.
-const coverageVerdictSections = Object.freeze([
-  { name: "摘要", pattern: "摘要|Abstract" },
-  { name: "结论", pattern: "结论|Conclusions?" },
-  { name: "临床实践要点", pattern: practicalSectionHeading },
-]);
-// The four ways a registered gap gets written as an answer, from the audit.
-const coverageRankingAssertion = /最常见|首位|占比|构成比|居首|多数|约半数|大多数/;
-const coverageThresholdAssertion = new RegExp([
-  "\\d+(?:\\.\\d+)?\\s*[%％]",
-  "[≥≤><]\\s*\\d",
-  "(?:大于|小于|超过|不超过|不少于|至少|不足|上限|下限)\\s*\\d",
-  "\\d+(?:\\.\\d+)?\\s*(?:[-–—~～至]|到)\\s*\\d",
-  "\\d+(?:\\.\\d+)?\\s*(?:mg|µg|μg|g|ml|mmHg|分钟|小时|天|周|个月|年|次|例|丸|片|倍|杯)",
-].join("|"), "i");
-const coverageDirectiveAssertion = /推荐|建议|应当|应予|应立即|必须|首选|优先(?:选择|使用)|可给予|适用于|可用于/;
-// The retrieval came back empty; the sentence reports it as a property of the
-// literature. This family carries no acknowledgement exemption — a sentence that
-// says both "we did not find it" and "the literature does not contain it" still
-// says the second one.
-const coverageLiteratureFactAssertion = new RegExp([
-  "(?:证据|结果|研究|数据)\\s*(?:为|是|均为|呈)[^，。；\\n]{0,8}阴性",
-  // 尚无 and 暂无 are hedges about what has been published so far; 无相关证据 is
-  // a statement about the literature. Only the second one is this family.
-  "(?<![尚暂])无(?:此类|该类|相关|任何|已发表)(?:的)?(?:证据|研究|报道|文献)",
-  "不存在(?:相关|此类|该类|任何)(?:的)?(?:证据|研究)",
-  "文献(?:中|里)(?:并)?(?:没有|无|未见)",
-  // 「此为证据空缺，非已证实无效」 is the sentence this rule exists to protect,
-  // so the negation in front of it has to be read.
-  "(?<![不非未])(?:已|均)(?:证实|表明|显示)(?:其)?无效",
-].join("|"));
-// "未检索到直接证据，这是一处证据空白" is the sentence this whole ledger exists
-// to encourage. A sentence that says so is not asserting an answer, whatever
-// else it carries, so the first three families never read it.
-const coverageGapAcknowledgement = new RegExp([
-  "未(?:能)?检索到",
-  "未检索出",
-  "尚未检索",
-  "检索(?:结果)?为空",
-  "未(?:能)?获(?:得|取)",
-  "未(?:能)?(?:获|经)(?:得)?(?:核验|核实|证实|确认)",
-  "证据空(?:白|缺)",
-  "证据缺口",
-  "未见(?:相关|直接|任何|以|有)",
-  "尚无(?:直接|已发表|公开|相应)?(?:的)?(?:证据|研究|数据|报道)",
-  "证据不足",
-  "不足以支持",
-  "无法(?:判定|评定|确定)",
-  "未(?:能)?(?:追溯|定位)到",
-  "未述及",
-  "未载",
-  "缺乏(?:直接)?(?:证据|研究|数据)",
-  "无直接(?:证据|研究)",
-].join("|"));
-// The half of the family above that says THE SEARCH CAME BACK EMPTY, as opposed
-// to the half that says a document already in hand does not mention the thing
-// (未载, 未述及, 未能追溯到). The distinction decides one thing only, in
-// coverageJudge.mjs: a ledger entry registered `gap` means "I could not answer
-// this because retrieval found nothing", so a report line that says retrieval
-// found nothing AGREES with that entry and cannot be evidence that the run
-// answered the question anyway. A line saying an obtained guideline or label
-// does not mention the thing is the opposite — the document was read, and its
-// silence is the answer the entry should have carried.
-//
-// Measured on 109 live judgements of the 29-package corpus: 16 verdicts quoted
-// a line that was itself an admission of absence, and 12 of them were of the
-// first kind — the model reporting a run for writing exactly the honest gap
-// sentence this whole ledger exists to encourage. The remaining 4 are of the
-// second kind and are kept.
-const coverageRetrievalAbsence = new RegExp([
-  "未(?:能)?检索到",
-  "未检索出",
-  "尚未检索",
-  "检索(?:结果)?为空",
-  "未(?:能)?获(?:得|取)(?![^，。；\\n]{0,6}(?:核验|核实))",
-  "证据空(?:白|缺)",
-  "证据缺口",
-  "未见(?:相关|直接|任何)[^，。；\\n]{0,8}(?:证据|研究|报道|文献|数据|记录)",
-  "尚无(?:直接|已发表|公开|相应)?(?:的)?(?:证据|研究|数据|报道)",
-  "缺乏(?:直接)?(?:证据|研究|数据)",
-  "无直接(?:证据|研究)",
-  "证据不足",
-].join("|"));
-// The abstract's methods sentence names the databases and the search date, and
-// a brief that names the same databases shares a long span with it. It states
-// how the evidence was looked for, never what was found, so it cannot be a gap
-// written as an answer and is not read as one.
-const coverageRetrievalRestatement = /检索(?:日期|时间|截至|策略)|检索[^。；\n]{0,60}(?:数据库|索引|注册库|PubMed|Europe\s*PMC|Crossref|ClinicalTrials|CNKI)/i;
-const coverageSentenceSplit = /(?<=[。！？；;])/;
-
-// --- Reading the brief -------------------------------------------------------
-//
-// A research brief is a Markdown document whose 「需要回答的问题」 section is a
-// numbered list. That structure is the contract the whole coverage check now
-// rests on, so it is read strictly: a document without that section, or with
-// fewer than two numbered questions under it, is not a brief this check can
-// use, and every brief-derived rule stands down rather than guessing. Requests
-// that are not commissioned this way — the open-domain line, a bare question —
-// land in that branch by design.
-const briefQuestionsHeading = "需要回答的问题";
-const briefQuestionNumberLine = /^\s*(\d{1,2})[.、)）]\s*(.*)$/;
-
-/** The body of one level-two section of a brief.
- *  @param {string} briefText @param {string} heading */
-function briefSectionText(briefText, heading) {
-  const collected = [];
-  let inside = false;
-  // Normalise line endings first. A brief pasted out of Word arrives CRLF, and
-  // the heading pattern below anchors with $, which in JS matches only at end
-  // of input -- a trailing \r made every heading fail to match, so the whole
-  // brief-derived family silently stopped running on exactly the briefs a
-  // person is most likely to paste.
-  for (const line of String(briefText ?? "").replace(/\r\n?/g, "\n").split("\n")) {
-    const match = /^##\s+(.*)$/.exec(line);
-    if (match) {
-      inside = match[1].trim() === heading;
-      continue;
-    }
-    if (inside) collected.push(line);
-  }
-  return collected.join("\n");
-}
-
-/** The brief's numbered questions, or null when this request is not a brief of
- *  that shape.
- *  @param {any} briefText
- *  @returns {{ number: number, text: string }[]|null} */
-function parseBriefQuestions(briefText) {
-  const section = briefSectionText(briefText, briefQuestionsHeading);
-  if (!section.trim()) return null;
-  /** @type {{ number: number, text: string }[]} */
-  const questions = [];
-  let current = null;
-  for (const line of section.split("\n")) {
-    const match = briefQuestionNumberLine.exec(line);
-    if (match) {
-      current = { number: Number(match[1]), text: match[2] };
-      questions.push(current);
-      continue;
-    }
-    // A question that wraps onto its own continuation lines is one question.
-    if (current && line.trim()) current.text += line.trim();
-  }
-  if (questions.length < 2) return null;
-  // Numbered 1..n with no repeats, or the numbering is not what it looks like.
-  if (questions.some((question, index) => question.number !== index + 1)) return null;
-  return questions;
-}
-
-// Whitespace is not content: the brief writes 「12 导联心电图」 and 「SAQ 评分」,
-// the report writes them closed up, and comparing them raw reported four items
-// as absent that were on the page.
-/** @param {any} value */
-export function briefCollapse(value) {
-  // Whitespace, and the variant characters Chinese medical prose uses
-  // interchangeably. A report writing 适应症 twenty-three times was told the
-  // brief's 适应证 never appears, which is a difference of orthography and not
-  // of content.
-  return String(value ?? "").replace(/\s+/g, "").replace(/[證证]/g, "症").replace(/徵/g, "征");
-}
-
-// The shortest run of a brief term that still says which concept it is. Below
-// this the claim "this never appears" is about a phrase, not about a subject:
-// the report says 心绞痛发作 where the brief said 心绞痛终点, and 硝酸酯 where the
-// brief said 硝酸酯类, and neither is a dropped item.
-const briefTermCoreLength = 3;
-
-/** Whether a brief's term is discussed at all, as opposed to quoted exactly.
- *  @param {string} term @param {string} collapsedReport */
-export function briefTermPresent(term, collapsedReport) {
-  const collapsed = briefCollapse(term);
-  if (!collapsed) return true;
-  if (collapsedReport.includes(collapsed)) return true;
-  if (collapsed.length <= briefTermCoreLength) return false;
-  for (let start = 0; start + briefTermCoreLength <= collapsed.length; start += 1) {
-    if (collapsedReport.includes(collapsed.slice(start, start + briefTermCoreLength))) return true;
-  }
-  return false;
-}
-
-/** The longest run of characters two strings share once punctuation and
- *  whitespace are removed.
- *
- *  Deliberately not coverageSharedTopic, which stops at punctuation because it
- *  compares a registered question to a report sentence and must not stitch a
- *  match across a comma. Here the two strings are a brief question and the
- *  ledger's transcription of part of it, and a transcribed sub-question is
- *  mostly punctuation: 「各研究的设计、样本量、给药方案…」 has no punctuation-free
- *  run longer than seven characters, so that rule called 32 honest entries
- *  inventions. Contiguity across the punctuation is the whole signal.
- *  @param {string} left @param {string} right */
-function briefTranscriptionOverlap(left, right) {
-  const a = briefContentOnly(left);
-  const b = briefContentOnly(right);
-  let best = 0;
-  let previous = new Array(b.length + 1).fill(0);
-  for (let i = 1; i <= a.length; i += 1) {
-    const current = new Array(b.length + 1).fill(0);
-    for (let j = 1; j <= b.length; j += 1) {
-      if (a[i - 1] !== b[j - 1]) continue;
-      current[j] = previous[j - 1] + 1;
-      if (current[j] > best) best = current[j];
-    }
-    previous = current;
-  }
-  return best;
-}
-
-/** @param {any} value */
-function briefContentOnly(value) {
-  return String(value ?? "").replace(/[^\p{Script=Han}A-Za-z0-9]+/gu, "");
-}
-
-// Where a transcription stops being one. Over the 611 ledger entries of the
-// 29-package corpus, 579 are an exact substring of the brief question their id
-// names and the other 32 — sub-questions split off a shared stem — share
-// between 14 and 39 characters with it. Nothing honest lands under 14; an entry
-// invented or copied from a different question does.
-const briefTranscriptionCharacters = 12;
-
-// A span carrying one of these is a clause the splitter mis-cut, not an item the
-// brief names. They are grammatical function words, and unlike a topic word list
-// there is nothing to evade by rewording: the evasion this whole check exists to
-// stop is a run dropping an item, and a dropped item cannot be dropped harder by
-// choosing a synonym for 是否.
-const briefItemFunctionWord = /是否|何种|可否|为何|还是|如何|能否|多少|哪些|分别|各自|有无/;
-const briefItemFragmentPrefix = /^[其以在缺仅这那该此]/;
-const briefItemMaxLength = 10;
-
-/** One item of a brief enumeration, or "" when the span is not one.
- *  @param {string} raw */
-function briefItemTerm(raw) {
-  const trimmed = String(raw).replace(/^[^\p{Script=Han}A-Za-z0-9]+|[^\p{Script=Han}A-Za-z0-9]+$/gu, "");
-  if (!trimmed || trimmed.length < 2 || trimmed.length > briefItemMaxLength) return "";
-  if (/[，,。？；;：:—…]/.test(trimmed)) return "";
-  // 「…等」 is an open list; 「…的」 is a modifier waiting for its head.
-  if (/等$/.test(trimmed) || /的$/.test(trimmed)) return "";
-  if (briefItemFunctionWord.test(trimmed) || briefItemFragmentPrefix.test(trimmed)) return "";
-  return trimmed;
-}
-
-/** The enumerations inside one brief question: each is the list of items the
- *  question spells out with 、.
- *
- *  Only interior items are taken. The first and last item of a run need the
- *  clause boundary to be guessed, and guessing it produced spans like
- *  「这些定义是否可复现」 — sentence tails, not items. Parentheses and ／ are
- *  read as item separators, because 「主要终点（心绞痛发作频率、硝酸甘油消耗量）」
- *  is a list whichever bracket it wears.
- *  @param {string} questionText */
-function briefEnumerations(questionText) {
-  const runs = [];
-  const normalized = String(questionText).replace(/[（）()]/g, "、").replace(/[／/]/g, "、");
-  for (const clause of normalized.split(/[。？；]/)) {
-    const parts = clause.split("、");
-    if (parts.length < 3) continue;
-    const items = [];
-    for (let index = 1; index < parts.length - 1; index += 1) {
-      for (const piece of parts[index].split(/[与及和或]|以及/)) {
-        const term = briefItemTerm(piece);
-        if (term) items.push(term);
-      }
-    }
-    const distinct = [...new Set(items)];
-    if (distinct.length >= 3) runs.push(distinct);
-  }
-  return runs;
-}
-
-// How much of an enumeration must be on the page before its absent items are
-// read as dropped. Two present items and a third of the run is the point where
-// the check stops describing the report and starts describing the run: below it,
-// an absent item usually means the whole enumeration is off this report's topic
-// (or that the splitter cut badly), and above it the report is demonstrably
-// working through the list and left some of it out. Measured over the 29
-// delivered clinical packages, this bar takes the flagged items from 244 to 151
-// and removes the runs where nothing matched at all.
-const briefEnumerationPresentFloor = 2;
-const briefDroppedItemsNamed = 8;
-
-/** Items the brief's question spells out that the report never uses, for an
- *  enumeration the report is otherwise working through.
- *  @param {string} questionText @param {string} collapsedReport */
-function briefDroppedItems(questionText, collapsedReport) {
-  const dropped = [];
-  const vanished = [];
-  for (const run of briefEnumerations(questionText)) {
-    // Finding a term is reliable; not finding a short one is not. 终点 is
-    // "missing" from a report that says 结局 throughout, and a two-character
-    // run turns up inside other words often enough that the claim is not worth
-    // making -- so a short term can show that the report is working through
-    // the list, but can never be one of the items reported as dropped.
-    const present = run.filter((term) => briefTermPresent(term, collapsedReport));
-    const reportable = run.filter((term) => briefCollapse(term).length > briefTermCoreLength);
-    const absent = reportable.filter((term) => !briefTermPresent(term, collapsedReport));
-    if (!absent.length) continue;
-    // Nothing from the list appears anywhere. Two things look like this: the
-    // extraction picked the wrong spans, or the question was dropped whole --
-    // and the second is the worst case this check exists for. Requiring some
-    // items to be present kept the noise down and blinded it to exactly that:
-    // RQ-16's second question names eight measured effects, none of which
-    // occurs in the report, and the family went quiet. Report it once, at the
-    // question, rather than as eight separate item claims whose extraction is
-    // the thing in doubt.
-    // Whether the question was addressed at all is judged on the reportable
-    // terms only: a two-character term turning up somewhere says nothing about
-    // whether this question was answered, and letting it count here hid the
-    // most severe case in the corpus -- eight measured effects named, none of
-    // them in the report.
-    const presentReportable = reportable.filter((term) => briefTermPresent(term, collapsedReport));
-    if (!presentReportable.length) {
-      if (reportable.length >= briefEnumerationPresentFloor + 1) vanished.push(reportable);
-      continue;
-    }
-    // Two of the list on the page is what says the list is this report's
-    // subject, and once that is settled the absence of the others is the
-    // finding. A ratio gate used to sit here as well, requiring a third of the
-    // list to be present; it read the strongest case backwards -- six of
-    // RQ-16's eight measured effects missing scored 0.25 and was discarded
-    // whole. Removing it cost four extra items across the corpus.
-    if (present.length < briefEnumerationPresentFloor) continue;
-
-    dropped.push(...absent);
-  }
-  return { dropped: [...new Set(dropped)], vanished };
-}
-
-/** The letter/digit/Han runs of a string, so a shared span cannot be stitched
- *  across a comma.
- *  @param {any} value */
-function coverageContentRuns(value) {
-  return String(value ?? "").match(/[\p{Script=Han}A-Za-z0-9]+/gu) ?? [];
-}
-
-/** The longest run of letters, digits and Han characters two strings share.
- *  No stopword list decides what a topic is, and the span itself is what the
- *  notice names, so a reader can see at once whether the match is real.
- *
- *  Eight characters, not five. A shorter bar was measured over the thirty
- *  delivered packages and matched on spans like 随机对照试验, 安慰剂对照,
- *  性冠脉综合征 and GRADE — vocabulary every report in this field uses in every
- *  section, which made the check fire on sentences that had nothing to do with
- *  the registered gap. The two matches that were real carried spans of eleven
- *  characters (以本品为干预的临床研究, 青年人为预防猝死而常备). Missing a real one
- *  costs a defect that other checks may still catch; a false one sends a run
- *  back to break a correct sentence, so the bar sits where the evidence puts it.
- *  @param {any} left @param {any} right */
-function coverageSharedTopic(left, right) {
-  const first = coverageContentRuns(left);
-  const second = coverageContentRuns(right);
-  let best = "";
-  for (const a of first) {
-    for (const b of second) {
-      let previous = new Array(b.length + 1).fill(0);
-      for (let i = 1; i <= a.length; i += 1) {
-        const current = new Array(b.length + 1).fill(0);
-        for (let j = 1; j <= b.length; j += 1) {
-          if (a[i - 1] !== b[j - 1]) continue;
-          current[j] = previous[j - 1] + 1;
-          if (current[j] > best.length) best = a.slice(i - current[j], i);
-        }
-        previous = current;
-      }
-    }
-  }
-  return best.length >= 8 ? best : "";
-}
-
-/** The level-two heading in force on each report line, indexed from 0.
- *  @param {any} reportText */
-function coverageSectionOfLine(reportText) {
-  let heading = "";
-  return String(reportText ?? "").split("\n").map((line) => {
-    const match = /^##\s+(.*)$/.exec(line);
-    if (match) heading = match[1];
-    return heading;
-  });
-}
-
-/** The contiguous non-blank block a line belongs to.
- *  @param {string[]} lines @param {number} index */
-function coverageParagraphAt(lines, index) {
-  const numbers = coverageParagraphLines(lines, index);
-  return numbers.map((line) => lines[line - 1]).join("\n");
-}
-
-/** The 1-based line numbers of that block. Same span as coverageParagraphAt,
- *  kept as numbers so an excerpt can be assembled without losing which line of
- *  the report each piece of text is.
- *  @param {string[]} lines @param {number} index */
-function coverageParagraphLines(lines, index) {
-  let start = index;
-  let end = index;
-  while (start > 0 && lines[start - 1].trim()) start -= 1;
-  while (end < lines.length - 1 && lines[end + 1].trim()) end += 1;
-  const numbers = [];
-  for (let line = start + 1; line <= end + 1; line += 1) numbers.push(line);
-  return numbers;
-}
-
-/** @param {string} line */
-function coverageLineSubstance(line) {
-  return String(line ?? "")
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/\[[^\]\n]*\]\([^)\s]*\)/g, "")
-    .replace(/\[\s*\d+(?:\s*[,，、\-–]\s*\d+)*\s*\]/g, "")
-    .replace(/[#>*_`|\-–—\s]/g, "")
-    .trim();
-}
-
-/** Everything the coverage ledger claims, checked against the brief the run was
- *  given and against the report lines, claim anchors and search log this gate
- *  already holds.
- *  @param {any} questionCoverageText @param {any} reportText @param {any} searchLogText
- *  @param {Set<string>} claimIds
- *  @param {{ number: number, text: string }[]|null} briefQuestions
- *  @returns {({ kind: 'shape', detail: string }
- *    | { kind: 'answered', id: string, question: string, detail: string, claim?: any }
- *    | { kind: 'gap-search', id: string, question: string, detail: string }
- *    | { kind: 'gap-asserted', id: string, question: string, section: string, line: number, topic: any, family: any, sentence: string }
- *    | { kind: 'brief-missing', number: number, question: string, total: number }
- *    | { kind: 'brief-mismatch', id: string, number: number, question: string, elsewhere: number | null }
- *    | { kind: 'brief-question-absent', number: number, ids: string[], terms: string[], more: number, total: number }
- *    | { kind: 'brief-item', number: number, ids: string[], terms: string[], more: number }
- *    | { kind: 'brief-extra', number: number, ids: string[], total: number })[]}
- *
- *  A discriminated union on `kind`, like the other two finding producers: the
- *  consumer is one long `else if` chain over exactly these values, and without
- *  the union each branch read fields the checker could only call
- *  possibly-undefined.
- */
-function questionCoverageFindings(questionCoverageText, reportText, searchLogText, claimIds, briefQuestions) {
-  /** @type {ReturnType<typeof questionCoverageFindings>} */
-  const findings = [];
-  const text = String(questionCoverageText ?? "");
-  if (!text.trim()) {
-    findings.push({ kind: "shape", detail: "文件缺失或为空。它必须是一个 JSON 对象，逐条列出题面「需要回答的问题」拆出的原子子问。" });
-    return findings;
-  }
-  let ledger = null;
-  try {
-    ledger = JSON.parse(text);
-  } catch (error) {
-    findings.push({ kind: "shape", detail: `不是合法 JSON（${String(/** @type {Error} */ (error)?.message ?? error).slice(0, 120)}）。` });
-    return findings;
-  }
-  if (!ledger || typeof ledger !== "object" || Array.isArray(ledger)) {
-    findings.push({ kind: "shape", detail: "顶层必须是对象，不能是数组或标量。" });
-    return findings;
-  }
-  if (ledger.schemaVersion !== 1) {
-    findings.push({ kind: "shape", detail: "必须写 \"schemaVersion\": 1。" });
-  }
-  const entries = Array.isArray(ledger.entries) ? ledger.entries : null;
-  if (!entries || !entries.length) {
-    findings.push({ kind: "shape", detail: "entries 必须是非空数组，一条原子子问一个条目。" });
-    return findings;
-  }
-  const lines = String(reportText ?? "").split("\n");
-  const sectionOfLine = coverageSectionOfLine(reportText);
-  const searchLog = parseJsonObject(searchLogText);
-  const rawLoggedQueries = Array.isArray(searchLog?.queries) ? searchLog.queries : [];
-  const loggedQueries = rawLoggedQueries.map((entry) => ({
-    query: normalizedSearchQuery(entry?.query),
-    database: String(entry?.database ?? "").trim().toLowerCase(),
-  }));
-  // A log written to another schema is one problem, not one per citation.
-  //
-  // The contract's `queries[]` holds objects — `{database, query, …}`. A run
-  // wrote plain strings and put the objects under `searches` instead, so
-  // `entry?.query` was undefined for every one of them and every logged query
-  // normalized to "". Each gap entry citing a search it really had run then
-  // came back as `其检索式「…」…没有对应记录`: twelve findings, all of them
-  // the same single fact about the file's shape, and none of them naming it.
-  // This is the matrix-schema collapse one file over.
-  const loggedShapeMismatch = rawLoggedQueries.length > 0 && loggedQueries.every((entry) => !entry.query);
-  if (loggedShapeMismatch) {
-    const found = [...new Set(rawLoggedQueries.map((entry) => (
-      entry && typeof entry === "object" && !Array.isArray(entry)
-        ? `object with keys ${Object.keys(entry).slice(0, 6).join("/") || "(none)"}`
-        : Array.isArray(entry) ? "array" : typeof entry
-    )))].slice(0, 3).join("、");
-    findings.push({
-      kind: "shape",
-      detail: `clinical-evidence-search.json 的 queries 用了与契约不同的形状：${rawLoggedQueries.length} 条里没有一条带 query 字段（读到的是 ${found}）。`
-        + "契约要的是对象数组，每条至少 {database, query}；这个文件由你写，不是工具写的。"
-        + "把每次真正跑过的检索按这个形状写进 queries[]，gap 条目引用的检索式才对得上。",
-    });
-  }
-  const loggedDate = String(searchLog?.searchedAt ?? "").slice(0, 10);
-  const seenIds = new Set();
-  const groups = new Set();
-  // Which ledger entries claim to cover each numbered brief question, keyed by
-  // the number their id leads with. "2.3" is the third sub-question of the
-  // brief's second question, and that convention is what makes the ledger
-  // comparable to the brief at all.
-  /** @type {Map<number, { id: string, question: string, status: any }[]>} */
-  const briefGroupEntries = new Map();
-  for (const [index, entry] of entries.entries()) {
-    const label = `entries[${index}]`;
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      findings.push({ kind: "shape", detail: `${label} 必须是对象。` });
-      continue;
-    }
-    const id = typeof entry.id === "string" ? entry.id.trim() : "";
-    const question = typeof entry.question === "string" ? entry.question.trim() : "";
-    if (!id) {
-      findings.push({ kind: "shape", detail: `${label}.id 必须是题面编号加子项序号（如 "2.3"）。` });
-      continue;
-    }
-    if (seenIds.has(id)) {
-      findings.push({ kind: "shape", detail: `条目编号 ${id} 出现了两次；一条子问一个编号。` });
-      continue;
-    }
-    seenIds.add(id);
-    const groupMatch = /\d+/.exec(id);
-    groups.add(groupMatch ? groupMatch[0] : id);
-    if (groupMatch) {
-      const number = Number(groupMatch[0]);
-      briefGroupEntries.set(number, [...(briefGroupEntries.get(number) ?? []), { id, question, status: entry.status }]);
-    }
-    if (question.replace(/\s+/g, "").length < 8) {
-      findings.push({ kind: "shape", detail: `${id}.question 必须转录子问原文（至少 8 个字符），当前为 ${JSON.stringify(question)}。` });
-      continue;
-    }
-    if (!coverageStatuses.has(entry.status)) {
-      findings.push({ kind: "shape", detail: `${id}.status 必须是 "answered" 或 "gap"，当前为 ${JSON.stringify(entry.status)}。` });
-      continue;
-    }
-    // With no matrix at all, every id the ledger names is unresolvable, and
-    // saying so once per id buries the one fact that explains all of them.
-    //
-    // Third location of this defect. The report-side version was fixed on
-    // 2026-08-26 (23 blocking issues, 14 of them one absent file); this one
-    // then cost a real run its last repair attempt: the matrix was momentarily
-    // empty at the third gate, the coverage ledger still named its claims, and
-    // the verdict came back with 114 issues of which ~78 were this sentence
-    // with a different id in it. The run had three real problems and no way to
-    // see them.
-    //
-    // A matrix that HAS claims and is missing a named one is still reported per
-    // id -- that is a genuine per-claim finding, and its control pins it.
-    if (Array.isArray(entry.claimIds) && claimIds.size) {
-      for (const claimId of entry.claimIds) {
-        if (!claimIds.has(claimId)) {
-          findings.push({ kind: "shape", detail: `${id}.claimIds 提到 ${JSON.stringify(claimId)}，证据矩阵里没有这个 claim。` });
-        }
-      }
-    }
-    if (entry.status === "answered") {
-      const reportLines = Array.isArray(entry.reportLines) ? entry.reportLines : null;
-      if (!reportLines || !reportLines.length || reportLines.some((/** @type {number} */ value) => !Number.isInteger(value) || value < 1)) {
-        findings.push({ kind: "shape", detail: `${id} 声明 answered，就必须在 reportLines 里给出正文行号（正整数数组，至少一条）。` });
-        continue;
-      }
-      let anchored = false;
-      for (const line of reportLines) {
-        if (line > lines.length) {
-          findings.push({ kind: "answered", id, question, detail: `指向报告第 ${line} 行，而报告只有 ${lines.length} 行。` });
-          continue;
-        }
-        const heading = sectionOfLine[line - 1] ?? "";
-        if (coverageExcludedSection.test(heading)) {
-          findings.push({
-            kind: "answered",
-            id,
-            question,
-            detail: `指向报告第 ${line} 行，那一行在「${heading.trim()}」一节里。参考文献表与局限性都不回答问题——把行号改到正文中真正给出答案的那一行。`,
-          });
-          continue;
-        }
-        if (!coverageLineSubstance(lines[line - 1])) {
-          findings.push({ kind: "answered", id, question, detail: `指向报告第 ${line} 行，那一行是空行或只有标记，没有正文。` });
-          continue;
-        }
-        if (coverageAnchorPattern.test(coverageParagraphAt(lines, line - 1))) anchored = true;
-      }
-      if (anchored) continue;
-      findings.push({
-        kind: "answered",
-        id,
-        question,
-        detail: `声明的行 ${reportLines.join("、")} 所在段落都没有 claim 锚点（<!-- claim:CLM-… -->）。`
-          + "被当作已回答的子问，其答案必须挂在证据上；没有锚点的一段散文不是答案。",
-      });
-      continue;
-    }
-    const searches = Array.isArray(entry.searches) ? entry.searches : null;
-    if (!searches || !searches.length) {
-      findings.push({ kind: "shape", detail: `${id} 声明 gap，就必须在 searches 里给出实际执行过的检索式、数据源与检索日期（至少一条）。` });
-      continue;
-    }
-    for (const [position, search] of searches.entries()) {
-      const query = typeof search?.query === "string" ? search.query.trim() : "";
-      const database = typeof search?.database === "string" ? search.database.trim() : "";
-      const searchedAt = typeof search?.searchedAt === "string" ? search.searchedAt.trim() : "";
-      if (!query || !database || !coverageIsoDate.test(searchedAt)) {
-        findings.push({
-          kind: "shape",
-          detail: `${id}.searches[${position}] 必须同时给出 query、database 与 searchedAt（YYYY-MM-DD）。`,
-        });
-        continue;
-      }
-      const normalized = normalizedSearchQuery(query);
-      const matches = loggedQueries.filter((logged) => logged.query === normalized);
-      if (!matches.length) {
-        // Already reported once, as the shape it is: repeating it per citation
-        // buries the one repair that fixes all of them.
-        if (loggedShapeMismatch) continue;
-        findings.push({
-          kind: "gap-search",
-          id,
-          question,
-          detail: `其检索式「${query}」在 clinical-evidence-search.json 的 queries 中没有对应记录。`
-            + "「查过但没查到」必须能在日志里找到那一次检索——"
-            + "把真正跑过的检索式抄进 queries[]，或者去跑这一次检索。",
-        });
-        continue;
-      }
-      if (!matches.some((logged) => logged.database === database.toLowerCase())) {
-        findings.push({
-          kind: "gap-search",
-          id,
-          question,
-          detail: `其检索式「${query}」声明的数据源是「${database}」，`
-            + `检索日志里这条检索记在「${[...new Set(matches.map((logged) => logged.database))].join("、")}」下。`,
-        });
-        continue;
-      }
-      if (loggedDate && searchedAt !== loggedDate) {
-        findings.push({
-          kind: "gap-search",
-          id,
-          question,
-          detail: `其检索式「${query}」声明的检索日期是 ${searchedAt}，clinical-evidence-search.json 的 searchedAt 是 ${loggedDate}。`,
-        });
-      }
-    }
-  }
-  // A registered gap written as an answer where the reader takes the answer
-  // away. The span the two strings share is what the notice names, so a reader
-  // can see at once whether the match is real.
-  const gapEntries = entries.filter((/** @type {Record<string, any> | null} */ entry) => (
-    entry && typeof entry === "object" && entry.status === "gap" && typeof entry.question === "string"
-  ));
-  for (const { name, pattern } of coverageVerdictSections) {
-    const sectionText = reportSection(reportText, pattern);
-    if (!sectionText.trim()) continue;
-    const sectionOffset = String(reportText ?? "").indexOf(sectionText);
-    const sectionFirstLine = sectionOffset >= 0
-      ? String(reportText ?? "").slice(0, sectionOffset).split("\n").length
-      : 1;
-    for (const [lineIndex, line] of sectionText.split("\n").entries()) {
-      for (const sentence of line.split(coverageSentenceSplit)) {
-        if (!sentence.trim()) continue;
-        if (coverageRetrievalRestatement.test(sentence)) continue;
-        // Naming a quantity as an objective is not reporting one.
-        if (coverageObjectiveSentence.test(sentence)) continue;
-        const literatureFact = coverageLiteratureFactAssertion.test(sentence);
-        const acknowledged = coverageGapAcknowledgement.test(sentence);
-        const family = literatureFact
-          ? "把这一次检索的空手写成了文献世界的事实"
-          : acknowledged
-            ? ""
-            : coverageRankingAssertion.test(sentence)
-              ? "给出了排序或构成比"
-              : coverageThresholdAssertion.test(sentence)
-                ? "给出了阈值或数值区间"
-                : coverageDirectiveAssertion.test(sentence)
-                  ? "给出了推荐或处置祈使"
-                  : "";
-        if (!family) continue;
-        for (const entry of gapEntries) {
-          const topic = coverageSharedTopic(entry.question, sentence);
-          if (!topic) continue;
-          findings.push({
-            kind: "gap-asserted",
-            id: String(entry.id ?? "").trim(),
-            question: entry.question.trim(),
-            section: name,
-            line: sectionFirstLine + lineIndex,
-            topic,
-            family,
-            sentence: sentence.trim().slice(0, 120),
-          });
-          break;
-        }
-      }
-    }
-  }
-  // --- Against the brief ----------------------------------------------------
-  //
-  // What replaced the old scope-count heuristic. That one read the abstract for
-  // a sentence restating the study's scope, counted the questions it named, and
-  // compared that number to the ledger's — two numbers both written by the run,
-  // so the only thing it could catch was the run disagreeing with itself. Here
-  // the question count is not inferred from anything: the brief has five
-  // numbered questions, and either the ledger accounts for all five or it does
-  // not.
-  if (briefQuestions) {
-    const collapsedReport = briefCollapse(reportText);
-    const briefNumbers = new Set(briefQuestions.map((question) => question.number));
-    for (const question of briefQuestions) {
-      const covered = briefGroupEntries.get(question.number) ?? [];
-      if (!covered.length) {
-        findings.push({ kind: "brief-missing", number: question.number, question: question.text, total: briefQuestions.length });
-        continue;
-      }
-      // The entry must be a transcription of the question it claims to cover.
-      // Without the brief the only available rule was "at least eight
-      // characters of something", which a run satisfies by typing anything —
-      // and which is exactly how one entry comes to stand for two questions:
-      // register 1.1 and 2.1 with the same text and the count comes out right.
-      for (const item of covered) {
-        const bar = Math.min(briefTranscriptionCharacters, briefContentOnly(item.question).length);
-        if (briefTranscriptionOverlap(question.text, item.question) >= bar) continue;
-        const elsewhere = briefQuestions.find((other) => (
-          other.number !== question.number && briefTranscriptionOverlap(other.text, item.question) >= bar
-        ));
-        findings.push({
-          kind: "brief-mismatch",
-          id: item.id,
-          number: question.number,
-          question: question.text,
-          elsewhere: elsewhere ? elsewhere.number : null,
-        });
-      }
-      // An item the brief spells out that the report never uses, in an
-      // enumeration the report is otherwise working through. Only for a
-      // question the ledger claims is answered: a question registered wholly as
-      // a gap is already held to a search that really ran.
-      if (!covered.some((item) => item.status === "answered")) continue;
-      const { dropped, vanished } = briefDroppedItems(question.text, collapsedReport);
-      for (const run of vanished) {
-        findings.push({
-          kind: "brief-question-absent",
-          number: question.number,
-          ids: covered.map((item) => item.id),
-          terms: run.slice(0, briefDroppedItemsNamed),
-          more: Math.max(0, run.length - briefDroppedItemsNamed),
-          total: run.length,
-        });
-      }
-      if (dropped.length) {
-        findings.push({
-          kind: "brief-item",
-          number: question.number,
-          ids: covered.map((item) => item.id),
-          terms: dropped.slice(0, briefDroppedItemsNamed),
-          more: Math.max(0, dropped.length - briefDroppedItemsNamed),
-        });
-      }
-    }
-    for (const number of [...briefGroupEntries.keys()].sort((left, right) => left - right)) {
-      if (briefNumbers.has(number)) continue;
-      findings.push({
-        kind: "brief-extra",
-        number,
-        ids: (briefGroupEntries.get(number) ?? []).map((item) => item.id),
-        total: briefQuestions.length,
-      });
-    }
-  }
-  return findings;
-}
-// Attribution: the check every finding of this function is recorded under.
-checkedBy(questionCoverageFindings, "question-coverage");
-
-// --- What a semantic judge is allowed to look at ----------------------------
-//
-// Everything above decides whether the run's account is INTERNALLY consistent
-// and whether it accounts for the brief's questions by name. Two defects
-// survive that by construction, and both were measured on the 30-package
-// corpus rather than imagined:
-//
-//   * A ledger entry says "answered" and points at a report line that really
-//     exists, really carries a claim anchor, and really is in the body — and
-//     answers a different question, population or endpoint than the
-//     sub-question it is registered against. Every deterministic predicate
-//     above passes. (4 labelled cases, reason R2.)
-//   * A registered gap whose answer is handed to the reader anyway in the
-//     abstract, the conclusion or the practical section, worded so that no
-//     eight-character span is shared with the registered question — synonym,
-//     nominalisation, a different clause order. coverageSharedTopic returns
-//     nothing and the gap-asserted rule stands down. (13 labelled cases,
-//     reason R3.) The reverse — material in hand registered as a gap — is the
-//     same shape. (3 labelled cases.)
-//
-// Both are judgements about MEANING, and no vocabulary list decides meaning.
-// What this function does is assemble exactly what a judge needs and nothing
-// else: the brief's questions, the ledger's entries, and a bounded excerpt of
-// the report. It decides nothing itself; coverageJudge.mjs takes it to a model
-// and then checks every checkable part of what comes back against the same
-// data. The excerpt is also the answer sheet: a verdict that names a line
-// outside it is discarded, so the model cannot cite a line it never saw.
-const coverageJudgeExcerptCharacters = 16_000;
-
-/** One report line as a judge sees it: its 1-based number, the section heading
- *  in force, and its text.
- *  @typedef {{ line: number, section: string, text: string }} CoverageJudgeLine */
-
-/** Everything a semantic coverage judge may read, or null when this delivery is
- *  not one it can judge (no parsable brief questions, no usable ledger entries,
- *  or no report).
- *  @param {Record<string, any>} options0 */
-export function coverageJudgeContext({ briefText, questionCoverageText, reportText } = {}) {
-  const briefQuestions = parseBriefQuestions(briefText);
-  if (!briefQuestions) return null;
-  const lines = String(reportText ?? "").split("\n");
-  if (!String(reportText ?? "").trim()) return null;
-  const ledger = parseJsonObject(questionCoverageText);
-  const rawEntries = Array.isArray(ledger?.entries) ? ledger.entries : [];
-  /** @type {{ id: string, question: string, status: string, declaredLines: number[], declaredParagraph: number[] }[]} */
-  const entries = [];
-  for (const entry of rawEntries) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
-    const id = typeof entry.id === "string" ? entry.id.trim() : "";
-    const question = typeof entry.question === "string" ? entry.question.trim() : "";
-    if (!id || !question || !coverageStatuses.has(entry.status)) continue;
-    const declaredLines = (Array.isArray(entry.reportLines) ? entry.reportLines : [])
-      .filter((/** @type {number} */ value) => Number.isInteger(value) && value >= 1 && value <= lines.length);
-    entries.push({ id, question, status: entry.status, declaredLines, declaredParagraph: [] });
-  }
-  if (!entries.length) return null;
-
-  const sectionOfLine = coverageSectionOfLine(reportText);
-  // The three places a reader takes an answer away, in full. A gap that becomes
-  // a conclusion becomes one here.
-  /** @type {Map<number, string>} */
-  const verdictLines = new Map();
-  for (const { name, pattern } of coverageVerdictSections) {
-    const sectionText = reportSection(reportText, pattern);
-    if (!sectionText.trim()) continue;
-    const offset = String(reportText ?? "").indexOf(sectionText);
-    if (offset < 0) continue;
-    const firstLine = String(reportText ?? "").slice(0, offset).split("\n").length;
-    for (let index = 0; index < sectionText.split("\n").length; index += 1) {
-      const line = firstLine + index;
-      if (line >= 1 && line <= lines.length) verdictLines.set(line, name);
-    }
-  }
-  // Plus the paragraphs the ledger itself points at. Nothing else: a judge that
-  // needs the whole 30 kB report to decide whether entry 2.1's own cited line
-  // answers entry 2.1's own question is not being asked the right question, and
-  // the cost of asking it that way is paid on every delivery.
-  /** @type {Map<number, number[]>} */
-  const declaredParagraphs = new Map();
-  for (const entry of entries) {
-    for (const line of entry.declaredLines) {
-      if (declaredParagraphs.has(line)) continue;
-      declaredParagraphs.set(line, coverageParagraphLines(lines, line - 1));
-    }
-    // The paragraph, not the line. A ledger entry cites the line its answer
-    // starts on and the answer runs to the end of the block — measured on the
-    // corpus, three of the labelled unresponsive answers are worded two or
-    // three lines below the cited one, so pinning a verdict to the cited line
-    // exactly would have thrown out three true findings to no benefit. The
-    // block is still the entry's OWN citation, which is the property that makes
-    // the charge falsifiable.
-    entry.declaredParagraph = [...new Set(entry.declaredLines.flatMap((line) => declaredParagraphs.get(line) ?? []))];
-  }
-
-  // Verdict sections first, then declared paragraphs in ledger order, so a
-  // truncation drops the least load-bearing lines rather than an arbitrary tail.
-  const ordered = [...verdictLines.keys()];
-  for (const entry of entries) {
-    for (const line of entry.declaredLines) ordered.push(...(declaredParagraphs.get(line) ?? []));
-  }
-  const excerptLines = new Set();
-  let budget = coverageJudgeExcerptCharacters;
-  let truncated = false;
-  for (const line of ordered) {
-    if (excerptLines.has(line)) continue;
-    const text = lines[line - 1] ?? "";
-    if (budget - text.length < 0) {
-      truncated = true;
-      continue;
-    }
-    budget -= text.length;
-    excerptLines.add(line);
-  }
-  /** @type {CoverageJudgeLine[]} */
-  const excerptLineViews = [...excerptLines]
-    .sort((left, right) => left - right)
-    .map((line) => ({ line, section: String(sectionOfLine[line - 1] ?? "").trim(), text: lines[line - 1] ?? "" }));
-
-  return {
-    briefQuestions,
-    entries,
-    totalLines: lines.length,
-    excerpt: excerptLineViews,
-    excerptLines,
-    verdictLines,
-    truncated,
-    /** The line carries readable prose rather than markup or a blank.
-     *  @param {number} line */
-    hasSubstance: (line) => Boolean(coverageLineSubstance(lines[line - 1] ?? "")),
-    /** The line sits in a section that does not answer questions.
-     *  @param {number} line */
-    inExcludedSection: (line) => coverageExcludedSection.test(String(sectionOfLine[line - 1] ?? "")),
-    /** The line's paragraph carries a claim anchor, i.e. an answer bonded to
-     *  evidence rather than a sentence of prose.
-     *  @param {number} line */
-    isAnchored: (line) => coverageAnchorPattern.test(coverageParagraphAt(lines, line - 1)),
-    /** The line's text, for verbatim-quote verification.
-     *  @param {number} line */
-    lineText: (line) => lines[line - 1] ?? "",
-    /** The span says the search came back empty, and says nothing else that
-     *  would make it an answer — the report agreeing with a `gap` entry rather
-     *  than contradicting it.
-     *  @param {string} text */
-    statesRetrievalGap: (text) => coverageRetrievalAbsence.test(String(text ?? ""))
-      && !coverageLiteratureFactAssertion.test(String(text ?? ""))
-      && !coverageDirectiveAssertion.test(String(text ?? "")),
-  };
-}
-
 /** TypeScript infers a destructured parameter as exactly the shape its
  *  defaults name, which rejects every other property a caller passes.
  *  @param {Record<string, any>} options0
@@ -4243,21 +2901,15 @@ export function coverageJudgeContext({ briefText, questionCoverageText, reportTe
 export function validateClinicalEvidencePackage({
   reportText,
   matrix,
-  runReceipt,
+  // Preserved source texts by workspace path, joined from the evidence ledger by
+  // the platform: an entry means a tool preserved the file in this run and it
+  // was read back.
   sourceArtifacts = {},
-  executedSearchQueries = null,
-  searchLogText = "",
-  referencesText = "",
-  citationLedgerText = "",
-  citationAuditText = "",
-  questionCoverageText = "",
-  // The server's own copy of the brief this run was dispatched with, held in
-  // memory on the run record. Null means it is not available — an in-flight run
-  // whose server restarted, or a request that never had one.
+  // The brief this run was dispatched with, as the dispatcher holds it — never
+  // the workspace copy the run can edit. The question-scoped safety rules read
+  // it; null means it is not available (an in-flight run whose server
+  // restarted), and those rules then do not run.
   briefText = null,
-  // The copy the run could read in its workspace. Never used to decide
-  // anything; compared to the one above so a rewritten exam paper is visible.
-  workspaceBriefText = null,
 } = {}) {
   const issues = new IssueLog();
   const claimIds = [];
@@ -4284,12 +2936,10 @@ export function validateClinicalEvidencePackage({
       issues: [absent],
       blockingIssues: [absent],
       safetyIssues: [],
-      silencedChecks: {},
       findings: [{ check: "report-present", text: absent, tier: "blocking", degradable: false }],
       issueChecks: [{ check: "report-present", text: absent }],
       claimIds: [],
       sourceDomains: [],
-      coverageDegradedNotice: null,
     };
   }
   // Annotated rather than inferred: `matrix` arrives as `any` from the caller,
@@ -4303,30 +2953,14 @@ export function validateClinicalEvidencePackage({
   const artifactText = sourceArtifacts instanceof Map
     ? sourceArtifacts
     : new Map(Object.entries(sourceArtifacts && typeof sourceArtifacts === "object" ? sourceArtifacts : {}));
-  // What preserved, from both the run's account of it and ours.
-  //
-  // `successfulSourceArtifacts` is written by the run. `artifactText` is joined
-  // from the evidence ledger by the platform, and an entry there means the file
-  // was preserved and read — a stronger fact than the run's own list, not a
-  // weaker one. Trusting only the list rejected five claims that each cited a
-  // genuinely preserved source, with `is not listed as a successful source
-  // artifact for this run`, because the run had not yet copied those paths into
-  // its receipt. It copied them two minutes later, out of attempts.
-  //
-  // So the union, and it is not a loosening: a path present only in the receipt
-  // still has no text, and every quote drawn from it is reported unverifiable.
-  // This only stops the package being failed over a bookkeeping disagreement
-  // about a source we ourselves read.
-  const successfulArtifacts = new Set([
-    ...(Array.isArray(runReceipt?.successfulSourceArtifacts)
-      ? runReceipt.successfulSourceArtifacts.filter((/** @type {unknown} */ value) => typeof value === "string")
-      : []),
-    ...[...artifactText.keys()].filter((path) => typeof path === "string" && path),
-  ]);
-  const distinctSuccessfulSources = new Set(
-    [...successfulArtifacts].map(sourceArtifactIdentity).filter(Boolean),
+  // What was preserved is the platform's record, not the run's account of it.
+  // The run used to list its sources in a receipt of its own, and trusting that
+  // list rejected claims citing genuinely preserved sources the run had not yet
+  // copied into it; the receipt is gone, and this set is what the evidence
+  // ledger says.
+  const successfulArtifacts = new Set(
+    [...artifactText.keys()].filter((path) => typeof path === "string" && path),
   );
-  const deepResearch = runReceipt?.reportProfile === deepResearchProfile;
   const reportReferenceCount = numberedReferenceCount(reportText);
   const reportReferenceNumbers = numberedReferenceNumbers(reportText);
 
@@ -4364,33 +2998,34 @@ export function validateClinicalEvidencePackage({
       + "Write the reader's actions under that heading; an empty section is audited as no section at all.",
     );
   }
-  if (deepResearch) {
-    issues.region("deep-research-sections");
-    for (const section of [
-      /(?:^|\n)##\s+.*(?:检索|方法|Methods?)/i,
-      /(?:^|\n)##\s+.*(?:结果|Results?)/i,
-      /(?:^|\n)##\s+.*(?:讨论|Discussion)/i,
-    ]) {
-      if (!section.test(reportText ?? "")) {
-        issues.push(`The deep-research report is missing a required academic section matching ${section}.`);
-      }
+  // Every package of this contract is a deep-research report. That used to be
+  // switched by a `reportProfile` the run typed into its own receipt, so a run
+  // that skipped the receipt skipped these checks too.
+  issues.region("deep-research-sections");
+  for (const section of [
+    /(?:^|\n)##\s+.*(?:检索|方法|Methods?)/i,
+    /(?:^|\n)##\s+.*(?:结果|Results?)/i,
+    /(?:^|\n)##\s+.*(?:讨论|Discussion)/i,
+  ]) {
+    if (!section.test(reportText ?? "")) {
+      issues.push(`The deep-research report is missing a required academic section matching ${section}.`);
     }
-    // Presence is required of every report above; here only the order matters.
-    issues.region("reference-list-order");
-    const practicalHeading = String(reportText ?? "").search(practicalHeadingLinePattern);
-    const referencesHeading = String(reportText ?? "").search(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*$/im);
-    if (referencesHeading < 0 || (practicalHeading >= 0 && referencesHeading < practicalHeading)) {
-      issues.push("The numbered reference list must follow the safety-first practical-answer section.");
-    }
-    issues.region("visible-claim-marker");
-    if (visibleClaimMarkerPattern.test(reportText ?? "")) {
-      issues.push("Deep-research reports must hide internal claim IDs in HTML comments and show standard numbered citations to readers.");
-    }
-    visibleClaimMarkerPattern.lastIndex = 0;
   }
+  // Presence is required of every report above; here only the order matters.
+  issues.region("reference-list-order");
+  const practicalHeading = String(reportText ?? "").search(practicalHeadingLinePattern);
+  const referencesHeading = String(reportText ?? "").search(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*$/im);
+  if (referencesHeading < 0 || (practicalHeading >= 0 && referencesHeading < practicalHeading)) {
+    issues.push("The numbered reference list must follow the safety-first practical-answer section.");
+  }
+  issues.region("visible-claim-marker");
+  if (visibleClaimMarkerPattern.test(reportText ?? "")) {
+    issues.push("Deep-research reports must hide internal claim IDs in HTML comments and show standard numbered citations to readers.");
+  }
+  visibleClaimMarkerPattern.lastIndex = 0;
   issues.region("operational-failure-prose");
   if (operationalFailurePattern.test(reportText ?? "")) {
-    issues.push("The academic report contains operational failure prose that belongs only in the run receipt.");
+    issues.push("The academic report contains operational failure prose. A tool or source that failed is not a finding: leave it out of the report, and state a missing source as a limitation of the evidence in 局限性 if it matters.");
   }
   issues.region("runtime-leakage");
   const leakageLine = firstMatchingLine(reportText, runtimeLeakagePattern)
@@ -4400,7 +3035,7 @@ export function validateClinicalEvidencePackage({
       "The academic report contains runtime or retrieval-process prose instead of scientific analysis: "
       + `line ${leakageLine.line} reads ${leakageLine.text}. `
       + "Write what the evidence shows, not how it was obtained — the run's tools, gateways, preserved artifacts (工件), "
-      + "access levels (访问层级), environment (本环境), and retrieval passes (本轮检索) belong in the run receipt. "
+      + "access levels (访问层级), environment (本环境), and retrieval passes (本轮检索) stay out of the report; the platform records them. "
       + "A source you could not obtain is stated as a limitation of the evidence base inside 局限性, in the reader's terms.",
     );
   }
@@ -4435,7 +3070,6 @@ export function validateClinicalEvidencePackage({
     }
   }
   issues.push(...issues.from(manuscriptRegisterIssues, reportText));
-  issues.push(...issues.from(comparativeStructureIssues, reportText));
   issues.region("claim-marker-format");
   if (/\[claim:CLM-[0-9]{3,6}[^\]]+\]/.test(reportText ?? "")) {
     issues.push("Each claim marker must contain exactly one claim ID.");
@@ -4480,12 +3114,10 @@ export function validateClinicalEvidencePackage({
       issues: [...issues.texts(), absent],
       blockingIssues: [absent],
       safetyIssues: [],
-      silencedChecks: {},
       findings: [...issues.all(), { check: "matrix-schema", text: absent }].map((entry) => ({ ...entry, tier: clinicalCheckTier(entry.check), degradable: false })),
       issueChecks: [...issues.all(), { check: "matrix-schema", text: absent }],
       claimIds: [],
       sourceDomains: [],
-      coverageDegradedNotice: null,
     };
   }
   const seen = new Set();
@@ -4517,7 +3149,6 @@ export function validateClinicalEvidencePackage({
     if (claimType === "synthesized") {
       issues.from(validateSynthesizedClaim, value, {
         label,
-        deepResearch,
         reportReferenceNumbers,
         successfulArtifacts,
         artifactText,
@@ -4551,7 +3182,7 @@ export function validateClinicalEvidencePackage({
       issues.push(`${label}.accessLevel is ${JSON.stringify(value.accessLevel)}; use exactly one of ${[...accessLevels].join(", ")} to record how much of the preserved artifact you read.`);
     }
     issues.region("claim-reference-number");
-    if (deepResearch && (!Number.isInteger(value.referenceNumber) || !reportReferenceNumbers.has(value.referenceNumber))) {
+    if (!Number.isInteger(value.referenceNumber) || !reportReferenceNumbers.has(value.referenceNumber)) {
       issues.push(`${label}.referenceNumber must resolve to a numbered report reference.`);
     }
     issues.region("claim-support-quote");
@@ -4586,7 +3217,7 @@ export function validateClinicalEvidencePackage({
     if (!validSourceArtifactPath(value.artifactPath)) {
       issues.push(`${label}.artifactPath is ${JSON.stringify(value.artifactPath)}, which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.`);
     } else if (!successfulArtifacts.has(value.artifactPath)) {
-      issues.push(`${label}.artifactPath is not listed as a successful source artifact for this run.`);
+      issues.push(`${label}.artifactPath is not listed as a successful source artifact for this run: no evidence tool in this run reported preserving that file, or its text could not be read back. Cite the exact .evimed-sources/ path a preserving tool returned, or preserve the source first.`);
     } else {
       issues.region("claim-quote-verbatim");
       const quoteProblem = supportQuoteIssue(artifactText, label, value.artifactPath, value.supportQuote);
@@ -4632,7 +3263,7 @@ export function validateClinicalEvidencePackage({
       `报告正文第 ${finding.line} 行以条款级方式引用「${finding.locator}」，`
       + "但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件"
       + "（要求：sourceUrl 主机名位于 .gov/.gov.<国别>/.go.<国别>/.europa.eu/.int 政府域，"
-      + `artifactPath 在本次运行的 successfulSourceArtifacts 中，且其 supportQuote 或 claim 含同一条号 第${finding.article}条 / Article ${finding.article}）；`
+      + `artifactPath 是本次运行保存过的来源，且其 supportQuote 或 claim 含同一条号 第${finding.article}条 / Article ${finding.article}）；`
       + `该行现有引用为 [${finding.refs.join(", ") || "无"}]，指向 ${finding.hosts.join(", ") || "无可解析来源"}。`
       + "条号级陈述只能由法条原文承载：要么先取得并留存发文机关公布的该法条文本再引用，"
       + "要么删去条号，只写所引来源本身是什么——例如把「《医师法》第 29 条第 2 款将超说明书用药的合法条件规定为四点」"
@@ -4757,7 +3388,7 @@ export function validateClinicalEvidencePackage({
       `The practical section cites derived result ${derivedInPractical.join(", ")}; practical advice must rest on measured evidence. Move the reasoning to the analysis and give the action a directly supported claim.`,
     );
   }
-  for (const hit of issues.from(clinicalSafetyRuleHits, { reportText, practical, question: runReceipt?.question })) {
+  for (const hit of issues.from(clinicalSafetyRuleHits, { reportText, practical, question: briefText })) {
     issues.pushAttributed({ text: hit.message, rule: hit.ruleId, line: hit.line });
   }
   issues.region("practical-claim-anchor");
@@ -4788,459 +3419,87 @@ export function validateClinicalEvidencePackage({
     );
   }
 
-  // The brief-derived rules run only on a brief the server itself holds. A run
-  // that supplies its own brief supplies its own exam, so the workspace copy is
-  // never read here — only compared, below.
-  const briefQuestions = parseBriefQuestions(briefText);
-  const coverageDegradedNotice = briefQuestions
-    ? null
-    : briefText == null
-      ? "本次交付未按题面逐问核对覆盖：服务端持有的题面副本不可用（题面只存在于内存中的运行记录上，"
-        + "服务进程重启后即丢失），question-coverage.json 只做了自洽核对——它登记了哪几问、"
-        + "登记的答案是否落在正文并挂着 claim 锚点、登记的空缺是否有真跑过的检索。"
-        + "「题面有几问、台账是不是这几问」这一层本次没有检查过。"
-      : "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，"
-        + "无法逐问比对。question-coverage.json 只做了自洽核对。";
-  issues.region("workspace-brief-mismatch");
-  if (briefQuestions && typeof workspaceBriefText === "string" && workspaceBriefText.trim()) {
-    if (briefCollapse(workspaceBriefText) !== briefCollapse(briefText)) {
-      issues.push(
-        "工作区里的题面只读副本 .evimed-brief/research-brief.md 与服务端派发时持有的题面不一致。"
-        + "门禁判定用的始终是服务端那一份，改动工作区副本不会改变判定，但被检查方改写考题本身就是可疑信号——"
-        + "把该文件恢复为派发时的原样，不要编辑它；需要记录自己的理解时另写一个文件。",
-      );
-    }
-  }
-  for (const finding of issues.from(
-    questionCoverageFindings,
-    questionCoverageText,
-    reportText,
-    searchLogText,
-    new Set(claimIds),
-    briefQuestions,
-  )) {
-    if (finding.kind === "shape") {
-      issues.push(
-        `question-coverage.json 台账格式无效：${finding.detail} `
-        + "台账把题面「需要回答的问题」拆成原子子问，一条一个条目："
-        + '{"schemaVersion":1,"entries":[{"id":"2.3","question":"<子问原文>","status":"answered","reportLines":[64],"claimIds":["CLM-005"]}]}；'
-        + 'status 为 "gap" 的条目改为给出 searches:[{"query":"<实际执行过的检索式>","database":"PubMed","searchedAt":"YYYY-MM-DD"}]。',
-      );
-    } else if (finding.kind === "answered") {
-      issues.push(
-        `question-coverage.json 条目 ${finding.id}（「${finding.question.slice(0, 60)}」）声明 answered，但${finding.detail}`,
-      );
-    } else if (finding.kind === "gap-search") {
-      issues.push(
-        `question-coverage.json 条目 ${finding.id}（「${finding.question.slice(0, 60)}」）声明 gap，${finding.detail}`,
-      );
-    } else if (finding.kind === "gap-asserted") {
-      issues.push(
-        `question-coverage.json 条目 ${finding.id}（「${finding.question.slice(0, 60)}」）登记为 gap，`
-        + `${finding.section}第 ${finding.line} 行却就同一主题「${finding.topic}」${finding.family}：「${finding.sentence}」。`
-        + "摘要、结论与临床实践要点是读者取走答案的地方，缺口不能在那里变成结论。"
-        + "要么把这一句改写成如实的缺口陈述（「未检索到该终点的直接证据，这是一处证据空白」是允许的，也是应当写的），"
-        + "要么这条子问其实有答案，把台账改成 answered 并给出正文行号。",
-      );
-    } else if (finding.kind === "brief-missing") {
-      issues.push(
-        `题面第 ${finding.number} 问在 question-coverage.json 中没有任何条目：「${String(finding.question).slice(0, 80)}」。`
-        + `题面共 ${finding.total} 问，台账必须逐问登记——不得合并、不得重新编号、不得少列。`
-        + "若这一问全篇未答，它仍然是一问：登记为 gap，给出真跑过的检索式，并在正文中如实写出这处空白。",
-      );
-    } else if (finding.kind === "brief-extra") {
-      issues.push(
-        `question-coverage.json 台账格式无效：条目 ${finding.ids.join("、")} 的编号指向题面第 ${finding.number} 问，`
-        + `而题面只有 ${finding.total} 问。条目编号的首位数字必须是它所覆盖的题面问号。`,
-      );
-    } else if (finding.kind === "brief-mismatch") {
-      issues.push(
-        `question-coverage.json 条目 ${finding.id} 的 question 不是题面第 ${finding.number} 问的原文：`
-        + `题面第 ${finding.number} 问是「${String(finding.question).slice(0, 60)}」。`
-        + (finding.elsewhere
-          ? `这一条转录的是题面第 ${finding.elsewhere} 问——一条条目只能覆盖一问，两问就是两条条目。`
-          : "台账条目必须逐字转录它所覆盖的那一问（或其中一项子问），自拟的概括无法核对。"),
-      );
-    } else if (finding.kind === "brief-question-absent") {
-      issues.push(
-        `question-coverage.json 条目 ${finding.ids.join("、")} 把题面第 ${finding.number} 问登记为 answered，`
-        + `但这一问点名的 ${finding.total} 项——「${finding.terms.join("」「")}」`
-        + (finding.more ? `等` : "")
-        + "——在报告全篇一项都没有出现。"
-        + "一项不落地全部缺席，通常意味着这一问整个没有作答：把它答出来并挂上证据，"
-        + "或者为它单列 status 为空缺的台账条目并在正文写明未检索到直接证据。",
-      );
-    } else if (finding.kind === "brief-item") {
-      issues.push(
-        `question-coverage.json 条目 ${finding.ids.join("、")} 把题面第 ${finding.number} 问登记为 answered，`
-        + `但这一问点名的「${finding.terms.join("」「")}」`
-        + (finding.more ? `等 ${finding.terms.length + finding.more} 项` : "")
-        + "在报告全篇一次未出现，同一列举中的其余项则都在正文里。"
-        + "题面逐项点名的东西，要么答它并挂上证据，要么为它单列一条 status 为空缺的台账条目，"
-        + "并在正文中写明未检索到该项的直接证据——整项无声消失不是这两者中的任何一种。",
-      );
-    }
-  }
-
-  if (deepResearch) {
-    const searchLog = parseJsonObject(searchLogText);
-    const queries = Array.isArray(searchLog?.queries) ? searchLog.queries : [];
-    const sourceRecords = Array.isArray(searchLog?.sourceRecords) ? searchLog.sourceRecords : [];
-    const normalizedQueryEntries = queries.map((entry) => ({
-      database: typeof entry?.database === "string" ? entry.database.trim().toLowerCase() : "",
-      query: normalizedSearchQuery(entry?.query),
-    }));
-    const normalizedQueries = new Set(
-      normalizedQueryEntries.map((entry) => entry.query).filter(Boolean),
+  // Padding stays a finding, but its own: the de-duplicated count used to be
+  // the denominator for resolution, so listing one source twice silently made
+  // the last reference "not resolve". Say what is actually true instead.
+  issues.region("reference-list-duplication");
+  if (reportReferenceNumbers.size > reportReferenceCount) {
+    issues.push(
+      `The numbered reference list gives ${reportReferenceNumbers.size} entries for ${reportReferenceCount} distinct sources; the same source is listed under more than one number.`,
     );
-    const searchedDatabases = new Set(
-      normalizedQueryEntries.map((entry) => entry.database).filter(Boolean),
-    );
-    const documentedSearches = new Set(
-      normalizedQueryEntries
-        .filter((entry) => entry.database && entry.query)
-        .map((entry) => `${entry.database}\u0000${entry.query}`),
-    );
-    const includedRecords = sourceRecords.filter((entry) => entry?.included === true);
-    const inspectedRecords = includedRecords.filter((entry) => (
-      ["full_text", "abstract", "official_page", "structured_record"].includes(entry?.accessLevel)
-      && entry.accessLevel !== "bibliographic_only"
-    ));
-    const screening = searchLog?.screening;
-
-    issues.region("search-log-schema");
-    if (searchLog?.schemaVersion !== 1) {
-      issues.push("clinical-evidence-search.json must use schemaVersion 1.");
-    }
-    issues.region("search-log-queries");
-    if (!queries.length || documentedSearches.size !== queries.length) {
-      issues.push("The search log must contain completed, non-empty, non-duplicate search queries.");
-    }
-    issues.region("search-log-execution-match");
-    if (Array.isArray(executedSearchQueries)) {
-      const executed = new Set(
-        executedSearchQueries
-          .map((value) => normalizedSearchQuery(value))
-          .filter(Boolean),
-      );
-      const undocumented = [...normalizedQueries].filter((query) => !executed.has(query));
-      const unlogged = [...executed].filter((query) => !normalizedQueries.has(query));
-      if (undocumented.length || unlogged.length) {
-        // The run already knows which searches succeeded, so telling the agent
-        // only that the log "must match" leaves it to guess which of eighteen
-        // entries is wrong. Name them.
-        const detail = [
-          unlogged.length ? `missing from the log: ${unlogged.slice(0, 4).map((q) => `"${q.slice(0, 60)}"`).join(", ")}` : "",
-          undocumented.length ? `logged but never executed: ${undocumented.slice(0, 4).map((q) => `"${q.slice(0, 60)}"`).join(", ")}` : "",
-        ].filter(Boolean).join("; ");
-        issues.push(`The search log must exactly match successful evidence-search calls from the same run — ${detail}.`);
-      }
-    }
-    issues.region("search-database-breadth");
-    if (searchedDatabases.size < 2) {
-      issues.push("Deep research must search at least two distinct evidence databases or source classes.");
-    }
-    issues.region("screening-flow-coherence");
-    if (
-      !screening
-      || !Number.isInteger(screening.recordsIdentified)
-      || screening.recordsIdentified < 1
-      || !Number.isInteger(screening.recordsAfterDeduplication)
-      || screening.recordsAfterDeduplication < 1
-      || screening.recordsAfterDeduplication > screening.recordsIdentified
-      || !Number.isInteger(screening.sourcesIncluded)
-      || screening.sourcesIncluded < 1
-      || screening.sourcesIncluded > screening.recordsAfterDeduplication
-      || screening.sourcesIncluded !== includedRecords.length
-    ) {
-      issues.push("The search log must preserve a coherent, internally consistent screening flow.");
-    }
-    issues.region("source-record-access-level");
-    if (inspectedRecords.length !== includedRecords.length) {
-      // Name the record. A title-only source carried into the included set is a
-      // specific reference the agent can drop or go and read, not a property of
-      // the log as a whole.
-      const uninspected = includedRecords
-        .filter((entry) => !inspectedRecords.includes(entry))
-        .map((entry) => `[${entry?.referenceNumber ?? "?"}] ${entry?.accessLevel ?? "no access level"}`)
-        .slice(0, 5);
+  }
+  issues.region("reference-number-unresolved");
+  const unresolved = [...new Set(claims
+    .map((claim) => claim?.referenceNumber)
+    .filter((number) => Number.isInteger(number) && !reportReferenceNumbers.has(number)))].sort((a, b) => a - b);
+  if (unresolved.length) {
+    issues.push(`The numbered reference list has no entry for reference ${unresolved.join(", ")}.`);
+  }
+  // The practical section's line range, so a mispaired anchor there is
+  // blocking: that section is already the one place the gate refuses derived
+  // claims and requires a marker on every action line.
+  const practicalLastLine = practical ? practicalFirstLine + practical.split("\n").length - 1 : 0;
+  for (const finding of issues.from(citationClosureFindings, reportText, claimsById)) {
+    if (finding.clause === "A") {
       issues.push(
-        `Every included source record must have an inspected evidence access level; ${uninspected.join(", ")} `
-        + "was carried into the included set without one. Read it, or exclude it — a title-only record supports nothing.",
+        `参考文献 [${finding.number}] 在正文中从未被引用：「${finding.body}」。`
+        + "已检索但未纳入的来源不进编号表——要么在正文中真正引用它，要么把它从编号表中移除并重新编号。",
       );
-    }
-    issues.region("run-receipt-statistics");
-    const stats = runReceipt?.stats;
-    if (
-      !stats
-      || !Number.isInteger(stats.totalSearches)
-      || stats.totalSearches !== queries.length
-      || !Number.isInteger(stats.recordsIdentified)
-      || stats.recordsIdentified !== screening?.recordsIdentified
-      || !Number.isInteger(stats.recordsAfterDeduplication)
-      || stats.recordsAfterDeduplication !== screening?.recordsAfterDeduplication
-      || !Number.isInteger(stats.sourcesIncluded)
-      || stats.sourcesIncluded !== screening?.sourcesIncluded
-      || !Number.isInteger(stats.distinctPreservedSources)
-      || stats.distinctPreservedSources !== distinctSuccessfulSources.size
-    ) {
-      issues.push("The run-receipt statistics must exactly match the search log and distinct preserved-source count.");
-    }
-    // Padding stays a finding, but its own: the de-duplicated count used to be
-    // the denominator for resolution, so listing one source twice silently made
-    // the last reference "not resolve". Say what is actually true instead.
-    issues.region("reference-list-duplication");
-    if (reportReferenceNumbers.size > reportReferenceCount) {
+    } else if (finding.clause === "B") {
       issues.push(
-        `The numbered reference list gives ${reportReferenceNumbers.size} entries for ${reportReferenceCount} distinct sources; the same source is listed under more than one number.`,
+        `正文引用 [${finding.number}] 在参考文献表中没有对应条目：补上该条目，或改引真正支持这句话的编号。`,
       );
-    }
-    issues.region("reference-number-unresolved");
-    const unresolved = [...new Set(claims
-      .map((claim) => claim?.referenceNumber)
-      .filter((number) => Number.isInteger(number) && !reportReferenceNumbers.has(number)))].sort((a, b) => a - b);
-    if (unresolved.length) {
-      issues.push(`The numbered reference list has no entry for reference ${unresolved.join(", ")}.`);
-    }
-    for (const finding of issues.from(screeningLedgerFindings, reportText, searchLog)) {
-      if (finding.leg === "A") {
-        issues.push(
-          `检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。`
-          + `本次不一致：正文写「${finding.clause}」中的${screeningFlowNames[finding.key]} ${finding.stated}，`
-          + `检索记录 ${finding.key} = ${finding.held}。`
-          + "请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
-        );
-      } else if (finding.leg === "B1") {
-        issues.push(
-          `参考文献 ${finding.numbers.map((number) => `[${number}]`).join("、")} 在正文中被引用或列入参考文献表，`
-          + "但在 clinical-evidence-search.json 的 sourceRecords 中 included=false（或该条记录根本不存在）。"
-          + "要么读到可核验层级并置 included=true、同步更新 screening 计数，"
-          + "要么删除这条引用——题录层级的记录支撑不了任何陈述。",
-        );
-      } else {
-        issues.push(
-          `参考文献表共 ${finding.listed} 条编号条目，screening.sourcesIncluded = ${finding.included}。`
-          + "编号表必须恰好是 included=true 的来源集合：同数量、同编号。",
-        );
-      }
-    }
-    // The practical section's line range, so a mispaired anchor there is
-    // blocking: that section is already the one place the gate refuses derived
-    // claims and requires a marker on every action line.
-    const practicalLastLine = practical ? practicalFirstLine + practical.split("\n").length - 1 : 0;
-    for (const finding of issues.from(citationClosureFindings, reportText, claimsById, searchLog)) {
-      if (finding.clause === "A") {
-        issues.push(
-          `参考文献 [${finding.number}] 在正文中从未被引用：「${finding.body}」。`
-          + "已检索但未纳入的来源不进编号表——要么在正文中真正引用它，"
-          + "要么把它写入 clinical-evidence-search.json 的 sourceRecords（\"included\": false 并给出 exclusionReason）后从编号表中移除并重新编号。",
-        );
-      } else if (finding.clause === "B") {
-        issues.push(
-          `正文引用 [${finding.number}] 在参考文献表中没有对应条目：补上该条目，或改引真正支持这句话的编号。`,
-        );
-      } else if (finding.clause === "C") {
-        issues.push(
-          `报告第 ${finding.line} 行把书目标识符放进了引用位：「${finding.bracket}」。`
-          + "行内 PMID/DOI 不能代替编号引用——为该来源分配参考文献编号与 claim，或按未纳入来源记入检索日志。",
-        );
-      } else if (finding.clause === "D") {
-        const detail = `${finding.claimId}，但该行只引用了 [${finding.cited.join(", ") || "无"}]，`
-          + `而 ${finding.claimId} 的 referenceNumber 是 ${finding.allowed.join(", ")}。`
-          + "把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。";
-        issues.push(finding.line >= practicalFirstLine && finding.line <= practicalLastLine
-          ? `The practical section's report line ${finding.line} anchors claim ${detail}`
-          : `Report line ${finding.line} anchors claim ${detail}`);
-      } else if (finding.clause === "E1") {
-        issues.push(
-          `clinical-evidence-search.json 的 sourceRecords[${finding.index}] 标记为 "included": false 却没有 exclusionReason：`
-          + "未纳入的来源必须写明排除理由。",
-        );
-      } else {
-        issues.push(
-          `clinical-evidence-search.json 的 sourceRecords[${finding.index}] 标记为 "included": false，`
-          + `却仍以编号 [${finding.number}] 留在参考文献表中：读到可核验层级并置 included=true，或从编号表中移除并重新编号。`,
-        );
-      }
-    }
-    // references.bib: a real cross-check — it must actually contain every cited
-    // source, not merely enough @entries to hit a count.
-    issues.region("bibliography-entry-count");
-    const bibText = String(referencesText ?? "");
-    if (bibliographyEntryCount(bibText) < reportReferenceCount) {
-      issues.push("references.bib must contain a bibliography entry for every numbered report reference.");
-    }
-    issues.region("bibliography-source-url");
-    const citedSourceUrls = [...new Set(claims.flatMap((claim) => (
-      claim?.claimType === "synthesized" && Array.isArray(claim?.supportingSources)
-        ? claim.supportingSources.map((source) => source?.sourceUrl)
-        : [claim?.sourceUrl]
-    )).filter((url) => typeof url === "string" && url))];
-    // Exact URL membership, not substring — otherwise .../source-1 would falsely
-    // match inside .../source-10.
-    const bibUrls = new Set([...bibText.matchAll(/https?:\/\/[^\s{}<>"'`)\]]+/g)].map((match) => match[0]));
-    if (citedSourceUrls.some((url) => !bibUrls.has(url))) {
-      issues.push("references.bib must contain a bibliography entry for every cited source URL.");
-    }
-    // citation-ledger.csv: a real cross-check — every matrix claim appears exactly
-    // once and each row's reference number matches the claim it names.
-    //
-    // Matched by column name, in any order. The header used to be positional —
-    // exactly claimId, referenceNumber, supportQuote in the first three columns
-    // — which no instruction stated and the preflight the agent is told to run
-    // until it passes never checked. Four consecutive production runs failed it;
-    // one rewrote its header three times, got the first two columns right, and
-    // could not guess that the third had to be the quote. A schema that is
-    // enforced but never written down is not a schema the run can satisfy, and
-    // column order carries no meaning here anyway.
-    // The ledger maps cited claims to the sources that carry them. A derived
-    // result cites no source of its own, so it is not a row here; its inputs
-    // are, and they are what a reader traces.
-    issues.region("citation-ledger-schema");
-    const citedClaims = claims.filter((claim) => (claim?.claimType ?? "direct") !== "derived");
-    const ledgerRecords = parseCsvRecords(citationLedgerText);
-    const ledgerHeader = (ledgerRecords[0] ?? []).map((cell) => cell.trim().toLowerCase().replace(/[_\s]/g, ""));
-    const claimIdColumn = ledgerHeader.indexOf("claimid");
-    const referenceColumn = ledgerHeader.indexOf("referencenumber");
-    // A run that records the quote as supportQuoteVerified has recorded the
-    // quote; the prefix is the requirement.
-    const quoteColumn = ledgerHeader.findIndex((name) => name.startsWith("supportquote"));
-    if (claimIdColumn < 0 || referenceColumn < 0 || quoteColumn < 0 || ledgerRecords.length < citedClaims.length + 1) {
+    } else if (finding.clause === "C") {
       issues.push(
-        "citation-ledger.csv must have a header naming claimId, referenceNumber and supportQuote columns (any order, extra columns allowed) and one row per evidence-matrix claim.",
+        `报告第 ${finding.line} 行把书目标识符放进了引用位：「${finding.bracket}」。`
+        + "行内 PMID/DOI 不能代替编号引用——为该来源分配参考文献编号与 claim，或把它从这句话里删去。",
       );
-    } else {
-      const ledgerRef = new Map();
-      for (const row of ledgerRecords.slice(1)) {
-        const claimId = String(row[claimIdColumn] ?? "").trim();
-        if (claimId) ledgerRef.set(claimId, String(row[referenceColumn] ?? "").trim());
-      }
-      const matrixIds = new Set(citedClaims.map((claim) => claim?.claimId));
-      const ledgerMismatch = ledgerRef.size !== matrixIds.size
-        || [...matrixIds].some((id) => !ledgerRef.has(id))
-        || citedClaims.some((claim) => ledgerRef.get(claim?.claimId) !== String(claim?.referenceNumber));
-      issues.region("citation-ledger-rows");
-      if (ledgerMismatch) {
-        issues.push("citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.");
-      }
+    } else if (finding.clause === "D") {
+      const detail = `${finding.claimId}，但该行只引用了 [${finding.cited.join(", ") || "无"}]，`
+        + `而 ${finding.claimId} 的 referenceNumber 是 ${finding.allowed.join(", ")}。`
+        + "把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。";
+      issues.push(finding.line >= practicalFirstLine && finding.line <= practicalLastLine
+        ? `The practical section's report line ${finding.line} anchors claim ${detail}`
+        : `Report line ${finding.line} anchors claim ${detail}`);
     }
-    // citation-audit.md: keep the required-dimension check, and make it real by
-    // requiring the audit to name at least one source identifier it actually
-    // examined, so it cannot pass as run-independent boilerplate.
-    issues.region("citation-audit-dimensions");
-    if (
-      !nonEmpty(citationAuditText)
-      || !/(?:unresolved|未解析)/i.test(citationAuditText)
-      || !/(?:duplicate|重复)/i.test(citationAuditText)
-      || !/(?:retract|撤稿|更正|correction)/i.test(citationAuditText)
-      || !/(?:metadata|元数据)/i.test(citationAuditText)
-      || !/(?:claim mismatch|claim-source|claims?.{0,60}(?:verified|checked|audited)|主张不匹配|引文不匹配|主张.{0,20}(?:核对|验证|审计)|逐条.{0,20}(?:核对|验证|审计))/i.test(citationAuditText)
-    ) {
-      issues.push("citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.");
-    }
-    issues.region("citation-audit-identifier");
-    const auditIdentifiers = claims.flatMap((claim) => (
-      claim?.claimType === "synthesized" && Array.isArray(claim?.supportingSources)
-        ? claim.supportingSources.map((source) => source?.identifier)
-        : [claim?.identifier]
-    )).filter((id) => typeof id === "string" && id.trim());
-    if (nonEmpty(citationAuditText) && auditIdentifiers.length && !auditIdentifiers.some((id) => String(citationAuditText).includes(id))) {
-      issues.push("citation-audit.md must reference at least one real audited source identifier from the evidence matrix.");
-    }
-    issues.region("claim-inline-citation");
-    for (const [index, claim] of claims.entries()) {
-      // A derived result is not a source and has no reference number of its
-      // own; its inputs carry the citations, and it carries the derived label.
-      if ((claim?.claimType ?? "direct") === "derived") continue;
-      const marker = `<!-- claim:${claim?.claimId} -->`;
-      const claimLine = String(reportText).split("\n").find((line) => line.includes(marker)) ?? "";
-      if (!standardCitationNumbers(claimLine).has(claim?.referenceNumber)) {
-        issues.push(`claims[${index}] is not paired with its standard numbered in-text citation.`);
-      }
+  }
+  issues.region("claim-inline-citation");
+  for (const [index, claim] of claims.entries()) {
+    // A derived result is not a source and has no reference number of its
+    // own; its inputs carry the citations, and it carries the derived label.
+    if ((claim?.claimType ?? "direct") === "derived") continue;
+    const marker = `<!-- claim:${claim?.claimId} -->`;
+    const claimLine = String(reportText).split("\n").find((line) => line.includes(marker)) ?? "";
+    if (!standardCitationNumbers(claimLine).has(claim?.referenceNumber)) {
+      issues.push(`claims[${index}] is not paired with its standard numbered in-text citation.`);
     }
   }
 
-  issues.region("run-receipt-shape");
-  if (!runReceipt || typeof runReceipt !== "object" || Array.isArray(runReceipt)) {
-    issues.push("clinical-evidence-run.json must be an object.");
-  } else {
-    issues.region("run-receipt-status");
-    if (runReceipt.status !== "succeeded") issues.push("The clinical evidence run receipt is not succeeded.");
-    issues.region("run-receipt-source-artifacts");
-    if (!Array.isArray(runReceipt.successfulSourceArtifacts)) {
-      issues.push("The run receipt must name the distinct successful source artifacts.");
-    } else {
-      if (runReceipt.successfulSourceArtifacts.some((/** @type {unknown} */ value) => !validSourceArtifactPath(value))) {
-        issues.push("Every successful source artifact must be a safe .evimed-sources workspace path.");
-      }
-      if (!distinctSuccessfulSources.size) {
-        issues.push("The run receipt must name the distinct successful source artifacts.");
-      }
-    }
-    issues.region("deep-research-source-count");
-    if (deepResearch && successfulArtifacts.size !== distinctSuccessfulSources.size) {
-      issues.push("Deep-research source counts must use one canonical text artifact per distinct document; companion XML and Markdown files cannot be counted twice.");
-    }
-    issues.region("run-receipt-quality-checks");
-    const checks = runReceipt.qualityChecks;
-    if (!checks || typeof checks !== "object" || Array.isArray(checks) || !Object.values(checks).length || Object.values(checks).some((value) => value !== true)) {
-      issues.push("All declared run-receipt quality checks must pass.");
-    }
-  }
-
-  // Bookkeeping checks run and are counted; they report nothing (see
-  // CLINICAL_CHECK_TIERS).
-  /** @type {Record<string, number>} */
-  const silencedChecks = {};
   const detected = collapseClaimFieldIssues(issues.all());
-  const existing = detected.filter((entry) => {
-    if (clinicalCheckTier(entry.check) !== "silent") return true;
-    silencedChecks[String(entry.check)] = (silencedChecks[String(entry.check)] ?? 0) + 1;
-    return false;
-  });
   /** @param {AttributedIssue} entry */
   const withholds = (entry) => {
     const tier = clinicalCheckTier(entry.check);
     return (tier === "blocking" || tier === "safety") && !degradableIssue(entry.text);
   };
-  const reviewCoverage = reviewMethodsFindings(parseJsonObject(searchLogText));
-  // Method accounting is observable before it can become a blocking rule.
-  // Both delivery entrypoints receive these same findings; the original
-  // blocking set remains unchanged, including when the extension is malformed.
-  const reported = [...existing, ...reviewCoverage.issues];
-  const reportedTexts = reported.map((entry) => entry.text);
 
   return Object.freeze({
-    valid: existing.length === 0,
-    issues: Object.freeze(reportedTexts),
-    blockingIssues: Object.freeze(existing.filter(withholds).map((entry) => entry.text)),
-    // The subset a reader is shown first: clinical framing, not bookkeeping.
-    safetyIssues: Object.freeze(existing.filter((entry) => clinicalCheckTier(entry.check) === "safety" && withholds(entry)).map((entry) => entry.text)),
-    silencedChecks: Object.freeze(silencedChecks),
-    // Everything every check found, before tiering, each with the tier that
-    // decided what became of it. What a false-positive distribution is computed
-    // over, and what a test of a check's own logic reads: `issues` is only what
-    // the run and the reader are told.
-    findings: Object.freeze([
-      ...detected.map((entry) => ({ ...entry, degradable: degradableIssue(entry.text) })),
-      // Method accounting never withheld a package, whatever its tier.
-      ...reviewCoverage.issues.map((entry) => ({ ...entry, degradable: true })),
-    ].map((entry) => Object.freeze({
-      check: entry.check, text: entry.text, tier: clinicalCheckTier(entry.check), degradable: entry.degradable,
+    valid: detected.length === 0,
+    issues: Object.freeze(detected.map((entry) => entry.text)),
+    blockingIssues: Object.freeze(detected.filter(withholds).map((entry) => entry.text)),
+    // The subset a reader is shown first: clinical framing.
+    safetyIssues: Object.freeze(detected.filter((entry) => clinicalCheckTier(entry.check) === "safety" && withholds(entry)).map((entry) => entry.text)),
+    // Every finding with the tier that decided what became of it. What a
+    // false-positive distribution is computed over, and what a test of a
+    // check's own logic reads.
+    findings: Object.freeze(detected.map((entry) => Object.freeze({
+      check: entry.check, text: entry.text, tier: clinicalCheckTier(entry.check), degradable: degradableIssue(entry.text),
     }))),
     // The same findings in the same order, each naming the check that raised
     // it. `issues` stays the strings the repair loop is fed, byte for byte;
     // this is what makes a per-check false-positive rate computable at all.
-    issueChecks: Object.freeze(reported.map((entry) => Object.freeze({ check: entry.check, text: entry.text }))),
+    issueChecks: Object.freeze(detected.map((entry) => Object.freeze({ check: entry.check, text: entry.text }))),
     claimIds: Object.freeze(claimIds),
     sourceDomains: Object.freeze([...sourceDomains].sort()),
-    reviewCoverage: Object.freeze(reviewCoverage.metrics),
-    // Not an issue: nothing here is the run's fault and nothing here is
-    // repairable by it, so it must not send a finished package back round the
-    // repair loop. It rides on the delivery as a notice instead — the one thing
-    // that must never happen is a package delivered as though the brief had
-    // been checked when it was not.
-    coverageDegradedNotice,
   });
 }
 
@@ -5261,9 +3520,10 @@ checkedBy(runtimeLeakageLine, "runtime-leakage");
 
 /**
  * The four Apodex verification-gate metrics (§8.1), computed mechanically from
- * the evidence matrix and the citation ledger. They are notices, not blocks:
- * the thresholds that would make them blocking do not exist yet, and a metric
- * whose threshold nobody has calibrated is a coin toss dressed as a gate.
+ * the evidence matrix and, for a contract that has one, the citation ledger.
+ * They are notices, not blocks: the thresholds that would make them blocking do
+ * not exist yet, and a metric whose threshold nobody has calibrated is a coin
+ * toss dressed as a gate.
  * @param {{ matrix?: any, citationLedgerText?: string, staleEvidenceCount?: number }} input
  * @returns {{ citationCoverage: number, confidenceMix: Record<string, number>, disputedShare: number, unresolved: number }}
  */
@@ -5410,8 +3670,7 @@ export function clinicalEvidenceAdvisoryNotes(reportText) {
   }
 
   // A substitution conclusion in a report that never says whether a direct
-  // comparison exists at all. (When it says one does not, the gate blocks; this
-  // is the case where the axis was simply never filled.)
+  // comparison exists at all: the axis was simply never filled.
   if (!directComparisonMentionPattern.test(body)) {
     for (const [index, line] of body.split("\n").entries()) {
       const conclusion = substitutionConclusion(line);

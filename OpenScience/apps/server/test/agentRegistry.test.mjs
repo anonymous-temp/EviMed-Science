@@ -523,24 +523,16 @@ test("a capability that writes files declares its skills, its tools and every ou
     "citation-integrity",
     "manuscript-humanize",
   ]);
-  // Required is what a reader is handed and what verifies it. The six files in
-  // which the package describes itself are declared, delivered when written,
-  // and never demanded (2026-09-17).
+  // The package is what a reader is handed and what verifies it. The six files
+  // in which it described itself went optional on 2026-09-17 and were then
+  // deleted; only the autopilot's agenda delta remains optional.
   assert.deepEqual(
     clinicalEvidence.produces[0].outputs.filter((output) => output.required).map((output) => output.path),
     ["clinical-evidence-report.md", "clinical-evidence-matrix.json"],
   );
   assert.deepEqual(
     clinicalEvidence.produces[0].outputs.filter((output) => !output.required).map((output) => output.path),
-    [
-      "clinical-evidence-search.json",
-      "citation-ledger.csv",
-      "references.bib",
-      "citation-audit.md",
-      "clinical-evidence-run.json",
-      "question-coverage.json",
-      "agenda-delta.json",
-    ],
+    ["agenda-delta.json"],
   );
   const topic = catalogue.find((entry) => entry.id === "research-topic-selection").manifest;
   assert.ok(!topic.tools.includes("mcp__evimed__patent_search"), "a deployment-disabled tool cannot enter a delegated child");

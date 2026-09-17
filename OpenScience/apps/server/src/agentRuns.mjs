@@ -14,9 +14,7 @@ import {
 } from "./security.mjs";
 import {
   citationIntegrityIssues,
-  clinicalCheckTier,
   clinicalEvidencePackageErrorCode,
-  coverageJudgeContext,
   validateClinicalEvidencePackage,
 } from "./clinicalEvidenceQuality.mjs";
 import { socketToolResult } from "./dshRuntimeAdapter.mjs";
@@ -1053,18 +1051,6 @@ const evidenceSourceToolSuffixes = Object.freeze([
 // server's own in-memory copy instead, so this file is a convenience for the
 // run and never evidence about it.
 export const workspaceBriefPath = ".evimed-brief/research-brief.md";
-// Missing deliverables that earn a code of their own rather than the generic
-// one, because the generic one is discarded and these are repairable in place.
-const missingOutputErrorCodes = Object.freeze({
-  "question-coverage.json": "specialist_question_coverage_missing",
-});
-const missingOutputRepairAdvice = Object.freeze({
-  "question-coverage.json":
-    "Write one entry per atomic sub-question of the brief — split the numbered questions on 、, —, 或 and coordinate clauses — "
-    + 'as {"schemaVersion":1,"entries":[{"id":"2.3","question":"<the sub-question, transcribed>","status":"answered","reportLines":[64],"claimIds":["CLM-005"]}]}. '
-    + 'An entry with "status":"gap" carries searches:[{"query":"<a search this run actually ran>","database":"PubMed","searchedAt":"YYYY-MM-DD"}] instead, '
-    + "and every query must appear in clinical-evidence-search.json. Everything the ledger needs is already in the package you have written.",
-});
 
 
 // Transport died before either side could say anything. The MCP client reports
@@ -1286,23 +1272,6 @@ function successfulToolPart(part) {
     && parsedToolResultStatus(part) !== "error";
 }
 
-function successfulEvidenceSearchQueries(messages) {
-  const searchTools = [
-    "literature_search",
-    "guideline_search",
-    "biomedical_source_search",
-  ];
-  return messages
-    .flatMap((message) => message?.parts ?? [])
-    .filter((part) => (
-      successfulToolPart(part)
-      && typeof part.tool === "string"
-      && searchTools.some((tool) => part.tool === tool || part.tool.endsWith(`_${tool}`))
-    ))
-    .map((part) => part?.state?.input?.query)
-    .filter((query) => typeof query === "string" && query.trim());
-}
-
 function terminalFromMessages(messages) {
   for (const message of messages) {
     const error = message?.info?.error;
@@ -1366,17 +1335,15 @@ function clinicalEvidenceRepairPrompt(issues, shrinkage = null, revisionRequired
     "When a capability child wrote the package, this resumed root session is its authenticated repair successor. Continue from the existing files and preserved sources; do not delegate any file or source to another child.",
     ...measured,
     ...(revisionRequired ? ["The local gate already accepted and froze this deliverable. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. The server has already retained the accepted bytes outside the runtime workspace; the tool opens a new revision, after which you must repair and resubmit the new bytes."] : []),
-    "Revise the named files in the existing academic package in place: clinical-evidence-report.md, clinical-evidence-matrix.json, clinical-evidence-search.json, citation-ledger.csv, references.bib, citation-audit.md, or clinical-evidence-run.json.",
+    "Revise the named files in the existing academic package in place: clinical-evidence-report.md or clinical-evidence-matrix.json.",
     "Patch clinical-evidence-report.md with the edit tool, changing only the lines the issues name. Do not rewrite it with the write tool: replacing the whole file regenerates it from what you still hold in context, which after a long run is a compressed recollection, so the report comes back shorter and you cannot tell that it did. Measured across four production repairs, every whole-file rewrite lost content — one shed 1,863 characters and the next 4,125 — while targeted edits held the report steady and ended slightly longer.",
-    "The same applies to the other deliverables: change what an issue names and leave the rest alone, preserving already valid evidence and source metadata. Rewriting a whole file is warranted only when its structure is what the issue rejects, such as a JSON deliverable that no longer parses.",
-    "Every JSON deliverable must remain strict JSON. Escape embedded quotation marks correctly instead of changing scientific wording to work around JSON syntax.",
+    "The same applies to the matrix: change what an issue names and leave the rest alone, preserving already valid evidence and source metadata. Rewriting it whole is warranted only when its structure is what the issue rejects, such as JSON that no longer parses.",
+    "The matrix must remain strict JSON. Escape embedded quotation marks correctly instead of changing scientific wording to work around JSON syntax.",
     "Never create or modify a .evimed-sources artifact. When a material claim lacks usable support, go and retrieve one with the approved evidence tools. Deleting the claim is the last resort, not the first: it satisfies the gate while making the analysis smaller, and a report that answers the question is worth more than a shorter one that passes. If you do drop a claim, say in your reply which claim went and why no source could support it.",
     "Treat repeated numeric-fact messages as one report-wide audit task. For each number, first attach it to the citation and hidden matrix claim marker that support it; drop only the numbers that are genuinely incidental to the argument. Do not resolve this by stripping the report of its quantitative content — effect estimates, sample sizes and confidence intervals are the analysis, not decoration.",
     "This revision must not leave the report thinner than it was. You are repairing traceability, not trimming to fit; if the corrected report is materially shorter, you have removed evidence instead of grounding it.",
-    "The search log must exactly match successful evidence-search calls from this run. Never invent, duplicate, or omit completed searches.",
     "Improve scientific synthesis, comparison, clinical reasoning, evidence appraisal, and applicability where the issues identify a substantive gap. A weighed cross-source conclusion (a synthesized claim backed by at least two supporting sources) is preferable to a chain of single-source restatements, and the report must state its bottom line early in readable prose. Do not pad the report, repeat conclusions, or add claims merely to increase counts.",
     "Every evidence-matrix claim must appear in the report on a line with its exact numbered citation and hidden claim marker. Emergency-call support quotes must include both the call action and the qualifying symptom condition.",
-    "citation-audit.md must record the citation checks actually performed and their findings, including unresolved identifiers, duplicates, corrections or retractions, metadata-only records, and claim-source mismatches.",
     "Keep only limitations that materially affect interpretation, and synthesize them rather than writing a checklist. Remove tool names, gateway names, and first-person retrieval diaries from the analysis; a material limit on evidence accessibility (for example, a guideline whose full text is not openly available) belongs in the Limitations section, stated as a property of the evidence base rather than a narration of the retrieval run.",
     "The safety-first practical section must come before the reference list. Remove unsupported self-care details; every numbered step and bullet must have direct support, a numbered citation, and a matching hidden claim marker.",
     // The check is a tool call now, not a script.
@@ -1778,7 +1745,6 @@ async function requiredSpecialistArtifacts(
   sourceArtifactProvenance = new Map(),
   assistantMessages = [],
   briefText = null,
-  judgeCoverage = null,
 ) {
   // Notices a check raises that do not decide the verdict. Collected here
   // because the checks below each return the moment they conclude, so a finding
@@ -1797,7 +1763,6 @@ async function requiredSpecialistArtifacts(
     assistantMessages,
     advisories,
     briefText,
-    judgeCoverage,
     skippedChecks,
   );
   const unchecked = skippedChecks.length > 0 ? { qualityUnchecked: true } : {};
@@ -1846,7 +1811,6 @@ async function loadedOrInjectedSkills(project, assistantMessages, run = null) {
  *  @param {any} assistantMessages
  *  @param {string[]} advisories
  *  @param {any} briefText
- *  @param {((context: any) => void)|null} judgeCoverage
  *  @param {string[]} skippedChecks
  *  @returns {Promise<SpecialistCompletionVerdict>}
  */
@@ -1858,7 +1822,6 @@ async function specialistCompletionOutcome(
   assistantMessages,
   advisories,
   briefText,
-  judgeCoverage = null,
   skippedChecks = [],
 ) {
   if (!run.effectiveAgentId) return { artifacts: [], errorCode: null };
@@ -1986,7 +1949,7 @@ async function specialistCompletionOutcome(
       ] };
       return {
         artifacts,
-        errorCode: missingOutputErrorCodes[relative] ?? "specialist_required_output_missing",
+        errorCode: "specialist_required_output_missing",
         // One absent file, whatever else the package would have been judged on:
         // no content rule below has run yet.
         qualityStructural: true,
@@ -1996,7 +1959,6 @@ async function specialistCompletionOutcome(
         ...(relative !== required[0] && artifacts.length > 0 ? { qualityDegradable: true, qualityUnverified: true } : {}),
         qualityIssues: [
           `The required deliverable ${relative} is not in the workspace. Write it at exactly that name, either at the workspace root or inside this deliverable\u0027s ${workspaceLayout.deliverablesDir}/<id>/ directory, before finishing.`,
-          ...(missingOutputRepairAdvice[relative] ? [missingOutputRepairAdvice[relative]] : []),
         ],
       };
     }
@@ -2151,23 +2113,15 @@ async function specialistCompletionOutcome(
         ],
       };
     }
-    // The run's own receipt is optional since 2026-09-17, and one that does not
-    // parse is read as absent: it is the run's account of itself, and nothing
-    // below depends on it any more.
-    let runReceipt = null;
-    try {
-      runReceipt = JSON.parse(files.get("clinical-evidence-run.json") ?? "null");
-    } catch { /* read as absent */ }
     const sourceArtifacts = new Map();
-    // Which preserved sources to read: the ones the claims themselves name,
-    // and whatever the run's receipt lists. It used to be the receipt alone,
-    // so a run that preserved five sources and omitted one field was failed
-    // whole; and a path with no provenance, or no file, ended the check for
-    // every other source too. Each gap is now named and the rest are read —
-    // a claim resting on a source that could not be read is reported by the
-    // validator as unverifiable, which is what it is.
+    // Which preserved sources to read: the ones the claims name, and nothing
+    // else. It used to be a list in the run's own receipt, which failed a run
+    // whole over one omitted field and let a path no claim cited decide the
+    // verdict; the receipt is gone. A path with no provenance, or no file, is
+    // named and the rest are still read — a claim resting on a source that
+    // could not be read is reported by the validator as one this run did not
+    // preserve, never as a misquotation.
     const namedPaths = [
-      ...(Array.isArray(runReceipt?.successfulSourceArtifacts) ? runReceipt.successfulSourceArtifacts : []),
       ...(Array.isArray(matrix?.claims) ? matrix.claims : []).flatMap((/** @type {any} */ claim) => [
         claim?.artifactPath,
         ...(Array.isArray(claim?.supportingSources) ? claim.supportingSources.map((/** @type {any} */ source) => source?.artifactPath) : []),
@@ -2198,7 +2152,7 @@ async function specialistCompletionOutcome(
         // run — a path typed from memory, a leftover from an earlier run, or a
         // file the run created itself.
         provenanceGap = true;
-        sourceGaps.push(`clinical-evidence-run.json lists ${relative}, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.`);
+        sourceGaps.push(`The evidence matrix cites ${relative}, but no evidence tool reported preserving that file during this run. Cite only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.`);
         continue;
       }
       const sourceFile = await readRequiredFile(project, relative);
@@ -2227,55 +2181,19 @@ async function specialistCompletionOutcome(
     const validation = validateClinicalEvidencePackage({
       reportText: files.get("clinical-evidence-report.md") ?? "",
       matrix,
-      runReceipt,
       sourceArtifacts,
-      executedSearchQueries: successfulEvidenceSearchQueries(assistantMessages),
-      searchLogText: files.get("clinical-evidence-search.json") ?? "",
-      referencesText: files.get("references.bib") ?? "",
-      citationLedgerText: files.get("citation-ledger.csv") ?? "",
-      citationAuditText: files.get("citation-audit.md") ?? "",
-      questionCoverageText: files.get("question-coverage.json") ?? "",
       briefText,
-      workspaceBriefText: (await readRequiredFile(project, workspaceBriefPath))?.text ?? null,
     });
-    // Said out loud whichever way the package goes: an advisory rides on a
-    // delivered run as a notice, and is appended to the issues of a failed one.
-    // The alternative — a coverage check that quietly does less after a restart
-    // — is a package delivered as if it had been checked against the brief.
-    // Only while the coverage check reports to somebody. It has been silent
-    // since 2026-09-17 (CLINICAL_CHECK_TIERS), and a delivery stamped "a check
-    // did not run" over a check whose findings reach nobody tells the reader
-    // about our plumbing, not about their report.
-    if (validation.coverageDegradedNotice && clinicalCheckTier("question-coverage") !== "silent") {
-      advisories.push(validation.coverageDegradedNotice);
-      // The notice explains it to a human. This is the same fact in the field a
-      // machine reads: the brief-versus-ledger comparison did not happen.
-      skippedChecks.push("brief-question-coverage");
-    }
-    // The semantic half, on a package that has already cleared every
-    // deterministic check that can withhold it. Deliberately last, deliberately
-    // conditional on there being nothing blocking: a package heading back round
-    // the repair loop will be judged when it comes back clean, and a model call
-    // per repair attempt is a cost with no reader on the other end.
-    //
-    // Started, not awaited. The judgement's median wall clock is 161 s (max 226
-    // s over 29 live runs) and this function is awaited by reconcileSession,
-    // which is awaited by the dispatch and start HTTP handlers — so awaiting it
-    // here hung a user's request for three minutes to compute something that
-    // cannot change the answer being computed. It produces notices only, so it
-    // is attached to the run when it comes back.
-    if (typeof judgeCoverage === "function" && validation.blockingIssues.length === 0) {
-      try {
-        judgeCoverage(coverageJudgeContext({
-          briefText,
-          questionCoverageText: files.get("question-coverage.json") ?? "",
-          reportText: files.get("clinical-evidence-report.md") ?? "",
-        }));
-      } catch {
-        // A judge that will not even start is a judge that did not run. It is
-        // not a reason to withhold a package that passed everything that can
-        // withhold it.
-      }
+    // A rule that did not run is said, not implied. The question-scoped safety
+    // rule reads the brief as the dispatcher holds it, in memory only, so a run
+    // that outlived a server restart is judged without it — and a package
+    // judged without a rule must not read like one that passed it.
+    if (briefText == null) {
+      advisories.push(
+        "本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」：服务端已不再持有这次运行的题面"
+        + "（题面只保存在服务进程内存里，服务重启后即丢失）。其余检查照常完成。",
+      );
+      skippedChecks.push("question-scoped-safety-rules");
     }
     // Which defect leads when a source named by the package had no tool
     // vouching for it: the same code that case has always carried.
@@ -3091,19 +3009,11 @@ export class AgentRunStore {
     // against where it started rather than against the previous attempt only.
     this.clinicalRepairReportSizes = new Map();
     // The brief each in-flight run was dispatched with, by run id. In memory
-    // only: it is what the delivery gate checks question coverage against, and
-    // it is far too large for the run ledger (see normalizeDispatchInput).
-    // A restart therefore loses it, and the gate degrades in the open rather
-    // than checking a brief the run itself could have written.
+    // only: the question-scoped safety rule reads it, and it is far too large
+    // for the run ledger (see normalizeDispatchInput). A restart therefore
+    // loses it, and the gate says so rather than reading a brief the run itself
+    // could have written.
     this.dispatchedBriefs = new Map();
-    // The semantic coverage judge (coverageJudge.mjs), or null in a deployment
-    // that has none. It is asked at most once per run: the entry is written
-    // before the call so a second pass over the same finished run — the monitor
-    // polls, and a repair loop re-enters this path — reuses the answer instead
-    // of paying for it again.
-    this.coverageJudge = options.coverageJudge ?? null;
-    /** @type {Map<string, Promise<{ notices: string[], judged?: boolean }>>} */
-    this.coverageJudgements = new Map();
     if (!this.model) throw new Error("AgentRunStore requires a configured model.");
   }
 
@@ -3515,53 +3425,6 @@ export class AgentRunStore {
     }
   }
 
-  /** One semantic coverage judgement per run, off the request path.
-   *
-   *  Started here and never awaited by the caller: the delivery decision does
-   *  not depend on it and must not wait three minutes for it. When it comes
-   *  back, its notices are appended to the run wherever the run has got to —
-   *  including after the run has finished, which is the normal case.
-   *
-   *  The cost ceiling is the other point: one run, one model call. The
-   *  in-flight promise is cached rather than its result, so two monitor passes
-   *  landing together do not both issue a call, and the entry survives a repair
-   *  round so a re-judged package is not paid for twice.
-   *  @param {any} project @param {string} runId @param {any} context */
-  scheduleCoverageJudgement(project, runId, context) {
-    // No judge, or nothing judgeable: no call, and nothing to remember.
-    if (!this.coverageJudge || !context) return null;
-    const existing = this.coverageJudgements.get(runId);
-    if (existing) return existing;
-    const pending = (async () => {
-      /** @type {any} */
-      let result;
-      try {
-        result = await this.coverageJudge.judge(context);
-      } catch {
-        // A judge that throws is a judge that did not run, and a run already
-        // delivered is not revisited for it.
-        result = { notices: [], judged: false, verdicts: [] };
-      }
-      const notices = Array.isArray(result?.notices) ? result.notices : [];
-      if (notices.length > 0) {
-        try {
-          // A judge that was asked and could not answer says so, and that is
-          // the "this layer was not checked" fact, not a finding about the
-          // package. It may only add the admission, never withdraw one.
-          const unchecked = result?.judged === false;
-          await this.appendQualityNotices(project, runId, notices, { unchecked });
-        } catch (error) {
-          process.stderr.write(
-            `coverage judgement could not be attached to ${runId}: ${error?.code ?? (error instanceof Error ? error.message : String(error))}\n`,
-          );
-        }
-      }
-      return result;
-    })();
-    this.coverageJudgements.set(runId, pending);
-    return pending;
-  }
-
   /** Append to what a run tells its reader, after the delivery decision.
    *
    *  A separate ledger event rather than a rewrite of the terminal one: the
@@ -3704,12 +3567,6 @@ export class AgentRunStore {
     if (!content && !structural) return null;
     // isolated: evimed_agent_run_learning_write_failed_total
     return this.recordLearning(project, runId, { repairRounds: { content, structural } }).catch(() => null);
-  }
-
-  /** Wait for every coverage judgement still in flight. Shutdown and tests
-   *  only — no request path may call this, which is the whole point of D2. */
-  async settleCoverageJudgements() {
-    await Promise.allSettled([...this.coverageJudgements.values()]);
   }
 
   /** Put a read-only copy of the brief in the workspace.
@@ -3988,17 +3845,6 @@ export class AgentRunStore {
       // The gate has already run by the time a run reaches a terminal state,
       // so the brief has done its work; keeping it would grow with every run.
       this.dispatchedBriefs.delete(runId);
-      // The judgement is not on the delivery path any more, so a terminal run
-      // routinely still has one in flight. Dropping the entry here would drop
-      // the only thing stopping a second, separately billed call — so it is
-      // released when the call settles, not when the run does.
-      const pendingJudgement = this.coverageJudgements.get(runId);
-      if (pendingJudgement) {
-        const release = () => {
-          if (this.coverageJudgements.get(runId) === pendingJudgement) this.coverageJudgements.delete(runId);
-        };
-        pendingJudgement.then(release, release);
-      }
     }
     if (outcome.transitioned) {
       try {
@@ -4159,9 +4005,6 @@ export class AgentRunStore {
           // after a restart has no brief here, and the gate is told so rather
           // than reading the copy in the workspace.
           this.dispatchedBriefs.get(run.id) ?? null,
-          // Fire-and-forget by design: the gate hands the judge its context and
-          // carries on deciding. See scheduleCoverageJudgement.
-          this.coverageJudge ? (context) => { this.scheduleCoverageJudgement(project, run.id, context); } : null,
         );
       } catch {
         completion = { artifacts: [], errorCode: "specialist_contract_unavailable" };
@@ -5355,10 +5198,6 @@ export class AgentRunStore {
     }
     this.projects.clear();
     this.dispatchOwners.clear();
-    // Not awaited: a judgement can take minutes and shutdown must not wait on
-    // one. Anything still in flight will fail its append against a store that
-    // is going away, which scheduleCoverageJudgement already swallows.
-    this.coverageJudgements.clear();
     this.clinicalRepairAttempts.clear();
     this.clinicalStructuralRepairAttempts.clear();
     this.clinicalRepairBaselineCursors.clear();

@@ -329,13 +329,7 @@ for (const dir of dirs) {
   const result = validateClinicalEvidencePackage({
     reportText: read("clinical-evidence-report.md"),
     matrix,
-    runReceipt: parse("clinical-evidence-run.json"),
     sourceArtifacts: sourceArtifactsOf(dir, matrix),
-    searchLogText: read("clinical-evidence-search.json"),
-    referencesText: read("references.bib"),
-    citationAuditText: read("citation-audit.md"),
-    citationLedgerText: read("citation-ledger.csv"),
-    questionCoverageText: read("question-coverage.json"),
   });
   const blocking = result.blockingIssues ?? [];
   rows.push({

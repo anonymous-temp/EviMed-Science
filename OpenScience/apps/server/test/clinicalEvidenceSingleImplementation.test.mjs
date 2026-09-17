@@ -11,7 +11,9 @@
 // seven deliverables was failed after 45 minutes, told only
 // "specialist_evidence_traceability_failed", and could not even be sent back to
 // fix it, because the repair path needs an issue to hand over and that failure
-// carried none.
+// carried none. (The ledger and the receipt went on 2026-09-17, with the four
+// other files a package kept about itself and every check that read them; a
+// package is now the report and the matrix.)
 //
 // The second implementation is gone. The rules live in `@evimed/domain`, the
 // run side reaches them through `evimed_submit_deliverable` and the server side
@@ -25,65 +27,47 @@
 // broken by editing one side of a single implementation.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 import { runGate } from "@evimed/domain";
 import * as domainGate from "@evimed/domain/clinical-evidence";
-import { deepResearchPackage, questionCoverageLedger, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
+import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 
-// The run-side entry: what `evimed_submit_deliverable` calls.
+// The run-side entry: what `evimed_submit_deliverable` calls, with what it
+// passes. The brief is the control plane's copy, and the source texts are the
+// ones the evidence ledger says a tool preserved.
 const runSide = (input, workspaceFiles) => runGate({
   contractKind: "clinical-evidence-report",
   files: workspaceFiles,
   expectedOutputs: CLINICAL_EVIDENCE_OUTPUTS,
   briefText: input.briefText ?? null,
-  workspaceBriefText: input.workspaceBriefText ?? input.briefText ?? null,
   matrix: input.matrix,
-  runReceipt: input.runReceipt,
   sourceArtifacts: input.sourceArtifacts,
-  executedSearchQueries: input.executedSearchQueries ?? null,
 });
 
 /** The files of a clinical evidence package, as the capability manifest lists
- *  them: the report and the matrix are required, the six that describe the
- *  package to itself are delivered when written and never demanded. */
+ *  them: the report and the matrix are required, and agenda-delta.json is
+ *  delivered when written and never demanded. */
 const CLINICAL_EVIDENCE_OUTPUTS = Object.freeze([
   { path: "clinical-evidence-report.md", required: true },
   { path: "clinical-evidence-matrix.json", required: true },
-  { path: "clinical-evidence-search.json", required: false },
-  { path: "citation-ledger.csv", required: false },
-  { path: "references.bib", required: false },
-  { path: "citation-audit.md", required: false },
-  { path: "clinical-evidence-run.json", required: false },
-  { path: "question-coverage.json", required: false },
+  { path: "agenda-delta.json", required: false },
 ]);
 
+/** The package as a run writes it. The source texts are not written: the run
+ *  side is handed them the way the socket hands them over, already joined from
+ *  the evidence ledger, so a copy on disk would be read by nothing. */
 async function writeWorkspace(input) {
-  const workspace = await mkdtemp(path.join(tmpdir(), "clinical-preflight-"));
+  const workspace = await mkdtemp(path.join(tmpdir(), "clinical-gate-"));
   const files = {
     "clinical-evidence-report.md": input.reportText,
     "clinical-evidence-matrix.json": JSON.stringify(input.matrix),
-    "clinical-evidence-run.json": JSON.stringify(input.runReceipt),
-    "clinical-evidence-search.json": input.searchLogText,
-    "references.bib": input.referencesText,
-    "citation-ledger.csv": input.citationLedgerText,
-    "citation-audit.md": input.citationAuditText,
-    "question-coverage.json": input.questionCoverageText,
-    // The read-only copy the server writes at dispatch. The preflight reads
-    // this one; the gate reads input.briefText, which is the server's own copy.
-    // A case that sets them differently is testing exactly that difference.
-    ".evimed-brief/research-brief.md": input.workspaceBriefText ?? input.briefText,
   };
   for (const [name, content] of Object.entries(files)) {
     if (content == null) continue;
-    await mkdir(path.join(workspace, path.dirname(name)), { recursive: true });
     await writeFile(path.join(workspace, name), content, "utf8");
-  }
-  for (const [artifactPath, content] of Object.entries(input.sourceArtifacts)) {
-    await mkdir(path.join(workspace, path.dirname(artifactPath)), { recursive: true });
-    await writeFile(path.join(workspace, artifactPath), content, "utf8");
   }
   return workspace;
 }
@@ -105,10 +89,6 @@ async function workspaceFiles(workspace) {
 
 /** @param {any} input @param {string} label */
 async function verdicts(input, label) {
-  // The coverage ledger cites report line numbers, and almost every case here
-  // edits the report. Rebuild it against the report the case actually built,
-  // unless the case is about the ledger and set one itself.
-  if (!input.keepCoverage) input.questionCoverageText = questionCoverageLedger(input.reportText, input.searchLogText);
   const workspace = await writeWorkspace(input);
   try {
     const verdict = runSide(input, await workspaceFiles(workspace));
@@ -136,21 +116,6 @@ async function verdicts(input, label) {
   }
 }
 
-/** What the gate detected, whatever became of it. A `silent` check
- *  (CLINICAL_CHECK_TIERS, 2026-09-17) still runs on both sides — there is one
- *  implementation — and tells neither the run nor the reader, so the cases
- *  about such a check hold two things: it still detects, and neither side says
- *  it.
- *  @param {any} gate */
-const detected = (gate) => gate.findings.map((/** @type {any} */ finding) => finding.text).join("\n");
-
-/** @param {any} both @param {RegExp} pattern @param {string} label */
-function assertDetectedAndSilent({ gate, preflight }, pattern, label) {
-  assert.match(detected(gate), pattern, `${label}: the check no longer detects this, so the case tests nothing`);
-  assert.doesNotMatch(gate.issues.join("\n"), pattern, `${label}: a silent check reported to the control plane`);
-  assert.doesNotMatch(preflight.said.join("\n"), pattern, `${label}: a silent check reported to the run`);
-}
-
 test("a package both sides accept", async () => {
   const { gate, preflight } = await verdicts(deepResearchPackage(), "valid");
   assert.equal(gate.valid, true, gate.issues.join("\n"));
@@ -162,34 +127,6 @@ test("whatever the server gate rejects, the preflight already caught", async () 
   // caused it. If the preflight passes any of these, a run is told it is done
   // and then failed for it — which is what happened, three times.
   const cases = [
-    {
-      label: "run receipt without successfulSourceArtifacts",
-      break: (input) => { delete input.runReceipt.successfulSourceArtifacts; },
-    },
-    {
-      label: "run receipt naming a source artifact that is not on disk",
-      break: (input) => { input.runReceipt.successfulSourceArtifacts = [".evimed-sources/missing/content.md"]; },
-    },
-    {
-      label: "run receipt naming a path outside .evimed-sources",
-      break: (input) => { input.runReceipt.successfulSourceArtifacts = ["workspace/notes.md"]; },
-    },
-    {
-      label: "citation ledger whose header omits a column the cross-check reads",
-      break: (input) => {
-        input.citationLedgerText = input.citationLedgerText.replace(
-          "claimId,referenceNumber,supportQuote",
-          "claim,source,quote",
-        );
-      },
-    },
-    {
-      label: "citation ledger missing a row",
-      break: (input) => {
-        const rows = input.citationLedgerText.trim().split("\n");
-        input.citationLedgerText = [rows[0], ...rows.slice(2)].join("\n");
-      },
-    },
     // The register the fifteen speed-of-heart-rescue-pill reports were written
     // in. Each line below is verbatim from one of them. They passed every
     // structural check and were delivered, and the reader who commissioned them
@@ -461,31 +398,6 @@ test("whatever the server gate rejects, the preflight already caught", async () 
       },
     },
     {
-      // A hand-written flow sentence. The log and the receipt agree with each
-      // other, so every existing check passes and nobody reads the prose.
-      label: "a screening flow number the search log contradicts",
-      break: (input) => {
-        input.reportText = input.reportText.replace(
-          "## 结果\n",
-          "## 结果\n共获得 40 条记录，去重并剔除无关记录后余 24 条，最终纳入 12 个来源。\n",
-        );
-      },
-    },
-    {
-      // A record kept at included:false while it is numbered in 参考文献 and
-      // cited in the body. sourcesIncluded === includedRecords.length still
-      // holds, so the log reads as consistent.
-      label: "a numbered reference whose source record was never included",
-      break: (input) => {
-        const log = JSON.parse(input.searchLogText);
-        log.sourceRecords[11].included = false;
-        log.sourceRecords[11].accessLevel = "bibliographic";
-        log.sourceRecords[11].exclusionReason = "题录层级，未获全文";
-        log.screening.sourcesIncluded = 11;
-        input.searchLogText = JSON.stringify(log);
-      },
-    },
-    {
       // A numbered entry nobody cites. The nearest existing check counts
       // entries, so padding the list satisfied it.
       label: "a numbered reference the body never cites",
@@ -655,118 +567,13 @@ test("whatever the server gate rejects, the preflight already caught", async () 
         );
       },
     },
-    // The question-coverage ledger. It is the newest deliverable and the one a
-    // run writes last, which is exactly when a run is most likely to be told
-    // "done" by the preflight and then failed by the gate. One case per
-    // cross-check, each breaking only that check.
-    {
-      label: "a coverage ledger that is not there at all",
-      break: (input) => {
-        input.keepCoverage = true;
-        input.questionCoverageText = "";
-      },
-    },
-    {
-      label: "a coverage entry whose status is neither answered nor gap",
-      break: (input) => {
-        const ledger = JSON.parse(input.questionCoverageText);
-        ledger.entries[0].status = "partial";
-        input.keepCoverage = true;
-        input.questionCoverageText = JSON.stringify(ledger);
-      },
-    },
-    {
-      label: "an answered sub-question pointing past the end of the report",
-      break: (input) => {
-        const ledger = JSON.parse(input.questionCoverageText);
-        ledger.entries[0].reportLines = [9999];
-        input.keepCoverage = true;
-        input.questionCoverageText = JSON.stringify(ledger);
-      },
-    },
-    {
-      label: "an answered sub-question pointing at the reference list",
-      break: (input) => {
-        const referencesLine = input.reportText.split("\n").findIndex((line) => /^1\. Author group\./.test(line)) + 1;
-        const ledger = JSON.parse(input.questionCoverageText);
-        ledger.entries[0].reportLines = [referencesLine];
-        ledger.entries[1].reportLines = [referencesLine];
-        input.keepCoverage = true;
-        input.questionCoverageText = JSON.stringify(ledger);
-      },
-    },
-    {
-      label: "a declared gap whose search never ran",
-      break: (input) => {
-        const ledger = JSON.parse(input.questionCoverageText);
-        ledger.entries[2].searches = [{
-          query: "a search that was never run in this session",
-          database: "PubMed",
-          searchedAt: "2026-02-11",
-        }];
-        input.keepCoverage = true;
-        input.questionCoverageText = JSON.stringify(ledger);
-      },
-    },
-    {
-      label: "a registered gap written as a finding in the conclusion",
-      break: (input) => {
-        const ledger = JSON.parse(input.questionCoverageText);
-        ledger.entries[2].question = "本品在夜间低血压人群中的院外自救有无以临床结局为终点的直接研究";
-        input.keepCoverage = true;
-        input.questionCoverageText = JSON.stringify(ledger);
-        input.reportText = input.reportText.replace(
-          "## 结论\n",
-          "## 结论\n本品在夜间低血压人群中的院外自救无相关证据 [1] <!-- claim:CLM-001 -->。\n",
-        );
-      },
-    },
-    {
-      // Was "an abstract that restates five questions as three", which the
-      // gate caught by comparing two numbers the run wrote itself. It now
-      // compares against the brief, and this is the construction that walked
-      // through the old rule: register one of the brief's two questions, mark
-      // it answered, and never contradict yourself anywhere.
-      label: "a brief question the ledger does not register at all",
-      break: (input) => {
-        const ledger = JSON.parse(input.questionCoverageText);
-        ledger.entries = ledger.entries.filter((entry) => !entry.id.startsWith("2."));
-        input.keepCoverage = true;
-        input.questionCoverageText = JSON.stringify(ledger);
-      },
-    },
-    {
-      label: "a ledger entry that does not transcribe the brief question its id names",
-      break: (input) => {
-        const ledger = JSON.parse(input.questionCoverageText);
-        ledger.entries[0].question = "本报告自拟的一条概括性子问，与题面任何一问都无关";
-        input.keepCoverage = true;
-        input.questionCoverageText = JSON.stringify(ledger);
-      },
-    },
-    {
-      label: "an item the brief spells out that the report never uses",
-      break: (input) => {
-        input.briefText = researchBrief().replace(
-          "1. 胸口突然发闷发紧",
-          "1. 请给出心率、血压、心率变异性、儿茶酚胺水平、房性期前收缩负荷、炎症指标、随访时长各自的实测数据。胸口突然发闷发紧",
-        );
-        input.reportText = input.reportText.replace(
-          "## 讨论\n",
-          "## 讨论\n本节给出心率、血压与心率变异性的实测数据。\n",
-        );
-      },
-    },
   ];
 
   for (const scenario of cases) {
     const input = deepResearchPackage();
     scenario.break(input);
     const { gate, preflight } = await verdicts(input, scenario.label);
-    // `findings`, not `valid`: since 2026-09-17 a check may detect a defect and
-    // report it to nobody (CLINICAL_CHECK_TIERS), and several of these cases
-    // are now of that kind. What this file holds is below, and is unchanged.
-    assert.ok(gate.findings.length > 0, `${scenario.label}: the gate no longer detects this at all, so this case tests nothing`);
+    assert.equal(gate.valid, false, `${scenario.label}: the gate no longer reports this at all, so this case tests nothing`);
     // The invariant that matters is not "both reject" — the server delivers a
     // package whose only findings are degradable — it is that the run and the
     // server withhold on exactly the same set. A case whose findings are all
@@ -821,22 +628,6 @@ test("what the gate degrades, the preflight also degrades", async () => {
         );
       },
       pattern: /资料与方法声明了 /,
-    },
-    {
-      // The exclusion ledger is the search apparatus describing itself, not a
-      // claim about medicine. Blocking on it also judged twenty-two delivered
-      // packages by a field the spec did not have when they were written.
-      label: "an excluded source record with no exclusion reason",
-      break: (input) => {
-        const log = JSON.parse(input.searchLogText);
-        log.sourceRecords.push({
-          sourceUrl: "https://pubmed.ncbi.nlm.nih.gov/evidence/source-13",
-          included: false,
-          accessLevel: "bibliographic",
-        });
-        input.searchLogText = JSON.stringify(log);
-      },
-      pattern: /sourceRecords\[\d+\] 标记为 "included": false/,
     },
   ];
 
@@ -1118,10 +909,6 @@ test("statistics are Latin script the manuscript cannot translate, and both side
   const [first] = input.matrix.claims;
   first.supportQuote = quote;
   input.sourceArtifacts[first.artifactPath] += `\n${quote}`;
-  input.citationLedgerText = input.citationLedgerText
-    .split("\n")
-    .map((row) => (row.startsWith(`${first.claimId},`) ? `${first.claimId},${first.referenceNumber},"${quote}"` : row))
-    .join("\n");
   input.reportText = input.reportText.replace(
     "## 讨论\n",
     "## 讨论\n携带 ALDH2 rs671 变异者的缓解率为 50.6%，非携带者为 79.4%（RR 0.82，95%CI 0.75–0.90，P < 0.01）。"
@@ -1159,141 +946,6 @@ test("the reference list is untranslated by definition, and it is the only secti
   assert.match(inBody.gate.issues.join("\n"), /consecutive words of untranslated source prose/);
   assert.match(inBody.preflight.said.join("\n"), /consecutive words of untranslated source prose/);
   assert.deepEqual([...inBody.preflight.issues].sort(), [...inBody.gate.blockingIssues].sort());
-});
-
-// The axis table the comparison rule asks for, written the way the skill writes
-// it. No cell carries a quantity, so the numeric audit has nothing to wire up
-// and the table is testing the comparison rule and nothing else.
-const comparisonAxes = [
-  "| 维度 | 舌下含服硝酸甘油 | 该中成药制剂 | 该维度可支持的结论边界 |",
-  "| --- | --- | --- | --- |",
-  "| 核准适用场景 | 心绞痛发作的急性缓解与预防 [1] | 气滞血瘀型冠心病心绞痛 [7] | 只能判断某一用法是否落在核准范围内 |",
-  "| 急性按需使用证据 | 已确诊心绞痛发作人群，结局为症状缓解与血流动力学 [2] | 未检索到以急性发作缓解时间为结局的随机对照研究 | 可分别陈述，不足以排序 |",
-  "| 人群反应差异 | 按基因型分层的缓解率差异已被测得 [9] | 未检索到按基因型分层的反应数据 | 一方为已测得的异质性，另一方为未测量 |",
-].join("\n");
-
-test("a comparison the title announces is carried out on fixed axes, on both sides", async () => {
-  // The commissioned report's own defect: the title promised a comparison of two
-  // medicines and the body reviewed each one's literature in turn, then closed
-  // with a shared verdict. The two accounts never met, so the verdict came from
-  // whichever arm had the thinner file — which is how "both lack evidence in
-  // out-of-hospital self-rescue" got written over an arm with an approved
-  // indication and an established use.
-  //
-  // Only the absence of the matrix is decidable: which columns are the arms is
-  // not readable from the text, so what is required is a table with an axis
-  // column and one column per arm, and nothing is asserted about its rows.
-  const missing = deepResearchPackage();
-  missing.reportText = missing.reportText.replace(
-    "# 急性胸部压迫感的鉴别与处置",
-    "# 急性胸痛院外自救用药的证据评价：两种含服制剂的比较",
-  );
-  const withoutMatrix = await verdicts(missing, "a comparative title with no matrix");
-  assertDetectedAndSilent(withoutMatrix, /titled as a comparison .* but no table in the analysis body/s, "a comparative title with no matrix");
-
-  // The same title over a body that fills the axes. This is the repair the
-  // notice asks for, so it must clear both sides.
-  const filled = deepResearchPackage();
-  filled.reportText = filled.reportText
-    .replace("# 急性胸部压迫感的鉴别与处置", "# 急性胸痛院外自救用药的证据评价：两种含服制剂的比较")
-    .replace("## 讨论\n", `## 讨论\n${comparisonAxes}\n`);
-  const withMatrix = await verdicts(filled, "a comparative title with its matrix");
-  assert.equal(withMatrix.gate.valid, true, withMatrix.gate.issues.join("\n"));
-  assert.equal(withMatrix.preflight.ok, true, JSON.stringify(withMatrix.preflight.issues));
-
-  // A title is not a comparison merely because it contains 对比: 对比剂 is an
-  // ordinary pharmacology noun, and a paper about contrast-induced nephropathy
-  // compares nothing.
-  const contrastAgent = deepResearchPackage();
-  contrastAgent.reportText = contrastAgent.reportText.replace(
-    "# 急性胸部压迫感的鉴别与处置",
-    "# 碘对比剂相关急性肾损伤的证据评价",
-  );
-  const unrelated = await verdicts(contrastAgent, "对比剂 in a title");
-  assert.equal(unrelated.gate.valid, true, unrelated.gate.issues.join("\n"));
-  assert.equal(unrelated.preflight.ok, true, JSON.stringify(unrelated.preflight.issues));
-});
-
-test("a substitution claim the report says it has no comparison for is rejected on both sides", async () => {
-  // The bridge the commissioned report walked in silence: a variant lowers one
-  // arm's response, therefore switch to the other. Links 3 to 6 — that the other
-  // arm is untouched by the same pathway, that switching improves outcomes, that
-  // it substitutes at all, that the genotype is a selection rule — were never
-  // established, and an arm never tested for a mechanism is untested rather than
-  // immune.
-  //
-  // What is decidable is not how strong the evidence should have been. It is
-  // that the report states there is no direct comparison and then concludes one
-  // anyway; the licence a substitution claim needs is exactly the comparison it
-  // has just said does not exist.
-  const declared = "未检索到两者在该场景的头对头随机对照比较。";
-  for (const write of [
-    "此类人群可改用该中成药制剂。",
-    "对低反应人群，该中成药制剂可能是更合适的选择。",
-    "就院外自救而言后者更为可靠。",
-    // A link asserted 已建立 is the conclusion itself, and a source noun in
-    // front of the verb does not turn a claim about the medicines into a claim
-    // about the literature. Neither exemption may become a way through.
-    "低反应者改用该中成药制剂后结局更好，该环已建立。",
-    "现有研究表明该中成药制剂优于硝酸甘油。",
-  ]) {
-    const input = deepResearchPackage();
-    input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${declared}\n${write}\n`);
-    const { gate, preflight } = await verdicts(input, write);
-    assertDetectedAndSilent({ gate, preflight }, /concludes that one arm can take the other's place/, write);
-  }
-
-  // Every one of these carries the words the rule reads, beside the same
-  // declared absence, and none of them is a substitution claim. Rejecting one
-  // would send the run back to break a sentence the skill prescribes.
-  for (const write of [
-    // The skill's own 正例 for the bridge that does not close.
-    "ALDH2 相关反应差异提示，院外心绞痛用药效果可能存在显著个体差异，不宜将硝酸甘油视为对所有中国患者反应完全一致的单一标准。"
-      + "另一药具有不同的药物组成和证据路径，但其在低反应人群中的相对价值仍需直接临床研究验证。",
-    // The skill's 正例 for the merged PICO, whose 替代 is the safety statement.
-    "两药在已确诊冠心病心绞痛患者中均有相应应用依据，但在首次发生或病因未明的院外急性胸痛中，现有证据不能支持患者自行选择药物替代专业评估。",
-    // A trial's own control arm, which is not the other arm of this comparison.
-    "该试验中试验组的症状缓解率优于对照组 [11]。",
-    // Somebody else's recommendation, reported with the body that made it.
-    "该指南建议含服无效者改用静脉给药 [2]。",
-    // The safety instruction, at the full strength the practical section owes it.
-    "任何自救药物都不能替代及时呼救与心电图评估。",
-    // The gap stated as a gap, which is the sentence the notice asks for.
-    "两药的相对效能尚不能判断，缺乏可回答该问题的随机对照研究。",
-    // The bridge written out link by link, which is the repair this rule's own
-    // notice asks for: the link that has not been shown is word for word the
-    // sentence the rule reads as a conclusion, so the 未建立 mark licenses it
-    // whether it sits in the same clause, a clause away, or in the short
-    // sentence that follows.
-    "低反应者改用该中成药制剂后结局更好：未建立，未检索到以临床结局为终点的研究。",
-    "链条的第四环是低反应者改用该中成药制剂后结局更好。该环未建立。",
-    // Asking the question this rule exists to keep open is not answering it.
-    "低反应人群是否应换用该中成药制剂，目前尚无研究可以回答。",
-    // Which evidence base is stronger is a statement about the literature: an
-    // axis may hold measured evidence on one arm and nothing on the other
-    // without any head-to-head study existing anywhere.
-    "该维度上硝酸甘油的证据强度优于该中成药制剂 [2]。",
-  ]) {
-    const input = deepResearchPackage();
-    input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${declared}\n${write}\n`);
-    const { gate, preflight } = await verdicts(input, write);
-    // Scoped to the three families, because these fixture lines carry figures
-    // and citations that the unrelated numeric-provenance checks read.
-    const families = [/^临床实践要点第 \d+ 行把/, /^GRADE 等级与降级理由不自洽/, /^资料与方法声明了 /];
-    // One implementation means one message vocabulary: the run reads the same
-    // families the server does.
-    const preflightFamilies = families;
-    assert.deepEqual(
-      gate.issues.filter((issue) => families.some((pattern) => pattern.test(issue))),
-      [],
-      `${write}: the gate flags a line the adversarial pass proved compliant`,
-    );
-    assert.deepEqual(
-      preflight.issues.filter((issue) => preflightFamilies.some((pattern) => pattern.test(issue))),
-      [],
-      `${write}: the preflight fails a run over a line the gate delivers`,
-    );
-  }
 });
 
 test("the merged PICO, the unanswered question and the unlicensed substitution are advice", async () => {
@@ -1340,8 +992,8 @@ test("the merged PICO, the unanswered question and the unlicensed substitution a
   assert.deepEqual(stratifiedRun.preflight.notes, []);
 
   // A substitution claim over a report that never says whether a direct
-  // comparison exists. The gate stays silent — it rejects the contradiction,
-  // not the silence — so this one has to reach the run as advice or not at all.
+  // comparison exists. Which nouns are the compared arms is not decidable, so
+  // the gate has no check for it, and it reaches the run as advice or not at all.
   const unlicensed = deepResearchPackage();
   unlicensed.reportText = unlicensed.reportText.replace("## 讨论\n", "## 讨论\n此类人群可改用该中成药制剂。\n");
   const unlicensedRun = await verdicts(unlicensed, "a substitution claim with nothing said about comparison");
@@ -1359,87 +1011,7 @@ test("the merged PICO, the unanswered question and the unlicensed substitution a
   assert.ok(Math.abs(Object.values(shares).reduce((total, share) => total + share, 0) - 100) <= 5, JSON.stringify(shares));
 });
 
-test("both sides look for the matrix in the analysis body, and both read it as a matrix", async () => {
-  // Two judgements are duplicated in two languages here: which sections are the
-  // analysis (both blank 参考文献 and 检索与方法 before looking) and what counts
-  // as a matrix (three columns, two filled rows). A run that satisfies one side
-  // and not the other is told it is done and then failed for the table it just
-  // wrote — the exact failure this file exists to prevent.
-  const comparativeTitle = "# 急性胸痛院外自救用药的证据评价：两种含服制剂的优劣";
-  const oneArmColumn = [
-    "| 维度 | 该中成药制剂 |",
-    "| --- | --- |",
-    "| 核准适用场景 | 气滞血瘀型冠心病心绞痛 [7] |",
-    "| 急性按需使用证据 | 未检索到以急性发作缓解时间为结局的随机对照研究 |",
-  ].join("\n");
-  for (const [placement, anchor, table] of [
-    // A table under 检索与方法 is a search strategy and a table under 参考文献 is
-    // somebody else's paper. Neither shows this report's arms meeting, and both
-    // sections are blanked before either side looks.
-    ["the matrix left in 检索与方法", "## 检索与方法\n", comparisonAxes],
-    ["the matrix left in 参考文献", "## 参考文献\n", comparisonAxes],
-    // One arm's column with the other's missing is a summary of one medicine.
-    ["one arm's column, the other's missing", "## 讨论\n", oneArmColumn],
-  ]) {
-    const input = deepResearchPackage();
-    input.reportText = input.reportText
-      .replace("# 急性胸部压迫感的鉴别与处置", comparativeTitle)
-      .replace(anchor, `${anchor}${table}\n`);
-    const { gate, preflight } = await verdicts(input, placement);
-    assertDetectedAndSilent({ gate, preflight }, /titled as a comparison .* but no table in the analysis body/s, placement);
-  }
-});
-
-test("the absence may be declared after the conclusion it contradicts, and both sides name the same two lines", async () => {
-  // 讨论 concludes and 局限 declares the gap — the order a manuscript is written
-  // in, and the reverse of the order the check reads in. Both sides scan the
-  // whole body for the declaration before judging any sentence, and both count
-  // lines over their own blanked copy, so a notice that names a line the author
-  // cannot find is a repair with nowhere to go.
-  const input = deepResearchPackage();
-  const conclusion = "低反应者可换用该中成药制剂。";
-  const absence = "两药之间缺乏头对头随机对照比较。";
-  input.reportText = input.reportText
-    .replace("## 讨论\n", `## 讨论\n${conclusion}\n`)
-    .replace("## 局限与不确定性\n", `## 局限与不确定性\n${absence}\n`);
-  const lines = input.reportText.split("\n");
-  const conclusionLine = lines.findIndex((line) => line.includes(conclusion)) + 1;
-  const absenceLine = lines.findIndex((line) => line.includes(absence)) + 1;
-  const { gate, preflight } = await verdicts(input, "the absence declared after the conclusion");
-  assertDetectedAndSilent({ gate, preflight }, new RegExp(`report line ${conclusionLine} concludes that one arm`), "the swap");
-  assert.match(detected(gate), new RegExp(`while line ${absenceLine} states`));
-});
-
-test("the sentences the reviewers wrote as the repair pass both sides unchanged", async () => {
-  // A false rejection costs more than a missed one here: the run is sent back to
-  // break a sentence the reviewers themselves wrote as the correct form, and it
-  // has no way to say what the evidence says. Each of these carries the words
-  // the rule reads, beside the declared absence that arms it.
-  const declared = "未检索到两者在该场景的头对头随机对照比较。";
-  for (const write of [
-    // Refusing the swap, written with the verb the rule blocks. The reviewers'
-    // wording names both medicines; this fixture's question names none, and a
-    // medicine-free question may not have one introduced into its report, so the
-    // arms are written the way this report writes them. The reviewers' exact
-    // sentence is pinned in clinicalEvidenceQuality.test.mjs, whose question is
-    // about that medicine.
-    "尚无证据支持以该中成药制剂替代含服硝酸酯。",
-    // The bridge that stops at the last established link, standing on its own
-    // line rather than inside the paragraph the earlier test writes it in.
-    "其在 ALDH2 低反应人群中的相对价值仍需直接临床研究验证。",
-    // Somebody else's comparison, under the two source nouns the attributed
-    // pattern carries besides 指南 and 该试验 — which is how most cross-arm
-    // sentences in a review get there at all.
-    "该系统评价报告含服硝酸酯的缓解率优于该中成药制剂 [3]。",
-    "该 Meta 分析显示该中成药制剂优于安慰剂 [5]。",
-  ]) {
-    const input = deepResearchPackage();
-    input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${declared}\n${write}\n`);
-    const { gate, preflight } = await verdicts(input, write);
-    assert.equal(gate.valid, true, `${write}: ${gate.issues.join("\n")}`);
-    assert.equal(preflight.ok, true, `${write}: ${JSON.stringify(preflight.issues)}`);
-  }
-
+test("a shared absence of head-to-head evidence is not a merged PICO, on either side", async () => {
   // The merged-PICO note reads a verdict given for every arm at once, and one
   // verdict is legitimately true of every stratum at once: that no head-to-head
   // study exists. Drawing the note there would teach the run to stratify a
@@ -1562,47 +1134,6 @@ test("the practical answer is found under its old and its manuscript name", asyn
   }
 });
 
-test("the coverage ledger is checked field for field on the run's side, not only at delivery", async () => {
-  // Rejecting these packages is not enough. It has to reject them *for the
-  // coverage defect* — an issue that names something else leaves the run to
-  // guess which of eight files to look at. Each case names its own.
-  const cases = [
-    [(ledger) => { ledger.entries[0].reportLines = [9999]; }, /条目 1\.1（[^）]*）声明 answered，但指向报告第 9999 行/],
-    [(ledger) => { ledger.entries[0].status = "partial"; }, /1\.1\.status 必须是/],
-    [(ledger) => { ledger.entries[1].id = "1.1"; }, /1\.1[^\n]*(?:两次|twice|重复)/],
-    [(ledger) => { ledger.entries[2].searches[0].query = "never ran"; }, /never ran/],
-    [(ledger) => { ledger.entries[2].searches[0].database = "Embase"; }, /Embase/],
-    [(ledger) => { ledger.entries[2].searches = []; }, /2\.1[^\n]*(?:gap|searches)/],
-  ];
-  for (const [breakLedger, expected] of cases) {
-    const input = deepResearchPackage();
-    input.questionCoverageText = questionCoverageLedger(input.reportText, input.searchLogText);
-    const ledger = JSON.parse(input.questionCoverageText);
-    breakLedger(ledger);
-    input.keepCoverage = true;
-    input.questionCoverageText = JSON.stringify(ledger);
-    assertDetectedAndSilent(await verdicts(input, String(expected)), expected, String(expected));
-  }
-
-  // And the deliverable's absence, which is the state every already-delivered
-  // package is in. The ledger is no longer demanded (the manifest lists it as
-  // optional and its check is silent), so a package without one is accepted by
-  // the run and the absence is only counted.
-  const missing = deepResearchPackage();
-  missing.keepCoverage = true;
-  missing.questionCoverageText = "";
-  const workspace = await writeWorkspace(missing);
-  try {
-    await rm(path.join(workspace, "question-coverage.json"));
-    const verdict = runSide(missing, await workspaceFiles(workspace));
-    assert.equal(verdict.ok, true, JSON.stringify(verdict.issues.filter((issue) => issue.severity === "required")));
-    assert.doesNotMatch(verdict.issues.map((issue) => issue.message).join("\n"), /question-coverage\.json/);
-    assert.match(detected(validateClinicalEvidencePackage(missing)), /question-coverage\.json 台账格式无效：文件缺失或为空/);
-  } finally {
-    await rm(workspace, { recursive: true, force: true });
-  }
-});
-
 test("both entries resolve to one implementation, and no second copy survives", async () => {
   // The server's module is a re-export, not a second implementation: the
   // function object the control plane calls and the one the domain exports are
@@ -1618,15 +1149,16 @@ test("both entries resolve to one implementation, and no second copy survives", 
   });
   assert.equal(registryVerdict.ok, false);
   // The registry adds no SECOND message for a file the validator already names,
-  // and it does name the ones the validator says nothing about.
+  // and it does name the ones the validator says nothing about: with nothing
+  // written, the validator speaks for the report and the manifest for the
+  // matrix.
   //
   // This used to assert the two lists were identical, on the stated grounds
   // that "the clinical validator has its own message for every file it needs".
-  // That claim was false for three of the eight — citation-ledger.csv,
-  // references.bib and citation-audit.md — and the gate returned ok=true with
-  // them absent while the server failed the run for them. The assertion to make
-  // is complementarity, not equality: no file spoken for twice, and none left
-  // unspoken until a later attempt.
+  // That claim was false for three of the files a package then had to carry,
+  // and the gate returned ok=true with them absent while the server failed the
+  // run for them. The assertion to make is complementarity, not equality: no
+  // file spoken for twice, and none left unspoken until a later attempt.
   const required = registryVerdict.issues.filter((issue) => issue.severity === "required").map((issue) => issue.message);
   const blocking = validateClinicalEvidencePackage({}).blockingIssues;
   for (const message of blocking) assert.ok(required.includes(message), `the validator's own message was dropped: ${message}`);

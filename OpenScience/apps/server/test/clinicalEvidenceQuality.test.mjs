@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import {
-  briefCollapse,
-  briefTermPresent,
   citationIntegrityIssues,
   clinicalEvidencePackageErrorCode,
   numberedReferenceCount,
@@ -11,28 +9,21 @@ import {
 } from "../src/clinicalEvidenceQuality.mjs";
 import { GATE_CHECK_IDS, runGate, workspaceLayout } from "@evimed/domain";
 import { CLINICAL_CHECK_TIERS, clinicalCheckTier, clinicalEvidenceCheckIds } from "@evimed/domain/clinical-evidence";
-import { deepResearchPackage, questionCoverageLedger, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
+import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 
-/** The question-coverage ledger cites report line numbers, and almost every
- *  case below edits the report. Rebuild it against the report the case actually
- *  built, so a case about a quotation is not failed over a stale line number;
- *  a case whose subject is the ledger sets `keepCoverage` and supplies its own.
- *
- *  What comes back is the DETECTION view. These cases are about what each check
- *  finds and whether its sentence is one a package could be delivered with;
- *  what a finding then does — block, advise, or stay silent — has been the
- *  business of `CLINICAL_CHECK_TIERS` since 2026-09-17 and has its own cases at
- *  the end of this file, which read the validator's result as it is (`tiered`).
- *  So `issues` here is every finding before tiering and `blockingIssues` the
- *  ones whose sentence is not degradable: the shape these cases were written
+/** The validator's DETECTION view. These cases are about what each check finds
+ *  and whether its sentence is one a package could be delivered with; what a
+ *  finding then does — block or advise — has been the business of
+ *  `CLINICAL_CHECK_TIERS` since 2026-09-17 and has its own cases at the end of
+ *  this file, which read the validator's result as it is (`tiered`). So
+ *  `issues` here is every finding before tiering and `blockingIssues` the ones
+ *  whose sentence is not degradable: the shape these cases were written
  *  against, kept so that a check's logic stays tested for as long as the check
  *  exists.
  *  @param {any} input */
 function validateClinicalEvidencePackage(input) {
-  const tiered = validatePackage(input?.keepCoverage
-    ? input
-    : { ...input, questionCoverageText: questionCoverageLedger(input?.reportText, input?.searchLogText) });
-  const detected = tiered.findings.filter((finding) => !REVIEW_METHOD_CHECKS.has(finding.check));
+  const tiered = validatePackage(input);
+  const detected = tiered.findings;
   return {
     ...tiered,
     tiered,
@@ -42,8 +33,6 @@ function validateClinicalEvidencePackage(input) {
     issueChecks: tiered.findings.map((finding) => ({ check: finding.check, text: finding.text })),
   };
 }
-const REVIEW_METHOD_CHECKS = new Set(["review-methods-schema", "review-search-coverage", "review-study-accounting"]);
-
 
 function claim(index, domain) {
   return {
@@ -57,9 +46,16 @@ function claim(index, domain) {
     supportQuote: `This directly observed source passage supports material clinical proposition number ${index}.`,
     applicability: "The population and emergency-care setting match the question.",
     uncertainty: "Indirectness remains for individual diagnosis.",
+    referenceNumber: index,
   };
 }
 
+/** A small valid package in the shape production delivers: each claim's
+ *  numbered citation with its marker hidden on the same line, the 检索与方法 /
+ *  结果 / 讨论 sections, and the numbered reference list after the practical
+ *  section. Every package is held to that shape, so a package without it fails
+ *  on shape before the case under test is reached. Cases edit the report by
+ *  exact string, which is why its lines stay short and distinct. */
 function validPackage() {
   const claims = [
     claim(1, "professional.heart.org"),
@@ -74,28 +70,36 @@ function validPackage() {
     "急性胸部压迫感需要优先排除时间敏感的心血管急症。".repeat(12),
     "",
     "## 临床问题与鉴别",
-    "症状不能单独完成病因归类。[claim:CLM-001] 诊断需要规范评估。[claim:CLM-002]",
+    "症状不能单独完成病因归类。[1] <!-- claim:CLM-001 --> 诊断需要规范评估。[2] <!-- claim:CLM-002 -->",
+    "",
+    "## 检索与方法",
+    "证据来源覆盖临床指南、系统评价与官方资料，按预设资格标准筛选，并逐条核对主张与来源原文。",
+    "",
+    "## 结果",
+    "纳入证据共同支持安全优先、分层评估的处置路径，症状描述只能调整先验判断。",
     "",
     "## 药物角色",
-    "速效救心丸不应延误急诊评估。[claim:CLM-003] 证据范围应被明确限定。[claim:CLM-004]",
+    "速效救心丸不应延误急诊评估。[3] <!-- claim:CLM-003 --> 证据范围应被明确限定。[4] <!-- claim:CLM-004 -->",
+    "",
+    "## 讨论",
+    "指南、诊断研究与官方资料方向一致而层级不同，个体决策仍需结合现场评估。",
     "",
     "## 科学局限",
     "现有证据对个体诊断存在间接性，且不同地区急救路径存在适用性差异。".repeat(8),
     "",
     "## 结论与实际处置",
-    "速效救心丸不应延误急诊评估。[claim:CLM-003] "
+    "速效救心丸不应延误急诊评估。[3] <!-- claim:CLM-003 --> "
       + "结论必须同时保留临床紧迫性、适用边界和不确定性。".repeat(30),
+    "",
+    "## 参考文献",
+    ...claims.map((item) => `${item.referenceNumber}. ${item.sourceTitle}. ${item.sourceUrl}`),
   ].join("\n");
   return {
     reportText,
     matrix: { schemaVersion: 1, claims },
-    runReceipt: {
-      question: "胸部压迫感与速效救心丸应如何处置？",
-      status: "succeeded",
-      successfulSourceArtifacts: [".evimed-sources/a/page.md", ".evimed-sources/b/fulltext.md"],
-      failedSources: [],
-      qualityChecks: { claimTraceability: true, contradictionAudit: true, arithmeticAudit: true },
-    },
+    // The brief as the dispatcher holds it. It names the medicine the report
+    // discusses, so the question-scoped safety rule runs and stays quiet.
+    briefText: "胸部压迫感与速效救心丸应如何处置？",
     sourceArtifacts: {
       ".evimed-sources/a/page.md": claims.filter((item) => item.artifactPath.endsWith("page.md")).map((item) => item.supportQuote).join("\n"),
       ".evimed-sources/b/fulltext.md": claims.filter((item) => item.artifactPath.endsWith("fulltext.md")).map((item) => item.supportQuote).join("\n"),
@@ -174,7 +178,10 @@ test("rejects metadata inference, generic API citations, missing quotes, and pro
   input.matrix.claims[0].accessLevel = "bibliographic_only";
   input.matrix.claims[1].supportQuote = "title only";
   input.matrix.claims[2].sourceUrl = "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/guide";
-  input.reportText += "\n## 证据局限与不确定性\nTransport error (GET official source).";
+  input.reportText = input.reportText.replace(
+    "\n\n## 参考文献",
+    "\n## 证据局限与不确定性\nTransport error (GET official source).\n\n## 参考文献",
+  );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
   assert.match(result.issues.join("\n"), /accessLevel/);
@@ -185,7 +192,7 @@ test("rejects metadata inference, generic API citations, missing quotes, and pro
 
 test("rejects a report whose claim references do not resolve to the evidence matrix", () => {
   const input = validPackage();
-  input.reportText = input.reportText.replace("[claim:CLM-004]", "[claim:CLM-999]");
+  input.reportText = input.reportText.replace("<!-- claim:CLM-004 -->", "<!-- claim:CLM-999 -->");
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
   assert.match(result.issues.join("\n"), /CLM-999/);
@@ -219,7 +226,6 @@ test("a matrix written before its sources were preserved is one behaviour, not t
   });
   const report = "# T\n\n## 摘要\n\n## 证据\n\n## 局限\n\n## 结论\n";
   const many = validateClinicalEvidencePackage({
-    keepCoverage: true,
     matrix: { claims: Array.from({ length: 12 }, (_, i) => bare(i)) },
     reportText: report,
   }).issues.filter((issue) => /artifactPath/.test(issue));
@@ -232,7 +238,6 @@ test("a matrix written before its sources were preserved is one behaviour, not t
   // all twenty claims, with an accessLevel outside the vocabulary: 83 required
   // issues for two decisions, on a budget of seven submissions.
   const wrongValue = validateClinicalEvidencePackage({
-    keepCoverage: true,
     matrix: {
       claims: Array.from({ length: 20 }, (_, i) => ({
         ...bare(i),
@@ -255,7 +260,6 @@ test("a matrix written before its sources were preserved is one behaviour, not t
   // required issues that were a handful of decisions. Grouping on the message
   // text needs no list of shapes.
   const noValue = validateClinicalEvidencePackage({
-    keepCoverage: true,
     matrix: {
       claims: Array.from({ length: 9 }, (_, i) => ({
         ...bare(i),
@@ -270,7 +274,6 @@ test("a matrix written before its sources were preserved is one behaviour, not t
   // Negative control: different text about different claims must stay separate,
   // or the collapse would hide distinct findings behind whichever came first.
   const distinct = validateClinicalEvidencePackage({
-    keepCoverage: true,
     matrix: {
       claims: [
         { ...bare(0), artifactPath: "notes-a.md" },
@@ -285,7 +288,6 @@ test("a matrix written before its sources were preserved is one behaviour, not t
   // Negative control 1: below the threshold the per-claim finding stands, so a
   // single missing path is not buried in a summary about the matrix.
   const few = validateClinicalEvidencePackage({
-    keepCoverage: true,
     matrix: { claims: [bare(0), { ...bare(1), artifactPath: ".evimed-sources/a/fulltext.md" }] },
     reportText: report,
   }).issues.filter((issue) => /artifactPath/.test(issue));
@@ -295,7 +297,6 @@ test("a matrix written before its sources were preserved is one behaviour, not t
   // Negative control 2: the generic shape complaint survives for a field that
   // has no more specific finding of its own.
   const thin = validateClinicalEvidencePackage({
-    keepCoverage: true,
     matrix: { claims: [{ ...bare(0), claim: "", artifactPath: ".evimed-sources/a/fulltext.md" }] },
     reportText: report,
   }).issues;
@@ -307,7 +308,6 @@ test("a matrix written before its sources were preserved is one behaviour, not t
   // Negative control 3: a non-empty path that is not a preserved artifact is a
   // different problem and keeps its own message.
   const wrong = validateClinicalEvidencePackage({
-    keepCoverage: true,
     matrix: { claims: [{ ...bare(0), artifactPath: "notes/source-records.md" }] },
     reportText: report,
   }).issues;
@@ -389,81 +389,25 @@ test("a collapse that groups by one key and removes by another adds findings ins
   }
 });
 
-test("a search log written to another schema is one problem, not one per gap entry", () => {
-  // The contract's `queries[]` holds objects. A run wrote plain strings and put
-  // the objects under `searches` instead, so `entry?.query` was undefined for
-  // all twelve and every logged query normalized to "". Each gap entry that
-  // cited a search it had genuinely run came back as "no corresponding record"
-  // — twelve blocking findings, every one of them the same fact about the
-  // file's shape, and not one of them naming it. Fourteen blocking issues on
-  // the real package collapse to three once it is said once.
-  //
-  // The old wording also told the run the retrieval tool writes this file. It
-  // does not — the run does, which is why the shape can be wrong at all, and a
-  // run that believes otherwise cannot find the repair.
-  //
-  // `keepCoverage`, because the ledger is the subject: it has to keep citing
-  // the searches that really ran while the log beneath it changes shape.
-  const input = deepResearchPackage();
-  const coverage = questionCoverageLedger(input.reportText, input.searchLogText);
-  assert.match(coverage, /"status": ?"gap"/, "the fixture ledger must declare a gap for this case to bite");
-  const search = JSON.parse(input.searchLogText);
-  search.searches = search.queries;
-  search.queries = search.queries.map((entry) => entry.query);
-  const text = validateClinicalEvidencePackage({
-    ...input,
-    keepCoverage: true,
-    questionCoverageText: coverage,
-    searchLogText: JSON.stringify(search),
-  }).issues.join("\n");
-  assert.match(text, /queries 用了与契约不同的形状/);
-  assert.match(text, /这个文件由你写，不是工具写的/);
-  assert.equal(
-    (text.match(/没有对应记录/g) ?? []).length,
-    0,
-    "the per-citation findings must give way to the one that names the cause",
-  );
-
-  // Negative control: with the shape intact, a query the log does not carry is
-  // still reported against the entry that cites it.
-  const drifted = JSON.parse(input.searchLogText);
-  drifted.queries = drifted.queries.map((entry) => ({ ...entry, query: `${entry.query} 改过了` }));
-  const driftedText = validateClinicalEvidencePackage({
-    ...input,
-    keepCoverage: true,
-    questionCoverageText: coverage,
-    searchLogText: JSON.stringify(drifted),
-  }).issues.join("\n");
-  assert.match(driftedText, /没有对应记录/);
-  assert.ok(!/queries 用了与契约不同的形状/.test(driftedText), "a well-shaped log must not be reported as misshapen");
-});
-
-test("a source the platform itself preserved counts, even if the run's receipt forgot to list it", () => {
+test("a source counts as preserved when the platform holds its text, and only then", () => {
   // The checks on a claim's artifactPath are a chain, and each link is only
   // reached once the one before it passes: valid path, then listed as
-  // successful, then the quote. A run therefore learns about one layer per
-  // submission, and the attempt budget is five. RQ-03's rerun spent them on
-  // "report missing", "four files missing", "matrix schema wrong",
-  // "artifactPath is your own notes file", and finally "not listed as a
-  // successful source artifact" — for five paths that were preserved on disk,
-  // read by the platform, and cited correctly. It wrote them into its receipt
-  // two and a half minutes after the last attempt was gone.
+  // successful, then the quote. RQ-03's rerun spent its last attempt on "not
+  // listed as a successful source artifact" for five paths that were preserved
+  // on disk, read by the platform, and cited correctly: the list consulted was
+  // the run's own, and the run had not yet copied them into it.
   //
-  // The receipt is the run's account of what preserved. `sourceArtifacts` is
-  // ours, joined from the evidence ledger. Where ours has the text, the source
-  // preserved — there is nothing the run's list can add to that, and nothing it
-  // should be able to take away.
+  // So the list is ours alone — `sourceArtifacts`, joined from the evidence
+  // ledger. A path we hold the text of is preserved; nothing else is.
   const input = validPackage();
-  const path = input.matrix.claims[0].artifactPath;
-  input.runReceipt.successfulSourceArtifacts = input.runReceipt.successfulSourceArtifacts.filter((item) => item !== path);
   const text = validateClinicalEvidencePackage(input).issues.join("\n");
   assert.ok(
     !/claims\[0\]\.artifactPath is not listed as a successful source artifact/.test(text),
     "a source we read and hold the text of must not be rejected as unpreserved",
   );
 
-  // Negative control: a path in neither the receipt nor the artifact map is
-  // still refused, and refused for that reason.
+  // Negative control: a path the artifact map does not hold is refused, and
+  // refused for that reason.
   const absent = validPackage();
   absent.matrix.claims[0].artifactPath = ".evimed-sources/never-fetched/fulltext.md";
   assert.match(
@@ -485,9 +429,12 @@ test("a quote we had no text to check is not reported as a quote that is wrong",
   // Withholding the text must never produce the same sentence as contradicting
   // it, because the two need opposite repairs and only one of them is the run's
   // to make.
+  //
+  // A path the map holds with no text behind it — an artifact preserved as an
+  // empty file — says nothing either way about the quote.
   const input = validPackage();
   const claim = input.matrix.claims[0];
-  delete input.sourceArtifacts[claim.artifactPath];
+  input.sourceArtifacts[claim.artifactPath] = "";
   const result = validateClinicalEvidencePackage(input);
   const text = result.issues.join("\n");
   assert.equal(result.valid, false, "an unverifiable quote is still not an accepted one");
@@ -498,13 +445,17 @@ test("a quote we had no text to check is not reported as a quote that is wrong",
     "withholding the text must not read as the source contradicting the quote",
   );
 
-  // An artifact preserved as an empty file says nothing either way, and saying
-  // "not found" about it is the same false verdict in a narrower form.
-  const empty = validPackage();
-  empty.sourceArtifacts[empty.matrix.claims[0].artifactPath] = "";
-  assert.match(
-    validateClinicalEvidencePackage(empty).issues.join("\n"),
-    /supportQuote could not be checked/,
+  // A path the map does not hold at all is not a preserved source, and is
+  // refused as that — still never as a quote the source contradicts.
+  const absent = validPackage();
+  delete absent.sourceArtifacts[absent.matrix.claims[0].artifactPath];
+  const absentResult = validateClinicalEvidencePackage(absent);
+  const absentText = absentResult.issues.join("\n");
+  assert.equal(absentResult.valid, false);
+  assert.match(absentText, /claims\[0\]\.artifactPath is not listed as a successful source artifact/);
+  assert.ok(
+    !/claims\[0\]\.supportQuote was not found in its preserved source artifact/.test(absentText),
+    "withholding the text must not read as the source contradicting the quote",
   );
 
   // Negative control: with the text present, a quote the source does not carry
@@ -684,8 +635,8 @@ test("a quote the source does not contain still fails, however it is spaced", ()
 test("rejects runtime-process prose and combined claim markers in the academic report", () => {
   const input = validPackage();
   input.reportText = input.reportText
-    .replace("[claim:CLM-001]", "[claim:CLM-001, CLM-002]")
-    + "\n本次依据 clinical-evidence-synthesis 契约完成白名单抓取和落盘核验。";
+    .replace("<!-- claim:CLM-001 -->", "[claim:CLM-001, CLM-002]")
+    .replace("\n\n## 参考文献", "\n本次依据 clinical-evidence-synthesis 契约完成白名单抓取和落盘核验。\n\n## 参考文献");
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
   assert.match(result.issues.join("\n"), /runtime or retrieval-process prose/);
@@ -850,8 +801,8 @@ test("the pasted quotation is rejected under either label and either colon", () 
   // paper's own voice with its citation, and the wording quoted only where the
   // wording is itself what is being analysed.
   for (const write of [
-    "指南推荐对仍有缺血症状者舌下含服硝酸甘油。[claim:CLM-003]",
-    "该说明书将适应症限定为“气滞血瘀型冠心病心绞痛”，未涵盖未分化急性胸痛。[claim:CLM-004]",
+    "指南推荐对仍有缺血症状者舌下含服硝酸甘油。[3] <!-- claim:CLM-003 -->",
+    "该说明书将适应症限定为“气滞血瘀型冠心病心绞痛”，未涵盖未分化急性胸痛。[4] <!-- claim:CLM-004 -->",
   ]) {
     const input = validPackage();
     input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${write}\n`);
@@ -880,7 +831,7 @@ test("a results paragraph keeps the Latin script the field writes in", () => {
       + "该研究发表于 Frontiers in Pharmacology，评价硝酸甘油（nitroglycerin, NTG）在急性冠脉综合征"
       + "（acute coronary syndrome, ACS）中的症状缓解。\n"
       + "携带 ALDH2 rs671 变异者的缓解率为 50.6%，非携带者为 79.4%（RR 0.82，95%CI 0.75–0.90，P < 0.01）。"
-      + "[claim:CLM-001]\n",
+      + "[1] <!-- claim:CLM-001 -->\n",
   );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, true, result.issues.join("\n"));
@@ -895,7 +846,11 @@ test("the reference list is untranslated by definition, and it is the only secti
     + "prehospital setting: a multicentre randomised controlled trial";
 
   const listed = validPackage();
-  listed.reportText += `\n\n## 参考文献\n1. Zhang L, Wang Y, et al. ${title}. Lancet. 2023. https://doi.org/10.1000/prehospital.ntg\n`;
+  listed.reportText = listed.reportText.replace(
+    "\n1. Authoritative source 1. https://professional.heart.org/evidence/1",
+    `\n1. Zhang L, Wang Y, et al. ${title}. Lancet. 2023. https://doi.org/10.1000/prehospital.ntg`,
+  );
+  assert.ok(listed.reportText.includes(title), "the title must be in the reference list for this case to mean anything");
   const cited = validateClinicalEvidencePackage(listed);
   assert.equal(cited.valid, true, cited.issues.join("\n"));
 
@@ -908,9 +863,9 @@ test("the reference list is untranslated by definition, and it is the only secti
 });
 
 test("untranslated source prose is rejected; names, statistics and short quotations are not", () => {
-  // A verbatim quote is checked against its artifact in the matrix and the
-  // ledger. In the body nothing checks it, and nine of them stood in one
-  // delivered report — three in a single paragraph, introduced by 原文：.
+  // A verbatim quote is checked against its artifact in the matrix. In the
+  // body nothing checks it, and nine of them stood in one delivered report —
+  // three in a single paragraph, introduced by 原文：.
   //
   // The threshold is twelve consecutive Latin words. The longest strings a
   // Chinese manuscript legitimately carries untranslated are proper names and
@@ -1005,288 +960,18 @@ test("absent evidence may be written as a gap but never as a counter-finding", (
   }
 });
 
-test("a comparison the title announces is carried out on fixed axes", () => {
-  // The defect the commissioned report was returned for: the title promised a
-  // comparison of two medicines, the body reviewed each one's literature in
-  // turn, and the closing verdict came from whichever arm had the thinner file.
-  // Only the absence of the matrix is decidable — which columns are the arms is
-  // not readable from the text — so a table with an axis column and one column
-  // per arm is what is required, and nothing is asserted about its rows.
-  const missing = validPackage();
-  missing.reportText = missing.reportText.replace(
-    "# 急性胸部压迫感与速效救心丸的证据边界",
-    "# 急性胸痛院外自救用药的证据评价：速效救心丸与含服硝酸酯的比较",
-  );
-  const result = validateClinicalEvidencePackage(missing);
-  assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /titled as a comparison .* but no table in the analysis body/s);
-  assert.match(result.issues.join("\n"), /核准适用场景/);
-
-  // The repair, in both layouts a comparison table is written in: axes as rows
-  // with an arm per column, and the transposed form with the arms as rows.
-  for (const table of [
-    [
-      "| 维度 | 速效救心丸 | 含服硝酸酯 | 该维度可支持的结论边界 |",
-      "| --- | --- | --- | --- |",
-      "| 核准适用场景 | 气滞血瘀型冠心病心绞痛 | 心绞痛发作的急性缓解 | 只能判断用法是否落在核准范围内 |",
-      "| 急性按需使用证据 | 未检索到以急性缓解时间为结局的随机对照研究 | 已确诊心绞痛发作人群 | 可分别陈述，不足以排序 |",
-      "| 是否存在直接比较研究 | 未检索到头对头研究 | 同上 | 该空缺本身是结果 |",
-    ],
-    [
-      "| 干预 | 核准适用场景 | 急性按需使用证据 | 是否存在直接比较研究 |",
-      "| --- | --- | --- | --- |",
-      "| 速效救心丸 | 气滞血瘀型冠心病心绞痛 | 未检索到急性缓解时间的随机对照研究 | 未检索到头对头研究 |",
-      "| 含服硝酸酯 | 心绞痛发作的急性缓解 | 已确诊心绞痛发作人群 | 同上 |",
-    ],
-  ]) {
-    const filled = validPackage();
-    filled.reportText = filled.reportText
-      .replace("# 急性胸部压迫感与速效救心丸的证据边界", "# 急性胸痛院外自救用药的证据评价：速效救心丸与含服硝酸酯的比较")
-      .replace("## 药物角色\n", `## 药物角色\n${table.join("\n")}\n`);
-    const filledResult = validateClinicalEvidencePackage(filled);
-    assert.equal(filledResult.valid, true, filledResult.issues.join("\n"));
-  }
-
-  // A title that compares nothing is not asked for a comparison matrix, and
-  // 对比剂 is an ordinary pharmacology noun rather than an announcement.
-  for (const write of [
-    "# 急性胸部压迫感与速效救心丸的证据边界",
-    "# 碘对比剂相关急性肾损伤的证据评价",
-    "# 速效救心丸用于急性胸痛院外自救的证据评价",
-  ]) {
-    const input = validPackage();
-    input.reportText = input.reportText.replace("# 急性胸部压迫感与速效救心丸的证据边界", write);
-    assert.equal(validateClinicalEvidencePackage(input).valid, true, write);
-  }
-});
-
-test("a substitution claim the report says it has no comparison for is rejected", () => {
-  // The bridge walked in silence: a variant lowers one arm's response,
-  // therefore switch to the other — with the links in between (the other arm is
-  // untouched by the same pathway, switching improves outcomes, it substitutes
-  // at all) never established. An arm never tested for a mechanism is untested,
-  // not immune.
-  //
-  // What is decidable is not how strong the evidence should have been, but that
-  // the report states there is no direct comparison and concludes one anyway.
-  const declared = "未检索到两者在该场景的头对头随机对照比较。";
-  for (const write of [
-    "此类人群可改用另一制剂。",
-    "对低反应人群，另一制剂可能是更合适的选择。",
-    "就院外自救而言后者更为可靠。",
-    "在该场景中另一制剂优于含服硝酸酯。",
-    "低反应者可用另一制剂取代原有用药。",
-    // What is being compared is named a clause away, which is where a run puts
-    // it once it is told not to write 后者更可靠.
-    "两者相比，该制剂在该场景中更安全。",
-    // The exemptions below must not become a way through. A link asserted
-    // 已建立 is the conclusion itself; a source noun in front of the verb does
-    // not make a claim about the medicines into a claim about the literature;
-    // and an interrogative in a neighbouring clause licenses nothing.
-    "低反应者改用另一制剂后结局更好，该环已建立。",
-    "现有资料显示该制剂优于含服硝酸酯。",
-    "现有研究表明该制剂优于含服硝酸酯。",
-    "该制剂的疗效优于含服硝酸酯，证据充分。",
-    "无论是否首诊，均可改用另一制剂。",
-  ]) {
-    const input = validPackage();
-    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${declared}\n${write}\n`);
-    const issues = validateClinicalEvidencePackage(input).issues.join("\n");
-    assert.match(issues, /concludes that one arm can take the other's place/, write);
-    assert.match(issues, /已建立 or 未建立/, write);
-  }
-
-  // Each of these carries the words the rule reads, beside the same declared
-  // absence. None is a substitution claim, and rejecting one would send the run
-  // back to break a sentence the skill prescribes.
-  for (const write of [
-    "ALDH2 相关反应差异提示，院外心绞痛用药效果可能存在显著个体差异，不宜将含服硝酸酯视为对所有患者反应完全一致的单一标准。"
-      + "另一药具有不同的药物组成和证据路径，但其在低反应人群中的相对价值仍需直接临床研究验证。",
-    "两药在已确诊冠心病心绞痛患者中均有相应应用依据，但在首次发生或病因未明的院外急性胸痛中，现有证据不能支持患者自行选择药物替代专业评估。",
-    "该试验中试验组的症状缓解率优于对照组。",
-    "该指南建议含服无效者改用静脉给药。",
-    "任何自救药物都不能替代及时呼救与心电图评估。",
-    "两药的相对效能尚不能判断，缺乏可回答该问题的随机对照研究。",
-    "该试验报告该制剂的缓解率优于另一制剂。",
-    // A comparative adjective attached to a property of one population or one
-    // formulation, which is what most 更好 in a manuscript is. Reading it as a
-    // conclusion about the arms would reject ordinary results prose.
-    "该人群的依从性更好，随访完成率更高。",
-    "该缓释制剂的耐受性更好，不良反应报告较少。",
-    // The bridge written out link by link, which is the repair this rule's own
-    // notice asks for. The link that has not been shown is word for word the
-    // sentence the rule reads as a conclusion, so the 未建立 mark has to
-    // license it — in the same clause, a clause away, or as the short sentence
-    // that follows it.
-    "低反应者改用另一制剂后结局更好：未建立，未检索到以临床结局为终点的研究。",
-    "第四环为低反应者改用另一制剂后结局更好，该环未建立。",
-    "链条的第四环是低反应者改用另一制剂后结局更好。该环未建立。",
-    // Asking the question this rule exists to keep open is not answering it.
-    "低反应人群是否应换用其他制剂，目前尚无研究可以回答。",
-    // Which evidence base is stronger is a statement about the literature, and
-    // an axis may hold measured evidence on one arm and nothing on the other
-    // without any head-to-head study existing.
-    "该维度上含服硝酸酯的证据强度优于该制剂。",
-    "在急性按需使用这一维度上，含服硝酸酯的证据更可靠。",
-    "两者相比，含服硝酸酯在急性按需使用维度的证据更充分。",
-  ]) {
-    const input = validPackage();
-    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${declared}\n${write}\n`);
-    const result = validateClinicalEvidencePackage(input);
-    assert.equal(result.valid, true, `${write}: ${result.issues.join("\n")}`);
-  }
-
-  // Silence is not the contradiction. A substitution claim over a report that
-  // never says whether a direct comparison exists is preflight advice, because
-  // whether one exists in the literature is not decidable from the document —
-  // and a rule that cannot be decided must not withhold a finished package.
-  const silent = validPackage();
-  silent.reportText = silent.reportText.replace("## 药物角色\n", "## 药物角色\n此类人群可改用另一制剂。\n");
-  assert.equal(validateClinicalEvidencePackage(silent).valid, true);
-});
-
-test("a comparison is announced in more words than 比较, and in none of the words that merely contain one", () => {
-  // The promise is made in the title, so that is where it is read — and a run
-  // sent back for 比较 reaches for the next word before it reaches for the
-  // table. Every spelling below announces the same duty and owes the same
-  // matrix; if only one of them is read, the rule is a word filter rather than
-  // a rule about comparisons.
-  for (const title of [
-    "# 速效救心丸与含服硝酸酯的优劣评价",
-    "# 两种含服制剂孰优孰劣：院外自救用药的证据评价",
-    "# 速效救心丸 versus 含服硝酸酯的证据评价",
-    "# 速效救心丸 vs. 含服硝酸酯的证据评价",
-    "# 两种含服制剂的头对头证据评价",
-  ]) {
-    const input = validPackage();
-    input.reportText = input.reportText.replace("# 急性胸部压迫感与速效救心丸的证据边界", title);
-    const result = validateClinicalEvidencePackage(input);
-    assert.equal(result.valid, false, `${title}: a comparative title was accepted with no matrix under it`);
-    assert.match(result.issues.join("\n"), /titled as a comparison .* but no table in the analysis body/s, title);
-  }
-
-  // A word that merely contains one of those spellings promises nothing. 随机
-  // 对照试验 is the design line of half the sources a review cites, and vs
-  // inside a word is not the comparison operator — demanding a comparison
-  // matrix from either would withhold a finished package over its vocabulary.
-  for (const title of [
-    "# 随机对照试验证据在院外胸痛处置中的适用边界",
-    "# CVS 连锁药房处方数据中的胸痛用药证据评价",
-  ]) {
-    const input = validPackage();
-    input.reportText = input.reportText.replace("# 急性胸部压迫感与速效救心丸的证据边界", title);
-    const result = validateClinicalEvidencePackage(input);
-    assert.equal(result.valid, true, `${title}: ${result.issues.join("\n")}`);
-  }
-});
-
-test("the table that answers a comparative title has to put the arms side by side", () => {
-  // A run told to add a table adds a table. What the rule asks for is a matrix
-  // — an axis column, one column per arm, more than one axis filled — and the
-  // two shapes below are what a report writes when it complies with the letter:
-  // one arm's column with the other's missing, and a single axis standing in
-  // for the table. In neither does the reader see the two accounts meet, which
-  // is the whole point of asking for the table. The shapes that do satisfy it,
-  // in both layouts, are covered by the test above.
-  for (const [shape, table] of [
-    [
-      "one arm's column, the other's missing",
-      [
-        "| 维度 | 速效救心丸 |",
-        "| --- | --- |",
-        "| 核准适用场景 | 气滞血瘀型冠心病心绞痛 |",
-        "| 急性按需使用证据 | 未检索到以急性缓解时间为结局的随机对照研究 |",
-      ],
-    ],
-    [
-      "a single axis standing in for the table",
-      [
-        "| 维度 | 速效救心丸 | 含服硝酸酯 | 该维度可支持的结论边界 |",
-        "| --- | --- | --- | --- |",
-        "| 核准适用场景 | 气滞血瘀型冠心病心绞痛 | 心绞痛发作的急性缓解 | 只能判断用法是否落在核准范围内 |",
-      ],
-    ],
-  ]) {
-    const input = validPackage();
-    input.reportText = input.reportText
-      .replace("# 急性胸部压迫感与速效救心丸的证据边界", "# 速效救心丸与含服硝酸酯的优劣评价")
-      .replace("## 药物角色\n", `## 药物角色\n${table.join("\n")}\n`);
-    const result = validateClinicalEvidencePackage(input);
-    assert.equal(result.valid, false, `${shape}: this was accepted as a comparison matrix`);
-    assert.match(result.issues.join("\n"), /no table in the analysis body/, shape);
-  }
-});
-
-test("a swap is a swap under every verb the report reaches for, and refusing one is not making one", () => {
-  // 替代 and 改用 are exercised above; these are the words a run reaches for
-  // once it has been sent back for those, and the rule has to read the move
-  // rather than the wording. The last one carries no 前者/后者 anchor at all —
-  // what makes it a claim about the arms is that the clause is choosing between
-  // them.
-  const declared = "未检索到两者在该场景的头对头随机对照比较。";
-  for (const write of [
-    "低反应者可换用另一制剂。",
-    "该制剂可以代替含服硝酸酯用于院外自救。",
-    "对低反应人群，该制剂是更好的首选方案。",
-  ]) {
-    const input = validPackage();
-    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${declared}\n${write}\n`);
-    const result = validateClinicalEvidencePackage(input);
-    assert.equal(result.valid, false, `${write}: a swap between the arms was accepted`);
-    assert.match(result.issues.join("\n"), /concludes that one arm can take the other's place/, write);
-  }
-
-  // The reviewers' own sentences, verbatim where the fixture's question allows
-  // the medicines to be named. Refusing the swap is the finding this rule
-  // exists to protect, and it is written with the same verb the rule blocks;
-  // rejecting it would leave a run no way to say what the evidence says.
-  for (const write of [
-    "尚无证据支持以速效救心丸替代硝酸甘油。",
-    "其在 ALDH2 低反应人群中的相对价值仍需直接临床研究验证。",
-    // Somebody else's comparison, under the two source nouns the attributed
-    // pattern carries besides 指南 and 该试验.
-    "该系统评价报告含服硝酸酯的缓解率优于该制剂。",
-    "该 Meta 分析显示该制剂优于安慰剂。",
-    // An indication is not a swap: naming what is first-line inside one
-    // population says nothing about the other arm.
-    "在已确诊心绞痛发作中，含服硝酸酯是发作期的首选用药。",
-  ]) {
-    const input = validPackage();
-    input.reportText = input.reportText.replace("## 药物角色\n", `## 药物角色\n${declared}\n${write}\n`);
-    const result = validateClinicalEvidencePackage(input);
-    assert.equal(result.valid, true, `${write}: ${result.issues.join("\n")}`);
-  }
-});
-
-test("rejects explanatory objects where the run receipt requires path strings and boolean checks", () => {
-  const input = validPackage();
-  input.runReceipt.successfulSourceArtifacts = [
-    { path: ".evimed-sources/a/page.md" },
-    { path: ".evimed-sources/b/fulltext.md" },
-  ];
-  input.runReceipt.qualityChecks = {
-    claimTraceability: { status: "passed" },
-    contradictionAudit: { status: "passed" },
-    arithmeticAudit: { status: "passed" },
-  };
-  const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /Every successful source artifact/);
-  assert.match(result.issues.join("\n"), /quality checks must pass/);
-});
-
 test("permits an evidence-accessibility limitation but still rejects uncited practical actions and response-based diagnosis", () => {
   const input = validPackage();
   input.reportText = input.reportText
     .replace(/## 科学局限[\s\S]*?(?=\n## 结论与实际处置)/, "## 科学局限\n核心指南全文不可及。")
     .replace(
-      /## 结论与实际处置[\s\S]*$/,
+      /## 结论与实际处置[\s\S]*?(?=\n\n## 参考文献)/,
       // "胃药缓解不能排除心脏病" states that antacid relief CANNOT rule out a
       // cardiac cause, which is the correct finding — and it was asserted here
       // as something the rule must reject. The rule matched the subject matter
       // rather than the claim, and this test held that mistake in place. Use
       // advice that genuinely tells a reader to self-triage on the response.
-      "## 结论与实际处置\n1. 不要自行驾车。\n2. 胃药缓解说明不是心脏病。[claim:CLM-001]",
+      "## 结论与实际处置\n1. 不要自行驾车。\n2. 胃药缓解说明不是心脏病。[1] <!-- claim:CLM-001 -->",
     );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
@@ -1300,8 +985,8 @@ test("permits an evidence-accessibility limitation but still rejects uncited pra
 test("still bans an evidence-accessibility statement outside the Limitations section", () => {
   const input = validPackage();
   input.reportText = input.reportText.replace(
-    "## 药物角色\n速效救心丸不应延误急诊评估。[claim:CLM-003]",
-    "## 药物角色\n核心指南全文不可及。速效救心丸不应延误急诊评估。[claim:CLM-003]",
+    "## 药物角色\n速效救心丸不应延误急诊评估。[3] <!-- claim:CLM-003 -->",
+    "## 药物角色\n核心指南全文不可及。速效救心丸不应延误急诊评估。[3] <!-- claim:CLM-003 -->",
   );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
@@ -1311,8 +996,8 @@ test("still bans an evidence-accessibility statement outside the Limitations sec
 test("rejects a report number absent from every cited claim proposition and source passage", () => {
   const input = validPackage();
   input.reportText = input.reportText.replace(
-    "证据范围应被明确限定。[claim:CLM-004]",
-    "证据来自 1776 名受试者。[claim:CLM-004]",
+    "证据范围应被明确限定。[4] <!-- claim:CLM-004 -->",
+    "证据来自 1776 名受试者。[4] <!-- claim:CLM-004 -->",
   );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
@@ -1335,12 +1020,12 @@ test("accepts source years and identifiers in headings and does not confuse adve
   input.reportText = input.reportText
     .replace("## 药物角色", "## ACC 2022 与 Cochrane CD004473 的药物角色")
     .replace(
-      "速效救心丸不应延误急诊评估。[claim:CLM-003]",
-      "监管机构基于药品不良反应评估修订了安全信息，不能据此判断胸痛病因。[claim:CLM-003]",
+      "速效救心丸不应延误急诊评估。[3] <!-- claim:CLM-003 -->",
+      "监管机构基于药品不良反应评估修订了安全信息，不能据此判断胸痛病因。[3] <!-- claim:CLM-003 -->",
     )
     .replace(
-      "证据范围应被明确限定。[claim:CLM-004]",
-      "证据边界包括（1）适用人群与（2）照护场景。[claim:CLM-004]",
+      "证据范围应被明确限定。[4] <!-- claim:CLM-004 -->",
+      "证据边界包括（1）适用人群与（2）照护场景。[4] <!-- claim:CLM-004 -->",
     );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, true, result.issues.join("\n"));
@@ -1363,8 +1048,8 @@ test("keeps decimal estimates and confidence intervals atomic during numeric tra
     .map((item) => item.supportQuote)
     .join("\n");
   input.reportText = input.reportText.replace(
-    "症状不能单独完成病因归类。[claim:CLM-001]",
-    "Sensitivity was 99.3% (95% CI 98.5%-99.7%). [claim:CLM-001]",
+    "症状不能单独完成病因归类。[1] <!-- claim:CLM-001 -->",
+    "Sensitivity was 99.3% (95% CI 98.5%-99.7%). [1] <!-- claim:CLM-001 -->",
   );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, true, result.issues.join("\n"));
@@ -1373,10 +1058,10 @@ test("keeps decimal estimates and confidence intervals atomic during numeric tra
 test("does not treat table ordinals or parenthesized enumeration as clinical numeric facts", () => {
   const input = validPackage();
   input.reportText = input.reportText.replace(
-    "症状不能单独完成病因归类。[claim:CLM-001]",
+    "症状不能单独完成病因归类。[1] <!-- claim:CLM-001 -->",
     [
-      "证据边界包括（1）适用人群、（2）照护场景与（3）结局定义。[claim:CLM-001]",
-      "| 1 | 立即完成结构化评估 | [claim:CLM-001] |",
+      "证据边界包括（1）适用人群、（2）照护场景与（3）结局定义。[1] <!-- claim:CLM-001 -->",
+      "| 1 | 立即完成结构化评估 | [1] <!-- claim:CLM-001 --> |",
     ].join("\n"),
   );
   const result = validateClinicalEvidencePackage(input);
@@ -1392,8 +1077,8 @@ test("resolves Chinese numerals in the report against Arabic numbers in the cite
     .map((item) => item.supportQuote)
     .join("\n");
   input.reportText = input.reportText.replace(
-    "症状不能单独完成病因归类。[claim:CLM-001]",
-    "该分析共纳入一千七百七十六名受试者。[claim:CLM-001]",
+    "症状不能单独完成病因归类。[1] <!-- claim:CLM-001 -->",
+    "该分析共纳入一千七百七十六名受试者。[1] <!-- claim:CLM-001 -->",
   );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, true, result.issues.join("\n"));
@@ -1402,8 +1087,8 @@ test("resolves Chinese numerals in the report against Arabic numbers in the cite
 test("flags a Chinese-numeral quantity absent from the cited evidence", () => {
   const input = validPackage();
   input.reportText = input.reportText.replace(
-    "症状不能单独完成病因归类。[claim:CLM-001]",
-    "该分析共纳入一千七百七十六名受试者。[claim:CLM-001]",
+    "症状不能单独完成病因归类。[1] <!-- claim:CLM-001 -->",
+    "该分析共纳入一千七百七十六名受试者。[1] <!-- claim:CLM-001 -->",
   );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
@@ -1411,9 +1096,9 @@ test("flags a Chinese-numeral quantity absent from the cited evidence", () => {
 });
 
 test("audits an effect size written with an equals sign or Chinese connective", () => {
-  for (const proposition of ["该药显著增加风险（OR=4.2）。[claim:CLM-002]", "风险比为3.8。[claim:CLM-002]"]) {
+  for (const proposition of ["该药显著增加风险（OR=4.2）。[2] <!-- claim:CLM-002 -->", "风险比为3.8。[2] <!-- claim:CLM-002 -->"]) {
     const input = validPackage();
-    input.reportText = input.reportText.replace("诊断需要规范评估。[claim:CLM-002]", proposition);
+    input.reportText = input.reportText.replace("诊断需要规范评估。[2] <!-- claim:CLM-002 -->", proposition);
     const result = validateClinicalEvidencePackage(input);
     assert.equal(result.valid, false, proposition);
     assert.match(result.issues.join("\n"), /numeric facts?\s+(?:4\.2|3\.8)/);
@@ -1422,7 +1107,7 @@ test("audits an effect size written with an equals sign or Chinese connective", 
 
 test("audits a Chinese-unit dose as a conclusory quantity", () => {
   const input = validPackage();
-  input.reportText = input.reportText.replace("诊断需要规范评估。[claim:CLM-002]", "推荐每次口服100毫克。[claim:CLM-002]");
+  input.reportText = input.reportText.replace("诊断需要规范评估。[2] <!-- claim:CLM-002 -->", "推荐每次口服100毫克。[2] <!-- claim:CLM-002 -->");
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
   assert.match(result.issues.join("\n"), /numeric facts?\s+100/);
@@ -1437,59 +1122,14 @@ test("does not let a structural English number-word in the source mask a fabrica
     .map((item) => item.supportQuote)
     .join("\n");
   input.reportText = input.reportText.replace(
-    "症状不能单独完成病因归类。[claim:CLM-001]",
-    "该疗法使风险增加3倍。[claim:CLM-001]",
+    "症状不能单独完成病因归类。[1] <!-- claim:CLM-001 -->",
+    "该疗法使风险增加3倍。[1] <!-- claim:CLM-001 -->",
   );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
   // The source's "three databases" is structural (not unit-adjacent) so it must
   // not supply a "3" that would mask the fabricated 3-fold effect.
   assert.match(result.issues.join("\n"), /numeric facts?\s+3\b/);
-});
-
-test("accepts a citation ledger whose required columns are present in any order", () => {
-  // The header four consecutive production runs were failed for. Nothing stated
-  // that the first three columns had to be claimId, referenceNumber,
-  // supportQuote positionally, and the preflight the run is told to satisfy
-  // never looked — so one run rewrote its header three times, got the first two
-  // right, and could not guess the third. Column order carries no meaning here.
-  const input = deepResearchPackage();
-  const rows = input.citationLedgerText.trim().split("\n");
-  input.citationLedgerText = [
-    "claimId,referenceNumber,claimType,supportQuoteVerified",
-    ...rows.slice(1).map((row) => {
-      const [claimId, referenceNumber, ...rest] = row.split(",");
-      return [claimId, referenceNumber, "direct", rest.join(" ").replace(/,/g, " ")].join(",");
-    }),
-  ].join("\n");
-  const result = validateClinicalEvidencePackage(input);
-  assert.doesNotMatch(result.issues.join("\n"), /citation-ledger\.csv must have a header naming/);
-});
-
-test("rejects a citation ledger that never names the columns the cross-check reads", () => {
-  const input = deepResearchPackage();
-  input.citationLedgerText = input.citationLedgerText.replace(
-    "claimId,referenceNumber,supportQuote",
-    "claim,source,quote",
-  );
-  const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, false);
-  // The message names every column it wants, so the run can act on it.
-  assert.match(result.issues.join("\n"), /must have a header naming claimId, referenceNumber and supportQuote/);
-});
-
-test("counts ledger records, not lines, when a support quote spans newlines", () => {
-  // A csv writer quotes an embedded newline rather than losing it. Counting
-  // lines then counted one claim as two, or split a row in half.
-  const input = deepResearchPackage();
-  const rows = input.citationLedgerText.trim().split("\n");
-  input.citationLedgerText = [
-    rows[0],
-    rows[1].replace(/,([^,]*)$/, ',"first line\nsecond line"'),
-    ...rows.slice(2),
-  ].join("\n");
-  const result = validateClinicalEvidencePackage(input);
-  assert.doesNotMatch(result.issues.join("\n"), /citation-ledger\.csv must have a header naming/);
 });
 
 test("numeric-audit line numbers point at the line the report actually has there", () => {
@@ -1544,13 +1184,13 @@ test("rejects authored retrieval excuses and uncited Chinese practical steps or 
       "## 科学局限\n本分析仅基于摘要页面，未触及完整文件。\n",
     )
     .replace(
-      /## 结论与实际处置[\s\S]*$/,
+      /## 结论与实际处置[\s\S]*?(?=\n\n## 参考文献)/,
       [
         "## 结论与实际处置",
-        "**第一步：立即呼叫急救。** [claim:CLM-001]",
+        "**第一步：立即呼叫急救。** [1] <!-- claim:CLM-001 -->",
         "**第二步：自行驾车前往医院。**",
         "- 服用速效救心丸后继续观察。",
-        "不得因服用速效救心丸而延误呼救或急诊评估。[claim:CLM-003]",
+        "不得因服用速效救心丸而延误呼救或急诊评估。[3] <!-- claim:CLM-003 -->",
       ].join("\n"),
     );
   const result = validateClinicalEvidencePackage(input);
@@ -1566,11 +1206,11 @@ test("rejects unsupported antacid or wait-and-see advice in the practical answer
   const advice = (line) => {
     const input = validPackage();
     input.reportText = input.reportText.replace(
-      /## 结论与实际处置[\s\S]*$/,
+      /## 结论与实际处置[\s\S]*?(?=\n\n## 参考文献)/,
       [
         "## 结论与实际处置",
-        "速效救心丸不应延误急诊评估。[claim:CLM-003]",
-        `${line}[claim:CLM-003] ` + "结论必须同时保留临床紧迫性、适用边界和不确定性。".repeat(30),
+        "速效救心丸不应延误急诊评估。[3] <!-- claim:CLM-003 -->",
+        `${line}[3] <!-- claim:CLM-003 --> ` + "结论必须同时保留临床紧迫性、适用边界和不确定性。".repeat(30),
       ].join("\n"),
     );
     return validateClinicalEvidencePackage(input);
@@ -1590,8 +1230,8 @@ test("rejects unsupported antacid or wait-and-see advice in the practical answer
 
 test("rejects an unrequested medicine and exclusive safety language", () => {
   const input = validPackage();
-  input.runReceipt.question = "胸口突然发闷发紧，该先怎么办？";
-  input.reportText += "\n这是唯一正确的处置策略。";
+  input.briefText = "胸口突然发闷发紧，该先怎么办？";
+  input.reportText = input.reportText.replace("\n\n## 参考文献", "\n这是唯一正确的处置策略。\n\n## 参考文献");
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
   assert.match(result.issues.join("\n"), /medicine-free question/);
@@ -1608,7 +1248,7 @@ test("does not treat unique research evidence or methods as exclusive safety cla
   ];
   for (const statement of ordinaryResearchStatements) {
     const input = validPackage();
-    input.reportText += `\n${statement}`;
+    input.reportText = input.reportText.replace("\n\n## 参考文献", `\n${statement}\n\n## 参考文献`);
     const result = validateClinicalEvidencePackage(input);
     assert.equal(result.valid, true, `${statement}\n${result.issues.join("\n")}`);
   }
@@ -1626,7 +1266,7 @@ test("rejects an exclusive clinical action method without an explicit safety adj
   ];
   for (const statement of exclusiveClinicalStatements) {
     const input = validPackage();
-    input.reportText += `\n${statement}`;
+    input.reportText = input.reportText.replace("\n\n## 参考文献", `\n${statement}\n\n## 参考文献`);
     const result = validateClinicalEvidencePackage(input);
     assert.equal(result.valid, false, statement);
     assert.match(result.issues.join("\n"), /exclusive safety claim/);
@@ -1764,10 +1404,13 @@ test("refuses subject labels that are record numbers from the source data", () =
   // PATIENT_IDs with a P stuck on the front, which reads like a pseudonym and
   // is not one. Nobody reading the report can tell, and the person exposed is
   // not the reader.
+  //
+  // On a line of its own: the rule reads a line that cites a source as being
+  // about that source, and every claim line in this package cites one.
   const input = validPackage();
   input.reportText = input.reportText.replace(
-    "症状不能单独完成病因归类。",
-    "P90000001 的浓度高于参考区间上限。",
+    "## 药物角色\n",
+    "## 药物角色\nP90000001 的浓度高于参考区间上限。\n",
   );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
@@ -1776,10 +1419,12 @@ test("refuses subject labels that are record numbers from the source data", () =
 });
 
 test("leaves bibliographic identifiers and short pseudonyms alone", () => {
+  // Where the case above puts its record number, so these lines are read.
   const input = validPackage();
-  input.reportText = input.reportText
-    .replace("症状不能单独完成病因归类。", "P3 与 P12 的浓度可比。")
-    + "\n\n综述编号 CD004473 与 PMC9584998 见参考文献。\n";
+  input.reportText = input.reportText.replace(
+    "## 药物角色\n",
+    "## 药物角色\nP3 与 P12 的浓度可比。\n综述编号 CD004473 与 PMC9584998 见参考文献。\n",
+  );
   const result = validateClinicalEvidencePackage(input);
   assert.doesNotMatch(result.issues.join("\n"), /record numbers/);
 });
@@ -1880,37 +1525,6 @@ test("accepts a traceable deep-research package without editorial count quotas",
   assert.equal(result.sourceDomains.length, 3);
 });
 
-test("rejects documented deep-research queries that were not successfully executed in the same run", () => {
-  const input = deepResearchPackage();
-  input.executedSearchQueries = JSON.parse(input.searchLogText).queries
-    .slice(0, 7)
-    .map((entry) => entry.query);
-  const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /must exactly match successful evidence-search calls/);
-});
-
-test("a search retyped into the log without its phrase quotes is the same search", () => {
-  const input = deepResearchPackage();
-  const executed = JSON.parse(input.searchLogText).queries.map((entry) => entry.query);
-  // The run executed a phrase search; the log records the same terms unquoted
-  // and respaced. That is transcription, not a search the agent never ran.
-  input.executedSearchQueries = executed.map((query, index) =>
-    index === 0 ? `"${query.split(" ").join('" "')}"  ` : query,
-  );
-  const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, true, result.issues.join("\n"));
-});
-
-test("allows the same query text to be run against different source classes", () => {
-  const input = deepResearchPackage();
-  const search = JSON.parse(input.searchLogText);
-  search.queries[1].query = search.queries[0].query;
-  input.searchLogText = JSON.stringify(search);
-  const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, true, result.issues.join("\n"));
-});
-
 test("accepts compound numbered citations when each hidden claim resolves on the same line", () => {
   const input = deepResearchPackage();
   const first = input.matrix.claims[0];
@@ -1937,63 +1551,6 @@ test("rejects a report that puts its practical answer after the reference list",
   assert.match(result.issues.join("\n"), /reference list must follow/);
 });
 
-test("rejects an internally inconsistent package that falsely claims the deep-research profile", () => {
-  const input = deepResearchPackage();
-  input.reportText = validPackage().reportText;
-  input.matrix.claims = input.matrix.claims.slice(0, 4);
-  input.searchLogText = JSON.stringify({
-    schemaVersion: 1,
-    queries: [{ database: "PubMed", query: "chest pain" }],
-    screening: { recordsIdentified: 4, recordsAfterDeduplication: 2, sourcesIncluded: 2 },
-    sourceRecords: [],
-  });
-  input.referencesText = "@article{one, pmid = {1}}";
-  input.citationLedgerText = "claimId,referenceNumber,supportQuote";
-  input.citationAuditText = "No audit.";
-  input.runReceipt.successfulSourceArtifacts = input.runReceipt.successfulSourceArtifacts.slice(0, 2);
-  const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, false);
-  const issues = result.issues.join("\n");
-  assert.match(issues, /at least two distinct evidence databases or source classes/);
-  assert.match(issues, /internally consistent screening flow/);
-  assert.match(issues, /reference list must follow/);
-  assert.match(issues, /one row per evidence-matrix claim/);
-  assert.match(issues, /citation-audit.md must document/);
-});
-
-test("does not count companion Markdown and XML files as distinct preserved sources", () => {
-  const input = deepResearchPackage();
-  const duplicated = input.runReceipt.successfulSourceArtifacts.slice(0, 4).flatMap((path) => {
-    const root = path.replace(/\/content\.md$/, "");
-    return [`${root}/fulltext.md`, `${root}/fulltext.xml`];
-  });
-  input.runReceipt.successfulSourceArtifacts = duplicated;
-  input.runReceipt.stats.distinctPreservedSources = 4;
-  input.sourceArtifacts = Object.fromEntries(duplicated.map((path, index) => [
-    path,
-    `Distinct source passage ${index + 1} with enough supporting text.`,
-  ]));
-  const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, false);
-  const issues = result.issues.join("\n");
-  assert.match(issues, /companion XML and Markdown files cannot be counted twice/);
-});
-
-test("classifies a citation-audit-documentation-only failure as degradable, not blocking", () => {
-  const input = deepResearchPackage();
-  // Drop only the correction/retraction line, so the sole failure is the
-  // citation-audit documentation-completeness check — a process-documentation
-  // gap that cannot mask a clinical error.
-  input.citationAuditText = input.citationAuditText.replace(
-    "Correction and retraction checks: no correction or retraction notice was identified for the included records.\n\n",
-    "",
-  );
-  const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /citation-audit\.md must document/);
-  assert.deepEqual([...result.blockingIssues], []);
-});
-
 test("classifies a fabricated support quote as a blocking failure", () => {
   const input = deepResearchPackage();
   input.matrix.claims[0].supportQuote = "This passage was never present in any preserved source artifact.";
@@ -2001,38 +1558,9 @@ test("classifies a fabricated support quote as a blocking failure", () => {
   assert.equal(result.valid, false);
   assert.ok(result.blockingIssues.length > 0);
   assert.match(result.blockingIssues.join("\n"), /was not found in its preserved source artifact/);
-});
-
-test("cross-checks the citation ledger's reference numbers against the matrix", () => {
-  const input = deepResearchPackage();
-  // Corrupt one ledger row's reference number so it disagrees with the matrix.
-  input.citationLedgerText = input.citationLedgerText.replace("CLM-001,1,", "CLM-001,99,");
-  const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /citation-ledger\.csv rows must match each evidence-matrix claim/);
-  assert.deepEqual([...result.blockingIssues], []); // supporting-doc gap stays degradable
-});
-
-test("cross-checks references.bib against every cited source URL", () => {
-  const input = deepResearchPackage();
-  // Blank one entry's URL so a cited source has no bibliography URL match.
-  input.referencesText = input.referencesText.replace(
-    "  url = {https://pubmed.ncbi.nlm.nih.gov/evidence/source-1}",
-    "  url = {}",
-  );
-  const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /references\.bib must contain a bibliography entry for every cited source URL/);
-  assert.deepEqual([...result.blockingIssues], []);
-});
-
-test("requires the citation audit to name a real audited source identifier", () => {
-  const input = deepResearchPackage();
-  input.citationAuditText = input.citationAuditText.replace("(for example PMID 900001) ", "");
-  const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /citation-audit\.md must reference at least one real audited source identifier/);
-  assert.deepEqual([...result.blockingIssues], []);
+  // No defect with a code of its own is among them, so the run is told the
+  // generic one.
+  assert.equal(clinicalEvidencePackageErrorCode(result.blockingIssues), "specialist_evidence_traceability_failed");
 });
 
 
@@ -2071,7 +1599,6 @@ function withSynthesizedClaim(mutate = (claim) => claim) {
     "## 讨论",
     "跨来源综合显示，2 项独立来源一致支持安全优先的分层评估路径。[1](https://pubmed.ncbi.nlm.nih.gov/evidence/source-1) <!-- claim:CLM-019 -->\n\n## 讨论",
   );
-  input.citationLedgerText += `\nCLM-019,1,"${claim.supportingSources[0].supportQuote}"`;
   return input;
 }
 
@@ -2885,95 +2412,6 @@ test("a repeated claim marker must carry that claim's number on every line it ap
   assert.equal(validateClinicalEvidencePackage(body).blockingIssues.includes(bodyIssues[0]), false);
 });
 
-test("an excluded source record needs a reason and must leave the numbered list", () => {
-  const issues = closureIssues((input) => {
-    const log = JSON.parse(input.searchLogText);
-    log.sourceRecords.push({
-      sourceUrl: "https://pubmed.ncbi.nlm.nih.gov/evidence/source-13",
-      referenceNumber: 5,
-      included: false,
-      accessLevel: "bibliographic",
-    });
-    input.searchLogText = JSON.stringify(log);
-  }, /sourceRecords\[12\]/);
-  assert.equal(issues.length, 2, issues.join("\n"));
-  assert.equal(issues.some((issue) => /没有 exclusionReason/.test(issue)), true);
-  assert.equal(issues.some((issue) => /却仍以编号 \[5\] 留在参考文献表中/.test(issue)), true);
-});
-
-// --- Screening numbers and the source set are rendered, never restated -----
-test("a stated flow number that disagrees with the search log is rejected, one number at a time", () => {
-  // RQ-07 as delivered: 191/116/25 in the prose against 203/125/24 in the log
-  // and in the run's own citation audit. Log and receipt agree perfectly, so
-  // every existing check passes; nobody reads the prose.
-  const input = deepResearchPackage();
-  input.reportText = input.reportText.replace(
-    "## 结果\n",
-    "## 结果\n以 PMID、DOI 及规范化题名去重后，共获得 40 条记录，去重并剔除无关记录后余 24 条，最终纳入 12 个来源。\n",
-  );
-  const issues = validateClinicalEvidencePackage(input).issues.filter((issue) => /^检索流程数与纳入来源集合/.test(issue));
-  // Only the disagreeing quantity: 24 and 12 are right and raise nothing.
-  assert.equal(issues.length, 1);
-  assert.match(issues[0], /命中记录数 40，检索记录 recordsIdentified = 42/);
-});
-
-test("a per-query hit count and a cited study's own count are not the run's flow", () => {
-  // The two most dangerous look-alikes in the corpus. 「命中 0 条」 for one named
-  // database is a result; 「纳入 46 篇系统评价」 and 「纳入 41 项随机对照试验」 are
-  // a cited paper's own counts. Without the anchoring rule the first collides
-  // with recordsIdentified and the second with sourcesIncluded.
-  for (const line of [
-    "临床试验注册库以“速效救心丸”检索命中 0 条。",
-    "纳入的 46 篇系统评价中，结局多为心绞痛与心电图等次要终点。",
-    "Ren 等的荟萃分析纳入 41 项随机对照试验、6276 例中国冠心病患者。",
-    "该试验纳入 174 例对长效硝酸酯不耐受的慢性冠脉综合征患者。",
-  ]) {
-    const input = deepResearchPackage();
-    input.reportText = input.reportText.replace("## 结果\n", `## 结果\n${line}\n`);
-    const issues = validateClinicalEvidencePackage(input).issues.filter((issue) => /^检索流程数与纳入来源集合/.test(issue));
-    assert.deepEqual(issues, [], `a per-study or per-query count must not read as the run's flow: ${line}`);
-  }
-  // And a complete, correct flow sentence stays silent, which is the shape the
-  // rule is asking for.
-  const correct = deepResearchPackage();
-  correct.reportText = correct.reportText.replace(
-    "## 结果\n",
-    "## 结果\n共执行 8 条检索式，命中 42 条记录，去重后 24 条，纳入 12 份来源。\n",
-  );
-  assert.deepEqual(
-    validateClinicalEvidencePackage(correct).issues.filter((issue) => /^检索流程数与纳入来源集合/.test(issue)),
-    [],
-  );
-});
-
-test("the numbered reference list must be exactly the included source set", () => {
-  // RQ-24 as delivered: twelve numbered references, seven included records, and
-  // the five it cites in the body sit in the log as
-  // "accessLevel": "bibliographic", "included": false. sourcesIncluded ===
-  // includedRecords.length still holds, so the existing check sees a
-  // consistent log while the reader sees twelve numbered sources.
-  const input = deepResearchPackage();
-  const log = JSON.parse(input.searchLogText);
-  log.sourceRecords[11].included = false;
-  log.sourceRecords[11].accessLevel = "bibliographic";
-  log.sourceRecords[11].exclusionReason = "题录层级，未获全文";
-  log.screening.sourcesIncluded = 11;
-  input.searchLogText = JSON.stringify(log);
-  const issues = validateClinicalEvidencePackage(input).issues;
-  assert.equal(issues.some((issue) => /^参考文献 \[12\] 在正文中被引用或列入参考文献表/.test(issue)), true, issues.join("\n"));
-  assert.equal(issues.some((issue) => /^参考文献表共 12 条编号条目，screening\.sourcesIncluded = 11/.test(issue)), true);
-});
-
-test("the screening-ledger mismatch earns its own run-level error code", () => {
-  // A repair loop told only "traceability failed" cannot hand the run the
-  // numbers that disagree.
-  assert.equal(
-    clinicalEvidencePackageErrorCode(["参考文献表共 12 条编号条目，screening.sourcesIncluded = 11。"]),
-    "specialist_screening_ledger_mismatch",
-  );
-  assert.equal(clinicalEvidencePackageErrorCode(["some other blocking issue"]), "specialist_evidence_traceability_failed");
-});
-
 // --- A named appraisal instrument is a promise, not a qualification --------
 /** @param {string} methods @param {string} [results] */
 function appraisalPackage(methods, results = "") {
@@ -3207,514 +2645,6 @@ test("the standard wording of a GRADE high-certainty verdict is not a contradict
   );
 });
 
-// --- The question-coverage ledger -------------------------------------------
-//
-// Two halves. The cases in this first block check the run's own account of the
-// brief's questions against the artifacts the gate holds anyway — the report's
-// lines, the claim anchors in them, the search log. The block further down
-// checks that account against the brief itself.
-
-/** A coverage-targeted package: the fixture, with the ledger the case supplies.
- *  @param {any} ledger @param {(input: any) => void} [edit] */
-function coveragePackage(ledger, edit) {
-  const input = deepResearchPackage();
-  if (edit) edit(input);
-  input.keepCoverage = true;
-  input.questionCoverageText = typeof ledger === "string" ? ledger : JSON.stringify(ledger);
-  return input;
-}
-
-/** The self-consistency findings only.
- *
- *  Cases in this block build ledgers whose question text is written for the
- *  case rather than transcribed from the fixture's brief, which the
- *  brief-derived rules correctly object to. Those objections belong to the
- *  block further down and would otherwise decide the error code here.
- *  @param {any} ledger @param {(input: any) => void} [edit] */
-function coverageBlocking(ledger, edit) {
-  const result = validateClinicalEvidencePackage(coveragePackage(ledger, edit));
-  return result.blockingIssues.filter((issue) => (
-    /^question-coverage\.json /.test(issue) && !issue.includes("题面第")
-  ));
-}
-
-/** The ledger the fixture is valid under, as an object to edit. */
-function coverageLedgerObject() {
-  const input = deepResearchPackage();
-  return JSON.parse(input.questionCoverageText);
-}
-
-test("the coverage ledger is a required deliverable, and its absence is stated as such", () => {
-  for (const absent of ["", "   ", undefined]) {
-    const input = deepResearchPackage();
-    input.keepCoverage = true;
-    input.questionCoverageText = absent;
-    const result = validateClinicalEvidencePackage(input);
-    assert.equal(result.valid, false, `an absent coverage ledger must block: ${JSON.stringify(absent)}`);
-    assert.match(result.blockingIssues.join("\n"), /^question-coverage\.json 台账格式无效：文件缺失或为空/m);
-    assert.equal(clinicalEvidencePackageErrorCode(result.blockingIssues), "specialist_question_coverage_invalid");
-  }
-  // And the fixture with its ledger passes, so this cannot pass by the whole
-  // family having been deleted.
-  assert.equal(validateClinicalEvidencePackage(deepResearchPackage()).valid, true);
-});
-
-test("a malformed coverage ledger names the field that is wrong", () => {
-  const cases = [
-    ["[]", /顶层必须是对象/],
-    ["{", /不是合法 JSON/],
-    ['{"schemaVersion":2,"entries":[]}', /必须写 "schemaVersion": 1/],
-    ['{"schemaVersion":1,"entries":[]}', /entries 必须是非空数组/],
-    ['{"schemaVersion":1,"entries":[{"question":"胸口发闷是心绞痛还是胃病","status":"answered","reportLines":[1]}]}', /\.id 必须是题面编号/],
-    ['{"schemaVersion":1,"entries":[{"id":"1.1","question":"短","status":"answered","reportLines":[1]}]}', /\.question 必须转录子问原文/],
-    ['{"schemaVersion":1,"entries":[{"id":"1.1","question":"胸口发闷是心绞痛还是胃病","status":"partial"}]}', /\.status 必须是/],
-  ];
-  for (const [ledger, expected] of cases) {
-    const issues = coverageBlocking(ledger);
-    assert.ok(issues.length > 0, `a malformed ledger must block: ${ledger}`);
-    assert.match(issues.join("\n"), expected);
-  }
-  // A repeated id, and a claim the matrix does not have.
-  const duplicate = coverageLedgerObject();
-  duplicate.entries[1].id = duplicate.entries[0].id;
-  assert.match(coverageBlocking(duplicate).join("\n"), /条目编号 1\.1 出现了两次/);
-  const invented = coverageLedgerObject();
-  invented.entries[0].claimIds = ["CLM-777"];
-  assert.match(coverageBlocking(invented).join("\n"), /证据矩阵里没有这个 claim/);
-});
-
-test("an answered sub-question must land on a report line that carries evidence", () => {
-  const beyond = coverageLedgerObject();
-  beyond.entries[0].reportLines = [9999];
-  assert.match(
-    coverageBlocking(beyond).join("\n"),
-    /条目 1\.1（「胸口突然发闷发紧、像被压着一样，是心绞痛还是胃病」）声明 answered，但指向报告第 9999 行/,
-  );
-
-  // Pointing at the reference list, at the limitations, and at a blank line.
-  const input = deepResearchPackage();
-  const lines = input.reportText.split("\n");
-  const lineIn = (heading) => {
-    let current = "";
-    for (const [index, line] of lines.entries()) {
-      const found = /^##\s+(.*)$/.exec(line);
-      if (found) current = found[1];
-      if (new RegExp(heading).test(current) && !/^##/.test(line) && line.trim()) return index + 1;
-    }
-    return 0;
-  };
-  for (const [line, expected] of [
-    [lineIn("参考文献"), /那一行在「参考文献」一节里/],
-    [lineIn("局限"), /那一行在「局限与不确定性」一节里/],
-    [lines.findIndex((value) => !value.trim()) + 1, /那一行是空行或只有标记/],
-  ]) {
-    const ledger = coverageLedgerObject();
-    ledger.entries[0].reportLines = [line];
-    ledger.entries[1].reportLines = [line];
-    assert.match(coverageBlocking(ledger).join("\n"), expected, `line ${line}`);
-  }
-
-  // A real prose line that carries no claim anchor anywhere in its paragraph.
-  const unanchored = lines.findIndex((line) => (
-    line.trim() && !/^#/.test(line) && !/claim:CLM/.test(line)
-  )) + 1;
-  const bare = coverageLedgerObject();
-  bare.entries[0].reportLines = [unanchored];
-  bare.entries[1].reportLines = [unanchored];
-  assert.match(coverageBlocking(bare).join("\n"), /所在段落都没有 claim 锚点/);
-
-  // The unedited ledger clears all of it.
-  assert.deepEqual(coverageBlocking(coverageLedgerObject()), []);
-});
-
-test("a declared gap must be backed by a search the retrieval tools really ran", () => {
-  const invented = coverageLedgerObject();
-  invented.entries[2].searches = [{
-    query: "a search that was never run in this session",
-    database: "PubMed",
-    searchedAt: "2026-02-11",
-  }];
-  assert.match(
-    coverageBlocking(invented).join("\n"),
-    /条目 2\.1（[^）]*）声明 gap，其检索式「a search that was never run in this session」在 clinical-evidence-search\.json 的 queries 中没有对应记录/,
-  );
-
-  const wrongDatabase = coverageLedgerObject();
-  wrongDatabase.entries[2].searches[0].database = "Embase";
-  assert.match(coverageBlocking(wrongDatabase).join("\n"), /声明的数据源是「Embase」/);
-
-  const wrongDate = coverageLedgerObject();
-  wrongDate.entries[2].searches[0].searchedAt = "2020-01-01";
-  assert.match(coverageBlocking(wrongDate).join("\n"), /声明的检索日期是 2020-01-01/);
-
-  for (const searches of [[], undefined, [{ query: "x" }]]) {
-    const missing = coverageLedgerObject();
-    missing.entries[2].searches = searches;
-    assert.ok(coverageBlocking(missing).length > 0, `a gap without a real search must block: ${JSON.stringify(searches)}`);
-  }
-
-  // Transcription differences in the query — spacing, quotes, case — are not a
-  // search that never ran.
-  const retyped = coverageLedgerObject();
-  retyped.entries[2].searches[0].query = ` "Distinct   Structured" search CONCEPT 1 `;
-  assert.deepEqual(coverageBlocking(retyped), []);
-});
-
-test("a registered gap may not be written as an answer where the reader takes the answer away", () => {
-  // One sentence per family, each carrying the gap's own subject, inserted into
-  // each of the three sections a reader reads for the answer.
-  const subject = "本品在夜间低血压人群中的院外自救";
-  const families = [
-    `${subject}最常见的表现形式是无症状低灌注 [1] <!-- claim:CLM-001 -->。`,
-    `${subject}的有效率为 62%，优于对照 [1] <!-- claim:CLM-001 -->。`,
-    `${subject}推荐在症状出现后即刻含服 [1] <!-- claim:CLM-001 -->。`,
-    `${subject}无相关证据，文献中没有任何记载 [1] <!-- claim:CLM-001 -->。`,
-  ];
-  const sections = [["## 摘要\n", "摘要"], ["## 结论\n", "结论"], ["## 实际处置\n", "临床实践要点"]];
-  for (const sentence of families) {
-    for (const [heading, name] of sections) {
-      const ledger = coverageLedgerObject();
-      ledger.entries[2].question = `${subject}有无以临床结局为终点的直接研究`;
-      const issues = coverageBlocking(ledger, (input) => {
-        input.reportText = input.reportText.replace(heading, `${heading}${sentence}\n`);
-      });
-      assert.ok(
-        issues.some((issue) => new RegExp(`条目 2\\.1[^\\n]*登记为 gap，${name}第 \\d+ 行`).test(issue)),
-        `${name} / ${sentence}: ${issues.join("\n") || "no finding"}`,
-      );
-      assert.equal(
-        clinicalEvidencePackageErrorCode(issues),
-        "specialist_question_coverage_gap_overstated",
-      );
-    }
-  }
-});
-
-test("admitting a gap is not asserting one, and the sentences the corpus wrote for it stay writable", () => {
-  // Verbatim from delivered packages. A rule that punished these would teach
-  // runs to stop writing them, which is the opposite of what the ledger is for.
-  // Each is placed in 结论 beside a gap entry whose question is that same
-  // sentence, which is the largest topic overlap the rule can ever see.
-  for (const sentence of [
-    "在“气滞血瘀型冠心病心绞痛”之外，未检索到速效救心丸适应症内的直接临床证据。",
-    "速效救心丸说明书与相关共识未检索到任何时间界限或再次给药间隔 [7]。",
-    "超出说明书适应症的长期“保养”或“预防”性服用，未检索到适应症内直接证据。",
-    "排便姿势与通便措施仅具排便力学与血流动力学终点，未检索到以心血管事件为终点的研究。",
-    "出院后自备、按需含服这一用法未检索到以临床结局为终点的直接研究。",
-    "未检索到以睡眠不足人群为对象、以本品为干预的临床研究，此为证据空缺，非已证实无效。",
-    "指南对体检报告该所见后各后续检查的推荐强度与证据等级未获核验，不逐条给出。",
-  ]) {
-    const ledger = coverageLedgerObject();
-    ledger.entries[2].question = sentence;
-    const issues = coverageBlocking(ledger, (input) => {
-      input.reportText = input.reportText.replace("## 结论\n", `## 结论\n${sentence}\n`);
-    });
-    assert.deepEqual(issues, [], `a compliant admission of a gap was flagged: ${sentence}`);
-  }
-  // And the sentence that turns the same admission into a finding about the
-  // literature still blocks, so this cannot pass by the rule being gone.
-  const asserted = coverageLedgerObject();
-  asserted.entries[2].question = "本品在该人群中的院外自救有无以临床结局为终点的直接研究";
-  assert.ok(coverageBlocking(asserted, (input) => {
-    input.reportText = input.reportText.replace(
-      "## 结论\n",
-      "## 结论\n本品在该人群中的院外自救无相关证据 [1] <!-- claim:CLM-001 -->。\n",
-    );
-  }).length > 0);
-});
-
-
-
-test("naming a quantity as an objective is not reporting one", () => {
-  // The abstract's 目的 sentence says what the paper set out to count. Reading
-  // it as a proportion told the author to rewrite a statement of intent as a
-  // gap declaration, which is not a thing an abstract can say.
-  const ledger = coverageLedgerObject();
-  ledger.entries = [{
-    id: "1.1",
-    question: "胸痛心源性与常见非心源性病因的构成比",
-    status: "gap",
-    searches: ledger.entries.find((entry) => entry.status === "gap")?.searches
-      ?? [{ query: "chest pain aetiology proportion", database: "PubMed", searchedAt: "2026-08-13" }],
-  }];
-  const issues = coverageBlocking(ledger, (input) => {
-    input.reportText = input.reportText.replace(
-      "## 摘要\n",
-      "## 摘要\n**目的** 清点胸痛心源性与常见非心源性病因的构成比。\n",
-    );
-  });
-  assert.deepEqual(issues.filter((issue) => /给出了排序或构成比/.test(issue)), []);
-});
-
-// --- The ledger against the brief -------------------------------------------
-//
-// These replace the one heuristic this section used to end with: the abstract
-// was read for a sentence restating the study's scope, the questions it named
-// were counted, and that number was compared to the ledger's. Both numbers were
-// written by the run, so the only defect it could reach was the run disagreeing
-// with itself — and the red-team construction below (register three of five and
-// mark all three answered) was completely silent, while over the 30 delivered
-// packages one of the two notices it raised was a false one.
-
-/** @param {any} ledger @param {(input: any) => void} [edit] */
-function coverageIssues(ledger, edit) {
-  const result = validateClinicalEvidencePackage(coveragePackage(ledger, edit));
-  return result.blockingIssues.filter((issue) => (
-    /^question-coverage\.json /.test(issue) || /^题面第 \d+ 问在/.test(issue) || /^工作区里的题面/.test(issue)
-  ));
-}
-
-test("a brief question the ledger does not register at all is named", () => {
-  // The construction the old scope heuristic could not see: the brief asks two
-  // questions, the ledger registers one of them, every entry says "answered",
-  // and the report never mentions the other. Nothing in the package contradicts
-  // anything else in the package.
-  const ledger = coverageLedgerObject();
-  ledger.entries = ledger.entries.filter((entry) => !entry.id.startsWith("2."));
-  const issues = coverageIssues(ledger);
-  assert.ok(
-    issues.some((issue) => /^题面第 2 问在 question-coverage\.json 中没有任何条目/.test(issue)),
-    issues.join("\n") || "no finding",
-  );
-  assert.match(issues.join("\n"), /题面共 2 问/);
-  assert.equal(clinicalEvidencePackageErrorCode(issues), "specialist_question_coverage_understated");
-});
-
-test("an entry standing in for a question it does not transcribe is named, and so is the question it does", () => {
-  // Merging: one sub-question registered twice under two numbers, so the count
-  // comes out right and one of the brief's questions is never addressed.
-  const merged = coverageLedgerObject();
-  merged.entries = merged.entries.map((entry) => (
-    entry.id.startsWith("2.")
-      ? { ...entry, question: merged.entries[0].question }
-      : entry
-  ));
-  const issues = coverageIssues(merged);
-  assert.ok(
-    issues.some((issue) => (
-      /条目 2\.1 的 question 不是题面第 2 问的原文/.test(issue) && /这一条转录的是题面第 1 问/.test(issue)
-    )),
-    issues.join("\n") || "no finding",
-  );
-  assert.equal(clinicalEvidencePackageErrorCode(issues), "specialist_question_coverage_invalid");
-
-  // Invention: text that came from neither question.
-  const invented = coverageLedgerObject();
-  invented.entries[0].question = "本报告自拟的一条概括性子问，与题面任何一问都无关";
-  assert.match(
-    coverageIssues(invented).join("\n"),
-    /条目 1\.1 的 question 不是题面第 1 问的原文.*台账条目必须逐字转录/s,
-  );
-
-  // A sub-question split off a shared stem still transcribes its question: 579
-  // of the corpus's 611 entries are an exact substring and the other 32 look
-  // like this. None of them may be called an invention.
-  const split = coverageLedgerObject();
-  split.entries[0].question = "胸口突然发闷发紧、像被压着一样，是心绞痛";
-  assert.deepEqual(coverageIssues(split), []);
-});
-
-test("an id outside the brief's numbering is named as a ledger defect", () => {
-  const ledger = coverageLedgerObject();
-  ledger.entries.push({ ...ledger.entries[0], id: "7.1" });
-  const issues = coverageIssues(ledger);
-  assert.ok(
-    issues.some((issue) => /条目 7\.1 的编号指向题面第 7 问，而题面只有 2 问/.test(issue)),
-    issues.join("\n") || "no finding",
-  );
-});
-
-test("an item the brief names that the report never uses is named, item by item", () => {
-  // The largest confirmed class: the brief spells out seven measured effects,
-  // the report works through three of them, and the other four leave without a
-  // word. The report is not self-contradictory anywhere.
-  const brief = researchBrief().replace(
-    "1. 胸口突然发闷发紧",
-    "1. 请给出心率、血压、心率变异性、儿茶酚胺水平、房性期前收缩负荷、炎症指标、随访时长各自的实测数据。胸口突然发闷发紧",
-  );
-  const issues = coverageIssues(coverageLedgerObject(), (input) => {
-    input.briefText = brief;
-    input.reportText = input.reportText.replace(
-      "## 讨论\n",
-      "## 讨论\n本节给出心率、血压与心率变异性的实测数据。\n",
-    );
-  });
-  const named = issues.find((issue) => /把题面第 1 问登记为 answered/.test(issue));
-  assert.ok(named, issues.join("\n") || "no finding");
-  for (const term of ["儿茶酚胺水平", "房性期前收缩负荷", "炎症指标"]) {
-    assert.ok(named.includes(term), `${term} is absent from the report and must be named: ${named}`);
-  }
-  // Items that are on the page are not named.
-  for (const term of ["心率变异性", "血压"]) {
-    assert.ok(!named.includes(`「${term}」`), `${term} is on the page and must not be named: ${named}`);
-  }
-  assert.equal(clinicalEvidencePackageErrorCode(issues), "specialist_question_coverage_unsupported");
-});
-
-test("a term the report writes differently is not a term the report dropped", () => {
-  // Sixteen single-item alerts from the corpus were read back by hand: three
-  // were real and nine were the brief and the report spelling one thing two
-  // ways. The claim this check makes is that a subject is absent, not that a
-  // phrase is, so it holds when the report says 硝酸酯 for 硝酸酯类, 心绞痛发作
-  // for 心绞痛终点, and 适应症 for 适应证.
-  const report = briefCollapse("本节说明适应症范围与辨症分型标准，比较硝酸酯药物与心绞痛发作频率。");
-  for (const written of ["适应证范围", "辨证分型标准", "硝酸酯类药物", "心绞痛终点"]) {
-    assert.equal(briefTermPresent(written, report), true, `${written} is on the page in another spelling`);
-  }
-  // A subject the report genuinely never raises is still absent.
-  for (const missing of ["儿茶酚胺水平", "房性期前收缩负荷", "肿瘤坏死因子"]) {
-    assert.equal(briefTermPresent(missing, report), false, `${missing} is nowhere on the page`);
-  }
-  // And a term too short to carry the claim is never called absent: 终点 is
-  // "missing" from a report that says 结局 throughout.
-  assert.equal(briefTermPresent("终点", briefCollapse("本文以结局为准")), false);
-  assert.equal(briefCollapse("适应证"), briefCollapse("适应症"));
-});
-
-test("two of a list on the page settles that the list is the subject", () => {
-  // A ratio gate used to require a third of a list to be present before any
-  // absence counted, and it read the strongest case backwards: six of RQ-16's
-  // eight measured effects are missing, which scores 0.25 and was discarded
-  // whole. Two present is what says the list belongs to this report.
-  const brief = researchBrief().replace(
-    "1. 胸口突然发闷发紧",
-    "1. 请给出研究设计、心率变异性、心房颤动发作、儿茶酚胺水平、房性期前收缩负荷、炎症与内皮功能、皮质醇节律水平、压力反射敏感性、血浆去甲肾上腺素、清晨皮质醇峰值、夜间血压下降率、白细胞介素六、肿瘤坏死因子、随访时长各自的实测效应。胸口突然发闷发紧",
-  );
-  const issues = coverageIssues(coverageLedgerObject(), (input) => {
-    input.briefText = brief;
-    input.reportText = input.reportText.replace(
-      "## 讨论\n",
-      "## 讨论\n本节给出心率变异性与心房颤动发作的实测数据。\n",
-    );
-  });
-  const named = issues.find((issue) => /把题面第 1 问登记为 answered/.test(issue));
-  assert.ok(named, issues.join("\n") || "no finding");
-  assert.ok(named.includes("儿茶酚胺水平"), named);
-});
-
-test("an enumeration the report is not working through at all is not read as dropped items", () => {
-  // The other side of the same rule. When none of a list is on the page, the
-  // list is off this report's topic (or the brief sentence was cut badly);
-  // reading that as six dropped items is how a term check turns into noise.
-  // Measured over the delivered corpus, this bar removes 93 of 244 flagged
-  // items and every run where nothing matched.
-  const brief = researchBrief().replace(
-    "1. 胸口突然发闷发紧",
-    "1. 请给出甲状腺功能亢进、嗜铬细胞瘤、原发性醛固酮增多症、肢端肥大症各自的患病率。胸口突然发闷发紧",
-  );
-  assert.deepEqual(coverageIssues(coverageLedgerObject(), (input) => { input.briefText = brief; }), []);
-});
-
-test("a long list of which nothing is on the page is the question going missing", () => {
-  // The worst case was the one the item rule could not see. Requiring some of
-  // a list to be present kept the noise down, and a question dropped whole has
-  // nothing present by definition -- on the corpus, RQ-16's second question
-  // names eight measured effects, the report contains none of them, and the
-  // family stayed quiet. Length is what separates the two readings: a short
-  // list that misses entirely is more likely a badly cut sentence, a long one
-  // is a question nobody answered.
-  const brief = researchBrief().replace(
-    "1. 胸口突然发闷发紧",
-    "1. 请给出心率与血压、儿茶酚胺、期前收缩负荷、炎症与内皮、皮质醇节律、压力反射敏感性各自的实测效应。胸口突然发闷发紧",
-  );
-  const issues = coverageIssues(coverageLedgerObject(), (input) => { input.briefText = brief; });
-  const named = issues.find((issue) => /一项都没有出现/.test(issue));
-  assert.ok(named, issues.join("\n") || "no finding");
-  assert.ok(/题面第 1 问/.test(named), named);
-  assert.equal(clinicalEvidencePackageErrorCode(issues), "specialist_question_coverage_unsupported");
-  // And it is reported once at the question, not once per item: the extraction
-  // is the thing in doubt, so the items are evidence, not separate claims.
-  assert.equal(issues.filter((issue) => /一项都没有出现/.test(issue)).length, 1);
-});
-
-test("a brief pasted with Windows line endings is still parsed", () => {
-  // $ in the heading pattern matches only at end of input, so a trailing \r
-  // made every heading fail and the whole brief-derived family went quiet --
-  // on exactly the briefs a person is most likely to paste out of Word.
-  const brief = researchBrief().replace(
-    "2. 长期随访中血脂谱变化与再入院率的关联有无直接研究？",
-    "2. 这一问被删掉了，台账里不会有它。",
-  );
-  const ledger = coverageLedgerObject();
-  ledger.entries = ledger.entries.filter((entry) => !entry.id.startsWith("2."));
-  const missing = /题面第 2 问/;
-  for (const [label, text] of [["LF", brief], ["CRLF", brief.replace(/\n/g, "\r\n")]]) {
-    const issues = coverageIssues(ledger, (input) => { input.briefText = text; });
-    assert.ok(issues.some((issue) => missing.test(issue)), `${label}: ${issues.join("\n") || "no finding"}`);
-  }
-});
-
-test("a question registered wholly as a gap is not also held to its named items", () => {
-  // A run that says "I searched for this and found nothing", with a search the
-  // log confirms, has already answered for the whole question. Naming its items
-  // as well would tell it to write the very sentences it just declared absent.
-  const ledger = coverageLedgerObject();
-  const gapEntry = ledger.entries.find((entry) => entry.status === "gap");
-  ledger.entries = [
-    ...ledger.entries.filter((entry) => entry.status !== "gap"),
-    { ...gapEntry, id: "1.9", question: ledger.entries[0].question },
-  ].map((entry) => (entry.id.startsWith("1.") ? entry : entry));
-  const brief = researchBrief().replace(
-    "2. 长期随访中血脂谱变化与再入院率的关联有无直接研究？",
-    "2. 长期随访中血脂谱变化与再入院率的关联有无直接研究？请给出总胆固醇、甘油三酯、载脂蛋白B、脂蛋白a的随访数据。",
-  );
-  const onlyGap = coverageLedgerObject();
-  onlyGap.entries = onlyGap.entries.filter((entry) => entry.status === "gap");
-  const issues = coverageIssues(onlyGap, (input) => { input.briefText = brief; });
-  assert.deepEqual(issues.filter((issue) => /把题面第 2 问登记为 answered/.test(issue)), []);
-});
-
-test("without the brief the coverage check degrades in the open rather than silently", () => {
-  // A server restart loses the brief for an in-flight run. What must not happen
-  // is a package delivered as though it had been checked against one.
-  const missing = coverageLedgerObject();
-  missing.entries = missing.entries.filter((entry) => !entry.id.startsWith("2."));
-  for (const briefText of [null, undefined, "什么都没有的一段自由文本，没有编号问题清单"]) {
-    const result = validateClinicalEvidencePackage(coveragePackage(missing, (input) => {
-      input.briefText = briefText;
-    }));
-    assert.deepEqual(
-      result.issues.filter((issue) => /^题面第 \d+ 问在/.test(issue)),
-      [],
-      `${briefText}: the brief-derived rules must not run without a brief`,
-    );
-    assert.match(String(result.coverageDegradedNotice), /未按题面逐问核对覆盖/);
-    // Still a check, not a waiver: the self-consistency half is unaffected.
-    assert.deepEqual(
-      validateClinicalEvidencePackage(coveragePackage("not json", (input) => {
-        input.briefText = briefText;
-      })).blockingIssues.filter((issue) => /^question-coverage\.json 台账格式无效/.test(issue)).length,
-      1,
-    );
-  }
-  // With a usable brief there is nothing to disclose.
-  assert.equal(validateClinicalEvidencePackage(deepResearchPackage()).coverageDegradedNotice, null);
-});
-
-test("a workspace brief the run has rewritten is reported, and never used", () => {
-  const rewritten = researchBrief().replace("2. 长期随访中血脂谱变化与再入院率的关联有无直接研究？", "");
-  const result = validateClinicalEvidencePackage(coveragePackage(coverageLedgerObject(), (input) => {
-    input.workspaceBriefText = rewritten;
-  }));
-  assert.ok(
-    result.blockingIssues.some((issue) => /^工作区里的题面只读副本/.test(issue)),
-    result.blockingIssues.join("\n") || "no finding",
-  );
-  assert.equal(clinicalEvidencePackageErrorCode(result.blockingIssues), "specialist_question_coverage_invalid");
-  // The gate judged the server's brief, not the rewritten one: dropping the
-  // second question from the workspace copy did not excuse the ledger from it.
-  assert.deepEqual(result.issues.filter((issue) => /^题面第 2 问在/.test(issue)), []);
-  // An identical copy, and a copy with only whitespace differences, are silent.
-  for (const copy of [researchBrief(), `${researchBrief()}\n\n`]) {
-    assert.deepEqual(
-      validateClinicalEvidencePackage(coveragePackage(coverageLedgerObject(), (input) => {
-        input.workspaceBriefText = copy;
-      })).issues.filter((issue) => /^工作区里的题面/.test(issue)),
-      [],
-    );
-  }
-});
-
 test("an absent evidence matrix is one problem, not one per claim marker in the report", () => {
   // Observed on a real run (rq01, 2026-08-26): the run wrote the report and
   // never wrote `clinical-evidence-matrix.json`. The verdict came back with 23
@@ -3754,63 +2684,11 @@ test("a matrix that exists and lacks a cited claim still names that claim", () =
   );
 });
 
-test("an empty matrix is one problem in the coverage ledger too, not one per claim id it names", () => {
-  // Third location of the absent-matrix cascade. The report side was fixed
-  // earlier today; this one then cost a real run (rq03b) its last repair
-  // attempt: the matrix was momentarily empty at the third gate, the coverage
-  // ledger still named its claims, and the verdict came back with 114 issues
-  // of which ~78 were this one sentence with a different id in it. Three real
-  // problems were in there somewhere and the run never saw them.
-  const input = deepResearchPackage();
-  const cited = [...String(input.reportText).matchAll(/claim:(CLM-\d+)/g)].map((m) => m[1]);
-  assert.ok(cited.length >= 2, "the fixture must cite claims for this to mean anything");
-  input.matrix = { ...input.matrix, claims: [] };
-  input.keepCoverage = true;
-  input.questionCoverageText = JSON.stringify({
-    schemaVersion: 1,
-    entries: cited.map((id, index) => ({
-      id: `1.${index + 1}`,
-      question: `这是第 ${index + 1} 个需要回答的原子子问，长度足够通过形状检查。`,
-      status: "answered",
-      reportLines: [10 + index],
-      claimIds: [id],
-    })),
-  });
-
-  const dangling = validateClinicalEvidencePackage(input).issues.filter((issue) => /claimIds 提到/.test(issue));
-
-  assert.deepEqual(dangling, [], "an absent matrix must not be restated once per id the ledger names");
-});
-
-test("a matrix that exists and lacks an id the ledger names still reports that id", () => {
-  // The control. Suppressing the cascade for an empty matrix must not retire
-  // the rule for a populated one, or a ledger could name anything it liked.
-  const input = deepResearchPackage();
-  const real = input.matrix.claims[0]?.claimId;
-  assert.ok(real, "fixture must have at least one claim");
-  input.keepCoverage = true;
-  input.questionCoverageText = JSON.stringify({
-    schemaVersion: 1,
-    entries: [{
-      id: "1.1",
-      question: "这是一个长度足够通过形状检查的原子子问原文转录。",
-      status: "answered",
-      reportLines: [10],
-      claimIds: [real, "CLM-999"],
-    }],
-  });
-
-  const issues = validateClinicalEvidencePackage(input).issues;
-
-  assert.ok(issues.some((issue) => /claimIds 提到 "CLM-999"/.test(issue)), "a dangling id against a real matrix must still be named");
-  assert.ok(!issues.some((issue) => new RegExp(`claimIds 提到 "${real}"`).test(issue)), "and a resolvable id must not be");
-});
-
 test("every file the capability manifest requires is named by the run-side gate when it is absent", async () => {
   // The invariant the tree states in prose: whatever the server gate rejects,
   // the run-side gate must already catch. It was asserted in a comment and
-  // enforced by nothing, and it was false for three of the eight required
-  // outputs — with citation-ledger.csv, references.bib or citation-audit.md
+  // enforced by nothing, and it was false for three of the eight outputs the
+  // package then required — with any of three companion files (since deleted)
   // absent, the run-side gate returned ok=true with zero required issues while
   // the server failed the run with specialist_required_output_missing.
   //
@@ -3832,18 +2710,13 @@ test("every file the capability manifest requires is named by the run-side gate 
   // the manifest was parsed at all, and an empty list would pass every loop.
   assert.ok(required.length >= 2, `expected the manifest's required outputs, found ${required.length}`);
   const declaredOptional = [...produces.matchAll(/- path:\s*(\S+)\s*\n\s*required:\s*false/g)].map((match) => match[1]);
-  assert.ok(declaredOptional.includes("question-coverage.json"), "the manifest no longer lists the optional outputs this case leaves out below");
+  assert.ok(declaredOptional.includes("agenda-delta.json"), "the manifest no longer lists the optional output this case leaves out below");
 
   const input = deepResearchPackage();
   const complete = new Map([
     ["clinical-evidence-report.md", input.reportText],
     ["clinical-evidence-matrix.json", JSON.stringify(input.matrix)],
-    ["clinical-evidence-run.json", JSON.stringify(input.runReceipt)],
-    ["clinical-evidence-search.json", input.searchLogText ?? "{}"],
-    ["citation-ledger.csv", input.citationLedgerText ?? "claimId,referenceNumber,supportQuote\n"],
-    ["references.bib", input.referencesText ?? "@article{a,title={x}}\n"],
-    ["citation-audit.md", input.citationAuditText ?? "# audit\n"],
-    ["question-coverage.json", input.questionCoverageText ?? "{}"],
+    ["agenda-delta.json", JSON.stringify({ claims: [], hypotheses: [] })],
   ]);
   const expectedOutputs = required.map((relative) => ({ path: relative, required: true }));
 
@@ -3973,11 +2846,12 @@ test("every finding names the check that raised it", () => {
     reportText: String(input.reportText).replace(/^# .*$/m, ""),
     matrix: {
       ...input.matrix,
-      claims: input.matrix.claims.map((/** @type {any} */ claim, /** @type {number} */ index) => (
-        index === 0 ? { ...claim, claimId: "CLM-x", artifactPath: "notes.md" } : claim
-      )),
+      claims: input.matrix.claims.map((/** @type {any} */ claim, /** @type {number} */ index) => {
+        if (index === 0) return { ...claim, claimId: "CLM-x", artifactPath: "notes.md" };
+        if (index === 1) return { ...claim, supportQuote: "A sentence the preserved source never contained." };
+        return claim;
+      }),
     },
-    runReceipt: { ...input.runReceipt, status: "failed" },
   };
 
   const result = validateClinicalEvidencePackage(broken);
@@ -3998,7 +2872,7 @@ test("every finding names the check that raised it", () => {
   assert.equal(checkFor(/^The academic title must be present\.$/), "report-sections");
   assert.equal(checkFor(/^claims\[0\]\.claimId must match CLM-NNN\.$/), "claim-schema");
   assert.equal(checkFor(/^claims\[0\]\.artifactPath is "notes\.md"/), "claim-artifact-path");
-  assert.equal(checkFor(/^The clinical evidence run receipt is not succeeded\.$/), "run-receipt-status");
+  assert.equal(checkFor(/^claims\[1\]\.supportQuote was not found in its preserved source artifact\.$/), "claim-quote-verbatim");
   assert.equal(checkFor(/does not resolve to the evidence matrix/), "report-claim-unresolved");
   // Distinct rules, distinct ids: one region swallowing its neighbour would
   // still pass every assertion above on its own.
@@ -4036,7 +2910,7 @@ test("the gate verdict carries the check through to the run's issue envelope", (
   const verdict = runGate({
     contractKind: "clinical-evidence-report",
     files: new Map(),
-    expectedOutputs: [{ path: "clinical-evidence-report.md", required: true }, { path: "references.bib", required: true }],
+    expectedOutputs: [{ path: "clinical-evidence-report.md", required: true }, { path: "clinical-evidence-matrix.json", required: true }],
   });
   assert.equal(verdict.ok, false);
   assert.ok(verdict.issues.length >= 2, `only ${verdict.issues.length} issues — this case must reach more than one rule`);
@@ -4068,34 +2942,14 @@ test("the gate verdict carries the check through to the run's issue envelope", (
 // ---------------------------------------------------------------------------
 
 test("every tiered check is one the validator can raise, and a check nobody tiered is advisory", () => {
+  // clinicalEvidenceCheckIds is the list of ids a rule declares, which the
+  // domain's own suite holds to the source; a tier on any other id is a tier
+  // nothing can ever raise.
   assert.deepEqual(Object.keys(CLINICAL_CHECK_TIERS).filter((check) => !clinicalEvidenceCheckIds.includes(check)), []);
-  assert.deepEqual([...new Set(Object.values(CLINICAL_CHECK_TIERS))].sort(), ["blocking", "safety", "silent"]);
+  // Two tiers. The third, `silent`, was deleted with the bookkeeping it held.
+  assert.deepEqual([...new Set(Object.values(CLINICAL_CHECK_TIERS))].sort(), ["blocking", "safety"]);
   assert.equal(clinicalCheckTier("report-number-unsupported"), "advisory");
   assert.equal(clinicalCheckTier(null), "advisory");
-});
-
-test("a package whose only defects are its own bookkeeping is valid, says nothing, and counts what it kept quiet", () => {
-  // memory-ablation v9 (2026-09-16): 34 of the 52 findings that withheld twelve
-  // packages were of this kind — a coverage ledger's line numbers, run-receipt
-  // statistics and self-declared quality checks — which no reader ever sees.
-  const input = deepResearchPackage();
-  const ledger = JSON.parse(input.questionCoverageText);
-  ledger.entries = ledger.entries.filter((/** @type {any} */ entry) => !entry.id.startsWith("2."));
-  input.questionCoverageText = JSON.stringify(ledger);
-  input.runReceipt = {
-    ...input.runReceipt,
-    stats: { ...input.runReceipt.stats, totalSearches: input.runReceipt.stats.totalSearches + 1 },
-    qualityChecks: { ...input.runReceipt.qualityChecks, claimsVerified: false },
-    status: "partial",
-  };
-  const result = validatePackage(input);
-  assert.deepEqual(result.blockingIssues, []);
-  assert.deepEqual(result.issues, [], result.issues.join("\n"));
-  assert.equal(result.valid, true);
-  for (const check of ["question-coverage", "run-receipt-statistics", "run-receipt-quality-checks", "run-receipt-status"]) {
-    assert.ok(result.silencedChecks[check] >= 1, `${check} still runs and is counted: ${JSON.stringify(result.silencedChecks)}`);
-  }
-  assert.ok(result.findings.some((finding) => finding.check === "question-coverage" && finding.tier === "silent"));
 });
 
 test("a quotation that is not in the source it names still withholds acceptance, and is said to the run", () => {
@@ -4108,20 +2962,6 @@ test("a quotation that is not in the source it names still withholds acceptance,
   assert.match(result.blockingIssues[0], /supportQuote was not found in its preserved source artifact/);
 });
 
-test("「替代终点」 is a surrogate endpoint: what comparative-structure makes of a sentence is reported to nobody", () => {
-  // The rule withheld two v9 packages: once over 「该 eGFR 斜率是替代终点，能否用它
-  // 替代肾衰竭这一临床终点…」 and once over 「用随机生成的标识符替代患者与住院编号」,
-  // each read as "one arm can take the other's place".
-  const input = validPackage();
-  input.reportText = input.reportText
-    .replace("## 药物角色\n", "## 药物角色\n速效救心丸可替代硝酸甘油用于此类人群。\n")
-    .replace("## 科学局限\n", "## 科学局限\n目前缺乏速效救心丸与硝酸甘油的直接比较研究。\n");
-  const result = validatePackage({ ...input, questionCoverageText: questionCoverageLedger(input.reportText, input.searchLogText) });
-  assert.ok(result.findings.some((finding) => finding.check === "comparative-structure"), "the construction must reach the rule");
-  assert.deepEqual(result.issueChecks.filter((entry) => entry.check === "comparative-structure"), []);
-  assert.ok(result.silencedChecks["comparative-structure"] >= 1);
-});
-
 test("a clinical-safety finding is said first and withholds acceptance in the run; a GRADE inconsistency is only said", () => {
   // The practical section read as instruction: an emergency call made to wait
   // on whether a medicine worked.
@@ -4130,7 +2970,7 @@ test("a clinical-safety finding is said first and withholds acceptance in the ru
     "\n\n## 参考文献",
     "\n6. 含服后 20 分钟以上胸痛不缓解符合急性心肌梗死的警示特征，应立即呼叫 120 并接受心电图评估。 <!-- claim:CLM-001 --> [1]\n\n## 参考文献",
   );
-  const safety = validatePackage({ ...unsafe, questionCoverageText: questionCoverageLedger(unsafe.reportText, unsafe.searchLogText) });
+  const safety = validatePackage(unsafe);
   assert.ok(safety.safetyIssues.length >= 1, JSON.stringify(safety.findings.map((finding) => [finding.check, finding.tier])));
   for (const issue of safety.safetyIssues) assert.ok(safety.blockingIssues.includes(issue));
 
@@ -4138,7 +2978,7 @@ test("a clinical-safety finding is said first and withholds acceptance in the ru
   graded.reportText = graded.reportText
     .replace("## 检索与方法\n", "## 检索与方法\n证据体确定性以 GRADE 表述。\n")
     .replace("## 结果\n", "## 结果\n纳入研究方法学质量偏低，按 GRADE 评为高确定性 [1]。\n");
-  const grade = validatePackage({ ...graded, questionCoverageText: questionCoverageLedger(graded.reportText, graded.searchLogText) });
+  const grade = validatePackage(graded);
   const found = grade.findings.filter((finding) => finding.check === "appraisal-declaration" && /^GRADE/.test(finding.text));
   assert.ok(found.length >= 1, "the construction must reach the rule");
   assert.ok(found.every((finding) => finding.tier === "advisory"));

@@ -1819,10 +1819,14 @@ test("a capability's two skill copies never drift apart by more than their known
   // clinical-evidence-synthesis now names two required files and six optional
   // companions, with the short list of what `evimed_submit_deliverable` insists
   // on (CLINICAL_CHECK_TIERS).
+  // Raised by 108 later that day, same direction: the six companion files were
+  // deleted with their checks, and the clinical skill's question-ledger,
+  // search-log, screening-number, bibliography and run-receipt instructions were
+  // rewritten as requirements on the report itself.
   const knownDivergence = {
     "adr-analysis": 18,
     "bibliometric-analysis": 18,
-    "clinical-evidence-synthesis": 82,
+    "clinical-evidence-synthesis": 190,
     "comprehensive-drug-evaluation": 18,
     "dataset-research-scoping": 41,
     "drug-selection": 18,
