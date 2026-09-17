@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import re
-import secrets
 import urllib.parse
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 
 import public_sources
-from immutable_capture import ImmutableCaptureError, preserve
+from immutable_capture import ImmutableCaptureError, managed_workspace, preserve
 
 
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
@@ -108,41 +106,10 @@ def _validated_url(value: str) -> str:
 
 
 def _workspace() -> Path:
-    raw = os.environ.get("OPEN_SCIENCE_WORKSPACE_DIR", "").strip()
-    if not raw or not os.path.isabs(raw) or "\0" in raw:
-        raise OfficialPageError("official_page_workspace_invalid", "The managed project workspace is unavailable.")
-    candidate = Path(raw)
-    if candidate.is_symlink():
-        raise OfficialPageError("official_page_workspace_invalid", "The managed project workspace is unavailable.")
-    workspace = candidate.resolve()
-    if not workspace.is_dir():
-        raise OfficialPageError("official_page_workspace_invalid", "The managed project workspace is unavailable.")
-    return workspace
-
-
-def _safe_directory(workspace: Path, relative: Path) -> Path:
-    current = workspace
-    for part in relative.parts:
-        current = current / part
-        if current.exists() and current.is_symlink():
-            raise OfficialPageError("official_page_output_invalid", "Managed source paths must not contain symbolic links.")
-        current.mkdir(mode=0o700, exist_ok=True)
-    return current
-
-
-def _atomic_write(path: Path, payload: bytes) -> None:
-    # public_sources also imports this writer for other managed outputs;
-    # immutable official-page captures use preserve() instead.
-    if path.exists() and path.is_symlink():
-        raise OfficialPageError("official_page_output_invalid", "Managed source files must not be symbolic links.")
-    temporary = path.with_name(".%s.%s.tmp" % (path.name, secrets.token_hex(8)))
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        os.write(descriptor, payload)
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-    os.replace(temporary, path)
+        return managed_workspace()
+    except ImmutableCaptureError as error:
+        raise OfficialPageError("official_page_workspace_invalid", str(error)) from error
 
 
 def _extract(payload: bytes) -> tuple[str, str]:

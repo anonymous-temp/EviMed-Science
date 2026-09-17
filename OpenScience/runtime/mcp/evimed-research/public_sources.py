@@ -1037,14 +1037,10 @@ def _evimed_literature_records(arguments):
 
 
 
-# Reused rather than re-implemented: the same symlink refusal, the same 0o700
-# directories, the same atomic write. A second copy of "write into the managed
+# The same capture every preserving tool writes: content-addressed, published
+# once, with its digests beside it. A second copy of "write into the managed
 # workspace safely" is a second place for that rule to drift.
-from official_pages import (
-    _atomic_write as _official_atomic_write,
-    _safe_directory as _official_safe_directory,
-    _workspace as _official_workspace,
-)
+from immutable_capture import managed_workspace, preserve
 
 
 def _preserve_guideline_text(identifier, title, record):
@@ -1060,9 +1056,18 @@ def _preserve_guideline_text(identifier, title, record):
     able to carry a claim equalled the number of preserved full texts exactly
     (3, 3 and 1), and 12 of 15, 6 of 9 and 29 of 30 references could not.
 
-    Returns the workspace-relative path, or None when the record carries no
-    prose worth preserving. Failure to write is never fatal: a retrieval that
-    still returned records must not be turned into an error by a disk problem.
+    Returns `{"path", "sha256"}` for the preserved file, or None when the
+    record carries no prose worth preserving. Failure to write is never fatal:
+    a retrieval that still returned records must not be turned into an error by
+    a disk problem.
+
+    Written as an immutable capture, like official pages and open-access full
+    texts, and reported with its digest. It used to be one overwritable file
+    per guideline id with no digest: the control plane accepts a cited source
+    only from a tool that reported the bytes' sha256, so every package quoting
+    a guideline was refused (nine of twelve v8 ablation cells, 2026-09-16), and
+    a later retrieval of the same guideline in another mode replaced the bytes
+    an earlier citation had been checked against.
     """
     body = str(record.get("fullText") or "").strip()
     if not body:
@@ -1071,9 +1076,8 @@ def _preserve_guideline_text(identifier, title, record):
     if len(body) < 200:
         return None
     try:
-        workspace = _official_workspace()
+        workspace = managed_workspace()
         digest = hashlib.sha256(("evimed-guide:%s" % identifier).encode("utf-8")).hexdigest()[:16]
-        root = _official_safe_directory(workspace, Path(".evimed-sources") / "evimed-guidelines" / digest)
         header = "# %s\n\n" % (title or identifier)
         meta = "".join(
             "- %s: %s\n" % (label, record.get(key))
@@ -1081,9 +1085,8 @@ def _preserve_guideline_text(identifier, title, record):
             if record.get(key)
         )
         payload = ("%s%s\n%s\n" % (header, meta, body)).encode("utf-8")
-        target = root / "guideline.md"
-        _official_atomic_write(target, payload)
-        return target.relative_to(workspace).as_posix()
+        paths = preserve(workspace, Path(".evimed-sources") / "evimed-guidelines" / digest, {"guideline.md": payload})
+        return {"path": paths["guideline.md"], "sha256": hashlib.sha256(payload).hexdigest()}
     except Exception:
         # isolated: evimed_guideline_preservation_failures_total
         return None
@@ -1109,7 +1112,7 @@ def _evimed_guidelines(arguments):
         data, endpoint = _evimed_post("review/api/guide", body)
         records = _list(data.get("list"))
     records, filtered_count = _filter_evimed_records(records, arguments.get("requiredConcepts"))
-    items, sources = [], []
+    items, sources, artifact_sha256s = [], [], {}
     for index, value in enumerate(records[:limit]):
         record = _dict(value)
         title = _first_text(record.get("title"))
@@ -1129,26 +1132,28 @@ def _evimed_guidelines(arguments):
             "rerankScore": record.get("rerankScore"),
             "rerankRank": record.get("rerankRank"),
         }
-        artifact = _preserve_guideline_text(identifier, title, record)
-        if artifact:
-            item["artifactPath"] = artifact
+        captured = _preserve_guideline_text(identifier, title, record)
+        if captured:
+            item["artifactPath"] = captured["path"]
+            artifact_sha256s[captured["path"]] = captured["sha256"]
         items.append({key: value for key, value in item.items() if value not in (None, "", [])})
         source = _source(item["id"], title, record_url, "evimed-guideline")
-        if artifact:
-            source["artifactPath"] = artifact
+        if captured:
+            source["artifactPath"] = captured["path"]
         sources.append(source)
     preserved = [item["artifactPath"] for item in items if item.get("artifactPath")]
     return {
         "status": "warning",
         "summary": "Retrieved %d traceable EviMed guideline candidates (%d with preserved text)." % (len(items), len(preserved)),
         "data": {
+            "artifactSha256s": artifact_sha256s,
             "items": items,
             "total": data.get("total"),
             "keywords": data.get("keywords") if mode == "blocks" else None,
             "enrichedQuery": data.get("enrichedQuery") if mode == "blocks" else None,
             "requestedJurisdiction": arguments.get("jurisdiction"),
         },
-        "artifacts": preserved,
+        "artifacts": list(artifact_sha256s),
         "sources": sources,
         "warnings": [
             "Verify the guideline version, issuing body, jurisdiction, and original recommendation context before use.",
