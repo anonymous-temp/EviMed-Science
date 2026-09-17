@@ -577,6 +577,17 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     })
   }
 
+  /** Whether a deliverable has used every submission it may make, and holds no
+   *  grant for one more. @param {Record<string, any>} entry @param {Record<string, any>} item */
+  const submissionsSpent = (entry, item) => item.status !== 'accepted'
+    && (entry.attempts.get(item.id) ?? 0) >= config.deliveryAttemptLimit
+    && !revisionSubmissionGrantMatches(entry, item, entry.revisionSubmissionGrants.get(item.id))
+
+  /** @param {string} id */
+  const attemptsSpentAdvice = (id) => `交付物「${id}」的 ${config.deliveryAttemptLimit} 次提交已经用完，再委派一个子代理也无法提交。`
+    + `它的文件留在 deliverables/${id}/ 里，会连同没有通过的核验项按「未核验」交付给读者——这不是失败。`
+    + '不要为同一件事重新规划一个新交付物；请调用 evimed_complete_run{partial:true} 结束本次运行。'
+
   async function delegateTool() {
     return defineTool({
       name: 'evimed_delegate',
@@ -594,6 +605,17 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         const entry = sessionState(call.sessionId)
         const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
         if (!item) return { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)] }
+        // A deliverable that has used its submissions cannot be helped by
+        // another child: the attempts are counted per deliverable, so the new
+        // child researches and writes for twenty minutes and is then refused at
+        // its first submit. Measured on the first non-blocking batch
+        // (memory-ablation v10 cell 2, 2026-09-17): three submissions spent by
+        // 12:41, a second child started, and the run was still going at 13:10.
+        // What the run wrote is delivered either way — marked, with the open
+        // findings attached — so the honest next step is to finish.
+        if (submissionsSpent(entry, item)) {
+          return { ok: false, code: 'deliverable_attempts_spent', issues: [issue('deliverable_attempts_spent', attemptsSpentAdvice(item.id))] }
+        }
         const ready = delegatableItems(entry.plan, entry.items).some((candidate) => candidate.id === item.id)
         if (!ready) {
           const pending = item.dependsOn.filter((/** @type {any} */ dep) => entry.items.find((/** @type {any} */ candidate) => candidate.id === dep)?.status !== 'accepted')
@@ -672,6 +694,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         if (item.status === 'accepted') {
           await putPlanIndex(store(), entry)
           return { ok: true, data: { deliverableId: item.id, childSessionId: outcome.childSessionId, report: outcome.structured ?? null, status: item.status } }
+        }
+        // Settled as it stands when the submissions are spent, whatever the
+        // child's stop reason: the automatic retry below would start a child
+        // that cannot submit (see the refusal at the top of this tool).
+        if (submissionsSpent(entry, item)) {
+          await putPlanIndex(store(), entry)
+          return { ok: true, data: { deliverableId: item.id, childSessionId: outcome.childSessionId, report: outcome.structured ?? null, status: item.status, next: attemptsSpentAdvice(item.id) } }
         }
         const settlement = settleDelegation({ item, outcome, alreadyRetried: entry.redelegated.has(item.id) })
         if (settlement.action === 'redelegate') {
