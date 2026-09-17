@@ -174,11 +174,17 @@ export function Sidebar() {
               onClick={() => navigate("/app/inbox")}
               aria-label={unread > 0 ? `收件箱，${unread} 条未读` : "收件箱"}
               title="收件箱"
-              className="relative ml-auto self-center rounded p-1 text-text hover:bg-surface-2"
+              className="relative ml-auto self-center rounded p-1.5 text-text hover:bg-surface-2"
             >
-              <Bell size={14} strokeWidth={1.5} aria-hidden="true" />
+              <Bell size={16} strokeWidth={1.5} aria-hidden="true" />
+              {/* The count hangs off the button's corner, not over the icon:
+                * the badge used to be as tall as the 14 px bell and offset
+                * inward by 2 px, so 「31」 covered the bell entirely
+                * (2026-09-18, owner's screenshot). A 16 px pill on the
+                * `badge` rung, pushed 4 px out with a ring in the surface
+                * colour, leaves the bell readable behind a two-digit count. */}
               {unread > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-accent px-1 text-caption font-medium text-accent-fg">
+                <span className="pointer-events-none absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 text-badge font-medium tabular-nums text-accent-fg ring-2 ring-surface">
                   {unread > 99 ? "99+" : unread}
                 </span>
               )}

@@ -79,6 +79,12 @@ export const EVIMED_DICTIONARIES = Object.freeze({
     'placeholder.hero': '描述你的研究问题或任务… / 调用指令，@ 引用文件或会话',
     'placeholder.default': '继续这项研究，或提出下一个任务… / 调用指令，@ 引用文件或会话',
   }),
+  // The working indicator under the last message. The kernel's copy is its
+  // vendor's Chinese name plus 中 (「深度求索中...」), which on this product's
+  // face reads as another company thinking. The product's own name goes there.
+  chat: Object.freeze({
+    'chat.deepDiving': 'EviMed 思考中…',
+  }),
 });
 
 /**
@@ -105,6 +111,9 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
       'hero.preview': '',
       'placeholder.hero': '描述你的研究问题或任务… / 调用指令，@ 引用文件或会话',
       'placeholder.default': '继续这项研究，或提出下一个任务… / 调用指令，@ 引用文件或会话',
+    },
+    chat: {
+      'chat.deepDiving': 'EviMed 思考中…',
     },
   };
   const localeId = 'zh-x-evimed';

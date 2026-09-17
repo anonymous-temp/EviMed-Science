@@ -36,7 +36,11 @@ export default {
       // walk, V2). Raised to 12px and 13px; line heights go up with them,
       // because CJK needs more leading than Latin at the same size.
       fontSize: {
-        caption: ["12px", "1.5"], // badges, meta info, timestamps
+        // A count badge on a 16 px icon: digits stay legible at 11 px where a
+        // Chinese glyph would not, and the caption rung's 18 px line box could
+        // not fit a 16 px pill (2026-09-18, the bell's 「31」 covered the bell).
+        badge: ["11px", "1"],
+        caption: ["12px", "1.5"], // meta info, timestamps
         "ui-sm": ["13px", "1.5"], // secondary buttons, chips, helper rows
         ui: ["13.5px", "1.55"], // default UI text, list rows
         body: ["15px", "1.65"], // chat / markdown body copy

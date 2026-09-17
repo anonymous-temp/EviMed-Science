@@ -177,9 +177,13 @@ test('the product language is a private-use pack over zh, and it is selected', (
   for (const entry of f.dictionaries) {
     assert.equal(entry.id, EVIMED_LOCALE);
     assert.deepEqual(entry.dict, /** @type {Record<string, any>} */ (EVIMED_DICTIONARIES)[entry.ns], `${entry.ns}: the body registers a dictionary the export does not describe`);
-    for (const value of Object.values(entry.dict)) assert.doesNotMatch(value, /[A-Za-z]{3,}/, 'the product face is Chinese');
+    // The product's own name is the one Latin word the face may carry.
+    for (const value of Object.values(entry.dict)) assert.doesNotMatch(value.replaceAll('EviMed', ''), /[A-Za-z]{3,}/, 'the product face is Chinese');
   }
   assert.ok(Object.keys(EVIMED_DICTIONARIES.conversation).length <= 8, 'the pack should stay a handful of strings');
+  // The working indicator names this product, not the kernel's vendor
+  // (「深度求索中...」 is the kernel's own zh copy of `chat.deepDiving`).
+  assert.equal(EVIMED_DICTIONARIES.chat['chat.deepDiving'], 'EviMed 思考中…');
 });
 
 test('a locale runtime without the documented surface still gets zh, not a crash', () => {
