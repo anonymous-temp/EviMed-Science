@@ -1085,6 +1085,17 @@ function evidenceSourceTool(tool) {
   return evidenceSourceToolSuffixes.some((suffix) => tool === suffix || tool.endsWith(`_${suffix}`));
 }
 
+/**
+ * The `.evimed-sources/` files this run's evidence tools reported writing, with
+ * the sha256 each reported for them.
+ *
+ * `warning` counts as well as `success`. A warning is a caveat about the
+ * retrieval — a guideline search answers `warning` for every result, "verify
+ * the version before use" — not a claim that nothing was written; the digest
+ * is what proves the bytes. Requiring `success` refused every package that
+ * quoted a preserved guideline, in nine of twelve v8 ablation cells
+ * (2026-09-16), while the run-side gate had accepted them.
+ */
 function successfulEvidenceSourceArtifacts(messages, runtimeWorkspaceRoot) {
   const artifacts = new Map();
   const runtimeRoot = path.resolve(runtimeWorkspaceRoot);
@@ -1094,7 +1105,7 @@ function successfulEvidenceSourceArtifacts(messages, runtimeWorkspaceRoot) {
       const result = parsedToolResult(part);
       const hashes = result?.data?.artifactSha256s;
       if (
-        result?.status !== "success"
+        (result?.status !== "success" && result?.status !== "warning")
         || !Array.isArray(result.artifacts)
         || !hashes
         || typeof hashes !== "object"
@@ -2425,7 +2436,60 @@ async function verifiedReceiptArtifacts(project, receipt) {
   return { artifacts: [...new Set(artifacts)].slice(0, maxArtifacts).sort(), mismatched: [...new Set(mismatched)], receipt: { ...receipt, entries } };
 }
 
-/** Preserve locally accepted bytes in control-plane-only project metadata before repair. */
+/** The file name a repair grant for one accepted receipt entry is kept under.
+ *  The same three values `consumeRepairAuthorization` is handed by the run.
+ *  @param {string} runId @param {Record<string, any>} entry */
+function repairGrantKey(runId, entry) {
+  const acceptedDigest = createHash("sha256").update(JSON.stringify(entry)).digest("hex");
+  return createHash("sha256").update(JSON.stringify([runId, entry.deliverableId, acceptedDigest])).digest("hex");
+}
+
+/**
+ * Whether a receipt's drift is a revision the control plane authorized.
+ *
+ * A repair round mints a one-time grant per accepted clinical report. The run
+ * consumes it to reopen the frozen deliverable, and from then until a
+ * resubmission is accepted its files differ from the receipt, which still
+ * names the accepted bytes — preserved outside the workspace when the grant
+ * was minted. That drift is the revision, not tampering. `revising` holds the
+ * deliverables whose grant was consumed; `explained` says every mismatched file
+ * belongs to one of them.
+ * @param {Record<string, any>} project
+ * @param {{ mismatched: string[], receipt: Record<string, any> }} verified
+ * @returns {Promise<{ revising: Set<string>, explained: boolean }>}
+ */
+async function revisionDrift(project, verified) {
+  const revising = new Set();
+  for (const entry of verified.receipt.entries ?? []) {
+    if (entry.contractKind !== "clinical-evidence-report") continue;
+    const claim = path.join(project.metaDir, "repair-authorizations", `${repairGrantKey(verified.receipt.runId, entry)}.claimed.json`);
+    if (await readTextFileNoFollow(project.rootDir, claim, "").catch(() => "")) revising.add(String(entry.deliverableId));
+  }
+  const explained = verified.mismatched.length > 0 && verified.mismatched.every((filePath) => (verified.receipt.entries ?? []).some((entry) => (
+    revising.has(String(entry.deliverableId)) && (entry.files ?? []).some((/** @type {any} */ file) => file.path === filePath)
+  )));
+  return { revising, explained };
+}
+
+/** What the ledger says about an authorized revision that did not pass.
+ *  @param {{ mismatched: string[], receipt: Record<string, any> }} verified @param {Set<string>} revising */
+function revisionNotAcceptedNotice(verified, revising) {
+  return `交付物「${[...revising].join("、")}」按服务端门禁的要求开启了修订，改动了 ${verified.mismatched.length} 个文件，修订版没有通过门禁，所以没有新的回执；被接受时的版本另存在控制面。`;
+}
+
+/**
+ * Preserve locally accepted bytes in control-plane-only project metadata before
+ * repair, and mint the grant that lets the run reopen a frozen deliverable.
+ *
+ * Called once per repair round. From the second round on, a deliverable's
+ * revision may already be open: the earlier grant was consumed, the files
+ * changed, and the resubmission was not accepted. That round needs no second
+ * grant — the run-side item is no longer frozen — and the drift is not a
+ * reason to refuse the repair. Refusing it ("accepted receipt drifted before
+ * repair") ended a v8 ablation cell after one round as
+ * `specialist_receipt_digest_mismatch` with no files (2026-09-16). Drift in a
+ * deliverable nobody authorized is still refused.
+ */
 async function snapshotAcceptedPackageForRepair(project, run, runtimeGeneration = null) {
   const receipt = await readDeliveryReceipt(project, run);
   if (!receipt) return { revisionRequired: false, snapshotPath: null };
@@ -2433,37 +2497,43 @@ async function snapshotAcceptedPackageForRepair(project, run, runtimeGeneration 
     throw new Error("active runtime generation is unavailable for repair authorization");
   }
   const verified = await verifiedReceiptArtifacts(project, receipt);
-  if (verified.mismatched.length > 0) {
+  const { revising, explained } = await revisionDrift(project, verified);
+  if (verified.mismatched.length > 0 && !explained) {
     throw new Error(`accepted receipt drifted before repair: ${verified.mismatched.slice(0, 6).join(", ")}`);
-  }
-  const metadata = new Map(verified.receipt.entries.flatMap((entry) => entry.files.map((file) => [file.path, file])));
-  const files = [];
-  for (const relative of verified.artifacts) {
-    const value = await readRequiredFile(project, relative);
-    const recorded = metadata.get(relative);
-    if (!value || !recorded) throw new Error(`accepted repair source disappeared: ${relative}`);
-    const digest = createHash("sha256").update(value.text, "utf8").digest("hex");
-    if (digest !== recorded.sha256 || Buffer.byteLength(value.text) !== recorded.bytes) {
-      throw new Error(`accepted repair source changed during snapshot: ${relative}`);
-    }
-    files.push({ path: relative, sha256: digest, bytes: recorded.bytes, text: value.text });
   }
   const acceptedDigest = createHash("sha256").update(JSON.stringify(verified.receipt)).digest("hex");
   const directory = path.join(project.metaDir, "repair-revisions");
   const snapshotPath = path.join(directory, `${safeId(run.id, "run id")}-${acceptedDigest}.json`);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  await writeFileAtomicNoFollow(project.rootDir, snapshotPath, `${JSON.stringify({
-    formatVersion: 1,
-    controlPlaneRunId: run.id,
-    acceptedDigest,
-    acceptedReceipt: verified.receipt,
-    files,
-    preservedAt: new Date().toISOString(),
-  }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  // Kept when it exists: an earlier round took it before any revision changed
+  // the files, and what is on disk now is less than it holds.
+  if (!(await readTextFileNoFollow(project.rootDir, snapshotPath, "").catch(() => ""))) {
+    const metadata = new Map(verified.receipt.entries.flatMap((entry) => entry.files.map((file) => [file.path, file])));
+    const files = [];
+    for (const relative of verified.artifacts) {
+      const value = await readRequiredFile(project, relative);
+      const recorded = metadata.get(relative);
+      if (!value || !recorded) throw new Error(`accepted repair source disappeared: ${relative}`);
+      const digest = createHash("sha256").update(value.text, "utf8").digest("hex");
+      if (digest !== recorded.sha256 || Buffer.byteLength(value.text) !== recorded.bytes) {
+        throw new Error(`accepted repair source changed during snapshot: ${relative}`);
+      }
+      files.push({ path: relative, sha256: digest, bytes: recorded.bytes, text: value.text });
+    }
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    await writeFileAtomicNoFollow(project.rootDir, snapshotPath, `${JSON.stringify({
+      formatVersion: 1,
+      controlPlaneRunId: run.id,
+      acceptedDigest,
+      acceptedReceipt: verified.receipt,
+      files,
+      preservedAt: new Date().toISOString(),
+    }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  }
   const authorizationDirectory = path.join(project.metaDir, "repair-authorizations");
   await mkdir(authorizationDirectory, { recursive: true, mode: 0o700 });
   const authorizations = [];
   for (const entry of verified.receipt.entries.filter((candidate) => candidate.contractKind === "clinical-evidence-report")) {
+    if (revising.has(String(entry.deliverableId))) continue;
     const authorization = {
       formatVersion: 1,
       controlPlaneRunId: run.id,
@@ -2475,9 +2545,7 @@ async function snapshotAcceptedPackageForRepair(project, run, runtimeGeneration 
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       consumedAt: null,
     };
-    const key = createHash("sha256").update(JSON.stringify([
-      authorization.runId, authorization.deliverableId, authorization.acceptedDigest,
-    ])).digest("hex");
+    const key = repairGrantKey(verified.receipt.runId, entry);
     const target = path.join(authorizationDirectory, `${key}.json`);
     const claim = path.join(authorizationDirectory, `${key}.claimed.json`);
     await withProjectStorageMutation(project, async () => {
@@ -2492,13 +2560,14 @@ async function snapshotAcceptedPackageForRepair(project, run, runtimeGeneration 
           current?.runId !== authorization.runId
           || current?.deliverableId !== authorization.deliverableId
           || current?.acceptedDigest !== authorization.acceptedDigest
-          || current?.runtimeGeneration !== runtimeGeneration
         ) throw new Error("existing repair authorization conflicts with current accepted bytes");
         if (current.consumedAt !== null) throw new Error("repair authorization for these accepted bytes was already consumed");
-        if (!Number.isFinite(Date.parse(current.expiresAt)) || Date.parse(current.expiresAt) <= Date.now()) {
-          throw new Error("repair authorization for these accepted bytes already expired");
-        }
-        return;
+        // Still usable: the same runtime can consume it inside its window.
+        // One minted for a runtime that has since been replaced, or one left
+        // unused past its window, can never be consumed, and refusing to
+        // replace it left every later round without a grant.
+        if (current.runtimeGeneration === runtimeGeneration
+          && Number.isFinite(Date.parse(current.expiresAt)) && Date.parse(current.expiresAt) > Date.now()) return;
       }
       await writeFileAtomicNoFollow(project.rootDir, target, `${JSON.stringify(authorization, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     });
@@ -3737,7 +3806,8 @@ export class AgentRunStore {
         ].slice(0, 20),
       });
     }
-    const { artifacts, mismatched } = await verifiedReceiptArtifacts(project, receipt);
+    const verifiedReceipt = await verifiedReceiptArtifacts(project, receipt);
+    const { artifacts, mismatched } = verifiedReceipt;
     if (mismatched.length) {
       // A file that does not match the digest it was graded under is not the
       // file that was graded. Refusing is the only honest answer: the
@@ -3747,6 +3817,18 @@ export class AgentRunStore {
       // container is gone, so the gate cannot be re-run over the bytes on disk
       // and nothing has judged them — which is precisely the case the receipt
       // exists to catch.
+      //
+      // Unless the files moved under a revision the server authorized: then
+      // the run ended with its revision not accepted, which is what it says.
+      const drift = await revisionDrift(project, verifiedReceipt);
+      if (drift.explained) {
+        return this.finishInternal(project, run.id, {
+          status: "failed",
+          errorCode: "specialist_deliverable_not_accepted",
+          artifacts: [],
+          qualityNotices: [revisionNotAcceptedNotice(verifiedReceipt, drift.revising)],
+        });
+      }
       return this.finishInternal(project, run.id, {
         status: "failed",
         errorCode: "specialist_receipt_digest_mismatch",
@@ -4120,11 +4202,18 @@ export class AgentRunStore {
           let repairRefusal = "";
           try {
             revision = await snapshotAcceptedPackageForRepair(project, run, await this.runtimeGeneration(project));
-          } catch {
+          } catch (error) {
             revision = null;
             terminal.status = "failed";
             terminal.errorCode = "specialist_evidence_repair_snapshot_failed";
-            terminal.qualityNotices = ["The accepted package could not be preserved outside the runtime workspace before repair, so no revision was authorized."];
+            // With its reason, and ahead of the issues it left unrepaired. It
+            // said only the first half of this sentence, and replaced the
+            // issues with it; finding the cause in a v8 ablation cell took a
+            // host inspection.
+            terminal.qualityNotices = [
+              `The accepted package could not be preserved outside the runtime workspace before repair (${String(error?.message ?? error).slice(0, 300)}), so no revision was authorized.`,
+              ...completion.qualityIssues,
+            ];
           }
           if (revision) {
             if (structuralRound) this.clinicalStructuralRepairAttempts.set(run.id, structuralAttempts + 1);
@@ -4354,23 +4443,34 @@ export class AgentRunStore {
         // entry this returns is the control plane's own durable record of what
         // it verified and shipped.
         const amendable = terminal.status === "succeeded" && artifacts.length > 0;
-        if (!amendable) {
+        // A failed repair whose files moved under a revision the server
+        // authorized is that failed repair, and it is already the verdict in
+        // `terminal`. Calling it a digest mismatch told the reader the files
+        // were tampered with and dropped them from the ledger (v8 ablation,
+        // 2026-09-16).
+        const drift = amendable || terminal.status !== "failed" ? null : await revisionDrift(project, verified);
+        if (drift?.explained) {
+          terminal.qualityNotices = [revisionNotAcceptedNotice(verified, drift.revising), ...(terminal.qualityNotices ?? [])];
+        } else if (!amendable) {
           return this.finishInternal(project, run.id, {
             status: "failed",
             errorCode: "specialist_receipt_digest_mismatch",
             artifacts: [],
+            // First: behind twenty gate issues they were cut off, and the
+            // ledger never said which files had moved.
             qualityNotices: [
-              ...(terminal.qualityNotices ?? []),
               ...verified.mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the package did not pass on the bytes now on disk`),
+              ...(terminal.qualityNotices ?? []),
             ].slice(0, 20),
           });
+        } else {
+          terminal.qualityNotices = [
+            ...(terminal.qualityNotices ?? []),
+            `交付物在写下回执之后被改动了 ${verified.mismatched.length} 个文件：${verified.mismatched.slice(0, 6).join("、")}。`
+            + "服务端已用同一套门禁对盘上的实际字节重判并通过，按实际交付重出回执；发出去的就是被验过的那一版。"
+            + "若这不是有意的收尾修改，请让运行在最后一次修改之后再提交一次。",
+          ].slice(0, 20);
         }
-        terminal.qualityNotices = [
-          ...(terminal.qualityNotices ?? []),
-          `交付物在写下回执之后被改动了 ${verified.mismatched.length} 个文件：${verified.mismatched.slice(0, 6).join("、")}。`
-          + "服务端已用同一套门禁对盘上的实际字节重判并通过，按实际交付重出回执；发出去的就是被验过的那一版。"
-          + "若这不是有意的收尾修改，请让运行在最后一次修改之后再提交一次。",
-        ].slice(0, 20);
       }
     }
     return this.finishInternal(project, run.id, { ...terminal, artifacts,

@@ -1286,7 +1286,7 @@ test("a routed clinical evidence turn honors a configured bounded repair limit",
   }
 });
 
-for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused", "old-tampered", "prior-turn-only"]) {
+for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused", "old-tampered", "prior-turn-only", "guideline-warning", "undigested"]) {
   test(`clinical evidence source artifacts must come from successful retrieval tools in the same turn: ${scenario}`, async () => {
     const root = await mkdtemp(path.join(tmpdir(), `os-agent-run-clinical-provenance-${scenario}-`));
     try {
@@ -1311,18 +1311,27 @@ for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused",
         [sourceA, quotes.slice(0, 2).join("\n")],
         [sourceB, quotes.slice(2).join("\n")],
       ]);
+      const retrieval = {
+        // A guideline search answers `warning` for every result — its caveat is
+        // "verify the version" — while the text it preserved is real bytes with
+        // their digests. Refused as "no evidence tool reported preserving that
+        // file" in nine of twelve v8 ablation cells (2026-09-16).
+        "guideline-warning": { tool: "mcp__evimed__guideline_search", status: "warning", digests: true },
+        // What guideline preservation reported until then: a path, no digest.
+        undigested: { tool: "mcp__evimed__guideline_search", status: "warning", digests: false },
+      }[scenario] ?? { tool: "evimed-research_evimed_official_page_fetch", status: "success", digests: true };
       const retrievalParts = !["missing", "old-missing"].includes(scenario)
         ? [sourceA, sourceB].map((source) => ({
             type: "tool",
-            tool: "evimed-research_evimed_official_page_fetch",
+            tool: retrieval.tool,
             state: {
               status: "completed",
               output: JSON.stringify({
-                status: "success",
+                status: retrieval.status,
                 artifacts: [source],
-                data: { artifactSha256s: {
+                ...(retrieval.digests ? { data: { artifactSha256s: {
                   [source]: createHash("sha256").update(sourceContents.get(source), "utf8").digest("hex"),
-                } },
+                } } } : {}),
               }),
             },
           }))
@@ -1441,7 +1450,7 @@ for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused",
       }];
       const finished = await store.reconcileSession(project, binding.sessionId);
       assert.equal(finished.id, run.id);
-      assert.equal(finished.status, ["valid", "reused"].includes(scenario) ? "succeeded" : "failed");
+      assert.equal(finished.status, ["valid", "reused", "guideline-warning"].includes(scenario) ? "succeeded" : "failed");
       assert.equal(finished.errorCode, {
         missing: "specialist_evidence_provenance_failed",
         valid: null,
@@ -1450,6 +1459,8 @@ for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused",
         reused: null,
         "old-tampered": "specialist_evidence_integrity_failed",
         "prior-turn-only": "specialist_evidence_provenance_failed",
+        "guideline-warning": null,
+        undigested: "specialist_evidence_provenance_failed",
       }[scenario]);
       await store.closeProject(project, "canceled");
     } finally {
@@ -3692,6 +3703,131 @@ test("a provenance rejection is repaired rather than discarded", async () => {
     assert.equal(repairPrompts.length, 1, "a repair prompt was sent");
     assert.match(repairPrompts[0], /\.evimed-sources\/official-pages\/source-a\/page\.md/);
     assert.match(repairPrompts[0], /no evidence tool reported preserving that file/);
+
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an authorized revision that did not pass gets its next round, and ends as that failed repair rather than as tampering", async () => {
+  // v8 ablation, cell review-003 candidate r0 (2026-09-16): round one's grant
+  // was consumed and the report edited, the resubmission was refused, and round
+  // two refused to preserve a package whose files no longer matched the
+  // receipt. The ledger then called it `specialist_receipt_digest_mismatch`,
+  // dropped the files, and cut the notice saying which files moved.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-revision-round-two-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_revision_round_two", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let history = [];
+    const repairPrompts = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      maxClinicalRepairAttempts: 2,
+      repairRetryDelaysMs: [0, 0],
+      runtimeGeneration: async () => "runtime-generation-1",
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_revision_round_two",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async (_session, _record, repairText = null) => {
+      if (repairText) repairPrompts.push(repairText);
+      return { accepted: true };
+    });
+
+    // A package the run-side gate accepted and the server refuses: its run
+    // receipt lists a source no retrieval tool reported preserving.
+    const source = ".evimed-sources/official-pages/source-a/page.md";
+    await mkdir(path.join(project.workspaceDir, path.dirname(source)), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, source), "Preserved source text.", "utf8");
+    const files = new Map([
+      ["deliverables/review/clinical-evidence-report.md", "# 报告\n\n正文。"],
+      ["deliverables/review/clinical-evidence-matrix.json", JSON.stringify({ claims: [] })],
+      ["deliverables/review/clinical-evidence-run.json", JSON.stringify({ successfulSourceArtifacts: [source] })],
+    ]);
+    await mkdir(path.join(project.workspaceDir, "deliverables", "review"), { recursive: true });
+    for (const [relative, text] of files) await writeFile(path.join(project.workspaceDir, relative), text, "utf8");
+    await writeFile(path.join(project.workspaceDir, workspaceLayout.receiptFile), JSON.stringify({
+      formatVersion: 1,
+      runId: run.id,
+      bundleVersion: "1.0.0",
+      domainVersion: "1.0.0",
+      entries: [{
+        deliverableId: "review",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        acceptedAt: new Date().toISOString(),
+        attempt: 1,
+        notices: [],
+        files: [...files].map(([relative, text]) => ({ path: relative, sha256: createHash("sha256").update(text).digest("hex"), bytes: Buffer.byteLength(text) })),
+      }],
+    }), "utf8");
+    const turn = (id) => ({
+      info: { id, role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        ...[...files.keys()].map((filePath) => ({ type: "tool", tool: "write", state: { status: "completed", input: { filePath } } })),
+        { type: "text", text: "Completed." },
+      ],
+    });
+    history = [turn("msg_accepted")];
+
+    const roundOne = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(roundOne.status, "running");
+    assert.equal(repairPrompts.length, 1);
+    assert.match(repairPrompts[0], /evimed_revise_deliverable/, "the accepted deliverable is frozen, so round one opens a revision");
+
+    // The run spends the grant, edits the report, and is refused again.
+    const grantDirectory = path.join(project.metaDir, "repair-authorizations");
+    const grantName = (await readdir(grantDirectory)).find((name) => !name.includes(".claimed."));
+    const grant = JSON.parse(await readFile(path.join(grantDirectory, grantName), "utf8"));
+    const consumed = await store.consumeRepairAuthorization(project, {
+      runId: grant.runId, deliverableId: grant.deliverableId, acceptedDigest: grant.acceptedDigest, runtimeGeneration: "runtime-generation-1",
+    }, { revalidateRuntimeGeneration: async () => "runtime-generation-1" });
+    assert.equal(consumed.authorized, true);
+    await writeFile(path.join(project.workspaceDir, "deliverables/review/clinical-evidence-report.md"), "# 报告\n\n修订后的正文。", "utf8");
+    history = [...history, turn("msg_revision_one")];
+
+    const roundTwo = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(roundTwo.status, "running", `round two is sent, not refused: ${JSON.stringify(roundTwo.qualityNotices ?? [])}`);
+    assert.equal(repairPrompts.length, 2);
+    assert.doesNotMatch(repairPrompts[1], /evimed_revise_deliverable/, "the revision is already open");
+
+    history = [...history, turn("msg_revision_two")];
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.status, "failed");
+    assert.equal(finished.errorCode, "specialist_evidence_provenance_failed");
+    assert.match(finished.qualityNotices[0], /开启了修订，改动了 1 个文件/);
+    assert.match(finished.qualityNotices.join("\n"), /no evidence tool reported preserving that file/);
 
     await store.closeProject(project, "canceled");
   } finally {
@@ -6143,6 +6279,109 @@ test("the preserved accepted bytes can be read back, and only by their own diges
   }
 });
 
+/** A workspace holding one accepted clinical report and the receipt naming it. */
+async function acceptedReportWorkspace(prefix, runId = "run_control") {
+  const root = await mkdtemp(path.join(tmpdir(), prefix));
+  const project = { rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  await mkdir(project.metaDir, { recursive: true });
+  const relative = "deliverables/review/clinical-evidence-report.md";
+  const accepted = "# Accepted review\nThe bytes the local gate accepted.\n";
+  await mkdir(path.dirname(path.join(project.workspaceDir, relative)), { recursive: true });
+  await writeFile(path.join(project.workspaceDir, relative), accepted);
+  await writeFile(path.join(project.workspaceDir, workspaceLayout.receiptFile), JSON.stringify({
+    formatVersion: 1,
+    runId,
+    bundleVersion: "1.0.0",
+    domainVersion: "1.0.0",
+    entries: [{
+      deliverableId: "review",
+      contractKind: "clinical-evidence-report",
+      capability: "clinical-evidence-synthesis",
+      acceptedAt: "2026-09-16T20:42:53.842Z",
+      attempt: 2,
+      notices: [],
+      files: [{ path: relative, sha256: createHash("sha256").update(accepted).digest("hex"), bytes: Buffer.byteLength(accepted) }],
+    }],
+  }));
+  const lifecycle = (generation = "runtime-generation-1") => ({
+    runtimeGeneration: generation,
+    controlRunRepairing: async () => true,
+    revalidateRuntimeGeneration: async () => generation,
+  });
+  return { root, project, relative, accepted, lifecycle };
+}
+
+test("a second repair round after an authorized revision that did not pass needs no second grant", async () => {
+  // v8 ablation, 2026-09-16: round one's grant was consumed, the run edited the
+  // report, and its resubmission was refused, so the receipt still named the
+  // accepted bytes. Round two refused to preserve a package whose files no
+  // longer matched it, and the run ended `specialist_receipt_digest_mismatch`
+  // after a single repair, with no files.
+  const { root, project, relative, accepted, lifecycle } = await acceptedReportWorkspace("os-repair-round-two-");
+  try {
+    const run = { id: "run_control", nativeTurn: null };
+    const first = await snapshotAcceptedPackageForRepairForTest(project, run, "runtime-generation-1");
+    assert.equal(first.revisionRequired, true);
+    assert.equal((await consumeRepairAuthorizationForTest(project, first.authorizations[0], lifecycle())).authorized, true);
+    await writeFile(path.join(project.workspaceDir, relative), "# Revised review\nA repair that did not pass.\n");
+
+    const second = await snapshotAcceptedPackageForRepairForTest(project, run, "runtime-generation-1");
+    assert.equal(second.revisionRequired, false, "the revision is already open");
+    assert.deepEqual(second.authorizations, []);
+    assert.equal(second.snapshotPath, first.snapshotPath);
+    const preserved = JSON.parse(await readFile(first.snapshotPath, "utf8"));
+    assert.equal(preserved.files[0].text, accepted, "the accepted bytes stay preserved, not overwritten by the revision");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("files that changed without a consumed grant are still refused before repair", async () => {
+  // The control for the case above. Unauthorized edits, and edits made while a
+  // grant sat unused, are not a revision.
+  const { root, project, relative } = await acceptedReportWorkspace("os-repair-unauthorized-drift-");
+  try {
+    const run = { id: "run_control", nativeTurn: null };
+    await writeFile(path.join(project.workspaceDir, relative), "# Edited with no revision\n");
+    await assert.rejects(snapshotAcceptedPackageForRepairForTest(project, run, "runtime-generation-1"), /accepted receipt drifted before repair/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+  const minted = await acceptedReportWorkspace("os-repair-unused-grant-drift-");
+  try {
+    const run = { id: "run_control", nativeTurn: null };
+    const first = await snapshotAcceptedPackageForRepairForTest(minted.project, run, "runtime-generation-1");
+    assert.equal(first.revisionRequired, true);
+    await writeFile(path.join(minted.project.workspaceDir, minted.relative), "# Edited while the grant sat unused\n");
+    await assert.rejects(snapshotAcceptedPackageForRepairForTest(minted.project, run, "runtime-generation-1"), /accepted receipt drifted before repair/);
+  } finally {
+    await rm(minted.root, { recursive: true, force: true });
+  }
+});
+
+test("a grant that can no longer be consumed is replaced for the next round", async () => {
+  const { root, project, lifecycle } = await acceptedReportWorkspace("os-repair-stale-grant-");
+  try {
+    const run = { id: "run_control", nativeTurn: null };
+    const first = await snapshotAcceptedPackageForRepairForTest(project, run, "runtime-generation-1");
+    // The runtime was replaced before the run used it.
+    const replaced = await snapshotAcceptedPackageForRepairForTest(project, run, "runtime-generation-2");
+    assert.equal(replaced.revisionRequired, true);
+    assert.equal((await consumeRepairAuthorizationForTest(project, first.authorizations[0], lifecycle("runtime-generation-1"))).authorized, false,
+      "the replaced runtime's grant is gone");
+    // And one left unused past its window.
+    const grants = (await readdir(path.join(project.metaDir, "repair-authorizations"))).filter((name) => !name.includes(".claimed."));
+    const grantPath = path.join(project.metaDir, "repair-authorizations", grants[0]);
+    const grant = JSON.parse(await readFile(grantPath, "utf8"));
+    await writeFile(grantPath, JSON.stringify({ ...grant, expiresAt: new Date(Date.now() - 1000).toISOString() }));
+    const renewed = await snapshotAcceptedPackageForRepairForTest(project, run, "runtime-generation-2");
+    assert.equal(renewed.revisionRequired, true);
+    assert.equal((await consumeRepairAuthorizationForTest(project, renewed.authorizations[0], lifecycle("runtime-generation-2"))).authorized, true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("server repair preserves accepted bytes outside the runtime workspace", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-repair-revision-"));
   try {
@@ -6252,11 +6491,13 @@ test("server repair preserves accepted bytes outside the runtime workspace", asy
       "the filesystem claim must allow only one consumer across Node processes");
     assert.equal((await consumeRepairAuthorizationForTest(project, authorization, lifecycle)).authorized, false, "the authorization must be one-time");
     assert.equal((await consumeRepairAuthorizationForTest(project, { ...authorization, acceptedDigest: "f".repeat(64) }, lifecycle)).authorized, false);
-    await assert.rejects(
-      snapshotAcceptedPackageForRepairForTest(project, { id: "run_control", nativeTurn: null }, "runtime-generation-1"),
-      /already consumed/,
-      "reissuing the same accepted digest must not reset consumedAt",
-    );
+    // A later round for the same accepted digest finds the revision open: it
+    // mints nothing, and the consumed grant stays consumed.
+    const again = await snapshotAcceptedPackageForRepairForTest(project, { id: "run_control", nativeTurn: null }, "runtime-generation-1");
+    assert.equal(again.revisionRequired, false);
+    assert.deepEqual(again.authorizations, []);
+    assert.equal((await consumeRepairAuthorizationForTest(project, authorization, lifecycle)).authorized, false,
+      "reissuing the same accepted digest must not reset consumedAt");
     assert.ok(result.snapshotPath.startsWith(project.metaDir + path.sep));
     await writeFile(path.join(project.workspaceDir, relative), "changed workspace bytes");
     const snapshot = JSON.parse(await readFile(result.snapshotPath, "utf8"));
@@ -6485,6 +6726,69 @@ test("a receipt naming a file that no longer matches its digest is refused, not 
     assert.deepEqual(finished?.artifacts, []);
     assert.deepEqual(finished?.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"]);
     assert.ok(finished?.qualityNotices?.some((line) => String(line).includes("未经核验")));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("with the runtime gone, files moved by an authorized revision end as a revision not accepted, not as tampering", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-revision-gone-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    const relative = "deliverables/d1/clinical-evidence-report.md";
+    const accepted = "# accepted report\n";
+    await mkdir(path.join(project.workspaceDir, "deliverables", "d1"), { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    await writeFile(path.join(project.workspaceDir, relative), accepted, "utf8");
+    await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_x",
+      bundleVersion: "0.1.0",
+      domainVersion: "0.1.0",
+      entries: [{
+        deliverableId: "d1",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        files: [{ path: relative, sha256: createHash("sha256").update(accepted).digest("hex"), bytes: Buffer.byteLength(accepted) }],
+        acceptedAt: "2026-01-01T00:00:00.000Z",
+        attempt: 1,
+        notices: [],
+      }],
+    }, null, 2), "utf8");
+
+    const binding = { sessionId: "ses_revision_gone", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let alive = true;
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => {
+        if (alive) { alive = false; return []; }
+        const error = new Error("gone");
+        error.code = "runtime_not_running";
+        throw error;
+      },
+      monitorIntervalMs: 60_000,
+    });
+    // Reconciled by hand below, once the revision is in place.
+    store.scheduleMonitor = () => {};
+    const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
+    const lifecycle = { runtimeGeneration: "runtime-generation-1", controlRunRepairing: async () => true, revalidateRuntimeGeneration: async () => "runtime-generation-1" };
+    const revision = await snapshotAcceptedPackageForRepairForTest(project, started, "runtime-generation-1");
+    assert.equal((await consumeRepairAuthorizationForTest(project, revision.authorizations[0], lifecycle)).authorized, true);
+    await writeFile(path.join(project.workspaceDir, relative), "# revised, never accepted\n", "utf8");
+
+    await store.reconcileSession(project, binding.sessionId).catch(() => {});
+    const finished = (await store.list(project)).find((item) => item.id === started.id);
+    assert.equal(finished?.status, "failed");
+    assert.equal(finished?.errorCode, "specialist_deliverable_not_accepted");
+    assert.deepEqual(finished?.artifacts, []);
+    assert.match(String(finished?.qualityNotices?.[0]), /交付物「d1」按服务端门禁的要求开启了修订/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
