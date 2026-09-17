@@ -1,6 +1,7 @@
 import * as Popover from "@radix-ui/react-popover";
 import { ExternalLink } from "lucide-react";
-import type { ClaimEvidence, ClaimSource } from "@/lib/claimCitations";
+import { CLAIM_STATUS_TEXT, type ClaimEvidence, type ClaimSource } from "@/lib/claimCitations";
+import { cn } from "@/lib/cn";
 
 const TYPE_LABEL: Record<string, string> = { direct: "直接证据", synthesized: "综合结论", derived: "推导结果" };
 const ACCESS_LABEL: Record<string, string> = {
@@ -41,16 +42,33 @@ function Source({ source }: { source: ClaimSource }) {
  * claim id the matrix does not hold is named, not skipped — a citation that
  * points at nothing is itself something to check.
  */
-export function ClaimCitation({ ids, claims }: { ids: string[]; claims: Map<string, ClaimEvidence> }) {
+const TONE_CLASS = { ok: "text-ok", warn: "text-warn", muted: "text-muted" } as const;
+
+export function ClaimCitation({ ids, claims, statuses }: {
+  ids: string[];
+  claims: Map<string, ClaimEvidence>;
+  /** What was found when each claim's quotation was looked up in its preserved
+   *  source. Absent while it loads, or for a report nobody has checked. */
+  statuses?: Map<string, string>;
+}) {
+  // The sentence is flagged where it stands, not only inside the popover: a
+  // reader skimming the page should see which sentences to look at twice.
+  const attention = ids.some((id) => {
+    const status = statuses?.get(id);
+    return status != null && CLAIM_STATUS_TEXT[status]?.tone === "warn";
+  });
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
         <button
           type="button"
-          aria-label={`查看这句话的依据（${ids.length} 条主张）`}
-          className="mx-0.5 inline-flex min-h-6 items-center rounded-input px-1 align-super text-caption font-medium text-accent hover:bg-surface-2"
+          aria-label={`查看这句话的依据（${ids.length} 条主张${attention ? "，其中有未核对上的引文" : ""}）`}
+          className={cn(
+            "mx-0.5 inline-flex min-h-6 items-center rounded-input px-1 align-super text-caption font-medium hover:bg-surface-2",
+            attention ? "text-warn" : "text-accent",
+          )}
         >
-          依据
+          {attention ? "依据 ⚠" : "依据"}
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -77,6 +95,11 @@ export function ClaimCitation({ ids, claims }: { ids: string[]; claims: Map<stri
                     {claim.confidence ? ` · 把握度 ${claim.confidence}` : ""}
                   </p>
                   <p className="mt-0.5 text-ui text-text">{claim.claim}</p>
+                  {statuses?.get(id) && (
+                    <p className={cn("mt-1 text-caption", TONE_CLASS[CLAIM_STATUS_TEXT[statuses.get(id) ?? ""]?.tone ?? "muted"])}>
+                      {CLAIM_STATUS_TEXT[statuses.get(id) ?? ""]?.label ?? "这条主张还没有被核对"}
+                    </p>
+                  )}
                   {sources.map((source, index) => <Source key={index} source={source} />)}
                   {claim.claimType === "derived" && (
                     <p className="mt-1 text-caption text-muted">

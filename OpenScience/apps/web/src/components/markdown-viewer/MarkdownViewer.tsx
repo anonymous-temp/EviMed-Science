@@ -68,6 +68,7 @@ export function MarkdownViewer({
   className,
   variant = "chat",
   claims,
+  claimStatuses,
 }: {
   children: string;
   className?: string;
@@ -75,6 +76,8 @@ export function MarkdownViewer({
   /** A report's evidence matrix, by claim id: each run of claim markers in the
    *  text becomes a citation that opens what the sentence rests on. */
   claims?: Map<string, ClaimEvidence>;
+  /** Whether each claim's quotation was found in its preserved source. */
+  claimStatuses?: Map<string, string>;
 }) {
   const s = STYLES[variant];
   // Claim markers become citations when there is a matrix to open; whatever
@@ -93,7 +96,7 @@ export function MarkdownViewer({
           p: ({ children }) => <p className={s.p}>{children}</p>,
           a: ({ children, href }) => {
             const ids = claims ? claimIdsFromHref(href) : null;
-            if (ids && claims) return <ClaimCitation ids={ids} claims={claims} />;
+            if (ids && claims) return <ClaimCitation ids={ids} claims={claims} statuses={claimStatuses} />;
             return (
               <a href={href} className={s.a}>
                 {children}

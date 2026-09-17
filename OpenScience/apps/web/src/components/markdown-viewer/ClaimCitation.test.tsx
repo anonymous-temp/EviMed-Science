@@ -25,6 +25,26 @@ describe("a report sentence opens what it rests on", () => {
     expect(screen.getByText("证据矩阵里没有这条主张（CLM-404）。")).toBeInTheDocument();
   });
 
+  it("marks the sentence whose quotation was not found, and says what was found for each claim", async () => {
+    // The gate used to withhold the whole package over this; the reader is told
+    // claim by claim instead (2026-09-17).
+    const statuses = new Map([["CLM-001", "verified"], ["CLM-404", "quote_not_found"]]);
+    render(<MarkdownViewer variant="document" claims={claims} claimStatuses={statuses}>{report}</MarkdownViewer>);
+    const citation = screen.getByRole("button", { name: "查看这句话的依据（2 条主张，其中有未核对上的引文）" });
+    expect(citation).toHaveTextContent("依据 ⚠");
+    await userEvent.click(citation);
+    expect(await screen.findByText("引文已在保存的原文中核对")).toBeInTheDocument();
+  });
+
+  it("a sentence whose every quotation was found is not flagged, and an unknown status is never read as verified", async () => {
+    render(<MarkdownViewer variant="document" claims={claims} claimStatuses={new Map([["CLM-001", "some_future_status"]])}>{"x [1]<!-- claim:CLM-001 -->"}</MarkdownViewer>);
+    const citation = screen.getByRole("button", { name: "查看这句话的依据（1 条主张）" });
+    expect(citation).toHaveTextContent(/^依据$/);
+    await userEvent.click(citation);
+    expect(await screen.findByText("这条主张还没有被核对")).toBeInTheDocument();
+    expect(screen.queryByText("引文已在保存的原文中核对")).toBeNull();
+  });
+
   it("never links a source address that is not http(s)", async () => {
     render(<MarkdownViewer variant="document" claims={claims}>{"x [2]<!-- claim:CLM-777 -->"}</MarkdownViewer>);
     await userEvent.click(screen.getByRole("button", { name: /查看这句话的依据/ }));

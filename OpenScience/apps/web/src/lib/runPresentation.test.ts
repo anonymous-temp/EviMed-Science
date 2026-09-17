@@ -77,4 +77,19 @@ describe("the gate's notices, grouped", () => {
     expect(summary.groups[0].items[0]).not.toMatch(/^MUST FIX/);
     expect(summary.groups.map((group) => group.label)).toEqual(expect.arrayContaining(["证据矩阵主张", "引文台账与参考文献", "其他核验提示"]));
   });
+
+  it("puts a clinical-safety finding ahead of everything and counts it apart", () => {
+    const summary = summarizeQualityNotices([
+      "MUST FIX — claims[2].supportQuote was not found in its preserved source artifact.",
+      "SAFETY — 临床实践要点第 12 行把呼叫急救的条件写成了服药后是否缓解。",
+      "Report line 9 numeric facts 12 have no evidence-matrix claim reference.",
+    ]);
+    expect(summary).toMatchObject({ total: 3, mustFix: 2, safety: 1, advisory: 1 });
+    expect(summary.groups.map((group) => [group.label, group.safety, group.mustFix])).toEqual([
+      ["临床安全", true, true],
+      ["证据矩阵主张", false, true],
+      ["数字未标注其来源主张", false, false],
+    ]);
+    expect(summary.groups[0].items[0]).toBe("临床实践要点第 12 行把呼叫急救的条件写成了服药后是否缓解。");
+  });
 });

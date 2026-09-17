@@ -263,6 +263,7 @@ describe("RunsPage (hosted web)", () => {
         "Report line 44 numeric facts 1.26-1.38 are not present in the cited claim evidence. Cite the claim that carries them.",
         "Report line 86 numeric facts 2.71 are not present in the cited claim evidence. Cite the claim that carries them.",
         "MUST FIX — The search log must exactly match successful evidence-search calls from the same run.",
+        "SAFETY — 临床实践要点第 12 行把呼叫急救的条件写成了服药后是否缓解。",
       ],
       artifacts: ["clinical-evidence-report.md"],
     })]);
@@ -271,12 +272,19 @@ describe("RunsPage (hosted web)", () => {
     expect(screen.getByText(/产物可以照常下载和阅读/)).toBeInTheDocument();
     // How much is owed, before any of the prose: a reader must not have to
     // count bullets to learn there are three findings and one is blocking.
-    expect(screen.getByText(/必须修正 1 项 · 建议修正 2 项/)).toBeInTheDocument();
-    // Grouped and named in Chinese, with what must be fixed leading. The notices
-    // are written for the agent that repairs them; a reader meets the shape of
-    // the problem first and the validator prose second.
-    const mustFix = screen.getByText("必须修正");
-    expect(mustFix).toBeInTheDocument();
+    // Said as findings about a delivered package, not as work owed: nothing here
+    // withholds the files any more (2026-09-17), so "必须修正" was addressed to
+    // nobody. Clinical safety is counted apart and leads.
+    expect(screen.getByText(/临床安全 1 项/)).toBeInTheDocument();
+    expect(screen.getByText(/未通过核验 1 项 · 提示 2 项/)).toBeInTheDocument();
+    // Grouped and named in Chinese, with what a reader cannot see for themselves
+    // leading. The notices are written for the agent; a reader meets the shape
+    // of the problem first and the validator prose second.
+    expect(screen.getByText("未通过核验")).toBeInTheDocument();
+    const groups = screen.getAllByRole("listitem").map((item) => item.textContent ?? "");
+    expect(groups.findIndex((text) => text.startsWith("临床安全"))).toBeLessThan(groups.findIndex((text) => text.startsWith("未通过核验")));
+    expect(screen.queryByText(/^SAFETY/)).not.toBeInTheDocument();
+    expect(screen.getByText(/句末的「依据」逐条标出/)).toBeInTheDocument();
     expect(screen.getByText("检索日志与运行记录")).toBeInTheDocument();
     expect(screen.getByText("数字与所引主张不符")).toBeInTheDocument();
     // Two notices of one kind are one heading carrying a count, not two walls.

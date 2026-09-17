@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { FilePreviewInspector as FilePreviewInspectorT } from "@ai4s/shared";
 import { FilePreviewInspector, PreviewError } from "./FilePreviewInspector";
-import { readArtifact } from "@/lib/artifactFile";
+import { readArtifact, readClaimVerification } from "@/lib/artifactFile";
 
 // The markdown tests below carry inline `content`, so they never hit
 // readArtifact — this mock only feeds the binary-file test.
@@ -30,6 +30,7 @@ vi.mock("@/lib/artifactFile", async (importOriginal) => {
       size: 3,
     })),
     previewUrl: vi.fn(async () => null),
+    readClaimVerification: vi.fn(async () => null),
     probeLargeFile: (...args: unknown[]) => probeLargeFile(...args),
     downloadArtifact: (...args: unknown[]) => downloadArtifact(...args),
     downloadInlineArtifact: (...args: unknown[]) => downloadInlineArtifact(...args),
@@ -64,6 +65,28 @@ describe("FilePreviewInspector — markdown", () => {
     await userEvent.click(await screen.findByRole("button", { name: "查看这句话的依据（1 条主张）" }));
     expect(await screen.findByText("“covering a decade”")).toBeInTheDocument();
     expect(vi.mocked(readArtifact)).toHaveBeenCalledWith("deliverables/d1/clinical-evidence-matrix.json", undefined);
+  });
+
+  it("says above the report how much of it was checked, and flags the sentence whose quotation was not found", async () => {
+    vi.mocked(readArtifact).mockImplementationOnce(async (path: string) => path === "deliverables/d1/clinical-evidence-matrix.json"
+      ? { path, mime: "application/json", encoding: "utf8", size: 1, data: JSON.stringify({ claims: [
+        { claimId: "CLM-001", claim: "MIMIC-IV 是单一机构数据库。", claimType: "direct", supportQuote: "covering a decade", sourceTitle: "MIMIC-IV" },
+        { claimId: "CLM-002", claim: "队列为 50,920 人。", claimType: "direct", supportQuote: "50,920 unique patients", sourceTitle: "MIMIC-IV" },
+      ] }) }
+      : null);
+    vi.mocked(readClaimVerification).mockResolvedValueOnce({
+      claims: [
+        { claimId: "CLM-001", claimType: "direct", status: "verified", sources: [] },
+        { claimId: "CLM-002", claimType: "direct", status: "quote_not_found", sources: [] },
+      ],
+      counts: { verified: 1, quote_not_found: 1 },
+    });
+    render(<FilePreviewInspector data={{ ...md, path: "deliverables/d1/clinical-evidence-report.md", filename: "clinical-evidence-report.md",
+      content: "单一机构数据库 [1]<!-- claim:CLM-001 -->。队列 50,920 人 [1]<!-- claim:CLM-002 -->。" }} onClose={() => {}} />);
+    expect(await screen.findByRole("note")).toHaveTextContent("本报告 2 条主张：1 条引文已在保存的原文中核对，1 条未在原文中找到。");
+    expect(screen.getByRole("button", { name: "查看这句话的依据（1 条主张，其中有未核对上的引文）" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看这句话的依据（1 条主张）" })).toBeInTheDocument();
+    expect(vi.mocked(readClaimVerification)).toHaveBeenCalledWith("deliverables/d1/clinical-evidence-matrix.json", undefined);
   });
 
   it("toggles to the raw source under the source tab", async () => {
