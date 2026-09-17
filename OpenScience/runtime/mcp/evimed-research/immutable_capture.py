@@ -33,6 +33,26 @@ CAPTURE_MANIFEST_NAME = "capture.json"
 CAPTURE_MANIFEST_SCHEMA = 1
 
 
+def managed_workspace() -> Path:
+    """The managed project workspace every capture is published into.
+
+    One resolver for every preserving tool. Guideline preservation borrowed
+    `official_pages._workspace`, and `official_pages` imports `public_sources`:
+    the cycle resolved only when `public_sources` happened to load first, and a
+    preservation that could not import its resolver returned no artifact at all.
+    """
+    raw = os.environ.get("OPEN_SCIENCE_WORKSPACE_DIR", "").strip()
+    if not raw or not os.path.isabs(raw) or "\0" in raw:
+        raise ImmutableCaptureError("The managed project workspace is unavailable.")
+    candidate = Path(raw)
+    if candidate.is_symlink():
+        raise ImmutableCaptureError("The managed project workspace is unavailable.")
+    workspace = candidate.resolve()
+    if not workspace.is_dir():
+        raise ImmutableCaptureError("The managed project workspace is unavailable.")
+    return workspace
+
+
 def _matches(directory: int, name: str, payload: bytes) -> bool:
     try:
         descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)

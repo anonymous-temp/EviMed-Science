@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import os
 import re
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -13,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import public_sources
-from immutable_capture import ImmutableCaptureError, preserve
+from immutable_capture import ImmutableCaptureError, managed_workspace, preserve
 
 
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
@@ -262,16 +261,10 @@ def _render_markdown(xml_payload: bytes, metadata: dict) -> tuple[str, dict]:
 
 
 def _workspace() -> Path:
-    raw = os.environ.get("OPEN_SCIENCE_WORKSPACE_DIR", "").strip()
-    if not raw or not os.path.isabs(raw) or "\0" in raw:
-        raise FullTextError("full_text_workspace_invalid", "The managed project workspace is unavailable.")
-    candidate = Path(raw)
-    if candidate.is_symlink():
-        raise FullTextError("full_text_workspace_invalid", "The managed project workspace is unavailable.")
-    workspace = candidate.resolve()
-    if not workspace.is_dir():
-        raise FullTextError("full_text_workspace_invalid", "The managed project workspace is unavailable.")
-    return workspace
+    try:
+        return managed_workspace()
+    except ImmutableCaptureError as error:
+        raise FullTextError("full_text_workspace_invalid", str(error)) from error
 
 
 def _doi_slug(doi: str) -> str:
