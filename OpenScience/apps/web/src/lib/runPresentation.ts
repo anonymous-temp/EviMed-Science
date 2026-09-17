@@ -227,6 +227,8 @@ const NOTICE_GROUPS: { label: string; match: RegExp }[] = [
 export interface NoticeGroup {
   label: string;
   mustFix: boolean;
+  /** Clinical framing that could hurt somebody: shown first, and in red. */
+  safety: boolean;
   items: string[];
 }
 
@@ -234,6 +236,8 @@ export interface NoticeSummary {
   groups: NoticeGroup[];
   /** How many notices a reader cannot discount on their own. */
   mustFix: number;
+  /** How many of those are about clinical safety. */
+  safety: number;
   advisory: number;
   total: number;
 }
@@ -249,22 +253,29 @@ export interface NoticeSummary {
 export function summarizeQualityNotices(notices: string[]): NoticeSummary {
   const groups = new Map<string, NoticeGroup>();
   let mustFixCount = 0;
+  let safetyCount = 0;
   for (const notice of notices) {
     // "MUST FIX — " is how the gate marks what a reader cannot see for
-    // themselves. It is a severity, not part of the sentence.
-    const mustFix = /^MUST FIX\s*[—-]\s*/.test(notice);
+    // themselves, and "SAFETY — " what could hurt somebody. Severities, not
+    // part of the sentence. Since 2026-09-17 neither withholds a delivery: the
+    // package is handed over and these are what the reader is told about it.
+    const safety = /^SAFETY\s*[—-]\s*/.test(notice);
+    const mustFix = safety || /^MUST FIX\s*[—-]\s*/.test(notice);
     if (mustFix) mustFixCount += 1;
-    const body = notice.replace(/^MUST FIX\s*[—-]\s*/, "");
-    const label = NOTICE_GROUPS.find((group) => group.match.test(body))?.label ?? "其他核验提示";
-    const key = `${mustFix ? "1" : "0"}:${label}`;
+    if (safety) safetyCount += 1;
+    const body = notice.replace(/^(?:MUST FIX|SAFETY)\s*[—-]\s*/, "");
+    const label = safety ? "临床安全" : NOTICE_GROUPS.find((group) => group.match.test(body))?.label ?? "其他核验提示";
+    const key = `${safety ? "2" : mustFix ? "1" : "0"}:${label}`;
     const existing = groups.get(key);
     if (existing) existing.items.push(body);
-    else groups.set(key, { label, mustFix, items: [body] });
+    else groups.set(key, { label, mustFix, safety, items: [body] });
   }
+  const rank = (group: NoticeGroup) => (group.safety ? 2 : group.mustFix ? 1 : 0);
   return {
-    // What must be fixed leads: it is the part a reader cannot discount alone.
-    groups: [...groups.values()].sort((a, b) => Number(b.mustFix) - Number(a.mustFix)),
+    // Safety leads, then what a reader cannot discount alone.
+    groups: [...groups.values()].sort((a, b) => rank(b) - rank(a)),
     mustFix: mustFixCount,
+    safety: safetyCount,
     advisory: notices.length - mustFixCount,
     total: notices.length,
   };

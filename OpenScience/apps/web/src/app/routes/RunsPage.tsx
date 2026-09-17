@@ -665,7 +665,8 @@ function WebRunRow({
                 {run.verification == null && "核验提示"}
                 {notices.total > 0 && (
                   <span className="normal-case tracking-normal">
-                    · 必须修正 {notices.mustFix} 项 · 建议修正 {notices.advisory} 项
+                    {notices.safety > 0 && <span className="text-error"> · 临床安全 {notices.safety} 项</span>}
+                    {" "}· 未通过核验 {notices.mustFix - notices.safety} 项 · 提示 {notices.advisory} 项
                   </span>
                 )}
               </div>
@@ -676,7 +677,7 @@ function WebRunRow({
               {run.verification === "unverified" && (
                 <p className="mb-1.5 text-caption text-text/80">
                   {hasArtifacts
-                    ? "产物可以照常下载和阅读；以下各点是本次分析未能自证的部分，请在引用前自行核对。"
+                    ? "产物可以照常下载和阅读；以下各点是本次分析未能自证的部分，请在引用前自行核对。打开报告，句末的「依据」逐条标出哪些引文已在保存的原文中核对、哪些没有。"
                     : "本次没有文件产出；以下各点是本次分析未能自证的部分，请在引用前自行核对。"}
                 </p>
               )}
@@ -691,8 +692,9 @@ function WebRunRow({
                   <li key={`${group.mustFix}-${group.label}`}>
                     <div className="flex items-center gap-1.5 text-caption">
                       {group.mustFix && (
-                        <span className="shrink-0 rounded bg-error/10 px-1 py-px text-caption font-medium text-error">
-                          必须修正
+                        <span className={cn("shrink-0 rounded px-1 py-px text-caption font-medium",
+                          group.safety ? "bg-error text-error-fg" : "bg-error/10 text-error")}>
+                          {group.safety ? "临床安全" : "未通过核验"}
                         </span>
                       )}
                       <span className="font-medium text-text">{group.label}</span>

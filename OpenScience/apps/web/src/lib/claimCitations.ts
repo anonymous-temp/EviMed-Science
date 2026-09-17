@@ -30,6 +30,49 @@ export interface ClaimEvidence extends ClaimSource {
   method?: string;
 }
 
+/**
+ * What the control plane found when it looked each claim's quotation up in the
+ * preserved source the claim names (`claim_verification`, 2026-09-17). The gate
+ * used to withhold a whole package over these; they are shown per claim now.
+ */
+export type ClaimStatus = "verified" | "quote_not_found" | "source_unavailable" | "no_quote" | "derived";
+
+export interface ClaimVerification {
+  claims: { claimId: string; claimType: string; status: ClaimStatus | string; sources: { artifactPath: string | null; status: string }[] }[];
+  counts: Record<string, number>;
+}
+
+/** What each status tells a reader. A status this table does not know reads as
+ *  unchecked rather than as verified. */
+export const CLAIM_STATUS_TEXT: Record<string, { label: string; tone: "ok" | "warn" | "muted" }> = {
+  verified: { label: "引文已在保存的原文中核对", tone: "ok" },
+  quote_not_found: { label: "引文未在保存的原文中找到，请对照来源核实", tone: "warn" },
+  source_unavailable: { label: "来源原文没有保存，引文无法核对", tone: "warn" },
+  no_quote: { label: "这条主张没有给出可核对的引文", tone: "warn" },
+  derived: { label: "推导结果：由其他主张计算或推断，本身没有引文", tone: "muted" },
+};
+
+/** Status by claim id, for the citation popover. */
+export function claimStatuses(verification: ClaimVerification | null | undefined): Map<string, string> {
+  return new Map((verification?.claims ?? []).map((claim) => [claim.claimId, String(claim.status)]));
+}
+
+/** One sentence for the top of a report: how many of its claims were checked
+ *  against a preserved source, and how many could not be. Null when there is
+ *  nothing to say. */
+export function claimVerificationSummary(verification: ClaimVerification | null | undefined): { text: string; attention: boolean } | null {
+  const counts = verification?.counts ?? {};
+  const total = verification?.claims.length ?? 0;
+  if (total === 0) return null;
+  const notFound = counts.quote_not_found ?? 0;
+  const unavailable = (counts.source_unavailable ?? 0) + (counts.no_quote ?? 0);
+  const parts = [`${counts.verified ?? 0} 条引文已在保存的原文中核对`];
+  if (notFound > 0) parts.push(`${notFound} 条未在原文中找到`);
+  if (unavailable > 0) parts.push(`${unavailable} 条无法核对`);
+  if ((counts.derived ?? 0) > 0) parts.push(`${counts.derived} 条为推导结果`);
+  return { text: `本报告 ${total} 条主张：${parts.join("，")}。点句末的「依据」看每一条。`, attention: notFound + unavailable > 0 };
+}
+
 /** The link target a citation is rendered from. Not a URL anyone navigates. */
 export const CLAIM_LINK_PREFIX = "#evimed-claims=";
 

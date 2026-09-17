@@ -3,6 +3,7 @@
 // in `pnpm dev`.
 // Paths are root-relative; `root` picks the tree ("workspace" = the active
 // session folder, default; "base" = the folder all session workspaces live under).
+import type { ClaimVerification } from "./claimCitations";
 import type { FileRoot } from "@ai4s/shared";
 import { hasWebApi, invokeCommand, webFileDownloadUrl } from "./apiClient";
 
@@ -21,6 +22,13 @@ export interface ArtifactFile {
 export async function readArtifact(path: string, root?: FileRoot): Promise<ArtifactFile | null> {
   if (!hasWebApi) return null;
   return invokeCommand<ArtifactFile>("read_artifact", { path, root });
+}
+
+/** Whether each claim of a clinical evidence matrix quotes the preserved source
+ *  it names, as the control plane finds it on disk right now. */
+export async function readClaimVerification(matrixPath: string, root?: FileRoot): Promise<ClaimVerification | null> {
+  if (!hasWebApi) return null;
+  return invokeCommand<ClaimVerification>("claim_verification", { path: matrixPath, root });
 }
 
 /** URL a workspace file is previewable at. Desktop uses the local file server;

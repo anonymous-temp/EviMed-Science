@@ -10,13 +10,17 @@ import {
   previewUrl,
   probeLargeFile,
   readArtifact,
+  readClaimVerification,
   type LargeFilePointer,
 } from "@/lib/artifactFile";
 import { hasWebApi } from "@/lib/apiClient";
 import { parseTableFile } from "@/lib/csv";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
-import { claimMatrixPathFor, parseClaimMatrix, type ClaimEvidence } from "@/lib/claimCitations";
+import {
+  claimMatrixPathFor, claimStatuses, claimVerificationSummary, parseClaimMatrix,
+  type ClaimEvidence, type ClaimVerification,
+} from "@/lib/claimCitations";
 import { ProvenancePanel } from "./ProvenancePanel";
 import { TablePreview } from "./TablePreview";
 import { canChart } from "@/lib/tableChart";
@@ -94,8 +98,13 @@ export function FilePreviewInspector({
   // A clinical evidence report's matrix, read beside it so each sentence can
   // open what it rests on. Best effort: without it the report still reads.
   const [claims, setClaims] = useState<Map<string, ClaimEvidence> | null>(null);
+  // And what the control plane found when it looked each quotation up in the
+  // preserved source: the report is delivered whatever this says, and says it
+  // claim by claim. Best effort too — a report nobody checked simply shows none.
+  const [verification, setVerification] = useState<ClaimVerification | null>(null);
   useEffect(() => {
     setClaims(null);
+    setVerification(null);
     const matrixPath = kind === "markdown" ? claimMatrixPathFor(data.path) : null;
     if (!matrixPath) return;
     let cancelled = false;
@@ -103,7 +112,11 @@ export function FilePreviewInspector({
       .then((file) => {
         if (cancelled || !file || file.encoding !== "utf8") return;
         const parsed = parseClaimMatrix(file.data);
-        if (parsed.size > 0) setClaims(parsed);
+        if (parsed.size === 0) return;
+        setClaims(parsed);
+        readClaimVerification(matrixPath, data.root)
+          .then((found) => { if (!cancelled) setVerification(found); })
+          .catch(() => { /* unchecked: the citations still open */ });
       })
       .catch(() => { /* no matrix, no citations; the report itself is unaffected */ });
     return () => { cancelled = true; };
@@ -261,11 +274,29 @@ export function FilePreviewInspector({
               path={data.path}
               language={data.language}
               claims={claims}
+              verification={verification}
             />
           </Suspense>
         )}
       </div>
     </div>
+  );
+}
+
+/** How much of the report was checked against a preserved source, said once
+ *  above it. The page under it is document-white whatever the theme, so the
+ *  colours are the document's and not the app's tokens. */
+function ClaimSummary({ verification }: { verification?: ClaimVerification | null }) {
+  const summary = claimVerificationSummary(verification);
+  if (!summary) return null;
+  return (
+    <p
+      role="note"
+      // eslint-disable-next-line no-restricted-syntax -- document-neutral canvas: fixed paper colours, like the page itself
+      className={`mb-6 rounded-input border px-3 py-2 text-ui-sm ${summary.attention ? "border-[#e6c98a] bg-[#fdf6e3] text-[#6b4e16]" : "border-[#cfe3d4] bg-[#f3faf5] text-[#23532f]"}`}
+    >
+      {summary.text}
+    </p>
   );
 }
 
@@ -279,6 +310,7 @@ function Body({
   path,
   language,
   claims,
+  verification,
 }: {
   kind: PreviewKind;
   url: string | null;
@@ -289,6 +321,7 @@ function Body({
   path: string;
   language?: string;
   claims?: Map<string, ClaimEvidence> | null;
+  verification?: ClaimVerification | null;
 }) {
   if (kind === "docx" || kind === "xlsx" || kind === "pptx") {
     // Office views scroll internally (the outer pane never does), so they
@@ -394,7 +427,8 @@ function Body({
     return text !== null ? (
       <div className="min-h-full px-6 py-8">
         <div className="mx-auto max-w-content rounded-sm bg-white px-12 py-11 shadow-[0_1px_4px_rgba(0,0,0,.25)] max-sm:px-6 max-sm:py-7">
-          <MarkdownViewer variant="document" claims={claims ?? undefined}>{text}</MarkdownViewer>
+          <ClaimSummary verification={verification} />
+          <MarkdownViewer variant="document" claims={claims ?? undefined} claimStatuses={claimStatuses(verification)}>{text}</MarkdownViewer>
         </div>
       </div>
     ) : (

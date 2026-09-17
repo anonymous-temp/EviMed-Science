@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { claimIdsFromHref, claimMatrixPathFor, linkClaimMarkers, parseClaimMatrix } from "./claimCitations";
+import {
+  CLAIM_STATUS_TEXT, claimIdsFromHref, claimMatrixPathFor, claimStatuses, claimVerificationSummary, linkClaimMarkers, parseClaimMatrix,
+} from "./claimCitations";
 
 // Marker and matrix shapes copied from a production report (2026-09-16,
 // deliverables/mimic-sepsis-prognosis-scoping).
@@ -18,6 +20,27 @@ describe("claim citations", () => {
     expect(linked).toContain("`<!-- claim:CLM-009 -->`");
     expect(linked).toContain("<!-- claim:CLM-010 -->");
     expect(linkClaimMarkers("x<!-- claim:CLM-002 --><!-- claim:CLM-002 -->")).toBe("x[依据](#evimed-claims=CLM-002)");
+  });
+
+  it("says once, above the report, how much of it was checked against a preserved source", () => {
+    const claim = (claimId: string, status: string) => ({ claimId, claimType: "direct", status, sources: [] });
+    expect(claimVerificationSummary(null)).toBeNull();
+    expect(claimVerificationSummary({ claims: [], counts: {} })).toBeNull();
+    expect(claimVerificationSummary({
+      claims: [claim("CLM-001", "verified"), claim("CLM-002", "verified")],
+      counts: { verified: 2 },
+    })).toEqual({ text: "本报告 2 条主张：2 条引文已在保存的原文中核对。点句末的「依据」看每一条。", attention: false });
+    const mixed = claimVerificationSummary({
+      claims: [claim("CLM-001", "verified"), claim("CLM-002", "quote_not_found"), claim("CLM-003", "source_unavailable"), claim("CLM-004", "derived")],
+      counts: { verified: 1, quote_not_found: 1, source_unavailable: 1, derived: 1 },
+    });
+    expect(mixed?.attention).toBe(true);
+    expect(mixed?.text).toBe("本报告 4 条主张：1 条引文已在保存的原文中核对，1 条未在原文中找到，1 条无法核对，1 条为推导结果。点句末的「依据」看每一条。");
+    expect(claimStatuses({ claims: [claim("CLM-001", "verified")], counts: {} }).get("CLM-001")).toBe("verified");
+    // Every status the control plane can answer has words for a reader.
+    for (const status of ["verified", "quote_not_found", "source_unavailable", "no_quote", "derived"]) {
+      expect(CLAIM_STATUS_TEXT[status]?.label).toBeTruthy();
+    }
   });
 
   it("reads the claim ids back from a citation link, and nothing from any other link", () => {
