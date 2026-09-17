@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { TextDecoder } from "node:util";
+import { claimVerification } from "./clinicalEvidenceQuality.mjs";
 import { assertDockerDataVolumeSupport, dockerWorkspaceMount } from "./dockerMounts.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
@@ -537,6 +538,54 @@ export function createCommandRegistry({ config, runtimeManager }) {
       } finally {
         await opened.handle.close();
       }
+    },
+
+    /**
+     * Whether each claim of a clinical evidence matrix quotes the source it
+     * names, for the reader of the report beside it (2026-09-17).
+     *
+     * Computed when asked, from what is on disk: the matrix at `path` and the
+     * preserved sources its claims name under `.evimed-sources/`. No stored
+     * verdict to go stale, and the comparison is the delivery gate's own
+     * (`claimVerification` in @evimed/domain), so the mark a reader sees and
+     * the gate's notice cannot disagree. `.evimed-sources/` is write-protected
+     * against the run's own tools, which is what makes a match worth showing.
+     */
+    async claim_verification(args, ctx) {
+      const { base, full } = await resolveFile(ctx.project, args);
+      if (path.basename(full) !== "clinical-evidence-matrix.json") {
+        throw new HttpError(400, "not_a_claim_matrix", "path must name a clinical-evidence-matrix.json.");
+      }
+      /** @param {string} root @param {string} file @returns {Promise<string | null>} */
+      const readText = async (root, file) => {
+        let opened;
+        try {
+          opened = await openScopedFileNoFollow(root, file);
+          if (!opened.stat.isFile() || opened.stat.size > ctx.config.maxFileBytes) return null;
+          return (await readStableFileHandle(opened.handle, opened.stat)).toString("utf8");
+        } catch {
+          return null;
+        } finally {
+          await opened?.handle.close();
+        }
+      };
+      const text = await readText(base, full);
+      if (text == null) throw new HttpError(404, "file_not_found", "File not found.");
+      let matrix;
+      try { matrix = JSON.parse(text); } catch { throw new HttpError(422, "claim_matrix_invalid", "The matrix is not valid JSON."); }
+      const named = (Array.isArray(matrix?.claims) ? matrix.claims : []).flatMap((/** @type {any} */ claim) => [
+        claim?.artifactPath,
+        ...(Array.isArray(claim?.supportingSources) ? claim.supportingSources.map((/** @type {any} */ source) => source?.artifactPath) : []),
+      ]).filter((value) => typeof value === "string" && value.startsWith(".evimed-sources/"));
+      /** @type {Record<string, string>} */
+      const sourceArtifacts = {};
+      // Bounded like the gate: one canonical file per document, 48 at most.
+      for (const artifactPath of [...new Set(named)].slice(0, 48)) {
+        let source = null;
+        try { source = await readText(ctx.project.workspaceDir, resolveScopedPath(ctx.project.workspaceDir, artifactPath)); } catch { /* an unsafe path is an unread source */ }
+        if (source) sourceArtifacts[artifactPath] = source;
+      }
+      return claimVerification({ matrix, sourceArtifacts });
     },
 
     async resolve_artifact(args, ctx) {

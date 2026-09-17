@@ -322,7 +322,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "2.11.0",
+      effectiveAgentVersion: "2.12.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
     const workspace = path.join(dataDir, "users", "dev", "projects", "default", "workspace");
@@ -876,7 +876,7 @@ test("the notices a package was accepted with reach the ledger on both paths", a
   });
 });
 
-test("a deliverable no gate accepted is not a success, receipt or no receipt", async () => {
+test("a deliverable no gate accepted is never a clean success: failed with nothing on disk, delivered marked otherwise", async () => {
   // RQ-03 spent all seven attempts and its last submission was still two
   // required issues short. It wrote 「部分交付」 in its own summary and produced
   // no receipt — and the ledger recorded `succeeded` with 16 artifacts. The
@@ -899,12 +899,32 @@ test("a deliverable no gate accepted is not a success, receipt or no receipt", a
     await dispatch("turn_never_accepted");
     appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
     const run = await store.reconcileSession(project, binding.sessionId);
-    assert.equal(run.status, "failed", "seven rejections is not a success");
+    assert.equal(run.status, "failed", "seven rejections and nothing on disk is not a success");
     assert.equal(run.errorCode, "specialist_deliverable_not_accepted");
     assert.ok(
       (run.qualityNotices ?? []).some((line) => /没有一件通过契约校验/.test(String(line))),
       "the verdict must say why",
     );
+
+    // The same seven rejections with the report on disk. What RQ-03's defect
+    // was is a success nobody could tell from a verified one, not that its
+    // files reached a reader: this rule turned seven of twelve finished v9
+    // packages, judged 3.1/5 useful, into 失败 (2026-09-16). So the files are
+    // delivered, and the record cannot be mistaken for a clean one.
+    const relative = "deliverables/d1/clinical-evidence-report.md";
+    await mkdir(path.join(project.workspaceDir, "deliverables", "d1"), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, relative), "# 二甲双胍的证据综述\n", "utf8");
+    await dispatch("turn_never_accepted_with_files");
+    appendHistory([
+      skillLoadedPart,
+      { type: "tool", tool: "write", state: { status: "completed", input: { filePath: relative } } },
+      { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" },
+    ]);
+    const delivered = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(delivered.status, "succeeded", JSON.stringify(delivered.qualityNotices));
+    assert.equal(delivered.verification, "unverified", "and never a clean success");
+    assert.deepEqual(delivered.artifacts, [relative]);
+    assert.ok((delivered.qualityNotices ?? []).some((line) => /没有通过运行内的契约校验，文件按「未核验」交付/.test(String(line))));
   });
 });
 
@@ -1450,18 +1470,21 @@ for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused",
       }];
       const finished = await store.reconcileSession(project, binding.sessionId);
       assert.equal(finished.id, run.id);
-      assert.equal(finished.status, ["valid", "reused", "guideline-warning"].includes(scenario) ? "succeeded" : "failed");
-      assert.equal(finished.errorCode, {
-        missing: "specialist_evidence_provenance_failed",
-        valid: null,
-        tampered: "specialist_evidence_integrity_failed",
-        "old-missing": "specialist_evidence_provenance_failed",
-        reused: null,
-        "old-tampered": "specialist_evidence_integrity_failed",
-        "prior-turn-only": "specialist_evidence_provenance_failed",
-        "guideline-warning": null,
-        undigested: "specialist_evidence_provenance_failed",
-      }[scenario]);
+      // Three outcomes since 2026-09-17. Sources a tool vouched for: delivered
+      // clean. Sources nobody vouched for in this run: still delivered — the
+      // report is on disk — and marked, with each unvouched path named, because
+      // that is a gap a reader can be told about. Sources whose bytes changed
+      // after a tool preserved them: withheld, the one case a reader cannot be
+      // warned out of, since every quotation in the package rests on them.
+      const tampered = ["tampered", "old-tampered"].includes(scenario);
+      const vouched = ["valid", "reused", "guideline-warning"].includes(scenario);
+      assert.equal(finished.status, tampered ? "failed" : "succeeded");
+      assert.equal(finished.errorCode, tampered ? "specialist_evidence_integrity_failed" : null);
+      assert.equal(finished.verification ?? null, tampered || vouched ? null : "unverified");
+      if (!tampered && !vouched) {
+        assert.match(finished.qualityNotices.join("\n"), /no evidence tool reported preserving that file/);
+        assert.ok(finished.artifacts.includes("clinical-evidence-report.md"), JSON.stringify(finished.artifacts));
+      }
       await store.closeProject(project, "canceled");
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -2907,6 +2930,9 @@ test("requires an evidence agent's cited sources to all be recorded in its snaps
         model: "deepseek/deepseek-v4-pro",
         monitorIntervalMs: 60_000,
         monitorMaxPolls: 20,
+        // Server-side repair rounds are off by default since 2026-09-17; this
+        // case is about what such a round says when a deployment turns them on.
+        maxClinicalRepairAttempts: 2,
         readSessionHistory: async () => history,
         readSessionStatus: async () => "idle",
       });
@@ -3223,8 +3249,10 @@ test("delivers a package whose only gap is bookkeeping, and does not stamp it un
     // were a gate bug of ours carried the same mark as one with a quotation
     // absent from its source. A mark that means everything means nothing.
     assert.notEqual(finished.verification, "unverified");
-    assert.ok(finished.qualityNotices.length > 0);
-    assert.match(finished.qualityNotices.join("\n"), /citation-audit\.md must document/);
+    // Nor say it. The audit file describing itself is one of the checks that
+    // have reported to nobody since 2026-09-17: the reader was being handed a
+    // sentence about `citation-audit.md`, a file they will never open.
+    assert.doesNotMatch((finished.qualityNotices ?? []).join("\n"), /citation-audit\.md must document/);
     assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
     await store.closeProject(project, "canceled");
   } finally {
@@ -3374,8 +3402,10 @@ test("sources a delegated child preserved count for the parent's package, read f
     // were a gate bug of ours carried the same mark as one with a quotation
     // absent from its source. A mark that means everything means nothing.
     assert.notEqual(finished.verification, "unverified");
-    assert.ok(finished.qualityNotices.length > 0);
-    assert.match(finished.qualityNotices.join("\n"), /citation-audit\.md must document/);
+    // Nor say it. The audit file describing itself is one of the checks that
+    // have reported to nobody since 2026-09-17: the reader was being handed a
+    // sentence about `citation-audit.md`, a file they will never open.
+    assert.doesNotMatch((finished.qualityNotices ?? []).join("\n"), /citation-audit\.md must document/);
     assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
     await store.closeProject(project, "canceled");
   } finally {
@@ -3710,7 +3740,7 @@ test("a provenance rejection is repaired rather than discarded", async () => {
   }
 });
 
-test("an authorized revision that did not pass gets its next round, and ends as that failed repair rather than as tampering", async () => {
+test("an authorized revision that did not pass gets its next round, and ends delivered with its findings rather than as tampering", async () => {
   // v8 ablation, cell review-003 candidate r0 (2026-09-16): round one's grant
   // was consumed and the report edited, the resubmission was refused, and round
   // two refused to preserve a package whose files no longer matched the
@@ -3824,10 +3854,16 @@ test("an authorized revision that did not pass gets its next round, and ends as 
 
     history = [...history, turn("msg_revision_two")];
     const finished = await store.reconcileSession(project, binding.sessionId);
-    assert.equal(finished.status, "failed");
-    assert.equal(finished.errorCode, "specialist_evidence_provenance_failed");
-    assert.match(finished.qualityNotices[0], /开启了修订，改动了 1 个文件/);
+    // Rounds spent: the revised package is what is on disk, so that is what is
+    // delivered — marked, with what it still fails and the fact that these are
+    // not the bytes the receipt names. Never "tampering", never no files.
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.errorCode, null);
+    assert.equal(finished.verification, "unverified");
+    assert.ok(finished.artifacts.includes("deliverables/review/clinical-evidence-report.md"), JSON.stringify(finished.artifacts));
     assert.match(finished.qualityNotices.join("\n"), /no evidence tool reported preserving that file/);
+    assert.match(finished.qualityNotices.join("\n"), /交付物在写下回执之后被改动了 1 个文件/);
+    assert.doesNotMatch(finished.qualityNotices.join("\n"), /重判并通过/, "an unverified package is not said to have passed");
 
     await store.closeProject(project, "canceled");
   } finally {
@@ -3835,7 +3871,7 @@ test("an authorized revision that did not pass gets its next round, and ends as 
   }
 });
 
-test("a repair the runtime refuses fails the run with the refusal named, not in silence", async () => {
+test("a repair the runtime refuses is named, and the package is delivered with it rather than discarded", async () => {
   // 2026-09-16, memory-ablation v7 cell 1: the repair was refused 68 ms after it
   // was authorized, and the ledger, the audit log and the container output held
   // nothing about why — the catch around the send was empty.
@@ -3931,8 +3967,11 @@ test("a repair the runtime refuses fails the run with the refusal named, not in 
     const finished = await store.reconcileSession(project, binding.sessionId);
     assert.equal(finished.id, run.id);
     assert.equal(repairPrompts.length, 3, "a transient refusal is sent again, a bounded number of times");
-    assert.equal(finished.status, "failed");
-    assert.equal(finished.errorCode, "specialist_evidence_repair_failed");
+    // A repair that could not be sent leaves the package what it was: delivered
+    // with its finding and with the refusal named (2026-09-17). It used to fail
+    // the run, which threw away a finished report over our own dispatch.
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.verification, "unverified");
     const notices = finished.qualityNotices.join("\n");
     assert.match(notices, /no evidence tool reported preserving that file/, "the issue it was meant to repair is still named");
     assert.match(notices, /repair request could not be dispatched after 3 attempts \(runtime_session_error: Session is busy with another turn\.\)/);
@@ -4143,8 +4182,8 @@ test("a repair refused for good is not sent again", async () => {
     const finished = await store.reconcileSession(project, binding.sessionId);
     assert.equal(finished.id, run.id);
     assert.equal(repairPrompts.length, 1, "a refusal that cannot clear is not retried");
-    assert.equal(finished.status, "failed");
-    assert.equal(finished.errorCode, "specialist_evidence_repair_failed");
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.verification, "unverified");
     const notices = finished.qualityNotices.join("\n");
     assert.match(notices, /no evidence tool reported preserving that file/, "the issue it was meant to repair is still named");
     assert.match(notices, /repair request could not be dispatched \(agent_run_active: The run is no longer accepting repair prompts\.\)/);
@@ -4340,8 +4379,11 @@ test("a structural rejection does not spend the content repair budget, and still
     history = [...history, finishedTurn("msg_structural_3")];
     const third = await store.reconcileSession(project, binding.sessionId);
     assert.equal(repairPrompts.length, 2, "a structural cause that repeats unchanged terminates");
-    assert.equal(third.status, "failed");
-    assert.equal(third.errorCode, "specialist_evidence_traceability_failed");
+    // And ends delivered: the report is on disk, the matrix that would verify
+    // it cannot be read, and the mark says exactly that.
+    assert.equal(third.status, "succeeded");
+    assert.equal(third.verification, "unverified");
+    assert.match(third.qualityNotices.join("\n"), /clinical-evidence-matrix\.json must contain strict valid JSON/);
 
     await store.closeProject(project, "canceled");
   } finally {
@@ -4957,13 +4999,17 @@ test("a package missing only the coverage ledger is repaired, not discarded", as
 
     const finished = await store.reconcileSession(project, binding.sessionId);
     assert.equal(finished.id, run.id);
-    assert.equal(finished.errorCode, "specialist_question_coverage_missing");
-    assert.ok(
-      repairableEvidencePackageErrorCodes.has(finished.errorCode),
-      "a package whose only absent file is the coverage ledger must go back for repair, not be thrown away",
-    );
-    // And it must hand back what to write, since the repair path has nothing to
-    // pass on without it.
+    // Not thrown away is what this holds, and since 2026-09-17 that is true
+    // without a repair round: a deployment that still lists the ledger as
+    // required delivers the package it belongs to, marked, with the absence
+    // said. (The shipped manifest no longer requires it at all.) The code stays
+    // repairable for a deployment that turns repair rounds back on.
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.errorCode, null);
+    assert.equal(finished.verification, "unverified");
+    assert.ok(finished.artifacts.includes("clinical-evidence-report.md"), JSON.stringify(finished.artifacts));
+    assert.ok(repairableEvidencePackageErrorCodes.has("specialist_question_coverage_missing"));
+    // And it says what to write.
     assert.match(finished.qualityNotices.join("\n"), /question-coverage\.json is not in the workspace/);
     assert.match(finished.qualityNotices.join("\n"), /one entry per atomic sub-question/);
     await store.closeProject(project, "canceled");
@@ -5445,33 +5491,33 @@ function dropSecondQuestionEntry(pkg) {
   pkg.questionCoverageText = JSON.stringify(ledger);
 }
 
-test("a delivery whose coverage check could not run says so in the field operations reads", async () => {
-  // Measured, same package, only the availability of the brief changed:
+test("a coverage check that reports to nobody neither marks a delivery nor stamps it unchecked", async () => {
+  // Measured before 2026-09-17, same package, only the availability of the
+  // brief changed:
   //   brief in hand   → succeeded / unverified / "MUST FIX — 题面第 2 问…"
-  //   brief lost      → succeeded / null       / one degradation notice
-  // The second is the more dangerous state and read as the safer one: null is
-  // the value a package that passed every check carries.
+  //   brief lost      → succeeded / unchecked  / one degradation notice
+  // Both were statements about `question-coverage.json`, a ledger the run types
+  // for the gate to compare — 17 of the 52 findings that withheld twelve live
+  // packages, and nothing a reader opens. The check is `silent` now
+  // (CLINICAL_CHECK_TIERS): it still runs and is counted, and a delivery is
+  // neither marked for what it found nor stamped for its not having run.
+  //
+  // `unchecked` itself stays in the vocabulary, for the day a check whose
+  // findings do reach a reader cannot run: a layer that did not run must not be
+  // reported as a layer that found nothing.
   const withBrief = await deliverClinicalPackage("coverage-brief", { mutate: dropSecondQuestionEntry });
   assert.equal(withBrief.finished.status, "succeeded");
-  assert.equal(withBrief.finished.verification, "unverified");
-  assert.match(withBrief.finished.qualityNotices.join("\n"), /MUST FIX/);
-  assert.match(withBrief.finished.qualityNotices.join("\n"), /第 2 问/);
+  assert.equal(withBrief.finished.verification ?? null, null);
+  assert.doesNotMatch((withBrief.finished.qualityNotices ?? []).join("\n"), /第 2 问|question-coverage/);
 
   const withoutBrief = await deliverClinicalPackage("coverage-restart", {
     mutate: dropSecondQuestionEntry,
     forgetBrief: true,
   });
   assert.equal(withoutBrief.finished.status, "succeeded", "a lost brief is not the run's fault");
-  assert.equal(
-    withoutBrief.finished.verification,
-    "unchecked",
-    "a layer that did not run must not be reported as a layer that found nothing",
-  );
-  // The human-readable explanation is kept exactly as it was.
-  assert.match(withoutBrief.finished.qualityNotices.join("\n"), /未按题面逐问核对覆盖/);
-  // And the reader of /api/agent-runs gets the field, not just the prose.
-  assert.equal(withoutBrief.delivered.verification, "unchecked");
-  assert.notEqual(withoutBrief.finished.verification, withBrief.finished.verification);
+  assert.equal(withoutBrief.finished.verification ?? null, null);
+  assert.doesNotMatch((withoutBrief.finished.qualityNotices ?? []).join("\n"), /未按题面逐问核对覆盖/);
+  assert.equal(withoutBrief.delivered.verification ?? null, null);
 });
 
 test("a clean package with every layer run stays null, and a finding still outranks an admission", async () => {
@@ -5488,7 +5534,10 @@ test("a clean package with every layer run stays null, and a finding still outra
     mutate: (pkg) => { pkg.matrix.claims[0].supportQuote = "这句话在它所引的来源里并不存在。"; },
   });
   assert.equal(both.finished.verification, "unverified");
-  assert.match(both.finished.qualityNotices.join("\n"), /未按题面逐问核对覆盖/);
+  assert.match(both.finished.qualityNotices.join("\n"), /supportQuote was not found in its preserved source artifact/);
+  // The coverage check reports to nobody since 2026-09-17, so its not having
+  // run is not said either; what the reader is told is the finding.
+  assert.doesNotMatch(both.finished.qualityNotices.join("\n"), /未按题面逐问核对覆盖/);
 });
 
 test("GET /api/agent-runs serves the unchecked verdict and the notice that landed after delivery", async () => {

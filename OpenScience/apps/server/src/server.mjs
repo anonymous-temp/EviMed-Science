@@ -1236,6 +1236,7 @@ export function createWebApiApp(overrides = {}) {
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
     coverageJudge,
+    maxClinicalRepairAttempts: config.gateRepairRounds,
     model: `deepseek/${config.deepseekModel}`,
     // Both poll counts are periods of this interval. It was assumed rather than
     // passed, so the stall threshold silently meant a different amount of time

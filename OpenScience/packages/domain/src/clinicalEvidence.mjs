@@ -400,6 +400,86 @@ export const clinicalEvidenceCheckIds = Object.freeze([
   "advisory-notes",
 ]);
 
+/**
+ * What a finding of each check does to a package (2026-09-17).
+ *
+ * Until now the rule was "everything blocks unless its sentence is on a
+ * degradable list", and what that blocked was measured on twelve live runs
+ * (memory-ablation v9): of the 52 `required` findings still open at the last
+ * submission, 65% were the package's own bookkeeping — `question-coverage`
+ * line numbers, run-receipt statistics, self-declared quality checks — which no
+ * reader ever sees; 15% were prose patterns with visible false positives
+ * (`comparative-structure` fired on 「替代终点」, a surrogate endpoint, as "one
+ * arm can take the other's place"); and about 10% were the one thing this
+ * product exists to catch, a quotation that is not in the source it names.
+ * 63% of all run time went to that loop and 0 of 12 packages passed it clean.
+ *
+ * So the default is inverted. A check blocks only when it is named here:
+ *
+ *   - `blocking` — the package cannot be read at all, or the defect is one a
+ *     reader cannot see for themselves (a quote absent from its source, a claim
+ *     bound to nothing, an estimate passed off as a measurement). The run is
+ *     told it must fix these while it still can; a package delivered with one
+ *     open is labelled unverified. It is never withheld for it.
+ *   - `safety` — clinical framing that could hurt somebody. Same treatment in
+ *     the run, and named to the reader first. Not withheld either: these rules
+ *     are patterns over prose whose false-positive rate nobody has measured,
+ *     and principle 4 asks for that distribution before a rule may block.
+ *   - `silent` — the package describing itself: ledgers, counts and status
+ *     fields the model was asked to type and the gate then compared. The check
+ *     still runs and is counted (`silencedChecks`), which is the distribution a
+ *     later decision needs, but it reports nothing to the run or the reader.
+ *     Scheduled for deletion, with the files they read, once a gate-off control
+ *     run confirms nothing is lost.
+ *
+ * Anything not named is `advisory`: said to the run as a suggestion and to the
+ * reader as a notice.
+ * @type {Readonly<Record<string, 'blocking' | 'safety' | 'silent'>>}
+ */
+export const CLINICAL_CHECK_TIERS = Object.freeze({
+  "report-present": "blocking",
+  "matrix-present": "blocking",
+  "matrix-schema": "blocking",
+  "claim-schema": "blocking",
+  "claim-support-quote": "blocking",
+  "claim-artifact-path": "blocking",
+  "claim-quote-verbatim": "blocking",
+  "synthesized-claim": "blocking",
+  "derived-claim-inputs": "blocking",
+  "derived-claim-grounding": "blocking",
+  "derived-report-label": "blocking",
+  "report-claim-unresolved": "blocking",
+  "clinical-safety-rules": "safety",
+  "emergency-trigger-conditioned": "safety",
+  "exclusive-safety": "safety",
+  "claim-emergency-support": "safety",
+  "practical-derived-claim": "safety",
+  "practical-claim-anchor": "safety",
+  "question-coverage": "silent",
+  "workspace-brief-mismatch": "silent",
+  "comparative-structure": "silent",
+  "search-log-schema": "silent",
+  "search-log-queries": "silent",
+  "search-log-execution-match": "silent",
+  "search-database-breadth": "silent",
+  "screening-flow-coherence": "silent",
+  "run-receipt-shape": "silent",
+  "run-receipt-status": "silent",
+  "run-receipt-statistics": "silent",
+  "run-receipt-source-artifacts": "silent",
+  "run-receipt-quality-checks": "silent",
+  "deep-research-source-count": "silent",
+  "citation-ledger-schema": "silent",
+  "citation-ledger-rows": "silent",
+  "citation-audit-dimensions": "silent",
+  "citation-audit-identifier": "silent",
+});
+
+/** @param {string | null | undefined} check @returns {'blocking' | 'safety' | 'advisory' | 'silent'} */
+export function clinicalCheckTier(check) {
+  return CLINICAL_CHECK_TIERS[String(check ?? "")] ?? "advisory";
+}
+
 /** The practical section with claim markers, emphasis and numbered citations
  *  taken out, so neither can inflate the gap between a medication word and a
  *  non-relief word. Line count is preserved: the notice names a line.
@@ -2149,6 +2229,61 @@ function supportQuoteIssue(artifactText, label, artifactPath, quote) {
   }
   if (!quoteIsPresent(artifact, quote)) return `${label}.supportQuote ${quoteFailure(artifact, quote)}.`;
   return null;
+}
+
+/**
+ * Whether each claim's quotation is in the source it names, per claim, for a
+ * reader (2026-09-17).
+ *
+ * The gate used to answer this for the whole package and withhold it; a reader
+ * is better served by the report with each claim marked. Uses `quoteIsPresent`,
+ * the comparison the gate itself makes, so the mark and the verdict cannot
+ * disagree. Statuses, per quoted source and per claim:
+ *
+ *   - `verified` — the quotation is in the preserved file;
+ *   - `quote_not_found` — the file was read and the quotation is not in it;
+ *   - `source_unavailable` — no preserved text for the path reached this check,
+ *     so the quotation was neither confirmed nor refuted;
+ *   - `no_quote` — the claim names no quotation or no preserved path;
+ *   - `derived` — the analyst's own estimate: it has inputs, not a quotation.
+ *
+ * A synthesized claim is `verified` only when every source it lists is.
+ *
+ * @param {{ matrix?: any, sourceArtifacts?: Map<string, string> | Record<string, string> }} input
+ * @returns {{ claims: { claimId: string, claimType: string, status: string, sources: { artifactPath: string | null, status: string }[] }[], counts: Record<string, number> }}
+ */
+export function claimVerification({ matrix, sourceArtifacts = {} } = {}) {
+  const artifactText = sourceArtifacts instanceof Map
+    ? sourceArtifacts
+    : new Map(Object.entries(sourceArtifacts && typeof sourceArtifacts === "object" ? sourceArtifacts : {}));
+  /** @param {any} source */
+  const sourceStatus = (source) => {
+    const artifactPath = validSourceArtifactPath(source?.artifactPath) ? source.artifactPath : null;
+    if (!artifactPath || !validSupportingPassage(source?.supportQuote)) return { artifactPath, status: "no_quote" };
+    const artifact = artifactText.get(artifactPath);
+    if (!artifact) return { artifactPath, status: "source_unavailable" };
+    return { artifactPath, status: quoteIsPresent(artifact, source.supportQuote) ? "verified" : "quote_not_found" };
+  };
+  const worst = ["quote_not_found", "source_unavailable", "no_quote", "verified"];
+  /** @type {Record<string, number>} */
+  const counts = {};
+  const claims = (Array.isArray(matrix?.claims) ? matrix.claims : [])
+    .filter((/** @type {any} */ claim) => claim && typeof claim === "object" && nonEmpty(claim.claimId))
+    .map((/** @type {any} */ claim) => {
+      const claimType = String(claim.claimType ?? "direct");
+      /** @type {{ artifactPath: string | null, status: string }[]} */
+      let sources = [];
+      let status = "derived";
+      if (claimType !== "derived") {
+        sources = claimType === "synthesized"
+          ? (Array.isArray(claim.supportingSources) ? claim.supportingSources : []).map(sourceStatus)
+          : [sourceStatus(claim)];
+        status = worst.find((candidate) => sources.some((source) => source.status === candidate)) ?? "no_quote";
+      }
+      counts[status] = (counts[status] ?? 0) + 1;
+      return { claimId: String(claim.claimId), claimType, status, sources };
+    });
+  return { claims, counts };
 }
 
 // The text a claim's numeric and quotational support is drawn from. Direct
@@ -4148,6 +4283,9 @@ export function validateClinicalEvidencePackage({
       valid: false,
       issues: [absent],
       blockingIssues: [absent],
+      safetyIssues: [],
+      silencedChecks: {},
+      findings: [{ check: "report-present", text: absent, tier: "blocking", degradable: false }],
       issueChecks: [{ check: "report-present", text: absent }],
       claimIds: [],
       sourceDomains: [],
@@ -4341,6 +4479,9 @@ export function validateClinicalEvidencePackage({
       valid: false,
       issues: [...issues.texts(), absent],
       blockingIssues: [absent],
+      safetyIssues: [],
+      silencedChecks: {},
+      findings: [...issues.all(), { check: "matrix-schema", text: absent }].map((entry) => ({ ...entry, tier: clinicalCheckTier(entry.check), degradable: false })),
       issueChecks: [...issues.all(), { check: "matrix-schema", text: absent }],
       claimIds: [],
       sourceDomains: [],
@@ -5047,7 +5188,21 @@ export function validateClinicalEvidencePackage({
     }
   }
 
-  const existing = collapseClaimFieldIssues(issues.all());
+  // Bookkeeping checks run and are counted; they report nothing (see
+  // CLINICAL_CHECK_TIERS).
+  /** @type {Record<string, number>} */
+  const silencedChecks = {};
+  const detected = collapseClaimFieldIssues(issues.all());
+  const existing = detected.filter((entry) => {
+    if (clinicalCheckTier(entry.check) !== "silent") return true;
+    silencedChecks[String(entry.check)] = (silencedChecks[String(entry.check)] ?? 0) + 1;
+    return false;
+  });
+  /** @param {AttributedIssue} entry */
+  const withholds = (entry) => {
+    const tier = clinicalCheckTier(entry.check);
+    return (tier === "blocking" || tier === "safety") && !degradableIssue(entry.text);
+  };
   const reviewCoverage = reviewMethodsFindings(parseJsonObject(searchLogText));
   // Method accounting is observable before it can become a blocking rule.
   // Both delivery entrypoints receive these same findings; the original
@@ -5058,7 +5213,21 @@ export function validateClinicalEvidencePackage({
   return Object.freeze({
     valid: existing.length === 0,
     issues: Object.freeze(reportedTexts),
-    blockingIssues: Object.freeze(existing.map((entry) => entry.text).filter((issue) => !degradableIssue(issue))),
+    blockingIssues: Object.freeze(existing.filter(withholds).map((entry) => entry.text)),
+    // The subset a reader is shown first: clinical framing, not bookkeeping.
+    safetyIssues: Object.freeze(existing.filter((entry) => clinicalCheckTier(entry.check) === "safety" && withholds(entry)).map((entry) => entry.text)),
+    silencedChecks: Object.freeze(silencedChecks),
+    // Everything every check found, before tiering, each with the tier that
+    // decided what became of it. What a false-positive distribution is computed
+    // over, and what a test of a check's own logic reads: `issues` is only what
+    // the run and the reader are told.
+    findings: Object.freeze([
+      ...detected.map((entry) => ({ ...entry, degradable: degradableIssue(entry.text) })),
+      // Method accounting never withheld a package, whatever its tier.
+      ...reviewCoverage.issues.map((entry) => ({ ...entry, degradable: true })),
+    ].map((entry) => Object.freeze({
+      check: entry.check, text: entry.text, tier: clinicalCheckTier(entry.check), degradable: entry.degradable,
+    }))),
     // The same findings in the same order, each naming the check that raised
     // it. `issues` stays the strings the repair loop is fed, byte for byte;
     // this is what makes a per-check false-positive rate computable at all.

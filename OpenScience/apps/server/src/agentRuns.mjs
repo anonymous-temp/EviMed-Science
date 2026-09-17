@@ -14,6 +14,7 @@ import {
 } from "./security.mjs";
 import {
   citationIntegrityIssues,
+  clinicalCheckTier,
   clinicalEvidencePackageErrorCode,
   coverageJudgeContext,
   validateClinicalEvidencePackage,
@@ -1924,6 +1925,7 @@ async function specialistCompletionOutcome(
     }
     return { artifacts: [], errorCode: null };
   }
+  let skillGap = "";
   if (agent.completionChecks.includes("skillsLoaded")) {
     const loadedSkills = await loadedOrInjectedSkills(project, assistantMessages, run);
     const requiredSkills = [...(agent.companionSkills ?? []), agent.skill];
@@ -1932,23 +1934,26 @@ async function specialistCompletionOutcome(
       // Name what was missing and the route that supplies it. A capability's
       // method bodies travel inside the delegated child's prompt; the root
       // session cannot fetch them with the `skill` tool, so a run that did the
-      // work itself instead of delegating fails here after producing every
+      // work itself instead of delegating ends here after producing every
       // file — a verdict that, without this line, reads as a mystery.
-      return {
-        artifacts: [],
-        errorCode: "specialist_required_skill_missing",
-        qualityIssues: [
-          `The run finished without the ${missing.join(", ")} method(s) in front of the model. `
-          + `Delegating the deliverable to the ${agent.id} capability with evimed_delegate injects every method its manifest lists; `
-          + "the skill tool cannot load a capability method into the root session.",
-        ],
-      };
+      //
+      // Held until the outputs have been read (2026-09-17). A process gap, as
+      // on the answer line: a run that wrote its files is delivered with this
+      // said and the mark on it; one that wrote nothing has nothing to deliver
+      // and fails with this as the reason.
+      skillGap = `The run finished without the ${missing.join(", ")} method(s) in front of the model. `
+        + `Delegating the deliverable to the ${agent.id} capability with evimed_delegate injects every method its manifest lists; `
+        + "the skill tool cannot load a capability method into the root session.";
     }
   }
   const required = agent.outputs.filter((output) => output.required).map((output) => output.path);
+  // Declared and not demanded: read when the run wrote them, so the checks
+  // below see the file that exists rather than an absence, and never a reason
+  // to send a run back.
+  const optional = new Set(agent.outputs.filter((output) => !output.required).map((output) => output.path));
   const artifacts = [];
   const files = new Map();
-  for (const relative of required) {
+  for (const relative of [...required, ...optional]) {
     let file = null;
     let artifactPath = relative;
     let outsideNativeTurn = false;
@@ -1971,6 +1976,10 @@ async function specialistCompletionOutcome(
       file = await readRequiredFile(project, relative, Date.parse(run.startedAt));
       if (file) artifactPath = file.relativePath;
     }
+    if (optional.has(relative) && (!file || file.stat.mtimeMs + 1_000 < Date.parse(run.startedAt))) continue;
+    if (!file && skillGap && artifacts.length === 0) {
+      return { artifacts: [], errorCode: "specialist_required_skill_missing", qualityIssues: [skillGap] };
+    }
     if (!file) {
       if (outsideNativeTurn) return { artifacts, errorCode: "specialist_required_output_stale", qualityIssues: [
         `${relative} exists outside this native turn's log interval, so it cannot be delivered as this turn's output.`,
@@ -1981,6 +1990,10 @@ async function specialistCompletionOutcome(
         // One absent file, whatever else the package would have been judged on:
         // no content rule below has run yet.
         qualityStructural: true,
+        // With the capability's first output absent there is nothing to hand
+        // over. With it present, what exists is delivered and marked: the
+        // reader gets the report and is told which companion file is missing.
+        ...(relative !== required[0] && artifacts.length > 0 ? { qualityDegradable: true, qualityUnverified: true } : {}),
         qualityIssues: [
           `The required deliverable ${relative} is not in the workspace. Write it at exactly that name, either at the workspace root or inside this deliverable\u0027s ${workspaceLayout.deliverablesDir}/<id>/ directory, before finishing.`,
           ...(missingOutputRepairAdvice[relative] ? [missingOutputRepairAdvice[relative]] : []),
@@ -1999,6 +2012,9 @@ async function specialistCompletionOutcome(
     files.set(relative, file.text);
     artifacts.push(artifactPath);
   }
+  if (skillGap) {
+    return { artifacts, errorCode: "specialist_required_skill_missing", qualityDegradable: true, qualityUnverified: true, qualityIssues: [skillGap] };
+  }
   if (agent.completionChecks.includes("citationsResolvable")) {
     const markdown = [...files].filter(([relative]) => relative.endsWith(".md")).map(([, text]) => text);
     const defects = markdown.map((text) => citationUrlDefects(text));
@@ -2008,7 +2024,7 @@ async function specialistCompletionOutcome(
       // Naming the URL, as every other gate message here does. This returned a
       // bare error code, so a run died with nothing to act on and the reason
       // had to be recovered by replaying the predicate over the transcript.
-      return { artifacts, errorCode: "specialist_citation_invalid", qualityIssues: blocking };
+      return { artifacts, errorCode: "specialist_citation_invalid", qualityDegradable: true, qualityUnverified: true, qualityIssues: blocking };
     }
   }
   if (agent.completionChecks.includes("citationIntegrity")) {
@@ -2035,6 +2051,8 @@ async function specialistCompletionOutcome(
         artifacts,
         errorCode: "specialist_evidence_snapshot_missing",
         qualityStructural: true,
+        qualityDegradable: true,
+        qualityUnverified: true,
         qualityIssues: [
           "This package must include evidence-snapshot.json — the frozen record of every source the report cites. Write it before finishing.",
         ],
@@ -2048,6 +2066,8 @@ async function specialistCompletionOutcome(
         artifacts,
         errorCode: "specialist_evidence_snapshot_invalid",
         qualityStructural: true,
+        qualityDegradable: true,
+        qualityUnverified: true,
         qualityIssues: ["evidence-snapshot.json must contain strict valid JSON; escape quotation marks correctly inside string values."],
       };
     }
@@ -2056,6 +2076,8 @@ async function specialistCompletionOutcome(
         artifacts,
         errorCode: "specialist_evidence_snapshot_invalid",
         qualityStructural: true,
+        qualityDegradable: true,
+        qualityUnverified: true,
         qualityIssues: ["evidence-snapshot.json must be a JSON object or array of source records, not a bare string or number."],
       };
     }
@@ -2064,6 +2086,8 @@ async function specialistCompletionOutcome(
       return {
         artifacts,
         errorCode: "specialist_evidence_snapshot_empty",
+        qualityDegradable: true,
+        qualityUnverified: true,
         qualityIssues: [
           "evidence-snapshot.json records no source URL at all. Every source the report cites must appear there with the address it was retrieved from.",
         ],
@@ -2080,6 +2104,8 @@ async function specialistCompletionOutcome(
       return {
         artifacts,
         errorCode: "specialist_cited_source_unrecorded",
+        qualityDegradable: true,
+        qualityUnverified: true,
         qualityIssues: unrecorded.slice(0, 12).map((url) =>
           `The report cites ${url}, which is absent from evidence-snapshot.json. Record the source there as retrieved, or drop the claim that rests on it.`),
       };
@@ -2116,96 +2142,77 @@ async function specialistCompletionOutcome(
         // it was unreadable and the package came back as a wall of content
         // findings that were all one syntax error.
         qualityStructural: true,
+        // The report is on disk and is delivered; without a readable matrix
+        // none of its claims could be checked, and the mark says so.
+        qualityDegradable: true,
+        qualityUnverified: true,
         qualityIssues: [
           "clinical-evidence-matrix.json must contain strict valid JSON; escape quotation marks correctly inside string values.",
         ],
       };
     }
-    let runReceipt;
+    // The run's own receipt is optional since 2026-09-17, and one that does not
+    // parse is read as absent: it is the run's account of itself, and nothing
+    // below depends on it any more.
+    let runReceipt = null;
     try {
-      runReceipt = JSON.parse(files.get("clinical-evidence-run.json") ?? "");
-    } catch {
-      return {
-        artifacts,
-        errorCode: "specialist_evidence_traceability_failed",
-        qualityStructural: true,
-        qualityIssues: ["clinical-evidence-run.json must contain strict valid JSON."],
-      };
-    }
+      runReceipt = JSON.parse(files.get("clinical-evidence-run.json") ?? "null");
+    } catch { /* read as absent */ }
     const sourceArtifacts = new Map();
-    const sourcePaths = runReceipt?.successfulSourceArtifacts;
-    // Every return below used to be bare. A run that had preserved five sources
-    // and written all seven deliverables was failed after 45 minutes because
-    // its receipt omitted one field, and it was told only
-    // "specialist_evidence_traceability_failed" — which is also why it could
-    // not be repaired: the repair path requires issues to hand back, so a
-    // silent failure is not merely unhelpful, it is unfixable.
-    if (!Array.isArray(sourcePaths)) {
-      return {
-        artifacts,
-        errorCode: "specialist_evidence_traceability_failed",
-        qualityIssues: [
-          "clinical-evidence-run.json must contain successfulSourceArtifacts: an array of the .evimed-sources paths this run preserved, one canonical path per distinct document.",
-        ],
-      };
-    }
+    // Which preserved sources to read: the ones the claims themselves name,
+    // and whatever the run's receipt lists. It used to be the receipt alone,
+    // so a run that preserved five sources and omitted one field was failed
+    // whole; and a path with no provenance, or no file, ended the check for
+    // every other source too. Each gap is now named and the rest are read —
+    // a claim resting on a source that could not be read is reported by the
+    // validator as unverifiable, which is what it is.
+    const namedPaths = [
+      ...(Array.isArray(runReceipt?.successfulSourceArtifacts) ? runReceipt.successfulSourceArtifacts : []),
+      ...(Array.isArray(matrix?.claims) ? matrix.claims : []).flatMap((/** @type {any} */ claim) => [
+        claim?.artifactPath,
+        ...(Array.isArray(claim?.supportingSources) ? claim.supportingSources.map((/** @type {any} */ source) => source?.artifactPath) : []),
+      ]),
+    ].filter((value) => typeof value === "string" && value.trim());
+    const sourcePaths = [...new Set(namedPaths)];
+    /** @type {string[]} */
+    const sourceGaps = [];
+    let provenanceGap = false;
     if (sourcePaths.length > 48) {
-      return {
-        artifacts,
-        errorCode: "specialist_evidence_traceability_failed",
-        qualityIssues: [
-          `clinical-evidence-run.json lists ${sourcePaths.length} source artifacts; at most 48 are accepted. List one canonical path per distinct document rather than every companion file.`,
-        ],
-      };
+      sourceGaps.push(`The package names ${sourcePaths.length} source artifacts; the first 48 were read. Cite one canonical path per distinct document rather than every companion file.`);
     }
-    for (const rawPath of sourcePaths) {
+    for (const rawPath of sourcePaths.slice(0, 48)) {
       let relative;
       try {
         relative = normalizeWorkspaceRelativePath(rawPath, "source artifact path");
       } catch {
-        return {
-          artifacts,
-          errorCode: "specialist_evidence_traceability_failed",
-          qualityIssues: [
-            `clinical-evidence-run.json lists ${JSON.stringify(rawPath)} as a source artifact, which is not a safe workspace path.`,
-          ],
-        };
+        sourceGaps.push(`${JSON.stringify(rawPath)} is named as a source artifact and is not a safe workspace path, so it was not read.`);
+        continue;
       }
       if (relative !== rawPath || !relative.startsWith(".evimed-sources/")) {
-        return {
-          artifacts,
-          errorCode: "specialist_evidence_traceability_failed",
-          qualityIssues: [
-            `clinical-evidence-run.json lists ${JSON.stringify(rawPath)} as a source artifact; it must be the exact .evimed-sources/... path a preserving tool returned, copied rather than typed.`,
-          ],
-        };
+        sourceGaps.push(`${JSON.stringify(rawPath)} is named as a source artifact; it must be the exact .evimed-sources/... path a preserving tool returned, copied rather than typed. It was not read.`);
+        continue;
       }
       const expectedDigest = sourceArtifactProvenance.get(relative);
       if (!expectedDigest) {
-        // The receipt names a file no preserving tool reported writing in this
+        // The package names a file no preserving tool reported writing in this
         // run — a path typed from memory, a leftover from an earlier run, or a
-        // file the run created itself. Whatever the cause, the run needs to be
-        // told which path, and this returned bare: two production packages died
-        // here with a complete report on disk and nothing to act on.
-        return {
-          artifacts,
-          errorCode: "specialist_evidence_provenance_failed",
-          qualityIssues: [
-            `clinical-evidence-run.json lists ${relative}, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.`,
-          ],
-        };
+        // file the run created itself.
+        provenanceGap = true;
+        sourceGaps.push(`clinical-evidence-run.json lists ${relative}, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.`);
+        continue;
       }
       const sourceFile = await readRequiredFile(project, relative);
       if (!sourceFile) {
-        return {
-          artifacts,
-          errorCode: "specialist_evidence_traceability_failed",
-          qualityIssues: [`The source artifact ${relative} named in clinical-evidence-run.json does not exist in the workspace.`],
-        };
+        sourceGaps.push(`The source artifact ${relative} named by the package does not exist in the workspace.`);
+        continue;
       }
       // The current run's preserving-tool receipt binds these bytes. Immutable
       // captures retain their first publication mtime when retrieved again;
       // that filesystem timestamp is not the time of this run's retrieval.
+      //
+      // The one source finding that still withholds the package: the bytes a
+      // tool preserved were changed afterwards, so nothing quoted from them can
+      // be trusted and a reader has no way to see it.
       if (createHash("sha256").update(sourceFile.text, "utf8").digest("hex") !== expectedDigest) {
         return {
           artifacts,
@@ -2235,7 +2242,11 @@ async function specialistCompletionOutcome(
     // delivered run as a notice, and is appended to the issues of a failed one.
     // The alternative — a coverage check that quietly does less after a restart
     // — is a package delivered as if it had been checked against the brief.
-    if (validation.coverageDegradedNotice) {
+    // Only while the coverage check reports to somebody. It has been silent
+    // since 2026-09-17 (CLINICAL_CHECK_TIERS), and a delivery stamped "a check
+    // did not run" over a check whose findings reach nobody tells the reader
+    // about our plumbing, not about their report.
+    if (validation.coverageDegradedNotice && clinicalCheckTier("question-coverage") !== "silent") {
       advisories.push(validation.coverageDegradedNotice);
       // The notice explains it to a human. This is the same fact in the field a
       // machine reads: the brief-versus-ledger comparison did not happen.
@@ -2266,6 +2277,21 @@ async function specialistCompletionOutcome(
         // withhold it.
       }
     }
+    // Which defect leads when a source named by the package had no tool
+    // vouching for it: the same code that case has always carried.
+    const provenanceVerdict = provenanceGap ? { errorCode: "specialist_evidence_provenance_failed" } : null;
+    if (sourceGaps.length > 0 && validation.valid) {
+      // Every claim that could be checked held, and some source named by the
+      // package could not be read: delivered, and said.
+      return {
+        artifacts,
+        errorCode: "specialist_evidence_traceability_failed",
+        ...provenanceVerdict,
+        qualityIssues: sourceGaps,
+        qualityDegradable: true,
+        qualityUnverified: true,
+      };
+    }
     if (!validation.valid) {
       // The analysis is on disk and every required deliverable exists. Ending
       // here as a bare failure threw all of it away and returned an error code:
@@ -2287,9 +2313,14 @@ async function specialistCompletionOutcome(
         // Every code the gate can name is repairable: the package is complete
         // and the issue is actionable inside it.
         errorCode: clinicalEvidencePackageErrorCode(blocking),
+        ...provenanceVerdict,
         qualityIssues: [
+          // What a reader is shown first: clinical framing that could hurt
+          // somebody, then what they cannot see for themselves.
+          ...validation.safetyIssues.map((/** @type {string} */ issue) => `SAFETY — ${issue}`),
           ...(delegationNotice ? [`MUST FIX — ${delegationNotice}`] : []),
-          ...blocking.map((issue) => `MUST FIX — ${issue}`),
+          ...sourceGaps.map((issue) => `MUST FIX — ${issue}`),
+          ...blocking.filter((/** @type {string} */ issue) => !validation.safetyIssues.includes(issue)).map((/** @type {string} */ issue) => `MUST FIX — ${issue}`),
           ...rest,
         ],
         qualityDegradable: true,
@@ -2299,7 +2330,7 @@ async function specialistCompletionOutcome(
         // the same mark as one with a quotation absent from its source — and a
         // mark that means everything means nothing. Bookkeeping still ships
         // attached to the run; it just no longer stamps it.
-        qualityUnverified: blocking.length > 0 || Boolean(delegationNotice),
+        qualityUnverified: blocking.length > 0 || sourceGaps.length > 0 || Boolean(delegationNotice),
       };
     }
     if (delegationNotice) {
@@ -3022,7 +3053,13 @@ export class AgentRunStore {
     // commit makes "what the ledger says" and "what the page shows" the same
     // thing without a second polling loop.
     this.onRunStateChanged = options.onRunStateChanged ?? (() => {});
-    this.maxClinicalRepairAttempts = options.maxClinicalRepairAttempts ?? 2;
+    // Server-side repair rounds. Off unless asked for (2026-09-17): twelve live
+    // runs spent 24 of them, 10 to 35 minutes each, and none produced a package
+    // that passed clean. The run still repairs inside its own turn, against the
+    // same rules, through `evimed_submit_deliverable`; what the server finds
+    // afterwards is attached to the delivery instead of sent back.
+    // `OPEN_SCIENCE_GATE_REPAIR_ROUNDS` turns them on again.
+    this.maxClinicalRepairAttempts = options.maxClinicalRepairAttempts ?? 0;
     // Waits before sending a refused repair again; see `sendRepair`.
     this.repairRetryDelaysMs = Array.isArray(options.repairRetryDelaysMs) ? options.repairRetryDelaysMs : [1_500, 4_000];
     if (!Number.isSafeInteger(this.maxClinicalRepairAttempts) || this.maxClinicalRepairAttempts < 0) {
@@ -4104,6 +4141,10 @@ export class AgentRunStore {
       allRunAssistants.flatMap((message) => artifactCandidates(message, runtimeWorkspaceRoot)),
     )].slice(0, maxArtifacts).sort();
     let artifacts = await existingArtifacts(project, candidates, run, ownEnd?.time);
+    // Whether the control plane itself ran the full evidence gate over the
+    // bytes on disk and found nothing. Only then may a package the run never
+    // got a receipt for go out without a mark.
+    let serverGateClean = false;
     if (terminal.status === "succeeded" && run.effectiveAgentId) {
       let completion;
       try {
@@ -4146,6 +4187,8 @@ export class AgentRunStore {
         };
       }
       artifacts = [...new Set([...artifacts, ...completion.artifacts])].sort();
+      serverGateClean = !completion.errorCode && !completion.qualityUnchecked
+        && (await this.agentRegistry)?.get?.(run.effectiveAgentId)?.completionChecks?.includes("evidenceClaimsTraceable") === true;
       if (completion.errorCode) {
         const repairSender = this.clinicalRepairSenders.get(run.id);
         const repairAttempts = this.clinicalRepairAttempts.get(run.id) ?? 0;
@@ -4197,6 +4240,11 @@ export class AgentRunStore {
           && completion.qualityIssues.length > 0
           && (structuralRound || repairAttempts < this.maxClinicalRepairAttempts)
           && typeof repairSender === "function";
+        // Why a repair that was due did not happen, when it did not. The
+        // package is still what it was, so it goes on to the same delivery
+        // decision as one that was never sent back, with this said first.
+        let repairNotRun = "";
+        let repairNotRunCode = "";
         if (canRepair) {
           let revision;
           let repairRefusal = "";
@@ -4204,16 +4252,11 @@ export class AgentRunStore {
             revision = await snapshotAcceptedPackageForRepair(project, run, await this.runtimeGeneration(project));
           } catch (error) {
             revision = null;
-            terminal.status = "failed";
-            terminal.errorCode = "specialist_evidence_repair_snapshot_failed";
-            // With its reason, and ahead of the issues it left unrepaired. It
-            // said only the first half of this sentence, and replaced the
-            // issues with it; finding the cause in a v8 ablation cell took a
-            // host inspection.
-            terminal.qualityNotices = [
-              `The accepted package could not be preserved outside the runtime workspace before repair (${String(error?.message ?? error).slice(0, 300)}), so no revision was authorized.`,
-              ...completion.qualityIssues,
-            ];
+            repairNotRunCode = "specialist_evidence_repair_snapshot_failed";
+            // With its reason. It said only the first half of this sentence,
+            // and replaced the issues with it; finding the cause in a v8
+            // ablation cell took a host inspection.
+            repairNotRun = `The accepted package could not be preserved outside the runtime workspace before repair (${String(error?.message ?? error).slice(0, 300)}), so no revision was authorized.`;
           }
           if (revision) {
             if (structuralRound) this.clinicalStructuralRepairAttempts.set(run.id, structuralAttempts + 1);
@@ -4246,20 +4289,20 @@ export class AgentRunStore {
                 ? clinicalEvidenceRepairPrompt(completion.qualityIssues, previous, revision.revisionRequired)
                 : specialistRepairPrompt(repairAgent, completion.qualityIssues, revision.revisionRequired), this.repairRetryDelaysMs);
               if (repair.accepted) return run;
-              // Still fail-closed, but no longer silent: see `sendRepair`.
+              // Not silent: see `sendRepair`.
               repairRefusal = repairDispatchFailure(repair.failures);
             } catch (error) {
               repairRefusal = repairDispatchFailure([error]);
             }
-            terminal.status = "failed";
-            terminal.errorCode = "specialist_evidence_repair_failed";
-            terminal.qualityNotices = [...completion.qualityIssues, repairRefusal];
+            repairNotRunCode = "specialist_evidence_repair_failed";
+            repairNotRun = repairRefusal;
           }
-        } else if (completion.qualityDegradable) {
-          // Repairs are exhausted or unavailable and only process-documentation
-          // or presentation gaps remain (no integrity or structural violation).
-          // Deliver the package marked "unverified" with the reasons attached
-          // instead of discarding the whole run.
+        }
+        const notices = [...(completion.qualityIssues ?? []), ...(repairNotRun ? [repairNotRun] : [])];
+        if (completion.qualityDegradable) {
+          // What the run wrote is delivered with what was found said about it,
+          // never withheld for it (2026-09-17). Withholding is for a package
+          // that cannot be handed over at all — see the branch below.
           terminal.status = "succeeded";
           terminal.errorCode = null;
           // A finding outranks an admission: "we checked and it did not hold
@@ -4267,11 +4310,14 @@ export class AgentRunStore {
           terminal.verification = completion.qualityUnverified
             ? "unverified"
             : completion.qualityUnchecked ? "unchecked" : null;
-          terminal.qualityNotices = completion.qualityIssues;
+          terminal.qualityNotices = notices;
         } else {
+          // Nothing to hand over (the capability's own output is absent or is a
+          // previous run's), a contract this deployment no longer has, or a
+          // preserved source whose bytes were changed after a tool wrote them.
           terminal.status = "failed";
-          terminal.errorCode = completion.errorCode;
-          if (Array.isArray(completion.qualityIssues)) terminal.qualityNotices = completion.qualityIssues;
+          terminal.errorCode = repairNotRunCode || completion.errorCode;
+          if (notices.length > 0) terminal.qualityNotices = notices;
         }
       } else {
         // Nothing withheld the package. A check may still have had something to
@@ -4347,7 +4393,8 @@ export class AgentRunStore {
     // the digests they were accepted under, none of them seen by any gate. The
     // verification was written for the rare case and skipped on the ordinary
     // one.
-    // And a deliverable no gate ever accepted must not be recorded as a success.
+    // And a deliverable no gate ever accepted must not be recorded as a clean
+    // success.
     //
     // The check below only fires when a receipt exists. RQ-03 ran out its seven
     // attempts with the last submission still two required issues short, wrote
@@ -4356,40 +4403,48 @@ export class AgentRunStore {
     // record read as nothing to check rather than as nothing accepted, which is
     // the empty-is-not-error shape one more time.
     //
+    // What that defect was is a success nobody could tell from a verified one —
+    // not that the files reached the reader. So the files are delivered and the
+    // run is marked unverified, and it is a failure only when there is nothing
+    // to deliver (2026-09-17: this rule alone turned seven of twelve finished
+    // v9 packages, judged 3.1/5 useful, into 失败).
+    //
     // Read from the run's own projection, so this only speaks about runs that
     // planned a contract deliverable: an answer-line turn plans none and is
     // unaffected.
-    //
-    // The artifacts stay, unlike the digest-mismatch branch above. There a
-    // receipt asserts an acceptance that is false, and shipping the files is a
-    // lie about them; here nothing claims they were graded, the run's own
-    // delivery summary says 部分交付, and discarding the work would help nobody.
     if (terminal.status === "succeeded") {
       const projection = await readRunStateProjection(project, project.workspaceDir, run);
+      /** @param {string[]} notices */
+      const unaccepted = (notices) => {
+        if (artifacts.length === 0) {
+          terminal.status = "failed";
+          terminal.errorCode = "specialist_deliverable_not_accepted";
+        } else if (!serverGateClean) {
+          terminal.verification = "unverified";
+        }
+        terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...notices];
+      };
       if (run.nativeTurn) {
         const proof = run.nativeWorkflow;
         const requiresAcceptance = proof?.plan?.items?.length || proof?.submissions?.length;
         const currentReceipt = await readDeliveryReceipt(project, run);
         const incomplete = proof?.completion?.ok === false || (requiresAcceptance && !currentReceipt);
         if (incomplete || (projection.state === "unattributed" && artifacts.length > 0 && !currentReceipt)) {
-          terminal.status = "failed";
-          terminal.errorCode = "specialist_deliverable_not_accepted";
-          terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...nativeWorkflowNotices(proof),
+          unaccepted([...nativeWorkflowNotices(proof),
             ...(projection.state === "unattributed" ? ["内核没有把这次运行的工作状态对应到本次请求，因此无法确认交付是否通过验收。"] : []),
-          ];
+          ]);
         }
       }
       const planned = projection.state === "read" && Array.isArray(projection.projection?.plan?.items)
         ? projection.projection.plan.items
         : [];
       const accepted = planned.filter((item) => item?.status === "accepted");
-      if (planned.length > 0 && accepted.length === 0 && !(await readDeliveryReceipt(project, run))) {
-        terminal.status = "failed";
-        terminal.errorCode = "specialist_deliverable_not_accepted";
-        terminal.qualityNotices = [
-          ...(terminal.qualityNotices ?? []),
-          `本次运行计划了 ${planned.length} 件交付物，没有一件通过契约校验，因此产物未经质量门。`,
-        ];
+      if (terminal.status === "succeeded" && planned.length > 0 && accepted.length === 0 && !(await readDeliveryReceipt(project, run))) {
+        unaccepted([artifacts.length === 0
+          ? `本次运行计划了 ${planned.length} 件交付物，没有一件通过契约校验，也没有留下文件。`
+          : serverGateClean
+            ? `本次运行计划的 ${planned.length} 件交付物没有拿到运行内的回执；服务端已用同一套规则核验了盘上的文件并通过。`
+            : `本次运行计划的 ${planned.length} 件交付物没有通过运行内的契约校验，文件按「未核验」交付，未通过的项列在下面。`]);
       }
     }
     const finalReceipt = await readDeliveryReceipt(project, run);
@@ -4467,7 +4522,9 @@ export class AgentRunStore {
           terminal.qualityNotices = [
             ...(terminal.qualityNotices ?? []),
             `交付物在写下回执之后被改动了 ${verified.mismatched.length} 个文件：${verified.mismatched.slice(0, 6).join("、")}。`
-            + "服务端已用同一套门禁对盘上的实际字节重判并通过，按实际交付重出回执；发出去的就是被验过的那一版。"
+            + (terminal.verification
+              ? "服务端已用同一套规则对盘上的实际字节重新核验，结论就是这次交付的核验标签；发出去的是盘上的这一版，不是回执记下的那一版。"
+              : "服务端已用同一套门禁对盘上的实际字节重判并通过，按实际交付重出回执；发出去的就是被验过的那一版。")
             + "若这不是有意的收尾修改，请让运行在最后一次修改之后再提交一次。",
           ].slice(0, 20);
         }

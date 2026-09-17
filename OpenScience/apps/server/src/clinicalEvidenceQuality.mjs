@@ -28,4 +28,6 @@ export {
   briefTermPresent,
   coverageJudgeContext,
   validateClinicalEvidencePackage,
+  clinicalCheckTier,
+  claimVerification,
 } from "@evimed/domain/clinical-evidence";

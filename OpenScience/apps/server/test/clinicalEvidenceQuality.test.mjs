@@ -10,18 +10,39 @@ import {
   validateClinicalEvidencePackage as validatePackage,
 } from "../src/clinicalEvidenceQuality.mjs";
 import { GATE_CHECK_IDS, runGate, workspaceLayout } from "@evimed/domain";
+import { CLINICAL_CHECK_TIERS, clinicalCheckTier, clinicalEvidenceCheckIds } from "@evimed/domain/clinical-evidence";
 import { deepResearchPackage, questionCoverageLedger, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 
 /** The question-coverage ledger cites report line numbers, and almost every
  *  case below edits the report. Rebuild it against the report the case actually
  *  built, so a case about a quotation is not failed over a stale line number;
  *  a case whose subject is the ledger sets `keepCoverage` and supplies its own.
+ *
+ *  What comes back is the DETECTION view. These cases are about what each check
+ *  finds and whether its sentence is one a package could be delivered with;
+ *  what a finding then does — block, advise, or stay silent — has been the
+ *  business of `CLINICAL_CHECK_TIERS` since 2026-09-17 and has its own cases at
+ *  the end of this file, which read the validator's result as it is (`tiered`).
+ *  So `issues` here is every finding before tiering and `blockingIssues` the
+ *  ones whose sentence is not degradable: the shape these cases were written
+ *  against, kept so that a check's logic stays tested for as long as the check
+ *  exists.
  *  @param {any} input */
 function validateClinicalEvidencePackage(input) {
-  return validatePackage(input?.keepCoverage
+  const tiered = validatePackage(input?.keepCoverage
     ? input
     : { ...input, questionCoverageText: questionCoverageLedger(input?.reportText, input?.searchLogText) });
+  const detected = tiered.findings.filter((finding) => !REVIEW_METHOD_CHECKS.has(finding.check));
+  return {
+    ...tiered,
+    tiered,
+    valid: detected.length === 0,
+    issues: tiered.findings.map((finding) => finding.text),
+    blockingIssues: detected.filter((finding) => !finding.degradable).map((finding) => finding.text),
+    issueChecks: tiered.findings.map((finding) => ({ check: finding.check, text: finding.text })),
+  };
 }
+const REVIEW_METHOD_CHECKS = new Set(["review-methods-schema", "review-search-coverage", "review-study-accounting"]);
 
 
 function claim(index, domain) {
@@ -3807,7 +3828,11 @@ test("every file the capability manifest requires is named by the run-side gate 
   );
   const produces = manifest.slice(manifest.indexOf("- contractKind: clinical-evidence-report"));
   const required = [...produces.matchAll(/- path:\s*(\S+)\s*\n\s*required:\s*true/g)].map((match) => match[1]);
-  assert.ok(required.length >= 8, `expected the manifest's required outputs, found ${required.length}`);
+  // Two since 2026-09-17: the report and the matrix. The floor is what proves
+  // the manifest was parsed at all, and an empty list would pass every loop.
+  assert.ok(required.length >= 2, `expected the manifest's required outputs, found ${required.length}`);
+  const declaredOptional = [...produces.matchAll(/- path:\s*(\S+)\s*\n\s*required:\s*false/g)].map((match) => match[1]);
+  assert.ok(declaredOptional.includes("question-coverage.json"), "the manifest no longer lists the optional outputs this case leaves out below");
 
   const input = deepResearchPackage();
   const complete = new Map([
@@ -3836,6 +3861,21 @@ test("every file the capability manifest requires is named by the run-side gate 
     assert.ok(
       verdict.issues.some((entry) => String(entry.message).includes(relative)),
       `${relative} is missing and no issue names it — the run cannot fix what it is not told about`,
+    );
+  }
+
+  // The other half of the same invariant: a file the manifest does not demand
+  // is not demanded by the run-side gate either. Optional on one side and
+  // required on the other is the same two-gates-one-package drift.
+  const allOutputs = [...expectedOutputs, ...declaredOptional.map((relative) => ({ path: relative, required: false }))];
+  for (const relative of declaredOptional) {
+    const files = new Map(complete);
+    files.delete(relative);
+    const verdict = runGate({ contractKind: "clinical-evidence-report", files, expectedOutputs: allOutputs, sourceArtifacts: input.sourceArtifacts ?? {} });
+    assert.deepEqual(
+      verdict.issues.filter((entry) => entry.severity === "required").map((entry) => entry.message),
+      [],
+      `${relative} is optional and its absence withheld acceptance`,
     );
   }
 });
@@ -4018,4 +4058,90 @@ test("the gate verdict carries the check through to the run's issue envelope", (
     verdict.issues.some((/** @type {any} */ entry) => entry.check === "required-output"),
     "and the manifest's own check keeps its own",
   );
+});
+
+// ---------------------------------------------------------------------------
+// What a finding does to a package: CLINICAL_CHECK_TIERS (2026-09-17).
+//
+// Everything above reads the detection view. These read the validator as the
+// run and the control plane do.
+// ---------------------------------------------------------------------------
+
+test("every tiered check is one the validator can raise, and a check nobody tiered is advisory", () => {
+  assert.deepEqual(Object.keys(CLINICAL_CHECK_TIERS).filter((check) => !clinicalEvidenceCheckIds.includes(check)), []);
+  assert.deepEqual([...new Set(Object.values(CLINICAL_CHECK_TIERS))].sort(), ["blocking", "safety", "silent"]);
+  assert.equal(clinicalCheckTier("report-number-unsupported"), "advisory");
+  assert.equal(clinicalCheckTier(null), "advisory");
+});
+
+test("a package whose only defects are its own bookkeeping is valid, says nothing, and counts what it kept quiet", () => {
+  // memory-ablation v9 (2026-09-16): 34 of the 52 findings that withheld twelve
+  // packages were of this kind — a coverage ledger's line numbers, run-receipt
+  // statistics and self-declared quality checks — which no reader ever sees.
+  const input = deepResearchPackage();
+  const ledger = JSON.parse(input.questionCoverageText);
+  ledger.entries = ledger.entries.filter((/** @type {any} */ entry) => !entry.id.startsWith("2."));
+  input.questionCoverageText = JSON.stringify(ledger);
+  input.runReceipt = {
+    ...input.runReceipt,
+    stats: { ...input.runReceipt.stats, totalSearches: input.runReceipt.stats.totalSearches + 1 },
+    qualityChecks: { ...input.runReceipt.qualityChecks, claimsVerified: false },
+    status: "partial",
+  };
+  const result = validatePackage(input);
+  assert.deepEqual(result.blockingIssues, []);
+  assert.deepEqual(result.issues, [], result.issues.join("\n"));
+  assert.equal(result.valid, true);
+  for (const check of ["question-coverage", "run-receipt-statistics", "run-receipt-quality-checks", "run-receipt-status"]) {
+    assert.ok(result.silencedChecks[check] >= 1, `${check} still runs and is counted: ${JSON.stringify(result.silencedChecks)}`);
+  }
+  assert.ok(result.findings.some((finding) => finding.check === "question-coverage" && finding.tier === "silent"));
+});
+
+test("a quotation that is not in the source it names still withholds acceptance, and is said to the run", () => {
+  const input = deepResearchPackage();
+  input.matrix = structuredClone(input.matrix);
+  input.matrix.claims[0].supportQuote = "A sentence the preserved source does not contain anywhere in its text at all.";
+  const result = validatePackage(input);
+  assert.equal(result.valid, false);
+  assert.equal(result.blockingIssues.length, 1, result.blockingIssues.join("\n"));
+  assert.match(result.blockingIssues[0], /supportQuote was not found in its preserved source artifact/);
+});
+
+test("「替代终点」 is a surrogate endpoint: what comparative-structure makes of a sentence is reported to nobody", () => {
+  // The rule withheld two v9 packages: once over 「该 eGFR 斜率是替代终点，能否用它
+  // 替代肾衰竭这一临床终点…」 and once over 「用随机生成的标识符替代患者与住院编号」,
+  // each read as "one arm can take the other's place".
+  const input = validPackage();
+  input.reportText = input.reportText
+    .replace("## 药物角色\n", "## 药物角色\n速效救心丸可替代硝酸甘油用于此类人群。\n")
+    .replace("## 科学局限\n", "## 科学局限\n目前缺乏速效救心丸与硝酸甘油的直接比较研究。\n");
+  const result = validatePackage({ ...input, questionCoverageText: questionCoverageLedger(input.reportText, input.searchLogText) });
+  assert.ok(result.findings.some((finding) => finding.check === "comparative-structure"), "the construction must reach the rule");
+  assert.deepEqual(result.issueChecks.filter((entry) => entry.check === "comparative-structure"), []);
+  assert.ok(result.silencedChecks["comparative-structure"] >= 1);
+});
+
+test("a clinical-safety finding is said first and withholds acceptance in the run; a GRADE inconsistency is only said", () => {
+  // The practical section read as instruction: an emergency call made to wait
+  // on whether a medicine worked.
+  const unsafe = deepResearchPackage();
+  unsafe.reportText = unsafe.reportText.replace(
+    "\n\n## 参考文献",
+    "\n6. 含服后 20 分钟以上胸痛不缓解符合急性心肌梗死的警示特征，应立即呼叫 120 并接受心电图评估。 <!-- claim:CLM-001 --> [1]\n\n## 参考文献",
+  );
+  const safety = validatePackage({ ...unsafe, questionCoverageText: questionCoverageLedger(unsafe.reportText, unsafe.searchLogText) });
+  assert.ok(safety.safetyIssues.length >= 1, JSON.stringify(safety.findings.map((finding) => [finding.check, finding.tier])));
+  for (const issue of safety.safetyIssues) assert.ok(safety.blockingIssues.includes(issue));
+
+  const graded = deepResearchPackage();
+  graded.reportText = graded.reportText
+    .replace("## 检索与方法\n", "## 检索与方法\n证据体确定性以 GRADE 表述。\n")
+    .replace("## 结果\n", "## 结果\n纳入研究方法学质量偏低，按 GRADE 评为高确定性 [1]。\n");
+  const grade = validatePackage({ ...graded, questionCoverageText: questionCoverageLedger(graded.reportText, graded.searchLogText) });
+  const found = grade.findings.filter((finding) => finding.check === "appraisal-declaration" && /^GRADE/.test(finding.text));
+  assert.ok(found.length >= 1, "the construction must reach the rule");
+  assert.ok(found.every((finding) => finding.tier === "advisory"));
+  assert.ok(found.every((finding) => grade.issues.includes(finding.text)), "said to the run and the reader");
+  assert.deepEqual(grade.blockingIssues.filter((issue) => /^GRADE/.test(issue)), []);
 });

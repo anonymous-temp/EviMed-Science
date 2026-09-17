@@ -1,6 +1,6 @@
 {
   "id": "clinical-evidence-synthesis",
-  "version": "2.11.0",
+  "version": "2.12.0",
   "title": "Clinical Evidence Synthesis",
   "description": "Transform an open-domain clinical question into a publication-grade deep evidence analysis with reproducible searches, verified citations, claim-level traceability, and a separate safety-first practical answer.",
   "whenToUse": "交付物是一份对某个临床问题的证据综述，需要逐条主张可追溯到可解析的文献时，委派给我。",
@@ -38,27 +38,27 @@
         },
         {
           "path": "clinical-evidence-search.json",
-          "required": true
+          "required": false
         },
         {
           "path": "citation-ledger.csv",
-          "required": true
+          "required": false
         },
         {
           "path": "references.bib",
-          "required": true
+          "required": false
         },
         {
           "path": "citation-audit.md",
-          "required": true
+          "required": false
         },
         {
           "path": "clinical-evidence-run.json",
-          "required": true
+          "required": false
         },
         {
           "path": "question-coverage.json",
-          "required": true
+          "required": false
         },
         {
           "path": "agenda-delta.json",

@@ -1818,9 +1818,24 @@ Escape quotation marks correctly inside JSON strings; do not alter the scientifi
 
 - `clinical-evidence-report.md`
 - `clinical-evidence-matrix.json`
+
+These two are what the reader is handed and what verifies it, and they are all
+the platform demands. Put your time into them. What `evimed_submit_deliverable`
+insists on before it accepts is short: every `direct` and `synthesized` claim
+quotes, verbatim, a source preserved under `.evimed-sources/`; a `derived`
+result names its inputs and is marked 〔推导〕 in the report; every claim marker
+in the report resolves to the matrix; and the practical answer is safe.
+Everything else it says is advice — act on what is cheap, and submit. Two
+rounds of fixes are plenty: a package with findings still open is delivered with
+those findings shown to the reader claim by claim, never withheld.
+
+Optional companions. Write one when it helps a reader and you have the material
+at hand; nothing sends a run back for a missing or imperfect one, and none is
+worth a second pass:
+
+- `references.bib`
 - `clinical-evidence-search.json`
 - `citation-ledger.csv`
-- `references.bib`
 - `citation-audit.md`
 - `clinical-evidence-run.json`
 - `question-coverage.json` — see "The question ledger"

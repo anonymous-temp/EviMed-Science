@@ -784,6 +784,15 @@ export function loadConfig(overrides = {}) {
     deliveryAttemptLimit: Number(
       overrides.deliveryAttemptLimit ?? process.env.OPEN_SCIENCE_DELIVERY_ATTEMPT_LIMIT ?? 3,
     ),
+    // How many times the control plane sends a finished package back to the
+    // run after its own gate has looked at it. 0 since 2026-09-17: measured on
+    // twelve live runs, 24 such rounds cost 10 to 35 minutes each and produced
+    // no package that passed clean; what the gate finds is attached to the
+    // delivery instead. The run still repairs inside its own turn (the ceiling
+    // above). An empty value reads as 0, which is the default, not a surprise.
+    gateRepairRounds: Math.max(0, Math.trunc(Number(
+      overrides.gateRepairRounds ?? process.env.OPEN_SCIENCE_GATE_REPAIR_ROUNDS ?? 0,
+    )) || 0),
     maxParallelChildren: Number(
       overrides.maxParallelChildren ?? process.env.OPEN_SCIENCE_MAX_PARALLEL_CHILDREN ?? 30,
     ),

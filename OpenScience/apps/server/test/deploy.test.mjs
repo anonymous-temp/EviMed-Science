@@ -1815,10 +1815,14 @@ test("a capability's two skill copies never drift apart by more than their known
   // number-provenance section into dataset-research-scoping (+15), both in the
   // two trees a run actually reads. `runtime/skills/evimed/` is the deleted
   // kernel's copy and is not edited, by plan.
+  // Raised by 12 on 2026-09-17, same direction: "Required outputs" in
+  // clinical-evidence-synthesis now names two required files and six optional
+  // companions, with the short list of what `evimed_submit_deliverable` insists
+  // on (CLINICAL_CHECK_TIERS).
   const knownDivergence = {
     "adr-analysis": 18,
     "bibliometric-analysis": 18,
-    "clinical-evidence-synthesis": 70,
+    "clinical-evidence-synthesis": 82,
     "comprehensive-drug-evaluation": 18,
     "dataset-research-scoping": 41,
     "drug-selection": 18,

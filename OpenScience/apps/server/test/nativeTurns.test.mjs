@@ -397,8 +397,12 @@ test("a current native plan rejected seven times is not hidden by a different ke
   const f = await setupWorkflow(t, false);
   await f.adopt();
   const run = (await f.runs())[0];
-  assert.equal(run.status, "failed");
-  assert.equal(run.errorCode, "specialist_deliverable_not_accepted");
+  // Not hidden is the point, and since 2026-09-17 it is made by the mark and
+  // the notice rather than by withholding the file: the report is on disk, so
+  // it is delivered, and nothing about the record lets it pass for verified.
+  assert.equal(run.status, "succeeded");
+  assert.equal(run.verification, "unverified");
+  assert.deepEqual(run.artifacts, ["report.md"]);
   assert.ok(run.qualityNotices.some((notice) => notice.includes("Current native gate rejection")));
 });
 
@@ -466,8 +470,9 @@ test("fresh files without witnessed workflow tools cannot silently bypass an una
   f.setEvents(fixture.events.filter((event) => event.seq >= 137));
   await f.adopt();
   const run = (await f.runs())[0];
-  assert.equal(run.status, "failed");
-  assert.equal(run.errorCode, "specialist_deliverable_not_accepted");
+  // "Silently" is what this forbids: the files go out marked, with the reason.
+  assert.equal(run.status, "succeeded");
+  assert.equal(run.verification, "unverified");
   assert.ok(run.qualityNotices.some((notice) => notice.includes("无法确认交付是否通过验收")),
     "the one gate notice a researcher could see is Chinese now (2026-09-16 walk, U4)");
 });
@@ -493,7 +498,8 @@ test("an old acceptance is not reused after the current native submissions are r
   await writeFile(path.join(f.project.workspaceDir, "delivery-receipt.json"), JSON.stringify(oldReceipt));
   await f.adopt();
   const run = (await f.runs())[0];
-  assert.equal(run.status, "failed");
+  // The old receipt neither vouches for this turn's files nor lends its notes.
+  assert.equal(run.verification, "unverified");
   assert.ok(!run.qualityNotices.includes("Old acceptance"));
 });
 

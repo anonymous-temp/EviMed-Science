@@ -523,17 +523,23 @@ test("a capability that writes files declares its skills, its tools and every ou
     "citation-integrity",
     "manuscript-humanize",
   ]);
+  // Required is what a reader is handed and what verifies it. The six files in
+  // which the package describes itself are declared, delivered when written,
+  // and never demanded (2026-09-17).
   assert.deepEqual(
     clinicalEvidence.produces[0].outputs.filter((output) => output.required).map((output) => output.path),
+    ["clinical-evidence-report.md", "clinical-evidence-matrix.json"],
+  );
+  assert.deepEqual(
+    clinicalEvidence.produces[0].outputs.filter((output) => !output.required).map((output) => output.path),
     [
-      "clinical-evidence-report.md",
-      "clinical-evidence-matrix.json",
       "clinical-evidence-search.json",
       "citation-ledger.csv",
       "references.bib",
       "citation-audit.md",
       "clinical-evidence-run.json",
       "question-coverage.json",
+      "agenda-delta.json",
     ],
   );
   const topic = catalogue.find((entry) => entry.id === "research-topic-selection").manifest;

@@ -382,15 +382,44 @@ export function gateDeliverable(input) {
  */
 export function rejectionEnvelope(verdict) {
   const layers = layeredIssues(verdict.issues)
+  const suggestions = [
+    ...layers.advisory.map((issue) => ({ ...issue, severity: 'advisory' })),
+    ...layers.optional.map((issue) => ({ ...issue, severity: 'optional' })),
+  ]
   return {
     ok: false,
     code: verdict.errorCode ?? 'deliverable_rejected',
     issues: [
       ...layers.required.map((issue) => ({ ...issue, severity: 'required' })),
-      ...layers.advisory.map((issue) => ({ ...issue, severity: 'advisory' })),
-      ...layers.optional.map((issue) => ({ ...issue, severity: 'optional' })),
+      ...boundedSuggestions(suggestions, (count) => ({
+        code: 'more_suggestions',
+        severity: 'optional',
+        message: `另有 ${count} 条建议没有列出。它们不影响通过：先修好必修项再提交。`,
+      })),
     ],
   }
+}
+
+/**
+ * How many suggestions ride along with what must be fixed.
+ *
+ * Measured on twelve live runs (2026-09-16): a first submission came back with
+ * 34 to 111 findings, one to fifteen of them required, and the run spent its
+ * attempts on the long tail. What withholds acceptance is always listed whole;
+ * advice is capped, with the rest counted, so the list reads as "fix these"
+ * and not as a wall. The receipt and the run ledger still record every notice.
+ */
+export const SUGGESTION_LIMIT = 12
+
+/**
+ * @template T
+ * @param {readonly T[]} suggestions
+ * @param {(hidden: number) => T} more what stands in for the ones not listed
+ * @returns {T[]}
+ */
+export function boundedSuggestions(suggestions, more) {
+  if (suggestions.length <= SUGGESTION_LIMIT) return [...suggestions]
+  return [...suggestions.slice(0, SUGGESTION_LIMIT), more(suggestions.length - SUGGESTION_LIMIT)]
 }
 
 /**
@@ -438,11 +467,17 @@ export function completionCheck(input) {
     // minutes rearranging files before giving up -- one step short of the
     // retry that would have succeeded. The list must say what the verdict
     // actually weighs.
+    //
+    // Every finding, since 2026-09-17, not two named codes. `partial` is the
+    // exit a run is told to take when it cannot finish; one that was still held
+    // at that door by a third code — a medicine named outside a clinical
+    // contract — had no exit at all, and burned its budget until the stall
+    // detector ended it with nothing delivered. What it leaves is said in the
+    // delivery summary and read again by the control plane.
     for (const issue of issues) {
-      if (issue.code === 'deliverable_not_accepted' || issue.code === 'plan_missing_clarifications') {
-        issue.severity = 'advisory'
-        issue.message = `${issue.message}（partial 交付下不阻断，将如实记录在交付摘要中。）`
-      }
+      if (issue.severity !== 'required') continue
+      issue.severity = 'advisory'
+      issue.message = `${issue.message}（partial 交付下不阻断，将如实记录在交付摘要中。）`
     }
   }
   const blocking = issues.filter((issue) => issue.severity === 'required')
