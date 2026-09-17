@@ -7,7 +7,7 @@
 # child is) and `produces` (which contract validates the result) are
 # required. `tools` uses the model-visible names.
 id: clinical-evidence-synthesis
-version: 2.12.0
+version: 2.13.0
 title: Clinical Evidence Synthesis
 category: Clinical Evidence
 description: Transform an open-domain clinical question into a publication-grade deep evidence analysis
@@ -35,30 +35,20 @@ tools:
 - mcp__evimed__pharmacy_reference_search
 produces:
 - contractKind: clinical-evidence-report
-  # Required is what a reader is handed and what verifies it: the report, and
-  # the matrix binding each claim to a quotation in a preserved source. The
-  # other six describe the package to itself. They stopped being required on
-  # 2026-09-17 with the checks that read them (CLINICAL_CHECK_TIERS in
-  # @evimed/domain): twelve live runs spent 63% of their time satisfying them
-  # and they were 65% of what withheld the packages. A run that writes them is
-  # delivered with them; one that does not is not sent back for them.
+  # The package is what a reader is handed and what verifies it: the report,
+  # and the matrix binding each claim to a quotation in a preserved source.
+  # Six more files — the search log, the run receipt, the question ledger, the
+  # citation ledger, the citation audit and references.bib — described the
+  # package to itself. On twelve live runs they took 63% of run time and were
+  # 65% of what withheld the packages; they became optional on 2026-09-17 and
+  # were deleted, with every check that read them, once the non-blocking
+  # control batch (memory-ablation v10) had run. What was searched and preserved
+  # is the platform's own record.
   outputs:
   - path: clinical-evidence-report.md
     required: true
   - path: clinical-evidence-matrix.json
     required: true
-  - path: clinical-evidence-search.json
-    required: false
-  - path: citation-ledger.csv
-    required: false
-  - path: references.bib
-    required: false
-  - path: citation-audit.md
-    required: false
-  - path: clinical-evidence-run.json
-    required: false
-  - path: question-coverage.json
-    required: false
   - path: agenda-delta.json
     required: false
   checks:

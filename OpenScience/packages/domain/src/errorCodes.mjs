@@ -38,18 +38,7 @@ export const repairableEvidencePackageErrorCodes = new Set([
   // introduced to stop.
   "practical_emergency_trigger_conditioned_on_medication_response",
   "regulatory_article_without_official_source",
-  "specialist_screening_ledger_mismatch",
   "declared-appraisal-must-execute",
-  // The question-coverage ledger. A package missing it is otherwise complete —
-  // the report, the matrix, the search log and every citation artifact are on
-  // disk — and the ledger is written from them, so this is the one missing
-  // deliverable the run can supply without redoing any work. It is therefore
-  // repaired rather than discarded, unlike a missing report.
-  "specialist_question_coverage_missing",
-  "specialist_question_coverage_invalid",
-  "specialist_question_coverage_unsupported",
-  "specialist_question_coverage_gap_overstated",
-  "specialist_question_coverage_understated",
 ]);
 
 // A source the run could not read is a limitation to report, not a defect in
@@ -532,13 +521,17 @@ export const RUN_VERDICT_ERROR_CODES = Object.freeze([
   'specialist_evidence_integrity_failed',
   'specialist_evidence_repair_failed',
   'specialist_evidence_repair_snapshot_failed',
+  // Retired on 2026-09-17 with the question ledger and the search log they
+  // judged: nothing writes them any more. Kept, with their sentences, so a run
+  // recorded before then is still explained by name rather than by the
+  // engine-failure fallback.
   'specialist_question_coverage_missing',
-  // The named defects `clinicalEvidencePackageErrorCode` returns.
   'specialist_question_coverage_invalid',
   'specialist_question_coverage_unsupported',
   'specialist_question_coverage_gap_overstated',
   'specialist_question_coverage_understated',
   'specialist_screening_ledger_mismatch',
+  // The named defects `clinicalEvidencePackageErrorCode` returns.
   'practical_emergency_trigger_conditioned_on_medication_response',
   'regulatory_article_without_official_source',
   'declared-appraisal-must-execute',
@@ -846,11 +839,10 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^evimed_evidence_/, '专有证据接口这次没能给出结果。'],
   [/^invalid_assessment/, '这次评估请求的格式不符合要求。'],
   [/^verification_/, '独立复核这次没能给出结论。原来的结论未被推翻。'],
-  // The specific families come first: matching is in order, and
-  // `specialist_question_coverage_missing` is a coverage gap, not an engine
-  // failure — telling a reader to retry it would send them to the wrong place.
+  // The specific family comes first: matching is in order, and an evidence
+  // defect is not an engine failure — telling a reader to retry it would send
+  // them to the wrong place.
   [/^specialist_evidence_/, '交付物的证据链有缺口，运行会被退回修复。'],
-  [/^specialist_question_coverage_/, '题面逐问核对的台账不完整，运行会被退回补齐。'],
   [/^(meta|specialist)_/, '专科引擎这次没能完成，稍后重试或缩小范围。'],
   [/^runtime_/, '运行时出现问题，稍后重试。'],
   [/^credits_/, '额度不足或已达上限。'],

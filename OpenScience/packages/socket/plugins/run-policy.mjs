@@ -786,9 +786,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           files,
           expectedOutputs,
           briefText: entry.briefText,
-          workspaceBriefText: await readFileAt(ctx, entry.cwd || call.cwd, workspaceLayout.briefFile),
           matrix: parseJson(files.get('clinical-evidence-matrix.json')),
-          runReceipt: parseJson(files.get('clinical-evidence-run.json')),
           sourceArtifacts,
           staleEvidenceCount: 0,
         })

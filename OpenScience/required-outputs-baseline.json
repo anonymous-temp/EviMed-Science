@@ -3,7 +3,7 @@
   "rule": "required: false first, then promote. Same weight as a seventh blocking point.",
   "recordedAt": "2026-08-30",
   "history": {
-    "clinical-evidence-report": "7 required on 2026-07-23; question-coverage.json made it 8 on 2026-08-15",
+    "clinical-evidence-report": "7 required on 2026-07-23; question-coverage.json made it 8 on 2026-08-15; 2 on 2026-09-17, when a gate verdict stopped withholding deliveries: the six files the package kept about itself (search log, run receipt, question ledger, citation ledger, citation audit, references.bib) went optional, and were deleted with the checks that read them after the non-blocking control batch (memory-ablation v10)",
     "appraisal-table": "5 required on 2026-09-02, the contract's opening count",
     "manuscript-section": "4 required on 2026-09-02. revision-notes.md shipped `required: false` deliberately: it was proposed as required, which the ratchet counts as a new blocking point, so it goes in optional and is promoted later from an observed distribution",
     "source-understanding": "2 required on 2026-09-07, the opening contract for approved ING04/06: typed understanding and its frozen input copy. Control-plane publication independently validates against the canonical capture.",
@@ -45,7 +45,7 @@
     },
     "clinical-evidence-report": {
       "capability": "clinical-evidence-synthesis",
-      "requiredCount": 8,
+      "requiredCount": 2,
       "outputs": [
         {
           "path": "clinical-evidence-report.md",
@@ -56,36 +56,6 @@
           "path": "clinical-evidence-matrix.json",
           "required": true,
           "addedOn": "2026-07-22"
-        },
-        {
-          "path": "clinical-evidence-search.json",
-          "required": true,
-          "addedOn": "2026-07-23"
-        },
-        {
-          "path": "citation-ledger.csv",
-          "required": true,
-          "addedOn": "2026-07-23"
-        },
-        {
-          "path": "references.bib",
-          "required": true,
-          "addedOn": "2026-07-23"
-        },
-        {
-          "path": "citation-audit.md",
-          "required": true,
-          "addedOn": "2026-07-23"
-        },
-        {
-          "path": "clinical-evidence-run.json",
-          "required": true,
-          "addedOn": "2026-07-22"
-        },
-        {
-          "path": "question-coverage.json",
-          "required": true,
-          "addedOn": "2026-08-15"
         }
       ]
     },

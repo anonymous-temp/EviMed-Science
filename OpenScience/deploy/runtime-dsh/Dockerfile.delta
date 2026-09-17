@@ -29,8 +29,8 @@
 #     passed once on an image whose bundle could not be imported at all.
 #
 # NOT ADMISSIBLE HERE: a changed `pnpm-lock.yaml`, a new dependency, a kernel
-# pin move, or anything under `runtime/` other than the skill trees this
-# copies and the research MCP server's own Python sources (see that step).
+# pin move, or anything under `runtime/` other than the curated skills' prose
+# and the research MCP server's own Python sources (see those steps).
 # Those change what the base installed, and the base is what this trusts.
 # Build the full `Dockerfile` for them.
 ARG RUNTIME_BASE_IMAGE
@@ -81,6 +81,24 @@ RUN set -eux; \
   cd /opt/evimed/mcp/evimed-research; \
   for module in *.py; do python3 -c "import sys; sys.path.insert(0, '.'); import ${module%.py}"; done; \
   chmod -R a-w /opt/evimed/mcp
+
+# The curated skills' instructions. The base installed this tree from its own
+# source and smoke-tested the scripts in it, so a delta may move the prose —
+# each SKILL.md, and the inventory and repin ledger that pin its digest — and
+# nothing else. Without this step a SKILL.md edit reached the web image and the
+# release manifest but not the runtime a run loads the skill from (2026-09-17,
+# citation-integrity). Any other file that differs from the base is a change
+# the base never tested, and the build stops: build the full Dockerfile.
+COPY runtime/skills/curated-scientific /tmp/evimed-curated-source
+RUN set -eux; \
+  live=/usr/local/share/evimed/skills/curated-scientific; \
+  source=/tmp/evimed-curated-source; \
+  moved="$(diff -rq -x __pycache__ -x '*.pyc' "${live}" "${source}" | grep -Ev '/SKILL\.md differ$|/(inventory\.json|digest-repins\.jsonl) differ$' || true)"; \
+  if [ -n "${moved}" ]; then echo "curated skills changed beyond their prose; build the full Dockerfile:" >&2; echo "${moved}" >&2; exit 1; fi; \
+  (cd "${source}" && find . -name __pycache__ -prune -o \( -name SKILL.md -o -name inventory.json -o -name digest-repins.jsonl \) -type f -print) \
+    | while read -r file; do install -m 0644 "${source}/${file}" "${live}/${file}"; done; \
+  diff -rq -x __pycache__ -x '*.pyc' "${live}" "${source}"; \
+  rm -rf "${source}"
 
 # The preset's system-trusted skill roots, and the copy of the preset under the
 # kernel's own root. Both are rebuilt from the skill trees the base already has.

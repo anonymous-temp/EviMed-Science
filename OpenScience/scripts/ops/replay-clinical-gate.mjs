@@ -99,23 +99,11 @@ for (const dir of dirs) {
   } catch {
     matrix = null;
   }
-  let runReceipt = null;
-  try {
-    runReceipt = JSON.parse(read("clinical-evidence-run.json") || "null");
-  } catch {
-    runReceipt = null;
-  }
 
   const result = validateClinicalEvidencePackage({
     reportText: read("clinical-evidence-report.md"),
     matrix,
-    runReceipt,
     sourceArtifacts: sourceArtifactsOf(dir, matrix),
-    searchLogText: read("clinical-evidence-search.json"),
-    referencesText: read("references.bib"),
-    citationLedgerText: read("citation-ledger.csv"),
-    citationAuditText: read("citation-audit.md"),
-    questionCoverageText: read("question-coverage.json"),
   });
 
   const blocking = new Set(result.blockingIssues ?? []);

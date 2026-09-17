@@ -873,7 +873,7 @@
       "security": "REHABILITATED_SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/citation-management+paper-lookup+pyzotero",
-      "digest": "sha256:6830ae198a02a796beac933b629171e0f76753e8ded1e47cadf21607b807740b",
+      "digest": "sha256:8611adbc7aed36933ac4a99cc39532a9575d8d2dc9ffc1e1d1a86340d84c7ca3",
       "fills": "Exact-record resolution and claim-to-source fidelity auditing"
     },
     {

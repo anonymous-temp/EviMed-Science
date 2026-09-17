@@ -36,7 +36,6 @@ import {
   routeOpenDomainSpecialist,
 } from "./specialistRouting.mjs";
 import { SpecialistClassifier } from "./specialistClassifier.mjs";
-import { CoverageJudge } from "./coverageJudge.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
@@ -1076,9 +1075,6 @@ export function createWebApiApp(overrides = {}) {
   const specialistClassifier = new SpecialistClassifier(config, {
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
   });
-  const coverageJudge = new CoverageJudge(config, {
-    fetchImpl: overrides.coverageJudgeFetch ?? globalThis.fetch,
-  });
   // One fan-out per live run. The browser subscribes here, never to a kernel.
   const runEvents = new RunEventHub();
   // The kernel's own live stream, decoded onto the same fan-out. The flag is
@@ -1235,7 +1231,6 @@ export function createWebApiApp(overrides = {}) {
   }) : null;
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
-    coverageJudge,
     maxClinicalRepairAttempts: config.gateRepairRounds,
     model: `deepseek/${config.deepseekModel}`,
     // Both poll counts are periods of this interval. It was assumed rather than

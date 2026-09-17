@@ -20,11 +20,10 @@ Do not claim completion if any required skill fails to load.
 
 ### One owner produces the initial evidence package
 
-Keep evidence retrieval, source reading, claim extraction, search logging, and
-factual drafting in the capability child that owns the initial package. The
-orchestrator delegates the question before any evidence-tool call; this child
-then performs all five operations and submits the package against the local
-gate. Never retrieve or read a document in the parent and hand it to a child,
+Keep evidence retrieval, source reading, claim extraction, and factual drafting
+in the capability child that owns the initial package. The orchestrator
+delegates the question before any evidence-tool call; this child then performs
+all four operations and submits the package against the local gate. Never retrieve or read a document in the parent and hand it to a child,
 and never ask another child to inspect a document.
 
 A later server repair resumes the root session after that child has finished.
@@ -54,60 +53,24 @@ reproducible searching and study-level screening; a scoping review maps a field;
 a rapid review names its deliberate shortcuts. None of these names licenses a
 quantitative meta-analysis without the appropriate deterministic specialist.
 
-Keep one optional `reviewMethods` object in `clinical-evidence-search.json`.
-This extends the existing ledger rather than creating another set of searches:
+State the design in `资料与方法`: the review type, the eligibility criteria
+actually applied (population, designs, outcomes, and the real exclusions — never
+another review's rules), whether a protocol was registered (with its real
+identifier, or say that it was not; never invent registration), and which
+evidence domains were searched, unavailable, or not applicable, with the reason
+for the last two.
 
-```json
-{
-  "schemaVersion": 1,
-  "reviewType": "systematic",
-  "eligibility": {
-    "inclusionCriteria": ["Specify the population, designs and outcomes for this question."],
-    "exclusionCriteria": ["Specify the actual exclusions; do not copy another review's rules."]
-  },
-  "protocol": {"status": "unregistered", "deviations": []},
-  "searchCoverage": [
-    {"domain": "intervention effects", "status": "searched", "queryIndexes": [0]},
-    {"domain": "ongoing trials", "status": "unavailable", "queryIndexes": [], "reason": "Record the actual failed source response."}
-  ],
-  "studyGroups": [
-    {"studyId": "NCT00000001", "evidenceType": "primary", "referenceNumbers": [1, 2]},
-    {"studyId": null, "evidenceType": "guideline", "referenceNumbers": [3]}
-  ]
-}
-```
-
-The example identifiers and domains illustrate the shape only; replace every
-one with this review's actual records. Query indexes are zero-based positions
-in the existing `queries` array, never an invented parallel query list.
-`searchCoverage.status` is `searched`, `unavailable`, or `not_applicable` (the
-last two need reasons). Protocol status is `registered` with its real identifier,
-`unregistered`, or `not_applicable` with a reason. Never invent registration.
-
-Assign every included reference to exactly one group. `evidenceType` is
-`primary`, `review`, `guideline`, `registry`, or `other`. Use an explicit,
-source-supported study identifier to group a primary report and its follow-up;
-if their common identity cannot be established, use null and explain the
-uncertainty. Similar titles or overlapping author lists are not sufficient.
-A guideline, registry protocol and existing systematic review are not extra
-independent outcome studies. Different papers sharing a study identifier remain
-separate reports and one study; do not combine their participants or outcomes
-as independent observations.
-
-Every included `sourceRecords` row also declares its own `reportType` using
-the same vocabulary. This is the publication's type: a systematic review stays
-`review` even when it reports a PROSPERO identifier, and a narrative review
-stays `review` even when it describes a primary cohort. A group label must
-match every report it contains. A registry record and a primary results paper
-may share one `studyId`; they remain different report types and contribute one
-primary study.
-
-Submission returns `metrics.reviewCoverage`, separating included reports,
-known primary studies, unassigned primary reports and unavailable search
-domains. An uncertain independent-study total is null, never a guessed integer.
-These counts summarize declared relationships, not automatic scientific
-adjudication. Review their advisory findings and repair the named ledger
-entries; preserve accepted claims, quotes, report sections and files.
+Count studies, not reports. A primary report and its follow-up are one study
+only when an explicit, source-supported identifier says so; similar titles or
+overlapping author lists are not sufficient, and when the common identity
+cannot be established, say so. A guideline, a registry protocol and an existing
+systematic review are not extra independent outcome studies. Different papers
+sharing a study identifier remain separate reports and one study: never combine
+their participants or outcomes as independent observations. A publication's
+type is its own — a systematic review stays a review even when it reports a
+PROSPERO identifier, and a narrative review stays a review even when it
+describes a primary cohort. An independent-study total you cannot establish is
+stated as uncertain, never as a guessed integer.
 
 Report search coverage and evidence limitations in the manuscript's methods
 and limitations. Do not display gate IDs or artifact names in reader-facing
@@ -165,71 +128,34 @@ Decompose the question into the evidence domains it actually needs. Derive them 
 
 Do not carry a previous question's domains into this one. If the question is about drug stability, ECG and troponin are not its domains; if it is about triage, formulation chemistry is not.
 
-### The question ledger: one entry per asked question, and a declared gap stays a gap
+### Every asked question is answered, and a declared gap stays a gap
 
-Decomposition is also a deliverable. The delivery gate checks your account of the
-task's 「需要回答的问题」 section against two things: the artifacts in this
-workspace — the report's own lines, the claim anchors in them, and
-`clinical-evidence-search.json` — and the task itself. Write it last, out of the
-finished package.
+Decomposition is part of the answer. The task you were given is on disk at
+`.evimed-brief/research-brief.md`, written by the server before this run began.
+Read it whenever you need the exact wording of a question rather than your
+recollection of it; after an hour of retrieval the fifth question is a
+recollection. Do not edit it: it is the question, not your notes.
 
-The task you were given is on disk at `.evimed-brief/research-brief.md`, written
-by the server before this run began. Read it whenever you need the exact wording
-of a question rather than your recollection of it; after an hour of retrieval the
-fifth question is a recollection. **Do not edit it.** The gate checks its own
-copy, not this one, and reports any difference between them — editing it changes
-nothing except that the difference is on the record. If the file is not there,
-the gate is checking without the task too, and says so on the delivery.
+Every numbered question of the task is answered in the report, in the task's
+own order, or written up in the body as a gap. Where a question spells out a
+list of things to report, each of those things ends up somewhere in the report:
+answered and anchored, or named as a gap. An item that is simply absent from
+the report is the defect a reader with the task in hand finds first.
 
-Every numbered question of the task needs at least one entry whose `id` begins
-with that question's number, and every entry's `question` must be transcribed
-from the question its `id` names — not paraphrased, and not the text of a
-different question. Where a question spells out a list of things to report, each
-of those things must end up somewhere in the report: answered and anchored, or
-named in its own `gap` entry and written up in the body as a gap. An item that is
-simply absent from the report is the defect this ledger exists to surface.
-
-Write `question-coverage.json` next to the files listed under "Required outputs",
-with exactly this shape:
-
-```json
-{
-  "schemaVersion": 1,
-  "entries": [
-    {
-      "id": "2.3",
-      "question": "睡眠剥夺对心率变异性所反映的交感与迷走张力有何实测效应",
-      "status": "answered",
-      "reportLines": [58],
-      "claimIds": ["CLM-005"]
-    },
-    {
-      "id": "4.1",
-      "question": "以睡眠剥夺、失眠或轮班人群为纳入对象、以本品为干预的临床研究是否存在",
-      "status": "gap",
-      "searches": [
-        { "query": "suxiao jiuxin palpitation insomnia sleep", "database": "PubMed", "searchedAt": "2026-08-13" }
-      ]
-    }
-  ]
-}
-```
-
-Create one entry per **atomic sub-question**, under the task's own numbering and
-in the task's own order — never merge two items into one, never renumber, never
-drop one because it reads like a restatement of its neighbour. Inside each
-numbered item, split on 顿号, 破折号, 「或」, and parallel clauses; an item needs at
-least as many entries as it has 「？」, and an enumeration introduced by 「：」 or set
-off by 破折号 gives one entry per member — that list *is* the question, not
-decoration. One entry asks one thing. `id` is the task's number plus a sub-item
-index (`2.3`); `question` transcribes the sub-question's own wording, not a
-paraphrase that is easier to answer.
+Work through the task one **atomic sub-question** at a time, under the task's
+own numbering and in the task's own order — never merge two items into one,
+never renumber, never drop one because it reads like a restatement of its
+neighbour. Inside each numbered item, split on 顿号, 破折号, 「或」, and parallel
+clauses; an item has at least as many sub-questions as it has 「？」, and an
+enumeration introduced by 「：」 or set off by 破折号 gives one sub-question per
+member — that list *is* the question, not decoration. Answer the sub-question's
+own wording, not a paraphrase that is easier to answer.
 
 Two things are not splits. A **population stratification** (「急性完全性、慢性部分
-性与轮班作业三种形式」) is reported inside each entry rather than multiplied across
-entries; see "Stratify the population before you conclude". A **reporting
+性与轮班作业三种形式」) is reported inside each sub-question rather than multiplied
+across them; see "Stratify the population before you conclude". A **reporting
 requirement attached to the whole item** (研究类型、效应量、可逆性、随访时长) is what
-every entry of that item owes, not an entry of its own.
+every sub-question of that item owes, not a sub-question of its own.
 
 示例——某题面第 2 问原文：
 
@@ -246,19 +172,19 @@ every entry of that item owes, not an entry of its own.
 - 反例（真实交付的 `摘要`，把五个编号问题重排成「三件事」）：
   `**目的** 评价三件事所依赖的证据：其一，工作压力与情绪激动后出现的心悸、胸闷，与心绞痛之间据以鉴别的证据；其二，现行指南要求在把症状归因于情绪之前排除哪些病因；其三，速效救心丸的说明书边界是否覆盖"无心血管诊断者在应激场景自行含服"这一用法。`
   该题面第 2 问的第一句是「其病理生理路径——交感激活、过度换气与低碳酸血症、心率
-  变异性改变——各由何种研究类型支持？」，破折号里的三条支路本该是三条条目；全文
+  变异性改变——各由何种研究类型支持？」，破折号里的三条支路本该是三条子问；全文
   「交感」「低碳酸」「心率变异」各 0 次，既没有答案，也没有缺口声明。缺口被申明与问题
   被删除，在交付物上看不出差别，对读者的后果完全不同。
 
 **A conditional question's fallback branch is its own sub-question.** 「若 X 检索
-不足则回到 Y 并标注来源与推荐强度」 is two entries: X, and Y. A report that wrote
-「未检索到 X」 and stopped has answered neither — it has answered X as a gap and
-left Y unwritten, and Y is what the reader was promised. The gate cannot see this
-one, because it cannot see the task text; it is on you.
+不足则回到 Y 并标注来源与推荐强度」 is two sub-questions: X, and Y. A report that
+wrote 「未检索到 X」 and stopped has answered neither — it has answered X as a gap
+and left Y unwritten, and Y is what the reader was promised. No check can see
+this one; it is on you.
 
 题面原文（真实题面的证据要求节）：`若检索不足以支持给出独立的血压下限或时间阈值，应
 回到指南既有阈值并标注其来源与推荐强度。` X 是本品自己的血压下限与时间阈值，Y 是指南
-既有阈值及其来源与推荐强度；两条都要登记，Y 落在正文里，不是落在 `局限性` 里。
+既有阈值及其来源与推荐强度；两条都要作答，Y 落在正文里，不是落在 `局限性` 里。
 
 - 正例（真实交付，X 落空后照 Y 交付）：先写 `该说明书未载明含服后应观察多久、再次给
   药的间隔，也未给出任何"不缓解即升级"的时间界限`，再回到指南把阈值连同推荐强度逐条
@@ -269,28 +195,18 @@ one, because it cannot see the task text; it is on you.
   并写明检索不足时回到指南既有阈值。全文既没有任何时间阈值，也没有任何推荐类别与
   证据等级，正文读起来却像这一问已被回答。
 
-Give every entry exactly one status:
+Each sub-question ends in one of two places:
 
-- `answered` — list `reportLines`, the 1-indexed lines of
-  `clinical-evidence-report.md` where you actually answer it, and optionally the
-  `claimIds` those lines carry. Every line must exist and carry prose, and at
-  least one of them must sit in a paragraph that carries a claim anchor
-  (`<!-- claim:CLM-… -->`). A line inside `参考文献` or `局限性` does not count:
-  neither section answers a question. A line that only says 「未检索到…」 is not an
-  answer either; that sub-question is a gap.
-- `gap` — list the searches you really ran, each with `query`, `database` and
-  `searchedAt` (`YYYY-MM-DD`). Every query must match an entry in
-  `clinical-evidence-search.json`'s `queries[]` (whitespace, quoting and case may
-  differ; the terms may not), under the same database, on the log's own
-  `searchedAt` date. You write that log yourself, one entry per search as you
-  run it, so 「我查了但没查到」 is falsifiable against it — and a search you never
-  ran will be caught at once. Its `queries[]` holds objects, never bare strings:
-  a log of strings loses the database each search was run against, which is half
-  of what makes a declared gap checkable.
+- **answered** — in the body, in a paragraph that carries a claim anchor
+  (`<!-- claim:CLM-… -->`). `参考文献` and `局限性` do not answer a question, and a
+  line that only says 「未检索到…」 is not an answer either; that sub-question is
+  a gap.
+- **gap** — written into the body as a gap, once the searches described under
+  "Reproducible search" have come back empty, together with what was searched.
 
 **A `gap` is a result, not a failure.** A sub-question you searched for and did
-not find is registered as `gap`, written into the body in those same words, and
-carried together with the searches that came back empty. Writing the gap out is
+not find is written into the body as a gap, together with the searches that came
+back empty. Writing the gap out is
 the point: 「未检索到该终点的直接证据，这是一处证据空白」 is exactly right, and
 「未检索到以睡眠不足人群为对象、以本品为干预的临床研究，此为证据空缺，非已证实无效」
 is the sentence to copy. What is forbidden is the *next* sentence, the one that
@@ -314,8 +230,8 @@ gap, not a counter-finding".
   房颤电复律后的持续性房颤患者、结局是房颤复发，没有测过心悸发作频次。换人群、换结局
   的阴性结果回答不了这条子问，它只能说明这条仍是 gap。
 
-**The ledger then binds the prose.** Where `摘要` or `引言` restates the scope of
-the work, it names at least as many items as the ledger holds, and it keeps the
+**A restatement binds the body.** Where `摘要` or `引言` restates the scope of
+the work, it names at least as many items as the task asks, and it keeps the
 task's numbering: no merging two items into one, no renumbering what survives. A
 restatement is a promise about the body, and a body that never answers item 4 is
 found out only by the reader who still had the task in hand.
@@ -329,7 +245,7 @@ found out only by the reader who still had the task in hand.
   的形态：五问重述为三问，而这三问恰好是第 1、2、4 问的合并，第 3、5 问随重新编号一起
   消失——条目数与编号都不得改。
 
-And once a sub-question is registered as a gap, its topic may not reappear in
+And once a sub-question is declared a gap, its topic may not reappear in
 `摘要`, `结论`, or `临床实践要点` as a ranking, a composition share, a 「最常见」, a
 threshold, a recommendation, or a 「证据为阴性／无此类证据／文献中没有」.
 
@@ -338,13 +254,12 @@ threshold, a recommendation, or a 「证据为阴性／无此类证据／文献�
 - 反例（同一段先声明缺口，再把缺口当已知构成使用）：
   `其三，高原暴露人群的急性冠脉事件、心绞痛与心血管死亡发生率相对平原的差异，缺乏前瞻性对照数据；以胸闷、心慌、气短为主诉者的病因构成比例亦无分母明确的研究。现有证据仅支持"急性高原病是最常见病因、高原肺水肿与高原脑水肿罕见但致命、肺栓塞可与高原肺水肿混淆、心源性猝死以既往心肌梗死与不习惯运动为要"这一较弱表述。`
   为什么是反例：「病因构成比例无分母明确的研究」是一条缺口，紧接着的「最常见病因」
-  却是一个构成排序。要么把该子问登记为 `answered` 并指向承载分母的正文行，要么删掉
-  排序断言。
+  却是一个构成排序。要么给出承载分母的证据并挂上 claim 锚点，要么删掉排序断言。
 
 **An unverifiable premise downgrades the sub-questions that depend on it; it does
 not delete the ones that do not.** When a fact you could not verify is the
-premise of some entries, mark those entries and conditionalize their claims —
-and then answer the rest of the item anyway. Ask of every neighbouring entry
+premise of some sub-questions, mark those and conditionalize their claims — and
+then answer the rest of the item anyway. Ask of every neighbouring sub-question
 whether it truly needs the missing premise; most do not.
 
 - 正例（真实交付，前提不可核实，依赖它的论断改写为条件句）：上面那条 `（一）…凡以某
@@ -362,15 +277,11 @@ whether it truly needs the missing premise; most do not.
 
 Search iteratively across at least two relevant source classes. Use English and Chinese synonyms when relevant. Continue until every material section has usable evidence and further query variation is no longer changing the conclusion; do not stop because a numeric query target was reached.
 
-Record each completed search in `clinical-evidence-search.json` immediately after
-the search succeeds. The JSON must exactly match successful search-tool calls
-from the current run. Planned, duplicate, or failed searches do not count.
-
-One log entry per call, and copy the query string verbatim from the call you
-made. A single search that reached several underlying databases is still one
-search: name the source class in `database` if that is clearer, but do not split
-it into an entry per database, and do not paraphrase or shorten the query. An
-entry whose query you never sent claims a search that did not happen.
+Report the search in `资料与方法`: the source classes searched, the date, and the
+query strings as you sent them — copied from the call, not paraphrased or
+shortened. Only searches you actually ran count; a planned, duplicate or failed
+search is not one. The platform keeps its own record of every search call, so
+there is no log file to maintain.
 
 For an acute pressure-like chest symptom question, adapt the queries to examine
 urgent cardiovascular triage, diagnostic pathways, limits of symptom-based
@@ -380,9 +291,9 @@ scope. Combine or split concepts according to the results rather than following
 a fixed query list.
 
 **A successful zero-hit query and an unavailable source are different observations.**
-Record a successful zero-hit query with `resultsRetrieved: 0`; it does not by
-itself establish absence of evidence. Failed requests belong in failed-source
-and coverage records, never as successful zero-hit searches. Long
+A search that ran and returned nothing is a result; it does not by itself
+establish absence of evidence. A source that could not be reached is an access
+limitation, stated in `局限性`, never reported as a search that found nothing. Long
 conjunctive queries are one possible cause of an empty result — seven concepts joined together match no
 record even when the literature on the question is substantial. Before writing
 that evidence on a point is absent:
@@ -418,9 +329,9 @@ Do not inflate counts with duplicates, irrelevant records, editorials, or title-
 
 ### Sufficiency audit: what the search still does not cover
 
-After a round of searching, before deciding the search is done, write down what
-the retrieved set covers and what it does not. Three lines, in the question
-ledger:
+After a round of searching, before deciding the search is done, write down for
+yourself — in your reasoning, not in a deliverable — what the retrieved set
+covers and what it does not. Three lines:
 
 1. **Coverage.** Which sub-questions of the review now have usable evidence, and
    from which source class. A sub-question covered only by the source class that
@@ -470,8 +381,9 @@ Use `mcp__evimed__official_page_fetch` for approved professional-society, guidel
 Prefer a PMCID or a search record explicitly marked open access before calling
 the full-text tool. For official pages, use stable URLs returned by the search
 or audited source catalog rather than guessed publisher paths. A closed-access
-result or unreachable official page belongs in `failedSources`; replace it with
-another relevant accessible source rather than repeatedly retrying it.
+result or unreachable official page is not a source: replace it with another
+relevant accessible source rather than repeatedly retrying it, and state the gap
+in `局限性` if it matters to the conclusion.
 
 Preserve and inspect the distinct documents actually used to support the report. Count one canonical readable artifact per document:
 
@@ -522,8 +434,9 @@ included no diagnostic-accuracy study. So **do not delete an instrument name fro
 methodological transparency the notice exists to protect. Delete it only if it
 was never part of your plan. The gate reports the gap and delivers the package.
 
-A GRADE level must agree with the downgrade reasons written next to it, and this
-one *is* a gate. Any downgrade at all excludes 高, so a **paragraph** that
+A GRADE level must agree with the downgrade reasons written next to it. The
+submission names every disagreement; fix each one — a reader cannot see which of
+the two you meant. Any downgrade at all excludes 高, so a **paragraph** that
 **asserts a deficiency** in the evidence — 方法学质量偏低/欠佳/不足, 证据强度不足,
 偏倚风险高/严重/不明确, 存在不一致/间接性/不精确, or a downgrade actually taken
 (降一级 / 下调一级 / 扣一档) — may not give a level that reaches 高, including
@@ -909,49 +822,42 @@ it. Appraising two arms evenly does not even out their risks.
 
 ## Citation and traceability integrity
 
-### Screening numbers and the source set are rendered from the log, never written by hand
+### The screening numbers and the reference list tell one story
 
-`clinical-evidence-search.json` is the ledger of what this run actually did.
-Four quantities live there and nowhere else — `queries.length`,
-`screening.recordsIdentified`, `screening.recordsAfterDeduplication`,
-`screening.sourcesIncluded` — together with the identity of every record you
-included. When the report states one of those quantities, copy it out of the
-file; do not restate it from memory and do not round, re-count or re-estimate
-it. If the sentence and the file disagree, the file is not the thing that is
-wrong.
+`资料与方法` states the screening flow once — searches run, records identified,
+records after deduplication, sources included — counted from your own
+screening, not estimated. State each number once and never restate it
+differently elsewhere in the report.
 
 The numbered reference list is the same fact seen from the reader's side. **It
-must be exactly the set of `sourceRecords` whose `included` is `true`** — same
-count, same reference numbers. A record you never read to an inspectable level
+is exactly the set of included sources** — as many entries as the included
+count. A record you never read to an inspectable level
 (`full_text`, `abstract`, `official_page`, `structured_record`) may not be
 numbered in 参考文献 and may not carry an in-text `[n]`, not even as background
-colour, and not even if you label it 「题录层级」. Read it, or drop it. Keeping
-the record at `included: false` while still citing it does not make the citation
-honest; it makes the count a lie.
+colour, and not even if you label it 「题录层级」. Read it, or drop it. Citing a
+source while counting it as excluded does not make the citation honest; it
+makes the count a lie.
 
 When an identifier resolves and a bibliographic field does not come back, leave
 the field empty and mark it 未解析. Never fill it from what the title suggests,
 and never reuse another paper's author list.
 
-- 正例（流程句逐字取自检索日志，编号表与之一致）：
+- 正例（流程句与编号表一致）：
   `共执行 21 条检索，命中 194 条记录，去重后 148 条，纳入 15 份来源。`
-  该次运行的日志正是 `queries.length = 21`、`screening = {recordsIdentified: 194,
-  recordsAfterDeduplication: 148, sourcesIncluded: 15}`，`参考文献` 恰为 15 条，
-  编号 1–15，且正是那 15 条 `included: true` 的记录。
-- 反例（四个数字都是手写的，没有一个能对上日志）：
+  `参考文献` 恰为 15 条，编号 1–15，每一条都读到了可核查层级。
+- 反例（流程句是凭印象复述的，与编号表对不上）：
   `以 PMID、DOI、稳定 URL 及规范化题名去重后，共获得 191 条记录，去重并剔除无关记录后余 116 条，最终纳入 25 个来源。`
-  同一次运行的日志写着 `203 / 125 / 24`，`参考文献` 有 24 条，连它自己的
-  `citation-audit.md` 开篇都写着「核查范围：全部 24 条编号参考文献」——正确的数字
-  就在同一交付里，只是没有被渲染出来。
+  同一份报告的 `参考文献` 只有 24 条，而这次运行实际的检索与筛选结果是
+  203 / 125 / 24——四个数字没有一个是数出来的。
 - 反例（另一条腿：编号表里坐着从未读到可核查层级的记录）：
   `2018 ACC/AHA/HRS 心动过缓和心脏传导延迟评估与管理指南[6]、窦房结功能障碍综述[7]、2022 年 JCS/JHRS 心律失常诊断与风险评估指南[8]，均以窦房结功能障碍的评估与管理为主题，其全文在本次检索中不可获取，仅能列为题录。`
-  这三条在日志里是 `"accessLevel": "bibliographic", "included": false`，而同一份报告
-  写着「最终纳入 7 个来源」，`参考文献` 却编了 12 条。在正文里标注「仅能列为题录」
+  这三条只读到了题录层级，而同一份报告写着「最终纳入 7 个来源」，`参考文献` 却编了
+  12 条。在正文里标注「仅能列为题录」
   并不能修复它：读者看到的仍然是十二个编号来源，方法学写的是七个。
 
 A per-query hit count is not the flow and is fine to state on its own —
-「临床试验注册库以"速效救心丸"检索命中 0 条」 is a result, not a screening total,
-and it is not compared against `recordsIdentified`.
+「临床试验注册库以"速效救心丸"检索命中 0 条」 is a result, not the records-identified
+total.
 
 ### Reference-table closure (nothing floats, no number is an orphan)
 
@@ -960,15 +866,13 @@ The numbered list and the body must close on each other in both directions.
 - **Every numbered entry in `参考文献` must be cited at least once by a `[n]` in
   the body**, and every `[n]` in the body must resolve to an entry. Table cells
   and the abstract count as body.
-- **A source you retrieved but did not use is not a reference.** Record it in
-  `clinical-evidence-search.json` as a `sourceRecords` entry with
-  `"included": false` and a non-empty `exclusionReason`, then drop it from the
+- **A source you retrieved but did not use is not a reference.** Drop it from the
   numbered list and renumber. Naming it once in `局限性` as "full text
   unavailable" is not a use.
 - **Never put a bibliographic identifier in the citation slot.**
   `[PMID 22897413]` resolves to nothing a reader can follow and to no claim. If
-  the source is worth naming it earns a number and a claim; if it is not, it
-  goes to the excluded list.
+  the source is worth naming it earns a number and a claim; if it is not, it is
+  left out.
 - **Every line carrying a `<!-- claim:CLM-NNN -->` marker must also carry that
   claim's own `referenceNumber`** (or, for a synthesized claim, one of its
   `referenceNumbers`). Having paired the marker correctly earlier in the report
@@ -982,8 +886,7 @@ The numbered list and the body must close on each other in both directions.
   `11. Walker NJ, Sites FD, Shofer FS, Hollander JE. Characteristics and outcomes of young adults who present to the emergency department with chest pain. Acad Emerg Med. 2001;8(7):703-708. PMID:11435184.`
   全文没有任何 `[11]`：这条青年胸痛队列只在 `局限性` 里被顺带提了一句「全文未获」，
   而它恰恰是该报告要回答的问题所需的队列。一个零引用的编号条目几乎总是指向一个没答
-  完的问题；要么真正引用它，要么以 `included: false` 加 `exclusionReason` 记入检索
-  日志并退出编号表。
+  完的问题；要么真正引用它，要么让它退出编号表。
 - 反例（行内标识符绕过参考表）：
   `……针对膝骨关节炎患者的中医诊断变量信度研究……[题录，PMID 22897413，全文未获]；冠心病痰瘀互结证中医诊断量表研究方案……[题录，PMID 29721788，全文未获]。`
   这句话承载的是一条否定性断言（「未检索到……的实证研究」），却把两条来源塞进方括号
@@ -1113,7 +1016,7 @@ are one assertion in four disguises, and all four are this rule. On any body lin
 `## 参考文献`) containing such a locator, at least one source cited on that line
 must be a matrix claim whose `sourceUrl` host sits in a government namespace
 (`.gov`, `.gov.<cc>`, `.go.<cc>`, `.gouv.fr`, `.europa.eu`, `.int`), whose
-`artifactPath` is in this run's `successfulSourceArtifacts`, and whose
+`artifactPath` is a source this run preserved, and whose
 `supportQuote` or `claim` names the same article number (第二十九条 and
 Article 29 both count).
 
@@ -1150,9 +1053,8 @@ Use standard numbered citations in order of first appearance:
 ### Quotation placement
 
 A verbatim support quote is a traceability device, and its home is the
-`supportQuote` field of `clinical-evidence-matrix.json` and the `supportQuote`
-column of `citation-ledger.csv`, where it is checked against the preserved
-artifact. **It does not go into the report body.** The body states the finding in
+`supportQuote` field of `clinical-evidence-matrix.json`, where it is checked
+against the preserved artifact. **It does not go into the report body.** The body states the finding in
 Chinese, in the paper's own voice, with its numbered citation; a reader who wants
 the original wording follows the citation, and an auditor reads the matrix.
 
@@ -1169,7 +1071,7 @@ paragraph is the signature of a matrix pasted into a manuscript.
 - 正例（确有必要直引时）：`该说明书将适应症限定为"气滞血瘀型冠心病心绞痛"[7]，未涵盖未分化急性胸痛。`
 
 Pasting the device into the body adds no verifiability: verifiability is carried
-by the matrix and the ledger, which are machine-checked against the artifacts,
+by the matrix, which is machine-checked against the artifacts,
 while a quotation in the body is checked by nobody. What it does add is a
 paragraph that reads as assembled by copying rather than written.
 
@@ -1276,17 +1178,7 @@ In the report, mark every line asserting a derived result with `〔推导〕` so
 
 **A derived result may never appear in `临床实践要点`.** Reason as far as the evidence allows in the analysis; what a reader is told to actually do must rest on measured evidence. If a derivation implies a more cautious action, state the caution in the analysis and give the practical step a directly supported claim.
 
-### Bibliography and audit
-
-Write:
-
-- `references.bib` with one deduplicated entry for every numbered report reference;
-- `citation-ledger.csv` with a header row and one row per matrix claim. The header must name `claimId`, `referenceNumber`, and `supportQuote` columns; order does not matter and extra columns are welcome. Each row's `referenceNumber` must equal that claim's `referenceNumber` in the matrix;
-- `citation-audit.md` documenting unresolved identifiers, duplicates, corrections or retractions, metadata-only records, and claim-source mismatches.
-
-Record the checks actually performed and their findings, including unresolved
-identifiers, duplicates, corrections or retractions, metadata-only records, and
-claim-source mismatches. `Abstract-only` is not a synonym for `metadata-only`.
+### Reference list
 
 Prefer DOI, then PMID/PMCID, then a stable official-document identifier. Verify author, title, venue, year, volume, issue, pages, DOI, PMID, and version against an authoritative record. Do not manufacture missing metadata.
 
@@ -1746,74 +1638,6 @@ Worked example of the boundaries above; apply the same reasoning to the analogou
 
 When Suxiao Jiuxin Wan is named, state clearly that taking it must not delay emergency contact or acute evaluation. Support that conclusion by combining emergency-triage evidence with medicine evidence limited to its studied or regulated population. Do not convert chronic stable-angina efficacy evidence into an acute self-triage recommendation.
 
-## Search log schema
-
-Write strict JSON to `clinical-evidence-search.json`:
-
-```json
-{
-  "schemaVersion": 1,
-  "searchedAt": "ISO-8601 timestamp",
-  "databases": ["PubMed", "guideline source"],
-  "queries": [
-    {
-      "database": "PubMed",
-      "query": "complete query",
-      "dateFrom": null,
-      "dateTo": null,
-      "resultsRetrieved": 20
-    }
-  ],
-  "screening": {
-    "recordsIdentified": 40,
-    "recordsAfterDeduplication": 24,
-    "sourcesIncluded": 14
-  },
-  "sourceRecords": [
-    {
-      "referenceNumber": 1,
-      "citationKey": "AuthorYearKeyword",
-      "identifier": "PMID or DOI",
-      "accessLevel": "full_text",
-      "reportType": "primary",
-      "included": true,
-      "role": "diagnostic pathway"
-    }
-  ]
-}
-```
-
-Counts must reflect actual tool results and screening decisions, and they are
-the only place those four quantities are written: the report renders them.
-
-Every `sourceRecords` entry carries a `referenceNumber`. A record that is not
-included carries `"included": false` **and** a non-empty `exclusionReason`, and
-does not appear in the report's numbered reference list.
-
-## Run receipt
-
-Write strict JSON to `clinical-evidence-run.json` containing:
-
-- `reportProfile`: exactly `academic_deep_research_v1`;
-- `question`, `title`, `startedAt`, and `completedAt`;
-- `tools`;
-- `successfulSourceArtifacts`: path strings only;
-- `failedSources`;
-- `qualityChecks`: the checks actually performed, represented as boolean values; include claim traceability, source-quote matching, citation integrity, search reproducibility, and contradiction or arithmetic checks when applicable;
-- `status`: exactly `succeeded` only when all required files and checks pass.
-
-`successfulSourceArtifacts` must list exactly one canonical readable path per distinct document. Also write a `stats` object whose integer values exactly match `clinical-evidence-search.json`:
-
-- `totalSearches`
-- `recordsIdentified`
-- `recordsAfterDeduplication`
-- `sourcesIncluded`
-- `distinctPreservedSources`
-
-Use actual current ISO-8601 timestamps. `startedAt` must not predate the current run, `completedAt` must not be in the future, and `startedAt` must precede `completedAt`.
-
-Escape quotation marks correctly inside JSON strings; do not alter the scientific wording merely to work around JSON syntax.
-
 ## Required outputs
 
 - `clinical-evidence-report.md`
@@ -1829,21 +1653,10 @@ Everything else it says is advice — act on what is cheap, and submit. Two
 rounds of fixes are plenty: a package with findings still open is delivered with
 those findings shown to the reader claim by claim, never withheld.
 
-Optional companions. Write one when it helps a reader and you have the material
-at hand; nothing sends a run back for a missing or imperfect one, and none is
-worth a second pass:
-
-- `references.bib`
-- `clinical-evidence-search.json`
-- `citation-ledger.csv`
-- `citation-audit.md`
-- `clinical-evidence-run.json`
-- `question-coverage.json` — see "The question ledger"
-
 Read every output back before claiming success. Do not use `grep` or another unbounded line-oriented search on a generated report; long Markdown lines can exceed tool-output limits and invalidate an otherwise complete run. Use bounded `read` ranges and the platform's deterministic completion validator instead. Verify:
 
-- the search log exactly matches successful searches and covers at least two relevant source classes;
-- screening counts are internally consistent and every included source was inspected beyond title-only metadata;
+- `资料与方法` reports the searches actually run, across at least two relevant source classes;
+- the screening counts agree with the numbered reference list, and every included source was inspected beyond title-only metadata;
 - the claim matrix contains every material factual conclusion without artificial claim splitting;
 - every numbered citation resolves to a complete reference;
 - every claim quote occurs in its source artifact;
@@ -1851,9 +1664,7 @@ Read every output back before claiming success. Do not use `grep` or another unb
 - no visible `[claim:...]` marker remains;
 - no operational failure or tool-process prose appears in the academic report;
 - every research question in `摘要目的` has its answer in `结论` in the same order, every 「证据不足」 judgment names the population stratum it holds for, and no section's share of the body outweighs the rank of the question it serves (see "Comparative appraisal and evidence bridging");
-- every numbered item of the task has its atomic entries in `question-coverage.json` — including the fallback branch of every 「若 X 则回到 Y」 — each `answered` sub-question points at body prose whose paragraph carries a claim anchor, each `gap` names a search that appears in `clinical-evidence-search.json`, no topic registered as a gap reappears as a ranking, a share, a threshold, a recommendation, or a negative finding in `摘要`, `结论`, or `临床实践要点`, every numbered question of the task has at least one entry, every entry transcribes the question its id names, and every item a question spells out is either in the report or registered as its own gap
-  and merges what survives, and every sub-question that does not depend on an
-  unverifiable premise is still answered;
+- every numbered item of the task is answered or declared a gap in the body — including the fallback branch of every 「若 X 则回到 Y」 — each answer sits in a paragraph that carries a claim anchor, every item a question spells out is in the report, a restatement of the scope keeps the task's numbering and merges nothing, no topic declared a gap reappears as a ranking, a share, a threshold, a recommendation, or a negative finding in `摘要`, `结论`, or `临床实践要点`, and every sub-question that does not depend on an unverifiable premise is still answered;
 - the section names are the manuscript ones and no commissioning, acceptance-specification, or self-referential prose survives anywhere in the report (see "Register: what a manuscript never says"). Read the request once more and confirm that no phrase of it was copied into the report — the request's wording is the usual way this register gets in;
 - the practical answer is medically correct, source-supported, and does not encourage delay.
 
@@ -1896,26 +1707,22 @@ produced it. A deliverable is an evidence-evaluation academic report if either
 its own `参考文献 / 参考来源 / References` section, or (b) it carries a level-2 or
 level-3 section headed `安全优先的实际处置 / 实际处置 / 临床实践要点 / 临床要点`.
 A run that writes such a deliverable — under any filename — writes
-`clinical-evidence-matrix.json`, `citation-ledger.csv`, `citation-audit.md`,
-`clinical-evidence-search.json`, and `clinical-evidence-run.json` alongside it
-(plus `references.bib` when marker (a) fired), and the package is then held to
-this file's contract in full. If a line cannot produce those artifacts, it may
-not ship a numbered bibliography or clinical advice: it ships a deliverable that
-has neither. The number of quantitative statements in a document is not the
+`clinical-evidence-matrix.json` alongside it, and the package is then held to
+this file's contract in full. If a line cannot produce a matrix, it may not ship
+a numbered bibliography or clinical advice: it ships a deliverable that has
+neither. The number of quantitative statements in a document is not the
 trigger — an internal engineering note scores higher on that measure than a real
 evidence report does.
 
 - 反例（`comprehensive-evaluation-report.md`，15 条编号参考文献、一节
-  `## 7 临床实践要点`，五份台账一个都没有）：
+  `## 7 临床实践要点`，没有证据矩阵）：
   `1. **急救底线（不可弱化）**：心绞痛/可疑急性冠脉综合征发作时，无论含服速效救心丸还是复方丹参滴丸，均**不得作为推迟呼叫 120 / 就医的理由**……`
   `8. 李旭东, 申延琴. 复方丹参滴丸与速效救心丸疗效观察. 基层医学论坛. 2014.（仅摘要）`
   八条参考文献没有 DOI、PMID 或任何可核验标识，表 1 里每个数字都无法回查——因为这条
-  线没有引文台账，也没有引文审计。
-- 正例（两条出路，任选其一）。其一，报告与台账一起写，使每个编号都有一行台账承载它
-  的逐字引文：
-  `comprehensive-evaluation-report.md`、`clinical-evidence-matrix.json`、
-  `citation-ledger.csv`、`citation-audit.md`、`clinical-evidence-search.json`、
-  `clinical-evidence-run.json`、`references.bib`。
+  线没有证据矩阵，没有一个数字绑定到保全下来的原文。
+- 正例（两条出路，任选其一）。其一，报告与证据矩阵一起写，使每个编号都有一条 claim
+  承载它的逐字引文：`comprehensive-evaluation-report.md` 与
+  `clinical-evidence-matrix.json`。
   其二，若这条线本就不检索也不保全来源，则两个标志都不要，交付一件不主张任何引文装置
   的工作产物：
   `## 说明书条目对照（依据：国家药监局公开索引件，检索日 2026-08-13）`，表内逐条列出
@@ -2009,7 +1816,7 @@ a draft brought in from elsewhere, or an older report being revised. On this
 line it is no longer the default finishing step, because prose written correctly
 does not need rewriting, and rewriting it is where content gets lost.
 
-If these integrity requirements cannot be met, write an honest failed run receipt and do not present the report as publication-grade.
+If these integrity requirements cannot be met, say so plainly in your reply and do not present the report as publication-grade.
 
 ## Before delivering: two fixed steps
 

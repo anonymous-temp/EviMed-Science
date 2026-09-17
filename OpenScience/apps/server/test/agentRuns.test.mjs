@@ -322,7 +322,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "2.12.0",
+      effectiveAgentVersion: "2.13.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
     const workspace = path.join(dataDir, "users", "dev", "projects", "default", "workspace");
@@ -1198,7 +1198,6 @@ test("a routed clinical evidence turn honors a configured bounded repair limit",
           outputs: [
             { path: "clinical-evidence-report.md", required: true },
             { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
         }),
@@ -1225,11 +1224,6 @@ test("a routed clinical evidence turn honors a configured bounded repair limit",
     }, sendPrompt);
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# Too short\nUnsupported claim [claim:CLM-999]", "utf8");
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims: [] }), "utf8");
-    await writeFile(path.join(project.workspaceDir, "clinical-evidence-run.json"), JSON.stringify({
-      status: "succeeded",
-      successfulSourceArtifacts: [],
-      qualityChecks: { claimTraceability: true, contradictionAudit: true, arithmeticAudit: true },
-    }), "utf8");
     history = [{
       info: { id: "msg_clinical_bad", role: "assistant", time: { completed: Date.now() } },
       parts: [
@@ -1255,6 +1249,13 @@ test("a routed clinical evidence turn honors a configured bounded repair limit",
     assert.match(prompts[1], /Patch clinical-evidence-report\.md with the edit tool/i);
     assert.match(prompts[1], /Do not rewrite it with the write tool/i);
     assert.doesNotMatch(prompts[1], /at least (?:8|12|18|30)|10000/);
+    // The package is the report and the matrix. A repair told to revise a file
+    // the package no longer has spends a bounded attempt finding that out.
+    assert.match(prompts[1], /in place: clinical-evidence-report\.md or clinical-evidence-matrix\.json\./);
+    assert.doesNotMatch(
+      prompts[1],
+      /clinical-evidence-search\.json|clinical-evidence-run\.json|question-coverage\.json|citation-ledger\.csv|citation-audit\.md|references\.bib|search log/i,
+    );
     const stillRepairing = await store.reconcileSession(project, binding.sessionId);
     assert.equal(stillRepairing.status, "running");
     history.push({
@@ -1377,7 +1378,6 @@ for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused",
             outputs: [
               { path: "clinical-evidence-report.md", required: true },
               { path: "clinical-evidence-matrix.json", required: true },
-              { path: "clinical-evidence-run.json", required: true },
             ],
             completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
           }),
@@ -1396,6 +1396,10 @@ for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused",
       const run = await store.dispatch(project, {
         sessionId: binding.sessionId,
         dispatchId: `turn_clinical_provenance_${scenario}`,
+        // Held by the dispatcher, as on every production dispatch, so the
+        // question-scoped safety rule runs. The question names the medicine the
+        // report discusses, which leaves that rule nothing to object to.
+        question: "突发压迫性胸闷，是心绞痛还是胃病？能不能先含服速效救心丸？",
         effectiveAgentId: "clinical-evidence-synthesis",
         effectiveAgentVersion: "1.0.0",
         effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
@@ -1431,24 +1435,12 @@ for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused",
         "## 实用处置结论",
         "出现新发压迫性胸部不适时应立即呼叫急救并接受规范评估 [claim:CLM-001]；不得因服用速效救心丸而延误呼救或急诊评估 [claim:CLM-004]。",
       ].join("\n");
-      const receipt = {
-        question: "急性压迫性胸部不适与速效救心丸",
-        title: "突发压迫性胸闷与速效救心丸的临床判断",
-        startedAt: new Date().toISOString(),
-        completedAt: new Date().toISOString(),
-        tools: ["official_page_fetch"],
-        successfulSourceArtifacts: [sourceA, sourceB],
-        failedSources: [],
-        qualityChecks: { claimsVerified: true, citationsResolved: true, contradictionsChecked: true },
-        status: "succeeded",
-      };
       await mkdir(path.join(project.workspaceDir, path.dirname(sourceA)), { recursive: true });
       await mkdir(path.join(project.workspaceDir, path.dirname(sourceB)), { recursive: true });
       await writeFile(path.join(project.workspaceDir, sourceA), sourceContents.get(sourceA), "utf8");
       await writeFile(path.join(project.workspaceDir, sourceB), sourceContents.get(sourceB), "utf8");
       await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), report, "utf8");
       await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims }), "utf8");
-      await writeFile(path.join(project.workspaceDir, "clinical-evidence-run.json"), JSON.stringify(receipt), "utf8");
       if (["tampered", "old-tampered"].includes(scenario)) {
         await writeFile(path.join(project.workspaceDir, sourceA), `${sourceContents.get(sourceA)}\nAuthored replacement.`, "utf8");
       }
@@ -1460,7 +1452,7 @@ for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused",
         info: { id: `msg_clinical_provenance_${scenario}`, role: "assistant", time: { completed: Date.now() } },
         parts: [
           ...(scenario === "prior-turn-only" ? [] : retrievalParts),
-          ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+          ...["clinical-evidence-report.md", "clinical-evidence-matrix.json"].map((filePath) => ({
             type: "tool",
             tool: "write",
             state: { status: "completed", input: { filePath } },
@@ -1482,7 +1474,14 @@ for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused",
       assert.equal(finished.errorCode, tampered ? "specialist_evidence_integrity_failed" : null);
       assert.equal(finished.verification ?? null, tampered || vouched ? null : "unverified");
       if (!tampered && !vouched) {
-        assert.match(finished.qualityNotices.join("\n"), /no evidence tool reported preserving that file/);
+        // The paths read are the ones the claims cite, so each is named as the
+        // matrix's citation.
+        for (const source of [sourceA, sourceB]) {
+          assert.ok(
+            finished.qualityNotices.some((notice) => notice.includes(`The evidence matrix cites ${source}, but no evidence tool reported preserving that file`)),
+            JSON.stringify(finished.qualityNotices),
+          );
+        }
         assert.ok(finished.artifacts.includes("clinical-evidence-report.md"), JSON.stringify(finished.artifacts));
       }
       await store.closeProject(project, "canceled");
@@ -3036,12 +3035,6 @@ test("server-valid clinical bytes without a local receipt get one resubmit-only 
           outputs: [
             { path: "clinical-evidence-report.md", required: true },
             { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
-            { path: "clinical-evidence-search.json", required: true },
-            { path: "references.bib", required: true },
-            { path: "citation-ledger.csv", required: true },
-            { path: "citation-audit.md", required: true },
-            { path: "question-coverage.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
         }),
@@ -3057,6 +3050,9 @@ test("server-valid clinical bytes without a local receipt get one resubmit-only 
     const run = await store.dispatch(project, {
       sessionId: binding.sessionId,
       dispatchId: "turn_resubmit_valid",
+      // Held, as on every production dispatch, so the server's verdict on
+      // these bytes covers every layer of the gate.
+      question: pkg.briefText,
       effectiveAgentId: "clinical-evidence-synthesis",
       effectiveAgentVersion: "1.0.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
@@ -3068,12 +3064,6 @@ test("server-valid clinical bytes without a local receipt get one resubmit-only 
     const deliverables = new Map([
       ["clinical-evidence-report.md", pkg.reportText],
       ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
-      ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
-      ["clinical-evidence-search.json", pkg.searchLogText],
-      ["references.bib", pkg.referencesText],
-      ["citation-ledger.csv", pkg.citationLedgerText],
-      ["citation-audit.md", pkg.citationAuditText],
-      ["question-coverage.json", pkg.questionCoverageText],
     ]);
     for (const [relative, content] of deliverables) {
       await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
@@ -3103,16 +3093,10 @@ test("server-valid clinical bytes without a local receipt get one resubmit-only 
         output: JSON.stringify({ status: "success", artifacts: [artifactPath], data: { artifactSha256s: { [artifactPath]: createHash("sha256").update(content, "utf8").digest("hex") } } }),
       },
     }));
-    const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
-      type: "tool",
-      tool: "evimed-research_evimed_literature_search",
-      state: { status: "completed", input: { query: entry.query } },
-    }));
     history = [{
       info: { id: "msg_resubmit_valid", role: "assistant", time: { completed: Date.now() } },
       parts: [
         ...retrievalParts,
-        ...searchParts,
         ...[...deliverables.keys()].map((filePath) => ({ type: "tool", tool: "write", state: { status: "completed", input: { filePath } } })),
         { type: "text", text: "The corrected files are complete; the local submission ceiling was reached before this version could receive a receipt." },
       ],
@@ -3127,6 +3111,17 @@ test("server-valid clinical bytes without a local receipt get one resubmit-only 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+/** Break only a bookkeeping check in the shared package: CLM-013 keeps its
+ *  hidden marker and loses its numbered citation. Reference 1 is still cited
+ *  on CLM-001's line, so no other rule has anything to say.
+ *  @param {any} pkg */
+function dropOneNumberedCitation(pkg) {
+  const line = pkg.reportText.split("\n").find((entry) => entry.includes("<!-- claim:CLM-013 -->"));
+  const stripped = line.replace(/ \[1\]\([^)]+\)/, "");
+  assert.notEqual(stripped, line, "the fixture line must carry the citation this removes");
+  pkg.reportText = pkg.reportText.replace(line, stripped);
+}
 
 test("delivers a package whose only gap is bookkeeping, and does not stamp it unverified", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-clinical-degrade-"));
@@ -3148,11 +3143,7 @@ test("delivers a package whose only gap is bookkeeping, and does not stamp it un
       runtimeAgent: null,
     };
     const pkg = deepResearchPackage();
-    // Break ONLY the degradable citation-audit documentation-completeness check.
-    pkg.citationAuditText = pkg.citationAuditText.replace(
-      "Correction and retraction checks: no correction or retraction notice was identified for the included records.\n\n",
-      "",
-    );
+    dropOneNumberedCitation(pkg);
     let history = [];
     const store = new AgentRunStore({ get: async () => binding }, {
       agentRegistry: {
@@ -3163,12 +3154,6 @@ test("delivers a package whose only gap is bookkeeping, and does not stamp it un
           outputs: [
             { path: "clinical-evidence-report.md", required: true },
             { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
-            { path: "clinical-evidence-search.json", required: true },
-            { path: "references.bib", required: true },
-            { path: "citation-ledger.csv", required: true },
-            { path: "citation-audit.md", required: true },
-            { path: "question-coverage.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
         }),
@@ -3185,6 +3170,7 @@ test("delivers a package whose only gap is bookkeeping, and does not stamp it un
     const run = await store.dispatch(project, {
       sessionId: binding.sessionId,
       dispatchId: "turn_clinical_degrade",
+      question: pkg.briefText,
       effectiveAgentId: "clinical-evidence-synthesis",
       effectiveAgentVersion: "1.0.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
@@ -3193,12 +3179,6 @@ test("delivers a package whose only gap is bookkeeping, and does not stamp it un
     const deliverables = new Map([
       ["clinical-evidence-report.md", pkg.reportText],
       ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
-      ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
-      ["clinical-evidence-search.json", pkg.searchLogText],
-      ["references.bib", pkg.referencesText],
-      ["citation-ledger.csv", pkg.citationLedgerText],
-      ["citation-audit.md", pkg.citationAuditText],
-      ["question-coverage.json", pkg.questionCoverageText],
     ]);
     for (const [relative, content] of deliverables) {
       await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
@@ -3220,16 +3200,10 @@ test("delivers a package whose only gap is bookkeeping, and does not stamp it un
         }),
       },
     }));
-    const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
-      type: "tool",
-      tool: "evimed-research_evimed_literature_search",
-      state: { status: "completed", input: { query: entry.query } },
-    }));
     history = [{
       info: { id: "msg_clinical_degrade", role: "assistant", time: { completed: Date.now() } },
       parts: [
         ...retrievalParts,
-        ...searchParts,
         ...[...deliverables.keys()].map((filePath) => ({
           type: "tool",
           tool: "write",
@@ -3241,18 +3215,19 @@ test("delivers a package whose only gap is bookkeeping, and does not stamp it un
 
     const finished = await store.reconcileSession(project, binding.sessionId);
     assert.equal(finished.id, run.id);
-    // Only a process-documentation gap remained: deliver, do not discard.
+    // Only a bookkeeping gap remained: deliver, do not discard.
     assert.equal(finished.status, "succeeded");
     assert.equal(finished.errorCode, null);
     // And do not stamp. "Unverified" is a statement about the evidence, and it
     // used to fire on any remaining issue — so a package whose only notices
     // were a gate bug of ours carried the same mark as one with a quotation
     // absent from its source. A mark that means everything means nothing.
-    assert.notEqual(finished.verification, "unverified");
-    // Nor say it. The audit file describing itself is one of the checks that
-    // have reported to nobody since 2026-09-17: the reader was being handed a
-    // sentence about `citation-audit.md`, a file they will never open.
-    assert.doesNotMatch((finished.qualityNotices ?? []).join("\n"), /citation-audit\.md must document/);
+    // Every layer ran, so it is not "unchecked" either.
+    assert.equal(finished.verification ?? null, null);
+    // The gap is still said, as a remark on the delivery rather than a must-fix.
+    const notices = (finished.qualityNotices ?? []).join("\n");
+    assert.match(notices, /claims\[12\] is not paired with its standard numbered in-text citation\./);
+    assert.doesNotMatch(notices, /MUST FIX|SAFETY/);
     assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
     await store.closeProject(project, "canceled");
   } finally {
@@ -3285,11 +3260,7 @@ test("sources a delegated child preserved count for the parent's package, read f
       runtimeAgent: null,
     };
     const pkg = deepResearchPackage();
-    // Break ONLY the degradable citation-audit documentation-completeness check.
-    pkg.citationAuditText = pkg.citationAuditText.replace(
-      "Correction and retraction checks: no correction or retraction notice was identified for the included records.\n\n",
-      "",
-    );
+    dropOneNumberedCitation(pkg);
     let history = [];
     let childHistory = [];
     const store = new AgentRunStore({ get: async () => binding }, {
@@ -3301,12 +3272,6 @@ test("sources a delegated child preserved count for the parent's package, read f
           outputs: [
             { path: "clinical-evidence-report.md", required: true },
             { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
-            { path: "clinical-evidence-search.json", required: true },
-            { path: "references.bib", required: true },
-            { path: "citation-ledger.csv", required: true },
-            { path: "citation-audit.md", required: true },
-            { path: "question-coverage.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
         }),
@@ -3330,6 +3295,7 @@ test("sources a delegated child preserved count for the parent's package, read f
     const run = await store.dispatch(project, {
       sessionId: binding.sessionId,
       dispatchId: "turn_delegated_sources",
+      question: pkg.briefText,
       effectiveAgentId: "clinical-evidence-synthesis",
       effectiveAgentVersion: "1.0.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
@@ -3338,12 +3304,6 @@ test("sources a delegated child preserved count for the parent's package, read f
     const deliverables = new Map([
       ["clinical-evidence-report.md", pkg.reportText],
       ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
-      ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
-      ["clinical-evidence-search.json", pkg.searchLogText],
-      ["references.bib", pkg.referencesText],
-      ["citation-ledger.csv", pkg.citationLedgerText],
-      ["citation-audit.md", pkg.citationAuditText],
-      ["question-coverage.json", pkg.questionCoverageText],
     ]);
     for (const [relative, content] of deliverables) {
       await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
@@ -3365,11 +3325,6 @@ test("sources a delegated child preserved count for the parent's package, read f
         }),
       },
     }));
-    const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
-      type: "tool",
-      tool: "evimed-research_evimed_literature_search",
-      state: { status: "completed", input: { query: entry.query } },
-    }));
     childHistory = [{
       info: { id: "msg_child_sources", role: "assistant", time: { completed: Date.now() } },
       parts: [...retrievalParts, { type: "text", text: "Sources preserved." }],
@@ -3382,7 +3337,6 @@ test("sources a delegated child preserved count for the parent's package, read f
           tool: "evimed_delegate",
           state: { status: "completed", output: kernelToolText({ ok: true, data: { deliverableId: "d1", childSessionId: "child-sources" } }) },
         },
-        ...searchParts,
         ...[...deliverables.keys()].map((filePath) => ({
           type: "tool",
           tool: "write",
@@ -3394,18 +3348,15 @@ test("sources a delegated child preserved count for the parent's package, read f
 
     const finished = await store.reconcileSession(project, binding.sessionId);
     assert.equal(finished.id, run.id);
-    // Only a process-documentation gap remained: deliver, do not discard.
+    // Only the bookkeeping gap remained: deliver, do not discard.
     assert.equal(finished.status, "succeeded");
     assert.equal(finished.errorCode, null);
-    // And do not stamp. "Unverified" is a statement about the evidence, and it
-    // used to fire on any remaining issue — so a package whose only notices
-    // were a gate bug of ours carried the same mark as one with a quotation
-    // absent from its source. A mark that means everything means nothing.
-    assert.notEqual(finished.verification, "unverified");
-    // Nor say it. The audit file describing itself is one of the checks that
-    // have reported to nobody since 2026-09-17: the reader was being handed a
-    // sentence about `citation-audit.md`, a file they will never open.
-    assert.doesNotMatch((finished.qualityNotices ?? []).join("\n"), /citation-audit\.md must document/);
+    // The child's receipts vouch for every path the claims cite. Unread, each
+    // path would be named as one no tool preserved and the package stamped.
+    const notices = (finished.qualityNotices ?? []).join("\n");
+    assert.doesNotMatch(notices, /no evidence tool reported preserving that file/);
+    assert.equal(finished.verification ?? null, null);
+    assert.match(notices, /claims\[12\] is not paired with its standard numbered in-text citation\./);
     assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
     await store.closeProject(project, "canceled");
   } finally {
@@ -3439,16 +3390,13 @@ test("one plain-HTTP citation is a notice on a delivered package, not a reason t
       runtimeAgent: null,
     };
     // A package that is valid in every other respect, with one source served
-    // over plain HTTP. Rewritten across every deliverable so the citation, the
-    // matrix and the bibliography still agree with each other.
+    // over plain HTTP. Rewritten in the report and the matrix alike, so the
+    // citation and the claims it anchors still agree.
     const insecure = "http://www.escardio.org/evidence/source-3";
     const secure = "https://www.escardio.org/evidence/source-3";
     const pkg = deepResearchPackage();
     const rewrite = (value) => value.split(secure).join(insecure);
     pkg.reportText = rewrite(pkg.reportText);
-    pkg.referencesText = rewrite(pkg.referencesText);
-    pkg.citationLedgerText = rewrite(pkg.citationLedgerText);
-    pkg.citationAuditText = rewrite(pkg.citationAuditText);
     pkg.matrix = JSON.parse(rewrite(JSON.stringify(pkg.matrix)));
 
     let history = [];
@@ -3461,12 +3409,6 @@ test("one plain-HTTP citation is a notice on a delivered package, not a reason t
           outputs: [
             { path: "clinical-evidence-report.md", required: true },
             { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
-            { path: "clinical-evidence-search.json", required: true },
-            { path: "references.bib", required: true },
-            { path: "citation-ledger.csv", required: true },
-            { path: "citation-audit.md", required: true },
-            { path: "question-coverage.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
         }),
@@ -3482,6 +3424,7 @@ test("one plain-HTTP citation is a notice on a delivered package, not a reason t
     const run = await store.dispatch(project, {
       sessionId: binding.sessionId,
       dispatchId: "turn_http_citation",
+      question: pkg.briefText,
       effectiveAgentId: "clinical-evidence-synthesis",
       effectiveAgentVersion: "1.0.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
@@ -3490,12 +3433,6 @@ test("one plain-HTTP citation is a notice on a delivered package, not a reason t
     const deliverables = new Map([
       ["clinical-evidence-report.md", pkg.reportText],
       ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
-      ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
-      ["clinical-evidence-search.json", pkg.searchLogText],
-      ["references.bib", pkg.referencesText],
-      ["citation-ledger.csv", pkg.citationLedgerText],
-      ["citation-audit.md", pkg.citationAuditText],
-      ["question-coverage.json", pkg.questionCoverageText],
     ]);
     for (const [relative, content] of deliverables) {
       await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
@@ -3517,16 +3454,10 @@ test("one plain-HTTP citation is a notice on a delivered package, not a reason t
         }),
       },
     }));
-    const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
-      type: "tool",
-      tool: "evimed-research_evimed_literature_search",
-      state: { status: "completed", input: { query: entry.query } },
-    }));
     history = [{
       info: { id: "msg_http_citation", role: "assistant", time: { completed: Date.now() } },
       parts: [
         ...retrievalParts,
-        ...searchParts,
         ...[...deliverables.keys()].map((filePath) => ({
           type: "tool",
           tool: "write",
@@ -3543,8 +3474,9 @@ test("one plain-HTTP citation is a notice on a delivered package, not a reason t
     assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
     // Delivered, and the scheme is said out loud with the URL that carries it.
     assert.match(finished.qualityNotices.join("\n"), /plain HTTP/);
-    // A reachable source over plain HTTP says nothing about the evidence.
-    assert.notEqual(finished.verification, "unverified");
+    // A reachable source over plain HTTP says nothing about the evidence, and
+    // every layer ran: no mark at all.
+    assert.equal(finished.verification ?? null, null);
     assert.match(finished.qualityNotices.join("\n"), /escardio\.org\/evidence\/source-3/);
     await store.closeProject(project, "canceled");
   } finally {
@@ -3628,6 +3560,29 @@ test("tolerated source error codes are real codes, not typos", async () => {
   assert.ok(!recoverableEvidenceSourceErrorCodes.has("invalid_input"));
 });
 
+/** An evidence matrix whose one claim cites `source`. The cases below write
+ *  that file to disk and have no tool report preserving it, so the gate names
+ *  the path as one this run never vouched for.
+ *  @param {string} source */
+function matrixCitingUnvouchedSource(source) {
+  return JSON.stringify({
+    schemaVersion: 1,
+    claims: [{
+      claimId: "CLM-001",
+      claim: "正文。",
+      sourceUrl: "https://www.acc.org/guidance/source-a",
+      sourceTitle: "Source A",
+      artifactPath: source,
+      identifier: "SOURCE-A",
+      accessLevel: "official_page",
+      supportQuote: "Preserved source text.",
+      applicability: "Directly informs the question.",
+      uncertainty: "Implementation may vary.",
+      referenceNumber: 1,
+    }],
+  });
+}
+
 // A rejection with no issues is unfixable, not merely unhelpful: the repair path
 // has nothing to hand back, so a package that is complete on disk is discarded.
 // The file says so in a comment and then did it anyway in nine more places —
@@ -3668,7 +3623,6 @@ test("a provenance rejection is repaired rather than discarded", async () => {
           outputs: [
             { path: "clinical-evidence-report.md", required: true },
             { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "evidenceClaimsTraceable"],
         }),
@@ -3695,22 +3649,17 @@ test("a provenance rejection is repaired rather than discarded", async () => {
       return { accepted: true };
     });
 
-    // A receipt naming a source no retrieval tool reported preserving: the
+    // A matrix citing a source no retrieval tool reported preserving: the
     // package is otherwise written and on disk.
     const source = ".evimed-sources/official-pages/source-a/page.md";
     await mkdir(path.join(project.workspaceDir, path.dirname(source)), { recursive: true });
     await writeFile(path.join(project.workspaceDir, source), "Preserved source text.", "utf8");
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# 报告\n\n正文。", "utf8");
-    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims: [] }), "utf8");
-    await writeFile(
-      path.join(project.workspaceDir, "clinical-evidence-run.json"),
-      JSON.stringify({ successfulSourceArtifacts: [source] }),
-      "utf8",
-    );
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), matrixCitingUnvouchedSource(source), "utf8");
     history = [{
       info: { id: "msg_repair_provenance", role: "assistant", time: { completed: Date.now() } },
       parts: [
-        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json"].map((filePath) => ({
           type: "tool",
           tool: "write",
           state: { status: "completed", input: { filePath } },
@@ -3731,8 +3680,10 @@ test("a provenance rejection is repaired rather than discarded", async () => {
     assert.equal(first.id, run.id);
     assert.equal(concurrent.id, run.id);
     assert.equal(repairPrompts.length, 1, "a repair prompt was sent");
-    assert.match(repairPrompts[0], /\.evimed-sources\/official-pages\/source-a\/page\.md/);
-    assert.match(repairPrompts[0], /no evidence tool reported preserving that file/);
+    assert.match(
+      repairPrompts[0],
+      /The evidence matrix cites \.evimed-sources\/official-pages\/source-a\/page\.md, but no evidence tool reported preserving that file/,
+    );
 
     await store.closeProject(project, "canceled");
   } finally {
@@ -3769,7 +3720,6 @@ test("an authorized revision that did not pass gets its next round, and ends del
           outputs: [
             { path: "clinical-evidence-report.md", required: true },
             { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "evidenceClaimsTraceable"],
         }),
@@ -3795,15 +3745,14 @@ test("an authorized revision that did not pass gets its next round, and ends del
       return { accepted: true };
     });
 
-    // A package the run-side gate accepted and the server refuses: its run
-    // receipt lists a source no retrieval tool reported preserving.
+    // A package the run-side gate accepted and the server refuses: its matrix
+    // cites a source no retrieval tool reported preserving.
     const source = ".evimed-sources/official-pages/source-a/page.md";
     await mkdir(path.join(project.workspaceDir, path.dirname(source)), { recursive: true });
     await writeFile(path.join(project.workspaceDir, source), "Preserved source text.", "utf8");
     const files = new Map([
       ["deliverables/review/clinical-evidence-report.md", "# 报告\n\n正文。"],
-      ["deliverables/review/clinical-evidence-matrix.json", JSON.stringify({ claims: [] })],
-      ["deliverables/review/clinical-evidence-run.json", JSON.stringify({ successfulSourceArtifacts: [source] })],
+      ["deliverables/review/clinical-evidence-matrix.json", matrixCitingUnvouchedSource(source)],
     ]);
     await mkdir(path.join(project.workspaceDir, "deliverables", "review"), { recursive: true });
     for (const [relative, text] of files) await writeFile(path.join(project.workspaceDir, relative), text, "utf8");
@@ -3861,7 +3810,10 @@ test("an authorized revision that did not pass gets its next round, and ends del
     assert.equal(finished.errorCode, null);
     assert.equal(finished.verification, "unverified");
     assert.ok(finished.artifacts.includes("deliverables/review/clinical-evidence-report.md"), JSON.stringify(finished.artifacts));
-    assert.match(finished.qualityNotices.join("\n"), /no evidence tool reported preserving that file/);
+    assert.match(
+      finished.qualityNotices.join("\n"),
+      /The evidence matrix cites \.evimed-sources\/official-pages\/source-a\/page\.md, but no evidence tool reported preserving that file/,
+    );
     assert.match(finished.qualityNotices.join("\n"), /交付物在写下回执之后被改动了 1 个文件/);
     assert.doesNotMatch(finished.qualityNotices.join("\n"), /重判并通过/, "an unverified package is not said to have passed");
 
@@ -3904,7 +3856,6 @@ test("a repair the runtime refuses is named, and the package is delivered with i
           outputs: [
             { path: "clinical-evidence-report.md", required: true },
             { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "evidenceClaimsTraceable"],
         }),
@@ -3935,22 +3886,17 @@ test("a repair the runtime refuses is named, and the package is delivered with i
       return { accepted: true };
     });
 
-    // A receipt naming a source no retrieval tool reported preserving: the
+    // A matrix citing a source no retrieval tool reported preserving: the
     // package is otherwise written and on disk.
     const source = ".evimed-sources/official-pages/source-a/page.md";
     await mkdir(path.join(project.workspaceDir, path.dirname(source)), { recursive: true });
     await writeFile(path.join(project.workspaceDir, source), "Preserved source text.", "utf8");
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# 报告\n\n正文。", "utf8");
-    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims: [] }), "utf8");
-    await writeFile(
-      path.join(project.workspaceDir, "clinical-evidence-run.json"),
-      JSON.stringify({ successfulSourceArtifacts: [source] }),
-      "utf8",
-    );
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), matrixCitingUnvouchedSource(source), "utf8");
     history = [{
       info: { id: "msg_repair_refused", role: "assistant", time: { completed: Date.now() } },
       parts: [
-        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json"].map((filePath) => ({
           type: "tool",
           tool: "write",
           state: { status: "completed", input: { filePath } },
@@ -3973,7 +3919,11 @@ test("a repair the runtime refuses is named, and the package is delivered with i
     assert.equal(finished.status, "succeeded");
     assert.equal(finished.verification, "unverified");
     const notices = finished.qualityNotices.join("\n");
-    assert.match(notices, /no evidence tool reported preserving that file/, "the issue it was meant to repair is still named");
+    assert.match(
+      notices,
+      /The evidence matrix cites \.evimed-sources\/official-pages\/source-a\/page\.md, but no evidence tool reported preserving that file/,
+      "the issue it was meant to repair is still named",
+    );
     assert.match(notices, /repair request could not be dispatched after 3 attempts \(runtime_session_error: Session is busy with another turn\.\)/);
 
     await store.closeProject(project, "canceled");
@@ -4015,7 +3965,6 @@ test("a repair refused once while the turn settles goes through on the next atte
           outputs: [
             { path: "clinical-evidence-report.md", required: true },
             { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "evidenceClaimsTraceable"],
         }),
@@ -4046,22 +3995,17 @@ test("a repair refused once while the turn settles goes through on the next atte
       return { accepted: true };
     });
 
-    // A receipt naming a source no retrieval tool reported preserving: the
+    // A matrix citing a source no retrieval tool reported preserving: the
     // package is otherwise written and on disk.
     const source = ".evimed-sources/official-pages/source-a/page.md";
     await mkdir(path.join(project.workspaceDir, path.dirname(source)), { recursive: true });
     await writeFile(path.join(project.workspaceDir, source), "Preserved source text.", "utf8");
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# 报告\n\n正文。", "utf8");
-    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims: [] }), "utf8");
-    await writeFile(
-      path.join(project.workspaceDir, "clinical-evidence-run.json"),
-      JSON.stringify({ successfulSourceArtifacts: [source] }),
-      "utf8",
-    );
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), matrixCitingUnvouchedSource(source), "utf8");
     history = [{
       info: { id: "msg_repair_retried", role: "assistant", time: { completed: Date.now() } },
       parts: [
-        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json"].map((filePath) => ({
           type: "tool",
           tool: "write",
           state: { status: "completed", input: { filePath } },
@@ -4079,6 +4023,10 @@ test("a repair refused once while the turn settles goes through on the next atte
     assert.equal(repairing.id, run.id);
     assert.equal(repairPrompts.length, 2);
     assert.equal(repairing.status, "running", "the repair went out on the second attempt and the run is repairing");
+    assert.match(
+      repairPrompts[1],
+      /The evidence matrix cites \.evimed-sources\/official-pages\/source-a\/page\.md, but no evidence tool reported preserving that file/,
+    );
 
     await store.closeProject(project, "canceled");
   } finally {
@@ -4119,7 +4067,6 @@ test("a repair refused for good is not sent again", async () => {
           outputs: [
             { path: "clinical-evidence-report.md", required: true },
             { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "evidenceClaimsTraceable"],
         }),
@@ -4150,22 +4097,17 @@ test("a repair refused for good is not sent again", async () => {
       return { accepted: true };
     });
 
-    // A receipt naming a source no retrieval tool reported preserving: the
+    // A matrix citing a source no retrieval tool reported preserving: the
     // package is otherwise written and on disk.
     const source = ".evimed-sources/official-pages/source-a/page.md";
     await mkdir(path.join(project.workspaceDir, path.dirname(source)), { recursive: true });
     await writeFile(path.join(project.workspaceDir, source), "Preserved source text.", "utf8");
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# 报告\n\n正文。", "utf8");
-    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims: [] }), "utf8");
-    await writeFile(
-      path.join(project.workspaceDir, "clinical-evidence-run.json"),
-      JSON.stringify({ successfulSourceArtifacts: [source] }),
-      "utf8",
-    );
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), matrixCitingUnvouchedSource(source), "utf8");
     history = [{
       info: { id: "msg_repair_final", role: "assistant", time: { completed: Date.now() } },
       parts: [
-        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json"].map((filePath) => ({
           type: "tool",
           tool: "write",
           state: { status: "completed", input: { filePath } },
@@ -4185,7 +4127,11 @@ test("a repair refused for good is not sent again", async () => {
     assert.equal(finished.status, "succeeded");
     assert.equal(finished.verification, "unverified");
     const notices = finished.qualityNotices.join("\n");
-    assert.match(notices, /no evidence tool reported preserving that file/, "the issue it was meant to repair is still named");
+    assert.match(
+      notices,
+      /The evidence matrix cites \.evimed-sources\/official-pages\/source-a\/page\.md, but no evidence tool reported preserving that file/,
+      "the issue it was meant to repair is still named",
+    );
     assert.match(notices, /repair request could not be dispatched \(agent_run_active: The run is no longer accepting repair prompts\.\)/);
 
     await store.closeProject(project, "canceled");
@@ -4295,7 +4241,6 @@ test("a structural rejection does not spend the content repair budget, and still
           outputs: [
             { path: "clinical-evidence-report.md", required: true },
             { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
           ],
           completionChecks: ["requiredOutputsExist", "evidenceClaimsTraceable"],
         }),
@@ -4334,15 +4279,10 @@ test("a structural rejection does not spend the content repair budget, and still
     // wrong with it, and the run cannot be told anything else until it parses.
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# 报告\n\n正文。", "utf8");
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), '{"claims": [', "utf8");
-    await writeFile(
-      path.join(project.workspaceDir, "clinical-evidence-run.json"),
-      JSON.stringify({ successfulSourceArtifacts: [] }),
-      "utf8",
-    );
     const finishedTurn = (id) => ({
       info: { id, role: "assistant", time: { completed: Date.now() } },
       parts: [
-        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json"].map((filePath) => ({
           type: "tool",
           tool: "write",
           state: { status: "completed", input: { filePath } },
@@ -4430,7 +4370,6 @@ test("a structural rejection carrying an advisory as well is charged as an ordin
           outputs: [
             { path: "clinical-evidence-report.md", required: true },
             { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
           ],
           // citationsResolvable runs before the matrix is parsed and files its
           // findings as advisories, which is how a second fact reaches a
@@ -4469,15 +4408,10 @@ test("a structural rejection carrying an advisory as well is charged as an ordin
       "utf8",
     );
     await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), '{"claims": [', "utf8");
-    await writeFile(
-      path.join(project.workspaceDir, "clinical-evidence-run.json"),
-      JSON.stringify({ successfulSourceArtifacts: [] }),
-      "utf8",
-    );
     history = [{
       info: { id: "msg_structural_advisory_1", role: "assistant", time: { completed: Date.now() } },
       parts: [
-        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json"].map((filePath) => ({
           type: "tool",
           tool: "write",
           state: { status: "completed", input: { filePath } },
@@ -4628,14 +4562,7 @@ test("every repairable rejection is a code the gate actually returns", async () 
   // rather than as a literal here, so the classification table is the second
   // place a code is returned from. A code listed as repairable and present in
   // neither is dead, which is what this test exists to catch.
-  // A missing deliverable that earns a code of its own is the third place, and
-  // the reason it has one is exactly this set: the generic missing-output code
-  // is discarded, so a deliverable that can be written from the finished package
-  // is mapped to a repairable code instead.
-  const missing = /const missingOutputErrorCodes = Object\.freeze\(\{([\s\S]*?)\n\}\);/.exec(source);
-  assert.ok(missing, "the missing-deliverable code table moved");
-  for (const [, code] of missing[1].matchAll(/:\s*"(specialist_[a-z_]+)"/g)) returned.add(code);
-  const gate = await readFile(new URL("../../../packages/domain/src/clinicalEvidence.mjs", import.meta.url), "utf8");
+  const gate =await readFile(new URL("../../../packages/domain/src/clinicalEvidence.mjs", import.meta.url), "utf8");
   const table = /const clinicalEvidenceIssueCodes = Object\.freeze\(\[([\s\S]*?)\n\]\);/.exec(gate);
   assert.ok(table, "the gate's error-code table moved");
   for (const [, code] of table[1].matchAll(/code:\s*"([a-z_-]+)"/g)) returned.add(code);
@@ -4848,7 +4775,7 @@ test("replacing the report during repair is named, not just its shrinkage", asyn
     { info: { role: "assistant" }, parts: [
       { type: "tool", tool: "write", state: { input: { filePath: "clinical-evidence-report.md", content: "y" } } },
       { type: "tool", tool: "edit", state: { input: { filePath: "clinical-evidence-report.md" } } },
-      { type: "tool", tool: "write", state: { input: { filePath: "citation-ledger.csv", content: "z" } } },
+      { type: "tool", tool: "write", state: { input: { filePath: "clinical-evidence-matrix.json", content: "z" } } },
     ] },
   ];
 
@@ -4885,142 +4812,9 @@ test("an unreachable open web does not fail a complete package", () => {
   assert.equal(recoverableEvidenceSourceErrorCodes.has("web_search_query_invalid"), false);
 });
 
-
-test("a package missing only the coverage ledger is repaired, not discarded", async () => {
-  // Every package delivered before this deliverable existed is in exactly this
-  // state: the report, the matrix, the search log and every citation artifact
-  // are on disk, and the one file absent is the account of the brief's
-  // questions — which is written from the others. The generic
-  // specialist_required_output_missing is not repairable, so a code of its own
-  // is what keeps the finished analysis out of the bin.
-  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-coverage-missing-"));
-  try {
-    const project = {
-      id: "project-1",
-      userId: "user-1",
-      rootDir: root,
-      workspaceDir: path.join(root, "workspace"),
-      metaDir: path.join(root, ".openscience"),
-    };
-    await mkdir(project.workspaceDir, { recursive: true });
-    await mkdir(project.metaDir, { recursive: true });
-    const binding = {
-      sessionId: "ses_coverage_missing",
-      mode: "open-domain",
-      agentId: null,
-      agentVersion: null,
-      runtimeAgent: null,
-    };
-    const pkg = deepResearchPackage();
-    let history = [];
-    const store = new AgentRunStore({ get: async () => binding }, {
-      agentRegistry: {
-        get: () => ({
-          id: "clinical-evidence-synthesis",
-          version: "1.0.0",
-          runtimeAgent: "evimed-clinical-evidence-synthesis",
-          outputs: [
-            { path: "clinical-evidence-report.md", required: true },
-            { path: "clinical-evidence-matrix.json", required: true },
-            { path: "clinical-evidence-run.json", required: true },
-            { path: "clinical-evidence-search.json", required: true },
-            { path: "references.bib", required: true },
-            { path: "citation-ledger.csv", required: true },
-            { path: "citation-audit.md", required: true },
-            { path: "question-coverage.json", required: true },
-          ],
-          completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
-        }),
-      },
-      model: "deepseek/deepseek-v4-pro",
-      monitorIntervalMs: 60_000,
-      monitorMaxPolls: 20,
-      readSessionHistory: async () => history,
-      readSessionStatus: async () => "idle",
-      // No repair budget: go straight to the terminal delivery decision.
-      maxClinicalRepairAttempts: 0,
-    });
-    store.scheduleMonitor = () => {};
-    const run = await store.dispatch(project, {
-      sessionId: binding.sessionId,
-      dispatchId: "turn_coverage_missing",
-      effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "1.0.0",
-      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
-    }, async () => ({ accepted: true }));
-
-    const deliverables = new Map([
-      ["clinical-evidence-report.md", pkg.reportText],
-      ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
-      ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
-      ["clinical-evidence-search.json", pkg.searchLogText],
-      ["references.bib", pkg.referencesText],
-      ["citation-ledger.csv", pkg.citationLedgerText],
-      ["citation-audit.md", pkg.citationAuditText],
-    ]);
-    for (const [relative, content] of deliverables) {
-      await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
-    }
-    for (const [artifactPath, content] of Object.entries(pkg.sourceArtifacts)) {
-      await mkdir(path.join(project.workspaceDir, path.dirname(artifactPath)), { recursive: true });
-      await writeFile(path.join(project.workspaceDir, artifactPath), content, "utf8");
-    }
-
-    const retrievalParts = Object.entries(pkg.sourceArtifacts).map(([artifactPath, content]) => ({
-      type: "tool",
-      tool: "evimed-research_evimed_open_access_full_text",
-      state: {
-        status: "completed",
-        output: JSON.stringify({
-          status: "success",
-          artifacts: [artifactPath],
-          data: { artifactSha256s: { [artifactPath]: createHash("sha256").update(content, "utf8").digest("hex") } },
-        }),
-      },
-    }));
-    const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
-      type: "tool",
-      tool: "evimed-research_evimed_literature_search",
-      state: { status: "completed", input: { query: entry.query } },
-    }));
-    history = [{
-      info: { id: "msg_coverage_missing", role: "assistant", time: { completed: Date.now() } },
-      parts: [
-        ...retrievalParts,
-        ...searchParts,
-        ...[...deliverables.keys()].map((filePath) => ({
-          type: "tool",
-          tool: "write",
-          state: { status: "completed", input: { filePath } },
-        })),
-        { type: "text", text: "Completed." },
-      ],
-    }];
-
-    const finished = await store.reconcileSession(project, binding.sessionId);
-    assert.equal(finished.id, run.id);
-    // Not thrown away is what this holds, and since 2026-09-17 that is true
-    // without a repair round: a deployment that still lists the ledger as
-    // required delivers the package it belongs to, marked, with the absence
-    // said. (The shipped manifest no longer requires it at all.) The code stays
-    // repairable for a deployment that turns repair rounds back on.
-    assert.equal(finished.status, "succeeded");
-    assert.equal(finished.errorCode, null);
-    assert.equal(finished.verification, "unverified");
-    assert.ok(finished.artifacts.includes("clinical-evidence-report.md"), JSON.stringify(finished.artifacts));
-    assert.ok(repairableEvidencePackageErrorCodes.has("specialist_question_coverage_missing"));
-    // And it says what to write.
-    assert.match(finished.qualityNotices.join("\n"), /question-coverage\.json is not in the workspace/);
-    assert.match(finished.qualityNotices.join("\n"), /one entry per atomic sub-question/);
-    await store.closeProject(project, "canceled");
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
 test("the brief reaches the gate and the workspace, and never the run ledger", async () => {
-  // The brief is what the coverage check compares the run's account against,
-  // and it is several thousand characters. runs.jsonl has a byte ceiling that a
+  // The brief is what the question-scoped safety rule reads, and it runs to
+  // several thousand characters. runs.jsonl has a byte ceiling that a
   // burst of progress events has already burst once, at 1048462 of 1048576, and
   // the run after it could not start — so the ledger keeps the 160-character
   // preview it always kept, and the brief itself lives in memory on the store.
@@ -5084,46 +4878,17 @@ test("the brief reaches the gate and the workspace, and never the run ledger", a
   }
 });
 
-// --- the semantic coverage judge in the delivery path ------------------------
-
-/** A fake DeepSeek that answers with a verdict built from the excerpt it was
- *  actually sent: the first answered ledger entry, one of that entry's own
- *  declared lines, and a span copied verbatim out of that line. Nothing is
- *  hardcoded, so the test fails if the payload contract changes. */
-function coverageJudgeFetchStub(calls) {
-  return async (_url, init) => {
-    calls.push(init);
-    const payload = JSON.parse(JSON.parse(init.body).messages[1].content);
-    const entry = payload.ledgerEntries.find(
-      (item) => item.status === "answered" && item.declaredReportLines.length > 0,
-    );
-    const line = payload.reportExcerpt.find((item) => item.line === entry.declaredReportLines[0]);
-    const verdicts = [{
-      entryId: entry.entryId,
-      kind: "answer-not-responsive",
-      reportLine: line.line,
-      quote: line.text.trim().slice(0, 24),
-      why: "该行给出的是另一人群的数据，不是这一子问所问的那一层。",
-    }];
-    return {
-      ok: true,
-      headers: { get: () => null },
-      text: async () => JSON.stringify({ choices: [{ message: { content: JSON.stringify({ verdicts }) } }] }),
-    };
-  };
-}
+// --- the delivery decision on the shared package -----------------------------
 
 /** Deliver the shared fixture package through the store and return the terminal
- *  run, with whatever coverage judge the caller supplies.
+ *  run.
  *
  *  `finished` is the delivery decision as reconcileSession returned it.
- *  `delivered` is what a later reader of /api/agent-runs sees, after every
- *  coverage judgement still in flight at delivery time has landed.
+ *  `delivered` is what a later reader of /api/agent-runs sees.
  *  `forgetBrief` drops the server's in-memory copy of the brief before the gate
  *  runs, which is exactly the state a restart leaves a run in.
  *  @param {string} label @param {Record<string, any>} options */
 async function deliverClinicalPackage(label, {
-  coverageJudge = null,
   mutate = null,
   forgetBrief = false,
 } = {}) {
@@ -5156,17 +4921,10 @@ async function deliverClinicalPackage(label, {
         outputs: [
           { path: "clinical-evidence-report.md", required: true },
           { path: "clinical-evidence-matrix.json", required: true },
-          { path: "clinical-evidence-run.json", required: true },
-          { path: "clinical-evidence-search.json", required: true },
-          { path: "references.bib", required: true },
-          { path: "citation-ledger.csv", required: true },
-          { path: "citation-audit.md", required: true },
-          { path: "question-coverage.json", required: true },
         ],
         completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
       }),
     },
-    coverageJudge,
     model: "deepseek/deepseek-v4-pro",
     monitorIntervalMs: 60_000,
     monitorMaxPolls: 20,
@@ -5187,12 +4945,6 @@ async function deliverClinicalPackage(label, {
   const deliverables = new Map([
     ["clinical-evidence-report.md", pkg.reportText],
     ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
-    ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
-    ["clinical-evidence-search.json", pkg.searchLogText],
-    ["references.bib", pkg.referencesText],
-    ["citation-ledger.csv", pkg.citationLedgerText],
-    ["citation-audit.md", pkg.citationAuditText],
-    ["question-coverage.json", pkg.questionCoverageText],
   ]);
   for (const [relative, content] of deliverables) {
     await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
@@ -5213,16 +4965,10 @@ async function deliverClinicalPackage(label, {
       }),
     },
   }));
-  const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
-    type: "tool",
-    tool: "evimed-research_evimed_literature_search",
-    state: { status: "completed", input: { query: entry.query } },
-  }));
   history = [{
     info: { id: `msg_${label}`, role: "assistant", time: { completed: Date.now() } },
     parts: [
       ...retrievalParts,
-      ...searchParts,
       ...[...deliverables.keys()].map((filePath) => ({
         type: "tool",
         tool: "write",
@@ -5234,62 +4980,20 @@ async function deliverClinicalPackage(label, {
   if (forgetBrief) store.dispatchedBriefs.delete(run.id);
   const finished = await store.reconcileSession(project, binding.sessionId);
   assert.equal(finished.id, run.id);
-  // The judgement is no longer awaited by the delivery decision, so read the
-  // run again once it has landed — this is the reader's view, not the gate's.
-  await store.settleCoverageJudgements();
   const delivered = (await store.list(project)).find((item) => item.id === run.id);
   await store.closeProject(project, "canceled");
   await rm(root, { recursive: true, force: true });
-  return { finished, delivered, store, runId: run.id };
+  return { finished, delivered };
 }
 
-test("a semantic coverage verdict rides on a delivered package as a notice, and never withholds it", async () => {
-  const { CoverageJudge } = await import("../src/coverageJudge.mjs");
-  const calls = [];
-  const coverageJudge = new CoverageJudge({
-    coverageJudgeEnabled: true,
-    deepseekProviderEnabled: true,
-    deepseekApiKey: "sk-test",
-    deepseekBaseUrl: "https://api.deepseek.com",
-    deepseekModel: "deepseek-v4-pro",
-    production: false,
-  }, { fetchImpl: coverageJudgeFetchStub(calls) });
+// --- "not checked" is not "checked and clean" --------------------------------
 
-  const { finished, delivered, store, runId } = await deliverClinicalPackage("judge", { coverageJudge });
-  assert.equal(calls.length, 1, "one finished run, one model call");
-  // The judgement is a notice about meaning; it cannot fail a package.
-  assert.equal(finished.status, "succeeded");
-  assert.equal(finished.errorCode, null);
-  assert.notEqual(finished.verification, "unverified");
-  // It reaches the reader through the run ledger, which is what /api/agent-runs
-  // serves, rather than through the terminal event the gate wrote.
-  assert.match(delivered.qualityNotices.join("\n"), /语义覆盖判定/);
-  assert.match(delivered.qualityNotices.join("\n"), /台账条目 1\.1/);
-  assert.match(delivered.qualityNotices.join("\n"), /未经核对/);
-  // And it changed nothing about the delivery itself.
-  assert.equal(delivered.status, "succeeded");
-  assert.equal(delivered.errorCode, null);
-  assert.deepEqual(delivered.artifacts, finished.artifacts);
-  assert.equal(delivered.finishedAt, finished.finishedAt);
-  assert.equal(delivered.verification, finished.verification);
-  // The brief went to the judge, but the run ledger still holds only a preview.
-  assert.equal(store.coverageJudgements.has(runId), false, "a settled judgement releases its cache entry");
-});
-
-test("the delivery decision does not wait for the judgement", async () => {
-  // 29 live judgements: median 161 s, max 226 s. reconcileSession is awaited by
-  // the dispatch and start HTTP handlers, so awaiting the judge here was three
-  // minutes of a user's request spent on something that cannot change the
-  // answer. The gate must return while the model is still thinking.
-  let release = () => {};
-  const started = [];
-  const coverageJudge = {
-    judge: (context) => new Promise((resolve) => {
-      started.push(context);
-      release = () => resolve({ notices: ["语义覆盖判定（不阻断交付）：迟到的结论。"], judged: true, verdicts: [] });
-    }),
-  };
-  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-judge-async-"));
+test("a notice that arrives before the run finishes is not overwritten by the terminal event", async () => {
+  // A notice can land while a run is still working — the monitor's stall
+  // notice, an unreadable run-side projection — and folding is meant to be
+  // order-independent: the terminal event must not erase it, nor the
+  // admission it carried.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-notice-early-"));
   try {
     const project = {
       id: "project-1",
@@ -5303,63 +5007,14 @@ test("the delivery decision does not wait for the judgement", async () => {
     const store = new AgentRunStore({ get: async () => null }, {
       model: "deepseek/deepseek-v4-pro",
       readSessionHistory: async () => [],
-      coverageJudge,
-    });
-    store.scheduleMonitor = () => {};
-    const binding = { sessionId: "ses_async", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
-    const { run } = await store.reserveRun(project, binding, { baselineCursor: null });
-    const pending = store.scheduleCoverageJudgement(project, run.id, { entries: [] });
-    assert.equal(started.length, 1, "the judge was started");
-
-    // The run reaches its terminal state with the model still running.
-    const finished = await store.finishInternal(project, run.id, {
-      status: "succeeded",
-      errorCode: null,
-      artifacts: [],
-    });
-    assert.equal(finished.status, "succeeded");
-    assert.deepEqual(finished.qualityNotices, [], "nothing waited for the judge");
-
-    release();
-    await pending;
-    const delivered = (await store.list(project)).find((item) => item.id === run.id);
-    assert.deepEqual(delivered.qualityNotices, ["语义覆盖判定（不阻断交付）：迟到的结论。"]);
-    // Attached without reopening the run.
-    assert.equal(delivered.status, "succeeded");
-    assert.equal(delivered.finishedAt, finished.finishedAt);
-    assert.equal(delivered.durationMs, finished.durationMs);
-    assert.equal(delivered.verification, null, "a judgement that ran does not mark the run unchecked");
-    await store.settleCoverageJudgements();
-    assert.equal(store.coverageJudgements.has(run.id), false);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-test("a judgement that arrives before the run finishes is not overwritten by the terminal event", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-judge-early-"));
-  try {
-    const project = {
-      id: "project-1",
-      userId: "user-1",
-      rootDir: root,
-      workspaceDir: path.join(root, "workspace"),
-      metaDir: path.join(root, ".openscience"),
-    };
-    await mkdir(project.workspaceDir, { recursive: true });
-    await mkdir(project.metaDir, { recursive: true });
-    const store = new AgentRunStore({ get: async () => null }, {
-      model: "deepseek/deepseek-v4-pro",
-      readSessionHistory: async () => [],
-      coverageJudge: { judge: async () => ({ notices: ["语义覆盖判定：早到的结论。"], judged: false, verdicts: [] }) },
     });
     store.scheduleMonitor = () => {};
     const binding = { sessionId: "ses_early", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
     const { run } = await store.reserveRun(project, binding, { baselineCursor: null });
-    await store.scheduleCoverageJudgement(project, run.id, { entries: [] });
+    await store.appendQualityNotices(project, run.id, ["某一层没有运行：早到的说明。"], { unchecked: true });
     const running = (await store.list(project)).find((item) => item.id === run.id);
     assert.equal(running.status, "running", "a notice must not finish a run");
-    assert.deepEqual(running.qualityNotices, ["语义覆盖判定：早到的结论。"]);
+    assert.deepEqual(running.qualityNotices, ["某一层没有运行：早到的说明。"]);
 
     const finished = await store.finishInternal(project, run.id, {
       status: "succeeded",
@@ -5367,8 +5022,8 @@ test("a judgement that arrives before the run finishes is not overwritten by the
       artifacts: [],
       qualityNotices: ["门禁自己的说明。"],
     });
-    // The gate's own notices lead; the early judgement survives behind them.
-    assert.deepEqual(finished.qualityNotices, ["门禁自己的说明。", "语义覆盖判定：早到的结论。"]);
+    // The gate's own notices lead; the early notice survives behind them.
+    assert.deepEqual(finished.qualityNotices, ["门禁自己的说明。", "某一层没有运行：早到的说明。"]);
     // And so does the admission it carried: a terminal event that says nothing
     // about verification must not silently overwrite one that already did.
     assert.equal(finished.verification, "unchecked");
@@ -5378,166 +5033,43 @@ test("a judgement that arrives before the run finishes is not overwritten by the
   }
 });
 
-test("the judge is asked at most once per run, however many times the delivery decision is reached", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-judge-once-"));
-  try {
-    let calls = 0;
-    const store = new AgentRunStore({ get: async () => null }, {
-      model: "deepseek/deepseek-v4-pro",
-      readSessionHistory: async () => [],
-      coverageJudge: {
-        judge: async () => {
-          calls += 1;
-          return { notices: ["语义覆盖判定：一处疑点。"], judged: true, verdicts: [] };
-        },
-      },
-    });
-    const project = {
-      id: "project-1",
-      userId: "user-1",
-      rootDir: root,
-      workspaceDir: path.join(root, "workspace"),
-      metaDir: path.join(root, ".openscience"),
-    };
-    await mkdir(project.workspaceDir, { recursive: true });
-    await mkdir(project.metaDir, { recursive: true });
-    const first = await store.scheduleCoverageJudgement(project, "run_1", { entries: [] });
-    const second = await store.scheduleCoverageJudgement(project, "run_1", { entries: [] });
-    assert.equal(calls, 1, "a repeat pass over the same finished run must reuse the answer");
-    assert.deepEqual(first, second);
-    // In flight, not merely already resolved: two monitor passes landing
-    // together must not both issue a call.
-    await Promise.all([
-      store.scheduleCoverageJudgement(project, "run_2", { entries: [] }),
-      store.scheduleCoverageJudgement(project, "run_2", { entries: [] }),
-    ]);
-    assert.equal(calls, 2);
-    // Nothing judgeable is nothing to pay for, and nothing to remember either.
-    assert.equal(store.scheduleCoverageJudgement(project, "run_3", null), null);
-    assert.equal(calls, 2);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-test("a coverage judge that throws leaves the finished package exactly as it was", async () => {
-  const coverageJudge = { judge: async () => { throw new Error("judge exploded"); } };
-  const { finished, delivered } = await deliverClinicalPackage("judge-throws", { coverageJudge });
-  assert.equal(finished.status, "succeeded");
+test("a run whose brief the server no longer holds is delivered unchecked, and says which rule did not run", async () => {
+  // The brief lives in the dispatcher's memory only, so a run that outlives a
+  // server restart reaches the gate without it, and the question-scoped safety
+  // rule — does the report bring in a medicine the question never named? —
+  // cannot run. The same package with its brief in hand is delivered with no
+  // mark at all (next test); without it, it must not read as the same thing.
+  const { finished, delivered } = await deliverClinicalPackage("brief-lost", { forgetBrief: true });
+  assert.equal(finished.status, "succeeded", "a lost brief is not the run's fault");
   assert.equal(finished.errorCode, null);
-  assert.equal(delivered.status, "succeeded");
-  assert.equal(delivered.errorCode, null);
-  assert.doesNotMatch(delivered.qualityNotices.join("\n"), /语义覆盖判定/);
-  assert.equal(delivered.verification, null);
-});
-
-test("a judge that was asked and could not answer marks the delivery unchecked", async () => {
-  // The one thing that must not happen is the degraded notice riding on a run
-  // whose machine-readable verdict still reads "nothing to report".
-  const coverageJudge = {
-    judge: async () => ({
-      notices: ["本次交付未做语义覆盖判定（「所引正文是否真的在回答这一问」这一层）：判定模型不可用（timeout）。"],
-      judged: false,
-      verdicts: [],
-    }),
-  };
-  const { finished, delivered } = await deliverClinicalPackage("judge-declined", { coverageJudge });
-  assert.equal(finished.status, "succeeded");
-  assert.equal(delivered.status, "succeeded", "an admission never reopens a run");
-  assert.equal(delivered.errorCode, null);
-  assert.match(delivered.qualityNotices.join("\n"), /未做语义覆盖判定/);
+  assert.ok(finished.artifacts.includes("clinical-evidence-report.md"), JSON.stringify(finished.artifacts));
+  assert.equal(finished.verification, "unchecked");
+  // Said once, in the reader's language, naming the rule that did not run.
+  assert.equal(finished.qualityNotices.length, 1, JSON.stringify(finished.qualityNotices));
+  assert.match(finished.qualityNotices[0], /^本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」/);
+  // And what /api/agent-runs serves afterwards says the same.
   assert.equal(delivered.verification, "unchecked");
-});
-
-test("no coverage judge configured delivers exactly as before", async () => {
-  const { finished, delivered } = await deliverClinicalPackage("judge-absent");
-  assert.equal(finished.status, "succeeded");
-  assert.equal(finished.errorCode, null);
-  // A deployment that never turned the judge on is not an unchecked delivery:
-  // a mark on every run of every such deployment would mean nothing.
-  assert.equal(delivered.verification, null);
   assert.deepEqual(delivered.qualityNotices, finished.qualityNotices);
-});
-
-test("the judge is not consulted while a blocking issue is still holding the package", async () => {
-  // A model call on a package that is going back round the repair loop is a
-  // cost with no reader on the other end.
-  let calls = 0;
-  const coverageJudge = {
-    judge: async () => {
-      calls += 1;
-      return { notices: [], judged: true, verdicts: [] };
-    },
-  };
-  const { finished } = await deliverClinicalPackage("judge-blocked", {
-    coverageJudge,
-    mutate: (pkg) => { pkg.matrix.claims[0].supportQuote = "这句话在它所引的来源里并不存在。"; },
-  });
-  // The package is delivered — a reader is better served by the analysis plus
-  // the list of what could not be verified — but it carries a blocking-grade
-  // finding, and that is the state in which a semantic opinion is noise.
-  assert.match(finished.qualityNotices.join("\n"), /supportQuote was not found in its preserved source artifact/);
-  assert.equal(calls, 0);
-});
-
-// --- "not checked" is not "checked and clean" --------------------------------
-
-/** Drop the ledger entry that accounts for the brief's second question, so the
- *  package is complete and self-consistent and answers one question fewer than
- *  it was asked. @param {any} pkg */
-function dropSecondQuestionEntry(pkg) {
-  const ledger = JSON.parse(pkg.questionCoverageText);
-  ledger.entries = ledger.entries.filter((entry) => !String(entry.id).startsWith("2."));
-  pkg.questionCoverageText = JSON.stringify(ledger);
-}
-
-test("a coverage check that reports to nobody neither marks a delivery nor stamps it unchecked", async () => {
-  // Measured before 2026-09-17, same package, only the availability of the
-  // brief changed:
-  //   brief in hand   → succeeded / unverified / "MUST FIX — 题面第 2 问…"
-  //   brief lost      → succeeded / unchecked  / one degradation notice
-  // Both were statements about `question-coverage.json`, a ledger the run types
-  // for the gate to compare — 17 of the 52 findings that withheld twelve live
-  // packages, and nothing a reader opens. The check is `silent` now
-  // (CLINICAL_CHECK_TIERS): it still runs and is counted, and a delivery is
-  // neither marked for what it found nor stamped for its not having run.
-  //
-  // `unchecked` itself stays in the vocabulary, for the day a check whose
-  // findings do reach a reader cannot run: a layer that did not run must not be
-  // reported as a layer that found nothing.
-  const withBrief = await deliverClinicalPackage("coverage-brief", { mutate: dropSecondQuestionEntry });
-  assert.equal(withBrief.finished.status, "succeeded");
-  assert.equal(withBrief.finished.verification ?? null, null);
-  assert.doesNotMatch((withBrief.finished.qualityNotices ?? []).join("\n"), /第 2 问|question-coverage/);
-
-  const withoutBrief = await deliverClinicalPackage("coverage-restart", {
-    mutate: dropSecondQuestionEntry,
-    forgetBrief: true,
-  });
-  assert.equal(withoutBrief.finished.status, "succeeded", "a lost brief is not the run's fault");
-  assert.equal(withoutBrief.finished.verification ?? null, null);
-  assert.doesNotMatch((withoutBrief.finished.qualityNotices ?? []).join("\n"), /未按题面逐问核对覆盖/);
-  assert.equal(withoutBrief.delivered.verification ?? null, null);
 });
 
 test("a clean package with every layer run stays null, and a finding still outranks an admission", async () => {
   // Null must keep meaning "checked, nothing to report", or the third value
   // buys nothing.
-  const clean = await deliverClinicalPackage("coverage-clean");
+  const clean = await deliverClinicalPackage("brief-held");
   assert.equal(clean.finished.status, "succeeded");
   assert.equal(clean.finished.verification, null);
+  assert.deepEqual(clean.finished.qualityNotices, []);
 
   // Brief lost AND a blocking finding of another kind: "we checked and it did
   // not hold up" is the more serious statement and is the one shown.
-  const both = await deliverClinicalPackage("coverage-both", {
+  const both = await deliverClinicalPackage("brief-lost-and-finding", {
     forgetBrief: true,
     mutate: (pkg) => { pkg.matrix.claims[0].supportQuote = "这句话在它所引的来源里并不存在。"; },
   });
   assert.equal(both.finished.verification, "unverified");
-  assert.match(both.finished.qualityNotices.join("\n"), /supportQuote was not found in its preserved source artifact/);
-  // The coverage check reports to nobody since 2026-09-17, so its not having
-  // run is not said either; what the reader is told is the finding.
-  assert.doesNotMatch(both.finished.qualityNotices.join("\n"), /未按题面逐问核对覆盖/);
+  assert.match(both.finished.qualityNotices[0], /^MUST FIX — .*supportQuote was not found in its preserved source artifact/);
+  // The admission is still said, behind the finding.
+  assert.match(both.finished.qualityNotices.at(-1), /^本次交付没有按原始题面核对/);
 });
 
 test("GET /api/agent-runs serves the unchecked verdict and the notice that landed after delivery", async () => {
@@ -5567,7 +5099,7 @@ test("GET /api/agent-runs serves the unchecked verdict and the notice that lande
         errorCode: null,
         artifacts: [],
         verification: "unchecked",
-        qualityNotices: ["本次交付未按题面逐问核对覆盖。"],
+        qualityNotices: ["本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」。"],
         finishedAt: timestamp,
         durationMs: 1,
       },
@@ -5575,7 +5107,7 @@ test("GET /api/agent-runs serves the unchecked verdict and the notice that lande
         event: "notice",
         id: "run_0001",
         at: timestamp,
-        qualityNotices: ["语义覆盖判定（不阻断交付）：1 处疑点。"],
+        qualityNotices: ["记忆已记录但暂缓生效 1 条：1 条因来源待确认。"],
       },
     ];
     await writeFile(
@@ -5589,8 +5121,8 @@ test("GET /api/agent-runs serves the unchecked verdict and the notice that lande
     assert.equal(run.status, "succeeded");
     assert.equal(run.verification, "unchecked");
     assert.deepEqual(run.qualityNotices, [
-      "本次交付未按题面逐问核对覆盖。",
-      "语义覆盖判定（不阻断交付）：1 处疑点。",
+      "本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」。",
+      "记忆已记录但暂缓生效 1 条：1 条因来源待确认。",
     ]);
   });
 });

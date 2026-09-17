@@ -644,10 +644,13 @@ test("the open-vocabulary prose patterns are frozen at their current count", asy
   assert.ok(literals.length > 200, `only ${literals.length} regex literals found — the scan did not read the file`);
 
   const prose = literals.filter((literal) => /[\u4e00-\u9fff]/.test(literal));
+  // 117 until 2026-09-17, when the question ledger, the screening-flow reader
+  // and the comparative-structure check were deleted with the files they read:
+  // 36 patterns went with them, none moved anywhere.
   assert.equal(
     prose.length,
-    117,
-    `open-vocabulary prose patterns moved from 117 to ${prose.length}. `
+    81,
+    `open-vocabulary prose patterns moved from 81 to ${prose.length}. `
       + "Adding one is frozen (principle #5): put medicine/scenario rules in clinical-safety-rules.json, "
       + "write an eval case, or hand the judgement to the reviewer. "
       + "Removing them is the direction of travel — lower this number and say which rule moved where.",
@@ -766,16 +769,11 @@ test("every gate check declares its own id, and no finding function is left anon
   const stamped = new Map([...source.matchAll(/^checkedBy\((\w+), "([a-z0-9-]+)"\);$/gm)].map((match) => [match[1], match[2]]));
   const regions = [...source.matchAll(/issues\.region\("([a-z0-9-]+)"\)/g)].map((match) => match[1]);
   const literals = [...source.matchAll(/check: "([a-z0-9-]+)"/g)].map((match) => match[1]);
-  const methodsSource = await readFile(new URL("../src/reviewMethods.mjs", import.meta.url), "utf8");
-  // Review accounting lives in a pure helper. Read the actual finding sites,
-  // not just its exported list, so a registered but unused id still fails.
-  const methodChecks = [...methodsSource.matchAll(/note\(issues, "([a-z0-9-]+)"/g)].map((match) => match[1]);
-  assert.ok(methodChecks.length >= 3, "the review-method finding scan must inspect real note sites");
-  for (const id of methodChecks) assert.ok(registered.has(id), `review accounting declares unregistered check "${id}"`);
   // The walk has to prove it walked: a scan that stopped matching would
   // otherwise find no unregistered id and pass forever.
   assert.ok(stamped.size >= 12, `only ${stamped.size} finding functions carry a check id — the scan did not read the file`);
-  assert.ok(regions.length >= 40, `only ${regions.length} inline regions found — the scan did not read the file`);
+  // 52 before the bookkeeping checks were deleted on 2026-09-17, 33 after.
+  assert.ok(regions.length >= 30, `only ${regions.length} inline regions found — the scan did not read the file`);
 
   for (const [fn, id] of stamped) assert.ok(registered.has(id), `${fn} declares check "${id}", which is not in clinicalEvidenceCheckIds`);
   for (const id of regions) assert.ok(registered.has(id), `an inline rule declares check "${id}", which is not in clinicalEvidenceCheckIds`);
@@ -786,14 +784,15 @@ test("every gate check declares its own id, and no finding function is left anon
   // which reads as coverage and measures the wrong rule. `IssueLog#from`
   // refuses such a function at runtime; this says so before a run does.
   const routed = [...source.matchAll(/issues\.from\(\s*(\w+)/g)].map((match) => match[1]);
-  assert.ok(routed.length >= 10, `only ${routed.length} finding functions are routed through the log — the scan did not read the file`);
+  // 10 before the bookkeeping checks were deleted on 2026-09-17, 8 after.
+  assert.ok(routed.length >= 8, `only ${routed.length} finding functions are routed through the log — the scan did not read the file`);
   for (const fn of routed) {
     assert.ok(stamped.has(fn), `${fn} raises gate issues through issues.from() but declares no check; add checkedBy(${fn}, "<id>") at its definition`);
   }
 
   // And no id is registered that nothing raises: a bucket nobody fills reads as
   // a rule that never fires.
-  const raised = new Set([...stamped.values(), ...regions, ...literals, ...methodChecks]);
+  const raised = new Set([...stamped.values(), ...regions, ...literals]);
   for (const id of clinicalEvidenceCheckIds) assert.ok(raised.has(id), `"${id}" is registered and declared by no rule`);
 
   // The contract registry raises three of its own, and attaches the clinical
