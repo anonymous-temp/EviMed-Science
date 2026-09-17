@@ -800,6 +800,32 @@ docker compose --env-file deploy/web/.env \
   --profile tls up -d --no-build --pull never
 ```
 
+### A delta release on the serving host
+
+The current production host is released as a delta on its own live release:
+`scripts/ops/host-delta-release.sh` seeds the new release directory from the
+live one, overlays the files that changed (and applies the deletions an overlay
+cannot), rewrites the release identity and builds both images — web in full,
+the runtime through `deploy/runtime-dsh/Dockerfile.delta`. The release manifest
+is then generated for the two image ids and copied into the release directory,
+and `scripts/ops/host-release-switch.sh <rev>` puts it in front.
+
+Three rules the switch holds, each from an incident (2026-09-14 to 09-17):
+
+- **Compose runs through `/srv/evimed-science/current`**, which is moved to the
+  new release first. Relative bind mounts then name `current/...`; Docker
+  resolves the link when a container starts, so Prometheus, Grafana and the
+  search proxy survive any number of later releases. Run from the release
+  directory, they named one release by absolute path and kept running on files
+  that a later cleanup had removed.
+- **Only services whose config hash differs from their container are
+  recreated.** PostgreSQL and the engines are left alone unless their
+  definition changed; the four containers that carry release identity always
+  differ.
+- **Old releases leave through `release-retention.mjs`**, which keeps the
+  newest two, whatever `current` names, and anything a container still mounts
+  or was created from. A release directory is never removed by hand.
+
 ### Research memory cutover
 
 A deployment upgrading from the release that ran the separate memory service
