@@ -1,0 +1,184 @@
+{
+  "arm": "baseline",
+  "armDigest": "8f868aaf189c2c73f9a4f63c688660476305b8653f33ff5e82dce1cbd12c6da5",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__baseline__r2",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "68c504b8b5e0cd234172d12eaccc6d1dfec769a13e2da37474c7b751d0827e34",
+  "configId": "memory-ablation-v9",
+  "cost": {
+    "currency": "CNY",
+    "source": "unavailable",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 119,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T09:40:28Z",
+  "judge": {
+    "issues": [],
+    "promptVersion": 1,
+    "rationale": "Directly answers the four durability subquestions at appropriate depth. Randomized and post-trial observational phases are clearly distinguished; NCT03594110 is counted once as one primary study despite four reports. Search design, eligibility, and protocol status are declared. Derived estimates are labeled, show inputs and assumptions, and are kept out of practice advice. Risk statements carry their evidence level and disclaim individual treatment decisions.",
+    "scores": {
+      "correctness": 5,
+      "evidenceHandling": 5,
+      "safetyFraming": 5,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 116,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 117
+      },
+      {
+        "expectedVersion": 110,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 111
+      },
+      {
+        "expectedVersion": 110,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 111
+      },
+      {
+        "expectedVersion": 109,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 110
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v9-c27c0bd8",
+  "repeat": 2,
+  "run": {
+    "artifacts": [
+      "deliverables/empa-kidney-durability-sr/citation-audit.md",
+      "deliverables/empa-kidney-durability-sr/citation-ledger.csv",
+      "deliverables/empa-kidney-durability-sr/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-durability-sr/clinical-evidence-report.md",
+      "deliverables/empa-kidney-durability-sr/clinical-evidence-run.json",
+      "deliverables/empa-kidney-durability-sr/clinical-evidence-search.json",
+      "deliverables/empa-kidney-durability-sr/question-coverage.json",
+      "deliverables/empa-kidney-durability-sr/references.bib",
+      "deliverables/empa-kidney-durability-sr/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_2_9b7673dc7f72db99",
+    "durationMs": 1670523,
+    "errorCode": null,
+    "id": "run_6864cced50b2a587ec607e96bd4a419f",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "MUST FIX — Report line 186 states derived result CLM-055 without marking it as derived. Label it 〔推导〕 so it is not read as a measurement.",
+      "MUST FIX — All declared run-receipt quality checks must pass.",
+      "claims[6].claim numeric fact 58 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[6].claim numeric fact 42 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[7].claim numeric fact 73 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[7].claim numeric fact 51 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[8].claim numeric fact 120 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[8].claim numeric fact 38 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[8].claim numeric fact 32 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[9].claim numeric fact 1.23 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[14].claim numeric fact 3 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[22].claim numeric fact 0.72 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[24].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[28].claim numeric fact 0.1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[42].claim numeric fact 58 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 84 numeric facts 1, 10 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 93 numeric facts 6609 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 94 numeric facts 6609, 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 186 numeric facts 1000 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.",
+      "literature_search searched and returned no source",
+      "review weakened: CLM-007 — 数值本身成立：急性下降 2.12（1.83–2.41）、6%（5–6%）、慢性斜率 −2.75→−1.37、50%（42–58%）与保全全文 PMC7615591 逐字一致。但报告第 10、17 行将该组数值同时挂 [1][3]，而在保全全文 PMC7614055 中只检索到总斜率 0.75 与慢性斜率组间差 1.37，未出现 −2.75、50% 或 42–58%；即 [1] 不承载该主张。功能引文 [3] 成立，扩大的引文范围不成立，故数值结论可用、引文归属需收窄。",
+      "review contradicted: CONFLICT:table-denominators — 同一实体（两张表的分母）上互相矛盾：报告第 78 行称「两张表的分母一致，因为四篇报告报告的是同一随机化人群，随机化人数只计一次」，而表 1（第 84 行）分母为随机化人数 6609，表 2（第 92 行）[2] 行为 4891 例进入试验后随访。表内数字与自我描述不可同时为真。该句已挂 CLM-003，因此同时削弱 CLM-003 的呈现。",
+      "review contradicted: CONFLICT:zero-hit-searches — 同一实体（0 命中检索式的数目）上互相矛盾：报告第 48 行称「其中两条命中为 0 条」，而同一交付物的 clinical-evidence-search.json 在查询索引 6、7、8 三处记 resultsRetrieved: 0；revision-notes.md 第 14–15 行亦写「3 条检索式命中 0 条」。检索记录合计 130 条与报告一致，但该子计数在产物之间不自洽，且 revision-notes 所举「停药后超过约 2 年的持久性」检索式并未出现在检索记录中。",
+      "review weakened: CONFLICT:slope-attribution — 同一实体（慢性 eGFR 斜率估计的来源）上归属不一致：第 10、17 行与 CLM-007 挂 [1][3]，第 100、174 行与 CLM-043 挂 [5] 并称两篇报告了完全相同的估计。核验保全全文：PMC7614055（[1]）只出现总斜率 0.75 与慢性斜率组间差 1.37，未出现 −2.75、50%（42–58%）或 1·37 的区间；PMC7615591（[3]）与 PMC7618536（[5]）各自报告 −2.75→−1.37 与 1·37（1·16–1·59）、50%（42–58",
+      "review weakened: CONFLICT:post-trial-summary-labelling — 摘要第 12 行把「两组试验后平均使用率 43% 对 40%」与「按原始随机化分组的时段比较仍成立」一并写在「试验后阶段……属非随机暴露」句中，同时把全随访期合并窗的 26.2% 对 30.3%、0.79 放在紧接的第 13 行，使跨两阶段的合并估计与试验后单段估计在同一段落内并置而无逐项时段标签；正文第 126、132 行对二者的区分是清楚的。文本在被引用的时点上没有事实错误（该暴露确为非随机，合并窗确含随机化阶段），但摘要层面的时段标签不足以单独支撑 CLM-024 与 CLM",
+      "review weakened: META:reference-metadata — 参考文献 [2] 的卷期页在产物内部不一致：references.bib 与报告参考文献表写 392(7):627-637（2025），而同一交付物所保全的全文 PMC7616743 的刊头为 N Engl J Med 2025 Feb 20，卷 392、期 8、页 777-787。PubMed 可解析记录（PMID 39453837，DOI 10.1056/NEJMoa2409183）确认期刊与出版日期，未提供页码、卷期，故无法据可解析来源判定二者孰是；该字段在 citation-audit 中声称已与保全",
+      "review weakened: ledger-02 引文审计的标识符解析断言 — 审计称 [2] 的「卷期页与保全全文的刊头记录不一致（Volume 392、Issue 8、页码 777-787）」，该刊头确实存在于保全的 JATS XML（<volume>392</volume><issue>8</issue><fpage>777</fpage><lpage>787</lpage>，ppub 2025-02-20、epub 2024-10-25），故描述属实。但审计又以「须由出版商页面才能判定」为由拒绝改写——保全报刊头即该文的权威书目记录，不存在须外部核实的情形，同一份保全件里就能定案。",
+      "review contradicted: ledger-03 参考文献 [2] 的书目字段（报告参考文献第 2 条、references.bib EMPAKIDNEY2025） — 两者均写作 N Engl J Med 2025;392(7):627-637，而保全全文 XML 的刊头为 volume 392、issue 8、pages 777-787（DOI 10.1056/NEJMoa2409183、PMID 39453837 一致）。卷、期、页三项与可解析来源直接冲突。审计台账已登记该冲突为「未解决」，但冻结的参考文献表与 bib 未修正，交付摘要亦未记录——按引文卫生要求，可解析来源本",
+      "review weakened: derived-01 CLM-054 覆盖缺口推算 — 算术全部正确且可独立复核：6609−4891=1718（26%）、6253−4891=1362（22%）、6609−6253=356；三个输入数字均取自源码原句。但两个分类性表述超出源码承载：源码只说「未死亡或未撤回同意者中 1362 例未同意或中心无法参与」，并未把这 356 例单独定义为「在活动期结束时已死亡或已撤回同意」，也未说明该 356 例的结局构成；报告据此写「后者已在随机化阶段被观察到的终点覆盖」，属对未给出的信息作定性。矩阵 assumptions/uncertainty 已声明这一不确定",
+      "review weakened: derived-02 CLM-055 同期开放标签用药的稀释推算 — 算术复核通过：比例混合 0.40×0.72+0.60=0.888、0.43×0.72+0.57=0.8796，比值 0.9905；乘法模型 0.72^0.4=0.8769、0.72^0.43=0.8682，比值 0.9901；敏感性区间 0.986–0.995（效应 0.60–0.85）方向稳定，输入（43%/40%、0.72）均可溯源。问题在解释而非计算：该模型设定「无停药后残余效应」为参照，0.99 因此是零假设下的期望值，与之对照 0.87 说明同期用药差异解释不了观察值——这一方向成",
+      "review weakened: proc-01 qualityChecks 全项 true 与交付摘要「未决问题：无」 — clinical-evidence-run.json 的 qualityChecks 把 citationIntegrity 与 denominatorConsistency 标为 true，但同一交付物内的引文审计第 5 节自认 [2] 的卷期页字段「未解决」且参考文献表与 bib 仍携带 627-637——即 citationIntegrity 在其可核查范围内并未达成自述状态。delivery-receipt.json 记录的 notices（含「citation",
+      "review weakened: gap-01 检索与纳入的可复现性（130/97/92/5、11 条检索式） — 11 条检索式与命中数（30/30/20/20/1/1/0/0/0/20/8）相加为 130，去重后 97，题录筛选排除 92、全文评估 5、纳入 5，逐项自洽；检索记录、运行回执与正文计数一致。但我无法用现有检索工具复现 130→97 的去重过程：临床指南数据库检索返回 20+20 条记录，而运行回执登记了 20 份保全来源，指南类记录的纳入/排除明细未逐条列出，故该流程链只有内部自洽性证据。",
+      "review weakened: unverified-01 未获独立可解析支持的次要修饰性表述 — 三处无法以可解析文献确认：(a) CLM-047/CLM-053 写指南「定稿于 2024 年 11 月」，而保全指南记录标 Published 2024-04-01、PID 38490803 为 2024 年，月份在我可核验范围内无支持（时间先后关系本身成立）；(b) 讨论中拟议试验「事件驱动的样本量在 1000 例量级」无引文承载，属交付物自撰估计；(c) CLM-054 对 356 例缺失类别的命名（见 derived-01）。三者均不影响任何效应估计或主要结论，且 (a)(c) 已在相"
+    ],
+    "repairRounds": {
+      "content": 2,
+      "structural": 0
+    },
+    "sessionId": "session-045465ed-51c9-4f4a-b149-5e576d939dff",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 2562926,
+      "completeness": "complete",
+      "messages": 557,
+      "path": ".openscience/transcripts/run_6864cced50b2a587ec607e96bd4a419f.jsonl",
+      "sha256": "7b4c585546e97b8ec8d57607cd33b090cba3b4f649ca2f2044fb9fcb0734db52"
+    },
+    "verification": "unverified"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.6906438888888888,
+    "evidenceCompleteness": 0.0,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 1.0,
+    "taskUtility": 1.0
+  },
+  "startedAt": "2026-09-17T09:07:50Z",
+  "usage": null
+}

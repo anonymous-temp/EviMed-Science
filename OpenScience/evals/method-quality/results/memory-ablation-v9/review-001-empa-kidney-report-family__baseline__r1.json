@@ -1,0 +1,203 @@
+{
+  "arm": "baseline",
+  "armDigest": "8f868aaf189c2c73f9a4f63c688660476305b8653f33ff5e82dce1cbd12c6da5",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__baseline__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "68c504b8b5e0cd234172d12eaccc6d1dfec769a13e2da37474c7b751d0827e34",
+  "configId": "memory-ablation-v9",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 168,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T04:38:27Z",
+  "judge": {
+    "issues": [
+      "Guideline-derived statements (GRADE, Level 1/2, risk-prediction practice point) are used while the audit states the drug-recommendation chapter and grading labels were not retrieved, leaving unsupported, safety-relevant content.",
+      "The revision-record is internally contradictory: it says report text is uncorrected, later says that no longer applies, and both confirms all support quotes passed and records reviewer contradiction for CLM-043/044.",
+      "Actual search strings and per-line hit counts are not declared in the delivered text, only referenced to an absent search log; the brief's mustDo to declare actual searches is unmet.",
+      "Total-slope 0.75 is presented as a slope rather than the between-group difference, and the uACR<30 subgroup 76% accepted-manuscript value is not version-tagged against the 86% published abstract.",
+      "The abstract says post-trial effect was significant only in the first 6 months, contradicting the report's own year-wise estimates where the whole post-trial period and year 1 exclude 1 and only year 2 crosses the null.",
+      "A practical risk-prediction practice point is given under clinical practice points despite an unverified guideline source; it should be removed or clearly marked unsupported."
+    ],
+    "promptVersion": 1,
+    "rationale": "Substantive answer that generally separates randomized from post-trial observation and counts one primary study, with derived estimates labeled. But actual searches are not declared in text, unsupported guideline claims and contradictory revision/audit statements persist, and numeric/version inconsistencies remain. These reduce correctness and evidence handling; safety framing is cautious but includes unverified practice guidance.",
+    "scores": {
+      "correctness": 2,
+      "evidenceHandling": 3,
+      "safetyFraming": 3,
+      "usefulness": 3
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 109,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 110
+      },
+      {
+        "expectedVersion": 103,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 104
+      },
+      {
+        "expectedVersion": 103,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 104
+      },
+      {
+        "expectedVersion": 102,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 103
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v9-d6e8946f",
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "deliverables/d1-evidence-review/citation-audit.md",
+      "deliverables/d1-evidence-review/citation-ledger.csv",
+      "deliverables/d1-evidence-review/clinical-evidence-matrix.json",
+      "deliverables/d1-evidence-review/clinical-evidence-report.md",
+      "deliverables/d1-evidence-review/clinical-evidence-run.json",
+      "deliverables/d1-evidence-review/clinical-evidence-search.json",
+      "deliverables/d1-evidence-review/question-coverage.json",
+      "deliverables/d1-evidence-review/references.bib",
+      "deliverables/d1-evidence-review/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_1_778964a48a083578",
+    "durationMs": 1867819,
+    "errorCode": "specialist_deliverable_not_accepted",
+    "id": "run_50bbc89f85c897237f412b7f7ebe6569",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "MUST FIX — The search log must exactly match successful evidence-search calls from the same run — missing from the log: \"kdigo 2024 ckd guideline recommendation sglt2 inhibitor trea\"; logged but never executed: \"kdigo 2024 ckd guideline recommendation sglt2 inhibitor trea\".",
+      "MUST FIX — The run-receipt statistics must exactly match the search log and distinct preserved-source count.",
+      "claims[7].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[8].claim numeric fact 0.72 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[13].claim numeric fact 95 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[15].claim numeric fact 42 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[15].claim numeric fact 58 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[17].claim numeric fact 5 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[18].claim numeric fact 32 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[18].claim numeric fact 120 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[18].claim numeric fact 19 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[18].claim numeric fact 38 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[19].claim numeric fact 50 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[19].claim numeric fact 73 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[19].claim numeric fact 29 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[19].claim numeric fact 51 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[23].claim numeric fact 19 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[23].claim numeric fact 33 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[24].claim numeric fact 3 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[28].claim numeric fact 1.23 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[29].claim numeric fact 0.1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[44].claim numeric fact 0.75 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[44].claim numeric fact 1.07 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[61].claim numeric fact 2.4 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[61].claim numeric fact 2.1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 83 numeric facts 1, 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 178 numeric facts 3 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.",
+      "citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.",
+      "citation-audit.md must reference at least one real audited source identifier from the evidence matrix.",
+      "Report line 7 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 3 处是同一条（Report line 192、Report line 214、Report line 228）：这是一处决定，改一次就能全部修好。",
+      "Report line 27 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 4 处是同一条（Report line 121、Report line 151、Report line 186、Report line 242）：这是一处决定，改一次就能全部修好。",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "本次运行计划了 1 件交付物，没有一件通过契约校验，因此产物未经质量门。",
+      "biomedical_source_search searched and returned no source",
+      "review weakened: CLM-011 — 人数流与暴露数值成立：保全全文确认 6609 例随机化、6253 例未死亡或撤回中 1362 例（22%）未进入、4891 例（74%）进入，试验后中位随访 2.0 年，两组开放性 SGLT2 抑制剂使用 43% 对 40%；报告也正确区分了 22%（分母 6253）与 74%（分母 6609）。问题在同一 claim 的 applicability 一句：「试验后随访各效应量的实际分母为 4891 例」与本来源统计方法节「未进入试验后随访的存活参与者在活动期随访结束时删失」直接冲突——试验后期间与其后的合并口径效应量都按原始随机分配在全部",
+      "review weakened: CLM-025 — claim 与它实际使用的保全全文（作者接受稿）逐字一致：76%（32–120%）对 28%（19–38%），p for trend 0.0001。但同一 DOI 的出版版摘要（PMID 38061371，可解析记录）对同一分层给出的是 86%（36–136%）对 29%（19–38%），ptrend<0.0001。方向、反转关系与 p 值一致，点估计不一致，说明交付物使用的是与出版版有数值差异的版本。citation-audit.md 只核对了「保全文本内部子串一致」，未发现版本差异，报告则把 76% 当作已发表数值行文。须在 claim",
+      "review weakened: CLM-030 — claim 文本与保全全文一致（「slowed the rate of decline … by 0.75（0.54–0.96）mL/min/1.73m²/年，相对减缓 26%（19–33%）」），0.75 是两组间总斜率之差。但报告第 99 行把它写成「从基线至末次随访的总斜率为 0.75（0.54 至 0.96）mL/min/1.73m²/年，相对减缓 26%」，把组间差值读成了某一组的斜率水平，读者按字面理解会得到错误量级。同一交付物内 claim 与正文互相矛盾，须以 claim 为准改写正文。",
+      "review weakened: CLM-035 — claim 本身可成立：英国存活并提供了末次随访后 4 周血样者，平均 eGFR 29.8 对 27.9 mL/min/1.73m²，差 1.87（1.23–2.52），保全全文逐字确认，且子集与方法限定已写明。问题在绑定：同一 claim 编号被钉在两处内容不同的句子上——第 167 行是该逆转（对）；第 27 行与第 177 行却是「试验后效应量建立在局部血肌酐而非中心实验室测定之上、试验后未采集住院资料」。后两项事实出自参考文献 2 的局限性段落，报告第 27 行却标 [3]，第 177 行末句也标 [3]；矩阵中并不存在承载这两项限",
+      "review weakened: CLM-038 — 74%（4891/6609）算术无误，但推论前提写错了设计：「合并口径效应量可视为对全部随机化人群无偏估计的前提是缺失的 26% 与进入者风险相同」——合并口径分析本身就是全部随机化参与者的意向治疗分析，未进入者只是被删失于活动期随访结束，缺失的是试验后随访时间而非 26% 的分析人群。缺失随访时间确实可能造成信息性删失偏倚，同一份报告的确显示未进入者肾衰竭风险略高，所以结论方向可以保留，但论证必须按「删失」而非「人群缺失」重写；否则读者会以为合并口径只覆盖了 74% 的随机化人群，而这与报告第 17 行自己给出的 865/3304 相矛盾"
+    ],
+    "repairRounds": {
+      "content": 2,
+      "structural": 0
+    },
+    "sessionId": "session-f8adc4be-195e-48d6-9e78-de1659c1edcc",
+    "status": "failed",
+    "transcript": {
+      "bytes": 2963228,
+      "completeness": "complete",
+      "messages": 632,
+      "path": ".openscience/transcripts/run_50bbc89f85c897237f412b7f7ebe6569.jsonl",
+      "sha256": "1b7b2597b082b58a3cc0c7d60ed7015bcf449069868e6747bf24e47dd08e70eb"
+    },
+    "verification": "unverified"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.6541075925925925,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 0.6,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-17T04:05:57Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

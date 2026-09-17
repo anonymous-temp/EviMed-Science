@@ -1,0 +1,185 @@
+{
+  "arm": "baseline",
+  "armDigest": "8f868aaf189c2c73f9a4f63c688660476305b8653f33ff5e82dce1cbd12c6da5",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__baseline__r0",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "68c504b8b5e0cd234172d12eaccc6d1dfec769a13e2da37474c7b751d0827e34",
+  "configId": "memory-ablation-v9",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 218,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T05:46:37Z",
+  "judge": {
+    "issues": [
+      "Evidence table row [7] reports comparator 'GOS 0.575', but the citation audit states it corrected this to 'GCS'; internal contradiction.",
+      "Evidence table row [8] lists outcome as '院内死亡', while the citation audit says it should be 90-day mortality and notes title/discussion discrepancies.",
+      "Summary states both cohorts used 'SOFA ≥ 2', while body/audit says the intra-abdominal sepsis study used 'SOFA increase ≥ 2'; operational difference not consistently stated.",
+      "Opening note calls the document 'not the deliverable' and historical, conflicting with its role as the evaluated delivery."
+    ],
+    "promptVersion": 1,
+    "rationale": "Comprehensively answers both scoping questions and preserves stated roles, with cohort overlap correctly left unresolved due to missing patient-level identifiers. However, internal inconsistencies (GOS/GCS, outcome definition, SOFA wording) and a confusing non-deliverable header reduce correctness and evidence-handling reliability. The derived overlap estimate names its inputs and assumptions and is kept out of practical guidance, so safety framing is appropriate.",
+    "scores": {
+      "correctness": 3,
+      "evidenceHandling": 3,
+      "safetyFraming": 5,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 111,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 112
+      },
+      {
+        "expectedVersion": 105,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 106
+      },
+      {
+        "expectedVersion": 105,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 106
+      },
+      {
+        "expectedVersion": 104,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 105
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v9-746147e2",
+  "repeat": 0,
+  "run": {
+    "artifacts": [
+      "cohort-independence-addendum.md",
+      "deliverables/sep-mimic4-models-scoping/citation-audit.md",
+      "deliverables/sep-mimic4-models-scoping/citation-ledger.csv",
+      "deliverables/sep-mimic4-models-scoping/clinical-evidence-matrix.json",
+      "deliverables/sep-mimic4-models-scoping/clinical-evidence-report.md",
+      "deliverables/sep-mimic4-models-scoping/clinical-evidence-run.json",
+      "deliverables/sep-mimic4-models-scoping/clinical-evidence-search.json",
+      "deliverables/sep-mimic4-models-scoping/question-coverage.json",
+      "deliverables/sep-mimic4-models-scoping/references.bib",
+      "deliverables/sep-mimic4-models-scoping/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_0_8128dcb93355de0d",
+    "durationMs": 2105878,
+    "errorCode": null,
+    "id": "run_e5a2f1ac97e32d4d4548c67db9220a94",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "交付物在写下回执之后被改动了 4 个文件：deliverables/sep-mimic4-models-scoping/clinical-evidence-report.md、deliverables/sep-mimic4-models-scoping/clinical-evidence-search.json、deliverables/sep-mimic4-models-scoping/references.bib、deliverables/sep-mimic4-models-scoping/citation-audit.md。服务端已用同一套门禁对盘上的实际字节重判并通过，按实际交付重出回",
+      "literature_search searched and returned no source",
+      "review weakened: CLM-020 — 主张正文（使用 MIMIC-IV version 3.0）在 PMC12534946 方法节逐字命中。问题在其 uncertainty：“version 3.0 的时间覆盖与 v2.2 不同，因此该研究的队列与其前版本研究的队列不可直接比较”，与同一交付内 CLM-021 及正文第 59、137 行用“v3.0 的 2020–2022 记录是在 v2.2 既有记录之上的补充”“v3.0 的时间覆盖包含 v2.2 的记录”论证版本关系，对同一实体（v3.0 与 v2.2 的覆盖关系）给出方向相反的两句话。",
+      "review weakened: CLM-022 — 数值核对通过：全文结果节训练集模型 AUROC 0.832，对照 SAPS II 0.769、SOFA 0.607、GCS 0.575，顺序与主张一致。但两处不实：一是报告表与主张写作“GOS”，原文正文为 GCS（Glasgow Coma Scale，摘要段误写作 GOS），交付沿用了来源的缩写错误而未加说明；二是 uncertainty 称“训练集与外部验证集的性能差异未给出置信区间”，而原文对全部数值均给出 95% CI，并给出验证集 AUROC 0.825／0.715／0.714／0.587，报告未记录。",
+      "review weakened: CLM-024 — AUC 数值核对通过（训练集 0.868，95% CI 0.794–0.942；验证集 0.836，95% CI 0.681–0.991）。但报告逐篇表中该行记录的“结局口径＝院内死亡”与来源不符：该文方法节与结果节反复写明模型预测的是 90 天死亡（“for predicting 90-day mortality”），文题写的是 ICU 死亡，全文只在讨论中偶用 in-hospital mortality。结局口径被记错，且该行正是 CLM-024 的锚点。",
+      "review weakened: CLM-031 — 第一半成立：两篇摘要都写明使用 MIMIC-IV，故“同源于同一公开数据库”可核。第二半“其队列层面的构成不可比对”不成立：本运行自己保全的两份全文给出了可对齐的队列构成——PMC12832424 写 MIMIC-IV 2.2、覆盖 2008–2019，并明确“Identical inclusion and exclusion criteria were applied to both databases”，排除项为<18 岁、ICU 停留<24 h、HALP 组分缺失、重复入住仅取首次；PMC12557738 写 MIMIC-IV V.2",
+      "review contradicted: CLM-032 — 主张称两篇锚定发表物的 MIMIC-IV 队列“无法判定是否来自同一次数据提取”。但本次运行自己保全的两份全文档直接写明了版本：PMC12557738 方法节“The data for this study were extracted from MIMIC-IV (V.2.2)”，PMC12832424 方法节“External validation was performed using the Medical Information Interchange Mart … (MIMIC-IV 2.2)”，其数据可用性声明亦指向 ",
+      "review contradicted: CLM-033 — 主张称两队列“连基线对齐都不成立”。但两份保全全文均给出可对齐的时间窗与纳排实现：PMC12557738 摘要与正文均写 MIMIC-IV 队列为 2008–2019 且版本 V.2.2，编码集、SOFA≥2、首次入住、<18 岁排除均可读；PMC12832424 写 MIMIC-IV 2.2 覆盖 2008–2019，并给出<18 岁、ICU 停留<24 h、HALP 组分完整度、重复入住等排除项，且声明两库采用相同纳排标准。故“一方有窗口、另一方为空”仅对摘要成立，作为对两篇发表物的判断是错的。",
+      "review weakened: CLM-034 — 算术与输入可核：50,920（CLM-004）与 3,726（CLM-006）、1,300（CLM-010）均为已核实数值，3,726×1,300÷50,920=95.1；敏感性 N=20,000→242.2、N=10,000→484.4 复算一致；〔推导〕标注到位，未进入临床实践要点。扣分在方向性表述：报告第 114 行断言“真实情形大概率偏离该假设……会把实际重叠推向预期值之上。因此 95 例应读作量级的下限”，该“下限”论断依赖“同源抽样带共同选择压力”这一未经验证的前提，且其依据正是“使用同一公开数据库”——接近于题面禁止的由数据库",
+      "review weakened: CLM-035 — 结论方向与“未解决”姿态可以维持：无任何产物断言两队列相同或独立，重叠问题明确保持在未解决状态，且所需信息清单（数据版本、年份区间、患者层面标识、纳排实现等）确实缺失其中的第三方可比队列标识。但该综合判断的四层依据有三层与证据不符：版本（两篇均写 v2.2）、时间窗（两篇均为 2008–2019）、纳排实现（两篇均给出可实施规则，HALP 文并称两库标准相同），此三点见 CLM-032/033。清空这三层后，“不能作为独立证据”的剩余唯一支点是患者层面标识缺失——而在同版本、同年份区间、同一识别规则下，证据方向其实比报告所述更强地指向可能重",
+      "review contradicted: LEDGER-CLM-031 — citation-ledger.csv 第 34 行的 CLM-031 与矩阵自相矛盾：矩阵 CLM-031 为 synthesized，referenceNumber 2、referenceNumbers [2,3]，带两条 supportingSources；台账该行却把 referenceNumber 记为 2，同时把 identifier 写成 https://pubmed.ncbi.nlm.nih.gov/41146378/（对应参考文献 3），并且只登记了一条来源。也就是说，承担“主张—来源绑定”功能的台账",
+      "review weakened: AUDIT-ACCOUNTING — 两处账目与审计结论不符。(1) clinical-evidence-run.json 的 failedSources 记录 PMID 41649129 因“unpaywall 凭据不可用”被移出纳入集合，但该记录在 clinical-evidence-search.json 的 sourceRecords、citation-audit 第 6 节的排除计数与报告局限性中均无踪迹；经 PubMed 核实，该文题为《A machine learning model for predicting 28-day mortality",
+      "biomedical_source_search searched and returned no source",
+      "review weakened: CLM-031 — 主张的两个组成部分经核对均可支撑：其一是两篇锚定发表物的 MIMIC-IV 队列同源于同一公开数据库（两篇保全全文与摘要均自述使用 MIMIC-IV：PMID:41602009 写 MIMIC-IV 2.2、PMID:41146378 写 MIMIC-IV V.2.2）；其二是两篇都没有提供可跨文比对的患者层面标识或可复算建库脚本——11 份保全全文检索后，patient-level 标识清单与建库脚本均未出现，唯一出现的是访问授权记录（HALP 文写 Protecting Human Research Participants 证书编号，",
+      "review weakened: CLM-033 — 该断言称两篇「都以 Sepsis-3 判定脓毒症并以 SOFA ≥ 2 判定器官功能障碍」，作为两队列定义可逐轴对齐的轴之一。保全全文核对结果：PMID:41602009 写 Sepsis-3 + SOFA ≥ 2（第 29 行）；PMID:41146378 写 sepsis-3.0「indicated by an increase of ≥2 points in the SOFA score」（第 33 行）——这是 SOFA 评分较基线升高 ≥2 分（Sepsis-3 的原始定义），与「SOFA ≥ 2」是两条不同的操作性表述。削弱点不",
+      "review weakened: CLM-040 — 主张陈述「HALP 研究以 Sepsis-3 判定成年脓毒症患者，其感染识别由 ICD-9 与 ICD-10 诊断编码结合器官功能障碍的临床证据实现，并要求 SOFA ≥ 2」。前半句的引文在保全全文方法节逐字命中；「SOFA ≥ 2」这一半句在该篇同段紧接的句子里确有原文（Patient identification and SOFA ≥ 2 calculation used structured PostgreSQL queries on the original databases），因此主张本身属实。削弱点在 supportQuot",
+      "review weakened: CLM-041 — 主张列出四项排除条件（未成年、ICU 停留不足 24 小时、HALP 组分缺失、再次入住）加「两库采用相同纳排标准」。引文「Identical inclusion and exclusion criteria were applied to both databases to ensure comparability of results between the derivation and validation cohorts.」只承载最后一项。四项排除条件在该篇保全全文第 33 行确有原文（Patients were excluded ",
+      "review weakened: CLM-042 — 主张陈述「以腹腔感染诊断编码识别研究人群，以感染合并器官功能障碍、SOFA 增加 ≥ 2 分判定脓毒症，多次入住仅保留首次，排除 18 岁以下者，结局为院内死亡」。引文「For patients with multiple ICU admissions, only data from the first admission was retained. Patients aged <18 years were excluded. In-hospital mortality was used as the outcome measure.」只承",
+      "review contradicted: SEARCH-LEDGER-COUNTS — 重点核查项之四：检索台账、运行回执与引文审计的计数不一致，被审计对象自己声称三处一致，但三处并不一致。事实如下：clinical-evidence-search.json 的 queries 数组有 17 条检索记录，searchCounts 明确写 totalSearches=17、primarySearches=11、supplementarySearches=6；clinical-evidence-run.json 的 stats.totalSearches 同为 17。而 citation-audi",
+      "review contradicted: CA-15-vs-17 — 跨产物冲突（以文件为单位逐项列出，均为同一实体上的互斥陈述）：（1）检索式条数：citation-audit.md「15 条检索登记（含 4 条补充检索）」对 clinical-evidence-search.json/clinical-evidence-run.json「totalSearches=17（11 主 + 6 补充）」。见 SEARCH-LEDGER-COUNTS 条。（2）两篇锚定发表物的 accessLevel：citation-audit.md §3.1 与 citation-ledger.csv 第 3",
+      "review contradicted: ADDENDUM-PROVENANCE — 单独列出，因为这是本次审查中唯一一处「同一实体上的叙述与可核记录方向相反」的文件级冲突，且它不在交付物之内、不受门禁校验保护。cohort-independence-addendum.md 第 3 行的三项可核陈述：(1)「已通过门禁并冻结（回执 delivery-receipt.json，acceptedAt 2026-09-17T05:23:54Z，8 个文件按 sha256 在案）」——回执实际记 acceptedAt 2026-09-17T05:41:18.730Z、attempt 5，两者相差 17",
+      "review contradicted: SCALE-PARITY-CONFLICT — 跨产物冲突，同一实体：本次纳入的模型报告是否具备「给出队列标识或可复算脚本」的可及水平。（1）报告第 147 行写「本次纳入的全文档级报告普遍提供了后两项的部分内容……患者层面标识则完全没有出现在任何一份报告中」，并把它表述为「本次观察到的……问题在于队列层面的记录方式尚未形成惯例」；第 127 行同样写「患者层面标识则完全没有出现在任何一份报告中」。这一表述把「本次实际读到的来源集合中没有出现」外推成了一个关于报告惯例的判断。（2）同一交付内，clinical-evidence-audit（citati"
+    ],
+    "repairRounds": {
+      "content": 2,
+      "structural": 0
+    },
+    "sessionId": "session-625fee4c-564c-4233-a0a4-2cf93125c249",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 2585264,
+      "completeness": "complete",
+      "messages": 646,
+      "path": ".openscience/transcripts/run_e5a2f1ac97e32d4d4548c67db9220a94.jsonl",
+      "sha256": "4c7aedab64116c14c817d5dd6c695634ebeedc21475223ebc82f7f0bbb43bd33"
+    },
+    "verification": "unchecked"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.6100225925925926,
+    "evidenceCompleteness": 0.0,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 1.0,
+    "taskUtility": 0.7
+  },
+  "startedAt": "2026-09-17T05:09:58Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

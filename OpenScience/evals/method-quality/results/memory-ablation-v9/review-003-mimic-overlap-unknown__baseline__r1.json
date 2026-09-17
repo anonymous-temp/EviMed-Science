@@ -1,0 +1,211 @@
+{
+  "arm": "baseline",
+  "armDigest": "8f868aaf189c2c73f9a4f63c688660476305b8653f33ff5e82dce1cbd12c6da5",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__baseline__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "68c504b8b5e0cd234172d12eaccc6d1dfec769a13e2da37474c7b751d0827e34",
+  "configId": "memory-ablation-v9",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 157,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T03:38:49Z",
+  "judge": {
+    "issues": [
+      "Violates mustNotDo by repeatedly calling the two abstract-level model publications (PMID 41602009, 41146378) full text, despite the brief requiring abstract-level recording until full text is preserved.",
+      "Internal contradictions in search and screening counts: 24 vs 16 searches, 116 vs 128 identified, 96 vs 118 vs 86 deduplicated, and inconsistent literature/guideline subtotals.",
+      "The delivery mixes conflicting audit logs, revision notes, and a final gate status of partial/unaccepted while the main report presents conclusions as settled.",
+      "Adds 15 sources beyond the three supplied and claims full-text preservation for all without verifiable support, weakening provenance."
+    ],
+    "promptVersion": 1,
+    "rationale": "The main report does answer the scoping question and lists the required independence elements. However, it breaches the abstract/full-text constraint, contains contradictory process counts and audit logs, and asserts full-text preservation for all sources without verifiable support. Claim bonding is asserted via IDs but is unreliable given these inconsistencies. Safety framing is appropriately non-clinical.",
+    "scores": {
+      "correctness": 2,
+      "evidenceHandling": 2,
+      "safetyFraming": 4,
+      "usefulness": 3
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 107,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 108
+      },
+      {
+        "expectedVersion": 101,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 102
+      },
+      {
+        "expectedVersion": 101,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 102
+      },
+      {
+        "expectedVersion": 100,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 101
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v9-9cd5cc24",
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "build/build.py",
+      "build/claims.py",
+      "build/sources.py",
+      "deliverables/mimic4-sepsis-independence-assessment/audit_numeric.py",
+      "deliverables/mimic4-sepsis-independence-assessment/citation-audit.md",
+      "deliverables/mimic4-sepsis-independence-assessment/citation-ledger.csv",
+      "deliverables/mimic4-sepsis-independence-assessment/clinical-evidence-matrix.json",
+      "deliverables/mimic4-sepsis-independence-assessment/clinical-evidence-report.md",
+      "deliverables/mimic4-sepsis-independence-assessment/clinical-evidence-run.json",
+      "deliverables/mimic4-sepsis-independence-assessment/clinical-evidence-search.json",
+      "deliverables/mimic4-sepsis-independence-assessment/post-hoc-verification-log.md",
+      "deliverables/mimic4-sepsis-independence-assessment/question-coverage.json",
+      "deliverables/mimic4-sepsis-independence-assessment/references.bib",
+      "deliverables/mimic4-sepsis-independence-assessment/revision-notes.md",
+      "deliverables/mimic4-sepsis-prognosis-scoping/citation-audit.md",
+      "deliverables/mimic4-sepsis-prognosis-scoping/clinical-evidence-matrix.json",
+      "deliverables/mimic4-sepsis-prognosis-scoping/clinical-evidence-report.md",
+      "deliverables/mimic4-sepsis-prognosis-scoping/clinical-evidence-search.json",
+      "deliverables/mimic4-sepsis-prognosis-scoping/question-coverage.json"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_1_1276e8a625bcb615",
+    "durationMs": 2654429,
+    "errorCode": "specialist_deliverable_not_accepted",
+    "id": "run_64dad6849c1b11701f969615f747f2f9",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "MUST FIX — The search log must exactly match successful evidence-search calls from the same run — missing from the log: \"intra-abdominal infection sepsis prognostic model mortality\", \"sofa score mortality prediction validation mimic-iv sepsis\", \"machine learning sepsis mortality prediction external ",
+      "MUST FIX — 检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「共执行 24 条检索，识别 116 条记录，去重后 96 条，纳入 18 份来源」中的命中记录数 116，检索记录 recordsIdentified = 128。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+      "MUST FIX — 检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。本次不一致：正文写「共执行 24 条检索，识别 116 条记录，去重后 96 条，纳入 18 份来源」中的去重后记录数 96，检索记录 recordsAfterDeduplication = 118。请改正持有事实的一侧或正文，使两侧逐字相等；只改正文措辞不算修好。",
+      "claims[4].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[73].claim numeric fact 31 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "Report line 7 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 67 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 139 numeric facts 2, 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 153 numeric facts 6, 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.",
+      "claims[6].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure. 另有 2 处是同一条（claims[62]、claims[65]）：这是一处决定，改一次就能全部修好。",
+      "Report line 31 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 7 处是同一条（Report line 111、Report line 155、Report line 173、Report line 183、Report line 187 等）：这是一处决定，改一次就能全部修好。",
+      "Report line 91 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 5 处是同一条（Report line 117、Report line 135、Report line 143、Report line 169、Report line 179）：这是一处决定，改一次就能全部修好。",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "本次运行计划了 2 件交付物，没有一件通过契约校验，因此产物未经质量门。",
+      "literature_search searched and returned no source",
+      "review contradicted: B-CLM-046 — 该来源（PMC12534946）正文自述为 version 3.0、2020 至 2022 年补 2.2 既有记录；B 版把它记为 v3.1 并于另一行记为 2008–2019，两种写法都与被保全来源不符，且与 A 版同来源记录互斥。",
+      "review contradicted: B-CLM-047 — 该研究真实队列为 5242（MIMIC IV）+3103（eICU-CRD）；B 版写的 5242 未出现在其归属来源，4922/2027/2895 属于另一项研究（PMID:41181555）。",
+      "review contradicted: B-CLM-015 — claim 属性为「脓毒症相关脑病死亡模型…纳入 4 922 例…MIMIC-IV 侧 2 027、eICU-CRD 侧 2 895」，但其 referenceNumber 指向 PMC12534946（Hu 列线图，5242/3103），数值与方法（v3.1、2008–2019、五折交叉）属于另一来源。同一交付物内另有一行把同一来源写成 v3.1/2008–2019，与 A 版的 3.0/2020–2022 冲突；无论以哪一版为准，该行的来源归属都不成立。",
+      "review contradicted: B-VERSION-CITATION — B 版把同一份 ARF 模型文献（PMID:42028136）的版本与窗口分别挂到两个编号上：表中作「v3.1，数据库覆盖 2008–2022」（编号 12），证据矩阵中又作「MIMIC-IV v3.1、正文记载 2008–2022」（编号 11），而编号 11 在参考表中是 PMC12576211。同一交付物内同一来源的版本、窗口与编号三次互不一致；对照 A 版，该研究恒记为 [10]、v3.1、2008–2022。",
+      "review weakened: B-CLM-071 — 「已声明版本者覆盖 1.0、2.0、2.2、3.0 与 3.1」五个版本，且以 [2,5,7,10,11] 五个编号支持。但支撑该断言的编号集合不含 3.0 与 3.1 的来源（3.0 为 [11] 仅按 B 版自己的行，3.1 为 [10]），而 B 版表内其余行的版本一律缺号；A 版同一断言（CLM-071）以 [2,5,7,10,11] 支持时，其 3.0 来源恰为 [11]。同一批已纳研究，A 版读到五个版本，B 版只读到四个（v1.0、v2.0、v2.2、v3.1），差异来自同一来源的版本归属不一致。主张本身可核，但其跨交付物",
+      "review weakened: B-TABLE-ROW-LABEL — B 版表内把 4922/2027/2895 与 v3.1/2008–2019 挂在「脓毒症相关脑病死亡模型 [10]」一行，而正文第 90 行把 APACHE II/SOFA 与 XGBoost 的比较又写成「脓毒症相关脑病研究报告」——两行指的是同一来源但内容分属两个来源。表内条目与矩阵、正文之间的对应关系无法逐条闭合，读者无法仅凭该表还原每个数字的来源。",
+      "review weakened: A-CLM-059 — 主张「未检索到报告队列构建所依据的标识符层级或 anchor_year_group 实际取值者；唯一出现标识符名称的一处，是按每位患者的 subject_id 提取数据」。前半句在其纳入范围内可核（各来源的方法段未见 anchor_year_group 取值分布），后半句也与 PMC11322336 全文第 27 行一致（「based on the subject_id of each patient」）。但同一交付物在矩阵 CLM-020 中把「报告了队列构建所依据的标识符层级」的计数写成 0，与正文「唯一出现标识符名称的一处」自相矛",
+      "review weakened: A-CLM-020 — 矩阵主张为「判定所需的标识符层级与去锚点实际取值在已发表正文中普遍缺位」，但其配套正文（第 133、193 行）把它读成「没有一项报告队列构建所用标识符层级」，而 A 版自己在 CLM-059 中承认存在一处 subject_id 层级的表述。主张与自身证据计数不符（0 项 vs. 1 项）。",
+      "review weakened: B-CLM-020 — 「全部 9 项一手模型研究中，没有一项报告队列构建所依据的标识符层级或 anchor_year_group 的实际取值」与 A 版同一批来源的记录冲突：A 版记录 PMC11322336 明示按每例的 subject_id 提取，属标识符层级的表述；A 版另有 [2,3,8,12,13] 五处层级表述的登记。B 版把「未报告该字段」升级为「未报告层级」，计数为 0 的说法在其自身纳入范围内也过强。",
+      "review weakened: B-CLM-070 — PMC13412256 全文第 141、263 行确实指出反复使用 MIMIC/eICU「created potential overlap across source populations and limited independence of performance estimates」，支持「二次研究均把同一批公共数据库被反复使用当作独立性限制」。但 A 版在同一处以 [17] 强调该二次研究在合并时「明确以计入重叠队列为前提／把重叠队列逐一去重」（PMC13290529 全文第 47、83 行），而 B 版未取到该法：同一批来",
+      "review weakened: A-CLM-073 — 「队列重叠已被证据合成环节作为处理对象」由二次研究全文支持（PMC13290529 第 47 行「To address the issue of overlapping cohorts, duplicate populations were de-duplicated during quantitative synthesis」、第 83/107 行「After excluding overlapping cohorts」），同时「两者都没有把同一数据库内部两项研究的队列是否重叠作为研究级提取条目」也与其正文一致。但该句是「两项二次研究",
+      "review weakened: B-CLM-012 — 12,597/2,975 与 890/102 的数字正确，但报告正文把这一序列写在「一项以 MIMIC-IV v3.1 构建的…队列中」，而同段未给正确编号；矩阵中该主张的编号为 12，而参考表编号 12 是二次研究（PMC13412256）。同一交付物内把「[12]＝ARF 模型」与「[12]＝系统评价」两种指称混用（表、引言与讨论三处）。数字可核，来源指称不可核。",
+      "review contradicted: B-REF-MISLABEL — B 版把两篇二次研究（PMID:42359097、PMID:42506073）排在编号 5 与 12，同时在正文中以编号 12 指称 ARF 模型文献（12,597/2,975、890/102、v3.1/2008–2022）与 SAE 模型文献（5,242/3,103）。编号 12 在参考表中是「Artificial Intelligence Models…A Systematic Review」，A 版对同一文献使用编号 [18] 并只用于二次研究论断。同一批参考文献被两版排成两套编号体系且 B 版内部自相矛盾，读者",
+      "review contradicted: A-TABLE-EICU-COUNT — 报告第 91 行写「以 eICU-CRD 为外部验证集的，其验证队列来自另一套数据库 [2,3,9,10,11]」，即在编号集合中列出 5 项；同一页第 133 行写「以 eICU-CRD 为外部验证集的 4 项 [2,3,9,10,11]」。同一编号集合在同一交付物内被数成 4、列成 5。按表内各行，使用 eICU 外部验证的是 [2]、[3]、[9]、[10]、[11] 共 5 项，故「4 项」为算术错误，「5 项」与表一致；但两个数字并存，读者按句取数会得到 9 个或 10 个一手研究的两种总计数。",
+      "review contradicted: A-SAMEDB-COUNT — 同一交付物对「只做同库内部分割、匹配或交叉验证」的项数给出两个互斥数字：第 91 行写「[4,6,12,13,14]」共 5 项，第 133 行写「5 项 [4,6,12,13,14,16]」共 6 项。两份产物该类的编号集合也不一致（B 版把 SA-AKI 模型列为「单中心院内队列外部验证」，A 版列为「另一家医院队列外部验证」）。三类验证形式的项数之和因此无法在任一版本内自洽。",
+      "review weakened: B-VALIDATION-CLASS — 两版把同一项研究（PMID:37349774，S-AKI 模型）归入不同验证类别：A 版作「以另一家医院队列为外部验证集」（外部队列来自中国医院），B 版作「单中心院内队列外部验证，其外部队列取自 2018 至 2022 年的中国医院」。已保全全文（PMC10286378 第 35 行）为 Hangzhou First People's Hospital 2018–2022，属另一家医院，A 版的归类可核；B 版把「另一家医院」写成「单中心院内」并把同一来源标为院内外部验证，同一实体上的角色归类与 A 版互斥。",
+      "review weakened: B-CLM-038 — 「MIMIC-IV 训练队列，中国一家医院外部验证」对 S-AKI 模型的外部队列描述（2018–2022 的中国医院）与全文一致，但把「另一家医院」置于「单中心院内队列外部验证」这一小类之下，使该分类不能区分「同一机构内分割」与「另一家机构队列」——而这一区分正是本交付物判定队列独立性的核心维度。",
+      "review weakened: B-CLM-004 — 数字（1300 例、264 例死亡；eICU 149 例、33 例死亡）与来源一致，但报告把它写在「MIMIC-IV 训练与内部验证，eICU 外部验证」行内而未标明 149/33 属 eICU 侧；同一交付物第 102 行的「1 300 例、264 例死亡」指 MIMIC 侧，与之并列的编号集合却含 eICU 侧数字，读者无法从行文分辨两个分母。上述缺失的侧别标注使该行在按行取数时可被读成 MIMIC-IV 侧的 149 例。",
+      "review weakened: B-CLM-019 — 「要求首次 ICU 入住且停留超过 48 小时、并经脓毒症判定者降至 2,968 例」中的队列数字与来源一致（PMC11892195：2,968 例、809 例 28 天死亡；排除 ICU<48 h、妊娠哺乳、入住首日未诊断脓毒症），但主张写作「停留超过 48 小时」而来源为「ICU stay of fewer than 48 h」被排除（即 ≥48 h），为边界措辞偏差；同一交付物的另一行把该来源的 48 小时列为一处，来源中另有一条 24 小时的排除（医院停留 <24 h 见其他研究）。边界措辞与来源不完全一致，方向不变。",
+      "review weakened: B-CLM-014 — 同一交付物的矩阵把该来源（PMC12009225）的版本写为 MIMIC-IV 1.0，而报告表内该行标注「v1.0，自述 2008–2019」；来源确实写作 version 1.0 与 2008–2019，故数字与版本本身可核。但同一交付物在另一处把 2008–2019 归属于不相关的 [12]，使同一时间窗在多个编号间漂浮；核到来源的一侧成立，核到编号的一侧不成立。",
+      "review weakened: A-CLM-075 — 推导主张称「同时声明所用版本与其日历窗口的报告为 13 项，占 15 项的 87%」，但 13/15 为 86.7%（四舍五入 87%），而同一交付物表内可数的组合是：声明版本者 15 项中 14 项（2.2 四项＋v2.0 两项＋v3.1、v3.0、V.1.0、1.0 各一项＝12 项，另有 [13] 1.0 与 [10] v3.1），同时声明窗口者 13 项（B 版另把 [14] 的两个窗口都记入）。分子分母的口径未说明，且其引文集合 [2,10,11,14,15] 正是「未声明版本」的两个来源加三个已声明来源的混合，不能支持该计数",
+      "review weakened: B-CLM-075 — 推导主张以「报告了版本号 9 项、报告了自述日历窗口 8 项……可进入判定者为 8 项，占 80%」给出计算结果，但同一矩阵中可核实为同时报告版本与窗口的研究数为 8–9 项，且该主张把「进入下一步判定的条件」设为版本＋窗口，而其后文又承认真实判定需要标识符层级（0 项）。80% 与 8/9 的两个口径在同一段落内并存，输入集合未逐条列出。",
+      "review weakened: B-AGE-BOUNDARY — B 版把 ARDS 模型的入选条件写成「年龄不低于 18 岁」，来源为「age ≥18 years」（PMC467048 第 33 行）；A 版对同一来源写「排除 18 岁以下」，来源为「Adult patients who met the criteria for sepsis-3 and ARDS were included」（第 33 行）。两侧措辞都在可接受范围内，但两版对同一规则的取法不同（≥18 vs 排除 <18），且 A 版在别处把另一来源的「age of > 18 years」（严格大于）列入同一清单，使「≥",
+      "review weakened: A-AGE-LIST — 同一段落把 [16] 的「ICU 停留超过 24 小时且不超过 100 天」与多项「排除 18 岁以下」并列；其中 [16] 的来源（PMC12339570 第 27 行）确为「ICU length of stay >24 hours but not exceeding 100 days」与「admission to the ICU with age ≥18 years」，[2]、[5] 的 24 小时上限在各自来源中未见逐字支持（[5] 的 24 小时来自来源的 exclude 规则，[2] 的 24 小时并未在已保全文本中核到）。"
+    ],
+    "repairRounds": {
+      "content": 2,
+      "structural": 0
+    },
+    "sessionId": "session-0f6a1bb6-5c9f-4bbb-bb8e-e4708dc0609a",
+    "status": "failed",
+    "transcript": {
+      "bytes": 4361783,
+      "completeness": "complete",
+      "messages": 999,
+      "path": ".openscience/transcripts/run_64dad6849c1b11701f969615f747f2f9.jsonl",
+      "sha256": "d3f654a3c1cbf6658dc8bf4e2bcbaf2fe9e9a3a3906c392cbda0103cb5225eb7"
+    },
+    "verification": "unverified"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.5084390740740741,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 0.8,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-17T02:53:17Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}
