@@ -1,0 +1,243 @@
+{
+  "arm": "candidate",
+  "armDigest": "3bd4a5ed8f4002c9393806216c118a338226a345ec09f80a33f0b2afe779f5d3",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__candidate__r2",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "68c504b8b5e0cd234172d12eaccc6d1dfec769a13e2da37474c7b751d0827e34",
+  "configId": "memory-ablation-v9",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 205,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T10:18:05Z",
+  "judge": {
+    "issues": [
+      "Substantive report is Chinese-only although the brief and question are in English.",
+      "Abstract methods contains unresolved placeholder 'NCT 试验注册号' instead of NCT03594110.",
+      "Actual search queries, databases, and per-source hits are not declared in the delivery; methods only refer to an external retrieval ledger.",
+      "Includes an ineligible non-EMPA-KIDNEY external SGLT2 inhibitor observational cohort (reference 6) and a design report not in the provided source list, beyond the brief's eligibility.",
+      "Internal claim-count inconsistencies: citation audit says 56 claims, revision notes say 42/55, and duplicated markers like CLM-029 appear multiple times with malformed citations.",
+      "Repeated duplicated prose such as '报告对这一时间分布的表述为：报告对这一时间分布的表述为...' and the duplicated EMPA-KIDNEY follow-up sentence."
+    ],
+    "promptVersion": 1,
+    "rationale": "The review answers the durability question in depth and carefully separates randomized from post-trial observational evidence; derived estimates are labelled and safety framing is cautious. But delivery quality is weakened by an unresolved placeholder, missing search specifics, inconsistent claim counts, duplicated markers, and inclusion of an ineligible external cohort. The Chinese-only body may also reduce usefulness for the English-language brief.",
+    "scores": {
+      "correctness": 3,
+      "evidenceHandling": 4,
+      "safetyFraming": 5,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 117,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 118
+      },
+      {
+        "expectedVersion": 111,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 112
+      },
+      {
+        "expectedVersion": 111,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 112
+      },
+      {
+        "expectedVersion": 110,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 111
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v9-146be7ec",
+  "repeat": 2,
+  "run": {
+    "artifacts": [
+      ".audit/apply.py",
+      ".audit/apply2.py",
+      ".audit/apply3.py",
+      ".audit/apply4.py",
+      ".audit/apply5.py",
+      ".audit/apply6.py",
+      ".audit/apply7.py",
+      ".audit/coverage.py",
+      ".audit/ctx.py",
+      ".audit/final_fix.py",
+      ".audit/final_quotes.py",
+      ".audit/find.py",
+      ".audit/find2.py",
+      ".audit/fix030.py",
+      ".audit/fix3.py",
+      ".audit/fix4.py",
+      ".audit/fix5.py",
+      ".audit/fix6.py",
+      ".audit/fixlines.py",
+      ".audit/fixlines2.py",
+      ".audit/fixquotes.py",
+      ".audit/fixsearch.py",
+      ".audit/fullcheck.py",
+      ".audit/grab.py",
+      ".audit/ledger.py",
+      ".audit/rebuild_quotes.py",
+      ".audit/repair1.py",
+      ".audit/repair10.py",
+      ".audit/repair2.py",
+      ".audit/repair3.py",
+      ".audit/repair4.py",
+      ".audit/repair5.py",
+      ".audit/repair6.py",
+      ".audit/repair7.py",
+      ".audit/repair8.py",
+      ".audit/repair9.py",
+      ".audit/scan.py",
+      ".audit/scan2.py",
+      ".audit/sents.py",
+      ".audit/verify.py",
+      "deliverables/empa-kidney-durability/citation-audit.md",
+      "deliverables/empa-kidney-durability/citation-ledger.csv",
+      "deliverables/empa-kidney-durability/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-durability/clinical-evidence-report.md",
+      "deliverables/empa-kidney-durability/clinical-evidence-run.json",
+      "deliverables/empa-kidney-durability/clinical-evidence-search.json",
+      "deliverables/empa-kidney-durability/question-coverage.json",
+      "deliverables/empa-kidney-durability/references.bib",
+      "deliverables/empa-kidney-durability/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_2_e1d391e12521bb07",
+    "durationMs": 2092322,
+    "errorCode": "specialist_deliverable_not_accepted",
+    "id": "run_7a3e4b6f13fbf41c600b2564e7fe1fbe",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "MUST FIX — claims[29].supportingSources[1].artifactPath duplicates another supporting source. One document supports one source, however many times it is listed — drop the repeat and restate any count that assumed independent studies.",
+      "MUST FIX — claims[29].supportingSources[1].supportQuote was not found in its preserved source artifact.",
+      "MUST FIX — claims[35].supportQuote was not found in its preserved source artifact.",
+      "MUST FIX — claims[42].supportQuote was not found in its preserved source artifact.",
+      "MUST FIX — claims[55].referenceNumber must resolve to a numbered report reference.",
+      "MUST FIX — claims[55].supportingSources[1].artifactPath duplicates another supporting source. One document supports one source, however many times it is listed — drop the repeat and restate any count that assumed independent studies.",
+      "MUST FIX — The search log must exactly match successful evidence-search calls from the same run — logged but never executed: \"39453837\", \"38061371\", \"35238940\".",
+      "MUST FIX — claims[11] is not paired with its standard numbered in-text citation. 另有 2 处是同一条（claims[54]、claims[55]）：这是一处决定，改一次就能全部修好。",
+      "claims[5].claim numeric fact 58 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[5].claim numeric fact 42 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[9].claim numeric fact 33 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[9].claim numeric fact 0.54 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[10].claim numeric fact 0.72 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[15].claim numeric fact 0.1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[17].claim numeric fact 1.23 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[24].claim numeric fact 120 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[24].claim numeric fact 38 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[24].claim numeric fact 32 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[29].claim numeric fact 0.64 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[29].claim numeric fact 0.82 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[29].claim numeric fact 0.76 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[29].claim numeric fact 0.99 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[29].claim numeric fact 46 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[30].claim numeric fact 73 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[30].claim numeric fact 51 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[37].claim numeric fact 0.96 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[37].claim numeric fact 0.75 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[37].claim numeric fact 1.07 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[37].claim numeric fact 28 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[37].claim numeric fact 0.72 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[37].claim numeric fact 0.64 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[37].claim numeric fact 0.82 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "claims[37].claim numeric fact 876 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "Report line 7 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 17 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 19 numeric facts 1.5-2.4 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 55 numeric facts 9, 5, 4 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 57 numeric facts 3, 0.64-0.82, 0.78-0.95, 0.73-0.97, 0.65-0.82 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 59 numeric facts 2, 3 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 81 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+    ],
+    "repairRounds": {
+      "content": 2,
+      "structural": 0
+    },
+    "sessionId": "session-ee589d87-4e64-4842-911b-68b889423b2e",
+    "status": "failed",
+    "transcript": {
+      "bytes": 3382963,
+      "completeness": "complete",
+      "messages": 774,
+      "path": ".openscience/transcripts/run_7a3e4b6f13fbf41c600b2564e7fe1fbe.jsonl",
+      "sha256": "a84b036e450718e6bf396c2b1a795877a4b2e9fb9f4f94c8bba811fce98d3551"
+    },
+    "verification": "unverified"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.612532962962963,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-17T09:41:04Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

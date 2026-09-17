@@ -1,0 +1,503 @@
+{
+  "arms": {
+    "baseline": {
+      "compactionPolicy": "basic",
+      "digest": "8f868aaf189c2c73f9a4f63c688660476305b8653f33ff5e82dce1cbd12c6da5",
+      "methodSnapshot": {
+        "capabilitySkillsDir": null,
+        "expectedMethods": null,
+        "id": "memory-off",
+        "records": [
+          {
+            "expectedVersion": 106,
+            "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+            "status": "pending"
+          },
+          {
+            "expectedVersion": 100,
+            "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+            "status": "pending"
+          },
+          {
+            "expectedVersion": 100,
+            "id": "jY7Dttzw4nQbQUwdXPYwKU",
+            "status": "pending"
+          },
+          {
+            "expectedVersion": 99,
+            "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+            "status": "pending"
+          }
+        ],
+        "trialDigestById": {},
+        "trialMethodIds": [],
+        "trialMountedDigestById": {}
+      }
+    },
+    "candidate": {
+      "compactionPolicy": "basic",
+      "digest": "3bd4a5ed8f4002c9393806216c118a338226a345ec09f80a33f0b2afe779f5d3",
+      "methodSnapshot": {
+        "capabilitySkillsDir": null,
+        "expectedMethods": null,
+        "id": "memory-on",
+        "records": [
+          {
+            "expectedVersion": 106,
+            "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+            "status": "active"
+          },
+          {
+            "expectedVersion": 100,
+            "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+            "status": "active"
+          },
+          {
+            "expectedVersion": 100,
+            "id": "jY7Dttzw4nQbQUwdXPYwKU",
+            "status": "active"
+          },
+          {
+            "expectedVersion": 99,
+            "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+            "status": "active"
+          }
+        ],
+        "trialDigestById": {},
+        "trialMethodIds": [],
+        "trialMountedDigestById": {}
+      }
+    }
+  },
+  "armsVerified": {
+    "baseline": {
+      "cellsInvalidated": 0,
+      "cellsVerified": 6,
+      "declaredTrial": []
+    },
+    "candidate": {
+      "cellsInvalidated": 0,
+      "cellsVerified": 6,
+      "declaredTrial": []
+    },
+    "environment": {
+      "contradictions": [],
+      "unconfirmed": []
+    }
+  },
+  "capability": "clinical-evidence-synthesis",
+  "cells": {
+    "excluded": [],
+    "expected": 12,
+    "failed": [],
+    "onDisk": 12,
+    "scored": 12
+  },
+  "clustering": {
+    "families": [
+      "review-001-empa-kidney-report-family",
+      "review-003-mimic-overlap-unknown"
+    ],
+    "note": "A `brief-id` source means the family was not declared and each brief was treated as its own cluster; the interval is only as wide as that assumption. Declare `family` on the briefs (§6.3.3: 8-12 task families) to remove the assumption.",
+    "sourceCounts": {
+      "brief-id": 12
+    },
+    "unit": "task family"
+  },
+  "configDigest": "68c504b8b5e0cd234172d12eaccc6d1dfec769a13e2da37474c7b751d0827e34",
+  "cost": {
+    "baseline": {
+      "available": false,
+      "n": 0,
+      "reason": "no per-run cost was joined: neither the usage route nor an export returned settled rows"
+    },
+    "candidate": {
+      "available": false,
+      "n": 0,
+      "reason": "no per-run cost was joined: neither the usage route nor an export returned settled rows"
+    }
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "byArm": {
+        "baseline": {
+          "argRatioMean": null,
+          "cells": 6,
+          "firstDivergenceTurnMedian": null
+        },
+        "candidate": {
+          "argRatioMean": null,
+          "cells": 6,
+          "firstDivergenceTurnMedian": null
+        }
+      },
+      "note": "§6.3.7: which turn a run began to diverge from the golden trace. Never a reward, never an input to the verdict.",
+      "role": "diagnostic"
+    }
+  },
+  "dimensions": {
+    "contextFidelity": {
+      "baselineMean": 1.0,
+      "candidateMean": 1.0,
+      "interval": {
+        "families": 2,
+        "high": 0.0,
+        "level": 0.95,
+        "low": 0.0,
+        "mean": 0.0,
+        "method": "cluster-bootstrap-by-family",
+        "pairs": 6,
+        "samples": 2000
+      },
+      "pairedMeanDiff": 0.0,
+      "verdict": "non_inferior"
+    },
+    "efficiency": {
+      "baselineMean": 0.5775448148148148,
+      "candidateMean": 0.5778614197530865,
+      "interval": {
+        "families": 2,
+        "high": 0.06603395061728401,
+        "level": 0.95,
+        "low": -0.06540074074074072,
+        "mean": 0.00031660493827164365,
+        "method": "cluster-bootstrap-by-family",
+        "pairs": 6,
+        "samples": 2000
+      },
+      "pairedMeanDiff": 0.00031660493827164365,
+      "verdict": "inconclusive"
+    },
+    "evidenceCompleteness": {
+      "baselineMean": 0.0,
+      "candidateMean": 0.0,
+      "interval": {
+        "families": 2,
+        "high": 0.0,
+        "level": 0.95,
+        "low": 0.0,
+        "mean": 0.0,
+        "method": "cluster-bootstrap-by-family",
+        "pairs": 6,
+        "samples": 2000
+      },
+      "pairedMeanDiff": 0.0,
+      "verdict": "non_inferior"
+    },
+    "reliability": {
+      "baselineMean": 0.5,
+      "candidateMean": 0.3333333333333333,
+      "interval": {
+        "families": 2,
+        "high": 0.0,
+        "level": 0.95,
+        "low": -0.3333333333333333,
+        "mean": -0.16666666666666666,
+        "method": "cluster-bootstrap-by-family",
+        "pairs": 6,
+        "samples": 2000
+      },
+      "pairedMeanDiff": -0.16666666666666666,
+      "verdict": "inconclusive"
+    },
+    "reuse": {
+      "baselineMean": 0.5,
+      "candidateMean": 0.3333333333333333,
+      "interval": {
+        "families": 2,
+        "high": 0.0,
+        "level": 0.95,
+        "low": -0.3333333333333333,
+        "mean": -0.16666666666666666,
+        "method": "cluster-bootstrap-by-family",
+        "pairs": 6,
+        "samples": 2000
+      },
+      "pairedMeanDiff": -0.16666666666666666,
+      "verdict": "inconclusive"
+    },
+    "safety": {
+      "baselineMean": 0.9,
+      "candidateMean": 0.9666666666666667,
+      "interval": {
+        "families": 2,
+        "high": 0.13333333333333333,
+        "level": 0.95,
+        "low": 0.0,
+        "mean": 0.06666666666666667,
+        "method": "cluster-bootstrap-by-family",
+        "pairs": 6,
+        "samples": 2000
+      },
+      "pairedMeanDiff": 0.06666666666666667,
+      "verdict": "non_inferior"
+    },
+    "taskUtility": {
+      "baselineMean": 0.45,
+      "candidateMean": 0.25,
+      "interval": {
+        "families": 2,
+        "high": -0.03333333333333329,
+        "level": 0.95,
+        "low": -0.3666666666666667,
+        "mean": -0.19999999999999996,
+        "method": "cluster-bootstrap-by-family",
+        "pairs": 6,
+        "samples": 2000
+      },
+      "pairedMeanDiff": -0.19999999999999996,
+      "verdict": "worse"
+    }
+  },
+  "environment": {
+    "checks": {
+      "auth": {
+        "bootstrapPasswordSource": "file",
+        "bootstrapUser": "present",
+        "mode": "local",
+        "ok": true,
+        "sessionTtlMs": 604800000
+      },
+      "backup": {
+        "encrypted": true,
+        "mode": "local",
+        "ok": true,
+        "postgres": {
+          "atomicAcrossComponents": false,
+          "lastDrillAt": "2026-09-16T18:48:51.111150Z",
+          "lastSuccessAt": "2026-09-16T18:48:51.545464Z",
+          "required": true,
+          "restoreVerified": true,
+          "snapshotFinishedAt": "2026-09-16T18:48:48.973179Z",
+          "snapshotStartedAt": "2026-09-16T18:48:48.365033Z",
+          "sourceIdentityVerified": true
+        },
+        "production": true,
+        "restoreDrill": true,
+        "retentionDays": 30,
+        "schedulerHealthy": true
+      },
+      "dataDir": {
+        "ok": true,
+        "symlink": false
+      },
+      "documentParser": {
+        "configured": true,
+        "mineruVersion": "3.4.5",
+        "ok": true,
+        "protocolVersion": 1,
+        "required": true
+      },
+      "evimedAdapters": {
+        "enabled": 12,
+        "ok": true,
+        "signingSecretSource": "file",
+        "specialistAdaptersRequired": true,
+        "workloadTokenRequired": true
+      },
+      "examples": {
+        "bundles": 1,
+        "ok": true
+      },
+      "inbox": {
+        "channel": "in-app",
+        "connected": true,
+        "ok": true,
+        "required": true,
+        "unresolved": 16
+      },
+      "kernel": {
+        "controlPlane": "controller_socket",
+        "enabled": true,
+        "imageLocal": true,
+        "imageVerified": true,
+        "networkMode": "none",
+        "ok": true,
+        "sandboxMode": "docker"
+      },
+      "memory": {
+        "connected": true,
+        "ok": true,
+        "required": true
+      },
+      "memoryIndex": {
+        "configured": true,
+        "connected": true,
+        "ok": true,
+        "provider": "builtin",
+        "required": false,
+        "rerank": {
+          "code": "memory_rerank_not_reached",
+          "configured": false
+        },
+        "worker": {
+          "lastCompletedAt": null,
+          "lastError": null,
+          "running": false
+        }
+      },
+      "modelGateway": {
+        "enabled": true,
+        "keySource": "file",
+        "model": "deepseek-flash",
+        "ok": true,
+        "receiptExpiresInMs": 86254914,
+        "receiptRenewalDue": false,
+        "signingSecretSource": "file"
+      },
+      "observability": {
+        "mode": "protected",
+        "ok": true,
+        "required": true,
+        "source": "file"
+      },
+      "openList": {
+        "connected": true,
+        "ok": true,
+        "required": true
+      },
+      "publicUrl": {
+        "ok": true,
+        "origin": "https://82.156.128.153",
+        "required": true,
+        "secure": true
+      },
+      "relationalIntegrity": {
+        "configured": true,
+        "ok": true,
+        "orphanTotal": 0,
+        "required": true,
+        "validated": true
+      },
+      "release": {
+        "appVersion": "0.1.3",
+        "createdAt": "2026-09-17T02:00:57.000Z",
+        "images": 2,
+        "ok": true,
+        "releaseId": "evimed-526261d6a154-1",
+        "required": true,
+        "revision": "526261d6a154",
+        "skills": 6,
+        "source": "file",
+        "tracked": true
+      },
+      "resources": {
+        "maxConcurrentTasks": 2,
+        "maxFileBytes": 52428800,
+        "maxProjectBytes": 1073741824,
+        "maxQueuedTasks": 100,
+        "maxRuntimeProxyConnections": 64,
+        "ok": true,
+        "production": true,
+        "runtimeQuotaCheckIntervalMs": 30000
+      },
+      "runtime": {
+        "capabilitySkillsDir": "/opt/evimed/capability-skills",
+        "compactionPolicy": "basic",
+        "controlPlane": "controller_socket",
+        "dataMount": "volume",
+        "imageLocal": true,
+        "imageVerified": true,
+        "kernel": "dsh",
+        "kernelVersion": "0.1.5-rc.2",
+        "mode": "kernel",
+        "networkEgress": "disabled",
+        "networkMode": "open-science-runtime-internal",
+        "networkPolicy": "not_required",
+        "ok": true,
+        "sandboxMode": "docker",
+        "transport": "unix"
+      },
+      "saasProfile": {
+        "billingIntegrated": false,
+        "commercialModel": "nonpaid-first-release",
+        "ok": true,
+        "organizationCollaboration": false,
+        "profile": "controlled-pilot",
+        "targetAudience": "individual-researchers",
+        "technicalSaas": false,
+        "tenantModel": "individual-account"
+      },
+      "scienceConnectors": {
+        "enabled": 7,
+        "gateway": "server-managed",
+        "materialsProjectEnabled": true,
+        "materialsProjectKeySource": "file",
+        "materialsProjectRequired": true,
+        "ok": true
+      },
+      "security": {
+        "corsOriginCount": 0,
+        "directShellAllowed": false,
+        "fullApprovalAllowed": false,
+        "hostShellAllowed": false,
+        "ok": true,
+        "persistentApprovalsAllowed": false,
+        "production": true,
+        "securityHeaders": true,
+        "trustedProxy": true
+      },
+      "stateStore": {
+        "mode": "postgres",
+        "ok": true,
+        "required": true,
+        "schemaVersion": 1,
+        "shared": true
+      },
+      "staticDir": {
+        "ok": true
+      },
+      "usageLedger": {
+        "connected": true,
+        "expiredReservations": 0,
+        "ok": true,
+        "required": true,
+        "uncertain": 47
+      }
+    },
+    "ok": true
+  },
+  "generatedAt": "2026-09-17T10:18:08Z",
+  "holdout": {
+    "briefs": [],
+    "reason": null
+  },
+  "latency": {
+    "baseline": {
+      "mean": 2281258.0,
+      "median": 2221883.5,
+      "n": 6,
+      "total": 13687548.0
+    },
+    "candidate": {
+      "mean": 2279548.3333333335,
+      "median": 1991834.5,
+      "n": 6,
+      "total": 13677290.0
+    }
+  },
+  "nonCompensatory": {
+    "evidenceCompleteness": [],
+    "safety": []
+  },
+  "plan": "docs/superpowers/plans/2026-09-07-self-evolving-agent-loop.md §6.3.5",
+  "preRegistered": {
+    "bootstrapSamples": 2000,
+    "budget": {
+      "costCap": 12.0,
+      "latencyCapMs": 5400000
+    },
+    "confidenceLevel": 0.95,
+    "margin": 0.02,
+    "primaryDimension": "taskUtility",
+    "repeats": 3,
+    "seed": 20260908
+  },
+  "regressionBriefs": [],
+  "reportId": "memory-ablation-v9",
+  "schemaVersion": 1,
+  "verdict": "worse",
+  "verdictReasons": [
+    "taskUtility is worse than the pre-registered margin"
+  ]
+}

@@ -1,0 +1,172 @@
+{
+  "arm": "baseline",
+  "armDigest": "8f868aaf189c2c73f9a4f63c688660476305b8653f33ff5e82dce1cbd12c6da5",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__baseline__r0",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "68c504b8b5e0cd234172d12eaccc6d1dfec769a13e2da37474c7b751d0827e34",
+  "configId": "memory-ablation-v9",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 173,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T07:14:52Z",
+  "judge": {
+    "issues": [],
+    "promptVersion": 1,
+    "rationale": "The delivery fully answers the brief: it declares unregistered protocol, actual search strings and screening counts, eligibility, and single-primary-study counting; keeps the guideline as contextual and outside effect estimates; and clearly separates randomized on-treatment contrasts from non-randomized post-trial exposure. Claims are typed and quote-bonded, derived estimates name inputs and assumptions, and risk statements keep their evidence level without resting practical advice on derivations.",
+    "scores": {
+      "correctness": 5,
+      "evidenceHandling": 5,
+      "safetyFraming": 5,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 113,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 114
+      },
+      {
+        "expectedVersion": 107,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 108
+      },
+      {
+        "expectedVersion": 107,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 108
+      },
+      {
+        "expectedVersion": 106,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 107
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v9-a4eaf489",
+  "repeat": 0,
+  "run": {
+    "artifacts": [
+      "deliverables/empakidney-durability-report/citation-audit.md",
+      "deliverables/empakidney-durability-report/citation-ledger.csv",
+      "deliverables/empakidney-durability-report/clinical-evidence-matrix.json",
+      "deliverables/empakidney-durability-report/clinical-evidence-report.md",
+      "deliverables/empakidney-durability-report/clinical-evidence-run.json",
+      "deliverables/empakidney-durability-report/clinical-evidence-search.json",
+      "deliverables/empakidney-durability-report/question-coverage.json",
+      "deliverables/empakidney-durability-report/references.bib",
+      "deliverables/empakidney-durability-report/revision-notes.md",
+      "tools/claim_audit.py",
+      "tools/numeric_audit.py"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_0_69aa249a882ff541",
+    "durationMs": 3051010,
+    "errorCode": null,
+    "id": "run_18464274e6bed154aa958e5efb5a4640",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "资料与方法声明了 GRADE，但结果与讨论中没有一处用它给出评级：第 57 行写「此处用于嵌在随机分配内部的非随机暴露。各类证据的确定性按 GRADE 评定」。GRADE 只在局限性或结论里出现。确定性等级必须写在对应证据体处，局限性不得为正文中不存在的方法学步骤申辩。",
+      "Report line 91 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 105 numeric facts 0.1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.",
+      "Review methods: searchCoverage[3] is unavailable: No registry of prospectively registered systematic-review protocols is among the source classes configured for this run; the protocol status is therefore declared as unregistered rather than checked.. This does not establish absence of evidence.",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "literature_search searched and returned no source",
+      "review weakened: CLM-017 — 数字本身逐字可核（[2] 摘要：\"4891 of 6609 randomized participants (74%) entered the post-trial period\"；43% vs 40%）。减弱的是一处表述：报告把它称作「阶段覆盖并不完整…74%」（L93）与 revision-notes 的「参与率为 74%」，而 4891 的合格分母是幸存未撤回的 6253 例（[2]：\"Of the 6253 participants not dead or withdrawn, 1362 (22%) did not provide ",
+      "review weakened: CLM-028 — 57（SE 14）与 45（14）两个每 1000 例绝对差值与 [2] 结果段逐字一致。减弱处：报告把「45」锚定为「整个随访期末」（L25），而原文是「at the end of the entire follow-up period」，且这两个差值由 Kaplan-Meier 曲线差计算（[2] 统计方法段）。差值的时点语义（尤其 45 对应哪个随访终点，以及它取自哪一分析集）在产物中只以「整个随访期」四字承载，读者无法从产物判断分母；这属于陈述精度不足，不是数值错误。",
+      "review weakened: CLM-060 — 换算本身算术正确：ln(0.87)/ln(0.72)=−0.139/−0.329≈0.42；仅变动 0.76 与 0.99 两端得 0.83 与 0.03，报告写的「3% 至 83%」区间可复现，且已标注〔推导〕、写明输入、方法与假设。减弱的原因是语义边界：产物把 0.87 的对比按分配、0.72 的对比按分配混在同一对数风险尺度上相乘比值，而 0.72 来自随机治疗期、0.87 来自暴露非随机的停药期；报告在假设段落承认了这一点（「不说明残余效应是否具因果性、由何种机制承载」），但结论层仍把它当作「疗效存留比例」使用（L145/L171）",
+      "review weakened: CLM-050 / CLM-052 / CLM-053 / CLM-054 — 四条被指定为 full_text 的指南引文，在被保存的指南产物中无法解析。该产物（.evimed-sources/evimed-guidelines/2160946d60faa052/…/guideline.md）只有 7 行：标题、Publisher/Year/Published 元数据，以及约 2000 字符的正文开头（止于 sex/gender 段落中间），我在其中检索不到任何 Recommendation 3.7.x、SGLT2i、Practice Point 或 DAP",
+      "review weakened: CLM-051 — 这是四条指南引文中被报告用得最重的一条：摘要、结果、讨论与结论都把它写成「指南原文中写明」随机随访期偏短是 2B 推荐不能更强的理由（L29、L31、L127、L155、L181）。该引文同样只存在于 matrix，不存在于被保存的指南产物中（见上条）；publisher PDF 未取得；报告自陈「未核对与正式出版版本在页面层面的对应关系」。因此报告给它挂的 accessLevel=full_text 与其实际可及层级不符，读者按「原文写明」理解会高于证据实际支持的程度。实质（KDIGO 2024 对低白蛋白尿人群给 2B、把 RCT 随访",
+      "review weakened: ACCESS-LEVEL-INTERNAL — 包内一处实质性不一致：摘要 L7 写「纳入 4 个来源并全部按全文层级阅读」，方法段 L55 紧接着自陈「指南的推荐文本读取自该指南的索引副本，而非出版方 PDF，故未核对与正式出版版本在页面层面的对应关系」，clinical-evidence-search.json 与 matrix 也把指南记为 accessLevel=full_text。同一份文件里「四篇全部全文」与「指南只读了索引副本」并存，且前者恰恰对最弱的一篇给出最强声明。指向同一条内层 claim 的第三处证据是我在指南产物里检索不到那四条引文。这",
+      "review weakened: CLM-057 / CLM-058 — 两条跨来源合成把指南与试验并列（0.87 的治疗暴露非随机期 vs 仍为 2B 的推荐；遗留效应至多 12 个月 vs 随机随访期偏短）。报告自己在 L155 指出「同一一致并不像表面上那样有说服力：指南说随访短、试验说随访被延长，两者是由设计联系在一起的，而非各自独立观察到的」——这一自我限定是对的，也应当保留。判 weakened 的原因与指南条目相同：合成的指南一侧（2B、short follow-up in the RCTs）出自产物中无法解析的引文；试验一侧（0.87 与其非随机暴露）已核实。合成的一半可追、一"
+    ],
+    "repairRounds": {
+      "content": 2,
+      "structural": 0
+    },
+    "sessionId": "session-18049ac4-6a2c-4730-871b-c5a130e4afeb",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 3300413,
+      "completeness": "complete",
+      "messages": 548,
+      "path": ".openscience/transcripts/run_18464274e6bed154aa958e5efb5a4640.jsonl",
+      "sha256": "f40fde8d569d2c53f3fbbd70f1884023f0d47244c056de3b9639ff99239d8e32"
+    },
+    "verification": "unchecked"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.4349981481481482,
+    "evidenceCompleteness": 0.0,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 1.0,
+    "taskUtility": 1.0
+  },
+  "startedAt": "2026-09-17T06:21:03Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

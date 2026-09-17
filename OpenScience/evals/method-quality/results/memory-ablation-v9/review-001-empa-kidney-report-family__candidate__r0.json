@@ -1,0 +1,170 @@
+{
+  "arm": "candidate",
+  "armDigest": "3bd4a5ed8f4002c9393806216c118a338226a345ec09f80a33f0b2afe779f5d3",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__candidate__r0",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "68c504b8b5e0cd234172d12eaccc6d1dfec769a13e2da37474c7b751d0827e34",
+  "configId": "memory-ablation-v9",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 147,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T06:21:01Z",
+  "judge": {
+    "issues": [
+      "A statement that no RCT directly compared continuing vs stopping SGLT2i is cited to the KDIGO guideline [4] rather than to the review's own search results, so the source does not carry that claim.",
+      "Delivery includes long audit/revision logs and self-reported gate non-approval that are outside the requested answer and reduce clarity/usefulness.",
+      "Meta-verification claims about 66/66 supportQuote matches and artifacts reference files not present in the provided input, so they cannot be independently checked.",
+      "Reference [2] has unresolved volume/issue/pages, leaving incomplete metadata."
+    ],
+    "promptVersion": 1,
+    "rationale": "The core report directly answers the brief, distinguishes randomized and post-trial periods, counts the primary study once, and names derived estimates. However, one search claim is cited to a guideline source, extensive audit logs add noise, and verification claims rely on absent artifacts. Safety framing is strong: derived estimates are marked and excluded from practice advice, and risk statements preserve evidence level.",
+    "scores": {
+      "correctness": 4,
+      "evidenceHandling": 4,
+      "safetyFraming": 5,
+      "usefulness": 4
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 112,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 113
+      },
+      {
+        "expectedVersion": 106,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 107
+      },
+      {
+        "expectedVersion": 106,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 107
+      },
+      {
+        "expectedVersion": 105,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 106
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v9-be9c157a",
+  "repeat": 0,
+  "run": {
+    "artifacts": [
+      "deliverables/empa-kidney-durability-review/citation-audit.md",
+      "deliverables/empa-kidney-durability-review/citation-ledger.csv",
+      "deliverables/empa-kidney-durability-review/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-durability-review/clinical-evidence-report.md",
+      "deliverables/empa-kidney-durability-review/clinical-evidence-run.json",
+      "deliverables/empa-kidney-durability-review/clinical-evidence-search.json",
+      "deliverables/empa-kidney-durability-review/question-coverage.json",
+      "deliverables/empa-kidney-durability-review/references.bib",
+      "deliverables/empa-kidney-durability-review/revision-notes.md",
+      "deliverables/empa-kidney-durability-review/verification/expand_search_log.py"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_0_9b4f643273c5dcce",
+    "durationMs": 1891347,
+    "errorCode": "specialist_deliverable_not_accepted",
+    "id": "run_2ba2ff011bc08bf73794eba50b944029",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.",
+      "citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.",
+      "Review methods: searchCoverage[6] is unavailable: 本次运行未接入中文文献库（SinoMed / CNKI 一类的来源），该来源类别未被检索。本综述不对中文文献中证据的有无作任何陈述。. This does not establish absence of evidence.",
+      "Review methods: searchCoverage[7] is unavailable: 本次运行未接入会议摘要库与试验注册结果条目来源；ClinicalTrials.gov 仅返回结构化注册字段，未返回结果条目全文。. This does not establish absence of evidence.",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "本次运行计划了 1 件交付物，没有一件通过契约校验，因此产物未经质量门。",
+      "literature_search searched and returned no source",
+      "final reply unavailable: nothing to scan"
+    ],
+    "repairRounds": {
+      "content": 2,
+      "structural": 0
+    },
+    "sessionId": "session-73f1fc51-39cf-4217-a650-2fc9d57784c0",
+    "status": "failed",
+    "transcript": {
+      "bytes": 2784362,
+      "completeness": "complete",
+      "messages": 607,
+      "path": ".openscience/transcripts/run_2ba2ff011bc08bf73794eba50b944029.jsonl",
+      "sha256": "f368e8fa62c4deb31ebef5bbc5b8ebbcda3a3c89e9ac2ac8bcd3d05dd1db30dd"
+    },
+    "verification": "unchecked"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.6497505555555556,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-17T05:46:38Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}
