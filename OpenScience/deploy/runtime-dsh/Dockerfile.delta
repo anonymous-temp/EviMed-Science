@@ -30,8 +30,9 @@
 #
 # NOT ADMISSIBLE HERE: a changed `pnpm-lock.yaml`, a new dependency, a kernel
 # pin move, or anything under `runtime/` other than the skill trees this
-# copies. Those change what the base installed, and the base is what this
-# trusts. Build the full `Dockerfile` for them.
+# copies and the research MCP server's own Python sources (see that step).
+# Those change what the base installed, and the base is what this trusts.
+# Build the full `Dockerfile` for them.
 ARG RUNTIME_BASE_IMAGE
 FROM ${RUNTIME_BASE_IMAGE}
 
@@ -61,6 +62,25 @@ COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
 RUN set -eux; \
   node /opt/evimed/socket/scripts/build-client.mjs; \
   test -s /opt/evimed/socket/dist/client.js
+
+# The research MCP server's Python sources, and nothing the full build
+# generated beside them.
+#
+# Admissible only while the change imports nothing outside the standard library
+# and this directory: the base installed everything the server depends on. The
+# full build also generated `data/sider-4.1.sqlite` into this same tree from
+# pinned upstream bytes, a step that needs the network, so the tree is not
+# replaced whole — the sources are copied over it and the generated index
+# stays. A module deleted from the source would linger, so a deletion, a
+# changed `build_sider_cache.py` or a new third-party import is a full build.
+# Importing every module is the acceptance: a source that needs something the
+# base does not have fails here, not in a run.
+COPY runtime/mcp/evimed-research/*.py /opt/evimed/mcp/evimed-research/
+RUN set -eux; \
+  test -s /opt/evimed/mcp/evimed-research/data/sider-4.1.sqlite; \
+  cd /opt/evimed/mcp/evimed-research; \
+  for module in *.py; do python3 -c "import sys; sys.path.insert(0, '.'); import ${module%.py}"; done; \
+  chmod -R a-w /opt/evimed/mcp
 
 # The preset's system-trusted skill roots, and the copy of the preset under the
 # kernel's own root. Both are rebuilt from the skill trees the base already has.
