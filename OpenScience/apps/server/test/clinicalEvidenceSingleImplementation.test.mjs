@@ -46,16 +46,18 @@ const runSide = (input, workspaceFiles) => runGate({
   executedSearchQueries: input.executedSearchQueries ?? null,
 });
 
-/** The eight files a clinical evidence package must contain. */
+/** The files of a clinical evidence package, as the capability manifest lists
+ *  them: the report and the matrix are required, the six that describe the
+ *  package to itself are delivered when written and never demanded. */
 const CLINICAL_EVIDENCE_OUTPUTS = Object.freeze([
   { path: "clinical-evidence-report.md", required: true },
   { path: "clinical-evidence-matrix.json", required: true },
-  { path: "clinical-evidence-search.json", required: true },
-  { path: "citation-ledger.csv", required: true },
-  { path: "references.bib", required: true },
-  { path: "citation-audit.md", required: true },
-  { path: "clinical-evidence-run.json", required: true },
-  { path: "question-coverage.json", required: true },
+  { path: "clinical-evidence-search.json", required: false },
+  { path: "citation-ledger.csv", required: false },
+  { path: "references.bib", required: false },
+  { path: "citation-audit.md", required: false },
+  { path: "clinical-evidence-run.json", required: false },
+  { path: "question-coverage.json", required: false },
 ]);
 
 async function writeWorkspace(input) {
@@ -121,12 +123,32 @@ async function verdicts(input, label) {
         ok: verdict.ok,
         issues: verdict.issues.filter((issue) => issue.severity === "required").map((issue) => issue.message),
         notes: verdict.issues.filter((issue) => issue.severity !== "required").map((issue) => issue.message),
+        // Everything the run is told, whatever it weighs. A check that moved
+        // from withholding to advising (CLINICAL_CHECK_TIERS, 2026-09-17) is
+        // still said on both sides in the same words, and that is what the
+        // cases about wording and line numbers hold.
+        said: verdict.issues.map((issue) => issue.message),
         metrics: verdict.metrics,
       },
     };
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }
+}
+
+/** What the gate detected, whatever became of it. A `silent` check
+ *  (CLINICAL_CHECK_TIERS, 2026-09-17) still runs on both sides — there is one
+ *  implementation — and tells neither the run nor the reader, so the cases
+ *  about such a check hold two things: it still detects, and neither side says
+ *  it.
+ *  @param {any} gate */
+const detected = (gate) => gate.findings.map((/** @type {any} */ finding) => finding.text).join("\n");
+
+/** @param {any} both @param {RegExp} pattern @param {string} label */
+function assertDetectedAndSilent({ gate, preflight }, pattern, label) {
+  assert.match(detected(gate), pattern, `${label}: the check no longer detects this, so the case tests nothing`);
+  assert.doesNotMatch(gate.issues.join("\n"), pattern, `${label}: a silent check reported to the control plane`);
+  assert.doesNotMatch(preflight.said.join("\n"), pattern, `${label}: a silent check reported to the run`);
 }
 
 test("a package both sides accept", async () => {
@@ -741,7 +763,10 @@ test("whatever the server gate rejects, the preflight already caught", async () 
     const input = deepResearchPackage();
     scenario.break(input);
     const { gate, preflight } = await verdicts(input, scenario.label);
-    assert.equal(gate.valid, false, `${scenario.label}: the gate no longer reports this at all, so this case tests nothing`);
+    // `findings`, not `valid`: since 2026-09-17 a check may detect a defect and
+    // report it to nobody (CLINICAL_CHECK_TIERS), and several of these cases
+    // are now of that kind. What this file holds is below, and is unchanged.
+    assert.ok(gate.findings.length > 0, `${scenario.label}: the gate no longer detects this at all, so this case tests nothing`);
     // The invariant that matters is not "both reject" — the server delivers a
     // package whose only findings are degradable — it is that the run and the
     // server withhold on exactly the same set. A case whose findings are all
@@ -1057,7 +1082,7 @@ test("both sides name the same line of the report the author has", async () => {
   const expected = input.reportText.split("\n").findIndex((line) => line.includes(offender)) + 1;
   const { gate, preflight } = await verdicts(input, "line agreement");
   assert.match(gate.issues.join("\n"), new RegExp(`report line ${expected} delivers a verdict`));
-  assert.match(preflight.issues.join("\n"), new RegExp(`report line ${expected} delivers a verdict`));
+  assert.match(preflight.said.join("\n"), new RegExp(`report line ${expected} delivers a verdict`));
 
   // The untranslated-prose notice is read off a second blanked copy — 参考文献
   // gone, and 检索与方法 gone as well, because a search strategy is in the
@@ -1075,7 +1100,7 @@ test("both sides name the same line of the report the author has", async () => {
     const line = shifted.reportText.split("\n").findIndex((text) => text.includes(write)) + 1;
     const named = await verdicts(shifted, write);
     assert.match(named.gate.issues.join("\n"), new RegExp(`report line ${line} ${gateReason}`));
-    assert.match(named.preflight.issues.join("\n"), new RegExp(`report line ${line} ${gateReason}`));
+    assert.match(named.preflight.said.join("\n"), new RegExp(`report line ${line} ${gateReason}`));
   }
 });
 
@@ -1129,7 +1154,11 @@ test("the reference list is untranslated by definition, and it is the only secti
   body.reportText = body.reportText.replace("## 讨论\n", `## 讨论\n${title}。\n`);
   const inBody = await verdicts(body, "the same title in the discussion");
   assert.equal(inBody.gate.valid, false, "the exemption is the section, not the title");
-  assert.equal(inBody.preflight.ok, false, JSON.stringify(inBody.preflight.issues));
+  // Said on both sides in the same words; advice since 2026-09-17, so it no
+  // longer withholds the run's acceptance.
+  assert.match(inBody.gate.issues.join("\n"), /consecutive words of untranslated source prose/);
+  assert.match(inBody.preflight.said.join("\n"), /consecutive words of untranslated source prose/);
+  assert.deepEqual([...inBody.preflight.issues].sort(), [...inBody.gate.blockingIssues].sort());
 });
 
 // The axis table the comparison rule asks for, written the way the skill writes
@@ -1160,14 +1189,7 @@ test("a comparison the title announces is carried out on fixed axes, on both sid
     "# 急性胸痛院外自救用药的证据评价：两种含服制剂的比较",
   );
   const withoutMatrix = await verdicts(missing, "a comparative title with no matrix");
-  assert.equal(withoutMatrix.gate.valid, false);
-  assert.match(withoutMatrix.gate.issues.join("\n"), /titled as a comparison .* but no table in the analysis body/s);
-  assert.equal(
-    withoutMatrix.preflight.ok,
-    false,
-    `the gate rejects this package but the preflight accepted it: ${JSON.stringify(withoutMatrix.preflight.issues)}`,
-  );
-  assert.match(withoutMatrix.preflight.issues.join("\n"), /titled as a comparison .* but no table in the analysis body/s);
+  assertDetectedAndSilent(withoutMatrix, /titled as a comparison .* but no table in the analysis body/s, "a comparative title with no matrix");
 
   // The same title over a body that fills the axes. This is the repair the
   // notice asks for, so it must clear both sides.
@@ -1218,15 +1240,7 @@ test("a substitution claim the report says it has no comparison for is rejected 
     const input = deepResearchPackage();
     input.reportText = input.reportText.replace("## 讨论\n", `## 讨论\n${declared}\n${write}\n`);
     const { gate, preflight } = await verdicts(input, write);
-    assert.equal(gate.valid, false, `${write}: the gate accepted a substitution claim it has no comparison for`);
-    assert.match(gate.issues.join("\n"), /concludes that one arm can take the other's place/);
-    assert.equal(
-      preflight.ok,
-      false,
-      `${write}: the gate rejects this package but the preflight returned ok=true, `
-        + JSON.stringify(preflight.issues),
-    );
-    assert.match(preflight.issues.join("\n"), /can take the other's place/);
+    assertDetectedAndSilent({ gate, preflight }, /concludes that one arm can take the other's place/, write);
   }
 
   // Every one of these carries the words the rule reads, beside the same
@@ -1372,14 +1386,7 @@ test("both sides look for the matrix in the analysis body, and both read it as a
       .replace("# 急性胸部压迫感的鉴别与处置", comparativeTitle)
       .replace(anchor, `${anchor}${table}\n`);
     const { gate, preflight } = await verdicts(input, placement);
-    assert.equal(gate.valid, false, `${placement}: the gate accepted a comparison with no matrix in its body`);
-    assert.match(gate.issues.join("\n"), /but no table in the analysis body/, placement);
-    assert.equal(
-      preflight.ok,
-      false,
-      `${placement}: the gate rejects this package but the preflight accepted it: ${JSON.stringify(preflight.issues)}`,
-    );
-    assert.match(preflight.issues.join("\n"), /titled as a comparison .* but no table in the analysis body/s, placement);
+    assertDetectedAndSilent({ gate, preflight }, /titled as a comparison .* but no table in the analysis body/s, placement);
   }
 });
 
@@ -1399,16 +1406,8 @@ test("the absence may be declared after the conclusion it contradicts, and both 
   const conclusionLine = lines.findIndex((line) => line.includes(conclusion)) + 1;
   const absenceLine = lines.findIndex((line) => line.includes(absence)) + 1;
   const { gate, preflight } = await verdicts(input, "the absence declared after the conclusion");
-  assert.equal(gate.valid, false, "the gate accepted a swap it has just said it has no comparison for");
-  assert.match(gate.issues.join("\n"), new RegExp(`report line ${conclusionLine} concludes that one arm`));
-  assert.match(gate.issues.join("\n"), new RegExp(`while line ${absenceLine} states`));
-  assert.equal(
-    preflight.ok,
-    false,
-    `the gate rejects this package but the preflight accepted it: ${JSON.stringify(preflight.issues)}`,
-  );
-  assert.match(preflight.issues.join("\n"), new RegExp(String(conclusionLine)));
-  assert.match(preflight.issues.join("\n"), new RegExp(String(absenceLine)));
+  assertDetectedAndSilent({ gate, preflight }, new RegExp(`report line ${conclusionLine} concludes that one arm`), "the swap");
+  assert.match(detected(gate), new RegExp(`while line ${absenceLine} states`));
 });
 
 test("the sentences the reviewers wrote as the repair pass both sides unchanged", async () => {
@@ -1582,13 +1581,13 @@ test("the coverage ledger is checked field for field on the run's side, not only
     breakLedger(ledger);
     input.keepCoverage = true;
     input.questionCoverageText = JSON.stringify(ledger);
-    const { gate, preflight } = await verdicts(input, String(expected));
-    assert.equal(gate.valid, false, `${expected}: the gate accepted it`);
-    assert.match(preflight.issues.join("\n"), expected);
+    assertDetectedAndSilent(await verdicts(input, String(expected)), expected, String(expected));
   }
 
   // And the deliverable's absence, which is the state every already-delivered
-  // package is in: the verdict has to say which file and what goes in it.
+  // package is in. The ledger is no longer demanded (the manifest lists it as
+  // optional and its check is silent), so a package without one is accepted by
+  // the run and the absence is only counted.
   const missing = deepResearchPackage();
   missing.keepCoverage = true;
   missing.questionCoverageText = "";
@@ -1596,10 +1595,9 @@ test("the coverage ledger is checked field for field on the run's side, not only
   try {
     await rm(path.join(workspace, "question-coverage.json"));
     const verdict = runSide(missing, await workspaceFiles(workspace));
-    assert.equal(verdict.ok, false);
-    const messages = verdict.issues.map((issue) => issue.message).join("\n");
-    assert.match(messages, /question-coverage\.json 台账格式无效：文件缺失或为空/);
-    assert.match(messages, /逐条列出题面「需要回答的问题」拆出的原子子问/);
+    assert.equal(verdict.ok, true, JSON.stringify(verdict.issues.filter((issue) => issue.severity === "required")));
+    assert.doesNotMatch(verdict.issues.map((issue) => issue.message).join("\n"), /question-coverage\.json/);
+    assert.match(detected(validateClinicalEvidencePackage(missing)), /question-coverage\.json 台账格式无效：文件缺失或为空/);
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }

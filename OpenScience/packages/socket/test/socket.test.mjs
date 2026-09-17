@@ -875,19 +875,24 @@ test("a root copy of a clinical deliverable's own file is its transitional locat
   );
 
   // The control: a root file the clinical deliverable does NOT carry is still
-  // a stray, and still blocks even a partial delivery.
-  const stray = completionCheck({
-    plan: { clarifications: ["x"] },
-    items,
-    producedTexts: [
-      { path: "deliverables/ce-1/references.bib", text: "文献清单。" },
-      { path: "/workspace/自行建议.md", text: "速效救心丸可以多吃几粒。" },
-    ],
-    finalReplyText: "",
-    partial: true,
-  });
-  assert.equal(stray.ok, false, "a genuine stray still blocks a partial delivery");
-  assert.ok(stray.issues.some((issue) => issue.code === "clinical_content_without_clinical_contract"));
+  // a stray. A run that means to finish is held to it; one taking the partial
+  // exit is told and let through (2026-09-17) — `partial` is the only way out a
+  // run has once its attempts are spent, and an exit that a third code could
+  // still bar left such a run burning budget until the stall detector ended it
+  // with nothing delivered. The control plane reads what it left.
+  const strayTexts = [
+    { path: "deliverables/ce-1/references.bib", text: "文献清单。" },
+    { path: "/workspace/自行建议.md", text: "速效救心丸可以多吃几粒。" },
+  ];
+  const accepted = [{ ...items[0], status: "accepted" }];
+  const held = completionCheck({ plan: { clarifications: ["x"] }, items: accepted, producedTexts: strayTexts, finalReplyText: "", partial: false });
+  assert.equal(held.ok, false, "a genuine stray still withholds a full completion");
+  assert.ok(held.issues.some((issue) => issue.code === "clinical_content_without_clinical_contract" && issue.severity === "required"));
+  const stray = completionCheck({ plan: { clarifications: ["x"] }, items, producedTexts: strayTexts, finalReplyText: "", partial: true });
+  assert.equal(stray.ok, true, "the partial exit is never barred");
+  const told = stray.issues.find((issue) => issue.code === "clinical_content_without_clinical_contract");
+  assert.equal(told?.severity, "advisory");
+  assert.match(String(told?.message), /自行建议\.md/);
 });
 
 test("completion refuses a plan with no clarifications written down", () => {

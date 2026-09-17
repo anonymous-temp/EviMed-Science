@@ -60,6 +60,7 @@ import {
   gateDeliverable,
   indexPlan,
   rejectionEnvelope,
+  boundedSuggestions,
   renderDeliverySummary,
   settleDelegation,
   sourceArtifactPaths,
@@ -822,7 +823,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         await writeReceipt(ctx, entry, receiptEntry, config.bundleVersion, call)
         Object.assign(item, advancePlanItem({ ...item, status: 'submitted' }, 'accept', { receiptDigest: await sha256Hex(JSON.stringify(receiptEntry)), lastIssues: [] }))
         await putPlanIndex(store(), entry)
-        return { ok: true, data: { deliverableId: item.id, contractKind: item.contractKind, label: contractKindLabel(item.contractKind), metrics: verdict.metrics, notices: receiptEntry.notices } }
+        // Accepted: the run is done with this deliverable. The receipt keeps
+        // every notice; the reply carries a bounded few, because a long list
+        // after "ok" reads as work still owed on a package that is now frozen.
+        return { ok: true, data: { deliverableId: item.id, contractKind: item.contractKind, label: contractKindLabel(item.contractKind), metrics: verdict.metrics, notices: boundedSuggestions(receiptEntry.notices, (count) => `另有 ${count} 条建议记在回执里，不需要再处理。`) } }
       },
     })
   }

@@ -283,6 +283,10 @@ services:
       # Comma-separated project id prefixes extraction never writes for, e.g.
       # `eval-memory-ablation` so a paired evaluation's arms hold still.
       OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES:
+      # How many times the control plane sends a finished package back to the
+      # run after its own gate has read it. Unset is 0: findings are attached to
+      # the delivery instead (config.mjs `gateRepairRounds`).
+      OPEN_SCIENCE_GATE_REPAIR_ROUNDS:
       # Which component ranks a recall. `openviking` is what this stack starts;
       # `builtin` is the term matcher, which needs nothing deployed and is what
       # a recall falls back to when the index is unreachable.

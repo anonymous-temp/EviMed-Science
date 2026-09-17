@@ -59,6 +59,10 @@ const hostSideOnly = {
  *  does nothing and says nothing. */
 const operatorLevers = {
   OPEN_SCIENCE_SAAS_PROFILE_UNCONFIGURED: ["open-science-web"],
+  // The way back to server-side repair rounds, off by default since
+  // 2026-09-17. A lever that does not arrive leaves an operator believing the
+  // gate sends packages back when it attaches its findings instead.
+  OPEN_SCIENCE_GATE_REPAIR_ROUNDS: ["open-science-web"],
   // Declared `true` in .env.example and read by config.mjs, and for a while
   // passed by neither compose service: an operator turning the LLM fallback
   // classifier off got the shipped default and no indication their setting had
