@@ -1,0 +1,190 @@
+{
+  "arm": "candidate",
+  "armDigest": "05d7659d92077a53b0a5bd4fdca75148ee16aeb4611db93312c68d51536db0bb",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__candidate__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "1301c2d979c6a68751c1b62b6cd03ed7c8362f5f1a08f8c5cddeed353f5f6a27",
+  "configId": "memory-ablation-v8",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 20,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T19:23:22Z",
+  "judge": {
+    "issues": [
+      "Delivery contains multiple unreconciled versions: an audit, revision notes, and two full reports with contradictory search/screening counts (14 searches/40 records/38 unique vs 11/132/116; 30 vs 108 excluded).",
+      "The submission is truncated mid-sentence at the end of the second conclusion, so the actual final answer is incomplete.",
+      "The two model sources labeled abstract in the brief are reported as full_text without visible full-text excerpts or preservation evidence in the delivery; mustDo abstract-level recording is not independently verifiable.",
+      "Five additional sources beyond the seeded three are asserted as included with PMCIDs, but their preservation/role is not evidenced and search counts do not reconcile."
+    ],
+    "promptVersion": 1,
+    "rationale": "The core question is answered and overlap correctly left unresolved with the necessary fields named, but the delivery is bloated and internally inconsistent, weakening usefulness and correctness. Evidence handling shows careful typing and a sound derived estimate, yet asserted preservation/audit cannot be verified and key numbers conflict. Safety framing is appropriately hedged and avoids practice-level advice. Overall quality is undermined by incoherent versioning and truncation.",
+    "scores": {
+      "correctness": 2,
+      "evidenceHandling": 3,
+      "safetyFraming": 4,
+      "usefulness": 3
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 94,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 95
+      },
+      {
+        "expectedVersion": 87,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 88
+      },
+      {
+        "expectedVersion": 87,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 88
+      },
+      {
+        "expectedVersion": 86,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 87
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v8-08bd469f",
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "deliverables/mimic-iv-sepsis-prognosis-scoping-v2/citation-audit.md",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping-v2/citation-ledger.csv",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping-v2/clinical-evidence-matrix.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping-v2/clinical-evidence-report.md",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping-v2/clinical-evidence-run.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping-v2/clinical-evidence-search.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping-v2/question-coverage.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping-v2/references.bib",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping-v2/revision-notes.md",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-report.md",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_1_6d510e44b2dfb691",
+    "durationMs": 2322370,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_4f9d6c43104d4b5b92d12b5f4459114f",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/evimed-guidelines/00366ec0605bf45d/guideline.md, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.",
+      "The repair request could not be dispatched (unknown: Client was closed and is not queryable), so no repair was attempted.",
+      "claims[6].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[8].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[27].claim numeric fact 3 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 7 numeric facts 9, 16 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 71 numeric facts 5 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 84 numeric facts 28 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 96 numeric facts 28 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 144 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.",
+      "citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.",
+      "Report line 21 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 9 处是同一条（Report line 118、Report line 132、Report line 136、Report line 138、Report line 160 等）：这是一处决定，改一次就能全部修好。",
+      "Review methods: searchCoverage[4] is unavailable: 本次运行未配置试验注册库连接器，该域未被检索。. This does not establish absence of evidence.",
+      "Review methods: 5 primary report(s) have unknown study identity; independent study count remains unavailable.",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "literature_search searched and returned no source",
+      "review weakened: v2:CLM-050 — 两个数字（73181 与 76 540）本身都在来源中逐字存在，故分歧陈述不假；但 v2 把该分歧登记为\"互不相容的数值陈述\"并只列出\"版本差异\"与\"计数口径\"两种解释的相容性，而同一保全产物 PMC10496690 第23行写明该报告使用的是 MIMIC IV V.2.0（\"which included over 76 000 ICU admissions\"），其队列为 2008–2019 全期，v1:CLM-037 亦指向同一版本。把分属 V.2.0 与 v2.2 的两个总量当作需要调和的分歧，削弱了该综合断言的表述力度（尽管两包",
+      "review weakened: v1:CLM-049 — 版本 2.0／2.2／3.0 并存在两包中都成立（与 v2:CLM-049 一致）；但 v1 摘要与结论行只写\"版本不一致\"，把版本差异当作队列不可比的方向性证据，而 v1 自身讨论节（第154行）又正确写明\"扩展版本可能包含更早的时期\"、版本差异并未回答问题。同一产物内部该概括与其自身限定句不一致，表述被削弱。",
+      "review weakened: v1:CLM-057 — 所述\"各报告都写出了规则名称，但未复现其实现\"与保全文本不符：PMC12832424 第33行原文即完整列出排除项（未满 18 岁、ICU 停留 <24 h、HALP 组分缺失、ICU 再入院），PMC12534946 与 PMC10496690 亦在正文给出纳入/排除条款原文——这些是可直接读到的规则实现，而非只有规则名称。该概括性陈述因此被削弱（其所依附的\"五篇都限制首次 ICU 入住\"、阈值 24/48/未写明三值并存两项仍成立）。",
+      "review weakened: v1:CLM-035 — 该断言把 \"[2,3,4,5,6] 五篇报告都要求成年\"、\"五篇都限制为首次入住 ICU\"等全五篇范围的结论标注为 claim:CLM-035，而 CLM-035 的唯一来源是来源 [6]（PMC10496690）。引文可核验但只覆盖其中一篇，五篇范围的整体断言在这条标注下不被支持；须依赖 v1 自己的 4.8／4.9 覆盖表所列的 CLM-015／022／028 才成立。",
+      "review weakened: v2:CLM-035 — 断言的后半句\"排除血液系统肿瘤与首次以外的重复 ICU 住院\"未被其自带引文承载：引文只截取到纳入条款 \"(1) Enrolled patients were diagnosed as malignancy and sepsis according to ... (2) Patients' age was more than 18 years when admitted by ICU.\"，而排除项在来源 PMC10496690 第27行（\"Enrolled patients with haematologic tumours. (2)",
+      "review weakened: v1:CLM-035@SEP — 采样到的另一处同一标注误用：v1 正文把来源 [5]（脓毒症相关脑病）的\"18 岁及以上；另排除一长串其他脑病病因\"与\"首次入住 ICU 且住院至少 24 h\"两格同时标注为 claim:CLM-035。CLM-035 指向来源 [6]，来源 [5] 的这些资格条件属 CLM-032。引用路由错误，该格因此不成立。",
+      "review contradicted: v1:EIGHT-FACTORS-SAE — v1 在摘要及模型表中把脓毒症相关脑病列线图记为\"八因子\"，同时又在模型表与结论行写\"八因子\"——但采样核对时发现 v1 结论行第186行写作\"脓毒症相关脑病 ICU 死亡八因子列线图\"，与 v2 一致；然而 v1 的实践要点第4行与讨论对同一模型另有\"九因子\"式表述引用。以 v2 的稳定表述与来源为准（PMC12534946 摘要：\"LASSO regression, identified eight predictive variables\"），凡把该模型写成\"九因子\"的表述被来源直接反驳。此条针对 v",
+      "review weakened: v1:RECEIPT-DISTINCT-SOURCES — 重点项 (d)：v1 运行回执记 distinctPreservedSources=8，而其保全来源清单只含 8 篇开放获取文章；同一工作区实际含有 14 份本次运行的保全文档（8 篇 PMC 全文 + 6 份指南文本，路径见 glob 结果）。v1 自身检索日志与正文又承认保全过一份指南候选文本（晚期肿瘤预后评估），该文本在回执中未被计数。此外 v1 修订说明自述其交付门禁两次以\"回执统计与检索日志及实际保全来源数不符\"为由退回、第三次因提交上限被拒，该阻塞项从未解决。因此该统计数字被削弱，不能视为",
+      "review weakened: v1:METHODS-VS-LOG-DESCRIPTOR — v1 方法节称 8 份之中有 1 份（MIMIC-IV 数据描述文献）来自题面所附来源清单而非本次检索，并据此在检索日志中单独标明；但题面所给种子清单为三篇（数据描述 + 两篇模型报告），且 v2 为同一数据描述补做了一条可检索到它的检索式（\"MIMIC-IV electronic health record dataset\"）。把该来源描述为\"来自题面\"而非\"来自检索\"，与两包各自对同一来源的溯源做法不一致，该表述被削弱（不影响其被保全与实际层级）。",
+      "review weakened: v1:CLM-010 — v1 正文在资源构造描述处把\"国家死亡索引\"以外的死亡信息来源写成\"与州生命统计登记库链接\"，而来源 PMC9810617 第43行只写 Massachusetts State Registry of Vital Records and Statistics，并未出现\"National Death Index\"字样；来源实际否定的对照物是 Social Security Death Master File（SSDMF）。v2:CLM-008 采用了正确的对照物（SSDMF），v1 该处的对照物表述被来源削弱。"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-06bddba4-6f17-44a4-9ea6-84d299895af5",
+    "status": "failed",
+    "transcript": {
+      "bytes": 4020859,
+      "completeness": "complete",
+      "messages": 648,
+      "path": ".openscience/transcripts/run_4f9d6c43104d4b5b92d12b5f4459114f.jsonl",
+      "sha256": "3a457a2410307fee48f51eb9352930a2ef91935fdbfa31ead06c1c7551ad8e97"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.5699314814814815,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 0.8,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T18:43:35Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

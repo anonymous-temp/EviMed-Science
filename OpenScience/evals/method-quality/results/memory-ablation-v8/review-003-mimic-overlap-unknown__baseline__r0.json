@@ -1,0 +1,200 @@
+{
+  "arm": "baseline",
+  "armDigest": "7973e501246dc945956fcf1b93dc07a39458b43822bb309a3de94594cf734da3",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__baseline__r0",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "1301c2d979c6a68751c1b62b6cd03ed7c8362f5f1a08f8c5cddeed353f5f6a27",
+  "configId": "memory-ablation-v8",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 13,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T21:11:26Z",
+  "judge": {
+    "issues": [
+      "方法部分称两份模型报告为摘要级，但结果、表1与引文审计将其称为全文级，报告自相矛盾。",
+      "违反必须不：将两份摘要级模型出版物（PMID 41602009、PMID 41146378）称为全文。",
+      "引文审计声称已保存这两份出版物的全文工件，但输入将其标为 abstract，证据等级被无依据升级，相关细粒度声明失去可靠绑定。"
+    ],
+    "promptVersion": 1,
+    "rationale": "回答了范围和独立性审计，字段解释充分，且重叠保持未解决、推算值标注为推导。但核心证据等级矛盾严重：方法说两份模型报告为摘要级，结果/表格/审计却说全文级，违反 mustNotDo，导致正确性与证据处理不可信。安全框架谨慎，风险声明分级。",
+    "scores": {
+      "correctness": 2,
+      "evidenceHandling": 2,
+      "safetyFraming": 4,
+      "usefulness": 3
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 99,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 100
+      },
+      {
+        "expectedVersion": 92,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 93
+      },
+      {
+        "expectedVersion": 92,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 93
+      },
+      {
+        "expectedVersion": 91,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 92
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v8-d7933201",
+  "repeat": 0,
+  "run": {
+    "artifacts": [
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/citation-audit.md",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/citation-ledger.csv",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-matrix.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-report.md",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-run.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/clinical-evidence-search.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/question-coverage.json",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/references.bib",
+      "deliverables/mimic-iv-sepsis-prognosis-scoping/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_0_470f2c241e416400",
+    "durationMs": 1389474,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_d682ffd57f94321172ca02e26be53b88",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "MUST FIX — The academic report line 19 concludes that one arm can take the other's place (两份模型报告都没有公布受试者层面名单、特定版本的提取代码或精确到标识符的队列流程图，因此患者队列重叠在本文中保留为未解决状态，不作任何方向的判定 [3]<!-- claim:CLM-020 -…), while line 145 states that the direct comparison behind such a conclusion was not found (| 是否存在直接比较研究 | 未检索到：两",
+      "MUST FIX — question-coverage.json 条目 5.1（「Report an evidence-hierarchy label (full text / abstract / b」）声明 answered，但指向报告第 76 行，那一行是空行或只有标记，没有正文。",
+      "MUST FIX — question-coverage.json 条目 9.1（「Evidence table of included models/studies with their MIMIC-I」）声明 answered，但指向报告第 76 行，那一行是空行或只有标记，没有正文。",
+      "MUST FIX — The search log must exactly match successful evidence-search calls from the same run — missing from the log: \"observation-process features are associated with larger doma\", \"pmc12832424\", \"pmc12557738\", \"10.1136/bmjopen-2025-102971\"; logged but never executed: \"10.1177/08850666261466237\".",
+      "The academic report contains runtime or retrieval-process prose instead of scientific analysis: line 75 reads | 报告（编号锚点） | 模型、人群、结局 | 指明的 MIMIC-IV 版本 | MIMIC-IV 在本研究中的角色 | 队列规模（死亡） | 记录访问层级 |. Write what the evidence shows, not how it was obtained — the run's tools, gateways, preserved artifacts (工件",
+      "claims[31].claim numeric fact 2008-2019 is not present in any supporting source and is not a verifiable source count. Add the source that states it, or record it as unverifiable.",
+      "Report line 17 numeric facts 920 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 31 numeric facts 2, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 57 numeric facts 181, 920, 519 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 67 numeric facts 625 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 83 numeric facts 2494 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 119 numeric facts 920 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 121 numeric facts 10, 950 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 142 numeric facts 4 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 127 anchors claim CLM-022，但该行只引用了 [1, 2]，而 CLM-022 的 referenceNumber 是 3。把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。",
+      "citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.",
+      "citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.",
+      "citation-audit.md must reference at least one real audited source identifier from the evidence matrix.",
+      "claims[32] is not paired with its standard numbered in-text citation.",
+      "Report line 89 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them. 另有 2 处是同一条（Report line 172、Report line 180）：这是一处决定，改一次就能全部修好。",
+      "Report line 91 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 2 处是同一条（Report line 145、Report line 160）：这是一处决定，改一次就能全部修好。",
+      "Report line 113 numeric facts 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them. 另有 2 处是同一条（Report line 158、Report line 166）：这是一处决定，改一次就能全部修好。",
+      "Report line 117 numeric facts 3 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 2 处是同一条（Report line 123、Report line 164）：这是一处决定，改一次就能全部修好。",
+      "Report line 152 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 2 处是同一条（Report line 154、Report line 190）：这是一处决定，改一次就能全部修好。",
+      "Review methods: reviewMethods must be an object with schemaVersion 1; leave the existing source and query ledgers intact while repairing it.",
+      "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，无法逐问比对。question-coverage.json 只做了自洽核对。",
+      "The repair request could not be dispatched (unknown: Client was closed and is not queryable), so no repair was attempted.",
+      "biomedical_source_search searched and returned no source",
+      "review contradicted: CLM-034-SENS — 该推算对象的 sensitivity 原文写「Both studies exclude stays shorter than 24 hours and keep only the first ICU admission」。这是错的事实：腹腔内脓毒症报告（CLM-022 引文）只写「For patients with multiple ICU admissions, only data from the first admission was retained. Patients aged <18 years were ex",
+      "review weakened: RPT-L164 — 讨论第 164 行把链环一标为「已建立：两个队列来自同一源人群、同一收集窗口，且都是成年 Sepsis-3 患者的首次 ICU 入住」。前半段（同版本、同窗口、均限首次入住、均为成人）有证据；但「都是成年 Sepsis-3 患者」把两者的病例定义并成了一个，而报告第 97 行明确写「本文按原文分别记录，不将二者等同」，表 2（第 141 行）也写「定义按原文记录而不等同」。链环文字与报告自身的方法学承诺冲突。链环二至五标为「未建立」的部分则正确，且报告没有给出替代结论，这部分无问题。",
+      "review contradicted: ACCESS-L45 — 方法第 45 行称「两份模型报告的全文未能在本次运行中取得，因此二者均按摘要层级记录」。这在本次运行自己的产物上直接为假：clinical-evidence-run.json 的 successfulSourceArtifacts 列出 .evimed-sources/PMC12832424/…/fulltext.md 与 .evimed-sources/PMC12557738/…/fulltext.md；两份制品均存在且 CLM-009/010/011/012/013/014/015/016/017/018/019 与 CL",
+      "review contradicted: COV-1.2-1.3 — question-coverage.json 的条目 1.2 与 1.3 为 PMID 41602009 / 41146378 记录「accessLevel: abstract」，与同一 run 的矩阵、检索台账、run receipt 及已保存的全文制品相反。条目 2.1 的问句是「除非全文被实际取回并保存在本工作区，否则记为摘要级证据」，其 reportLines 却指向第 41 行（即「4 份来源均按全文层级阅读」那一行），把相反的一行当作该条的落地位置。覆盖台账因此同时携带了错误的标签和错误的行号。",
+      "review weakened: CLM-019 — 引文逐字命中，内容也经独立证据证实：被引的那项较早 MIMIC-IV 脓毒症 HALP 分析可解析为 PMID 40065235（BMC Infect Dis 2025，2,968 例脓毒症患者，28 天死亡 809 例，smoothing spline 拐点 24.69）——与被引句的「break-point around 24.7」吻合。削弱之处在制品对该证据可得性的描述：矩阵 uncertainty 写该分析「is known to this review only through the citing paper's sentenc",
+      "review weakened: CLM-030 — 数字本身经保留全文与独立摘要双重印证（AUC 0.812、accuracy 0.772、sensitivity 0.605、specificity 0.823；摘要另给 F1 与 PPV）。但矩阵把该数值说成「in the MIMIC-IV training cohort」，而所引 Table 2 的标题是「Prediction performance of each model in internal validation sets」，正文亦称其为 internal comparison——集合标签不精确。同一实体上还存在报告的计数不一致",
+      "review contradicted: AUDIT-CORR — citation-audit.md 断言「No correction, expression of concern or retraction was identified for any included reference」，并进一步把 HALP 论文引用的 doi 10.1038/s41597-023-01945-2 解释为该论文自己的 DOI 变体。两处都错：该 DOI 属于纳入参考 [1] 的一篇 Author Correction（PMID 36646711，我取回全文，内容为表 1 缺失列标题的更正），另有一篇 ",
+      "review contradicted: RPT-L83-COUNT — 报告第 83 行写「同一轮检索还返回 3 条无法解析到 DOI、PMID 或 PMCID 的记录，未作进一步刻画即排除」。检索台账里这样的记录只有 1 条（screeningNumber 8，Embase accession L644440695，无 DOI/PMID/PMCID），citation-audit.md 第 28 行也写「One retrieved conference abstract … has no DOI, PMID or PMCID at all」。其余候选记录均带 PMID 或 DOI（含 PM",
+      "review contradicted: RPT-L19-CODE — 报告第 19 行断言「两份模型报告都没有公布受试者层面名单、特定版本的提取代码或精确到标识符的队列流程图」，第 180 行亦称本次未能取得提取脚本。复合句中的「提取代码」一项为假：HALP 报告全文写明「Patient identification and SOFA ≥ 2 calculation used structured PostgreSQL queries on the original databases (full reproducible SQL script in Supplementary materi",
+      "review weakened: RPT-L150 — 第 150 行与第 174 行均写「3 份模型报告，其中 2 份是 MIMIC-IV 成人脓毒症死亡模型报告」，第 11 行与第 186 行相应写「有两个…模型在 MIMIC-IV 中做过评价」。这与本综述自己的纳入标准冲突：标准为「a prognostic model…developed, internally validated, externally validated or temporally validated in MIMIC-IV」，而脓毒症合并急性呼吸衰竭模型正是在 MIMIC-IV v3.1 上建模并在该库内做内部验证",
+      "review contradicted: PLAN-LANG — task-plan.json 的澄清第 6 条写明「交付语言为英文（题面与来源均为英文），报告正文英文书写」，但 clinical-evidence-report.md 全文为中文，clinical-evidence-run.json 记录 outputLanguage = \"zh\"。计划与交付物在同一实体（交付语言）上互相矛盾；因无运行中追问渠道，该偏离也未在澄清或修订说明中登记。语言本身不构成科学错误，但它是计划与成品之间一条未被记录的直接冲突。",
+      "review weakened: REVISION-NOTES-30 — revision-notes.md 称独立科学审查者与可追溯性审查者「were not invocable from this session」，因此不存在 evimed_review_run 输出，各项检查改由本地执行且「All passed before submission」。工作区中没有任何记录可以佐证曾尝试调用而未成（无失败回执、无工具日志），所以未做跨产物审查的原因属于未经核实，而非已确证。反向证据也指向本地自检并未真的抓到冲突：run receipt 的 qualityChecks 全项为 true，含 i"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-4379f927-02f1-4326-b84d-1a15b734294d",
+    "status": "failed",
+    "transcript": {
+      "bytes": 1853677,
+      "completeness": "complete",
+      "messages": 538,
+      "path": ".openscience/transcripts/run_d682ffd57f94321172ca02e26be53b88.jsonl",
+      "sha256": "65a43dc13291e330feac10233546c1dc7fdc3713a5480ee7f5d67de0e0163de4"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.7426900000000001,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 0.8,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T20:47:30Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

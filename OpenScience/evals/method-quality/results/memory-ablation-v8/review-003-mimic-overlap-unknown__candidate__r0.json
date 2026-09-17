@@ -1,0 +1,174 @@
+{
+  "arm": "candidate",
+  "armDigest": "05d7659d92077a53b0a5bd4fdca75148ee16aeb4611db93312c68d51536db0bb",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-003-mimic-overlap-unknown__candidate__r0",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "1301c2d979c6a68751c1b62b6cd03ed7c8362f5f1a08f8c5cddeed353f5f6a27",
+  "configId": "memory-ablation-v8",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 67,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "excluded": {
+    "detail": "no delivered file to judge",
+    "reason": "judge_unavailable"
+  },
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T20:47:28Z",
+  "judge": null,
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 98,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 99
+      },
+      {
+        "expectedVersion": 91,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 92
+      },
+      {
+        "expectedVersion": 91,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 92
+      },
+      {
+        "expectedVersion": 90,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 91
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v8-a7852b49",
+  "repeat": 0,
+  "run": {
+    "artifacts": [],
+    "compaction": [],
+    "dispatchId": "mq_candidate_0_ba04a23f7c72a193",
+    "durationMs": 1234431,
+    "errorCode": "specialist_receipt_digest_mismatch",
+    "id": "run_bf7f8917b7fcc08dd6448ae4ffc6ad84",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "The accepted package could not be preserved outside the runtime workspace before repair, so no revision was authorized.",
+      "The academic report contains runtime or retrieval-process prose instead of scientific analysis: line 7 reads **方法** 范围综述。证据检索覆盖英文文献索引、结构化生物医学题录数据库与临床指南来源，纳入以成人脓毒症或脓毒性休克死亡为结局、以 MIMIC-IV 为数据来源的预后模型研究，以及 MIMI…. Write what the evidence shows, not how it was obtained — the run's tools, gateways, preserve",
+      "claims[2].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[5].claim numeric fact 231 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[5].claim numeric fact 181 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[5].claim numeric fact 733 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[5].claim numeric fact 920 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[8].claim numeric fact 859 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[8].claim numeric fact 367 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[11].claim numeric fact 899 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[11].claim numeric fact 726 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[13].claim numeric fact 6 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 25 numeric facts 181 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 37 numeric facts 2, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 68 numeric facts 251 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 69 numeric facts 390 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 79 numeric facts 1, 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 119 numeric facts 7 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 123 numeric facts 1, 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 141 numeric facts 2, 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "这次运行没有通过交付前的质量门，因此下面的文件标记为「未经核验」——它们是运行真实写出来的成果，没有被删除，可以直接查看和取用，只是还没有拿到质量门的通过判定。上面的退回理由说明了差在哪里；按它修好后重新提交，同一份成果就会变成已核验。",
+      "literature_search searched and returned no source",
+      "final reply unavailable: nothing to scan",
+      "review weakened: CLM-003 — The stay_id sentence is quoted accurately. But the claim is entered as part of '判定队列独立性所需的报告要素' while the report simultaneously holds the PMC12557738 full text specifying MIMIC-IV (V.2.2), and never notes that its own version criterion is partly satisfiable from material i",
+      "review weakened: CLM-011 — PMID 41602009 resolves (Lv X, Liu X, Shen Y, et al., Frontiers in Public Health 2025, doi:10.3389/fpubh.2025.1710118) and the abstract text is reproduced exactly (eICU derivation n=12,899; MIMIC-IV validation n=3,726; total 16,625). Weakness is not in the quote but in its ",
+      "review weakened: CLM-012 — PMID 41146378 resolves (Zhang J, Chen Y, Zhao CC, et al., BMJ Open 2025, doi:10.1136/bmjopen-2025-102971, published 2025-10-23) and the abstract wording ('1300 patients... for model training and internal validation') is reproduced exactly. The weakness is the same-denomina",
+      "review weakened: CLM-024 — The quoted sentence exists in the review (line 143), so the excerpt is not fabricated. But the report generalises it: line 59 and the conclusion present 'MIMIC-IV 上成人脓毒症死亡预后模型覆盖…' as a statement about prognostic models in general, while the review's inclusion criterion is ",
+      "review weakened: CLM-027 — The substantive proposition is supportable: the review's Discussion states that models trained and tested within public repositories may reflect database-specific coding practices, measurement frequency, missing-data mechanisms, treatment protocols and case-mix, and that i",
+      "review weakened: CLM-028 — The claim is technically true at abstract level: neither abstract states the MIMIC-IV version or identifier-level cohort information, and I verified both abstract texts. The weakness is that the report holds the PMC12557738 full text, whose Methods state MIMIC-IV (V.2.2), ",
+      "review weakened: CLM-024 — Second, independent check of the population-scope issue: the review's eligible-subgroup list (line 143) is reproduced faithfully in the matrix, so the excerpt is sound; the defect is the report's generalisation of an AI/ML-scoped review to 'MIMIC-IV 上成人脓毒症死亡预后模型' without c",
+      "review weakened: CLM-011 — Second, sharper ground from the actual abstract text: the study reports risk-adjusted associations (segmented Cox; MIMIC-IV HR 0.97, 95% CI 0.94–0.99 per HALP unit below the inflection point; high-HALP HR 0.723, 95% CI 0.607–0.862) plus calibration-free multivariable adjus",
+      "review weakened: CLM-012 — Additional detail: the reported MIMIC-IV dates (2008–2019) are the database-wide collection window, not a study-specific enrolment window — this is the report's own argument elsewhere (CLM-001 uncertainty). The abstract's use of that window is reproduced faithfully, but th",
+      "review weakened: CLM-028 — Second ground under C-3: cross-database linkage is impossible only in the subject_id direction; the claim that '并置两条摘要仍不足以判定' is correct, but the report also holds a full text stating that the MIMIC-IV cohort was randomly split 7:3 into training (910) and internal validati",
+      "review weakened: CLM-027 — Second, independent ground: the same proposition also appears at line 139 under the CLM-014 anchor only, so a reader following the anchors sees the shared-error-source statement tied to the repeated-use observation, while the anchor that actually supports the systematic-er"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-cb808078-1322-44c2-a949-d7b46f725038",
+    "status": "failed",
+    "transcript": {
+      "bytes": 2539716,
+      "completeness": "complete",
+      "messages": 388,
+      "path": ".openscience/transcripts/run_bf7f8917b7fcc08dd6448ae4ffc6ad84.jsonl",
+      "sha256": "250b306e3d0bcfed30acd83aea4c93ca7c32c1991cf3995e8e7c7410cebd5bef"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.7714016666666667,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 1.0,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T20:26:41Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

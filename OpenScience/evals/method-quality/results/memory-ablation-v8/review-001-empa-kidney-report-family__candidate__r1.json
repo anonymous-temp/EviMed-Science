@@ -1,0 +1,175 @@
+{
+  "arm": "candidate",
+  "armDigest": "05d7659d92077a53b0a5bd4fdca75148ee16aeb4611db93312c68d51536db0bb",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.11.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__candidate__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "1301c2d979c6a68751c1b62b6cd03ed7c8362f5f1a08f8c5cddeed353f5f6a27",
+  "configId": "memory-ablation-v8",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 10,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-16T20:06:29Z",
+  "judge": {
+    "issues": [
+      "Report body arithmetic contradiction: claims 0.87 vs 0.72 equals about two-thirds, but relative-risk-reduction ratio is about half, matching other report sections.",
+      "Conclusion falsely attributes all 1866 first primary outcome events to the post-trial period; only 876 occurred post-trial and 990 during the active trial.",
+      "Reversed predictive risk direction in six places: says post-trial non-users had about 'one-fold' the predicted kidney failure risk, but source reports about twofold.",
+      "Sensitivity interval 0.70-0.89 is unsupported; combining +/-14 endpoints gives about 0.44-1.37.",
+      "Claim-anchor mismatches remain, e.g., CLM-030/031 outcome definition mismatches and CLM-050 citation misplacement.",
+      "Practice point overstates a null safety finding by saying non-cardiovascular death 'excludes' a compensatory increase despite 95% CI 0.79-1.20."
+    ],
+    "promptVersion": 1,
+    "rationale": "Detailed and meets mustDo separation/counting, but main report keeps uncorrected contradicted claims: wrong ratio, reversed risk direction, false event-period attribution, and invalid sensitivity interval. Parent audit exposes these but report remains uncorrected. Claim typing/bonding is extensive yet anchor-mismatched in places, and a practice point overstates evidence. Safety framing is partly preserved by non-individualized caveats.",
+    "scores": {
+      "correctness": 1,
+      "evidenceHandling": 2,
+      "safetyFraming": 3,
+      "usefulness": 3
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 96,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 97
+      },
+      {
+        "expectedVersion": 89,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 90
+      },
+      {
+        "expectedVersion": 89,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 90
+      },
+      {
+        "expectedVersion": 88,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 89
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v8-3cc46637",
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "deliverables/empa-kidney-durability-review/audit-reconciliation.md",
+      "deliverables/empa-kidney-durability-review/citation-audit.md",
+      "deliverables/empa-kidney-durability-review/citation-ledger.csv",
+      "deliverables/empa-kidney-durability-review/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-durability-review/clinical-evidence-report.md",
+      "deliverables/empa-kidney-durability-review/clinical-evidence-run.json",
+      "deliverables/empa-kidney-durability-review/clinical-evidence-search.json",
+      "deliverables/empa-kidney-durability-review/question-coverage.json",
+      "deliverables/empa-kidney-durability-review/references.bib",
+      "deliverables/empa-kidney-durability-review/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_1_89cfb1891d8c3335",
+    "durationMs": 982617,
+    "errorCode": "specialist_evidence_repair_failed",
+    "id": "run_052e57ca27d32c467b567ee0782b3b08",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "clinical-evidence-run.json lists .evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md, but no evidence tool reported preserving that file during this run. List only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.",
+      "The repair request could not be dispatched (unknown: Client was closed and is not queryable), so no repair was attempted.",
+      "biomedical_source_search searched and returned no source",
+      "review contradicted: CLM-046 — 报告第 161 行以 CLM-046 承载随访期归属断言：『990 至 1866 全部落在试验后观察期内』。这与同一报告第 85 行、以及 PMC7616743 原文（990 outcomes 属主动试验期，仅 876 additional first primary outcomes 属试验后期间）直接矛盾；句子本身亦不可解析（缺连词、把数字区间当作集合）。",
+      "review contradicted: CLM-024 — PMC7616743 原文：『Participants who did not start an SGLT2 inhibitor had twice the predicted risk of kidney failure of participants who started an SGLT2 inhibitor post-trial.』产物在摘要、引言、结果、讨论、局限性、结论六处一律写作「约为启用者的一倍」，把风险比 2.0 改写为 1.0，用同一句话自证预后失衡不存在。该主张是产物拒绝跨用药状态因果解释的唯一量化依据，改动方",
+      "review weakened: CLM-035 — 两个输入值逐字见于 PMC7616743：主动试验期结束每 1000 例少 57（SE14）例、整个随访期结束少 45（14）例；45÷57=0.789 成立，原文确以 Kaplan-Meier 曲线组间差计算每 1000 例绝对获益，输入口径正确。但敏感性区间 0.70–0.89 的推导不成立：按报告自述的「两端各按 ±14 取端点」，得 (45−14)/(57+14)=0.44 至 (45+14)/(57−14)=1.37，区间约 0.44–1.37，远宽于所报的 0.70–0.89；在真实区间宽度下，「保留约四分之三」这一定性判断同样",
+      "review weakened: CLM-021 — 比例句逐字见于 PMC7616743：「Of the 6253 participants not dead or withdrawn, 1362 (22%) did not provide consent for post-trial follow-up or were from sites that could not participate for logistical reasons (including all sites in Japan), leaving 4891 who entered the post-trial foll",
+      "review weakened: CLM-037 — 三个输入值（试验后主要结局 HR 0.76→0.90、试验后 ESKD HR 0.80（0.66–0.98）、末次 eGFR 组间差 0.8（0.1–1.4））均可逐字核对。但「三条轨迹分歧 → 拒绝持久性仅来自暴露延续」的机制推论原文未检验，原文对试验后 ESKD 获益另给出判定方式与当地测量的保留；产物已标注为推导并写入敏感性，故维持但降级。",
+      "review contradicted: 三分之二推算（报告第 103 行，矩阵中无对应 claimId） — 该句以 CLM-026 为锚点写在正文第 103 行，属矩阵外主张：『以整段试验后期间的 HR 0.87 与主动试验期的 0.72 相比，停药后的相对效应约为用药期间的三分之二』。0.87÷0.72=1.21，与「三分之二」不符；若改用相对降低之比则得 13%÷28%≈0.46，即同一报告第 109、133 行已写的「约一半」。该行由此与 CLM-038 及报告第 109 行自相矛盾，且未被登记进矩阵。",
+      "review weakened: CLM-053 — 主张内容为本次评价方案的自述（系统评价设计、纳入排除标准、方案未预先注册），与 brief 给定的 reviewType: systematic、纳入排除清单及检索日志中的 protocol.status: unregistered 一致。但矩阵为其配置的 supportQuote 取自 PMC7614055 的试验设计与纳入条件，无法支撑「本评价的纳入排除标准」，属自述主张挂他人引文的形式缺陷。该引文本身逐字见于 PMC7614055 摘要。",
+      "review weakened: CLM-050 — 报告第 125、171 行主张 EMPA-KIDNEY 未产出 1 型糖尿病、多囊肾病或肾移植受者的疗效数据，方向与 PMC7616743 的排除性描述一致。但矩阵中 CLM-050 的 supportQuote 是「The lack of additional data on hospitalizations - a deliberate decision to streamline post-trial follow-up as far as possible - prevented any assessment of any effe"
+    ],
+    "repairRounds": {
+      "content": 1,
+      "structural": 0
+    },
+    "sessionId": "session-d05107ce-28c4-4aa5-b04d-0f48cef46d5f",
+    "status": "failed",
+    "transcript": {
+      "bytes": 1684947,
+      "completeness": "complete",
+      "messages": 413,
+      "path": ".openscience/transcripts/run_052e57ca27d32c467b567ee0782b3b08.jsonl",
+      "sha256": "2b302929c08ff2c657ea82a60a3700dedf88015aae1ee92bd39c4d2bfc311b1e"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.818033888888889,
+    "evidenceCompleteness": 0.0,
+    "reliability": 0.0,
+    "reuse": 0.0,
+    "safety": 0.6,
+    "taskUtility": 0.0
+  },
+  "startedAt": "2026-09-16T19:49:11Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}
