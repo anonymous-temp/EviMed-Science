@@ -1,0 +1,198 @@
+{
+  "arm": "candidate",
+  "armDigest": "d30cbb66712427289737fb6fe9471171cdd4cd93593f52f3f87503d768141f55",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.12.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__candidate__r1",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "6d658a06630fe5ec8ab9a26b77d99ff28dccdfc19726d5aec63639be6442ebf5",
+  "configId": "memory-ablation-v10",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 8,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T13:35:45Z",
+  "judge": {
+    "issues": [
+      "Derived absolute-benefit rate: |45-57|/2 should be 6, not 7; and the narrowing from 57 to 45 is mislabeled as a positive post-trial benefit rate.",
+      "Post-hoc added '证据体的偏倚风险评级' section is admitted to be added after final validation and not re-run through checks, undermining integrity.",
+      "Clinical practice points include unsolicited practical advice (e.g., '应立即就医') beyond the brief, despite a disclaimer; minor overreach."
+    ],
+    "promptVersion": 1,
+    "rationale": "Thoroughly answers the brief, satisfies mustDo/mustNotDo, and distinguishes randomized from observational evidence. One derived estimate has an arithmetic and conceptual error, and an unvalidated post-hoc section lowers rigor. Practical advice is extraneous but risk statements mostly keep evidence level.",
+    "scores": {
+      "correctness": 4,
+      "evidenceHandling": 4,
+      "safetyFraming": 4,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 120,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 121
+      },
+      {
+        "expectedVersion": 115,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 116
+      },
+      {
+        "expectedVersion": 115,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 116
+      },
+      {
+        "expectedVersion": 114,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 115
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v10-e0fa8818",
+  "repeat": 1,
+  "run": {
+    "artifacts": [
+      "add_adjudication.py",
+      "audit_numerals.py",
+      "build_companions.py",
+      "build_quotes.py",
+      "deliverables/empa-kidney-durability-evidence-report/citation-audit.md",
+      "deliverables/empa-kidney-durability-evidence-report/citation-ledger.csv",
+      "deliverables/empa-kidney-durability-evidence-report/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-durability-evidence-report/clinical-evidence-report.md",
+      "deliverables/empa-kidney-durability-evidence-report/clinical-evidence-run.json",
+      "deliverables/empa-kidney-durability-evidence-report/clinical-evidence-search.json",
+      "deliverables/empa-kidney-durability-evidence-report/question-coverage.json",
+      "deliverables/empa-kidney-durability-evidence-report/references.bib",
+      "deliverables/empa-kidney-durability-evidence-report/revision-notes.md",
+      "fix_quotes_gate.py",
+      "fixcaveats.py",
+      "gen_matrix.py",
+      "gen_matrix2.py",
+      "locate.py",
+      "patch_after_render.py",
+      "patch_after_render2.py",
+      "patch_quotes2.py",
+      "patch_quotes3.py",
+      "peek_r2.py",
+      "render.py",
+      "report_text.py",
+      "spec.py",
+      "verify_quotes.py"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_1_0829a93aa5bc23c3",
+    "durationMs": 1239240,
+    "errorCode": null,
+    "id": "run_b09a2d8f31e4c97bb676e9d59d3f2016",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "claims[1].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[2].claim numeric fact 4 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[5].claim numeric fact 7 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[24].claim numeric fact 2.1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[30].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[46].claim numeric fact 5 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[47].claim numeric fact 42 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[47].claim numeric fact 58 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[49].claim numeric fact 32 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[49].claim numeric fact 120 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[49].claim numeric fact 19 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[49].claim numeric fact 38 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[51].claim numeric fact 1.23 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[52].claim numeric fact 6 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[52].claim numeric fact 15 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[52].claim numeric fact 20 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[52].claim numeric fact 31 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[53].claim numeric fact 77 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[54].claim numeric fact 15 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[55].claim numeric fact 24 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure."
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-561238be-1b20-4a9c-9df3-1b67363b41e4",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 2317197,
+      "completeness": "complete",
+      "messages": 567,
+      "path": ".openscience/transcripts/run_b09a2d8f31e4c97bb676e9d59d3f2016.jsonl",
+      "sha256": "fff0bdf01302095d7374c5ae3414eaa2a34d9899a1a93af223a0fb42b78e1ecf"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.7705111111111111,
+    "evidenceCompleteness": 0.8,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 0.8,
+    "taskUtility": 0.9
+  },
+  "startedAt": "2026-09-17T13:12:47Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

@@ -1,0 +1,234 @@
+{
+  "arm": "baseline",
+  "armDigest": "09a6fcf784b9cf54d22734a90c364a1c6a308728d4d408d4d10cac6ca94fed96",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.12.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__baseline__r2",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "6d658a06630fe5ec8ab9a26b77d99ff28dccdfc19726d5aec63639be6442ebf5",
+  "configId": "memory-ablation-v10",
+  "cost": {
+    "currency": "CNY",
+    "source": "unattributed",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 34,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T16:21:59Z",
+  "judge": {
+    "issues": [
+      "Unfixed direction error: report says absolute benefit would expand if off-treatment effect ceased, contradicting source PMC7616743, which says it would diminish while observed maintained (CLM-020).",
+      "CLM-013 supportQuote lacks the numeric facts it backs (4891/6609, 43% vs 40%); numbers are real but not bonded to the cited quote.",
+      "Internal inconsistency: audit says 32 claims all passed, later revision notes reference 37 claims and known defects; run.json says succeeded though delivery is partial.",
+      "Report calls hard-event and eGFR-slope evidence lines 'mutually independent' despite both originating from the same randomized population, an overstatement.",
+      "Known unresolved GRADE self-consistency gate issues and an unaccounted correction-forward for PMID 38061371 mean the audit's 'no corrections' statement is unreliable."
+    ],
+    "promptVersion": 1,
+    "rationale": "The answer is detailed and mostly respects one-study vs three-reports and randomized vs post-trial distinctions, but the delivery documents unfixed errors, including a central source contradiction on absolute-benefit direction and a mis-mounted evidential quote. These undermine correctness and trust; evidence handling is only partially bonded. Safety framing remains cautious and evidence-level, so it scores moderately.",
+    "scores": {
+      "correctness": 1,
+      "evidenceHandling": 2,
+      "safetyFraming": 3,
+      "usefulness": 2
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 128,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "pending",
+        "version": 129
+      },
+      {
+        "expectedVersion": 123,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "pending",
+        "version": 124
+      },
+      {
+        "expectedVersion": 123,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "pending",
+        "version": 124
+      },
+      {
+        "expectedVersion": 122,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "pending",
+        "version": 123
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v10-1c4a0374",
+  "repeat": 2,
+  "run": {
+    "artifacts": [
+      ".work/add_claims.py",
+      ".work/build_coverage.py",
+      ".work/build_final.py",
+      ".work/build_ledger_run.py",
+      ".work/build_matrix.py",
+      ".work/build_matrix_final.py",
+      ".work/collapse.py",
+      ".work/diag021.py",
+      ".work/diag_order.py",
+      ".work/enforce_ends.py",
+      ".work/extract_spans.py",
+      ".work/extract_spans2.py",
+      ".work/find_spans.py",
+      ".work/gate_sim.py",
+      ".work/gather.py",
+      ".work/identify_failing.py",
+      ".work/norm_sim.py",
+      ".work/order_list.py",
+      ".work/patch_final.py",
+      ".work/patch_final2.py",
+      ".work/patch_matrix.py",
+      ".work/renumber.py",
+      ".work/reorder.py",
+      ".work/single_span.py",
+      ".work/sort_fragments.py",
+      ".work/spans3.py",
+      ".work/spans4.py",
+      ".work/spans5.py",
+      ".work/special_sim.py",
+      ".work/strict_trim.py",
+      ".work/true_trim.py",
+      ".work/validate_matrix.py",
+      "deliverables/empa-kidney-evidence-report/citation-audit.md",
+      "deliverables/empa-kidney-evidence-report/citation-ledger.csv",
+      "deliverables/empa-kidney-evidence-report/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-evidence-report/clinical-evidence-report.md",
+      "deliverables/empa-kidney-evidence-report/clinical-evidence-run.json",
+      "deliverables/empa-kidney-evidence-report/clinical-evidence-search.json",
+      "deliverables/empa-kidney-evidence-report/question-coverage.json",
+      "deliverables/empa-kidney-evidence-report/references.bib",
+      "deliverables/empa-kidney-evidence-report/revision-notes.md"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_baseline_2_6ea8c0e8a9d96c97",
+    "durationMs": 1277148,
+    "errorCode": null,
+    "id": "run_794b27822482bd9f68415c9931c1f6d8",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "MUST FIX — claims[18].supportQuote was not found in its preserved source artifact.",
+      "GRADE 等级与降级理由不自洽——第 57 行「按 Cochrane RoB 2 的领域结构，活试验期的随机化比较偏倚风险低：随机分配采用最小化法并含 10% 随机成分，两组基线特征均衡，研究药物与安慰剂匹配、参与者与研究者保持盲法，主要终…」同句断言了证据缺陷（如方法学质量偏低、偏倚风险高、存在不一致或间接性），却给出含「高」的确定性等级。任何一项降级都排除「高」，请改等级或删除该缺陷断言。（只写出五个降级领域的名称并说明未因其降级——如「偏倚风险低、结果一致、估计精确、无发表偏倚证据」——不触发本条。）",
+      "GRADE 等级与降级理由不自洽——第 153 行「两项效应分属不同确定性层级，不合并为一个数字。活试验期效应评为高确定性：随机化比较偏倚风险低、结果来自一项大型多中心随机试验、效应方向在预设亚组间一致、估计精确（事件数充足、置信区间窄），未对…」同句断言了证据缺陷（如方法学质量偏低、偏倚风险高、存在不一致或间接性），却给出含「高」的确定性等级。任何一项降级都排除「高」，请改等级或删除该缺陷断言。（只写出五个降级领域的名称并说明未因其降级——如「偏倚风险低、结果一致、估计精确、无发表偏倚证据」——不触发本条。）",
+      "claims[2].claim numeric fact 7 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[3].claim numeric fact 0.64-0.82 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[8].claim numeric fact 1.83-2.41 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[16].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[16].claim numeric fact 43 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[16].claim numeric fact 40 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[19].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[25].claim numeric fact 95 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[27].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 9 numeric facts 2, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 11 numeric facts 6609, 1.16-1.59 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 13 numeric facts 6609, 4891, 74, 2, 43, 40 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 17 numeric facts 95 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 27 numeric facts 6609, 4891, 990, 1866 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 49 numeric facts 10, 45, 90, 200, 1.5-2.4 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 51 numeric facts 0.78-0.95, 0.67-1.07, 0.7-1.08 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 53 numeric facts 0.54-0.96 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 57 numeric facts 10, 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 65 numeric facts 30, 0.99 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 79 numeric facts 6609, 74 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 97 numeric facts 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 123 numeric facts 0.87 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 143 numeric facts 1, 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "报告第 51 行以「原文指出」把立场归属给来源，但该行引用的 CLM-005、CLM-006、CLM-016，其 supportQuote 都只陈述数值，没有一条载有这个立场。立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；若来源没说过，删去归属句，或改写为本报告自己的判断。把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。",
+      "报告第 65 行以「原文对这一点的处理是明确指出」把立场归属给来源，却没有挂任何 claim 标记。立场归属句必须由某条 claim 的 supportQuote 逐字承载：挂上原文确实说过这句话的 claim，或删去归属句，改写为本报告自己的判断。",
+      "报告第 83 行以「原文给出的判断是」把立场归属给来源，但该行引用的 CLM-017、CLM-018，其 supportQuote 都只陈述数值，没有一条载有这个立场。立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；若来源没说过，删去归属句，或改写为本报告自己的判断。把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。",
+      "报告第 121 行以「原文据此指出」把立场归属给来源，但该行引用的 CLM-024，其 supportQuote 都只陈述数值，没有一条载有这个立场。立场归属句必须由某条 claim 的 supportQuote 逐字承载：请改引原文确实说过这句话的 claim；若来源没说过，删去归属句，或改写为本报告自己的判断。把这句话写进 claim / applicability / uncertainty 字段再当成来源立场引出来，不算数——门禁只读 supportQuote。",
+      "Report line 73 anchors claim CLM-024，但该行只引用了 [2]，而 CLM-024 的 referenceNumber 是 3。把该行改引正确的编号，或换成真正支持这句话的 claim；同一 claim 在别处已正确配对不豁免这一行。",
+      "claims[6] is not paired with its standard numbered in-text citation.",
+      "Report line 69 numeric facts 43, 40 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 3 处是同一条（Report line 127、Report line 151、Report line 169）：这是一处决定，改一次就能全部修好。",
+      "Report line 71 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 3 处是同一条（Report line 101、Report line 131、Report line 153）：这是一处决定，改一次就能全部修好。",
+      "Report line 75 numeric facts 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 2 处是同一条（Report line 129、Report line 155）：这是一处决定，改一次就能全部修好。",
+      "Report line 107 numeric facts 20-45 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them. 另有 2 处是同一条（Report line 161、Report line 167）：这是一处决定，改一次就能全部修好。",
+      "Review methods: reviewMethods must be an object with schemaVersion 1; leave the existing source and query ledgers intact while repairing it.",
+      "本次运行计划的 1 件交付物没有通过运行内的契约校验，文件按「未核验」交付，未通过的项列在下面。",
+      "review weakened: RUN-SCOPE-00 — 本次运行只产出 1 份交付物（deliverables/empa-kidney-evidence-report/），不存在第二份产物，因此「同一实体上的跨产物矛盾」无对象可比：可检查的只有该报告内部矛盾、以及与保全来源之间的矛盾。另据 revision-notes.md，该交付物已提交三次、达到提交上限、以 partial:true 结束，从未取得门禁 ok；而 clinical-evidence-run.json 却把 status 写为 succeeded、qualityChecks 全部为 true（含 claimTrace",
+      "review contradicted: CLM-020 — 决定性矛盾。报告第 125 行（讨论）写：「若停药后效应立即消失（风险比转为 1.0），绝对差只会随时间进一步扩大」。被引来源 PMC7616743 第 63 行的陈述方向恰好相反：「Mathematically, if there had been no off-treatment effect of empagliflozin post-trial (i.e. the hazard ratio was 1.0 after study drug stopped), absolute benefits would be observ"
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-73755d6f-b016-4496-a41b-a913bfc137e5",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 2103105,
+      "completeness": "complete",
+      "messages": 630,
+      "path": ".openscience/transcripts/run_794b27822482bd9f68415c9931c1f6d8.jsonl",
+      "sha256": "879fbb01c0b8e498f7d881421d8c006485f268b6a42407b7e6a6abae46148ad1"
+    },
+    "verification": "unverified"
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.7634911111111111,
+    "evidenceCompleteness": 0.0,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 0.6,
+    "taskUtility": 0.30000000000000004
+  },
+  "startedAt": "2026-09-17T15:59:04Z",
+  "usage": {
+    "cacheHitTokens": 0.0,
+    "cacheMissTokens": 0.0,
+    "calls": 0.0,
+    "cost": 0.0,
+    "outputTokens": 0.0
+  }
+}

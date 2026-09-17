@@ -1,0 +1,179 @@
+{
+  "arm": "candidate",
+  "armDigest": "d30cbb66712427289737fb6fe9471171cdd4cd93593f52f3f87503d768141f55",
+  "armVerified": {
+    "mounted": true,
+    "problems": []
+  },
+  "attempt": 1,
+  "briefDigest": "a9314982c1d00a76ab72a220319e12abd9736eeb7fcd5198f9b47be3054d5330",
+  "briefId": "review-001-empa-kidney-report-family",
+  "capability": {
+    "id": "clinical-evidence-synthesis",
+    "version": "2.12.0"
+  },
+  "cell": "review-001-empa-kidney-report-family__candidate__r0",
+  "compactionPolicy": "basic",
+  "complete": true,
+  "configDigest": "6d658a06630fe5ec8ab9a26b77d99ff28dccdfc19726d5aec63639be6442ebf5",
+  "configId": "memory-ablation-v10",
+  "cost": {
+    "currency": "CNY",
+    "source": "unavailable",
+    "value": null
+  },
+  "deterministic": {
+    "checks": [],
+    "completenessFailures": [],
+    "passed": 0,
+    "referenceAvailable": false,
+    "safetyFailures": [],
+    "total": 0
+  },
+  "diagnostics": {
+    "turnCoverage": {
+      "argMatchedTurns": 0,
+      "argRatio": null,
+      "firstDivergenceTurn": null,
+      "note": "§6.3.7: never a reward, never part of the verdict.",
+      "observedCalls": 19,
+      "perTurn": [],
+      "role": "diagnostic",
+      "toolMatchedTurns": 0,
+      "toolRatio": null,
+      "turns": 0
+    }
+  },
+  "family": "review-001-empa-kidney-report-family",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-17T15:05:02Z",
+  "judge": {
+    "issues": [
+      "Derived estimate CLM-058 sensitivity reasoning is internally inconsistent: under positive correlation the standard error of the difference is smaller, which would make the 12/1000 difference more, not less, likely to be statistically distinguishable; the 'still insufficient' conclusion does not foll",
+      "The alternative conversion of reported SEs to a 95% CI half-width ('合成约22.4') is unexplained and does not align with the preceding independence calculation."
+    ],
+    "promptVersion": 1,
+    "rationale": "The review strongly answers the brief, declares design/searches/protocol, counts the single trial once, and separates randomized from post-trial observational evidence. Most claims are meticulously source-bonded. One derived sensitivity calculation misframes covariance direction and gives an unexplained interval half-width, slightly weakening correctness and evidence-handling rigor. Safety advice is sourced to guidelines and not based on derived estimates.",
+    "scores": {
+      "correctness": 4,
+      "evidenceHandling": 4,
+      "safetyFraming": 5,
+      "usefulness": 5
+    }
+  },
+  "methodSnapshot": {
+    "capabilitySkillsDir": null,
+    "declaredOnly": [
+      "capabilitySkillsDir",
+      "compactionPolicy"
+    ],
+    "records": [
+      {
+        "expectedVersion": 124,
+        "id": "076c3d2b-293b-4c5f-92c2-493a2da7516d",
+        "status": "active",
+        "version": 125
+      },
+      {
+        "expectedVersion": 119,
+        "id": "be8c54de-1ff0-4a37-b809-8bb407d32886",
+        "status": "active",
+        "version": 120
+      },
+      {
+        "expectedVersion": 119,
+        "id": "jY7Dttzw4nQbQUwdXPYwKU",
+        "status": "active",
+        "version": 120
+      },
+      {
+        "expectedVersion": 118,
+        "id": "nyHQFcTbHUAiVfxKYDLFnQ",
+        "status": "active",
+        "version": 119
+      }
+    ],
+    "trial": {
+      "digestById": {},
+      "expiresAt": null,
+      "methodIds": []
+    }
+  },
+  "projectId": "eval-memory-ablation-v10-f02ac2a6",
+  "repeat": 0,
+  "run": {
+    "artifacts": [
+      "deliverables/empa-kidney-evidence-report/citation-audit.md",
+      "deliverables/empa-kidney-evidence-report/citation-ledger.csv",
+      "deliverables/empa-kidney-evidence-report/clinical-evidence-matrix.json",
+      "deliverables/empa-kidney-evidence-report/clinical-evidence-report.md",
+      "deliverables/empa-kidney-evidence-report/clinical-evidence-run.json",
+      "deliverables/empa-kidney-evidence-report/clinical-evidence-search.json",
+      "deliverables/empa-kidney-evidence-report/question-coverage.json",
+      "deliverables/empa-kidney-evidence-report/references.bib"
+    ],
+    "compaction": [],
+    "dispatchId": "mq_candidate_0_7ec5cbffcd317a3a",
+    "durationMs": 970747,
+    "errorCode": null,
+    "id": "run_b8a3595e3de7396c9950c57cf8cbc8cc",
+    "methodsInvoked": [],
+    "methodsLoaded": [],
+    "model": "deepseek/deepseek-flash",
+    "qualityNotices": [
+      "claims[0].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[20].claim numeric fact 1 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[20].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[23].claim numeric fact 95 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[26].claim numeric fact 2 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[44].claim numeric fact 1000 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[45].claim numeric fact 1000 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "claims[47].claim numeric fact 5 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+      "Report line 10 numeric facts 1, 6609 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 14 numeric facts 0.62-0.81, 0.6-1.19 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 18 numeric facts 0.54-0.96, 1.16-1.59 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 20 numeric facts 1.83-2.41 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "Report line 48 numeric facts 20 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 50 numeric facts 3, 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 101 numeric facts 1, 6609, 2 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 103 numeric facts 6609, 1 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 107 numeric facts 6609 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 108 numeric facts 2, 6609 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 109 numeric facts 74 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+      "Report line 121 numeric facts 0.64-0.82, 0.62-0.81, 1.83-2.41 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+      "review weakened: CLM-055 — 来源引用（624 个首发结局、990/876 事件）均可核，\"未检索到独立重复\"也已限定为本次检索范围，故实质判断成立。但确定性标注与自列降级理由不符：报告为观察期效应同时给出\"偏倚风险\"与\"间接性\"两个降级域，按 GRADE 应降至低确定性，而此处与摘要、结论均写\"中等确定性\"，未作对账；此外\"效应在观察期内递减\"仅由主要复合结局的探索性时间分层支持，同一观察期的 ESKD 0.80（0.66–0.98）与死亡或 ESKD 0.82（0.70–0.96）在全程观察期仍不跨 1，报告把持久性衰减写成对该期的一般描述。",
+      "review weakened: CLM-056 — 两侧引文均可核，\"不在同一量纲\"的框架也成立。但\"对同一人群\"不成立：指南 2B 建议针对的是\"无糖尿病且尿 ACR<200 mg/g\"者，而试验亚组是全部受试者中 uACR<30 mg/g（n=1328，含糖尿病者）；把两者当同一人群进行比较，放大了二者张力。",
+      "review weakened: CLM-058 — 主算可复算：57−45=12，√(14²+14²)=19.8，12/19.8≈0.61，结论\"不足以判定为衰减\"方向可信。但敏感性分析自相矛盾：若把 14 当作 95% CI 半宽，两个标准误应各为 7.1、合成约 10.1（更小、更可分辨），而非其写的 22.4；且\"常规显著所需约 4 倍标准误（48/1000）\"用了 4×差值而非 1.96×SE（应为约 38.8/1000）。两处口径混用，敏感性叙述不成立。",
+      "review weakened: REV-GRADE-DURABILITY — 你点名核查项：确定性标注与证据层级不一致。报告在局限性段为观察期效应具名两个降级域（偏倚风险、间接性），双降级按 GRADE 结论应为低确定性，但摘要结论、结论（2）与 CLM-055 均写\"中等确定性\"；同一段又把\"降级理由\"中\"治疗暴露非随机分配\"列为降级域，而讨论段称该比较\"保留了随机化的分组结构，因此不受治疗指征混杂的直接影响\"——降级理由与其自证的偏倚结构对不上。",
+      "review contradicted: REV-REF2-METADATA — citation-audit.md 称参考文献 2 的卷号与页码\"未从任何权威记录返回\"，参考表据此标\"卷与页码未解析\"。但工作区已保全的 PMC7616743 JATS 元数据明写 volume 392、issue 8、fpage 777、lpage 787（ppub 2025-02-20、epub 2024-10-25），信息就在自有产物内。缺失原因被推断而非核实。",
+      "review weakened: REV-CLAIMCOUNT — 台账自相矛盾：citation-audit.md 写\"51 条 direct 与 5 条 synthesized\"（合计 56），revision-notes.md 写\"57 条 direct／synthesized\"；而 clinical-evidence-search 与 citation-ledger.csv 实际为 CLM-001…052 direct（52 条）+ CLM-053…056 synthesized（4 条）=56 条，另有 2 条 derived。总数对得上，分类计数与修订记录不一致。",
+      "review weakened: REV-EGFR-INTERP — 关于停药后 eGFR 差值的解释前后不一致：CLM-012（PMC7615591）显示英国受试者末次随访后 4 周急性下降即已逆转，差值 1.87（1.23–2.52）且方向为恩格列净组更高；报告却把观察期末次当地测量的残差 0.8（0.1–1.4）解释为\"与该项测量在停药后部分回吐的解释相符\"、量级\"与活动期急性下降 2.12 相当接近\"。若急性下降 4 周内已逆转，则 0.8 反映的是组间差随时间的进一步收窄，而不是\"回吐急性下降\"；该推断混用了组内急性下降量与组间差值两个量。CLM-025 本身引文忠实，问题在其解释性"
+    ],
+    "repairRounds": {
+      "content": 0,
+      "structural": 0
+    },
+    "sessionId": "session-5ca6f03b-cfe7-42d4-800d-e4b8a3bc208b",
+    "status": "succeeded",
+    "transcript": {
+      "bytes": 1711415,
+      "completeness": "complete",
+      "messages": 274,
+      "path": ".openscience/transcripts/run_b8a3595e3de7396c9950c57cf8cbc8cc.jsonl",
+      "sha256": "da2efe2cb0f90e1c0b1c18d10b52d51591f95b58dcc036d9b855c6fa8a7b0ab4"
+    },
+    "verification": null
+  },
+  "schemaVersion": 1,
+  "scores": {
+    "contextFidelity": 1.0,
+    "efficiency": 0.8202320370370371,
+    "evidenceCompleteness": 0.8,
+    "reliability": 1.0,
+    "reuse": 1.0,
+    "safety": 1.0,
+    "taskUtility": 0.9
+  },
+  "startedAt": "2026-09-17T14:44:37Z",
+  "usage": null
+}
