@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { before, after, test } from 'node:test';
+import pg from 'pg';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
 import { PluginService, projectPluginId } from '../src/pluginService.mjs';
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? '';
@@ -102,6 +103,55 @@ test('nested runtime and prompt admission reuse one database connection without 
     assert.equal(result.desired.revision,3);
     assert.equal(await nested.hasPendingPrompts(project),false);
   }finally{await limited.close();}
+});
+
+test('work an admission started that prompts after the admission ended takes an admission of its own', options, async()=>{
+  // A run monitor is scheduled inside the dispatch admission and sends its
+  // repair prompt minutes later (v8 ablation, 2026-09-16: "Client was closed
+  // and is not queryable"). Once with a pool that closes the released client
+  // (20 ms here, 30 s in production) and once with one that keeps it.
+  for (const idleTimeoutMillis of [20, 30_000]) {
+    const pool = new pg.Pool({connectionString:databaseUrl,max:2,idleTimeoutMillis});
+    const scoped = new PluginService(new ControlPlaneDatabase({databasePoolMax:2,databaseConnectionTimeoutMs:1000},{pool}));
+    let resume, monitor;
+    const later = new Promise(r=>{resume=r;});
+    try {
+      await scoped.withAdmission(project, async()=>{
+        monitor = (async()=>{
+          await later;
+          const read = await scoped.get(owner,project);
+          const repair = await scoped.withAdmission(project, async()=>{
+            const lock = await db.transaction(c=>c.query('SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired',[`plugin-project:${owner}:one`]));
+            return {applyExcluded:!lock.rows[0].acquired};
+          },{prompt:true});
+          return {read,repair};
+        })();
+      });
+      await new Promise(r=>setTimeout(r,200));
+      resume();
+      const {read,repair} = await monitor;
+      assert.equal(typeof read.desired.revision,'number');
+      assert.equal(repair.applyExcluded,true,`idle ${idleTimeoutMillis}: the late prompt holds the lock apply takes`);
+      assert.equal(await scoped.hasPendingPrompts(project),false);
+    } finally { await pool.end(); }
+  }
+});
+
+test('an admission does not commit while a prompt it lent its connection to is still in flight', options, async()=>{
+  let entered, release, detached, committed = false;
+  const inFlight = new Promise(r=>{entered=r;}); const released = new Promise(r=>{release=r;});
+  const outer = service.withAdmission(project, async()=>{
+    detached = service.withAdmission(project, async()=>{entered();await released;return 'sent';},{prompt:true});
+    await inFlight;
+  }).then(()=>{committed=true;});
+  await inFlight;
+  await new Promise(r=>setTimeout(r,100));
+  assert.equal(committed,false);
+  release();
+  assert.equal(await detached,'sent');
+  await outer;
+  assert.equal(committed,true);
+  assert.equal(await service.hasPendingPrompts(project),false);
 });
 
 test('a project without a runtime stays saved until first launch is really probed, and a new generation is unverified', options, async()=>{
