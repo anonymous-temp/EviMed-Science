@@ -3139,3 +3139,93 @@ test("a subagent session is read at the address the kernel's own catalogue gives
   assert.equal(calls.find((call) => call.method === "session/page")?.args.request.address.kind, "session");
   assert.equal(await manager.subagentAddressFor(project, "root-1", "child-broken"), null);
 });
+
+test("a kernel file whose URL names its content is kept a year with its validators, and the document still is not", async (t) => {
+  // Every session opened downloaded the whole kernel application again: the
+  // proxy answered `private, no-store` for everything and dropped the ETag,
+  // including files whose names are their content hashes (2026-09-18 plan,
+  // session open).
+  const f = await uiSurfaceFixture(t);
+  const upstream = createServer((req, res) => {
+    if (req.url.startsWith("/plugins/")) {
+      // The kernel's own declaration for revisioned bundles.
+      res.writeHead(200, { "content-type": "text/javascript", "cache-control": "public, max-age=31536000, immutable", etag: '"plugin"' });
+      res.end("window.plugin = true;");
+      return;
+    }
+    if (req.url === "/") {
+      res.writeHead(200, { "content-type": "text/html", etag: '"doc"' });
+      res.end('<!doctype html><html><head><script type="module" crossorigin src="./assets/index-Df-65__b.js"></script></head><body></body></html>');
+      return;
+    }
+    res.writeHead(200, { "content-type": "text/javascript", "cache-control": "public, max-age=3600", etag: '"asset"', "last-modified": "Wed, 16 Sep 2026 00:00:00 GMT" });
+    res.end("window.asset = true;");
+  });
+  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+  try {
+    f.app.runtimeManager.start = async () => ({ url: `http://127.0.0.1:${upstream.address().port}`, cookie: "native=internal", close: async () => {} });
+    const hashed = await fetch(`${f.uiBase}/assets/index-Df-65__b.js`, { headers: { cookie: f.cookie } });
+    assert.equal(hashed.headers.get("cache-control"), "private, max-age=31536000, immutable");
+    assert.equal(hashed.headers.get("etag"), '"asset"', "validators stay, so a revalidation can answer 304");
+    assert.equal(hashed.headers.get("last-modified"), "Wed, 16 Sep 2026 00:00:00 GMT");
+    const plugin = await fetch(`${f.uiBase}/plugins/??@evimed/dsh-socket/client.js&rev=0123456789ab`, { headers: { cookie: f.cookie } });
+    assert.equal(plugin.headers.get("cache-control"), "private, max-age=31536000, immutable", "the kernel's own immutable answer is kept, privately");
+    const unhashed = await fetch(`${f.uiBase}/assets/index.js`, { headers: { cookie: f.cookie } });
+    assert.equal(unhashed.headers.get("cache-control"), "private, no-store");
+    assert.equal(unhashed.headers.get("etag"), null);
+    const documentResponse = await fetch(`${f.uiBase}/`, { headers: { cookie: f.cookie } });
+    assert.equal(documentResponse.headers.get("cache-control"), "private, no-store", "the document binds a frame and is never kept");
+    const html = await documentResponse.text();
+    assert.ok(html.includes('src="/__evimed/a/default/assets/index-Df-65__b.js"'), `the document names the project's stable asset path: ${html}`);
+  } finally {
+    upstream.closeAllConnections();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test("the project's stable asset path serves build files to its owner, with no frame, and nothing else", async (t) => {
+  const f = await uiSurfaceFixture(t);
+  const seen = [];
+  const upstream = createServer((req, res) => {
+    seen.push(req.url);
+    res.writeHead(200, { "content-type": "text/javascript", etag: '"a"' });
+    res.end("window.stable = true;");
+  });
+  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+  try {
+    f.app.runtimeManager.start = async () => ({ url: `http://127.0.0.1:${upstream.address().port}`, cookie: "native=internal", close: async () => {} });
+    const origin = new URL(f.uiBase).origin;
+    // The login alone, as a browser sends it here: the frame cookie's path is
+    // the frame's own and does not cover this one.
+    const asset = await fetch(`${origin}/__evimed/a/default/assets/vendor-CCJJTK99.js`, { headers: { cookie: f.loginCookie } });
+    assert.equal(asset.status, 200);
+    assert.equal(await asset.text(), "window.stable = true;");
+    assert.equal(asset.headers.get("cache-control"), "private, max-age=31536000, immutable");
+    assert.deepEqual(seen, ["/assets/vendor-CCJJTK99.js"], "the kernel is asked for the file itself");
+    for (const [label, route, init] of [
+      ["another project", "/__evimed/a/not-mine/assets/x-12345678.js", {}],
+      ["a path outside assets", "/__evimed/a/default/api/session/list", {}],
+      ["a traversal", "/__evimed/a/default/assets/../index.html", {}],
+      ["a write", "/__evimed/a/default/assets/x-12345678.js", { method: "POST" }],
+    ]) {
+      const response = await fetch(`${origin}${route}`, { ...init, headers: { cookie: f.loginCookie, Origin: "https://science.example:8443" } });
+      assert.equal(response.status, 404, label);
+    }
+    assert.equal(seen.length, 1, "no refused request reached the kernel");
+    const anonymous = await fetch(`${origin}/__evimed/a/default/assets/vendor-CCJJTK99.js`);
+    assert.equal(anonymous.status, 401);
+  } finally {
+    upstream.closeAllConnections();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test("only a file whose URL names its content counts as immutable", async () => {
+  const { isImmutableRuntimeUiAsset } = await import("../src/runtimeManager.mjs");
+  for (const suffix of ["/assets/index-Df-65__b.js", "/assets/vendor-BNsW4eBh.css", "/assets/inter-latin-400-3a4b5c6d.woff2", "/plugins/??@evimed/dsh-socket/client.js&rev=0123456789ab"]) {
+    assert.equal(isImmutableRuntimeUiAsset(suffix), true, suffix);
+  }
+  for (const suffix of ["/", "/index.html", "/assets/index.js", "/assets/a.js", "/plugins/??app&rev=abc", "/plugins/??@deepseek-ai/client,@evimed/socket&rev=a%2Fb&x=1", "/api/session/list", "/__evimed_bootstrap.js"]) {
+    assert.equal(isImmutableRuntimeUiAsset(suffix), false, suffix);
+  }
+});

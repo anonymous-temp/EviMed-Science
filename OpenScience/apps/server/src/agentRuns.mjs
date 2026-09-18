@@ -3612,6 +3612,27 @@ export class AgentRunStore {
   }
 
   /**
+   * The conversation a researcher last worked in, in this project (C4 "me"
+   * `lastSessionId`): the session of the run that moved most recently, so the
+   * shell can reopen it instead of a blank page. Work a machine started —
+   * an evaluation, an autopilot episode — is not "last open".
+   * @param {any} project @returns {Promise<string | null>}
+   */
+  async lastSessionId(project) {
+    let latest = null;
+    let at = "";
+    for (const run of foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()) {
+      if (run.automated === true || String(run.effectiveRouteReason ?? "").startsWith("autopilot:")) continue;
+      const moved = [run.lastProgressAt, run.finishedAt, run.startedAt].filter((value) => typeof value === "string").sort().at(-1) ?? "";
+      if (moved > at) {
+        at = moved;
+        latest = run.sessionId;
+      }
+    }
+    return latest;
+  }
+
+  /**
    * The runs of a project that are still going, by id — what the model
    * gateway asks to attribute an interactive runtime's request to its run
    * (E §9.4). A fold with no phase walk, because it is asked per request.
