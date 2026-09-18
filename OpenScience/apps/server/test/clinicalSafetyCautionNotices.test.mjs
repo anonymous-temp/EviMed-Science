@@ -84,12 +84,21 @@ test("a caution the report owes its reader is delivered as a SAFETY notice, and 
     assert.equal(finished.status, "succeeded", "a caution never withholds a delivery");
     assert.equal(finished.errorCode, null);
     assert.equal(finished.verification ?? null, null, "a caution is not a statement about the evidence");
-    const notices = (finished.qualityNotices ?? []).filter((notice) => notice.startsWith("SAFETY — "));
-    assert.deepEqual(notices.map((notice) => notice.slice("SAFETY — ".length).split("：")[0]), [
+    // Structured since the notices carry their identity to the reader (C2): the
+    // rule's own title, its message as the detail, the rule id, and the legacy
+    // sentence only as `text`.
+    const notices = (finished.qualityNotices ?? []).filter((notice) => notice.code === "clinical_safety_caution");
+    assert.deepEqual(notices.map((notice) => notice.rule), [
+      "aspirin-primary-prevention-bleeding",
+      "aspirin-primary-prevention-older-adults",
+    ]);
+    assert.ok(notices.every((notice) => notice.severity === "safety" && notice.check === "clinical-safety-cautions"));
+    assert.deepEqual(notices.map((notice) => notice.title.split("：")[0]), [
       "阿司匹林一级预防",
       "老年人阿司匹林一级预防",
     ]);
-    assert.match(notices[0], /请写明/);
+    assert.match(notices[0].detail, /请写明/);
+    assert.ok(notices.every((notice) => notice.text.startsWith(`SAFETY — ${notice.title}：`)));
     assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
     await store.closeProject(project, "canceled");
   } finally {
