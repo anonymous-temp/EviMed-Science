@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { trapTab } from "@/lib/focusTrap";
+import { focusableIn, trapTab } from "@/lib/focusTrap";
 
 /**
  * A panel that slides over the page from the right: a capability's card, a
@@ -21,7 +21,9 @@ export function Drawer({
   actions,
   className,
   widthClassName = "max-w-xl",
+  bare = false,
 }: {
+  /** Names the dialog; with `bare`, it must be text (it becomes the label). */
   title: ReactNode;
   /** One quiet line under the title. */
   description?: ReactNode;
@@ -31,6 +33,8 @@ export function Drawer({
   actions?: ReactNode;
   className?: string;
   widthClassName?: string;
+  /** The content brings its own header and close control (a file preview, say). */
+  bare?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -41,7 +45,8 @@ export function Drawer({
 
   useEffect(() => {
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
+    if (closeRef.current) closeRef.current.focus();
+    else focusableIn(panelRef.current)[0]?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
@@ -69,31 +74,38 @@ export function Drawer({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={description ? descriptionId : undefined}
+        aria-labelledby={bare ? undefined : titleId}
+        aria-label={bare && typeof title === "string" ? title : undefined}
+        aria-describedby={description && !bare ? descriptionId : undefined}
         className={cn(
           "flex h-full w-full flex-col border-l border-border bg-surface shadow-modal motion-safe:animate-drawer-in",
           widthClassName,
           className,
         )}
       >
-        <header className="flex items-start gap-3 border-b border-border px-5 py-4">
-          <div className="min-w-0 flex-1">
-            <h2 id={titleId} className="font-serif text-title font-semibold text-text">{title}</h2>
-            {description && <p id={descriptionId} className="mt-1 text-caption text-muted">{description}</p>}
-          </div>
-          {actions}
-          <button
-            ref={closeRef}
-            type="button"
-            onClick={() => close.current()}
-            aria-label="关闭"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-input text-muted hover:bg-surface-2 hover:text-text"
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">{children}</div>
+        {bare ? (
+          <div className="min-h-0 flex-1">{children}</div>
+        ) : (
+          <>
+            <header className="flex items-start gap-3 border-b border-border px-5 py-4">
+              <div className="min-w-0 flex-1">
+                <h2 id={titleId} className="font-serif text-title font-semibold text-text">{title}</h2>
+                {description && <p id={descriptionId} className="mt-1 text-caption text-muted">{description}</p>}
+              </div>
+              {actions}
+              <button
+                ref={closeRef}
+                type="button"
+                onClick={() => close.current()}
+                aria-label="关闭"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-input text-muted hover:bg-surface-2 hover:text-text"
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">{children}</div>
+          </>
+        )}
       </div>
     </div>
   );

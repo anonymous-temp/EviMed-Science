@@ -8,6 +8,8 @@ import { emptyIpynb } from "@/lib/notebook-file";
 import type { KernelLanguage } from "@/lib/kernel";
 import { NotebookEditor } from "@/components/notebook/NotebookEditor";
 import { Button } from "@/components/ui/Button";
+import { FilesSkeleton } from "@/components/cards/Skeletons";
+import { LoadError } from "@/components/cards/LoadError";
 import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
 import { toast } from "@/lib/toast";
 
@@ -19,7 +21,10 @@ import { toast } from "@/lib/toast";
  */
 /** @param embedded rendered as one view of 知识库; the hub owns the title. */
 export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {}) {
-  const [entries, setEntries] = useState<NotebookEntry[]>([]);
+  // `null` while the list is read: 「暂无笔记本」 used to show before the
+  // first answer, and again in place of a failed read.
+  const [entries, setEntries] = useState<NotebookEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   /** Open notebook + the tree its path resolves in ("base" = listed here;
    *  "workspace" = just created in the active session folder). */
   const [open, setOpen] = useState<{ path: string; root: "workspace" | "base" } | null>(null);
@@ -27,7 +32,13 @@ export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {})
   const menuRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
-    setEntries(await listNotebooks("base"));
+    setError(null);
+    try {
+      setEntries(await listNotebooks("base"));
+    } catch (err) {
+      setError(webErrorMessage(err, { fallback: "笔记本列表暂时读不到。" }));
+      setEntries((current) => current ?? []);
+    }
   }, []);
   useEffect(() => {
     void refresh();
@@ -116,16 +127,16 @@ export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {})
         </p>
 
         <div className="mt-5 space-y-1.5">
-          {entries.length === 0 && (
+          {entries === null && <FilesSkeleton />}
+          {error && <LoadError message={error} onRetry={() => void refresh()} />}
+          {entries !== null && entries.length === 0 && !error && (
             <div className="rounded-card border border-border bg-surface p-5 text-ui text-muted">
               {hasWebApi
-                ? hasWebApi
-                  ? "暂无笔记本。可以新建、从知识库上传，或在对话里让 EviMed 生成。"
-                  : "暂无笔记本。可以新建，或在对话里让 EviMed 生成。"
+                ? "暂无笔记本。可以新建、从知识库上传，或在对话里让 EviMed 生成。"
                 : "当前未配置可用的笔记本后端。"}
             </div>
           )}
-          {entries.map((e) => {
+          {(entries ?? []).map((e) => {
             const slash = e.path.lastIndexOf("/");
             const folder = slash >= 0 ? e.path.slice(0, slash) : "";
             const name = slash >= 0 ? e.path.slice(slash + 1) : e.path;

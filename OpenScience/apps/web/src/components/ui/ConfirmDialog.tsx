@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from "react";
 import { trapTab } from "@/lib/focusTrap";
+import { Button } from "@/components/ui/Button";
 
 /**
  * Minimal in-app confirmation dialog. `window.confirm` is unreliable inside
@@ -34,6 +35,7 @@ export function ConfirmDialog({
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
   const bodyId = useId();
   // Always call the latest callbacks from the mount-once effect below, so a
   // parent re-render neither re-focuses nor re-arms the key listener.
@@ -72,30 +74,21 @@ export function ConfirmDialog({
         ref={dialogRef}
         role="alertdialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         aria-describedby={bodyId}
         className="w-full max-w-sm rounded-card border border-border bg-surface p-4 shadow-modal"
       >
-        <div className="text-ui font-medium text-text">{title}</div>
+        <h2 id={titleId} className="text-ui font-semibold text-text">{title}</h2>
         <p id={bodyId} className="mt-1.5 text-ui text-muted">
           {body}
         </p>
         <div className="mt-4 flex justify-end gap-2">
-          <button
-            ref={cancelRef}
-            className="rounded-input border border-strong px-3 py-1.5 text-ui text-text hover:bg-surface-2"
-            onClick={onCancel}
-          >
+          <Button ref={cancelRef} size="sm" variant="ghost" onClick={onCancel}>
             取消
-          </button>
-          <button
-            className={tone === "danger"
-              ? "rounded-input bg-error px-3 py-1.5 text-ui font-medium text-error-fg hover:opacity-90"
-              : "rounded-input bg-accent px-3 py-1.5 text-ui font-medium text-accent-fg hover:opacity-90"}
-            onClick={onConfirm}
-          >
+          </Button>
+          <Button size="sm" variant={tone === "danger" ? "danger" : "primary"} onClick={onConfirm}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

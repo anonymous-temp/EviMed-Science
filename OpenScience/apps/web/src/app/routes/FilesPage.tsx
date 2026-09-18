@@ -26,6 +26,7 @@ import { NotebookEditor } from "@/components/notebook/NotebookEditor";
 import { FilePreviewInspector } from "@/components/inspector/FilePreviewInspector";
 import { PaneTitlebarInset } from "@/components/inspector/RightPane";
 import { EmptyState } from "@/components/cards/EmptyState";
+import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { humanSize } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -175,7 +176,7 @@ export function FilesPage() {
 
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {entries === null && <FilesSkeleton />}
-          {error && <div className="p-2 text-ui text-error">{error}</div>}
+          {error && <LoadError message={error} onRetry={() => void load(dir)} className="m-2" />}
           {entries && entries.length === 0 && !error && (
             hasWebApi ? (
               <EmptyState
@@ -384,7 +385,7 @@ export function SessionFilesPane({
       )}
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {entries === null && <FilesSkeleton />}
-        {error && <div className="p-2 text-ui text-error">{error}</div>}
+        {error && <LoadError message={error} onRetry={() => void loadEntries(dir)} className="m-2" />}
         {entries && entries.length === 0 && !error && (
           <EmptyState icon={FolderOpen} title="本次任务还没有文件" className="px-2 py-8" />
         )}

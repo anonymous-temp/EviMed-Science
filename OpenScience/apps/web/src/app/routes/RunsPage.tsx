@@ -77,6 +77,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { Drawer } from "@/components/ui/Drawer";
 import { Textarea } from "@/components/ui/Input";
 
 type SincePreset = "24h" | "7d" | "30d";
@@ -1180,34 +1181,21 @@ function readerHref(runId: string, path: string): string {
  * files page uses, so a clinical report opens with its citations.
  */
 function RunFilePreview({ path, run, onClose }: { path: string; run: WebAgentRun; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
   const filename = path.slice(path.lastIndexOf("/") + 1);
+  // The shared drawer: a dialog named for the file, focus kept inside while it
+  // is open and handed back to 预览 when it closes (it used to be a
+  // hand-rolled overlay that did neither).
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- a click on the backdrop itself closes the panel; Escape is the keyboard equivalent, bound above.
-    <div
-      className="fixed inset-0 z-40 flex justify-end bg-black/20"
-      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`预览 ${filename}`}
-        className="h-full w-full max-w-content-wide border-l border-border bg-bg shadow-modal"
-      >
-        <Suspense fallback={<p className="p-6 text-ui text-muted">正在打开预览…</p>}>
-          <ReportRunContext.Provider value={{ runId: run.id, run }}>
-            <FilePreviewInspector
-              data={{ variant: "file", path, filename, artifact: extToKind(extOf(filename)), root: "workspace" }}
-              onClose={onClose}
-            />
-          </ReportRunContext.Provider>
-        </Suspense>
-      </div>
-    </div>
+    <Drawer bare title={`预览 ${filename}`} onClose={onClose} widthClassName="max-w-content-wide">
+      <Suspense fallback={<p className="p-6 text-ui text-muted">正在打开预览…</p>}>
+        <ReportRunContext.Provider value={{ runId: run.id, run }}>
+          <FilePreviewInspector
+            data={{ variant: "file", path, filename, artifact: extToKind(extOf(filename)), root: "workspace" }}
+            onClose={onClose}
+          />
+        </ReportRunContext.Provider>
+      </Suspense>
+    </Drawer>
   );
 }
 

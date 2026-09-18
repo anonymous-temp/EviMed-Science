@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import {
   Bot,
   Brain,
+  Command,
   FlaskConical,
   FolderTree,
   Orbit,
@@ -21,6 +22,7 @@ import { RunStatusDot } from "@/components/runs/RunStatusDot";
 import { useConnectorAttention } from "@/lib/connectorAttention";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EviMedMark } from "@/components/brand/EviMedMark";
+import { isMacPlatform } from "@/lib/platform";
 
 /** Dragging the divider below this pointer x collapses the sidebar; dragging
  *  back past it re-expands. Sits below SIDEBAR_MIN so there is a clear "snap". */
@@ -60,7 +62,7 @@ const NAV: NavItem[] = [
 
 export function Sidebar() {
   const location = useLocation();
-  const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar } =
+  const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar, setPaletteOpen } =
     useUiStore();
   // While dragging, the live width lives here; the store (and localStorage)
   // are only written on pointer-up.
@@ -178,6 +180,21 @@ export function Sidebar() {
 
         <ProjectSwitcher running={(runs ?? []).some((run) => runState(run).key === "running")} />
 
+        {/* ⌘K made visible (appendix D §4): the palette reaches every view by
+          * name, and a shortcut nobody can see is a shortcut nobody uses. */}
+        <div className="px-3 pb-2">
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            aria-keyshortcuts="Meta+K Control+K"
+            className="flex h-8 w-full items-center gap-2 rounded-input px-2.5 text-ui text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text"
+          >
+            <Command size={15} strokeWidth={1.75} aria-hidden="true" />
+            <span className="flex-1 text-left">快速跳转</span>
+            <kbd className="rounded border border-border px-1 font-sans text-caption text-muted">{isMacPlatform() ? "⌘K" : "Ctrl K"}</kbd>
+          </button>
+        </div>
+
         <nav className="flex flex-col px-3">
           {NAV.map((item) => (
             <NavRow
@@ -265,21 +282,47 @@ export function Sidebar() {
 
       {/* Drag divider: resize within [SIDEBAR_MIN, SIDEBAR_MAX]; dragging far
           left snaps the sidebar closed. Kept mounted while collapsed so an
-          in-flight drag (pointer capture) can re-open it. */}
+          in-flight drag (pointer capture) can re-open it. A focusable
+          separator (WAI-ARIA window splitter): ←/→ by 16 px, Home/End to the
+          limits, Enter collapses — a width a mouse can set, a keyboard can. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex -- a focusable separator is the WAI-ARIA window-splitter widget, which these rules do not model. */}
       <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整侧边栏宽度"
+        aria-valuemin={SIDEBAR_MIN}
+        aria-valuemax={SIDEBAR_MAX}
+        aria-valuenow={Math.round(width)}
+        tabIndex={sidebarCollapsed ? -1 : 0}
+        onKeyDown={(event) => {
+          const step = event.shiftKey ? 64 : 16;
+          const next = event.key === "ArrowLeft" ? sidebarWidth - step
+            : event.key === "ArrowRight" ? sidebarWidth + step
+              : event.key === "Home" ? SIDEBAR_MIN
+                : event.key === "End" ? SIDEBAR_MAX
+                  : null;
+          if (event.key === "Enter") {
+            event.preventDefault();
+            toggleSidebar();
+            return;
+          }
+          if (next == null) return;
+          event.preventDefault();
+          setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, next)));
+        }}
         onPointerDown={onDividerPointerDown}
         onPointerMove={onDividerPointerMove}
         onPointerUp={onDividerPointerUp}
         onPointerCancel={onDividerPointerUp}
         className={cn(
-          "group absolute inset-y-0 right-0 z-10 w-[5px] cursor-col-resize",
+          "group absolute inset-y-0 right-0 z-10 w-[5px] cursor-col-resize outline-none",
           sidebarCollapsed && !dragging && "pointer-events-none",
         )}
       >
         <div
           className={cn(
             "absolute inset-y-0 right-0 w-[2px] transition-colors",
-            dragging ? "bg-focus" : "bg-transparent group-hover:bg-strong",
+            dragging ? "bg-focus" : "bg-transparent group-hover:bg-strong group-focus-visible:bg-focus",
           )}
         />
       </div>

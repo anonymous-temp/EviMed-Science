@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import type { FileRoot } from "@ai4s/shared";
-import { Download, ListTree, Printer, ShieldAlert } from "lucide-react";
+import { ArrowUp, Download, ListTree, Printer, ShieldAlert } from "lucide-react";
 import type { WebAgentRun } from "@/lib/apiClient";
 import { downloadArtifact } from "@/lib/artifactFile";
 import { claimMatrixPathFor, claimStatuses, claimVerificationSummary } from "@/lib/claimCitations";
@@ -270,6 +270,14 @@ export function ReportReader({
             <aside className="sticky top-4 hidden max-h-[calc(100vh-6rem)] w-56 shrink-0 self-start overflow-y-auto lg:block" data-print-hide="">
               <p className="mb-2 flex items-center gap-1.5 px-2 text-caption font-medium text-muted"><ListTree size={14} aria-hidden="true" />目录</p>
               {contents}
+              {/* A 60 KB report needs a way back up (appendix D §4.5). */}
+              <button
+                type="button"
+                onClick={() => articleRef.current?.closest(".overflow-y-auto")?.scrollTo({ top: 0 })}
+                className="mt-3 flex items-center gap-1 px-2 text-caption text-link hover:underline"
+              >
+                <ArrowUp size={12} aria-hidden="true" />回到顶部
+              </button>
             </aside>
           )}
           <div className={cn("min-w-0 flex-1 space-y-4", view === "report" && "max-w-content")}>

@@ -23,6 +23,12 @@ vi.mock("@/lib/inboxClient", () => ({
   INBOX_CHANGED_EVENT: "evimed:inbox-changed",
 }));
 
+const store = vi.hoisted(() => ({
+  setSidebarWidth: vi.fn(),
+  toggleSidebar: vi.fn(),
+  setPaletteOpen: vi.fn(),
+}));
+
 vi.mock("@/lib/store", () => ({
   SIDEBAR_MIN: 220,
   SIDEBAR_MAX: 420,
@@ -30,8 +36,9 @@ vi.mock("@/lib/store", () => ({
     sidebarCollapsed: false,
     sidebarWidth: 260,
     setSidebarCollapsed: vi.fn(),
-    setSidebarWidth: vi.fn(),
-    toggleSidebar: vi.fn(),
+    setSidebarWidth: store.setSidebarWidth,
+    toggleSidebar: store.toggleSidebar,
+    setPaletteOpen: store.setPaletteOpen,
   }),
 }));
 
@@ -268,5 +275,29 @@ describe("Sidebar recent runs", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await waitFor(() => expect(screen.getByRole("link", { name: /已经读到的运行/ })).toBeInTheDocument());
     expect(screen.queryByText("还没有任务")).not.toBeInTheDocument();
+  });
+
+  // A width a mouse can set, a keyboard can (WAI-ARIA window splitter).
+  it("resizes from the keyboard through a focusable separator", async () => {
+    renderSidebar();
+    const separator = await screen.findByRole("separator", { name: "调整侧边栏宽度" });
+    expect(separator).toHaveAttribute("aria-valuenow", "260");
+    expect(separator).toHaveAttribute("aria-valuemin", "220");
+    expect(separator).toHaveAttribute("aria-valuemax", "420");
+    separator.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(store.setSidebarWidth).toHaveBeenLastCalledWith(276);
+    await userEvent.keyboard("{Home}");
+    expect(store.setSidebarWidth).toHaveBeenLastCalledWith(220);
+    await userEvent.keyboard("{Enter}");
+    expect(store.toggleSidebar).toHaveBeenCalled();
+  });
+
+  it("shows the command palette's shortcut where it can be seen, and opens it", async () => {
+    renderSidebar();
+    const open = await screen.findByRole("button", { name: /快速跳转/ });
+    expect(open).toHaveTextContent(/K/);
+    await userEvent.click(open);
+    expect(store.setPaletteOpen).toHaveBeenCalledWith(true);
   });
 });
