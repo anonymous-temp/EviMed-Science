@@ -7,6 +7,7 @@ import test from "node:test";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { normalizeTranscript, transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
+import { noticeTexts } from "./helpers/noticeTexts.mjs";
 
 const fixture = JSON.parse(await readFile(new URL("./fixtures/dsh/native-turn-frames.json", import.meta.url), "utf8"));
 const question = (event) => event.data.content.map((part) => part.text ?? "").join(" ");
@@ -341,7 +342,7 @@ test("a legacy numeric cursor missing from the transcript is explicitly unattrib
   await f.adopt();
   const runs = await f.runs();
   assert.equal(runs.length, 1);
-  assert.ok(runs[0].qualityNotices.some((notice) => notice.includes("no unique verifiable input boundary")));
+  assert.ok(noticeTexts(runs[0]).some((notice) => notice.includes("no unique verifiable input boundary")));
 });
 
 function workflowEvents(accepted) {
@@ -403,7 +404,7 @@ test("a current native plan rejected seven times is not hidden by a different ke
   assert.equal(run.status, "succeeded");
   assert.equal(run.verification, "unverified");
   assert.deepEqual(run.artifacts, ["report.md"]);
-  assert.ok(run.qualityNotices.some((notice) => notice.includes("Current native gate rejection")));
+  assert.ok(noticeTexts(run).some((notice) => notice.includes("Current native gate rejection")));
 });
 
 test("a witnessed current native receipt survives kernel loss and a control-plane restart", async (t) => {
@@ -414,7 +415,7 @@ test("a witnessed current native receipt survives kernel loss and a control-plan
   const finished = await f.store.finishFromDurableRecord(f.project, run);
   assert.equal(finished.status, "succeeded");
   assert.deepEqual(finished.artifacts, ["report.md"]);
-  assert.ok(finished.qualityNotices.includes("Current native gate note"));
+  assert.ok(noticeTexts(finished).includes("Current native gate note"));
 });
 
 test("a legacy basename receipt resolves only within its named deliverable and verifies the digest", async (t) => {
@@ -462,7 +463,7 @@ test("a cumulative receipt contributes only entries witnessed in the current nat
   const finished = await f.store.finishFromDurableRecord(f.project, (await f.runs())[0]);
   assert.equal(finished.status, "succeeded");
   assert.deepEqual(finished.artifacts, ["report.md"]);
-  assert.ok(!finished.qualityNotices.includes("Old unrelated notice"));
+  assert.ok(!noticeTexts(finished).includes("Old unrelated notice"));
 });
 
 test("fresh files without witnessed workflow tools cannot silently bypass an unattributed rejection", async (t) => {
@@ -473,7 +474,7 @@ test("fresh files without witnessed workflow tools cannot silently bypass an una
   // "Silently" is what this forbids: the files go out marked, with the reason.
   assert.equal(run.status, "succeeded");
   assert.equal(run.verification, "unverified");
-  assert.ok(run.qualityNotices.some((notice) => notice.includes("无法确认交付是否通过验收")),
+  assert.ok(noticeTexts(run).some((notice) => notice.includes("无法确认交付是否通过验收")),
     "the one gate notice a researcher could see is Chinese now (2026-09-16 walk, U4)");
 });
 
@@ -500,7 +501,7 @@ test("an old acceptance is not reused after the current native submissions are r
   const run = (await f.runs())[0];
   // The old receipt neither vouches for this turn's files nor lends its notes.
   assert.equal(run.verification, "unverified");
-  assert.ok(!run.qualityNotices.includes("Old acceptance"));
+  assert.ok(!noticeTexts(run).includes("Old acceptance"));
 });
 
 test("a late older native snapshot cannot erase a persisted acceptance", async (t) => {
@@ -534,7 +535,7 @@ test("durable native completion respects the current complete_run rejection desp
   const finished = await f.store.finishFromDurableRecord(f.project, (await f.runs())[0]);
   assert.equal(finished.status, "failed");
   assert.equal(finished.errorCode, "specialist_deliverable_not_accepted");
-  assert.ok(finished.qualityNotices.includes("Current completion safety rejection"));
+  assert.ok(noticeTexts(finished).includes("Current completion safety rejection"));
 });
 
 test("a genuinely later successful complete_run replaces an earlier rejection in the same native turn", async (t) => {
@@ -591,4 +592,40 @@ test("the same receipt, written by this run, is its delivery", async (t) => {
   const finished = await f.store.finishFromDurableRecord(f.project, run);
   assert.equal(finished.status, "succeeded");
   assert.deepEqual(finished.artifacts, ["deliverables/d1/report.md"]);
+});
+
+test("a fork is adopted as its own run, named after the line it branched from, and its copied turns stay with the source", async (t) => {
+  // `session/fork` seeds the new session with the source's events and marks
+  // the cut with `session/end-seed`. The copied turns are the source's runs
+  // already; only what the researcher does after the cut is new work, and it
+  // is filed with the session it came from (2026-09-18 decision 6).
+  const f = await setup(t);
+  await f.adopt();
+  const sourceRuns = await f.runs();
+  const sourceTitle = sourceRuns.sort((left, right) => right.startedAt.localeCompare(left.startedAt))[0].title;
+  const forkId = "session-fork-1";
+  const last = fixture.events.at(-1);
+  const forkEvents = [
+    ...structuredClone(fixture.events),
+    { type: "session/end-seed", seq: last.seq + 1, time: last.time + 1, data: { inherited: true } },
+    { type: "turn/start", seq: last.seq + 2, time: last.time + 2, data: { turn: 3 } },
+    { type: "user/message", seq: last.seq + 3, time: last.time + 3, data: {
+      content: [{ type: "text", text: "换一个角度：只看随机对照试验的证据。" }],
+      source: { kind: "user", rpcId: "fork-request-1", clientTimeZone: "Asia/Shanghai" }, role: "user", id: "fork-message-1",
+    } },
+  ];
+  const transcript = normalizeTranscript(forkId, forkEvents);
+  assert.equal(transcript.seedEndSeq, last.seq + 1, "the cut is read from the kernel's own marker");
+  await f.store.adoptRuntimeSession(f.project, forkId, { transcript, routeTurn: async () => ({}), forkedFrom: fixture.sessionId });
+  const all = await f.runs();
+  const branch = all.filter((run) => run.sessionId === forkId);
+  assert.equal(branch.length, 1, `the copied turns became runs of the fork: ${JSON.stringify(branch.map((run) => run.question))}`);
+  assert.equal(branch[0].question, "换一个角度：只看随机对照试验的证据。");
+  assert.equal(branch[0].forkedFrom, fixture.sessionId);
+  assert.equal(branch[0].title, `分支：${sourceTitle}`);
+  assert.equal(branch[0].titleSource, "auto", "a system name the researcher can replace, and an automatic title will not");
+  assert.equal(all.length, sourceRuns.length + 1, "the source's runs are untouched");
+  // Adopting the same fork again files nothing twice.
+  await f.store.adoptRuntimeSession(f.project, forkId, { transcript, routeTurn: async () => ({}), forkedFrom: fixture.sessionId });
+  assert.equal((await f.runs()).length, sourceRuns.length + 1);
 });

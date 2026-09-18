@@ -71,6 +71,23 @@ CREATE INDEX IF NOT EXISTS research_sessions_updated_at_idx
 
 INSERT INTO ${schema}.schema_migrations(version) VALUES (1)
 ON CONFLICT (version) DO NOTHING;
+
+-- 2026-09-18 (contract C4). A project can be archived rather than deleted:
+-- out of the way, still whole, still exportable.
+ALTER TABLE ${schema}.projects ADD COLUMN IF NOT EXISTS archived_at timestamptz;
+
+-- The seeded default was named in English, the first thing under the wordmark
+-- of a Chinese product (B §2). Renamed once: a researcher who has renamed it
+-- since no longer matches, and one who later names it "Default Project" on
+-- purpose is not renamed again, because version 2 is recorded.
+DO $default_project_name$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM ${schema}.schema_migrations WHERE version = 2) THEN
+    UPDATE ${schema}.projects SET name = '我的研究', updated_at = now()
+     WHERE id = 'default' AND name = 'Default Project';
+    INSERT INTO ${schema}.schema_migrations(version) VALUES (2) ON CONFLICT (version) DO NOTHING;
+  END IF;
+END $default_project_name$;
 `;
 
 /** @returns {Error & Record<string, any>} An Error carrying the extra fields its
@@ -216,3 +233,7 @@ export class ControlPlaneDatabase {
 }
 
 export const CONTROL_PLANE_SCHEMA = schema;
+/** The migration version this build writes last, and the one readiness
+ *  requires: 2 since the project archive column and the default-name
+ *  migration (2026-09-18). */
+export const CONTROL_PLANE_SCHEMA_VERSION = 2;

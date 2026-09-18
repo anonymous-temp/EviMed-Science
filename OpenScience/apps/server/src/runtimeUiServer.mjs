@@ -8,6 +8,7 @@ import { assertSpendWithinLimits } from "./usageMetering.mjs";
 import { HttpError, readBody } from "./security.mjs";
 import { RUNTIME_UI_FRAME_COOKIE, parseRuntimeUiFramePath, runtimeUiCookie, runtimeUiOrigins, validateRuntimeUiFrame } from "./runtimeUiFrames.mjs";
 import { runtimeUiBootstrapSource } from "./runtimeUiDocument.mjs";
+import { isImmutableRuntimeUiAsset } from "./runtimeManager.mjs";
 
 /**
  * The methods that make the deployment spend money.
@@ -269,6 +270,38 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     return { user, session, project, claims, frame };
   }
 
+  /**
+   * The kernel application's build assets, under a path that does not change
+   * from one frame to the next (`/__evimed/a/<projectId>/assets/<file>`), so a
+   * browser that opened a session a minute ago does not download the whole
+   * application again for the next one (2026-09-18 plan, session open). The
+   * document is rewritten to reference them here (`rebaseRuntimeUiDocument`).
+   *
+   * Authorized by the login and the project it names, not by a frame: the
+   * files are the kernel's published application, the same for every
+   * researcher, and a frame cookie is scoped to its own path and is not sent
+   * here. Read-only, and only files: nothing under this path reaches a method.
+   * @returns {Promise<boolean>} whether the request was this route's
+   */
+  async function serveProjectAsset(req, res) {
+    const target = String(req.url ?? "");
+    const match = /^\/__evimed\/a\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})\/(assets\/[A-Za-z0-9._-]+)$/.exec(target.split("?")[0]);
+    if (!target.startsWith("/__evimed/a/")) return false;
+    if (!match || !["GET", "HEAD"].includes(String(req.method).toUpperCase())) {
+      throw new HttpError(404, "runtime_ui_asset_not_found", "No such application file.");
+    }
+    const { user } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
+    const project = await store.requireProject(user, match[1]);
+    const suffix = `/${match[2]}`;
+    await runtimeManager.proxy(req, res, project, suffix, {
+      surface: "ui",
+      uiBasePath: `/__evimed/a/${project.id}/`,
+      immutable: isImmutableRuntimeUiAsset(suffix),
+      rebaseDocument: false,
+    });
+    return true;
+  }
+
   async function handle(req, res) {
     if (!config.runtimeUiProxyEnabled) {
       sendNotice(res, 404, "未启用", "此部署没有开启内核界面。", { code: "runtime_ui_not_enabled", shellOrigin });
@@ -281,6 +314,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       sendNotice(res, 401, "请先登录", "请在 EviMed 中登录后重新打开。", { code: "unauthorized", shellOrigin });
       return;
     }
+    if (await serveProjectAsset(req, res)) return;
 
     if (!["GET", "HEAD", "OPTIONS"].includes(String(req.method).toUpperCase())) assertBrowserOrigin(req, config);
     const { user, project, frame, claims } = await resolveFrame(req, res);
@@ -370,6 +404,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       surface: "ui",
       uiBasePath: frame.prefix,
       revalidate,
+      // Build assets the document names are served from the project's stable
+      // path; a file whose URL names its content is kept by the browser.
+      uiAssetPrefix: `/__evimed/a/${project.id}/`,
+      immutable: isImmutableRuntimeUiAsset(frame.suffix),
     });
     const forwardPrompt = async () => {
       await authorizePromptSession(project, promptBody?.payload);

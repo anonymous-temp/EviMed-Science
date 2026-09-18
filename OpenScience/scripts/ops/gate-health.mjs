@@ -113,9 +113,10 @@ function ledgerHealth(root) {
   const now = Date.now();
   /** @type {Map<string, {count: number, lastMs: number}>} */
   const codes = new Map();
-  /** Advisory findings, by their first 80 characters. Keyed on the text
-   *  because that is what the ledger stores; once `qualityNotices` carries the
-   *  check id the key becomes the id and this comment goes. */
+  /** Advisory findings, by the check that raised them. A notice written
+   *  since 2026-09-18 is structured and carries its check or code; a sentence
+   *  from an older ledger is keyed by its first 80 characters, which is all it
+   *  has. */
   /** @type {Map<string, {count: number, blocked: number, lastMs: number}>} */
   const noticeCodes = new Map();
   for (const file of ledgers) {
@@ -137,11 +138,14 @@ function ledgerHealth(root) {
       // acquire one that way: "notice first" quietly became "notice forever".
       // A succeeded run's own notices are exactly that distribution.
       for (const notice of Array.isArray(event.qualityNotices) ? event.qualityNotices : []) {
-        const text = String(notice ?? "");
-        if (!text) continue;
-        const bucket = noticeCodes.get(text.slice(0, 80)) ?? { count: 0, blocked: 0, lastMs: 0 };
+        const structured = notice && typeof notice === "object";
+        const key = structured
+          ? (notice.check ? `check:${notice.check}` : `code:${String(notice.code ?? "")}`)
+          : String(notice ?? "").slice(0, 80);
+        if (!key || key === "code:") continue;
+        const bucket = noticeCodes.get(key) ?? { count: 0, blocked: 0, lastMs: 0 };
         const at = Date.parse(event.finishedAt ?? "");
-        noticeCodes.set(text.slice(0, 80), {
+        noticeCodes.set(key, {
           count: bucket.count + 1,
           // Whether the run it appeared on was withheld. A notice that only
           // ever appears beside a delivered package is a notice nobody acted

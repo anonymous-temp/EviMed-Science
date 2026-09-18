@@ -121,6 +121,12 @@ const operatorLevers = {
   // The frame layer's per-body off switches: the control every body is
   // measured against has to be reachable from .env.
   OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF: ["open-science-web"],
+  // Automatic run titles default on and spend a model call per run; the off
+  // switch has to arrive (2026-09-18).
+  OPEN_SCIENCE_RUN_TITLES_ENABLED: ["open-science-web"],
+  // The memory evaluation's control arm is this switch; an ablation whose
+  // "off" arm silently recalled would measure nothing (2026-09-18).
+  OPEN_SCIENCE_MEMORY_RECALL_ENABLED: ["open-science-web"],
 };
 
 async function composeFiles() {

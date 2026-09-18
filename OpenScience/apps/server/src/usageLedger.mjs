@@ -383,6 +383,35 @@ export class UsageLedger {
     };
   }
 
+  /**
+   * What each of several runs has used, in one query (C3 `usage`): requests
+   * made, prompt tokens (and how many of them were served from the provider's
+   * cache), output tokens, and the settled cost. For a run list, which would
+   * otherwise ask once per row. A run with no attributed request is absent.
+   * @param {string} userId @param {readonly string[]} runIds
+   * @returns {Promise<Map<string, { requests: number, inputTokens: number, cachedInputTokens: number, outputTokens: number, costCny: number }>>}
+   */
+  async summaryRuns(userId, runIds) {
+    const ids = [...new Set((runIds ?? []).filter((id) => typeof id === "string" && id))].slice(0, 500).map((id) => productId(id, "run"));
+    const summaries = new Map();
+    if (ids.length === 0) return summaries;
+    await migrateUsageLedger(this.database);
+    const result = await this.database.query(`SELECT run_id, count(*)::integer AS requests,
+      coalesce(sum(cache_hit_tokens + cache_miss_tokens) FILTER (WHERE status='settled'),0) AS input_tokens,
+      coalesce(sum(cache_hit_tokens) FILTER (WHERE status='settled'),0) AS cached_input_tokens,
+      coalesce(sum(output_tokens) FILTER (WHERE status='settled'),0) AS output_tokens,
+      coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0) AS cost
+      FROM evimed_usage.model_requests WHERE user_id=$1 AND run_id = ANY($2::text[]) GROUP BY run_id`,
+    [productId(userId, "user"), ids]);
+    for (const row of result.rows) {
+      summaries.set(row.run_id, {
+        requests: Number(row.requests), inputTokens: Number(row.input_tokens), cachedInputTokens: Number(row.cached_input_tokens),
+        outputTokens: Number(row.output_tokens), costCny: Number(row.cost),
+      });
+    }
+    return summaries;
+  }
+
   /** Refuse a new interactive entry point that is already at its configured limit. */
   async assertWithinLimits(userId, { dailyLimit = 0, weeklyLimit = 0, now = new Date() } = {}) {
     const user = productId(userId, "user");

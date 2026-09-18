@@ -219,6 +219,40 @@ export class CapsuleService {
     }
   }
 
+  /**
+   * The approved entries of the given kinds in the researcher's own active
+   * capsules — what the resident profile renders (`capsuleProfile.mjs`).
+   *
+   * "Own" is the predicate `note()` already uses: activated as `own` and not
+   * imported. A guest or blend activation carries someone else's methods and
+   * standards and, by design, never their identity, so its entries stay one
+   * recall away instead of being presented as who this researcher is.
+   *
+   * @param {string} userId @param {string|null} projectId @param {readonly string[]} kinds
+   * @returns {Promise<{ id: string, capsuleId: string, factKind: string, content: string, updatedAt: string | null }[]>}
+   */
+  async profileFacts(userId, projectId, kinds) {
+    for (const kind of kinds) member(kind, CAPSULE_FACT_KINDS, "fact kind");
+    const local = await this.active(userId, projectId);
+    const global = projectId ? await this.active(userId, null) : { items: [] };
+    const own = [...local.items, ...global.items]
+      .filter((item, index, all) => item.mode === "own" && all.findIndex((other) => other.capsuleId === item.capsuleId) === index)
+      .slice(0, 8);
+    const facts = [];
+    for (const selection of own) {
+      const capsule = await this.documents.get(userId, "capsule", selection.capsuleId);
+      if (!capsule || capsule.payload.imported) continue;
+      for (const factKind of kinds) {
+        // Newest fifty of each kind is more than a 1,500-token block can hold.
+        const page = await this.documents.list(userId, "fact", { limit: 50, filter: { capsuleId: capsule.id, status: "approved", factKind } });
+        for (const entry of page.items) {
+          facts.push({ id: entry.id, capsuleId: capsule.id, factKind, content: String(entry.payload.content ?? ""), updatedAt: entry.updatedAt ?? null });
+        }
+      }
+    }
+    return facts;
+  }
+
   /** @param {string} userId @param {{ query: string, projectId?: string|null, limit?: number, factKinds?: string[], since?: string|null, scope?: string, accountCreatedAt?:string }} input */
   async recall(userId, { query, projectId = null, limit = 10, factKinds = [], since = null, scope = "all", accountCreatedAt = undefined }) {
     const needle = text(query, "query", 2000);

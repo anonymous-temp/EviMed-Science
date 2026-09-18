@@ -14,7 +14,7 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
-import { AgentRunStore } from "./agentRuns.mjs";
+import { AgentRunStore, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
@@ -36,13 +36,15 @@ import {
   routeOpenDomainSpecialist,
 } from "./specialistRouting.mjs";
 import { SpecialistClassifier } from "./specialistClassifier.mjs";
+import { RunTitleScheduler, RunTitler } from "./runTitles.mjs";
+import { runEstimate } from "./runRoute.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
 import { createModelGatewayHandler, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger } from "./usageLedger.mjs";
-import { NotificationService, runFinishedNotice } from "./notificationService.mjs";
+import { NotificationService, runFinishedInboxItem, runFinishedNotifies } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
@@ -101,7 +103,7 @@ import {
   runtimeNetworkUsesHostOrContainer,
   validateEviMedAdapterConfig,
 } from "./runtimeManager.mjs";
-import { createStore } from "./store.mjs";
+import { createStore, projectDisplayName, projectIdFromName } from "./store.mjs";
 import { readinessSaasProfile } from "./saasProfile.mjs";
 import { TaskManager } from "./taskManager.mjs";
 import { RunEventHub, attachRunStream, resumePosition } from "./runEventStream.mjs";
@@ -589,6 +591,32 @@ class OperationalMetrics {
  *
  * @param {any} error
  */
+/**
+ * A dispatch's explicit line (`line` on `POST /api/agent-runs/dispatch`):
+ * `"answer"` for the answer line, or the id of a public capability. Null when
+ * the caller chose nothing. A choice is only meaningful where the platform
+ * would otherwise route — an open conversation; one bound to a capability
+ * already has its line, and a choice there is refused rather than ignored.
+ *
+ * @param {unknown} value
+ * @param {any} boundSession
+ * @param {readonly any[]} routableAgents public capabilities, answer line excluded
+ * @returns {{ agent: any | null } | null}
+ */
+function chosenDispatchLine(value, boundSession, routableAgents) {
+  if (value == null) return null;
+  if (typeof value !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(value)) {
+    throw new HttpError(400, "invalid_agent_run", "line must be \"answer\" or a capability id.");
+  }
+  if (boundSession?.mode !== "open-domain") {
+    throw new HttpError(400, "invalid_agent_run", "A line can be chosen only in an open conversation; this one is bound to a capability.");
+  }
+  if (value === "answer") return { agent: null };
+  const agent = routableAgents.find((candidate) => candidate.id === value);
+  if (!agent) throw new HttpError(400, "invalid_agent_run", "line names no capability this deployment offers.");
+  return { agent };
+}
+
 function memoryRecallRejection(error) {
   /** @type {any} */
   const rejection = error instanceof HttpError
@@ -596,6 +624,38 @@ function memoryRecallRejection(error) {
     : new HttpError(503, "memory_unavailable", "Required research memory is unavailable.");
   rejection.definitivelyRejected = true;
   return rejection;
+}
+
+/**
+ * Whether a run was started by a machine rather than a person: an evaluation
+ * or acceptance harness that said so at dispatch, an autopilot episode (its
+ * route reason is minted by the dispatcher, `autopilot:<task>`), or an
+ * independent verification (its dispatch id is a shape `/runs` refuses from a
+ * client). Such a run's completion is recorded in the inbox without notifying
+ * anyone (C1).
+ * @param {Record<string, any>} run
+ */
+/**
+ * One run's usage from the ledger's per-run aggregate (C3 `usage`). A run is
+ * stamped under its own id by the model gateway, and a bounded run (autopilot,
+ * verification) under the id its runtime was minted for, which is the run's
+ * dispatch id; both are read and added. Null when nothing was attributed.
+ * @param {Map<string, any>} summaries @param {Record<string, any>} run
+ */
+export function runUsageFrom(summaries, run) {
+  const parts = [summaries.get(run.id), run.dispatchId && run.dispatchId !== run.id ? summaries.get(run.dispatchId) : null].filter(Boolean);
+  if (parts.length === 0) return null;
+  const sum = (field) => parts.reduce((total, part) => total + (Number(part[field]) || 0), 0);
+  return {
+    requests: sum("requests"), inputTokens: sum("inputTokens"), cachedInputTokens: sum("cachedInputTokens"),
+    outputTokens: sum("outputTokens"), costCny: Math.round(sum("costCny") * 1e6) / 1e6,
+  };
+}
+
+export function automatedRun(run) {
+  return run?.automated === true
+    || String(run?.effectiveRouteReason ?? "").startsWith("autopilot:")
+    || Boolean(verificationEpisodeId(run?.dispatchId));
 }
 
 function normalizeClientAddress(value) {
@@ -628,9 +688,10 @@ export function createWebApiApp(overrides = {}) {
   // A researcher's own connector credentials. Postgres-backed and keyed under
   // the gateway signing secret; a file-store deployment has neither the table
   // nor a reason to hold personal keys, and answers 503 by name.
-  const connectorCredentials = productDatabase && typeof config.modelGatewaySigningSecret === "string" && config.modelGatewaySigningSecret.length >= 32
-    ? new ConnectorCredentialStore({ database: productDatabase, secret: config.modelGatewaySigningSecret, config })
-    : null;
+  const connectorCredentials = overrides.connectorCredentials
+    ?? (productDatabase && typeof config.modelGatewaySigningSecret === "string" && config.modelGatewaySigningSecret.length >= 32
+      ? new ConnectorCredentialStore({ database: productDatabase, secret: config.modelGatewaySigningSecret, config })
+      : null);
   let maintenanceService = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
@@ -642,10 +703,23 @@ export function createWebApiApp(overrides = {}) {
   const notificationRoutes = createNotificationRoutes({ store, service: notificationService, maxJsonBytes: config.maxJsonBytes });
   let notificationTimer = null;
   let notificationRun = null;
+  let inboxPrunedAt = 0;
   const applyNotificationDefaults = () => {
     if (!notificationService) return Promise.resolve([]);
     if (notificationRun) return notificationRun;
-    notificationRun = maintenanceMutation(() => notificationService.applyDueDefaults()).catch((error) => {
+    notificationRun = maintenanceMutation(async () => {
+      const applied = await notificationService.applyDueDefaults();
+      // The retention sweep rides the same tick, at most hourly: read items
+      // leave 90 days after they were read (C1). Its own failure is reported
+      // on its own line, and never costs the defaults that were applied.
+      if (Date.now() - inboxPrunedAt >= 3_600_000) {
+        inboxPrunedAt = Date.now();
+        await notificationService.pruneRead().catch((/** @type {any} */ error) => {
+          process.stderr.write(`inbox retention sweep failed: ${typeof error?.code === "string" ? error.code : "notification_unavailable"}\n`);
+        });
+      }
+      return applied;
+    }).catch((error) => {
       if (error?.code === "maintenance_active") return [];
       process.stderr.write(`inbox default processing failed: ${typeof error?.code === "string" ? error.code : "notification_unavailable"}\n`);
       return [];
@@ -1077,6 +1151,30 @@ export function createWebApiApp(overrides = {}) {
   const specialistClassifier = new SpecialistClassifier(config, {
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
   });
+  // Which run an interactive runtime's model request belongs to (E §9.4):
+  // the one running in its project, when exactly one is. Remembered for a
+  // few seconds because the gateway asks on every model call, and forgotten
+  // the moment any run of the project changes state.
+  /** @type {Map<string, { at: number, runId: string | null }>} */
+  const runAttribution = new Map();
+  const attributeRun = async ({ userId, projectId }) => {
+    const key = `${userId}\0${projectId}`;
+    const known = runAttribution.get(key);
+    if (known && Date.now() - known.at < 3_000) return known.runId;
+    const user = await store.userById(userId);
+    if (!user) return null;
+    const running = await agentRuns.activeRunIds(await store.requireProject(user, projectId));
+    const runId = running.length === 1 ? running[0] : null;
+    runAttribution.set(key, { at: Date.now(), runId });
+    if (runAttribution.size > 5_000) runAttribution.delete(runAttribution.keys().next().value);
+    return runId;
+  };
+  // What a run is called (C3): one metered flash call per new run, off the
+  // critical path, never over a title the researcher gave it.
+  const runTitles = new RunTitleScheduler({
+    titler: new RunTitler(config, { usageLedger, fetchImpl: overrides.runTitleFetch ?? globalThis.fetch }),
+    recordTitle: (project, runId, title) => agentRuns.recordRunLabels(project, runId, { title, titleSource: "auto" }),
+  });
   // One fan-out per live run. The browser subscribes here, never to a kernel.
   const runEvents = new RunEventHub();
   // The kernel's own live stream, decoded onto the same fan-out. The flag is
@@ -1094,7 +1192,7 @@ export function createWebApiApp(overrides = {}) {
     // record. Handing them the pump's stub made both lookups fail quietly, and
     // a check that cannot see the research session adopts every session the
     // control plane is in the middle of starting.
-    adoptSession: async (project, sessionId) => {
+    adoptSession: async (project, sessionId, summary = null) => {
       const user = await store.userById(project.userId);
       if (!user) return null;
       const full = await store.requireProject(user, project.id);
@@ -1105,9 +1203,14 @@ export function createWebApiApp(overrides = {}) {
       // Each committed user turn carries its own input and request identity;
       // an existing conversation is not a permanent ownership exemption.
       const transcript = await runtimeManager.sessionTranscript(full, sessionId, { wake: false });
+      // A fork names its source as its parent and is no subagent: the
+      // kernel's own parentage, which is what makes this a branch (decision 6).
+      const parent = String(summary?.parentSessionId ?? summary?.parentSession ?? summary?.header?.parentSession ?? "");
+      const origin = String(summary?.origin ?? summary?.header?.origin ?? "");
       return agentRuns.adoptRuntimeSession(full, sessionId, {
         transcript,
         routeTurn: (text) => routeAdoptedInput(full, sessionId, text),
+        ...(parent && origin !== "subagent" ? { forkedFrom: parent } : {}),
       });
     },
     // The pump has already authenticated the runtime and attributed root and
@@ -1115,6 +1218,10 @@ export function createWebApiApp(overrides = {}) {
     // sequence directly to the stall monitor; the model's workspace
     // projection remains useful UI detail, but is not the heartbeat.
     onRunActivity: (project, runId, activity) => agentRuns?.noteKernelActivity(project, runId, activity),
+    // The same events, into the run's progress aggregate (`run/progress`): a
+    // delegated child's tool calls reach the count within a second instead of
+    // at the monitor's next read of the child's own history.
+    onRunEvent: (project, runId, observed) => agentRuns?.noteRunEvent(project, runId, observed),
     // Recorded, not merely published: the browser shows a compaction card and
     // forgets it, while "does compaction ever fire, and what does it cost"
     // needs the ledger. Today the answer is expected to be "never" — the
@@ -1203,7 +1310,8 @@ export function createWebApiApp(overrides = {}) {
       // instead of becoming a second, unguarded unhandled rejection.
       return agentRuns?.closeProject(project, status);
     },
-    onSessionAbort: (project, sessionId) => agentRuns?.cancelSession(project, sessionId),
+    // The researcher's own stop, relayed through the runtime proxy.
+    onSessionAbort: (project, sessionId) => agentRuns?.cancelSession(project, sessionId, { by: "user" }),
     onRuntimeStart: (project, runtime) => {
       runtimeEventPump.attach(project, runtime);
       if (!runtimeManager.pluginOverrides.has(runtimeManager.key(project))) {
@@ -1246,8 +1354,12 @@ export function createWebApiApp(overrides = {}) {
     ),
     readSessionHistory: (project, sessionId, options) => runtimeManager.sessionMessages(project, sessionId, options),
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
-    readChildSessionActivity: (project, parentSessionId, childSessionIds) =>
-      runtimeManager.childSessionActivity(project, parentSessionId, childSessionIds),
+    readChildSessionActivity: (project, parentSessionId, childSessionIds, options) =>
+      runtimeManager.childSessionActivity(project, parentSessionId, childSessionIds, options),
+    // What the run has spent so far, for its progress aggregate (C5).
+    readRunUsage: async (project, run) => (usageLedger
+      ? runUsageFrom(await usageLedger.summaryRuns(project.userId, [run.id, run.dispatchId].filter(Boolean)), run)
+      : null),
     runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     // Which workspace a run belongs to, re-derived rather than remembered. It
@@ -1277,11 +1389,19 @@ export function createWebApiApp(overrides = {}) {
         errorCode: run.errorCode ?? null,
         verification: run.verification ?? null,
         attempts: run.attempts ?? 0,
+        // A rename, automatic or by hand, reaches every open surface on the
+        // same frame as the state it belongs to.
+        title: run.title ?? null,
+        titleSource: run.titleSource ?? null,
       });
       // The event pump's own session map, kept current on the same signal:
       // a fresh run's session becomes routable the moment the ledger knows
       // it, and a finished run's stops being routed at all.
       runtimeEventPump.noteRun(project, run);
+      runTitles.consider(project, run);
+      // A run started or ended: which one a model request belongs to may
+      // have changed.
+      runAttribution.delete(`${project.userId}\0${project.id}`);
     },
     // The run's own projection of itself — evidence counts and budget — read
     // off the monitor's existing cycle and forwarded on the same channel as
@@ -1351,7 +1471,7 @@ export function createWebApiApp(overrides = {}) {
           code: typeof error?.code === "string" ? error.code : "verification_scratch_remove_failed",
         }));
       }
-      await completeOwnedAutopilotRun({
+      const autopilotOwned = await completeOwnedAutopilotRun({
         service: autopilotService, runtimeManager, usageLedger,
         readDelta: async () => {
           let claims = [];
@@ -1375,26 +1495,20 @@ export function createWebApiApp(overrides = {}) {
             : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
         }),
       }, project, run);
-      if (notificationService && !evaluationRun) {
+      if (notificationService && !evaluationRun && runFinishedNotifies(run)) {
         try {
           // Say what happened, in the notice itself. The mapping lives in
-          // `notificationService.runFinishedNotice` so it is a tested pure
+          // `notificationService.runFinishedInboxItem` so it is a tested pure
           // function rather than inline copy in a completion callback.
-          const notice = runFinishedNotice(run);
-          await notificationService.create(project.userId, {
-            noticeType: "notify",
-            title: notice.title,
-            body: notice.body,
-            // Without an action the card renders no control at all, so a
-            // notice that names a run still could not open one. The frontend
-            // turns this id into `/app/runs?run=<id>` rather than resolving it
-            // server-side: an inbox action that resolves on the server would
-            // have to know the frontend's routes.
-            actions: [{ id: "open", label: "查看运行", style: "primary" }],
-            projectId: project.id,
-            source: { type: "run", id: run.id },
-            idempotencyKey: `run-finished:${run.id}`,
-          });
+          //
+          // Automated work is recorded without notifying anyone (C1): an
+          // evaluation harness says so at dispatch (`automated`), and an
+          // autopilot episode or its verification is known here — the
+          // episode has its own digest, which is the notice a person reads.
+          const silent = automatedRun(run) || autopilotOwned === true;
+          const peers = (await agentRuns.list(project).catch(() => []))
+            .filter((other) => other.id !== run.id && automatedRun(other) === silent);
+          await notificationService.create(project.userId, runFinishedInboxItem(project, run, { peers, silent }));
         } catch (error) {
           await securityAudit(config, "notification.agent_run.create", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
@@ -1543,15 +1657,16 @@ export function createWebApiApp(overrides = {}) {
       // testing for one of them is how every run of an excluded evaluation
       // project came to be stamped with it.
       if (memoryResult.extracted === 0 && !MEMORY_WRITE_SKIPPED_SOURCES.has(memoryResult.source)) {
-        await agentRuns.appendQualityNotices(project, run.id, [
-          `记忆抽取未产出记录：消息 ${messages.length} 条、候选 ${memoryResult.proposed} 条、`
+        const sentence = `记忆抽取未产出记录：消息 ${messages.length} 条、候选 ${memoryResult.proposed} 条、`
           + `采纳 ${memoryResult.extracted} 条、驳回 ${memoryResult.rejected} 条`
           // A third cause of the same zero: the transcript was mostly our own
           // injected context, which the extractor refuses to read back as if
           // the user had said it.
           + `${memoryResult.excluded?.length ? `、未读取 ${memoryResult.excluded.map((item) => `${item.count} 条（${item.reason === "injected" ? "系统注入" : "回合未完成"}）`).join("")}` : ""}`
           + `${memoryResult.extractionError ? `（抽取报错：${memoryResult.extractionError}）` : ""}`
-          + "。空对话与抽取失效在结果上一样，这行区分它们。",
+          + "。空对话与抽取失效在结果上一样，这行区分它们。";
+        await agentRuns.appendQualityNotices(project, run.id, [
+          runNotice("memory_extraction_empty", sentence, { detail: sentence }),
         // A notice, not a verification downgrade. `unchecked` means a layer of
         // the delivery gate did not run, and the researcher's inbox renders it
         // as 「有质量检查没有运行，无法确认是否达标」. Memory extraction is not a
@@ -1569,10 +1684,11 @@ export function createWebApiApp(overrides = {}) {
       // makes it legible. No `unchecked` flag: parking a memory says nothing
       // about whether the run's own deliverables were checked.
       if (memoryResult.pending > 0) {
-        await agentRuns.appendQualityNotices(project, run.id, [
-          `记忆已记录但暂缓生效 ${memoryResult.pending} 条：`
+        const sentence = `记忆已记录但暂缓生效 ${memoryResult.pending} 条：`
           + memoryResult.pendingReasons.map((item) => `${item.count} 条因${item.text}`).join("；")
-          + "。记录与证据都已保存，可在记忆管理中确认后启用。",
+          + "。记录与证据都已保存，可在记忆管理中确认后启用。";
+        await agentRuns.appendQualityNotices(project, run.id, [
+          runNotice("memory_pending", sentence, { detail: sentence }),
         ]).catch(() => {});
       }
       // A memory the researcher had confirmed, changed by this conversation.
@@ -1589,10 +1705,11 @@ export function createWebApiApp(overrides = {}) {
         // The inbox notice carries the full excerpts.
         const changed = memoryResult.conflicts.slice(0, 2).map((item) =>
           `「${item.key.slice(0, 40)}」由「${item.previousValue.slice(0, 30)}」改为「${item.nextValue.slice(0, 30)}」`);
-        await agentRuns.appendQualityNotices(project, run.id, [
-          `本次对话改写了 ${memoryResult.conflicts.length} 条你确认过的记忆：${changed.join("；")}`
+        const sentence = `本次对话改写了 ${memoryResult.conflicts.length} 条你确认过的记忆：${changed.join("；")}`
           + `${memoryResult.conflicts.length > changed.length ? "等" : ""}`
-          + "。新值已生效，原值保留在该记忆的修订记录中，可在记忆管理中改回。",
+          + "。新值已生效，原值保留在该记忆的修订记录中，可在记忆管理中改回。";
+        await agentRuns.appendQualityNotices(project, run.id, [
+          runNotice("memory_conflicts", sentence, { detail: sentence }),
         ]).catch(() => {});
       }
       securityAudit(config, "memory.agent_run.record", "completed", {
@@ -1943,6 +2060,7 @@ export function createWebApiApp(overrides = {}) {
             effectiveAgentVersion: selected.version,
             effectiveRuntimeAgent: selected.runtimeAgent,
             effectiveRouteReason: `autopilot:${episode.taskType}`,
+            ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
           }, async (binding, dispatchedRun, repairText = null) => {
             try {
               await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
@@ -1978,7 +2096,7 @@ export function createWebApiApp(overrides = {}) {
             });
             return runtimeManager.dispatchPrompt(project, session.id, {
               text: `<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}\n${promptText}`,
-              system: prepared.system, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
+              system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
               model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),
             });
@@ -2032,6 +2150,7 @@ export function createWebApiApp(overrides = {}) {
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     usageLedger,
+    attributeRun,
   });
   // The evaluation corpus needs both arms to see byte-identical upstream
   // answers, so the gateway's fetch is replaceable by a fixture reader. Neither
@@ -2128,11 +2247,12 @@ export function createWebApiApp(overrides = {}) {
     if (!text) return {};
     const binding = await researchSessions.get(project, sessionId);
     await assertPublicSessionPrompt(project, sessionId, binding);
+    const registry = await agentRegistry;
     if (binding?.mode === "specialist") return {
       effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
       effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: "session-binding",
+      estimatedMinutes: runEstimate(registry.get(binding.agentId)),
     };
-    const registry = await agentRegistry;
     const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
     const named = routeNamedSpecialist(text, routableAgents);
     /** @type {{ failure?: string, verdict?: string }} */
@@ -2154,6 +2274,7 @@ export function createWebApiApp(overrides = {}) {
       effectiveAgentVersion: effective?.agentVersion ?? null,
       effectiveRuntimeAgent: effective?.runtimeAgent ?? null,
       effectiveRouteReason: effective?.reason ?? null,
+      estimatedMinutes: runEstimate(effective?.agentId ? registry.get(effective.agentId) : null),
     };
   }
 
@@ -2454,6 +2575,19 @@ export function createWebApiApp(overrides = {}) {
             tenant: { id: user.tenantId ?? user.id, model: "individual-account", role: "owner" },
             project: { id: project.id, name: project.name },
             projects: await store.listProjects(user),
+            // The conversation to reopen in this project (C4), or null when
+            // the researcher has not worked here yet — or the ledger cannot be
+            // read, which is not a reason the shell should fail to render.
+            lastSessionId: await agentRuns.lastSessionId(project).catch(() => null),
+            // How many data sources nothing serves for this researcher and
+            // that need a key — the badge on the account page. 0 where the
+            // deployment keeps no personal credentials or cannot say now: the
+            // shell must render either way.
+            missingConnectorCredentials: connectorCredentials
+              ? await connectorCredentials.status(user.id)
+                .then((entries) => entries.filter((entry) => entry.needsAttention).length)
+                .catch(() => 0)
+              : 0,
             csrfToken: session.csrfToken,
             // Whether this account sees the operations page. Presentation
             // only: `config.operatorUsers` decides which menu the shell draws,
@@ -2481,6 +2615,12 @@ export function createWebApiApp(overrides = {}) {
         const projectId = assertString(body.projectId, "projectId", { max: 128 });
         const project = await store.requireProject(user, projectId);
         const frame = issueRuntimeUiFrame({ config, req, user, session, project });
+        // A turn typed into this window reaches the kernel without a dispatch,
+        // so this is the last moment the control plane sees before it: bring
+        // the resident capsule profile up to date here. Not awaited — opening
+        // the window must not wait on the product database — and the window's
+        // own boot takes far longer than the write.
+        void runtimeManager.syncCapsuleProfile(project);
         res.setHeader("Set-Cookie", frame.cookie);
         res.setHeader("Cache-Control", "no-store");
         sendJson(res, 201, { data: { frameId: frame.frameId, frameUrl: frame.frameUrl, expiresAt: frame.expiresAt, renewalToken: frame.renewalToken } });
@@ -2621,7 +2761,36 @@ export function createWebApiApp(overrides = {}) {
 
       if (pathname === "/api/agent-runs" && req.method === "GET") {
         const ctx = await context(req, res);
-        sendJson(res, 200, { data: await agentRuns.withPlanProgress(ctx.project, await agentRuns.recover(ctx.project)) });
+        let runs = await agentRuns.withPlanProgress(ctx.project, await agentRuns.recover(ctx.project));
+        // Runs adopted before their first message could be read learn it in
+        // the background; this answer does not wait for that (C3).
+        agentRuns.backfillQuestions(ctx.project, runs);
+        // What each run has spent (C3 `usage`), one query for the whole list.
+        // A ledger that cannot be read leaves the runs without the field
+        // rather than the list without its runs.
+        if (usageLedger && runs.length > 0) {
+          const summaries = await usageLedger.summaryRuns(ctx.project.userId, runs.flatMap((run) => [run.id, run.dispatchId]).filter(Boolean))
+            .catch(() => null);
+          if (summaries) runs = runs.map((run) => { const usage = runUsageFrom(summaries, run); return usage ? { ...run, usage } : run; });
+        }
+        sendJson(res, 200, { data: runs });
+        return;
+      }
+
+      // A researcher names a run (C3). Locked from then on: no automatic
+      // title replaces it, and the next rename by hand does.
+      if (pathname.startsWith("/api/agent-runs/") && req.method === "PATCH") {
+        const rawRunId = pathname.slice("/api/agent-runs/".length);
+        if (!rawRunId || rawRunId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
+        const runId = decodeRouteComponent(rawRunId, "agent run id");
+        const ctx = await context(req, res);
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run update");
+        const unknown = Object.keys(body).filter((field) => field !== "title");
+        if (unknown.length > 0) {
+          throw new HttpError(400, "invalid_payload", `Unknown agent run field(s): ${unknown.sort().join(", ")}.`);
+        }
+        if (typeof body.title !== "string") throw new HttpError(400, "invalid_payload", "title must be a string.");
+        sendJson(res, 200, { data: await agentRuns.recordRunLabels(ctx.project, runId, { title: body.title, titleSource: "user" }) });
         return;
       }
 
@@ -2658,12 +2827,29 @@ export function createWebApiApp(overrides = {}) {
         return;
       }
 
+      // A question, dispatched as a run.
+      //
+      //   POST /api/agent-runs/dispatch
+      //     { sessionId, dispatchId?, text, automated?: boolean, line?: "answer" | "<capability id>" }
+      //   202 { data: run }   run.routeReason (zh) and run.estimatedMinutes say where it went (C3)
+      //   400 invalid_agent_run — an unknown field; a `line` that is neither `answer` nor a public
+      //       capability id; a `line` on a conversation already bound to a capability
+      //
+      // `line` is the researcher's own choice and replaces the router and the
+      // classifier: `answer` pins the answer line (「改为普通问答」), an id pins
+      // that capability; the run records `choice:<line>`.
       if (pathname === "/api/agent-runs/dispatch" && req.method === "POST") {
         const ctx = await context(req, res);
         const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run dispatch");
-        const unknown = Object.keys(body).filter((field) => !["sessionId", "dispatchId", "text"].includes(field));
+        const unknown = Object.keys(body).filter((field) => !["sessionId", "dispatchId", "text", "automated", "line"].includes(field));
         if (unknown.length > 0) {
           throw new HttpError(400, "invalid_agent_run", `Unknown agent run field(s): ${unknown.sort().join(", ")}.`);
+        }
+        // An evaluation or acceptance harness says so, and its run's completion
+        // is then recorded in the inbox without notifying anyone (C1). 29 of the
+        // 31 unread items the 2026-09-17 walk found were eval cells.
+        if (body.automated != null && typeof body.automated !== "boolean") {
+          throw new HttpError(400, "invalid_agent_run", "automated must be a boolean.");
         }
         const text = assertString(body.text, "text", { max: config.maxJsonBytes });
         if (!text.trim()) throw new HttpError(400, "invalid_payload", "text must not be empty.");
@@ -2693,6 +2879,12 @@ export function createWebApiApp(overrides = {}) {
         // The default open-domain answer agent is the fallback handler, never
         // a routable specialist: exclude it from router/classifier candidates.
         const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
+        // The researcher's own choice of line (2026-09-18): `line: "answer"`
+        // for the answer line — the shell's 「改为普通问答」 — or the id of a
+        // public capability. A choice is an instruction, not a hint: it
+        // replaces the router and the classifier outright, and is recorded as
+        // `choice:<line>` so the ledger and the reader both see it was chosen.
+        const chosenLine = chosenDispatchLine(body.line, boundSession, routableAgents);
         // Routing is a judgement about what deliverable the request commissions,
         // and a word list cannot make it. Deciding by regex first sent six real
         // requests for a clinical evidence review to other pipelines because
@@ -2705,10 +2897,13 @@ export function createWebApiApp(overrides = {}) {
         // made. That preserves the property the old order was built for — a
         // high-risk medicine asked about in a report request always reaches the
         // clinical gate — without letting keyword matching outrank judgement.
-        let routedSpecialist = null;
+        /** @type {{ agentId: string, agentVersion: string, runtimeAgent: string, reason: string } | null} */
+        let routedSpecialist = chosenLine?.agent
+          ? { agentId: chosenLine.agent.id, agentVersion: chosenLine.agent.version, runtimeAgent: chosenLine.agent.runtimeAgent, reason: `choice:${chosenLine.agent.id}` }
+          : null;
         /** @type {{ failure?: string, verdict?: string }} */
         const classifierTrace = {};
-        if (boundSession?.mode === "open-domain") {
+        if (boundSession?.mode === "open-domain" && !chosenLine) {
           const named = routeNamedSpecialist(text, routableAgents);
           // Naming the package is an instruction, not a guess at intent.
           routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace);
@@ -2742,14 +2937,23 @@ export function createWebApiApp(overrides = {}) {
               // So when the classifier never got to decide, the ledger says so:
               // a batch cannot be read afterwards if a timed-out routing and a
               // genuinely open-domain question leave the same record.
-              reason: classifierTrace.failure
-                ? classifierFailureReason("unrouted:open-domain", classifierTrace.failure)
-                : "unrouted:open-domain",
+              reason: chosenLine
+                ? "choice:answer"
+                : classifierTrace.failure
+                  ? classifierFailureReason("unrouted:open-domain", classifierTrace.failure)
+                  : "unrouted:open-domain",
             }
           : null);
+        // How long the route taken should take (C3): the bound capability's, the
+        // routed one's, or the answer line's own estimate.
+        const estimate = runEstimate(boundSession?.mode === "specialist"
+          ? registry.get(boundSession.agentId)
+          : (routedSpecialist ? registry.get(routedSpecialist.agentId) : answerAgent));
         const dispatch = () => agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
+          ...(body.automated === true ? { automated: true } : {}),
+          ...(estimate ? { estimatedMinutes: estimate } : {}),
           question: text,
           effectiveAgentId: effectiveAgent?.agentId ?? null,
           effectiveAgentVersion: effectiveAgent?.agentVersion ?? null,
@@ -2817,6 +3021,7 @@ export function createWebApiApp(overrides = {}) {
             text: promptText,
             system: prepared.system,
             memoryContext: prepared.memoryContext,
+            residentProfile: true,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
             model: `deepseek/${config.deepseekModel}`,
             runId: dispatchedRun.id,
@@ -2830,6 +3035,13 @@ export function createWebApiApp(overrides = {}) {
       }
 
       // A correction to a run that is already going.
+      //
+      //   POST /api/agent-runs/:id/steer   { text: string }   (1–4000 chars, not blank; no other field)
+      //   202 { data: { id, corrections } }                   corrections = how many this run has taken
+      //   404 agent_run_not_found · 400 invalid_payload
+      //   409 agent_run_not_running · 409 agent_run_correction_limit (MAX_RUN_CORRECTIONS per run)
+      // The text reaches the running turn at its next step boundary (kernel
+      // `steer` delivery), wrapped in <evimed-correction> so a compaction keeps it.
       //
       // Deliberately its own route rather than an exemption in the dispatch
       // rule. A dispatch creates a run, a run binds a deliverable contract, and
@@ -2867,6 +3079,53 @@ export function createWebApiApp(overrides = {}) {
           strictContext: true,
         });
         sendJson(res, 202, { data: { id: runId, corrections: updated?.corrections ?? 0 } });
+        return;
+      }
+
+      // Stops a run (C3). A researcher who saw at minute three that a run was
+      // going the wrong way had no way to stop it from the runs page (E §9.2).
+      //
+      // The kernel first, then the ledger, and in that order on purpose: a
+      // ledger that says 「已取消」 while the kernel keeps spending is the one
+      // outcome worse than no button. So a kernel that cannot be reached with
+      // a runtime running is an error the caller can retry, and the run stays
+      // running; with no runtime running there is nothing left to stop.
+      //
+      // What reaches a child. `session/cancel` stops the root's current turn;
+      // the kernel refuses it for a subagent-owned session, and its
+      // `subagents/interruptByParent` interrupts only continuable children
+      // (every child the socket starts is one-shot, and the method is on the
+      // seam manifest's deny list). A one-shot child ends with its owner: the
+      // socket cancels the children a cancelled root turn orphans. The answer
+      // lists the children this control plane knew of, marked `with-root`.
+      if (pathname.startsWith("/api/agent-runs/") && pathname.endsWith("/cancel") && req.method === "POST") {
+        const rawRunId = pathname.slice("/api/agent-runs/".length, -"/cancel".length);
+        if (!rawRunId || rawRunId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
+        const runId = decodeRouteComponent(rawRunId, "agent run id");
+        const ctx = await context(req, res);
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run cancellation");
+        const unknown = Object.keys(body);
+        if (unknown.length > 0) {
+          throw new HttpError(400, "invalid_payload", `Unknown cancellation field(s): ${unknown.sort().join(", ")}.`);
+        }
+        const run = (await agentRuns.list(ctx.project)).find((item) => item.id === runId);
+        if (!run) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
+        if (run.status !== "running") {
+          sendJson(res, 200, { data: { run, cancellation: { root: "not-running", children: [] } } });
+          return;
+        }
+        let root = "canceled";
+        try {
+          if (!(await runtimeManager.cancelRuntimeSession(ctx.project, run.sessionId))) root = "runtime-not-running";
+        } catch (error) {
+          // A session the kernel no longer holds is not running either.
+          if (error?.code !== "runtime_session_not_found") throw error;
+          root = "session-not-found";
+        }
+        const children = agentRuns.knownChildSessions(run).map((childSessionId) => ({ childSessionId, stop: "with-root" }));
+        const canceled = await agentRuns.cancelRun(ctx.project, runId, { by: "user" });
+        await audit(ctx, "agent_run.cancel", "completed", { target: runId });
+        sendJson(res, 200, { data: { run: canceled, cancellation: { root, children } } });
         return;
       }
 
@@ -2999,20 +3258,40 @@ export function createWebApiApp(overrides = {}) {
 
       if (pathname === "/api/projects" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
-        sendJson(res, 200, { data: await store.listProjects(user) });
+        // With how much each has been used (C4): runs and the last moment
+        // anything happened in one. A ledger that cannot be read is reported
+        // as unknown activity for that row, never as a failed list.
+        const projects = await store.listProjects(user);
+        const data = await Promise.all(projects.map(async (item) => {
+          try {
+            return { ...item, ...(await agentRuns.activitySummary(await store.requireProject(user, item.id))) };
+          } catch {
+            return { ...item, runCount: 0, lastActivityAt: null };
+          }
+        }));
+        sendJson(res, 200, { data });
         return;
       }
 
       if (pathname === "/api/projects" && req.method === "POST") {
         const user = await store.ensureUser(req, res);
-        const body = await readJson(req, config.maxJsonBytes);
-        const id = assertString(body.id, "id", { max: 64 });
-        const name = assertString(body.name ?? id, "name", { max: 128 });
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "project");
+        const unknown = Object.keys(body).filter((field) => field !== "id" && field !== "name");
+        if (unknown.length > 0) throw new HttpError(400, "invalid_payload", `Unknown project field(s): ${unknown.sort().join(", ")}.`);
+        // A name in any language, and an id the researcher never has to see
+        // (C4): the id is a path segment under projects/, so it stays ASCII
+        // and is derived; a caller that still sends one keeps it.
+        const existing = await store.listProjects(user);
+        if (body.id == null && body.name == null) throw new HttpError(400, "invalid_payload", "A project needs a name.");
+        const id = body.id == null
+          ? projectIdFromName(String(body.name), new Set(existing.map((project) => project.id)))
+          : safeId(assertString(body.id, "id", { max: 64 }), "project id");
+        const name = projectDisplayName(body.name ?? id);
         // Counted before the create, and only for a project that is new: a
         // per-project storage quota and a per-user runtime limit bound nothing
         // on their own, because an account at the limit can make another
-        // project and have another of each.
-        const existing = await store.listProjects(user);
+        // project and have another of each. Archived projects count: they
+        // still hold their storage.
         if (
           config.maxProjectsPerUser > 0 &&
           existing.length >= config.maxProjectsPerUser &&
@@ -3021,13 +3300,13 @@ export function createWebApiApp(overrides = {}) {
           throw new HttpError(
             409,
             "project_limit_reached",
-            `This account already holds ${existing.length} projects, which is its limit. Delete one to make another.`,
+            `This account already holds ${existing.length} projects, which is its limit: each has its own storage and research runtime. Export and delete one to make another.`,
           );
         }
         const data = await store.createProject(user, id, name);
         const project = await store.requireProject(user, id);
         await audit({ config, user, project }, "project.create", "completed", { target: id });
-        sendJson(res, 200, { data });
+        sendJson(res, 200, { data: { ...data, runCount: 0, lastActivityAt: null } });
         return;
       }
 
@@ -3035,6 +3314,32 @@ export function createWebApiApp(overrides = {}) {
         const [rawProjectId, action, ...extra] = pathname.slice("/api/projects/".length).split("/");
         if (!rawProjectId || extra.length > 0) throw new HttpError(404, "not_found", "Route not found.");
         const projectId = decodeRouteComponent(rawProjectId, "project id");
+        // Renamed by its name only (C4); the id is a path and does not move.
+        if (!action && req.method === "PATCH") {
+          const user = await store.ensureUser(req, res);
+          const body = assertObject(await readJson(req, config.maxJsonBytes), "project update");
+          const unknown = Object.keys(body).filter((field) => field !== "name");
+          if (unknown.length > 0) throw new HttpError(400, "invalid_payload", `Unknown project field(s): ${unknown.sort().join(", ")}.`);
+          const data = await store.renameProject(user, projectId, body.name);
+          const project = await store.requireProject(user, projectId);
+          await audit({ config, user, project }, "project.rename", "completed", { target: projectId });
+          sendJson(res, 200, { data: { ...data, ...(await agentRuns.activitySummary(project).catch(() => ({ runCount: 0, lastActivityAt: null }))) } });
+          return;
+        }
+        // Archived rather than deleted: out of the way, still whole and
+        // exportable, and back with `{ archived: false }` (C4).
+        if (action === "archive" && req.method === "POST") {
+          const user = await store.ensureUser(req, res);
+          const body = assertObject(await readJson(req, config.maxJsonBytes), "project archive");
+          const unknown = Object.keys(body).filter((field) => field !== "archived");
+          if (unknown.length > 0) throw new HttpError(400, "invalid_payload", `Unknown project field(s): ${unknown.sort().join(", ")}.`);
+          if (body.archived != null && typeof body.archived !== "boolean") throw new HttpError(400, "invalid_payload", "archived must be a boolean.");
+          const data = await store.archiveProject(user, projectId, body.archived !== false);
+          const project = await store.requireProject(user, projectId);
+          await audit({ config, user, project }, data.archivedAt ? "project.archive" : "project.unarchive", "completed", { target: projectId });
+          sendJson(res, 200, { data: { ...data, ...(await agentRuns.activitySummary(project).catch(() => ({ runCount: 0, lastActivityAt: null }))) } });
+          return;
+        }
         if (action === "export" && req.method === "GET") {
           const user = await store.ensureUser(req, res);
           const project = await store.requireProject(user, projectId);
@@ -3303,21 +3608,25 @@ export function createWebApiApp(overrides = {}) {
         const run = (await agentRuns.list(ctx.project)).find((candidate) => candidate.id === runId);
         if (!run) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
         if (!usageLedger) throw new HttpError(503, "usage_ledger_unavailable", "The usage ledger is unavailable.");
-        // Keyed by `dispatchId`, which is what the gateway stamps on each call;
-        // the same key `finishInternal` uses, so the two agree by construction.
-        const summary = await usageLedger.summaryRun(ctx.project.userId, run.dispatchId ?? run.id);
+        // Under both ids a run's calls can carry: its own, which the gateway
+        // stamps on an interactive run's calls, and its dispatch id, which a
+        // bounded runtime (autopilot, verification) was minted for.
+        const summaries = await Promise.all([...new Set([run.id, run.dispatchId].filter(Boolean))]
+          .map((id) => usageLedger.summaryRun(ctx.project.userId, id)));
+        const total = (field) => summaries.reduce((sum, item) => sum + (Number(item[field]) || 0), 0);
+        const models = [...new Set(summaries.map((item) => item.modelId).filter(Boolean))];
         sendJson(res, 200, { data: {
           runId: run.id,
-          cost: summary.actualCost,
-          openCost: summary.openCost,
-          currency: summary.currency,
-          calls: summary.settledCalls,
-          uncertain: summary.uncertain,
+          cost: Math.round(total("actualCost") * 1e6) / 1e6,
+          openCost: Math.round(total("openCost") * 1e6) / 1e6,
+          currency: summaries[0]?.currency ?? "CNY",
+          calls: total("settledCalls"),
+          uncertain: total("uncertain"),
           cacheHitTokens: null,
           cacheMissTokens: null,
-          inputTokens: summary.inputTokens,
-          outputTokens: summary.outputTokens,
-          modelId: summary.modelId,
+          inputTokens: total("inputTokens"),
+          outputTokens: total("outputTokens"),
+          modelId: models.length === 1 ? models[0] : null,
         } });
         return;
       }
@@ -3804,6 +4113,7 @@ export function createWebApiApp(overrides = {}) {
       // Before the runtimes, because stopping a runtime the pump is still
       // following makes it reconnect to a kernel that is going away.
       await runtimeEventPump.closeAll();
+      await runTitles.settle();
       await agentRuns.closeAll();
       // After the run store, before the runtimes — and that order is the whole
       // point rather than a detail.
@@ -4886,7 +5196,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     publicUrl: await readinessCheck(() => readinessPublicUrl(config)),
     auth: await readinessCheck(async () => readinessAuth(config, store)),
     stateStore: await readinessCheck(async () => readinessStateStore(config, store)),
-    memory: await readinessCheck(async () => readinessMemory(researchMemory)),
+    memory: await readinessCheck(async () => readinessMemory(researchMemory, config)),
     memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memorySubstrate, memoryIndexWorker)),
     usageLedger: await readinessCheck(async () => readinessUsageLedger(config, usageLedger)),
     inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
@@ -4975,16 +5285,23 @@ async function readinessStateStore(config, store) {
  * no research memory at all, which is a configuration rather than a fault and
  * says so as `required: false`. A store that exists and cannot answer IS a
  * fault, because every recall and every extraction goes through it. */
-async function readinessMemory(researchMemory) {
-  if (!researchMemory?.configured) return { required: false, configured: false };
+/** Whether the memory store answers, and whether recall is on at all
+ *  (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`). The switch is reported with the
+ *  store rather than as a check of its own: an evaluation keeps `/api/ready`
+ *  verbatim, and "memory off" has to be readable there as a setting, not
+ *  inferred from runs that happened to recall nothing. */
+async function readinessMemory(researchMemory, config) {
+  const recallEnabled = config?.memoryRecallEnabled !== false;
+  if (!researchMemory?.configured) return { required: false, configured: false, recallEnabled };
   const status = await researchMemory.status();
   if (!status.connected) {
     throw readinessFailure(status.code ?? "memory_unavailable", {
       configured: Boolean(status.configured),
       connected: false,
+      recallEnabled,
     });
   }
-  return { required: true, connected: true };
+  return { required: true, connected: true, recallEnabled };
 }
 
 /** Which component ranks a recall, whether it can be reached, and what the
@@ -5023,9 +5340,15 @@ async function readinessMemoryIndex(config, substrate, worker) {
     : substrate?.active
       ? { configured: rerankStatus.configured, code: config.dashscopeApiKeyError ?? rerankStatus.code ?? null }
       : { configured: false, code: "memory_rerank_not_reached" };
+  // Why this provider: every memory evaluation recorded `builtin` from a
+  // deployment whose compose file said `openviking`, and the bare name could
+  // not tell a pin from an accident (E §10.5). `indexConfigured` beside a
+  // `builtin` provider is the pin, visible.
+  const selection = substrate?.selection ?? null;
   const details = {
     required,
     provider: status.provider,
+    ...(selection ? { providerSource: selection.source, indexConfigured: selection.indexConfigured } : {}),
     configured: Boolean(status.configured),
     connected: Boolean(status.connected),
     ...(status.code ? { code: status.code } : {}),

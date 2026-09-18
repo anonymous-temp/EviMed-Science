@@ -187,10 +187,11 @@ export {
   validateCapabilityManifest,
 } from './src/capabilityManifest.mjs'
 
-// capabilityDisplay — 3 exports
+// capabilityDisplay — 4 exports
 export {
   CAPABILITY_DISPLAY,
   capabilityBrief,
+  capabilityBriefTask,
   capabilityTitle,
 } from './src/capabilityDisplay.mjs'
 
@@ -550,3 +551,17 @@ export {
   gradeCertaintyFromParts,
   riskOfBiasOverall,
 } from './src/appraisalStructure.mjs'
+
+// gateIssueText — 10 exports: a gate finding's Chinese title by its identity
+export {
+  GATE_CHECKS_TITLED_BY_RULE,
+  GATE_CHECK_TITLES_ZH,
+  GATE_CODE_TITLES_ZH,
+  GATE_FALLBACK_TITLES_ZH,
+  GATE_ISSUE_SEVERITIES,
+  describeGateIssue,
+  gateIssueDetail,
+  gateIssueRefs,
+  gateIssueSeverity,
+  summarizeGateNotices,
+} from './src/gateIssueText.mjs'

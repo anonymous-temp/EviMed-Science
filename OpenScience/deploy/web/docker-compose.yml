@@ -16,6 +16,9 @@ x-runtime-caps: &runtime-caps
   # number to choose, and a limit nobody chose fires at the worst moment.
   OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT: ${OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT:-0}
   OPEN_SCIENCE_USER_WEEKLY_SPEND_LIMIT: ${OPEN_SCIENCE_USER_WEEKLY_SPEND_LIMIT:-0}
+  # Per-run cap for interactive runs (the gateway attributes their calls to
+  # the run since 2026-09-18). Zero is no cap.
+  OPEN_SCIENCE_USER_RUN_SPEND_LIMIT: ${OPEN_SCIENCE_USER_RUN_SPEND_LIMIT:-0}
   OPEN_SCIENCE_MAX_PROJECTS_PER_USER: ${OPEN_SCIENCE_MAX_PROJECTS_PER_USER:-20}
 
 services:
@@ -277,6 +280,10 @@ services:
       # Value-less, so an unset one stays absent and config.mjs's own default
       # applies (see deploymentEnvReachesTheContainer.test.mjs).
       OPEN_SCIENCE_MEMORY_ENABLED:
+      # Whether any memory reaches a run: the recalled block, the resident
+      # capsule profile, the recall tool and API. Value-less: unset follows
+      # OPEN_SCIENCE_MEMORY_ENABLED (config.mjs), so the default stays on.
+      OPEN_SCIENCE_MEMORY_RECALL_ENABLED:
       # Publishes an account's memory to whoever holds one of its API keys;
       # off unless a deployment decides otherwise (docs/AGENT_MEMORY_API.md).
       OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED:
@@ -419,6 +426,9 @@ services:
       OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT:
       OPEN_SCIENCE_LLM_ROUTING_ENABLED:
       OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD:
+      # Automatic run titles (one metered flash call per new run). Value-less:
+      # unset keeps config.mjs's default, on.
+      OPEN_SCIENCE_RUN_TITLES_ENABLED:
       # The learning loop's levers. It defaults on, which is exactly why these
       # have to be here: compose passes environment item by item, so a knob
       # missing from this list is a knob that does nothing and says nothing —
