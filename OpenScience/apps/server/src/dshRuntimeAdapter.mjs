@@ -695,6 +695,9 @@ export function normalizeTranscript(sessionId, entries) {
   /** @type {import('@evimed/domain').TranscriptTurn | null} */
   let activeTurn = null;
   let lastSeq = -1;
+  /** The last `session/end-seed` marker of a forked session (see the kernel's
+   *  `Session.firstLiveSeq`: locate the LAST such event). */
+  let seedEndSeq = -1;
 
   for (const entry of entries) {
     const event = entry?.event ?? entry;
@@ -833,6 +836,12 @@ export function normalizeTranscript(sessionId, entries) {
         }
         break;
       }
+      case "session/end-seed": {
+        // A fork's copied history ends here (`session/fork` seeds the new
+        // session with the source's events and marks the cut).
+        if (Number.isSafeInteger(seq)) seedEndSeq = Math.max(seedEndSeq, seq);
+        break;
+      }
       case "turn/end": {
         const end = toTurnEnd(event);
         const mapped = turnEndErrorCode(end.kind === "unknown" ? String(end.rawKind ?? "") : end.kind);
@@ -857,6 +866,7 @@ export function normalizeTranscript(sessionId, entries) {
     turnEnd,
     subagents: Object.freeze(subagents),
     lastSeq,
+    ...(seedEndSeq >= 0 ? { seedEndSeq } : {}),
   };
 }
 

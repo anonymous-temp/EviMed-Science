@@ -593,3 +593,39 @@ test("the same receipt, written by this run, is its delivery", async (t) => {
   assert.equal(finished.status, "succeeded");
   assert.deepEqual(finished.artifacts, ["deliverables/d1/report.md"]);
 });
+
+test("a fork is adopted as its own run, named after the line it branched from, and its copied turns stay with the source", async (t) => {
+  // `session/fork` seeds the new session with the source's events and marks
+  // the cut with `session/end-seed`. The copied turns are the source's runs
+  // already; only what the researcher does after the cut is new work, and it
+  // is filed with the session it came from (2026-09-18 decision 6).
+  const f = await setup(t);
+  await f.adopt();
+  const sourceRuns = await f.runs();
+  const sourceTitle = sourceRuns.sort((left, right) => right.startedAt.localeCompare(left.startedAt))[0].title;
+  const forkId = "session-fork-1";
+  const last = fixture.events.at(-1);
+  const forkEvents = [
+    ...structuredClone(fixture.events),
+    { type: "session/end-seed", seq: last.seq + 1, time: last.time + 1, data: { inherited: true } },
+    { type: "turn/start", seq: last.seq + 2, time: last.time + 2, data: { turn: 3 } },
+    { type: "user/message", seq: last.seq + 3, time: last.time + 3, data: {
+      content: [{ type: "text", text: "换一个角度：只看随机对照试验的证据。" }],
+      source: { kind: "user", rpcId: "fork-request-1", clientTimeZone: "Asia/Shanghai" }, role: "user", id: "fork-message-1",
+    } },
+  ];
+  const transcript = normalizeTranscript(forkId, forkEvents);
+  assert.equal(transcript.seedEndSeq, last.seq + 1, "the cut is read from the kernel's own marker");
+  await f.store.adoptRuntimeSession(f.project, forkId, { transcript, routeTurn: async () => ({}), forkedFrom: fixture.sessionId });
+  const all = await f.runs();
+  const branch = all.filter((run) => run.sessionId === forkId);
+  assert.equal(branch.length, 1, `the copied turns became runs of the fork: ${JSON.stringify(branch.map((run) => run.question))}`);
+  assert.equal(branch[0].question, "换一个角度：只看随机对照试验的证据。");
+  assert.equal(branch[0].forkedFrom, fixture.sessionId);
+  assert.equal(branch[0].title, `分支：${sourceTitle}`);
+  assert.equal(branch[0].titleSource, "auto", "a system name the researcher can replace, and an automatic title will not");
+  assert.equal(all.length, sourceRuns.length + 1, "the source's runs are untouched");
+  // Adopting the same fork again files nothing twice.
+  await f.store.adoptRuntimeSession(f.project, forkId, { transcript, routeTurn: async () => ({}), forkedFrom: fixture.sessionId });
+  assert.equal((await f.runs()).length, sourceRuns.length + 1);
+});

@@ -80,6 +80,9 @@ import { isEviMedToolName } from './toolNames.mjs'
  *   of the session. The only truthful truncation signal: `lastSeq` counts every
  *   event and a transcript's messages are a subset of those, so comparing the
  *   two reports a gap on any session that ends on a turn-end.
+ * @property {number} [seedEndSeq] a forked session's `session/end-seed` marker:
+ *   every event at or before it was copied from the session it was forked
+ *   from, and belongs to that session's runs, not to this one's.
  */
 
 /** An empty transcript, so a caller never has to invent one. */
