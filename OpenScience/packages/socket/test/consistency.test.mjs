@@ -23,7 +23,7 @@ import test from "node:test";
 import { SEAMS, __setHarnessModule, defineTool } from "@evimed/harness-port";
 import { CONTRACT_KINDS, SOCKET_TOOL_NAME_LIST, workspaceLayout } from "@evimed/domain";
 
-import { buildGuidanceText } from "../src/guidanceText.mjs";
+import { GUIDANCE_SECTION_NAME, buildGuidanceText } from "../src/guidanceText.mjs";
 import { RUN_DOMAIN_SPEC, projectRunState } from "../src/runMirror.mjs";
 import { evidenceFromOutcome } from "../src/evidenceIngest.mjs";
 import { skillBodyDigestAsync } from "../src/digest.mjs";
@@ -215,6 +215,46 @@ test("the kernel's produced-files paragraph is withdrawn from every agent, and n
   assert.equal(withdrawn[0].text, "", "an empty section is what the renderer drops");
   assert.equal(withdrawn[0].order, SEAMS.promptSections.deliverableFileReferences.order);
   assert.ok(sections.some((section) => section.text.length > 0), "the guidance itself is still registered");
+});
+
+test("a delegated child reads the child guidance instead of the orchestration guidance, and no answer persona; the root keeps both", async () => {
+  const { apply: applyGuidance } = await import("../plugins/guidance.mjs");
+  const ctx = harness();
+  ctx.provide("fs", {
+    resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
+    readText: async (/** @type {string} */ target) => (target === "/persona/SKILL.md" ? "---\nname: open-domain-answer\n---\n# Persona\n\nAnswer first." : null),
+  });
+  /** @param {any[]} into */
+  const recorder = (into) => ({ section: (/** @type {any} */ section) => { into.push(section); return () => {}; } });
+  /** @type {any[]} */
+  const presetSections = [];
+  /** @type {any} */ (ctx).systemPrompt = recorder(presetSections);
+  await applyGuidance(ctx, { capabilitiesDir: "", answerPersonaDir: "/persona", askUserEnabled: false, capsuleActive: true, reviewEnabled: false });
+  assert.ok(presetSections.some((section) => section.name === "evimed:answer-persona" && section.text.includes("Answer first.")), "the persona is on the preset for the root");
+  const orchestration = presetSections.find((section) => section.name === GUIDANCE_SECTION_NAME);
+  assert.match(orchestration.text, /evimed_delegate/);
+
+  const start = (/** @type {any} */ agent) => { for (const handler of ctx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent, source: "startup" }); };
+  /** @type {any[]} */
+  const childSections = [];
+  start({ session: { id: "c1", header: { origin: "subagent", parentSession: "r1" } }, ctx: { systemPrompt: recorder(childSections) } });
+  assert.deepEqual(childSections.map((section) => section.name), [GUIDANCE_SECTION_NAME, "evimed:answer-persona"], "both sections are replaced in the child's own scope");
+  assert.equal(childSections[0].order, orchestration.order, "in the same place in the prompt");
+  assert.equal(childSections[1].text, "", "an empty section is dropped: the child has no answer persona");
+  const child = childSections[0].text;
+  assert.match(child, /<evimed-delegated>/);
+  assert.doesNotMatch(child, /evimed_plan|evimed_delegate|evimed_complete_run|能力目录|契约种类/, "nothing about running a run the child cannot run");
+  for (const kept of ["## 检索顺序", "## 注入的上下文怎么用", "## 引文卫生", "## 安全", "evimed_capsule_recall"]) {
+    assert.ok(child.includes(kept), `the child keeps ${kept}`);
+  }
+  // The shared rules are the root's own text, not a second copy to drift.
+  const citation = (/** @type {string} */ text) => text.slice(text.indexOf("## 引文卫生"), text.indexOf("## 安全"));
+  assert.equal(citation(child), citation(orchestration.text));
+
+  /** @type {any[]} */
+  const rootSections = [];
+  start({ session: { id: "r1", header: { cwd: "/workspace" } }, ctx: { systemPrompt: recorder(rootSections) } });
+  assert.deepEqual(rootSections, [], "the root reads the preset's sections");
 });
 
 test("recalled context is named as data, not as an instruction", () => {
@@ -480,7 +520,12 @@ test("a delegated child is handed the run's recalled memory and the knowledge po
   assert.match(withMemory.prompt, /## 个人知识库/);
   assert.match(withMemory.prompt, /`\.evimed-knowledge\/`/);
   assert.match(withMemory.prompt, /3 项/);
-  assert.ok(withMemory.prompt.indexOf("## 用户记忆") < withMemory.prompt.indexOf("## 方法"), "who the child works for comes before how");
+  // Reversed on 2026-09-18 (plan §9.4, stable prefix first): the method is the
+  // same for every child of a capability and opens the message so the prefix
+  // cache can reuse it; who the child works for is per delegation and follows
+  // the task, where the rest of what changes per delegation is.
+  assert.ok(withMemory.prompt.indexOf("## 方法") < withMemory.prompt.indexOf("## 你的任务"), "the stable method opens the message");
+  assert.ok(withMemory.prompt.indexOf("## 你的任务") < withMemory.prompt.indexOf("## 用户记忆"), "the researcher's memory travels with the task, after the method");
   const without = buildDelegation({ ...base, memoryText: null, knowledgeEntries: 0 });
   assert.doesNotMatch(without.prompt, /用户记忆|个人知识库|evimed-knowledge/);
   const blank = buildDelegation({ ...base, memoryText: "   " });

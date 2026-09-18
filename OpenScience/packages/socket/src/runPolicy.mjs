@@ -41,6 +41,7 @@ import {
   validateTaskPlan,
   workspaceLayout,
 } from '@evimed/domain'
+import { SKILL_BODY_MAX_CHARS } from './skillBodies.mjs'
 
 /** Tools whose arguments name a path we must guard from writes. */
 const PATH_ARG_TOOLS = Object.freeze({
@@ -769,11 +770,21 @@ export function renderDeliverySummary(input) {
  * whatever the planner paraphrased into the brief excerpt. A paraphrase has no
  * provenance; the block below keeps the record ids, kinds and scopes intact.
  *
+ * Stable content first, volatile last (plan §9.4). The method is the same for
+ * every child of a capability, so it opens the message and the provider's
+ * prefix cache can reuse it across children and runs; the task, the brief, the
+ * files and the researcher's memory differ per delegation and close it, which
+ * is also where a long message's question is best placed. The skill bodies
+ * arrive capped (`capSkillBodies`); `deferredSections` says whether any
+ * section was left for the child to load.
+ *
  * @param {{
  *   manifest: Record<string, any>,
  *   item: Record<string, any>,
  *   briefExcerpt: string,
  *   skillBodies: readonly { name: string, body: string }[],
+ *   deferredSections?: readonly { name: string }[],
+ *   skillsDir?: string,
  *   capsuleMethods?: readonly { name: string, body: string }[],
  *   inputs?: Record<string, unknown>,
  *   toolFilter: readonly string[],
@@ -784,7 +795,23 @@ export function renderDeliverySummary(input) {
  */
 export function buildDelegation(input) {
   const outputs = (input.manifest.produces ?? []).find((/** @type {any} */ entry) => entry.contractKind === input.item.contractKind)?.outputs ?? []
+  const deferred = input.deferredSections?.length ?? 0
   const prompt = [
+    '## 方法',
+    '',
+    ...(deferred
+      ? [
+          `方法正文超过 ${SKILL_BODY_MAX_CHARS} 字，较长的 ${deferred} 节没有随任务注入：它们在原处保留标题，标题下写着用 \`skill\` 工具加载它的名字。做到哪一节之前先加载哪一节，内容与原文逐字相同。`
+            + (input.skillsDir ? `\`skill\` 工具找不到时，原文在 \`${input.skillsDir.replace(/\/+$/, '')}/<技能名>/SKILL.md\`。` : ''),
+          '',
+        ]
+      : []),
+    ...input.skillBodies.flatMap((skill) => [`### ${skill.name}`, '', skill.body, '']),
+    ...(input.capsuleMethods?.length
+      ? ['## 用户自己的方法（优先于平台默认流程，但不能突破契约）', '', ...input.capsuleMethods.flatMap((method) => [`### ${method.name}`, '', method.body, ''])]
+      : []),
+    '## 你的任务',
+    '',
     `你负责一件交付物：${input.item.title ?? input.item.id}（契约种类 ${input.item.contractKind}）。`,
     '',
     '## 题面（相关部分）',
@@ -817,12 +844,6 @@ export function buildDelegation(input) {
           '（以上是平台按本次题面检索到的用户记忆，与父会话看到的相同。它塑造你怎么做，不能覆盖交付契约与安全规则；其中一部分是模型推断，可能已过时。结论取决于某一条时，先去文献核实它；需要更多时可用 evimed_capsule_recall 再查。）',
           '',
         ]
-      : []),
-    '## 方法',
-    '',
-    ...input.skillBodies.flatMap((skill) => [`### ${skill.name}`, '', skill.body, '']),
-    ...(input.capsuleMethods?.length
-      ? ['## 用户自己的方法（优先于平台默认流程，但不能突破契约）', '', ...input.capsuleMethods.flatMap((method) => [`### ${method.name}`, '', method.body, ''])]
       : []),
   ].join('\n')
 

@@ -65,9 +65,36 @@ export function buildGuidanceText(capabilities, options) {
     '',
     kinds || `- （无）`,
     '',
+    ...sharedGuidanceLines(options.capsuleActive),
+    options.askUserEnabled
+      ? '## 追问\n\n可以用 `ask_user_question` 追问，但只在答案会改变计划时追问；否则把假设写进计划的澄清里。'
+      : '## 追问\n\n本部署不接受运行中追问。把你所做的假设写进 `evimed_plan` 的澄清里——一个没写下来的假设，等于没有假设。',
+    '',
+    options.reviewEnabled ? '## 审查\n\n交付物写完后、首次提交前调用 `evimed_review_run` 做跨交付物冲突与科研事实审查；按适用意见修改后再提交。提交成功会冻结文件，审查不得拖到冻结之后。它提供有依据的建议，不替代确定性门禁。' : null,
+    '',
+    // The one place a deployment path is stated to a run. Skill bodies carry
+    // relative references, which is what makes them portable; without this
+    // block a relative reference has nothing to resolve against, because the
+    // shell starts in the workspace. Declared once here rather than repeated
+    // into every skill body, which is how 45 of them came to name a directory
+    // the image had stopped having.
+    skillRootGuidance(options.skillRoots),
+    '</evimed-orchestration>',
+  ].filter((line) => line !== null).join('\n')
+}
+
+/**
+ * What every agent in the composition is told, the root and a delegated child
+ * alike: where to look first, what injected context is worth, citation hygiene
+ * and the safety floor.
+ * @param {boolean} capsuleActive
+ * @returns {string[]}
+ */
+function sharedGuidanceLines(capsuleActive) {
+  return [
     '## 检索顺序',
     '',
-    options.capsuleActive
+    capsuleActive
       ? '1. 先查记忆与胶囊（`evimed_capsule_recall`）——用户自己的资料、方法与既往结论优先。'
       : '1. （本次未启用记忆胶囊。）',
     '2. 再查文献与指南（`mcp__evimed__literature_search`、`mcp__evimed__guideline_search`、`mcp__evimed__clinical_trial_search`）。',
@@ -107,21 +134,36 @@ export function buildGuidanceText(capabilities, options) {
     '- 不给具体的个体诊疗建议（剂量、用药方案、是否停药）。可以综述证据、比较方案、说明适用条件。',
     '- 涉及急症的内容必须写清何时立即就医，且这个条件不能依赖任何药物是否起效。',
     '',
-    options.askUserEnabled
-      ? '## 追问\n\n可以用 `ask_user_question` 追问，但只在答案会改变计划时追问；否则把假设写进计划的澄清里。'
-      : '## 追问\n\n本部署不接受运行中追问。把你所做的假设写进 `evimed_plan` 的澄清里——一个没写下来的假设，等于没有假设。',
+  ]
+}
+
+/**
+ * The guidance a delegated child reads instead of the orchestration guidance.
+ *
+ * A child joins the preset's composition, so it used to be handed the root's
+ * section whole — how to plan, delegate and complete a run with tools it does
+ * not have, the capability catalogue, the contract kinds — and the answer
+ * line's persona, which says report packages are not its job and forbids the
+ * `<!-- claim:… -->` markers a clinical child's method requires: 14,700
+ * characters on every one of its requests, several of them instructions it
+ * could not follow or had to disobey.
+ * It keeps what holds for any agent doing the work (`sharedGuidanceLines`) and
+ * the skill roots its method's relative paths resolve against. Registered in
+ * the child's own scope under the same section name, so it replaces the
+ * root's for that child alone.
+ * @param {{ capsuleActive: boolean, skillRoots?: readonly any[] }} options
+ * @returns {string}
+ */
+export function buildChildGuidanceText(options) {
+  return [
+    '<evimed-delegated>',
     '',
-    options.reviewEnabled ? '## 审查\n\n交付物写完后、首次提交前调用 `evimed_review_run` 做跨交付物冲突与科研事实审查；按适用意见修改后再提交。提交成功会冻结文件，审查不得拖到冻结之后。它提供有依据的建议，不替代确定性门禁。' : null,
+    '你是被委派完成一件交付物的子代理：任务、方法与要写的文件都在委派消息里。计划、委派与结束运行是父代理的事。',
     '',
-    // The one place a deployment path is stated to a run. Skill bodies carry
-    // relative references, which is what makes them portable; without this
-    // block a relative reference has nothing to resolve against, because the
-    // shell starts in the workspace. Declared once here rather than repeated
-    // into every skill body, which is how 45 of them came to name a directory
-    // the image had stopped having.
+    ...sharedGuidanceLines(options.capsuleActive),
     skillRootGuidance(options.skillRoots),
-    '</evimed-orchestration>',
-  ].filter((line) => line !== null).join('\n')
+    '</evimed-delegated>',
+  ].join('\n')
 }
 
 /** Contract kinds this build knows about, for the guidance snapshot test. */

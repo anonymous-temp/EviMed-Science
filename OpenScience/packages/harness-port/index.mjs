@@ -238,6 +238,67 @@ export function registeredToolNames(ctx) {
 }
 
 /**
+ * Whether one agent's own tool view holds a tool: the registry's scope-aware
+ * lookup, which applies that agent's restriction. A delegated child's
+ * restriction is installed while it is created, so this already answers for a
+ * child at its session start.
+ * @param {any} ctx @param {any} agent @param {string} name @returns {boolean}
+ */
+export function agentSeesTool(ctx, agent, name) {
+  const tools = ctx?.get?.('tools') ?? ctx?.tools
+  return typeof tools?.get === 'function' && tools.get(name, agent) !== undefined
+}
+
+/**
+ * Whether an agent's session is a delegated child's. The header fields are the
+ * kernel's (`@deepseek-ai/dsh-subagent` writes `origin: "subagent"` and the
+ * parent's id when it creates a child), so they are read here and nowhere else.
+ * @param {any} agent @returns {boolean}
+ */
+export function isSubagentSession(agent) {
+  return String(agent?.session?.header?.origin ?? '') === 'subagent'
+}
+
+/** @param {any} agent @returns {string} the session a child was started from, or '' */
+export function parentSessionOf(agent) {
+  return String(agent?.session?.header?.parentSession ?? '')
+}
+
+/**
+ * Register a prompt section in one agent's own scope. The registry merges
+ * sections by name along the scope chain, nearest first, so a section named
+ * like one the preset registers replaces it for this agent alone — the way the
+ * kernel itself gives a child its own persona prefix. Called at the agent's
+ * session start, before its first prompt is assembled.
+ * @param {any} agent @param {import('./src/types.mjs').PromptSection} section
+ * @returns {() => void}
+ */
+export function registerAgentSection(agent, section) {
+  return agent.ctx.systemPrompt.section({ name: section.name, order: section.order, text: section.text })
+}
+
+/**
+ * Register a skill in one agent's own scope, loadable through the kernel's
+ * `skill` tool by that agent alone. Model-invocable only: it is a section of a
+ * method, not a command a person types. Registered before the agent's first
+ * step, it is part of the agent's first skill catalogue rather than a
+ * replacement catalogue appended later.
+ * @param {any} agent
+ * @param {{ name: string, description: string, content: string, resourceDir?: string }} skill
+ * @returns {() => void}
+ */
+export function registerAgentSkill(agent, skill) {
+  return agent.ctx.skills.register({
+    name: skill.name,
+    description: skill.description,
+    content: skill.content,
+    source: 'runtime',
+    invocation: { modelInvocable: true, userInvocable: false },
+    ...(skill.resourceDir ? { resourceBase: { kind: 'directory', path: skill.resourceDir } } : {}),
+  })
+}
+
+/**
  * The monotonic, final refusal. Reserved for policy: an attempt ceiling, a
  * budget, a path guard. A business verdict is a return value, never this.
  * @param {any} ctx

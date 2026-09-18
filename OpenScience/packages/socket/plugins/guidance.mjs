@@ -16,8 +16,17 @@
 
 import { errorMessage } from '../src/runPolicy.mjs'
 import { validateCapabilityManifest } from '@evimed/domain'
-import { configSchema, listDirAt, readFileAt, registerSection, withdrawPromptSection } from '@evimed/harness-port'
-import { GUIDANCE_SECTION_NAME, GUIDANCE_SECTION_ORDER, buildGuidanceText } from '../src/guidanceText.mjs'
+import {
+  configSchema,
+  isSubagentSession,
+  listDirAt,
+  onSessionStart,
+  readFileAt,
+  registerAgentSection,
+  registerSection,
+  withdrawPromptSection,
+} from '@evimed/harness-port'
+import { GUIDANCE_SECTION_NAME, GUIDANCE_SECTION_ORDER, buildChildGuidanceText, buildGuidanceText } from '../src/guidanceText.mjs'
 
 const Schema = await configSchema()
 
@@ -95,6 +104,23 @@ export async function apply(ctx, config) {
   ctx.effect(() => withdrawPromptSection(ctx, 'deliverableFileReferences'))
 
   const persona = await loadAnswerPersona(ctx, config.answerPersonaDir)
+
+  // A delegated child is not the orchestrator and not the answer line. Both
+  // sections are replaced in the child's own scope before its first request is
+  // assembled: the orchestration guidance by the part that holds for any agent
+  // doing the work, the answer persona by nothing. Nothing of the root's
+  // prompt changes.
+  const childText = buildChildGuidanceText({ capsuleActive: config.capsuleActive })
+  ctx.effect(() => onSessionStart(ctx, (agent) => {
+    if (!isSubagentSession(agent) || !agent?.ctx) return
+    try {
+      registerAgentSection(agent, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text: childText })
+      if (persona) registerAgentSection(agent, { name: ANSWER_PERSONA_SECTION_NAME, order: ANSWER_PERSONA_SECTION_ORDER, text: '' })
+    } catch (error) {
+      ctx.get('evimedDiagnostics')?.degrade?.(`child guidance not installed: ${errorMessage(error)}`)
+    }
+  }))
+
   if (persona) {
     ctx.effect(() => registerSection(ctx, {
       name: ANSWER_PERSONA_SECTION_NAME,

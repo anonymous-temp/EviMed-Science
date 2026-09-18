@@ -31,6 +31,7 @@ import {
   DOMAIN_VERSION,
   MCP_TOOL_PREFIX,
   RECEIPT_FORMAT_VERSION,
+  SOCKET_TOOL_NAMES,
   canTransition,
   contractKindLabel,
   delegationToolFilter,
@@ -41,10 +42,12 @@ import {
   workspaceLayout,
 } from '@evimed/domain'
 import {
+  agentSeesTool,
   configSchema,
   defineTool,
   guardTools,
   injectContext,
+  isSubagentSession,
   listDirAt,
   onPreStep,
   onSessionEvent,
@@ -54,7 +57,9 @@ import {
   onToolWrap,
   onTurnEnd,
   onTurnStopping,
+  parentSessionOf,
   readFileAt,
+  registerAgentSkill,
   registerTool,
   registeredToolNames,
   restrictAgentTools,
@@ -91,6 +96,7 @@ import {
   unmetDependencies,
 } from '../src/runPolicy.mjs'
 import { advancePlanItem } from '../src/runMirror.mjs'
+import { capSkillBodies, deferredSectionSkill } from '../src/skillBodies.mjs'
 import { concurrentWriteNotice } from '../src/runPolicy.mjs'
 import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
 import { unreadableSubmission } from '@evimed/domain'
@@ -429,9 +435,62 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     }
   }
 
+  /**
+   * Method sections a child about to start will load on demand, by the
+   * session that is starting it.
+   *
+   * A child's session starts inside `startSubagent` — the kernel creates the
+   * agent, emits `agent/session-start`, and only then starts its loop — so the
+   * sections can be registered in the child's own scope before its first skill
+   * catalogue is assembled, and only that child ever lists them. One slot per
+   * parent is enough: every capability child is started under its parent's run
+   * lock, one at a time. The slot is taken only by a child that can submit a
+   * deliverable, so a screening or review child started beside it cannot.
+   * @type {Map<string, { skills: ReturnType<typeof deferredSectionSkill>[], registered: boolean }>}
+   */
+  const pendingChildSkills = new Map()
+
+  /** @param {any} agent */
+  const composeChild = (agent) => {
+    if (!agent?.ctx || !isSubagentSession(agent)) return
+    const pending = pendingChildSkills.get(parentSessionOf(agent))
+    if (!pending || pending.registered) return
+    if (!agentSeesTool(ctx, agent, SOCKET_TOOL_NAMES.submitDeliverable)) return
+    pending.registered = true
+    for (const skill of pending.skills) {
+      try {
+        registerAgentSkill(agent, skill)
+      } catch (error) {
+        diagnostics(parentSessionOf(agent))?.degrade?.(`method section ${skill.name} not registered: ${errorMessage(error)}`)
+      }
+    }
+  }
+
+  /**
+   * Start a capability child with its deferred method sections waiting for it.
+   * @param {import('@evimed/harness-port').SubagentRequest} request @param {any} parent @param {AbortSignal} signal
+   * @param {ReturnType<typeof deferredSectionSkill>[]} skills
+   * @param {string} deliverableId
+   */
+  const startCapabilityChild = async (request, parent, signal, skills, deliverableId) => {
+    const parentSessionId = String(parent?.session?.id ?? '')
+    if (!skills.length || !parentSessionId) return startSubagent(ctx, request, parent, signal)
+    const pending = { skills, registered: false }
+    pendingChildSkills.set(parentSessionId, pending)
+    try {
+      return await startSubagent(ctx, request, parent, signal)
+    } finally {
+      pendingChildSkills.delete(parentSessionId)
+      if (!pending.registered) {
+        diagnostics(parentSessionId)?.degrade?.(`method sections for ${deliverableId} were not registered; the child can read them from the skill files`)
+      }
+    }
+  }
+
   // ---- each dispatch context, injected as a first-class user message -------
   ctx.effect(() => onSessionStart(ctx, (agent) => {
     narrowRootTools(agent)
+    composeChild(agent)
     void injectBrief(ctx, agent, sessionState, config)
   }))
 
@@ -861,11 +920,17 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           if (!kind.ok) return refusal(kind.code, kind.message)
 
           const skillBodies = await readSkillBodies(ctx, config.skillsDir, manifest)
+          // Capped the way the answer persona is; what does not fit is loaded
+          // by the child through the `skill` tool, from its own scope.
+          const method = capSkillBodies(skillBodies)
+          const sectionSkills = method.deferred.map((section) => deferredSectionSkill(section, config.skillsDir))
           const request = buildDelegation({
             manifest,
             item,
             briefExcerpt: String(args.brief ?? entry.briefText ?? ''),
-            skillBodies,
+            skillBodies: method.inline,
+            deferredSections: method.deferred,
+            skillsDir: config.skillsDir,
             capsuleMethods: ctx.get('evimedCapsuleMethods') ?? [],
             inputs: args.inputs ?? {},
             toolFilter: delegationToolFilter(manifest, { allowBash: true }),
@@ -887,7 +952,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           const signal = AbortSignal.any([call.signal, abort.signal])
           let run
           try {
-            run = await startSubagent(ctx, request, ctx.get('agents')?.get?.(call.agentId), signal)
+            run = await startCapabilityChild(request, ctx.get('agents')?.get?.(call.agentId), signal, sectionSkills, item.id)
           } catch (error) {
             // Starting is the commit point. A constructor can reject a stale
             // tool filter before any child exists; charging a child, marking the
@@ -924,7 +989,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           // The receipt's digests, computed beside the running child rather than
           // in front of it. See `delegationReceipt` for why the order matters.
           const receipt = delegationReceipt(ctx, runId, item.id, skillBodies, childSessionId)
-          delegation.settled = followDelegation(entry, delegation, run, { request, receipt, injected, signal, parentAgentId: call.agentId })
+          delegation.settled = followDelegation(entry, delegation, run, { request, receipt, injected, signal, parentAgentId: call.agentId, sectionSkills })
           await putPlanIndex(store(), entry)
           await putRunMirror(ctx, entry, config.bundleVersion)
           // The child's own session id is in the reply the moment it exists: the
@@ -951,7 +1016,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    * waiting call's error.
    *
    * @param {Record<string, any>} entry @param {Record<string, any>} delegation @param {any} firstRun
-   * @param {{ request: any, receipt: Promise<Record<string, any>>, injected: string[], signal: AbortSignal, parentAgentId: string }} context
+   * @param {{ request: any, receipt: Promise<Record<string, any>>, injected: string[], signal: AbortSignal, parentAgentId: string, sectionSkills?: any[] }} context
    * @returns {Promise<void>}
    */
   const followDelegation = async (entry, delegation, firstRun, context) => {
@@ -975,7 +1040,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    *
    * @param {Record<string, any>} entry @param {Record<string, any>} delegation
    * @param {ReturnType<typeof toSubagentOutcome>} outcome @param {Record<string, any>} receipt
-   * @param {{ request: any, injected: string[], signal: AbortSignal, parentAgentId: string }} context
+   * @param {{ request: any, injected: string[], signal: AbortSignal, parentAgentId: string, sectionSkills?: any[] }} context
    * @returns {Promise<any>}
    */
   const settleRound = async (entry, delegation, outcome, receipt, context) => {
@@ -1044,7 +1109,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       // `parent: undefined` while the first attempt got a real one — two
       // different spawns for the same delegation, and only reachable after a
       // child had already failed, which is why nothing ever saw it.
-      retry = await startSubagent(ctx, { ...context.request, prompt: `${context.request.prompt}\n\n## 上一次失败\n\n${settlement.reason}` }, ctx.get('agents')?.get?.(context.parentAgentId), context.signal)
+      retry = await startCapabilityChild(
+        { ...context.request, prompt: `${context.request.prompt}\n\n## 上一次失败\n\n${settlement.reason}` },
+        ctx.get('agents')?.get?.(context.parentAgentId),
+        context.signal,
+        context.sectionSkills ?? [],
+        delegation.deliverableId,
+      )
     } catch (error) {
       Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_failed', settlement.reason)] }))
       return finishDelegation(entry, delegation, 'failed', { ...report, reason: `${settlement.reason} 重派没有启动：${errorMessage(error)}` })
@@ -1547,11 +1618,6 @@ async function requestRevisionAuthorization(ctx, config, body) {
   } catch {
     return false
   }
-}
-
-/** @param {any} agent @returns {boolean} */
-function isSubagentSession(agent) {
-  return String(agent?.session?.header?.origin ?? '') === 'subagent'
 }
 
 /** @param {Record<string, any>} item @returns {Record<string, any>} */
