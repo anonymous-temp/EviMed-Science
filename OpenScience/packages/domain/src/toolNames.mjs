@@ -114,6 +114,14 @@ export const SOCKET_TOOL_NAMES = Object.freeze({
   // contract by failing submissions because nothing else could tell it where it
   // stood (2026-09-18 review, appendix E §1.3).
   packageCheck: 'evimed_package_check',
+  // Claim-level evidence work for a deliverable that carries an evidence
+  // matrix: one claim written and judged by the gate's own rules at a time,
+  // and the report's numbering and reference list made to agree with it —
+  // what runs did with scripts they wrote themselves (2026-09-18 review,
+  // appendix E §1; plan §9.1). Never required steps: cheaper than a script,
+  // nothing more.
+  claimUpsert: 'evimed_claim_upsert',
+  renderReport: 'evimed_render_report',
   completeRun: 'evimed_complete_run',
   capsuleRecall: 'evimed_capsule_recall',
   capsuleNote: 'evimed_capsule_note',

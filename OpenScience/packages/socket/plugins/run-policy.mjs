@@ -38,6 +38,7 @@ import {
   deliverableDir,
   deliverablePath,
   errorCodeMessage,
+  mcpToolName,
   resolveContractKind,
   workspaceLayout,
 } from '@evimed/domain'
@@ -97,6 +98,24 @@ import {
 } from '../src/runPolicy.mjs'
 import { advancePlanItem } from '../src/runMirror.mjs'
 import { capSkillBodies, deferredSectionSkill } from '../src/skillBodies.mjs'
+import { proseShape } from '../src/proseShape.mjs'
+import {
+  CLAIM_ISSUE_LIMIT,
+  CLAIM_MATRIX_FILE,
+  CLAIM_REPORT_FILE,
+  CLAIM_VERDICT_MEMORY,
+  readMatrix,
+  renderClinicalReport,
+  upsertClaim,
+} from '../src/claimTools.mjs'
+import { validateEvidenceClaim } from '@evimed/domain/clinical-evidence'
+
+/**
+ * The research server's quote locator (contract C7), by its base name. Given
+ * to a child only when the server publishes it, so this socket works against a
+ * server that predates it.
+ */
+const QUOTE_LOCATOR = 'locate_quote'
 import { concurrentWriteNotice } from '../src/runPolicy.mjs'
 import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
 import { unreadableSubmission } from '@evimed/domain'
@@ -487,6 +506,24 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     }
   }
 
+  /**
+   * A child's tools: the domain's allow-list for its capability and contract,
+   * and the research server's quote locator when the deliverable carries an
+   * evidence matrix and this deployment's server publishes it. Asked of the
+   * registry rather than of a list, because a name `tools.restrict()` does not
+   * know turns the delegation into an exception.
+   * @param {any} manifest a validated capability manifest @param {string} contractKind
+   * @returns {string[]}
+   */
+  const childToolFilter = (manifest, contractKind) => {
+    const tools = delegationToolFilter(manifest, { allowBash: true, contractKind })
+    const locator = mcpToolName(QUOTE_LOCATOR)
+    if (tools.includes(SOCKET_TOOL_NAMES.claimUpsert) && !tools.includes(locator) && registeredToolNames(ctx).includes(locator)) {
+      tools.push(locator)
+    }
+    return tools
+  }
+
   // ---- each dispatch context, injected as a first-class user message -------
   ctx.effect(() => onSessionStart(ctx, (agent) => {
     narrowRootTools(agent)
@@ -740,13 +777,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   // plugin's apply failed on its first line and the run either refused to start
   // or came up with no gate at all. The effect callbacks stay synchronous
   // because what they return is the disposer.
-  const [plan, delegate, awaitChildren, revise, submit, packageCheck, complete] = await Promise.all([
+  const [plan, delegate, awaitChildren, revise, submit, packageCheck, claimUpsert, renderReport, complete] = await Promise.all([
     planTool(),
     delegateTool(),
     awaitTool(),
     reviseTool(),
     submitTool(),
     packageCheckTool(),
+    claimUpsertTool(),
+    renderReportTool(),
     completeTool(),
   ])
   ctx.effect(() => registerTool(ctx, plan))
@@ -755,6 +794,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   ctx.effect(() => registerTool(ctx, revise))
   ctx.effect(() => registerTool(ctx, submit))
   ctx.effect(() => registerTool(ctx, packageCheck))
+  ctx.effect(() => registerTool(ctx, claimUpsert))
+  ctx.effect(() => registerTool(ctx, renderReport))
   ctx.effect(() => registerTool(ctx, complete))
 
   async function planTool() {
@@ -933,7 +974,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             skillsDir: config.skillsDir,
             capsuleMethods: ctx.get('evimedCapsuleMethods') ?? [],
             inputs: args.inputs ?? {},
-            toolFilter: delegationToolFilter(manifest, { allowBash: true }),
+            toolFilter: childToolFilter(manifest, kind.contractKind),
             memoryText: entry.memoryText ?? null,
             knowledgeEntries: Number(entry.knowledgeEntries ?? 0),
           })
@@ -1294,7 +1335,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    * the one that does not decide anything.
    *
    * @param {Record<string, any>} entry @param {Record<string, any>} item @param {Record<string, any>} call
-   * @returns {Promise<{ verdict: ReturnType<typeof gateDeliverable>, files: Map<string, string> }>}
+   * @returns {Promise<{ verdict: ReturnType<typeof gateDeliverable>, files: Map<string, string>, expectedOutputs: any[] }>}
    */
   const judgeDeliverable = async (entry, item, call) => {
     const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
@@ -1310,7 +1351,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       sourceArtifacts,
       staleEvidenceCount: 0,
     })
-    return { verdict, files }
+    return { verdict, files, expectedOutputs }
   }
 
   async function submitTool() {
@@ -1430,9 +1471,12 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       description: [
         '对一件交付物运行与 evimed_submit_deliverable 完全相同的核验，返回同样的裁定。',
         '不提交、不写回执、不占提交次数；提交前随时可用它看还差什么。',
+        '加 prose:true 时另附报告正文的形状（每段所在小节、字数、开头）与 watchPhrases 中每个词出现的次数，不必整篇读回。',
       ].join(' '),
       parameters: {
         deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
+        prose: { type: 'boolean', description: '同时返回报告正文的形状。默认不返回。' },
+        watchPhrases: { type: 'array', items: { type: 'string' }, description: '要计数的词语，最多 40 个，每个不超过 24 字；只在 prose 为 true 时使用。' },
       },
       // Reads the deliverable and the preserved sources, writes nothing, and
       // touches no counter — so it may share a step with the calls around it.
@@ -1446,9 +1490,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // record of what was *submitted*, and a check that wrote one would turn
         // every look into a charge in the distribution the blocking budget is
         // computed from.
-        const { verdict } = await judgeDeliverable(entry, item, call)
+        const { verdict, files, expectedOutputs } = await judgeDeliverable(entry, item, call)
         const attempts = attemptStanding(entry, item)
-        if (!verdict.ok) return { ...rejectionEnvelope(verdict), data: { deliverableId: item.id, attempts } }
+        // The report's shape, when asked: read from the same bytes the verdict
+        // was, so the two describe one version of the file.
+        const reportPath = expectedOutputs.find((/** @type {any} */ output) => /\.md$/i.test(String(output.path ?? '')))?.path
+        const prose = args.prose && reportPath && files.has(reportPath)
+          ? { prose: { file: reportPath, ...proseShape(String(files.get(reportPath)), Array.isArray(args.watchPhrases) ? args.watchPhrases : []) } }
+          : {}
+        if (!verdict.ok) return { ...rejectionEnvelope(verdict), data: { deliverableId: item.id, attempts, ...prose } }
         const notices = verdict.issues.filter((entryIssue) => entryIssue.severity !== 'required').map((entryIssue) => entryIssue.message)
         return {
           ok: true,
@@ -1459,8 +1509,188 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             metrics: verdict.metrics,
             notices: boundedSuggestions(notices, (count) => `另有 ${count} 条建议没有列出，它们不影响通过。`),
             attempts,
+            ...prose,
           },
         }
+      },
+    })
+  }
+
+  /**
+   * One deliverable's claim files are read, changed and written by one call at
+   * a time. Per deliverable rather than the run lock: a child writing claims
+   * must not wait on another child's submission, and two claim writes to one
+   * matrix in the same step must not both start from the same file.
+   * @param {Record<string, any>} entry @param {string} deliverableId @param {() => Promise<any>} fn
+   */
+  const withDeliverableLock = (entry, deliverableId, fn) => {
+    entry.deliverableLocks ??= new Map()
+    const turn = (entry.deliverableLocks.get(deliverableId) ?? Promise.resolve()).then(fn, fn)
+    entry.deliverableLocks.set(deliverableId, turn.then(() => undefined, () => undefined))
+    return turn
+  }
+
+  /**
+   * The deliverable a claim tool may write, or the refusal that says why not:
+   * only the one this session owns, only a contract that carries an evidence
+   * matrix, and never once its bytes are frozen by an acceptance.
+   * @param {Record<string, any>} call @param {string} deliverableId
+   * @returns {{ refusal: Record<string, any> } | { refusal?: undefined, entry: Record<string, any>, item: Record<string, any> }}
+   */
+  const claimDeliverable = (call, deliverableId) => {
+    const resolved = resolveDeliverable(call, deliverableId)
+    if (resolved.refusal) return resolved
+    const { entry, item } = resolved
+    const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
+    const outputs = manifest?.produces?.find((/** @type {any} */ produced) => produced.contractKind === item.contractKind)?.outputs ?? []
+    if (!outputs.some((/** @type {any} */ output) => output.path === CLAIM_MATRIX_FILE)) {
+      return { refusal: refusal('claim_matrix_unsupported', `交付物「${item.id}」的契约（${contractKindLabel(item.contractKind)}）没有证据矩阵，这两个工具只用于有 ${CLAIM_MATRIX_FILE} 的交付物。`) }
+    }
+    if (item.status === 'accepted') {
+      return { refusal: refusal('deliverable_already_accepted', `交付物「${item.id}」已经通过，文件已冻结；需要修改时先调用 evimed_revise_deliverable。`) }
+    }
+    return { entry, item }
+  }
+
+  /**
+   * A claim's verdict, remembered by what it depends on: the claim as written
+   * and whether each source it quotes has preserved text here. A matrix of
+   * seventy claims is re-judged on every write for the totals, and each
+   * judgement reads its whole source; the claims that did not change need not
+   * be read again.
+   * @param {Record<string, any>} entry @param {Record<string, any>} claim @param {readonly any[]} claims
+   * @param {Record<string, string>} sourceArtifacts
+   * @returns {ReturnType<typeof validateEvidenceClaim>}
+   */
+  const judgeClaim = (entry, claim, claims, sourceArtifacts) => {
+    const paths = [claim?.artifactPath, ...(Array.isArray(claim?.supportingSources) ? claim.supportingSources.map((/** @type {any} */ source) => source?.artifactPath) : [])]
+      .filter((path) => typeof path === 'string')
+    // A derived result is judged against the claims it reasons from, so it is
+    // never served from memory; it reads no source and costs nothing to redo.
+    const key = claim?.claimType === 'derived'
+      ? null
+      : `${JSON.stringify(claim)}\u0000${paths.map((path) => `${path}:${sourceArtifacts[path] ? sourceArtifacts[path].length : 0}`).join('\u0000')}`
+    entry.claimVerdicts ??= new Map()
+    if (key && entry.claimVerdicts.has(key)) return entry.claimVerdicts.get(key)
+    const verdict = validateEvidenceClaim({ claim, claims, sourceArtifacts })
+    if (key) {
+      if (entry.claimVerdicts.size >= CLAIM_VERDICT_MEMORY) entry.claimVerdicts.delete(entry.claimVerdicts.keys().next().value)
+      entry.claimVerdicts.set(key, verdict)
+    }
+    return verdict
+  }
+
+  async function claimUpsertTool() {
+    return defineTool({
+      name: SOCKET_TOOL_NAMES.claimUpsert,
+      description: [
+        '在证据矩阵里写入或更新一条主张（按 claimId；不给 claimId 则分配下一个），并当场用门禁自己的规则核验它：引文是否逐字出现在所引来源的保存原文里、字段是否齐全、数字是否有出处。',
+        '返回 verified 或 unverified 与原因；unverified 的主张也照样写入，改好后用同一个 claimId 再写一次即可。',
+      ].join(' '),
+      parameters: {
+        deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
+        claim: { type: 'object', required: true, additionalProperties: true, description: '一条主张，字段同 clinical-evidence-matrix.json 的 claims[]。' },
+      },
+      // Writes go through the deliverable's own lock, so parallel calls in one
+      // step each land on the file the previous one wrote.
+      concurrencySafe: true,
+      async execute(args, call) {
+        const resolved = claimDeliverable(call, args.deliverableId)
+        if (resolved.refusal) return resolved.refusal
+        const { entry, item } = resolved
+        let claim = args.claim
+        if (typeof claim === 'string') {
+          try { claim = JSON.parse(claim) } catch { claim = null }
+        }
+        if (!claim || typeof claim !== 'object' || Array.isArray(claim)) {
+          return refusal('claim_invalid', '`claim` 必须是一个 JSON 对象，字段同证据矩阵的 claims[]。')
+        }
+        return withDeliverableLock(entry, item.id, async () => {
+          const cwd = entry.cwd || call.cwd
+          const path = deliverablePath(item.id, CLAIM_MATRIX_FILE)
+          const read = readMatrix(await readFileAt(ctx, cwd, path))
+          if (!read.ok) return refusal('matrix_unreadable', `${read.reason} 这个文件不会被覆盖；修好后再写主张。`)
+          const written = upsertClaim(read.matrix, claim)
+          // Written whatever the verdict: a claim that does not verify yet is
+          // work in progress the run can see and fix, not work to lose.
+          await writeFileAt(ctx, cwd, path, `${JSON.stringify(written.matrix, null, 2)}\n`)
+          const sourceArtifacts = await collectSourceArtifacts(ctx, entry, call)
+          const claims = written.matrix.claims
+          const verdict = judgeClaim(entry, written.claim, claims, sourceArtifacts)
+          const verified = claims.filter((/** @type {any} */ entryClaim) => entryClaim && typeof entryClaim === 'object'
+            && judgeClaim(entry, entryClaim, claims, sourceArtifacts).status === 'verified').length
+          const totals = { total: claims.length, verified }
+          // The running count is progress the control plane can show while the
+          // run works: seventy-two claims read as seventy-two steps of evidence
+          // rather than one submission at minute twenty-four.
+          item.claims = totals
+          await putPlanIndex(store(), entry)
+          return {
+            ok: true,
+            data: {
+              claimId: verdict.claimId || written.claim.claimId,
+              status: verdict.status,
+              issues: verdict.issues.slice(0, CLAIM_ISSUE_LIMIT).map((finding) => ({
+                code: finding.code,
+                message: finding.message,
+                severity: finding.tier === 'advisory' ? 'advisory' : 'required',
+              })),
+              totals,
+              ...(written.created ? { created: true } : {}),
+            },
+          }
+        })
+      },
+    })
+  }
+
+  async function renderReportTool() {
+    return defineTool({
+      name: SOCKET_TOOL_NAMES.renderReport,
+      description: [
+        '整理报告的编号与参考文献：按正文首次出现的顺序重排 [n]，合并同一来源的重复条目，按新顺序重建参考文献表（缺条目时用矩阵里该来源的题名、标识符与链接补上），把新编号同步进证据矩阵，并把可见的 [claim:…] 改为隐藏标记。',
+        '只动编号与标记，不改一句正文；已经有序时原样返回。',
+      ].join(' '),
+      parameters: {
+        deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
+      },
+      concurrencySafe: true,
+      async execute(args, call) {
+        const resolved = claimDeliverable(call, args.deliverableId)
+        if (resolved.refusal) return resolved.refusal
+        const { entry, item } = resolved
+        return withDeliverableLock(entry, item.id, async () => {
+          const cwd = entry.cwd || call.cwd
+          const reportPath = deliverablePath(item.id, CLAIM_REPORT_FILE)
+          const matrixPath = deliverablePath(item.id, CLAIM_MATRIX_FILE)
+          const reportText = await readFileAt(ctx, cwd, reportPath)
+          if (reportText == null || !String(reportText).trim()) {
+            return refusal('report_missing', `还没有 ${reportPath}；先写报告，再整理编号。`)
+          }
+          const matrixText = await readFileAt(ctx, cwd, matrixPath)
+          const read = readMatrix(matrixText)
+          if (!read.ok) return refusal('matrix_unreadable', `${read.reason} 这个文件不会被覆盖；修好后再整理编号。`)
+          const rendered = renderClinicalReport({ reportText: String(reportText), matrix: matrixText == null ? null : read.matrix })
+          if (rendered.changed.report) await writeFileAt(ctx, cwd, reportPath, rendered.text)
+          if (rendered.changed.matrix && rendered.matrix) await writeFileAt(ctx, cwd, matrixPath, `${JSON.stringify(rendered.matrix, null, 2)}\n`)
+          const unresolved = [
+            ...rendered.unresolved.citations.map((number) => `[${number}]`),
+            ...rendered.unresolved.claims,
+          ]
+          return {
+            ok: true,
+            data: {
+              file: reportPath,
+              references: rendered.references,
+              markersSynced: rendered.markersSynced,
+              renumbered: rendered.renumbered,
+              ...(rendered.merged.length ? { merged: rendered.merged } : {}),
+              ...(rendered.added.length ? { added: rendered.added } : {}),
+              ...(rendered.uncited.length ? { uncited: rendered.uncited } : {}),
+              ...(unresolved.length ? { unresolved } : {}),
+            },
+          }
+        })
       },
     })
   }
@@ -1635,6 +1865,9 @@ function publicItem(item) {
     // control plane used to learn it only when the delegate call returned,
     // which was when the child was done.
     ...(item.childSessionId ? { childSessionId: String(item.childSessionId) } : {}),
+    // How many of its claims are written and how many verify, as of the last
+    // `evimed_claim_upsert`: evidence progress the control plane can show.
+    ...(item.claims ? { claims: { total: Number(item.claims.total) || 0, verified: Number(item.claims.verified) || 0 } } : {}),
   }
 }
 

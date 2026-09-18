@@ -82,8 +82,11 @@ test("EviMed tool names cover both worlds", () => {
   // ask for a compaction, mounted only where the engine that serves it is.
   // Eleven since `evimed_package_check`: the submission's verdict without the
   // submission. Twelve since `evimed_await`: delegation stopped waiting inside
-  // its own call, and the parent collects here.
-  assert.equal(SOCKET_TOOL_NAME_LIST.length, 12);
+  // its own call, and the parent collects here. Fourteen since the two claim
+  // tools: a claim written and judged at a time, and the numbering rendered.
+  assert.equal(SOCKET_TOOL_NAME_LIST.length, 14);
+  assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_claim_upsert"));
+  assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_render_report"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_await"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_revise_deliverable"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_compact_request"));

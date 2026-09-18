@@ -289,9 +289,11 @@ function appraisalFiles({ complete = true } = {}, prefix = "/workspace/deliverab
  *   projected?: boolean,
  *   maxConcurrentChildren?: number,
  *   skillBodies?: Readonly<Record<string, string>>,
+ *   capabilities?: readonly Record<string, any>[],
+ *   evidenceRecords?: readonly Record<string, any>[],
  * }} [options]
  */
-async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, projected = false, maxConcurrentChildren = 3, skillBodies = SKILL_BODIES } = {}) {
+async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, projected = false, maxConcurrentChildren = 3, skillBodies = SKILL_BODIES, capabilities = [BIBLIOMETRIC, APPRAISAL], evidenceRecords = [] } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
   const rows = new Map();
@@ -348,14 +350,14 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
       runMirror: { put: async (/** @type {string} */ key, /** @type {any} */ value) => rows.set(key, value) },
       planIndex: { put: async () => {} },
       gateRuns: { put: async (/** @type {string} */ key, /** @type {any} */ value) => gateRuns.push({ key, ...value }) },
-      evidence: { entries: () => [] },
+      evidence: { entries: () => evidenceRecords.map((record, index) => [String(index), record]) },
       subagents: childRows,
       sessionRuns,
       runIdForSession: (/** @type {string} */ sessionId) => sessionRuns.get(sessionId) ?? "",
     });
     ctx.provide("evimedDiagnostics", { degrade() {}, notice() {} });
   }
-  ctx.provide("evimedCapabilities", [BIBLIOMETRIC, APPRAISAL]);
+  ctx.provide("evimedCapabilities", capabilities);
   /** @type {{ provider: any, options: any }[]} */
   const starts = [];
   /** @type {any} */ (ctx).subagents = {
@@ -1524,4 +1526,196 @@ test("a method over the cap reaches the child capped, and its deferred sections 
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.ok(degraded.some((line) => /method sections for d-bib were not registered/.test(line)), `the retry's missing registration is reported: ${JSON.stringify(degraded)}`);
   assert.equal(registered.length, 2, "the unrelated child took nothing");
+});
+
+/* ------------------------------------------------ claim-level evidence tools */
+
+const CLINICAL = Object.freeze({
+  id: "clinical-evidence-synthesis",
+  persona: "你是临床证据分析师。",
+  skills: ["clinical-evidence-synthesis"],
+  tools: ["mcp__evimed__literature_search", "mcp__evimed__open_access_full_text"],
+  produces: [{
+    contractKind: "clinical-evidence-report",
+    outputs: [
+      { path: "clinical-evidence-report.md", required: true },
+      { path: "clinical-evidence-matrix.json", required: true },
+    ],
+  }],
+});
+
+const SOURCE_PATH = ".evimed-sources/aspirin/fulltext.txt";
+const SOURCE_TEXT = "Background. In adults aged 70 years or older, daily low-dose aspirin did not reduce cardiovascular events (HR 0.95, 95% CI 0.83-1.08) and increased major hemorrhage (HR 1.38, 95% CI 1.18-1.62). Methods follow.";
+
+/** A claim bound to the preserved source, verbatim unless told otherwise. @param {Record<string, any>} [overrides] */
+function clinicalClaim(overrides = {}) {
+  return {
+    claimId: "CLM-001",
+    claim: "70 岁及以上成人每日低剂量阿司匹林使大出血风险升高（HR 1.38）。",
+    referenceNumber: 1,
+    sourceUrl: "https://www.nejm.org/doi/10.1056/NEJMoa1805819",
+    sourceTitle: "Effect of Aspirin on Cardiovascular Events and Bleeding in the Healthy Elderly",
+    artifactPath: SOURCE_PATH,
+    identifier: "doi:10.1056/NEJMoa1805819",
+    accessLevel: "full_text",
+    supportQuote: "increased major hemorrhage (HR 1.38, 95% CI 1.18-1.62)",
+    applicability: "70 岁及以上、无心血管病史的社区成人",
+    uncertainty: "单一大型试验；结果外推到亚洲人群需谨慎",
+    ...overrides,
+  };
+}
+
+/** A root-driven clinical fixture: one planned clinical deliverable, one preserved source. */
+async function clinicalFixture() {
+  const f = await combinedFixture({
+    capabilities: [CLINICAL],
+    skillBodies: { ...SKILL_BODIES, "clinical-evidence-synthesis": "## 方法\n写主张。\n" },
+    evidenceRecords: [{ runId: "combined_run", artifactPath: SOURCE_PATH, status: "ready" }],
+  });
+  f.files.set(`/workspace/${SOURCE_PATH}`, SOURCE_TEXT);
+  await f.step(1);
+  const planned = await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["人群按题面限定为 70 岁及以上。"],
+    deliverables: [{ id: "d-clin", contractKind: "clinical-evidence-report", capability: CLINICAL.id, title: "阿司匹林一级预防证据综述", dependsOn: [] }],
+  });
+  assert.equal(planned.value.ok, true, JSON.stringify(planned.value));
+  return f;
+}
+
+const MATRIX_FILE = "/workspace/deliverables/d-clin/clinical-evidence-matrix.json";
+const REPORT_FILE = "/workspace/deliverables/d-clin/clinical-evidence-report.md";
+
+test("a claim that does not verify is written anyway, judged by the gate's own rules, and fixed by writing it again", async () => {
+  const f = await clinicalFixture();
+
+  // The quotation is not in the preserved source: unverified, and on disk.
+  const first = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim({ supportQuote: "aspirin eliminated all bleeding events" }) });
+  assert.equal(first.value.ok, true, "a verdict about a claim is never a refusal");
+  assert.equal(first.value.data.claimId, "CLM-001");
+  assert.equal(first.value.data.status, "unverified");
+  assert.ok(first.value.data.issues.some((/** @type {any} */ entry) => entry.code === "claim-quote-verbatim" && entry.severity === "required"),
+    JSON.stringify(first.value.data.issues));
+  assert.deepEqual(first.value.data.totals, { total: 1, verified: 0 });
+  const written = JSON.parse(String(f.files.get(MATRIX_FILE)));
+  assert.equal(written.claims.length, 1, "the unverified claim is in the matrix");
+  assert.equal(written.claims[0].supportQuote, "aspirin eliminated all bleeding events");
+
+  // The same id again, quoted correctly: replaced in place, verified.
+  const second = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim() });
+  assert.equal(second.value.data.status, "verified", JSON.stringify(second.value.data.issues));
+  assert.deepEqual(second.value.data.totals, { total: 1, verified: 1 });
+  assert.equal(second.value.data.created, undefined, "a rewrite is not a new claim");
+  const rewritten = JSON.parse(String(f.files.get(MATRIX_FILE)));
+  assert.equal(rewritten.claims.length, 1, "idempotent by claim id");
+
+  // A claim with no id gets the next one; the progress is on the plan.
+  const third = await f.execute("evimed_claim_upsert", {
+    deliverableId: "d-clin",
+    claim: JSON.stringify(clinicalClaim({ claimId: undefined, claim: "心血管事件未见减少（HR 0.95）。", supportQuote: "did not reduce cardiovascular events (HR 0.95, 95% CI 0.83-1.08)" })),
+  });
+  assert.equal(third.value.data.claimId, "CLM-002");
+  assert.equal(third.value.data.created, true);
+  assert.deepEqual(third.value.data.totals, { total: 2, verified: 2 });
+  assert.deepEqual((await f.status())["d-clin"].claims, { total: 2, verified: 2 }, "evidence progress the control plane can read");
+});
+
+test("the claim tools refuse what they cannot write safely, and never overwrite a matrix they cannot read", async () => {
+  const f = await clinicalFixture();
+  f.files.set(MATRIX_FILE, '{"claims": [ {"claimId": "CLM-001", "claim": "未闭合的"支撑"引号"} ]}');
+  const unreadable = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim() });
+  assert.equal(unreadable.value.code, "matrix_unreadable");
+  assert.match(f.files.get(MATRIX_FILE) ?? "", /未闭合的/, "the run's own file is left as it was");
+
+  const notAClaim = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: "not json" });
+  assert.equal(notAClaim.value.code, "claim_invalid");
+
+  const unknown = await f.execute("evimed_claim_upsert", { deliverableId: "d-nope", claim: clinicalClaim() });
+  assert.equal(unknown.value.code, "deliverable_unknown");
+
+  const noReport = await f.execute("evimed_render_report", { deliverableId: "d-clin" });
+  assert.equal(noReport.value.code, "report_missing");
+
+  // A contract without an evidence matrix is not the claim tools' business.
+  const other = await combinedFixture();
+  await other.step(1);
+  await other.plan();
+  const bib = await other.execute("evimed_claim_upsert", { deliverableId: "d-bib", claim: clinicalClaim() });
+  assert.equal(bib.value.code, "claim_matrix_unsupported");
+});
+
+test("rendering renumbers by first appearance, merges a source listed twice and carries the numbers into the matrix", async () => {
+  const f = await clinicalFixture();
+  await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim({ referenceNumber: 3 }) });
+  f.files.set(REPORT_FILE, [
+    "# 阿司匹林一级预防",
+    "",
+    "## 结果",
+    "",
+    "大出血风险升高 [3]。<!-- claim:CLM-001 -->",
+    "与既往队列一致 [1] [claim:CLM-001]",
+    "`[9]` 不是引用。",
+    "",
+    "## 参考文献",
+    "",
+    "1. Chan AT. A cohort. BMJ. 2016. doi:10.1136/bmj.i1",
+    "3. McNeil JJ. Aspirin in the healthy elderly. N Engl J Med. 2018. doi:10.1056/NEJMoa1805819",
+    "[4] McNeil JJ. Same trial, second listing. doi:10.1056/NEJMoa1805819",
+    "",
+  ].join("\n"));
+
+  const rendered = await f.execute("evimed_render_report", { deliverableId: "d-clin" });
+  assert.equal(rendered.value.ok, true, JSON.stringify(rendered.value));
+  const data = rendered.value.data;
+  assert.equal(data.file, "deliverables/d-clin/clinical-evidence-report.md");
+  assert.equal(data.renumbered, true);
+  assert.equal(data.references, 2, "one work, one entry");
+  assert.deepEqual(data.merged, [{ from: 4, into: 3 }]);
+  assert.equal(data.markersSynced, 2, "one visible marker hidden, one claim re-pointed");
+  const report = String(f.files.get(REPORT_FILE));
+  assert.match(report, /大出血风险升高 \[1\]。<!-- claim:CLM-001 -->/);
+  assert.match(report, /与既往队列一致 \[2\] <!-- claim:CLM-001 -->/);
+  assert.match(report, /`\[9\]` 不是引用/, "code spans are not citations");
+  assert.match(report, /## 参考文献\n\n1\. McNeil JJ\. Aspirin in the healthy elderly[^\n]*\n2\. Chan AT\. A cohort/);
+  assert.doesNotMatch(report, /Same trial, second listing/);
+  assert.equal(JSON.parse(String(f.files.get(MATRIX_FILE))).claims[0].referenceNumber, 1, "the matrix follows the numbers");
+
+  // Deterministic: a second render changes nothing.
+  const again = await f.execute("evimed_render_report", { deliverableId: "d-clin" });
+  assert.equal(again.value.data.renumbered, false);
+  assert.equal(again.value.data.markersSynced, 0);
+  assert.equal(String(f.files.get(REPORT_FILE)), report);
+});
+
+test("the check and the submission reach the same verdict on a clinical package, and the check can describe the prose", async () => {
+  const f = await clinicalFixture();
+  // A quotation absent from its source: the one finding every tier agrees
+  // must be fixed, so both verdicts are rejections with something to compare.
+  await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim({ supportQuote: "aspirin halved major hemorrhage" }) });
+  f.files.set(REPORT_FILE, [
+    "# 阿司匹林用于 70 岁及以上人群一级预防的获益与风险",
+    "",
+    "## 摘要",
+    "",
+    "此外，70 岁及以上成人每日低剂量阿司匹林使大出血风险升高（HR 1.38）[1]。<!-- claim:CLM-001 -->",
+    "",
+    "## 参考文献",
+    "",
+    "1. McNeil JJ. Effect of Aspirin on Cardiovascular Events and Bleeding in the Healthy Elderly. N Engl J Med. 2018. doi:10.1056/NEJMoa1805819",
+    "",
+  ].join("\n"));
+  const check = await f.execute("evimed_package_check", { deliverableId: "d-clin", prose: true, watchPhrases: ["此外", "综上所述"] });
+  const submit = await f.execute("evimed_submit_deliverable", { deliverableId: "d-clin" });
+  assert.equal(check.value.ok, submit.value.ok);
+  assert.equal(check.value.ok, false, "a misquoted source is a must-fix, and both say so");
+  /** @param {any} reply @returns {string[]} */
+  const texts = (reply) => reply.value.issues.map((/** @type {any} */ entry) => `${entry.severity}|${entry.code}|${entry.message}`).sort();
+  assert.deepEqual(texts(check), texts(submit), "one verdict, whichever tool asked");
+  assert.ok(texts(check).some((line) => /supportQuote/.test(line)), "the verdict names the quotation");
+  assert.equal(check.value.data.attempts.used, 0, "the check spent nothing");
+
+  const prose = check.value.data.prose;
+  assert.equal(prose.file, "clinical-evidence-report.md");
+  assert.deepEqual(prose.phrases, { 此外: 1 }, "only phrases present are counted");
+  assert.ok(prose.paragraphs.some((/** @type {any} */ row) => row.section === "摘要" && row.opening.startsWith("此外")), JSON.stringify(prose.paragraphs));
 });
