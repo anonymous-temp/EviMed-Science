@@ -29,6 +29,7 @@ import {
   runNotice,
   runSideDegradedNotice,
 } from "./runNotices.mjs";
+import { describeRunArtifacts } from "./runArtifacts.mjs";
 import { normalizeRunEstimate, routeReasonText } from "./runRoute.mjs";
 import {
   assembleRunProgress,
@@ -3429,6 +3430,11 @@ export class AgentRunStore {
   constructor(researchSessions, options = {}) {
     this.researchSessions = researchSessions;
     this.agentRegistry = Promise.resolve(options.agentRegistry);
+    // The same registry, once it has loaded, for the one synchronous reader:
+    // a pushed `run/state` describes its artifacts like the list does.
+    /** @type {any} */
+    this.loadedAgentRegistry = null;
+    this.agentRegistry.then((registry) => { this.loadedAgentRegistry = registry ?? null; }, () => {});
     this.model = String(options.model ?? "").trim();
     this.maxRuns = options.maxRuns ?? defaultMaxRuns;
     this.maxBytes = options.maxBytes ?? defaultMaxBytes;
@@ -3534,8 +3540,28 @@ export class AgentRunStore {
    *  to fail the write it is observing.
    *  isolated: evimed_run_state_listener_failures_total
    *  @param {Record<string, any>} project @param {Record<string, any> | null | undefined} run */
-  notifyState(project, run) {
-    if (!run) return;
+  /**
+   * A run with the kind of every file it left (`artifactKinds`) and their
+   * counts (`artifactCounts`) — `runArtifacts.mjs`. Computed on read from the
+   * plan on the record and the registry's declared outputs, so every run ever
+   * recorded is described and `artifacts` keeps its shape for older readers.
+   * @param {Record<string, any>} run @param {any} [registry]
+   * @returns {Record<string, any>}
+   */
+  withArtifactKinds(run, registry = this.loadedAgentRegistry) {
+    let described = null;
+    try {
+      described = describeRunArtifacts(run, (capabilityId) => {
+        const outputs = registry?.get?.(capabilityId)?.outputs;
+        return Array.isArray(outputs) ? outputs.map((/** @type {any} */ output) => String(output?.path ?? "")).filter(Boolean) : null;
+      });
+    } catch { /* isolated: a record that cannot be described is still a record */ }
+    return described ? { ...run, ...described } : run;
+  }
+
+  notifyState(project, folded) {
+    if (!folded) return;
+    const run = this.withArtifactKinds(folded);
     // The one choke point every push notification passes through, so `phase`
     // (§7.1.1) reaches `run/state` the same way it reaches `list()` — a fresh
     // record straight from `foldEvents` has the ledger's own four-value
@@ -3731,8 +3757,9 @@ export class AgentRunStore {
     // request; eight covers any account's concurrent runs today (the project
     // cap is one or two), where the old three silently dropped the fourth.
     let budget = 8;
+    const registry = await this.agentRegistry.catch(() => null);
     return Promise.all(runs.map(async (run) => {
-      if (run.status !== "running" || budget <= 0) return run;
+      if (run.status !== "running" || budget <= 0) return this.withArtifactKinds(run, registry);
       budget -= 1;
       // `readRunStateProjection` answers every failure with a state, never a throw.
       const read = /** @type {{ state: string, projection?: any }} */ (await readRunStateProjection(project, project.workspaceDir, run));
