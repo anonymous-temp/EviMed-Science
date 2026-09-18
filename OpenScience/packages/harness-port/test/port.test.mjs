@@ -29,6 +29,7 @@ import {
   toToolOutcome,
   toTurnEnd,
   toUsage,
+  withdrawPromptSection,
 } from "../index.mjs";
 
 test("injected context is an identified user message accepted by session format v3", () => {
@@ -620,4 +621,14 @@ test("a right-pane tab registers as a tab, keyed the way tab slots are keyed", (
   assert.equal(calls[0][1].order, 10);
   assert.throws(() => registerRightSidebarTab(client, /** @type {any} */ ({ title: "x", render: () => null })), /must carry a key/);
   assert.throws(() => registerRightSidebarTab(ctx, { key: "k", title: "t", render: () => null }), /no sidebarRightTabs seam/);
+});
+
+test("a withdrawn upstream prompt section is an empty section under the upstream name and order", () => {
+  /** @type {any[]} */
+  const sections = [];
+  const ctx = { systemPrompt: { section: (/** @type {any} */ section) => { sections.push(section); return () => {}; } } };
+  const dispose = withdrawPromptSection(ctx, "deliverableFileReferences");
+  assert.equal(typeof dispose, "function");
+  assert.deepEqual(sections, [{ name: "ui:deliverable-file-references", order: 9000, text: "" }]);
+  assert.equal(SEAMS.promptSections.deliverableFileReferences.package, "@deepseek-ai/dsh-client-ui-deliverables");
 });

@@ -499,6 +499,23 @@ export function registerSection(ctx, section) {
 }
 
 /**
+ * Withdraw an upstream prompt section from every agent in the calling scope.
+ *
+ * The registry merges sections by name along a scope chain and the renderer
+ * drops empty ones, so an empty section under the upstream name removes the
+ * paragraph and nothing else. That is the difference from `disabled: true` on
+ * the host row: the row's other halves keep working, and the recorded host
+ * composition does not move. If upstream renames the section, this shadows
+ * nothing and the paragraph comes back; nothing else changes.
+ * @param {any} ctx @param {keyof typeof SEAMS.promptSections} key
+ * @returns {() => void}
+ */
+export function withdrawPromptSection(ctx, key) {
+  const section = SEAMS.promptSections[key]
+  return ctx.systemPrompt.section({ name: section.name, order: section.order, text: '' })
+}
+
+/**
  * Makes text model-visible by logging it. Not a side channel: it becomes a
  * first-class `user/message` with a plugin source, which is what preserves the
  * runtime's "model-visible ⟺ logged" invariant and lets the UI show exactly
