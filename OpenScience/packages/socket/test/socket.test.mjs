@@ -1079,6 +1079,73 @@ test("exactly one compaction engine can be active at a time", async () => {
   assert.ok(!/from\s+['"]@deepseek-ai\//.test(plugin), "the base engine must stay lazily resolved; it is not installed here");
 });
 
+test("a request about to pass the gateway's byte limit is compacted first, on the kernel's own engine too", async () => {
+  const { apply: applyCompaction, guardRequestBytes } = await import("../plugins/compaction.mjs");
+  /** @type {Map<string, Function[]>} */
+  const listeners = new Map();
+  /** @type {string[]} */
+  const degraded = [];
+  /** @type {any[]} */
+  const compactions = [];
+  /** @type {any[]} */
+  let history = [];
+  let shrinks = true;
+  const compaction = {
+    compactIfNeeded: async (/** @type {any} */ agent, /** @type {string} */ trigger) => {
+      compactions.push(trigger);
+      if (!shrinks) return null;
+      history = [{ role: "user", content: [{ type: "text", text: "summary" }] }];
+      return { shadowedTokenCount: 1 };
+    },
+  };
+  /** @type {Map<string, any>} */
+  const services = new Map();
+  services.set("compaction", compaction);
+  services.set("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line), notice() {} });
+  const ctx = {
+    get: (/** @type {string} */ key) => services.get(key),
+    on: (/** @type {string} */ event, /** @type {Function} */ handler) => { listeners.set(event, [...(listeners.get(event) ?? []), handler]); return () => {}; },
+    effect: (/** @type {Function} */ fn) => fn(),
+  };
+  const agent = { id: "a1", session: { id: "s1", header: {}, deriveMessages: () => [...history], requestHeader: () => ({ tools: [] }) } };
+  const step = async () => {
+    for (const handler of listeners.get(SEAMS.events.preStep) ?? []) {
+      await handler({ agent, messages: [], turn: 1, step: 1, signal: AbortSignal.timeout(1000) }, async () => ({ kind: "enter", messages: [] }));
+    }
+  };
+  const big = (/** @type {number} */ size) => ({ role: "tool", content: [{ type: "text", text: "x".repeat(size) }] });
+
+  // On `basic`: the plugin registers no engine and no tool, and still guards.
+  await applyCompaction(/** @type {any} */ (ctx), { policy: "basic", thresholdRatio: 0.8, retainRatio: 0.16, maxTokens: 8192, maxRequestBytes: 10_000 });
+  assert.equal((listeners.get(SEAMS.events.preStep) ?? []).length, 1, "the guard is registered on the default policy");
+
+  history = [big(2_000)];
+  await step();
+  assert.deepEqual(compactions, [], "below the limit nothing happens");
+
+  history = [big(6_000), big(6_000)];
+  await step();
+  assert.deepEqual(compactions, ["context-overflow"], "the backend's own overflow path, not a second engine");
+  assert.match(degraded.at(-1) ?? "", /passed the compaction byte limit 10000; compacted to \d+ bytes/);
+
+  // A history that cannot be compacted is not retried until it grows.
+  shrinks = false;
+  history = [big(12_000)];
+  await step();
+  await step();
+  assert.equal(compactions.length, 2, "one attempt for the same size");
+  assert.match(degraded.at(-1) ?? "", /nothing could be compacted/);
+  history = [big(12_000), big(500)];
+  await step();
+  assert.equal(compactions.length, 3, "a grown history is tried again");
+
+  // Off is off.
+  listeners.clear();
+  await applyCompaction(/** @type {any} */ (ctx), { policy: "basic", thresholdRatio: 0.8, retainRatio: 0.16, maxTokens: 8192, maxRequestBytes: 0 });
+  assert.equal((listeners.get(SEAMS.events.preStep) ?? []).length, 0);
+  assert.equal(typeof guardRequestBytes, "function");
+});
+
 /* ------------------------------------------- the manager's compaction request tool */
 
 test("the compaction request marker is consumed, keyed by session, and never leaks between them", async () => {

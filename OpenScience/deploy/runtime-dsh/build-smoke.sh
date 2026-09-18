@@ -130,15 +130,17 @@ export EVIMED_WORKLOAD_TOKEN_FILE="${home}/evimed-workload.token"
 export EVIMED_BUNDLE_VERSION="${SOCKET_VERSION:-0.1.0}"
 export EVIMED_ASK_USER=0 EVIMED_CAPSULE_ACTIVE=0 EVIMED_REVIEW_ENABLED=1
 export EVIMED_CITE_ENABLED=1 EVIMED_CITE_TIMEOUT_MS=15000 EVIMED_CITE_CONFIG_REVISION=0
-export EVIMED_DELIVERY_ATTEMPT_LIMIT=3 EVIMED_MAX_PARALLEL_CHILDREN=30
+export EVIMED_DELIVERY_ATTEMPT_LIMIT=3 EVIMED_MAX_CHILDREN_TOTAL=30 EVIMED_MAX_CONCURRENT_CHILDREN=30
 export EVIMED_MAX_STEPS=0 EVIMED_MAX_TOKENS=0
 export EVIMED_EVIDENCE_STALE_MINUTES=10 EVIMED_SCREENING_BATCH_SIZE=50
-# The compaction group reads all four, and the boot proof has to boot under
+# The compaction group reads all five, and the boot proof has to boot under
 # the same environment a run gets. `basic` here is the shipped default: the
 # provider swap registers nothing on it, so this proves the row loads
-# without asserting a policy the deployment has not chosen.
+# without asserting a policy the deployment has not chosen. The byte guard is
+# three quarters of the model gateway's default 2 MiB body limit.
 export EVIMED_COMPACTION_POLICY=basic EVIMED_COMPACTION_THRESHOLD_RATIO=0.8
 export EVIMED_COMPACTION_RETAIN_RATIO=0.16 EVIMED_COMPACTION_MAX_TOKENS=8192
+export EVIMED_COMPACTION_MAX_REQUEST_BYTES=1572864
 export DSH_TELEMETRY_DISABLED=1 DSH_PERMISSION_MODE=workspace-write
 : > "${EVIMED_WORKLOAD_TOKEN_FILE}"
 
