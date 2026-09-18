@@ -106,7 +106,7 @@ export function QualityNotices({
         <p className="text-caption text-muted">另有 {summary.technicalCount} 条技术提示，是写给运行自身的修复说明。</p>
       )}
       {technical.length > 0 && operator && (
-        <Disclosure summary={<>另有 {technical.length} 条技术原文（仅运维账号可见）</>} summaryClassName="text-caption">
+        <Disclosure summary={<>技术原文 {technical.length} 条（仅运维账号可见）</>} summaryClassName="text-caption">
           <ul className="space-y-1 font-mono text-caption text-muted">
             {technical.map((text, index) => <li key={index} className="break-words">{text}</li>)}
           </ul>

@@ -398,9 +398,18 @@ export interface WebSecurityEvent {
   code: string | null;
 }
 
+/**
+ * A project: its own workspace, run ledger, runtime container and memory
+ * scope. The name is the researcher's, in any language; the id is derived
+ * by the server and never needs to be seen (contract C4).
+ */
 export interface WebProject {
   id: string;
   name: string;
+  /** How many runs the project holds, when the server counts them. */
+  runCount?: number;
+  /** The latest run's start in this project, or null for none yet. */
+  lastActivityAt?: string | null;
 }
 
 export interface WebPluginConfiguration {
@@ -1221,6 +1230,8 @@ export interface WebMe {
   projects: WebProject[];
   csrfToken?: string;
   runtime?: WebRuntimeProfile;
+  /** The newest addressable session in the current project (contract C4). */
+  lastSessionId?: string | null;
 }
 
 /** How long one answer to `/api/me` serves every caller that asks for the same project. */
@@ -1333,16 +1344,37 @@ export function removeWebPlugin(projectId: string, pluginId: string, input: { ex
   return webPluginRequest(projectId, pluginPath(pluginId), "DELETE", { expectedRevision: input.expectedRevision }, signal);
 }
 
-export async function createWebProject(id: string, name = id): Promise<WebProject> {
+/**
+ * Creates a project from its name, in any language (contract C4). The server
+ * derives the id — an ASCII slug, or `p-<8 hex>` for a name with no Latin
+ * letters — so a researcher is never asked for one. The old form asked for a
+ * 「新项目名」 and then refused every Chinese character in it, because it was
+ * really asking for an id (review B §2c).
+ */
+export async function createWebProject(name: string, options: { id?: string } = {}): Promise<WebProject> {
   if (!hasWebApi) throw new BackendUnavailableError("projects.create");
   const res = await fetchWithWebAuth(apiUrl("/projects"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, name }),
+    body: JSON.stringify({ name, ...(options.id ? { id: options.id } : {}) }),
   });
   const created = await parseApiResponse<WebProject>(res);
   invalidateWebMe();
   return created;
+}
+
+/** Renames a project (`PATCH /api/projects/:id`). The id never changes: it is
+ *  a path segment under the workspace root, and renaming it would move one. */
+export async function renameWebProject(projectId: string, name: string): Promise<WebProject> {
+  if (!hasWebApi) throw new BackendUnavailableError("projects.rename");
+  const res = await fetchWithWebAuth(apiUrl(`/projects/${encodeURIComponent(projectId)}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const renamed = await parseApiResponse<WebProject>(res);
+  invalidateWebMe();
+  return renamed;
 }
 
 /**

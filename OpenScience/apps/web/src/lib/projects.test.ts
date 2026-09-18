@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   projectId: "default",
   listWebProjects: vi.fn(),
   createWebProject: vi.fn(),
+  renameWebProject: vi.fn(),
   fetchWebMe: vi.fn(),
   assign: vi.fn(),
 }));
@@ -21,6 +22,7 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
   },
   listWebProjects: mocks.listWebProjects,
   createWebProject: mocks.createWebProject,
+  renameWebProject: mocks.renameWebProject,
   fetchWebMe: mocks.fetchWebMe,
 }));
 
@@ -122,14 +124,41 @@ describe("project store", () => {
     expect(mocks.assign).not.toHaveBeenCalled();
   });
 
-  it("adds a created project to the list in name order", async () => {
-    mocks.listWebProjects.mockResolvedValue([{ id: "default", name: "Default" }]);
+  it("creates a project from its trimmed name and adds it in name order", async () => {
+    mocks.listWebProjects.mockResolvedValue([{ id: "default", name: "我的研究" }]);
     mocks.createWebProject.mockResolvedValue({ id: "alpha", name: "Alpha" });
     const store = await freshStore();
     await store.getState().load();
 
-    await store.getState().create("alpha");
+    await store.getState().create("  Alpha ");
 
-    expect(store.getState().projects.map((p) => p.id)).toEqual(["alpha", "default"]);
+    expect(mocks.createWebProject).toHaveBeenCalledWith("Alpha");
+    expect(store.getState().projects.map((p) => p.id)).toEqual(["default", "alpha"]);
+  });
+
+  it("lists the account's own project first, then by name as a Chinese reader sorts", async () => {
+    mocks.listWebProjects.mockResolvedValue([
+      { id: "p2", name: "心衰" },
+      { id: "p1", name: "房颤" },
+      { id: "default", name: "我的研究" },
+    ]);
+    const store = await freshStore();
+    await store.getState().load();
+
+    // Pinyin order: 房 (fang) before 心 (xin).
+    expect(store.getState().projects.map((p) => p.name)).toEqual(["我的研究", "房颤", "心衰"]);
+  });
+
+  it("renames a project in the list without moving the selection", async () => {
+    mocks.listWebProjects.mockResolvedValue([{ id: "default", name: "我的研究" }, { id: "paper1", name: "Paper 1" }]);
+    mocks.renameWebProject.mockResolvedValue({ id: "paper1", name: "论文一" });
+    const store = await freshStore();
+    await store.getState().load();
+
+    await store.getState().rename("paper1", " 论文一 ");
+
+    expect(mocks.renameWebProject).toHaveBeenCalledWith("paper1", "论文一");
+    expect(store.getState().projects.find((p) => p.id === "paper1")?.name).toBe("论文一");
+    expect(store.getState().currentId).toBe("default");
   });
 });
