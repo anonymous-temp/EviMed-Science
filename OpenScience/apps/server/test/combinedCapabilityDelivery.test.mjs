@@ -44,6 +44,7 @@ import test from "node:test";
 import {
   AgentRunStore,
   consumeRepairAuthorizationForTest,
+  loadedOrInjectedSkillsForTest,
   scopeNativeProjectionForTest,
   snapshotAcceptedPackageForRepairForTest,
 } from "../src/agentRuns.mjs";
@@ -372,6 +373,22 @@ test("a combined delivery ships both capabilities' packages, with both capabilit
     "a combined delivery that ships one capability's files is half a delivery");
   assert.deepEqual(noticeTexts(finished).sort(), ["文献计量接受时的提示", "证据综述接受时的提示"].sort(),
     "each capability's acceptance notices must reach the reader");
+});
+
+test("an adopted run's children count as having had their methods, although the plan index names the kernel's run", async (t) => {
+  // The plan index of a native turn carries the kernel's run id, never the
+  // ledger's. The skill check compared the two and threw the children's
+  // injected methods away, so the live aspirin run of 2026-09-19 — both
+  // deliverables accepted at the first submission — was delivered 未核验
+  // with 「运行时未载入能力方法」.
+  const f = await setupCombined(t, { completed: false });
+  await f.adopt();
+  const run = (await f.runs()).find((item) => item.nativeWorkflow);
+  assert.ok(run?.nativeTurn, "an adopted native turn");
+  assert.notEqual(run.id, "combined_kernel_owner", "the ledger's id is not the kernel's");
+  const loaded = await loadedOrInjectedSkillsForTest(f.project, [], run);
+  assert.ok(loaded.has(EVIDENCE.capability), `the evidence child's method counts (got ${[...loaded].join(", ") || "nothing"})`);
+  assert.ok(loaded.has(BIBLIOMETRIC.capability), "and the bibliometric child's");
 });
 
 test("a receipt entry naming a capability the plan never gave that deliverable is not shipped", async (t) => {

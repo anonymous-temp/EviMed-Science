@@ -128,7 +128,12 @@ const Schema = await configSchema()
 
 export const name = 'evimed-run-policy'
 
-export const inject = ['tools', 'agents', 'sessions', 'subagents']
+// `skills`: a capability child's deferred method sections are registered in
+// the child's own scope (`registerAgentSkill`), and cordis refuses a service
+// this plugin did not declare — every section of the live aspirin run of
+// 2026-09-19 failed with 「cannot get property "skills" without inject」 and
+// the child read its method from the files instead.
+export const inject = ['tools', 'agents', 'sessions', 'subagents', 'skills']
 
 /**
  * @typedef {object} Config

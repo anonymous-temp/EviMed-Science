@@ -2164,8 +2164,13 @@ async function loadedOrInjectedSkills(project, assistantMessages, run = null) {
   const read = await readRunStateProjection(project, project.workspaceDir, run);
   if (read.state !== "read") return loaded;
   // A skill receipt is completion authority, so unlike display-only legacy
-  // projections it must identify this exact control-plane run.
-  if (run && read.projection?.runId !== run.id) return loaded;
+  // projections it must identify this exact control-plane run. A native turn's
+  // projection already does: `scopeNativeProjection` admitted it by session
+  // and kernel run, and its id is the kernel's (`native_…`), never the
+  // ledger's. Comparing that id with the run's discarded the children's
+  // injected methods on every adopted run and marked the first live aspirin
+  // run of 2026-09-19 — both deliverables accepted first time — 未核验.
+  if (run && !run.nativeTurn && read.projection?.runId !== run.id) return loaded;
   for (const name of injectedSkills(read.projection)) loaded.add(name);
   return loaded;
 }
