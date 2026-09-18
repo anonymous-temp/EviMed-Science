@@ -609,7 +609,7 @@ export function PreviewError({
         <div className="flex flex-wrap gap-2">
           {path && (
             <button
-              className="inline-flex items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-1.5 text-ui text-text hover:bg-surface disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-input border border-strong bg-surface-2 px-2.5 py-1.5 text-ui text-text hover:bg-surface disabled:opacity-60"
               onClick={() => void inspect()}
               disabled={probing}
             >
@@ -618,7 +618,7 @@ export function PreviewError({
             </button>
           )}
           <button
-            className="inline-flex items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-1.5 text-ui text-text hover:bg-surface"
+            className="inline-flex items-center gap-1.5 rounded-input border border-strong bg-surface-2 px-2.5 py-1.5 text-ui text-text hover:bg-surface"
             onClick={onOpenExternally}
           >
             <ExternalActionIcon size={13} aria-hidden="true" /> {externalActionLabel}

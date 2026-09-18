@@ -133,7 +133,7 @@ export function PhaseView({ filename, text }: { filename: string; text: string }
             );
           })()
         ) : (
-          <span className="text-muted/50">悬停查看相位 · 实心表示稳定，空心表示亚稳</span>
+          <span className="text-muted">悬停查看相位 · 实心表示稳定，空心表示亚稳</span>
         )}
       </div>
     </div>

@@ -38,6 +38,9 @@ export default {
         // font-size rung, and `text-badge` would then set both at once.
         unread: "var(--badge)",
         "unread-fg": "var(--badge-fg)",
+        // `border-strong` (and `bg-strong` for a divider's hover): the visible
+        // boundary of a control, 3:1. Plain `border-border` is decoration.
+        strong: "var(--border-strong)",
         dot: {
           running: "var(--dot-running)",
           done: "var(--dot-done)",
@@ -46,11 +49,7 @@ export default {
           canceled: "var(--dot-canceled)",
         },
       },
-      borderColor: {
-        // `border-strong`: the visible boundary of a control (3:1). Plain
-        // `border-border` is decoration.
-        strong: "var(--border-strong)",
-      },
+
       // Two durations: a state change (press, toggle, chevron) and a container
       // (menu, drawer, panel). `prefers-reduced-motion` collapses both to an
       // instant in src/index.css.

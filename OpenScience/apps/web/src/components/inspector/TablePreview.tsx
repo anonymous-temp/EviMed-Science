@@ -21,7 +21,7 @@ export function TablePreview({ table }: { table: TableData }) {
           </thead>
           <tbody>
             {table.rows.map((row, i) => (
-              <tr key={i} className="border-b border-border/60 last:border-0">
+              <tr key={i} className="border-b border-border last:border-0">
                 {row.map((cell, j) => (
                   <td key={j} className="whitespace-nowrap px-3 py-1.5 font-mono text-ui-sm text-text">
                     {cell}

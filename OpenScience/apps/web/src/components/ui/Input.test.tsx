@@ -34,7 +34,8 @@ describe("Input", () => {
     const input = screen.getByRole("textbox", { name: "搜索" });
     expect(container.firstElementChild).toBe(input);
     expect(input).not.toHaveAttribute("aria-invalid");
-    expect(input).toHaveClass("border-border");
+    // The control boundary token (3:1), not the decorative hairline.
+    expect(input).toHaveClass("border-strong");
   });
 
   it("forwards refs, values and change handlers", async () => {

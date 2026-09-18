@@ -61,7 +61,7 @@ export const CodeBlock = memo(function CodeBlock({
           type="button"
           onClick={() => void copy()}
           aria-label={copied ? "已复制" : "复制代码"}
-          className="flex items-center gap-1 rounded-input border border-border bg-surface px-2 py-1 text-caption text-muted shadow-card hover:text-text"
+          className="flex items-center gap-1 rounded-input border border-strong bg-surface px-2 py-1 text-caption text-muted shadow-card hover:text-text"
         >
           {copied ? <Check size={12} className="text-ok" aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
           {copied ? "已复制" : "复制"}

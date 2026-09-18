@@ -295,7 +295,7 @@ function SpectrumView({ filename, spec }: { filename: string; spec: import("@/li
             {ctype1 ?? "x"} = {(x0 + dx * hover.i).toPrecision(6)} · value = {data[hover.i].toPrecision(5)}
           </>
         ) : (
-          <span className="text-muted/50">悬停查看样本</span>
+          <span className="text-muted">悬停查看样本</span>
         )}
       </div>
     </div>

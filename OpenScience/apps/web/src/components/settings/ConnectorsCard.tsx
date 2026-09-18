@@ -190,9 +190,9 @@ function SourceChip({ connector }: { connector: WebConnector }) {
           : "未配置";
   const tone =
     connector.source === "deployment" || connector.source === "user"
-      ? "bg-ok/10 text-ok"
+      ? "bg-ok-soft text-ok"
       : connector.keyless
         ? "bg-surface-2 text-muted"
-        : "bg-warn/10 text-warn";
+        : "bg-warn-soft text-warn";
   return <span className={cn("rounded-input px-1.5 py-0.5 text-caption", tone)}>{label}</span>;
 }

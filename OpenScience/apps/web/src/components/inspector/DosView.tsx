@@ -90,7 +90,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
           className={cn(
             "rounded-md px-2 py-1 text-caption font-medium ring-1 transition-colors",
             alignFermi
-              ? "bg-accent/15 text-accent ring-accent/30"
+              ? "bg-accent-soft text-accent ring-focus"
               : "bg-surface-2 text-muted ring-border hover:text-text",
           )}
         >
@@ -152,7 +152,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
             {dos.down ? ` · DOS↓ = ${dos.down[hover.i].toPrecision(4)}` : ""}
           </>
         ) : (
-          <span className="text-muted/50">费米能级为 E_F · 悬停查看数据点</span>
+          <span className="text-muted">费米能级为 E_F · 悬停查看数据点</span>
         )}
       </div>
     </div>

@@ -129,7 +129,7 @@ describe("RunsPage (hosted web)", () => {
     } as Partial<WebAgentRun>)]);
     renderPage();
     const steps = await screen.findByRole("list", { name: "交付进度" });
-    expect(screen.getByText("交付进度 1/3")).toBeInTheDocument();
+    expect(screen.getByText("1/3 件已交付")).toBeInTheDocument();
     expect(steps).toHaveTextContent("证据综述报告已通过");
     expect(steps).toHaveTextContent("文献计量分析需修改 · 第 2 次提交");
     expect(steps).toHaveTextContent("方法学附录待开始");

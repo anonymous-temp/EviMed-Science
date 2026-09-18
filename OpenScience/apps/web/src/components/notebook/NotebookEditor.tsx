@@ -294,7 +294,7 @@ export function NotebookEditor({
                 rows={Math.min(Math.max(cell.code.split("\n").length, 1), 14)}
                 spellCheck={false}
                 className={cn(
-                  "w-full resize-none rounded-input border border-border bg-surface p-3 font-mono text-ui-sm leading-relaxed text-text outline-none focus:border-accent/50",
+                  "w-full resize-none rounded-input border border-strong bg-surface p-3 font-mono text-ui-sm leading-relaxed text-text outline-none focus:border-focus",
                   !isCodeLanguage(cell.language) && "bg-surface-2 text-muted",
                 )}
                 aria-label={`单元格 ${cell.index}`}

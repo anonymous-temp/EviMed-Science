@@ -95,7 +95,7 @@ export function InboxPage() {
       <header><h1 className={PAGE_TITLE_CLASS}>收件箱</h1><p className="mt-2 text-ui text-muted">审阅和提问排在前面；普通通知随后显示。</p></header>
       <SegmentedControl value={filter} onChange={(value) => setFilter(value)} aria-label="消息筛选"
         options={[{ value: "all", label: "全部" }, { value: "unread", label: "未读" }]} />
-      {error && <div role="alert" className="flex items-center justify-between gap-3 rounded-card border border-error/30 bg-surface p-3 text-ui text-error">
+      {error && <div role="alert" className="flex items-center justify-between gap-3 rounded-card border border-danger bg-surface p-3 text-ui text-error">
         <span>{error}</span><Button size="sm" variant="ghost" onClick={() => void reload()}>重试</Button>
       </div>}
       {items === null ? <MemorySkeleton /> : items.length === 0 ? <EmptyState icon={Bell}

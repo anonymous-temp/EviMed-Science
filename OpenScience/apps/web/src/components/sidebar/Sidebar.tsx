@@ -199,7 +199,7 @@ export function Sidebar() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="搜索任务"
-                className="h-7 w-full rounded-input border border-border bg-bg pl-7 pr-2 text-caption text-text outline-none placeholder:text-muted focus:border-accent"
+                className="h-7 w-full rounded-input border border-strong bg-bg pl-7 pr-2 text-caption text-text outline-none placeholder:text-muted focus:border-focus"
               />
             </label>
           )}
@@ -276,7 +276,7 @@ export function Sidebar() {
         <div
           className={cn(
             "absolute inset-y-0 right-0 w-[2px] transition-colors",
-            dragging ? "bg-accent/60" : "bg-transparent group-hover:bg-accent/40",
+            dragging ? "bg-focus" : "bg-transparent group-hover:bg-strong",
           )}
         />
       </div>

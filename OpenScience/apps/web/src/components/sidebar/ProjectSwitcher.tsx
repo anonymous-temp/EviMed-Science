@@ -92,7 +92,7 @@ export function ProjectSwitcher() {
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`当前项目：${label}`}
-        className="flex w-full items-center gap-2 rounded-input border border-border px-2 py-1.5 text-ui text-text hover:bg-surface-2"
+        className="flex w-full items-center gap-2 rounded-input border border-strong px-2 py-1.5 text-ui text-text hover:bg-surface-2"
       >
         <FolderGit2 size={14} strokeWidth={1.5} className="shrink-0 text-muted" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-left">{label}</span>
@@ -142,7 +142,7 @@ export function ProjectSwitcher() {
                   }}
                   placeholder="新项目名"
                   aria-label="新项目名"
-                  className="h-7 w-full rounded-input border border-border bg-bg px-2 text-caption text-text outline-none placeholder:text-muted focus:border-accent"
+                  className="h-7 w-full rounded-input border border-strong bg-bg px-2 text-caption text-text outline-none placeholder:text-muted focus:border-focus"
                 />
               </div>
             ) : (

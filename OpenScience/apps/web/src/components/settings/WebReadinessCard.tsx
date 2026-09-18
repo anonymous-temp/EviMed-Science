@@ -75,7 +75,7 @@ export function WebReadinessCard() {
             {readiness ? (readiness.ok ? "部署检查全部通过" : "部署检查需要关注") : "服务端就绪检查"}
           </p>
         </div>
-        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-caption font-medium", readiness?.ok ? "bg-ok/10 text-ok" : "bg-warn/10 text-warn")}>
+        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-caption font-medium", readiness?.ok ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn")}>
           {readiness ? (readiness.ok ? "就绪" : "未就绪") : "加载中"}
         </span>
         <button

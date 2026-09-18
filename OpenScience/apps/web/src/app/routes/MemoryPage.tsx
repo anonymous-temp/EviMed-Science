@@ -268,7 +268,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
           </div>
           <div className={cn(
             "inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-ui-sm",
-            connected ? "border-ok/30 bg-ok/10 text-ok" : "border-border bg-surface text-muted",
+            connected ? "border-ok bg-ok-soft text-ok" : "border-border bg-surface text-muted",
           )}>
             <span className={cn("h-1.5 w-1.5 rounded-full", connected ? "bg-ok" : "bg-muted")} />
             {statusText}
@@ -296,7 +296,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
                 onChange={(event) => setDraft(event.target.value)}
                 placeholder="记录一条科研记忆… 例如：项目纳入标准、常用数据口径、某个药物证据争议或长期研究偏好。支持 Markdown 和 #标签。"
                 aria-label="科研记忆内容"
-                className="min-h-32 w-full resize-y bg-transparent px-5 pb-3 pt-5 text-body text-text outline-none placeholder:text-muted/80"
+                className="min-h-32 w-full resize-y bg-transparent px-5 pb-3 pt-5 text-body text-text outline-none placeholder:text-muted"
               />
               <div className="flex items-center justify-between border-t border-border px-4 py-3">
                 <span className="text-ui-sm text-muted">仅保存为个人私有记忆；系统会根据问题相关性选择使用。</span>
@@ -431,7 +431,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
                 </Button>
               ) : undefined
             }
-            className="mt-8 min-h-72 rounded-card border border-dashed border-border bg-surface/50"
+            className="mt-8 min-h-72 rounded-card border border-dashed border-border bg-surface"
           />
         )}
       </div>
@@ -576,7 +576,7 @@ function MemoryProfileOverview({
                           <div className="mt-2 space-y-2 border-l border-border pl-2">
                             {record.evidence.slice(-3).reverse().map((evidence) => (
                               <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
-                                <p className="text-text/80">“{evidence.quote}”</p>
+                                <p className="text-text">“{evidence.quote}”</p>
                                 <p className="mt-0.5">{evidenceSourceLabel(evidence.sourceType)} · {formatTime(evidence.observedAt)}</p>
                               </div>
                             ))}
@@ -689,7 +689,7 @@ function MemoryAction({
       onClick={onClick}
       className={cn(
         "rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text disabled:opacity-30",
-        danger && "hover:bg-error/10 hover:text-error",
+        danger && "hover:bg-danger-soft hover:text-error",
       )}
     >
       {disabled ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : icon}
