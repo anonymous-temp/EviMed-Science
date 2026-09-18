@@ -9,7 +9,7 @@
     var dark = saved === "dark"
       || (saved !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.dataset.theme = dark ? "dark" : "light";
-  } catch (error) {
+  } catch {
     // Storage unavailable: ThemeProvider decides once the bundle runs.
   }
 })();
