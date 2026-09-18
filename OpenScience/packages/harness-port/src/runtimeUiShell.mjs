@@ -163,11 +163,13 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     /** @param {{size?: number, className?: string}} props */
     const Mark = ({ size, className }) => {
       const px = Number(size) > 0 ? Number(size) : 24;
-      // The brand ramp's primary step, through the frame's own token so the
-      // mark follows the theme layer (and its dark variant) like every other
-      // accent on the page. As style and not as a presentation attribute: an
-      // SVG attribute is not a place `var()` resolves.
-      const color = 'var(--dsw-static-deepseek-500, #00756b)';
+      // The brand's accent, through the frame's own token so the mark follows
+      // the theme layer (and its lighter dark-scheme step) like every other
+      // accent on the page. Not the deepseek ramp: under direction A its 500
+      // step is the working line's muted grey. As style and not as a
+      // presentation attribute: an SVG attribute is not a place `var()`
+      // resolves.
+      const color = 'var(--dsw-alias-state-business-primary, #00756b)';
       return h('svg', { xmlns: 'http://www.w3.org/2000/svg', viewBox: '0 0 48 48', width: px, height: px,
         role: 'img', 'aria-label': 'EviMed', className: className || undefined },
       h('g', { style: { fill: 'none', stroke: color }, strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 3.5 },
@@ -193,8 +195,26 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     });
     kit.guarded('hero brand', () => kit.occupy({ slot: 'conversation.hero.brand.mark', priority: below }, Mark));
     // The left column, removed: occupying `sidebar` replaces the column's
-    // content, and the stylesheet removes its width.
-    kit.guarded('sidebar column', () => kit.occupy({ slot: 'sidebar', priority: below }, Nothing));
+    // content, and the stylesheet removes its width. The frame's own room
+    // arithmetic still counts the column, though — expanded it is 280 px of
+    // the width the right column is weighed against, and with it counted the
+    // right column refuses to open below a 980 px frame and sits narrower
+    // above. So the column is also told it is collapsed (a 56 px rail in that
+    // arithmetic) whenever it says it is not: `ctx.layout.toggleSidebar()` is
+    // the layout's own public switch, and the owner props say which way it
+    // stands, so this never toggles it open.
+    /** @type {any} */
+    let layout = null;
+    kit.withServices(['layout'], (/** @type {any} */ scope) => { layout = scope.layout; });
+    /** @param {{ collapsed?: boolean }} props */
+    const LeftColumn = ({ collapsed }) => {
+      kit.react.useEffect(() => {
+        if (collapsed !== false || !layout || typeof layout.toggleSidebar !== 'function') return;
+        try { layout.toggleSidebar(); } catch { /* the column keeps its width; only the room arithmetic suffers */ }
+      }, [collapsed]);
+      return null;
+    };
+    kit.guarded('sidebar column', () => kit.occupy({ slot: 'sidebar', priority: below }, kit.react ? LeftColumn : Nothing));
     // The picker is a popup the chip opens; an occupant that renders nothing
     // removes the choice (the chip itself is hidden by the stylesheet).
     kit.guarded('workspace picker', () => kit.occupy({ slot: 'conversation.hero.workspace', priority: below }, Nothing));

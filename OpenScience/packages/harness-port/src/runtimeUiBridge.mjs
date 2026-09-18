@@ -13,7 +13,8 @@ export const inject = ['sessions', 'conversation', 'connection', 'workspaces'];
  * The vocabulary, both ways (`evimed.runtime-ui.<type>`, every message carrying
  * `version`, `frameId`, `projectId` and `seq`):
  *
- *   shell → frame  navigate · resume · theme · run-state · kb-result · search
+ *   shell → frame  navigate · resume · theme · run-state · evidence · kb-result ·
+ *                  search
  *   frame → shell  booted · ready · connecting · error · ack · session ·
  *                  shell-navigate · shell-shortcut · open-artifact · kb-query ·
  *                  search-result
@@ -256,6 +257,20 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       const { type: _type, version: _version, frameId: _frameId, projectId: _projectId, seq: _seq, ...rest } = data;
       return rest;
     },
+    /**
+     * The claims and sources behind the bound run's report, read by the shell
+     * from the delivered evidence matrix. Large and rare, so it travels apart
+     * from the run state that changes every few seconds.
+     * @param {any} data
+     */
+    evidence(data) {
+      if (data.runId !== null && !validId(data.runId)) return null;
+      let size = 0;
+      try { size = JSON.stringify(data).length; } catch { return null; }
+      if (size > 1_000_000) return null;
+      const { type: _type, version: _version, frameId: _frameId, projectId: _projectId, seq: _seq, ...rest } = data;
+      return rest;
+    },
     /** @param {any} data */
     'kb-result'(data) {
       if (typeof data.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(data.requestId)) return null;
@@ -293,7 +308,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       return;
     }
     if (Object.hasOwn(INBOUND, kind)) {
-      const payload = INBOUND[/** @type {'theme' | 'run-state' | 'kb-result'} */ (kind)](data);
+      const payload = INBOUND[/** @type {'theme' | 'run-state' | 'evidence' | 'kb-result'} */ (kind)](data);
       if (!payload) return;
       incoming = data.seq;
       hub?.deliver(kind, payload);

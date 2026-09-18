@@ -7,10 +7,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFrameKit } from "../../../../../packages/harness-port/src/runtimeUiKit.mjs";
 import { FRAME_VOCABULARY } from "../../../../../packages/harness-port/src/runtimeUiFrame.mjs";
 import { apply as applyToolviews } from "../../../../../packages/harness-port/src/runtimeUiToolviews.mjs";
+import { apply as applyPanels } from "../../../../../packages/harness-port/src/runtimeUiPanels.mjs";
+import { apply as applyShell } from "../../../../../packages/harness-port/src/runtimeUiShell.mjs";
 
 type Listener = () => void;
 
-function frame(entries: Array<Record<string, unknown>>) {
+function frame(entries: Array<Record<string, unknown>>, extra: Record<string, unknown> = {}) {
   const components = new Map<string, (props: Record<string, unknown>) => unknown>();
   const listeners = new Set<Listener>();
   let snapshot = { current: "session-a", subagentsByParent: { "session-a": { entries } } };
@@ -23,10 +25,11 @@ function frame(entries: Array<Record<string, unknown>>) {
     sessions,
     slots: {
       inject: (_name: string, setup: () => unknown) => setup(),
-      register: (options: { key: string }, component: (props: Record<string, unknown>) => unknown) => { components.set(options.key, component); return () => {}; },
+      register: (options: { key?: string; name: string }, component: (props: Record<string, unknown>) => unknown) => { components.set(options.key ?? options.name, component); return () => {}; },
     },
     effect: (setup: () => unknown) => setup(),
     on: () => () => {},
+    ...extra,
   };
   const target = {
     __EVIMED_FRAME__: { version: 1, frameId: "f", projectId: "p", shellOrigin: "https://app.example", cwd: "/workspace", capabilities: [] },
@@ -35,9 +38,11 @@ function frame(entries: Array<Record<string, unknown>>) {
   };
   const kit = createFrameKit(ctx, target, (id: string) => (id === "react" ? React : undefined), FRAME_VOCABULARY);
   applyToolviews(ctx, {}, target, undefined, kit);
+  applyPanels(ctx, {}, target, undefined, kit);
+  applyShell(ctx, {}, { ...target, document: undefined }, undefined, kit);
   kit.hub.deliver("session", { sessionId: "session-a" });
   return {
-    sessions, kit, card: components.get("evimed_delegate")!,
+    sessions, kit, components, card: components.get("evimed_delegate")!,
     publish(next: Array<Record<string, unknown>>) { snapshot = { ...snapshot, subagentsByParent: { "session-a": { entries: next } } }; act(() => { for (const fn of [...listeners]) fn(); }); },
   };
 }
@@ -99,3 +104,45 @@ describe("the delegation card's link to the child", () => {
     } finally { vi.useRealTimers(); }
   });
 });
+
+describe("the right column's tabs", () => {
+  afterEach(() => { cleanup(); });
+  const live = {
+    runId: "run-1", sessionId: "session-a", state: "succeeded",
+    artifacts: ["deliverables/evidence/clinical-evidence-report.md", "deliverables/evidence/clinical-evidence-matrix.json"],
+    unverifiedArtifacts: [],
+    progress: { deliverables: [{ id: "evidence", title: "老年房颤抗凝证据综述", status: "accepted", attempts: 2 }], children: [] },
+  };
+
+  it("opens a delivered file, or the report at a claim, through the shell", () => {
+    const f = frame([], { sidebarRightTabs: { register: () => () => {} }, sidebarRight: { openTab: vi.fn() } });
+    const sent: Array<[string, Record<string, unknown>]> = [];
+    f.kit.hub.attach((type: string, fields: Record<string, unknown>) => { sent.push([type, fields]); });
+    act(() => f.kit.hub.deliver("run-state", live));
+    act(() => f.kit.hub.deliver("evidence", { runId: "run-1", reportPath: live.artifacts[0], claims: [
+      { claimId: "CLM-002", claim: "老年患者大出血风险相近。", claimType: "direct", status: "quote_not_found", sourceTitle: "ARISTOTLE" },
+    ], sources: [] }));
+    const Deliverables = f.components.get("evimed-deliverables") as (props: Record<string, unknown>) => React.ReactElement;
+    render(<Deliverables />);
+    const [report] = screen.getAllByRole("button", { name: "打开" });
+    fireEvent.click(report);
+    expect(sent).toEqual([["open-artifact", { runId: "run-1", path: "deliverables/evidence/clinical-evidence-report.md" }]]);
+    cleanup();
+    const Evidence = f.components.get("evimed-evidence") as (props: Record<string, unknown>) => React.ReactElement;
+    render(<Evidence />);
+    fireEvent.click(screen.getByText("老年患者大出血风险相近。"));
+    expect(sent.at(-1)).toEqual(["open-artifact", { runId: "run-1", path: "deliverables/evidence/clinical-evidence-report.md", anchor: "CLM-002" }]);
+  });
+
+  it("tells the kernel its left column is collapsed whenever it says it is not, and never opens it", () => {
+    const layout = { toggleSidebar: vi.fn() };
+    const f = frame([], { layout });
+    const LeftColumn = f.components.get("sidebar") as (props: Record<string, unknown>) => React.ReactElement;
+    const view = render(<LeftColumn collapsed={false} />);
+    expect(layout.toggleSidebar).toHaveBeenCalledTimes(1);
+    view.rerender(<LeftColumn collapsed />);
+    view.rerender(<LeftColumn collapsed />);
+    expect(layout.toggleSidebar).toHaveBeenCalledTimes(1);
+  });
+});
+

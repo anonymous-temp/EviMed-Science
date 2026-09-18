@@ -38,6 +38,7 @@ import { BODY as BRIDGE } from './runtimeUiBridge.mjs';
 import { BODY as COMMANDS } from './runtimeUiCommands.mjs';
 import { KIT_PARTS } from './runtimeUiKit.mjs';
 import { BODY as LOCALE } from './runtimeUiLocale.mjs';
+import { BODY as PANELS } from './runtimeUiPanels.mjs';
 import { BODY as SHELL } from './runtimeUiShell.mjs';
 import { RUNTIME_UI_KERNEL_PIN, RUNTIME_UI_SLOTS } from './runtimeUiSlots.mjs';
 import { BODY as THEME } from './runtimeUiTheme.mjs';
@@ -57,7 +58,7 @@ import { BODY as TRANSCRIPT } from './runtimeUiTranscript.mjs';
  * before anything that renders.
  * @type {readonly FrameBody[]}
  */
-export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, TRANSCRIPT, TOOLVIEWS, COMMANDS]);
+export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, TRANSCRIPT, TOOLVIEWS, PANELS, COMMANDS]);
 
 /** The switch names an operator may list; the bridge is not one of them. */
 export const FRAME_SWITCHABLE_BODIES = Object.freeze(FRAME_BODIES.map((body) => body.name).filter((name) => name !== 'bridge'));

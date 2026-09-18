@@ -95,8 +95,8 @@ export function createHub(target) {
   const stateListeners = new Set();
   /** @type {Map<string, { resolve: (value: any) => void, reject: (error: Error) => void, timer: any }>} */
   const pending = new Map();
-  /** @type {{ theme: any, runState: any, session: any }} */
-  let state = Object.freeze({ theme: null, runState: null, session: null });
+  /** @type {{ theme: any, runState: any, session: any, evidence: any }} */
+  let state = Object.freeze({ theme: null, runState: null, session: null, evidence: null });
   let sequence = 0;
   // Timers are looked up when a request is made, not when the hub is built:
   // the hub exists on every page the loader evaluates, including contexts
@@ -158,7 +158,7 @@ export function createHub(target) {
     },
     /**
      * What the shell sent, handed over by the bridge after it validated the
-     * envelope. `theme`, `run-state` and `session` are kept as state; an
+     * envelope. `theme`, `run-state`, `session` and `evidence` are kept as state; an
      * answer carrying a request id settles that request.
      * @param {string} type @param {any} data
      */
@@ -166,6 +166,7 @@ export function createHub(target) {
       if (type === 'theme') publish({ theme: data });
       else if (type === 'run-state') publish({ runState: data });
       else if (type === 'session') publish({ session: data });
+      else if (type === 'evidence') publish({ evidence: data });
       const requestId = data && typeof data.requestId === 'string' ? data.requestId : null;
       if (requestId && pending.has(requestId)) {
         const entry = pending.get(requestId);

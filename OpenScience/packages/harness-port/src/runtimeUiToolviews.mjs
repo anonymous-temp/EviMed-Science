@@ -34,6 +34,8 @@
  * @module @evimed/harness-port/runtime-ui-toolviews
  */
 
+import { frameStyles } from './runtimeUiStyles.mjs';
+
 /** Services this body needs outright. */
 export const inject = ['slots', 'sessions'];
 
@@ -368,83 +370,23 @@ export function claimView(block, kit) {
 }
 
 /**
- * @param {any} ctx Native Cordis client context.
- * @param {any} [_config]
- * @param {any} target Browser global.
- * @param {(id: string) => any} [_require]
- * @param {any} [kit] The frame kit.
+ * 「查看子任务」: the kernel's own view of a child, reached through the parent's
+ * catalogue — the only address `sessions.openSubagent` accepts, and only with
+ * the exact mode the catalogue lists. Disabled until the catalogue lists the
+ * child; the catalogue is asked for once when it does not.
+ *
+ * Shared by the delegation card and the progress tab: the build emits it into
+ * each body that lists it among its parts.
+ *
+ * @param {any} ctx @param {any} kit @param {any} target
+ * @returns {(props: { childSessionId: string }) => any}
  */
-export function apply(ctx, _config, target = globalThis, _require = undefined, kit = undefined) {
-  if (!kit || !kit.ours || !kit.h || !kit.react) return;
+export function childLinkFor(ctx, kit, target) {
   const h = kit.h;
   const React = kit.react;
-  const tools = (kit.vocabulary && kit.vocabulary.tools) || {};
-  // Deliverable titles the plan calls on this page carried: the fallback
-  // name for a card whose call names only an id and whose run state has not
-  // arrived.
-  /** @type {Map<string, string>} */
-  const known = new Map();
-
-  const tone = (/** @type {string} */ name) => ({
-    ok: 'var(--dsw-alias-state-success-primary)',
-    warn: 'var(--dsw-alias-state-warn-label)',
-    active: 'var(--dsw-alias-state-business-primary)',
-    muted: 'var(--dsw-alias-label-tertiary)',
-  })[name] ?? 'var(--dsw-alias-label-tertiary)';
-  const secondary = { fontSize: 'var(--dsh-content-font-size-secondary, 13px)', lineHeight: 'calc(22px + var(--dsh-content-font-delta, 0px))' };
-  const card = {
-    ...secondary,
-    border: '0.5px solid var(--dsw-alias-border-l2)',
-    borderRadius: '10px',
-    background: 'var(--dsw-alias-bg-layer-1)',
-    padding: '8px 12px',
-    margin: '2px 0',
-    color: 'var(--dsw-alias-label-secondary)',
-    minWidth: 0,
-  };
-  const line = { ...secondary, display: 'flex', alignItems: 'baseline', gap: '8px', minWidth: 0, color: 'var(--dsw-alias-label-secondary)' };
-  const title = { color: 'var(--dsw-alias-label-primary)', fontWeight: 500, flex: 'none' };
-  const quiet = { color: 'var(--dsw-alias-label-tertiary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
-  const pill = (/** @type {string} */ name) => ({ color: tone(name), flex: 'none', fontWeight: 500 });
-  const button = {
-    ...secondary,
-    marginLeft: 'auto',
-    flex: 'none',
-    border: '0.5px solid var(--dsw-alias-border-l4)',
-    borderRadius: '6px',
-    background: 'transparent',
-    color: 'var(--dsw-alias-label-secondary)',
-    padding: '0 8px',
-    cursor: 'pointer',
-    font: 'inherit',
-  };
-
-  /** The run state for the conversation on screen, or null. */
-  function useLive() {
-    const runState = kit.useFrameState((/** @type {any} */ state) => state.runState);
-    const session = kit.useFrameState((/** @type {any} */ state) => state.session);
-    return liveRunFor(runState, session);
-  }
-
-  /**
-   * The model of one call, or null when the call has a shape the view does
-   * not know — drawn then as a plain row, never thrown (see the module note).
-   * @param {string} name @param {() => any} compute
-   */
-  function modelOf(name, compute) {
-    try { return compute(); } catch (error) { target.console?.warn?.(`[evimed-frame] ${name} view could not read a call:`, error); return null; }
-  }
-
-  /** @param {{ label: string }} props */
-  const PlainRow = ({ label }) => h('div', { style: line, 'data-evimed-toolview': 'plain' }, h('span', { style: title }, label));
-
-  /**
-   * 「查看子任务」: the kernel's own view of the child, reached through the
-   * parent's catalogue. Disabled until the catalogue lists the child, and the
-   * catalogue is asked for once when it does not.
-   * @param {{ childSessionId: string }} props
-   */
-  function ChildLink({ childSessionId }) {
+  const { button } = frameStyles();
+  /** @param {{ childSessionId: string }} props */
+  return function ChildLink({ childSessionId }) {
     const list = ctx.sessions && ctx.sessions.list;
     const read = () => (list && typeof list.getSnapshot === 'function' ? list.getSnapshot() : null);
     const snapshot = React.useSyncExternalStore(
@@ -474,7 +416,49 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       title: entry ? '在内核的子任务视图中查看这件工作的完整过程' : '子任务目录还在载入',
       style: { ...button, opacity: entry ? 1 : 0.5, cursor: entry ? 'pointer' : 'default' },
     }, '查看子任务');
+  };
+}
+
+/**
+ * @param {any} ctx Native Cordis client context.
+ * @param {any} [_config]
+ * @param {any} target Browser global.
+ * @param {(id: string) => any} [_require]
+ * @param {any} [kit] The frame kit.
+ */
+export function apply(ctx, _config, target = globalThis, _require = undefined, kit = undefined) {
+  if (!kit || !kit.ours || !kit.h || !kit.react) return;
+  const h = kit.h;
+  const React = kit.react;
+  const tools = (kit.vocabulary && kit.vocabulary.tools) || {};
+  // Deliverable titles the plan calls on this page carried: the fallback
+  // name for a card whose call names only an id and whose run state has not
+  // arrived.
+  /** @type {Map<string, string>} */
+  const known = new Map();
+
+  const { card, line, title, quiet, pill } = frameStyles();
+
+  /** The run state for the conversation on screen, or null. */
+  function useLive() {
+    const runState = kit.useFrameState((/** @type {any} */ state) => state.runState);
+    const session = kit.useFrameState((/** @type {any} */ state) => state.session);
+    return liveRunFor(runState, session);
   }
+
+  /**
+   * The model of one call, or null when the call has a shape the view does
+   * not know — drawn then as a plain row, never thrown (see the module note).
+   * @param {string} name @param {() => any} compute
+   */
+  function modelOf(name, compute) {
+    try { return compute(); } catch (error) { target.console?.warn?.(`[evimed-frame] ${name} view could not read a call:`, error); return null; }
+  }
+
+  /** @param {{ label: string }} props */
+  const PlainRow = ({ label }) => h('div', { style: line, 'data-evimed-toolview': 'plain' }, h('span', { style: title }, label));
+
+  const ChildLink = childLinkFor(ctx, kit, target);
 
   /** @param {{ block: any }} props */
   function PlanView({ block }) {
@@ -599,5 +583,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'toolviews',
   inject,
-  parts: Object.freeze([toolviewText, verdictText, refusalOf, liveRunFor, liveDeliverable, liveChild, planView, delegateView, awaitView, verdictView, claimView, apply]),
+  parts: Object.freeze([frameStyles, toolviewText, verdictText, refusalOf, liveRunFor, liveDeliverable, liveChild, planView, delegateView, awaitView, verdictView, claimView, childLinkFor, apply]),
 });

@@ -38,7 +38,9 @@ test('the left column, the three brand slots and the hero workspace picker are o
   assert.match(mark, /width="34"/);
   assert.match(mark, /aria-label="EviMed"/);
   assert.match(mark, /class="fish"/);
-  assert.match(mark, /var\(--dsw-static-deepseek-500/, 'the mark follows the theme layer rather than a literal colour');
+  assert.match(mark, /var\(--dsw-alias-state-business-primary/, 'the mark follows the theme layer rather than a literal colour');
+  // Not the deepseek ramp: under direction A its 500 step is the working line's grey.
+  assert.doesNotMatch(mark, /deepseek-500/);
   assert.equal(renderStatic(occupants['sidebar.brand.name'].component), '<span style="font-weight:600">EviMed</span>');
   // An occupant that renders nothing is how a popup slot and a column are withdrawn.
   assert.equal(renderStatic(occupants['conversation.hero.workspace'].component), '');
