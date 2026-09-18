@@ -10,6 +10,83 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Primitive ramps — direction A 「循证青」 (2026-09-18 review, appendix D §7.1
+   and §7.3; the owner's decision). Theme-independent: a semantic token below
+   points at a step, and the dark theme points the same name at a different
+   step rather than inverting a colour. Generated in OKLCH on one lightness
+   ladder (50 98.0% · 100 95.8% · 200 91.2% · 300 84.5% · 400 76.0% · 500 67.2%
+   · 600 58.5% · 700 50.5% · 800 43.2% · 900 36.0% · 950 26.8%) with chroma
+   clamped into sRGB, so "one step darker" is a computation, not a guess — the
+   five hand-deepened values below this block are what guessing looked like.
+   Steps appendix D publishes are copied from it verbatim; the few it does not
+   list (danger/warn/ok/info 100·400·950) come from the same ladder. The
+   frame mirrors these values through `ctx.theme.overrideTokens`. */
+:root {
+  --brand-50: #f0fbf9;
+  --brand-100: #e1f7f3;
+  --brand-200: #c3ece6;
+  --brand-300: #98dbd2;
+  --brand-400: #63c5b9;
+  --brand-500: #26ac9f;
+  --brand-600: #008f84;
+  --brand-700: #00756b;
+  --brand-800: #005e56;
+  --brand-900: #004841;
+  --brand-950: #002d29;
+  /* Cool neutral, H=232 with chroma held under 0.010 so it reads as paper,
+     not as blue paper. n-500 is 2.96:1 on white — never a text or dot colour. */
+  --n-50: #f8f8f9;
+  --n-100: #f0f1f2;
+  --n-150: #e9ebed;
+  --n-200: #dfe2e4;
+  --n-300: #c8cdcf;
+  --n-400: #acb2b5;
+  --n-500: #90979b;
+  --n-600: #767d81;
+  --n-700: #606669;
+  --n-800: #4c5154;
+  --n-900: #3a3e40;
+  --n-950: #242628;
+  /* Dark surfaces on the same hue, one step lighter per layer (Carbon's
+     layering model): canvas → surface → raised. */
+  --dark-bg: #14181a;
+  --dark-surface: #1d2225;
+  --dark-surface-2: #272d30;
+  --dark-border-faint: #292f32;
+  --dark-border: #3a4044;
+  --dark-border-strong: #646c71;
+  --danger-50: #fff6f5;
+  --danger-100: #ffecea;
+  --danger-300: #ffb7ae;
+  --danger-400: #ff8b7f;
+  --danger-600: #cf463e;
+  --danger-700: #af302b;
+  --danger-800: #8f2320;
+  --danger-950: #470f0d;
+  --warn-50: #fff7ef;
+  --warn-100: #ffeedc;
+  --warn-300: #efc392;
+  --warn-400: #e8a042;
+  --warn-600: #ab6c00;
+  --warn-700: #8c5700;
+  --warn-800: #704500;
+  --warn-950: #382000;
+  --ok-50: #f3fbf4;
+  --ok-300: #aadbb3;
+  --ok-600: #3a9052;
+  --ok-700: #25773e;
+  --ok-800: #1a5f30;
+  --ok-950: #082e14;
+  --info-50: #f4f9ff;
+  --info-100: #e8f2ff;
+  --info-300: #aacfff;
+  --info-400: #79b4ff;
+  --info-600: #1f7ae0;
+  --info-700: #0362bf;
+  --info-800: #004e9c;
+  --info-950: #01254e;
+}
+
 :root,
 [data-theme="light"] {
   --bg: #f7f5ef;
@@ -33,6 +110,35 @@
   --ok: #40784e; /* 5.23 / 4.80 / 4.55 (was #4b8b5b: 4.08 / 3.75 / 3.55) */
   --error: #b44c41; /* 5.18 / 4.76 / 4.51 (was #c0564b: 4.49 / 4.12 / 3.91) */
   --error-fg: #ffffff;
+  /* Semantic roles added with direction A. Contrast is measured with the WCAG
+     2.1 relative-luminance formula on --surface / --bg unless stated. */
+  /* A control's visible boundary (WCAG 1.4.11 wants 3:1): 3.19 / 3.01.
+     Appendix D proposed #8e969b, measured 3.01 on white only — controls sit on
+     the canvas as often, where it is 2.83. `--border` stays decoration. */
+  --border-strong: #8b9195;
+  --accent-soft: var(--brand-50); /* selected rows, the ✓ chip; never text */
+  --accent-strong: var(--brand-800); /* text on --accent-soft: 7.26 */
+  --danger: var(--danger-700); /* clinical safety and unread work, nothing else */
+  --danger-soft: var(--danger-50);
+  --danger-strong: var(--danger-800); /* SAFETY chip text on --danger-soft: 8.13 */
+  --warn-soft: var(--warn-50);
+  --warn-strong: var(--warn-800); /* "needs checking" text on --warn-soft: 7.80 */
+  --ok-soft: var(--ok-50);
+  --info-soft: var(--info-50); /* citation chips: --link on it 5.66 */
+  /* The product's promise, in the brand colour on purpose: a verified claim. */
+  --verify-ok: var(--brand-700);
+  /* "Needs checking" is amber and never red — it is not a clinical alarm. */
+  --verify-pending: var(--warn-800);
+  --focus: var(--brand-700); /* 5.27 on --bg */
+  --badge: var(--danger-700); /* unread count; white on it 6.40 */
+  --badge-fg: #ffffff;
+  /* Run-state dots are graphics (1.4.11, 3:1), each paired with a shape and a
+     word — colour is never the only carrier. n-500 is 2.96 and is not used. */
+  --dot-running: var(--info-600); /* 4.27 */
+  --dot-done: var(--brand-600); /* 3.99 */
+  --dot-review: var(--warn-600); /* 4.31 */
+  --dot-failed: var(--danger-600); /* 4.57 */
+  --dot-canceled: var(--n-600); /* 4.18 */
   /* Chart design system (P1-5) — validated categorical hues + chart chrome,
      the single source of truth shared with @ai4s/shared and the matplotlib
      style. Light surface = --surface (#ffffff). */
@@ -63,6 +169,26 @@
   --ok: #6bb07d;
   --error: #d47a70;
   --error-fg: #16151a;
+  --border-strong: var(--dark-border-strong); /* 3.00 / 3.34 */
+  --accent-soft: var(--brand-900);
+  --accent-strong: var(--brand-300); /* on --accent-soft: 6.69 */
+  --danger: var(--danger-300);
+  --danger-soft: var(--danger-950);
+  --danger-strong: var(--danger-300); /* 9.42 */
+  --warn-soft: var(--warn-950);
+  --warn-strong: var(--warn-300); /* 9.38 */
+  --ok-soft: var(--ok-950);
+  --info-soft: var(--info-950); /* --link on it 9.51 */
+  --verify-ok: var(--brand-300); /* 10.25 */
+  --verify-pending: var(--warn-300); /* 9.86 */
+  --focus: var(--brand-400);
+  --badge: var(--danger-600); /* white on it 4.57 */
+  --badge-fg: #ffffff;
+  --dot-running: var(--info-400); /* 7.48 */
+  --dot-done: var(--brand-400); /* 7.81 */
+  --dot-review: var(--warn-400); /* 7.29 */
+  --dot-failed: var(--danger-400); /* 7.07 */
+  --dot-canceled: var(--n-500); /* 5.42 */
   /* Same hues stepped for the dark chart surface (--surface #1e1d24). */
   --series-1: #3987e5;
   --series-2: #199e70;
