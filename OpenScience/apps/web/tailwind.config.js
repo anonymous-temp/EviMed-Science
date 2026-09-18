@@ -57,50 +57,69 @@ export default {
         fast: "120ms",
         base: "200ms",
       },
-      // Latin faces first (they carry the metrics the type scale was measured
-      // against), Chinese faces after them. Neither stack named a CJK face
-      // until 2026-09-16, so `font-serif` — 31 uses, all of them Chinese page
-      // titles — fell to SimSun on Windows and to the system serif on macOS.
+      transitionTimingFunction: {
+        standard: "cubic-bezier(0.2, 0, 0, 1)",
+      },
+      // One stack for the shell and the frame (contract C10; appendix D §8.1).
+      // Latin faces first, so numbers, DOIs and identifiers keep the metrics
+      // the scale was measured against; then every Chinese face a reader's
+      // OS might carry — HarmonyOS Sans and MiSans cover Huawei and Xiaomi
+      // devices, and naming Microsoft YaHei keeps Windows off bitmap SimSun.
       fontFamily: {
-        serif: ["'Source Serif 4'", "Georgia", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", "serif"],
-        sans: ["Inter", "system-ui", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", "sans-serif"],
-        mono: ["'JetBrains Mono'", "ui-monospace", "monospace"],
+        sans: ["Inter", "SF Pro Text", "system-ui", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "sans-serif"],
+        // Titles only; never Chinese body text. SimSun is gone from the end of
+        // it: naming it chose the bitmap face on Windows on purpose.
+        serif: ["'Source Serif 4'", "Georgia", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "serif"],
+        // DOIs, PMIDs, run ids — checked character by character. JetBrains
+        // Mono has no Chinese glyphs, so the Chinese sans faces follow it
+        // rather than whatever the OS picks at a different width.
+        mono: ["'JetBrains Mono'", "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "Noto Sans Mono CJK SC", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "monospace"],
       },
-      // Semantic type scale (design spec §3). Arbitrary `text-[*px]` values are
-      // banned in components by ESLint; use these six rungs instead.
-      // The two smallest rungs were 11px and 12.5px, below the size at which a
-      // Chinese glyph's strokes stay separable on a 1x display (2026-09-16
-      // walk, V2). Raised to 12px and 13px; line heights go up with them,
-      // because CJK needs more leading than Latin at the same size.
+      // The type scale (appendix D §8.3, the owner's plan §6.2). Five rungs
+      // plus two single-purpose ones. The 13 px `ui-sm` and 13.5 px `ui` were
+      // one rung pretending to be two — half a pixel apart, rounding
+      // differently per display — and are one 14/22 rung now, where Ant
+      // Design and TDesign independently land. Arbitrary `text-[*px]` values
+      // are banned by ESLint.
       fontSize: {
-        // A count badge on a 16 px icon: digits stay legible at 11 px where a
-        // Chinese glyph would not, and the caption rung's 18 px line box could
-        // not fit a 16 px pill (2026-09-18, the bell's 「31」 covered the bell).
+        // A count on a 16 px pill: digits stay legible at 11 px where a
+        // Chinese glyph would not (2026-09-18, the bell's 「31」).
         badge: ["11px", "1"],
-        caption: ["12px", "1.5"], // meta info, timestamps
-        "ui-sm": ["13px", "1.5"], // secondary buttons, chips, helper rows
-        ui: ["13.5px", "1.55"], // default UI text, list rows
-        body: ["15px", "1.65"], // chat / markdown body copy
-        title: ["20px", "1.3"], // page titles (serif)
-        display: ["26px", "1.25"], // brand-level titles, empty states (serif)
+        caption: ["12px", "1.5"], // timestamps, metadata, counts
+        ui: ["14px", "22px"], // default interface text, list rows, controls
+        // Retired: merged into `ui`. Kept as an alias only so a class nobody
+        // has migrated renders at the ui rung instead of inheriting nothing;
+        // ESLint rejects new uses.
+        "ui-sm": ["14px", "22px"],
+        body: ["16px", "1.75"], // report prose and conversation body
+        title: ["20px", "1.35"], // every page H1 (serif)
+        display: ["26px", "1.25"], // the login page and empty states only (serif)
+        // The sidebar's EviMed lockup: between body and title on purpose.
+        wordmark: ["17px", "1"],
       },
-      // Page-level container widths (design spec §4).
-      // NOTE: `content` intentionally overrides Tailwind's default
-      // `max-w-content` (fit-content), which was unused in this codebase.
+      // Four containers (appendix D §8.5). `content` is the reading measure:
+      // 680 px holds ~42 Chinese characters per line at 16 px — the old 760 px
+      // at 15 px was 50, past the 35–45 a Chinese reader tracks comfortably.
+      // NOTE: `content` intentionally overrides Tailwind's `max-w-content`.
       maxWidth: {
-        "content-narrow": "672px", // settings / forms
-        content: "760px", // conversation flow
-        "content-wide": "1024px", // notebooks / run logs
-        "content-full": "1080px", // memory / catalog
+        "content-narrow": "640px", // settings, forms
+        content: "680px", // conversation, report prose, the inbox
+        "content-wide": "1000px", // run ledger, notebooks
+        "content-full": "1120px", // catalogues, the evidence matrix
       },
+      // Four radii, nothing else: 4 (`rounded`, Tailwind's own), controls 8,
+      // cards 12, panels and dialogs 16; `rounded-full` for chips. 14 px
+      // cards read as consumer software; 12 reads as an instrument.
       borderRadius: {
-        card: "14px",
-        input: "10px",
+        input: "8px",
+        card: "12px",
+        panel: "16px",
       },
+      // Structure is hairlines, not shadows. A static card has none (a 1 px
+      // `border-border` is its whole edge); only what floats casts one:
+      // `pop` for menus and popovers, `modal` for dialogs and drawers.
       boxShadow: {
-        card: "0 1px 2px rgba(40, 39, 35, 0.04), 0 4px 16px rgba(40, 39, 35, 0.05)",
-        pop: "0 8px 30px rgba(40, 39, 35, 0.14)",
-        // Dialogs and drawers: the one tier above a popover.
+        pop: "0 4px 16px rgba(20, 24, 26, 0.10), 0 1px 3px rgba(20, 24, 26, 0.06)",
         modal: "0 16px 48px rgba(20, 24, 26, 0.18), 0 2px 8px rgba(20, 24, 26, 0.08)",
       },
     },

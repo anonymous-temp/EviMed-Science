@@ -216,21 +216,51 @@ body,
   height: 100%;
 }
 
-/* The UI baseline language is Simplified Chinese and neither font stack named
-   a Chinese face (2026-09-16 walk, V1): `Inter, system-ui` left every Chinese
-   glyph to whatever the browser picked by itself, which on Windows is the
-   1990s bitmap-hinted SimSun and differs machine to machine. The Latin faces
-   stay first so numbers, DOIs and identifiers keep the metrics the design
-   tokens were measured against, and the CJK faces follow for the glyphs Inter
-   does not carry. Kept in one place: `tailwind.config.js` reads the same two
-   lists through `fontFamily`. */
+/* The UI baseline language is Simplified Chinese. One stack for the shell and
+   the frame (contract C10): Latin faces first so numbers, DOIs and identifiers
+   keep the metrics the scale was measured against, then every Chinese face a
+   reader's OS might carry. Without named CJK faces Windows fell to the
+   bitmap-hinted SimSun (2026-09-16 walk, V1). `tailwind.config.js` carries the
+   same list for `font-sans`.
+
+   Body text is 14/22 (the `ui` rung) — where Ant Design and TDesign both land;
+   report prose uses the 16/1.75 `body` rung. */
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: Inter, system-ui, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+  font-family: Inter, "SF Pro Text", system-ui, "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  font-size: 14px;
+  line-height: 22px;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Chinese screen faces carry no true bold at every weight; a synthesized one
+     smears strokes. A missing weight falls back to the nearest real one. */
+  font-synthesis-weight: none;
+  /* The 1/8-em gap between Chinese and Latin letters or digits
+     (阿司匹林 ASPREE 研究), set by the browser rather than typed by the model —
+     a typed space would differ, byte for byte, from the quotation it copies.
+     Chrome 140, Firefox 145 and Safari 18.4 all ship it but default it OFF, so
+     it has to be written. `normal` = ideograph-alpha ideograph-numeric. */
+  text-autospace: normal;
+  /* Chromium only: trims doubled full-width punctuation space. Progressive. */
+  text-spacing-trim: normal;
+}
+
+/* Identifiers and code are compared character by character; nothing may be
+   inserted between their characters, not even for display. */
+code,
+kbd,
+pre,
+samp,
+.font-mono {
+  text-autospace: no-autospace;
+}
+
+/* Numbers in tables line up by digit: effect sizes, sample sizes, costs. */
+table,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Thin, calm scrollbars to match the paper aesthetic. */
@@ -267,6 +297,14 @@ select:focus-visible,
   outline: none;
 }
 
+/* Motion: two durations (tailwind `duration-fast` / `duration-base`) and one
+   easing. A state change takes 120 ms, a container 200 ms; nothing bounces. */
+:root {
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
 /* Honor reduced-motion (spec §11.5): collapse transitions and decorative
    animations to an instant. Loading indicators keep their meaning — the
    spinner/pulse icon still renders, it just does not move. */
@@ -292,5 +330,5 @@ select:focus-visible,
   }
 }
 .fade-in {
-  animation: fade-in 150ms ease-out 150ms backwards;
+  animation: fade-in var(--dur-fast) var(--ease-standard) var(--dur-fast) backwards;
 }

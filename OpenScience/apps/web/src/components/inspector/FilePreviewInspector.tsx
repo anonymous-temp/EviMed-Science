@@ -51,7 +51,7 @@ const PhaseView = lazy(() => import("./PhaseView").then((m) => ({ default: m.Pha
 /** What a viewer chunk's arrival looks like inside the preview pane. */
 function ViewerFallback() {
   return (
-    <div className="flex h-full min-h-0 items-center justify-center gap-2 text-ui-sm text-muted" role="status" aria-live="polite">
+    <div className="flex h-full min-h-0 items-center justify-center gap-2 text-ui text-muted" role="status" aria-live="polite">
       <Loader2 size={16} className="animate-spin" aria-hidden="true" />
       正在载入查看器…
     </div>
@@ -293,7 +293,7 @@ function ClaimSummary({ verification }: { verification?: ClaimVerification | nul
     <p
       role="note"
       // eslint-disable-next-line no-restricted-syntax -- document-neutral canvas: fixed paper colours, like the page itself
-      className={`mb-6 rounded-input border px-3 py-2 text-ui-sm ${summary.attention ? "border-[#e6c98a] bg-[#fdf6e3] text-[#6b4e16]" : "border-[#cfe3d4] bg-[#f3faf5] text-[#23532f]"}`}
+      className={`mb-6 rounded-input border px-3 py-2 text-ui ${summary.attention ? "border-[#e6c98a] bg-[#fdf6e3] text-[#6b4e16]" : "border-[#cfe3d4] bg-[#f3faf5] text-[#23532f]"}`}
     >
       {summary.text}
     </p>
@@ -482,7 +482,7 @@ function Body({
   if (kind === "image") {
     return url ? (
       <div className="flex justify-center p-4">
-        <img src={url} alt={filename} className="max-w-full rounded-sm bg-white shadow-card" />
+        <img src={url} alt={filename} className="max-w-full rounded-sm bg-white ring-1 ring-border" />
       </div>
     ) : (
       <Note text="当前文件暂不支持在线预览。" />
@@ -497,7 +497,7 @@ function Body({
         <video
           src={url}
           controls
-          className="max-h-[80vh] max-w-full rounded-sm bg-black shadow-card"
+          className="max-h-[80vh] max-w-full rounded-sm bg-black ring-1 ring-border"
         />
       </div>
     ) : (
@@ -651,7 +651,7 @@ function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
     <div className="mt-3 rounded-input border border-border bg-surface-2 p-3">
       {p.hint && <div className="mb-2 text-ui text-text">{p.hint}</div>}
       {rows.length > 0 && (
-        <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-ui-sm">
+        <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-ui">
           {rows.map(([k, v]) => (
             <div key={k} className="contents">
               <dt className="text-muted">{k}</dt>
@@ -662,7 +662,7 @@ function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
       )}
       {p.columns && p.columns.length > 0 && (
         <div className="mt-2">
-          <div className="mb-1 text-ui-sm text-muted">数据结构</div>
+          <div className="mb-1 text-ui text-muted">数据结构</div>
           <div className="flex flex-wrap gap-1">
             {p.columns.slice(0, 40).map((c) => (
               <span key={c.name} className="rounded bg-surface px-1.5 py-0.5 font-mono text-caption text-text">
@@ -674,7 +674,7 @@ function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
       )}
       {p.datasets && p.datasets.length > 0 && (
         <div className="mt-2">
-          <div className="mb-1 text-ui-sm text-muted">数据集</div>
+          <div className="mb-1 text-ui text-muted">数据集</div>
           <div className="flex flex-col gap-0.5 font-mono text-caption text-text">
             {p.datasets.slice(0, 20).map((d) => (
               <span key={d.path}>{d.path} <span className="text-muted">[{d.shape.join("×")}] {d.dtype}</span></span>
@@ -684,7 +684,7 @@ function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
       )}
       {p.sample_ids && p.sample_ids.length > 0 && (
         <div className="mt-2">
-          <div className="mb-1 text-ui-sm text-muted">样本 ID</div>
+          <div className="mb-1 text-ui text-muted">样本 ID</div>
           <div className="font-mono text-caption text-text">{p.sample_ids.slice(0, 5).join(", ")}</div>
         </div>
       )}
@@ -707,7 +707,7 @@ function ToggleBtn({
       onClick={onClick}
       className={cn(
         "flex items-center gap-1 rounded px-2 py-1 text-caption",
-        active ? "bg-surface text-text shadow-card" : "text-muted hover:text-text",
+        active ? "bg-surface text-text ring-1 ring-border" : "text-muted hover:text-text",
       )}
     >
       {children}

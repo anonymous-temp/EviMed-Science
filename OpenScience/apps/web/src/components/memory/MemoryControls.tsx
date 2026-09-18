@@ -42,7 +42,7 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
 
   if (failed) {
     return (
-      <p className="mt-6 text-ui-sm text-muted">记忆开关暂时读取不到，刷新页面后再试。记忆本身不受影响。</p>
+      <p className="mt-6 text-ui text-muted">记忆开关暂时读取不到，刷新页面后再试。记忆本身不受影响。</p>
     );
   }
   if (!settings) return null;
@@ -110,7 +110,7 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
   ];
 
   return (
-    <section aria-labelledby="memory-controls-title" className="mt-7 rounded-card border border-border bg-surface shadow-card">
+    <section aria-labelledby="memory-controls-title" className="mt-7 rounded-card border border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border px-5 py-3">
         <h2 id="memory-controls-title" className="text-ui font-medium text-text">记忆开关</h2>
         <Button variant="ghost" size="sm" loading={busy === "reset"} disabled={busy !== null} onClick={() => setConfirmingReset(true)}>
@@ -123,7 +123,7 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
           <li key={row.key} className="flex items-center justify-between gap-4 px-5 py-3">
             <div className="min-w-0">
               <p className="text-ui text-text">{row.label}</p>
-              <p className="mt-0.5 text-ui-sm text-muted">{row.detail}</p>
+              <p className="mt-0.5 text-ui text-muted">{row.detail}</p>
             </div>
             <Button
               variant="ghost"

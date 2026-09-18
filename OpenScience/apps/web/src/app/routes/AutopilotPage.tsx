@@ -119,10 +119,10 @@ function NewAgendaForm({ projectId, busy, onCreated, onError }: {
           placeholder="逗号分隔，例如：司美格鲁肽, 胰腺炎, 心血管结局"
           onChange={(event) => setTopics(event.target.value)} />
         <fieldset className="space-y-1">
-          <legend className="text-ui-sm font-medium text-text">回合类型</legend>
+          <legend className="text-ui font-medium text-text">回合类型</legend>
           <div className="flex flex-wrap gap-3">
             {TASK_TYPE_LABELS.map((type) => (
-              <label key={type.value} className="flex items-center gap-1.5 text-ui-sm text-text">
+              <label key={type.value} className="flex items-center gap-1.5 text-ui text-text">
                 <input type="checkbox" checked={taskTypes.includes(type.value)}
                   onChange={(event) => setTaskTypes((current) => event.target.checked
                     ? [...current, type.value]
@@ -138,7 +138,7 @@ function NewAgendaForm({ projectId, busy, onCreated, onError }: {
           <Input label="每周上限 ¥" type="number" min="0" step="1" value={weeklyBudgetCny} onChange={(event) => setWeeklyBudgetCny(event.target.value)} />
           <Input label="每天运行时刻" type="number" min="0" max="23" step="1" value={scheduleHour} onChange={(event) => setScheduleHour(event.target.value)} />
         </div>
-        {!budgetsOrdered && <p className="text-ui-sm text-muted">三档预算需满足：单回合 ≤ 每日 ≤ 每周，且都大于 0。</p>}
+        {!budgetsOrdered && <p className="text-ui text-muted">三档预算需满足：单回合 ≤ 每日 ≤ 每周，且都大于 0。</p>}
         <div className="flex gap-2">
           <Button size="sm" type="submit" disabled={!ready || saving}>创建议程</Button>
           <Button size="sm" type="button" variant="ghost" disabled={saving} onClick={() => setOpen(false)}>取消</Button>
@@ -398,7 +398,7 @@ export function AutopilotPage() {
               : [...digest.payload.headlines.map((claim) => ({ claim, kind: "重点发现" })), ...digest.payload.leads.map((claim) => ({ claim, kind: "待验证线索" }))].map(({ claim, kind }) => <div key={claim.id} className="rounded-input bg-surface-2 p-3">
               <p className="text-caption text-muted">{kind}</p><p className="mt-1 text-ui text-text">{claim.statement}</p>
               <ClaimVerification claim={claim} />
-              {decisionLabel(digest, claim.id) && <p className="mt-1 text-ui-sm text-muted">{decisionLabel(digest, claim.id)}</p>}
+              {decisionLabel(digest, claim.id) && <p className="mt-1 text-ui text-muted">{decisionLabel(digest, claim.id)}</p>}
               <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="ghost" aria-label={`采纳${claim.statement}`} disabled={busy} onClick={() => void decide(digest.id, claim.id, "adopt")}>采纳</Button>
                 <Button size="sm" variant="ghost" aria-label={`驳回${claim.statement}`} disabled={busy} onClick={() => void decide(digest.id, claim.id, "reject")}>驳回</Button>
                 <Button size="sm" variant="ghost" aria-label={`追问${claim.statement}`} disabled={busy} onClick={() => setFollowUp(followUp?.claimId === claim.id && followUp.digestId === digest.id ? null : { digestId: digest.id, claimId: claim.id, note: "" })}>追问</Button></div>
@@ -431,9 +431,9 @@ export function AutopilotPage() {
         ? <EmptyState icon={CalendarClock} title="还没有主动科研议程" description="用右上角的「新建议程」写下方向、回合类型和三档预算。议程创建后默认暂停，只有你主动开始才会运行和产生费用。" />
         : agendas.map((agenda) => <Card key={agenda.id} title={agenda.payload.title}
           hint={`${agenda.payload.status === "active" ? "运行中" : "已暂停"} · ${agenda.payload.topics.join("、")}`}><div className="space-y-3">
-          <p className="text-ui-sm text-muted">每日 ¥{agenda.payload.dailyBudgetCny} · 每周 ¥{agenda.payload.weeklyBudgetCny} · 单回合 ¥{agenda.payload.maxEpisodeCny}</p>
-          {agenda.payload.pauseReason && <p className="text-ui-sm text-muted">{agenda.payload.pauseReason}</p>}
-          {pendingFollowUps(agenda) > 0 && <p className="text-ui-sm text-muted">下一回合先回答 {pendingFollowUps(agenda)} 条追问。</p>}
+          <p className="text-ui text-muted">每日 ¥{agenda.payload.dailyBudgetCny} · 每周 ¥{agenda.payload.weeklyBudgetCny} · 单回合 ¥{agenda.payload.maxEpisodeCny}</p>
+          {agenda.payload.pauseReason && <p className="text-ui text-muted">{agenda.payload.pauseReason}</p>}
+          {pendingFollowUps(agenda) > 0 && <p className="text-ui text-muted">下一回合先回答 {pendingFollowUps(agenda)} 条追问。</p>}
           <div className="flex flex-wrap gap-2">
             {/* Spending is confirmed; a verdict is not.
               * 「立即运行一回合」 starts a paid episode on one click, so it says

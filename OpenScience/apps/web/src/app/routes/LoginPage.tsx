@@ -96,12 +96,12 @@ function signInMessage(error: unknown): string {
       <div className="w-full max-w-[420px]">
         <div className="mb-8 flex items-center justify-center gap-2.5">
           <img src={evimedMark} alt="EviMed" className="h-9 w-9" />
-          <span className="font-serif text-display font-semibold tracking-tight">EviMed</span>
+          <span className="font-serif text-display font-semibold">EviMed</span>
         </div>
 
-        <section className="rounded-card border border-border bg-surface px-7 py-8 shadow-card sm:px-9">
+        <section className="rounded-card border border-border bg-surface px-7 py-8 sm:px-9">
           <div className="text-center">
-            <div className="text-caption font-medium tracking-[0.18em] text-accent">循证医学科研智能体</div>
+            <div className="text-caption font-medium text-accent">循证医学科研智能体</div>
             <PageTitle page="登录" />
             <h1 className="mt-3 font-serif text-display font-semibold">
               {registering ? "注册 EviMed" : "登录 EviMed"}

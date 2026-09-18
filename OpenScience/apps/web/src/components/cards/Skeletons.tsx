@@ -59,7 +59,7 @@ export function MemorySkeleton() {
   return (
     <div className="mt-6 grid animate-pulse items-start gap-4 md:grid-cols-2" aria-hidden>
       {[3, 2, 3, 2].map((lines, i) => (
-        <div key={i} className="rounded-card border border-border bg-surface p-5 shadow-card">
+        <div key={i} className="rounded-card border border-border bg-surface p-5">
           <div className="flex items-center justify-between">
             <Bar className="h-3 w-24" />
             <Bar className="h-4 w-16" />

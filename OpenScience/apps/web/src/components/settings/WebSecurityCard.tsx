@@ -26,7 +26,7 @@ export function WebSecurityCard() {
   }, [refresh]);
 
   return (
-    <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
+    <section className="mt-5 rounded-card border border-border bg-surface">
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-body text-text">安全事件</h2>

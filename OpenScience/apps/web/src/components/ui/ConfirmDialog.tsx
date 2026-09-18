@@ -73,7 +73,7 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-label={title}
         aria-describedby={bodyId}
-        className="w-full max-w-sm rounded-card border border-border bg-surface p-4 shadow-card"
+        className="w-full max-w-sm rounded-card border border-border bg-surface p-4 shadow-modal"
       >
         <div className="text-ui font-medium text-text">{title}</div>
         <p id={bodyId} className="mt-1.5 text-ui text-muted">

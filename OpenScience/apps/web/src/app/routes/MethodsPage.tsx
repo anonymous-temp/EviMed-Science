@@ -162,7 +162,7 @@ export function MethodsPage() {
         </div>
 
         {writing && (
-          <section aria-label="写一个方法" className="mt-4 rounded-card border border-border bg-surface p-4 shadow-card">
+          <section aria-label="写一个方法" className="mt-4 rounded-card border border-border bg-surface p-4">
             <Textarea
               aria-label="方法内容（SKILL.md）"
               value={draft}
@@ -170,7 +170,7 @@ export function MethodsPage() {
               className="min-h-56 font-mono text-ui"
             />
             <div className="mt-3 flex items-center justify-between gap-3">
-              <span className="text-ui-sm text-muted">开头两行 name 与 description 必填；正文写清什么时候用、怎么做。</span>
+              <span className="text-ui text-muted">开头两行 name 与 description 必填；正文写清什么时候用、怎么做。</span>
               <Button onClick={() => void save()} loading={saving} disabled={!draft.trim()}>保存并生效</Button>
             </div>
           </section>
@@ -195,7 +195,7 @@ export function MethodsPage() {
         ) : (
           <ul className="mt-6 space-y-4" aria-label="方法列表">
             {methods.map((method) => (
-              <li key={method.id} className="rounded-card border border-border bg-surface p-5 shadow-card">
+              <li key={method.id} className="rounded-card border border-border bg-surface p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="text-body font-medium text-text">{method.name || "未命名方法"}</h3>
@@ -211,7 +211,7 @@ export function MethodsPage() {
                 </div>
 
                 {method.status === "candidate" && method.promotion.missing.length > 0 && (
-                  <div className="mt-3 rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-text">
+                  <div className="mt-3 rounded-input bg-surface-2 px-3 py-2 text-ui text-text">
                     <p className="font-medium">还差：</p>
                     <ul className="mt-1 list-disc space-y-0.5 pl-4">
                       {method.promotion.missing.map((sentence, index) => (
@@ -230,7 +230,7 @@ export function MethodsPage() {
                 </p>
 
                 <details className="mt-3 text-ui">
-                  <summary className="cursor-pointer select-none text-ui-sm text-muted hover:text-text">查看方法内容</summary>
+                  <summary className="cursor-pointer select-none text-ui text-muted hover:text-text">查看方法内容</summary>
                   <div className="mt-2 border-l border-border pl-3">
                     <MarkdownViewer className="text-ui">{method.body}</MarkdownViewer>
                   </div>
