@@ -95,6 +95,39 @@ function locationOf(url) {
 }
 
 /**
+ * Where the preserving tool wrote what a capture is: `source.json`, beside the
+ * preserved text in the same content-addressed capture directory
+ * (`runtime/mcp/evimed-research/source_types.py`, `sidecar`). A reader holding
+ * only the artifact path a claim cites finds the type there without re-running
+ * a search — the control plane's `claim_verification` for its badge, the gate
+ * and the claim tool for the design a GRADE upgrade depends on. Null for a
+ * path that is not a preserved source.
+ * @param {unknown} artifactPath @returns {string | null}
+ */
+export function sourceTypeSidecarPath(artifactPath) {
+  if (typeof artifactPath !== 'string' || !artifactPath.startsWith('.evimed-sources/') || artifactPath.includes('\\')) return null
+  const segments = artifactPath.split('/')
+  if (segments.length < 3 || segments.some((segment) => segment === '' || segment === '.' || segment === '..')) return null
+  return [...segments.slice(0, -1), 'source.json'].join('/')
+}
+
+/**
+ * The evidence type a capture's `source.json` declares, or null when it
+ * declares none this table knows — an absent sidecar (a capture older than
+ * C8), an unreadable one, or a value from a newer table.
+ * @param {unknown} text @returns {EvidenceSourceType | null}
+ */
+export function sourceTypeOfSidecar(text) {
+  if (typeof text !== 'string' || !text.trim()) return null
+  try {
+    const declared = JSON.parse(text)?.sourceType
+    return isEvidenceSourceType(declared) ? declared : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * The type of one source record. Reads, in order: an explicit valid
  * `sourceType`; the publication types; the article or study type; the tool that
  * found it; the connector that produced it; the host and path of its URL.

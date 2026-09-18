@@ -527,10 +527,26 @@ export {
   summarizeRunPhases,
 } from './src/runPhases.mjs'
 
-// sourceTypes — 4 exports
+// sourceTypes — 6 exports
 export {
   EVIDENCE_SOURCE_TYPES,
   EVIDENCE_SOURCE_TYPE_LABELS_ZH,
   evidenceSourceTypeOf,
   isEvidenceSourceType,
+  sourceTypeOfSidecar,
+  sourceTypeSidecarPath,
 } from './src/sourceTypes.mjs'
+
+// appraisalStructure — 9 exports: a claim's PICO, GRADE certainty in parts and
+// risk of bias by a named tool, with the level each set of parts gives.
+export {
+  CERTAINTY_LEVELS,
+  CERTAINTY_LEVEL_LABELS_ZH,
+  RISK_OF_BIAS_LEVEL_LABELS_ZH,
+  RISK_OF_BIAS_TOOL_IDS,
+  claimAppraisal,
+  claimAppraisalFindings,
+  evidenceDesignOf,
+  gradeCertaintyFromParts,
+  riskOfBiasOverall,
+} from './src/appraisalStructure.mjs'
