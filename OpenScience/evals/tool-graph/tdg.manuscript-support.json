@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "manuscript-support",
-  "version": "sha256:c75d4c0426e87891d61367b41cf08dcb601f29f092030386205fe0867a2ef819",
+  "version": "sha256:bc2d6c0ffc133aef7b824d7c73801262337c3defd02806ed11a875c5d5db297f",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 28,
+    "nodes": 29,
     "edges": 15,
     "byVia": {
       "schema": 15,
@@ -976,6 +976,51 @@
         "doi",
         "pmid"
       ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__locate_quote",
+      "source": "mcp",
+      "description": "Find a quotation in a source this run preserved, judged exactly as the delivery gate judges a claim's supportQuote (case, quotation marks, dashes, whitespace, full-width forms, CJK spacing, PDF line breaks, inline citation markers and marked … elisions are forgiven; anything else is not). found=true only for a match the gate accepts; each match has character offsets into the preserved file, its line and context. When not found, match=near passages show what the source actually says, to quote instead. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "The .evimed-sources/... path a preserving tool returned, or the id it reported (PMCID, DOI, official-page:<hash>, EVIMED-GUIDE:<id>, label:<approval number>#<section>)."
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "maxResults": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "sourceId",
+          "quote"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [
+        "source_id"
+      ],
+      "requiredTypeTags": [
+        "source_id"
+      ],
+      "outputTypeTags": [],
       "stateEffect": "none"
     },
     {
