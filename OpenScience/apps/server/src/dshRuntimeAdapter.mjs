@@ -24,6 +24,7 @@
 
 import {
   EMPTY_TRANSCRIPT,
+  SOCKET_TOOL_NAMES,
   narrateToolCall,
   normalizeTurnEndKind,
   turnEndErrorCode,
@@ -226,6 +227,50 @@ export function socketToolResult(output) {
     if (issue) issues.push({ severity: issue[1], code: issue[2], message: issue[3] ?? "" });
   }
   return { ok: false, code: failed[1], issues };
+}
+
+// The socket's collecting tool (C6, 2026-09-18). Named here rather than read
+// from `SOCKET_TOOL_NAMES`, which gains the row in the same release: a missing
+// row there would make this reader silently match nothing.
+const awaitToolName = "evimed_await";
+const childSessionIdPattern = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/;
+
+/**
+ * The child sessions a delegation tool's own result names.
+ *
+ * `evimed_delegate` answers `{handle, deliverableId, childSessionId, status}`
+ * the moment its child exists — it stopped waiting for the child on
+ * 2026-09-18 (C6) — and `evimed_await` answers `{results: [{handle,
+ * deliverableId, childSessionId, status, …}]}`, which is the only place a
+ * retried child's id reaches the parent at all: the retry starts after the
+ * delegate call has already returned. Both are rendered by the socket, never
+ * by the model.
+ *
+ * This is the second witness beside the kernel's `subagent/catalog` fact on
+ * the parent's log. The same release removed four subagent rows from the
+ * preset, and a run's children must not become invisible again because one
+ * kernel fact moved (the F4 failure was exactly that). A name found here is a
+ * candidate: wherever it counts for liveness, the kernel's session list still
+ * has to confirm the parent first.
+ * @param {string} tool @param {unknown} output
+ * @returns {{ childSessionId: string, deliverableId?: string }[]}
+ */
+export function delegatedChildrenOf(tool, output) {
+  if (tool !== SOCKET_TOOL_NAMES.delegate && tool !== awaitToolName) return [];
+  const result = socketToolResult(output);
+  if (result?.ok !== true || !result.data || typeof result.data !== "object") return [];
+  const rows = tool === awaitToolName
+    ? (Array.isArray(result.data.results) ? result.data.results : [])
+    : [result.data];
+  /** @type {{ childSessionId: string, deliverableId?: string }[]} */
+  const children = [];
+  for (const row of rows.slice(0, 64)) {
+    const childSessionId = typeof row?.childSessionId === "string" ? row.childSessionId.trim() : "";
+    if (!childSessionIdPattern.test(childSessionId) || children.some((child) => child.childSessionId === childSessionId)) continue;
+    const deliverableId = typeof row?.deliverableId === "string" ? row.deliverableId.trim().slice(0, 120) : "";
+    children.push({ childSessionId, ...(deliverableId ? { deliverableId } : {}) });
+  }
+  return children;
 }
 
 /**

@@ -18,7 +18,7 @@ import {
   clinicalEvidencePackageErrorCode,
   validateClinicalEvidencePackage,
 } from "./clinicalEvidenceQuality.mjs";
-import { socketToolResult } from "./dshRuntimeAdapter.mjs";
+import { delegatedChildrenOf, socketToolResult } from "./dshRuntimeAdapter.mjs";
 import {
   describedQualityNotices,
   maxQualityNotices,
@@ -1074,18 +1074,22 @@ function parsedToolResultStatus(part) {
   return typeof value?.status === "string" ? value.status : null;
 }
 
-/** Child session ids witnessed in successful delegation tool receipts. */
+/**
+ * Child session ids witnessed in successful delegation tool receipts — the
+ * delegate call's own answer and every collecting call's (a retried child is
+ * named only by the latter; see `delegatedChildrenOf`).
+ */
 function delegatedChildSessionIds(messages) {
   const ids = [];
   for (const message of messages) {
     for (const part of message?.parts ?? []) {
-      if (part?.type !== "tool" || part?.tool !== "evimed_delegate" || part?.state?.status !== "completed") continue;
-      const result = socketToolResult(part?.state?.output);
-      const raw = result?.ok === true ? result?.data?.childSessionId : null;
-      try {
-        const id = storedKernelRequestId(raw);
-        if (!ids.includes(id)) ids.push(id);
-      } catch { /* malformed or absent child identities prove nothing */ }
+      if (part?.type !== "tool" || part?.state?.status !== "completed") continue;
+      for (const child of delegatedChildrenOf(part?.tool, part?.state?.output)) {
+        try {
+          const id = storedKernelRequestId(child.childSessionId);
+          if (!ids.includes(id)) ids.push(id);
+        } catch { /* malformed child identities prove nothing */ }
+      }
     }
   }
   return ids.slice(0, 32);
@@ -4896,10 +4900,20 @@ export class AgentRunStore {
     }
     const projection = read.projection ?? {};
     this.publishRunProjection(project, run, projection);
-    const childSessionIds = [...new Set((projection.subagents ?? [])
-      .filter((child) => child?.status === "running" && typeof child?.childSessionId === "string")
-      .map((child) => child.childSessionId.trim())
-      .filter(Boolean))].slice(0, 64);
+    // Two rows name a working child: the delegation's own `subagents` row and,
+    // since 2026-09-18, the plan item it works on (`childSessionId` from the
+    // moment the child exists). Either alone has gone missing before, and
+    // both are only candidates — the kernel's session list confirms the
+    // parent before a head counts.
+    const settledItem = new Set(["accepted", "delivered", "failed"]);
+    const childSessionIds = [...new Set([
+      ...(Array.isArray(projection.subagents) ? projection.subagents : [])
+        .filter((child) => child?.status === "running" && typeof child?.childSessionId === "string")
+        .map((child) => child.childSessionId.trim()),
+      ...(Array.isArray(projection.plan?.items) ? projection.plan.items : [])
+        .filter((item) => typeof item?.childSessionId === "string" && !settledItem.has(String(item?.status ?? "")))
+        .map((item) => item.childSessionId.trim()),
+    ].filter(Boolean))].slice(0, 64);
     return { signature: runSideActivitySignature(projection), unreadable: false, childSessionIds, projection };
   }
 
@@ -5045,6 +5059,14 @@ export class AgentRunStore {
     const nowMs = this.now().getTime();
     if (!observed.replay) tracker.activity.set(observed.sessionId, nowMs);
     if (observed.child) tracker.children.add(observed.sessionId);
+    // A delegation's receipt names its child before the child's own stream
+    // has said anything (see `delegatedChildrenOf`); the monitor's next read
+    // asks the kernel about it like any other candidate.
+    if (observed.event.type === "tool/result") {
+      for (const found of delegatedChildrenOf(observed.event.tool, observed.event.output)) {
+        if (found.childSessionId !== observed.sessionId) tracker.children.add(found.childSessionId);
+      }
+    }
     let calls = tracker.sessions.get(observed.sessionId);
     if (!calls) {
       calls = new Map();
