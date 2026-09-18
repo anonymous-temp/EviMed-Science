@@ -82,6 +82,27 @@ class OpenAccessFullTextTests(unittest.TestCase):
         self.assertIn("42%", text)
         self.assertIn("Table 1", text)
 
+    def test_result_maps_the_file_instead_of_carrying_it(self):
+        # The article stays on disk; the result gives the abstract and where
+        # each section starts, so a run reads the part it needs by line range.
+        with mock.patch.object(
+            self.module,
+            "_resolve",
+            return_value={"pmcid": "PMC123456", "doi": "10.1/test", "title": "Verified trial"},
+        ), mock.patch.object(self.module, "_request_bytes", return_value=XML):
+            result = self.module.fetch({"identifier": "10.1/test"})
+        data = result["data"]
+        self.assertEqual(data["abstract"], "Abstract evidence.")
+        lines = (self.workspace / data["markdownPath"]).read_text(encoding="utf-8").split("\n")
+        headings = {entry["heading"]: entry for entry in data["outline"]}
+        for name in ("Abstract", "Methods", "Results", "References"):
+            self.assertIn(name, headings)
+            entry = headings[name]
+            self.assertEqual(lines[entry["line"] - 1].lstrip("#").strip(), name)
+            self.assertGreater(entry["lines"], 0)
+        self.assertIn("locate_quote", data["readingHint"])
+        self.assertNotIn("We enrolled 100 participants", json.dumps(data, ensure_ascii=False))
+
     def test_resolve_accepts_the_prefixed_pubmed_identifier_used_by_search_results(self):
         with mock.patch.object(
             self.module,
