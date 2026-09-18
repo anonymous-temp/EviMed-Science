@@ -1,0 +1,119 @@
+{
+ "theme": "dark",
+ "console": [],
+ "failed": [],
+ "pages": {
+  "runs": {
+   "h1": {
+    "text": "运行记录",
+    "size": "20px"
+   },
+   "englishSentences": [
+    "clinical-evidence-synthesis",
+    "clinical-evidence-synthesis",
+    "clinical-evidence-synthesis"
+   ],
+   "banner": false,
+   "sample": "EviMed\n3\n我的研究\n快速跳转\nCtrl K\n新任务\n运行记录\n知识库\n记忆\n主动科研\n科研能力\n最近任务\n搜索运行记录\n70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议以及adr都…\n19 小时前 · 已交付，待复核\n简单说说：70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议？…\n9/15 · 已交付，待复核\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床"
+  },
+  "inbox": {
+   "h1": {
+    "text": "收件箱",
+    "size": "20px"
+   },
+   "englishSentences": [],
+   "banner": false,
+   "sample": "EviMed\n3\n我的研究\n快速跳转\nCtrl K\n新任务\n运行记录\n知识库\n记忆\n主动科研\n科研能力\n最近任务\n搜索运行记录\n70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议以及adr都…\n19 小时前 · 已交付，待复核\n简单说说：70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议？…\n9/15 · 已交付，待复核\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床"
+  },
+  "capabilities": {
+   "h1": {
+    "text": "科研能力",
+    "size": "20px"
+   },
+   "englishSentences": [],
+   "banner": false,
+   "sample": "EviMed\n3\n我的研究\n快速跳转\nCtrl K\n新任务\n运行记录\n知识库\n记忆\n主动科研\n科研能力\n最近任务\n搜索运行记录\n70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议以及adr都…\n19 小时前 · 已交付，待复核\n简单说说：70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议？…\n9/15 · 已交付，待复核\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床"
+  },
+  "account": {
+   "h1": {
+    "text": "账户",
+    "size": "20px"
+   },
+   "englishSentences": [],
+   "banner": false,
+   "sample": "EviMed\n3\n我的研究\n快速跳转\nCtrl K\n新任务\n运行记录\n知识库\n记忆\n主动科研\n科研能力\n最近任务\n搜索运行记录\n70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议以及adr都…\n19 小时前 · 已交付，待复核\n简单说说：70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议？…\n9/15 · 已交付，待复核\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床"
+  },
+  "files": {
+   "h1": {
+    "text": "知识库",
+    "size": "20px"
+   },
+   "englishSentences": [],
+   "banner": false,
+   "sample": "EviMed\n3\n我的研究\n快速跳转\nCtrl K\n新任务\n运行记录\n知识库\n记忆\n主动科研\n科研能力\n最近任务\n搜索运行记录\n70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议以及adr都…\n19 小时前 · 已交付，待复核\n简单说说：70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议？…\n9/15 · 已交付，待复核\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床"
+  },
+  "memory": {
+   "h1": {
+    "text": "记忆",
+    "size": "20px"
+   },
+   "englishSentences": [
+    "user's work is clinical evidence review with explicit design",
+    "user delivers review tasks as structured JSON briefs with explicit source list and must-do",
+    "User habitually structures clinical questions as PICO blocks (Population ",
+    "Outcomes) alongside a free-text question and a certainty-of-evidence ask",
+    "Requests maximal-depth evidence-based analysis reports for clinical questions"
+   ],
+   "banner": false,
+   "sample": "EviMed\n3\n我的研究\n快速跳转\nCtrl K\n新任务\n运行记录\n知识库\n记忆\n主动科研\n科研能力\n最近任务\n搜索运行记录\n70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议以及adr都…\n19 小时前 · 已交付，待复核\n简单说说：70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议？…\n9/15 · 已交付，待复核\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床"
+  }
+ },
+ "login": 200,
+ "sidebar": {
+  "bell": "收件箱，3 条未读",
+  "text": "EviMed\n3\n我的研究\n快速跳转\nCtrl K\n新任务\n运行记录\n知识库\n记忆\n主动科研\n科研能力\n最近任务\n搜索运行记录\n70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议以及adr都…\n19 小时前 · 已交付，待复核\n简单说说：70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议？…\n9/15 · 已交付，待复核\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 已交付\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/23 · 未完成\n临床证据深度分析\n7/22 · 未完成\n账户与设置\n7"
+ },
+ "accent": "#63c5b9",
+ "frameReadyMs": 12255,
+ "stagesSeen": [
+  "准备运行时",
+  "载入界面",
+  "打开任务"
+ ],
+ "frame": {
+  "lang": "zh-CN",
+  "sendFill": "#00756b",
+  "deepseek500": "#acb2b5",
+  "brandPrimary": "#f9fafb",
+  "font": "Inter, \"SF Pro Text\", system-ui, \"PingFang SC\", \"HarmonyOS S",
+  "text": "70 岁以上老年人用阿司匹林做\n/\n5 个子任务\n70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议以及adr都有哪些，给我最详细的循证分析报告\n9月18日 06:26\n思考\nThe user wants a comprehensive evidence-based analysis report on aspirin for primary cardiovascular prevention in adults over 70, covering current guideline recommendations and adverse drug reactions. This is a detailed report that requires pulling from clinical evidence synthesis and ADR analysis to provide the thorough answer they're asking for.\n\n我先把这个任务写成计划，然后立刻把专业工作委派出去。\n\n研究计划\n3 件交付物\n≥70 岁老年人阿司匹林一级预防：指南推荐与临床证据深度综述（含疗效—出血净获益与年龄/共病亚组）\n临床证据深度分析 · 临床证据综述\n阿司匹林在 ≥70 岁老年人群的不良反应谱：出血与非出血事件的信号分析、标签比对与个例审阅\n药品安全性分析 · 药物安全信号分析\n融合简报：≥70 岁阿司匹林一级预防的指南立场、疗效—安全权衡与临床决策要点（含就医红线）\n临床证据深度分析 · 临床证据综述\n澄清与假设 · 8 条\n思考\nN"
+ },
+ "slashMenu": [
+  "指令\n能力\n选择一项研究能力，把它的题面填进输入框",
+  "指令\n能力\n选择一项研究能力，把它的题面填进输入框"
+ ],
+ "afterSelect": "/能力",
+ "rightToggle": true,
+ "rightPanel": "开始\n收起侧边栏\n进展\n每件交付物做到哪一步、用了多久\n交付物\n报告、证据矩阵与修订说明\n依据\n每条主张的引文是否在原文中核对过\n来源\n本次纳入的文献、指南与说明书",
+ "gridScrollLeft": 0,
+ "projects": [
+  {
+   "id": "eval-memory-ablation-v11-9def6619",
+   "name": "memory-ablation-v11 · review-003-mimic-overlap-unknown__candidate__r0",
+   "runCount": 1,
+   "lastActivityAt": "2026-09-17T17:39:28.927Z"
+  },
+  {
+   "id": "default",
+   "name": "我的研究",
+   "runCount": 25,
+   "lastActivityAt": "2026-09-17T23:46:17.632Z"
+  }
+ ],
+ "unread": {
+  "data": {
+   "unreadTotal": 3,
+   "safetyUnread": 0
+  }
+ }
+}
