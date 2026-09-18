@@ -1417,7 +1417,10 @@ export function createWebApiApp(overrides = {}) {
             : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
         }),
       }, project, run);
-      if (notificationService && !evaluationRun) {
+      // A dispatch refused before it started was answered in the request that
+      // made it; an inbox item saying so again is none of the three moments
+      // the inbox notifies at (C1).
+      if (notificationService && !evaluationRun && run.dispatchStatus !== "rejected") {
         try {
           // Say what happened, in the notice itself. The mapping lives in
           // `notificationService.runFinishedInboxItem` so it is a tested pure

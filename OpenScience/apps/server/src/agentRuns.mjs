@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   HttpError,
+  assertNoSymlinkPath,
   normalizeWorkspaceRelativePath,
   openScopedFileNoFollow,
   randomId,
@@ -256,8 +257,8 @@ function sanitizeErrorCode(value) {
 //   "unchecked"  a layer did not run at all.
 //
 // The third value is the one this field was missing. A run whose brief the
-// server no longer holds — the brief lives in memory only, so a restart loses
-// it — has its per-question coverage check skipped entirely, and used to finish
+// server no longer holds — the brief lived in memory only until 2026-09-18,
+// so a restart lost it — has its per-question coverage check skipped entirely, and used to finish
 // with verification null: byte-identical, in the one machine-readable field
 // operations and the UI read, to a package that passed the check. The same
 // package with the brief in hand finished "unverified" with the missing
@@ -2487,12 +2488,13 @@ async function specialistCompletionOutcome(
       briefText,
     });
     // A rule that did not run is said, not implied. The question-scoped safety
-    // rule reads the brief as the dispatcher holds it, in memory only, so a run
-    // that outlived a server restart is judged without it — and a package
-    // judged without a rule must not read like one that passed it.
+    // rule reads the brief as the dispatcher kept it; a run whose kept copy is
+    // missing (dispatched before briefs were kept beside the ledger, or the
+    // copy unreadable) is judged without it — and a package judged without a
+    // rule must not read like one that passed it.
     if (briefText == null) {
-      const sentence = "本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」：服务端已不再持有这次运行的题面"
-        + "（题面只保存在服务进程内存里，服务重启后即丢失）。其余检查照常完成。";
+      const sentence = "本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」：服务端没有找到这次运行保存的题面"
+        + "（运行早于题面单独保存，或保存的那份无法读取）。其余检查照常完成。";
       advisories.push(runNotice("run_brief_lost", sentence, { detail: sentence }));
       skippedChecks.push("question-scoped-safety-rules");
     }
@@ -3856,7 +3858,7 @@ export class AgentRunStore {
     // The brief, before the prompt goes out, so it is held whatever happens
     // next. This is the authoritative copy and the only one the gate reads.
     if (briefText) {
-      this.dispatchedBriefs.set(record.id, briefText);
+      await this.keepBrief(project, record.id, briefText);
       await this.writeWorkspaceBrief(project, briefText);
     }
     try {
@@ -3872,7 +3874,13 @@ export class AgentRunStore {
       this.scheduleMonitor(project, record.id);
       return accepted;
     } catch (error) {
-      if (error?.code === "runtime_prompt_rejected" || error?.definitivelyRejected === true) {
+      // Refused before the prompt was sent: nothing is running, so nothing may
+      // be left looking as if it were. A capacity or lock refusal (429 / 423)
+      // is raised before any kernel call; treating it as "unknown" left a run
+      // `running` behind the 429 the person was shown, and `agent_run_active`
+      // then refused their retry on the same session (E §9.3).
+      if (error?.code === "runtime_prompt_rejected" || error?.definitivelyRejected === true
+        || (error instanceof HttpError && (error.status === 429 || error.status === 423))) {
         await this.markDispatch(project, record.id, "rejected");
         await this.finishInternal(project, record.id, {
           status: "failed",
@@ -4130,6 +4138,63 @@ export class AgentRunStore {
         { encoding: "utf8", mode: 0o444 },
       );
     } catch { /* advisory copy only; the authoritative one is on the run record */ }
+  }
+
+  /**
+   * Where a run's brief is kept: beside the ledger, outside the workspace the
+   * run can write and outside the ledger's 1 MiB ceiling (briefs run to
+   * several thousand characters), readable by this process alone.
+   * @param {any} project @param {string} runId
+   */
+  briefFile(project, runId) {
+    return path.join(project.metaDir, "briefs", `${safeId(runId, "agent run id")}.txt`);
+  }
+
+  /**
+   * Holds the brief for the delivery gate, and keeps it durably (0600).
+   *
+   * It used to live only in this process's memory, so a control-plane restart
+   * mid-run judged the package without it: the question-scoped clinical safety
+   * rules — the pharmacist-authored layer — silently did not run for that run
+   * (2026-09-18 review, E §9.1). A failed write is said and not fatal: the
+   * in-memory copy still serves the gate while this process lives.
+   * @param {any} project @param {string} runId @param {string} briefText
+   */
+  async keepBrief(project, runId, briefText) {
+    this.dispatchedBriefs.set(runId, briefText);
+    try {
+      await writeFileAtomicNoFollow(project.rootDir, this.briefFile(project, runId), briefText, { encoding: "utf8", mode: 0o600 });
+    } catch (error) {
+      process.stderr.write(`run brief not kept for ${runId}: ${typeof error?.code === "string" ? error.code : "write_failed"}\n`);
+    }
+  }
+
+  /**
+   * The brief the gate reads: the one in memory, else the one kept beside the
+   * ledger — which is how a restarted control plane gets it back.
+   * @param {any} project @param {string} runId @returns {Promise<string | null>}
+   */
+  async dispatchedBrief(project, runId) {
+    const held = this.dispatchedBriefs.get(runId);
+    if (held != null) return held;
+    try {
+      const kept = await readTextFileNoFollow(project.rootDir, this.briefFile(project, runId), "");
+      if (kept) {
+        this.dispatchedBriefs.set(runId, kept);
+        return kept;
+      }
+    } catch { /* unreadable is missing: the gate says it judged without it */ }
+    return null;
+  }
+
+  /** The brief leaves with the run's delivery decision. @param {any} project @param {string} runId */
+  async dropBrief(project, runId) {
+    this.dispatchedBriefs.delete(runId);
+    try {
+      const file = this.briefFile(project, runId);
+      await assertNoSymlinkPath(project.rootDir, file, { allowMissingTail: true });
+      await rm(file, { force: true });
+    } catch { /* isolated: evimed_run_brief_remove_failures_total — a stale brief is bytes, not a wrong verdict */ }
   }
 
   async markDispatch(project, rawRunId, status) {
@@ -4447,7 +4512,7 @@ export class AgentRunStore {
       this.childKernelActivities.delete(kernelKey);
       // The gate has already run by the time a run reaches a terminal state,
       // so the brief has done its work; keeping it would grow with every run.
-      this.dispatchedBriefs.delete(runId);
+      await this.dropBrief(project, runId);
       const tracker = this.progressTrackers.get(runId);
       if (tracker?.timer) clearTimeout(tracker.timer);
       this.progressTrackers.delete(runId);
@@ -4607,10 +4672,10 @@ export class AgentRunStore {
           this.agentRegistry,
           sourceArtifactProvenance,
           allRunAssistants,
-          // Only what this process dispatched. A run recovered from the ledger
-          // after a restart has no brief here, and the gate is told so rather
-          // than reading the copy in the workspace.
-          this.dispatchedBriefs.get(run.id) ?? null,
+          // Only what this control plane dispatched: held in memory, and kept
+          // beside the ledger so a restart does not lose it. Never the copy in
+          // the workspace, which the run can write.
+          await this.dispatchedBrief(project, run.id),
         );
       } catch {
         completion = { artifacts: [], errorCode: "specialist_contract_unavailable" };
@@ -4642,6 +4707,11 @@ export class AgentRunStore {
         && (await this.agentRegistry)?.get?.(run.effectiveAgentId)?.completionChecks?.includes("evidenceClaimsTraceable") === true;
       if (completion.errorCode) {
         const repairSender = this.clinicalRepairSenders.get(run.id);
+        // Read here and written below, across awaits. Safe because a run's
+        // whole evaluation is single-flight (`reconcileSession` hands every
+        // concurrent caller the evaluation already in flight), so no second
+        // reader can see the count between the two — the lock this
+        // read-modify-write needs, and the reason it has no other.
         const repairAttempts = this.clinicalRepairAttempts.get(run.id) ?? 0;
         // A rejection whose every issue is one structural fact — the deliverable
         // did not parse, or a required file is not there — teaches the run one
