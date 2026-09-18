@@ -28,14 +28,17 @@ export const inject = ['tools', 'subagents']
 /**
  * @typedef {object} Config
  * @property {number} batchSize
- * @property {number} maxParallelChildren
+ * @property {number} maxConcurrentChildren
  */
 
 export const Config = Schema.object({
   batchSize: Schema.number().default(50)
     .description('Records per screening child. A deployment whose records are longer lowers it.'),
-  maxParallelChildren: Schema.number().default(30)
-    .description('Concurrent screening children. Owned by the control plane, same ceiling as delegation.'),
+  // The same number that bounds a run's concurrent delegations. It is a wave
+  // size here and was always one, which is the meaning the old shared name
+  // (`maxParallelChildren`) promised and delegation did not keep.
+  maxConcurrentChildren: Schema.number().default(30)
+    .description('Concurrent screening children. Owned by the control plane, same ceiling as concurrent delegations.'),
 })
 
 /**
@@ -90,7 +93,9 @@ export async function apply(ctx, config) {
       // Batches run in waves rather than all at once: the ceiling is the
       // control plane's, and exceeding it is how one run starves every other
       // run in the container.
-      for (const wave of chunk(batches, config.maxParallelChildren)) {
+      // 0 is "no ceiling" here as it is for delegation: one wave of every batch.
+      const waveSize = Number(config.maxConcurrentChildren) > 0 ? Number(config.maxConcurrentChildren) : Math.max(1, batches.length)
+      for (const wave of chunk(batches, waveSize)) {
         const runs = await Promise.all(wave.map((batch, index) => startSubagent(ctx, {
           capability: 'evimed-screening',
           label: `筛选 ${index + 1}/${batches.length}`,

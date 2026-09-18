@@ -867,8 +867,8 @@ The numbered list and the body must close on each other in both directions.
   the body**, and every `[n]` in the body must resolve to an entry. Table cells
   and the abstract count as body.
 - **A source you retrieved but did not use is not a reference.** Drop it from the
-  numbered list and renumber. Naming it once in `局限性` as "full text
-  unavailable" is not a use.
+  numbered list; `evimed_render_report` renumbers what remains. Naming it once
+  in `局限性` as "full text unavailable" is not a use.
 - **Never put a bibliographic identifier in the citation slot.**
   `[PMID 22897413]` resolves to nothing a reader can follow and to no claim. If
   the source is worth naming it earns a number and a claim; if it is not, it is
@@ -1042,6 +1042,16 @@ Use standard numbered citations in order of first appearance:
 
 `急性胸痛需要结构化风险评估。[1](https://example.org/source) <!-- claim:CLM-001 -->`
 
+You do not have to keep the numbers in order while you draft.
+`evimed_render_report{deliverableId}` renumbers every `[n]` by first appearance,
+merges a source listed under two numbers, rebuilds `参考文献` in that order,
+carries the new numbers into each claim's `referenceNumber`, and hides a visible
+`[claim:…]` marker. It changes no sentence and returns the report untouched when
+it is already in order; run it once the draft stands, and again after an edit
+adds or moves citations. It reports entries the body never cites instead of
+deleting them — whether a source stays is your judgement (see "Reference-table
+closure").
+
 - Readers must see `[1]`, `[2]`, and so on, not internal claim IDs.
 - Put each internal marker in an HTML comment: `<!-- claim:CLM-NNN -->`.
 - Put the numbered citation and hidden claim marker on the same physical line as the supported proposition.
@@ -1077,7 +1087,7 @@ paragraph that reads as assembled by copying rather than written.
 
 ### Evidence matrix
 
-Write `clinical-evidence-matrix.json` with a top-level `claims` array containing the report's atomic material claims. Do not split prose into artificial micro-claims merely to increase the count. Every claim must contain:
+`clinical-evidence-matrix.json` holds the report's atomic material claims in a top-level `claims` array. Write them one at a time with `evimed_claim_upsert{deliverableId, claim}`: it writes the claim (replacing the one with the same `claimId`, or numbering a new one), judges it on the spot by the rules the submission applies — the quote verbatim in its preserved source, the fields present, every numeral carried by the quote — and answers `verified` or `unverified` with the reasons. An unverified claim is written anyway: fix what it names and write it again under its `claimId`. Writing the file yourself still works; the tool is only cheaper than a script that builds it. Do not split prose into artificial micro-claims merely to increase the count. Every claim must contain:
 
 - `claimId`
 - `claim`
@@ -1091,9 +1101,11 @@ Write `clinical-evidence-matrix.json` with a top-level `claims` array containing
 - `applicability`
 - `uncertainty`
 
-`referenceNumber` must resolve to the numbered reference list. `supportQuote` must be a verbatim passage present in the preserved source artifact. Every numeral in a claim must also appear in the quote, source title, or identifier.
+`referenceNumber` must resolve to the numbered reference list; when the renderer moves a number it moves the claim's with it. `supportQuote` must be a verbatim passage present in the preserved source artifact. Every numeral in a claim must also appear in the quote, source title, or identifier.
 
 Every claim also carries `pico`, `picoMatch`, `denominatorKind`, and `requiredCaveats`, and the matrix root carries `questionPico` — see "A claim's caveats travel with it".
+
+To find the exact wording in a long full text, `mcp__evimed__locate_quote{sourceId, quote}` (when your tools include it) returns where a passage sits — exact, normalized, or near — with its surrounding context, compared the way the quote check compares; copy the passage it returns rather than retyping it, and never search a preserved full text with `grep`.
 
 Quote contiguously by default. You may elide a passage you do not need by marking the gap with `…`, as any scholarly quotation does; each side of the gap is then checked on its own and must appear in the source in the order you wrote it. Never join two passages without marking the gap, and never elide across a qualification — a quote reading "the effect was significant … in the subgroup analysis" that hides "not" is a misquotation whether or not the words are all in the document. Copy sentences as they read: an inline citation marker the extractor left mid-sentence ("…in coronary spasm patients.23 Li Jin et al…") is not part of the sentence and may be left out.
 
@@ -1185,6 +1197,11 @@ Prefer DOI, then PMID/PMCID, then a stable official-document identifier. Verify 
 The report reference list must use a consistent Vancouver-style format:
 
 `1. Authors. Title. Journal. Year;volume(issue):pages. doi:... PMID:... URL:...`
+
+When the body cites a number with no entry, `evimed_render_report` fills one
+from that claim's `sourceTitle`, `identifier` and `sourceUrl`. That is a
+placeholder, not a reference: complete and verify it as above, because the
+renderer looks nothing up.
 
 For organizations or official documents, use the issuing organization as the author and include publication/update date and stable URL when available.
 
@@ -1653,15 +1670,12 @@ Everything else it says is advice — act on what is cheap, and submit. Two
 rounds of fixes are plenty: a package with findings still open is delivered with
 those findings shown to the reader claim by claim, never withheld.
 
-Read every output back before claiming success. Do not use `grep` or another unbounded line-oriented search on a generated report; long Markdown lines can exceed tool-output limits and invalidate an otherwise complete run. Use bounded `read` ranges and the platform's deterministic completion validator instead. Verify:
+Read every output back before claiming success. Do not use `grep` or another unbounded line-oriented search on a generated report; long Markdown lines can exceed tool-output limits and invalidate an otherwise complete run. Use bounded `read` ranges, and `evimed_package_check{deliverableId}` for the verdict a submission would give — it spends no submission, and it is where the mechanical half is answered: every numbered citation resolves, every claim quote occurs in its source artifact, no visible `[claim:...]` marker remains. What it cannot judge is yours to verify:
 
 - `资料与方法` reports the searches actually run, across at least two relevant source classes;
 - the screening counts agree with the numbered reference list, and every included source was inspected beyond title-only metadata;
 - the claim matrix contains every material factual conclusion without artificial claim splitting;
-- every numbered citation resolves to a complete reference;
-- every claim quote occurs in its source artifact;
 - all DOI/PMID/PMCID values and bibliographic metadata are accurate;
-- no visible `[claim:...]` marker remains;
 - no operational failure or tool-process prose appears in the academic report;
 - every research question in `摘要目的` has its answer in `结论` in the same order, every 「证据不足」 judgment names the population stratum it holds for, and no section's share of the body outweighs the rank of the question it serves (see "Comparative appraisal and evidence bridging");
 - every numbered item of the task is answered or declared a gap in the body — including the fallback branch of every 「若 X 则回到 Y」 — each answer sits in a paragraph that carries a claim anchor, every item a question spells out is in the report, a restatement of the scope keeps the task's numbering and merges nothing, no topic declared a gap reappears as a ranking, a share, a threshold, a recommendation, or a negative finding in `摘要`, `结论`, or `临床实践要点`, and every sub-question that does not depend on an unverifiable premise is still answered;
@@ -1737,39 +1751,21 @@ rewrite. **The closing step is a self-check, not a reread**, and the point of
 having written the rules into the drafting stage is that this step usually
 changes nothing.
 
-1. Print the shape of the prose. This prints one short line per paragraph and a
-   count per watched phrase, so a long Markdown line cannot flood the tool
-   output — which is why `grep` is forbidden on the report and this is not:
+1. Ask for the shape of the prose, not the prose:
 
-```bash
-python - <<'PY'
-import pathlib, re
-text = re.sub(r"<!--.*?-->", "", pathlib.Path("clinical-evidence-report.md").read_text(encoding="utf-8"))
-section, buf, rows = "", [], []
-def flush():
-    p = "".join(buf).strip()
-    buf.clear()
-    if p and p[0] not in "|>-*" and not p[0].isdigit():
-        rows.append((section, len(p), p[:14]))
-for line in text.splitlines():
-    s = line.strip()
-    if not s or s.startswith(("#", "|", ">", "-", "*")) or s[:1].isdigit():
-        flush()
-        if s.startswith("#"):
-            section = s.lstrip("# ")
-        continue
-    buf.append(s)
-flush()
-for s, n, head in rows:
-    print(f"{s[:8]:<8} {n:>4} {head}")
-watch = ["此外", "值得注意的是", "综上所述", "总的来说", "需要指出的是", "不容忽视", "众所周知",
-         "随着", "不仅", "研究表明", "研究显示", "大量研究", "专家认为", "疗效确切", "安全有效",
-         "广泛应用", "重要意义", "奠定", "新思路", "值得进一步", "发挥了重要作用", "前景广阔"]
-print({w: text.count(w) for w in watch if w in text})
-PY
+```
+evimed_package_check{deliverableId: "<your deliverable id>", prose: true,
+  watchPhrases: ["此外", "值得注意的是", "综上所述", "总的来说", "需要指出的是", "不容忽视", "众所周知",
+                 "随着", "不仅", "研究表明", "研究显示", "大量研究", "专家认为", "疗效确切", "安全有效",
+                 "广泛应用", "重要意义", "奠定", "新思路", "值得进一步", "发挥了重要作用", "前景广阔"]}
 ```
 
-2. Read the printout against four questions, each pointing at the rule that
+   Beside the verdict it returns one short row per paragraph — section, length,
+   first fourteen characters — and a count for each watched phrase present, so
+   a long Markdown line never floods the tool output and the report is never
+   read back whole.
+
+2. Read the rows against four questions, each pointing at the rule that
    answers it:
    - **Are the paragraph lengths flat?** In `结果` and `讨论`, near-identical
      lengths across a run of paragraphs means content was filled to a quota

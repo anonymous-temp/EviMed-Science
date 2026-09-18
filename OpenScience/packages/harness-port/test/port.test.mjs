@@ -5,18 +5,26 @@ import test from "node:test";
 import {
   SEAMS,
   __setHarnessModule,
+  agentSeesTool,
   defineTool,
   injectContext,
+  isSubagentSession,
   loadHarnessModule,
   onPreStep,
   onToolObserved,
   onToolPolicy,
   onTurnEnd,
+  parentSessionOf,
   probeSeams,
+  registerAgentSection,
+  registerAgentSkill,
   registerRightSidebarTab,
   registerWebFetchProvider,
   registerWebSearchProvider,
+  registeredToolNames,
   renderEnvelope,
+  restrictAgentTools,
+  steerContext,
   toArgs,
   toSessionRef,
   toSkillName,
@@ -26,6 +34,7 @@ import {
   toToolOutcome,
   toTurnEnd,
   toUsage,
+  withdrawPromptSection,
 } from "../index.mjs";
 
 test("injected context is an identified user message accepted by session format v3", () => {
@@ -40,6 +49,36 @@ test("injected context is an identified user message accepted by session format 
   assert.notEqual(messages[0].id, messages[1].id);
   assert.deepEqual(messages[0].source, { kind: "plugin", plugin: "evimed-guidance" });
   assert.deepEqual(messages[0].content, [{ type: "text", text: "Retain the research constraints." }]);
+});
+
+test("steered context is the same identified plugin message, handed to the kernel's steer and never to inject", () => {
+  // Steer is what wakes an idle driver and what objects to a closing turn;
+  // inject does neither. The message must still read as the plugin's, never as
+  // the researcher's, because transcript readers tell the two apart by source.
+  /** @type {any[]} */
+  const steered = [];
+  /** @type {any[]} */
+  const injected = [];
+  const agent = { steer: (/** @type {any} */ message) => steered.push(message), inject: (/** @type {any} */ message) => injected.push(message) };
+  steerContext(agent, "Collect the children's results.", "evimed-run-policy");
+  assert.equal(injected.length, 0);
+  assert.equal(steered.length, 1);
+  assert.equal(steered[0].role, "user");
+  assert.ok(typeof steered[0].id === "string" && steered[0].id.length > 0);
+  assert.deepEqual(steered[0].source, { kind: "plugin", plugin: "evimed-run-policy" });
+  assert.deepEqual(steered[0].content, [{ type: "text", text: "Collect the children's results." }]);
+});
+
+test("an agent's tools are narrowed through its own scope, from names the registry actually holds", () => {
+  /** @type {any[]} */
+  const filters = [];
+  const agent = { ctx: { tools: { restrict: (/** @type {any} */ filter) => { filters.push(filter); return () => "disposed"; } } } };
+  const dispose = restrictAgentTools(agent, { deny: ["mcp__evimed__meta_analysis"] });
+  assert.deepEqual(filters, [{ deny: ["mcp__evimed__meta_analysis"] }], "exactly the filter asked for, and no empty allow list beside it");
+  assert.equal(dispose(), "disposed", "the registry's own disposer is handed back");
+  const ctx = { get: (/** @type {string} */ key) => (key === "tools" ? { schemas: () => [{ name: "bash" }, { name: "mcp__evimed__meta_analysis" }, { name: "" }] } : undefined) };
+  assert.deepEqual(registeredToolNames(ctx), ["bash", "mcp__evimed__meta_analysis"]);
+  assert.deepEqual(registeredToolNames({ get: () => ({}) }), [], "a registry without a schema projection narrows nothing rather than guessing");
 });
 
 test("context added during pre-step enters that request rather than the next inbox claim", async () => {
@@ -587,4 +626,56 @@ test("a right-pane tab registers as a tab, keyed the way tab slots are keyed", (
   assert.equal(calls[0][1].order, 10);
   assert.throws(() => registerRightSidebarTab(client, /** @type {any} */ ({ title: "x", render: () => null })), /must carry a key/);
   assert.throws(() => registerRightSidebarTab(ctx, { key: "k", title: "t", render: () => null }), /no sidebarRightTabs seam/);
+});
+
+test("a withdrawn upstream prompt section is an empty section under the upstream name and order", () => {
+  /** @type {any[]} */
+  const sections = [];
+  const ctx = { systemPrompt: { section: (/** @type {any} */ section) => { sections.push(section); return () => {}; } } };
+  const dispose = withdrawPromptSection(ctx, "deliverableFileReferences");
+  assert.equal(typeof dispose, "function");
+  assert.deepEqual(sections, [{ name: "ui:deliverable-file-references", order: 9000, text: "" }]);
+  assert.equal(SEAMS.promptSections.deliverableFileReferences.package, "@deepseek-ai/dsh-client-ui-deliverables");
+});
+
+test("a child is recognised by the kernel's own header fields, and what it sees is asked of its own scope", () => {
+  const child = { session: { header: { origin: "subagent", parentSession: "root-1" } } };
+  const root = { session: { header: { cwd: "/workspace" } } };
+  assert.equal(isSubagentSession(child), true);
+  assert.equal(isSubagentSession(root), false);
+  assert.equal(isSubagentSession(undefined), false);
+  assert.equal(parentSessionOf(child), "root-1");
+  assert.equal(parentSessionOf(root), "");
+
+  /** @type {any[]} */
+  const lookups = [];
+  const ctx = { get: (/** @type {string} */ key) => (key === "tools" ? { get: (/** @type {string} */ name, /** @type {any} */ scope) => { lookups.push([name, scope]); return name === "read" ? {} : undefined; } } : undefined) };
+  assert.equal(agentSeesTool(ctx, child, "read"), true);
+  assert.equal(agentSeesTool(ctx, child, "evimed_submit_deliverable"), false);
+  assert.equal(lookups[0][1], child, "the lookup is scoped to the agent, which is what applies its restriction");
+  assert.equal(agentSeesTool({ get: () => ({}) }, child, "read"), false, "a registry without a scoped lookup answers no");
+});
+
+test("a section and a skill registered for one agent go through that agent's own context", () => {
+  /** @type {any[]} */
+  const sections = [];
+  /** @type {any[]} */
+  const skills = [];
+  const agent = { ctx: {
+    systemPrompt: { section: (/** @type {any} */ section) => { sections.push(section); return () => {}; } },
+    skills: { register: (/** @type {any} */ skill) => { skills.push(skill); return () => {}; } },
+  } };
+  registerAgentSection(agent, { name: "evimed:orchestration", order: 120, text: "child" });
+  assert.deepEqual(sections, [{ name: "evimed:orchestration", order: 120, text: "child" }]);
+  registerAgentSkill(agent, { name: "demo-section-02", description: "demo 的第 2 节：Two", content: "## Two", resourceDir: "/skills/demo" });
+  registerAgentSkill(agent, { name: "demo-section-03", description: "demo 的第 3 节：Three", content: "## Three" });
+  assert.deepEqual(skills[0], {
+    name: "demo-section-02",
+    description: "demo 的第 2 节：Two",
+    content: "## Two",
+    source: "runtime",
+    invocation: { modelInvocable: true, userInvocable: false },
+    resourceBase: { kind: "directory", path: "/skills/demo" },
+  });
+  assert.equal(skills[1].resourceBase, undefined);
 });

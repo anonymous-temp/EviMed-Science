@@ -1823,10 +1823,14 @@ test("a capability's two skill copies never drift apart by more than their known
   // deleted with their checks, and the clinical skill's question-ledger,
   // search-log, screening-number, bibliography and run-receipt instructions were
   // rewritten as requirements on the report itself.
+  // Raised by 29 on 2026-09-18, same direction: the clinical skill's matrix,
+  // renumbering, read-back and prose self-check procedure now points at
+  // evimed_claim_upsert, evimed_render_report and evimed_package_check, and the
+  // Python self-check it replaced is gone.
   const knownDivergence = {
     "adr-analysis": 18,
     "bibliometric-analysis": 18,
-    "clinical-evidence-synthesis": 190,
+    "clinical-evidence-synthesis": 219,
     "comprehensive-drug-evaluation": 18,
     "dataset-research-scoping": 41,
     "drug-selection": 18,

@@ -1697,6 +1697,27 @@ export function revisionGatewayProviderUrl(config) {
 }
 
 /**
+ * The compaction settings a launched runtime receives, derived from this
+ * process's environment by the same function the container-side rows use.
+ *
+ * One derivation for the launch plan and for readiness, so the value an
+ * operator reads back is the value a runtime is started with. The policy comes
+ * from config (which may be overridden in tests); the gateway's body limit
+ * does too, because the byte guard is a share of it and a limit the gateway
+ * enforces but the guard never heard of is the 413 the guard exists to avoid.
+ * @param {Record<string, any>} config @param {Record<string, string | undefined>} [env]
+ */
+export function runtimeCompactionSettings(config, env = process.env) {
+  return compactionConfigFromEnv({
+    ...env,
+    OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY: String(config.runtimeCompactionPolicy ?? "basic"),
+    ...(Number(config.modelGatewayMaxBodyBytes) > 0
+      ? { OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: String(Math.floor(Number(config.modelGatewayMaxBodyBytes))) }
+      : {}),
+  });
+}
+
+/**
  * The one description of a runtime's deployment settings.
  *
  * The patch and the container environment are two halves of it: rows the host
@@ -1755,7 +1776,8 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     dshVersion: String(config.dshVersion ?? ""),
     limits: {
       deliveryAttemptLimit: config.deliveryAttemptLimit,
-      maxParallelChildren: config.maxParallelChildren,
+      maxChildrenTotal: config.maxChildrenTotal,
+      maxConcurrentChildren: config.maxConcurrentChildren,
       maxSteps: config.runMaxSteps,
       maxTokens: config.runMaxTokens,
       evidenceStaleMinutes: config.evidenceStaleMinutes,
@@ -2251,10 +2273,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           // Derived once, out here, from the same definitions the preset row
           // reads inside the container. A compaction knob that is not on this
           // list does nothing and says nothing.
-          compaction: compactionRuntimeEnv(compactionConfigFromEnv({
-            ...process.env,
-            OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY: String(config.runtimeCompactionPolicy ?? "basic"),
-          })),
+          compaction: compactionRuntimeEnv(runtimeCompactionSettings(config)),
           // `retainTokens` is a port-level option with no row to read it, so it
           // never crosses the boundary. Sending it would put a name on the
           // container's env that nothing reads, which is the same defect as a
@@ -2270,7 +2289,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           },
           limits: {
             deliveryAttemptLimit: config.deliveryAttemptLimit,
-            maxParallelChildren: config.maxParallelChildren,
+            maxChildrenTotal: config.maxChildrenTotal,
+            maxConcurrentChildren: config.maxConcurrentChildren,
             maxSteps: config.runMaxSteps,
             maxTokens: config.runMaxTokens,
             evidenceStaleMinutes: config.evidenceStaleMinutes,

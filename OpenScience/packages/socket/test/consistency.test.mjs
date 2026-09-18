@@ -23,7 +23,7 @@ import test from "node:test";
 import { SEAMS, __setHarnessModule, defineTool } from "@evimed/harness-port";
 import { CONTRACT_KINDS, SOCKET_TOOL_NAME_LIST, workspaceLayout } from "@evimed/domain";
 
-import { buildGuidanceText } from "../src/guidanceText.mjs";
+import { GUIDANCE_SECTION_NAME, buildGuidanceText } from "../src/guidanceText.mjs";
 import { RUN_DOMAIN_SPEC, projectRunState } from "../src/runMirror.mjs";
 import { evidenceFromOutcome } from "../src/evidenceIngest.mjs";
 import { skillBodyDigestAsync } from "../src/digest.mjs";
@@ -201,6 +201,60 @@ test("the guidance the model reads names every mounted capability and no unmount
   for (const capability of capabilities) assert.ok(text.includes(capability.id), capability.id);
   assert.ok(!text.includes("geo-content"), "an unmounted capability must not be advertised");
   assert.ok(text.includes("如实说明"), "the catalogue is the edge of what we can claim to do");
+});
+
+test("the kernel's produced-files paragraph is withdrawn from every agent, and nothing else of that row is", async () => {
+  const { apply: applyGuidance } = await import("../plugins/guidance.mjs");
+  const ctx = harness();
+  /** @type {any[]} */
+  const sections = [];
+  /** @type {any} */ (ctx).systemPrompt = { section: (/** @type {any} */ section) => { sections.push(section); return () => {}; } };
+  await applyGuidance(ctx, { capabilitiesDir: "", answerPersonaDir: "", askUserEnabled: false, capsuleActive: false, reviewEnabled: false });
+  const withdrawn = sections.filter((section) => section.name === SEAMS.promptSections.deliverableFileReferences.name);
+  assert.equal(withdrawn.length, 1, `sections registered: ${sections.map((section) => section.name).join(", ")}`);
+  assert.equal(withdrawn[0].text, "", "an empty section is what the renderer drops");
+  assert.equal(withdrawn[0].order, SEAMS.promptSections.deliverableFileReferences.order);
+  assert.ok(sections.some((section) => section.text.length > 0), "the guidance itself is still registered");
+});
+
+test("a delegated child reads the child guidance instead of the orchestration guidance, and no answer persona; the root keeps both", async () => {
+  const { apply: applyGuidance } = await import("../plugins/guidance.mjs");
+  const ctx = harness();
+  ctx.provide("fs", {
+    resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
+    readText: async (/** @type {string} */ target) => (target === "/persona/SKILL.md" ? "---\nname: open-domain-answer\n---\n# Persona\n\nAnswer first." : null),
+  });
+  /** @param {any[]} into */
+  const recorder = (into) => ({ section: (/** @type {any} */ section) => { into.push(section); return () => {}; } });
+  /** @type {any[]} */
+  const presetSections = [];
+  /** @type {any} */ (ctx).systemPrompt = recorder(presetSections);
+  await applyGuidance(ctx, { capabilitiesDir: "", answerPersonaDir: "/persona", askUserEnabled: false, capsuleActive: true, reviewEnabled: false });
+  assert.ok(presetSections.some((section) => section.name === "evimed:answer-persona" && section.text.includes("Answer first.")), "the persona is on the preset for the root");
+  const orchestration = presetSections.find((section) => section.name === GUIDANCE_SECTION_NAME);
+  assert.match(orchestration.text, /evimed_delegate/);
+
+  const start = (/** @type {any} */ agent) => { for (const handler of ctx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent, source: "startup" }); };
+  /** @type {any[]} */
+  const childSections = [];
+  start({ session: { id: "c1", header: { origin: "subagent", parentSession: "r1" } }, ctx: { systemPrompt: recorder(childSections) } });
+  assert.deepEqual(childSections.map((section) => section.name), [GUIDANCE_SECTION_NAME, "evimed:answer-persona"], "both sections are replaced in the child's own scope");
+  assert.equal(childSections[0].order, orchestration.order, "in the same place in the prompt");
+  assert.equal(childSections[1].text, "", "an empty section is dropped: the child has no answer persona");
+  const child = childSections[0].text;
+  assert.match(child, /<evimed-delegated>/);
+  assert.doesNotMatch(child, /evimed_plan|evimed_delegate|evimed_complete_run|能力目录|契约种类/, "nothing about running a run the child cannot run");
+  for (const kept of ["## 检索顺序", "## 注入的上下文怎么用", "## 引文卫生", "## 安全", "evimed_capsule_recall"]) {
+    assert.ok(child.includes(kept), `the child keeps ${kept}`);
+  }
+  // The shared rules are the root's own text, not a second copy to drift.
+  const citation = (/** @type {string} */ text) => text.slice(text.indexOf("## 引文卫生"), text.indexOf("## 安全"));
+  assert.equal(citation(child), citation(orchestration.text));
+
+  /** @type {any[]} */
+  const rootSections = [];
+  start({ session: { id: "r1", header: { cwd: "/workspace" } }, ctx: { systemPrompt: recorder(rootSections) } });
+  assert.deepEqual(rootSections, [], "the root reads the preset's sections");
 });
 
 test("recalled context is named as data, not as an instruction", () => {
@@ -466,7 +520,12 @@ test("a delegated child is handed the run's recalled memory and the knowledge po
   assert.match(withMemory.prompt, /## 个人知识库/);
   assert.match(withMemory.prompt, /`\.evimed-knowledge\/`/);
   assert.match(withMemory.prompt, /3 项/);
-  assert.ok(withMemory.prompt.indexOf("## 用户记忆") < withMemory.prompt.indexOf("## 方法"), "who the child works for comes before how");
+  // Reversed on 2026-09-18 (plan §9.4, stable prefix first): the method is the
+  // same for every child of a capability and opens the message so the prefix
+  // cache can reuse it; who the child works for is per delegation and follows
+  // the task, where the rest of what changes per delegation is.
+  assert.ok(withMemory.prompt.indexOf("## 方法") < withMemory.prompt.indexOf("## 你的任务"), "the stable method opens the message");
+  assert.ok(withMemory.prompt.indexOf("## 你的任务") < withMemory.prompt.indexOf("## 用户记忆"), "the researcher's memory travels with the task, after the method");
   const without = buildDelegation({ ...base, memoryText: null, knowledgeEntries: 0 });
   assert.doesNotMatch(without.prompt, /用户记忆|个人知识库|evimed-knowledge/);
   const blank = buildDelegation({ ...base, memoryText: "   " });
@@ -524,7 +583,7 @@ test("every plugin mounts against a registry with the harness's own precondition
 
   const mounted = [];
   for (const [label, apply, config] of [
-    ["run-policy", applyRunPolicy, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 2 }],
+    ["run-policy", applyRunPolicy, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit: 2 }],
     ["review", applyReview, { enabled: true }],
     ["screening", applyScreening, { batchSize: 25, concurrency: 4 }],
     ["capsule", applyCapsule, { recallUrl: "http://control-plane.invalid/api/capsule", recallTimeoutMs: 30000 }],
@@ -538,7 +597,7 @@ test("every plugin mounts against a registry with the harness's own precondition
   }
 
   const byPlugin = Object.fromEntries(mounted);
-  assert.deepEqual(byPlugin["run-policy"].sort(), ["evimed_complete_run", "evimed_delegate", "evimed_plan", "evimed_revise_deliverable", "evimed_submit_deliverable"]);
+  assert.deepEqual(byPlugin["run-policy"].sort(), ["evimed_await", "evimed_claim_upsert", "evimed_complete_run", "evimed_delegate", "evimed_package_check", "evimed_plan", "evimed_render_report", "evimed_revise_deliverable", "evimed_submit_deliverable"]);
   assert.deepEqual(byPlugin.review, ["evimed_review_run"]);
   assert.deepEqual(byPlugin.screening, ["evimed_screen_batch"]);
   assert.deepEqual(byPlugin.capsule.sort(), ["evimed_capsule_note", "evimed_capsule_recall"]);
@@ -599,7 +658,7 @@ test("mounting the run policy produces a run mirror row, not just the ability to
     },
   });
 
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 2, bundleVersion: "0.1.0" });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit: 2, bundleVersion: "0.1.0" });
 
   const started = ctx.listeners.get(SEAMS.events.sessionStart) ?? [];
   assert.ok(started.length, "the run policy must listen for a session starting");
@@ -620,6 +679,54 @@ test("mounting the run policy produces a run mirror row, not just the ability to
   // And the table the projection reads is the table that was written.
   assert.ok(Object.keys(RUN_DOMAIN_SPEC.tables).includes("run_mirror"));
   assert.ok("cwd" in RUN_DOMAIN_SPEC.tables.run_mirror, "the field the projection reads must be declared");
+});
+
+test("a root session is shown only its own research tools, in its own scope, once; a child is left to its capability's filter", async () => {
+  const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
+  const { MCP_TOOL_NAMES: mcpNames } = await import("@evimed/domain");
+  const ctx = harness();
+  /** @type {string[]} */
+  const degraded = [];
+  ctx.provide("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line), notice() {} });
+  // What the MCP bridge registered in the global layer, plus the kernel's own.
+  /** @type {any} */ (ctx.tools).schemas = () => [...mcpNames, "bash", "read", "skill"].map((name) => ({ name }));
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit: 2, bundleVersion: "0.1.0" });
+  /** @param {any} agent */
+  const start = (agent) => { for (const handler of ctx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent, source: "startup" }); };
+  /** @type {any[]} */
+  const rootFilters = [];
+  const root = { id: "root", session: { id: "root", header: { cwd: "/workspace" } }, ctx: { tools: { restrict: (/** @type {any} */ filter) => { rootFilters.push(filter); return () => {}; } } }, inject() {} };
+  start(root);
+  assert.equal(rootFilters.length, 2, "the root is narrowed at session start, before its first request is assembled");
+  assert.deepEqual(rootFilters[0].deny, ["evimed_claim_upsert", "evimed_render_report"], "the claim tools are a child's");
+  const research = rootFilters[1];
+  assert.ok(research.deny.includes("mcp__evimed__comprehensive_drug_evaluation"));
+  assert.ok(!research.deny.includes("mcp__evimed__literature_search"), "the root keeps its own retrieval");
+  assert.ok(!research.deny.includes("bash"), "kernel tools are not this narrowing's business");
+  assert.ok(!research.deny.includes("evimed_package_check"), "the root keeps the check it may need in a repair");
+  assert.equal(research.allow, undefined, "a deny list, so nothing the root was not told about disappears with it");
+  start(root);
+  assert.equal(rootFilters.length, 2, "a resumed or compacted session keeps its scope and is not narrowed twice");
+
+  /** @type {any[]} */
+  const childFilters = [];
+  const child = { id: "child", session: { id: "child", header: { cwd: "/workspace", origin: "subagent", parentSession: "root" } }, ctx: { tools: { restrict: (/** @type {any} */ filter) => { childFilters.push(filter); return () => {}; } } } };
+  start(child);
+  assert.equal(childFilters.length, 0, "a child is narrowed by its capability's own filter, never by the root's");
+
+  const broken = { id: "broken", session: { id: "broken", header: { cwd: "/workspace" } }, ctx: { tools: { restrict: () => { throw new Error("tools.restrict() names unknown global tool"); } } }, inject() {} };
+  assert.doesNotThrow(() => start(broken), "a failed narrowing must not fail the session");
+  assert.ok(degraded.some((line) => /narrowing failed/.test(line)), `the failure is said out loud: ${JSON.stringify(degraded)}`);
+
+  // A registry with the kernel's tools but no research server yet: nothing to
+  // deny, and the run says the root will see whatever registers later.
+  /** @type {any} */ (ctx.tools).schemas = () => ["bash", "read", "skill"].map((name) => ({ name }));
+  /** @type {any[]} */
+  const earlyFilters = [];
+  const early = { id: "early", session: { id: "early", header: { cwd: "/workspace" } }, ctx: { tools: { restrict: (/** @type {any} */ filter) => { earlyFilters.push(filter); return () => {}; } } }, inject() {} };
+  start(early);
+  assert.equal(earlyFilters.length, 1, "only the claim tools; no research tool to deny yet");
+  assert.ok(degraded.some((line) => /found no research tools registered/.test(line)), `an empty narrowing is said out loud: ${JSON.stringify(degraded)}`);
 });
 
 /** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number, structuralAttemptAllowance?: number, knowledge?: string[]|null }} [options] */
@@ -652,7 +759,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     writeText: async (/** @type {string} */ target, /** @type {string} */ text) => { files.set(target, text); },
     listDir: async (/** @type {string} */ target) => (target === `/workspace/${workspaceLayout.knowledgeDir}` && knowledge ? knowledge.map((/** @type {string} */ name) => ({ name })) : []),
   });
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
   const step = async (/** @type {number} */ turn) => {
     for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) {
       const decision = await handler({ agent, turn, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] }));
@@ -893,6 +1000,10 @@ test("a capability child may submit only the parent plan item it owns", async ()
 
   settle({ stopReason: "completed", output: { deliverableId: "d1", submitted: true, summary: "done" } });
   await pending;
+  // Delegation returns at once; the settlement is what `evimed_await` collects,
+  // and waiting on it is what makes the binding's release observable below.
+  const collected = await f.execute("evimed_await", {});
+  assert.deepEqual(collected.value.data.results.map((/** @type {any} */ result) => [result.deliverableId, result.status]), [["d1", "completed"]]);
   const status = await f.execute("evimed_plan", { action: "status" });
   assert.equal(status.value.data.items[0].status, "accepted");
   const afterSettlement = await f.ctx.tools.execute({
@@ -996,6 +1107,12 @@ test("an accepted child delivery is not retried or downgraded by a later child e
   settle({ stopReason: "error", diagnostic: "structured tail did not match the output schema" });
   const delegated = await pending;
   assert.equal(delegated.value?.ok, true);
+  // The decision not to retry is made when the child settles, which is after
+  // the delegate call returned; counting starts before collecting the
+  // settlement would pass whether or not a retry was started.
+  const collected = await f.execute("evimed_await", {});
+  assert.equal(collected.value.data.results[0].status, "completed", JSON.stringify(collected.value));
+  assert.equal(collected.value.data.results[0].submission.verdict, "pass");
   assert.equal(starts, 1, "an accepted package must not start a retry child");
   const status = await f.execute("evimed_plan", { action: "status" });
   assert.equal(status.value.data.items[0].status, "accepted");
@@ -1075,6 +1192,8 @@ test("the delegation receipt names first and hashes beside the child, and the re
   assert.deepEqual(running.skillDigests, [], "no skills dir is mounted here, and an absent list would be a different claim");
   settleRetry({ stopReason: "completed", output: "done" });
   await pending;
+  const collected = await f.execute("evimed_await", {});
+  assert.equal(collected.value.data.results[0].status, "completed", JSON.stringify(collected.value));
   const settled = [...f.childRows.values()][0];
   assert.equal(settled.status, "completed");
   assert.equal(settled.retried, true);
@@ -1376,7 +1495,7 @@ test("the safety scan reads the reply the user will actually see", async () => {
   const notices = [];
   ctx.provide("evimedDiagnostics", { degrade: (/** @type {any} */ line) => notices.push(`degrade:${line}`), notice: (/** @type {any} */ line) => notices.push(line) });
   ctx.provide("fs", { resolve: async (/** @type {any} */ relative, /** @type {{ cwd?: string }} */ { cwd }) => `${cwd}/${relative}`, readText: async () => null });
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 2, bundleVersion: "0.1.0" });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit: 2, bundleVersion: "0.1.0" });
 
   const onEvent = ctx.listeners.get(SEAMS.events.sessionEvent) ?? [];
   assert.ok(onEvent.length, "the run policy must observe session events");
@@ -1440,7 +1559,7 @@ test("a screening ledger path aimed at a protected file is refused, not written"
       result: Promise.resolve({ structured: { verdicts: [{ id: "r1", decision: "include" }] } }),
     }),
   };
-  await applyScreening(ctx, { batchSize: 25, maxParallelChildren: 4 });
+  await applyScreening(ctx, { batchSize: 25, maxConcurrentChildren: 4 });
 
   const call = (/** @type {any} */ ledgerPath) => ({
     callId: "1",
@@ -1769,7 +1888,7 @@ test("a gate run records the check that raised each issue, not only the issue", 
     writeText: async () => true,
   });
 
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 3, structuralAttemptAllowance: 2, bundleVersion: "0.1.0" });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit: 3, structuralAttemptAllowance: 2, bundleVersion: "0.1.0" });
   for (const handler of ctx.listeners.get(SEAMS.events.sessionStart) ?? []) {
     handler({ agent: { session: { id: "s-gate", header: { cwd: "/workspace" } } }, source: "startup" });
   }

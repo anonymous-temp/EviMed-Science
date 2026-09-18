@@ -95,6 +95,7 @@ import {
   RUNTIME_CAPABILITY_SKILLS_DIR,
   RUNTIME_KERNEL_NAME,
   RuntimeManager,
+  runtimeCompactionSettings,
   runtimeNetworkRequiresEgressOptIn,
   runtimeNetworkUsesHostOrContainer,
   validateEviMedAdapterConfig,
@@ -5748,10 +5749,16 @@ async function readinessRuntime(config, runtimeManager) {
   // on and cannot set over HTTP. Without them in readiness the harness could
   // only write the word "declaredOnly" in its report, which reads like a
   // result and is an admission that nobody checked.
+  // The threshold and the request-size guard are what a launched runtime is
+  // given (runtimeCompactionSettings), read back here so a lever set in .env
+  // can be seen to have reached the launch plan.
+  const compaction = runtimeCompactionSettings(config);
   const kernel = {
     kernel: RUNTIME_KERNEL_NAME,
     kernelVersion: config.dshVersion,
     compactionPolicy: config.runtimeCompactionPolicy,
+    compactionThresholdRatio: compaction.config.thresholdRatio,
+    compactionMaxRequestBytes: compaction.maxRequestBytes,
     capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,
   };
   // The kernel's browser application is this product's session surface, so a

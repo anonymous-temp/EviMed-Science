@@ -287,6 +287,25 @@ services:
       # run after its own gate has read it. Unset is 0: findings are attached to
       # the delivery instead (config.mjs `gateRepairRounds`).
       OPEN_SCIENCE_GATE_REPAIR_ROUNDS:
+      # Delegation limits, read wherever a launch plan is built — here and in
+      # the runtime controller below: the children one run may start over its
+      # life, and the children that may work at the same moment (also the
+      # screening wave). Unset, both are 30 (config.mjs `maxChildrenTotal`,
+      # `maxConcurrentChildren`).
+      OPEN_SCIENCE_MAX_CHILDREN_TOTAL:
+      OPEN_SCIENCE_MAX_CONCURRENT_CHILDREN:
+      # Compaction, read wherever a launch plan is built — here, where readiness
+      # reports it, and in the runtime controller below, which forwards it into
+      # every runtime as EVIMED_COMPACTION_*. Unset: the kernel's own engine at
+      # 0.8 of the context window, and one forced compaction when a request
+      # reaches three quarters of the model gateway's body limit
+      # (harness-port compaction.mjs).
+      OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY:
+      OPEN_SCIENCE_RUNTIME_COMPACTION_THRESHOLD_RATIO:
+      OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_RATIO:
+      OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_TOKENS:
+      OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_TOKENS:
+      OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_REQUEST_BYTES:
       # Which component ranks a recall. `openviking` is what this stack starts;
       # `builtin` is the term matcher, which needs nothing deployed and is what
       # a recall falls back to when the index is unreachable.
@@ -1142,6 +1161,19 @@ services:
       OPEN_SCIENCE_MAX_JSON_BYTES: ${OPEN_SCIENCE_MAX_JSON_BYTES:-12582912}
       OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES: ${OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES:-1048576}
       OPEN_SCIENCE_KERNEL_TIMEOUT_MS: ${OPEN_SCIENCE_KERNEL_TIMEOUT_MS:-10000}
+      # The controller builds the hosted launch plan, so the container's
+      # delegation limits come from its environment, not the web API's.
+      OPEN_SCIENCE_MAX_CHILDREN_TOTAL:
+      OPEN_SCIENCE_MAX_CONCURRENT_CHILDREN:
+      # And its compaction settings, including the request-size guard, which is
+      # a share of the web API's model gateway body limit.
+      OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY:
+      OPEN_SCIENCE_RUNTIME_COMPACTION_THRESHOLD_RATIO:
+      OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_RATIO:
+      OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_TOKENS:
+      OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_TOKENS:
+      OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_REQUEST_BYTES:
+      OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: ${OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES:-2097152}
       <<: *runtime-caps
     volumes:
       - open-science-data:/data:ro

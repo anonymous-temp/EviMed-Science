@@ -244,6 +244,25 @@ export const COMPACTION_ENV_KEYS = Object.freeze({
   retainRatio: Object.freeze(['EVIMED_COMPACTION_RETAIN_RATIO', 'OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_RATIO']),
   retainTokens: Object.freeze(['EVIMED_COMPACTION_RETAIN_TOKENS', 'OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_TOKENS']),
   maxTokens: Object.freeze(['EVIMED_COMPACTION_MAX_TOKENS', 'OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_TOKENS']),
+  maxRequestBytes: Object.freeze(['EVIMED_COMPACTION_MAX_REQUEST_BYTES', 'OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_REQUEST_BYTES']),
+})
+
+/**
+ * The request-size guard's defaults.
+ *
+ * The token threshold is not the only wall. Every model request leaves the
+ * container through the control plane's model gateway, which refuses a body
+ * over `OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES` (2 MiB by default) with a
+ * 413 and no retry — so a run whose context grows faster in bytes than in
+ * tokens, or a deployment that declares a larger context window, dies at the
+ * gateway before pressure compaction would ever fire (review appendix E §3.1).
+ * The guard forces one compaction when the next request would pass a share of
+ * that limit; the share leaves room for what the estimate does not count — the
+ * system prompt and the provider envelope.
+ */
+export const REQUEST_BYTES_GUARD = Object.freeze({
+  gatewayMaxBodyBytes: 2 * 1024 * 1024,
+  ratio: 0.75,
 })
 
 /* ------------------------------------------------------------- the packet */
@@ -408,8 +427,12 @@ function collapse(text) {
  * both fails plugin load - so an explicit absolute budget wins and the ratio is
  * reported as the one that lost.
  *
+ * `maxRequestBytes` is ours, not the backend's, and stays out of `config`,
+ * which is handed to the engine whole. Unset, it is {@link REQUEST_BYTES_GUARD}'s
+ * share of the gateway's body limit; `0` turns the guard off.
+ *
  * @param {Record<string, string | undefined>} [env]
- * @returns {{ policy: string, config: { thresholdRatio: number, maxTokens: number, retainRatio?: number, retainTokens?: number }, invalid: string[] }}
+ * @returns {{ policy: string, config: { thresholdRatio: number, maxTokens: number, retainRatio?: number, retainTokens?: number }, maxRequestBytes: number, invalid: string[] }}
  */
 export function compactionConfigFromEnv(env = {}) {
   /** @type {string[]} */
@@ -436,16 +459,21 @@ export function compactionConfigFromEnv(env = {}) {
   const retainTokens = positiveInteger(read(COMPACTION_ENV_KEYS.retainTokens), invalid)
   const rawRetainRatio = read(COMPACTION_ENV_KEYS.retainRatio)
   const retainRatio = ratio(rawRetainRatio, invalid)
+  const gatewayMaxBodyBytes = positiveInteger(read(['OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES']), invalid)
+    ?? REQUEST_BYTES_GUARD.gatewayMaxBodyBytes
+  const maxRequestBytes = nonNegativeInteger(read(COMPACTION_ENV_KEYS.maxRequestBytes), invalid)
+    ?? Math.floor(gatewayMaxBodyBytes * REQUEST_BYTES_GUARD.ratio)
 
   if (retainTokens !== null) {
     if (retainRatio !== null && rawRetainRatio) {
       invalid.push(`${rawRetainRatio.name}=${rawRetainRatio.value} (ignored: an absolute retain budget is also set)`)
     }
-    return { policy, config: { thresholdRatio, maxTokens, retainTokens }, invalid }
+    return { policy, config: { thresholdRatio, maxTokens, retainTokens }, maxRequestBytes, invalid }
   }
   return {
     policy,
     config: { thresholdRatio, maxTokens, retainRatio: retainRatio ?? COMPACTION_DEFAULTS.retainRatio },
+    maxRequestBytes,
     invalid,
   }
 }
@@ -454,7 +482,7 @@ export function compactionConfigFromEnv(env = {}) {
  * The env pairs the control plane must forward into the runtime container,
  * derived from the same function that reads them so a setting cannot exist on
  * one side of the boundary only.
- * @param {{ policy: string, config: { thresholdRatio: number, maxTokens: number, retainRatio?: number, retainTokens?: number } }} derived
+ * @param {{ policy: string, config: { thresholdRatio: number, maxTokens: number, retainRatio?: number, retainTokens?: number }, maxRequestBytes?: number }} derived
  * @returns {Record<string, string>}
  */
 export function compactionRuntimeEnv(derived) {
@@ -463,6 +491,7 @@ export function compactionRuntimeEnv(derived) {
     EVIMED_COMPACTION_POLICY: String(derived.policy),
     EVIMED_COMPACTION_THRESHOLD_RATIO: String(derived.config.thresholdRatio),
     EVIMED_COMPACTION_MAX_TOKENS: String(derived.config.maxTokens),
+    EVIMED_COMPACTION_MAX_REQUEST_BYTES: String(derived.maxRequestBytes ?? 0),
   }
   if (derived.config.retainTokens === undefined) env.EVIMED_COMPACTION_RETAIN_RATIO = String(derived.config.retainRatio)
   else env.EVIMED_COMPACTION_RETAIN_TOKENS = String(derived.config.retainTokens)
@@ -481,12 +510,76 @@ function ratio(raw, invalid) {
 }
 
 /** @param {{ name: string, value: string } | null} raw @param {string[]} invalid @returns {number | null} */
+function nonNegativeInteger(raw, invalid) {
+  if (!raw) return null
+  const value = Number(raw.value)
+  if (Number.isSafeInteger(value) && value >= 0) return value
+  invalid.push(`${raw.name}=${raw.value} (must be a non-negative integer)`)
+  return null
+}
+
+/** @param {{ name: string, value: string } | null} raw @param {string[]} invalid @returns {number | null} */
 function positiveInteger(raw, invalid) {
   if (!raw) return null
   const value = Number(raw.value)
   if (Number.isSafeInteger(value) && value > 0) return value
   invalid.push(`${raw.name}=${raw.value} (must be a positive integer)`)
   return null
+}
+
+/* ------------------------------------------------- the request-size guard */
+
+const utf8 = new TextEncoder()
+
+/**
+ * The UTF-8 size of the request an agent's next step would send, estimated
+ * from what the kernel holds: its derived message history, the inbox batch
+ * the step claims, and the tool schemas of its current request header. The
+ * system prompt and the provider envelope are not counted; the guard's share
+ * of the gateway limit ({@link REQUEST_BYTES_GUARD}) is the room left for them.
+ *
+ * The kernel's derived messages are shared, frozen objects it reuses from one
+ * step to the next, so each is measured once and remembered by identity: a
+ * step pays for the messages it added, not for the whole history again.
+ *
+ * @param {any} agent
+ * @param {readonly any[]} [claimed] the messages this step took from the inbox
+ * @param {WeakMap<object, number>} [sizes] sizes already measured, by object
+ * @returns {number}
+ */
+export function nextRequestBytes(agent, claimed = [], sizes = new WeakMap()) {
+  const session = agent?.session
+  if (typeof session?.deriveMessages !== 'function') return 0
+  /** @param {any} value @returns {number} */
+  const measure = (value) => {
+    if (!value || typeof value !== 'object') return utf8.encode(JSON.stringify(value) ?? '').byteLength
+    const known = sizes.get(value)
+    if (known !== undefined) return known
+    const size = utf8.encode(JSON.stringify(value) ?? '').byteLength
+    sizes.set(value, size)
+    return size
+  }
+  let bytes = 0
+  for (const message of session.deriveMessages()) bytes += measure(message)
+  for (const message of claimed ?? []) bytes += measure(message)
+  const tools = session.requestHeader?.()?.tools
+  if (Array.isArray(tools)) bytes += measure(tools)
+  return bytes
+}
+
+/**
+ * Force one compaction below the token threshold, through the backend's own
+ * context-overflow path: the call the kernel makes when a provider refuses a
+ * request as too long, which bypasses the pressure threshold and the retained
+ * tail to make one useful reduction. Null when the composition has no
+ * compaction service or nothing could be compacted.
+ * @param {any} ctx @param {any} agent @param {AbortSignal} signal
+ * @returns {Promise<any>}
+ */
+export async function forceCompaction(ctx, agent, signal) {
+  const compaction = ctx?.get?.('compaction') ?? ctx?.compaction
+  if (typeof compaction?.compactIfNeeded !== 'function') return null
+  return compaction.compactIfNeeded(agent, SEAMS.providers.compaction.triggers[1], signal)
 }
 
 /* ------------------------------------------------------------- the engine */
