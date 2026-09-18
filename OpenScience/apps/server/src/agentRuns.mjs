@@ -3609,6 +3609,17 @@ export class AgentRunStore {
   }
 
   /**
+   * The runs of a project that are still going, by id — what the model
+   * gateway asks to attribute an interactive runtime's request to its run
+   * (E §9.4). A fold with no phase walk, because it is asked per request.
+   * @param {any} project @returns {Promise<string[]>}
+   */
+  async activeRunIds(project) {
+    const runs = foldEvents(parseEvents(await readLedgerText(project, this.maxBytes)));
+    return [...runs.values()].filter((run) => run.status === "running").map((run) => run.id);
+  }
+
+  /**
    * How much a project has been used, for its list row (C4): how many runs it
    * holds and when anything last happened in one. Cheaper than `list` — no
    * phase walk — because the project list reads it for every project.

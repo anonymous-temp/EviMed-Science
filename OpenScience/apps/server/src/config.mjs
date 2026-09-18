@@ -1398,5 +1398,10 @@ export function loadConfig(overrides = {}) {
     // the critical path (runTitles.mjs). Off leaves every run named by its
     // question, which is also what any failure leaves.
     runTitlesEnabled: overrides.runTitlesEnabled ?? boolEnv("OPEN_SCIENCE_RUN_TITLES_ENABLED", true),
+    // Per-run spend cap for interactive runs, in CNY; 0 = none. Enforceable
+    // since the model gateway attributes an interactive runtime's calls to
+    // the run (modelGateway.mjs `attributeRun`); bounded runtimes carry
+    // their own cap in their token.
+    userRunSpendLimit: Number(overrides.userRunSpendLimit ?? process.env.OPEN_SCIENCE_USER_RUN_SPEND_LIMIT ?? 0),
   };
 }
