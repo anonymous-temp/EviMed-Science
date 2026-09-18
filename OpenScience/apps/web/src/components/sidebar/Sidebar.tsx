@@ -130,6 +130,10 @@ export function Sidebar() {
   };
 
   const needle = query.trim().toLowerCase();
+  // Local filtering over the recent runs' titles. Integration seam: the frame
+  // stream's `useRuntimeSessionSearch()` (lib/runtimeUiBridge.ts, S3) returns
+  // the kernel's own conversation matches for the same query; they merge in
+  // here, beside — not instead of — these rows.
   const rows = (runs ?? [])
     .filter((run) => !needle || runTitle(run).toLowerCase().includes(needle))
     .slice(0, RECENT_RUNS);

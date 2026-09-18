@@ -71,6 +71,7 @@ import { toast } from "@/lib/toast";
 import { QualityNotices } from "@/components/runs/QualityNotices";
 import { RunStatusDot } from "@/components/runs/RunStatusDot";
 import { RouteLine } from "@/components/runs/RouteLine";
+import { ReportRunContext } from "@/components/report/ReportRunContext";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Button, buttonClasses } from "@/components/ui/Button";
@@ -271,7 +272,7 @@ function HostedRunsView() {
   const [runs, setRuns] = useState<WebAgentRun[] | null>(null); // null = loading
   // A deliverable opened in place: a report, its matrix, a table — with the
   // same viewers the files page uses, instead of download-only rows.
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ path: string; run: WebAgentRun } | null>(null);
   const [filter, setFilter] = useState<Filter>({ search: "" });
   const [debounced, setDebounced] = useState("");
   // `?run=` is how every link into this page names the run it means — the
@@ -473,7 +474,7 @@ function HostedRunsView() {
 
   return (
     <ConnectorsContext.Provider value={connectors}>
-      <FilePreviewContext.Provider value={setPreviewPath}>
+      <FilePreviewContext.Provider value={(path, run) => setPreview({ path, run })}>
         <div className="h-full overflow-y-auto">
           <div className="mx-auto max-w-content-wide px-8 py-8">
             <PageHeader
@@ -520,7 +521,7 @@ function HostedRunsView() {
             </div>
           </div>
         </div>
-        {previewPath && <RunFilePreview path={previewPath} onClose={() => setPreviewPath(null)} />}
+        {preview && <RunFilePreview path={preview.path} run={preview.run} onClose={() => setPreview(null)} />}
       </FilePreviewContext.Provider>
     </ConnectorsContext.Provider>
   );
@@ -813,7 +814,7 @@ function RunDetail({
             <ul className="space-y-1">
               {run.artifacts.map((path) => (
                 <li key={path}>
-                  <ArtifactRow path={path} />
+                  <ArtifactRow path={path} run={run} />
                   <DeliverableFeedback runId={run.id} path={path} />
                 </li>
               ))}
@@ -832,7 +833,7 @@ function RunDetail({
               <ul className="space-y-0.5">
                 {undelivered.map((path) => (
                   <li key={path}>
-                    <ArtifactRow path={path} unverified />
+                    <ArtifactRow path={path} run={run} unverified />
                   </li>
                 ))}
               </ul>
@@ -846,6 +847,16 @@ function RunDetail({
         notices={run.qualityNotices}
         verification={run.verification}
         hasArtifacts={hasArtifacts}
+        // A finding that names a claim opens the report at that claim.
+        renderLineAction={(line) => {
+          const report = reportArtifact(run);
+          if (!line.claimId || !report) return null;
+          return (
+            <Link to={`${readerHref(run.id, report)}#${line.claimId}`} className="shrink-0 text-caption text-link hover:underline">
+              在报告中查看
+            </Link>
+          );
+        }}
         className="rounded-card border border-border bg-surface p-3"
       />
 
@@ -1151,14 +1162,24 @@ function DeliverableFeedback({ runId, path }: { runId: string; path: string }) {
 const FilePreviewInspector = lazy(() => import("@/components/inspector/FilePreviewInspector").then((m) => ({ default: m.FilePreviewInspector })));
 
 /** Opens a run's file in place; absent outside the runs page. */
-const FilePreviewContext = createContext<((path: string) => void) | null>(null);
+const FilePreviewContext = createContext<((path: string, run: WebAgentRun) => void) | null>(null);
+
+/** The run's clinical evidence report, the file a finding's claim lives in. */
+function reportArtifact(run: WebAgentRun): string | null {
+  return run.artifacts.find((path) => path.endsWith("/clinical-evidence-report.md") || path === "clinical-evidence-report.md") ?? null;
+}
+
+/** The standalone reader for one of a run's files. */
+function readerHref(runId: string, path: string): string {
+  return `/app/runs/${encodeURIComponent(runId)}/files/${path.split("/").map(encodeURIComponent).join("/")}`;
+}
 
 /**
  * A deliverable previewed beside the ledger (2026-09-16 review, P2 #14: a
  * run's output was a list of paths to download). The viewer is the one the
  * files page uses, so a clinical report opens with its citations.
  */
-function RunFilePreview({ path, onClose }: { path: string; onClose: () => void }) {
+function RunFilePreview({ path, run, onClose }: { path: string; run: WebAgentRun; onClose: () => void }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -1178,10 +1199,12 @@ function RunFilePreview({ path, onClose }: { path: string; onClose: () => void }
         className="h-full w-full max-w-content-wide border-l border-border bg-bg shadow-modal"
       >
         <Suspense fallback={<p className="p-6 text-ui text-muted">正在打开预览…</p>}>
-          <FilePreviewInspector
-            data={{ variant: "file", path, filename, artifact: extToKind(extOf(filename)), root: "workspace" }}
-            onClose={onClose}
-          />
+          <ReportRunContext.Provider value={{ runId: run.id, run }}>
+            <FilePreviewInspector
+              data={{ variant: "file", path, filename, artifact: extToKind(extOf(filename)), root: "workspace" }}
+              onClose={onClose}
+            />
+          </ReportRunContext.Provider>
         </Suspense>
       </div>
     </div>
@@ -1191,7 +1214,7 @@ function RunFilePreview({ path, onClose }: { path: string; onClose: () => void }
 /** One downloadable file. `unverified` marks a file the gate did not accept;
  *  the marker carries the same weight as the path, because a reader must not
  *  be able to take one of these for graded work. */
-function ArtifactRow({ path, unverified }: { path: string; unverified?: boolean }) {
+function ArtifactRow({ path, run, unverified }: { path: string; run: WebAgentRun; unverified?: boolean }) {
   // The file's name is what a reader recognizes; the folder it sits in is the
   // workspace's bookkeeping (2026-09-16 walk, U13), kept beside it, quieter.
   const slash = path.lastIndexOf("/");
@@ -1215,9 +1238,14 @@ function ArtifactRow({ path, unverified }: { path: string; unverified?: boolean 
         <ExternalLink size={12} className="shrink-0 text-muted opacity-0 group-hover:opacity-100" aria-hidden="true" />
       </button>
       {preview && (
-        <Button size="sm" variant="ghost" onClick={() => preview(path)} aria-label={`预览 ${name}`}>
+        <Button size="sm" variant="ghost" onClick={() => preview(path, run)} aria-label={`预览 ${name}`}>
           预览
         </Button>
+      )}
+      {/\.(md|markdown)$/i.test(name) && (
+        <Link to={readerHref(run.id, path)} className={buttonClasses({ size: "sm", variant: "ghost" })} aria-label={`在阅读器中打开 ${name}`}>
+          阅读
+        </Link>
       )}
     </div>
   );

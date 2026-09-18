@@ -15,7 +15,9 @@ const claims = parseClaimMatrix(JSON.stringify({ claims: [
 describe("a report sentence opens what it rests on", () => {
   it("shows the claim, its verbatim quote and its source, and names a claim the matrix lacks", async () => {
     render(<MarkdownViewer variant="document" claims={claims}>{report}</MarkdownViewer>);
-    const citation = screen.getByRole("button", { name: "查看这句话的依据（2 条主张）" });
+    // A citation that points at a claim the matrix does not hold is itself
+    // something to check, so the sentence is flagged.
+    const citation = screen.getByRole("button", { name: "查看这句话的依据（2 条主张，其中有未核对上的引文）" });
     await userEvent.click(citation);
     expect(await screen.findByText("MIMIC-IV 是单一机构常规诊疗数据的公开衍生数据库。")).toBeInTheDocument();
     expect(screen.getByText("“In this paper we describe the public release of MIMIC-IV”")).toBeInTheDocument();

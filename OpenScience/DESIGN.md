@@ -104,6 +104,7 @@ colors:
   info-soft:      "{colors.info-50}"
   verify-ok:      "{colors.brand-700}"
   verify-pending: "{colors.warn-800}"
+  highlight:      "{colors.warn-300}"   # a located quotation in a preserved source
   focus:          "{colors.brand-700}"
   badge:          "{colors.danger-700}"
   badge-fg:       "#ffffff"
@@ -131,6 +132,7 @@ colors:
   dark-info-soft:      "{colors.info-950}"
   dark-verify-ok:      "{colors.brand-300}"
   dark-verify-pending: "{colors.warn-300}"
+  dark-highlight:      "{colors.warn-800}"
   dark-focus:          "{colors.brand-400}"
   dark-badge:          "{colors.danger-600}"
   dark-dot-running:    "{colors.info-400}"
@@ -533,8 +535,10 @@ tables scroll horizontally with the first column frozen. No page may scroll hori
 
 ### Image Behavior
 Figures inside a report keep a white background in both themes (a chart printed on a dark card is
-unreadable and unprintable); the report prose itself follows the theme. Printing gets white paper
-from the print stylesheet.
+unreadable and unprintable); the report prose itself follows the theme. Printing gets white paper:
+the reader mounts a print copy of the report while the browser prints (`beforeprint`), re-scoped to
+the light tokens with `data-theme="light"`, and the print stylesheet hides everything else — so
+「打印 / 存为 PDF」 gives the report and its facts, each 依据 mark a plain word, never the shell.
 
 ## Iteration Guide
 
