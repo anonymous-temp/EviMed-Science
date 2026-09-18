@@ -12,7 +12,6 @@ import {
   Loader2,
   MessageSquare,
   RotateCcw,
-  ScrollText,
   Search,
   X,
 } from "lucide-react";
@@ -35,12 +34,12 @@ import {
   OPEN_DOMAIN_ANSWER_AGENT_ID,
   runDidNotDeliver,
   runTitle,
-  summarizeQualityNotices,
   undeliveredFiles,
   webRunOutcome,
   WEB_RUN_STATUS_LABEL,
 } from "@/lib/runPresentation";
 import { capabilityTitle } from "@/lib/researchAgentUi";
+import { QualityNotices } from "@/components/runs/QualityNotices";
 import { cn } from "@/lib/cn";
 import { PageTitle } from "@/components/layout/PageTitle";
 
@@ -542,7 +541,6 @@ function WebRunRow({
 }) {
   const failed = run.status === "failed";
   const ts = webRunTs(run);
-  const notices = summarizeQualityNotices(run.qualityNotices ?? []);
   const hasArtifacts = run.artifacts.length > 0;
   // `null` when the ledger does not carry the field at all — which is not the
   // same as "there are none", so the row stays silent rather than claiming the
@@ -653,66 +651,12 @@ function WebRunRow({
           {/* The verdict and its reasons were computed, stored, and returned by
             * the API, and then rendered nowhere: a package delivered with seven
             * named gaps looked exactly like a clean one. */}
-          {(run.verification != null || notices.total > 0) && (
-            <div className="rounded-card border border-border-faint bg-surface-2/40 p-2">
-              <div className="mb-1 flex items-center gap-1.5 text-caption font-medium uppercase tracking-wider text-muted">
-                <ScrollText size={12} aria-hidden="true" />
-                {run.verification === "unverified" && "已交付，但未完成核验"}
-                {/* Not the same statement, and it used to render as the absence
-                  * of any statement: a layer of the gate did not run here, so
-                  * nothing below says that layer found the package sound. */}
-                {run.verification === "unchecked" && "已交付，但有一层没有检查过"}
-                {run.verification == null && "核验提示"}
-                {notices.total > 0 && (
-                  <span className="normal-case tracking-normal">
-                    {notices.safety > 0 && <span className="text-error"> · 临床安全 {notices.safety} 项</span>}
-                    {" "}· 未通过核验 {notices.mustFix - notices.safety} 项 · 提示 {notices.advisory} 项
-                  </span>
-                )}
-              </div>
-              {/* The clause about files is conditional: the unverified path can
-                * finish with no files at all (an open-domain answer has none by
-                * design), and this paragraph used to promise downloadable
-                * artifacts directly above an empty artifact list. */}
-              {run.verification === "unverified" && (
-                <p className="mb-1.5 text-caption text-text/80">
-                  {hasArtifacts
-                    ? "产物可以照常下载和阅读；以下各点是本次分析未能自证的部分，请在引用前自行核对。打开报告，句末的「依据」逐条标出哪些引文已在保存的原文中核对、哪些没有。"
-                    : "本次没有文件产出；以下各点是本次分析未能自证的部分，请在引用前自行核对。"}
-                </p>
-              )}
-              {run.verification === "unchecked" && (
-                <p className="mb-1.5 text-caption text-text/80">
-                  {hasArtifacts ? "产物可以照常下载和阅读；" : ""}
-                  本次交付有一层核验根本没有执行，以下说明是哪一层、为什么没执行。 没有发现问题不等于检查过。
-                </p>
-              )}
-              <ul className="space-y-2">
-                {notices.groups.map((group) => (
-                  <li key={`${group.mustFix}-${group.label}`}>
-                    <div className="flex items-center gap-1.5 text-caption">
-                      {group.mustFix && (
-                        <span className={cn("shrink-0 rounded px-1 py-px text-caption font-medium",
-                          group.safety ? "bg-error text-error-fg" : "bg-error/10 text-error")}>
-                          {group.safety ? "临床安全" : "未通过核验"}
-                        </span>
-                      )}
-                      <span className="font-medium text-text">{group.label}</span>
-                      <span className="tabular-nums text-muted">{group.items.length}</span>
-                    </div>
-                    <ul className="mt-0.5 space-y-0.5">
-                      {group.items.map((item, index) => (
-                        <li key={index} className="flex gap-1.5 leading-relaxed text-text/70">
-                          <span className="shrink-0 text-muted">·</span>
-                          <span className="min-w-0 break-words">{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <QualityNotices
+            notices={run.qualityNotices}
+            verification={run.verification}
+            hasArtifacts={hasArtifacts}
+            className="rounded-card border border-border bg-surface p-3"
+          />
 
           {/* What the platform knew about this researcher and used here. The
             * count is the point — an answer that silently drew on a stored

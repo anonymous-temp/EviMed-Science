@@ -7,6 +7,7 @@ import { createAgenda, decideDigest, getDigest, listAgendas, listDigests, markDi
 import { productErrorMessage } from "@/lib/productClient";
 import { toast } from "@/lib/toast";
 import { listInbox, type InboxItem } from "@/lib/inboxClient";
+import { InboxBody } from "@/components/inbox/InboxBody";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
@@ -418,7 +419,7 @@ export function AutopilotPage() {
     {decisions.length > 0 && <section className="space-y-2" aria-label="需要你决定">
       <h2 className="font-serif text-body text-text">需要你决定</h2>
       {decisions.map((item) => <Card key={item.id} title={item.title} hint={item.noticeType === "review" ? "需要审阅" : "等待回答"}>
-        <p className="text-ui text-muted">{item.body}</p>
+        <InboxBody body={item.body} />
         <Button className="mt-2" size="sm" variant="ghost" onClick={() => navigate("/app/inbox")}>去收件箱处理</Button>
       </Card>)}
     </section>}

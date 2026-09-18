@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { inboxErrorMessage, listInbox, markInboxRead, resolveInboxItem, type InboxItem } from "@/lib/inboxClient";
 import { PageTitle } from "@/components/layout/PageTitle";
+import { InboxBody } from "@/components/inbox/InboxBody";
 import { Link } from "react-router";
 
 const TYPE_LABEL = { review: "需要审阅", question: "等待回答", notify: "通知" } as const;
@@ -125,7 +126,7 @@ function InboxCard({ item, busy, onRead, onResolve }: {
           {item.count > 1 && <span className="text-caption text-muted">合并 {item.count} 条</span>}</div>
         {completed && <span className="flex items-center gap-1 text-caption text-ok"><CheckCircle2 size={13} aria-hidden="true" />已处理</span>}
       </div>
-      <div><h2 className="text-body font-medium text-text">{item.title}</h2><p className="mt-1 whitespace-pre-wrap text-ui text-muted">{item.body}</p></div>
+      <div><h2 className="text-body font-medium text-text">{item.title}</h2><InboxBody body={item.body} className="mt-1" /></div>
       {availableActions.length > 0 && <div className="flex flex-wrap gap-2">{availableActions.map((action) => {
         const variant: ButtonVariant = action.style === "danger" ? "danger" : action.style === "primary" ? "primary" : "ghost";
         // `Link`, not `<a href>`: a bare anchor inside the shell reloaded the
