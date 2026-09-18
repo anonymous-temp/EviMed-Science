@@ -295,7 +295,7 @@ def collect_one(
         opener,
         "POST",
         f"{base}/api/agent-runs/dispatch",
-        {"sessionId": session_id, "dispatchId": dispatch_id, "text": question["question"]},
+        {"sessionId": session_id, "dispatchId": dispatch_id, "text": question["question"], "automated": True},
         headers=headers,
     )
     run_id = unwrap(dispatched, "dispatch").get("id")

@@ -27,9 +27,10 @@
  * @module dshEventPump
  */
 
-import { DshRuntimeAdapter, decodeHostInteraction, sessionListItems } from "./dshRuntimeAdapter.mjs";
+import { DshRuntimeAdapter, decodeHostInteraction, delegatedChildrenOf, sessionListItems, subagentAddress } from "./dshRuntimeAdapter.mjs";
 import { Buffer } from "node:buffer";
 import { randomBytes } from "node:crypto";
+import { phaseOfToolCall } from "@evimed/domain";
 
 import { DshMux } from "./dshMux.mjs";
 import { readRuntimeResponseBody, requestRuntime } from "./runtimeManager.mjs";
@@ -132,7 +133,9 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
  * @property {{ userId: string, id: string }} project
  * @property {AbortController} controller
  * @property {Map<string, string>} rootSessions - kernel sessionId -> run id, for a run's own top-level session
- * @property {Map<string, { runId: string, label: string, capability: string }>} childSessions - kernel sessionId -> owning run, for a subagent's session
+ * @property {Map<string, { runId: string, label: string, capability: string, parentSessionId?: string, mode?: string, modeLookups?: number }>} childSessions - kernel sessionId -> owning run, for a subagent's session; `parentSessionId` and `mode` make its durable follow address
+ * @property {Set<string>} resolvingModes - children whose address mode is being read from the parent's catalogue
+ * @property {Map<string, Map<string, string | null>>} callPhases - per session, the phase each open tool call was labelled with, so its result carries the same label
  * @property {Map<string, string>} childOwners - first run that owned a child session, retained until the runtime detaches
  * @property {Map<string, { summary: Record<string, any>, runId: string|null }>} childAnnouncements - live HOST announcements bound to the run active when they arrived
  * @property {Map<string, number>} sessionHeads - highest trusted event sequence observed for each followed session
@@ -157,7 +160,7 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
  */
 export class RuntimeEventPump {
   /**
-   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string) => Promise<any>, adoptIntervalMs?: number, onRunActivity?: (project: any, runId: string, activity: { sessionId: string, seq: number, stream?: {attemptId: string, index: number} }) => void, onCompaction?: (project: any, runId: string, record: { seq: number, replaced: number, tokens: number }) => void }} options
+   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string, summary?: Record<string, any>) => Promise<any>, adoptIntervalMs?: number, onRunActivity?: (project: any, runId: string, activity: { sessionId: string, seq: number, stream?: {attemptId: string, index: number} }) => void, onCompaction?: (project: any, runId: string, record: { seq: number, replaced: number, tokens: number }) => void, onRunEvent?: (project: any, runId: string, observed: { sessionId: string, child: boolean, replay: boolean, event: import('@evimed/domain').RunEvent }) => void }} options
    */
   constructor({
     runEvents,
@@ -178,6 +181,11 @@ export class RuntimeEventPump {
     // 400,000, so pressure compaction is unreachable inside the budget and
     // nobody could tell that from "it happens and we do not log it".
     onCompaction = () => {},
+    // Every event this pump routed to a run, root and child alike, for the
+    // run's progress aggregate. The browser's stream is one consumer of these
+    // events; the ledger's `run/progress` is the other, and it cannot read the
+    // browser's channel.
+    onRunEvent = () => {},
   }) {
     this.adoptSession = adoptSession;
     this.runEvents = runEvents;
@@ -192,6 +200,7 @@ export class RuntimeEventPump {
     this.adoptIntervalMs = adoptIntervalMs;
     this.onRunActivity = onRunActivity;
     this.onCompaction = onCompaction;
+    this.onRunEvent = onRunEvent;
     /** @type {Map<string, PumpProjectState>} */
     this.projects = new Map();
     /** Adoptions still writing, so `closeAll` can wait for them. @type {Set<Promise<void>>} */
@@ -222,7 +231,7 @@ export class RuntimeEventPump {
     if (this.projects.has(key)) return;
     const controller = new AbortController();
     /** @type {PumpProjectState} */
-    const state = { project, controller, rootSessions: new Map(), childSessions: new Map(), childOwners: new Map(), childAnnouncements: new Map(), sessionHeads: new Map(), follows: new Map(), resync: null, pending: new Map(), adopting: new Set(), adoptionHeads: new Map(), rootTurnSeqs: new Map(), rootTurnEnds: new Map(), rootInputs: new Map() };
+    const state = { project, controller, rootSessions: new Map(), childSessions: new Map(), childOwners: new Map(), childAnnouncements: new Map(), sessionHeads: new Map(), follows: new Map(), resync: null, pending: new Map(), adopting: new Set(), adoptionHeads: new Map(), rootTurnSeqs: new Map(), rootTurnEnds: new Map(), rootInputs: new Map(), resolvingModes: new Set(), callPhases: new Map() };
     this.projects.set(key, state);
     // On the project's own lifetime, not the mux's: a reconnect must not reset
     // the sweep's clock, and the kernel is reachable for `session/list` whether
@@ -316,10 +325,12 @@ export class RuntimeEventPump {
     } else if (state.rootSessions.get(run.sessionId) === run.id) {
       state.rootSessions.delete(run.sessionId);
       state.sessionHeads.delete(run.sessionId);
+      state.callPhases.delete(run.sessionId);
       for (const [sessionId, child] of state.childSessions) {
         if (child.runId === run.id) {
           state.childSessions.delete(sessionId);
           state.sessionHeads.delete(sessionId);
+          state.callPhases.delete(sessionId);
         }
       }
       for (const [sessionId, announcement] of state.childAnnouncements) {
@@ -421,13 +432,30 @@ export class RuntimeEventPump {
         const wanted = new Set([...state.rootSessions.keys(), ...state.childSessions.keys()]);
         for (const sessionId of wanted) {
           if (state.follows.has(sessionId)) continue;
+          // A child is followed at its parent's durable address or not at all:
+          // asked for at its own id the kernel refuses the stream, and that
+          // refusal was swallowed below, so no child was ever heard. The mode
+          // cannot be guessed — the kernel checks it against the child's own
+          // descriptor — so a child announced without one waits until the
+          // parent's catalogue names it.
+          const child = state.childSessions.get(sessionId);
+          let address = null;
+          if (child) {
+            address = child.parentSessionId && child.mode
+              ? subagentAddress(child.parentSessionId, { id: sessionId, mode: child.mode })
+              : null;
+            if (!address) {
+              this.#resolveChildMode(state, adapter, sessionId, signal);
+              continue;
+            }
+          }
           const controller = new AbortController();
           state.follows.set(sessionId, controller);
           const stop = () => controller.abort();
           signal.addEventListener("abort", stop, { once: true });
           (async () => {
             try {
-              for await (const { event, replay } of adapter.watchSession({ sessionId, signal: controller.signal })) {
+              for await (const { event, replay } of adapter.watchSession({ sessionId, signal: controller.signal, address })) {
                 this.#handle(state, sessionId, event, { replay });
               }
             } catch {
@@ -455,6 +483,90 @@ export class RuntimeEventPump {
         resolve(undefined);
       }, { once: true });
       reconcile();
+    });
+  }
+
+  /**
+   * The event with its activity phase, for the two tool events; any other
+   * event is returned as it came.
+   *
+   * A result is labelled with the phase its call was labelled with, because
+   * `write` depends on the call's path argument and a result carries none.
+   * A result whose call this pump did not see — the follow reconnected in
+   * between — is labelled from the tool name alone, which is exact for every
+   * phase but that one.
+   *
+   * @param {PumpProjectState} state @param {string} sessionId
+   * @param {import('@evimed/domain').RunEvent} event
+   * @returns {import('@evimed/domain').RunEvent}
+   */
+  #withPhase(state, sessionId, event) {
+    if (event.type === "tool/call") {
+      const phase = phaseOfToolCall(event.tool, event.input ?? null);
+      let calls = state.callPhases.get(sessionId);
+      if (!calls) {
+        calls = new Map();
+        state.callPhases.set(sessionId, calls);
+      }
+      if (event.callId) {
+        calls.set(event.callId, phase);
+        // Bounded: a call whose result never arrives must not keep its label
+        // for the life of the process.
+        if (calls.size > 512) calls.delete(/** @type {string} */ (calls.keys().next().value));
+      }
+      return { ...event, phase };
+    }
+    if (event.type === "tool/result") {
+      const calls = state.callPhases.get(sessionId);
+      const known = event.callId && calls?.has(event.callId) ? calls.get(event.callId) : undefined;
+      if (known !== undefined) calls?.delete(event.callId);
+      return { ...event, phase: known !== undefined ? /** @type {any} */ (known) : phaseOfToolCall(event.tool, null) };
+    }
+    return event;
+  }
+
+  /**
+   * Reads one child's address mode out of its parent's `subagents/list`.
+   *
+   * Needed only for a child the host announced (`api-session/added`) before
+   * the parent's `subagent/catalog` fact reached this pump: the announcement
+   * names the parent and not the mode, and the mode is the one part of the
+   * address the kernel refuses to have guessed. Bounded twice — a few tries
+   * per round and a few rounds per child — because a catalogue that never
+   * lists the child must not become a loop; the parent's own catalog event,
+   * when it arrives, still sets the mode and starts the follow.
+   *
+   * @param {PumpProjectState} state @param {DshRuntimeAdapter} adapter
+   * @param {string} sessionId @param {AbortSignal} signal
+   */
+  #resolveChildMode(state, adapter, sessionId, signal) {
+    const child = state.childSessions.get(sessionId);
+    if (!child?.parentSessionId || state.resolvingModes.has(sessionId) || signal.aborted) return;
+    const rounds = Number(child.modeLookups ?? 0);
+    if (rounds >= 3) return; // isolated: evimed_runtime_child_mode_unresolved_total
+    state.childSessions.set(sessionId, { ...child, modeLookups: rounds + 1 });
+    state.resolvingModes.add(sessionId);
+    const parentSessionId = child.parentSessionId;
+    (async () => {
+      for (let attempt = 0; attempt < 3 && !signal.aborted; attempt += 1) {
+        try {
+          const rows = await adapter.subagents({ sessionId: parentSessionId, signal });
+          const row = rows.find((item) => String(item?.id ?? item?.childSessionId ?? "") === sessionId);
+          const mode = String(row?.mode ?? "");
+          if (mode === "one-shot" || mode === "continuable") {
+            const current = state.childSessions.get(sessionId);
+            if (current) state.childSessions.set(sessionId, { ...current, mode });
+            return;
+          }
+        } catch {
+          // A catalogue read that fails is retried below and then given up
+          // on; the follow simply does not start for this child.
+        }
+        await delay(this.reconnectDelayMs, signal);
+      }
+    })().finally(() => {
+      state.resolvingModes.delete(sessionId);
+      if (state.childSessions.get(sessionId)?.mode) state.resync?.();
     });
   }
 
@@ -534,7 +646,12 @@ export class RuntimeEventPump {
     const sessionId = String(summary?.sessionId ?? summary?.id ?? "");
     const parentSessionId = String(summary?.parentSessionId ?? summary?.parentSession ?? summary?.header?.parentSession ?? "");
     const origin = String(summary?.origin ?? summary?.header?.origin ?? "");
-    if (!parentSessionId && origin !== "subagent") return false;
+    // A child is what the kernel says is one: `origin: 'subagent'`. A session
+    // with a parent and no such origin is a fork — `session/fork` records the
+    // source as its parent — and a fork is a researcher's own new line of
+    // work, adopted as a run of its own (2026-09-18 decision 6), never bound
+    // as a child of the run it branched from.
+    if (origin !== "subagent") return false;
     if (!sessionId || !parentSessionId) return true;
     const parentChild = state.childSessions.get(parentSessionId);
     const rootRunId = state.rootSessions.get(parentSessionId);
@@ -560,6 +677,11 @@ export class RuntimeEventPump {
       runId,
       label: String(summary?.label ?? existing?.label ?? ""),
       capability: String(summary?.capability ?? existing?.capability ?? ""),
+      // The address half a summary does carry. The mode it does not carry
+      // comes from the parent's catalogue (see `#resolveChildMode`).
+      parentSessionId,
+      ...(existing?.mode ? { mode: existing.mode } : {}),
+      ...(existing?.modeLookups ? { modeLookups: existing.modeLookups } : {}),
     });
     const head = Number(summary?.projections?.asOfSeq ?? summary?.asOfSeq ?? NaN);
     // The catalogue/opening summary describes history. It seeds replay
@@ -610,8 +732,9 @@ export class RuntimeEventPump {
     // A minted session can later be opened in the native UI. Its committed
     // input's request identity, not who created the session, decides ownership.
     // A subagent's session is already owned by its parent's run; adopting it
-    // would file the same work twice.
-    if (summary?.parentSessionId || summary?.origin === "subagent") return;
+    // would file the same work twice. A fork has a parent too and is adopted:
+    // see `#considerChildSession`.
+    if (summary?.origin === "subagent") return;
     const head = summary?.projections?.asOfSeq;
     if (Number.isSafeInteger(head) && state.adoptionHeads.get(sessionId) === head) return;
     if (state.adopting.has(sessionId)) return;
@@ -619,7 +742,7 @@ export class RuntimeEventPump {
     // Tracked, not fired and forgotten. An adoption writes to the project's
     // ledger, and a pump that closed without waiting for it left a write
     // landing in a directory the caller had already started removing.
-    const inFlight = Promise.resolve(this.adoptSession(state.project, sessionId))
+    const inFlight = Promise.resolve(this.adoptSession(state.project, sessionId, summary))
       .then((run) => {
         if (state.controller.signal.aborted) return;
         if (Number.isSafeInteger(head)) state.adoptionHeads.set(sessionId, head);
@@ -642,7 +765,9 @@ export class RuntimeEventPump {
         const sessionId = String(summary.sessionId ?? summary.id ?? "");
         const parentSessionId = String(summary.parentSessionId ?? summary.parentSession ?? summary.header?.parentSession ?? "");
         const origin = String(summary.origin ?? summary.header?.origin ?? "");
-        if (!parentSessionId && origin !== "subagent") return;
+        // Only a subagent is announced as a child; a fork is adopted by the
+        // sweep as a run of its own.
+        if (origin !== "subagent") return;
         const parentChild = state.childSessions.get(parentSessionId);
         const rootRunId = state.rootSessions.get(parentSessionId);
         const runId = parentChild?.runId ?? rootRunId ?? null;
@@ -793,9 +918,45 @@ export class RuntimeEventPump {
       // which by then is already in this map, so nesting resolves without
       // the ledger ever having to enumerate it.
       const firstOwner = state.childOwners.get(event.childSessionId);
-      if (!firstOwner || firstOwner === runId) {
+      if (event.childSessionId && (!firstOwner || firstOwner === runId)) {
+        const existing = state.childSessions.get(event.childSessionId);
         state.childOwners.set(event.childSessionId, runId);
-        state.childSessions.set(event.childSessionId, { runId, label: event.label, capability: event.capability });
+        // The event carries the parent and the mode when it is the parent's
+        // own `subagent/catalog` fact (the path that works at this pin). A
+        // descriptor-derived start arrives on the child's own stream, names
+        // the child itself, and carries neither: it refreshes the label and
+        // keeps the address already known.
+        const parentSessionId = event.parentSessionId || existing?.parentSessionId
+          || (event.childSessionId !== sessionId ? sessionId : "");
+        const mode = event.mode ?? existing?.mode;
+        state.childSessions.set(event.childSessionId, {
+          runId,
+          label: event.label || existing?.label || "",
+          capability: event.capability || existing?.capability || "",
+          ...(parentSessionId ? { parentSessionId } : {}),
+          ...(mode ? { mode } : {}),
+          ...(existing?.modeLookups ? { modeLookups: existing.modeLookups } : {}),
+        });
+        state.resync?.();
+      }
+    }
+    if (event.type === "tool/result" && runId) {
+      // The delegation's own receipt names its child too, the moment the child
+      // exists. A third way in, beside the parent's `subagent/catalog` fact and
+      // the session list's parentage, so following a child never rests on one
+      // kernel fact. The session that made the call is the child's parent; the
+      // mode is not in the receipt and is looked up like any other child's.
+      for (const found of delegatedChildrenOf(event.tool, event.output)) {
+        const firstOwner = state.childOwners.get(found.childSessionId);
+        if (found.childSessionId === sessionId || state.childSessions.has(found.childSessionId)
+          || (firstOwner && firstOwner !== runId)) continue;
+        state.childOwners.set(found.childSessionId, runId);
+        state.childSessions.set(found.childSessionId, {
+          runId,
+          label: found.deliverableId ?? "",
+          capability: "",
+          parentSessionId: sessionId,
+        });
         state.resync?.();
       }
     }
@@ -807,7 +968,22 @@ export class RuntimeEventPump {
         this.onRunActivity(state.project, runId, { sessionId, seq: event.seq, stream: event.stream });
       } else this.#noteRunActivity(state, sessionId, runId, event.seq);
     }
-    this.runEvents.publish(runId, "run/event", { event });
+    // What kind of research work a tool call is, labelled here once so the
+    // browser, the frame and the ledger's progress count the same calls the
+    // same way. A label on an observed call, never a stage the run was told
+    // to enter (principle 12); a call that is none of them carries null.
+    const labelled = this.#withPhase(state, sessionId, event);
+    const fromChild = state.childSessions.has(sessionId);
+    try {
+      this.onRunEvent(state.project, runId, { sessionId, child: fromChild, replay: options.replay === true, event: labelled });
+    } catch {
+      // isolated: evimed_runtime_event_pump_progress_feed_failures_total — the
+      // progress aggregate is a reader of this stream, never a reason to stop it.
+    }
+    // Which session said it. A delegated child's tool calls now reach the
+    // run's channel too, and a reader that could not tell them from the
+    // orchestrator's would draw one conversation out of two.
+    this.runEvents.publish(runId, "run/event", { event: labelled, sessionId, ...(fromChild ? { child: true } : {}) });
     if (event.type === "compaction" && !options.replay) {
       try {
         this.onCompaction(state.project, runId, { seq: event.seq, replaced: event.replaced, tokens: event.estimatedTokens });

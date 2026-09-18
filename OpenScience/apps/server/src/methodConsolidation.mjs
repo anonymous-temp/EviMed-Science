@@ -645,6 +645,9 @@ export class MethodConsolidation {
         ...(job.projectId ? { projectId: job.projectId } : {}),
         source: { type: "system", id: document.id },
         idempotencyKey: `consolidate-notice:${job.id}:${document.id}`,
+        // Nightly housekeeping of the method library notifies nobody (C1:
+        // 完成 / 需要你 / 结论变了 only); the record stays in the inbox, read.
+        silent: true,
       });
     } catch {
       // isolated: evimed_learning_notice_failed_total
@@ -661,6 +664,7 @@ export class MethodConsolidation {
         body: `新增关系 ${summary.relationCount} 条，启用 ${summary.promoted.length} 条方法，建议停用 ${summary.retirements.length} 条。`,
         ...(job.projectId ? { projectId: job.projectId } : {}),
         idempotencyKey: `consolidate-reflection:${job.id}`,
+        silent: true,
       });
     } catch {
       // isolated: evimed_learning_notice_failed_total

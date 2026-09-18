@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   HttpError,
+  assertNoSymlinkPath,
   normalizeWorkspaceRelativePath,
   openScopedFileNoFollow,
   randomId,
@@ -14,18 +15,48 @@ import {
 } from "./security.mjs";
 import {
   citationIntegrityIssues,
+  claimVerification,
   clinicalEvidencePackageErrorCode,
   validateClinicalEvidencePackage,
 } from "./clinicalEvidenceQuality.mjs";
-import { socketToolResult } from "./dshRuntimeAdapter.mjs";
+import { delegatedChildrenOf, socketToolResult } from "./dshRuntimeAdapter.mjs";
+import {
+  clinicalSafetyCautionNotice,
+  describedQualityNotices,
+  maxQualityNotices,
+  normalizeQualityNotices,
+  noticeCodePattern,
+  noticeText,
+  runNotice,
+  runSideDegradedNotice,
+} from "./runNotices.mjs";
+import { describeRunArtifacts } from "./runArtifacts.mjs";
+import { normalizeRunEstimate, routeReasonText } from "./runRoute.mjs";
+import {
+  assembleRunProgress,
+  claimSummaryOf,
+  foldToolEvent,
+  normalizeRunUsage,
+  normalizeStoredDeliverables,
+  normalizeStoredProgress,
+  observedCallsFromHistory,
+  progressChildren,
+  progressDigest,
+  runDeliverables,
+} from "./runProgress.mjs";
 // The three classifications of a failure — repairable package, recoverable
 // source, terminal source — moved into the domain when the run side started
 // needing them too. They are re-exported here because the ledger's callers and
 // its tests have always imported them from this module, and because a second
 // definition is exactly the drift the move was made to stop.
 import {
+  CONNECTOR_CREDENTIALS,
+  CONNECTOR_CREDENTIAL_IDS,
   PLAN_ITEM_STATES,
   SOCKET_TOOL_NAMES,
+  capabilityBriefTask,
+  capabilityTitle,
+  gateIssueSeverity,
   isContractKind,
   isMcpToolName,
   recoverableEvidenceSourceErrorCodes,
@@ -50,6 +81,8 @@ import { sourceTypeOfSidecar, sourceTypeSidecarPath } from "@evimed/domain";
 
 export { repairableEvidencePackageErrorCodes, recoverableEvidenceSourceErrorCodes, terminalEvidenceSourceErrorCodes };
 
+/** @typedef {import('./runNotices.mjs').StoredNotice} StoredNotice */
+
 // Exported for its own direct test: constructing a ledger event sequence that
 // reaches this function while also being illegal under the *phase* table, but
 // not under any of `foldEvents`' own (much stricter) corruption checks, is not
@@ -62,6 +95,10 @@ export { runPhaseHistory };
 // what a future kernel change would break.
 export { readRequiredFile as readRequiredFileForTest };
 export { serializeNext as ledgerTextForTest };
+// A notice the platform raises about a run, for the composition root's own
+// notices (memory extraction) — one constructor, so a notice raised there is
+// shaped like every other one.
+export { runNotice };
 
 const ledgerFileName = "runs.jsonl";
 const terminalStatuses = new Set(["succeeded", "failed", "canceled"]);
@@ -69,6 +106,8 @@ const startFields = new Set(["sessionId"]);
 const dispatchFields = new Set([
   "sessionId",
   "dispatchId",
+  "automated",
+  "estimatedMinutes",
   "question",
   "effectiveAgentId",
   "effectiveAgentVersion",
@@ -82,8 +121,6 @@ const defaultMaxBytes = 1024 * 1024;
 // whole list to the run; a reader needs the shape of the problem, not 300 lines.
 const maxDeliverableIssues = 40;
 const maxArtifacts = 64;
-const maxQualityNotices = 40;
-const maxQualityNoticeLength = 300;
 const maxObservedChildSessions = 64;
 
 // Which rule picked the agent: `matched:adr-analysis`, `matched:named:peer-review`
@@ -135,9 +172,45 @@ const maxQuestionPreview = 160;
 
 function questionPreview(value) {
   if (typeof value !== "string") return null;
-  const collapsed = value.replace(/\s+/g, " ").trim();
+  // What the person asked, without the capability card's naming line: twelve
+  // runs of one capability were listed under twelve copies of 「请以「X」能力完成
+  // 以下任务：」 (B §4b). The capability itself is on the run as its route.
+  const collapsed = capabilityBriefTask(value).task.replace(/\s+/g, " ").trim();
   if (!collapsed) return null;
   return collapsed.length > maxQuestionPreview ? `${collapsed.slice(0, maxQuestionPreview)}…` : collapsed;
+}
+
+/** What a run is called, and where that name came from (C3). */
+const titleSources = new Set(["auto", "question", "user"]);
+const maxRunTitle = 80;
+const maxDerivedTitle = 40;
+
+/**
+ * A title a run may carry: one line, bounded, and not blank. The same rule
+ * for the researcher's own and the model's, because both are shown in the
+ * same place.
+ * @param {unknown} value @returns {string | null}
+ */
+export function normalizeRunTitle(value) {
+  if (typeof value !== "string") return null;
+  const line = [...value].map((char) => (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? " " : char)).join("")
+    .replace(/\s+/g, " ").trim();
+  if (!line || [...line].length > maxRunTitle) return null;
+  return line;
+}
+
+/**
+ * The title a run has before anyone named it: what was asked, else the
+ * capability it was routed to, else a plain placeholder. Marked `question`,
+ * which is what an automatic title replaces and a researcher's never is.
+ * @param {Record<string, any>} run
+ */
+function derivedRunTitle(run) {
+  const question = typeof run.question === "string" ? [...run.question] : [];
+  if (question.length) {
+    return question.length > maxDerivedTitle ? `${question.slice(0, maxDerivedTitle - 1).join("")}…` : question.join("");
+  }
+  return capabilityTitle(run.effectiveAgentId) ?? "未命名的研究";
 }
 
 function normalizeDispatchInput(input) {
@@ -159,9 +232,17 @@ function normalizeDispatchInput(input) {
   if (input.effectiveRouteReason != null && !routeReasonPattern.test(input.effectiveRouteReason)) {
     throw invalid("Effective route reason is invalid.");
   }
+  if (input.automated != null && typeof input.automated !== "boolean") throw invalid("automated must be a boolean.");
+  const estimatedMinutes = input.estimatedMinutes == null ? null : normalizeRunEstimate(input.estimatedMinutes);
+  if (input.estimatedMinutes != null && !estimatedMinutes) throw invalid("estimatedMinutes must be { min, max } minutes.");
   return {
     sessionId: safeId(input.sessionId, "research session id"),
     dispatchId: safeId(input.dispatchId, "agent run dispatch id"),
+    // Started by a harness rather than a person; read by the inbox, which
+    // records such a run's completion without notifying anyone (C1).
+    automated: input.automated === true,
+    // How long the route it took should take, as the dispatcher knew it (C3).
+    estimatedMinutes,
     // What the reader asked, kept short. A run list identified only by
     // run_cf7f08fa4b78… is a list of hashes: thirty analyses side by side and
     // no way to tell which is which without opening each one.
@@ -196,8 +277,8 @@ function sanitizeErrorCode(value) {
 //   "unchecked"  a layer did not run at all.
 //
 // The third value is the one this field was missing. A run whose brief the
-// server no longer holds — the brief lives in memory only, so a restart loses
-// it — has its per-question coverage check skipped entirely, and used to finish
+// server no longer holds — the brief lived in memory only until 2026-09-18,
+// so a restart lost it — has its per-question coverage check skipped entirely, and used to finish
 // with verification null: byte-identical, in the one machine-readable field
 // operations and the UI read, to a package that passed the check. The same
 // package with the brief in hand finished "unverified" with the missing
@@ -209,13 +290,6 @@ function normalizeVerification(value) {
   return verificationValues.includes(value) ? value : null;
 }
 
-function normalizeQualityNotices(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item) => typeof item === "string" && item.trim())
-    .slice(0, maxQualityNotices)
-    .map((item) => item.slice(0, maxQualityNoticeLength));
-}
 
 function normalizeArtifacts(value) {
   if (value == null) return [];
@@ -328,7 +402,14 @@ function foldEvents(events) {
         effectiveRuntimeAgent,
         effectiveRouteReason,
         model: event.model,
-        question: typeof event.question === "string" && event.question ? event.question : null,
+        // Read through the same preamble rule a new dispatch writes with, so
+        // a ledger written before it lists the same way.
+        question: typeof event.question === "string" && event.question ? questionPreview(event.question) : null,
+        ...(event.automated === true ? { automated: true } : {}),
+        ...(normalizeRunEstimate(event.estimatedMinutes) ? { estimatedMinutes: normalizeRunEstimate(event.estimatedMinutes) } : {}),
+        // The session this run's session was forked from (C3), so a branch
+        // can be followed back to the conversation it came from.
+        ...(typeof event.forkedFrom === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(event.forkedFrom) ? { forkedFrom: event.forkedFrom } : {}),
         status: "running",
         createdAt: storedTimestamp(event.createdAt, "createdAt"),
         startedAt,
@@ -389,8 +470,15 @@ function foldEvents(events) {
       if (!current || current.status !== "running") continue;
       if (!Number.isSafeInteger(event.messages) || event.messages < 0) continue;
       if (!Number.isSafeInteger(event.toolCalls) || event.toolCalls < 0) continue;
+      // The run's plan and its progress aggregate, as last observed. Fields on
+      // the existing gauge rather than an event kind of their own, so an older
+      // control plane reads this ledger and simply does not fold them.
+      const deliverables = normalizeStoredDeliverables(event.deliverables);
+      const snapshot = normalizeStoredProgress(event.snapshot);
       runs.set(id, Object.freeze({
         ...current,
+        ...(deliverables ? { deliverables } : {}),
+        ...(snapshot ? { progress: { deliverables: deliverables ?? current.deliverables ?? [], ...snapshot } } : {}),
         observedMessages: event.messages,
         observedToolCalls: event.toolCalls,
         // The run's own side of the same observation. Absent on a run that
@@ -414,8 +502,26 @@ function foldEvents(events) {
       if (!Number.isSafeInteger(event.durationMs) || event.durationMs < 0) throw corrupt("Agent run duration is invalid.");
       const artifacts = normalizeStoredArtifacts(event.artifacts);
       const errorCode = event.errorCode == null ? null : String(event.errorCode);
+      // The plan as the run ended it, and what its claims came to. Kept after
+      // the end on purpose: which item was rejected and how many times it was
+      // submitted is the record a researcher wants afterwards, and a finished
+      // run's page used to have no way to show it (2026-09-18 review, B §4h).
+      const deliverables = normalizeStoredDeliverables(event.deliverables);
+      const snapshot = normalizeStoredProgress(event.snapshot);
+      const claimSummary = normalizeClaimSummary(event.claimSummary);
       runs.set(id, Object.freeze({
         ...current,
+        ...(deliverables ? { deliverables } : {}),
+        ...(snapshot ? { progress: { deliverables: deliverables ?? current.deliverables ?? [], ...snapshot } } : {}),
+        ...(claimSummary ? { claimSummary } : {}),
+        // Who stopped a cancelled run: the researcher, or the platform
+        // shutting down. Absent when the kernel reported the stop itself.
+        ...(event.canceledBy === "user" || event.canceledBy === "platform" ? { canceledBy: event.canceledBy } : {}),
+        // The kernel's finer reason, or the connector a failed research call
+        // had no credential for — written since the sub-code existed and read
+        // back only now, so a reader can say what to do about it.
+        ...(typeof event.errorSubCode === "string" && /^[a-z][a-z0-9_.-]{0,63}$/.test(event.errorSubCode) ? { errorSubCode: event.errorSubCode } : {}),
+        ...(typeof event.missingCredential === "string" && CONNECTOR_CREDENTIAL_IDS.has(event.missingCredential) ? { missingCredential: event.missingCredential } : {}),
         status: event.status,
         finishedAt: storedTimestamp(event.finishedAt, "finishedAt"),
         durationMs: event.durationMs,
@@ -440,8 +546,10 @@ function foldEvents(events) {
         // The run's own notices lead; anything appended after the fact — a
         // coverage judgement that was still running when the run finished —
         // follows, in whichever order the two events reached the ledger.
+        // Described on read (C2): a stored notice, or a sentence an older
+        // build wrote, becomes a titled item a reader can use.
         qualityNotices: [
-          ...(Array.isArray(event.qualityNotices) ? event.qualityNotices.filter((item) => typeof item === "string") : []),
+          ...describedQualityNotices(event.qualityNotices),
           ...current.qualityNotices,
         ].slice(0, maxQualityNotices),
       }));
@@ -497,11 +605,21 @@ function foldEvents(events) {
       const id = safeStoredId(event.id, "id");
       const current = runs.get(id);
       if (!current) throw corrupt("Agent run ledger contains a notice for an unknown run.");
-      const added = Array.isArray(event.qualityNotices)
-        ? event.qualityNotices.filter((item) => typeof item === "string" && item)
-        : [];
+      const added = describedQualityNotices(event.qualityNotices);
+      // What the run is called and what it asked, when either was learned
+      // after the start (C3). Fields on this event rather than a kind of their
+      // own, so a control plane older than them reads the ledger and ignores
+      // them. A researcher's title is locked: nothing but another of theirs
+      // replaces it. A question is filled once and never rewritten.
+      const title = normalizeRunTitle(event.title);
+      const titleSource = titleSources.has(event.titleSource) ? event.titleSource : null;
+      const labelled = title && titleSource && titleSource !== "question"
+        && (current.titleSource !== "user" || titleSource === "user");
+      const question = current.question == null && typeof event.question === "string" ? questionPreview(event.question) : null;
       runs.set(id, Object.freeze({
         ...current,
+        ...(labelled ? { title, titleSource } : {}),
+        ...(question ? { question } : {}),
         verification: event.verification === "unchecked" && current.verification === null
           ? "unchecked"
           : current.verification,
@@ -510,6 +628,20 @@ function foldEvents(events) {
       continue;
     }
     throw corrupt("Agent run ledger contains an unsupported event.");
+  }
+  // Every run has a name (C3). One nobody gave a title is called by what it
+  // asked; that is `question`, the source an automatic title may replace.
+  for (const [id, run] of runs) {
+    // Why it went where it went, in the reader's words (C3), derived from the
+    // machine reason the ledger keeps for operations.
+    const routeReason = routeReasonText(run.effectiveRouteReason, run.effectiveAgentId);
+    const named = run.titleSource === "auto" || run.titleSource === "user";
+    if (named && !routeReason) continue;
+    runs.set(id, Object.freeze({
+      ...run,
+      ...(routeReason ? { routeReason } : {}),
+      ...(named ? {} : { title: derivedRunTitle(run), titleSource: "question" }),
+    }));
   }
   return runs;
 }
@@ -633,6 +765,34 @@ function normalizeMethodDigests(value) {
     });
   }
   return entries;
+}
+
+/**
+ * A session's observed calls with a fresh read laid over them: the read wins
+ * for every call it holds, and a call only the stream has seen so far is kept.
+ * @param {Map<string, import('./runProgress.mjs').ObservedCall> | undefined} existing
+ * @param {import('./runProgress.mjs').ObservedCall[]} read
+ */
+function mergeObservedCalls(existing, read) {
+  const calls = existing ?? new Map();
+  for (const call of read) if (call.callId) calls.set(call.callId, call);
+  return calls;
+}
+
+/** The aggregate as the ledger stores it: the plan lives beside it, not in it.
+ *  @param {import('./runProgress.mjs').RunProgress} progress */
+function withoutDeliverables(progress) {
+  const { deliverables: _deliverables, ...rest } = progress;
+  return rest;
+}
+
+/** @param {any} value @returns {{ total: number, verified: number, unverified: number } | undefined} */
+function normalizeClaimSummary(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const read = (/** @type {unknown} */ number) => (Number.isSafeInteger(number) && Number(number) >= 0 ? Number(number) : 0);
+  const total = read(value.total);
+  if (!total) return undefined;
+  return { total, verified: Math.min(total, read(value.verified)), unverified: Math.min(total, read(value.unverified)) };
 }
 
 /** @param {any} value @returns {{content: number, structural: number} | undefined} */
@@ -828,6 +988,18 @@ function actualUserMessage(message) {
   return messageRole(message) === "user" && message.info?.source === "user";
 }
 
+/**
+ * What the person typed first in this run's own turns, as plain text: the
+ * question a run adopted before it could be read was asked. By sender, not by
+ * role — injected context is a user-role message too.
+ * @param {Record<string, any>} run @param {any[]} history
+ */
+function firstUserText(run, history) {
+  const message = runHistory(run, history).find(actualUserMessage);
+  return (message?.parts ?? []).filter((part) => part?.type === "text" && typeof part.text === "string")
+    .map((part) => part.text).join(" ").trim();
+}
+
 /** Only completed control tools in the owned turn may establish workflow provenance. */
 function nativeWorkflowEvidence(run, history) {
   let plan = null;
@@ -861,14 +1033,20 @@ function nativeWorkflowEvidence(run, history) {
       const entry = submissions.get(id) ?? { id, attempts: 0, accepted: null, rejected: null };
       entry.attempts++;
       if (result.ok && result.data?.deliverableId === id && isContractKind(result.data?.contractKind)) {
-        entry.accepted = { ...span, contractKind: result.data.contractKind, notices: normalizeQualityNotices(result.data.notices) };
+        // An accepted submission's notices are the run-side gate's advisory
+        // messages; the tool reply carries their text only.
+        entry.accepted = { ...span, contractKind: result.data.contractKind,
+          notices: normalizeQualityNotices((Array.isArray(result.data.notices) ? result.data.notices : []).map((text) => (
+            typeof text === "string" ? runNotice("gate_advisory", text) : text))) };
       } else if (!result.ok) {
-        entry.rejected = { ...span, code: String(result.code ?? ""), notices: normalizeQualityNotices((result.issues ?? []).map((issue) => issue.message)) };
+        // A rejection's issues keep their code and severity: the rendered
+        // reply carries both (`- (<severity>) <code> <message>`).
+        entry.rejected = { ...span, code: String(result.code ?? ""), notices: normalizeQualityNotices(result.issues ?? []) };
       }
       submissions.set(id, entry);
     }
     if (part.tool === "evimed_delegate" && result.ok && result.data?.deliverableId === args.deliverableId) delegates.add(args.deliverableId);
-    if (part.tool === "evimed_complete_run") completion = { ok: result.ok, notices: normalizeQualityNotices((result.issues ?? result.data?.issues ?? []).map((issue) => issue.message)), ...span };
+    if (part.tool === "evimed_complete_run") completion = { ok: result.ok, notices: normalizeQualityNotices(result.issues ?? result.data?.issues ?? []), ...span };
   }
   if (!plan && !submissions.size && !delegates.size && !completion) return null;
   const throughSeq = history.reduce((head, message) => Math.max(head,
@@ -888,8 +1066,42 @@ function nativeWorkflowNotices(proof) {
   ]);
 }
 
-/** Match plan revision and item identity, never a projection's refresh timestamp. */
-function scopeNativeProjection(projection, run) {
+/** Progress states a live run's own plan index may report as they are. None of
+ *  them claims the work passed: that is `accepted`, which stays gated. */
+const liveProjectionStates = new Set(["queued", "delegated", "submitted", "rejected", "failed"]);
+
+/**
+ * Match plan revision and item identity, never a projection's refresh timestamp.
+ *
+ * Two readings of one file, decided by whether the run is still going.
+ *
+ * Once the run has ended, every item's state is rebuilt from the tool calls the
+ * parent session was seen to complete — the attribution a terminal verdict and
+ * a skill receipt rest on, because the projection is a document the model's
+ * workspace holds.
+ *
+ * While it is going, that rebuild is structurally wrong for delegated work and
+ * it was the whole of F4 (2026-09-18): the child does the submitting, so its
+ * `evimed_submit_deliverable` never appears in the parent's transcript, and a
+ * blocking `evimed_delegate` does not complete until the child finishes, so the
+ * parent's proof named no delegation either. Every item read `planned` with 0
+ * attempts for 25 minutes while the plan index said item 1 was `rejected,
+ * attempts 2`; and because the same rebuild emptied `subagents`, the monitor
+ * never read a child's heartbeat and announced a stall. So a live run takes its
+ * progress states — delegated, submitted, rejected — and its attempt counts
+ * from the plan index, and keeps its children.
+ *
+ * `accepted` is the one state the proof exists to protect, and it stays gated
+ * on evidence either way: an acceptance the parent was seen to receive, or a
+ * delivery receipt for this kernel run whose files still match the digests
+ * they were accepted at (`receiptAccepted`, read by the caller). A plan index
+ * that says `accepted` without either reads as `submitted`.
+ *
+ * @param {Record<string, any>} projection @param {Record<string, any>} run
+ * @param {{ receiptAccepted?: ReadonlySet<string> | null }} [options]
+ * @returns {Record<string, any> | null}
+ */
+function scopeNativeProjection(projection, run, { receiptAccepted = null } = {}) {
   const proof = run.nativeWorkflow;
   if (!proof || projection.sessionId !== run.sessionId || !projection.runId) return null;
   if (proof.kernelRunId && projection.runId !== proof.kernelRunId) return null;
@@ -901,16 +1113,28 @@ function scopeNativeProjection(projection, run) {
   }
   if (proof.plan?.written && projection.plan?.revision !== proof.plan.revision) return null;
   if (!definitions.length || !definitions.every((item) => rawItems.some((raw) => raw.id === item.id && raw.contractKind === item.contractKind && (!item.capability || raw.capability === item.capability)))) return null;
+  const live = run.status === "running";
   const items = definitions.map((definition) => {
     const raw = rawItems.find((item) => item.id === definition.id);
     const submission = proof.submissions.find((item) => item.id === definition.id);
-    return { ...raw, status: submission?.accepted ? "accepted" : submission?.rejected ? "submitted" : proof.delegates.includes(definition.id) ? "delegated" : "planned",
-      attempts: submission?.attempts ?? 0 };
+    const witnessed = submission?.accepted ? "accepted" : submission?.rejected ? "submitted" : proof.delegates.includes(definition.id) ? "delegated" : "planned";
+    if (!live) return { ...raw, status: witnessed, attempts: submission?.attempts ?? 0 };
+    const reported = String(raw?.status ?? "planned");
+    const accepted = witnessed === "accepted" || (reported === "accepted" && receiptAccepted?.has(definition.id) === true);
+    const status = accepted ? "accepted"
+      : liveProjectionStates.has(reported) ? reported
+        : reported === "accepted" ? "submitted"
+          : witnessed;
+    const attempts = Math.max(submission?.attempts ?? 0, Number.isSafeInteger(raw?.attempts) && raw.attempts > 0 ? raw.attempts : 0);
+    return { ...raw, status, attempts };
   });
-  const gateRuns = (Array.isArray(projection.gateRuns) ? projection.gateRuns : []).filter((gate) => proof.submissions.some((item) => item.id === gate.deliverableId
-    && [item.accepted, item.rejected].some((attempt) => attempt && Date.parse(gate.at) >= attempt.start && Date.parse(gate.at) <= attempt.end)));
-  const subagents = (Array.isArray(projection.subagents) ? projection.subagents : []).filter((child) => proof.delegates.includes(child.deliverableId)
-    && definitions.some((item) => item.id === child.deliverableId && item.capability === child.capability));
+  const planned = new Set(definitions.map((item) => item.id));
+  const gateRuns = (Array.isArray(projection.gateRuns) ? projection.gateRuns : []).filter((gate) => (live
+    ? planned.has(gate.deliverableId)
+    : proof.submissions.some((item) => item.id === gate.deliverableId
+      && [item.accepted, item.rejected].some((attempt) => attempt && Date.parse(gate.at) >= attempt.start && Date.parse(gate.at) <= attempt.end))));
+  const subagents = (Array.isArray(projection.subagents) ? projection.subagents : []).filter((child) => (live || proof.delegates.includes(child.deliverableId))
+    && definitions.some((item) => item.id === child.deliverableId && (live && !item.capability ? true : item.capability === child.capability)));
   return { ...projection, plan: { revision: proof.plan?.revision ?? projection.plan?.revision, items }, gateRuns, subagents,
     qualityNotices: nativeWorkflowNotices(proof), degraded: [] };
 }
@@ -967,18 +1191,22 @@ function parsedToolResultStatus(part) {
   return typeof value?.status === "string" ? value.status : null;
 }
 
-/** Child session ids witnessed in successful delegation tool receipts. */
+/**
+ * Child session ids witnessed in successful delegation tool receipts — the
+ * delegate call's own answer and every collecting call's (a retried child is
+ * named only by the latter; see `delegatedChildrenOf`).
+ */
 function delegatedChildSessionIds(messages) {
   const ids = [];
   for (const message of messages) {
     for (const part of message?.parts ?? []) {
-      if (part?.type !== "tool" || part?.tool !== "evimed_delegate" || part?.state?.status !== "completed") continue;
-      const result = socketToolResult(part?.state?.output);
-      const raw = result?.ok === true ? result?.data?.childSessionId : null;
-      try {
-        const id = storedKernelRequestId(raw);
-        if (!ids.includes(id)) ids.push(id);
-      } catch { /* malformed or absent child identities prove nothing */ }
+      if (part?.type !== "tool" || part?.state?.status !== "completed") continue;
+      for (const child of delegatedChildrenOf(part?.tool, part?.state?.output)) {
+        try {
+          const id = storedKernelRequestId(child.childSessionId);
+          if (!ids.includes(id)) ids.push(id);
+        } catch { /* malformed child identities prove nothing */ }
+      }
     }
   }
   return ids.slice(0, 32);
@@ -1281,6 +1509,29 @@ function successfulToolPart(part) {
     && parsedToolResultStatus(part) !== "error";
 }
 
+/**
+ * The connector a failed research call was missing a credential for: the
+ * public-source gateway refuses with `public_source_<connector>_credential_missing`
+ * (hyphens as underscores), and a connector is one of the closed list a
+ * researcher can hold a credential for (`CONNECTOR_CREDENTIALS`). Null for any
+ * other code. A format, not a reading of prose.
+ * @type {ReadonlyMap<string, string>}
+ */
+const missingCredentialCodes = new Map(CONNECTOR_CREDENTIALS.map((spec) => [
+  `public_source_${spec.id.replaceAll("-", "_")}_credential_missing`, spec.id,
+]));
+
+/** @param {string | null} errorCode @returns {string | null} */
+function missingCredentialConnector(errorCode) {
+  return (errorCode && missingCredentialCodes.get(errorCode)) ?? null;
+}
+
+/**
+ * The terminal outcome a turn's messages decide. Callers go on to add the
+ * delivery verdict to it (`verification`, `qualityNotices`, …), hence open.
+ * @param {any[]} messages
+ * @returns {{ status: string, errorCode: string | null, errorSubCode: string | null, missingCredential?: string } & Record<string, any>}
+ */
 function terminalFromMessages(messages) {
   for (const message of messages) {
     const error = message?.info?.error;
@@ -1324,7 +1575,14 @@ function terminalFromMessages(messages) {
     const correctedByLaterSuccess = toolParts.slice(index + 1).some((candidate) => (
       candidate.tool === part.tool && successfulToolPart(candidate)
     ));
-    if (!correctedByLaterSuccess) return { status: "failed", errorCode: "runtime_tool_error", errorSubCode: null };
+    if (!correctedByLaterSuccess) {
+      // A source the researcher can open themselves: the account page takes
+      // their own credential (connectorCredentials.mjs). Named as the sub-code
+      // and as its own field, so the reader is told what to add rather than
+      // that a tool failed.
+      const missingCredential = missingCredentialConnector(errorCode);
+      return { status: "failed", errorCode: "runtime_tool_error", errorSubCode: missingCredential, ...(missingCredential ? { missingCredential } : {}) };
+    }
   }
   return { status: "succeeded", errorCode: null, errorSubCode: null };
 }
@@ -1552,6 +1810,55 @@ async function openWorkspaceText(project, relative) {
 }
 
 /**
+ * What a run's evidence matrices say about their own claims, by the same rule
+ * the reader's 「依据」 marks use (`claimVerification`, the gate's own quote
+ * comparison), so a count on a run row and the marks in its report cannot
+ * disagree.
+ *
+ * Reads each matrix and at most 48 preserved sources it quotes, like the gate.
+ * `previousKey` makes an unchanged set of matrices free: the caller polls, and
+ * re-reading every source on every poll would be most of the monitor's work.
+ *
+ * @param {Record<string, any>} project @param {readonly string[]} relativePaths
+ * @param {string | null} [previousKey]
+ * @returns {Promise<{ key: string, total: number, verified: number, unverified: number } | null>}
+ *   null when nothing changed since `previousKey`
+ */
+async function matrixClaimSummary(project, relativePaths, previousKey = null) {
+  /** @type {{ relative: string, file: { text: string, stat: import('node:fs').Stats } }[]} */
+  const found = [];
+  for (const relative of relativePaths) {
+    const file = await openWorkspaceText(project, relative);
+    if (file) found.push({ relative, file });
+  }
+  const key = found.map(({ relative, file }) => `${relative}:${file.stat.size}:${file.stat.mtimeMs}`).join("|");
+  if (previousKey !== null && key === previousKey) return null;
+  const totals = { key, total: 0, verified: 0, unverified: 0 };
+  for (const { file } of found) {
+    let matrix;
+    try { matrix = JSON.parse(file.text); } catch { continue; }
+    const named = (Array.isArray(matrix?.claims) ? matrix.claims : []).flatMap((/** @type {any} */ claim) => [
+      claim?.artifactPath,
+      ...(Array.isArray(claim?.supportingSources) ? claim.supportingSources.map((/** @type {any} */ source) => source?.artifactPath) : []),
+    ]).filter((value) => typeof value === "string" && value.startsWith(".evimed-sources/"));
+    /** @type {Record<string, string>} */
+    const sourceArtifacts = {};
+    for (const artifactPath of [...new Set(named)].slice(0, 48)) {
+      let relative;
+      try { relative = normalizeWorkspaceRelativePath(artifactPath, "source artifact path"); } catch { continue; }
+      const source = await openWorkspaceText(project, relative);
+      if (source) sourceArtifacts[artifactPath] = source.text;
+    }
+    const summary = claimSummaryOf(claimVerification({ matrix, sourceArtifacts }));
+    if (!summary) continue;
+    totals.total += summary.total;
+    totals.verified += summary.verified;
+    totals.unverified += summary.unverified;
+  }
+  return totals;
+}
+
+/**
  * `deliverables/<id>/<name>` for every deliverable directory the run made.
  * @param {Record<string, any>} project @param {string} relative
  * @returns {Promise<string[]>}
@@ -1718,12 +2025,17 @@ function assistantProse(messages) {
  *   artifacts: any[],
  *   errorCode: string|null,
  *   qualityIssues?: string[],
+ *   qualityFindings?: StoredNotice[],
  *   qualityStructural?: boolean,
  *   qualityDegradable?: boolean,
  *   qualityUnverified?: boolean,
  *   qualityUnchecked?: boolean,
- *   qualityNotices?: string[],
+ *   qualityNotices?: StoredNotice[],
  * }} SpecialistCompletionVerdict
+ *
+ * `qualityIssues` are the strings the repair loop hands back to the run,
+ * verbatim; `qualityFindings` are the same findings with their identity, for
+ * the record. `qualityNotices` are findings that decide nothing.
  */
 
 /**
@@ -1758,6 +2070,7 @@ async function requiredSpecialistArtifacts(
   // Notices a check raises that do not decide the verdict. Collected here
   // because the checks below each return the moment they conclude, so a finding
   // that is not a reason to withhold anything has nowhere else to survive.
+  /** @type {StoredNotice[]} */
   const advisories = [];
   // Layers that did not run. Separate from the advisories because "we looked
   // and found nothing to say" and "we did not look" are different facts, and
@@ -1775,15 +2088,59 @@ async function requiredSpecialistArtifacts(
     skippedChecks,
   );
   const unchecked = skippedChecks.length > 0 ? { qualityUnchecked: true } : {};
-  if (advisories.length === 0) return { ...outcome, ...unchecked };
+  // The structured twin of `qualityIssues`, for the reader. The strings stay
+  // exactly what they were, because the repair loop hands them back to the run
+  // verbatim; the findings carry each one's identity, so the record can title
+  // it in Chinese without translating the sentence (C2).
+  const findings = qualityFindingsOf(outcome);
+  if (advisories.length === 0) return { ...outcome, ...unchecked, ...(findings.length ? { qualityFindings: findings } : {}) };
   // An advisory riding along is a second fact, so the rejection is no longer
   // attributable to the structural cause alone and must be charged normally.
   // Marking the return site was the honest place to decide it; this is the one
   // place that can add to that list afterwards, so it is the one place that has
   // to take the mark back.
   return outcome.errorCode
-    ? { ...outcome, ...unchecked, qualityStructural: false, qualityIssues: [...(outcome.qualityIssues ?? []), ...advisories] }
+    ? { ...outcome, ...unchecked, qualityStructural: false,
+      qualityIssues: [...(outcome.qualityIssues ?? []), ...advisories.map(noticeText)],
+      qualityFindings: [...findings, ...advisories] }
     : { ...outcome, ...unchecked, qualityNotices: advisories };
+}
+
+/**
+ * Verdict codes whose issues are defects in the evidence a reader cannot see
+ * for themselves — `must-fix`. Every other verdict's issues are advice: a
+ * process gap, a bookkeeping gap, something the reader can check.
+ */
+const mustFixVerdictCodes = new Set([
+  "specialist_citation_invalid",
+  "specialist_citation_integrity_failed",
+  "specialist_cited_source_unrecorded",
+  "specialist_evidence_snapshot_missing",
+  "specialist_evidence_snapshot_invalid",
+  "specialist_evidence_snapshot_empty",
+  "specialist_evidence_traceability_failed",
+  "specialist_evidence_provenance_failed",
+  "specialist_evidence_integrity_failed",
+  "specialist_delegated_evidence_read",
+  "specialist_required_output_missing",
+  "specialist_required_output_stale",
+]);
+
+/**
+ * The structured findings of a completion verdict: the ones the verdict built
+ * itself (the clinical path, which knows each finding's check), or one per
+ * issue string, identified by the verdict's own code.
+ * @param {SpecialistCompletionVerdict} outcome @returns {StoredNotice[]}
+ */
+function qualityFindingsOf(outcome) {
+  if (Array.isArray(outcome.qualityFindings)) return outcome.qualityFindings;
+  const code = outcome.errorCode ?? "gate_notice";
+  const severity = mustFixVerdictCodes.has(code) ? "must-fix" : "advice";
+  return (outcome.qualityIssues ?? []).filter((issue) => typeof issue === "string" && issue.trim()).map((issue) => (
+    issue.startsWith("SAFETY — ") ? runNotice(code, issue, { severity: "safety" })
+      : issue.startsWith("MUST FIX — ") ? runNotice(code, issue, { severity: "must-fix" })
+        : runNotice(code, issue, { severity })
+  ));
 }
 
 /**
@@ -1818,7 +2175,7 @@ async function loadedOrInjectedSkills(project, assistantMessages, run = null) {
  *  @param {any} agentRegistry
  *  @param {any} sourceArtifactProvenance
  *  @param {any} assistantMessages
- *  @param {string[]} advisories
+ *  @param {StoredNotice[]} advisories
  *  @param {any} briefText
  *  @param {string[]} skippedChecks
  *  @returns {Promise<SpecialistCompletionVerdict>}
@@ -1852,6 +2209,11 @@ async function specialistCompletionOutcome(
       const loadedSkills = await loadedOrInjectedSkills(project, assistantMessages, run);
       const requiredSkills = [...(agent.companionSkills ?? []), agent.skill];
       if (requiredSkills.some((skill) => !loadedSkills.has(skill))) {
+        // Said in the product's language, because this sentence is shown to
+        // the researcher on the run ledger and in their inbox — it was
+        // English, and it was the first thing a first-time user read about
+        // their own first answer (2026-09-15 walk, B8).
+        const sentence = `本轮没有加载「${agent.skill}」方法，回答按未经人设校验交付。内容本身未被判定有误，可直接阅读；如需严格校验，重新提问即可。`;
         return {
           artifacts: [],
           errorCode: "specialist_required_skill_missing",
@@ -1860,19 +2222,14 @@ async function specialistCompletionOutcome(
           // literally means. Unlike a bookkeeping gap between the report and
           // its apparatus, a reader cannot see that it was skipped.
           qualityUnverified: true,
-          // Said in the product's language, because this sentence is shown to
-          // the researcher on the run ledger and in their inbox — it was
-          // English, and it was the first thing a first-time user read about
-          // their own first answer (2026-09-15 walk, B8).
-          qualityIssues: [
-            `本轮没有加载「${agent.skill}」方法，回答按未经人设校验交付。内容本身未被判定有误，可直接阅读；如需严格校验，重新提问即可。`,
-          ],
+          qualityIssues: [sentence],
+          qualityFindings: [runNotice("specialist_required_skill_missing", sentence, { detail: sentence })],
         };
       }
     }
     if (agent.completionChecks.includes("citationsResolvable")) {
       const { blocking, advisory } = citationUrlDefects(assistantProse(assistantMessages));
-      advisories.push(...advisory);
+      advisories.push(...advisory.map((text) => runNotice("citation_plain_http", text)));
       if (blocking.length > 0) {
         return {
           artifacts: [],
@@ -1989,7 +2346,7 @@ async function specialistCompletionOutcome(
   if (agent.completionChecks.includes("citationsResolvable")) {
     const markdown = [...files].filter(([relative]) => relative.endsWith(".md")).map(([, text]) => text);
     const defects = markdown.map((text) => citationUrlDefects(text));
-    advisories.push(...defects.flatMap((defect) => defect.advisory));
+    advisories.push(...defects.flatMap((defect) => defect.advisory).map((text) => runNotice("citation_plain_http", text)));
     const blocking = defects.flatMap((defect) => defect.blocking);
     if (blocking.length > 0) {
       // Naming the URL, as every other gate message here does. This returned a
@@ -2140,20 +2497,27 @@ async function specialistCompletionOutcome(
     const sourcePaths = [...new Set(namedPaths)];
     /** @type {string[]} */
     const sourceGaps = [];
+    /** The same gaps with their cause and file, for the record. @type {StoredNotice[]} */
+    const sourceGapFindings = [];
+    /** @param {string} text @param {string} code @param {string} [file] */
+    const gap = (text, code, file) => {
+      sourceGaps.push(text);
+      sourceGapFindings.push(runNotice(code, text, { severity: "must-fix", ...(file ? { file } : {}) }));
+    };
     let provenanceGap = false;
     if (sourcePaths.length > 48) {
-      sourceGaps.push(`The package names ${sourcePaths.length} source artifacts; the first 48 were read. Cite one canonical path per distinct document rather than every companion file.`);
+      gap(`The package names ${sourcePaths.length} source artifacts; the first 48 were read. Cite one canonical path per distinct document rather than every companion file.`, "specialist_evidence_traceability_failed");
     }
     for (const rawPath of sourcePaths.slice(0, 48)) {
       let relative;
       try {
         relative = normalizeWorkspaceRelativePath(rawPath, "source artifact path");
       } catch {
-        sourceGaps.push(`${JSON.stringify(rawPath)} is named as a source artifact and is not a safe workspace path, so it was not read.`);
+        gap(`${JSON.stringify(rawPath)} is named as a source artifact and is not a safe workspace path, so it was not read.`, "specialist_evidence_traceability_failed");
         continue;
       }
       if (relative !== rawPath || !relative.startsWith(".evimed-sources/")) {
-        sourceGaps.push(`${JSON.stringify(rawPath)} is named as a source artifact; it must be the exact .evimed-sources/... path a preserving tool returned, copied rather than typed. It was not read.`);
+        gap(`${JSON.stringify(rawPath)} is named as a source artifact; it must be the exact .evimed-sources/... path a preserving tool returned, copied rather than typed. It was not read.`, "specialist_evidence_traceability_failed");
         continue;
       }
       const expectedDigest = sourceArtifactProvenance.get(relative);
@@ -2162,12 +2526,12 @@ async function specialistCompletionOutcome(
         // run — a path typed from memory, a leftover from an earlier run, or a
         // file the run created itself.
         provenanceGap = true;
-        sourceGaps.push(`The evidence matrix cites ${relative}, but no evidence tool reported preserving that file during this run. Cite only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.`);
+        gap(`The evidence matrix cites ${relative}, but no evidence tool reported preserving that file during this run. Cite only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.`, "specialist_evidence_provenance_failed", relative);
         continue;
       }
       const sourceFile = await readRequiredFile(project, relative);
       if (!sourceFile) {
-        sourceGaps.push(`The source artifact ${relative} named by the package does not exist in the workspace.`);
+        gap(`The source artifact ${relative} named by the package does not exist in the workspace.`, "specialist_evidence_traceability_failed", relative);
         continue;
       }
       // The current run's preserving-tool receipt binds these bytes. Immutable
@@ -2206,17 +2570,17 @@ async function specialistCompletionOutcome(
     // decision 5 (2026-09-18). The run was advised of the same caution while it
     // could still add the sentence.
     for (const hit of clinicalSafetyCautionHits({ reportText: files.get("clinical-evidence-report.md") ?? "", question: briefText ?? undefined })) {
-      advisories.push(`SAFETY — ${hit.titleZh}：${hit.messageZh}`);
+      advisories.push(clinicalSafetyCautionNotice(hit));
     }
     // A rule that did not run is said, not implied. The question-scoped safety
-    // rule reads the brief as the dispatcher holds it, in memory only, so a run
-    // that outlived a server restart is judged without it — and a package
-    // judged without a rule must not read like one that passed it.
+    // rule reads the brief as the dispatcher kept it; a run whose kept copy is
+    // missing (dispatched before briefs were kept beside the ledger, or the
+    // copy unreadable) is judged without it — and a package judged without a
+    // rule must not read like one that passed it.
     if (briefText == null) {
-      advisories.push(
-        "本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」：服务端已不再持有这次运行的题面"
-        + "（题面只保存在服务进程内存里，服务重启后即丢失）。其余检查照常完成。",
-      );
+      const sentence = "本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」：服务端没有找到这次运行保存的题面"
+        + "（运行早于题面单独保存，或保存的那份无法读取）。其余检查照常完成。";
+      advisories.push(runNotice("run_brief_lost", sentence, { detail: sentence }));
       skippedChecks.push("question-scoped-safety-rules");
     }
     // Which defect leads when a source named by the package had no tool
@@ -2230,6 +2594,7 @@ async function specialistCompletionOutcome(
         errorCode: "specialist_evidence_traceability_failed",
         ...provenanceVerdict,
         qualityIssues: sourceGaps,
+        qualityFindings: sourceGapFindings,
         qualityDegradable: true,
         qualityUnverified: true,
       };
@@ -2248,6 +2613,16 @@ async function specialistCompletionOutcome(
       // framing that is unsafe. They are not hidden — they are the headline.
       const blocking = [...validation.blockingIssues];
       const rest = validation.issues.filter((issue) => !blocking.includes(issue));
+      // Which check raised each finding, read off the validator's own record
+      // (`issueChecks`, same texts, same order) rather than recovered from the
+      // sentence. `clinical_evidence_issue` / `_notice` are the codes the
+      // run-side gate gives the same findings.
+      const checkOf = new Map((validation.issueChecks ?? []).map((/** @type {{ check: string | null, text: string }} */ entry) => [entry.text, entry.check]));
+      /** @param {string} issue @param {'safety'|'must-fix'|'advice'} severity @param {string} text */
+      const finding = (issue, severity, text) => runNotice(severity === "advice" ? "clinical_evidence_notice" : "clinical_evidence_issue", text, {
+        severity,
+        ...(checkOf.get(issue) ? { check: String(checkOf.get(issue)) } : {}),
+      });
       return {
         artifacts,
         // Which defect this is, so the repair loop hands the run the named
@@ -2264,6 +2639,13 @@ async function specialistCompletionOutcome(
           ...sourceGaps.map((issue) => `MUST FIX — ${issue}`),
           ...blocking.filter((/** @type {string} */ issue) => !validation.safetyIssues.includes(issue)).map((/** @type {string} */ issue) => `MUST FIX — ${issue}`),
           ...rest,
+        ],
+        qualityFindings: [
+          ...validation.safetyIssues.map((/** @type {string} */ issue) => finding(issue, "safety", `SAFETY — ${issue}`)),
+          ...(delegationNotice ? [runNotice("specialist_delegated_evidence_read", `MUST FIX — ${delegationNotice}`, { severity: "must-fix" })] : []),
+          ...sourceGapFindings,
+          ...blocking.filter((/** @type {string} */ issue) => !validation.safetyIssues.includes(issue)).map((/** @type {string} */ issue) => finding(issue, "must-fix", `MUST FIX — ${issue}`)),
+          ...rest.map((/** @type {string} */ issue) => finding(issue, "advice", issue)),
         ],
         qualityDegradable: true,
         // "Unverified" is a statement about the evidence, so only a finding
@@ -2445,9 +2827,73 @@ async function revisionDrift(project, verified) {
 }
 
 /** What the ledger says about an authorized revision that did not pass.
- *  @param {{ mismatched: string[], receipt: Record<string, any> }} verified @param {Set<string>} revising */
+ *  @param {{ mismatched: string[], receipt: Record<string, any> }} verified @param {Set<string>} revising
+ *  @returns {StoredNotice} */
 function revisionNotAcceptedNotice(verified, revising) {
-  return `交付物「${[...revising].join("、")}」按服务端门禁的要求开启了修订，改动了 ${verified.mismatched.length} 个文件，修订版没有通过门禁，所以没有新的回执；被接受时的版本另存在控制面。`;
+  const sentence = `交付物「${[...revising].join("、")}」按服务端门禁的要求开启了修订，改动了 ${verified.mismatched.length} 个文件，修订版没有通过门禁，所以没有新的回执；被接受时的版本另存在控制面。`;
+  return runNotice("run_revision_not_accepted", sentence, { detail: sentence });
+}
+
+/**
+ * The run's own admissions from its projection: `degraded` lines say part of
+ * its bookkeeping could not be kept, `qualityNotices` lines are its own notes.
+ * Both are the socket's technical English, kept as `text` only.
+ * @param {Record<string, any>} projection @returns {StoredNotice[]}
+ */
+function runSideNotices(projection) {
+  // A native run's scoped projection carries the parent's own gate findings,
+  // already structured (`scopeNativeProjection`); the socket's own lines are
+  // plain strings.
+  /** @param {unknown} value @param {(line: string) => StoredNotice} named @returns {StoredNotice[]} */
+  const entries = (value, named) => (Array.isArray(value) ? value : []).flatMap((item) => (
+    typeof item === "string" ? (item ? [named(item)] : []) : normalizeQualityNotices([item])));
+  return [
+    // Each degraded line by the template it was written with, so a reader
+    // sees what went missing rather than 「另有技术提示」.
+    ...entries(projection?.degraded, runSideDegradedNotice),
+    ...entries(projection?.qualityNotices, (line) => runNotice("run_side_notice", line)),
+  ];
+}
+
+/** The kernel could not tie this run's work state to this request. @returns {StoredNotice} */
+function unattributedNotice() {
+  const sentence = "内核没有把这次运行的工作状态对应到本次请求，因此无法确认交付是否通过验收。";
+  return runNotice("run_unattributed", sentence, { detail: sentence });
+}
+
+/**
+ * The run-side gate's advisory findings on an accepted package, with their
+ * identity back.
+ *
+ * The receipt keeps each finding's message only. The gate run that accepted
+ * the package keeps the whole finding in the run's projection, so a note whose
+ * text is exactly one of those findings' messages takes that finding's code,
+ * check and position — a lookup by the finding's own text, never a reading of
+ * it. A note no gate run carries is advice under `gate_advisory`.
+ * @param {readonly any[]} entries receipt entries
+ * @param {Record<string, any> | null} projection
+ * @returns {StoredNotice[]}
+ */
+function receiptNotices(entries, projection) {
+  /** @type {Map<string, Record<string, any>>} */
+  const known = new Map();
+  for (const gate of Array.isArray(projection?.gateRuns) ? projection.gateRuns : []) {
+    for (const issue of Array.isArray(gate?.issues) ? gate.issues : []) {
+      if (issue && typeof issue.message === "string" && !known.has(issue.message)) known.set(issue.message, issue);
+    }
+  }
+  return (entries ?? []).flatMap((entry) => (Array.isArray(entry?.notices) ? entry.notices : []))
+    .filter((line) => typeof line === "string" && line)
+    .map((line) => {
+      const issue = known.get(line);
+      if (!issue) return runNotice("gate_advisory", line);
+      return runNotice(noticeCodePattern.test(String(issue.code ?? "")) ? String(issue.code) : "gate_advisory", line, {
+        severity: gateIssueSeverity(issue),
+        ...(typeof issue.check === "string" && issue.check ? { check: issue.check } : {}),
+        ...(typeof issue.path === "string" && issue.path ? { file: issue.path } : {}),
+        ...(Number.isSafeInteger(issue.line) && issue.line > 0 ? { line: issue.line } : {}),
+      });
+    });
 }
 
 /**
@@ -2686,11 +3132,50 @@ async function readRunStateProjection(project, workspaceRoot, run = null) {
       if (run && projection.runId && projection.runId !== run.id) return { state: "unattributed" };
       return { state: "read", projection };
     }
-    const scoped = scopeNativeProjection(projection, run);
+    // Only read when the plan index claims an acceptance the parent cannot
+    // have witnessed: the receipt check hashes every accepted file, and this
+    // function runs on every monitor poll.
+    const claimsAcceptance = run.status === "running" && Array.isArray(projection.plan?.items)
+      && projection.plan.items.some((/** @type {any} */ item) => item?.status === "accepted");
+    const receiptAccepted = claimsAcceptance ? await receiptAcceptedDeliverables(project, String(projection.runId ?? "")) : null;
+    const scoped = scopeNativeProjection(projection, run, { receiptAccepted });
     return scoped ? { state: "read", projection: scoped } : { state: "unattributed" };
   } catch {
     return { state: "unreadable" };
   }
+}
+
+/**
+ * The deliverables a delivery receipt accepts for one kernel run, counting
+ * only entries whose every file still matches the digest it was accepted at.
+ *
+ * The receipt is written by the run-side gate alone and only on acceptance,
+ * under a path the sandbox refuses the model's writes to, and each file it
+ * names is re-hashed here — which is what lets a live native run show a
+ * child's acceptance its parent never witnessed without taking the plan
+ * index's word for it.
+ * @param {Record<string, any>} project @param {string} kernelRunId
+ * @returns {Promise<Set<string>>}
+ */
+async function receiptAcceptedDeliverables(project, kernelRunId) {
+  /** @type {Set<string>} */
+  const accepted = new Set();
+  if (!kernelRunId) return accepted;
+  let parsed;
+  try {
+    const text = await readTextFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, workspaceLayout.receiptFile), "");
+    if (!text) return accepted;
+    parsed = JSON.parse(text);
+  } catch {
+    return accepted;
+  }
+  const validated = validateDeliveryReceipt(parsed);
+  if (!validated.ok || validated.receipt.runId !== kernelRunId) return accepted;
+  for (const entry of validated.receipt.entries ?? []) {
+    const verified = await verifiedReceiptArtifacts(project, { ...validated.receipt, entries: [entry] });
+    if (verified.artifacts.length > 0 && verified.mismatched.length === 0) accepted.add(String(entry.deliverableId));
+  }
+  return accepted;
 }
 
 /**
@@ -2748,7 +3233,7 @@ async function unsubmittedDeliverables(project, projection) {
  * reader is owed the fact that something else they asked for is not here.
  * @param {any} projection a `readRunStateProjection` result
  * @param {any} receipt
- * @returns {string[]}
+ * @returns {StoredNotice[]}
  */
 function droppedDeliverableNotices(projection, receipt) {
   if (projection?.state !== "read") return [];
@@ -2770,9 +3255,10 @@ function droppedDeliverableNotices(projection, receipt) {
     const state = String(item?.status ?? item?.state ?? "");
     if (state === "accepted") continue;
     const label = String(item?.title ?? item?.capability ?? "").trim();
-    notices.push(label
+    const sentence = label
       ? `计划中的交付物「${label}」（${id}）没有通过验收，本次运行没有交付它；其余通过验收的内容不受影响。`
-      : `计划中的交付物 ${id} 没有通过验收，本次运行没有交付它；其余通过验收的内容不受影响。`);
+      : `计划中的交付物 ${id} 没有通过验收，本次运行没有交付它；其余通过验收的内容不受影响。`;
+    notices.push(runNotice("run_deliverable_dropped", sentence, { detail: sentence }));
   }
   return notices.slice(0, 10);
 }
@@ -2816,6 +3302,7 @@ function droppedDeliverableNotices(projection, receipt) {
 function deliverableFrames(projection, receipt = null) {
   const items = Array.isArray(projection?.plan?.items) ? projection.plan.items : [];
   const entries = new Map((receipt?.entries ?? []).map((entry) => [String(entry.deliverableId), entry]));
+  const children = Array.isArray(projection?.subagents) ? projection.subagents : [];
   /** @type {Record<string, any>[]} */
   const frames = [];
   const seen = new Set();
@@ -2826,14 +3313,25 @@ function deliverableFrames(projection, receipt = null) {
     const contractKind = String(item?.contractKind ?? "").trim();
     const status = String(item?.status ?? "planned");
     const entry = entries.get(id);
+    // The plan index writes the last verdict as `issues` and names no child
+    // (the socket's `publicItem`); this read `lastIssues` and
+    // `item.childSessionId`, so every frame went out with no issues and no
+    // child — the panel a second attempt is watched on was empty by
+    // construction. The child is the plan index's delegation row.
+    const issues = normalizeGateIssues(Array.isArray(item?.issues) ? item.issues : item?.lastIssues);
+    const child = [...children].reverse().find((row) => String(row?.deliverableId ?? "") === id);
+    const childSessionId = child?.childSessionId ?? item?.childSessionId;
+    const attempts = Number.isSafeInteger(item?.attempts) && item.attempts > 0 ? item.attempts : 0;
     frames.push({
       id,
       contractKind: isContractKind(contractKind) ? contractKind : "",
       capability: String(item?.capability ?? "").trim(),
       title: String(item?.title ?? "").trim() || id,
       status: PLAN_ITEM_STATES.includes(status) ? status : "planned",
-      childSessionId: item?.childSessionId ? String(item.childSessionId) : null,
-      issues: normalizeGateIssues(item?.lastIssues),
+      attempts,
+      childSessionId: childSessionId ? String(childSessionId) : null,
+      issues,
+      mustFixCount: issues.filter((issue) => issue.severity === "required").length,
       ...(entry ? { receipt: receiptEntryView(entry) } : {}),
     });
   }
@@ -2855,8 +3353,10 @@ function deliverableFrames(projection, receipt = null) {
       capability: String(entry.capability ?? "").trim(),
       title: id,
       status: "accepted",
+      attempts: Number.isSafeInteger(entry.attempt) && entry.attempt > 0 ? entry.attempt : 0,
       childSessionId: null,
       issues: [],
+      mustFixCount: 0,
       receipt: receiptEntryView(entry),
     });
   }
@@ -2955,6 +3455,11 @@ export class AgentRunStore {
   constructor(researchSessions, options = {}) {
     this.researchSessions = researchSessions;
     this.agentRegistry = Promise.resolve(options.agentRegistry);
+    // The same registry, once it has loaded, for the one synchronous reader:
+    // a pushed `run/state` describes its artifacts like the list does.
+    /** @type {any} */
+    this.loadedAgentRegistry = null;
+    this.agentRegistry.then((registry) => { this.loadedAgentRegistry = registry ?? null; }, () => {});
     this.model = String(options.model ?? "").trim();
     this.maxRuns = options.maxRuns ?? defaultMaxRuns;
     this.maxBytes = options.maxBytes ?? defaultMaxBytes;
@@ -2970,6 +3475,21 @@ export class AgentRunStore {
     this.resolveRunProject = options.resolveRunProject ?? (async (project) => project);
     /** Whoever forwards a run's own projection to the browser. @type {(project: any, run: any, type: string, data: any) => void} */
     this.onRunProjection = options.onRunProjection ?? (() => {});
+    // The progress aggregate (`run/progress`): the minimum gap between two
+    // frames for one run, how often a child's own history is re-read to
+    // reconcile its tool calls, and how often the kernel is asked for children
+    // nothing named yet. Each is a bound on work the monitor does per poll.
+    this.progressPublishIntervalMs = options.progressPublishIntervalMs ?? 2_000;
+    this.childHistoryIntervalMs = options.childHistoryIntervalMs ?? 20_000;
+    this.childDiscoveryIntervalMs = options.childDiscoveryIntervalMs ?? 5_000;
+    /** What one run cost so far, for the aggregate; null when unattributed. @type {(project: any, run: any) => Promise<any>} */
+    this.readRunUsage = options.readRunUsage ?? (async () => null);
+    /** runId -> the live progress state the monitor and the event pump feed. */
+    this.progressTrackers = new Map();
+    /** runId -> when its question was last looked for (epoch ms). @type {Map<string, number>} */
+    this.questionBackfills = new Map();
+    /** Label writes still in flight, awaited on close. @type {Set<Promise<void>>} */
+    this.backgroundLabels = new Set();
     /** Per-run memory, so a fixed-interval poll does not repeat itself. */
     this.projectionDigests = new Map();
     /** runId -> deliverableId -> the frame last sent for it. Same reason. */
@@ -3045,8 +3565,28 @@ export class AgentRunStore {
    *  to fail the write it is observing.
    *  isolated: evimed_run_state_listener_failures_total
    *  @param {Record<string, any>} project @param {Record<string, any> | null | undefined} run */
-  notifyState(project, run) {
-    if (!run) return;
+  /**
+   * A run with the kind of every file it left (`artifactKinds`) and their
+   * counts (`artifactCounts`) — `runArtifacts.mjs`. Computed on read from the
+   * plan on the record and the registry's declared outputs, so every run ever
+   * recorded is described and `artifacts` keeps its shape for older readers.
+   * @param {Record<string, any>} run @param {any} [registry]
+   * @returns {Record<string, any>}
+   */
+  withArtifactKinds(run, registry = this.loadedAgentRegistry) {
+    let described = null;
+    try {
+      described = describeRunArtifacts(run, (capabilityId) => {
+        const outputs = registry?.get?.(capabilityId)?.outputs;
+        return Array.isArray(outputs) ? outputs.map((/** @type {any} */ output) => String(output?.path ?? "")).filter(Boolean) : null;
+      });
+    } catch { /* isolated: a record that cannot be described is still a record */ }
+    return described ? { ...run, ...described } : run;
+  }
+
+  notifyState(project, folded) {
+    if (!folded) return;
+    const run = this.withArtifactKinds(folded);
     // The one choke point every push notification passes through, so `phase`
     // (§7.1.1) reaches `run/state` the same way it reaches `list()` — a fresh
     // record straight from `foldEvents` has the ledger's own four-value
@@ -3159,6 +3699,55 @@ export class AgentRunStore {
     };
   }
 
+  /**
+   * The conversation a researcher last worked in, in this project (C4 "me"
+   * `lastSessionId`): the session of the run that moved most recently, so the
+   * shell can reopen it instead of a blank page. Work a machine started —
+   * an evaluation, an autopilot episode — is not "last open".
+   * @param {any} project @returns {Promise<string | null>}
+   */
+  async lastSessionId(project) {
+    let latest = null;
+    let at = "";
+    for (const run of foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()) {
+      if (run.automated === true || String(run.effectiveRouteReason ?? "").startsWith("autopilot:")) continue;
+      const moved = [run.lastProgressAt, run.finishedAt, run.startedAt].filter((value) => typeof value === "string").sort().at(-1) ?? "";
+      if (moved > at) {
+        at = moved;
+        latest = run.sessionId;
+      }
+    }
+    return latest;
+  }
+
+  /**
+   * The runs of a project that are still going, by id — what the model
+   * gateway asks to attribute an interactive runtime's request to its run
+   * (E §9.4). A fold with no phase walk, because it is asked per request.
+   * @param {any} project @returns {Promise<string[]>}
+   */
+  async activeRunIds(project) {
+    const runs = foldEvents(parseEvents(await readLedgerText(project, this.maxBytes)));
+    return [...runs.values()].filter((run) => run.status === "running").map((run) => run.id);
+  }
+
+  /**
+   * How much a project has been used, for its list row (C4): how many runs it
+   * holds and when anything last happened in one. Cheaper than `list` — no
+   * phase walk — because the project list reads it for every project.
+   * @param {any} project @returns {Promise<{ runCount: number, lastActivityAt: string | null }>}
+   */
+  async activitySummary(project) {
+    const runs = [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()];
+    let last = null;
+    for (const run of runs) {
+      for (const at of [run.finishedAt, run.lastProgressAt, run.startedAt]) {
+        if (typeof at === "string" && (!last || at > last)) last = at;
+      }
+    }
+    return { runCount: runs.length, lastActivityAt: last };
+  }
+
   async list(project) {
     const events = parseEvents(await readLedgerText(project, this.maxBytes));
     const runs = [...foldEvents(events).values()];
@@ -3189,22 +3778,34 @@ export class AgentRunStore {
    * @param {Record<string, any>} project @param {Record<string, any>[]} runs
    */
   async withPlanProgress(project, runs) {
-    let budget = 3;
+    // Bounded, because each running run is a projection read on a list
+    // request; eight covers any account's concurrent runs today (the project
+    // cap is one or two), where the old three silently dropped the fourth.
+    let budget = 8;
+    const registry = await this.agentRegistry.catch(() => null);
     return Promise.all(runs.map(async (run) => {
-      if (run.status !== "running" || budget <= 0) return run;
+      if (run.status !== "running" || budget <= 0) return this.withArtifactKinds(run, registry);
       budget -= 1;
       // `readRunStateProjection` answers every failure with a state, never a throw.
       const read = /** @type {{ state: string, projection?: any }} */ (await readRunStateProjection(project, project.workspaceDir, run));
-      const items = read.state === "read" && Array.isArray(read.projection?.plan?.items) ? read.projection.plan.items : null;
-      if (!items?.length) return run;
+      const projection = read.state === "read" ? read.projection ?? null : null;
+      const items = Array.isArray(projection?.plan?.items) ? projection.plan.items : null;
+      const deliverables = items?.length ? runDeliverables(projection, null, null) : run.deliverables;
+      const live = this.progressTrackers.get(run.id)?.last;
       return {
         ...run,
-        planItems: items.slice(0, 12).map((/** @type {any} */ item) => ({
-          id: String(item?.id ?? "").slice(0, 120),
-          title: String(item?.title ?? item?.id ?? "").slice(0, 160),
-          status: PLAN_ITEM_STATES.includes(item?.status) ? item.status : "planned",
-          attempts: Number.isSafeInteger(item?.attempts) ? item.attempts : 0,
-        })),
+        ...(items?.length ? {
+          // The pre-C3 view the shell has read since the step list shipped;
+          // `deliverables` below is the same plan with verdicts and children.
+          planItems: items.slice(0, 12).map((/** @type {any} */ item) => ({
+            id: String(item?.id ?? "").slice(0, 120),
+            title: String(item?.title ?? item?.id ?? "").slice(0, 160),
+            status: PLAN_ITEM_STATES.includes(item?.status) ? item.status : "planned",
+            attempts: Number.isSafeInteger(item?.attempts) ? item.attempts : 0,
+          })),
+        } : {}),
+        ...(deliverables?.length ? { deliverables } : {}),
+        ...(live ? { progress: { ...live, deliverables: deliverables ?? live.deliverables } } : {}),
       };
     }));
   }
@@ -3259,6 +3860,9 @@ export class AgentRunStore {
   async reserveRun(project, session, {
     baselineCursor,
     dispatchId = null,
+    automated = false,
+    estimatedMinutes = null,
+    forkedFrom = null,
     question = null,
     effectiveAgentId = session.mode === "specialist" ? session.agentId : null,
     effectiveAgentVersion = session.mode === "specialist" ? session.agentVersion : null,
@@ -3354,6 +3958,9 @@ export class AgentRunStore {
         effectiveRouteReason,
         model: this.model,
         question,
+        ...(automated === true ? { automated: true } : {}),
+        ...(normalizeRunEstimate(estimatedMinutes) ? { estimatedMinutes: normalizeRunEstimate(estimatedMinutes) } : {}),
+        ...(typeof forkedFrom === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(forkedFrom) ? { forkedFrom } : {}),
         createdAt: now,
         startedAt: startedAt == null ? now : storedTimestamp(startedAt, "startedAt"),
         baselineCursor,
@@ -3387,6 +3994,8 @@ export class AgentRunStore {
     const {
       sessionId,
       dispatchId,
+      automated,
+      estimatedMinutes,
       question,
       briefText,
       effectiveAgentId,
@@ -3409,14 +4018,14 @@ export class AgentRunStore {
           effectiveRouteReason: "session-binding",
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
-    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, question, ...selected });
+    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, automated, estimatedMinutes, question, ...selected });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
     // The brief, before the prompt goes out, so it is held whatever happens
     // next. This is the authoritative copy and the only one the gate reads.
     if (briefText) {
-      this.dispatchedBriefs.set(record.id, briefText);
+      await this.keepBrief(project, record.id, briefText);
       await this.writeWorkspaceBrief(project, briefText);
     }
     try {
@@ -3432,7 +4041,13 @@ export class AgentRunStore {
       this.scheduleMonitor(project, record.id);
       return accepted;
     } catch (error) {
-      if (error?.code === "runtime_prompt_rejected" || error?.definitivelyRejected === true) {
+      // Refused before the prompt was sent: nothing is running, so nothing may
+      // be left looking as if it were. A capacity or lock refusal (429 / 423)
+      // is raised before any kernel call; treating it as "unknown" left a run
+      // `running` behind the 429 the person was shown, and `agent_run_active`
+      // then refused their retry on the same session (E §9.3).
+      if (error?.code === "runtime_prompt_rejected" || error?.definitivelyRejected === true
+        || (error instanceof HttpError && (error.status === 429 || error.status === 423))) {
         await this.markDispatch(project, record.id, "rejected");
         await this.finishInternal(project, record.id, {
           status: "failed",
@@ -3480,6 +4095,79 @@ export class AgentRunStore {
       this.notifyState(project, noticed);
       return noticed;
     });
+  }
+
+  /**
+   * What a run is called and what it asked, when either is learned after the
+   * run started (C3).
+   *
+   * One `notice` event carries both, which an older control plane folds as a
+   * notice with nothing in it. A title from anywhere but the researcher never
+   * replaces theirs, and a question is filled once: this returns the run
+   * unchanged, without writing, when there is nothing it may change.
+   * @param {any} project @param {string} rawRunId
+   * @param {{ title?: string, titleSource?: 'auto'|'user', question?: string }} labels
+   */
+  async recordRunLabels(project, rawRunId, { title, titleSource, question } = {}) {
+    const runId = safeId(rawRunId, "agent run id");
+    const named = title === undefined ? null : normalizeRunTitle(title);
+    if (title !== undefined && !named) throw new HttpError(400, "invalid_payload", `A run title is one line of 1 to ${maxRunTitle} characters.`);
+    if (named && titleSource !== "auto" && titleSource !== "user") throw invalid("A run title needs its source.");
+    const asked = question === undefined ? null : questionPreview(question);
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const current = foldEvents(events).get(runId);
+      if (!current) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
+      const retitle = named && (current.titleSource !== "user" || titleSource === "user")
+        && !(current.title === named && current.titleSource === titleSource);
+      const fill = asked && current.question == null;
+      if (!retitle && !fill) return current;
+      const event = {
+        event: "notice",
+        id: runId,
+        at: this.now().toISOString(),
+        qualityNotices: [],
+        ...(retitle ? { title: named, titleSource } : {}),
+        ...(fill ? { question: asked } : {}),
+      };
+      const text = serializeNext(events, event, this.maxBytes);
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+      const labelled = foldEvents([...events, event]).get(runId);
+      this.notifyState(project, labelled);
+      return labelled;
+    });
+  }
+
+  /**
+   * Fills in, in the background, what a few runs with no question asked.
+   *
+   * A session typed into the kernel's own application is adopted before its
+   * first message can be read, and a monitor that never runs (nothing to
+   * grade) never reads it afterwards, so those runs were listed forever by a
+   * placeholder. The list route calls this and does not wait: the answer goes
+   * out as it stands, the ledger is filled from the session's own first user
+   * message — read without waking a stopped runtime — and the next read shows
+   * it. Bounded per call and per run, because a list is read often.
+   * isolated: evimed_run_question_backfill_failures_total
+   * @param {any} project @param {readonly Record<string, any>[]} runs @param {{ limit?: number }} [options]
+   */
+  backfillQuestions(project, runs, { limit = 3 } = {}) {
+    const nowMs = this.now().getTime();
+    const due = runs
+      .filter((run) => run?.question == null && run?.sessionId
+        && nowMs - (this.questionBackfills.get(run.id) ?? -Infinity) >= 10 * 60_000)
+      .slice(0, limit);
+    for (const run of due) {
+      this.questionBackfills.set(run.id, nowMs);
+      if (this.questionBackfills.size > 2_000) this.questionBackfills.delete(this.questionBackfills.keys().next().value);
+      const pending = (async () => {
+        const history = await this.readSessionHistory(project, run.sessionId, { wake: false });
+        const asked = Array.isArray(history) ? firstUserText(run, history) : "";
+        if (asked) await this.recordRunLabels(project, run.id, { question: asked });
+      })().catch(() => {});
+      this.backgroundLabels.add(pending);
+      void pending.finally(() => this.backgroundLabels.delete(pending));
+    }
   }
 
   /**
@@ -3619,6 +4307,63 @@ export class AgentRunStore {
     } catch { /* advisory copy only; the authoritative one is on the run record */ }
   }
 
+  /**
+   * Where a run's brief is kept: beside the ledger, outside the workspace the
+   * run can write and outside the ledger's 1 MiB ceiling (briefs run to
+   * several thousand characters), readable by this process alone.
+   * @param {any} project @param {string} runId
+   */
+  briefFile(project, runId) {
+    return path.join(project.metaDir, "briefs", `${safeId(runId, "agent run id")}.txt`);
+  }
+
+  /**
+   * Holds the brief for the delivery gate, and keeps it durably (0600).
+   *
+   * It used to live only in this process's memory, so a control-plane restart
+   * mid-run judged the package without it: the question-scoped clinical safety
+   * rules — the pharmacist-authored layer — silently did not run for that run
+   * (2026-09-18 review, E §9.1). A failed write is said and not fatal: the
+   * in-memory copy still serves the gate while this process lives.
+   * @param {any} project @param {string} runId @param {string} briefText
+   */
+  async keepBrief(project, runId, briefText) {
+    this.dispatchedBriefs.set(runId, briefText);
+    try {
+      await writeFileAtomicNoFollow(project.rootDir, this.briefFile(project, runId), briefText, { encoding: "utf8", mode: 0o600 });
+    } catch (error) {
+      process.stderr.write(`run brief not kept for ${runId}: ${typeof error?.code === "string" ? error.code : "write_failed"}\n`);
+    }
+  }
+
+  /**
+   * The brief the gate reads: the one in memory, else the one kept beside the
+   * ledger — which is how a restarted control plane gets it back.
+   * @param {any} project @param {string} runId @returns {Promise<string | null>}
+   */
+  async dispatchedBrief(project, runId) {
+    const held = this.dispatchedBriefs.get(runId);
+    if (held != null) return held;
+    try {
+      const kept = await readTextFileNoFollow(project.rootDir, this.briefFile(project, runId), "");
+      if (kept) {
+        this.dispatchedBriefs.set(runId, kept);
+        return kept;
+      }
+    } catch { /* unreadable is missing: the gate says it judged without it */ }
+    return null;
+  }
+
+  /** The brief leaves with the run's delivery decision. @param {any} project @param {string} runId */
+  async dropBrief(project, runId) {
+    this.dispatchedBriefs.delete(runId);
+    try {
+      const file = this.briefFile(project, runId);
+      await assertNoSymlinkPath(project.rootDir, file, { allowMissingTail: true });
+      await rm(file, { force: true });
+    } catch { /* isolated: evimed_run_brief_remove_failures_total — a stale brief is bytes, not a wrong verdict */ }
+  }
+
   async markDispatch(project, rawRunId, status) {
     const runId = safeId(rawRunId, "agent run id");
     if (!["accepted", "unknown", "rejected"].includes(status)) throw new Error("Invalid dispatch status.");
@@ -3675,10 +4420,9 @@ export class AgentRunStore {
       // for a run the monitor had been watching, and not at all for one that
       // died before its first poll. The set is the same one that path keeps.
       const admitted = this.projectionAdmissions.get(run.id) ?? new Set();
-      const notices = (projection.state === "read"
-        ? [...(projection.projection?.degraded ?? []), ...(projection.projection?.qualityNotices ?? [])]
-        : []
-      ).filter((line) => typeof line === "string" && line && !admitted.has(line));
+      const notices = projection.state === "read"
+        ? runSideNotices(projection.projection ?? {}).filter((notice) => !admitted.has(notice.text))
+        : [];
       // Two failures end here and they are not the same failure. A run cut off
       // mid-flight lost its work; a run that wrote every file its contract asks
       // for and never submitted any of them for grading produced a complete
@@ -3715,11 +4459,15 @@ export class AgentRunStore {
           : rejected.length ? "specialist_deliverable_not_accepted" : "runtime_stopped",
         artifacts: [],
         qualityNotices: [
-          ...(projection.state === "unattributed" ? ["内核没有把这次运行的工作状态对应到本次请求，因此无法确认交付是否通过验收。"] : []),
-          ...unsubmitted.map((entry) => `交付物「${entry.id}」的文件已经写好（${entry.files} 个），但从未提交校验，因此没有通过质量门。`),
-          ...(unsubmitted.length ? [] : rejected.map((entry) => (
-            `交付物「${entry.id}」提交了 ${Number(entry.attempts ?? 0)} 次，每次都被契约校验拒绝，因此产物未经质量门。`
-          ))),
+          ...(projection.state === "unattributed" ? [unattributedNotice()] : []),
+          ...unsubmitted.map((entry) => {
+            const sentence = `交付物「${entry.id}」的文件已经写好（${entry.files} 个），但从未提交校验，因此没有通过质量门。`;
+            return runNotice("run_deliverable_never_submitted", sentence, { detail: sentence });
+          }),
+          ...(unsubmitted.length ? [] : rejected.map((entry) => {
+            const sentence = `交付物「${entry.id}」提交了 ${Number(entry.attempts ?? 0)} 次，每次都被契约校验拒绝，因此产物未经质量门。`;
+            return runNotice("run_deliverable_rejected_every_time", sentence, { detail: sentence });
+          })),
           ...notices,
         ].slice(0, 20),
       });
@@ -3751,7 +4499,9 @@ export class AgentRunStore {
         status: "failed",
         errorCode: "specialist_receipt_digest_mismatch",
         artifacts: [],
-        qualityNotices: mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the runtime is gone so no gate can judge the current bytes`),
+        qualityNotices: mismatched.slice(0, 10).map((entry) => runNotice("run_receipt_mismatch",
+          `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the runtime is gone so no gate can judge the current bytes`,
+          { file: entry, detail: "回执记下的文件在通过之后被改动，运行已经结束，改动后的内容无法再核验。" })),
       });
     }
     const delivered = await readRunStateProjection(project, project.workspaceDir, run);
@@ -3762,12 +4512,57 @@ export class AgentRunStore {
       errorCode: null,
       artifacts,
       qualityNotices: [
-        ...receipt.entries.flatMap((/** @type {any} */ entry) => entry.notices ?? []),
+        ...receiptNotices(receipt.entries, delivered.state === "read" ? delivered.projection ?? null : null),
         // The plan, not just the receipt. A receipt can only speak for what it
         // holds an entry for, so on its own it cannot report an absence.
         ...droppedDeliverableNotices(delivered, receipt),
       ].slice(0, 20),
     });
+  }
+
+  /**
+   * What the record keeps about a run's plan once it ends.
+   *
+   * The plan is read the way a live run's is — the plan index's own states,
+   * `accepted` gated on a witnessed acceptance or a verified receipt — because
+   * the stricter terminal reading rebuilds every item from the parent's own
+   * tool calls, and a delegated item's submissions are never among them: it
+   * would record 0 attempts for an item a child submitted twice. The outcome
+   * then decides what each item became (`runDeliverables`).
+   *
+   * @param {any} project @param {string} runId
+   * @param {{ status: string, artifacts: string[], unverifiedArtifacts: string[] }} normalized
+   */
+  async finalRunFacts(project, runId, normalized) {
+    const run = (await this.list(project)).find((item) => item.id === runId);
+    if (!run || run.status !== "running") return null;
+    const read = await readRunStateProjection(project, project.workspaceDir, run);
+    const projection = read.state === "read" ? read.projection ?? null : null;
+    const receipt = await readDeliveryReceipt(project, run).catch(() => null);
+    const deliverables = runDeliverables(projection, receipt, {
+      status: normalized.status,
+      artifacts: normalized.artifacts,
+      unverifiedArtifacts: normalized.unverifiedArtifacts,
+    });
+    const matrices = [...normalized.artifacts, ...normalized.unverifiedArtifacts]
+      .filter((file) => file.endsWith("clinical-evidence-matrix.json"));
+    const claims = matrices.length ? await matrixClaimSummary(project, matrices, null) : null;
+    const tracker = this.progressTracker(runId);
+    tracker.project ??= project;
+    tracker.startedAt ??= run.startedAt;
+    if (projection) tracker.projection = projection;
+    if (claims?.total) tracker.matrix = { ...claims, at: this.now().getTime() };
+    const progress = this.composeProgress(tracker, run, deliverables);
+    return {
+      deliverables,
+      claimSummary: claims?.total ? { total: claims.total, verified: claims.verified, unverified: claims.unverified } : null,
+      // A snapshot only of what was observed: a run this process never
+      // watched (finished from the durable record after a restart) keeps the
+      // last one its ledger holds rather than a picture of zero calls.
+      snapshot: tracker.sessions.size > 0 ? withoutDeliverables(progress) : null,
+      progress,
+      tracker,
+    };
   }
 
   async finishInternal(project, rawRunId, terminal) {
@@ -3781,12 +4576,15 @@ export class AgentRunStore {
       // other things key on, and a context overflow is a different remedy from
       // a session fault -- which the ledger could not distinguish at all.
       ...(sanitizeErrorCode(terminal.errorSubCode) ? { errorSubCode: sanitizeErrorCode(terminal.errorSubCode) } : {}),
+      ...(CONNECTOR_CREDENTIAL_IDS.has(terminal.missingCredential) ? { missingCredential: terminal.missingCredential } : {}),
       artifacts: normalizeArtifacts(terminal.artifacts),
       /** Files the run wrote that no gate accepted. Empty is "none"; the field
        *  is always present so a reader never has to treat absent as unknown. */
       unverifiedArtifacts: normalizeArtifacts(terminal.unverifiedArtifacts),
       verification: normalizeVerification(terminal.verification),
       qualityNotices: normalizeQualityNotices(terminal.qualityNotices),
+      ...(terminal.status === "canceled" && (terminal.canceledBy === "user" || terminal.canceledBy === "platform")
+        ? { canceledBy: terminal.canceledBy } : {}),
     };
 
     // Delivery is a label, not a switch.
@@ -3827,10 +4625,17 @@ export class AgentRunStore {
         normalized.unverifiedArtifacts = normalizeArtifacts(recovered);
         normalized.qualityNotices = normalizeQualityNotices([
           ...normalized.qualityNotices,
-          UNVERIFIED_DELIVERY_NOTICE,
+          runNotice("run_unverified_delivery", UNVERIFIED_DELIVERY_NOTICE, { detail: UNVERIFIED_DELIVERY_NOTICE }),
         ]);
       }
     }
+    // The plan as the run ends it, what its claims came to, and its last
+    // progress picture — computed before the terminal write and published
+    // ahead of it, because a watching tab closes its stream on the terminal
+    // `run/state` and a frame sent after that reaches nobody. Best effort: a
+    // record the run cannot be described in is still a finished run.
+    const facts = await this.finalRunFacts(project, runId, normalized).catch(() => null);
+    if (facts?.tracker && facts.progress) this.publishProgress(project, runId, facts.tracker, facts.progress, { force: true });
     const outcome = await withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const runs = foldEvents(events);
@@ -3840,7 +4645,16 @@ export class AgentRunStore {
       const finishedAt = current.nativeTurn && terminal.finishedAt
         ? storedTimestamp(terminal.finishedAt, "finishedAt") : this.now().toISOString();
       const durationMs = Math.max(0, Date.parse(finishedAt) - Date.parse(current.startedAt));
-      const event = { event: "finished", id: runId, ...normalized, finishedAt, durationMs };
+      const event = {
+        event: "finished",
+        id: runId,
+        ...normalized,
+        finishedAt,
+        durationMs,
+        ...(facts?.deliverables?.length ? { deliverables: facts.deliverables } : {}),
+        ...(facts?.claimSummary ? { claimSummary: facts.claimSummary } : {}),
+        ...(facts?.snapshot ? { snapshot: facts.snapshot } : {}),
+      };
       const text = serializeNext(events, event, this.maxBytes);
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
       const finished = foldEvents([...events, event]).get(runId);
@@ -3868,7 +4682,10 @@ export class AgentRunStore {
       this.childKernelActivities.delete(kernelKey);
       // The gate has already run by the time a run reaches a terminal state,
       // so the brief has done its work; keeping it would grow with every run.
-      this.dispatchedBriefs.delete(runId);
+      await this.dropBrief(project, runId);
+      const tracker = this.progressTrackers.get(runId);
+      if (tracker?.timer) clearTimeout(tracker.timer);
+      this.progressTrackers.delete(runId);
     }
     if (outcome.transitioned) {
       try {
@@ -3882,12 +4699,48 @@ export class AgentRunStore {
     return result;
   }
 
-  async cancelSession(project, rawSessionId) {
+  /** @param {any} project @param {string} rawSessionId @param {{ by?: 'user' | 'platform' | null }} [options] */
+  async cancelSession(project, rawSessionId, { by = null } = {}) {
     const sessionId = safeId(rawSessionId, "research session id");
     const run = (await this.list(project)).find(
       (item) => item.sessionId === sessionId && item.status === "running",
     );
     if (!run) return null;
+    return this.cancelRunRecord(project, run, { by });
+  }
+
+  /**
+   * Stops one run's observation and records it cancelled (C3). Idempotent: a
+   * run already over is returned as it is. The kernel side — its sessions —
+   * is the caller's, because only the caller knows which it may reach.
+   * @param {any} project @param {string} rawRunId @param {{ by?: 'user' | 'platform' | null }} [options]
+   */
+  async cancelRun(project, rawRunId, { by = null } = {}) {
+    const runId = safeId(rawRunId, "agent run id");
+    const run = (await this.list(project)).find((item) => item.id === runId);
+    if (!run) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
+    if (run.status !== "running") return run;
+    return this.cancelRunRecord(project, run, { by });
+  }
+
+  /**
+   * Every child session this control plane knows a run to have: its plan's
+   * deliverables, its last progress aggregate, and what the live tracker
+   * observed. Candidates for the caller to act on, bounded.
+   * @param {Record<string, any>} run @returns {string[]}
+   */
+  knownChildSessions(run) {
+    const tracker = this.progressTrackers.get(run.id);
+    const ids = [
+      ...(Array.isArray(run.deliverables) ? run.deliverables : []).map((item) => item?.childSessionId),
+      ...(Array.isArray(run.progress?.children) ? run.progress.children : []).map((child) => child?.childSessionId),
+      ...(tracker ? [...tracker.children, ...tracker.kernelChildren.map((child) => child.sessionId)] : []),
+    ];
+    return [...new Set(ids.filter((id) => typeof id === "string" && id && id !== run.sessionId))].slice(0, 64);
+  }
+
+  /** @param {any} project @param {Record<string, any>} run @param {{ by?: 'user' | 'platform' | null }} options */
+  async cancelRunRecord(project, run, { by = null }) {
     const monitor = this.monitors.get(run.id);
     monitor?.cancel();
     let finished;
@@ -3896,6 +4749,7 @@ export class AgentRunStore {
         status: "canceled",
         errorCode: "runtime_canceled",
         artifacts: [],
+        ...(by ? { canceledBy: by } : {}),
       });
     } finally {
       // Cancellation is complete only after the observer has left every read
@@ -4025,10 +4879,10 @@ export class AgentRunStore {
           this.agentRegistry,
           sourceArtifactProvenance,
           allRunAssistants,
-          // Only what this process dispatched. A run recovered from the ledger
-          // after a restart has no brief here, and the gate is told so rather
-          // than reading the copy in the workspace.
-          this.dispatchedBriefs.get(run.id) ?? null,
+          // Only what this control plane dispatched: held in memory, and kept
+          // beside the ledger so a restart does not lose it. Never the copy in
+          // the workspace, which the run can write.
+          await this.dispatchedBrief(project, run.id),
         );
       } catch {
         completion = { artifacts: [], errorCode: "specialist_contract_unavailable" };
@@ -4043,13 +4897,15 @@ export class AgentRunStore {
       // may well have copied. The verdict itself is unchanged: this states what
       // the verdict rests on, it does not soften it.
       if (completion.errorCode === "specialist_evidence_provenance_failed" && delegated.unreadable.length > 0) {
+        const partial = `This check could read only part of the run: ${delegated.unreadable.length} delegated session(s) `
+          + `(${delegated.unreadable.slice(0, 4).join(", ")}) could not be read, so a source one of them preserved `
+          + "is not visible here. Re-list the paths from the preserving tools' own output.";
         completion = {
           ...completion,
-          qualityIssues: [
-            ...(completion.qualityIssues ?? []),
-            `This check could read only part of the run: ${delegated.unreadable.length} delegated session(s) `
-            + `(${delegated.unreadable.slice(0, 4).join(", ")}) could not be read, so a source one of them preserved `
-            + "is not visible here. Re-list the paths from the preserving tools' own output.",
+          qualityIssues: [...(completion.qualityIssues ?? []), partial],
+          qualityFindings: [
+            ...(completion.qualityFindings ?? []),
+            runNotice("run_partial_read", partial, { detail: `有 ${delegated.unreadable.length} 个子任务的记录无法读取，这一项结论只基于能读到的部分。` }),
           ],
         };
       }
@@ -4058,6 +4914,11 @@ export class AgentRunStore {
         && (await this.agentRegistry)?.get?.(run.effectiveAgentId)?.completionChecks?.includes("evidenceClaimsTraceable") === true;
       if (completion.errorCode) {
         const repairSender = this.clinicalRepairSenders.get(run.id);
+        // Read here and written below, across awaits. Safe because a run's
+        // whole evaluation is single-flight (`reconcileSession` hands every
+        // concurrent caller the evaluation already in flight), so no second
+        // reader can see the count between the two — the lock this
+        // read-modify-write needs, and the reason it has no other.
         const repairAttempts = this.clinicalRepairAttempts.get(run.id) ?? 0;
         // A rejection whose every issue is one structural fact — the deliverable
         // did not parse, or a required file is not there — teaches the run one
@@ -4165,7 +5026,12 @@ export class AgentRunStore {
             repairNotRun = repairRefusal;
           }
         }
-        const notices = [...(completion.qualityIssues ?? []), ...(repairNotRun ? [repairNotRun] : [])];
+        // The findings with their identity (C2), and why a repair that was due
+        // did not happen, when it did not.
+        const notices = [
+          ...qualityFindingsOf(completion),
+          ...(repairNotRun ? [runNotice("run_repair_not_dispatched", repairNotRun)] : []),
+        ];
         if (completion.qualityDegradable) {
           // What the run wrote is delivered with what was found said about it,
           // never withheld for it (2026-09-17). Withholding is for a package
@@ -4221,7 +5087,10 @@ export class AgentRunStore {
           const refusal = repairDispatchFailure(repair.failures);
           terminal.status = "failed";
           terminal.errorCode = "specialist_evidence_repair_failed";
-          terminal.qualityNotices = ["The server accepted the current package, but the run-side receipt resubmission could not be dispatched.", refusal];
+          terminal.qualityNotices = [
+            runNotice("run_resubmit_not_dispatched", "The server accepted the current package, but the run-side receipt resubmission could not be dispatched."),
+            runNotice("run_resubmit_not_dispatched", refusal),
+          ];
         }
       }
     }
@@ -4235,7 +5104,9 @@ export class AgentRunStore {
     if (rewrites.length > 0) {
       terminal.qualityNotices = [
         ...(terminal.qualityNotices ?? []),
-        `The report was replaced with the write tool ${rewrites.length} time(s) while repairing, instead of being patched with edit; a rewrite regenerates the report from context rather than from the evidence on disk.`,
+        runNotice("run_report_rewritten", `The report was replaced with the write tool ${rewrites.length} time(s) while repairing, instead of being patched with edit; a rewrite regenerates the report from context rather than from the evidence on disk.`, {
+          detail: `修订时有 ${rewrites.length} 次整篇重写了报告，而不是按问题逐处修改；整篇重写凭记忆重生成内容，可能遗漏原有证据。`,
+        }),
       ];
     }
     const repairSizes = this.clinicalRepairReportSizes.get(run.id) ?? [];
@@ -4246,7 +5117,9 @@ export class AgentRunStore {
         const lost = Math.round(((startSize - finalSize) / startSize) * 100);
         terminal.qualityNotices = [
           ...(terminal.qualityNotices ?? []),
-          `Repair reduced the report from ${startSize} to ${finalSize} characters (${lost}% smaller) over ${repairSizes.length} round(s); traceability was restored by removing analysis rather than by grounding it.`,
+          runNotice("run_report_shrunk", `Repair reduced the report from ${startSize} to ${finalSize} characters (${lost}% smaller) over ${repairSizes.length} round(s); traceability was restored by removing analysis rather than by grounding it.`, {
+            detail: `经过 ${repairSizes.length} 轮修订，报告从 ${startSize} 字缩短到 ${finalSize} 字（少了 ${lost}%）：问题是靠删内容而不是补依据解决的。`,
+          }),
         ];
       }
     }
@@ -4281,7 +5154,7 @@ export class AgentRunStore {
     // unaffected.
     if (terminal.status === "succeeded") {
       const projection = await readRunStateProjection(project, project.workspaceDir, run);
-      /** @param {string[]} notices */
+      /** @param {(string | StoredNotice)[]} notices */
       const unaccepted = (notices) => {
         if (artifacts.length === 0) {
           terminal.status = "failed";
@@ -4298,7 +5171,7 @@ export class AgentRunStore {
         const incomplete = proof?.completion?.ok === false || (requiresAcceptance && !currentReceipt);
         if (incomplete || (projection.state === "unattributed" && artifacts.length > 0 && !currentReceipt)) {
           unaccepted([...nativeWorkflowNotices(proof),
-            ...(projection.state === "unattributed" ? ["内核没有把这次运行的工作状态对应到本次请求，因此无法确认交付是否通过验收。"] : []),
+            ...(projection.state === "unattributed" ? [unattributedNotice()] : []),
           ]);
         }
       }
@@ -4307,11 +5180,12 @@ export class AgentRunStore {
         : [];
       const accepted = planned.filter((item) => item?.status === "accepted");
       if (terminal.status === "succeeded" && planned.length > 0 && accepted.length === 0 && !(await readDeliveryReceipt(project, run))) {
-        unaccepted([artifacts.length === 0
+        const sentence = artifacts.length === 0
           ? `本次运行计划了 ${planned.length} 件交付物，没有一件通过契约校验，也没有留下文件。`
           : serverGateClean
             ? `本次运行计划的 ${planned.length} 件交付物没有拿到运行内的回执；服务端已用同一套规则核验了盘上的文件并通过。`
-            : `本次运行计划的 ${planned.length} 件交付物没有通过运行内的契约校验，文件按「未核验」交付，未通过的项列在下面。`]);
+            : `本次运行计划的 ${planned.length} 件交付物没有通过运行内的契约校验，文件按「未核验」交付，未通过的项列在下面。`;
+        unaccepted([runNotice("run_planned_none_accepted", sentence, { detail: sentence })]);
       }
     }
     const finalReceipt = await readDeliveryReceipt(project, run);
@@ -4337,9 +5211,9 @@ export class AgentRunStore {
       // twenty-five advisory notes reached the ledger with zero. Deduplicated,
       // because a notice already admitted while the run was alive is the same
       // notice.
-      const seen = new Set(terminal.qualityNotices ?? []);
-      const accepted = finalReceipt.entries.flatMap((entry) => entry.notices ?? [])
-        .filter((line) => typeof line === "string" && line && !seen.has(line));
+      const seen = new Set((terminal.qualityNotices ?? []).map(noticeText));
+      const accepted = receiptNotices(finalReceipt.entries, finalProjection.state === "read" ? finalProjection.projection ?? null : null)
+        .filter((notice) => !seen.has(notice.text));
       if (accepted.length) {
         terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...accepted].slice(0, 20);
       }
@@ -4381,18 +5255,21 @@ export class AgentRunStore {
             // First: behind twenty gate issues they were cut off, and the
             // ledger never said which files had moved.
             qualityNotices: [
-              ...verified.mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the package did not pass on the bytes now on disk`),
+              ...verified.mismatched.slice(0, 10).map((entry) => runNotice("run_receipt_mismatch",
+                `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the package did not pass on the bytes now on disk`,
+                { file: entry, detail: `回执记下的文件在通过之后被改动，改动后的内容没有通过核验。` })),
               ...(terminal.qualityNotices ?? []),
             ].slice(0, 20),
           });
         } else {
-          terminal.qualityNotices = [
-            ...(terminal.qualityNotices ?? []),
-            `交付物在写下回执之后被改动了 ${verified.mismatched.length} 个文件：${verified.mismatched.slice(0, 6).join("、")}。`
+          const changed = `交付物在写下回执之后被改动了 ${verified.mismatched.length} 个文件：${verified.mismatched.slice(0, 6).join("、")}。`
             + (terminal.verification
               ? "服务端已用同一套规则对盘上的实际字节重新核验，结论就是这次交付的核验标签；发出去的是盘上的这一版，不是回执记下的那一版。"
               : "服务端已用同一套门禁对盘上的实际字节重判并通过，按实际交付重出回执；发出去的就是被验过的那一版。")
-            + "若这不是有意的收尾修改，请让运行在最后一次修改之后再提交一次。",
+            + "若这不是有意的收尾修改，请让运行在最后一次修改之后再提交一次。";
+          terminal.qualityNotices = [
+            ...(terminal.qualityNotices ?? []),
+            runNotice("run_files_changed_after_receipt", changed, { detail: changed }),
           ].slice(0, 20);
         }
       }
@@ -4419,7 +5296,7 @@ export class AgentRunStore {
    * them would mean reading it three times on three schedules.
    *
    * @param {any} project @param {Record<string, any>} run
-   * @returns {Promise<{ signature: string | null, unreadable: boolean, childSessionIds: string[] }>}
+   * @returns {Promise<{ signature: string | null, unreadable: boolean, childSessionIds: string[], projection: Record<string, any> | null }>}
    */
   async readRunSideActivity(project, run) {
     // Read from the host, because that is where this process opens files.
@@ -4439,27 +5316,38 @@ export class AgentRunStore {
     // `successfulEvidenceSourceArtifacts` still take the container root, and
     // correctly: they relativise paths the model wrote.
     const read = await readRunStateProjection(project, project.workspaceDir, run);
-    if (read.state === "unattributed") return { signature: null, unreadable: true, childSessionIds: [] };
-    if (read.state === "missing") return { signature: null, unreadable: false, childSessionIds: [] };
+    if (read.state === "unattributed") return { signature: null, unreadable: true, childSessionIds: [], projection: null };
+    if (read.state === "missing") return { signature: null, unreadable: false, childSessionIds: [], projection: null };
     if (read.state === "unreadable") {
       // Said once per run, not once per poll: the monitor wakes on a fixed
       // interval and a notice per wake would bury the ledger in one repeated
       // sentence. isolated: evimed_run_projection_unreadable_total
       if (!this.projectionNoticed.has(run.id)) {
         this.projectionNoticed.add(run.id);
+        const sentence = "运行自述文件 .evimed-run/state.json 无法解析，本次运行的证据与预算明细不可见；运行本身不受影响。";
         await this.appendQualityNotices(project, run.id, [
-          "运行自述文件 .evimed-run/state.json 无法解析，本次运行的证据与预算明细不可见；运行本身不受影响。",
+          runNotice("run_projection_unreadable", sentence, { detail: sentence }),
         ]).catch(() => {});
       }
-      return { signature: null, unreadable: true, childSessionIds: [] };
+      return { signature: null, unreadable: true, childSessionIds: [], projection: null };
     }
     const projection = read.projection ?? {};
     this.publishRunProjection(project, run, projection);
-    const childSessionIds = [...new Set((projection.subagents ?? [])
-      .filter((child) => child?.status === "running" && typeof child?.childSessionId === "string")
-      .map((child) => child.childSessionId.trim())
-      .filter(Boolean))].slice(0, 64);
-    return { signature: runSideActivitySignature(projection), unreadable: false, childSessionIds };
+    // Two rows name a working child: the delegation's own `subagents` row and,
+    // since 2026-09-18, the plan item it works on (`childSessionId` from the
+    // moment the child exists). Either alone has gone missing before, and
+    // both are only candidates — the kernel's session list confirms the
+    // parent before a head counts.
+    const settledItem = new Set(["accepted", "delivered", "failed"]);
+    const childSessionIds = [...new Set([
+      ...(Array.isArray(projection.subagents) ? projection.subagents : [])
+        .filter((child) => child?.status === "running" && typeof child?.childSessionId === "string")
+        .map((child) => child.childSessionId.trim()),
+      ...(Array.isArray(projection.plan?.items) ? projection.plan.items : [])
+        .filter((item) => typeof item?.childSessionId === "string" && !settledItem.has(String(item?.status ?? "")))
+        .map((item) => item.childSessionId.trim()),
+    ].filter(Boolean))].slice(0, 64);
+    return { signature: runSideActivitySignature(projection), unreadable: false, childSessionIds, projection };
   }
 
   /**
@@ -4502,14 +5390,11 @@ export class AgentRunStore {
     // The run's own admissions ride the ledger, not the stream: they outlive
     // the socket a browser is holding, and a reader who opens the run tomorrow
     // must still see that a layer went unchecked.
-    const admissions = [
-      ...(Array.isArray(projection?.degraded) ? projection.degraded : []),
-      ...(Array.isArray(projection?.qualityNotices) ? projection.qualityNotices : []),
-    ].filter((line) => typeof line === "string" && line);
+    const admissions = runSideNotices(projection);
     const already = this.projectionAdmissions.get(run.id) ?? new Set();
-    const fresh = admissions.filter((line) => !already.has(line));
+    const fresh = admissions.filter((notice) => !already.has(notice.text));
     if (!fresh.length) return;
-    for (const line of fresh) already.add(line);
+    for (const notice of fresh) already.add(notice.text);
     this.projectionAdmissions.set(run.id, already);
     this.appendQualityNotices(project, run.id, fresh).catch(() => {});
   }
@@ -4538,6 +5423,218 @@ export class AgentRunStore {
       }
     } catch { /* isolated */ }
     this.deliverableDigests.set(run.id, sent);
+  }
+
+  /**
+   * The live progress state of one run, created on first use and dropped when
+   * the run finishes.
+   * @param {string} runId
+   */
+  progressTracker(runId) {
+    let tracker = this.progressTrackers.get(runId);
+    if (!tracker) {
+      tracker = {
+        /** sessionId -> call key -> the observed call. Root and children alike. @type {Map<string, Map<string, import('./runProgress.mjs').ObservedCall>>} */
+        sessions: new Map(),
+        /** Sessions the kernel attributed to this run as children. @type {Set<string>} */
+        children: new Set(),
+        /** childSessionId -> the head sequence its history was last read at. @type {Map<string, { at: number, seq: number }>} */
+        childReads: new Map(),
+        /** childSessionId -> how its last turn ended, from its own stream. @type {Map<string, string>} */
+        childEnds: new Map(),
+        /** sessionId -> when it was last seen doing something (epoch ms). @type {Map<string, number>} */
+        activity: new Map(),
+        /** The kernel's last word on this run's direct children. @type {{ sessionId: string, running: boolean }[]} */
+        kernelChildren: [],
+        discoveredAt: 0,
+        /** @type {{ key: string, at: number, total: number, verified: number, unverified: number } | null} */
+        matrix: null,
+        /** @type {Record<string, any> | null} */
+        projection: null,
+        /** @type {any} */
+        usage: null,
+        usageAt: 0,
+        /** @type {string | null} */
+        startedAt: null,
+        /** @type {import('./runProgress.mjs').RunProgress | null} */
+        last: null,
+        publishedDigest: "",
+        publishedAt: 0,
+        /** @type {ReturnType<typeof setTimeout> | null} */
+        timer: null,
+        /** @type {any} */
+        project: null,
+      };
+      this.progressTrackers.set(runId, tracker);
+    }
+    return tracker;
+  }
+
+  /**
+   * One event the kernel's stream carried for a run, the parent's or a
+   * child's, handed over by the event pump.
+   *
+   * The monitor reads the parent's whole history every poll and is exact
+   * about it; a child's work reached nothing at all before this, so a
+   * delegated run's progress stopped at the parent's blocked tool call. The
+   * stream is what makes a child's search count within a second, and the
+   * monitor's occasional re-read of the child's own history (see
+   * `reconcileChildCalls`) is what makes the count right if the stream missed
+   * something. A call is keyed by its id, so a replay counts once.
+   *
+   * @param {any} project @param {string} runId
+   * @param {{ sessionId: string, child?: boolean, replay?: boolean, event: import('@evimed/domain').RunEvent }} observed
+   */
+  noteRunEvent(project, runId, observed) {
+    if (!runId || !observed?.sessionId || !observed.event) return;
+    const tracker = this.progressTracker(runId);
+    tracker.project ??= project;
+    const nowMs = this.now().getTime();
+    if (!observed.replay) tracker.activity.set(observed.sessionId, nowMs);
+    if (observed.child) tracker.children.add(observed.sessionId);
+    // A delegation's receipt names its child before the child's own stream
+    // has said anything (see `delegatedChildrenOf`); the monitor's next read
+    // asks the kernel about it like any other candidate.
+    if (observed.event.type === "tool/result") {
+      for (const found of delegatedChildrenOf(observed.event.tool, observed.event.output)) {
+        if (found.childSessionId !== observed.sessionId) tracker.children.add(found.childSessionId);
+      }
+    }
+    let calls = tracker.sessions.get(observed.sessionId);
+    if (!calls) {
+      calls = new Map();
+      tracker.sessions.set(observed.sessionId, calls);
+    }
+    let changed = foldToolEvent(calls, observed.event, nowMs);
+    if (observed.child && observed.event.type === "turn/end") {
+      tracker.childEnds.set(observed.sessionId, String(observed.event.endKind ?? ""));
+      changed = true;
+    }
+    // A child that starts a new turn is running again, whatever its last one did.
+    if (observed.child && observed.event.type === "turn/start" && tracker.childEnds.delete(observed.sessionId)) changed = true;
+    if (changed && tracker.startedAt && tracker.last) {
+      this.publishProgress(tracker.project ?? project, runId, tracker, this.composeProgress(tracker, { startedAt: tracker.startedAt }));
+    }
+  }
+
+  /**
+   * The aggregate from what the tracker holds.
+   * @param {ReturnType<AgentRunStore['progressTracker']>} tracker @param {{ startedAt?: string | null }} run
+   * @param {import('./runProgress.mjs').RunDeliverable[] | null} [deliverables]
+   */
+  composeProgress(tracker, run, deliverables = null) {
+    const projection = tracker.projection;
+    return assembleRunProgress({
+      deliverables: deliverables ?? runDeliverables(projection, null, null),
+      calls: [...tracker.sessions.values()].flatMap((calls) => [...calls.values()]),
+      projection,
+      matrixClaims: tracker.matrix,
+      children: progressChildren({ projection, kernelChildren: tracker.kernelChildren, ended: tracker.childEnds, lastActivity: tracker.activity }),
+      usage: tracker.usage,
+      startedAt: run.startedAt ?? tracker.startedAt ?? null,
+      now: this.now().toISOString(),
+    });
+  }
+
+  /**
+   * Publishes one run's aggregate when it changed, at most once per
+   * `progressPublishIntervalMs`, with the last change sent when the interval
+   * ends — so a burst of child tool calls is one frame, and the frame after a
+   * burst is never the one that was dropped.
+   * isolated: evimed_run_progress_publish_failures_total
+   * @param {any} project @param {string} runId @param {ReturnType<AgentRunStore['progressTracker']>} tracker
+   * @param {import('./runProgress.mjs').RunProgress} progress @param {{ force?: boolean }} [options]
+   */
+  publishProgress(project, runId, tracker, progress, { force = false } = {}) {
+    tracker.last = progress;
+    const send = () => {
+      if (tracker.timer) clearTimeout(tracker.timer);
+      tracker.timer = null;
+      const latest = tracker.last;
+      if (!latest) return;
+      const digest = progressDigest(latest);
+      if (digest === tracker.publishedDigest) return;
+      tracker.publishedDigest = digest;
+      tracker.publishedAt = Date.now();
+      try {
+        this.onRunProjection(project, { id: runId }, "run/progress", latest);
+      } catch { /* isolated */ }
+    };
+    if (progressDigest(progress) === tracker.publishedDigest) return;
+    const wait = tracker.publishedAt + this.progressPublishIntervalMs - Date.now();
+    if (force || wait <= 0) {
+      send();
+      return;
+    }
+    if (!tracker.timer) {
+      tracker.timer = setTimeout(send, wait);
+      tracker.timer.unref?.();
+    }
+  }
+
+  /**
+   * Re-reads a child's own history when its head has moved, to reconcile the
+   * tool calls the stream reported for it.
+   *
+   * Bounded twice: only a child whose kernel head advanced since its last
+   * read, and at most once per `childHistoryIntervalMs` each. Read under the
+   * parent's address — the only one the kernel accepts for a child.
+   * @param {any} project @param {Record<string, any>} run
+   * @param {ReturnType<AgentRunStore['progressTracker']>} tracker
+   * @param {{ sessionId: string, asOfSeq: number }[]} childActivity
+   */
+  async reconcileChildCalls(project, run, tracker, childActivity) {
+    const nowMs = this.now().getTime();
+    for (const child of childActivity.slice(0, 16)) {
+      const last = tracker.childReads.get(child.sessionId);
+      if (last && (child.asOfSeq <= last.seq || nowMs - last.at < this.childHistoryIntervalMs)) continue;
+      tracker.childReads.set(child.sessionId, { at: nowMs, seq: child.asOfSeq });
+      if (last) tracker.activity.set(child.sessionId, nowMs);
+      tracker.children.add(child.sessionId);
+      let history;
+      try {
+        history = await this.readSessionHistory(project, child.sessionId, { wake: false, parentSessionId: run.sessionId });
+      } catch {
+        continue; // an unread child still counts through its live events
+      }
+      tracker.sessions.set(child.sessionId, mergeObservedCalls(tracker.sessions.get(child.sessionId), observedCallsFromHistory(Array.isArray(history) ? history : [])));
+    }
+  }
+
+  /**
+   * What the run has cost so far, for the aggregate: at most every ten
+   * seconds, because it is a query against the usage ledger per poll otherwise.
+   * An unattributed run reads null and the aggregate carries no usage rather
+   * than a zero it did not measure.
+   * @param {any} project @param {Record<string, any>} run
+   * @param {ReturnType<AgentRunStore['progressTracker']>} tracker
+   */
+  async refreshRunUsage(project, run, tracker) {
+    const nowMs = this.now().getTime();
+    if (tracker.usageAt && nowMs - tracker.usageAt < 10_000) return;
+    tracker.usageAt = nowMs;
+    const usage = await this.readRunUsage(project, run);
+    tracker.usage = usage && typeof usage === "object" && Number(usage.requests) > 0 ? normalizeRunUsage(usage) : null;
+  }
+
+  /**
+   * The claim counts of the run's evidence matrices, when no claim tool has
+   * reported them: re-read only when a matrix file changed, and at most every
+   * fifteen seconds, because it re-reads every preserved source it quotes.
+   * @param {any} project @param {ReturnType<AgentRunStore['progressTracker']>} tracker
+   */
+  async refreshMatrixClaims(project, tracker) {
+    const nowMs = this.now().getTime();
+    if (tracker.matrix && nowMs - tracker.matrix.at < 15_000) return;
+    const ids = (Array.isArray(tracker.projection?.plan?.items) ? tracker.projection.plan.items : [])
+      .map((/** @type {any} */ item) => String(item?.id ?? ""))
+      .filter((id) => id && !id.includes("/") && !id.includes("\\") && id !== "." && id !== "..")
+      .slice(0, 12);
+    const paths = ids.map((id) => `${workspaceLayout.deliverablesDir}/${id}/clinical-evidence-matrix.json`);
+    const summary = await matrixClaimSummary(project, paths, tracker.matrix?.key ?? null);
+    tracker.matrix = summary
+      ? { ...summary, at: nowMs }
+      : (tracker.matrix ? { ...tracker.matrix, at: nowMs } : null);
   }
 
   /**
@@ -4578,6 +5675,12 @@ export class AgentRunStore {
       return null;
     }
     if (!Array.isArray(history)) return null;
+    // A run adopted before its first message could be read learns what it
+    // asked here, on the first poll that can read it (C3).
+    if (run.question == null) {
+      const asked = firstUserText(run, history);
+      if (asked) await this.recordRunLabels(project, run.id, { question: asked }).catch(() => {});
+    }
     history = runHistory(run, history);
     const messages = history.length;
     const toolCalls = history.reduce(
@@ -4592,14 +5695,35 @@ export class AgentRunStore {
     const runSide = await this.readRunSideActivity(project, run);
     const activity = runSide.signature;
     const eventActivity = this.kernelActivities.get(`${project.userId}\0${project.id}\0${run.id}`) ?? null;
+    const tracker = this.progressTracker(run.id);
+    tracker.project = project;
+    tracker.startedAt = run.startedAt;
+    if (runSide.projection) tracker.projection = runSide.projection;
+    const nowMs = this.now().getTime();
+    // Which children to ask the kernel about. The projection names the ones a
+    // delegation recorded; the event stream names the ones the kernel itself
+    // announced on the parent's log. Both are only *candidates*: the kernel's
+    // session list must confirm each one's parent before its head counts.
+    const candidates = [...new Set([...runSide.childSessionIds, ...tracker.children])].slice(0, 64);
+    // And every few seconds, children nothing named yet. A child the kernel
+    // lists under this run's root session and created after this run began is
+    // this run's work — the case F4 was: a delegated child writing every
+    // minute that no projection row and no stream event had named.
+    const discover = nowMs - tracker.discoveredAt >= this.childDiscoveryIntervalMs;
+    if (discover) tracker.discoveredAt = nowMs;
     let childActivity = [];
     let childActivityUnreadable = false;
-    if (runSide.childSessionIds.length > 0) {
+    if (candidates.length > 0 || discover) {
       try {
-        const observed = await this.readChildSessionActivity(project, run.sessionId, runSide.childSessionIds);
-        const allowed = new Set(runSide.childSessionIds);
+        const observed = await this.readChildSessionActivity(
+          project,
+          run.sessionId,
+          candidates,
+          discover ? { discoverSince: Date.parse(run.startedAt) - 5_000 } : {},
+        );
+        const allowed = new Set(candidates);
         childActivity = (Array.isArray(observed) ? observed : []).filter((child) =>
-          allowed.has(child?.sessionId)
+          (allowed.has(child?.sessionId) || child?.discovered === true)
           && typeof child?.sessionId === "string"
           && child.sessionId.length > 0
           && child.sessionId.length <= 512
@@ -4612,10 +5736,25 @@ export class AgentRunStore {
         })).slice(0, 256).sort((left, right) => left.sessionId.localeCompare(right.sessionId, "en"));
       } catch {
         // An unreadable catalogue is unknown activity, never proof of a stall
-        // and never permission to trust the projection's own counters.
-        childActivityUnreadable = true;
+        // and never permission to trust the projection's own counters — when
+        // there was a child to ask about. A discovery read that fails finds
+        // nothing, which is what it found before it existed.
+        if (candidates.length > 0) childActivityUnreadable = true;
       }
     }
+    // The aggregate a reader sees, before any stall arithmetic: it is a
+    // statement of what was observed, and a poll that cannot tell whether the
+    // run moved can still say what it has done.
+    tracker.sessions.set(run.sessionId, mergeObservedCalls(tracker.sessions.get(run.sessionId), observedCallsFromHistory(history)));
+    if (!childActivityUnreadable) {
+      tracker.kernelChildren = childActivity.map((child) => ({ sessionId: child.sessionId, running: child.running }));
+      for (const child of childActivity) tracker.children.add(child.sessionId);
+      await this.reconcileChildCalls(project, run, tracker, childActivity);
+    }
+    await this.refreshMatrixClaims(project, tracker).catch(() => {});
+    await this.refreshRunUsage(project, run, tracker).catch(() => {});
+    const progress = this.composeProgress(tracker, run);
+    this.publishProgress(project, run.id, tracker, progress);
     if (childActivityUnreadable) return null;
     const kernelKey = `${project.userId}\0${project.id}\0${run.id}`;
     const heads = this.childKernelHeads.get(kernelKey) ?? new Map();
@@ -4673,6 +5812,11 @@ export class AgentRunStore {
         toolCalls,
         ...(activity === null ? {} : { runSideActivity: activity }),
         ...(kernelActivity === null ? {} : { kernelActivity }),
+        // The aggregate, stored so a reader who opens the run later (or a
+        // restarted control plane) sees the last observed picture. The plan
+        // is stored once, beside the snapshot, never inside it twice.
+        ...(progress.deliverables.length ? { deliverables: progress.deliverables } : {}),
+        snapshot: withoutDeliverables(progress),
       };
       // Superseded progress rows go, for every run rather than only this one:
       // `serializeNext` holds that rule now, so the terminal path drops them too.
@@ -4739,8 +5883,15 @@ export class AgentRunStore {
         if (this.monitorStallPolls > 0 && idlePolls >= this.monitorStallPolls && !stallNoticed) {
           stallNoticed = true;
           const minutes = Math.round((idlePolls * this.monitorIntervalMs) / 60_000);
+          // Says what was measured and nothing else. It used to add 「工作区
+          // 也没有变化」, which nothing here ever checks — and in F4 it was shown
+          // while a child wrote a file every minute. What the counter does
+          // read is the parent's messages and tool calls, the kernel's events
+          // for the parent and every child it attributed, and each child's
+          // head in the kernel's own session list.
+          const sentence = `这次运行已有约 ${minutes} 分钟没有可观测的进展：主会话和各子任务都没有新消息、也没有新工具调用。运行仍在继续，没有被终止；如果确认它确实卡住了，可以停止它，已经写出的文件不会丢失。`;
           await this.appendQualityNotices(project, runId, [
-            `这次运行已有约 ${minutes} 分钟没有可观测的进展（没有新消息、没有新工具调用、工作区也没有变化）。运行仍在继续，没有被终止；如果确认它确实卡住了，可以手动停止，已经写出的文件不会丢失。`,
+            runNotice("run_stall_observed", sentence, { detail: sentence }),
           ]).catch(() => null);
         }
         // Checked here as well as in the loop condition. A cancel that lands
@@ -4839,11 +5990,11 @@ export class AgentRunStore {
    * ungated work indistinguishable from work that passed.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null, transcript?: import('@evimed/domain').RunTranscript, routeTurn?: (text: string) => Promise<any> }} [routed]
+   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null, estimatedMinutes?: { min: number, max: number } | null, forkedFrom?: string | null, transcript?: import('@evimed/domain').RunTranscript, routeTurn?: (text: string) => Promise<any> }} [routed]
    */
   async adoptRuntimeSession(project, sessionId, routed = {}) {
     const id = safeId(sessionId, "runtime session id");
-    if (routed.transcript) return this.adoptRuntimeTurns(project, id, routed.transcript, routed.routeTurn);
+    if (routed.transcript) return this.adoptRuntimeTurns(project, id, routed.transcript, routed.routeTurn, { forkedFrom: routed.forkedFrom ?? null });
     const existing = (await this.list(project)).find((run) => run.sessionId === id);
     if (existing) return existing;
     // A session this control plane is starting is announced by the kernel
@@ -4867,6 +6018,7 @@ export class AgentRunStore {
     }, {
       baselineCursor: null,
       question: routed.question ?? null,
+      estimatedMinutes: routed.estimatedMinutes ?? null,
       effectiveAgentId: routed.effectiveAgentId ?? null,
       effectiveAgentVersion: routed.effectiveAgentVersion ?? null,
       effectiveRuntimeAgent: routed.effectiveRuntimeAgent ?? null,
@@ -4889,7 +6041,9 @@ export class AgentRunStore {
       // Nothing to grade against: no text to route, so no contract. Said in the
       // one machine-readable field rather than left to look like a pass.
       await this.appendQualityNotices(project, run.id, [
-        "Adopted from the runtime's own browser application with no readable first message, so no deliverable contract could be selected and the delivery gate did not run on this session.",
+        runNotice("run_adopted_unchecked",
+          "Adopted from the runtime's own browser application with no readable first message, so no deliverable contract could be selected and the delivery gate did not run on this session.",
+          { detail: "这次对话没有可读的首条提问，无法匹配交付契约，所以没有做交付核验。" }),
       ], { unchecked: true });
     }
     return (await this.list(project)).find((item) => item.id === run.id) ?? run;
@@ -4997,15 +6151,21 @@ export class AgentRunStore {
    * @param {any} project @param {string} sessionId
    * @param {import('@evimed/domain').RunTranscript} transcript
    * @param {(text: string) => Promise<any>} [routeTurn]
+   * @param {{ forkedFrom?: string | null }} [options] the session this one was forked from
    */
-  async adoptRuntimeTurns(project, sessionId, transcript, routeTurn = async () => ({})) {
+  async adoptRuntimeTurns(project, sessionId, transcript, routeTurn = async () => ({}), { forkedFrom = null } = {}) {
     if (transcript.sessionId !== sessionId) throw new HttpError(400, "invalid_agent_run", "Runtime transcript identity does not match.");
     const binding = await this.researchSessions.get(project, sessionId);
+    // A fork begins with a copy of the session it branched from. Those turns
+    // are that session's runs already; only what came after the cut is work
+    // done here.
+    const seedEnd = Number.isSafeInteger(transcript.seedEndSeq) ? Number(transcript.seedEndSeq) : -1;
     const turns = (transcript.turns ?? []).map((turn) => ({
       ...turn,
       inputs: transcript.messages.filter((message) => message.turnStartSeq === turn.startSeq && message.role === "user" && message.source === "user"),
-    })).filter((turn) => turn.inputs.length > 0);
+    })).filter((turn) => turn.inputs.length > 0 && turn.startSeq > seedEnd);
     const knownRuns = await this.list(project);
+    const source = forkedFrom && /^[A-Za-z0-9_-]{1,128}$/.test(forkedFrom) ? forkedFrom : null;
     const notifiedLegacy = new Set();
     for (const [index, turn] of turns.entries()) {
       const first = turn.inputs[0];
@@ -5048,8 +6208,9 @@ export class AgentRunStore {
           run = await this.bindLegacyKernelRequests(legacyProject, matches[0].id, requestIds);
           knownRuns[knownRuns.findIndex((item) => item.id === run.id)] = run;
         } else if (matches.length > 1 || unknownLegacy) {
-          const notice = "Native replay could not be attributed because a legacy ordinary run has no unique verifiable input boundary.";
-          for (const item of legacyOrdinary) if (!item.qualityNotices?.includes(notice) && !notifiedLegacy.has(item.id)) {
+          const notice = runNotice("run_legacy_unattributed",
+            "Native replay could not be attributed because a legacy ordinary run has no unique verifiable input boundary.");
+          for (const item of legacyOrdinary) if (!item.qualityNotices?.some((existing) => noticeText(existing) === notice.text) && !notifiedLegacy.has(item.id)) {
             const legacyProject = await this.resolveRunProject(project, item);
             if (!legacyProject) continue;
             await this.appendQualityNotices(legacyProject, item.id, [notice], { unchecked: true });
@@ -5074,17 +6235,32 @@ export class AgentRunStore {
           kernelRequestIds: requestIds,
           legacyRunId: legacy?.id,
           question: questionPreview(question),
+          estimatedMinutes: routed.estimatedMinutes ?? null,
+          forkedFrom: source,
           effectiveAgentId: routed.effectiveAgentId ?? binding?.agentId ?? null,
           effectiveAgentVersion: routed.effectiveAgentVersion ?? binding?.agentVersion ?? null,
           effectiveRuntimeAgent: routed.effectiveRuntimeAgent ?? binding?.runtimeAgent ?? null,
           effectiveRouteReason: `${adoptedRouteReason}${routed.effectiveRouteReason ? `:${routed.effectiveRouteReason}` : ""}`.slice(0, 64),
         });
         run = reservation.run;
+        // The first run of a fork is named after the line it branched from,
+        // 「分支：<that run's title>」; the researcher can rename it like any.
+        if (reservation.owner && source && !knownRuns.some((item) => item.sessionId === sessionId && item.id !== run.id)) {
+          const origin = knownRuns.filter((item) => item.sessionId === source)
+            .sort((left, right) => String(right.startedAt).localeCompare(String(left.startedAt)))[0];
+          const named = [...String(origin?.title ?? "一次对话")];
+          run = await this.recordRunLabels(project, run.id, {
+            title: `分支：${named.length > 40 ? `${named.slice(0, 39).join("")}…` : named.join("")}`,
+            titleSource: "auto",
+          }).catch(() => run);
+        }
         const knownIndex = knownRuns.findIndex((item) => item.id === run.id);
         if (knownIndex >= 0) knownRuns[knownIndex] = run;
         else knownRuns.push(run);
         if (reservation.owner && !run.effectiveRuntimeAgent) {
-          await this.appendQualityNotices(project, run.id, ["The native input could not be assigned a deliverable contract; its delivery checks are unchecked."], { unchecked: true });
+          await this.appendQualityNotices(project, run.id, [runNotice("run_adopted_unchecked",
+            "The native input could not be assigned a deliverable contract; its delivery checks are unchecked.",
+            { detail: "这次提问没有匹配到交付契约，所以没有做交付核验。" })], { unchecked: true });
         }
       }
       if (run.status === "running" && !(run.dispatchStatus === "dispatching" && this.dispatchOwners.has(run.id))) {
@@ -5193,6 +6369,9 @@ export class AgentRunStore {
         status,
         errorCode: "runtime_canceled",
         artifacts: [],
+        // The platform stopping, not the researcher: said, because the inbox
+        // tells the one and not the other.
+        ...(status === "canceled" ? { canceledBy: "platform" } : {}),
       });
     }
   }
@@ -5220,6 +6399,7 @@ export class AgentRunStore {
         // other project's runs from being marked canceled on shutdown.
       }
     }
+    await Promise.allSettled([...this.backgroundLabels]);
     this.projects.clear();
     this.dispatchOwners.clear();
     this.clinicalRepairAttempts.clear();

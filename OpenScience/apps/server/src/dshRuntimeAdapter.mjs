@@ -24,6 +24,7 @@
 
 import {
   EMPTY_TRANSCRIPT,
+  SOCKET_TOOL_NAMES,
   narrateToolCall,
   normalizeTurnEndKind,
   turnEndErrorCode,
@@ -226,6 +227,50 @@ export function socketToolResult(output) {
     if (issue) issues.push({ severity: issue[1], code: issue[2], message: issue[3] ?? "" });
   }
   return { ok: false, code: failed[1], issues };
+}
+
+// The socket's collecting tool (C6, 2026-09-18). Named here rather than read
+// from `SOCKET_TOOL_NAMES`, which gains the row in the same release: a missing
+// row there would make this reader silently match nothing.
+const awaitToolName = "evimed_await";
+const childSessionIdPattern = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/;
+
+/**
+ * The child sessions a delegation tool's own result names.
+ *
+ * `evimed_delegate` answers `{handle, deliverableId, childSessionId, status}`
+ * the moment its child exists — it stopped waiting for the child on
+ * 2026-09-18 (C6) — and `evimed_await` answers `{results: [{handle,
+ * deliverableId, childSessionId, status, …}]}`, which is the only place a
+ * retried child's id reaches the parent at all: the retry starts after the
+ * delegate call has already returned. Both are rendered by the socket, never
+ * by the model.
+ *
+ * This is the second witness beside the kernel's `subagent/catalog` fact on
+ * the parent's log. The same release removed four subagent rows from the
+ * preset, and a run's children must not become invisible again because one
+ * kernel fact moved (the F4 failure was exactly that). A name found here is a
+ * candidate: wherever it counts for liveness, the kernel's session list still
+ * has to confirm the parent first.
+ * @param {string} tool @param {unknown} output
+ * @returns {{ childSessionId: string, deliverableId?: string }[]}
+ */
+export function delegatedChildrenOf(tool, output) {
+  if (tool !== SOCKET_TOOL_NAMES.delegate && tool !== awaitToolName) return [];
+  const result = socketToolResult(output);
+  if (result?.ok !== true || !result.data || typeof result.data !== "object") return [];
+  const rows = tool === awaitToolName
+    ? (Array.isArray(result.data.results) ? result.data.results : [])
+    : [result.data];
+  /** @type {{ childSessionId: string, deliverableId?: string }[]} */
+  const children = [];
+  for (const row of rows.slice(0, 64)) {
+    const childSessionId = typeof row?.childSessionId === "string" ? row.childSessionId.trim() : "";
+    if (!childSessionIdPattern.test(childSessionId) || children.some((child) => child.childSessionId === childSessionId)) continue;
+    const deliverableId = typeof row?.deliverableId === "string" ? row.deliverableId.trim().slice(0, 120) : "";
+    children.push({ childSessionId, ...(deliverableId ? { deliverableId } : {}) });
+  }
+  return children;
 }
 
 /**
@@ -563,11 +608,17 @@ export class DshRuntimeAdapter {
    * the transcript endpoint: a tab that connects mid-run gets the window it
    * missed from here, in the same vocabulary as everything after it.
    *
-   * @param {{ sessionId: string, signal: AbortSignal }} input
+   * @param {{ sessionId: string, signal: AbortSignal, address?: { kind: 'subagent', parentSessionId: string, childSessionId: string, mode: string } | null }} input
    * @returns {AsyncGenerator<{ sessionId: string, event: import('@evimed/domain').RunEvent, replay: boolean }>}
    */
-  async *watchSession({ sessionId, signal }) {
-    const args = { request: { address: { kind: "session", sessionId }, assistantStream: true } };
+  async *watchSession({ sessionId, signal, address = null }) {
+    // A subagent session is followed at its parent's address. Asked for at its
+    // own id the kernel refuses the stream ("subagent Sessions require their
+    // durable parent address"), and the pump's follow loop swallows the
+    // refusal — so until the address was passed no delegated child's tool call
+    // ever reached a run's event channel, and the stall monitor could not hear
+    // a child that was writing files every minute.
+    const args = { request: { address: address ?? { kind: "session", sessionId }, assistantStream: true } };
     /** @type {{attemptId: string, startedAfterSeq: number, nextIndex: number}|null} */
     let attempt = null;
     let revision = -1;
@@ -635,7 +686,7 @@ export function normalizeTranscript(sessionId, entries) {
   const messages = [];
   /** @type {Map<string, Record<string, any>>} */
   const pendingCalls = new Map();
-  /** @type {{ sessionId: string, parentSessionId: string, label: string, capability: string }[]} */
+  /** @type {{ sessionId: string, parentSessionId: string, label: string, capability: string, mode?: string, createdAt?: number }[]} */
   const subagents = [];
   /** @type {{ kind: string, code?: string, subCode?: string } | null} */
   let turnEnd = null;
@@ -644,6 +695,9 @@ export function normalizeTranscript(sessionId, entries) {
   /** @type {import('@evimed/domain').TranscriptTurn | null} */
   let activeTurn = null;
   let lastSeq = -1;
+  /** The last `session/end-seed` marker of a forked session (see the kernel's
+   *  `Session.firstLiveSeq`: locate the LAST such event). */
+  let seedEndSeq = -1;
 
   for (const entry of entries) {
     const event = entry?.event ?? entry;
@@ -764,6 +818,30 @@ export function normalizeTranscript(sessionId, entries) {
         });
         break;
       }
+      // The parent's own record of a child it created — the event that does
+      // reach a parent's log at this pin, where `subagent/descriptor` (written
+      // into the child) never does. See `decodeMuxFrame`.
+      case "subagent/catalog": {
+        const childId = String(data.childId ?? "");
+        const mode = String(data.mode ?? "");
+        if (childId && !subagents.some((known) => known.sessionId === childId)) {
+          subagents.push({
+            sessionId: childId,
+            parentSessionId: sessionId,
+            label: String(data.label ?? ""),
+            capability: "",
+            ...(mode === "one-shot" || mode === "continuable" ? { mode } : {}),
+            ...(Number.isSafeInteger(data.childCreatedAt) ? { createdAt: data.childCreatedAt } : {}),
+          });
+        }
+        break;
+      }
+      case "session/end-seed": {
+        // A fork's copied history ends here (`session/fork` seeds the new
+        // session with the source's events and marks the cut).
+        if (Number.isSafeInteger(seq)) seedEndSeq = Math.max(seedEndSeq, seq);
+        break;
+      }
       case "turn/end": {
         const end = toTurnEnd(event);
         const mapped = turnEndErrorCode(end.kind === "unknown" ? String(end.rawKind ?? "") : end.kind);
@@ -788,6 +866,7 @@ export function normalizeTranscript(sessionId, entries) {
     turnEnd,
     subagents: Object.freeze(subagents),
     lastSeq,
+    ...(seedEndSeq >= 0 ? { seedEndSeq } : {}),
   };
 }
 
@@ -999,6 +1078,35 @@ export function decodeMuxFrame(frame) {
           output,
           ...(data.error ? { errorCode: String(data.error.code ?? "") } : {}),
           narration: narrateToolCall(tool, {}, data.error ? undefined : { text: output }).text,
+        },
+      };
+    }
+    // The child's creation, as the PARENT's own log records it.
+    //
+    // `subagent/descriptor` below is written into the child's log, so a reader
+    // following only the parent never sees it — and at this pin nothing else
+    // announced a delegated child on the parent's stream, so the event pump
+    // never learned a child existed and a delegated run's progress stopped at
+    // the parent's blocked tool call (2026-09-18, F4). The kernel appends
+    // `subagent/catalog` to the parent the moment a child is established
+    // (`establishCatalogChild`, dsh-subagent 0.1.5-rc.2): `{version, childId,
+    // childCreatedAt, mode, label?}`. It is the kernel's fact, not a
+    // model-writable one, and it carries `mode` — the one field a child's
+    // durable address needs and cannot be guessed (see `subagentAddress`).
+    case "subagent/catalog": {
+      const childSessionId = String(data.childId ?? "");
+      const mode = String(data.mode ?? "");
+      if (!childSessionId) return { sessionId, event: { type: "unknown", seq, rawType: "subagent/catalog" } };
+      return {
+        sessionId,
+        event: {
+          type: "subagent/started",
+          seq,
+          childSessionId,
+          capability: "",
+          label: String(data.label ?? ""),
+          parentSessionId: sessionId,
+          ...(mode === "one-shot" || mode === "continuable" ? { mode } : {}),
         },
       };
     }

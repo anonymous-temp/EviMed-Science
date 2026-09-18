@@ -71,12 +71,18 @@ import { isEviMedToolName } from './toolNames.mjs'
  * @property {readonly TranscriptMessage[]} messages
  * @property {readonly TranscriptTurn[]} [turns]
  * @property {{ kind: string, code?: string, subCode?: string } | null} turnEnd
- * @property {readonly { sessionId: string, parentSessionId: string, label: string, capability: string }[]} subagents
+ * @property {readonly { sessionId: string, parentSessionId: string, label: string, capability: string, mode?: string, createdAt?: number }[]} subagents
+ *   `mode` and `createdAt` come from the parent log's `subagent/catalog` fact;
+ *   a child's durable address needs the mode, and `createdAt` tells one turn's
+ *   children from an earlier turn's in a native session.
  * @property {number} lastSeq
  * @property {boolean} [exhausted] whether the reader walked back to the start
  *   of the session. The only truthful truncation signal: `lastSeq` counts every
  *   event and a transcript's messages are a subset of those, so comparing the
  *   two reports a gap on any session that ends on a turn-end.
+ * @property {number} [seedEndSeq] a forked session's `session/end-seed` marker:
+ *   every event at or before it was copied from the session it was forked
+ *   from, and belongs to that session's runs, not to this one's.
  */
 
 /** An empty transcript, so a caller never has to invent one. */
@@ -162,9 +168,9 @@ export function totalOutputTokens(transcript) {
  *   | { type: 'message/user', seq: number, text: string, source: 'user'|'plugin'|'system'|'subagent'|'skill-catalog', sourceRequestId?: string }
  *   | { type: 'message/assistant', seq: number, text: string, reasoning: string, usage: { input: number, output: number, cacheHit: number, cacheMiss: number } | null, interrupted: boolean }
  *   | { type: 'assistant/delta', seq: number, kind: 'text'|'reasoning', text: string, stream?: {attemptId: string, index: number} }
- *   | { type: 'tool/call', seq: number, callId: string, tool: string, input: Record<string, unknown>, narration: string }
- *   | { type: 'tool/result', seq: number, callId: string, tool: string, status: 'completed'|'error', output: string, errorCode?: string, narration: string, durationMs?: number }
- *   | { type: 'subagent/started', seq: number, childSessionId: string, capability: string, label: string }
+ *   | { type: 'tool/call', seq: number, callId: string, tool: string, input: Record<string, unknown>, narration: string, phase?: import('./runPhases.mjs').RunActivityPhase | null }
+ *   | { type: 'tool/result', seq: number, callId: string, tool: string, status: 'completed'|'error', output: string, errorCode?: string, narration: string, durationMs?: number, phase?: import('./runPhases.mjs').RunActivityPhase | null }
+ *   | { type: 'subagent/started', seq: number, childSessionId: string, capability: string, label: string, parentSessionId?: string, mode?: 'one-shot'|'continuable' }
  *   | { type: 'workflow/stage', seq: number, runId: string, stage: string, state: string }
  *   | { type: 'compaction', seq: number, replaced: number, estimatedTokens: number }
  *   | { type: 'plan/updated', seq: number, revision: number, deliverableCount: number }

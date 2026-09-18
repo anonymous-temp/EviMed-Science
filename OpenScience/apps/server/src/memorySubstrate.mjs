@@ -41,8 +41,32 @@ export const MEMORY_INDEX_PROVIDERS = Object.freeze(["builtin", "openviking"]);
  *  work no worker claims; one that did not enqueue on an `openviking` one would
  *  leave the index empty, which is the same defect seen from the other side. */
 export function selectedMemoryIndexProvider(config) {
-  const requested = String(config?.memoryIndexProvider ?? "builtin");
-  return MEMORY_INDEX_PROVIDERS.includes(requested) ? requested : "builtin";
+  return memoryIndexSelection(config).provider;
+}
+
+/** Which provider a configuration selects, and why — the why is what readiness
+ *  reports, because every memory evaluation so far recorded `builtin` from a
+ *  deployment whose files said `openviking` (2026-09-18 review, E §10.5), and a
+ *  bare provider name could not say whether that was a choice or an accident.
+ *
+ *  - `named`: `OPEN_SCIENCE_MEMORY_INDEX_PROVIDER` names a provider; it wins,
+ *    including `builtin` on a deployment whose index is configured.
+ *  - `index-configured`: unset, and an OpenViking URL and its key are both
+ *    present, so the index this deployment configured is the one used.
+ *  - `default`: unset and no index configured — the term matcher.
+ *  - `unknown-name`: a name this build does not know, read as the term matcher.
+ *
+ *  @param {any} config
+ *  @returns {{ provider: string, source: 'named' | 'index-configured' | 'default' | 'unknown-name', indexConfigured: boolean }} */
+export function memoryIndexSelection(config) {
+  const requested = String(config?.memoryIndexProvider ?? "").trim();
+  const indexConfigured = Boolean(String(config?.openVikingUrl ?? "").trim())
+    && Boolean(config?.openVikingApiKey) && !config?.openVikingApiKeyError;
+  if (MEMORY_INDEX_PROVIDERS.includes(requested)) return { provider: requested, source: "named", indexConfigured };
+  if (requested) return { provider: "builtin", source: "unknown-name", indexConfigured };
+  return indexConfigured
+    ? { provider: "openviking", source: "index-configured", indexConfigured }
+    : { provider: "builtin", source: "default", indexConfigured };
 }
 
 /** How many candidates to ask the index for, relative to what the budget will
@@ -121,7 +145,13 @@ export class MemorySubstrate {
    * @param {{ store?: any, openViking?: any, rerank?: any, jobs?: any }} dependencies
    */
   constructor(config, { store = null, openViking = null, rerank = null, jobs = null } = {}) {
-    this.provider = selectedMemoryIndexProvider(config);
+    this.selection = memoryIndexSelection(config);
+    this.provider = this.selection.provider;
+    // The deployment's recall switch (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`).
+    // Held here because every recall passes through this port — the dispatch
+    // block directly, the recall tool and the agent API through
+    // `recallAcrossMemory` — so one flag on it is one switch, not three.
+    this.recallEnabled = config?.memoryRecallEnabled !== false;
     this.store = store;
     this.openViking = openViking;
     this.rerank = rerank;
@@ -156,6 +186,10 @@ export class MemorySubstrate {
    * @param {{ projectId?: string|null, sessionId?: string|null }} scope
    */
   async recall(userId, query, { projectId = null, sessionId = null } = {}) {
+    // The deployment's switch, before the researcher's: off means no memory
+    // reaches a run from this port, which is what makes "memory off" a control
+    // arm rather than an account whose records happen not to match.
+    if (!this.recallEnabled) return [];
     // The researcher's own switch, for the account or for this project
     // (2026-09-16 review, M4④). Before either path, so a paused account gets no
     // memories whichever index is serving.

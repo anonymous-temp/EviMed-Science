@@ -36,6 +36,19 @@ test("the real app exposes an account-scoped inbox decision journey", {
       body: JSON.stringify({ actionId: "adopt", expectedRevision: item.revision }) });
     assert.equal(resolved.status, 200);
     assert.equal((await resolved.json()).data.resolution.actionId, "adopt");
+    // C1: the bell's two integers, the list's total, and read-all.
+    await app.notificationService.create(user.id, { noticeType: "notify", title: "研究已交付，待你复核",
+      body: "已交付。1 项自证未通过，其中 1 项涉及临床安全。", severity: "safety", actions: [{ id: "open", label: "查看运行" }] });
+    const count = await fetch(`${base}/api/inbox/unread-count`, { headers });
+    assert.equal(count.status, 200);
+    assert.deepEqual((await count.json()).data, { unreadTotal: 1, safetyUnread: 1 });
+    const page = await (await fetch(`${base}/api/inbox?unread=true&limit=1`, { headers })).json();
+    assert.equal(page.data.unreadTotal, 1);
+    assert.equal(page.data.items[0].severity, "safety");
+    assert.equal((await fetch(`${base}/api/inbox/read-all`, { method: "POST", headers, body: JSON.stringify({ everything: true }) })).status, 400);
+    const cleared = await fetch(`${base}/api/inbox/read-all`, { method: "POST", headers, body: "{}" });
+    assert.deepEqual((await cleared.json()).data, { updated: 1 });
+    assert.deepEqual((await (await fetch(`${base}/api/inbox/unread-count`, { headers })).json()).data, { unreadTotal: 0, safetyUnread: 0 });
     assert.equal((await fetch(`${base}/api/inbox`)).status, 401);
   } finally {
     if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);

@@ -160,3 +160,27 @@ test("recall applies type and time filters before limiting the selected context"
   await assert.rejects(service.recall(owner, { query: "Matching", factKinds: ["permission"] }), { code: "capsule_payload_invalid" });
   await assert.rejects(service.recall(owner, { query: "Matching", scope: "agenda" }), { code: "capsule_scope_unavailable" });
 });
+
+test("the resident profile reads approved person entries of the researcher's own capsules from PostgreSQL", options, async () => {
+  // Its own account: activation is per account, and the cases above leave
+  // theirs in whatever state they needed.
+  const profileOwner = `capsule_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Profile owner','development')", [profileOwner]);
+  try {
+    await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'profile','Profile',1048576)", [profileOwner]);
+    const own = await service.create(profileOwner, { title: "Own capsule" });
+    await service.addEntry(profileOwner, own.id, { factKind: "profile", layer: "profile", content: "Cardiology pharmacist." });
+    await service.addEntry(profileOwner, own.id, { factKind: "writing_style", layer: "profile", content: "Conclusion first." });
+    await service.addEntry(profileOwner, own.id, { factKind: "preference", layer: "profile", content: "Inferred, not approved.", origin: "inferred" });
+    await service.addEntry(profileOwner, own.id, { factKind: "project_fact", content: "Uses MIMIC-IV." });
+    const guest = await service.create(profileOwner, { title: "Colleague's pack" });
+    await service.addEntry(profileOwner, guest.id, { factKind: "profile", layer: "profile", content: "Oncologist." });
+    await service.activate(profileOwner, own.id, { mode: "own", projectId: "profile" });
+    await service.activate(profileOwner, guest.id, { mode: "guest", projectId: "profile" });
+    const facts = await service.profileFacts(profileOwner, "profile", ["profile", "expertise", "preference", "stance", "writing_style"]);
+    assert.deepEqual(facts.map((fact) => fact.content).sort(), ["Cardiology pharmacist.", "Conclusion first."]);
+    assert.ok(facts.every((fact) => fact.capsuleId === own.id && typeof fact.updatedAt === "string"));
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [profileOwner]);
+  }
+});

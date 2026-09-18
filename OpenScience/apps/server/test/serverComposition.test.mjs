@@ -136,6 +136,8 @@ class FakePool extends EventEmitter {
     this.jobs = new Map();
     /** @type {Map<string, any>} Rows of `evimed_inbox.notifications`. */
     this.inbox = new Map();
+    /** @type {Map<string, string>} `evimed_inbox.merged_events`: event id -> the item it folded into. */
+    this.mergedEvents = new Map();
     /** @type {string[]} Every statement, in order, one line each. */
     this.statements = [];
     /** @type {{ sql: string, values: any[] }[]} The same statements with their bound parameters. */
@@ -203,13 +205,44 @@ class FakePool extends EventEmitter {
       const row = this.inbox.get(values[0]);
       return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
     }
+    // A grouped item's members, which is how a replayed event of a group is
+    // recognised after the group has moved on.
+    if (/^SELECT n\.\* FROM evimed_inbox\.merged_events e JOIN evimed_inbox\.notifications n/.test(sql)) {
+      const row = this.inbox.get(this.mergedEvents.get(values[0]) ?? "");
+      const owned = row && row.user_id === values[1] ? [row] : [];
+      return { rows: owned, rowCount: owned.length };
+    }
+    if (/^INSERT INTO evimed_inbox\.merged_events/.test(sql)) {
+      if (this.mergedEvents.has(values[0])) return { rows: [], rowCount: 0 };
+      this.mergedEvents.set(values[0], values[1] ?? values[0]);
+      return { rows: [], rowCount: 1 };
+    }
+    if (/^SELECT \* FROM evimed_inbox\.notifications WHERE user_id=\$1 AND notice_type='notify' AND group_key=\$2/.test(sql)) {
+      const rows = [...this.inbox.values()].filter((row) => row.user_id === values[0] && row.notice_type === "notify"
+        && row.group_key === values[1] && (row.project_id ?? null) === (values[2] ?? null));
+      const latest = rows.sort((left, right) => String(right.created_at).localeCompare(String(left.created_at)))[0];
+      return { rows: latest ? [latest] : [], rowCount: latest ? 1 : 0 };
+    }
+    if (/^UPDATE evimed_inbox\.notifications SET title=\$2,body=\$3,actions=\$4::jsonb,source=\$5::jsonb/.test(sql)) {
+      const row = this.inbox.get(values[0]);
+      if (!row) return { rows: [], rowCount: 0 };
+      const silent = values[6] === true;
+      Object.assign(row, {
+        title: values[1], body: values[2], actions: JSON.parse(values[3]), source: JSON.parse(values[4]), severity: values[5],
+        silent: row.silent && silent, read_at: silent ? row.read_at : null, resolved_at: silent ? row.resolved_at : null,
+        resolution: silent ? row.resolution : null, event_count: row.event_count + 1, revision: row.revision + 1,
+        created_at: String(values[7]) > String(row.created_at) ? values[7] : row.created_at, updated_at: values[7],
+      });
+      return { rows: [row], rowCount: 1 };
+    }
     if (/^INSERT INTO evimed_inbox\.notifications/.test(sql)) {
       if (this.inbox.has(values[0])) return { rows: [], rowCount: 0 };
       const row = {
         id: values[0], user_id: values[1], project_id: values[2], notice_type: values[3], priority: values[4],
         title: values[5], body: values[6], actions: JSON.parse(values[7]), source: JSON.parse(values[8]),
         group_key: values[9], due_at: values[10], default_action: values[11], event_count: 1,
-        read_at: null, resolved_at: null, resolution: null, channels_sent: { "in-app": values[12] },
+        severity: values[13], silent: values[14] === true, read_at: values[14] === true ? values[12] : null,
+        resolved_at: null, resolution: null, channels_sent: { "in-app": values[12] },
         revision: 1, created_at: values[12], updated_at: values[12],
       };
       this.inbox.set(row.id, row);
@@ -285,9 +318,9 @@ class FakePool extends EventEmitter {
     if (/^SELECT 1 FROM evimed_control\.projects WHERE user_id = \$1 AND id = \$2 FOR UPDATE/.test(sql)) {
       return values[0] === USER_ID && values[1] === PROJECT_ID ? { rows: [{ "?column?": 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
-    if (/^SELECT id, name, active_workspace, quota_bytes FROM evimed_control\.projects/.test(sql)) {
+    if (/^SELECT id, name, active_workspace, quota_bytes(?:, archived_at)? FROM evimed_control\.projects/.test(sql)) {
       return values[0] === USER_ID && values[1] === PROJECT_ID
-        ? { rows: [{ id: PROJECT_ID, name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000 }], rowCount: 1 }
+        ? { rows: [{ id: PROJECT_ID, name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT request_id,requested_at,expires_at FROM evimed_product\.maintenance_lease/.test(sql)) {
@@ -1431,6 +1464,9 @@ test("the memory extractor the composition root built reports a rewritten memory
   assert.equal(notices.length, 1, "the conflict notice never reached evimed_inbox.notifications");
   assert.equal(notices[0].user_id, USER_ID);
   assert.equal(notices[0].notice_type, "notify", "the change already happened; there is nothing left to ask");
+  // 「结论变了」 is one of the three moments the inbox notifies at (C1).
+  assert.equal(notices[0].severity, "attention");
+  assert.equal(notices[0].silent, false);
   // One action, and it is a link rather than a resolution: the change has
   // already happened, so a button that posts a decision would promise one
   // nothing acts on. Without it the inbox said a memory had been rewritten and

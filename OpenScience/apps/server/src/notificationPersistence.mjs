@@ -32,6 +32,26 @@ CREATE INDEX IF NOT EXISTS inbox_due_idx ON evimed_inbox.notifications(due_at,id
 CREATE INDEX IF NOT EXISTS inbox_group_idx ON evimed_inbox.notifications(user_id,group_key,created_at DESC)
   WHERE resolved_at IS NULL AND notice_type='notify' AND group_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS inbox_project_fk_idx ON evimed_inbox.notifications(user_id,project_id);
+-- 2026-09-18 (contract C1). How much an item may interrupt, and whether it was
+-- recorded without notifying anyone. Added columns, not a new table: every
+-- existing row reads as the quiet default, which is what it was.
+ALTER TABLE evimed_inbox.notifications ADD COLUMN IF NOT EXISTS severity text NOT NULL DEFAULT 'info';
+ALTER TABLE evimed_inbox.notifications ADD COLUMN IF NOT EXISTS silent boolean NOT NULL DEFAULT false;
+-- The bell's count, and the retention sweep's scan. Both are partial on
+-- read_at, which is the only column either of them filters on first.
+CREATE INDEX IF NOT EXISTS inbox_unread_idx ON evimed_inbox.notifications(user_id,severity) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS inbox_read_retention_idx ON evimed_inbox.notifications(read_at) WHERE read_at IS NOT NULL;
+-- A grouped item stands for several events, and each of them keeps its own
+-- idempotency key here. Without this a replay of the third run's completion
+-- would find no row under its own key and fold into the group a second time.
+CREATE TABLE IF NOT EXISTS evimed_inbox.merged_events (
+  id text PRIMARY KEY,
+  notification_id text NOT NULL REFERENCES evimed_inbox.notifications(id) ON DELETE CASCADE,
+  created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS inbox_merged_events_notification_idx ON evimed_inbox.merged_events(notification_id);
+CREATE INDEX IF NOT EXISTS inbox_group_key_idx ON evimed_inbox.notifications(user_id,group_key,created_at DESC)
+  WHERE notice_type='notify' AND group_key IS NOT NULL;
 CREATE TABLE IF NOT EXISTS evimed_inbox.preferences (
   user_id text PRIMARY KEY REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   quiet_start text NOT NULL DEFAULT '22:00',
@@ -67,6 +87,13 @@ BEGIN
   ) THEN
     ALTER TABLE evimed_inbox.preferences ADD CONSTRAINT inbox_preferences_user_fk
       FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_inbox' AND t.relname='notifications' AND c.conname='inbox_notifications_severity_check'
+  ) THEN
+    ALTER TABLE evimed_inbox.notifications ADD CONSTRAINT inbox_notifications_severity_check
+      CHECK (severity IN ('safety','attention','info'));
   END IF;
 END $foreign_keys$;
 `;

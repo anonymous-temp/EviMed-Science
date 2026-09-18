@@ -337,3 +337,24 @@ test("the sweep decides expiry on the database clock, not the process instant", 
   assert.equal(row.status, "uncertain");
   assert.equal(row.error_code, "reservation_expired");
 });
+
+test("an interactive run's attributed calls are capped by its own limit, and a list reads every run's usage at once", options, async () => {
+  // Interactive calls reached the ledger with no run until 2026-09-18, so the
+  // per-run cap above could only ever fire for autopilot (E §9.4). The gateway
+  // now names the run; this is the cap doing its job for one, and the
+  // one-query aggregate the run list reads.
+  const now = new Date("2026-09-07T00:00:00.000Z");
+  const runId = `run_${randomUUID().replaceAll("-", "")}`;
+  const first = await ledger.reserveModel(reservation(other, { runId, runLimit: 1, estimatedCost: 0.6, now }));
+  await ledger.settleModel(other, first.id, { usage: { cacheHitTokens: 300, cacheMissTokens: 700, completionTokens: 50 }, actualCost: 0.5, priced: true });
+  await assert.rejects(ledger.reserveModel(reservation(other, { runId, runLimit: 1, estimatedCost: 0.6, now })),
+    (error) => error.code === "usage_budget_exceeded" && error.details?.window === "run");
+  const otherRun = `run_${randomUUID().replaceAll("-", "")}`;
+  const unrelated = await ledger.reserveModel(reservation(other, { runId: otherRun, runLimit: 1, estimatedCost: 0.6, now }));
+  assert.ok(unrelated.id, "another run's budget is its own");
+  const summaries = await ledger.summaryRuns(other, [runId, otherRun, "run_never_used"]);
+  assert.deepEqual(summaries.get(runId), { requests: 1, inputTokens: 1000, cachedInputTokens: 300, outputTokens: 50, costCny: 0.5 });
+  assert.deepEqual(summaries.get(otherRun), { requests: 1, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, costCny: 0 }, "a reserved call is counted, its tokens are not yet");
+  assert.equal(summaries.has("run_never_used"), false);
+  assert.equal((await ledger.summaryRuns(owner, [runId])).size, 0, "another account's runs are not read");
+});

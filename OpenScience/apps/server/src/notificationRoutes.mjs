@@ -38,7 +38,18 @@ export function createNotificationRoutes({ store, service, maxJsonBytes }) {
         unresolvedOnly: booleanParam(url, "unresolved"),
         limit: Number(url.searchParams.get("limit") ?? 50),
         cursor: url.searchParams.get("cursor"),
+        projectId: url.searchParams.get("projectId"),
       }));
+    }
+    // The bell polls this: two integers, and nothing it would have to count.
+    // Account-wide unless `projectId` narrows it, the same scope as the list —
+    // a run that finished in another project is still the reader's to see.
+    if (parts.length === 1 && parts[0] === "unread-count" && method === "GET") {
+      return reply(await service.unreadCount(user.id, { projectId: url.searchParams.get("projectId") }));
+    }
+    if (parts.length === 1 && parts[0] === "read-all" && method === "POST") {
+      const body = await bodyOf(req, maxJsonBytes, ["projectId", "noticeType"]);
+      return reply(await service.markAllRead(user.id, { projectId: body.projectId ?? null, noticeType: body.noticeType ?? null }));
     }
     if (parts.length === 1 && parts[0] === "preferences") {
       if (method === "GET") return reply(await service.preferences(user.id));
