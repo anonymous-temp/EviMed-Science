@@ -1,0 +1,585 @@
+{
+  "$comment": "Cases for the advisory caution rules in packages/domain/src/clinical-safety-rules.json (cautionRules). Every rule has at least one case where it fires and one where it does not; `expect` is the exact set of rules that fire for that question and report. Read by packages/domain/test/clinicalSafetyCautions.test.mjs. A pharmacist adding a rule adds its two cases here.",
+  "cases": [
+    {
+      "rule": "aspirin-primary-prevention-bleeding",
+      "fires": true,
+      "note": "primary prevention with no word of bleeding",
+      "report": "# 阿司匹林一级预防\n\n本报告评价 40–59 岁人群使用阿司匹林进行一级预防的获益。",
+      "expect": [
+        "aspirin-primary-prevention-bleeding"
+      ]
+    },
+    {
+      "rule": "aspirin-primary-prevention-bleeding",
+      "fires": false,
+      "note": "bleeding is stated",
+      "report": "# 阿司匹林一级预防\n\n40–59 岁人群使用阿司匹林进行一级预防，获益须与消化道出血风险权衡。",
+      "expect": []
+    },
+    {
+      "rule": "aspirin-primary-prevention-older-adults",
+      "fires": true,
+      "note": "bleeding stated, the guideline position is not",
+      "report": "≥70 岁老年人使用阿司匹林进行一级预防会增加消化道出血。",
+      "expect": [
+        "aspirin-primary-prevention-older-adults"
+      ]
+    },
+    {
+      "rule": "aspirin-primary-prevention-older-adults",
+      "fires": false,
+      "note": "the position is stated",
+      "report": "≥70 岁老年人使用阿司匹林进行一级预防会增加消化道出血；USPSTF 2022 不推荐 60 岁及以上人群启用。",
+      "expect": []
+    },
+    {
+      "rule": "aspirin-primary-prevention-older-adults",
+      "fires": true,
+      "note": "the brief sets the scene the report never names, and the report gives neither caution",
+      "question": "≥70 岁阿司匹林一级预防 + ADR",
+      "report": "# 证据摘要\n\n本报告检索了相关随机对照试验与指南。",
+      "expect": [
+        "aspirin-primary-prevention-bleeding",
+        "aspirin-primary-prevention-older-adults"
+      ]
+    },
+    {
+      "rule": "aspirin-primary-prevention-older-adults",
+      "fires": false,
+      "note": "the brief's report states both cautions",
+      "question": "≥70 岁阿司匹林一级预防 + ADR",
+      "report": "# 证据摘要\n\nASPREE 试验中阿司匹林增加大出血，USPSTF 2022 不推荐 60 岁及以上人群启用阿司匹林一级预防。",
+      "expect": []
+    },
+    {
+      "rule": "anticoagulant-with-antiplatelet-or-nsaid",
+      "fires": true,
+      "note": "anticoagulant plus antiplatelet, no bleeding",
+      "report": "华法林与氯吡格雷联用于冠心病合并房颤患者。",
+      "expect": [
+        "anticoagulant-with-antiplatelet-or-nsaid"
+      ]
+    },
+    {
+      "rule": "anticoagulant-with-antiplatelet-or-nsaid",
+      "fires": false,
+      "note": "bleeding stated",
+      "report": "华法林与氯吡格雷联用于冠心病合并房颤患者，可增加大出血风险。",
+      "expect": []
+    },
+    {
+      "rule": "anticoagulant-with-antiplatelet-or-nsaid",
+      "fires": false,
+      "note": "the two drugs are in different paragraphs: not an interaction scene",
+      "report": "利伐沙班用于非瓣膜性房颤。\n\n另一项研究评价了布洛芬的镇痛效果。",
+      "expect": []
+    },
+    {
+      "rule": "anticoagulant-with-antiplatelet-or-nsaid",
+      "fires": false,
+      "note": "class words listed as an outcome (a real report's sentence) set no scene",
+      "report": "安全性指标包括与抗血小板或抗凝药物的相互作用。",
+      "expect": []
+    },
+    {
+      "rule": "nsaid-in-chronic-kidney-disease",
+      "fires": true,
+      "note": "no renal risk named",
+      "report": "慢性肾病患者使用布洛芬止痛的证据。",
+      "expect": [
+        "nsaid-in-chronic-kidney-disease"
+      ]
+    },
+    {
+      "rule": "nsaid-in-chronic-kidney-disease",
+      "fires": false,
+      "note": "acute kidney injury named",
+      "report": "慢性肾病患者使用布洛芬止痛可致急性肾损伤。",
+      "expect": []
+    },
+    {
+      "rule": "nsaid-in-heart-failure",
+      "fires": true,
+      "note": "no worsening named",
+      "report": "心衰患者服用塞来昔布的安全性证据。",
+      "expect": [
+        "nsaid-in-heart-failure"
+      ]
+    },
+    {
+      "rule": "nsaid-in-heart-failure",
+      "fires": false,
+      "note": "fluid retention named",
+      "report": "心衰患者服用塞来昔布可致水钠潴留、心衰加重。",
+      "expect": []
+    },
+    {
+      "rule": "nsaid-in-older-adults",
+      "fires": true,
+      "note": "no GI bleeding named",
+      "report": "老年人长期服用双氯芬酸治疗骨关节炎。",
+      "expect": [
+        "nsaid-in-older-adults"
+      ]
+    },
+    {
+      "rule": "nsaid-in-older-adults",
+      "fires": false,
+      "note": "GI bleeding named",
+      "report": "老年人长期服用双氯芬酸治疗骨关节炎，消化道出血风险增加。",
+      "expect": []
+    },
+    {
+      "rule": "qt-prolonging-combination",
+      "fires": true,
+      "note": "two QT drugs, QT never named",
+      "report": "胺碘酮与左氧氟沙星联用于住院患者。",
+      "expect": [
+        "qt-prolonging-combination"
+      ]
+    },
+    {
+      "rule": "qt-prolonging-combination",
+      "fires": false,
+      "note": "QTc named",
+      "report": "胺碘酮与左氧氟沙星联用于住院患者，需监测 QTc。",
+      "expect": []
+    },
+    {
+      "rule": "qt-prolonging-combination",
+      "fires": false,
+      "note": "one drug whose Chinese name contains another's is still one drug",
+      "report": "艾司西酞普兰（escitalopram）用于抑郁症。",
+      "expect": []
+    },
+    {
+      "rule": "qt-prolonging-combination",
+      "fires": false,
+      "note": "one drug under two names is one drug",
+      "report": "amiodarone（胺碘酮）用于房颤。",
+      "expect": []
+    },
+    {
+      "rule": "methotrexate-weekly-dosing",
+      "fires": true,
+      "note": "low-dose methotrexate, schedule never stated",
+      "report": "类风湿关节炎患者使用甲氨蝶呤。甲氨蝶呤起始剂量 7.5 mg。甲氨蝶呤需监测血常规。",
+      "expect": [
+        "methotrexate-weekly-dosing"
+      ]
+    },
+    {
+      "rule": "methotrexate-weekly-dosing",
+      "fires": false,
+      "note": "weekly schedule stated",
+      "report": "类风湿关节炎患者使用甲氨蝶呤。甲氨蝶呤每周一次口服。甲氨蝶呤需监测血常规。",
+      "expect": []
+    },
+    {
+      "rule": "methotrexate-weekly-dosing",
+      "fires": false,
+      "note": "a passing mention is not a report about the drug",
+      "report": "中国 TDM 常用项目以万古霉素、丙戊酸、甲氨蝶呤为主；类风湿关节炎另论。",
+      "expect": []
+    },
+    {
+      "rule": "teratogen-in-pregnancy",
+      "fires": true,
+      "note": "teratogen with women of childbearing potential, no teratogenicity named",
+      "report": "育龄女性使用丙戊酸钠治疗癫痫的证据。",
+      "expect": [
+        "teratogen-in-pregnancy"
+      ]
+    },
+    {
+      "rule": "teratogen-in-pregnancy",
+      "fires": false,
+      "note": "teratogenicity and contraception named",
+      "report": "育龄女性使用丙戊酸钠治疗癫痫：丙戊酸钠有致畸风险，须避孕。",
+      "expect": []
+    },
+    {
+      "rule": "raas-blocker-in-pregnancy",
+      "fires": true,
+      "note": "ARB in pregnancy, fetal toxicity never named",
+      "report": "妊娠期高血压患者能否继续使用缬沙坦。",
+      "expect": [
+        "raas-blocker-in-pregnancy"
+      ]
+    },
+    {
+      "rule": "raas-blocker-in-pregnancy",
+      "fires": false,
+      "note": "fetal toxicity named",
+      "report": "妊娠期高血压患者不应继续使用缬沙坦：缬沙坦可致胎儿毒性。",
+      "expect": []
+    },
+    {
+      "rule": "serotonergic-combination",
+      "fires": true,
+      "note": "SSRI plus tramadol, serotonin syndrome never named",
+      "report": "舍曲林与曲马多同时使用的患者。",
+      "expect": [
+        "serotonergic-combination"
+      ]
+    },
+    {
+      "rule": "serotonergic-combination",
+      "fires": false,
+      "note": "serotonin syndrome named",
+      "report": "舍曲林与曲马多同时使用需警惕 5-羟色胺综合征。",
+      "expect": []
+    },
+    {
+      "rule": "opioid-with-benzodiazepine",
+      "fires": true,
+      "note": "opioid plus benzodiazepine, respiratory depression never named",
+      "report": "羟考酮与阿普唑仑同时用于癌痛合并焦虑。",
+      "expect": [
+        "opioid-with-benzodiazepine"
+      ]
+    },
+    {
+      "rule": "opioid-with-benzodiazepine",
+      "fires": false,
+      "note": "respiratory depression named",
+      "report": "羟考酮与阿普唑仑同时用于癌痛合并焦虑，黑框警告提示呼吸抑制风险。",
+      "expect": []
+    },
+    {
+      "rule": "opioid-with-benzodiazepine",
+      "fires": false,
+      "note": "an opioid antagonist is not an opioid (a real report's sentence)",
+      "report": "心导管室备有苯二氮䓬类与阿片类拮抗剂（氟马西尼、纳洛酮）及抢救用药。",
+      "expect": []
+    },
+    {
+      "rule": "digoxin-with-amiodarone-or-verapamil",
+      "fires": true,
+      "note": "levels never named",
+      "report": "地高辛与胺碘酮联用于房颤心室率控制。",
+      "expect": [
+        "digoxin-with-amiodarone-or-verapamil"
+      ]
+    },
+    {
+      "rule": "digoxin-with-amiodarone-or-verapamil",
+      "fires": false,
+      "note": "dose reduction and levels named",
+      "report": "地高辛与胺碘酮联用于房颤心室率控制，地高辛需减量并监测血药浓度。",
+      "expect": []
+    },
+    {
+      "rule": "metformin-kidney-function",
+      "fires": true,
+      "note": "thresholds never named",
+      "report": "二甲双胍在慢性肾病患者中的使用。",
+      "expect": [
+        "metformin-kidney-function"
+      ]
+    },
+    {
+      "rule": "metformin-kidney-function",
+      "fires": false,
+      "note": "threshold and lactic acidosis named",
+      "report": "二甲双胍在慢性肾病患者中的使用：eGFR<30 禁用，警惕乳酸酸中毒。",
+      "expect": []
+    },
+    {
+      "rule": "fluoroquinolone-in-older-adults",
+      "fires": true,
+      "note": "tendon and aortic risk never named",
+      "report": "老年社区获得性肺炎患者使用左氧氟沙星。",
+      "expect": [
+        "fluoroquinolone-in-older-adults"
+      ]
+    },
+    {
+      "rule": "fluoroquinolone-in-older-adults",
+      "fires": false,
+      "note": "both risks named",
+      "report": "老年社区获得性肺炎患者使用左氧氟沙星，需警惕肌腱断裂与主动脉夹层。",
+      "expect": []
+    },
+    {
+      "rule": "strong-cyp3a4-inhibitor-with-simvastatin-lovastatin",
+      "fires": true,
+      "note": "myopathy never named",
+      "report": "辛伐他汀与克拉霉素合用于合并肺炎的高脂血症患者。",
+      "expect": [
+        "strong-cyp3a4-inhibitor-with-simvastatin-lovastatin"
+      ]
+    },
+    {
+      "rule": "strong-cyp3a4-inhibitor-with-simvastatin-lovastatin",
+      "fires": false,
+      "note": "contraindication and rhabdomyolysis named",
+      "report": "辛伐他汀与克拉霉素禁止合用，可致横纹肌溶解。",
+      "expect": []
+    },
+    {
+      "rule": "allopurinol-hla-b5801",
+      "fires": true,
+      "note": "HLA-B*58:01 never named",
+      "report": "痛风患者起始别嘌醇。别嘌醇剂量逐步滴定。别嘌醇与非布司他比较。",
+      "expect": [
+        "allopurinol-hla-b5801"
+      ]
+    },
+    {
+      "rule": "allopurinol-hla-b5801",
+      "fires": false,
+      "note": "screening named",
+      "report": "痛风患者起始别嘌醇前检测 HLA-B*58:01。别嘌醇剂量逐步滴定。别嘌醇与非布司他比较。",
+      "expect": []
+    },
+    {
+      "rule": "allopurinol-hla-b5801",
+      "fires": false,
+      "note": "a passing mention is not a report about the drug",
+      "report": "常用降尿酸药物包括别嘌醇与非布司他。",
+      "expect": []
+    },
+    {
+      "rule": "carbamazepine-hla-b1502",
+      "fires": true,
+      "note": "HLA-B*15:02 never named",
+      "report": "卡马西平用于三叉神经痛。卡马西平起始剂量 100 mg。卡马西平需监测血钠。",
+      "expect": [
+        "carbamazepine-hla-b1502"
+      ]
+    },
+    {
+      "rule": "carbamazepine-hla-b1502",
+      "fires": false,
+      "note": "screening named",
+      "report": "卡马西平用于三叉神经痛，用药前检测 HLA-B*15:02。卡马西平起始剂量 100 mg。卡马西平需监测血钠。",
+      "expect": []
+    },
+    {
+      "rule": "potassium-sparing-with-raas-blocker",
+      "fires": true,
+      "note": "potassium never named",
+      "report": "螺内酯与依那普利联用治疗心衰。",
+      "expect": [
+        "potassium-sparing-with-raas-blocker"
+      ]
+    },
+    {
+      "rule": "potassium-sparing-with-raas-blocker",
+      "fires": false,
+      "note": "potassium named",
+      "report": "螺内酯与依那普利联用治疗心衰，需监测血钾以防高钾血症。",
+      "expect": []
+    },
+    {
+      "rule": "aminoglycoside-toxicity",
+      "fires": true,
+      "note": "toxicity never named",
+      "report": "庆大霉素用于革兰阴性菌感染。庆大霉素每日一次给药。庆大霉素疗程 7 天。",
+      "expect": [
+        "aminoglycoside-toxicity"
+      ]
+    },
+    {
+      "rule": "aminoglycoside-toxicity",
+      "fires": false,
+      "note": "toxicity and monitoring named",
+      "report": "庆大霉素用于革兰阴性菌感染。庆大霉素每日一次给药并监测谷浓度。庆大霉素有肾毒性与耳毒性。",
+      "expect": []
+    },
+    {
+      "rule": "tcm-shibafan-gancao",
+      "fires": true,
+      "note": "the classical pair in one prescription, never called incompatible",
+      "report": "处方组成：甘草 10 g，甘遂 6 g，水煎服。",
+      "expect": [
+        "tcm-shibafan-gancao"
+      ]
+    },
+    {
+      "rule": "tcm-shibafan-gancao",
+      "fires": false,
+      "note": "the incompatibility is stated",
+      "report": "处方组成：甘草 10 g，甘遂 6 g。二者属十八反配伍禁忌，不宜同用。",
+      "expect": []
+    },
+    {
+      "rule": "tcm-shibafan-wutou",
+      "fires": true,
+      "note": "the classical pair in one prescription, never called incompatible",
+      "report": "处方组成：川乌 10 g，半夏 6 g，水煎服。",
+      "expect": [
+        "tcm-shibafan-wutou"
+      ]
+    },
+    {
+      "rule": "tcm-shibafan-wutou",
+      "fires": false,
+      "note": "the incompatibility is stated",
+      "report": "处方组成：川乌 10 g，半夏 6 g。二者属十八反配伍禁忌，不宜同用。",
+      "expect": []
+    },
+    {
+      "rule": "tcm-shibafan-lilu",
+      "fires": true,
+      "note": "the classical pair in one prescription, never called incompatible",
+      "report": "处方组成：藜芦 10 g，人参 6 g，水煎服。",
+      "expect": [
+        "tcm-shibafan-lilu"
+      ]
+    },
+    {
+      "rule": "tcm-shibafan-lilu",
+      "fires": false,
+      "note": "the incompatibility is stated",
+      "report": "处方组成：藜芦 10 g，人参 6 g。二者属十八反配伍禁忌，不宜同用。",
+      "expect": []
+    },
+    {
+      "rule": "tcm-shijiuwei-liuhuang-poxiao",
+      "fires": true,
+      "note": "the classical pair in one prescription, never called incompatible",
+      "report": "处方组成：硫黄 10 g，朴硝 6 g，水煎服。",
+      "expect": [
+        "tcm-shijiuwei-liuhuang-poxiao"
+      ]
+    },
+    {
+      "rule": "tcm-shijiuwei-liuhuang-poxiao",
+      "fires": false,
+      "note": "the incompatibility is stated",
+      "report": "处方组成：硫黄 10 g，朴硝 6 g。二者属十九畏配伍禁忌，不宜同用。",
+      "expect": []
+    },
+    {
+      "rule": "tcm-shijiuwei-shuiyin-pishuang",
+      "fires": true,
+      "note": "the classical pair in one prescription, never called incompatible",
+      "report": "处方组成：水银 10 g，砒霜 6 g，水煎服。",
+      "expect": [
+        "tcm-shijiuwei-shuiyin-pishuang"
+      ]
+    },
+    {
+      "rule": "tcm-shijiuwei-shuiyin-pishuang",
+      "fires": false,
+      "note": "the incompatibility is stated",
+      "report": "处方组成：水银 10 g，砒霜 6 g。二者属十九畏配伍禁忌，不宜同用。",
+      "expect": []
+    },
+    {
+      "rule": "tcm-shijiuwei-langdu-mituoseng",
+      "fires": true,
+      "note": "the classical pair in one prescription, never called incompatible",
+      "report": "处方组成：狼毒 10 g，密陀僧 6 g，水煎服。",
+      "expect": [
+        "tcm-shijiuwei-langdu-mituoseng"
+      ]
+    },
+    {
+      "rule": "tcm-shijiuwei-langdu-mituoseng",
+      "fires": false,
+      "note": "the incompatibility is stated",
+      "report": "处方组成：狼毒 10 g，密陀僧 6 g。二者属十九畏配伍禁忌，不宜同用。",
+      "expect": []
+    },
+    {
+      "rule": "tcm-shijiuwei-badou-qianniu",
+      "fires": true,
+      "note": "the classical pair in one prescription, never called incompatible",
+      "report": "处方组成：巴豆 10 g，牵牛 6 g，水煎服。",
+      "expect": [
+        "tcm-shijiuwei-badou-qianniu"
+      ]
+    },
+    {
+      "rule": "tcm-shijiuwei-badou-qianniu",
+      "fires": false,
+      "note": "the incompatibility is stated",
+      "report": "处方组成：巴豆 10 g，牵牛 6 g。二者属十九畏配伍禁忌，不宜同用。",
+      "expect": []
+    },
+    {
+      "rule": "tcm-shijiuwei-dingxiang-yujin",
+      "fires": true,
+      "note": "the classical pair in one prescription, never called incompatible",
+      "report": "处方组成：丁香 10 g，郁金 6 g，水煎服。",
+      "expect": [
+        "tcm-shijiuwei-dingxiang-yujin"
+      ]
+    },
+    {
+      "rule": "tcm-shijiuwei-dingxiang-yujin",
+      "fires": false,
+      "note": "the incompatibility is stated",
+      "report": "处方组成：丁香 10 g，郁金 6 g。二者属十九畏配伍禁忌，不宜同用。",
+      "expect": []
+    },
+    {
+      "rule": "tcm-shijiuwei-wutou-xijiao",
+      "fires": true,
+      "note": "the classical pair in one prescription, never called incompatible",
+      "report": "处方组成：川乌 10 g，犀角 6 g，水煎服。",
+      "expect": [
+        "tcm-shijiuwei-wutou-xijiao"
+      ]
+    },
+    {
+      "rule": "tcm-shijiuwei-wutou-xijiao",
+      "fires": false,
+      "note": "the incompatibility is stated",
+      "report": "处方组成：川乌 10 g，犀角 6 g。二者属十九畏配伍禁忌，不宜同用。",
+      "expect": []
+    },
+    {
+      "rule": "tcm-shijiuwei-yaxiao-sanleng",
+      "fires": true,
+      "note": "the classical pair in one prescription, never called incompatible",
+      "report": "处方组成：牙硝 10 g，三棱 6 g，水煎服。",
+      "expect": [
+        "tcm-shijiuwei-yaxiao-sanleng"
+      ]
+    },
+    {
+      "rule": "tcm-shijiuwei-yaxiao-sanleng",
+      "fires": false,
+      "note": "the incompatibility is stated",
+      "report": "处方组成：牙硝 10 g，三棱 6 g。二者属十九畏配伍禁忌，不宜同用。",
+      "expect": []
+    },
+    {
+      "rule": "tcm-shijiuwei-guangui-chishizhi",
+      "fires": true,
+      "note": "the classical pair in one prescription, never called incompatible",
+      "report": "处方组成：官桂 10 g，赤石脂 6 g，水煎服。",
+      "expect": [
+        "tcm-shijiuwei-guangui-chishizhi"
+      ]
+    },
+    {
+      "rule": "tcm-shijiuwei-guangui-chishizhi",
+      "fires": false,
+      "note": "the incompatibility is stated",
+      "report": "处方组成：官桂 10 g，赤石脂 6 g。二者属十九畏配伍禁忌，不宜同用。",
+      "expect": []
+    },
+    {
+      "rule": "tcm-shijiuwei-renshen-wulingzhi",
+      "fires": true,
+      "note": "the classical pair in one prescription, never called incompatible",
+      "report": "处方组成：人参 10 g，五灵脂 6 g，水煎服。",
+      "expect": [
+        "tcm-shijiuwei-renshen-wulingzhi"
+      ]
+    },
+    {
+      "rule": "tcm-shijiuwei-renshen-wulingzhi",
+      "fires": false,
+      "note": "the incompatibility is stated",
+      "report": "处方组成：人参 10 g，五灵脂 6 g。二者属十九畏配伍禁忌，不宜同用。",
+      "expect": []
+    }
+  ]
+}

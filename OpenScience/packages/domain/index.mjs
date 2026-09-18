@@ -229,12 +229,16 @@ export {
   skillRootGuidance,
 } from './src/skillRoots.mjs'
 
-// safetyRules — 6 exports
+// safetyRules — 10 exports
 export {
   CLINICAL_CONTENT_TRIGGER_ENTITIES,
   CLINICAL_HIGH_RISK_ENTITIES,
+  CLINICAL_SAFETY_CAUTION_CHECK,
+  CLINICAL_SAFETY_CAUTION_RULES,
   clinicalContentTriggerPattern,
+  clinicalSafetyCautionHits,
   clinicalSafetyRules,
+  compileCautionRules,
   matchedClinicalTriggers,
   matchedHighRiskEntities,
 } from './src/safetyRules.mjs'
