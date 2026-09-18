@@ -490,6 +490,10 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
     "message/user",
     "step/end",
     "step/start",
+    // The parent's own `subagent/catalog` fact. It was on this recording all
+    // along and decoded as `unknown`, which is how no delegated child ever
+    // reached the event pump (2026-09-18).
+    "subagent/started",
     "tool/call",
     "tool/result",
     "turn/end",
@@ -522,6 +526,15 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   assert.ok(decoded.length >= 10, `only ${decoded.length} frames decoded; the recording, not the decoder, is what this test needs`);
   const unknowns = decoded.filter((item) => item.event.type === "unknown");
   assert.ok(unknowns.length > 0, "an unrecognized frame must still arrive, or this test proves nothing");
+
+  // The child the recorded run delegated, as the parent's log names it: the
+  // id, the mode its durable address needs, and the parent it hangs from.
+  const started = decoded.find((item) => item.event.type === "subagent/started").event;
+  const catalogFrame = golden.session.find((frame) => frame?.event?.type === "subagent/catalog").event;
+  assert.equal(started.childSessionId, catalogFrame.data.childId);
+  assert.equal(started.mode, "one-shot");
+  assert.equal(started.parentSessionId, RECORDED_SESSION);
+  assert.equal(started.label, catalogFrame.data.label);
 
   const call = decoded.find((item) => item.event.type === "tool/call").event;
   assert.equal(call.tool, "write");

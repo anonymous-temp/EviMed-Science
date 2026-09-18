@@ -519,9 +519,12 @@ test("a combined run whose second capability was never accepted still delivers t
   // directly below — not asserted here, so a fix does not have to edit this
   // test, and not left in prose either, so CI shows it.
   const published = f.frames.filter((frame) => frame.type === "deliverable/update");
+  // `rejected`, the plan index's own verdict, not `submitted`: while the run
+  // is going its item states come from the plan index (2026-09-18, F4); the
+  // parent-witness rebuild could only ever say `submitted` for a rejection.
   assert.deepEqual(published.map((frame) => [frame.data.id, frame.data.capability, frame.data.status]), [
     [EVIDENCE.id, EVIDENCE.capability, "accepted"],
-    [BIBLIOMETRIC.id, BIBLIOMETRIC.capability, "submitted"],
+    [BIBLIOMETRIC.id, BIBLIOMETRIC.capability, "rejected"],
   ], "each capability's item must be published under its own identity and its own verdict");
   assert.deepEqual(published[1].data.issues, [
     { code: "required_output_missing", message: "文献计量报告缺少必需文件", severity: "required" },

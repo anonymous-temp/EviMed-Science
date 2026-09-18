@@ -3797,13 +3797,20 @@ export class RuntimeManager {
   /** Authenticated sequence heads for declared direct children of one root.
    * Candidate ids come from the run projection; the kernel catalogue must
    * independently confirm their parent before they can count as activity.
+   *
+   * With `discoverSince`, also every direct child the kernel lists under this
+   * parent that was created after that moment, marked `discovered`: the
+   * kernel's own `origin: 'subagent'` and `parentSessionId` are what make it
+   * this run's child, so no model-written record has to name it first.
    * @param {Record<string, any>} project @param {string} parentSessionId
    * @param {readonly string[]} childSessionIds
-   * @returns {Promise<{ sessionId: string, asOfSeq: number, running: boolean }[]>}
+   * @param {{ discoverSince?: number }} [options]
+   * @returns {Promise<{ sessionId: string, asOfSeq: number, running: boolean, discovered?: boolean }[]>}
    */
-  async childSessionActivity(project, parentSessionId, childSessionIds) {
+  async childSessionActivity(project, parentSessionId, childSessionIds, { discoverSince } = {}) {
     const runtime = this.runtimes.get(this.key(project));
-    if (!runtime || !Array.isArray(childSessionIds) || childSessionIds.length === 0) return [];
+    const discovering = Number.isFinite(discoverSince);
+    if (!runtime || !Array.isArray(childSessionIds) || (childSessionIds.length === 0 && !discovering)) return [];
     const parent = safeId(parentSessionId, "parent session id");
     const candidates = childSessionIds.slice(0, 64).map((value) => safeId(value, "child session id"));
     this.beginProxy(project);
@@ -3813,7 +3820,7 @@ export class RuntimeManager {
         "runtime_history_unavailable",
         "Runtime child session status did not answer in time.",
       );
-      return childSessionHeads(sessionListItems(value), parent, candidates);
+      return childSessionHeads(sessionListItems(value), parent, candidates, discovering ? { discoverSince } : {});
     } finally {
       this.endProxy(project);
     }
@@ -5232,18 +5239,30 @@ export class RuntimeManager {
 }
 
 /** Kernel-confirmed direct child heads, isolated for contract testing.
+ *
+ * A candidate counts only when the kernel's own summary says it is a subagent
+ * of this parent. With `discoverSince`, an uncandidated child counts too when
+ * the kernel says the same and its `updatedAt` — a child's creation time, since
+ * nobody prompts a child directly — is not older than that moment: a native
+ * session keeps every turn's children under one root, and an earlier turn's
+ * child is an earlier run's work.
  * @param {readonly Record<string, any>[]} summaries @param {string} parentSessionId
  * @param {readonly string[]} childSessionIds
- * @returns {{ sessionId: string, asOfSeq: number, running: boolean }[]}
+ * @param {{ discoverSince?: number }} [options]
+ * @returns {{ sessionId: string, asOfSeq: number, running: boolean, discovered?: boolean }[]}
  */
-export function childSessionHeads(summaries, parentSessionId, childSessionIds) {
+export function childSessionHeads(summaries, parentSessionId, childSessionIds, { discoverSince } = {}) {
   const wanted = new Set(childSessionIds.map(String));
+  const discovering = Number.isFinite(discoverSince);
   return summaries.flatMap((summary) => {
     const sessionId = String(summary?.sessionId ?? summary?.id ?? "");
     const parent = String(summary?.parentSessionId ?? summary?.parentSession ?? summary?.header?.parentSession ?? "");
     const origin = String(summary?.origin ?? summary?.header?.origin ?? "");
     const asOfSeq = Number(summary?.projections?.asOfSeq ?? summary?.asOfSeq ?? NaN);
-    if (!wanted.has(sessionId) || parent !== parentSessionId || origin !== "subagent" || !Number.isSafeInteger(asOfSeq) || asOfSeq < 0) return [];
-    return [{ sessionId, asOfSeq, running: summary?.running === true }];
+    if (!sessionId || parent !== parentSessionId || origin !== "subagent" || !Number.isSafeInteger(asOfSeq) || asOfSeq < 0) return [];
+    if (wanted.has(sessionId)) return [{ sessionId, asOfSeq, running: summary?.running === true }];
+    const createdAt = Number(summary?.updatedAt ?? NaN);
+    if (!discovering || !Number.isFinite(createdAt) || createdAt < Number(discoverSince)) return [];
+    return [{ sessionId, asOfSeq, running: summary?.running === true, discovered: true }];
   }).sort((left, right) => left.sessionId.localeCompare(right.sessionId, "en"));
 }

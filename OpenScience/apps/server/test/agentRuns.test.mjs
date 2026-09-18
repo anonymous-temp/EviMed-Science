@@ -1575,7 +1575,7 @@ async function waitForProjection(predicate) {
 }
 
 /** A run fixture whose root history and run-side projection are both scriptable. */
-async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChildSessionActivity = async () => [] } = {}) {
+async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChildSessionActivity = async () => [], readSessionHistory = null, progressPublishIntervalMs = 2_000 } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-projection-"));
   let store;
   t.after(async () => {
@@ -1589,17 +1589,21 @@ async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChil
   await mkdir(project.metaDir, { recursive: true });
   await mkdir(path.join(root, ".evimed-run"), { recursive: true });
   const frames = [];
+  // `run/progress` rides the same forwarder; kept apart so a test about the
+  // projection's own frames counts only those.
+  const progress = [];
   store = new AgentRunStore({ get: async () => ({ sessionId: "ses_deleg", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null }) }, {
     model: "deepseek/deepseek-v4-pro",
     monitorIntervalMs: 1,
     monitorMaxPolls: maxPolls,
     monitorStallPolls: stallPolls,
+    progressPublishIntervalMs,
     // The root session never moves again after this: it delegated and is waiting.
-    readSessionHistory: async () => [{ info: { id: "m1", role: "user" }, parts: [{ type: "text", text: "go" }] }],
+    readSessionHistory: readSessionHistory ?? (async () => [{ info: { id: "m1", role: "user" }, parts: [{ type: "text", text: "go" }] }]),
     readSessionStatus: async () => "running",
     readChildSessionActivity,
     runtimeWorkspaceRoot: () => root,
-    onRunProjection: (_project, _run, type, data) => frames.push({ type, data }),
+    onRunProjection: (_project, _run, type, data) => (type === "run/progress" ? progress : frames).push({ type, data }),
   });
   let projectionWrites = 0;
   const writeProjection = async (value) => {
@@ -1608,7 +1612,7 @@ async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChil
     await writeFile(temporary, typeof value === "string" ? value : JSON.stringify(value), "utf8");
     await rename(temporary, target);
   };
-  return { root, project, store, frames, writeProjection };
+  return { root, project, store, frames, progress, writeProjection };
 }
 
 test("a run whose subagents are working is not judged stalled because its root session went quiet", async (t) => {
@@ -1857,8 +1861,10 @@ test("a deliverable's verdict reaches the browser while the run is still repairi
     capability: "clinical-evidence-synthesis",
     title: "证据综述",
     status: "submitted",
+    attempts: 1,
     childSessionId: "child-1",
     issues: [],
+    mustFixCount: 0,
   });
   assert.equal(first[1].data.childSessionId, null, "an undelegated item names no child rather than a made-up one");
 

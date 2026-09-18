@@ -150,6 +150,11 @@ export class RunEventHub {
  */
 export const RUN_STREAM_EVENT_TYPES = Object.freeze([
   "run/state",
+  // The one aggregate every progress surface renders: the plan with each
+  // item's attempts and verdict, activity phases over the parent's and the
+  // children's tool calls, sources, claims, children and cost. Published on
+  // change, at most every two seconds (`AgentRunStore.publishProgress`).
+  "run/progress",
   "run/event",
   "subagent/update",
   "deliverable/update",
