@@ -1996,7 +1996,8 @@ class PairedRunner:
             agent = self.pinned_capability(client)
             client.bind_session(session_id, {"mode": "specialist", "agentId": agent["id"], "agentVersion": agent["version"]})
             record["capability"] = {"id": agent["id"], "version": agent["version"]}
-            run_id = client.dispatch({"sessionId": session_id, "dispatchId": dispatch_id, "text": brief_prompt(brief)})
+            # `automated`: the inbox records the cell without notifying anyone.
+            run_id = client.dispatch({"sessionId": session_id, "dispatchId": dispatch_id, "text": brief_prompt(brief), "automated": True})
         run = client.wait_for_run(
             run_id,
             timeout_seconds=self.config["timeoutMinutes"] * 60,

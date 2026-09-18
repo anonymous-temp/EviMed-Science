@@ -42,7 +42,7 @@ import { assertDockerVolumeName } from "./dockerMounts.mjs";
 import { createModelGatewayHandler, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger } from "./usageLedger.mjs";
-import { NotificationService, runFinishedNotice } from "./notificationService.mjs";
+import { NotificationService, runFinishedInboxItem } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
@@ -596,6 +596,21 @@ function memoryRecallRejection(error) {
   return rejection;
 }
 
+/**
+ * Whether a run was started by a machine rather than a person: an evaluation
+ * or acceptance harness that said so at dispatch, an autopilot episode (its
+ * route reason is minted by the dispatcher, `autopilot:<task>`), or an
+ * independent verification (its dispatch id is a shape `/runs` refuses from a
+ * client). Such a run's completion is recorded in the inbox without notifying
+ * anyone (C1).
+ * @param {Record<string, any>} run
+ */
+export function automatedRun(run) {
+  return run?.automated === true
+    || String(run?.effectiveRouteReason ?? "").startsWith("autopilot:")
+    || Boolean(verificationEpisodeId(run?.dispatchId));
+}
+
 function normalizeClientAddress(value) {
   if (typeof value !== "string") return null;
   const candidate = value.trim();
@@ -640,10 +655,23 @@ export function createWebApiApp(overrides = {}) {
   const notificationRoutes = createNotificationRoutes({ store, service: notificationService, maxJsonBytes: config.maxJsonBytes });
   let notificationTimer = null;
   let notificationRun = null;
+  let inboxPrunedAt = 0;
   const applyNotificationDefaults = () => {
     if (!notificationService) return Promise.resolve([]);
     if (notificationRun) return notificationRun;
-    notificationRun = maintenanceMutation(() => notificationService.applyDueDefaults()).catch((error) => {
+    notificationRun = maintenanceMutation(async () => {
+      const applied = await notificationService.applyDueDefaults();
+      // The retention sweep rides the same tick, at most hourly: read items
+      // leave 90 days after they were read (C1). Its own failure is reported
+      // on its own line, and never costs the defaults that were applied.
+      if (Date.now() - inboxPrunedAt >= 3_600_000) {
+        inboxPrunedAt = Date.now();
+        await notificationService.pruneRead().catch((/** @type {any} */ error) => {
+          process.stderr.write(`inbox retention sweep failed: ${typeof error?.code === "string" ? error.code : "notification_unavailable"}\n`);
+        });
+      }
+      return applied;
+    }).catch((error) => {
       if (error?.code === "maintenance_active") return [];
       process.stderr.write(`inbox default processing failed: ${typeof error?.code === "string" ? error.code : "notification_unavailable"}\n`);
       return [];
@@ -1353,7 +1381,7 @@ export function createWebApiApp(overrides = {}) {
           code: typeof error?.code === "string" ? error.code : "verification_scratch_remove_failed",
         }));
       }
-      await completeOwnedAutopilotRun({
+      const autopilotOwned = await completeOwnedAutopilotRun({
         service: autopilotService, runtimeManager, usageLedger,
         readDelta: async () => {
           let claims = [];
@@ -1380,23 +1408,17 @@ export function createWebApiApp(overrides = {}) {
       if (notificationService && !evaluationRun) {
         try {
           // Say what happened, in the notice itself. The mapping lives in
-          // `notificationService.runFinishedNotice` so it is a tested pure
+          // `notificationService.runFinishedInboxItem` so it is a tested pure
           // function rather than inline copy in a completion callback.
-          const notice = runFinishedNotice(run);
-          await notificationService.create(project.userId, {
-            noticeType: "notify",
-            title: notice.title,
-            body: notice.body,
-            // Without an action the card renders no control at all, so a
-            // notice that names a run still could not open one. The frontend
-            // turns this id into `/app/runs?run=<id>` rather than resolving it
-            // server-side: an inbox action that resolves on the server would
-            // have to know the frontend's routes.
-            actions: [{ id: "open", label: "查看运行", style: "primary" }],
-            projectId: project.id,
-            source: { type: "run", id: run.id },
-            idempotencyKey: `run-finished:${run.id}`,
-          });
+          //
+          // Automated work is recorded without notifying anyone (C1): an
+          // evaluation harness says so at dispatch (`automated`), and an
+          // autopilot episode or its verification is known here — the
+          // episode has its own digest, which is the notice a person reads.
+          const silent = automatedRun(run) || autopilotOwned === true;
+          const peers = (await agentRuns.list(project).catch(() => []))
+            .filter((other) => other.id !== run.id && automatedRun(other) === silent);
+          await notificationService.create(project.userId, runFinishedInboxItem(project, run, { peers, silent }));
         } catch (error) {
           await securityAudit(config, "notification.agent_run.create", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
@@ -2666,9 +2688,15 @@ export function createWebApiApp(overrides = {}) {
       if (pathname === "/api/agent-runs/dispatch" && req.method === "POST") {
         const ctx = await context(req, res);
         const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run dispatch");
-        const unknown = Object.keys(body).filter((field) => !["sessionId", "dispatchId", "text"].includes(field));
+        const unknown = Object.keys(body).filter((field) => !["sessionId", "dispatchId", "text", "automated"].includes(field));
         if (unknown.length > 0) {
           throw new HttpError(400, "invalid_agent_run", `Unknown agent run field(s): ${unknown.sort().join(", ")}.`);
+        }
+        // An evaluation or acceptance harness says so, and its run's completion
+        // is then recorded in the inbox without notifying anyone (C1). 29 of the
+        // 31 unread items the 2026-09-17 walk found were eval cells.
+        if (body.automated != null && typeof body.automated !== "boolean") {
+          throw new HttpError(400, "invalid_agent_run", "automated must be a boolean.");
         }
         const text = assertString(body.text, "text", { max: config.maxJsonBytes });
         if (!text.trim()) throw new HttpError(400, "invalid_payload", "text must not be empty.");
@@ -2755,6 +2783,7 @@ export function createWebApiApp(overrides = {}) {
         const dispatch = () => agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
+          ...(body.automated === true ? { automated: true } : {}),
           question: text,
           effectiveAgentId: effectiveAgent?.agentId ?? null,
           effectiveAgentVersion: effectiveAgent?.agentVersion ?? null,

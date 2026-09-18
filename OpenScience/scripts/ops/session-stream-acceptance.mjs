@@ -189,7 +189,7 @@ async function main() {
     ?? "二甲双胍用于非糖尿病的肥胖成人减重，目前的证据强度如何？请说明主要证据来源与不确定之处。";
   const dispatched = await jsonFetch(`${base}/api/agent-runs/dispatch`, {
     method: "POST", headers: { "Content-Type": "application/json", ...scoped },
-    body: JSON.stringify({ sessionId, dispatchId: `f0-${marker}`, text: question }),
+    body: JSON.stringify({ sessionId, dispatchId: `f0-${marker}`, text: question, automated: true }),
   }, 202);
   const runId = dispatched.body?.data?.id;
   if (!runId) throw failure("session_stream_dispatch_invalid", "Dispatch returned no run id.");

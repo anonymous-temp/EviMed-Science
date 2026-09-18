@@ -7458,3 +7458,32 @@ test("a running run carries the deliverables it is working through, and a finish
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a harness's dispatch is recorded as automated, and nothing but a boolean says so", async (t) => {
+  // The inbox records an automated run's completion without notifying anyone
+  // (C1); the ledger is where it learns which runs those are.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-automated-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const project = { id: "project-1", userId: "user-1", rootDir: root, workspaceDir: root, metaDir: path.join(root, ".openscience") };
+  await mkdir(project.metaDir, { recursive: true });
+  const binding = { sessionId: "ses_auto", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+  const store = new AgentRunStore({ get: async () => binding }, {
+    model: "deepseek/deepseek-flash", monitorIntervalMs: 60_000, monitorMaxPolls: 1,
+    readSessionHistory: async () => [], readSessionStatus: async () => "idle",
+  });
+  store.scheduleMonitor = () => {};
+  const run = await store.dispatch(project, { sessionId: "ses_auto", dispatchId: "eval_cell_1", automated: true }, async () => ({ accepted: true }));
+  assert.equal(run.automated, true);
+  assert.equal((await store.list(project)).find((item) => item.id === run.id).automated, true, "the flag survives a fold of the ledger");
+  await assert.rejects(store.dispatch(project, { sessionId: "ses_auto", dispatchId: "eval_cell_2", automated: "yes" }, async () => ({ accepted: true })),
+    { code: "invalid_agent_run" });
+  await store.closeAll();
+  const person = new AgentRunStore({ get: async () => ({ ...binding, sessionId: "ses_person" }) }, {
+    model: "deepseek/deepseek-flash", monitorIntervalMs: 60_000, monitorMaxPolls: 1,
+    readSessionHistory: async () => [], readSessionStatus: async () => "idle",
+  });
+  person.scheduleMonitor = () => {};
+  const typed = await person.dispatch(project, { sessionId: "ses_person", dispatchId: "typed_1" }, async () => ({ accepted: true }));
+  assert.equal(Object.hasOwn(typed, "automated"), false, "a person's run carries no flag at all");
+  await person.closeAll();
+});
