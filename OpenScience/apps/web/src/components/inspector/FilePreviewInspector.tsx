@@ -10,17 +10,16 @@ import {
   previewUrl,
   probeLargeFile,
   readArtifact,
-  readClaimVerification,
   type LargeFilePointer,
 } from "@/lib/artifactFile";
 import { hasWebApi } from "@/lib/apiClient";
 import { parseTableFile } from "@/lib/csv";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
-import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
-import {
-  claimMatrixPathFor, claimStatuses, claimVerificationSummary, parseClaimMatrix,
-  type ClaimEvidence, type ClaimVerification,
-} from "@/lib/claimCitations";
+import { isClaimMatrixPath } from "@/lib/claimCitations";
+import { ReportReader } from "@/components/report/ReportReader";
+import { EvidenceMatrixTable } from "@/components/report/EvidenceMatrixTable";
+import { useClaimMatrix } from "@/components/report/useClaimMatrix";
+import { useReportRun } from "@/components/report/ReportRunContext";
 import { ProvenancePanel } from "./ProvenancePanel";
 import { TablePreview } from "./TablePreview";
 import { canChart } from "@/lib/tableChart";
@@ -62,8 +61,14 @@ import { cn } from "@/lib/cn";
 import { PaneTitlebarInset } from "./RightPane";
 import { toast } from "@/lib/toast";
 import { parseFailureMessage } from "@/lib/errorText";
+import { labelFor } from "@/lib/statusLabel";
 
 const HTML_PREVIEW_SANDBOX = "";
+
+/** The kind of file, in the reader's words (every enum on screen goes through a Chinese table). */
+const ARTIFACT_KIND_LABEL: Record<string, string> = {
+  figure: "图表", script: "脚本", report: "报告", table: "表格", notebook: "笔记本", model: "模型", data: "数据",
+};
 
 /**
  * Right-pane preview for any workspace file. Strategy (no format conversion):
@@ -95,35 +100,12 @@ export function FilePreviewInspector({
   const [url, setUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(data.content ?? null);
   const [bytes, setBytes] = useState<ArrayBuffer | null>(null);
-  // A clinical evidence report's matrix, read beside it so each sentence can
-  // open what it rests on. Best effort: without it the report still reads.
-  const [claims, setClaims] = useState<Map<string, ClaimEvidence> | null>(null);
-  // And what the control plane found when it looked each quotation up in the
-  // preserved source: the report is delivered whatever this says, and says it
-  // claim by claim. Best effort too — a report nobody checked simply shows none.
-  const [verification, setVerification] = useState<ClaimVerification | null>(null);
-  useEffect(() => {
-    setClaims(null);
-    setVerification(null);
-    const matrixPath = kind === "markdown" ? claimMatrixPathFor(data.path) : null;
-    if (!matrixPath) return;
-    let cancelled = false;
-    readArtifact(matrixPath, data.root)
-      .then((file) => {
-        if (cancelled || !file || file.encoding !== "utf8") return;
-        const parsed = parseClaimMatrix(file.data);
-        if (parsed.size === 0) return;
-        setClaims(parsed);
-        readClaimVerification(matrixPath, data.root)
-          .then((found) => { if (!cancelled) setVerification(found); })
-          .catch(() => { /* unchecked: the citations still open */ });
-      })
-      .catch(() => { /* no matrix, no citations; the report itself is unaffected */ });
-    return () => { cancelled = true; };
-  }, [data.path, data.root, kind]);
+  // A clinical evidence matrix reads as a table, not as JSON; the JSON stays
+  // one toggle away.
+  const matrixFile = isClaimMatrixPath(data.path);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"preview" | "code">(kind === "text" ? "code" : "preview");
+  const [tab, setTab] = useState<"preview" | "code">(kind === "text" && !matrixFile ? "code" : "preview");
   const [showHistory, setShowHistory] = useState(false);
   const hostedWeb = hasWebApi;
   const fileActionLabel = hostedWeb ? "下载文件" : "用本地应用打开";
@@ -193,7 +175,7 @@ export function FilePreviewInspector({
   }, [data.path, data.content, data.root, kind, needsUrl, needsText, needsBytes]);
 
   const canToggle =
-    kind === "html" || kind === "markdown" || kind === "molecule" || kind === "genome";
+    kind === "html" || kind === "markdown" || kind === "molecule" || kind === "genome" || matrixFile;
 
   // Where the user was in this file, restored when they come back to it —
   // history browsing keeps its own offset so the two don't clobber each other.
@@ -209,7 +191,7 @@ export function FilePreviewInspector({
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <PaneTitlebarInset />
         <span className="truncate text-ui font-medium text-text">{data.filename}</span>
-        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-caption text-muted">{data.artifact}</span>
+        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-caption text-muted">{labelFor(ARTIFACT_KIND_LABEL, data.artifact, "文件")}</span>
         {canToggle && (
           <div className="ml-2 flex items-center gap-1 rounded-input bg-surface-2 p-0.5">
             <ToggleBtn active={tab === "preview"} onClick={() => setTab("preview")}>
@@ -273,29 +255,13 @@ export function FilePreviewInspector({
               filename={data.filename}
               path={data.path}
               language={data.language}
-              claims={claims}
-              verification={verification}
+              root={data.root}
+              matrixFile={matrixFile}
             />
           </Suspense>
         )}
       </div>
     </div>
-  );
-}
-
-/** How much of the report was checked against a preserved source, said once
- *  above it — amber when something could not be checked, never red: an
- *  unchecked quotation is not a clinical alarm. */
-function ClaimSummary({ verification }: { verification?: ClaimVerification | null }) {
-  const summary = claimVerificationSummary(verification);
-  if (!summary) return null;
-  return (
-    <p
-      role="note"
-      className={`mb-6 rounded-input border px-3 py-2 text-ui ${summary.attention ? "border-warn bg-warn-soft text-warn-strong" : "border-border bg-accent-soft text-accent-strong"}`}
-    >
-      {summary.text}
-    </p>
   );
 }
 
@@ -308,8 +274,8 @@ function Body({
   filename,
   path,
   language,
-  claims,
-  verification,
+  root,
+  matrixFile,
 }: {
   kind: PreviewKind;
   url: string | null;
@@ -319,9 +285,13 @@ function Body({
   filename: string;
   path: string;
   language?: string;
-  claims?: Map<string, ClaimEvidence> | null;
-  verification?: ClaimVerification | null;
+  root?: FileRoot;
+  matrixFile?: boolean;
 }) {
+  const reportRun = useReportRun();
+  if (matrixFile && !showCode) {
+    return <MatrixFileView path={path} root={root} runId={reportRun?.runId ?? null} />;
+  }
   if (kind === "docx" || kind === "xlsx" || kind === "pptx") {
     // Office views scroll internally (the outer pane never does), so they
     // carry their own scroll memory, keyed apart from the outer container's.
@@ -422,15 +392,11 @@ function Body({
       );
     }
     // A report reads as a page on the canvas: the surface colour, a hairline
-    // edge, the reading measure. It follows the theme like the rest of the
-    // shell; printing gets white paper from the print stylesheet.
+    // edge, the reading measure, its facts, contents and marks (ReportReader).
+    // It follows the theme like the rest of the shell; printing gets white
+    // paper from the reader's print copy.
     return text !== null ? (
-      <div className="min-h-full px-6 py-8">
-        <div className="mx-auto max-w-content rounded-card border border-border bg-surface px-12 py-11 max-sm:px-6 max-sm:py-7">
-          <ClaimSummary verification={verification} />
-          <MarkdownViewer variant="document" claims={claims ?? undefined} claimStatuses={claimStatuses(verification)}>{text}</MarkdownViewer>
-        </div>
-      </div>
+      <ReportReader path={path} root={root} text={text} layout="pane" run={reportRun?.run ?? null} runId={reportRun?.runId ?? null} />
     ) : (
       <Note text="当前文件暂不支持在线预览。" />
     );
@@ -517,6 +483,17 @@ function Body({
     </div>
   ) : (
     <Note text="当前文件暂不支持在线预览。" />
+  );
+}
+
+/** A clinical evidence matrix opened on its own: the table, with its checks. */
+function MatrixFileView({ path, root, runId }: { path: string; root?: FileRoot; runId: string | null }) {
+  const { document, verified } = useClaimMatrix(path, root);
+  if (!document) return <Note text="正在读取证据矩阵…" />;
+  return (
+    <div className="p-4">
+      <EvidenceMatrixTable claims={document.claims} verified={verified} runId={runId} />
+    </div>
   );
 }
 

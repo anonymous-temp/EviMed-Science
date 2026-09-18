@@ -340,6 +340,24 @@ describe("RunsPage (hosted web)", () => {
     expect(screen.queryByRole("group", { name: "临床安全" })).not.toBeInTheDocument();
   });
 
+  // A finding that names a claim opens the report at that claim, in the reader
+  // the frame's 依据 tab opens too (`/app/runs/:runId/files/*#CLM-…`).
+  it("opens the report at the claim a finding names, and offers the reader for a report", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({
+      verification: "unverified",
+      qualityNotices: [
+        { code: "quote_not_found", check: "quote-bond", severity: "must-fix", title: "引文不在所引来源中", detail: "主张 CLM-003", claimId: "CLM-003", text: "x" },
+      ],
+      artifacts: ["deliverables/d1/clinical-evidence-report.md"],
+    })]);
+    renderPage();
+    const link = await screen.findByRole("link", { name: "在报告中查看" });
+    expect(link).toHaveAttribute("href", "/app/runs/run-1/files/deliverables/d1/clinical-evidence-report.md#CLM-003");
+    expect(screen.getByRole("link", { name: "在阅读器中打开 clinical-evidence-report.md" })).toHaveAttribute(
+      "href", "/app/runs/run-1/files/deliverables/d1/clinical-evidence-report.md",
+    );
+  });
+
   // Support still needs the sentence the run was sent; an operator can open it.
   it("keeps the raw text of an old finding behind a disclosure only an operator gets", async () => {
     fetchWebMe.mockResolvedValue({ user: { id: "op", name: "运维" }, operator: true, project: { id: "default", name: "我的研究" }, projects: [] });

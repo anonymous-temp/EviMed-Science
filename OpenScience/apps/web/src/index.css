@@ -125,6 +125,9 @@
   --danger-strong: var(--danger-800); /* SAFETY chip text on --danger-soft: 8.13 */
   --warn-soft: var(--warn-50);
   --warn-strong: var(--warn-800); /* "needs checking" text on --warn-soft: 7.80 */
+  /* A located quotation in a source (::highlight): visible on paper, and the
+     body text on it still reads (--text on warn-300: 9.32). */
+  --highlight: var(--warn-300);
   --ok-soft: var(--ok-50);
   --info-soft: var(--info-50); /* citation chips: --link on it 5.66 */
   /* The product's promise, in the brand colour on purpose: a verified claim. */
@@ -192,6 +195,7 @@
   --danger-strong: var(--danger-300); /* 9.42 */
   --warn-soft: var(--warn-950);
   --warn-strong: var(--warn-300); /* 9.38 */
+  --highlight: var(--warn-800);
   --ok-soft: var(--ok-950);
   --info-soft: var(--info-950); /* --link on it 9.51 */
   --verify-ok: var(--brand-300); /* 10.25 */
@@ -339,4 +343,46 @@ select:focus-visible,
 }
 .fade-in {
   animation: fade-in var(--dur-fast) var(--ease-standard) var(--dur-fast) backwards;
+}
+
+/* A quotation located in a preserved source (lib/quoteHighlight.ts, the CSS
+   Custom Highlight API): the amber of "check this", not the red of danger. */
+::highlight(evimed-quote) {
+  background-color: var(--highlight);
+  color: var(--text);
+}
+
+/* Paper. A report reader mounts a print copy of the report beside the app
+   (`[data-print-root]`, re-scoped to the light tokens); when one exists, the
+   printer gets only that — the report and its facts on white paper, each
+   依据 mark a plain word — and never the shell, a popover or a toast. */
+@media print {
+  @page {
+    margin: 16mm 18mm;
+  }
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+  body:has(> [data-print-root]) > *:not([data-print-root]) {
+    display: none !important;
+  }
+  [data-print-root] {
+    font-size: 11pt;
+  }
+  [data-print-root] h1,
+  [data-print-root] h2,
+  [data-print-root] h3 {
+    break-after: avoid;
+  }
+  [data-print-root] table,
+  [data-print-root] blockquote,
+  [data-print-root] figure {
+    break-inside: avoid;
+  }
+  [data-print-hide] {
+    display: none !important;
+  }
 }

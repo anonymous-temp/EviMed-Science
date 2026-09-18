@@ -1,10 +1,11 @@
-import type { ReactElement, ReactNode } from "react";
+import { memo, useMemo, type ReactElement, type ReactNode } from "react";
+import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/cn";
 import { CodeBlock } from "./CodeBlock";
-import { ClaimCitation } from "./ClaimCitation";
+import { ClaimCitation, type ClaimReading } from "./ClaimCitation";
 import { claimIdsFromHref, linkClaimMarkers, type ClaimEvidence } from "@/lib/claimCitations";
 import { sanitizeAssistantText } from "@/lib/sanitizeAssistantText";
 
@@ -30,6 +31,7 @@ const STYLES: Record<Variant, Record<string, string>> = {
     table: "border-collapse text-ui tabular-nums",
     th: "border border-border bg-surface-2 px-3 py-1.5 text-left font-semibold",
     td: "border border-border px-3 py-1.5",
+    img: "my-2 max-w-full rounded-input",
   },
   // A delivered report (appendix D §8.4). It used to be warm editorial paper
   // with a terracotta accent and fixed hexes — the old brand, frozen into the
@@ -56,15 +58,27 @@ const STYLES: Record<Variant, Record<string, string>> = {
     table: "border-collapse text-ui tabular-nums",
     th: "border-b border-strong bg-surface-2 px-3 py-2 text-left font-semibold",
     td: "border-b border-faint px-3 py-2 align-top",
+    // A figure keeps white paper in both themes: a chart drawn for paper is
+    // unreadable on a dark card, and prints wrong from one.
+    img: "my-5 max-w-full rounded-input bg-white p-3 ring-1 ring-border",
   },
 };
 
-export function MarkdownViewer({
+/**
+ * Memoized, and its element renderers held stable: react-markdown takes a
+ * `components` map, and an inline map is a new component *type* for every tag
+ * on every render — React then unmounts and remounts the whole document. A
+ * report remounted each time its reader re-rendered (a scroll moving the
+ * contents' current mark was enough), which closed any open 依据 and dropped
+ * the ids its contents had given the headings.
+ */
+export const MarkdownViewer = memo(function MarkdownViewer({
   children,
   className,
   variant = "chat",
   claims,
   claimStatuses,
+  reading,
 }: {
   children: string;
   className?: string;
@@ -74,6 +88,9 @@ export function MarkdownViewer({
   claims?: Map<string, ClaimEvidence>;
   /** Whether each claim's quotation was found in its preserved source. */
   claimStatuses?: Map<string, string>;
+  /** What the report reader around this text knows: per-source verification,
+   *  the run (to open preserved sources), safety claims, print. */
+  reading?: ClaimReading;
 }) {
   const s = STYLES[variant];
   // Claim markers become citations when there is a matrix to open; whatever
@@ -81,68 +98,72 @@ export function MarkdownViewer({
   // is removed rather than printed. react-markdown renders a raw `<!-- … -->` as
   // visible text, so every report opened without its matrix showed the reader
   // `<!-- claim:CLM-001 -->` after each finding (2026-09-16).
-  const source = sanitizeAssistantText(claims ? linkClaimMarkers(children) : children);
+  const source = useMemo(() => sanitizeAssistantText(claims ? linkClaimMarkers(children) : children), [children, claims]);
+  const components = useMemo<Components>(() => ({
+    p: ({ children }) => <p className={s.p}>{children}</p>,
+    a: ({ children, href }) => {
+      const ids = claims ? claimIdsFromHref(href) : null;
+      if (ids && claims) return <ClaimCitation ids={ids} claims={claims} statuses={claimStatuses} reading={reading} />;
+      return (
+        <a href={href} className={s.a}>
+          {children}
+        </a>
+      );
+    },
+    code: ({ children }) => <code className={s.code}>{children}</code>,
+    // Block code: the fence is highlighted and gets a copy button. The
+    // language and raw text come from the inner <code> element's props
+    // (react-markdown passes it as the pre's single child); CodeBlock
+    // never renders that child, so inline-code styling stays untouched.
+    pre: ({ children }) => {
+      const el = children as ReactElement<{
+        className?: string;
+        children?: ReactNode;
+      }> | null;
+      const language = /language-([\w-]+)/.exec(el?.props?.className ?? "")?.[1];
+      return (
+        <CodeBlock
+          code={flattenText(el?.props?.children).replace(/\n$/, "")}
+          language={language}
+          className={s.pre}
+        />
+      );
+    },
+    ul: ({ children }) => <ul className={s.ul}>{children}</ul>,
+    ol: ({ children }) => <ol className={s.ol}>{children}</ol>,
+    li: ({ children }) => <li>{children}</li>,
+    // Document elements (headings, quotes, tables, rules) — Tailwind's
+    // preflight strips the browser defaults, so each needs explicit style.
+    h1: ({ children }) => <h1 className={s.h1}>{children}</h1>,
+    h2: ({ children }) => <h2 className={s.h2}>{children}</h2>,
+    h3: ({ children }) => <h3 className={s.h3}>{children}</h3>,
+    h4: ({ children }) => <h4 className={s.h4}>{children}</h4>,
+    blockquote: ({ children }) => <blockquote className={s.blockquote}>{children}</blockquote>,
+    hr: () => <hr className={s.hr} />,
+    table: ({ children }) => (
+      <div className="my-4 overflow-x-auto">
+        <table className={s.table}>{children}</table>
+      </div>
+    ),
+    th: ({ children }) => <th className={s.th}>{children}</th>,
+    td: ({ children }) => <td className={s.td}>{children}</td>,
+    img: ({ src, alt }) => <img src={typeof src === "string" ? src : undefined} alt={alt ?? ""} loading="lazy" className={s.img} />,
+  }), [s, claims, claimStatuses, reading]);
   return (
     <div className={cn(s.root, className)}>
       <ReactMarkdown
         // remark-breaks: chat prose treats a single newline as a line break
         // (chat convention), not as the collapsible space of print markdown.
-        remarkPlugins={[remarkGfm, remarkBreaks]}
-        components={{
-          p: ({ children }) => <p className={s.p}>{children}</p>,
-          a: ({ children, href }) => {
-            const ids = claims ? claimIdsFromHref(href) : null;
-            if (ids && claims) return <ClaimCitation ids={ids} claims={claims} statuses={claimStatuses} />;
-            return (
-              <a href={href} className={s.a}>
-                {children}
-              </a>
-            );
-          },
-          code: ({ children }) => <code className={s.code}>{children}</code>,
-          // Block code: the fence is highlighted and gets a copy button. The
-          // language and raw text come from the inner <code> element's props
-          // (react-markdown passes it as the pre's single child); CodeBlock
-          // never renders that child, so inline-code styling stays untouched.
-          pre: ({ children }) => {
-            const el = children as ReactElement<{
-              className?: string;
-              children?: ReactNode;
-            }> | null;
-            const language = /language-([\w-]+)/.exec(el?.props?.className ?? "")?.[1];
-            return (
-              <CodeBlock
-                code={flattenText(el?.props?.children).replace(/\n$/, "")}
-                language={language}
-                className={s.pre}
-              />
-            );
-          },
-          ul: ({ children }) => <ul className={s.ul}>{children}</ul>,
-          ol: ({ children }) => <ol className={s.ol}>{children}</ol>,
-          li: ({ children }) => <li>{children}</li>,
-          // Document elements (headings, quotes, tables, rules) — Tailwind's
-          // preflight strips the browser defaults, so each needs explicit style.
-          h1: ({ children }) => <h1 className={s.h1}>{children}</h1>,
-          h2: ({ children }) => <h2 className={s.h2}>{children}</h2>,
-          h3: ({ children }) => <h3 className={s.h3}>{children}</h3>,
-          h4: ({ children }) => <h4 className={s.h4}>{children}</h4>,
-          blockquote: ({ children }) => <blockquote className={s.blockquote}>{children}</blockquote>,
-          hr: () => <hr className={s.hr} />,
-          table: ({ children }) => (
-            <div className="my-4 overflow-x-auto">
-              <table className={s.table}>{children}</table>
-            </div>
-          ),
-          th: ({ children }) => <th className={s.th}>{children}</th>,
-          td: ({ children }) => <td className={s.td}>{children}</td>,
-        }}
+        remarkPlugins={REMARK_PLUGINS}
+        components={components}
       >
         {source}
       </ReactMarkdown>
     </div>
   );
-}
+});
+
+const REMARK_PLUGINS = [remarkGfm, remarkBreaks];
 
 /** Fence content is almost always one string, but react-markdown may split it
  *  into an array of text nodes — flatten defensively. */

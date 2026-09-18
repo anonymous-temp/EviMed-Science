@@ -11,23 +11,49 @@
  * viewer can open in place.
  */
 
+import { evidenceSourceTypeOf } from "@evimed/domain";
+
+/** One of the domain's evidence source types (contract C8): `guideline`, `rct`, … `other`. */
+export type EvidenceSourceType = ReturnType<typeof evidenceSourceTypeOf>;
+
 export interface ClaimSource {
   sourceTitle?: string;
   sourceUrl?: string;
   identifier?: string;
   accessLevel?: string;
   supportQuote?: string;
+  /** The preserved copy of the source in the workspace (`.evimed-sources/…`), when the run kept one. */
+  artifactPath?: string;
+  /** What kind of evidence the source is, decided once by the domain (C8). */
+  sourceType: EvidenceSourceType;
 }
 
 export interface ClaimEvidence extends ClaimSource {
   claimId: string;
   claim: string;
   claimType: "direct" | "synthesized" | "derived" | string;
+  referenceNumber?: number;
   uncertainty?: string;
   confidence?: string;
   supportingSources?: ClaimSource[];
   derivedFrom?: string[];
   method?: string;
+}
+
+/**
+ * Package-level facts a matrix root may declare. None of them is required by
+ * the contract today; a reader shows 「未注明」 for each one a package leaves
+ * out rather than guessing it from the prose.
+ */
+export interface ClaimMatrixMeta {
+  searchCutoff?: string;
+  sourceScope?: string;
+  limitations?: string[];
+}
+
+export interface ClaimMatrixDocument {
+  claims: Map<string, ClaimEvidence>;
+  meta: ClaimMatrixMeta;
 }
 
 /**
@@ -79,42 +105,86 @@ export const CLAIM_LINK_PREFIX = "#evimed-claims=";
 const REPORT_NAME = "clinical-evidence-report.md";
 const MATRIX_NAME = "clinical-evidence-matrix.json";
 
+function fileName(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash >= 0 ? path.slice(slash + 1) : path;
+}
+
+function directoryOf(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash >= 0 ? path.slice(0, slash + 1) : "";
+}
+
 /** The matrix that belongs to a report, or null when the file is not one. */
 export function claimMatrixPathFor(reportPath: string): string | null {
-  const slash = reportPath.lastIndexOf("/");
-  const name = slash >= 0 ? reportPath.slice(slash + 1) : reportPath;
-  if (name !== REPORT_NAME) return null;
-  return `${slash >= 0 ? reportPath.slice(0, slash + 1) : ""}${MATRIX_NAME}`;
+  if (fileName(reportPath) !== REPORT_NAME) return null;
+  return `${directoryOf(reportPath)}${MATRIX_NAME}`;
+}
+
+/** Whether a path is a clinical evidence matrix, which reads as a table, not as JSON. */
+export function isClaimMatrixPath(path: string): boolean {
+  return fileName(path) === MATRIX_NAME;
+}
+
+/** The report a matrix belongs to. */
+export function reportPathForMatrix(matrixPath: string): string {
+  return `${directoryOf(matrixPath)}${REPORT_NAME}`;
+}
+
+/** A workspace path a link may open: relative, no `..`, no backslash. */
+export function safeWorkspacePath(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value || value.length > 1024) return undefined;
+  if (value.startsWith("/") || value.includes("\\") || value.split("/").some((part) => part === ".." || part === "." || part === "")) return undefined;
+  return value;
 }
 
 /** The claims a matrix holds, by id. A matrix that does not parse holds none. */
 export function parseClaimMatrix(text: string): Map<string, ClaimEvidence> {
+  return parseClaimMatrixDocument(text).claims;
+}
+
+/** The claims a matrix holds, and the package-level facts its root declares. */
+export function parseClaimMatrixDocument(text: string): ClaimMatrixDocument {
   const claims = new Map<string, ClaimEvidence>();
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return claims;
+    return { claims, meta: {} };
   }
-  const list = (parsed as { claims?: unknown })?.claims;
-  if (!Array.isArray(list)) return claims;
+  const root = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  const value = (entry: unknown) => (typeof entry === "string" && entry.trim() ? entry.trim() : undefined);
+  const limitations = Array.isArray(root.limitations)
+    ? root.limitations.map(value).filter((entry): entry is string => Boolean(entry))
+    : value(root.limitations) ? [value(root.limitations)!] : undefined;
+  const meta: ClaimMatrixMeta = {
+    ...(value(root.searchCutoff) ?? value(root.searchDate) ? { searchCutoff: value(root.searchCutoff) ?? value(root.searchDate) } : {}),
+    ...(value(root.sourceScope) ? { sourceScope: value(root.sourceScope) } : {}),
+    ...(limitations?.length ? { limitations } : {}),
+  };
+  const list = root.claims;
+  if (!Array.isArray(list)) return { claims, meta };
   for (const item of list) {
     if (!item || typeof item !== "object") continue;
     const claim = item as Record<string, unknown>;
     if (typeof claim.claimId !== "string" || typeof claim.claim !== "string") continue;
-    const text = (value: unknown) => (typeof value === "string" && value.trim() ? value : undefined);
-    const source = (value: Record<string, unknown>): ClaimSource => ({
-      sourceTitle: text(value.sourceTitle),
-      sourceUrl: text(value.sourceUrl),
-      identifier: text(value.identifier),
-      accessLevel: text(value.accessLevel),
-      supportQuote: text(value.supportQuote),
+    const text = (entry: unknown) => (typeof entry === "string" && entry.trim() ? entry : undefined);
+    const source = (record: Record<string, unknown>): ClaimSource => ({
+      sourceTitle: text(record.sourceTitle),
+      sourceUrl: text(record.sourceUrl),
+      identifier: text(record.identifier),
+      accessLevel: text(record.accessLevel),
+      supportQuote: text(record.supportQuote),
+      artifactPath: safeWorkspacePath(record.artifactPath),
+      sourceType: evidenceSourceTypeOf(record),
     });
+    const referenceNumber = Number(claim.referenceNumber);
     claims.set(claim.claimId, {
       claimId: claim.claimId,
       claim: claim.claim,
       claimType: text(claim.claimType) ?? "direct",
       ...source(claim),
+      ...(Number.isSafeInteger(referenceNumber) && referenceNumber > 0 ? { referenceNumber } : {}),
       uncertainty: text(claim.uncertainty),
       confidence: text(claim.confidence),
       supportingSources: Array.isArray(claim.supportingSources)
@@ -124,7 +194,38 @@ export function parseClaimMatrix(text: string): Map<string, ClaimEvidence> {
       method: text(claim.method),
     });
   }
-  return claims;
+  return { claims, meta };
+}
+
+/** The sources a claim stands on, in the order the verification reports them. */
+export function claimSources(claim: ClaimEvidence): ClaimSource[] {
+  if (claim.claimType === "derived") return [];
+  if (claim.claimType === "synthesized") return claim.supportingSources ?? [];
+  return [claim];
+}
+
+/**
+ * What a reader should do about a claim whose quotation did not check out,
+ * naming which quotation (「第 2 段引文」) when the claim rests on several.
+ * Null when every quotation checked out, or nothing was checked.
+ */
+export function claimGuidance(
+  claim: ClaimEvidence | undefined,
+  verified: ClaimVerification["claims"][number] | undefined,
+): string | null {
+  if (!verified || verified.status === "verified" || verified.status === "derived") return null;
+  const count = verified.sources.length;
+  const which = (index: number) => (count > 1 ? `第 ${index + 1} 段引文` : "这段引文");
+  const lines = verified.sources
+    .map((source, index) => {
+      if (source.status === "quote_not_found") return `${which(index)}没有在保存的原文中找到：请打开原文核对措辞与数字。`;
+      if (source.status === "source_unavailable") return `${which(index)}的原文没有保存，无法自动核对：请到原始来源核实。`;
+      if (source.status === "no_quote") return `${which(index)}缺少可核对的原文摘录：引用这条结论前请自行查证。`;
+      return null;
+    })
+    .filter((line): line is string => Boolean(line));
+  if (lines.length > 0) return lines.join("");
+  return claim && claimSources(claim).length === 0 ? "这条主张没有给出可核对的引文：引用前请自行查证。" : null;
 }
 
 // A fenced block (closed, or open to the end) or an inline code span: a claim
