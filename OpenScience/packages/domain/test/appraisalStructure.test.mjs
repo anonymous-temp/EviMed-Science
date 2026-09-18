@@ -267,8 +267,9 @@ test("the PICO the skill taught first — {population, intervention, outcome} �
   const legacy = directClaim({ pico: { population: "≥70 岁社区成人", intervention: "阿司匹林 100 mg/d", outcome: "大出血" }, picoMatch: { population: "same", intervention: "same", outcome: "same" } });
   assert.deepEqual(judge(legacy), judge(directClaim()), "not one finding more, not one less");
   assert.deepEqual(claimAppraisal(legacy)?.pico, {
-    population: "≥70 岁社区成人", intervention: "阿司匹林 100 mg/d", comparator: null, outcomes: ["大出血"], timeframe: null, setting: null,
+    population: "≥70 岁社区成人", intervention: "阿司匹林 100 mg/d", exposure: false, comparator: null, outcomes: ["大出血"], timeframe: null, setting: null,
   });
+  assert.equal(claimAppraisal(directClaim({ pico: { population: "成人", exposure: "吸烟", outcomes: ["肺癌"] } }))?.pico?.exposure, true, "PECO is labelled as such");
 });
 
 test("a PICO part's quote is held to the same verbatim check as the claim's own, and a miss is advice", () => {

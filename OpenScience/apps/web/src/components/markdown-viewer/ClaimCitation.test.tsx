@@ -54,6 +54,34 @@ describe("a report sentence opens what it rests on", () => {
     expect(screen.queryByRole("link", { name: /Bad/ })).toBeNull();
   });
 
+  it("shows the claim's PICO and its certainty badge, with a quiet note when the stated level and its parts disagree", async () => {
+    const appraised = parseClaimMatrix(JSON.stringify({ claims: [{
+      claimId: "CLM-010", claim: "70 岁及以上成人服用阿司匹林大出血风险升高。", claimType: "direct", accessLevel: "full_text",
+      sourceTitle: "ASPREE", artifactPath: ".evimed-sources/aspree/fulltext.md", supportQuote: "major hemorrhage was higher",
+      pico: { population: "≥70 岁社区成人", intervention: "阿司匹林 100 mg/d", comparator: "安慰剂", outcomes: ["大出血"] },
+      certainty: { start: "high", riskOfBias: -1, imprecision: -1, rationale: "见正文", label: "moderate" },
+      riskOfBias: { tool: "RoB 2", domains: { D1: "low", D2: "low", D3: "low", D4: "low", D5: "low" }, overall: "low" },
+    }] }));
+    render(<MarkdownViewer variant="document" claims={appraised}>{"x [1]<!-- claim:CLM-010 -->"}</MarkdownViewer>);
+    await userEvent.click(screen.getByRole("button", { name: /查看这句话的依据/ }));
+    const list = await screen.findByLabelText("PICO");
+    expect(list).toHaveTextContent("人群≥70 岁社区成人");
+    expect(list).toHaveTextContent("干预阿司匹林 100 mg/d");
+    expect(list).toHaveTextContent("对照安慰剂");
+    expect(list).toHaveTextContent("结局大出血");
+    expect(screen.getByLabelText("证据确定性：中")).toHaveTextContent("确定性 中");
+    expect(screen.getByText("标注为“中”，按各分项计算为“低”")).toBeInTheDocument();
+    expect(screen.getByText("偏倚风险 · RoB 2")).toBeInTheDocument();
+  });
+
+  it("a claim with no appraisal shows none of it", async () => {
+    render(<MarkdownViewer variant="document" claims={claims}>{"x [1]<!-- claim:CLM-001 -->"}</MarkdownViewer>);
+    await userEvent.click(screen.getByRole("button", { name: /查看这句话的依据/ }));
+    expect(await screen.findByText("MIMIC-IV 是单一机构常规诊疗数据的公开衍生数据库。")).toBeInTheDocument();
+    expect(screen.queryByLabelText("PICO")).toBeNull();
+    expect(screen.queryByText(/确定性/)).toBeNull();
+  });
+
   it("without a matrix the markers are removed, never printed as text", () => {
     const { container } = render(<MarkdownViewer variant="document">{report}</MarkdownViewer>);
     expect(screen.queryByRole("button", { name: /依据/ })).toBeNull();
