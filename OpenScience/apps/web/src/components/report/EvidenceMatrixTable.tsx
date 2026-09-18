@@ -43,18 +43,20 @@ export function EvidenceMatrixTable({
     return <p className="p-4 text-ui text-muted">这个证据矩阵里没有可读的主张。</p>;
   }
   return (
-    <div className={cn("overflow-x-auto rounded-card border border-border bg-surface", className)}>
+    // Its own scroll box, so the header row and the claim column both stay
+    // put (appendix D §4.2: freeze the header and the first column).
+    <div className={cn("max-h-[calc(100vh-12rem)] overflow-auto rounded-card border border-border bg-surface", className)}>
       <table className="min-w-[64rem] border-collapse text-left text-ui tabular-nums">
         <caption className="sr-only">证据矩阵：{rows.length} 条主张</caption>
         <thead>
-          <tr className="border-b border-strong bg-surface-2 text-caption text-muted">
-            <th scope="col" className="sticky left-0 z-10 w-24 bg-surface-2 px-3 py-2 font-semibold">主张</th>
-            <th scope="col" className="w-14 px-3 py-2 text-right font-semibold">文献号</th>
-            <th scope="col" className="min-w-[16rem] px-3 py-2 font-semibold">内容</th>
-            <th scope="col" className="w-20 px-3 py-2 font-semibold">类型</th>
-            <th scope="col" className="min-w-[14rem] px-3 py-2 font-semibold">来源</th>
-            <th scope="col" className="min-w-[18rem] px-3 py-2 font-semibold">引文</th>
-            <th scope="col" className="w-28 px-3 py-2 font-semibold">核对</th>
+          <tr className="text-caption text-muted">
+            <th scope="col" className="sticky left-0 top-0 z-30 w-24 border-b border-strong bg-surface-2 px-3 py-2 font-semibold">主张</th>
+            <th scope="col" className={cn(HEAD, "w-14 text-right")}>文献号</th>
+            <th scope="col" className={cn(HEAD, "min-w-[16rem]")}>内容</th>
+            <th scope="col" className={cn(HEAD, "w-20")}>类型</th>
+            <th scope="col" className={cn(HEAD, "min-w-[14rem]")}>来源</th>
+            <th scope="col" className={cn(HEAD, "min-w-[18rem]")}>引文</th>
+            <th scope="col" className={cn(HEAD, "w-28")}>核对</th>
           </tr>
         </thead>
         <tbody>
@@ -63,8 +65,8 @@ export function EvidenceMatrixTable({
             const check = verified?.get(claim.claimId);
             const overall = check ? STATUS_MARK[check.status] : undefined;
             return (
-              <tr key={claim.claimId} id={`matrix-${claim.claimId}`} className="border-b border-faint align-top">
-                <th scope="row" className="sticky left-0 z-10 bg-surface px-3 py-2 font-mono text-caption font-medium text-text">
+              <tr key={claim.claimId} id={`matrix-${claim.claimId}`} className="group border-b border-faint align-top hover:bg-surface-2">
+                <th scope="row" className="sticky left-0 z-10 bg-surface px-3 py-2 font-mono text-caption font-medium text-text group-hover:bg-surface-2">
                   {claim.claimId}
                 </th>
                 <td className="px-3 py-2 text-right">{claim.referenceNumber ?? "—"}</td>
@@ -124,6 +126,9 @@ export function EvidenceMatrixTable({
     </div>
   );
 }
+
+/** A header cell: frozen to the top of the table's own scroll box. */
+const HEAD = "sticky top-0 z-20 border-b border-strong bg-surface-2 px-3 py-2 font-semibold";
 
 /** A quotation, linked to where it should be in the preserved source, or to the source itself. */
 function QuoteLink({ source, runId }: { source: ReturnType<typeof claimSources>[number]; runId?: string | null }) {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { isMacPlatform } from "@/lib/platform";
+import { trapTab } from "@/lib/focusTrap";
 
 /** Toggles the cheat sheet from outside it: the chat frame forwards `?` when
  *  focus is inside it, where this component's own listener cannot hear it. */
@@ -34,6 +35,8 @@ export function ShortcutHelp() {
         e.preventDefault();
         setOpen(false);
       }
+      // A modal layer keeps Tab inside it.
+      if (e.key === "Tab" && openRef.current) trapTab(panelRef.current, e);
     };
     const onToggle = () => setOpen((v) => !v);
     window.addEventListener("keydown", onKey);
