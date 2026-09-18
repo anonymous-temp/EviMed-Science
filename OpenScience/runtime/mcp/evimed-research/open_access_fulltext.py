@@ -283,6 +283,57 @@ def _render_markdown(xml_payload: bytes, metadata: dict) -> tuple[str, dict]:
     }
 
 
+# The article is on disk; what enters the model's context is the run's choice.
+# A 60 K-character full text read whole is the largest single thing a child
+# puts into its context, and most of it — methods boilerplate, references —
+# is never quoted. So the result carries the abstract and a map of the file:
+# every heading with the line it starts on and how long its section runs, so
+# a run reads the Results or the one table it needs by line range, and checks
+# a quotation with `locate_quote` rather than by reading the article again.
+MAX_ABSTRACT_CHARS = 3_000
+MAX_OUTLINE_ENTRIES = 80
+
+
+def _outline(markdown: str) -> list[dict]:
+    lines = markdown.split("\n")
+    headings = []
+    for index, line in enumerate(lines):
+        match = re.match(r"^(#{1,4})\s+(.+?)\s*$", line)
+        if match:
+            headings.append((index, len(match.group(1)), match.group(2)))
+    outline = []
+    for position, (index, level, title) in enumerate(headings[:MAX_OUTLINE_ENTRIES]):
+        end = headings[position + 1][0] if position + 1 < len(headings) else len(lines)
+        outline.append({
+            "heading": title[:160],
+            "level": level,
+            "line": index + 1,
+            "lines": end - index,
+            "characters": sum(len(line) + 1 for line in lines[index:end]),
+        })
+    return outline
+
+
+def _abstract(markdown: str) -> str:
+    match = re.search(r"^## Abstract\s*\n(.*?)(?=^#{1,2} |\Z)", markdown, re.M | re.S)
+    if not match:
+        return ""
+    text = " ".join(match.group(1).split())
+    return text if len(text) <= MAX_ABSTRACT_CHARS else text[: MAX_ABSTRACT_CHARS - 1] + "…"
+
+
+def _reading_map(markdown: str, markdown_relative: str) -> dict:
+    return {
+        "abstract": _abstract(markdown),
+        "outline": _outline(markdown),
+        "readingHint": (
+            "The full text is at %s. Read only the sections you need by line range "
+            "(the outline gives each section's first line and length), and confirm a "
+            "quotation with locate_quote instead of re-reading the article." % markdown_relative
+        ),
+    }
+
+
 def _workspace() -> Path:
     try:
         return managed_workspace()
@@ -340,6 +391,7 @@ def _fetch_open_access_pdf(metadata: dict, workspace: Path) -> dict:
             },
             "markdownCharacters": len(markdown),
             "pdfBytes": len(payload),
+            **_reading_map(markdown, markdown_relative),
         },
         "sources": [{
             "id": doi,
@@ -405,6 +457,7 @@ def fetch(arguments: dict) -> dict:
                 },
                 "markdownCharacters": len(markdown),
                 "xmlBytes": len(xml_payload),
+                **_reading_map(markdown, markdown_relative),
             },
             "sources": [source],
             "artifacts": [markdown_relative, xml_relative],
