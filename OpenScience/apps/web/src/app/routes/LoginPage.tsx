@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowRight, Loader2, LockKeyhole, UserRound } from "lucide-react";
 import { useNavigate } from "react-router";
-import evimedMark from "@/assets/evimed-mark.svg";
+import { EviMedMark } from "@/components/brand/EviMedMark";
 import {
   fetchWebAuthMethods,
   fetchWebMe,
@@ -95,7 +95,7 @@ function signInMessage(error: unknown): string {
     <main className="grid min-h-screen place-items-center bg-bg px-6 py-10 text-text">
       <div className="w-full max-w-[420px]">
         <div className="mb-8 flex items-center justify-center gap-2.5">
-          <img src={evimedMark} alt="EviMed" className="h-9 w-9" />
+          <EviMedMark className="h-9 w-9" />
           <span className="font-serif text-display font-semibold">EviMed</span>
         </div>
 

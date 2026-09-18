@@ -116,12 +116,11 @@ module.exports = {
       },
     },
     {
-      // Surfaces whose colors are content, not chrome: the Markdown "paper" a
-      // report is read on keeps its own print palette and heading sizes, and
-      // the canvas / WebGL viewers hand hex values to a renderer rather than to
-      // CSS. The raw-error rule still applies to them.
+      // Surfaces whose colors are content, not chrome: the canvas / WebGL
+      // viewers hand hex values to a renderer rather than to CSS. (The report
+      // viewer used to be here with its own palette; it reads the tokens now.)
+      // The raw-error rule still applies to them.
       files: [
-        "src/components/markdown-viewer/MarkdownViewer.tsx",
         "src/components/inspector/MeshView.tsx",
         "src/components/inspector/QCodeView.tsx",
         "src/components/inspector/AnomalyMapView.tsx",

@@ -52,11 +52,15 @@ describe("MarkdownViewer code blocks", () => {
     expect(await screen.findByRole("button", { name: "已复制" })).toBeInTheDocument();
   });
 
-  it("marks document-variant blocks with the paper highlight palette", () => {
+  // A report follows the theme like the rest of the shell: no fixed paper
+  // palette of its own, so dark mode does not leave one white page.
+  it("renders a report's code blocks on the theme tokens, with no paper palette", () => {
     const { container } = render(
       <MarkdownViewer variant="document">{"```js\nlet x = 1;\n```"}</MarkdownViewer>,
     );
-    expect(container.querySelector("pre")).toHaveClass("hljs-paper");
+    const pre = container.querySelector("pre");
+    expect(pre).toHaveClass("bg-surface-2");
+    expect(pre).not.toHaveClass("hljs-paper");
   });
 
   it("keeps inline code unhighlighted and intact", () => {
