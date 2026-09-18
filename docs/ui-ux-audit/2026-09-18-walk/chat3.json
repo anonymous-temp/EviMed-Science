@@ -1,0 +1,138 @@
+{
+  "widths": {
+    "1280": {
+      "viewport": 1048,
+      "frameGrid": "280px 400px 368px",
+      "sidebar": {
+        "x": 0,
+        "w": 0,
+        "display": "none",
+        "gridColumn": "auto",
+        "minWidth": "0px",
+        "overflow": "hidden"
+      },
+      "center": {
+        "x": 0,
+        "w": 680,
+        "display": "flex",
+        "gridColumn": "1 / 3",
+        "minWidth": "0px",
+        "overflow": "hidden"
+      },
+      "right": {
+        "x": 680,
+        "w": 368,
+        "display": "block",
+        "gridColumn": "3",
+        "minWidth": "0px",
+        "overflow": "visible"
+      },
+      "composer": {
+        "x": 16,
+        "w": 634
+      },
+      "rightText": "开始"
+    },
+    "1440": {
+      "viewport": 1208,
+      "frameGrid": "280px 400px 528px",
+      "sidebar": {
+        "x": 0,
+        "w": 0,
+        "display": "none",
+        "gridColumn": "auto",
+        "minWidth": "0px",
+        "overflow": "hidden"
+      },
+      "center": {
+        "x": 0,
+        "w": 680,
+        "display": "flex",
+        "gridColumn": "1 / 3",
+        "minWidth": "0px",
+        "overflow": "hidden"
+      },
+      "right": {
+        "x": 680,
+        "w": 528,
+        "display": "block",
+        "gridColumn": "3",
+        "minWidth": "0px",
+        "overflow": "visible"
+      },
+      "composer": {
+        "x": 16,
+        "w": 634
+      },
+      "rightText": "开始"
+    },
+    "1728": {
+      "viewport": 1496,
+      "frameGrid": "280px 543px 673px",
+      "sidebar": {
+        "x": 0,
+        "w": 0,
+        "display": "none",
+        "gridColumn": "auto",
+        "minWidth": "0px",
+        "overflow": "hidden"
+      },
+      "center": {
+        "x": 0,
+        "w": 823,
+        "display": "flex",
+        "gridColumn": "1 / 3",
+        "minWidth": "0px",
+        "overflow": "hidden"
+      },
+      "right": {
+        "x": 823,
+        "w": 673,
+        "display": "block",
+        "gridColumn": "3",
+        "minWidth": "0px",
+        "overflow": "visible"
+      },
+      "composer": {
+        "x": 51,
+        "w": 708
+      },
+      "rightText": "开始\n收起侧边栏"
+    }
+  },
+  "closed": {
+    "viewport": 1496,
+    "frameGrid": "280px 1216px 0px",
+    "sidebar": {
+      "x": 0,
+      "w": 0,
+      "display": "none",
+      "gridColumn": "auto",
+      "minWidth": "0px",
+      "overflow": "hidden"
+    },
+    "center": {
+      "x": 0,
+      "w": 1496,
+      "display": "flex",
+      "gridColumn": "1 / 3",
+      "minWidth": "0px",
+      "overflow": "hidden"
+    },
+    "right": {
+      "x": 1496,
+      "w": 0,
+      "display": "block",
+      "gridColumn": "3",
+      "minWidth": "0px",
+      "overflow": "visible"
+    },
+    "composer": {
+      "x": 267,
+      "w": 948
+    },
+    "rightText": ""
+  },
+  "newTabMenu": [],
+  "rightAfterNewTab": "开始\n收起侧边栏"
+}
