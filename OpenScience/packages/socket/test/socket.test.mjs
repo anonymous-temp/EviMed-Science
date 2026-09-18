@@ -3,7 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 import { SEAMS } from "@evimed/harness-port";
-import { CONTRACT_KINDS, workspaceLayout, TOOL_RESULT_PRUNER } from "@evimed/domain";
+import { CONTRACT_KINDS, MCP_TOOL_NAMES, ROOT_VISIBLE_MCP_BASE_NAMES, workspaceLayout, TOOL_RESULT_PRUNER } from "@evimed/domain";
 
 import {
   AGENT_PLUGIN_IDS,
@@ -16,7 +16,7 @@ import {
   buildGuidanceText,
   completionCheck,
   concurrentWriteNotice,
-  delegatableItems,
+  unmetDependencies,
   evidenceFromOutcome,
   evidenceSourceErrorCode,
   sourceProbe,
@@ -26,6 +26,7 @@ import {
   mergeEvidence,
   projectRunState,
   rejectionEnvelope,
+  rootHiddenMcpTools,
   sourceArtifactPaths,
   renderDeliverySummary,
   settleDelegation,
@@ -84,28 +85,24 @@ test("the composition mounts every agent plugin we own and nothing we ruled out"
 test("a child cannot interrupt its parent's synthesis by choosing how its report is delivered", async () => {
   // This used to be `assert.match(preset, /reportDelivery: quiet/)`, and that
   // string has not been a setting since 0.1.2-alpha.4 — the row carrying it was
-  // removed upstream. The assertion went on matching the comment that explains
-  // its removal, so it passed while checking nothing about the composition.
-  //
-  // What holds now, and is worth asserting: the row that took the setting is
-  // gone, its replacement takes no configuration at all, and the retired
-  // report tool is mounted nowhere. The property is the same; the mechanism is
-  // construction rather than a value we set.
+  // removed upstream. It then became "the control row is mounted and takes no
+  // configuration". Since 2026-09-18 no kernel messaging row is mounted at all:
+  // a child's only channel to its parent is its submission, which reaches the
+  // root through `evimed_await` or, when the root is idle between turns, one
+  // steer carrying the settled results (combinedPlan.test.mjs: "a root inside
+  // its turn collects for itself, and a cancelled run is never woken").
+  // Neither lets a child choose to break into the parent's synthesis.
   const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
   const rows = preset.split("\n").filter((line) => /^\s*-?\s*name: '@deepseek-ai\//.test(line));
   assert.ok(rows.length > 0, "no plugin rows were read, so this test walked nothing");
-  assert.ok(
-    !rows.some((row) => row.includes("dsh-tool-subagent-report")),
-    "the retired one-way report tool is mounted; delivery would be the model's choice again",
-  );
-  assert.ok(
-    rows.some((row) => row.includes("dsh-tool-subagent-control")),
-    "the replacement row is absent, so a child has no way to reach its parent at all",
-  );
-  const control = preset.slice(preset.indexOf("id: tool-subagent-control"));
-  const nextRow = control.slice(control.indexOf("\n") + 1).search(/^\s*- id: /m);
-  assert.doesNotMatch(control.slice(0, nextRow > 0 ? nextRow : 200), /config:/,
-    "the control row takes configuration, so delivery is a setting again and must be asserted as one");
+  for (const retired of ["dsh-tool-subagent-report", "dsh-tool-subagent-control", "dsh-tool-subagent'"]) {
+    assert.ok(!rows.some((row) => row.includes(retired)), `${retired} is mounted; a child could address its parent directly again`);
+  }
+  const { DELEGATION_BASE_TOOLS } = await import("@evimed/domain");
+  assert.ok(DELEGATION_BASE_TOOLS.length > 0, "no child tools were read, so this test walked nothing");
+  for (const messaging of ["send_message", "interrupt_agent", "list_agents", "report", "subagent", "subagent_report"]) {
+    assert.ok(!DELEGATION_BASE_TOOLS.includes(messaging), `a child is handed ${messaging}`);
+  }
 });
 
 test("a specialist deliverable is delegated before the parent retrieves its evidence", async () => {
@@ -297,8 +294,8 @@ test("the budget refuses a step and the refusal names what to do next", () => {
   assert.deepEqual(accumulateBudget(zeroBudget, { input: 10, output: 5, cacheHit: 8, cacheMiss: 2 }), { steps: 1, tokens: 15, children: 0 });
 });
 
-test("a delegation is queued until its dependencies are accepted", () => {
-  const { plan, items } = indexPlan({
+test("a delegation waits on nothing: it is refused until its dependencies are delivered, naming what is missing", () => {
+  const { items } = indexPlan({
     revision: 1,
     clarifications: ["assumed adults"],
     deliverables: [
@@ -306,9 +303,20 @@ test("a delegation is queued until its dependencies are accepted", () => {
       { id: "b", contractKind: "research-brief", capability: "research-brief", title: "B", dependsOn: ["a"] },
     ],
   });
-  assert.deepEqual(delegatableItems(plan, items).map((item) => item.id), ["a"]);
+  const neverSpent = () => false;
+  assert.deepEqual(unmetDependencies(items[0], items, neverSpent), [], "an item with no dependencies may start at once");
+  assert.deepEqual(unmetDependencies(items[1], items, neverSpent), [{ id: "a", status: "planned" }],
+    "the refusal names the dependency and where it stands, so it can be acted on");
   const accepted = items.map((item) => (item.id === "a" ? { ...item, status: "accepted" } : item));
-  assert.deepEqual(delegatableItems(plan, accepted).map((item) => item.id), ["b"]);
+  assert.deepEqual(unmetDependencies(accepted[1], accepted, neverSpent), []);
+  // A dependency whose submissions are spent goes to the reader as it stands,
+  // marked unverified — a gate verdict never withholds a delivery — so it no
+  // longer holds back the item that builds on it. It used to, forever.
+  const rejected = items.map((item) => (item.id === "a" ? { ...item, status: "rejected" } : item));
+  assert.deepEqual(unmetDependencies(rejected[1], rejected, neverSpent), [{ id: "a", status: "rejected" }]);
+  assert.deepEqual(unmetDependencies(rejected[1], rejected, (dependency) => dependency.id === "a"), []);
+  // A dependency the plan does not contain is reported, never assumed done.
+  assert.deepEqual(unmetDependencies({ id: "c", dependsOn: ["ghost"] }, items, () => true), [{ id: "ghost", status: "missing" }]);
 });
 
 test("a delegated child gets a writable tool set and its own deliverable directory", () => {
@@ -1071,6 +1079,73 @@ test("exactly one compaction engine can be active at a time", async () => {
   assert.ok(!/from\s+['"]@deepseek-ai\//.test(plugin), "the base engine must stay lazily resolved; it is not installed here");
 });
 
+test("a request about to pass the gateway's byte limit is compacted first, on the kernel's own engine too", async () => {
+  const { apply: applyCompaction, guardRequestBytes } = await import("../plugins/compaction.mjs");
+  /** @type {Map<string, Function[]>} */
+  const listeners = new Map();
+  /** @type {string[]} */
+  const degraded = [];
+  /** @type {any[]} */
+  const compactions = [];
+  /** @type {any[]} */
+  let history = [];
+  let shrinks = true;
+  const compaction = {
+    compactIfNeeded: async (/** @type {any} */ agent, /** @type {string} */ trigger) => {
+      compactions.push(trigger);
+      if (!shrinks) return null;
+      history = [{ role: "user", content: [{ type: "text", text: "summary" }] }];
+      return { shadowedTokenCount: 1 };
+    },
+  };
+  /** @type {Map<string, any>} */
+  const services = new Map();
+  services.set("compaction", compaction);
+  services.set("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line), notice() {} });
+  const ctx = {
+    get: (/** @type {string} */ key) => services.get(key),
+    on: (/** @type {string} */ event, /** @type {Function} */ handler) => { listeners.set(event, [...(listeners.get(event) ?? []), handler]); return () => {}; },
+    effect: (/** @type {Function} */ fn) => fn(),
+  };
+  const agent = { id: "a1", session: { id: "s1", header: {}, deriveMessages: () => [...history], requestHeader: () => ({ tools: [] }) } };
+  const step = async () => {
+    for (const handler of listeners.get(SEAMS.events.preStep) ?? []) {
+      await handler({ agent, messages: [], turn: 1, step: 1, signal: AbortSignal.timeout(1000) }, async () => ({ kind: "enter", messages: [] }));
+    }
+  };
+  const big = (/** @type {number} */ size) => ({ role: "tool", content: [{ type: "text", text: "x".repeat(size) }] });
+
+  // On `basic`: the plugin registers no engine and no tool, and still guards.
+  await applyCompaction(/** @type {any} */ (ctx), { policy: "basic", thresholdRatio: 0.8, retainRatio: 0.16, maxTokens: 8192, maxRequestBytes: 10_000 });
+  assert.equal((listeners.get(SEAMS.events.preStep) ?? []).length, 1, "the guard is registered on the default policy");
+
+  history = [big(2_000)];
+  await step();
+  assert.deepEqual(compactions, [], "below the limit nothing happens");
+
+  history = [big(6_000), big(6_000)];
+  await step();
+  assert.deepEqual(compactions, ["context-overflow"], "the backend's own overflow path, not a second engine");
+  assert.match(degraded.at(-1) ?? "", /passed the compaction byte limit 10000; compacted to \d+ bytes/);
+
+  // A history that cannot be compacted is not retried until it grows.
+  shrinks = false;
+  history = [big(12_000)];
+  await step();
+  await step();
+  assert.equal(compactions.length, 2, "one attempt for the same size");
+  assert.match(degraded.at(-1) ?? "", /nothing could be compacted/);
+  history = [big(12_000), big(500)];
+  await step();
+  assert.equal(compactions.length, 3, "a grown history is tried again");
+
+  // Off is off.
+  listeners.clear();
+  await applyCompaction(/** @type {any} */ (ctx), { policy: "basic", thresholdRatio: 0.8, retainRatio: 0.16, maxTokens: 8192, maxRequestBytes: 0 });
+  assert.equal((listeners.get(SEAMS.events.preStep) ?? []).length, 0);
+  assert.equal(typeof guardRequestBytes, "function");
+});
+
 /* ------------------------------------------- the manager's compaction request tool */
 
 test("the compaction request marker is consumed, keyed by session, and never leaks between them", async () => {
@@ -1148,4 +1223,47 @@ test("every compaction observation is emitted under a topic the vocabulary defin
   for (const value of topics) {
     assert.match(value, /^compaction\//, `${value} is not a full topic, so the emit would need a prefix`);
   }
+});
+
+/* ------------------------------------------------ what the root is shown */
+
+test("the root is shown every research tool its own instructions name, and the specialist tools stay with the children", async () => {
+  // The root is the answer line as well as the orchestrator: an open-domain
+  // question is answered in the root session under the open-domain-answer
+  // persona. A tool that persona declares, or that the orchestration guidance
+  // names, must stay visible to the root, or the plain questions that should
+  // never need a delegation are the ones that fail.
+  const agentYaml = await readFile(new URL("../../../runtime/skills/evimed/open-domain-answer/agent.yaml", import.meta.url), "utf8");
+  /** The two lists, read line by line: they are plain YAML sequences under a key. @param {string} key */
+  const list = (key) => {
+    const lines = agentYaml.split("\n");
+    const start = lines.findIndex((line) => line.trim() === `${key}:`);
+    assert.ok(start >= 0, `agent.yaml has no ${key}: list; the read is wrong, not the persona`);
+    const items = [];
+    for (const line of lines.slice(start + 1)) {
+      const match = /^\s+-\s+([a-z_]+)\s*$/.exec(line);
+      if (!match) break;
+      items.push(match[1]);
+    }
+    return items;
+  };
+  const personaTools = [...list("requiredTools"), ...list("optionalTools")];
+  assert.ok(personaTools.length >= 8 && personaTools.includes("biomedical_source_search"), `read ${personaTools.join(", ")}`);
+  const guidance = buildGuidanceText([], { askUserEnabled: false, capsuleActive: true, reviewEnabled: false });
+  const guidanceTools = [...guidance.matchAll(/mcp__evimed__([a-z_]+)/g)].map((match) => match[1]);
+  assert.ok(guidanceTools.length >= 3, `read ${guidanceTools.join(", ")} from the guidance`);
+  const personaSkill = await readFile(new URL("../../../runtime/skills/evimed/open-domain-answer/SKILL.md", import.meta.url), "utf8");
+  const personaSkillTools = [...personaSkill.matchAll(/mcp__evimed__([a-z_]+)/g)].map((match) => match[1]);
+  for (const tool of new Set([...personaTools, ...guidanceTools, ...personaSkillTools])) {
+    assert.ok(ROOT_VISIBLE_MCP_BASE_NAMES.includes(tool), `the root's instructions name ${tool} and the root would not be shown it`);
+  }
+
+  const hidden = rootHiddenMcpTools([...MCP_TOOL_NAMES, "bash", "evimed_plan", "mcp__tooluniverse__execute_tool", "mcp__evimed__a_tool_added_later"]);
+  for (const tool of ["comprehensive_drug_evaluation", "mendelian_randomization", "offlabel_evidence_packet", "drug_selection_evaluation", "meta_analysis"]) {
+    assert.ok(hidden.includes(`mcp__evimed__${tool}`), `${tool} is delegated work and must not ride every root request`);
+  }
+  for (const tool of ROOT_VISIBLE_MCP_BASE_NAMES) assert.ok(!hidden.includes(`mcp__evimed__${tool}`), `${tool} is the root's own`);
+  assert.ok(!hidden.includes("bash") && !hidden.includes("evimed_plan"), "only research-server tools are narrowed");
+  assert.ok(!hidden.includes("mcp__tooluniverse__execute_tool"), "another server's tools are not this list's business");
+  assert.ok(hidden.includes("mcp__evimed__a_tool_added_later"), "a research tool this build does not know is delegated work by default");
 });

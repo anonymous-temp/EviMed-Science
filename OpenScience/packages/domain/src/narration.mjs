@@ -82,7 +82,16 @@ function withCount(phrase, result) {
 /** @type {Readonly<Record<string, (args: Record<string, any>, result: any) => string>>} */
 const SOCKET_NARRATION = Object.freeze({
   [SOCKET_TOOL_NAMES.plan]: (args) => (args?.action === 'status' ? '查看计划进度' : '写下计划'),
-  [SOCKET_TOOL_NAMES.delegate]: (args) => `分工给 ${excerpt(args?.capability, 32)}`,
+  // `deliverableId` is what the call carries; it used to read `capability`,
+  // which is not one of its arguments, so every delegation narrated as 「分工给 」.
+  [SOCKET_TOOL_NAMES.delegate]: (args) => `分工：交付物 ${excerpt(args?.deliverableId, 32)}`,
+  [SOCKET_TOOL_NAMES.await]: (args, result) => {
+    const record = result && typeof result === 'object' ? /** @type {Record<string, any>} */ (result) : null
+    const results = Array.isArray(record?.data?.results) ? record.data.results : null
+    if (!results) return args?.mode === 'any' ? '等待任一子任务结束' : '等待子任务结束'
+    const done = results.filter((/** @type {any} */ entry) => entry?.status !== 'running').length
+    return `等待子任务：${done}/${results.length} 已结束`
+  },
   [SOCKET_TOOL_NAMES.reviseDeliverable]: (args) => `开启交付物新修订：${excerpt(args?.deliverableId, 32)}`,
   [SOCKET_TOOL_NAMES.submitDeliverable]: (args, result) => {
     const id = excerpt(args?.deliverableId, 32)
@@ -91,6 +100,28 @@ const SOCKET_NARRATION = Object.freeze({
     if (record.ok) return `提交交付物 ${id}：通过`
     const required = Array.isArray(record.issues) ? record.issues.filter((i) => i?.severity !== 'advisory' && i?.severity !== 'optional').length : 0
     return `提交交付物 ${id}：被退回（${required} 项必修）`
+  },
+  [SOCKET_TOOL_NAMES.packageCheck]: (args, result) => {
+    const id = excerpt(args?.deliverableId, 32)
+    if (!result || typeof result !== 'object') return `自查交付物 ${id}`
+    const record = /** @type {Record<string, any>} */ (result)
+    if (record.ok) return `自查交付物 ${id}：可以提交`
+    const required = Array.isArray(record.issues) ? record.issues.filter((i) => i?.severity !== 'advisory' && i?.severity !== 'optional').length : 0
+    return `自查交付物 ${id}：${required} 项必修`
+  },
+  [SOCKET_TOOL_NAMES.claimUpsert]: (args, result) => {
+    const record = result && typeof result === 'object' ? /** @type {Record<string, any>} */ (result) : null
+    const data = record?.data
+    const id = excerpt(data?.claimId ?? args?.claim?.claimId, 16)
+    if (!data || !record?.ok) return id ? `登记主张 ${id}` : '登记一条主张'
+    const totals = data.totals && typeof data.totals === 'object' ? `（已核实 ${Number(data.totals.verified) || 0}/${Number(data.totals.total) || 0}）` : ''
+    return `登记主张 ${id}：${data.status === 'verified' ? '已核实' : '待核实'}${totals}`
+  },
+  [SOCKET_TOOL_NAMES.renderReport]: (args, result) => {
+    const record = result && typeof result === 'object' ? /** @type {Record<string, any>} */ (result) : null
+    const data = record?.data
+    if (!data || !record?.ok) return '整理参考文献与编号'
+    return `整理参考文献：${Number(data.references) || 0} 条${data.renumbered ? '，已按出现顺序重新编号' : ''}`
   },
   [SOCKET_TOOL_NAMES.completeRun]: (args) => (args?.partial ? '以部分交付结束' : '结束运行'),
   [SOCKET_TOOL_NAMES.capsuleRecall]: (args, result) => withCount(`回忆胶囊：「${excerpt(args?.query)}」`, result),

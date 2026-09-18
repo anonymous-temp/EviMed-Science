@@ -15,7 +15,7 @@
 
 import { isContractKind } from './contractKinds.mjs'
 import { SAFETY_CLASSES } from './contractKinds.mjs'
-import { MCP_TOOL_NAMES, SOCKET_TOOL_NAME_LIST, mcpToolBaseName, mcpToolName } from './toolNames.mjs'
+import { MCP_TOOL_NAMES, SOCKET_TOOL_NAMES, SOCKET_TOOL_NAME_LIST, mcpToolBaseName, mcpToolName } from './toolNames.mjs'
 
 /**
  * Tools every delegated child gets regardless of its manifest (§9.5 step 3).
@@ -44,6 +44,10 @@ export const DELEGATION_BASE_TOOLS = Object.freeze([
   'grep',
   'skill',
   'evimed_submit_deliverable',
+  // Every child submits, so every child may ask for the verdict first. The
+  // check runs the gate the submission runs and spends nothing; without it the
+  // only way to learn what the gate thinks was to spend an attempt finding out.
+  'evimed_package_check',
   // Memory is the researcher's, not the orchestrator's: the child does the work
   // a memory is about, so it gets the same pull channel the root has. The
   // socket registers this tool on every deployment — answering
@@ -60,9 +64,10 @@ export const DELEGATION_BASE_TOOLS = Object.freeze([
  *
  * Derived from the plugin rows our preset mounts: `tool-fs` publishes
  * read/write/edit, `tool-fs-search` glob/grep, `tool-skill` skill, `tool-bash`
- * bash, `tool-subagent` subagent, `tool-ask-user` ask_user. Kept as data next
- * to the list it constrains so that adding a name to one without the other is
- * a test failure rather than a runtime exception at the first delegation.
+ * bash, `tool-ask-user` ask_user. (`tool-subagent` left the preset on
+ * 2026-09-18; delegation never went through it.) Kept as data next to the list
+ * it constrains so that adding a name to one without the other is a test
+ * failure rather than a runtime exception at the first delegation.
  * @type {ReadonlySet<string>}
  */
 export const KERNEL_GLOBAL_TOOL_NAMES = Object.freeze(new Set([
@@ -73,7 +78,6 @@ export const KERNEL_GLOBAL_TOOL_NAMES = Object.freeze(new Set([
   'grep',
   'skill',
   'bash',
-  'subagent',
   'ask_user',
 ]))
 
@@ -318,15 +322,38 @@ export function resolveContractKind(manifest, declared) {
 }
 
 /**
+ * The output whose presence makes a deliverable one the claim tools serve: the
+ * clinical contract's evidence matrix, as the contract registry names it.
+ */
+export const EVIDENCE_MATRIX_OUTPUT = 'clinical-evidence-matrix.json'
+
+/**
+ * Socket tools a child is given when its deliverable carries an evidence
+ * matrix: write and judge one claim at a time, render the numbering.
+ * Registered on every deployment, so `tools.restrict()` always knows them.
+ */
+export const CLAIM_TOOLS = Object.freeze([SOCKET_TOOL_NAMES.claimUpsert, SOCKET_TOOL_NAMES.renderReport])
+
+/**
  * The full tool allow-list for a delegated child: what the manifest asks for
- * plus the tools every child needs to be able to deliver at all (G3).
- * @param {{ tools: readonly string[] }} manifest
- * @param {{ allowBash?: boolean }} [options]
+ * plus the tools every child needs to be able to deliver at all (G3), plus the
+ * claim tools when the delegated contract's outputs include an evidence matrix.
+ * The contract is the one named, or the manifest's only one; a child whose
+ * deliverable has no matrix is not shown two tools it could only misuse.
+ * @param {{ tools: readonly string[], produces?: readonly { contractKind: string, outputs?: readonly { path: string }[] }[] }} manifest
+ * @param {{ allowBash?: boolean, contractKind?: string }} [options]
  * @returns {string[]}
  */
 export function delegationToolFilter(manifest, options = {}) {
   const set = new Set([...DELEGATION_BASE_TOOLS, ...manifest.tools])
   if (options.allowBash) set.add('bash')
+  const produces = manifest.produces ?? []
+  const contract = options.contractKind
+    ? produces.find((entry) => entry.contractKind === options.contractKind)
+    : produces.length === 1 ? produces[0] : undefined
+  if (contract?.outputs?.some((output) => output.path === EVIDENCE_MATRIX_OUTPUT)) {
+    for (const tool of CLAIM_TOOLS) set.add(tool)
+  }
   return [...set].sort()
 }
 

@@ -30,6 +30,11 @@ module.exports = {
     fetch: "readonly",
     Response: "readonly",
     AbortSignal: "readonly",
+    // A delegated child outlives the tool call that started it, so the run
+    // policy owns one controller per child to cancel it on a partial
+    // completion, a plan revision or a superseding run. Same platform global
+    // as AbortSignal, not an escape from the sandbox.
+    AbortController: "readonly",
   },
   rules: {
     "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" }],

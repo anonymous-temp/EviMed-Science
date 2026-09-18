@@ -206,6 +206,99 @@ export function registerTool(ctx, tool) {
 }
 
 /**
+ * Narrow the tools one agent sees, in that agent's own scope.
+ *
+ * Through `agent.ctx` and nowhere else: the kernel's registry intersects every
+ * restriction on an agent's scope chain, so a restriction registered in the
+ * preset's scope would narrow every child joined under it too (spec §9.7). A
+ * child joins the preset's standing scope, not its parent's, so a restriction
+ * here stays with the one agent. Names the registry does not know make it
+ * throw; the caller derives the list from `registeredToolNames`.
+ * @param {any} agent @param {{ allow?: readonly string[], deny?: readonly string[] }} filter
+ * @returns {() => void} the registry's disposer
+ */
+export function restrictAgentTools(agent, filter) {
+  return agent.ctx.tools.restrict({
+    ...(filter.allow ? { allow: [...filter.allow] } : {}),
+    ...(filter.deny ? { deny: [...filter.deny] } : {}),
+  })
+}
+
+/**
+ * Names of the tools registered in the global layer — the host composition's,
+ * which is where the MCP bridge registers the research server's tools. Empty
+ * where the registry offers no schema projection, so a caller narrows nothing
+ * rather than guessing names the registry would refuse.
+ * @param {any} ctx @returns {string[]}
+ */
+export function registeredToolNames(ctx) {
+  const tools = ctx?.get?.('tools') ?? ctx?.tools
+  if (typeof tools?.schemas !== 'function') return []
+  return tools.schemas().map((/** @type {any} */ schema) => String(schema?.name ?? '')).filter(Boolean)
+}
+
+/**
+ * Whether one agent's own tool view holds a tool: the registry's scope-aware
+ * lookup, which applies that agent's restriction. A delegated child's
+ * restriction is installed while it is created, so this already answers for a
+ * child at its session start.
+ * @param {any} ctx @param {any} agent @param {string} name @returns {boolean}
+ */
+export function agentSeesTool(ctx, agent, name) {
+  const tools = ctx?.get?.('tools') ?? ctx?.tools
+  return typeof tools?.get === 'function' && tools.get(name, agent) !== undefined
+}
+
+/**
+ * Whether an agent's session is a delegated child's. The header fields are the
+ * kernel's (`@deepseek-ai/dsh-subagent` writes `origin: "subagent"` and the
+ * parent's id when it creates a child), so they are read here and nowhere else.
+ * @param {any} agent @returns {boolean}
+ */
+export function isSubagentSession(agent) {
+  return String(agent?.session?.header?.origin ?? '') === 'subagent'
+}
+
+/** @param {any} agent @returns {string} the session a child was started from, or '' */
+export function parentSessionOf(agent) {
+  return String(agent?.session?.header?.parentSession ?? '')
+}
+
+/**
+ * Register a prompt section in one agent's own scope. The registry merges
+ * sections by name along the scope chain, nearest first, so a section named
+ * like one the preset registers replaces it for this agent alone — the way the
+ * kernel itself gives a child its own persona prefix. Called at the agent's
+ * session start, before its first prompt is assembled.
+ * @param {any} agent @param {import('./src/types.mjs').PromptSection} section
+ * @returns {() => void}
+ */
+export function registerAgentSection(agent, section) {
+  return agent.ctx.systemPrompt.section({ name: section.name, order: section.order, text: section.text })
+}
+
+/**
+ * Register a skill in one agent's own scope, loadable through the kernel's
+ * `skill` tool by that agent alone. Model-invocable only: it is a section of a
+ * method, not a command a person types. Registered before the agent's first
+ * step, it is part of the agent's first skill catalogue rather than a
+ * replacement catalogue appended later.
+ * @param {any} agent
+ * @param {{ name: string, description: string, content: string, resourceDir?: string }} skill
+ * @returns {() => void}
+ */
+export function registerAgentSkill(agent, skill) {
+  return agent.ctx.skills.register({
+    name: skill.name,
+    description: skill.description,
+    content: skill.content,
+    source: 'runtime',
+    invocation: { modelInvocable: true, userInvocable: false },
+    ...(skill.resourceDir ? { resourceBase: { kind: 'directory', path: skill.resourceDir } } : {}),
+  })
+}
+
+/**
  * The monotonic, final refusal. Reserved for policy: an attempt ceiling, a
  * budget, a path guard. A business verdict is a return value, never this.
  * @param {any} ctx
@@ -467,6 +560,23 @@ export function registerSection(ctx, section) {
 }
 
 /**
+ * Withdraw an upstream prompt section from every agent in the calling scope.
+ *
+ * The registry merges sections by name along a scope chain and the renderer
+ * drops empty ones, so an empty section under the upstream name removes the
+ * paragraph and nothing else. That is the difference from `disabled: true` on
+ * the host row: the row's other halves keep working, and the recorded host
+ * composition does not move. If upstream renames the section, this shadows
+ * nothing and the paragraph comes back; nothing else changes.
+ * @param {any} ctx @param {keyof typeof SEAMS.promptSections} key
+ * @returns {() => void}
+ */
+export function withdrawPromptSection(ctx, key) {
+  const section = SEAMS.promptSections[key]
+  return ctx.systemPrompt.section({ name: section.name, order: section.order, text: '' })
+}
+
+/**
  * Makes text model-visible by logging it. Not a side channel: it becomes a
  * first-class `user/message` with a plugin source, which is what preserves the
  * runtime's "model-visible ⟺ logged" invariant and lets the UI show exactly
@@ -475,15 +585,41 @@ export function registerSection(ctx, section) {
  * @returns {void}
  */
 export function injectContext(agent, text, plugin) {
-  const message = {
+  const message = pluginMessage(text, plugin)
+  const entering = enteringStepContext.get(agent)
+  if (entering) entering.push(message)
+  else agent.inject(message)
+}
+
+/**
+ * Makes text model-visible *and* wakes the agent for it: the kernel's steer.
+ *
+ * `inject` queues context for a driver that is already running and leaves an
+ * idle one idle. Two moments need the other half. At `agent/turn-stopping` the
+ * kernel's own contract is that "a listener that objects steers
+ * (`agent.steer(...)`)" and the turn runs another step; and a parent whose
+ * turn has ended while children it started were still working is idle, which
+ * is exactly when a steer "starts a turn" — the same route DSH's native
+ * background subagents use to hand a parent their settlement.
+ *
+ * The message is the one `injectContext` writes — a user-role message with a
+ * plugin source — so every transcript reader that tells the researcher's words
+ * from machine text by source keeps doing so.
+ * @param {any} agent @param {string} text @param {string} plugin
+ * @returns {void}
+ */
+export function steerContext(agent, text, plugin) {
+  agent.steer(pluginMessage(text, plugin))
+}
+
+/** @param {string} text @param {string} plugin */
+function pluginMessage(text, plugin) {
+  return {
     id: globalThis.crypto.randomUUID(),
     role: 'user',
     content: [{ type: 'text', text }],
     source: { kind: 'plugin', plugin },
   }
-  const entering = enteringStepContext.get(agent)
-  if (entering) entering.push(message)
-  else agent.inject(message)
 }
 
 /**
@@ -885,13 +1021,16 @@ export {
   COMPACTION_PLUGIN,
   COMPACTION_POLICIES,
   EVIMED_SUMMARY_INSTRUCTION,
+  REQUEST_BYTES_GUARD,
   STATE_HANDLE_KINDS,
   buildStateHandlePacket,
   compactionConfigFromEnv,
   compactionProviderIssues,
   compactionRuntimeEnv,
   createEvimedCompactionEngine,
+  forceCompaction,
   loadEvimedCompactionEngine,
   missingHandles,
+  nextRequestBytes,
   strictHandleInstruction,
 } from './src/compaction.mjs'

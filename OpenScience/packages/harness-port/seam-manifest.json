@@ -16,7 +16,6 @@
       "skills",
       "fs",
       "jobs",
-      "workflowEngine",
       "web"
     ]
   },
@@ -92,10 +91,6 @@
     "@deepseek-ai/dsh-skill-filesystem": "config-row",
     "@deepseek-ai/dsh-compaction-basic": "provider-base",
     "@deepseek-ai/dsh-compaction-tool-result-pruner": "config-row",
-    "@deepseek-ai/dsh-tool-subagent": "config-row",
-    "@deepseek-ai/dsh-tool-subagent-control": "config-row",
-    "@deepseek-ai/dsh-workflow-worker-thread": "config-row",
-    "@deepseek-ai/dsh-tool-workflow": "config-row",
     "@deepseek-ai/dsh-tool-bash": "config-row",
     "@deepseek-ai/dsh-tool-fs": "config-row",
     "@deepseek-ai/dsh-tool-fs-search": "config-row",
@@ -119,6 +114,10 @@
         "compactRegion",
         "compactNow"
       ],
+      "triggers": [
+        "pressure",
+        "context-overflow"
+      ],
       "statics": [
         "inject",
         "Config"
@@ -128,6 +127,13 @@
         "retainRatio": 0.16,
         "maxTokens": 8192
       }
+    }
+  },
+  "promptSections": {
+    "deliverableFileReferences": {
+      "name": "ui:deliverable-file-references",
+      "order": 9000,
+      "package": "@deepseek-ai/dsh-client-ui-deliverables"
     }
   },
   "wire": {
@@ -336,7 +342,8 @@
     "noVersionField": "The wire protocol carries no version field, so method names matching does not prove frame shapes match. Golden frames are the only check that does.",
     "summarizeWithLlmNotExported": "dsh-compaction-basic declares summarizeWithLlm in lib/types/summarizer.d.ts, but the published bundle exports only { BasicCompactionEngine, default }: the function is module-internal, and `./src/*` is in `exports` while not being in `files`. src/compaction.mjs therefore reaches the upstream summarization call through the base class's own summarize() hook, which appends its checkpoint-structure directive after ours. If a later release exports it, the EviMed directive can replace the upstream one instead of composing with it.",
     "compactionProviderIsAlsoAComposition": "dsh-compaction-basic is a `provider-base`, not a `config-row`, because harness-port subclasses it. It is still named by a composition row and still installed only inside the runtime image, which is why the composition checker treats both roles alike; the distinct word records that a rename of `summarize` silently disables the override rather than erroring.",
-    "sessionV3": "DSH 0.1.5 uses session format 3. Live assistant deltas use assistant-stream frames; durable assistant/message contains the completed output and attempt stream. Historical v0 chunks remain readable by the EviMed legacy decoder only."
+    "sessionV3": "DSH 0.1.5 uses session format 3. Live assistant deltas use assistant-stream frames; durable assistant/message contains the completed output and attempt stream. Historical v0 chunks remain readable by the EviMed legacy decoder only.",
+    "agentScopedRegistration": "Three registrations are made through one agent's own context (`agent.ctx`) at its `agent/session-start`, never through the preset's: `tools.restrict` (the root is shown only its own research tools), `systemPrompt.section` (a delegated child's guidance replaces the orchestration guidance and the answer persona by name) and `skills.register` (a child's deferred method sections, loadable through the kernel's `skill` tool). The registries intersect restrictions and let the nearest scope win a section or skill name along a scope chain, and a child joins the preset's standing scope rather than its parent's, so each registration stays with the one agent. A child's session starts inside `ctx.subagents.start` (the kernel creates the agent, emits `agent/session-start`, then starts its loop), so a registration made there precedes the child's first prompt and first skill catalogue. `agent.steer` wakes an idle agent and is the documented objection at `agent/turn-stopping`; `agent.inject` does neither."
   },
   "browser": {
     "transportGlobal": "__DSH_TRANSPORT__",

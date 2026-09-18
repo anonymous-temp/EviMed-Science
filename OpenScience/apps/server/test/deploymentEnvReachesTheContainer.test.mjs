@@ -99,6 +99,25 @@ const operatorLevers = {
   OPEN_SCIENCE_MEMORY_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES: ["open-science-web"],
+  // The two delegation limits that replaced `maxParallelChildren` (2026-09-18).
+  // The controller builds the hosted launch plan and so is the service that
+  // actually writes them into a runtime container; the web API builds it when
+  // it launches directly. The old variable reached neither.
+  OPEN_SCIENCE_MAX_CHILDREN_TOTAL: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_MAX_CONCURRENT_CHILDREN: ["open-science-web", "open-science-runtime-controller"],
+  // Read by harness-port's compactionConfigFromEnv in both services and passed
+  // by no compose file until 2026-09-18: the threshold lever the review's
+  // cheapest experiment (0.8 -> 0.5) needs did nothing from .env, and the
+  // controller, which writes it into every runtime, never saw it. The gateway
+  // body limit reaches the controller because the request-size guard is a
+  // share of it.
+  OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_RUNTIME_COMPACTION_THRESHOLD_RATIO: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_RATIO: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_RUNTIME_COMPACTION_RETAIN_TOKENS: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_TOKENS: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_REQUEST_BYTES: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: ["open-science-web", "open-science-runtime-controller"],
 };
 
 async function composeFiles() {

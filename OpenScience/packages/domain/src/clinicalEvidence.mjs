@@ -815,6 +815,9 @@ checkedBy(declaredAppraisalIssues, "appraisal-declaration");
 const citationNumberListPattern = /\[(\d{1,3}(?:\s*[,，、\-–—]\s*\d{1,3})*)\]/g;
 const bareCitationNumberList = /^\s*\d{1,3}(?:\s*[,，、\-–—]\s*\d{1,3})*\s*$/;
 const bracketSpanPattern = /\[([^[\]\n]{1,200})\]/g;
+// Every reference heading. One literal for the closure check and for
+// `referenceListBounds`, so the two cut the list at the same line.
+const referenceHeadingPattern = /(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*/gi;
 // A bibliographic identifier occupying the citation slot resolves to nothing a
 // reader can follow and to no claim. Identifiers in running prose or in
 // （full-width parens） are untouched — a trial registration named in a sentence
@@ -889,7 +892,7 @@ function citationClosureFindings(reportText, claimsById) {
   // The LAST reference heading, as preflight already does: reportSection uses
   // the first, and a report naming its reference list twice would be cut in
   // the wrong place.
-  const headings = [...text.matchAll(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*/gi)];
+  const headings = [...text.matchAll(referenceHeadingPattern)];
   const referencesStart = headings.at(-1)?.index ?? text.length;
   const prose = text.slice(0, referencesStart);
   const entries = new Map();
@@ -953,6 +956,91 @@ function citationClosureFindings(reportText, claimsById) {
 }
 // Attribution: the check every finding of this function is recorded under.
 checkedBy(citationClosureFindings, "citation-closure");
+
+/* --- The report grammar, for a caller that rewrites a report --------------
+ * `evimed_render_report` renumbers citations, rebuilds the reference list and
+ * hides visible claim markers. It reads the report with these, the functions
+ * the checks above read it with, because a renderer with a reading of its own
+ * would rewrite a report into a shape the gate then reads differently — the
+ * two-implementations failure this module exists to end.
+ */
+
+/**
+ * Every bracketed citation list in a report, with its offsets: fenced blocks
+ * and inline code spans skipped as `proseWithoutCode` skips them, full-width
+ * separators and ranges read as `closureCitationNumbers` reads them.
+ * @param {string} text
+ * @returns {{ start: number, end: number, raw: string, numbers: number[] }[]}
+ */
+export function citationSpans(text) {
+  /** @type {{ start: number, end: number, raw: string, numbers: number[] }[]} */
+  const spans = [];
+  let insideFence = false;
+  let offset = 0;
+  for (const line of String(text ?? "").split("\n")) {
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      insideFence = !insideFence;
+    } else if (!insideFence) {
+      const code = [...line.matchAll(/`[^`\n]*`/g)].map((match) => [match.index, match.index + match[0].length]);
+      for (const match of line.matchAll(citationNumberListPattern)) {
+        const at = match.index;
+        if (code.some(([from, to]) => at >= from && at < to)) continue;
+        spans.push({ start: offset + at, end: offset + at + match[0].length, raw: match[0], numbers: [...closureCitationNumbers(match[0])] });
+      }
+    }
+    offset += line.length + 1;
+  }
+  return spans;
+}
+
+/**
+ * Where the numbered reference list is: from the last reference heading — the
+ * one the closure check cuts at — to the next level-two heading. Null when the
+ * report has no reference heading.
+ * @param {string} text
+ * @returns {{ headingStart: number, headingEnd: number, end: number } | null}
+ */
+export function referenceListBounds(text) {
+  const source = String(text ?? "");
+  const last = [...source.matchAll(referenceHeadingPattern)].at(-1);
+  if (!last) return null;
+  const headingStart = last.index + (last[0].startsWith("\n") ? 1 : 0);
+  const headingEnd = last.index + last[0].length;
+  const next = source.slice(headingEnd).search(/\n##\s/);
+  return { headingStart, headingEnd, end: next < 0 ? source.length : headingEnd + next + 1 };
+}
+
+/**
+ * One numbered reference-list entry (`1. …`, `1、…` or `[1] …`), or null.
+ * @param {string} line @returns {{ number: number, text: string } | null}
+ */
+export function parseReferenceEntry(line) {
+  const match = referenceEntryPattern.exec(String(line ?? ""));
+  return match ? { number: Number(match[1] ?? match[2]), text: match[3].trim() } : null;
+}
+
+/**
+ * The claim ids a passage marks, visible or hidden, in order.
+ * @param {string} text @returns {string[]}
+ */
+export function markedClaimIds(text) {
+  return reportClaimIds(text);
+}
+
+/**
+ * The report with every visible `[claim:CLM-NNN]` marker turned into the
+ * hidden `<!-- claim:CLM-NNN -->` form the `visible-claim-marker` check asks
+ * for, and how many were turned.
+ * @param {string} text @returns {{ text: string, hidden: number }}
+ */
+export function hideVisibleClaimMarkers(text) {
+  let hidden = 0;
+  const result = String(text ?? "").replace(new RegExp(visibleClaimMarkerPattern.source, "g"), (_match, id) => {
+    hidden += 1;
+    return `<!-- claim:${id} -->`;
+  });
+  return { text: result, hidden };
+}
 
 // --- An attributed position must be quoted, not inferred from data ---------
 // 作者指出 / 作者认为 / 该研究强调 attributes a position to a source. The
@@ -2786,7 +2874,7 @@ function validSourceArtifactPath(value) {
  * @param {Record<string, any>} value
  * @param {{
  *   label: string,
- *   reportReferenceNumbers: Set<number>,
+ *   reportReferenceNumbers: Set<number> | null,
  *   successfulArtifacts: Set<string>,
  *   artifactText: Map<string, string>,
  *   sourceDomains: Set<string>,
@@ -2801,13 +2889,13 @@ function validateSynthesizedClaim(
   if (!synthesizedConfidenceLevels.has(value.confidence)) {
     issues.push(`${label}.confidence must be one of high, moderate, low for a synthesized claim.`);
   }
-  if (!Number.isInteger(value.referenceNumber) || !reportReferenceNumbers.has(value.referenceNumber)) {
+  if (!Number.isInteger(value.referenceNumber) || (reportReferenceNumbers && !reportReferenceNumbers.has(value.referenceNumber))) {
     issues.push(`${label}.referenceNumber must resolve to a numbered report reference.`);
   }
   const referenceNumbers = Array.isArray(value.referenceNumbers) ? value.referenceNumbers : [];
   if (
     referenceNumbers.length < 2
-    || referenceNumbers.some((entry) => !Number.isInteger(entry) || !reportReferenceNumbers.has(entry))
+    || referenceNumbers.some((entry) => !Number.isInteger(entry) || (reportReferenceNumbers && !reportReferenceNumbers.has(entry)))
   ) {
     issues.push(`${label}.referenceNumbers must list at least two numbered report references.`);
   } else if (Number.isInteger(value.referenceNumber) && !referenceNumbers.includes(value.referenceNumber)) {
@@ -2894,6 +2982,224 @@ function validateSynthesizedClaim(
 // Attribution: the check every finding this function pushes is recorded under.
 checkedBy(validateSynthesizedClaim, "synthesized-claim");
 
+/**
+ * One claim's findings about itself: its schema, its sources and the
+ * quotation bond — everything a matrix row can be judged on without the rest
+ * of the package.
+ *
+ * Lifted out of the package validator's loop unchanged, so the gate and
+ * `validateEvidenceClaim` (what `evimed_claim_upsert` answers with) are one
+ * implementation and cannot disagree about a claim. `reportReferenceNumbers`
+ * is null when there is no report to resolve against yet — a claim written
+ * before its report — and then only the reference number's shape is checked;
+ * the package gate always passes the report's own list.
+ *
+ * @param {any} value
+ * @param {string} label
+ * @param {{
+ *   issues: IssueLog,
+ *   reportReferenceNumbers: Set<number> | null,
+ *   successfulArtifacts: Set<string>,
+ *   artifactText: Map<string, string>,
+ *   sourceDomains: Set<string>,
+ *   seen: Set<string>,
+ *   claimIds: string[],
+ *   derivedClaims: { label: string, claim: Record<string, any> }[],
+ * }} context
+ * @returns {void}
+ */
+function auditClaim(value, label, context) {
+  const { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, seen, claimIds, derivedClaims } = context;
+  issues.region("claim-schema");
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    issues.push(`${label} must be an object.`);
+    return;
+  }
+  const claimType = value.claimType ?? "direct";
+  if (!claimTypes.has(claimType)) {
+    issues.push(`${label}.claimType must be "direct" or "synthesized" when present.`);
+    return;
+  }
+  const requiredFields = claimType === "synthesized"
+    ? synthesizedBaseFields
+    : claimType === "derived" ? derivedBaseFields : claimFields;
+  for (const field of requiredFields) {
+    if (!nonEmpty(value[field])) issues.push(`${label}.${field} must be a non-empty string.`);
+  }
+  if (!claimIdPattern.test(value.claimId ?? "")) issues.push(`${label}.claimId must match CLM-NNN.`);
+  if (seen.has(value.claimId)) issues.push(`${label}.claimId is duplicated.`);
+  else if (typeof value.claimId === "string") {
+    seen.add(value.claimId);
+    claimIds.push(value.claimId);
+  }
+  if (claimType === "synthesized") {
+    issues.from(validateSynthesizedClaim, value, {
+      label,
+      reportReferenceNumbers,
+      successfulArtifacts,
+      artifactText,
+      sourceDomains,
+      issues,
+    });
+    return;
+  }
+  if (claimType === "derived") {
+    // Grounding is checked after the loop, once every claimId is known.
+    issues.region("derived-claim-inputs");
+    const inputs = value.derivedFrom;
+    if (!Array.isArray(inputs) || inputs.length === 0) {
+      issues.push(`${label}.derivedFrom must list the claim ids this result is reasoned from.`);
+    } else if (inputs.some((id) => typeof id !== "string" || !claimIdPattern.test(id))) {
+      issues.push(`${label}.derivedFrom entries must each match CLM-NNN.`);
+    } else if (inputs.includes(value.claimId)) {
+      issues.push(`${label}.derivedFrom must not include the claim itself.`);
+    }
+    // The method is the audit trail that replaces the missing quote, so it
+    // has to actually show the step rather than gesture at one. A result with
+    // a number in it must show that number's arithmetic or its bound.
+    if (nonEmpty(value.method) && String(value.method).trim().length < 40) {
+      issues.push(`${label}.method must state the reasoning or calculation that takes the inputs to this result, not name it.`);
+    }
+    derivedClaims.push({ label, claim: value });
+    return;
+  }
+  issues.region("claim-access-level");
+  if (!accessLevels.has(value.accessLevel)) {
+    issues.push(`${label}.accessLevel is ${JSON.stringify(value.accessLevel)}; use exactly one of ${[...accessLevels].join(", ")} to record how much of the preserved artifact you read.`);
+  }
+  issues.region("claim-reference-number");
+  if (!Number.isInteger(value.referenceNumber) || (reportReferenceNumbers && !reportReferenceNumbers.has(value.referenceNumber))) {
+    issues.push(`${label}.referenceNumber must resolve to a numbered report reference.`);
+  }
+  issues.region("claim-support-quote");
+  if (!validSupportingPassage(value.supportQuote)) issues.push(`${label}.supportQuote must contain a direct supporting passage.`);
+  issues.region("claim-emergency-support");
+  if (emergencyCallClaimPattern.test(value.claim ?? "")
+    && !emergencyCallSupportPattern.test(value.supportQuote ?? "")) {
+    issues.push(`${label}.emergency-call action is not present in its direct support.`);
+  }
+  // Support counts under either reading, as the report-line audit already
+  // does: the two extractors split ranges differently, so a quote saying
+  // "98.5–99.7%" offers the atomic range under one and the endpoints under
+  // the other. Narrow what is demanded, never what is accepted as support.
+  issues.region("claim-numeric-support");
+  const directSupport = [value.supportQuote, value.sourceTitle, value.identifier].join(" ");
+  const directSupportNumbers = new Set([
+    ...numericTokens(directSupport),
+    ...conclusoryQuantities(directSupport),
+  ]);
+  // The same standard the report lines are held to: a figure that carries a
+  // unit or a statistic, with publication years excluded. This audited every
+  // integer in the claim instead, so "2022年发表的网络meta分析" was reported
+  // as the unsupported numeric fact 2022 — a year the citation already
+  // carries, and one the report-line audit deliberately ignores. Two
+  // standards for the same number is not strictness, it is inconsistency.
+  for (const token of conclusoryQuantities(value.claim)) {
+    if (!directSupportNumbers.has(token)) {
+      issues.push(`${label}.claim numeric fact ${token} is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.`);
+    }
+  }
+  issues.region("claim-artifact-path");
+  if (!validSourceArtifactPath(value.artifactPath)) {
+    issues.push(`${label}.artifactPath is ${JSON.stringify(value.artifactPath)}, which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.`);
+  } else if (!successfulArtifacts.has(value.artifactPath)) {
+    issues.push(`${label}.artifactPath is not listed as a successful source artifact for this run: no evidence tool in this run reported preserving that file, or its text could not be read back. Cite the exact .evimed-sources/ path a preserving tool returned, or preserve the source first.`);
+  } else {
+    issues.region("claim-quote-verbatim");
+    const quoteProblem = supportQuoteIssue(artifactText, label, value.artifactPath, value.supportQuote);
+    if (quoteProblem) issues.push(quoteProblem);
+  }
+  issues.region("claim-source-url");
+  const domain = sourceDomain(value.sourceUrl);
+  if (!domain) issues.push(`${label}.sourceUrl must be a valid credential-free HTTPS URL.`);
+  else {
+    sourceDomains.add(domain);
+    if (domain === "www.evimed.com" && value.sourceUrl.includes("/api-evimed/")) {
+      issues.push(`${label}.sourceUrl is an internal API route, not a public evidence citation.`);
+    }
+  }
+}
+
+/**
+ * Whether a derived claim's inputs resolve and reach measured evidence, or the
+ * sentence that says why not. One implementation for the package gate and for
+ * a single claim.
+ * @param {string} label @param {Record<string, any>} claim @param {Map<any, any>} claimsById
+ * @returns {string | null}
+ */
+function derivedGroundingIssue(label, claim, claimsById) {
+  const inputs = Array.isArray(claim?.derivedFrom) ? claim.derivedFrom : [];
+  const unresolved = inputs.filter((/** @type {any} */ id) => !claimsById.has(id));
+  if (unresolved.length) {
+    return `${label}.derivedFrom names ${unresolved.join(", ")}, which ${unresolved.length > 1 ? "are" : "is"} not in the evidence matrix.`;
+  }
+  const grounded = new Set();
+  const pending = [...inputs];
+  let reachesEvidence = false;
+  while (pending.length) {
+    const id = pending.pop();
+    if (grounded.has(id)) continue;
+    grounded.add(id);
+    const input = claimsById.get(id);
+    if ((input?.claimType ?? "direct") !== "derived") { reachesEvidence = true; continue; }
+    for (const next of Array.isArray(input?.derivedFrom) ? input.derivedFrom : []) pending.push(next);
+  }
+  return reachesEvidence ? null : `${label} is derived only from other derived claims; a derivation must reach measured evidence.`;
+}
+
+/**
+ * One claim, judged by the gate's own rules, for a caller writing claims one
+ * at a time (`evimed_claim_upsert`).
+ *
+ * `verified` means what it means to a reader: nothing the gate would require
+ * of this claim is open, and its quotation is in the preserved source it names
+ * (or, for a derived result, its inputs resolve and reach measured evidence).
+ * Advisory findings travel in `issues` and do not unverify a claim — the same
+ * line the package gate draws between "must fix" and "advice". The report is
+ * optional: without it the claim's reference number is checked for shape only,
+ * because the report is usually written after the claims it cites.
+ *
+ * Never throws and never refuses: a claim that fails comes back `unverified`
+ * with the reasons, which is what lets the caller write it anyway.
+ *
+ * @param {{ claim?: any, claims?: readonly any[], sourceArtifacts?: Map<string, string> | Record<string, string>, reportText?: string | null }} input
+ * @returns {{ claimId: string, status: 'verified' | 'unverified', verification: string, issues: { code: string, message: string, tier: 'blocking' | 'safety' | 'advisory' }[] }}
+ */
+export function validateEvidenceClaim({ claim, claims = [], sourceArtifacts = {}, reportText = null } = {}) {
+  const artifactText = sourceArtifacts instanceof Map
+    ? sourceArtifacts
+    : new Map(Object.entries(sourceArtifacts && typeof sourceArtifacts === "object" ? sourceArtifacts : {}));
+  const issues = new IssueLog();
+  /** @type {{ label: string, claim: Record<string, any> }[]} */
+  const derivedClaims = [];
+  const claimId = typeof claim?.claimId === "string" ? claim.claimId : "";
+  const label = claimIdPattern.test(claimId) ? claimId : "claim";
+  auditClaim(claim, label, {
+    issues,
+    reportReferenceNumbers: reportText == null ? null : numberedReferenceNumbers(reportText),
+    successfulArtifacts: new Set([...artifactText.keys()].filter((path) => typeof path === "string" && path)),
+    artifactText,
+    sourceDomains: new Set(),
+    seen: new Set(),
+    claimIds: [],
+    derivedClaims,
+  });
+  if (derivedClaims.length) {
+    issues.region("derived-claim-grounding");
+    const claimsById = new Map([...claims, claim].map((entry) => [entry?.claimId, entry]));
+    const grounding = derivedGroundingIssue(label, claim, claimsById);
+    if (grounding) issues.push(grounding);
+  }
+  const findings = issues.all().map((entry) => ({ code: String(entry.check ?? ""), message: entry.text, tier: clinicalCheckTier(entry.check) }));
+  // The reader's mark for the claim, from the comparison the gate itself
+  // makes; a derived result has inputs instead of a quotation, and the
+  // grounding above is what vouches for it.
+  const verification = claimVerification({ matrix: { claims: [claim] }, sourceArtifacts: artifactText }).claims[0]?.status ?? "no_quote";
+  const bonded = verification === "verified" || verification === "derived";
+  const status = bonded && findings.every((finding) => finding.tier === "advisory") ? "verified" : "unverified";
+  return { claimId, status, verification, issues: findings };
+}
+
 /** TypeScript infers a destructured parameter as exactly the shape its
  *  defaults name, which rejects every other property a caller passes.
  *  @param {Record<string, any>} options0
@@ -2912,7 +3218,9 @@ export function validateClinicalEvidencePackage({
   briefText = null,
 } = {}) {
   const issues = new IssueLog();
+  /** @type {string[]} */
   const claimIds = [];
+  /** @type {Set<string>} */
   const sourceDomains = new Set();
 
   // An absent report is one problem, not nine.
@@ -3121,118 +3429,10 @@ export function validateClinicalEvidencePackage({
     };
   }
   const seen = new Set();
+  /** @type {{ label: string, claim: Record<string, any> }[]} */
   const derivedClaims = [];
-  for (const [index, value] of claims.entries()) {
-    const label = `claims[${index}]`;
-    issues.region("claim-schema");
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      issues.push(`${label} must be an object.`);
-      continue;
-    }
-    const claimType = value.claimType ?? "direct";
-    if (!claimTypes.has(claimType)) {
-      issues.push(`${label}.claimType must be "direct" or "synthesized" when present.`);
-      continue;
-    }
-    const requiredFields = claimType === "synthesized"
-      ? synthesizedBaseFields
-      : claimType === "derived" ? derivedBaseFields : claimFields;
-    for (const field of requiredFields) {
-      if (!nonEmpty(value[field])) issues.push(`${label}.${field} must be a non-empty string.`);
-    }
-    if (!claimIdPattern.test(value.claimId ?? "")) issues.push(`${label}.claimId must match CLM-NNN.`);
-    if (seen.has(value.claimId)) issues.push(`${label}.claimId is duplicated.`);
-    else if (typeof value.claimId === "string") {
-      seen.add(value.claimId);
-      claimIds.push(value.claimId);
-    }
-    if (claimType === "synthesized") {
-      issues.from(validateSynthesizedClaim, value, {
-        label,
-        reportReferenceNumbers,
-        successfulArtifacts,
-        artifactText,
-        sourceDomains,
-        issues,
-      });
-      continue;
-    }
-    if (claimType === "derived") {
-      // Grounding is checked after the loop, once every claimId is known.
-      issues.region("derived-claim-inputs");
-      const inputs = value.derivedFrom;
-      if (!Array.isArray(inputs) || inputs.length === 0) {
-        issues.push(`${label}.derivedFrom must list the claim ids this result is reasoned from.`);
-      } else if (inputs.some((id) => typeof id !== "string" || !claimIdPattern.test(id))) {
-        issues.push(`${label}.derivedFrom entries must each match CLM-NNN.`);
-      } else if (inputs.includes(value.claimId)) {
-        issues.push(`${label}.derivedFrom must not include the claim itself.`);
-      }
-      // The method is the audit trail that replaces the missing quote, so it
-      // has to actually show the step rather than gesture at one. A result with
-      // a number in it must show that number's arithmetic or its bound.
-      if (nonEmpty(value.method) && String(value.method).trim().length < 40) {
-        issues.push(`${label}.method must state the reasoning or calculation that takes the inputs to this result, not name it.`);
-      }
-      derivedClaims.push({ label, claim: value });
-      continue;
-    }
-    issues.region("claim-access-level");
-    if (!accessLevels.has(value.accessLevel)) {
-      issues.push(`${label}.accessLevel is ${JSON.stringify(value.accessLevel)}; use exactly one of ${[...accessLevels].join(", ")} to record how much of the preserved artifact you read.`);
-    }
-    issues.region("claim-reference-number");
-    if (!Number.isInteger(value.referenceNumber) || !reportReferenceNumbers.has(value.referenceNumber)) {
-      issues.push(`${label}.referenceNumber must resolve to a numbered report reference.`);
-    }
-    issues.region("claim-support-quote");
-    if (!validSupportingPassage(value.supportQuote)) issues.push(`${label}.supportQuote must contain a direct supporting passage.`);
-    issues.region("claim-emergency-support");
-    if (emergencyCallClaimPattern.test(value.claim ?? "")
-      && !emergencyCallSupportPattern.test(value.supportQuote ?? "")) {
-      issues.push(`${label}.emergency-call action is not present in its direct support.`);
-    }
-    // Support counts under either reading, as the report-line audit already
-    // does: the two extractors split ranges differently, so a quote saying
-    // "98.5–99.7%" offers the atomic range under one and the endpoints under
-    // the other. Narrow what is demanded, never what is accepted as support.
-    issues.region("claim-numeric-support");
-    const directSupport = [value.supportQuote, value.sourceTitle, value.identifier].join(" ");
-    const directSupportNumbers = new Set([
-      ...numericTokens(directSupport),
-      ...conclusoryQuantities(directSupport),
-    ]);
-    // The same standard the report lines are held to: a figure that carries a
-    // unit or a statistic, with publication years excluded. This audited every
-    // integer in the claim instead, so "2022年发表的网络meta分析" was reported
-    // as the unsupported numeric fact 2022 — a year the citation already
-    // carries, and one the report-line audit deliberately ignores. Two
-    // standards for the same number is not strictness, it is inconsistency.
-    for (const token of conclusoryQuantities(value.claim)) {
-      if (!directSupportNumbers.has(token)) {
-        issues.push(`${label}.claim numeric fact ${token} is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.`);
-      }
-    }
-    issues.region("claim-artifact-path");
-    if (!validSourceArtifactPath(value.artifactPath)) {
-      issues.push(`${label}.artifactPath is ${JSON.stringify(value.artifactPath)}, which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.`);
-    } else if (!successfulArtifacts.has(value.artifactPath)) {
-      issues.push(`${label}.artifactPath is not listed as a successful source artifact for this run: no evidence tool in this run reported preserving that file, or its text could not be read back. Cite the exact .evimed-sources/ path a preserving tool returned, or preserve the source first.`);
-    } else {
-      issues.region("claim-quote-verbatim");
-      const quoteProblem = supportQuoteIssue(artifactText, label, value.artifactPath, value.supportQuote);
-      if (quoteProblem) issues.push(quoteProblem);
-    }
-    issues.region("claim-source-url");
-    const domain = sourceDomain(value.sourceUrl);
-    if (!domain) issues.push(`${label}.sourceUrl must be a valid credential-free HTTPS URL.`);
-    else {
-      sourceDomains.add(domain);
-      if (domain === "www.evimed.com" && value.sourceUrl.includes("/api-evimed/")) {
-        issues.push(`${label}.sourceUrl is an internal API route, not a public evidence citation.`);
-      }
-    }
-  }
+  const claimContext = { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, seen, claimIds, derivedClaims };
+  for (const [index, value] of claims.entries()) auditClaim(value, `claims[${index}]`, claimContext);
   const reportClaims = reportClaimIds(reportText);
   const reportSet = new Set(reportClaims);
   // With no matrix at all, every marker in the report is unresolvable, and
@@ -3277,26 +3477,8 @@ export function validateClinicalEvidencePackage({
   // stop, wearing the vocabulary of analysis.
   issues.region("derived-claim-grounding");
   for (const { label, claim } of derivedClaims) {
-    const inputs = Array.isArray(claim?.derivedFrom) ? claim.derivedFrom : [];
-    const unresolved = inputs.filter((id) => !claimsById.has(id));
-    if (unresolved.length) {
-      issues.push(`${label}.derivedFrom names ${unresolved.join(", ")}, which ${unresolved.length > 1 ? "are" : "is"} not in the evidence matrix.`);
-      continue;
-    }
-    const grounded = new Set();
-    const pending = [...inputs];
-    let reachesEvidence = false;
-    while (pending.length) {
-      const id = pending.pop();
-      if (grounded.has(id)) continue;
-      grounded.add(id);
-      const input = claimsById.get(id);
-      if ((input?.claimType ?? "direct") !== "derived") { reachesEvidence = true; continue; }
-      for (const next of Array.isArray(input?.derivedFrom) ? input.derivedFrom : []) pending.push(next);
-    }
-    if (!reachesEvidence) {
-      issues.push(`${label} is derived only from other derived claims; a derivation must reach measured evidence.`);
-    }
+    const grounding = derivedGroundingIssue(label, claim, claimsById);
+    if (grounding) issues.push(grounding);
   }
 
   // Marked wherever it is asserted, so a reader meets the estimate as an

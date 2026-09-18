@@ -287,9 +287,13 @@ function appraisalFiles({ complete = true } = {}, prefix = "/workspace/deliverab
  *   deliveryAttemptLimit?: number,
  *   structuralAttemptAllowance?: number,
  *   projected?: boolean,
+ *   maxConcurrentChildren?: number,
+ *   skillBodies?: Readonly<Record<string, string>>,
+ *   capabilities?: readonly Record<string, any>[],
+ *   evidenceRecords?: readonly Record<string, any>[],
  * }} [options]
  */
-async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, projected = false } = {}) {
+async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, projected = false, maxConcurrentChildren = 3, skillBodies = SKILL_BODIES, capabilities = [BIBLIOMETRIC, APPRAISAL], evidenceRecords = [] } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
   const rows = new Map();
@@ -299,13 +303,15 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   const files = new Map();
   /** @type {any[]} */
   const gateRuns = [];
-  const agent = { id: "root-agent", session: { id: "root-session", header: { cwd: "/workspace" } }, inject: () => {} };
+  /** @type {any[]} */
+  const steered = [];
+  const agent = { id: "root-agent", session: { id: "root-session", header: { cwd: "/workspace" } }, inject: () => {}, steer: (/** @type {any} */ message) => steered.push(message) };
   ctx.provide("agents", { get: () => agent });
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
     readText: async (/** @type {string} */ target) => {
       if (target.endsWith(workspaceLayout.briefIndexFile)) return JSON.stringify({ runId: "combined_run" });
-      for (const [skill, body] of Object.entries(SKILL_BODIES)) {
+      for (const [skill, body] of Object.entries(skillBodies)) {
         if (target === `/skills/${skill}/SKILL.md`) return body;
       }
       return files.get(target) ?? null;
@@ -344,14 +350,14 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
       runMirror: { put: async (/** @type {string} */ key, /** @type {any} */ value) => rows.set(key, value) },
       planIndex: { put: async () => {} },
       gateRuns: { put: async (/** @type {string} */ key, /** @type {any} */ value) => gateRuns.push({ key, ...value }) },
-      evidence: { entries: () => [] },
+      evidence: { entries: () => evidenceRecords.map((record, index) => [String(index), record]) },
       subagents: childRows,
       sessionRuns,
       runIdForSession: (/** @type {string} */ sessionId) => sessionRuns.get(sessionId) ?? "",
     });
     ctx.provide("evimedDiagnostics", { degrade() {}, notice() {} });
   }
-  ctx.provide("evimedCapabilities", [BIBLIOMETRIC, APPRAISAL]);
+  ctx.provide("evimedCapabilities", capabilities);
   /** @type {{ provider: any, options: any }[]} */
   const starts = [];
   /** @type {any} */ (ctx).subagents = {
@@ -364,7 +370,7 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   await applyRunPolicy(ctx, {
     maxSteps: 100,
     maxTokens: 100000,
-    maxParallelChildren: 3,
+    maxChildrenTotal: 3, maxConcurrentChildren,
     deliveryAttemptLimit,
     structuralAttemptAllowance,
     bundleVersion: "0.1.0",
@@ -431,6 +437,7 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   };
   return {
     ctx,
+    steered,
     rows,
     // The real store owns its own `subagents` Map, so `childRows` has to be
     // that one under `projected` — handing back the unused stub Map would make
@@ -604,7 +611,15 @@ test("a plan spanning two capabilities delegates twice, and each child submits o
   assert.equal(appraisalReachingAcross.value?.code, "deliverable_not_owned");
 
   for (const [id, settle] of settlers) settle({ stopReason: "completed", output: { deliverableId: id, submitted: true, summary: "done" } });
-  await Promise.all([bibDelegation, appraisalDelegation]);
+  // Both delegate calls returned the moment their children started; the
+  // settlements are what the parent collects, in one call for both.
+  const started = await Promise.all([bibDelegation, appraisalDelegation]);
+  assert.deepEqual(started.map((result) => result.value.data.status), ["started", "started"]);
+  const collected = await f.execute("evimed_await", {});
+  assert.deepEqual(
+    collected.value.data.results.map((/** @type {any} */ result) => [result.deliverableId, result.status, result.submission?.verdict]).sort(),
+    [["d-appraise", "completed", "pass"], ["d-bib", "completed", "pass"]],
+  );
 
   const items = await f.status();
   assert.equal(items["d-bib"].status, "accepted");
@@ -999,4 +1014,708 @@ test("the projection the control plane reads keeps both children, each separable
     projection.subagents.map((/** @type {any} */ child) => [child.deliverableId, child.capability]),
     "the shared projection and the run-scoped one must tell the same story about who the children are",
   );
+});
+
+/* --------------------------------------------------- the package check */
+
+test("a package check answers with the submission's own verdict and spends nothing", async () => {
+  // The check exists because the only way to learn what the gate thought was
+  // to spend a submission finding out. It is worth something only if it says
+  // exactly what the submission would say: a check with its own reading of the
+  // files would teach the run to satisfy a second opinion that decides nothing.
+  const f = await combinedFixture({ deliveryAttemptLimit: 3, structuralAttemptAllowance: 0 });
+  await f.step(1);
+  await f.plan();
+  f.writeFiles(appraisalFiles({ complete: false }));
+
+  const checked = await f.execute("evimed_package_check", { deliverableId: "d-appraise" });
+  assert.equal(checked.value.ok, false, JSON.stringify(checked.value));
+  assert.ok(
+    checked.value.issues.some((/** @type {any} */ issue) => issue.code === "required_output_missing" && issue.path === "delivery-summary.md"),
+    `the check must name the file to fix: ${JSON.stringify(checked.value.issues)}`,
+  );
+  assert.deepEqual(checked.value.data, { deliverableId: "d-appraise", attempts: { used: 0, limit: 3, remaining: 3 } });
+
+  // Nothing was charged and nothing was recorded: the gate ledger holds what
+  // was submitted, and a look is not a submission.
+  assert.equal(f.gateRuns.length, 0, `a check wrote a gate run: ${JSON.stringify(f.gateRuns)}`);
+  assert.equal((await f.status())["d-appraise"].attempts, 0);
+  assert.equal((await f.status())["d-appraise"].status, "planned", "a check must not move the item");
+  assert.equal(f.receipt(), null, "a check must not write a receipt");
+
+  // The submission of the same bytes answers with the same code and the same
+  // issues, in the same order.
+  const submitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d-appraise" });
+  assert.equal(submitted.value.ok, false);
+  assert.equal(submitted.value.code, checked.value.code);
+  assert.deepEqual(submitted.value.issues, checked.value.issues);
+  assert.equal(f.gateRuns.length, 1);
+  assert.equal((await f.status())["d-appraise"].attempts, 1);
+
+  // And on a package that passes, the check says ok with the same contract and
+  // metrics the acceptance reports — without accepting it.
+  f.writeFiles(bibliometricFiles());
+  const passing = await f.execute("evimed_package_check", { deliverableId: "d-bib" });
+  assert.equal(passing.value.ok, true, JSON.stringify(passing.value));
+  assert.equal((await f.status())["d-bib"].status, "planned", "an ok from a check is not an acceptance");
+  const accepted = await f.execute("evimed_submit_deliverable", { deliverableId: "d-bib" });
+  assert.equal(accepted.value.ok, true);
+  assert.deepEqual(
+    [passing.value.data.contractKind, passing.value.data.label, passing.value.data.metrics],
+    [accepted.value.data.contractKind, accepted.value.data.label, accepted.value.data.metrics],
+  );
+});
+
+test("a package check still answers once the submissions are spent, and says there are none left", async () => {
+  // The guard refuses the fourth submission, and that is right; it is also the
+  // moment a run most needs to know what is still wrong, because what it wrote
+  // is delivered marked either way.
+  const f = await combinedFixture({ deliveryAttemptLimit: 1, structuralAttemptAllowance: 0 });
+  await f.step(1);
+  await f.plan();
+  f.writeFiles(appraisalFiles({ complete: false }));
+  assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d-appraise" })).value.ok, false);
+  const guarded = await f.execute("evimed_submit_deliverable", { deliverableId: "d-appraise" });
+  assert.equal(guarded.error?.code, "GUARDED", "the ceiling still holds for submissions");
+
+  const checked = await f.execute("evimed_package_check", { deliverableId: "d-appraise" });
+  assert.equal(checked.error, undefined, "the ceiling is a ceiling on submissions, not on looking");
+  assert.equal(checked.value.ok, false);
+  assert.deepEqual(checked.value.data.attempts, { used: 1, limit: 1, remaining: 0 });
+  assert.equal(f.gateRuns.length, 1, "the check after the ceiling recorded nothing either");
+});
+
+test("a child may check only the deliverable it owns, as it may submit only that one", async () => {
+  /** @type {Map<string, (value: any) => void>} */
+  const settlers = new Map();
+  const f = await combinedFixture({
+    subagentStart: (_provider, options) => {
+      const id = options.toolFilter.allow.includes(BIBLIOMETRIC_ONLY_TOOL) ? "child-bib" : "child-appraise";
+      return { id, result: new Promise((resolve) => settlers.set(id, resolve)) };
+    },
+  });
+  await f.step(1);
+  await f.plan();
+  const delegations = [
+    f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} }),
+    f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} }),
+  ];
+  await startedChildren(f, 2);
+  // Every child is handed the check, because every child submits.
+  for (const start of f.starts) {
+    assert.ok(start.options.toolFilter.allow.includes("evimed_package_check"), "a child that submits must be able to check first");
+  }
+  f.writeFiles(bibliometricFiles());
+  const own = await f.asChild("child-bib")("evimed_package_check", { deliverableId: "d-bib" });
+  assert.equal(own.value.ok, true, JSON.stringify(own.value));
+  const across = await f.asChild("child-bib")("evimed_package_check", { deliverableId: "d-appraise" });
+  assert.equal(across.value.ok, false);
+  assert.equal(across.value.code, "deliverable_not_owned");
+  for (const [, settle] of settlers) settle({ stopReason: "completed", output: "done" });
+  await Promise.all(delegations);
+});
+
+/* ------------------------------------------- delegation that does not wait */
+
+/**
+ * Children whose start and settlement the test controls, keyed by the
+ * capability each was handed. Records the signal every child was started
+ * with, because cancelling a child is aborting that signal.
+ */
+function controllableChildren() {
+  /** @type {Map<string, (value: any) => void>} */
+  const settlers = new Map();
+  /** @type {Map<string, AbortSignal>} */
+  const signals = new Map();
+  let serial = 0;
+  const subagentStart = (/** @type {any} */ _provider, /** @type {any} */ options) => {
+    serial += 1;
+    const id = `${options.toolFilter.allow.includes(BIBLIOMETRIC_ONLY_TOOL) ? "child-bib" : "child-appraise"}-${serial}`;
+    signals.set(id, options.signal);
+    return { id, result: new Promise((resolve) => settlers.set(id, resolve)) };
+  };
+  /** @param {string} prefix */
+  const idFor = (prefix) => [...settlers.keys()].filter((id) => id.startsWith(prefix)).at(-1) ?? "";
+  return { settlers, signals, subagentStart, idFor };
+}
+
+test("independent deliverables delegate in one step and work at the same time; the parent collects any or all", async () => {
+  const children = controllableChildren();
+  const f = await combinedFixture({ subagentStart: children.subagentStart });
+  await f.step(1);
+  await f.plan();
+
+  // Both calls return before either child has done anything: a handle and a
+  // child session id, the moment the child exists.
+  const [bib, appraise] = await Promise.all([
+    f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} }),
+    f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} }),
+  ]);
+  assert.equal(f.starts.length, 2, "two independent deliverables must both be started");
+  assert.deepEqual(bib.value.data, { handle: "d-bib#1", deliverableId: "d-bib", childSessionId: children.idFor("child-bib"), status: "started" });
+  assert.deepEqual(appraise.value.data, { handle: "d-appraise#1", deliverableId: "d-appraise", childSessionId: children.idFor("child-appraise"), status: "started" });
+  // The child is on the plan index the control plane reads before it settles.
+  const items = await f.status();
+  assert.equal(items["d-bib"].status, "delegated");
+  assert.equal(items["d-bib"].childSessionId, children.idFor("child-bib"));
+
+  // One finishes: `any` returns with it and reports the other as running.
+  f.writeFiles(bibliometricFiles());
+  assert.equal((await f.asChild(children.idFor("child-bib"))("evimed_submit_deliverable", { deliverableId: "d-bib" })).value.ok, true);
+  children.settlers.get(children.idFor("child-bib"))?.({ stopReason: "completed", structured: { deliverableId: "d-bib", submitted: true, summary: "计量报告已提交并通过。", unresolved: ["2025 年数据未收录"] } });
+  const first = await f.execute("evimed_await", { mode: "any" });
+  const byDeliverable = (/** @type {any} */ reply) => Object.fromEntries(reply.value.data.results.map((/** @type {any} */ result) => [result.deliverableId, result]));
+  const firstResults = byDeliverable(first);
+  assert.equal(firstResults["d-bib"].status, "completed");
+  assert.equal(firstResults["d-bib"].summary, "计量报告已提交并通过。");
+  assert.deepEqual(firstResults["d-bib"].unresolved, ["2025 年数据未收录"]);
+  assert.deepEqual(firstResults["d-bib"].submission, { attempts: 1, verdict: "pass" });
+  assert.equal(firstResults["d-appraise"].status, "running", "the one still working is reported as running, not waited for");
+
+  // With no handles the next await is about what is still outstanding: the
+  // reported child does not satisfy it again.
+  const second = f.execute("evimed_await", {});
+  let secondSettled = false;
+  void second.then(() => { secondSettled = true; });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(secondSettled, false, "an await for what is outstanding must wait while the child works");
+  children.settlers.get(children.idFor("child-appraise"))?.({ stopReason: "completed", output: "done" });
+  const secondResults = byDeliverable(await second);
+  assert.deepEqual(Object.keys(secondResults), ["d-appraise"], "the child already reported is not reported again");
+  assert.equal(secondResults["d-appraise"].status, "completed");
+  assert.equal(secondResults["d-appraise"].submission, undefined, "a child that never submitted has no submission to report");
+
+  // Once everything is reported, an await answers with the whole picture at once.
+  const third = await f.execute("evimed_await", {});
+  assert.deepEqual(Object.keys(byDeliverable(third)).sort(), ["d-appraise", "d-bib"]);
+  // And a handle the run never issued is refused with the ones it did.
+  const unknown = await f.execute("evimed_await", { handles: ["d-bib#9"] });
+  assert.equal(unknown.value.code, "delegation_handle_unknown");
+  assert.match(unknown.value.issues[0].message, /d-bib#1/);
+});
+
+test("an await with a time bound returns when it runs out, saying what is still running", async () => {
+  const children = controllableChildren();
+  const f = await combinedFixture({ subagentStart: children.subagentStart });
+  await f.step(1);
+  await f.plan();
+  await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  const began = Date.now();
+  const waited = await f.execute("evimed_await", { timeoutSeconds: 1 });
+  assert.ok(Date.now() - began >= 900, "the bound is honoured, not skipped");
+  assert.equal(waited.value.data.timedOut, true);
+  assert.deepEqual(waited.value.data.results.map((/** @type {any} */ result) => [result.handle, result.status]), [["d-bib#1", "running"]]);
+  children.settlers.get(children.idFor("child-bib"))?.({ stopReason: "completed", output: "done" });
+  const collected = await f.execute("evimed_await", { handles: ["d-bib#1"] });
+  assert.equal(collected.value.data.timedOut, undefined);
+  assert.equal(collected.value.data.results[0].status, "completed");
+});
+
+test("a dependent deliverable is refused while its dependency works, the refusal names it and its handle, and a spent dependency releases it", async () => {
+  const children = controllableChildren();
+  const f = await combinedFixture({ subagentStart: children.subagentStart, deliveryAttemptLimit: 1, structuralAttemptAllowance: 0 });
+  await f.step(1);
+  const written = await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["评价表建立在文献计量结果之上。"],
+    deliverables: [PLAN_ITEMS.bibliometric, { ...PLAN_ITEMS.appraisal, dependsOn: ["d-bib"] }],
+  });
+  assert.equal(written.value.ok, true, JSON.stringify(written.value));
+  await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  const early = await f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
+  assert.equal(early.value.code, "deliverable_dependency_pending");
+  assert.match(early.value.issues[0].message, /d-bib（子代理正在做，句柄 d-bib#1）/, "the refusal names what it waits for and how to wait for it");
+  assert.equal(f.starts.length, 1, "a refused delegation starts nothing");
+  // Nothing was queued: the description says refused, and refused is what happens.
+  const twice = await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  assert.equal(twice.value.code, "deliverable_already_delegated", "a deliverable with a working child is not delegated a second time");
+
+  // The dependency's only submission is rejected and its budget is spent: it
+  // is delivered as it stands, unverified, so the item that builds on it may start.
+  f.files.set("/workspace/deliverables/d-bib/bibliometric-analysis-report.md", "# 文献计量报告\n\n只写了一半。\n");
+  const rejected = await f.asChild(children.idFor("child-bib"))("evimed_submit_deliverable", { deliverableId: "d-bib" });
+  assert.equal(rejected.value.ok, false);
+  children.settlers.get(children.idFor("child-bib"))?.({ stopReason: "completed", output: "done" });
+  const collected = await f.execute("evimed_await", {});
+  assert.deepEqual(collected.value.data.results[0].submission, { attempts: 1, verdict: "unverified" });
+  const released = await f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
+  assert.equal(released.value.ok, true, JSON.stringify(released.value));
+  children.settlers.get(children.idFor("child-appraise"))?.({ stopReason: "completed", output: "done" });
+  await f.execute("evimed_await", {});
+});
+
+test("at the concurrency ceiling a delegation is refused with the way to wait, and admitted once a child finishes", async () => {
+  const children = controllableChildren();
+  const f = await combinedFixture({ subagentStart: children.subagentStart, maxConcurrentChildren: 1 });
+  await f.step(1);
+  await f.plan();
+  await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  const refused = await f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
+  assert.equal(refused.value.code, "delegation_concurrency_limit");
+  assert.match(refused.value.issues[0].message, /evimed_await\{mode:"any"\}/);
+  children.settlers.get(children.idFor("child-bib"))?.({ stopReason: "completed", output: "done" });
+  await f.execute("evimed_await", { mode: "any" });
+  const admitted = await f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
+  assert.equal(admitted.value.ok, true, JSON.stringify(admitted.value));
+  children.settlers.get(children.idFor("child-appraise"))?.({ stopReason: "completed", output: "done" });
+  await f.execute("evimed_await", {});
+});
+
+test("concurrent submissions of one deliverable are charged one after the other, never over each other", async () => {
+  // `attempts` was read before two awaits and written after them. Two
+  // submissions interleaving there each read 0, each wrote 1, and both gate
+  // runs were filed under the same key — one charge and one verdict lost.
+  const f = await combinedFixture({ structuralAttemptAllowance: 0 });
+  await f.step(1);
+  await f.plan();
+  f.writeFiles(appraisalFiles({ complete: false }));
+  // Slow reads, so the two submissions really do overlap at the awaits.
+  const fs = f.ctx.get("fs");
+  const read = fs.readText;
+  fs.readText = async (/** @type {string} */ target) => {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return read(target);
+  };
+  const [first, second] = await Promise.all([
+    f.execute("evimed_submit_deliverable", { deliverableId: "d-appraise" }),
+    f.execute("evimed_submit_deliverable", { deliverableId: "d-appraise" }),
+  ]);
+  assert.equal(first.value.ok, false);
+  assert.equal(second.value.ok, false);
+  assert.equal((await f.status())["d-appraise"].attempts, 2, "two submissions are two attempts");
+  assert.deepEqual(f.gateRuns.map((row) => row.attempt).sort(), [1, 2]);
+  assert.equal(new Set(f.gateRuns.map((row) => row.key)).size, 2, `two verdicts collided on one key: ${JSON.stringify(f.gateRuns.map((row) => row.key))}`);
+});
+
+test("a plan naming a capability the catalogue does not have is refused when it is written, with the ones it has", async () => {
+  const f = await combinedFixture();
+  await f.step(1);
+  const typo = await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["假设成人。"],
+    deliverables: [{ ...PLAN_ITEMS.bibliometric, capability: "bibliometrics" }],
+  });
+  assert.equal(typo.value.ok, false);
+  assert.equal(typo.value.code, "plan_invalid");
+  assert.equal(typo.value.issues[0].code, "capability_unknown");
+  assert.match(typo.value.issues[0].message, /bibliometric-analysis、evidence-appraisal/, "the refusal lists what the catalogue does offer");
+  const wrongKind = await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["假设成人。"],
+    deliverables: [{ ...PLAN_ITEMS.bibliometric, contractKind: "appraisal-table" }],
+  });
+  assert.equal(wrongKind.value.issues[0].code, "contract_kind_unknown");
+  assert.match(wrongKind.value.issues[0].message, /bibliometric-analysis-report/);
+  // Nothing was written: the plan on disk and the index are what they were.
+  assert.equal(f.files.get(`/workspace/${workspaceLayout.planFile}`), undefined);
+  assert.deepEqual(Object.keys(await f.status()), []);
+});
+
+test("a run does not complete while its children work; a partial completion cancels them and says so", async () => {
+  const children = controllableChildren();
+  const f = await combinedFixture({ subagentStart: children.subagentStart });
+  await f.step(1);
+  await f.plan();
+  await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  await f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
+
+  const refused = await f.execute("evimed_complete_run", {});
+  assert.equal(refused.value.code, "children_running");
+  assert.match(refused.value.issues[0].message, /d-bib（句柄 d-bib#1）/);
+  assert.equal(refused.concluded, false, "a refused completion does not end the turn");
+  for (const [, signal] of children.signals) assert.equal(signal.aborted, false, "a refusal cancels nothing");
+
+  const partial = await f.execute("evimed_complete_run", { partial: true });
+  assert.equal(partial.value.ok, true, JSON.stringify(partial.value));
+  assert.equal(partial.concluded, true);
+  assert.deepEqual([...partial.value.data.cancelledChildren].sort(), ["d-appraise#1", "d-bib#1"]);
+  for (const [id, signal] of children.signals) assert.equal(signal.aborted, true, `${id} was left running after a partial completion`);
+  const items = await f.status();
+  assert.equal(items["d-bib"].status, "failed");
+  assert.match(items["d-bib"].issues[0].message, /已取消/);
+  // The kernel ends a cancelled child as aborted; its settlement is recorded
+  // as a cancellation and never retried.
+  for (const [, settle] of children.settlers) settle({ stopReason: "aborted" });
+  const collected = await f.execute("evimed_await", {});
+  for (const result of collected.value.data.results) {
+    assert.equal(result.status, "failed");
+    assert.match(result.summary, /子代理已取消：运行以部分交付结束时它仍在工作/);
+  }
+  assert.equal(f.starts.length, 2, "a cancelled child is not retried");
+});
+
+test("a cancelled root turn cancels the run's children, and a plan revision cancels the child whose deliverable it dropped", async () => {
+  const children = controllableChildren();
+  const f = await combinedFixture({ subagentStart: children.subagentStart });
+  await f.step(1);
+  await f.plan();
+  await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  await f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
+
+  // A revision without d-bib: its child has nowhere to deliver.
+  const revised = await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["只保留证据评价表。"],
+    deliverables: [PLAN_ITEMS.appraisal],
+  });
+  assert.equal(revised.value.ok, true, JSON.stringify(revised.value));
+  assert.equal(children.signals.get(children.idFor("child-bib"))?.aborted, true, "the dropped deliverable's child must be cancelled");
+  assert.equal(children.signals.get(children.idFor("child-appraise"))?.aborted, false, "the kept deliverable's child keeps working");
+
+  // The researcher stops the run in a later turn.
+  for (const handler of f.ctx.listeners.get(SEAMS.events.sessionEvent) ?? []) {
+    handler(f.agent.session, { type: "turn/end", seq: 9, data: { reason: { kind: "aborted" } } });
+  }
+  assert.equal(children.signals.get(children.idFor("child-appraise"))?.aborted, true, "a cancelled root turn must reach every running child");
+  for (const [, settle] of children.settlers) settle({ stopReason: "aborted" });
+  const collected = await f.execute("evimed_await", {});
+  assert.deepEqual(collected.value.data.results.map((/** @type {any} */ result) => result.status), ["failed", "failed"]);
+  assert.equal(f.starts.length, 2, "cancelled children are not retried");
+});
+
+/* ------------------------------------ a root that stops while children work */
+
+/** Emit one root turn end, as the kernel's session event does. @param {any} f @param {string} kind */
+function endRootTurn(f, kind) {
+  for (const handler of f.ctx.listeners.get(SEAMS.events.sessionEvent) ?? []) {
+    handler(f.agent.session, { type: "turn/end", seq: 50, data: { reason: { kind } } });
+  }
+}
+
+/** Wait until the fixture has recorded `count` steers, or fail naming the count. @param {any} f @param {number} count */
+async function steeredAtLeast(f, count) {
+  for (let turn = 0; turn < 200 && f.steered.length < count; turn += 1) await new Promise((resolve) => setTimeout(resolve, 1));
+  assert.ok(f.steered.length >= count, `expected ${count} steer(s), saw ${f.steered.length}`);
+}
+
+test("a root turn about to close with children outstanding is steered back to collect them, a bounded number of times", async () => {
+  // The kernel's contract for objecting to a turn closing is a steer: the turn
+  // runs another step with the reminder in it. Its own design also lets a
+  // parent end a turn while background children work, so the objection is
+  // bounded rather than a wall.
+  const children = controllableChildren();
+  const f = await combinedFixture({ subagentStart: children.subagentStart });
+  await f.step(1);
+  await f.plan();
+  await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  const stopping = async () => {
+    for (const handler of f.ctx.listeners.get(SEAMS.events.turnStopping) ?? []) await handler({ agent: f.agent, turn: 1 });
+  };
+  for (let index = 0; index < 5; index += 1) await stopping();
+  assert.equal(f.steered.length, 3, "three reminders, then the turn may close");
+  const reminder = f.steered[0];
+  assert.equal(reminder.role, "user");
+  assert.deepEqual(reminder.source, { kind: "plugin", plugin: "evimed-run-policy" }, "machine text is marked as the plugin's, never as the researcher's");
+  assert.match(reminder.content[0].text, /d-bib#1/);
+  assert.match(reminder.content[0].text, /evimed_await/);
+  // A result that settled but was never collected is outstanding too.
+  children.settlers.get(children.idFor("child-bib"))?.({ stopReason: "completed", output: "done" });
+  const collected = await f.execute("evimed_await", {});
+  assert.equal(collected.value.data.results[0].status, "completed");
+});
+
+test("a root that ended its turn while its child worked is woken with the child's result when the child settles", async () => {
+  const children = controllableChildren();
+  const f = await combinedFixture({ subagentStart: children.subagentStart });
+  await f.step(1);
+  await f.plan();
+  await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  await f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
+  endRootTurn(f, "completed");
+  assert.equal(f.steered.length, 0, "nothing to hand over while the children still work");
+
+  // One settles: the other is still working, so the root is not woken for half
+  // the answer.
+  children.settlers.get(children.idFor("child-bib"))?.({ stopReason: "completed", structured: { deliverableId: "d-bib", submitted: false, summary: "计量完成。" } });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(f.steered.length, 0, "the root is woken once, for the whole set, not once per child");
+
+  children.settlers.get(children.idFor("child-appraise"))?.({ stopReason: "completed", output: "done" });
+  await steeredAtLeast(f, 1);
+  assert.equal(f.steered.length, 1);
+  const wake = f.steered[0];
+  assert.deepEqual(wake.source, { kind: "plugin", plugin: "evimed-run-policy" });
+  const handed = JSON.parse(/\{[\s\S]*\}/.exec(wake.content[0].text)?.[0] ?? "{}");
+  assert.deepEqual(handed.results.map((/** @type {any} */ result) => [result.handle, result.status]).sort(), [["d-appraise#1", "completed"], ["d-bib#1", "completed"]]);
+  assert.equal(handed.results.find((/** @type {any} */ result) => result.handle === "d-bib#1").summary, "计量完成。");
+  // What was handed over counts as collected: the next stopping turn is not
+  // told about it again.
+  for (const handler of f.ctx.listeners.get(SEAMS.events.turnStopping) ?? []) await handler({ agent: f.agent, turn: 2 });
+  assert.equal(f.steered.length, 1, "results already handed over are not outstanding");
+});
+
+test("a root inside its turn collects for itself, and a cancelled run is never woken", async () => {
+  const children = controllableChildren();
+  const f = await combinedFixture({ subagentStart: children.subagentStart });
+  await f.step(1);
+  await f.plan();
+  await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  // Still inside its turn: the settlement is for evimed_await, not a wake.
+  children.settlers.get(children.idFor("child-bib"))?.({ stopReason: "completed", output: "done" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(f.steered.length, 0, "a root that is mid-turn is not steered a second copy of its results");
+  await f.execute("evimed_await", {});
+
+  await f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
+  endRootTurn(f, "aborted");
+  assert.equal(children.signals.get(children.idFor("child-appraise"))?.aborted, true);
+  children.settlers.get(children.idFor("child-appraise"))?.({ stopReason: "aborted" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(f.steered.length, 0, "the researcher stopped the run; nothing may start it again");
+});
+
+/* --------------------------------------------- a capped method, loaded later */
+
+test("a method over the cap reaches the child capped, and its deferred sections are registered in that child's scope alone", async () => {
+  const section = (/** @type {string} */ title, /** @type {number} */ size) => `## ${title}\n\n${"证".repeat(size)}\n`;
+  const bigBody = ["# 文献计量\n", section("检索与去重", 20_000), section("网络分析", 18_000), section("解读", 16_000), section("安全边界", 800)].join("\n");
+  /** @type {{ sessionId: string, skill: any }[]} */
+  const registered = [];
+  /** @type {any} */
+  let fixtureCtx = null;
+  /** @param {string} sessionId @param {readonly string[]} visible */
+  const childAgent = (sessionId, visible) => ({
+    id: `agent-${sessionId}`,
+    visible,
+    session: { id: sessionId, header: { cwd: "/workspace", origin: "subagent", parentSession: "root-session" } },
+    ctx: { skills: { register: (/** @type {any} */ skill) => { registered.push({ sessionId, skill }); return () => {}; } } },
+  });
+  /** @type {Map<string, (value: any) => void>} */
+  const settlers = new Map();
+  let startOnlyUnrelatedChild = false;
+  const subagentStart = (/** @type {any} */ _provider, /** @type {any} */ options) => {
+    const starting = (/** @type {any} */ agent) => {
+      for (const handler of fixtureCtx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent, source: "startup" });
+    };
+    // A screening child of the same parent starts first and must not take the
+    // sections: it cannot submit a deliverable.
+    starting(childAgent(`screen-${settlers.size + 1}`, ["read"]));
+    const id = `child-${settlers.size + 1}`;
+    if (!startOnlyUnrelatedChild) starting(childAgent(id, options.toolFilter.allow));
+    return { id, result: new Promise((resolve) => settlers.set(id, resolve)) };
+  };
+  const f = await combinedFixture({ subagentStart, skillBodies: { ...SKILL_BODIES, "bibliometric-analysis": bigBody } });
+  fixtureCtx = f.ctx;
+  /** @type {any} */ (f.ctx.tools).get = (/** @type {string} */ name, /** @type {any} */ scope) => (scope?.visible?.includes(name) ? { name } : undefined);
+  /** @type {string[]} */
+  const degraded = [];
+  f.ctx.provide("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line), notice() {} });
+  await f.step(1);
+  await f.plan();
+
+  const delegated = await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  assert.equal(delegated.value.ok, true, JSON.stringify(delegated.value));
+  const prompt = String(f.starts[0].options.prompt[0].text);
+  assert.ok(prompt.length < bigBody.length, "the child's first message is capped");
+  assert.ok(prompt.startsWith("## 方法"), "the method opens the message");
+  assert.ok(/较长的 2 节没有随任务注入/.test(prompt), "the child is told two sections wait for it");
+  assert.ok(prompt.includes(section("解读", 16_000)) && prompt.includes(section("安全边界", 800)), "what fits stays inline");
+  assert.deepEqual(
+    registered.map((entry) => [entry.sessionId, entry.skill.name]),
+    [["child-1", "bibliometric-analysis-section-01"], ["child-1", "bibliometric-analysis-section-02"]],
+    "only the child that can submit takes the sections, and only its own",
+  );
+  assert.ok(registered[0].skill.content === section("检索与去重", 20_000), "the loaded section is the original text");
+  assert.deepEqual(registered[0].skill.invocation, { modelInvocable: true, userInvocable: false });
+  assert.equal(registered[0].skill.resourceBase.path, "/skills/bibliometric-analysis");
+  assert.deepEqual(degraded, []);
+
+  // A child that never showed up to take its sections is said out loud.
+  startOnlyUnrelatedChild = true;
+  settlers.get("child-1")?.({ stopReason: "error", output: "" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(degraded.some((line) => /method sections for d-bib were not registered/.test(line)), `the retry's missing registration is reported: ${JSON.stringify(degraded)}`);
+  assert.equal(registered.length, 2, "the unrelated child took nothing");
+});
+
+/* ------------------------------------------------ claim-level evidence tools */
+
+const CLINICAL = Object.freeze({
+  id: "clinical-evidence-synthesis",
+  persona: "你是临床证据分析师。",
+  skills: ["clinical-evidence-synthesis"],
+  tools: ["mcp__evimed__literature_search", "mcp__evimed__open_access_full_text"],
+  produces: [{
+    contractKind: "clinical-evidence-report",
+    outputs: [
+      { path: "clinical-evidence-report.md", required: true },
+      { path: "clinical-evidence-matrix.json", required: true },
+    ],
+  }],
+});
+
+const SOURCE_PATH = ".evimed-sources/aspirin/fulltext.txt";
+const SOURCE_TEXT = "Background. In adults aged 70 years or older, daily low-dose aspirin did not reduce cardiovascular events (HR 0.95, 95% CI 0.83-1.08) and increased major hemorrhage (HR 1.38, 95% CI 1.18-1.62). Methods follow.";
+
+/** A claim bound to the preserved source, verbatim unless told otherwise. @param {Record<string, any>} [overrides] */
+function clinicalClaim(overrides = {}) {
+  return {
+    claimId: "CLM-001",
+    claim: "70 岁及以上成人每日低剂量阿司匹林使大出血风险升高（HR 1.38）。",
+    referenceNumber: 1,
+    sourceUrl: "https://www.nejm.org/doi/10.1056/NEJMoa1805819",
+    sourceTitle: "Effect of Aspirin on Cardiovascular Events and Bleeding in the Healthy Elderly",
+    artifactPath: SOURCE_PATH,
+    identifier: "doi:10.1056/NEJMoa1805819",
+    accessLevel: "full_text",
+    supportQuote: "increased major hemorrhage (HR 1.38, 95% CI 1.18-1.62)",
+    applicability: "70 岁及以上、无心血管病史的社区成人",
+    uncertainty: "单一大型试验；结果外推到亚洲人群需谨慎",
+    ...overrides,
+  };
+}
+
+/** A root-driven clinical fixture: one planned clinical deliverable, one preserved source. */
+async function clinicalFixture() {
+  const f = await combinedFixture({
+    capabilities: [CLINICAL],
+    skillBodies: { ...SKILL_BODIES, "clinical-evidence-synthesis": "## 方法\n写主张。\n" },
+    evidenceRecords: [{ runId: "combined_run", artifactPath: SOURCE_PATH, status: "ready" }],
+  });
+  f.files.set(`/workspace/${SOURCE_PATH}`, SOURCE_TEXT);
+  await f.step(1);
+  const planned = await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["人群按题面限定为 70 岁及以上。"],
+    deliverables: [{ id: "d-clin", contractKind: "clinical-evidence-report", capability: CLINICAL.id, title: "阿司匹林一级预防证据综述", dependsOn: [] }],
+  });
+  assert.equal(planned.value.ok, true, JSON.stringify(planned.value));
+  return f;
+}
+
+const MATRIX_FILE = "/workspace/deliverables/d-clin/clinical-evidence-matrix.json";
+const REPORT_FILE = "/workspace/deliverables/d-clin/clinical-evidence-report.md";
+
+test("a claim that does not verify is written anyway, judged by the gate's own rules, and fixed by writing it again", async () => {
+  const f = await clinicalFixture();
+
+  // The quotation is not in the preserved source: unverified, and on disk.
+  const first = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim({ supportQuote: "aspirin eliminated all bleeding events" }) });
+  assert.equal(first.value.ok, true, "a verdict about a claim is never a refusal");
+  assert.equal(first.value.data.claimId, "CLM-001");
+  assert.equal(first.value.data.status, "unverified");
+  assert.ok(first.value.data.issues.some((/** @type {any} */ entry) => entry.code === "claim-quote-verbatim" && entry.severity === "required"),
+    JSON.stringify(first.value.data.issues));
+  assert.deepEqual(first.value.data.totals, { total: 1, verified: 0 });
+  const written = JSON.parse(String(f.files.get(MATRIX_FILE)));
+  assert.equal(written.claims.length, 1, "the unverified claim is in the matrix");
+  assert.equal(written.claims[0].supportQuote, "aspirin eliminated all bleeding events");
+
+  // The same id again, quoted correctly: replaced in place, verified.
+  const second = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim() });
+  assert.equal(second.value.data.status, "verified", JSON.stringify(second.value.data.issues));
+  assert.deepEqual(second.value.data.totals, { total: 1, verified: 1 });
+  assert.equal(second.value.data.created, undefined, "a rewrite is not a new claim");
+  const rewritten = JSON.parse(String(f.files.get(MATRIX_FILE)));
+  assert.equal(rewritten.claims.length, 1, "idempotent by claim id");
+
+  // A claim with no id gets the next one; the progress is on the plan.
+  const third = await f.execute("evimed_claim_upsert", {
+    deliverableId: "d-clin",
+    claim: JSON.stringify(clinicalClaim({ claimId: undefined, claim: "心血管事件未见减少（HR 0.95）。", supportQuote: "did not reduce cardiovascular events (HR 0.95, 95% CI 0.83-1.08)" })),
+  });
+  assert.equal(third.value.data.claimId, "CLM-002");
+  assert.equal(third.value.data.created, true);
+  assert.deepEqual(third.value.data.totals, { total: 2, verified: 2 });
+  assert.deepEqual((await f.status())["d-clin"].claims, { total: 2, verified: 2 }, "evidence progress the control plane can read");
+});
+
+test("the claim tools refuse what they cannot write safely, and never overwrite a matrix they cannot read", async () => {
+  const f = await clinicalFixture();
+  f.files.set(MATRIX_FILE, '{"claims": [ {"claimId": "CLM-001", "claim": "未闭合的"支撑"引号"} ]}');
+  const unreadable = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim() });
+  assert.equal(unreadable.value.code, "matrix_unreadable");
+  assert.match(f.files.get(MATRIX_FILE) ?? "", /未闭合的/, "the run's own file is left as it was");
+
+  const notAClaim = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: "not json" });
+  assert.equal(notAClaim.value.code, "claim_invalid");
+
+  const unknown = await f.execute("evimed_claim_upsert", { deliverableId: "d-nope", claim: clinicalClaim() });
+  assert.equal(unknown.value.code, "deliverable_unknown");
+
+  const noReport = await f.execute("evimed_render_report", { deliverableId: "d-clin" });
+  assert.equal(noReport.value.code, "report_missing");
+
+  // A contract without an evidence matrix is not the claim tools' business.
+  const other = await combinedFixture();
+  await other.step(1);
+  await other.plan();
+  const bib = await other.execute("evimed_claim_upsert", { deliverableId: "d-bib", claim: clinicalClaim() });
+  assert.equal(bib.value.code, "claim_matrix_unsupported");
+});
+
+test("rendering renumbers by first appearance, merges a source listed twice and carries the numbers into the matrix", async () => {
+  const f = await clinicalFixture();
+  await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim({ referenceNumber: 3 }) });
+  f.files.set(REPORT_FILE, [
+    "# 阿司匹林一级预防",
+    "",
+    "## 结果",
+    "",
+    "大出血风险升高 [3]。<!-- claim:CLM-001 -->",
+    "与既往队列一致 [1] [claim:CLM-001]",
+    "`[9]` 不是引用。",
+    "",
+    "## 参考文献",
+    "",
+    "1. Chan AT. A cohort. BMJ. 2016. doi:10.1136/bmj.i1",
+    "3. McNeil JJ. Aspirin in the healthy elderly. N Engl J Med. 2018. doi:10.1056/NEJMoa1805819",
+    "[4] McNeil JJ. Same trial, second listing. doi:10.1056/NEJMoa1805819",
+    "",
+  ].join("\n"));
+
+  const rendered = await f.execute("evimed_render_report", { deliverableId: "d-clin" });
+  assert.equal(rendered.value.ok, true, JSON.stringify(rendered.value));
+  const data = rendered.value.data;
+  assert.equal(data.file, "deliverables/d-clin/clinical-evidence-report.md");
+  assert.equal(data.renumbered, true);
+  assert.equal(data.references, 2, "one work, one entry");
+  assert.deepEqual(data.merged, [{ from: 4, into: 3 }]);
+  assert.equal(data.markersSynced, 2, "one visible marker hidden, one claim re-pointed");
+  const report = String(f.files.get(REPORT_FILE));
+  assert.match(report, /大出血风险升高 \[1\]。<!-- claim:CLM-001 -->/);
+  assert.match(report, /与既往队列一致 \[2\] <!-- claim:CLM-001 -->/);
+  assert.match(report, /`\[9\]` 不是引用/, "code spans are not citations");
+  assert.match(report, /## 参考文献\n\n1\. McNeil JJ\. Aspirin in the healthy elderly[^\n]*\n2\. Chan AT\. A cohort/);
+  assert.doesNotMatch(report, /Same trial, second listing/);
+  assert.equal(JSON.parse(String(f.files.get(MATRIX_FILE))).claims[0].referenceNumber, 1, "the matrix follows the numbers");
+
+  // Deterministic: a second render changes nothing.
+  const again = await f.execute("evimed_render_report", { deliverableId: "d-clin" });
+  assert.equal(again.value.data.renumbered, false);
+  assert.equal(again.value.data.markersSynced, 0);
+  assert.equal(String(f.files.get(REPORT_FILE)), report);
+});
+
+test("the check and the submission reach the same verdict on a clinical package, and the check can describe the prose", async () => {
+  const f = await clinicalFixture();
+  // A quotation absent from its source: the one finding every tier agrees
+  // must be fixed, so both verdicts are rejections with something to compare.
+  await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim({ supportQuote: "aspirin halved major hemorrhage" }) });
+  f.files.set(REPORT_FILE, [
+    "# 阿司匹林用于 70 岁及以上人群一级预防的获益与风险",
+    "",
+    "## 摘要",
+    "",
+    "此外，70 岁及以上成人每日低剂量阿司匹林使大出血风险升高（HR 1.38）[1]。<!-- claim:CLM-001 -->",
+    "",
+    "## 参考文献",
+    "",
+    "1. McNeil JJ. Effect of Aspirin on Cardiovascular Events and Bleeding in the Healthy Elderly. N Engl J Med. 2018. doi:10.1056/NEJMoa1805819",
+    "",
+  ].join("\n"));
+  const check = await f.execute("evimed_package_check", { deliverableId: "d-clin", prose: true, watchPhrases: ["此外", "综上所述"] });
+  const submit = await f.execute("evimed_submit_deliverable", { deliverableId: "d-clin" });
+  assert.equal(check.value.ok, submit.value.ok);
+  assert.equal(check.value.ok, false, "a misquoted source is a must-fix, and both say so");
+  /** @param {any} reply @returns {string[]} */
+  const texts = (reply) => reply.value.issues.map((/** @type {any} */ entry) => `${entry.severity}|${entry.code}|${entry.message}`).sort();
+  assert.deepEqual(texts(check), texts(submit), "one verdict, whichever tool asked");
+  assert.ok(texts(check).some((line) => /supportQuote/.test(line)), "the verdict names the quotation");
+  assert.equal(check.value.data.attempts.used, 0, "the check spent nothing");
+
+  const prose = check.value.data.prose;
+  assert.equal(prose.file, "clinical-evidence-report.md");
+  assert.deepEqual(prose.phrases, { 此外: 1 }, "only phrases present are counted");
+  assert.ok(prose.paragraphs.some((/** @type {any} */ row) => row.section === "摘要" && row.opening.startsWith("此外")), JSON.stringify(prose.paragraphs));
 });
