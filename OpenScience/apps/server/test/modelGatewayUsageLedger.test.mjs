@@ -200,3 +200,54 @@ test("a bounded runtime token retains episode attribution after markers compact 
   assert.equal(reservation.runId, "episode-compacted");
   assert.equal(reservation.runLimit, 5);
 });
+
+/* --------------------------------------------- run attribution (E §9.4, C3) */
+
+async function callWith(t, { attributeRun = null, caller = { userId: "usage-owner", projectId: "default" }, extraConfig = {} } = {}, requestBody) {
+  const events = [];
+  const upstream = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end('{"id":"provider-x","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":10}}');
+  });
+  const upstreamBase = await listen(upstream);
+  t.after(() => new Promise((resolve) => upstream.close(resolve)));
+  const gateway = createServer(createModelGatewayHandler({ ...config(upstreamBase), ...extraConfig },
+    { assertActiveModelGatewayToken: () => caller }, { usageLedger: ledger(events), ...(attributeRun ? { attributeRun } : {}) }));
+  const gatewayBase = await listen(gateway);
+  t.after(() => new Promise((resolve) => gateway.close(resolve)));
+  const post = () => fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
+    method: "POST", headers: { authorization: "Bearer runtime", "content-type": "application/json" }, body: JSON.stringify(requestBody),
+  }).then((response) => response.text());
+  return { events, post };
+}
+
+test("an interactive runtime's call is charged to the one run going in its project, and capped by the per-run limit", async (t) => {
+  const asked = [];
+  const { events, post } = await callWith(t, {
+    attributeRun: async (caller) => { asked.push(caller); return "run_interactive"; },
+    extraConfig: { userRunSpendLimit: 3 },
+  }, { messages: [{ role: "user", content: "Attribute me." }] });
+  await post();
+  assert.deepEqual(asked, [{ userId: "usage-owner", projectId: "default" }]);
+  assert.equal(events[0].input.runId, "run_interactive");
+  assert.equal(events[0].input.runLimit, 3, "the interactive per-run cap applies once the call has a run");
+});
+
+test("a bounded runtime keeps the run its token names, and an unattributable call carries none", async (t) => {
+  const bounded = await callWith(t, {
+    caller: { userId: "usage-owner", projectId: "default", runId: "episode-1", runLimit: 1.5, dailyLimit: 2, weeklyLimit: 5 },
+    attributeRun: async () => assert.fail("a bounded runtime's run is its own"),
+    extraConfig: { userRunSpendLimit: 3 },
+  }, { messages: [{ role: "user", content: "Bounded." }] });
+  await bounded.post();
+  assert.equal(bounded.events[0].input.runId, "episode-1");
+  assert.equal(bounded.events[0].input.runLimit, 1.5);
+  const ambiguous = await callWith(t, { attributeRun: async () => null, extraConfig: { userRunSpendLimit: 3 } }, { messages: [{ role: "user", content: "Two runs." }] });
+  await ambiguous.post();
+  assert.equal(ambiguous.events[0].input.runId, null, "two runs at once are not guessed between");
+  assert.equal(ambiguous.events[0].input.runLimit, 0);
+  const broken = await callWith(t, { attributeRun: async () => { throw new Error("ledger unreadable"); } }, { messages: [{ role: "user", content: "x" }] });
+  assert.equal((await broken.post()).length > 0, true, "an attribution failure never costs the call");
+  assert.equal(broken.events[0].input.runId, null);
+});

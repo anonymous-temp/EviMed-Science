@@ -825,6 +825,9 @@ export class MemoryIntelligence {
         source: { type: "memory", id: conflict.recordId },
         actions: [{ id: "open", label: "查看这条记忆", style: "primary" }],
         idempotencyKey: `memory-value-replaced:${conflict.recordId}:${conflict.identity}`,
+        // 「结论变了」: something the reader had confirmed now says otherwise,
+        // which is theirs to check (C1).
+        severity: "attention",
       });
     } catch (error) {
       await this.audit("notification.memory_conflict.create", error);

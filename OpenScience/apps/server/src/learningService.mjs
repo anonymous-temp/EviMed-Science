@@ -600,6 +600,9 @@ export class LearningService {
         ...(document.projectId ? { projectId: document.projectId } : {}),
         source: { type: "system", id: document.id },
         idempotencyKey: `method-status:${document.id}:${document.revision}`,
+        // The method library's own housekeeping is none of the three moments
+        // the inbox notifies at (完成 / 需要你 / 结论变了, C1): recorded, read.
+        silent: true,
       });
     } catch {
       // isolated: evimed_learning_notice_failed_total

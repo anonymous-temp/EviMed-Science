@@ -2308,9 +2308,17 @@ async function putPlanIndex(store, entry) {
  */
 async function recordGateRun(store, entry, item, verdict, attempt) {
   if (!store || !entry.runId) return
-  await store.gateRuns.put(`${entry.runId}:${item.id}:${attempt}`, {
+  // Keyed by the submission's place in the sequence, not by the charged
+  // attempt: a submission inside the structural allowance does not advance
+  // `attempt`, so two unreadable submissions in a row wrote one key and the
+  // second erased the first's issues — the history that allowance exists to
+  // keep visible (2026-09-18 review, E §9.5). Every submission advances
+  // exactly one of the two counters, so their sum counts submissions.
+  const sequence = attempt + (entry.structuralAttempts?.get(item.id) ?? 0)
+  await store.gateRuns.put(`${entry.runId}:${item.id}:${sequence}`, {
     runId: entry.runId,
     attempt,
+    sequence,
     deliverableId: item.id,
     contractKind: item.contractKind,
     issues: verdict.issues,

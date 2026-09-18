@@ -101,7 +101,7 @@ async function main() {
   // because the probe is about admission, not about the answer.
   const first = await api("/api/agent-runs/dispatch", {
     method: "POST",
-    body: JSON.stringify({ sessionId, dispatchId: `probe-v1-a-${stamp}`, text: "用三句话说明阿司匹林的抗血小板作用机制。" }),
+    body: JSON.stringify({ sessionId, dispatchId: `probe-v1-a-${stamp}`, text: "用三句话说明阿司匹林的抗血小板作用机制。", automated: true }),
   });
   say("first dispatch", { status: first.status, runId: first.body?.data?.id, runStatus: first.body?.data?.status });
   if (first.status !== 202) throw new Error(`first dispatch refused: ${JSON.stringify(first.body).slice(0, 300)}`);
@@ -109,7 +109,7 @@ async function main() {
   // The probe. No wait: the point is to arrive while the first turn is live.
   const second = await api("/api/agent-runs/dispatch", {
     method: "POST",
-    body: JSON.stringify({ sessionId, dispatchId: `probe-v1-b-${stamp}`, text: "补充一句：请同时说明它与氯吡格雷的机制差别。" }),
+    body: JSON.stringify({ sessionId, dispatchId: `probe-v1-b-${stamp}`, text: "补充一句：请同时说明它与氯吡格雷的机制差别。", automated: true }),
   });
   say("second dispatch (while first is running)", {
     status: second.status,

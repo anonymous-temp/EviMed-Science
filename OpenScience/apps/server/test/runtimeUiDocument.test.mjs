@@ -33,3 +33,17 @@ test("native Javascript and CSS remain byte-identical and source text containing
   assert.ok(rendered.includes(`const value = '<script src="/plugins/inline.js">'`));
   assert.ok(rendered.includes(`src='${prefix}plugins/actual.js'`));
 });
+
+test("with the project's stable asset path, the document's own build files are referenced there and nothing else moves", async () => {
+  const { rebaseRuntimeUiDocument } = await import("../src/runtimeUiDocument.mjs");
+  const rendered = rebaseRuntimeUiDocument(Buffer.from(publishedHtml), { "content-type": "text/html" }, prefix, "/__evimed/a/default/").toString();
+  for (const file of ["assets/index-Df-65__b.js", "assets/vendor-CCJJTK99.js", "assets/vendor-BNsW4eBh.css", "assets/index-b24khbeK.css"]) {
+    assert.ok(rendered.includes(`"/__evimed/a/default/${file}"`), `${file} was not moved: ${rendered}`);
+    assert.ok(!rendered.includes(`"./${file}"`), `${file} is still relative`);
+  }
+  assert.ok(rendered.includes('href="./favicon.svg"') && rendered.includes('href="./manifest.webmanifest"'), "files outside assets/ stay with the frame");
+  assert.ok(rendered.includes(`<base href="${prefix}">`), "the frame's own base is unchanged");
+  // A malformed path is not trusted to name anything.
+  const refused = rebaseRuntimeUiDocument(Buffer.from(publishedHtml), { "content-type": "text/html" }, prefix, "/elsewhere/").toString();
+  assert.ok(refused.includes('src="./assets/index-Df-65__b.js"'));
+});

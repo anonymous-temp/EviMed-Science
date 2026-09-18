@@ -1905,7 +1905,8 @@ class PairedRunner:
             return self.project_id
         suffix = sha256_text(f"{cell}{self.config['digest']}{self.release_id}#{attempt}")[:8]
         project_id = f"{self.project_id[:55]}-{suffix}"
-        client.ensure_project(project_id, f"{self.config['id']} · {cell}"[:80])
+        # A project name is 1-40 characters on the control plane (C4, 2026-09-18).
+        client.ensure_project(project_id, f"{self.config['id']} · {cell}"[:40])
         client.scope_to_project(project_id)
         for fixture in self.fixtures:
             client.upload(str(fixture["path"]), base64.b64decode(fixture["data"]))
@@ -1996,7 +1997,8 @@ class PairedRunner:
             agent = self.pinned_capability(client)
             client.bind_session(session_id, {"mode": "specialist", "agentId": agent["id"], "agentVersion": agent["version"]})
             record["capability"] = {"id": agent["id"], "version": agent["version"]}
-            run_id = client.dispatch({"sessionId": session_id, "dispatchId": dispatch_id, "text": brief_prompt(brief)})
+            # `automated`: the inbox records the cell without notifying anyone.
+            run_id = client.dispatch({"sessionId": session_id, "dispatchId": dispatch_id, "text": brief_prompt(brief), "automated": True})
         run = client.wait_for_run(
             run_id,
             timeout_seconds=self.config["timeoutMinutes"] * 60,

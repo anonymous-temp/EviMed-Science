@@ -95,8 +95,8 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     assert.equal((await meFromSecond.json()).data.user.id, "alice");
     const projectsFromSecond = await fetch(`${second.base}/api/projects`, { headers: { Cookie: alice.cookie } });
     assert.deepEqual((await projectsFromSecond.json()).data, [
-      { id: "default", name: "Default Project" },
-      { id: "paper1", name: "Paper 1" },
+      { id: "paper1", name: "Paper 1", archivedAt: null, runCount: 0, lastActivityAt: null },
+      { id: "default", name: "我的研究", archivedAt: null, runCount: 0, lastActivityAt: null },
     ]);
     const sessionsFromSecond = await fetch(`${second.base}/api/research-sessions`, {
       headers: { Cookie: alice.cookie, "X-Open-Science-Project": "paper1" },
@@ -137,7 +137,7 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     const bob = await login(second.base, "bob", "another correct battery staple");
     assert.equal(bob.response.status, 200);
     const bobProjects = await fetch(`${second.base}/api/projects`, { headers: { Cookie: bob.cookie } });
-    assert.deepEqual((await bobProjects.json()).data, [{ id: "default", name: "Default Project" }]);
+    assert.deepEqual((await bobProjects.json()).data, [{ id: "default", name: "我的研究", archivedAt: null, runCount: 0, lastActivityAt: null }]);
     const bobCannotSeeAlice = await fetch(`${second.base}/api/research-sessions`, {
       headers: { Cookie: bob.cookie, "X-Open-Science-Project": "paper1" },
     });
@@ -206,7 +206,7 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
     }
 
     const readiness = await first.app.store.readiness();
-    assert.deepEqual(readiness, { mode: "postgres", shared: true, schemaVersion: 1 });
+    assert.deepEqual(readiness, { mode: "postgres", shared: true, schemaVersion: 2 });
     for (const file of [
       path.join(dataDir, "users.json"),
       path.join(dataDir, ".openscience", "sessions.json"),
@@ -284,6 +284,55 @@ test("a deliberately deleted bootstrap account is not resurrected", {
     assert.equal(alice.response.status, 401, "creating-when-absent must not undo a deliberate deletion");
   } finally {
     await app?.app.close();
+    await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
+    await admin.end();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("a stored English default is renamed once, and a rename and an archive are shared across instances", {
+  skip: databaseUrl ? false : "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
+}, async () => {
+  assertTestDatabase(databaseUrl);
+  const admin = new Pool({ connectionString: databaseUrl, max: 1 });
+  await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
+  const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-project-names-"));
+  let first;
+  let second;
+  try {
+    // A database from before version 2: the seeded row carries the English
+    // name, and the migration record stops at version 1.
+    const seeding = await start(dataDir);
+    await seeding.app.close();
+    await admin.query("UPDATE evimed_control.projects SET name = 'Default Project' WHERE id = 'default'");
+    await admin.query("DELETE FROM evimed_control.schema_migrations WHERE version = 2");
+
+    first = await start(dataDir);
+    const alice = await login(first.base, "alice", "correct horse battery staple");
+    const headers = { Cookie: alice.cookie, "X-Open-Science-CSRF": alice.csrf, "Content-Type": "application/json" };
+    const listed = await (await fetch(`${first.base}/api/projects`, { headers })).json();
+    assert.equal(listed.data.find((item) => item.id === "default").name, "我的研究");
+    const created = await (await fetch(`${first.base}/api/projects`, { method: "POST", headers, body: JSON.stringify({ name: "二甲双胍与乳酸酸中毒" }) })).json();
+    assert.match(created.data.id, /^p-[0-9a-f]{8}$/);
+    const renamed = await fetch(`${first.base}/api/projects/${created.data.id}`, { method: "PATCH", headers, body: JSON.stringify({ name: "二甲双胍（肾功能不全）" }) });
+    assert.equal(renamed.status, 200);
+    const archived = await (await fetch(`${first.base}/api/projects/${created.data.id}/archive`, { method: "POST", headers, body: "{}" })).json();
+    assert.ok(Date.parse(archived.data.archivedAt));
+    // A researcher who then names the default "Default Project" keeps it.
+    assert.equal((await fetch(`${first.base}/api/projects/default`, { method: "PATCH", headers, body: JSON.stringify({ name: "Default Project" }) })).status, 200);
+
+    second = await start(dataDir);
+    const again = await login(second.base, "alice", "correct horse battery staple");
+    const fromSecond = await (await fetch(`${second.base}/api/projects`, { headers: { Cookie: again.cookie } })).json();
+    const byId = new Map(fromSecond.data.map((item) => [item.id, item]));
+    assert.equal(byId.get(created.data.id).name, "二甲双胍（肾功能不全）");
+    assert.equal(byId.get(created.data.id).archivedAt, archived.data.archivedAt);
+    assert.equal(byId.get("default").name, "Default Project", "renamed once, not on every start");
+    const versions = await admin.query("SELECT version FROM evimed_control.schema_migrations ORDER BY version");
+    assert.deepEqual(versions.rows.map((row) => row.version), [1, 2]);
+  } finally {
+    await first?.app.close();
+    await second?.app.close();
     await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");
     await admin.end();
     await rm(dataDir, { recursive: true, force: true });
