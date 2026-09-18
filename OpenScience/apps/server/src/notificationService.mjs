@@ -5,6 +5,21 @@ import { HttpError } from "./security.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 
+/**
+ * How much an inbox item may interrupt (contract C1, 2026-09-18). `safety` is
+ * a clinical-safety finding and the only class allowed to interrupt; a person
+ * has something to do on `attention`; `info` records something that happened.
+ */
+export const INBOX_SEVERITIES = Object.freeze(["safety", "attention", "info"]);
+const severityRank = Object.freeze({ info: 0, attention: 1, safety: 2 });
+
+/**
+ * How long a read item is kept, counted from when it was read (C1). Unread
+ * items are never swept: the reader has not seen them. Neither is a question
+ * or review that is read but unresolved, because it is still asking.
+ */
+export const INBOX_READ_RETENTION_DAYS = 90;
+
 /** @param {unknown} value @param {string} name @param {number} max */
 function text(value, name, max) {
   if (typeof value !== "string" || !value.trim() || value.length > max || value.includes("\0")) {
@@ -66,7 +81,17 @@ function record(row) {
     resolvedAt: row.resolved_at == null ? null : new Date(row.resolved_at).toISOString(),
     resolution: row.resolution, channelsSent: row.channels_sent, revision: Number(row.revision),
     createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString(),
+    // A row written before these columns existed reads as the quiet default,
+    // which is what it was.
+    severity: INBOX_SEVERITIES.includes(row.severity) ? row.severity : "info",
+    silent: row.silent === true,
   } : null;
+}
+
+/** @param {unknown} value @returns {string | null} */
+function inboxProjectScope(value) {
+  if (value == null || value === "") return null;
+  return productId(value, "project");
 }
 
 function validTime(value, name) {
@@ -161,6 +186,111 @@ export function runFinishedNotice(run) {
   return { outcome, title, body, severity, counts: { safety: summary.safety, mustFix: summary.mustFix, advice: summary.advice } };
 }
 
+// China Standard Time has kept one offset since 1991, so a fixed +8 h is exact
+// and needs no time-zone database — the control-plane container is UTC and
+// carries none (memory note "Node reads TZ without tzdata").
+const shanghaiOffsetMs = 8 * 3_600_000;
+
+/**
+ * The calendar day a moment falls on for a researcher in China, `YYYY-MM-DD`.
+ * @param {unknown} value @returns {string | null}
+ */
+export function shanghaiDay(value) {
+  const time = value instanceof Date ? value.getTime() : Date.parse(String(value ?? ""));
+  return Number.isFinite(time) ? new Date(time + shanghaiOffsetMs).toISOString().slice(0, 10) : null;
+}
+
+/**
+ * What a run is called in an inbox line: its title, else what was asked,
+ * cut to fit one line. The researcher's own words or the platform's title for
+ * them — never anything a validator wrote.
+ * @param {Record<string, any>} run
+ */
+function runLabel(run) {
+  const label = [run?.title, run?.question].find((value) => typeof value === "string" && value.trim());
+  if (!label) return "一项研究";
+  const characters = [...label.replace(/\s+/g, " ").trim()];
+  return characters.length > 24 ? `${characters.slice(0, 23).join("")}…` : characters.join("");
+}
+
+/** @param {{ outcome: string, severity: string }} notice */
+function routineCompletion(notice) {
+  return (notice.outcome === "delivered" || notice.outcome === "qualified") && notice.severity !== "safety";
+}
+
+/**
+ * The inbox item a finished run produces, grouped by project and day.
+ *
+ * Routine completions — delivered, or delivered for review, with nothing
+ * touching clinical safety — share one item per project per day
+ * (`run-finished:<project>:<YYYY-MM-DD, Asia/Shanghai>`), so an afternoon of
+ * ten runs is one line saying ten instead of ten lines (2026-09-18 plan §8.5;
+ * 29 of the 31 unread items the walk found were machine-generated). A safety
+ * finding and every run that did not deliver stand alone: they are the
+ * 「需要你」 moment and must not be folded under a count.
+ *
+ * `peers` are the project's other finished runs of the same kind — silent
+ * with silent, attended with attended — and the group is recomposed from them
+ * each time, so the item always says what the ledger says. The body is counts
+ * and run titles; no finding's sentence reaches it.
+ *
+ * @param {{ id: string }} project
+ * @param {Record<string, any>} run
+ * @param {{ peers?: readonly Record<string, any>[], silent?: boolean }} [options]
+ */
+export function runFinishedInboxItem(project, run, { peers = [], silent = false } = {}) {
+  const notice = runFinishedNotice(run);
+  const base = {
+    noticeType: "notify",
+    // Without an action the card renders no control at all, so a notice that
+    // names a run could not open it. The frontend turns this id into
+    // `/app/runs?run=<id>`; resolving it here would mean knowing its routes.
+    actions: [{ id: "open", label: "查看运行", style: "primary" }],
+    projectId: project.id,
+    source: { type: "run", id: run.id },
+    idempotencyKey: `run-finished:${run.id}`,
+    severity: notice.severity,
+    silent,
+  };
+  const day = shanghaiDay(run.finishedAt ?? run.startedAt);
+  if (!routineCompletion(notice) || !day) return { ...base, title: notice.title, body: notice.body };
+  const groupKey = `run-finished:${project.id}:${day}${silent ? ":silent" : ""}`;
+  const seen = new Set([run.id]);
+  const members = [{ run, notice }];
+  for (const peer of peers) {
+    if (!peer?.id || seen.has(peer.id) || peer.status === "running" || shanghaiDay(peer.finishedAt) !== day) continue;
+    const peerNotice = runFinishedNotice(peer);
+    if (!routineCompletion(peerNotice)) continue;
+    seen.add(peer.id);
+    members.push({ run: peer, notice: peerNotice });
+  }
+  if (members.length === 1) return { ...base, groupKey, title: notice.title, body: notice.body };
+  members.sort((left, right) => String(right.run.finishedAt ?? "").localeCompare(String(left.run.finishedAt ?? "")));
+  const review = members.filter((member) => member.notice.outcome === "qualified");
+  const failing = review.reduce((sum, member) => sum + member.notice.counts.safety + member.notice.counts.mustFix, 0);
+  const [, month, date] = day.split("-").map(Number);
+  const parts = [review.length ? `${review.length} 项待你复核` : null, members.length - review.length ? `${members.length - review.length} 项已完成` : null].filter(Boolean);
+  const shown = members.slice(0, 3).map(({ run: member, notice: memberNotice }) => {
+    const memberFailing = memberNotice.counts.safety + memberNotice.counts.mustFix;
+    const state = memberNotice.outcome !== "qualified" ? "已完成" : memberFailing ? `待复核，${memberFailing} 项自证未通过` : "待复核";
+    return `· ${runLabel(member)}：${state}`;
+  });
+  const body = [
+    `其中 ${parts.join("，")}。`,
+    failing > 0 ? `待复核的研究共有 ${failing} 项自证未通过；引用前请在报告的「依据」里核对带 ⚠ 的结论。` : null,
+    ...shown,
+    members.length > shown.length ? `另有 ${members.length - shown.length} 项，见运行记录。` : null,
+  ].filter(Boolean).join("\n");
+  const severity = members.some((member) => member.notice.severity === "attention") ? "attention" : "info";
+  return {
+    ...base,
+    groupKey,
+    title: `${month}月${date}日完成 ${members.length} 项研究`,
+    body,
+    severity,
+  };
+}
+
 export class NotificationService {
   /** @param {any} database */
   constructor(database) { this.database = database; }
@@ -182,6 +312,17 @@ export class NotificationService {
     const defaultAction = input.defaultAction == null ? null : productId(input.defaultAction, "default action");
     if (defaultAction && !actionList.some((item) => item.id === defaultAction)) throw new HttpError(400, "notification_action_invalid", "Default action is unavailable.");
     if (defaultAction && input.dueAt == null) throw new HttpError(400, "notification_payload_invalid", "A default action requires a due time.");
+    // Blocking items ask a person for something, so they default to
+    // attention; a plain notice defaults to information.
+    const severity = input.severity == null ? (noticeType === "notify" ? "info" : "attention") : String(input.severity);
+    if (!INBOX_SEVERITIES.includes(severity)) throw new HttpError(400, "notification_payload_invalid", "Invalid severity.");
+    if (input.silent != null && typeof input.silent !== "boolean") throw new HttpError(400, "notification_payload_invalid", "Invalid silent flag.");
+    // Recorded without notifying anyone: stored already read, so no count ever
+    // includes it. Automated work (an evaluation cell, an autopilot episode)
+    // and platform housekeeping use it — the inbox keeps the record without
+    // spending the reader's attention on it (C1).
+    const silent = input.silent === true;
+    if (silent && noticeType !== "notify") throw new HttpError(400, "notification_payload_invalid", "Only a notice can be recorded silently.");
     const values = {
       id: input.idempotencyKey == null ? randomUUID() : `notification:${createHash("sha256")
         .update(JSON.stringify([user, text(input.idempotencyKey, "idempotency key", 200)])).digest("hex")}`,
@@ -189,12 +330,18 @@ export class NotificationService {
       noticeType, priority: NOTICE_PRIORITY[noticeType], title: text(input.title, "title", 150), body: text(input.body, "body", 8000),
       actions: JSON.stringify(actionList), source: JSON.stringify(source(input.source)),
       groupKey: input.groupKey == null ? null : text(input.groupKey, "group key", 200),
-      dueAt: timestamp(input.dueAt, "due time"), defaultAction, createdAt,
+      dueAt: timestamp(input.dueAt, "due time"), defaultAction, createdAt, severity, silent,
     };
     await migrateNotifications(this.database);
     return this.database.transaction(async (client) => {
       if (input.idempotencyKey != null) {
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-inbox-key:${values.id}`]);
+        // An event already folded into a grouped item returns that item as it
+        // stands now: the group has moved on since, so comparing content with
+        // this one event would call every replay a conflict.
+        const folded = await client.query(`SELECT n.* FROM evimed_inbox.merged_events e
+          JOIN evimed_inbox.notifications n ON n.id=e.notification_id WHERE e.id=$1 AND n.user_id=$2`, [values.id, values.user]);
+        if (folded.rowCount) return record(folded.rows[0]);
         const prior = await client.query("SELECT * FROM evimed_inbox.notifications WHERE id=$1 FOR UPDATE", [values.id]);
         if (prior.rowCount) {
           const item = record(prior.rows[0]);
@@ -206,23 +353,49 @@ export class NotificationService {
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
           `evimed-inbox:${JSON.stringify([values.user, values.projectId, values.groupKey])}`,
         ]);
+        // One row per key. The key carries its own period — a run-finished
+        // key names the project and the day — so there is no time window
+        // here, and a row the reader already read or opened is brought back
+        // rather than joined by a second one: 「9月18日完成 4 项研究」 is one item
+        // that says four, not a read one saying three beside a new one saying
+        // one. A silent event joins without bringing anything back.
         const existing = await client.query(`SELECT * FROM evimed_inbox.notifications
-          WHERE user_id=$1 AND notice_type='notify' AND group_key=$2 AND project_id IS NOT DISTINCT FROM $4::text AND resolved_at IS NULL
-          AND created_at BETWEEN $3::timestamptz - interval '5 minutes' AND $3::timestamptz
-          ORDER BY created_at DESC,id DESC FOR UPDATE LIMIT 1`, [values.user, values.groupKey, values.createdAt, values.projectId]);
+          WHERE user_id=$1 AND notice_type='notify' AND group_key=$2 AND project_id IS NOT DISTINCT FROM $3::text
+          ORDER BY created_at DESC,id DESC FOR UPDATE LIMIT 1`, [values.user, values.groupKey, values.projectId]);
         if (existing.rowCount) {
-          const merged = await client.query(`UPDATE evimed_inbox.notifications SET title=$2,body=$3,
-            event_count=event_count+1,revision=revision+1,updated_at=$4 WHERE id=$1 RETURNING *`,
-          [existing.rows[0].id, values.title, values.body, values.createdAt]);
+          const current = existing.rows[0];
+          const strongest = severityRank[values.severity] > (severityRank[current.severity] ?? 0) ? values.severity : current.severity;
+          const merged = await client.query(`UPDATE evimed_inbox.notifications SET title=$2,body=$3,actions=$4::jsonb,source=$5::jsonb,
+            severity=$6,silent=(silent AND $7::boolean),
+            read_at=CASE WHEN $7::boolean THEN read_at ELSE NULL END,
+            resolved_at=CASE WHEN $7::boolean THEN resolved_at ELSE NULL END,
+            resolution=CASE WHEN $7::boolean THEN resolution ELSE NULL END,
+            event_count=LEAST(event_count+1,10000),revision=revision+1,
+            created_at=GREATEST(created_at,$8::timestamptz),updated_at=$8::timestamptz
+            WHERE id=$1 RETURNING *`,
+          [current.id, values.title, values.body, values.actions, values.source, strongest, values.silent, values.createdAt]);
+          if (input.idempotencyKey != null) {
+            await client.query(`INSERT INTO evimed_inbox.merged_events(id,notification_id,created_at) VALUES($1,$2,$3::timestamptz)
+              ON CONFLICT(id) DO NOTHING`, [values.id, current.id, values.createdAt]);
+          }
           return record(merged.rows[0]);
         }
       }
       const inserted = await client.query(`INSERT INTO evimed_inbox.notifications
-        (id,user_id,project_id,notice_type,priority,title,body,actions,source,group_key,due_at,default_action,channels_sent,created_at,updated_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,jsonb_build_object('in-app',$13::text),$13::timestamptz,$13::timestamptz)
+        (id,user_id,project_id,notice_type,priority,title,body,actions,source,group_key,due_at,default_action,channels_sent,
+         severity,silent,read_at,created_at,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,jsonb_build_object('in-app',$13::text),
+         $14,$15::boolean,CASE WHEN $15::boolean THEN $13::timestamptz ELSE NULL END,$13::timestamptz,$13::timestamptz)
         ON CONFLICT(id) DO NOTHING RETURNING *`,
       [values.id, values.user, values.projectId, values.noticeType, values.priority, values.title, values.body,
-        values.actions, values.source, values.groupKey, values.dueAt, values.defaultAction, values.createdAt]);
+        values.actions, values.source, values.groupKey, values.dueAt, values.defaultAction, values.createdAt,
+        values.severity, values.silent]);
+      if (inserted.rowCount && values.groupKey && input.idempotencyKey != null) {
+        // The first event of a group is recorded like every later one, so a
+        // replay of it is recognised after the group has changed its content.
+        await client.query(`INSERT INTO evimed_inbox.merged_events(id,notification_id,created_at) VALUES($1,$1,$2::timestamptz)
+          ON CONFLICT(id) DO NOTHING`, [values.id, values.createdAt]);
+      }
       if (inserted.rowCount) return record(inserted.rows[0]);
       const existing = await client.query("SELECT * FROM evimed_inbox.notifications WHERE user_id=$1 AND id=$2", [values.user, values.id]);
       const item = record(existing.rows[0]);
@@ -231,11 +404,12 @@ export class NotificationService {
     });
   }
 
-  /** @param {string} userId @param {{limit?:number,cursor?:string|null,noticeType?:string|null,unreadOnly?:boolean,unresolvedOnly?:boolean}} options */
-  async list(userId, { limit = 50, cursor = null, noticeType = null, unreadOnly = false, unresolvedOnly = false } = {}) {
+  /** @param {string} userId @param {{limit?:number,cursor?:string|null,noticeType?:string|null,unreadOnly?:boolean,unresolvedOnly?:boolean,projectId?:string|null}} options */
+  async list(userId, { limit = 50, cursor = null, noticeType = null, unreadOnly = false, unresolvedOnly = false, projectId = null } = {}) {
     productInteger(limit, 1, 100);
     if (noticeType != null && !NOTICE_TYPES.includes(noticeType)) throw new HttpError(400, "notification_filter_invalid", "Invalid notice type.");
     if (typeof unreadOnly !== "boolean" || typeof unresolvedOnly !== "boolean") throw new HttpError(400, "notification_filter_invalid", "Invalid inbox filter.");
+    const project = inboxProjectScope(projectId);
     let after = null;
     if (cursor) {
       try {
@@ -248,13 +422,81 @@ export class NotificationService {
     const result = await this.database.query(`SELECT * FROM evimed_inbox.notifications WHERE user_id=$1
       AND ($2::text IS NULL OR notice_type=$2) AND (NOT $3::boolean OR read_at IS NULL)
       AND (NOT $4::boolean OR resolved_at IS NULL)
+      AND ($9::text IS NULL OR project_id=$9 OR project_id IS NULL)
       AND ($5::smallint IS NULL OR priority>$5 OR (priority=$5 AND (created_at,id)<($6::timestamptz,$7::text)))
       ORDER BY priority,created_at DESC,id DESC LIMIT $8`,
-    [productId(userId, "user"), noticeType, unreadOnly, unresolvedOnly, after?.[0] ?? null, after?.[1] ?? null, after?.[2] ?? null, limit + 1]);
+    [productId(userId, "user"), noticeType, unreadOnly, unresolvedOnly, after?.[0] ?? null, after?.[1] ?? null, after?.[2] ?? null, limit + 1, project]);
     const items = result.rows.slice(0, limit).map(record);
     const last = items.at(-1);
+    // The count of everything unread in the same scope, not this page's
+    // length: the page is capped, and a badge that counted the page could
+    // never say more than fifty (B §1c).
+    const { unreadTotal } = await this.unreadCount(userId, { projectId: project });
     return { items, nextCursor: result.rows.length > limit && last
-      ? Buffer.from(JSON.stringify([last.priority, last.createdAt, last.id])).toString("base64url") : null };
+      ? Buffer.from(JSON.stringify([last.priority, last.createdAt, last.id])).toString("base64url") : null, unreadTotal };
+  }
+
+  /**
+   * The bell's whole input: how many items are unread, and how many of those
+   * are clinical-safety findings — the one class allowed to interrupt.
+   *
+   * Scoped like the list: every project of the account unless a project is
+   * named, and then that project plus the account-wide items (a user-scoped
+   * memory notice belongs to no project and to every one). A silent item was
+   * stored read and is never here.
+   * @param {string} userId @param {{ projectId?: string | null }} [options]
+   */
+  async unreadCount(userId, { projectId = null } = {}) {
+    const project = inboxProjectScope(projectId);
+    await migrateNotifications(this.database);
+    const result = await this.database.query(`SELECT count(*)::integer AS unread,
+      count(*) FILTER (WHERE severity='safety')::integer AS safety
+      FROM evimed_inbox.notifications WHERE user_id=$1 AND read_at IS NULL
+      AND ($2::text IS NULL OR project_id=$2 OR project_id IS NULL)`, [productId(userId, "user"), project]);
+    return { unreadTotal: Number(result.rows[0]?.unread ?? 0), safetyUnread: Number(result.rows[0]?.safety ?? 0) };
+  }
+
+  /**
+   * Marks every unread item read, whatever actions it carries (C1).
+   *
+   * No revision precondition, unlike the per-item path: "everything I have
+   * not read, I have now seen" is idempotent and does not race with anything
+   * a revision would protect. Resolution is untouched — a question marked
+   * read is still a question.
+   * @param {string} userId @param {{ projectId?: string | null, noticeType?: string | null }} [options]
+   */
+  async markAllRead(userId, { projectId = null, noticeType = null } = {}) {
+    if (noticeType != null && !NOTICE_TYPES.includes(noticeType)) throw new HttpError(400, "notification_filter_invalid", "Invalid notice type.");
+    const project = inboxProjectScope(projectId);
+    await migrateNotifications(this.database);
+    const result = await this.database.query(`UPDATE evimed_inbox.notifications
+      SET read_at=clock_timestamp(),revision=revision+1,updated_at=clock_timestamp()
+      WHERE user_id=$1 AND read_at IS NULL AND ($2::text IS NULL OR project_id=$2 OR project_id IS NULL)
+      AND ($3::text IS NULL OR notice_type=$3)`, [productId(userId, "user"), project, noticeType]);
+    return { updated: Number(result.rowCount ?? 0) };
+  }
+
+  /**
+   * Deletes items read more than `INBOX_READ_RETENTION_DAYS` ago (C1).
+   *
+   * Nothing deleted an inbox row before this; rows left only when their user
+   * or project did (B §1d). Bounded per call so a first sweep over a long
+   * history is a series of short transactions rather than one long one; the
+   * caller runs it again on its next tick.
+   * @param {{ now?: Date, retentionDays?: number, limit?: number }} [options]
+   * @returns {Promise<number>} how many items were deleted
+   */
+  async pruneRead({ now = new Date(), retentionDays = INBOX_READ_RETENTION_DAYS, limit = 1000 } = {}) {
+    productInteger(limit, 1, 10_000);
+    productInteger(retentionDays, 1, 3650);
+    const cutoff = new Date(now.getTime() - retentionDays * 86_400_000).toISOString();
+    await migrateNotifications(this.database);
+    const result = await this.database.query(`WITH doomed AS (
+      SELECT id FROM evimed_inbox.notifications
+      WHERE read_at < $1::timestamptz AND (notice_type='notify' OR resolved_at IS NOT NULL)
+      ORDER BY read_at LIMIT $2 FOR UPDATE SKIP LOCKED
+    ) DELETE FROM evimed_inbox.notifications n USING doomed WHERE n.id=doomed.id`, [cutoff, limit]);
+    return Number(result.rowCount ?? 0);
   }
 
   async get(userId, id, client = this.database) {

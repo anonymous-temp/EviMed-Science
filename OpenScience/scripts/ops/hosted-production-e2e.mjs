@@ -299,6 +299,7 @@ async function main() {
       body: JSON.stringify({
         sessionId,
         dispatchId: `dispatch-${marker}`,
+        automated: true,
         text: [
           "Analyze aspirin (drug=aspirin) with the registered drug-safety specialist.",
           "Call drug_safety_analysis with action=capabilities, then action=start, then poll status with waitSeconds=45 until terminal.",

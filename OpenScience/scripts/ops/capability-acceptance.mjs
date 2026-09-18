@@ -242,7 +242,7 @@ async function main() {
     const dispatchId = String(args["dispatch-id"] ?? `acc-${Date.now().toString(36)}`).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
     const dispatched = await api("/api/agent-runs/dispatch", {
       method: "POST",
-      body: JSON.stringify({ sessionId, dispatchId, text }),
+      body: JSON.stringify({ sessionId, dispatchId, text, automated: true }),
     });
     if (dispatched.status !== 202) {
       throw new Error(`dispatch failed: ${dispatched.status} ${JSON.stringify(dispatched.body).slice(0, 400)}`);

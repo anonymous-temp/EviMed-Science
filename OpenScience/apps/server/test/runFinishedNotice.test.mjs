@@ -11,7 +11,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ALL_ERROR_CODES, RUN_OUTCOME_KINDS, errorCodeMessage } from "@evimed/domain";
-import { runFinishedNotice } from "../src/notificationService.mjs";
+import { runFinishedInboxItem, runFinishedNotice, shanghaiDay } from "../src/notificationService.mjs";
+import { automatedRun } from "../src/server.mjs";
 
 test("a clean delivery says so and nothing more", () => {
   const notice = runFinishedNotice({ status: "succeeded", errorCode: null, verification: null, artifacts: ["report.md"] });
@@ -124,4 +125,87 @@ test("every code that can end a run produces a body with a real sentence", () =>
   }
   assert.deepEqual(empty, [], `codes with no Chinese sentence: ${empty.slice(0, 10).join(", ")}`);
   assert.ok(ALL_ERROR_CODES.length > 250, `the registry walked only ${ALL_ERROR_CODES.length} codes`);
+});
+
+/* ------------------------------------------------ grouping and silence (C1) */
+
+const finished = (id, finishedAt, extra = {}) => ({
+  id, status: "succeeded", errorCode: null, verification: null, artifacts: ["deliverables/r/report.md"],
+  finishedAt, startedAt: finishedAt, question: `问题 ${id}`, ...extra,
+});
+
+test("a day's routine completions in a project are one item that says how many", () => {
+  const project = { id: "default" };
+  const peers = [
+    finished("run-a", "2026-09-18T01:00:00.000Z", { verification: "unverified", title: "二甲双胍与乳酸酸中毒风险",
+      qualityNotices: [{ code: "clinical_evidence_issue", check: "claim-quote-verbatim", severity: "must-fix", text: "MUST FIX — x" }] }),
+    finished("run-b", "2026-09-18T02:00:00.000Z"),
+    // The day before, in China: 23:30 on the 17th.
+    finished("run-old", "2026-09-17T15:30:00.000Z"),
+    // A safety finding and a failure stand alone; they are not "完成".
+    finished("run-safety", "2026-09-18T02:30:00.000Z", { verification: "unverified",
+      qualityNotices: [{ code: "clinical_evidence_issue", check: "clinical-safety-rules", severity: "safety", text: "SAFETY — x" }] }),
+    { ...finished("run-failed", "2026-09-18T02:40:00.000Z"), status: "failed", errorCode: "verification_timeout" },
+    { ...finished("run-live", "2026-09-18T02:50:00.000Z"), status: "running" },
+  ];
+  const item = runFinishedInboxItem(project, finished("run-c", "2026-09-18T03:00:00.000Z", { title: "阿司匹林一级预防" }), { peers });
+  assert.equal(item.groupKey, "run-finished:default:2026-09-18");
+  assert.equal(item.title, "9月18日完成 3 项研究");
+  assert.equal(item.idempotencyKey, "run-finished:run-c", "each run is its own event inside the group");
+  assert.deepEqual(item.source, { type: "run", id: "run-c" }, "the item opens the latest run");
+  assert.equal(item.severity, "attention", "one of them is waiting for review");
+  assert.equal(item.silent, false);
+  const lines = item.body.split("\n");
+  assert.equal(lines[0], "其中 1 项待你复核，2 项已完成。");
+  assert.equal(lines[1], "待复核的研究共有 1 项自证未通过；引用前请在报告的「依据」里核对带 ⚠ 的结论。");
+  assert.deepEqual(lines.slice(2), [
+    "· 阿司匹林一级预防：已完成",
+    "· 问题 run-b：已完成",
+    "· 二甲双胍与乳酸酸中毒风险：待复核，1 项自证未通过",
+  ]);
+  assert.doesNotMatch(item.body, /MUST FIX|SAFETY|[a-z]{5,}/, "counts and titles only");
+});
+
+test("the day is China's, a lone completion keeps its own words, and a long day is summarised", () => {
+  const project = { id: "p1" };
+  // 00:30 on the 19th in Shanghai is still the 18th in UTC.
+  assert.equal(shanghaiDay("2026-09-18T16:30:00.000Z"), "2026-09-19");
+  assert.equal(shanghaiDay("2026-09-18T15:59:59.999Z"), "2026-09-18");
+  assert.equal(shanghaiDay("not a time"), null);
+  const lone = runFinishedInboxItem(project, finished("run-1", "2026-09-18T16:30:00.000Z"), {
+    peers: [finished("run-0", "2026-09-18T15:00:00.000Z")],
+  });
+  assert.equal(lone.groupKey, "run-finished:p1:2026-09-19");
+  assert.equal(lone.title, "研究已完成", "a group of one is the run's own notice");
+  assert.equal(lone.body, runFinishedNotice(finished("run-1", "2026-09-18T16:30:00.000Z")).body);
+  const many = runFinishedInboxItem(project, finished("run-9", "2026-09-18T09:00:00.000Z"), {
+    peers: Array.from({ length: 6 }, (_unused, index) => finished(`run-${index}`, `2026-09-18T0${index}:00:00.000Z`)),
+  });
+  assert.equal(many.title, "9月18日完成 7 项研究");
+  assert.equal(many.body.split("\n").at(-1), "另有 4 项，见运行记录。");
+  assert.equal(many.severity, "info");
+});
+
+test("a safety finding or a failure is never folded, and automated work is recorded silently in its own group", () => {
+  const project = { id: "default" };
+  const safety = runFinishedInboxItem(project, finished("run-s", "2026-09-18T03:00:00.000Z", { verification: "unverified",
+    qualityNotices: [{ code: "clinical_evidence_issue", check: "clinical-safety-rules", severity: "safety", text: "SAFETY — x" }] }),
+  { peers: [finished("run-a", "2026-09-18T01:00:00.000Z")] });
+  assert.equal(safety.groupKey, undefined);
+  assert.equal(safety.severity, "safety");
+  assert.equal(safety.title, "研究已交付，待你复核");
+  const failed = runFinishedInboxItem(project, { ...finished("run-f", "2026-09-18T03:00:00.000Z"), status: "failed", errorCode: "verification_timeout" });
+  assert.equal(failed.groupKey, undefined);
+  assert.equal(failed.severity, "attention");
+  const quiet = runFinishedInboxItem(project, finished("run-e", "2026-09-18T03:00:00.000Z", { automated: true }), { silent: true });
+  assert.equal(quiet.silent, true);
+  assert.equal(quiet.groupKey, "run-finished:default:2026-09-18:silent", "machine runs never fold into, or resurface, a person's item");
+});
+
+test("a run is automated when a harness said so, or when autopilot started it", () => {
+  assert.equal(automatedRun({ automated: true }), true);
+  assert.equal(automatedRun({ effectiveRouteReason: "autopilot:literature-sentinel" }), true);
+  assert.equal(automatedRun({ dispatchId: `episode-${"a".repeat(32)}-v1` }), true, "an independent verification");
+  assert.equal(automatedRun({ effectiveRouteReason: "unrouted:open-domain", dispatchId: "dispatch-1" }), false);
+  assert.equal(automatedRun({ automated: "yes" }), false, "only the boolean the dispatch validated counts");
 });

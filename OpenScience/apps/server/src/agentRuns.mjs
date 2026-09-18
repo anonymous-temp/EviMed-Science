@@ -88,6 +88,7 @@ const startFields = new Set(["sessionId"]);
 const dispatchFields = new Set([
   "sessionId",
   "dispatchId",
+  "automated",
   "question",
   "effectiveAgentId",
   "effectiveAgentVersion",
@@ -176,9 +177,13 @@ function normalizeDispatchInput(input) {
   if (input.effectiveRouteReason != null && !routeReasonPattern.test(input.effectiveRouteReason)) {
     throw invalid("Effective route reason is invalid.");
   }
+  if (input.automated != null && typeof input.automated !== "boolean") throw invalid("automated must be a boolean.");
   return {
     sessionId: safeId(input.sessionId, "research session id"),
     dispatchId: safeId(input.dispatchId, "agent run dispatch id"),
+    // Started by a harness rather than a person; read by the inbox, which
+    // records such a run's completion without notifying anyone (C1).
+    automated: input.automated === true,
     // What the reader asked, kept short. A run list identified only by
     // run_cf7f08fa4b78… is a list of hashes: thirty analyses side by side and
     // no way to tell which is which without opening each one.
@@ -339,6 +344,7 @@ function foldEvents(events) {
         effectiveRouteReason,
         model: event.model,
         question: typeof event.question === "string" && event.question ? event.question : null,
+        ...(event.automated === true ? { automated: true } : {}),
         status: "running",
         createdAt: storedTimestamp(event.createdAt, "createdAt"),
         startedAt,
@@ -3616,6 +3622,7 @@ export class AgentRunStore {
   async reserveRun(project, session, {
     baselineCursor,
     dispatchId = null,
+    automated = false,
     question = null,
     effectiveAgentId = session.mode === "specialist" ? session.agentId : null,
     effectiveAgentVersion = session.mode === "specialist" ? session.agentVersion : null,
@@ -3711,6 +3718,7 @@ export class AgentRunStore {
         effectiveRouteReason,
         model: this.model,
         question,
+        ...(automated === true ? { automated: true } : {}),
         createdAt: now,
         startedAt: startedAt == null ? now : storedTimestamp(startedAt, "startedAt"),
         baselineCursor,
@@ -3744,6 +3752,7 @@ export class AgentRunStore {
     const {
       sessionId,
       dispatchId,
+      automated,
       question,
       briefText,
       effectiveAgentId,
@@ -3766,7 +3775,7 @@ export class AgentRunStore {
           effectiveRouteReason: "session-binding",
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
-    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, question, ...selected });
+    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, automated, question, ...selected });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);

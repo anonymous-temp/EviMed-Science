@@ -12,6 +12,8 @@ async function fixture(t) {
     resolve: async (user, id, body) => { calls.push({ action: "resolve", user, id, body }); return { id, resolution: body }; },
     preferences: async (user) => { calls.push({ action: "preferences", user }); return { revision: 1, channels: ["in-app"] }; },
     updatePreferences: async (user, body, revision) => { calls.push({ action: "update-preferences", user, body, revision }); return { ...body, revision: revision + 1 }; },
+    unreadCount: async (user, options) => { calls.push({ action: "unread-count", user, options }); return { unreadTotal: 73, safetyUnread: 2 }; },
+    markAllRead: async (user, options) => { calls.push({ action: "read-all", user, options }); return { updated: 73 }; },
   };
   const store = {
     ensureSessionUser: async (req) => {
@@ -38,7 +40,7 @@ test("inbox routes require authentication and CSRF while preserving typed filter
   assert.equal((await fetch(`${base}?unread=true`)).status, 401);
   const page = await fetch(`${base}?noticeType=review&unread=true&unresolved=true&limit=20`, { headers: { cookie: headers.cookie } });
   assert.equal(page.status, 200);
-  assert.deepEqual(calls[0].options, { noticeType: "review", unreadOnly: true, unresolvedOnly: true, limit: 20, cursor: null });
+  assert.deepEqual(calls[0].options, { noticeType: "review", unreadOnly: true, unresolvedOnly: true, limit: 20, cursor: null, projectId: null });
   assert.equal((await fetch(`${base}/notice-one/read`, { method: "POST", headers: { cookie: headers.cookie }, body: '{"expectedRevision":1}' })).status, 403);
   assert.equal((await fetch(`${base}/notice-one/read`, { method: "POST", headers, body: '{"expectedRevision":1,"userId":"other"}' })).status, 400);
   assert.equal((await fetch(`${base}/notice-one/read`, { method: "POST", headers, body: '{"expectedRevision":1}' })).status, 200);
@@ -56,4 +58,24 @@ test("resolution and preference updates accept only their closed contracts", asy
   assert.equal((await fetch(`${base}/preferences`, { method: "PATCH", headers, body: JSON.stringify(settings) })).status, 200);
   assert.equal(calls.at(-1).revision, 1);
   assert.equal((await fetch(`${base}/preferences`, { method: "PATCH", headers, body: JSON.stringify({ ...settings, email: true }) })).status, 400);
+});
+
+test("the bell's count and read-all are their own routes, and read-all takes only its scope", async (t) => {
+  const { base, headers, calls } = await fixture(t);
+  assert.equal((await fetch(`${base}/unread-count`)).status, 401);
+  const count = await fetch(`${base}/unread-count`, { headers: { cookie: headers.cookie } });
+  assert.equal(count.status, 200);
+  assert.deepEqual((await count.json()).data, { unreadTotal: 73, safetyUnread: 2 });
+  assert.deepEqual(calls.at(-1), { action: "unread-count", user: "owner", options: { projectId: null } });
+  await fetch(`${base}/unread-count?projectId=second`, { headers: { cookie: headers.cookie } });
+  assert.deepEqual(calls.at(-1).options, { projectId: "second" });
+  assert.equal((await fetch(`${base}/read-all`, { method: "POST", headers: { cookie: headers.cookie }, body: "{}" })).status, 403, "a mutation needs CSRF");
+  assert.equal((await fetch(`${base}/read-all`, { method: "POST", headers, body: '{"userId":"other"}' })).status, 400);
+  const cleared = await fetch(`${base}/read-all`, { method: "POST", headers, body: "" });
+  assert.equal(cleared.status, 200);
+  assert.deepEqual((await cleared.json()).data, { updated: 73 });
+  assert.deepEqual(calls.at(-1), { action: "read-all", user: "owner", options: { projectId: null, noticeType: null } });
+  await fetch(`${base}/read-all`, { method: "POST", headers, body: '{"projectId":"default","noticeType":"notify"}' });
+  assert.deepEqual(calls.at(-1).options, { projectId: "default", noticeType: "notify" });
+  assert.equal((await fetch(`${base}/unread-count`, { method: "POST", headers, body: "{}" })).status, 404, "the count is read-only");
 });
