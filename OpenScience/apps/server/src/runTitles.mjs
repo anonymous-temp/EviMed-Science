@@ -112,9 +112,13 @@ export class RunTitler {
           body: {
             model: this.config.deepseekModel,
             temperature: 0,
-            // Room for the reasoning a flash model does before it writes; a
-            // title is a dozen tokens after it (see specialistClassifier.mjs
-            // for what a budget tuned too tight did).
+            // A title needs no reasoning. Measured on the live API with the
+            // aspirin question (2026-09-19): thinking off returned the same
+            // title in 17 output tokens and 0.6 s; on, 503 tokens (486 of them
+            // reasoning) and 2.3 s. The budget still leaves room for a model
+            // that thinks anyway (see specialistClassifier.mjs for what a
+            // budget tuned too tight did).
+            thinking: { type: "disabled" },
             max_tokens: 2_000,
             response_format: { type: "json_object" },
             messages: [

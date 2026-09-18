@@ -65,6 +65,8 @@ test("the titler makes one metered flash call attributed to the run, and fails s
   assert.equal(calls[0].call.runId, "run_1", "the call is charged to the run it names");
   assert.equal(calls[0].call.userId, "u1");
   assert.equal(calls[0].call.body.model, "deepseek-flash");
+  // A title needs no reasoning: thinking off costs a thirtieth of the tokens.
+  assert.deepEqual(calls[0].call.body.thinking, { type: "disabled" });
   assert.deepEqual(calls[0].deps.usageLedger, { marker: true }, "through the metered control-plane path");
   // The answer written into the reasoning text still counts.
   reply = answer({ content: "", reasoning_content: "思考……最后答案 {\"title\": \"阿司匹林一级预防\"}" });
