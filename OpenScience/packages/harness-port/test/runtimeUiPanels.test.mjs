@@ -71,7 +71,7 @@ test('the progress tab reads the run: phases, counts, cost and each deliverable'
   assert.equal(model.elapsed, '2 分 05 秒');
   assert.equal(model.cost, '约 ¥0.42');
   assert.deepEqual(model.phases.map((/** @type {any} */ phase) => `${phase.label}${phase.count}${phase.current ? '*' : ''}`), ['检索4', '筛选2*', '全文1', '核验0', '撰写0', '交付0']);
-  assert.equal(model.sources, '检索 120 篇 · 纳入 18 篇 · 全文 6 篇');
+  assert.equal(model.sources, '检索 120 次 · 纳入 18 篇 · 全文 6 篇');
   assert.equal(model.claims, null, 'no claims yet says nothing rather than 「主张 0 条」');
   assert.deepEqual(model.deliverables.map((/** @type {any} */ item) => [item.title, item.status, item.childState, item.attempts, item.verdict?.text ?? null, item.childSessionId]), [
     ['老年房颤抗凝证据综述', '需修改', '进行中', 2, '⚠ 3 项需核对', 'child-1'],
@@ -109,7 +109,7 @@ test('the evidence tab lists each claim with what the check found, and only for 
 
 test('the sources tab shows the counts and the cited sources, with their type and only web links', () => {
   const model = sourcesModel(EVIDENCE, LIVE, kit());
-  assert.equal(model.counts, '检索 120 篇 · 纳入 18 篇 · 获取全文 6 篇');
+  assert.equal(model.counts, '检索 120 次 · 纳入 18 篇 · 获取全文 6 篇');
   assert.deepEqual(model.sources.map((/** @type {any} */ source) => [source.title, source.type, source.identifier, source.url]), [
     ['ROCKET AF', 'RCT', 'PMID:21830957', 'https://pubmed.ncbi.nlm.nih.gov/21830957/'],
     ['2023 ACC/AHA 房颤指南', '指南', null, null],
