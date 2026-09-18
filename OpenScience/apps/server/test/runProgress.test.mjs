@@ -346,3 +346,21 @@ test("the stall notice names only what the monitor measured", async (t) => {
   const ledger = await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8");
   assert.doesNotMatch(ledger, /工作区也没有变化/);
 });
+
+test("claim counts come from the plan index when no claim tool call was observed", async () => {
+  const { assembleRunProgress } = await import("../src/runProgress.mjs");
+  const progress = assembleRunProgress({
+    deliverables: [],
+    calls: [],
+    projection: { plan: { items: [
+      { id: "d1", claims: { total: 40, verified: 36 } },
+      { id: "d2", claims: { total: 12, verified: 12 } },
+      { id: "d3" },
+    ] } },
+    matrixClaims: { total: 1, verified: 1 },
+    children: [],
+    startedAt: null,
+    now: "2026-09-18T00:00:00.000Z",
+  });
+  assert.deepEqual(progress.claims, { total: 52, verified: 48 }, "the plan index outranks a matrix read, and is summed per item");
+});

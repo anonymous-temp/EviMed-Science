@@ -136,3 +136,18 @@ test("a summary is counts and titles, most urgent first", () => {
     ["advice", "数值未出现在引文中", 2],
   ]);
 });
+
+test("the codes delegation that does not wait and the claim tools refuse with are titled too", () => {
+  // Raised by the socket (2026-09-18); listed here by name because this
+  // branch's registry does not carry them yet, and a refusal without a title
+  // reaches a reader as 「另有技术提示」.
+  for (const code of [
+    "claim_matrix_unsupported", "claim_invalid", "matrix_unreadable", "report_missing",
+    "deliverable_already_accepted", "deliverable_already_delegated", "deliverable_failed",
+    "delegation_concurrency_limit", "delegation_handle_unknown", "children_running",
+    "plan_invalid", "capability_unknown", "contract_kind_unknown", "subagent_cancelled",
+  ]) {
+    assert.ok(Object.hasOwn(GATE_CODE_TITLES_ZH, code), `"${code}" has no title`);
+    assert.notEqual(describeGateIssue({ code, severity: "required" }).title, GATE_FALLBACK_TITLES_ZH["must-fix"], code);
+  }
+});

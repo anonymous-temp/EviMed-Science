@@ -385,9 +385,16 @@ export function assembleRunProgress({ deliverables, calls, projection = null, ma
   /** @type {Map<string, { total: number, verified: number }>} */
   const upserts = new Map();
   for (const call of list) if (call.claimTotals) upserts.set(call.claimTotals.deliverableId, call.claimTotals);
+  // Since 2026-09-18 the plan index keeps each item's claim counts too
+  // (`claims: {total, verified}`), which a run that restarted — or a reader
+  // that never saw the claim tool's own calls — still has.
+  const planned = (Array.isArray(projection?.plan?.items) ? projection.plan.items : [])
+    .filter((/** @type {any} */ item) => item?.claims && typeof item.claims === "object");
   const claims = upserts.size
     ? [...upserts.values()].reduce((sum, value) => ({ total: sum.total + value.total, verified: sum.verified + value.verified }), { total: 0, verified: 0 })
-    : { total: count(matrixClaims?.total), verified: count(matrixClaims?.verified) };
+    : planned.length
+      ? planned.reduce((sum, /** @type {any} */ item) => ({ total: sum.total + count(item.claims.total), verified: sum.verified + count(item.claims.verified) }), { total: 0, verified: 0 })
+      : { total: count(matrixClaims?.total), verified: count(matrixClaims?.verified) };
   return {
     deliverables,
     phaseCounts,

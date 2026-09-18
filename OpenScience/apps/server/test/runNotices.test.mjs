@@ -97,3 +97,30 @@ test("an old ledger with string notices and a new one with structured notices re
     assert.equal(typeof notice.text, "string");
   }
 });
+
+test("the run side's degraded lines are titled by the template they were written with", async () => {
+  const { runSideDegradedNotice } = await import("../src/runNotices.mjs");
+  const cases = [
+    ["root research-tool narrowing failed: tools.restrict is not a function", "run_root_tools_unnarrowed", "根任务未能收窄研究工具"],
+    ["root research-tool narrowing found no research tools registered at session start", "run_root_tools_unnarrowed", "根任务未能收窄研究工具"],
+    ["root claim-tool narrowing failed: boom", "run_root_claim_tools_unnarrowed", "根任务未能收窄主张工具"],
+    ["method section clinical-evidence-synthesis/appraisal not registered: duplicate", "run_method_sections_unregistered", "方法说明未注册，改读技能文件"],
+    ["method sections for d1 were not registered; the child can read them from the skill files", "run_method_sections_unregistered", "方法说明未注册，改读技能文件"],
+    ["child guidance not installed: agent/pre-step unavailable", "run_child_guidance_missing", "子任务指引没有装上"],
+    ["request size 2400000 bytes passed the compaction byte limit 2000000; compacted to 1200000 bytes before the model gateway could refuse it", "run_compaction_forced", "请求过大，已先压缩上下文"],
+    ["request size 2400000 bytes passed the compaction byte limit 2000000 and nothing could be compacted", "run_compaction_nothing", "请求过大，没有可压缩的内容"],
+    ["request size 2400000 bytes passed the compaction byte limit 2000000; the forced compaction failed: timeout", "run_compaction_failed", "请求过大，强制压缩失败"],
+    ["turn ended with children still running: h-1, h-2", "run_children_outlived_turn", "一轮结束时仍有子任务在运行"],
+  ];
+  for (const [line, code, title] of cases) {
+    const [described] = describedQualityNotices([runSideDegradedNotice(line)]);
+    assert.equal(described.code, code, line);
+    assert.equal(described.title, title, line);
+    assert.equal(described.detail, undefined, "an English line is never shown as the detail");
+    assert.equal(described.text, line);
+  }
+  const concurrent = describedQualityNotices([runSideDegradedNotice("deliverables/d1/report.md 被两个子代理先后写入（child-a 之后是 child-b）：后写的覆盖了先写的")])[0];
+  assert.equal(concurrent.code, "run_concurrent_write");
+  assert.match(concurrent.detail, /被两个子代理先后写入/, "a line written in Chinese is its own detail");
+  assert.equal(runSideDegradedNotice("something the table does not know").code, "run_side_degraded");
+});
