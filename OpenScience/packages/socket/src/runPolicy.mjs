@@ -802,8 +802,7 @@ export function buildDelegation(input) {
     '',
     ...(deferred
       ? [
-          `方法正文超过 ${SKILL_BODY_MAX_CHARS} 字，较长的 ${deferred} 节没有随任务注入：它们在原处保留标题，标题下写着用 \`skill\` 工具加载它的名字。做到哪一节之前先加载哪一节，内容与原文逐字相同。`
-            + (input.skillsDir ? `\`skill\` 工具找不到时，原文在 \`${input.skillsDir.replace(/\/+$/, '')}/<技能名>/SKILL.md\`。` : ''),
+          `方法正文超过 ${SKILL_BODY_MAX_CHARS} 字，较长的 ${deferred} 节没有随任务注入：它们在原处保留标题，标题下写着原文所在的文件与行号。做到哪一节之前，先用 \`read\` 按那几行读取它，内容与原文逐字相同。`,
           '',
         ]
       : []),
