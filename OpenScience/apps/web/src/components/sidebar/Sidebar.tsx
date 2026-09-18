@@ -18,6 +18,7 @@ import { RUNS_CHANGED_EVENT, runMetaLine, runState, runTitle } from "@/lib/runPr
 import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { ProjectSwitcher } from "@/components/sidebar/ProjectSwitcher";
 import { InboxBell } from "@/components/sidebar/InboxBell";
+import { ConversationMatches } from "@/components/sidebar/ConversationMatches";
 import { RunStatusDot } from "@/components/runs/RunStatusDot";
 import { useConnectorAttention } from "@/lib/connectorAttention";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
@@ -132,10 +133,10 @@ export function Sidebar() {
   };
 
   const needle = query.trim().toLowerCase();
-  // Local filtering over the recent runs' titles. Integration seam: the frame
-  // stream's `useRuntimeSessionSearch()` (lib/runtimeUiBridge.ts, S3) returns
-  // the kernel's own conversation matches for the same query; they merge in
-  // here, beside — not instead of — these rows.
+  // Local filtering over the recent runs' titles. The kernel's own full-text
+  // matches for the same query follow the rows (ConversationMatches), beside
+  // them rather than instead of them: a title says what a run was for, the
+  // conversation says what was found.
   const rows = (runs ?? [])
     .filter((run) => !needle || runTitle(run).toLowerCase().includes(needle))
     .slice(0, RECENT_RUNS);
@@ -258,6 +259,7 @@ export function Sidebar() {
               </NavLink>
             );
           })}
+          <ConversationMatches query={query} shownSessionIds={new Set(rows.map((run) => run.sessionId))} />
         </div>
 
         <div className="flex flex-col border-t border-border px-3 py-3">
