@@ -384,6 +384,13 @@ Light: `bg` → `surface` → `surface-2` is a three-step ladder from canvas to 
 the same three names point at #14181a → #1d2225 → #272d30; each added layer is one step lighter,
 never a lightened copy of the light theme.
 
+The theme is `data-theme` on `<html>` (light / dark; `system` resolves to one of them), set before
+the first paint by `public/theme-init.js` and kept live by `ThemeProvider`; each block also sets
+`color-scheme`, so scrollbars, a select's list and date pickers follow it. No colour may bypass the
+tokens: `designTokens.test.ts` rejects a hex literal or a colour function (`rgb()`, `hsl()`,
+`oklch()`…) in any component outside its named exceptions — content surfaces such as a rendered
+Office document or a fixed-dark scientific canvas.
+
 ### Text
 - `text` (#242628) — body and headings. 15.19:1 on white, 13.43:1 on surface-2.
 - `muted` (#606669) — captions, metadata, secondary rows. 5.83:1 on white, 5.16:1 on surface-2.

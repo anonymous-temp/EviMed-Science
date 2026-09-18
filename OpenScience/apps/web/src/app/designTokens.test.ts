@@ -27,8 +27,9 @@ const ALLOWED: Record<string, string> = {
   "lib/xlsx.ts": "default cell border when a spreadsheet does not declare one",
 };
 
-// `&#123;` and `#anchor` are not colours; a colour is 3, 4, 6 or 8 hex digits.
-const HEX = /(?<![\w&])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b/;
+// `&#123;` and `#anchor` are not colours; a colour is 3, 4, 6 or 8 hex digits
+// — or a colour function, which reaches a theme no better than a hex does.
+const HEX = /(?<![\w&])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\(/;
 
 function sourceFiles(directory: string): string[] {
   const files: string[] = [];
