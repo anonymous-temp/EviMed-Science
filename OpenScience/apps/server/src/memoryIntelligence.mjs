@@ -3,6 +3,7 @@ import { MEMORY_PROMOTION_MIN_OCCURRENCES, MEMORY_PROMOTION_MIN_RUNS, mcpToolBas
 import { HttpError } from "./security.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { memoryPausedFor } from "./researchMemory.mjs";
+import { MEMORY_KIND_LABELS_ZH } from "./researchMemoryPersistence.mjs";
 
 const candidateKinds = new Set([
   "profile",
@@ -805,7 +806,7 @@ export class MemoryIntelligence {
       return await this.notifications.create(project.userId, {
         noticeType: "notify",
         title: "一条你确认过的记忆已被本次对话改写",
-        body: `记忆「${conflict.key}」原本记的是「${conflict.previousValue}」，`
+        body: `一条「${MEMORY_KIND_LABELS_ZH[conflict.kind] ?? "记忆"}」记忆原本记的是「${conflict.previousValue}」，`
           + `本次对话把它改为「${conflict.nextValue}」，现在生效的是后者。`
           + (conflict.origin === "inferred"
             ? "这次改写来自模型对本次对话的推断，你并没有明确要求。"
