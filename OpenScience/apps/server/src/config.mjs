@@ -1038,6 +1038,12 @@ export function loadConfig(overrides = {}) {
     // Frame tickets cannot outlive the authenticated login that created them.
     runtimeUiFrameTtlMs: Number(overrides.runtimeUiFrameTtlMs ?? process.env.OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS
       ?? overrides.sessionTtlMs ?? process.env.OPEN_SCIENCE_SESSION_TTL_MS ?? defaultSessionTtlMs),
+    // Frame layer (S3, 2026-09-18): which bodies of the kernel page's EviMed
+    // layer to switch off (`theme,panels,...`; the bridge is not switchable).
+    // Each is off-able on its own, and the kernel's own conversation is what
+    // remains with all of them off — the control every body is measured against.
+    runtimeUiFrameOff: String(overrides.runtimeUiFrameOff ?? process.env.OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF ?? "")
+      .split(",").map((value) => value.trim().toLowerCase()).filter((value) => /^[a-z]{1,32}$/.test(value)),
     geoProbeUrl: overrides.geoProbeUrl ?? process.env.OPEN_SCIENCE_GEO_PROBE_URL ?? "",
     geoProbeGatewayInternalUrl:
       overrides.geoProbeGatewayInternalUrl ??

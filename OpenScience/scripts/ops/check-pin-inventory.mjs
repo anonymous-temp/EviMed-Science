@@ -83,6 +83,11 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/packages\/harness-port\/src\/runtimeUi[A-Za-z]*\.mjs$/,
+    why: "the frame layer's slot contracts, service providers, token readers and layout selectors were read off this exact kernel client; a test holds the recorded version equal to the pin, so moving the pin fails until they are re-read — they never move with it",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/scripts\/ops\/check-kernel-defaults\.mjs$/,
     why: "records which version produced the stored --dump-config baseline; it moves when the baseline is re-recorded, not when the pin moves",
   },

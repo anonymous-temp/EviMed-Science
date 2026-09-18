@@ -118,6 +118,9 @@ const operatorLevers = {
   OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_TOKENS: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_REQUEST_BYTES: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: ["open-science-web", "open-science-runtime-controller"],
+  // The frame layer's per-body off switches: the control every body is
+  // measured against has to be reachable from .env.
+  OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF: ["open-science-web"],
 };
 
 async function composeFiles() {

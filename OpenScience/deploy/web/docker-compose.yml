@@ -492,6 +492,12 @@ services:
       OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED: ${OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED:-}
       OPEN_SCIENCE_RUNTIME_UI_PORT: ${OPEN_SCIENCE_RUNTIME_UI_PORT:-8788}
       OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN: ${OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN:-}
+      # The EviMed frame bodies switched off, comma-separated (theme,
+      # toolviews, transcript, panels, commands, controls, shell, locale; the
+      # bridge is not switchable). Interpolated rather than value-less: a
+      # value-less entry takes the variable from the shell compose runs in,
+      # never from the deployment's `.env`, so setting it there did nothing.
+      OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF: ${OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF:-}
       OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/geo-probe/v1}
       OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT: ${OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT:-}
       OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS: ${OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS:-360000}

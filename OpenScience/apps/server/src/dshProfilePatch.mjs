@@ -330,6 +330,15 @@ export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
   "ui-open-in-app",
   "ui-sidebar-files",
   "ui-sidebar-documentpreview",
+  // Not a panel: the browser half of dynamic Cordis packages. Its node half is
+  // an empty `apply` (the row exists only so the page loads the client half),
+  // its one consumer is `ui-cordis` above, and every method it calls lives in
+  // `dynamicCordisRunner/*`, which the hosted surface denies wholesale. So on
+  // every session open it did exactly one visible thing: sync its inspect
+  // manifest, twice (at start and on the connection's reset), and put two 403s
+  // in the console (2026-09-18 walk, F7). Not mounting it is the composition's
+  // answer; the namespace ban stays as the one that holds.
+  "cordis-client-runner",
 ]);
 
 /**

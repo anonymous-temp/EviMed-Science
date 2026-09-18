@@ -5,8 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionRoute } from "./SessionRoute";
 import { WebApiError } from "@/lib/apiClient";
 import { apply as applyNativeBridge } from "../../../../../packages/harness-port/src/runtimeUiBridge.mjs";
+import { createFrameKit } from "../../../../../packages/harness-port/src/runtimeUiKit.mjs";
+import { apply as applyFrameTheme } from "../../../../../packages/harness-port/src/runtimeUiTheme.mjs";
+import { useUiStore } from "@/lib/store";
+import { useRuntimeSessionSearch } from "@/lib/runtimeUiBridge";
+import { renderHook } from "@testing-library/react";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources }));
+// The run's event stream, held by the test: the frame's run view follows it.
+vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/runEvents")>()), subscribeRunEvents: mocks.subscribe }));
 // Only the four frame calls and the profile are stubbed. Everything else is the
 // real module on purpose: `WebApiError` has to be the same class the component
 // tests with `instanceof`, and `webErrorMessage` has to be the real projection
@@ -14,14 +22,15 @@ const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.f
 // dictionary renders, which is the defect this change removes, not the fix.
 vi.mock("@/lib/apiClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
-  hasWebApi: true, fetchWebMe: () => Promise.resolve({}), webRuntimeProfile: () => mocks.profile,
+  hasWebApi: true, fetchWebMe: () => mocks.me(), webRuntimeProfile: () => mocks.profile,
   getWebProjectId: () => mocks.projectId, createWebRuntimeUiFrame: mocks.create, releaseWebRuntimeUiFrame: mocks.release,
   renewWebRuntimeUiFrame: mocks.renew, listWebAgentRuns: mocks.listRuns,
 }));
 const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
 function PathProbe() {
   const navigate = useNavigate();
-  return <div><span data-testid="path">{useLocation().pathname}</span>
+  const location = useLocation();
+  return <div><span data-testid="path">{location.pathname}</span><span data-testid="state">{JSON.stringify(location.state ?? null)}</span>
     <button onClick={() => navigate("/app/chat/session-b")}>Open B</button>
     <button onClick={() => navigate(-1)}>Back</button>
   </div>;
@@ -30,6 +39,7 @@ function mount(state: unknown = null, path = "/app/chat") {
   return render(<MemoryRouter initialEntries={[{ pathname: path, state }]}><PathProbe /><Routes>
     <Route path="/app/chat" element={<SessionRoute />} /><Route path="/app/chat/:sessionId" element={<SessionRoute />} />
     <Route path="/app/account" element={<div>account and usage</div>} />
+    <Route path="/app/runs/:runId/files/*" element={<div>run file reader</div>} />
   </Routes></MemoryRouter>);
 }
 function emit(frame: HTMLIFrameElement, data: Record<string, unknown>, origin = mocks.profile.uiOrigin, source: MessageEventSource | null = frame.contentWindow) {
@@ -40,6 +50,8 @@ beforeEach(() => {
   window.localStorage.clear(); mocks.create.mockReset(); mocks.renew.mockReset(); mocks.release.mockReset(); mocks.release.mockResolvedValue(undefined); mocks.projectId = "default";
   mocks.create.mockResolvedValue(binding);
   mocks.listRuns.mockReset(); mocks.listRuns.mockResolvedValue([]);
+  mocks.subscribe.mockReset(); mocks.subscribe.mockReturnValue(() => {});
+  mocks.me.mockReset(); mocks.me.mockResolvedValue({});
   mocks.renew.mockImplementation(async () => ({ ...binding, expiresAt: Date.now() + 300_000 }));
   mocks.profile.uiOrigin = "https://host.example:8443";
 });
@@ -163,15 +175,18 @@ describe("native frame identity and readiness", () => {
     const frame = container.querySelector("iframe")!;
     expect(mocks.create).toHaveBeenCalledWith("default"); expect(frame.src).toBe(binding.frameUrl);
     act(() => frame.dispatchEvent(new Event("load")));
-    expect(screen.getByText("正在启动研究运行时…")).toBeInTheDocument();
+    // The binding is here, the runtime prepared; the interface is loading.
+    expect(screen.getByText("正在载入界面…")).toBeInTheDocument();
+    expect(screen.getByText("✓ 准备运行时")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ready" }, "https://evil.example");
     emit(frame, { type: "evimed.runtime-ui.ready" }, mocks.profile.uiOrigin, window);
     emit(frame, { type: "evimed.runtime-ui.ready", frameId: "frame-b" });
-    expect(screen.getByText("正在启动研究运行时…")).toBeInTheDocument();
+    expect(screen.getByText("正在载入界面…")).toBeInTheDocument();
     const post = vi.spyOn(frame.contentWindow!, "postMessage");
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("正在打开研究任务…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开任务…")).toBeInTheDocument();
+    expect(screen.getByText("✓ 载入界面")).toBeInTheDocument();
     const command = post.mock.calls[0][0];
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: command.requestId, ok: true, sessionId: command.intent.sessionId });
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
@@ -278,9 +293,9 @@ describe("native frame identity and readiness", () => {
     expect(post.mock.calls[0][0]).toMatchObject({ type: "evimed.runtime-ui.navigate", requestId: "request-a", frameId: "frame-a", intent: { sessionId: "session-new", draft: "Evidence brief" } });
     expect(post.mock.calls[0][1]).toBe(mocks.profile.uiOrigin);
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "wrong", ok: true, sessionId: "session-new" });
-    expect(screen.getByText("正在打开研究任务…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开任务…")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: "request-a", ok: true, sessionId: "session-canonical" });
-    await waitFor(() => expect(screen.queryByText("正在打开研究任务…")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("正在打开任务…")).toBeNull());
     expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-canonical");
   });
 
@@ -368,7 +383,7 @@ describe("native frame identity and readiness", () => {
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "wrong-session" });
-    expect(screen.getByText("正在打开研究任务…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开任务…")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
     emit(frame, { type: "evimed.runtime-ui.error", seq: 4, error: "NATIVE_NOT_READY" });
     await waitFor(() => expect(mocks.renew).toHaveBeenCalledTimes(1));
@@ -429,6 +444,241 @@ describe("native frame identity and readiness", () => {
     expect(container.querySelector("iframe")).toBe(frame);
   });
 
+});
+
+describe("the shell's theme in the frame", () => {
+  // jsdom has no matchMedia; the shell asks it only while the preference is
+  // "system", to say which scheme that resolves to.
+  function stubScheme(dark: boolean) {
+    const listeners = new Set<() => void>();
+    const media = { matches: dark, addEventListener: (_type: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_type: string, fn: () => void) => listeners.delete(fn) };
+    const original = window.matchMedia;
+    window.matchMedia = (() => media) as unknown as typeof window.matchMedia;
+    return { flip(next: boolean) { media.matches = next; act(() => { for (const fn of [...listeners]) fn(); }); }, listeners,
+      restore() { window.matchMedia = original; } };
+  }
+  // Unmounted first: the store is shared by every test in this file, and a
+  // reset while the frame is still mounted re-renders it outside act().
+  afterEach(() => { cleanup(); useUiStore.setState({ theme: "system" }); });
+
+  it("answers the frame's first word with the shell's choice, and follows every change", async () => {
+    const scheme = stubScheme(false);
+    try {
+      useUiStore.setState({ theme: "dark" });
+      const { container } = mount(null, "/app/chat/session-a");
+      await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+      const frame = container.querySelector("iframe")!;
+      const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      const themes = () => post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.theme").map(([data, origin]) => ({ ...data, origin }));
+      // A bridge that never said it was listening is told nothing: an older
+      // frame document has no use for the message.
+      emit(frame, { type: "evimed.runtime-ui.ready", seq: 2 });
+      await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+      expect(themes()).toHaveLength(0);
+      emit(frame, { type: "evimed.runtime-ui.booted", seq: 3 });
+      await waitFor(() => expect(themes()).toHaveLength(1));
+      expect(themes()[0]).toMatchObject({ version: 1, frameId: "frame-a", projectId: "default", preference: "dark", resolved: "dark", origin: mocks.profile.uiOrigin });
+      expect(themes()[0].seq).toBeGreaterThan(post.mock.calls[0][0].seq);
+      act(() => useUiStore.getState().setTheme("system"));
+      await waitFor(() => expect(themes()).toHaveLength(2));
+      expect(themes()[1]).toMatchObject({ preference: "system", resolved: "light" });
+      // Under "system" an OS flip is news too; under an explicit choice it is not.
+      scheme.flip(true);
+      await waitFor(() => expect(themes()).toHaveLength(3));
+      expect(themes()[2]).toMatchObject({ preference: "system", resolved: "dark" });
+      act(() => useUiStore.getState().setTheme("light"));
+      await waitFor(() => expect(themes()).toHaveLength(4));
+      expect(scheme.listeners.size).toBe(0);
+      scheme.flip(false);
+      expect(themes()).toHaveLength(4);
+      expect(themes().map(entry => entry.seq)).toEqual([...themes().map(entry => entry.seq)].sort((a, b) => a - b));
+    } finally { scheme.restore(); }
+  });
+
+  it("reaches the kernel's theme runtime through the real bridge and the frame's theme body", async () => {
+    useUiStore.setState({ theme: "dark" });
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const origin = "https://shell.example";
+    let listener = (_event: unknown) => {};
+    const parent = { postMessage: (data: Record<string, unknown>) => {
+      window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: mocks.profile.uiOrigin, data }));
+    } };
+    vi.spyOn(frame.contentWindow!, "postMessage").mockImplementation(data => listener({ data, origin, source: parent }));
+    const setTheme = vi.fn();
+    const overrideTokens = vi.fn(() => () => {});
+    const disposers: Array<() => void> = [];
+    const ctx: Record<string, unknown> = {
+      loader: { await: () => new Promise(() => {}) },
+      connection: { generation: { getSnapshot: () => ({}), subscribe: () => () => {} } },
+      sessions: { refresh: vi.fn(), create: vi.fn(), open: vi.fn(), scope: () => ({}), list: { getSnapshot: () => ({ current: null }), subscribe: () => () => {} } },
+      workspaces: { create: vi.fn(), list: { getSnapshot: () => ({ items: [] }) } },
+      conversation: { input: { for: () => ({ setDraft: vi.fn() }) } },
+      theme: { setTheme, overrideTokens },
+      effect: (setup: () => (() => void) | void) => { const dispose = setup(); if (typeof dispose === "function") disposers.push(dispose); },
+      on: () => () => {},
+    };
+    ctx.inject = (_names: string[], callback: (scope: unknown) => void) => callback(ctx);
+    const target = {
+      __EVIMED_FRAME__: { version: 1, frameId: binding.frameId, projectId: "default", shellOrigin: origin, cwd: "/workspace" },
+      parent, addEventListener: (type: string, fn: typeof listener) => { if (type === "message") listener = fn; }, removeEventListener() {},
+      setTimeout, clearTimeout, console,
+    };
+    const kit = createFrameKit(ctx, target, () => undefined, {});
+    await act(async () => {
+      applyNativeBridge(ctx, {}, target, undefined, kit);
+      applyFrameTheme(ctx, {}, target, undefined, kit);
+    });
+    await waitFor(() => expect(setTheme).toHaveBeenCalledWith("dark"));
+    expect(overrideTokens).toHaveBeenCalledWith("@evimed/dsh-socket", expect.objectContaining({ "--dsw-alias-button-info-fill": { light: "#00756b", dark: "#00756b" } }));
+    act(() => useUiStore.getState().setTheme("light"));
+    await waitFor(() => expect(setTheme).toHaveBeenLastCalledWith("light"));
+    for (const dispose of disposers.reverse()) dispose();
+  });
+});
+
+describe("the run behind the task, in the frame", () => {
+  async function openTask() {
+    const view = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+    return { ...view, frame, post, sent: (type: string) => post.mock.calls.filter(([data]) => data.type === `evimed.runtime-ui.${type}`).map(([data]) => data) };
+  }
+  const run = { id: "run-1", sessionId: "session-a", status: "running", startedAt: "2026-09-18T01:00:00.000Z", createdAt: "2026-09-18T01:00:00.000Z",
+    artifacts: [], unverifiedArtifacts: [], planItems: [{ id: "evidence", title: "证据综述", status: "delegated", attempts: 0 }] };
+
+  it("reaches the frame once its bridge listens, and follows the run's stream", async () => {
+    mocks.listRuns.mockResolvedValue([run]);
+    let onEvent: (event: Record<string, unknown>) => void = () => {};
+    mocks.subscribe.mockImplementation((_id: string, handler: typeof onEvent) => { onEvent = handler; return () => {}; });
+    const { frame, sent } = await openTask();
+    expect(mocks.listRuns).not.toHaveBeenCalled();
+    emit(frame, { type: "evimed.runtime-ui.booted", seq: 3 });
+    await waitFor(() => expect(sent("run-state").at(-1)).toMatchObject({ runId: "run-1", sessionId: "session-a", state: "running", frameId: "frame-a", projectId: "default" }));
+    act(() => onEvent({ seq: 1, time: "2026-09-18T01:01:00.000Z", type: "run/progress", currentPhase: "search", phaseCounts: { search: 2 }, children: [] }));
+    await waitFor(() => expect(sent("run-state").at(-1)).toMatchObject({ progress: { currentPhase: "search" } }));
+    const seqs = sent("run-state").map((data) => data.seq);
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+  });
+
+  it("keeps the task when the reader opens a delegated child's view inside the frame", async () => {
+    mocks.listRuns.mockResolvedValue([run]);
+    const { frame } = await openTask();
+    emit(frame, { type: "evimed.runtime-ui.booted", seq: 3 });
+    await waitFor(() => expect(mocks.listRuns).toHaveBeenCalledTimes(1));
+    emit(frame, { type: "evimed.runtime-ui.session", seq: 4, sessionId: "child-1", subagent: true, rootSessionId: "session-a" });
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a");
+    // Another task inside the frame is a navigation, and its run is looked up.
+    emit(frame, { type: "evimed.runtime-ui.session", seq: 5, sessionId: "session-b" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-b"));
+  });
+
+  it("answers the frame's @ menu with the project's parsed sources, by the request's id", async () => {
+    mocks.listSources.mockResolvedValue({ items: [{ id: "src_kb1", revision: 1, projectId: "default", createdAt: "", updatedAt: "", deletedAt: null,
+      payload: { paths: ["文献/老年房颤.pdf"], status: "complete", outputs: {} } }], nextCursor: null });
+    const { frame, sent } = await openTask();
+    emit(frame, { type: "evimed.runtime-ui.kb-query", seq: 3, requestId: "r1", query: "房颤" });
+    await waitFor(() => expect(sent("kb-result")).toHaveLength(1));
+    expect(sent("kb-result")[0]).toMatchObject({ requestId: "r1", ok: true, items: [{ id: "src_kb1", title: "老年房颤.pdf" }], frameId: "frame-a" });
+    // A request id the frame could not have minted is not answered.
+    emit(frame, { type: "evimed.runtime-ui.kb-query", seq: 4, requestId: "bad id!", query: "x" });
+    mocks.listSources.mockRejectedValue(new Error("offline"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sent("kb-result")).toHaveLength(1);
+  });
+
+  it("offers the kernel's conversation search to the shell while the frame is ready, answered by request id", async () => {
+    const hook = renderHook(() => useRuntimeSessionSearch());
+    expect(hook.result.current.available).toBe(false);
+    expect(await hook.result.current.search("阿司匹林")).toEqual({ ok: false, items: [], hasMore: false, error: "search_unavailable" });
+    const { frame, sent, unmount } = await openTask();
+    await waitFor(() => expect(hook.result.current.available).toBe(true));
+    const pending = hook.result.current.search("  阿司匹林  ");
+    await waitFor(() => expect(sent("search")).toHaveLength(1));
+    const request = sent("search")[0];
+    expect(request).toMatchObject({ query: "阿司匹林", frameId: "frame-a" });
+    emit(frame, { type: "evimed.runtime-ui.search-result", seq: 3, requestId: "someone-else", ok: true, items: [] });
+    emit(frame, { type: "evimed.runtime-ui.search-result", seq: 4, requestId: request.requestId, ok: true, hasMore: true, items: [
+      { sessionId: "session-b", title: "老年房颤抗凝", snippet: "……阿司匹林……" }, { sessionId: "bad id!", title: "x", snippet: "y" },
+    ] });
+    expect(await pending).toEqual({ ok: true, hasMore: true, items: [{ sessionId: "session-b", title: "老年房颤抗凝", snippet: "……阿司匹林……" }] });
+    const waiting = hook.result.current.search("华法林");
+    unmount();
+    expect(await waiting).toMatchObject({ ok: false, error: "search_unavailable" });
+    await waitFor(() => expect(hook.result.current.available).toBe(false));
+  });
+
+  it("follows a branch of a finished turn as a task of its own, saying where it came from", async () => {
+    const { frame } = await openTask();
+    emit(frame, { type: "evimed.runtime-ui.session", seq: 3, sessionId: "session-fork", forkedFrom: "session-a" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-fork"));
+    expect(screen.getByTestId("state")).toHaveTextContent('{"forkedFrom":"session-a"}');
+  });
+
+  it("opens a file the frame names in the shell's reader, and nothing it could spell as an escape", async () => {
+    const { frame } = await openTask();
+    emit(frame, { type: "evimed.runtime-ui.open-artifact", seq: 3, runId: "run-1", path: "../../etc/passwd" });
+    emit(frame, { type: "evimed.runtime-ui.open-artifact", seq: 4, runId: "run-1", path: "/etc/passwd" });
+    emit(frame, { type: "evimed.runtime-ui.open-artifact", seq: 5, runId: "run 1", path: "deliverables/a.md" });
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a");
+    emit(frame, { type: "evimed.runtime-ui.open-artifact", seq: 6, runId: "run-1", path: "deliverables/evidence/clinical-evidence-report.md", anchor: "CLM-002" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/runs/run-1/files/deliverables/evidence/clinical-evidence-report.md"));
+    expect(screen.getByText("run file reader")).toBeInTheDocument();
+  });
+});
+
+describe("opening a task", () => {
+  it("names the moment it is in, advanced by the event that ends each one, and says more after five seconds", async () => {
+    vi.useFakeTimers();
+    let resolveFrame!: (value: typeof binding) => void;
+    mocks.create.mockImplementation(() => new Promise(resolve => { resolveFrame = resolve; }));
+    const view = mount(null, "/app/chat/session-a");
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const status = screen.getByRole("status");
+    expect(status).toHaveAttribute("data-open-stage", "0");
+    // The composer the reader is about to type into is drawn from the start.
+    expect(status.querySelector('[aria-hidden="true"] .animate-pulse')).not.toBeNull();
+    expect(screen.getByText("正在准备运行时…")).toBeInTheDocument();
+    expect(screen.queryByText(/通常需要 10–30 秒/)).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(screen.getByText(/通常需要 10–30 秒/)).toBeInTheDocument();
+    await act(async () => { resolveFrame(binding); await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole("status")).toHaveAttribute("data-open-stage", "1");
+    expect(screen.getByText("✓ 准备运行时")).toBeInTheDocument();
+    expect(screen.queryByText(/通常需要 10–30 秒/)).toBeNull();
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole("status")).toHaveAttribute("data-open-stage", "2");
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(screen.getByText(/正在读取这个任务的完整记录/)).toBeInTheDocument();
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.queryByRole("status")).toBeNull();
+    view.unmount();
+  });
+
+  it("resumes the conversation the account last had open, without walking the ledger", async () => {
+    mocks.me.mockResolvedValue({ lastSessionId: "session-last" });
+    mocks.listRuns.mockResolvedValue([{ sessionId: "session-from-ledger" }]);
+    mount();
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-last"));
+    expect(mocks.listRuns).not.toHaveBeenCalled();
+  });
+
+  it("walks the ledger when the account's answer has no usable last conversation", async () => {
+    mocks.me.mockResolvedValue({ lastSessionId: "not a session id!" });
+    mocks.listRuns.mockResolvedValue([{ sessionId: "session-from-ledger" }]);
+    mount();
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-from-ledger"));
+  });
 });
 
 it("a new valid navigation recovers automatically after an unknown-session error", async () => {
