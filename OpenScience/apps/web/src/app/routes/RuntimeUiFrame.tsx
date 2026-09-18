@@ -93,6 +93,11 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   const [binding, setBinding] = useState<WebRuntimeUiFrame | null>(null);
   const [ready, setReady] = useState(false);
   const [readyGeneration, setReadyGeneration] = useState(0);
+  // Counts the frame documents that announced themselves: the bridge inside
+  // posts `booted` as soon as it runs, before the kernel's application is
+  // ready, and that is the earliest moment it can receive anything.
+  const [booted, setBooted] = useState(0);
+  const theme = useUiStore((state) => state.theme);
   const [pending, setPending] = useState(false);
   const [navigated, setNavigated] = useState(false);
   const [error, setError] = useState<FrameFailure | null>(null);
@@ -142,7 +147,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         // Cookie cleanup is best effort; login expiry and revocation remain authoritative.
       });
     };
-    setBinding(null); setReady(false); setPending(false); setNavigated(false); setError(null); setLeaseError(null); setRenewing(false);
+    setBinding(null); setReady(false); setBooted(0); setPending(false); setNavigated(false); setError(null); setLeaseError(null); setRenewing(false);
     recoveryAttempted.current = false;
     nativeReady.current = false;
     incoming.current = 0; outgoing.current = 0; lastSent.current = ""; currentRequest.current = null;
@@ -243,7 +248,10 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
       }
       if (!message || message.version !== 1 || message.frameId !== binding.frameId || message.projectId !== projectId
         || !Number.isSafeInteger(message.seq) || message.seq <= incoming.current) return;
-      if (message.type === "evimed.runtime-ui.ready") {
+      if (message.type === "evimed.runtime-ui.booted") {
+        incoming.current = message.seq;
+        setBooted(value => value + 1);
+      } else if (message.type === "evimed.runtime-ui.ready") {
         nativeReady.current = true;
         recoveryAttempted.current = false;
         setLeaseError(null);
@@ -337,6 +345,28 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
       intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }) },
     }, origin);
   }, [ready, readyGeneration, error, binding, intent, projectId, origin]);
+
+  // The shell's light/dark/system choice, in the frame (C9 `theme`). The
+  // kernel's page has no channel of its own for it — no parameter, no storage
+  // key — so the bridge applies it with the theme runtime's `setTheme`. Sent
+  // the moment the frame's bridge is listening, which is before the kernel's
+  // application is ready: the flip happens under the waiting cover, not in
+  // front of the reader. `resolved` follows the system scheme while the
+  // preference is `system`.
+  useEffect(() => {
+    if (!booted || error || !frameId) return;
+    const media = typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+    const post = () => {
+      const resolved = theme === "system" ? (media?.matches ? "dark" : "light") : theme;
+      iframe.current?.contentWindow?.postMessage({
+        type: "evimed.runtime-ui.theme", version: 1, frameId, projectId, seq: ++outgoing.current, preference: theme, resolved,
+      }, origin);
+    };
+    post();
+    if (theme !== "system" || !media) return;
+    media.addEventListener("change", post);
+    return () => media.removeEventListener("change", post);
+  }, [booted, error, frameId, projectId, origin, theme]);
 
   // Focus goes where the next keystroke belongs (U8): into the conversation
   // once it is open — unless the reader already put focus somewhere else in the

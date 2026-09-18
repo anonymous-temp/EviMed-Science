@@ -21,7 +21,8 @@
     "./runtime-ui-kit": "./src/runtimeUiKit.mjs",
     "./runtime-ui-slots": "./src/runtimeUiSlots.mjs",
     "./runtime-ui-locale": "./src/runtimeUiLocale.mjs",
-    "./runtime-ui-commands": "./src/runtimeUiCommands.mjs"
+    "./runtime-ui-commands": "./src/runtimeUiCommands.mjs",
+    "./runtime-ui-theme": "./src/runtimeUiTheme.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",

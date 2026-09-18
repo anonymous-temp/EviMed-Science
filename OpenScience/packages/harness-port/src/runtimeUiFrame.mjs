@@ -39,6 +39,7 @@ import { KIT_PARTS } from './runtimeUiKit.mjs';
 import { BODY as LOCALE } from './runtimeUiLocale.mjs';
 import { BODY as SHELL } from './runtimeUiShell.mjs';
 import { RUNTIME_UI_KERNEL_PIN, RUNTIME_UI_SLOTS } from './runtimeUiSlots.mjs';
+import { BODY as THEME } from './runtimeUiTheme.mjs';
 
 /**
  * @typedef {object} FrameBody
@@ -49,11 +50,11 @@ import { RUNTIME_UI_KERNEL_PIN, RUNTIME_UI_SLOTS } from './runtimeUiSlots.mjs';
 
 /**
  * The bodies, in the order they start. The bridge first, because the others
- * reach the shell through the hub it attaches; the language before anything
- * that renders copy.
+ * reach the shell through the hub it attaches; the language and the palette
+ * before anything that renders.
  * @type {readonly FrameBody[]}
  */
-export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, SHELL, COMMANDS]);
+export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, COMMANDS]);
 
 /** The switch names an operator may list; the bridge is not one of them. */
 export const FRAME_SWITCHABLE_BODIES = Object.freeze(FRAME_BODIES.map((body) => body.name).filter((name) => name !== 'bridge'));
