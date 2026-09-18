@@ -32,7 +32,14 @@ EVIMED_EVIDENCE_BASE_URL = os.environ.get(
 _OPENFDA_CASE_BATCH_SIZE = 5
 _OPENFDA_PUBLIC_CASE_LIMIT = 25
 MAX_ABSTRACT_CHARS = 4000
-PUBMED_ABSTRACT_FETCH_LIMIT = 5
+# Abstracts are fetched for the records a run asks for, not for the top of a
+# search. The old rule — efetch the first five hits — meant screening beyond
+# rank five was title-only, which the clinical skill forbids ("every included
+# source was inspected beyond title-only metadata"). NCBI accepts up to 200 ids
+# per efetch GET; a request for more is split into batches of that size.
+PUBMED_EFETCH_BATCH = 200
+MAX_PUBMED_ABSTRACT_PMIDS = 200
+_PMID_PATTERN = re.compile(r"^\s*(?:PMID\s*:?\s*)?(\d{1,9})\s*$", re.I)
 _RXNORM_RESOLVE_LIMIT = 10
 
 
@@ -567,6 +574,11 @@ def _pubmed(query, limit, date_from=None, date_to=None, source_name="pubmed"):
             "authors": [item.get("name") for item in record.get("authors", []) if isinstance(item, dict) and item.get("name")],
             **({"doi": doi} if doi else {}),
             "url": record_url,
+            # NLM's own classification of the record, for every hit: what lets
+            # a run screen by design before it spends a call on the abstract,
+            # and what a source-type badge is derived from.
+            "publicationTypes": _esummary_publication_types(record),
+            "hasAbstract": "Has Abstract" in _list(record.get("attributes")),
         })
         sources.append(_source("PMID:%s" % pmid, title, record_url, source_name))
     return {
@@ -574,6 +586,10 @@ def _pubmed(query, limit, date_from=None, date_to=None, source_name="pubmed"):
         "data": {"items": items},
         "sources": sources,
     }
+
+
+def _esummary_publication_types(record):
+    return [str(value).strip() for value in _list(record.get("pubtype")) if str(value).strip()][:12]
 
 
 def _crossref(query, limit):
@@ -1351,13 +1367,21 @@ def _bibliographic_metadata_only(result):
             "Public literature results contain bibliographic metadata only; titles do not establish study design, evidence level, outcomes, effect estimates, or causality."
         ],
         "next_actions": [
-            "Retrieve and review the abstract or full text before classifying study design or summarizing findings."
+            "Retrieve and review the abstract or full text before classifying study design or summarizing findings: "
+            "literature_search with pmids=[...] returns and preserves the abstracts of the PubMed records you keep."
         ],
     }
 
 
 def literature(arguments):
-    query = arguments["query"]
+    # Addressed by PMIDs: the abstracts of records a run has already found and
+    # decided to keep. Answered from PubMed whatever else is configured, because
+    # no keyword search can return a named set of records.
+    if arguments.get("pmids"):
+        return pubmed_abstracts(arguments["pmids"])
+    # Optional since `pmids` and `relation` address records without words; the
+    # server refuses a call that carries none of the three.
+    query = arguments.get("query") or ""
     limit = arguments.get("limit", 10)
     # A relation query is addressed by concept identifiers, not by words, so no
     # keyword database can serve it and there is nothing to fall back to. It
@@ -2064,37 +2088,183 @@ def _metadata_result(source_id, items, sources, limitation=None):
     }
 
 
-def _pubmed_abstracts(base, ids):
-    """Fetch abstracts for the top PubMed hits without ever breaking the metadata path."""
-    fetch_ids = [identifier for identifier in ids[:PUBMED_ABSTRACT_FETCH_LIMIT]]
-    if not fetch_ids:
-        return {}, None
-    fetch_url = _url(base, "efetch.fcgi", _ncbi_params({
-        "db": "pubmed", "id": ",".join(fetch_ids), "rettype": "abstract", "retmode": "xml",
-    }))
+def _pubmed_article(article):
+    """One `PubmedArticle` as the fields a record carries, or None without a PMID."""
+    citation = article.find("MedlineCitation")
+    if citation is None:
+        return None
+    pmid = (citation.findtext("PMID") or "").strip()
+    if not pmid:
+        return None
+    node = citation.find("Article")
+    title = " ".join("".join(node.find("ArticleTitle").itertext()).split()) if node is not None and node.find("ArticleTitle") is not None else ""
+    sections = []
+    for element in article.findall(".//Abstract/AbstractText"):
+        text = " ".join("".join(element.itertext()).split())
+        if not text:
+            continue
+        label = (element.get("Label") or "").strip()
+        sections.append("%s: %s" % (label, text) if label else text)
+    journal = (citation.findtext("Article/Journal/Title") or citation.findtext("MedlineJournalInfo/MedlineTA") or "").strip()
+    year = (
+        citation.findtext("Article/Journal/JournalIssue/PubDate/Year")
+        or (citation.findtext("Article/Journal/JournalIssue/PubDate/MedlineDate") or "")[:4]
+        or ""
+    ).strip()
+    identifiers = {
+        (element.get("IdType") or "").strip().lower(): (element.text or "").strip()
+        for element in article.findall("PubmedData/ArticleIdList/ArticleId")
+    }
+    publication_types = [
+        " ".join((element.text or "").split())
+        for element in citation.findall("Article/PublicationTypeList/PublicationType")
+        if (element.text or "").strip()
+    ]
+    mesh = []
+    for heading in citation.findall("MeshHeadingList/MeshHeading"):
+        descriptor = heading.find("DescriptorName")
+        if descriptor is None or not (descriptor.text or "").strip():
+            continue
+        name = " ".join(descriptor.text.split())
+        major = descriptor.get("MajorTopicYN") == "Y" or any(
+            qualifier.get("MajorTopicYN") == "Y" for qualifier in heading.findall("QualifierName")
+        )
+        mesh.append(name + ("*" if major else ""))
+    return {
+        "pmid": pmid,
+        "title": title or "Untitled PubMed record",
+        "sections": sections,
+        "journal": journal,
+        "year": year,
+        "doi": identifiers.get("doi", ""),
+        "pmcid": identifiers.get("pmc", ""),
+        "publicationTypes": publication_types[:12],
+        "meshHeadings": mesh[:30],
+    }
+
+
+def _pubmed_efetch_records(base, pmids):
+    """Parsed PubMed records for these PMIDs, in E-utilities batches of 200."""
+    records = {}
+    for start in range(0, len(pmids), PUBMED_EFETCH_BATCH):
+        batch = pmids[start:start + PUBMED_EFETCH_BATCH]
+        fetch_url = _url(base, "efetch.fcgi", _ncbi_params({
+            "db": "pubmed", "id": ",".join(batch), "rettype": "abstract", "retmode": "xml",
+        }))
+        try:
+            root = ET.fromstring(_ncbi_get_text(fetch_url))
+        except ET.ParseError as error:
+            raise PublicSourceError("public_source_invalid_response", "PubMed returned invalid XML: %s." % error, True)
+        for article in root.findall(".//PubmedArticle"):
+            record = _pubmed_article(article)
+            if record and record["pmid"] in batch:
+                records[record["pmid"]] = record
+    return records
+
+
+def _pubmed_abstract_markdown(record):
+    """The preserved rendering of one abstract: deterministic, so fetching the
+    same record again reuses its capture instead of writing a new version."""
+    lines = ["# " + record["title"], "", "- PMID: " + record["pmid"]]
+    if record["doi"]:
+        lines.append("- DOI: " + record["doi"].casefold())
+    if record["journal"]:
+        lines.append("- Journal: %s%s" % (record["journal"], (" (%s)" % record["year"]) if record["year"] else ""))
+    if record["publicationTypes"]:
+        lines.append("- Publication types: " + "; ".join(record["publicationTypes"]))
+    lines.extend(["- Primary source: https://pubmed.ncbi.nlm.nih.gov/%s/" % record["pmid"], "", "## Abstract", ""])
+    for section in record["sections"]:
+        lines.extend([section, ""])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _preserve_pubmed_abstract(record):
+    """Preserve one abstract so a claim can quote it; None when it cannot be.
+
+    Failure to write is never fatal, exactly as for guideline prose: the
+    abstract is still returned, and the result says it cannot carry a claim."""
     try:
-        root = ET.fromstring(_ncbi_get_text(fetch_url))
-    except (PublicSourceError, ET.ParseError):
-        return {}, "PubMed abstract retrieval failed; results are bibliographic metadata only."
-    abstracts = {}
-    for article in root.findall(".//PubmedArticle"):
-        citation = article.find("MedlineCitation")
-        if citation is None:
+        payload = _pubmed_abstract_markdown(record).encode("utf-8")
+        paths = preserve(managed_workspace(), Path(".evimed-sources") / "pubmed" / ("PMID%s" % record["pmid"]), {"abstract.md": payload})
+        return {"path": paths["abstract.md"], "sha256": hashlib.sha256(payload).hexdigest()}
+    except Exception:
+        # isolated: evimed_pubmed_abstract_preservation_failures_total
+        return None
+
+
+def pubmed_abstracts(pmids):
+    """`literature_search` with `pmids`: abstracts, publication types and MeSH
+    headings for records a run chose, each abstract preserved as a source."""
+    values = _list(pmids)
+    if not values or len(values) > MAX_PUBMED_ABSTRACT_PMIDS:
+        raise PublicSourceError("public_source_pmid_invalid", "Pass between 1 and %d PubMed ids." % MAX_PUBMED_ABSTRACT_PMIDS)
+    requested = []
+    for value in values:
+        match = _PMID_PATTERN.match(str(value))
+        if not match:
+            raise PublicSourceError("public_source_pmid_invalid", "%r is not a PubMed id; pass digits, optionally prefixed PMID:." % value)
+        if match.group(1) not in requested:
+            requested.append(match.group(1))
+    base = _base("EVIMED_PUBMED_BASE_URL", "https://eutils.ncbi.nlm.nih.gov/entrez/eutils")
+    records = _pubmed_efetch_records(base, requested)
+    items, sources, artifact_sha256s = [], [], {}
+    missing, without_abstract, unpreserved = [], [], []
+    for pmid in requested:
+        record = records.get(pmid)
+        if record is None:
+            missing.append(pmid)
             continue
-        pmid = (citation.findtext("PMID") or "").strip()
-        if not pmid:
-            continue
-        sections = []
-        for element in article.findall(".//Abstract/AbstractText"):
-            text = " ".join("".join(element.itertext()).split())
-            if not text:
-                continue
-            label = (element.get("Label") or "").strip()
-            sections.append("%s: %s" % (label, text) if label else text)
-        abstract = _clean_abstract(" ".join(sections))
+        record_url = "https://pubmed.ncbi.nlm.nih.gov/%s/" % urllib.parse.quote(pmid)
+        abstract = " ".join(record["sections"])
+        item = {
+            "id": "PMID:%s" % pmid,
+            "pmid": pmid,
+            "title": record["title"],
+            "journal": record["journal"] or None,
+            "year": record["year"] or None,
+            "doi": record["doi"] or None,
+            "pmcid": record["pmcid"] or None,
+            "url": record_url,
+            "publicationTypes": record["publicationTypes"],
+            "meshHeadings": record["meshHeadings"],
+            "evidenceLevel": "abstract" if abstract else "metadata",
+        }
+        source = _source("PMID:%s" % pmid, record["title"], record_url, "pubmed")
         if abstract:
-            abstracts[pmid] = abstract
-    return abstracts, None
+            item["abstract"] = abstract[:MAX_ABSTRACT_CHARS]
+            if len(abstract) > MAX_ABSTRACT_CHARS:
+                item["abstractTruncated"] = True
+            captured = _preserve_pubmed_abstract(record)
+            if captured:
+                item["artifactPath"] = captured["path"]
+                artifact_sha256s[captured["path"]] = captured["sha256"]
+                source["artifactPath"] = captured["path"]
+                source["evidenceAccess"] = "abstract"
+            else:
+                unpreserved.append(pmid)
+        else:
+            without_abstract.append(pmid)
+        items.append({key: value for key, value in item.items() if value not in (None, "", [])})
+        sources.append(source)
+    warnings = []
+    if missing:
+        warnings.append("PubMed returned no record for PMID %s." % ", ".join(missing))
+    if without_abstract:
+        warnings.append("PubMed has no abstract for PMID %s; screen those by full text or leave them out." % ", ".join(without_abstract))
+    if unpreserved:
+        warnings.append("The abstract of PMID %s could not be preserved, so it cannot carry a claim." % ", ".join(unpreserved))
+    result = {
+        "status": "warning" if warnings else "success",
+        "summary": "Fetched %d PubMed abstract(s) for %d requested id(s); %d preserved as quotable sources."
+        % (len(items) - len(without_abstract), len(requested), len(artifact_sha256s)),
+        "data": {"items": items, "artifactSha256s": artifact_sha256s, "requested": len(requested)},
+        "sources": sources,
+        "artifacts": list(artifact_sha256s),
+    }
+    if warnings:
+        result["warnings"] = warnings
+        result["next_actions"] = ["Quote an abstract only through its artifactPath, and read the full text before claiming what the abstract does not state."]
+    return result
 
 
 def _ncbi_database(source_id, query, limit):
@@ -2135,19 +2305,17 @@ def _ncbi_database(source_id, query, limit):
             "url": record_url,
             "description": _first_text(record.get("description"), record.get("summary"), title)[:1500],
         }
+        if source_id == "pubmed":
+            item["publicationTypes"] = _esummary_publication_types(record)
+            item["hasAbstract"] = "Has Abstract" in _list(record.get("attributes"))
+            item["evidenceLevel"] = "metadata"
         items.append(item)
         sources.append(_source(identifier, title, record_url, source_id))
-    if source_id != "pubmed":
-        return _metadata_result(source_id, items, sources)
-    abstracts, note = _pubmed_abstracts(base, ids)
-    for item in items:
-        abstract = abstracts.get(item["id"])
-        item["evidenceLevel"] = "abstract" if abstract else "metadata"
-        if abstract:
-            item["abstract"] = abstract
     result = _metadata_result(source_id, items, sources)
-    if note:
-        result["warnings"].append(note)
+    if source_id == "pubmed":
+        result["next_actions"].append(
+            "Fetch the abstracts of the records you keep with literature_search pmids=[...]; they are preserved and quotable."
+        )
     return result
 
 

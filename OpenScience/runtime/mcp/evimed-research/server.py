@@ -447,10 +447,14 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "literature_search",
-        "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+        "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
         "inputSchema": object_schema(
             {
                 "query": STRING,
+                "pmids": {
+                    "type": "array", "minItems": 1, "maxItems": public_sources.MAX_PUBMED_ABSTRACT_PMIDS,
+                    "items": {"type": "string", "pattern": r"^\s*(?:PMID\s*:?\s*)?\d{1,9}\s*$"},
+                },
                 "relation": object_schema(
                     {
                         "subject": {"type": "string", "pattern": "^@[A-Z]+_[A-Za-z0-9_,.:+-]{1,180}$"},
@@ -482,7 +486,6 @@ TOOL_DEFINITIONS = [
                     "items": {"type": "string", "enum": ["internal", "pubmed", "crossref"]},
                 },
             },
-            ("query",),
         ),
     },
     {
@@ -1884,6 +1887,26 @@ def call_tool(name, arguments):
         if arguments.get("action") == "status":
             return _managed_status_with_wait(meta_agent.status_job, arguments)
         return meta_agent.call(arguments)
+    if name == "literature_search" and not any(arguments.get(key) for key in ("query", "relation", "pmids")):
+        return failure(
+            "invalid_input",
+            "Invalid input for literature_search: supply query, relation or pmids.",
+            False,
+            "Stop until the tool input matches its published JSON schema.",
+            ["Search with query, or fetch abstracts of chosen PubMed records with pmids."],
+        )
+    if name == "literature_search" and arguments.get("pmids"):
+        # Addressed by PubMed ids, so no private literature adapter can serve
+        # it: this call goes to PubMed through the gateway or is refused.
+        if not public_sources.enabled():
+            return failure(
+                "public_source_unsupported",
+                "Abstract retrieval by PMID needs the public connectors, which are disabled in this deployment.",
+                False,
+                "Stop and read the records another way.",
+                ["Use open_access_full_text for records with a PMC copy, or ask an operator to enable public connectors."],
+            )
+        return _public_adapter_call(name, arguments)
     if name == "literature_search" and arguments.get("relation"):
         # Addressed by concept identifiers, so no private literature adapter can
         # serve it however it is configured: this one call goes to the public

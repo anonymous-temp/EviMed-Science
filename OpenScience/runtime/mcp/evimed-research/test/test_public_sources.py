@@ -733,51 +733,31 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertNotIn("abstract", second)
         self.assertEqual(second["evidenceLevel"], "metadata")
 
-    def test_pubmed_search_attaches_efetch_abstracts_to_top_hits(self):
+    def test_pubmed_search_types_every_hit_and_leaves_abstracts_to_a_request(self):
+        # Abstracts used to be fetched for the first five hits only, so
+        # screening beyond rank five was title-only. Every hit now carries its
+        # publication types and whether an abstract exists, and the abstracts
+        # of the records a run keeps are fetched on request (literature_search
+        # with pmids) — in `test_pubmed_abstracts.py`.
         ids = [str(100 + index) for index in range(6)]
         search = {"esearchresult": {"idlist": ids}}
-        summary = {"result": {identifier: {"uid": identifier, "title": "Observed %s" % identifier} for identifier in ids}}
-        efetch_xml = """
-        <PubmedArticleSet>
-          <PubmedArticle><MedlineCitation><PMID>100</PMID><Article><Abstract>
-            <AbstractText Label="BACKGROUND">Observed background.</AbstractText>
-            <AbstractText>Plain section.</AbstractText>
-          </Abstract></Article></MedlineCitation></PubmedArticle>
-          <PubmedArticle><MedlineCitation><PMID>101</PMID><Article><Abstract>
-            <AbstractText>Second abstract.</AbstractText>
-          </Abstract></Article></MedlineCitation></PubmedArticle>
-        </PubmedArticleSet>
-        """
+        summary = {"result": {identifier: {
+            "uid": identifier, "title": "Observed %s" % identifier,
+            "pubtype": ["Journal Article", "Randomized Controlled Trial"], "attributes": ["Has Abstract"],
+        } for identifier in ids}}
         with mock.patch.object(sources, "_get_json", side_effect=[search, summary]):
-            with mock.patch.object(sources, "_get_text", return_value=efetch_xml) as fetch:
+            with mock.patch.object(sources, "_get_text") as fetch:
                 result = sources.biomedical_search({"source": "pubmed", "query": "observed", "limit": 6})
-        fetch_url = fetch.call_args.args[0]
-        self.assertIn("efetch.fcgi", fetch_url)
-        self.assertIn("rettype=abstract", fetch_url)
-        self.assertIn("id=100%2C101%2C102%2C103%2C104", fetch_url)
-        self.assertNotIn("105", fetch_url)
+        fetch.assert_not_called()
         items = result["data"]["items"]
-        self.assertEqual(items[0]["abstract"], "BACKGROUND: Observed background. Plain section.")
-        self.assertEqual(items[0]["evidenceLevel"], "abstract")
-        self.assertEqual(items[1]["abstract"], "Second abstract.")
-        for item in items[2:]:
+        self.assertEqual(len(items), 6)
+        for item in items:
+            self.assertEqual(item["publicationTypes"], ["Journal Article", "Randomized Controlled Trial"])
+            self.assertTrue(item["hasAbstract"])
             self.assertEqual(item["evidenceLevel"], "metadata")
             self.assertNotIn("abstract", item)
+        self.assertTrue(any("pmids" in action for action in result["next_actions"]))
         self.assertEqual(len(result["sources"]), 6)
-
-    def test_pubmed_abstract_failure_degrades_to_metadata_with_a_note(self):
-        search = {"esearchresult": {"idlist": ["101"]}}
-        summary = {"result": {"101": {"uid": "101", "title": "Observed"}}}
-        unavailable = sources.PublicSourceError("public_source_unavailable", "timed out", True)
-        with mock.patch.object(sources, "_get_json", side_effect=[search, summary]):
-            with mock.patch.object(sources, "_get_text", side_effect=unavailable):
-                with mock.patch.object(sources.time, "sleep"):
-                    result = sources.biomedical_search({"source": "pubmed", "query": "observed", "limit": 1})
-        item = result["data"]["items"][0]
-        self.assertEqual(item["title"], "Observed")
-        self.assertEqual(item["evidenceLevel"], "metadata")
-        self.assertNotIn("abstract", item)
-        self.assertTrue(any("bibliographic metadata only" in warning for warning in result["warnings"]))
 
     def test_non_pubmed_ncbi_databases_never_fetch_abstracts(self):
         search = {"esearchresult": {"idlist": ["101"]}}
