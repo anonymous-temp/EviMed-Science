@@ -64,7 +64,7 @@ export function AccountPage() {
                 账号 {identity.tenantId || "正在读取…"}
               </div>
             </div>
-            <div className="flex items-center gap-1.5 rounded-full bg-ok/10 px-2.5 py-1 text-caption font-medium text-ok">
+            <div className="flex items-center gap-1.5 rounded-full bg-ok-soft px-2.5 py-1 text-caption font-medium text-ok">
               <ShieldCheck size={13} aria-hidden="true" /> 数据独立
             </div>
           </div>
@@ -82,7 +82,7 @@ export function AccountPage() {
             hint="本次会话中最近一次被额度拦下的请求。额度按滚动窗口计算：每笔支出分别在满 24 小时或满 7 天后自动腾出，不在固定时间重置。"
           >
             <div className="flex items-start gap-3">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warn/10 text-warn">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warn-soft text-warn">
                 <WalletMinimal size={17} aria-hidden="true" />
               </div>
               <div className="min-w-0">

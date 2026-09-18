@@ -43,7 +43,7 @@ describe("WebSecurityCard", () => {
 
     expect(await screen.findByText("安全事件")).toBeInTheDocument();
     expect(screen.getByText("auth.login")).toBeInTheDocument();
-    expect(screen.getByText("failed")).toBeInTheDocument();
+    expect(screen.getByText("失败")).toBeInTheDocument();
     expect(screen.getByText("invalid_credentials")).toBeInTheDocument();
     expect(screen.getByText("auth.logout")).toBeInTheDocument();
     expect(screen.queryByText("bob")).not.toBeInTheDocument();

@@ -29,7 +29,7 @@ export function CodeViewer({ code, language, startLine = 1 }: Props) {
   const lineCount = code.replace(/\n$/, "").split("\n").length;
 
   return (
-    <div className="flex overflow-x-auto rounded-input border border-border bg-surface font-mono text-ui-sm leading-[1.55]">
+    <div className="flex overflow-x-auto rounded-input border border-border bg-surface font-mono text-ui leading-[1.55]">
       <div
         aria-hidden
         className="select-none border-r border-border bg-surface-2 px-3 py-3 text-right text-muted"

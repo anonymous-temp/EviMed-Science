@@ -38,7 +38,6 @@ vi.mock("@/components/sidebar/Sidebar", () => ({ Sidebar: () => <aside>Sidebar</
 vi.mock("@/components/command-palette/CommandPalette", () => ({ CommandPalette: () => null }));
 vi.mock("@/components/ui/Toaster", () => ({ Toaster: () => null }));
 // The login-time connector prompt has its own test; here it is a slot.
-vi.mock("@/components/settings/ConnectorPrompt", () => ({ ConnectorPrompt: () => null }));
 
 function renderRoute(path = "/app/chat") {
   const router = createMemoryRouter(

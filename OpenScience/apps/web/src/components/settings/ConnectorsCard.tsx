@@ -8,8 +8,10 @@ import { webErrorMessage,
 } from "@/lib/apiClient";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { toast } from "@/lib/toast";
+import { announceConnectorsChanged } from "@/lib/connectorAttention";
 import { cn } from "@/lib/cn";
 
 /**
@@ -26,12 +28,16 @@ export function ConnectorsCard() {
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<WebConnector | null>(null);
 
   const reload = () =>
     fetchWebConnectors()
       .then((list) => {
         setConnectors(list);
         setError(null);
+        // The account row's count reads the same list; tell it now rather
+        // than on its next mount.
+        announceConnectorsChanged();
       })
       .catch((err) => setError(webErrorMessage(err)));
 
@@ -159,7 +165,7 @@ export function ConnectorsCard() {
                       variant="ghost"
                       aria-label={`移除 ${connector.title} 凭据`}
                       disabled={busy === connector.id}
-                      onClick={() => void remove(connector)}
+                      onClick={() => setPendingRemoval(connector)}
                     >
                       <Trash2 size={14} aria-hidden="true" />
                     </Button>
@@ -171,6 +177,21 @@ export function ConnectorsCard() {
         </ul>
       )}
       <p className="mt-3 text-caption text-muted">凭据加密保存，只在你自己的运行里由服务端代为使用；运行环境本身从不持有它。</p>
+      {/* Removing a key the researcher may not have at hand is not undone by
+        * a click (appendix D §5.9): the consequence is said before it happens. */}
+      {pendingRemoval && (
+        <ConfirmDialog
+          title={`移除你的 ${pendingRemoval.title} 凭据？`}
+          body={`移除后，需要 ${pendingRemoval.title} 的研究运行会报告缺少凭据，直到你重新填写；已经完成的运行不受影响。`}
+          confirmLabel="移除凭据"
+          onConfirm={() => {
+            const connector = pendingRemoval;
+            setPendingRemoval(null);
+            void remove(connector);
+          }}
+          onCancel={() => setPendingRemoval(null)}
+        />
+      )}
     </Card>
   );
 }
@@ -186,9 +207,9 @@ function SourceChip({ connector }: { connector: WebConnector }) {
           : "未配置";
   const tone =
     connector.source === "deployment" || connector.source === "user"
-      ? "bg-ok/10 text-ok"
+      ? "bg-ok-soft text-ok"
       : connector.keyless
         ? "bg-surface-2 text-muted"
-        : "bg-warn/10 text-warn";
+        : "bg-warn-soft text-warn";
   return <span className={cn("rounded-input px-1.5 py-0.5 text-caption", tone)}>{label}</span>;
 }

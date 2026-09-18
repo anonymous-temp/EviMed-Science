@@ -73,3 +73,23 @@ dataSources:
 starterPrompts:
 - Assess the evidence for an off-label indication in a defined population.
 - Compare a proposed dose and regimen with approved labels across jurisdictions.
+
+# What a researcher is shown, in Chinese: read by people, not by the
+# orchestrator (the fields above). The generator derives the shell's and the
+# frame's capability table from this block, and adds what evals/ measured.
+display:
+  title: "超说明书用药分析"
+  category: "药学评价"
+  description: "逐项比对属地说明书，辅助评价证据支持度；缺失信息会先集中提示补充。"
+  starterPrompts:
+  - "评估二甲双胍用于胰岛素抵抗型多囊卵巢综合征的证据支持度（按国内说明书）。"
+  - "评估利妥昔单抗用于难治性重症肌无力的超说明书证据。"
+  - "按适应证、人群、剂量和给药方案逐项比对属地说明书，并辅助评价证据支持度。"
+  estimatedMinutes:
+    min: 15
+    max: 35
+  outputs:
+  - "超说明书用药评价报告"
+  - "证据表"
+  knownLimits:
+  - "给出的是证据支持度评价，不替代医疗机构的超说明书用药审批流程。"

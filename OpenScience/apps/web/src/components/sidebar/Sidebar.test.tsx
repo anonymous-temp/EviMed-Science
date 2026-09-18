@@ -8,15 +8,26 @@ import { Sidebar } from "./Sidebar";
 const mocks = vi.hoisted(() => ({
   runs: [] as WebAgentRun[],
   listWebAgentRuns: vi.fn(),
-  listInbox: vi.fn(),
+  fetchInboxUnreadCount: vi.fn(),
+  fetchWebConnectors: vi.fn(),
 }));
 
 vi.mock("@/lib/apiClient", () => ({
   listWebAgentRuns: mocks.listWebAgentRuns,
+  fetchWebConnectors: mocks.fetchWebConnectors,
   getWebProjectId: () => "default",
 }));
 
-vi.mock("@/lib/inboxClient", () => ({ listInbox: mocks.listInbox }));
+vi.mock("@/lib/inboxClient", () => ({
+  fetchInboxUnreadCount: mocks.fetchInboxUnreadCount,
+  INBOX_CHANGED_EVENT: "evimed:inbox-changed",
+}));
+
+const store = vi.hoisted(() => ({
+  setSidebarWidth: vi.fn(),
+  toggleSidebar: vi.fn(),
+  setPaletteOpen: vi.fn(),
+}));
 
 vi.mock("@/lib/store", () => ({
   SIDEBAR_MIN: 220,
@@ -25,8 +36,9 @@ vi.mock("@/lib/store", () => ({
     sidebarCollapsed: false,
     sidebarWidth: 260,
     setSidebarCollapsed: vi.fn(),
-    setSidebarWidth: vi.fn(),
-    toggleSidebar: vi.fn(),
+    setSidebarWidth: store.setSidebarWidth,
+    toggleSidebar: store.toggleSidebar,
+    setPaletteOpen: store.setPaletteOpen,
   }),
 }));
 
@@ -84,7 +96,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.runs = [];
   mocks.listWebAgentRuns.mockImplementation(async () => mocks.runs);
-  mocks.listInbox.mockResolvedValue({ items: [], nextCursor: null });
+  mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 0, safetyUnread: 0 });
+  mocks.fetchWebConnectors.mockResolvedValue([]);
 });
 
 describe("Sidebar navigation", () => {
@@ -123,6 +136,20 @@ describe("Sidebar navigation", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/app/account");
   });
 
+  // The credentials banner used to sit across the top of seven pages. The
+  // fact it stated is now a quiet count on the account row.
+  it("counts the data sources nothing serves on the account row instead of a banner", async () => {
+    mocks.fetchWebConnectors.mockResolvedValue([
+      { id: "opengwas", needsAttention: true },
+      { id: "core", needsAttention: true },
+      { id: "semantic-scholar", needsAttention: false },
+    ]);
+    renderSidebar();
+    const row = await screen.findByRole("link", { name: "账户与设置，2 个数据源没有可用凭据" });
+    expect(row).toHaveAttribute("href", "/app/account?tab=connectors");
+    expect(row).toHaveTextContent("2");
+  });
+
   // The rows that used to be here and are now tabs of one of the six. The
   // inbox is not in this list: it is still reachable, as the bell above.
   it("no longer offers a row for a view of another destination", async () => {
@@ -134,7 +161,7 @@ describe("Sidebar navigation", () => {
   });
 
   it("carries the brand, the inbox bell and the project switcher above the nav", async () => {
-    mocks.listInbox.mockResolvedValue({ items: [{ id: "n1" }, { id: "n2" }], nextCursor: null });
+    mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 2, safetyUnread: 0 });
     renderSidebar();
     expect(screen.getByRole("img", { name: "EviMed" })).toBeInTheDocument();
     expect(screen.getByTestId("project-switcher")).toBeInTheDocument();
@@ -181,13 +208,38 @@ describe("Sidebar recent runs", () => {
     renderSidebar();
 
     const clean = await screen.findByRole("link", { name: /干净的运行/ });
-    expect(clean.querySelector(".bg-ok")).not.toBeNull();
+    expect(clean).toHaveTextContent("已交付");
+    expect(clean).not.toHaveTextContent("待复核");
+    expect(clean.querySelector("[data-run-state]")).toHaveAttribute("data-run-state", "done");
 
     for (const name of [/有待复核的运行/, /降级交付的运行/]) {
       const row = screen.getByRole("link", { name });
-      expect(row.querySelector(".bg-ok")).toBeNull();
-      expect(row.querySelector(".bg-warn")).not.toBeNull();
+      expect(row).toHaveTextContent("已交付，待复核");
+      expect(row.querySelector("[data-run-state]")).toHaveAttribute("data-run-state", "review");
     }
+  });
+
+  // Twelve runs of one capability with no recorded question used to be
+  // twelve identical rows. The second line is what tells them apart.
+  it("gives every row a second line saying when and how it ended", async () => {
+    mocks.runs = [
+      run({ id: "a", status: "failed", errorCode: "runtime_stalled" }),
+      run({ id: "b", status: "canceled" }),
+      run({ id: "c", status: "running", finishedAt: null }),
+    ];
+    renderSidebar();
+    const links = await screen.findAllByRole("link", { name: /未记录题面的运行/ });
+    const text = links.map((link) => link.textContent ?? "");
+    expect(text.some((line) => line.includes("未完成"))).toBe(true);
+    expect(text.some((line) => line.includes("已取消"))).toBe(true);
+    expect(text.some((line) => line.includes("运行中"))).toBe(true);
+  });
+
+  it("titles a row with the ledger's title before its question", async () => {
+    mocks.runs = [run({ id: "t", title: "阿司匹林一级预防（≥70 岁）", question: "请以「临床证据深度分析」能力完成以下任务：原题" })];
+    renderSidebar();
+    expect(await screen.findByRole("link", { name: /阿司匹林一级预防（≥70 岁）/ })).toBeInTheDocument();
+    expect(screen.queryByText(/请以「/)).not.toBeInTheDocument();
   });
 
   it("filters the list by what the run was asked", async () => {
@@ -223,5 +275,29 @@ describe("Sidebar recent runs", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await waitFor(() => expect(screen.getByRole("link", { name: /已经读到的运行/ })).toBeInTheDocument());
     expect(screen.queryByText("还没有任务")).not.toBeInTheDocument();
+  });
+
+  // A width a mouse can set, a keyboard can (WAI-ARIA window splitter).
+  it("resizes from the keyboard through a focusable separator", async () => {
+    renderSidebar();
+    const separator = await screen.findByRole("separator", { name: "调整侧边栏宽度" });
+    expect(separator).toHaveAttribute("aria-valuenow", "260");
+    expect(separator).toHaveAttribute("aria-valuemin", "220");
+    expect(separator).toHaveAttribute("aria-valuemax", "420");
+    separator.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(store.setSidebarWidth).toHaveBeenLastCalledWith(276);
+    await userEvent.keyboard("{Home}");
+    expect(store.setSidebarWidth).toHaveBeenLastCalledWith(220);
+    await userEvent.keyboard("{Enter}");
+    expect(store.toggleSidebar).toHaveBeenCalled();
+  });
+
+  it("shows the command palette's shortcut where it can be seen, and opens it", async () => {
+    renderSidebar();
+    const open = await screen.findByRole("button", { name: /快速跳转/ });
+    expect(open).toHaveTextContent(/K/);
+    await userEvent.click(open);
+    expect(store.setPaletteOpen).toHaveBeenCalledWith(true);
   });
 });

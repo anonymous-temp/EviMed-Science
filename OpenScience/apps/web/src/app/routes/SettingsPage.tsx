@@ -4,6 +4,7 @@ import { PluginsCard } from "@/components/settings/PluginsCard";
 import { DataFlowCard } from "@/components/settings/DataFlowCard";
 import { WebProjectsCard } from "@/components/settings/WebProjectsCard";
 import { ThemeSegmentedControl } from "@/components/settings/ThemeSegmentedControl";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 
 /**
@@ -41,10 +42,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
     <div className="h-full overflow-y-auto bg-bg">
       <div className="mx-auto max-w-content px-8 py-10">
         {!embedded && (
-          <>
-            <h1 className="font-serif text-display font-semibold text-text">设置</h1>
-            <p className="mt-2 text-body text-muted">项目、插件、数据边界与外观。</p>
-          </>
+          <PageHeader title="设置" description="项目、插件、数据边界与外观。" />
         )}
 
         <WebProjectsCard onProjectChange={(project) => { projectChanged.current = true; setProjectId(project.id); }} />

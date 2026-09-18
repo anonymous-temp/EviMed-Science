@@ -398,9 +398,18 @@ export interface WebSecurityEvent {
   code: string | null;
 }
 
+/**
+ * A project: its own workspace, run ledger, runtime container and memory
+ * scope. The name is the researcher's, in any language; the id is derived
+ * by the server and never needs to be seen (contract C4).
+ */
 export interface WebProject {
   id: string;
   name: string;
+  /** How many runs the project holds, when the server counts them. */
+  runCount?: number;
+  /** The latest run's start in this project, or null for none yet. */
+  lastActivityAt?: string | null;
 }
 
 export interface WebPluginConfiguration {
@@ -586,12 +595,106 @@ export type WebRunPhase =
   | "reserved" | "dispatched" | "running" | "delivering" | "repairing"
   | "accepted" | "degraded" | "failed" | "canceled";
 
+/**
+ * One finding the delivery gate attached to a run (2026-09-18, contract C2).
+ *
+ * It used to be a flattened English sentence written for the agent that had to
+ * repair it, and the ledger and the inbox showed it verbatim. Now the gate's
+ * own `code` travels with it and the Chinese `title`/`detail` come from one
+ * domain table (`gateIssueText.mjs`). `text` is the old sentence, kept only
+ * for old readers: it is never the primary text on screen.
+ */
+export type WebQualityNoticeSeverity = "safety" | "must-fix" | "advice";
+
+export interface WebQualityNotice {
+  code: string;
+  check?: string;
+  severity: WebQualityNoticeSeverity;
+  title: string;
+  detail?: string;
+  claimId?: string;
+  file?: string;
+  text: string;
+}
+
+/** What one run cost, attributed to it (contract C3). */
+export interface WebRunUsage {
+  requests: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  costCny: number;
+}
+
+/** A planned deliverable's state, kept after the run ends (contract C3). */
+export type WebRunDeliverableStatus =
+  | "planned" | "delegated" | "submitted" | "rejected" | "accepted" | "delivered" | "failed";
+
+export interface WebRunDeliverable {
+  id: string;
+  title: string;
+  capability?: string;
+  status: WebRunDeliverableStatus;
+  /** Submissions so far; above one means the gate sent it back at least once. */
+  attempts: number;
+  lastVerdict?: "pass" | "issues" | "unverified";
+  mustFixCount?: number;
+  childSessionId?: string;
+}
+
+/** The medical activity a tool call belongs to (`RUN_ACTIVITY_PHASES`). */
+export type WebRunActivityPhase = "search" | "screen" | "fulltext" | "claims" | "write" | "deliver";
+
+/**
+ * The one aggregate every progress surface renders (contract C5): published on
+ * the run's event stream as `run/progress` and stored on the record as
+ * `progress`. Every count is a count of something observed — tool calls,
+ * preserved sources, checked claims — never an estimate.
+ */
+export interface WebRunProgress {
+  deliverables: WebRunDeliverable[];
+  phaseCounts: Record<WebRunActivityPhase, number>;
+  currentPhase: WebRunActivityPhase | null;
+  sources: { searched: number; included: number; fullText: number };
+  claims: { total: number; verified: number };
+  children: Array<{
+    childSessionId: string;
+    deliverableId?: string;
+    state: "running" | "idle" | "done" | "failed";
+    lastActivityAt: string | null;
+  }>;
+  usage?: WebRunUsage;
+  startedAt: string | null;
+  updatedAt: string;
+}
+
 export interface WebAgentRun {
   id: string;
   dispatchId: string | null;
+  /**
+   * The run's name in every list (contract C3). `titleSource` says where it
+   * came from: `user` means a researcher typed it and nothing automatic may
+   * overwrite it; `question` and `auto` are the server's reading.
+   */
+  title?: string | null;
+  titleSource?: "auto" | "question" | "user";
   // The question as asked, truncated. A run list keyed only by id is a list of
   // hashes.
   question?: string | null;
+  /** Why the router chose this capability, in the reader's words. */
+  routeReason?: string | null;
+  /** How long this capability usually takes, as a range in minutes. */
+  estimatedMinutes?: { min: number; max: number } | null;
+  usage?: WebRunUsage | null;
+  /** The plan, per deliverable, kept after the run ends. */
+  deliverables?: WebRunDeliverable[];
+  /** Set when this run's session was forked from another session. */
+  forkedFrom?: string | null;
+  /** How many of the report's claims were checked against a preserved source. */
+  claimSummary?: { total: number; verified: number; unverified: number } | null;
+  progress?: WebRunProgress | null;
+  /** The finer code under `errorCode`, when the ledger recorded one. */
+  errorSubCode?: string | null;
   dispatchStatus: "dispatching" | "accepted" | "unknown" | "rejected";
   sessionId: string;
   mode: "open-domain" | "specialist";
@@ -629,8 +732,10 @@ export interface WebAgentRun {
   // lost on restart. Null means every layer ran and none of them objected, so
   // "not checked" must never be reported as null.
   verification?: "unverified" | "unchecked" | null;
-  // Human-readable gate reasons attached to a failed or unverified run.
-  qualityNotices?: string[];
+  // The gate's findings on a failed or unverified run. Structured since
+  // 2026-09-18 (`WebQualityNotice`); a record written before that holds the
+  // flattened sentences, which is why both shapes are read.
+  qualityNotices?: Array<string | WebQualityNotice>;
   // Liveness for a run that legitimately takes tens of minutes.
   observedMessages?: number;
   observedToolCalls?: number;
@@ -1125,6 +1230,8 @@ export interface WebMe {
   projects: WebProject[];
   csrfToken?: string;
   runtime?: WebRuntimeProfile;
+  /** The newest addressable session in the current project (contract C4). */
+  lastSessionId?: string | null;
 }
 
 /** How long one answer to `/api/me` serves every caller that asks for the same project. */
@@ -1237,16 +1344,37 @@ export function removeWebPlugin(projectId: string, pluginId: string, input: { ex
   return webPluginRequest(projectId, pluginPath(pluginId), "DELETE", { expectedRevision: input.expectedRevision }, signal);
 }
 
-export async function createWebProject(id: string, name = id): Promise<WebProject> {
+/**
+ * Creates a project from its name, in any language (contract C4). The server
+ * derives the id — an ASCII slug, or `p-<8 hex>` for a name with no Latin
+ * letters — so a researcher is never asked for one. The old form asked for a
+ * 「新项目名」 and then refused every Chinese character in it, because it was
+ * really asking for an id (review B §2c).
+ */
+export async function createWebProject(name: string, options: { id?: string } = {}): Promise<WebProject> {
   if (!hasWebApi) throw new BackendUnavailableError("projects.create");
   const res = await fetchWithWebAuth(apiUrl("/projects"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, name }),
+    body: JSON.stringify({ name, ...(options.id ? { id: options.id } : {}) }),
   });
   const created = await parseApiResponse<WebProject>(res);
   invalidateWebMe();
   return created;
+}
+
+/** Renames a project (`PATCH /api/projects/:id`). The id never changes: it is
+ *  a path segment under the workspace root, and renaming it would move one. */
+export async function renameWebProject(projectId: string, name: string): Promise<WebProject> {
+  if (!hasWebApi) throw new BackendUnavailableError("projects.rename");
+  const res = await fetchWithWebAuth(apiUrl(`/projects/${encodeURIComponent(projectId)}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const renamed = await parseApiResponse<WebProject>(res);
+  invalidateWebMe();
+  return renamed;
 }
 
 /**
@@ -1409,6 +1537,64 @@ export async function listWebAgentRuns(): Promise<WebAgentRun[]> {
   if (!hasWebApi) throw new BackendUnavailableError("agentRuns.list");
   const res = await fetchWithWebAuth(apiUrl("/agent-runs"));
   return parseApiResponse<WebAgentRun[]>(res);
+}
+
+/**
+ * Stops a run: the root session and every child session the ledger knows
+ * about (contract C3). The researcher's own ■ in the conversation already
+ * reached the kernel; the runs page had no way to stop a run at all.
+ */
+export async function cancelWebAgentRun(runId: string): Promise<WebAgentRun> {
+  if (!hasWebApi) throw new BackendUnavailableError("agentRuns.cancel");
+  const res = await fetchWithWebAuth(apiUrl(`/agent-runs/${encodeURIComponent(runId)}/cancel`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  return (await parseApiResponse<{ run: WebAgentRun }>(res)).run;
+}
+
+/**
+ * Names a run by hand. The server records it as `titleSource: "user"`, and no
+ * automatic title may overwrite it afterwards — the lesson of every product
+ * whose auto-rename kept undoing its users (appendix C, A3).
+ */
+export async function renameWebAgentRun(runId: string, title: string): Promise<WebAgentRun> {
+  if (!hasWebApi) throw new BackendUnavailableError("agentRuns.rename");
+  const res = await fetchWithWebAuth(apiUrl(`/agent-runs/${encodeURIComponent(runId)}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  return parseApiResponse<WebAgentRun>(res);
+}
+
+/**
+ * A correction to a run that is still going: same run, same contract, same
+ * gate, one more input (`POST /api/agent-runs/:id/steer`, `{ text }` of at most
+ * 4 000 characters, answered 202 with the run's correction count). The route
+ * existed with no way to reach it from the page.
+ */
+export async function steerWebAgentRun(runId: string, text: string): Promise<{ id: string; corrections: number }> {
+  if (!hasWebApi) throw new BackendUnavailableError("agentRuns.steer");
+  const res = await fetchWithWebAuth(apiUrl(`/agent-runs/${encodeURIComponent(runId)}/steer`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  return parseApiResponse<{ id: string; corrections: number }>(res);
+}
+
+/**
+ * What the researcher already reported about one deliverable — the newest
+ * adoption and the newest edit, if any. The subject id is the server's own
+ * `deliverableSubjectId(runId, path)`: `<runId>:<path>`.
+ */
+export async function listWebDeliverableFeedback(runId: string, path: string): Promise<WebFeedbackEvent[]> {
+  if (!hasWebApi) throw new BackendUnavailableError("feedback.list");
+  const query = new URLSearchParams({ subjectType: "deliverable", subjectId: `${runId}:${path}`, limit: "20" });
+  const res = await fetchWithWebAuth(apiUrl(`/feedback/events?${query}`));
+  return (await parseApiResponse<{ items: WebFeedbackEvent[]; nextCursor: string | null }>(res)).items;
 }
 
 export async function dispatchWebAgentRun(

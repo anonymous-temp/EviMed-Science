@@ -10,17 +10,16 @@ import {
   previewUrl,
   probeLargeFile,
   readArtifact,
-  readClaimVerification,
   type LargeFilePointer,
 } from "@/lib/artifactFile";
 import { hasWebApi } from "@/lib/apiClient";
 import { parseTableFile } from "@/lib/csv";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
-import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
-import {
-  claimMatrixPathFor, claimStatuses, claimVerificationSummary, parseClaimMatrix,
-  type ClaimEvidence, type ClaimVerification,
-} from "@/lib/claimCitations";
+import { isClaimMatrixPath } from "@/lib/claimCitations";
+import { ReportReader } from "@/components/report/ReportReader";
+import { EvidenceMatrixTable } from "@/components/report/EvidenceMatrixTable";
+import { useClaimMatrix } from "@/components/report/useClaimMatrix";
+import { useReportRun } from "@/components/report/ReportRunContext";
 import { ProvenancePanel } from "./ProvenancePanel";
 import { TablePreview } from "./TablePreview";
 import { canChart } from "@/lib/tableChart";
@@ -51,7 +50,7 @@ const PhaseView = lazy(() => import("./PhaseView").then((m) => ({ default: m.Pha
 /** What a viewer chunk's arrival looks like inside the preview pane. */
 function ViewerFallback() {
   return (
-    <div className="flex h-full min-h-0 items-center justify-center gap-2 text-ui-sm text-muted" role="status" aria-live="polite">
+    <div className="flex h-full min-h-0 items-center justify-center gap-2 text-ui text-muted" role="status" aria-live="polite">
       <Loader2 size={16} className="animate-spin" aria-hidden="true" />
       正在载入查看器…
     </div>
@@ -62,8 +61,14 @@ import { cn } from "@/lib/cn";
 import { PaneTitlebarInset } from "./RightPane";
 import { toast } from "@/lib/toast";
 import { parseFailureMessage } from "@/lib/errorText";
+import { labelFor } from "@/lib/statusLabel";
 
 const HTML_PREVIEW_SANDBOX = "";
+
+/** The kind of file, in the reader's words (every enum on screen goes through a Chinese table). */
+const ARTIFACT_KIND_LABEL: Record<string, string> = {
+  figure: "图表", script: "脚本", report: "报告", table: "表格", notebook: "笔记本", model: "模型", data: "数据",
+};
 
 /**
  * Right-pane preview for any workspace file. Strategy (no format conversion):
@@ -95,35 +100,12 @@ export function FilePreviewInspector({
   const [url, setUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(data.content ?? null);
   const [bytes, setBytes] = useState<ArrayBuffer | null>(null);
-  // A clinical evidence report's matrix, read beside it so each sentence can
-  // open what it rests on. Best effort: without it the report still reads.
-  const [claims, setClaims] = useState<Map<string, ClaimEvidence> | null>(null);
-  // And what the control plane found when it looked each quotation up in the
-  // preserved source: the report is delivered whatever this says, and says it
-  // claim by claim. Best effort too — a report nobody checked simply shows none.
-  const [verification, setVerification] = useState<ClaimVerification | null>(null);
-  useEffect(() => {
-    setClaims(null);
-    setVerification(null);
-    const matrixPath = kind === "markdown" ? claimMatrixPathFor(data.path) : null;
-    if (!matrixPath) return;
-    let cancelled = false;
-    readArtifact(matrixPath, data.root)
-      .then((file) => {
-        if (cancelled || !file || file.encoding !== "utf8") return;
-        const parsed = parseClaimMatrix(file.data);
-        if (parsed.size === 0) return;
-        setClaims(parsed);
-        readClaimVerification(matrixPath, data.root)
-          .then((found) => { if (!cancelled) setVerification(found); })
-          .catch(() => { /* unchecked: the citations still open */ });
-      })
-      .catch(() => { /* no matrix, no citations; the report itself is unaffected */ });
-    return () => { cancelled = true; };
-  }, [data.path, data.root, kind]);
+  // A clinical evidence matrix reads as a table, not as JSON; the JSON stays
+  // one toggle away.
+  const matrixFile = isClaimMatrixPath(data.path);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"preview" | "code">(kind === "text" ? "code" : "preview");
+  const [tab, setTab] = useState<"preview" | "code">(kind === "text" && !matrixFile ? "code" : "preview");
   const [showHistory, setShowHistory] = useState(false);
   const hostedWeb = hasWebApi;
   const fileActionLabel = hostedWeb ? "下载文件" : "用本地应用打开";
@@ -193,7 +175,7 @@ export function FilePreviewInspector({
   }, [data.path, data.content, data.root, kind, needsUrl, needsText, needsBytes]);
 
   const canToggle =
-    kind === "html" || kind === "markdown" || kind === "molecule" || kind === "genome";
+    kind === "html" || kind === "markdown" || kind === "molecule" || kind === "genome" || matrixFile;
 
   // Where the user was in this file, restored when they come back to it —
   // history browsing keeps its own offset so the two don't clobber each other.
@@ -209,7 +191,7 @@ export function FilePreviewInspector({
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <PaneTitlebarInset />
         <span className="truncate text-ui font-medium text-text">{data.filename}</span>
-        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-caption text-muted">{data.artifact}</span>
+        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-caption text-muted">{labelFor(ARTIFACT_KIND_LABEL, data.artifact, "文件")}</span>
         {canToggle && (
           <div className="ml-2 flex items-center gap-1 rounded-input bg-surface-2 p-0.5">
             <ToggleBtn active={tab === "preview"} onClick={() => setTab("preview")}>
@@ -273,30 +255,13 @@ export function FilePreviewInspector({
               filename={data.filename}
               path={data.path}
               language={data.language}
-              claims={claims}
-              verification={verification}
+              root={data.root}
+              matrixFile={matrixFile}
             />
           </Suspense>
         )}
       </div>
     </div>
-  );
-}
-
-/** How much of the report was checked against a preserved source, said once
- *  above it. The page under it is document-white whatever the theme, so the
- *  colours are the document's and not the app's tokens. */
-function ClaimSummary({ verification }: { verification?: ClaimVerification | null }) {
-  const summary = claimVerificationSummary(verification);
-  if (!summary) return null;
-  return (
-    <p
-      role="note"
-      // eslint-disable-next-line no-restricted-syntax -- document-neutral canvas: fixed paper colours, like the page itself
-      className={`mb-6 rounded-input border px-3 py-2 text-ui-sm ${summary.attention ? "border-[#e6c98a] bg-[#fdf6e3] text-[#6b4e16]" : "border-[#cfe3d4] bg-[#f3faf5] text-[#23532f]"}`}
-    >
-      {summary.text}
-    </p>
   );
 }
 
@@ -309,8 +274,8 @@ function Body({
   filename,
   path,
   language,
-  claims,
-  verification,
+  root,
+  matrixFile,
 }: {
   kind: PreviewKind;
   url: string | null;
@@ -320,9 +285,13 @@ function Body({
   filename: string;
   path: string;
   language?: string;
-  claims?: Map<string, ClaimEvidence> | null;
-  verification?: ClaimVerification | null;
+  root?: FileRoot;
+  matrixFile?: boolean;
 }) {
+  const reportRun = useReportRun();
+  if (matrixFile && !showCode) {
+    return <MatrixFileView path={path} root={root} runId={reportRun?.runId ?? null} />;
+  }
   if (kind === "docx" || kind === "xlsx" || kind === "pptx") {
     // Office views scroll internally (the outer pane never does), so they
     // carry their own scroll memory, keyed apart from the outer container's.
@@ -422,15 +391,12 @@ function Body({
         <Note text="当前文件暂不支持在线查看源文件。" />
       );
     }
-    // A document reads as a page: white paper, black text, whatever the app
-    // theme — the same document-neutral canvas the Office previews use.
+    // A report reads as a page on the canvas: the surface colour, a hairline
+    // edge, the reading measure, its facts, contents and marks (ReportReader).
+    // It follows the theme like the rest of the shell; printing gets white
+    // paper from the reader's print copy.
     return text !== null ? (
-      <div className="min-h-full px-6 py-8">
-        <div className="mx-auto max-w-content rounded-sm bg-white px-12 py-11 shadow-[0_1px_4px_rgba(0,0,0,.25)] max-sm:px-6 max-sm:py-7">
-          <ClaimSummary verification={verification} />
-          <MarkdownViewer variant="document" claims={claims ?? undefined} claimStatuses={claimStatuses(verification)}>{text}</MarkdownViewer>
-        </div>
-      </div>
+      <ReportReader path={path} root={root} text={text} layout="pane" run={reportRun?.run ?? null} runId={reportRun?.runId ?? null} />
     ) : (
       <Note text="当前文件暂不支持在线预览。" />
     );
@@ -482,7 +448,7 @@ function Body({
   if (kind === "image") {
     return url ? (
       <div className="flex justify-center p-4">
-        <img src={url} alt={filename} className="max-w-full rounded-sm bg-white shadow-card" />
+        <img src={url} alt={filename} className="max-w-full rounded-sm bg-white ring-1 ring-border" />
       </div>
     ) : (
       <Note text="当前文件暂不支持在线预览。" />
@@ -497,7 +463,7 @@ function Body({
         <video
           src={url}
           controls
-          className="max-h-[80vh] max-w-full rounded-sm bg-black shadow-card"
+          className="max-h-[80vh] max-w-full rounded-sm bg-black ring-1 ring-border"
         />
       </div>
     ) : (
@@ -517,6 +483,17 @@ function Body({
     </div>
   ) : (
     <Note text="当前文件暂不支持在线预览。" />
+  );
+}
+
+/** A clinical evidence matrix opened on its own: the table, with its checks. */
+function MatrixFileView({ path, root, runId }: { path: string; root?: FileRoot; runId: string | null }) {
+  const { document, verified } = useClaimMatrix(path, root);
+  if (!document) return <Note text="正在读取证据矩阵…" />;
+  return (
+    <div className="p-4">
+      <EvidenceMatrixTable claims={document.claims} verified={verified} runId={runId} />
+    </div>
   );
 }
 
@@ -609,7 +586,7 @@ export function PreviewError({
         <div className="flex flex-wrap gap-2">
           {path && (
             <button
-              className="inline-flex items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-1.5 text-ui text-text hover:bg-surface disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-input border border-strong bg-surface-2 px-2.5 py-1.5 text-ui text-text hover:bg-surface disabled:opacity-60"
               onClick={() => void inspect()}
               disabled={probing}
             >
@@ -618,7 +595,7 @@ export function PreviewError({
             </button>
           )}
           <button
-            className="inline-flex items-center gap-1.5 rounded-input border border-border bg-surface-2 px-2.5 py-1.5 text-ui text-text hover:bg-surface"
+            className="inline-flex items-center gap-1.5 rounded-input border border-strong bg-surface-2 px-2.5 py-1.5 text-ui text-text hover:bg-surface"
             onClick={onOpenExternally}
           >
             <ExternalActionIcon size={13} aria-hidden="true" /> {externalActionLabel}
@@ -651,7 +628,7 @@ function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
     <div className="mt-3 rounded-input border border-border bg-surface-2 p-3">
       {p.hint && <div className="mb-2 text-ui text-text">{p.hint}</div>}
       {rows.length > 0 && (
-        <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-ui-sm">
+        <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-ui">
           {rows.map(([k, v]) => (
             <div key={k} className="contents">
               <dt className="text-muted">{k}</dt>
@@ -662,7 +639,7 @@ function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
       )}
       {p.columns && p.columns.length > 0 && (
         <div className="mt-2">
-          <div className="mb-1 text-ui-sm text-muted">数据结构</div>
+          <div className="mb-1 text-ui text-muted">数据结构</div>
           <div className="flex flex-wrap gap-1">
             {p.columns.slice(0, 40).map((c) => (
               <span key={c.name} className="rounded bg-surface px-1.5 py-0.5 font-mono text-caption text-text">
@@ -674,7 +651,7 @@ function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
       )}
       {p.datasets && p.datasets.length > 0 && (
         <div className="mt-2">
-          <div className="mb-1 text-ui-sm text-muted">数据集</div>
+          <div className="mb-1 text-ui text-muted">数据集</div>
           <div className="flex flex-col gap-0.5 font-mono text-caption text-text">
             {p.datasets.slice(0, 20).map((d) => (
               <span key={d.path}>{d.path} <span className="text-muted">[{d.shape.join("×")}] {d.dtype}</span></span>
@@ -684,7 +661,7 @@ function LargeFilePointerPanel({ p }: { p: LargeFilePointer }) {
       )}
       {p.sample_ids && p.sample_ids.length > 0 && (
         <div className="mt-2">
-          <div className="mb-1 text-ui-sm text-muted">样本 ID</div>
+          <div className="mb-1 text-ui text-muted">样本 ID</div>
           <div className="font-mono text-caption text-text">{p.sample_ids.slice(0, 5).join(", ")}</div>
         </div>
       )}
@@ -707,7 +684,7 @@ function ToggleBtn({
       onClick={onClick}
       className={cn(
         "flex items-center gap-1 rounded px-2 py-1 text-caption",
-        active ? "bg-surface text-text shadow-card" : "text-muted hover:text-text",
+        active ? "bg-surface text-text ring-1 ring-border" : "text-muted hover:text-text",
       )}
     >
       {children}

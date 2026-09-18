@@ -117,3 +117,23 @@ dataSources:
 - reporting-guidelines
 starterPrompts:
 - 这是我们回顾性队列的分析结果和数据字典，按 STROBE 帮我写资料与方法这一节。
+
+# What a researcher is shown, in Chinese: read by people, not by the
+# orchestrator (the fields above). The generator derives the shell's and the
+# frame's capability table from this block, and adds what evals/ measured.
+display:
+  title: "论文章节写作"
+  category: "写作与传播"
+  description: "在你给定的资料范围内起草或修改论文的一节（前言、方法、结果、讨论）：每条主张都能追溯到资料，每条引文都能解析。"
+  starterPrompts:
+  - "这是我们回顾性队列的分析结果和数据字典，按 STROBE 帮我写资料与方法这一节。"
+  - "按 CONSORT 帮我写这项随机对照试验的结果部分。"
+  materials: "需要先把资料（分析结果、数据字典、已有稿件）上传到知识库"
+  estimatedMinutes:
+    min: 15
+    max: 40
+  outputs:
+  - "论文章节正文"
+  - "主张与引文对照表"
+  knownLimits:
+  - "只在你给的资料范围内写；资料里没有的数字留成〔待补〕占位，不会编造。"

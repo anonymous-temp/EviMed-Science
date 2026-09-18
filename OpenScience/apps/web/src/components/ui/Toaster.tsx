@@ -50,8 +50,8 @@ function ToastCard({
       onFocus={onPause}
       onBlur={onResume}
       className={cn(
-        "pointer-events-auto flex max-w-[70vw] items-center gap-2 rounded-card border px-3.5 py-2 text-ui shadow-card",
-        isError ? "border-error/30 bg-surface text-error" : "border-ok/30 bg-surface text-text",
+        "pointer-events-auto flex max-w-[70vw] items-center gap-2 rounded-card border px-3.5 py-2 text-ui shadow-pop",
+        isError ? "border-danger bg-surface text-error" : "border-ok bg-surface text-text",
       )}
     >
       {isError ? (

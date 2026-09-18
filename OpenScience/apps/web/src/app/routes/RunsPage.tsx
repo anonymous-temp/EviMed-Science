@@ -1,4 +1,4 @@
-import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import {
   AlertCircle,
@@ -6,47 +6,90 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  CircleHelp,
   ExternalLink,
-  FileOutput,
   FlaskConical,
+  GitBranch,
   Loader2,
   MessageSquare,
+  Pencil,
   RotateCcw,
-  ScrollText,
   Search,
+  Square,
   X,
 } from "lucide-react";
 import { downloadArtifact } from "@/lib/artifactFile";
 import { extOf, extToKind } from "@/lib/artifacts";
 import {
+  cancelWebAgentRun,
+  fetchWebConnectors,
   getWebProjectId,
   listWebAgentRuns,
+  listWebDeliverableFeedback,
+  renameWebAgentRun,
   reportWebDeliverableFeedback,
+  steerWebAgentRun,
   webErrorMessage,
   type WebAgentRun,
   type WebAgentRunStatus,
-  type WebRunPlanItem,
+  type WebConnector,
+  type WebRunDeliverable,
 } from "@/lib/apiClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatDuration } from "@/lib/format";
 import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import {
+  announceRunsChanged,
   OPEN_DOMAIN_ANSWER_AGENT_ID,
+  relativeTime,
   runDidNotDeliver,
+  runState,
   runTitle,
-  summarizeQualityNotices,
   undeliveredFiles,
   webRunOutcome,
   WEB_RUN_STATUS_LABEL,
 } from "@/lib/runPresentation";
+import {
+  childrenLine,
+  claimSummaryLine,
+  currentPhaseLabel,
+  DELIVERABLE_STATUS_LABEL,
+  foldRunEvents,
+  progressCountsLine,
+  runCostText,
+  runDeliverables,
+  runProgressOf,
+  type LiveRunFold,
+} from "@/lib/runProgress";
+import { useRunEvents } from "@/lib/runEvents";
 import { capabilityTitle } from "@/lib/researchAgentUi";
+import { runCredentialNeed, runCredentialSentence } from "@/lib/runCredential";
+import { labelFor } from "@/lib/statusLabel";
 import { cn } from "@/lib/cn";
-import { PageTitle } from "@/components/layout/PageTitle";
+import { toast } from "@/lib/toast";
+import { QualityNotices } from "@/components/runs/QualityNotices";
+import { RunStatusDot } from "@/components/runs/RunStatusDot";
+import { RouteLine } from "@/components/runs/RouteLine";
+import { ReportRunContext } from "@/components/report/ReportRunContext";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Disclosure } from "@/components/ui/Disclosure";
+import { Drawer } from "@/components/ui/Drawer";
+import { Textarea } from "@/components/ui/Input";
 
 type SincePreset = "24h" | "7d" | "30d";
 
 const SINCE_SECONDS: Record<SincePreset, number> = { "24h": 86_400, "7d": 604_800, "30d": 2_592_000 };
+
+const SINCE_OPTIONS: { value: SincePreset | "all"; label: string }[] = [
+  { value: "all", label: "全部时间" },
+  { value: "24h", label: "24 小时" },
+  { value: "7d", label: "7 天" },
+  { value: "30d", label: "30 天" },
+];
 
 interface Filter {
   search: string;
@@ -56,30 +99,26 @@ interface Filter {
 }
 
 /**
- * The nine-phase projection (§7.1.1), for the row that is already open.
+ * The nine-phase projection (§7.1.1), said for a run that is still open.
  *
  * Not a second status: `status` is the ledger's own four-value field and stays
- * what the badge, the filters and every gate script read. The phase is a
- * strictly richer read of the same record — it separates a run still waiting
- * for its container from one that is working, and a clean delivery from one
- * that needs a person to look at it — and it was already on the wire and used
- * for exactly one filter chip while the row itself never mentioned it.
+ * what the badge, the filters and every gate script read. The phase separates
+ * a run still waiting for its container from one that is working, and a
+ * repair round from a first attempt. 「核验」, not 「门禁」: the gate is the
+ * platform's word for itself, not the researcher's.
  */
 const WEB_RUN_PHASE_LABEL: Record<string, string> = {
   reserved: "已排队，尚未派发",
   dispatched: "已派发，尚无进展",
   running: "进行中",
   delivering: "交付核对中",
-  repairing: "按门禁意见修复中",
+  repairing: "按核验意见修复中",
   accepted: "已交付并通过核验",
   degraded: "已交付，待人工复核",
   failed: "未完成",
   canceled: "已取消",
 };
 
-/** Global Runs view (sidebar) — all runs across every session, like the global
- *  Files browser and Notebooks page. Same information architecture on both
- *  surfaces; only the data source and row actions differ. */
 /**
  * The run ledger.
  *
@@ -91,37 +130,19 @@ export function RunsPage() {
   return <HostedRunsView />;
 }
 
-/** The page header shared by both runs surfaces. */
-function RunsHeader({ description }: { description: ReactNode }) {
-  return (
-    <header className="mb-4 flex items-start gap-3">
-      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-input bg-accent/10 text-accent">
-        <FlaskConical size={17} strokeWidth={1.75} aria-hidden="true" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <PageTitle page="运行记录" />
-        <h1 className="font-serif text-display leading-tight text-text">运行记录</h1>
-        <p className="mt-0.5 text-ui text-muted">{description}</p>
-      </div>
-    </header>
-  );
-}
-
 interface RunsFilterChip {
   key: string;
   label: string;
   count: number;
   active: boolean;
   onClick: () => void;
-  dot?: string;
-  accent?: boolean;
+  state?: "done" | "review" | "failed" | "running" | "canceled";
 }
 
-/** The sticky filter bar shared by both runs ledgers: a search box (callers
- *  debounce it), status/surface facet chips, and a recency preset switch. */
+/** The sticky filter bar: a search box (debounced by the caller), status
+ *  facet chips, and the time range in words. */
 function RunsFilterBar({
   search,
-  searchPlaceholder,
   onSearchChange,
   chips,
   since,
@@ -130,7 +151,6 @@ function RunsFilterBar({
   onClear,
 }: {
   search: string;
-  searchPlaceholder: string;
   onSearchChange: (value: string) => void;
   chips: RunsFilterChip[];
   since?: SincePreset;
@@ -139,47 +159,34 @@ function RunsFilterBar({
   onClear: () => void;
 }) {
   return (
-    <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 bg-bg/95 px-1 py-2 backdrop-blur">
-      <div className="relative min-w-[12rem] flex-1">
+    // An opaque canvas: the 95 %-alpha canvas class it had generated no CSS at
+    // all (an opacity modifier on a var() colour), so rows scrolled visibly
+    // under it.
+    <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 bg-bg px-1 py-2">
+      <label className="relative min-w-48 flex-1">
         <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
+        <span className="sr-only">搜索运行记录</span>
         <input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder={searchPlaceholder}
-          className="w-full rounded-input border border-border bg-surface py-1.5 pl-8 pr-3 text-ui text-text outline-none placeholder:text-muted focus:border-accent"
+          placeholder="搜索题目、能力或产物文件…"
+          className="h-9 w-full rounded-input border border-strong bg-surface pl-8 pr-3 text-ui text-text outline-none placeholder:text-muted focus:border-focus"
         />
-      </div>
-      {chips.map((chip) => (
-        <FacetChip
-          key={chip.key}
-          label={chip.label}
-          count={chip.count}
-          active={chip.active}
-          onClick={chip.onClick}
-          dot={chip.dot}
-          accent={chip.accent}
-        />
+      </label>
+      {chips.map(({ key, ...chip }) => (
+        <FacetChip key={key} {...chip} />
       ))}
-      <div className="flex shrink-0 items-center rounded-full border border-border bg-surface p-0.5 text-caption">
-        {(["all", "24h", "7d", "30d"] as const).map((k) => {
-          const active = (since ?? "all") === k;
-          return (
-            <button
-              key={k}
-              onClick={() => onSinceChange(k === "all" ? undefined : k)}
-              className={cn(
-                "rounded-full px-2 py-0.5 font-medium capitalize transition-colors",
-                active ? "bg-surface-2 text-text" : "text-muted hover:text-text",
-              )}
-            >
-              {k === "all" ? "任意时间" : k}
-            </button>
-          );
-        })}
-      </div>
+      {/* In words, not `24h / 7d / 30d` with `capitalize` — the one Latin
+        * control in a Chinese interface (review B §4h). */}
+      <SegmentedControl
+        aria-label="时间范围"
+        value={since ?? "all"}
+        onChange={(value) => onSinceChange(value === "all" ? undefined : value)}
+        options={SINCE_OPTIONS}
+      />
       {anyFilter && (
-        <button className="text-caption text-link hover:underline" onClick={onClear}>
-          清除
+        <button type="button" className="text-ui text-link hover:underline" onClick={onClear}>
+          清除筛选
         </button>
       )}
     </div>
@@ -189,16 +196,15 @@ function RunsFilterBar({
 /** One day-grouped section of the ledger, under its sticky day label. */
 function DaySection({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <section>
-      <div className="sticky top-[3.25rem] z-10 bg-bg/95 py-1 text-caption font-semibold uppercase tracking-wider text-muted backdrop-blur">
+    <section aria-label={label}>
+      <h2 className="sticky top-[3.25rem] z-10 bg-bg py-1 text-caption font-semibold text-muted">
         {label}
-      </div>
+      </h2>
       <ul>{children}</ul>
     </section>
   );
 }
 
-/** The ledger's two empty states: nothing recorded yet, or nothing matches. */
 /** The memory kinds, in the researcher's words. Values are never shown here —
  *  a memory's content lives in one place, where deleting it deletes it. */
 const MEMORY_KIND_LABELS: Record<string, string> = {
@@ -214,29 +220,29 @@ const MEMORY_KIND_LABELS: Record<string, string> = {
   note: "科研记忆",
 };
 
-/** Statuses a run is still in. Drives the refresh above; a finished ledger is
- *  not re-read. */
+/** Statuses a run is still in. Drives the fallback refresh below. */
 const ACTIVE_RUN_STATUSES: ReadonlySet<WebAgentRunStatus> = new Set([
   "queued",
   "dispatching",
   "running",
   "canceling",
 ] as WebAgentRunStatus[]);
-const RUNS_POLL_MS = 20_000;
+
+/**
+ * The fallback read of the whole ledger while something runs. Live progress
+ * arrives on each running row's event stream within a second; this is only
+ * for what the stream does not carry and for a stream that could not connect.
+ * It was the only source at 20 s, for three runs, and the page was 20 s stale.
+ */
+const RUNS_POLL_MS = 60_000;
 
 /** A read that failed, said as a read that failed. */
 function RunsLoadError({ message, onRetry, stale }: { message: string; onRetry: () => void; stale: boolean }) {
   return (
     <div role="alert" className="mt-3 rounded-card border border-border bg-surface px-4 py-3">
       <p className="text-ui text-text">{stale ? "刷新运行记录失败，下面显示的是上一次读到的内容。" : "无法读取运行记录。"}</p>
-      <p className="mt-1 text-ui-sm text-muted">{message}</p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="mt-2 min-h-6 rounded-input border border-border px-3 py-1 text-ui-sm text-text hover:bg-surface-2"
-      >
-        重试
-      </button>
+      <p className="mt-1 text-ui text-muted">{message}</p>
+      <Button size="sm" variant="ghost" className="mt-2" onClick={onRetry}>重试</Button>
     </div>
   );
 }
@@ -245,17 +251,15 @@ function RunsEmptyState({ filtered }: { filtered: boolean }) {
   if (filtered) {
     return <EmptyState icon={Search} title="没有符合筛选条件的运行记录。" className="mt-8" />;
   }
+  // It used to say 「当 EviMed 运行代码时（例如 python train.py）」 — a line
+  // left over from a machine-learning tool, on an evidence workbench.
   return (
     <EmptyState
       icon={FlaskConical}
-      title="尚无运行记录"
-      description={
-        <>
-          当 EviMed 运行代码时（例如 <span className="font-mono text-text">python train.py</span>
-          ），执行方案和产物会记录于此。
-        </>
-      }
-      className="mt-8 rounded-input border border-dashed border-border bg-surface"
+      title="还没有运行记录"
+      description="提一个研究问题，或从「科研能力」选一项开始。每次运行的计划、进展、核验结果与产物都会记在这里。"
+      action={<Link to="/app/chat" className={buttonClasses()}>新任务</Link>}
+      className="mt-8 rounded-card border border-dashed border-border bg-surface"
     />
   );
 }
@@ -263,43 +267,51 @@ function RunsEmptyState({ filtered }: { filtered: boolean }) {
 /**
  * The hosted runs ledger. The web API returns the full list in one shot — no
  * server-side paging or facets — so filtering, day-grouping and chip counts
- * are computed client-side while the filter bar, sticky day labels and row
- * expand style stay identical to the desktop ledger. Actions differ by form:
- * hosted downloads artifacts instead of opening them locally, and "复查与复现"
- * drafts into the runtime session surface instead of the desktop's re-run
- * recipe.
+ * are computed client-side.
  */
 function HostedRunsView() {
   const [runs, setRuns] = useState<WebAgentRun[] | null>(null); // null = loading
   // A deliverable opened in place: a report, its matrix, a table — with the
   // same viewers the files page uses, instead of download-only rows.
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ path: string; run: WebAgentRun } | null>(null);
   const [filter, setFilter] = useState<Filter>({ search: "" });
   const [debounced, setDebounced] = useState("");
   // `?run=` is how every link into this page names the run it means — the
-  // sidebar's recent list, and anything else that wants to point at one.
-  // Without it a link can only land on "the newest run", which is a different
-  // run by the time someone opens it.
+  // sidebar's recent list, the inbox, and anything else that points at one.
   const [params] = useSearchParams();
   const deepLinked = params.get("run");
   const [expanded, setExpanded] = useState<string | null>(deepLinked);
+  // The run a link named, until the ledger has been read and it can be opened.
+  // It used to be applied once at mount, and the "keep the open row visible"
+  // effect below ran first against the still-empty list and cleared it, so a
+  // link from the sidebar or the inbox opened the newest run instead.
+  const pendingDeepLink = useRef<string | null>(deepLinked);
   const navigate = useNavigate();
 
-  // The ledger is a trust surface, so a failed read says so.
-  //
-  // It used to set `runs = []` and show 「尚无运行记录」 (2026-09-16 walk, U3):
-  // a control plane that could not be reached and an account that has never
-  // run anything rendered the same page, and the second reading is the one
-  // people believe. The error is kept in its own state so the rows already on
-  // screen survive a failed refresh — a poll that misses must not empty a page
-  // that is correct.
+  // The ledger is a trust surface, so a failed read says so, and the rows
+  // already on screen survive a failed refresh (2026-09-16 walk, U3).
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [connectors, setConnectors] = useState<WebConnector[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    // Only to name the one source a failed run needed; a read that fails
+    // leaves that sentence out and nothing else.
+    fetchWebConnectors().then((list) => { if (active) setConnectors(list); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const load = useCallback(async (): Promise<boolean> => {
     try {
       const value = await listWebAgentRuns();
       setRuns(value);
-      setExpanded((current) => current ?? newestRun(value)?.id ?? null);
+      const linked = pendingDeepLink.current;
+      if (linked && value.some((run) => run.id === linked)) {
+        pendingDeepLink.current = null;
+        setExpanded(linked);
+      } else {
+        setExpanded((current) => current ?? newestRun(value)?.id ?? null);
+      }
       setLoadError(null);
       return true;
     } catch (error) {
@@ -312,11 +324,14 @@ function HostedRunsView() {
     void load();
   }, [load]);
 
-  // While something is running the page refreshes itself. It used to fetch once
-  // and never again, so 「最近进展 X 分钟前」 froze at whatever it said when the
-  // page opened while the sidebar beside it polled every 20 s and disagreed.
-  // Gated on visibility: a background tab polling a ledger is spend with nobody
-  // reading it.
+  /** One run's record changed here (renamed, cancelled): swap it in place. */
+  const replaceRun = useCallback((next: WebAgentRun) => {
+    setRuns((current) => current?.map((run) => (run.id === next.id ? { ...run, ...next } : run)) ?? current);
+    announceRunsChanged();
+  }, []);
+
+  // The slow fallback refresh while something runs, gated on visibility: a
+  // background tab polling a ledger is spend with nobody reading it.
   const hasActiveRun = (runs ?? []).some((run) => ACTIVE_RUN_STATUSES.has(run.status));
   useEffect(() => {
     if (!hasActiveRun) return;
@@ -347,12 +362,11 @@ function HostedRunsView() {
       .filter(
         (run) =>
           // "degraded" is not a status value — it is the phase projection
-          // (§7.1.1), so this one filter key reads a different field than the
-          // rest without needing a second filter dimension for it.
+          // (§7.1.1), so this one filter key reads a different field.
           (!filter.status || (filter.status === "degraded" ? run.phase === "degraded" : run.status === filter.status)) &&
           (!sinceTs || webRunTs(run) >= sinceTs) &&
           (!query ||
-            [run.question, run.id, run.sessionId, run.mode, run.agentId, run.effectiveAgentId, run.model, ...run.artifacts]
+            [runTitle(run), run.question, run.id, run.sessionId, run.agentId, run.effectiveAgentId, capabilityLabel(run), run.model, ...run.artifacts]
               .filter(Boolean)
               .join(" ")
               .toLowerCase()
@@ -371,14 +385,9 @@ function HostedRunsView() {
   }, [runs]);
 
   /**
-   * "复查与复现" — drafted into the session surface that actually reads it.
-   *
-   * This used to write a store field only our own, never-routed composer read
-   * (deleted 2026-09-09 with the rest of that surface), so the draft went
-   * nowhere and the researcher landed on an empty runtime chat: a button whose
-   * tooltip promised a drafted prompt and which silently did nothing. The
-   * channel that works is `runtimeUiIntent` in the navigation state, forwarded
-   * by RuntimeUiFrame and applied by the harness bridge's `setDraft`.
+   * "复查与复现" — drafted into the session surface that actually reads it:
+   * `runtimeUiIntent` in the navigation state, forwarded by RuntimeUiFrame and
+   * applied by the harness bridge's `setDraft`.
    */
   const reproduce = (run: WebAgentRun) => {
     const activeAgent = run.effectiveAgentId ?? run.agentId;
@@ -386,9 +395,7 @@ function HostedRunsView() {
       `复查科研运行 \`${run.id}\`（${activeAgent ? `${run.mode === "open-domain" ? "开放域路由 · " : ""}${activeAgent}` : "开放域科研"}）。` +
       `请读取该会话的原始消息、工具记录和产物，核对证据来源、失败项与可复现性；不要重新编造缺失数据。`;
     // `runtimeUiIntentFromState` drops an intent whose session id is not a
-    // plain identifier, and a dropped intent is indistinguishable from the bug
-    // being fixed here. When the ledger's session id cannot be addressed,
-    // open a fresh session carrying the same draft rather than lose it.
+    // plain identifier; open a fresh session carrying the same draft then.
     const addressable = /^[A-Za-z0-9_-]{1,160}$/.test(run.sessionId);
     const intent: RuntimeUiIntent = {
       kind: addressable ? "open" : "create",
@@ -407,379 +414,631 @@ function HostedRunsView() {
   const chips: RunsFilterChip[] = [
     {
       key: "succeeded",
-      label: "成功",
+      label: "已交付",
       count: statusCounts.get("succeeded") ?? 0,
       active: filter.status === "succeeded",
-      dot: "bg-ok",
+      state: "done",
       onClick: () => toggle("succeeded"),
     },
-    // Delivered, but with something unresolved — unverified content, or a
-    // partial delivery — that a person should look at before it is trusted the
-    // way an accepted run is. Shown only once at least one run actually needs
-    // it, the same rule "running"/"canceled" below already follow.
+    // Delivered, but with something unresolved a person should look at before
+    // it is trusted the way an accepted run is. Shown only once at least one
+    // run needs it, the rule "running"/"canceled" below follow.
     ...(statusCounts.get("degraded") ? [{
       key: "degraded",
       label: "待人工复核",
       count: statusCounts.get("degraded") ?? 0,
       active: filter.status === "degraded",
-      dot: "bg-warn",
+      state: "review" as const,
       onClick: () => toggle("degraded"),
     }] : []),
     {
       key: "failed",
-      label: "失败",
+      label: "未完成",
       count: statusCounts.get("failed") ?? 0,
       active: filter.status === "failed",
-      dot: "bg-error",
+      state: "failed",
       onClick: () => toggle("failed"),
     },
     ...(["running", "canceled"] as const)
       .filter((s) => statusCounts.has(s))
       .map((s) => ({
         key: s,
-        label: WEB_RUN_STATUS_LABEL[s],
+        label: s === "running" ? "运行中" : WEB_RUN_STATUS_LABEL[s],
         count: statusCounts.get(s) ?? 0,
         active: filter.status === s,
-        dot: s === "running" ? "bg-accent" : "bg-muted",
+        state: s,
         onClick: () => toggle(s),
       })),
   ];
   const groups = useMemo(() => groupByDay(rows, webRunTs), [rows]);
 
   // Keep the expanded row visible: when a filter change drops it from the
-  // list, fall back to the newest row (the desktop ledger does the same on
-  // every refetch).
+  // list, fall back to the newest row. Not while the ledger is still loading —
+  // an empty list is not a filter result.
   useEffect(() => {
+    if (runs === null) return;
     setExpanded((cur) => (cur && rows.some((r) => r.id === cur) ? cur : (rows[0]?.id ?? null)));
-  }, [rows]);
+  }, [rows, runs]);
 
   // A new `?run=` on an already-mounted page (clicking a second sidebar row)
   // must move the expansion, not be ignored because the first one won.
+  const runsRef = useRef(runs);
+  runsRef.current = runs;
   useEffect(() => {
-    if (deepLinked) setExpanded(deepLinked);
+    if (!deepLinked) return;
+    pendingDeepLink.current = deepLinked;
+    if (runsRef.current?.some((run) => run.id === deepLinked)) {
+      pendingDeepLink.current = null;
+      setExpanded(deepLinked);
+    }
   }, [deepLinked]);
 
   return (
-    <FilePreviewContext.Provider value={setPreviewPath}>
-      <div className="h-full overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-8 py-8">
-          <RunsHeader description="记录开放域与专项科研任务的执行状态、模型、耗时和成果文件。" />
-
-          {(rows.length > 0 || anyFilter) && (
-            <RunsFilterBar
-              search={filter.search}
-              searchPlaceholder="搜索专项、模型、会话或产物文件…"
-              onSearchChange={(value) => setFilter((f) => ({ ...f, search: value }))}
-              chips={chips}
-              since={filter.since}
-              onSinceChange={(since) => setFilter((f) => ({ ...f, since }))}
-              anyFilter={anyFilter}
-              onClear={() => setFilter({ search: "" })}
+    <ConnectorsContext.Provider value={connectors}>
+      <FilePreviewContext.Provider value={(path, run) => setPreview({ path, run })}>
+        <div className="h-full overflow-y-auto">
+          <div className="mx-auto max-w-content-wide px-8 py-8">
+            <PageHeader
+              title="运行记录"
+              description="每次研究运行的进展、核验结果与产物。"
+              className="mb-4"
             />
-          )}
 
-          {runs === null && loadError === null && <RunsSkeleton />}
+            {(rows.length > 0 || anyFilter) && (
+              <RunsFilterBar
+                search={filter.search}
+                onSearchChange={(value) => setFilter((f) => ({ ...f, search: value }))}
+                chips={chips}
+                since={filter.since}
+                onSinceChange={(since) => setFilter((f) => ({ ...f, since }))}
+                anyFilter={anyFilter}
+                onClear={() => setFilter({ search: "" })}
+              />
+            )}
 
-          {loadError !== null && <RunsLoadError message={loadError} onRetry={() => void load()} stale={(runs?.length ?? 0) > 0} />}
+            {runs === null && loadError === null && <RunsSkeleton />}
 
-          {runs !== null && loadError === null && rows.length === 0 && <RunsEmptyState filtered={anyFilter} />}
+            {loadError !== null && <RunsLoadError message={loadError} onRetry={() => void load()} stale={(runs?.length ?? 0) > 0} />}
 
-          <div className="mt-1">
-            {groups.map(([label, items]) => (
-              <DaySection key={label} label={label}>
-                {items.map((run) => (
-                  <WebRunRow
-                    key={run.id}
-                    run={run}
-                    open={expanded === run.id}
-                    onToggle={() => setExpanded((e) => (e === run.id ? null : run.id))}
-                    onReproduce={() => reproduce(run)}
-                    onOpenConversation={() => navigate(`/app/chat/${run.sessionId}`)}
-                  />
-                ))}
-              </DaySection>
-            ))}
+            {runs !== null && loadError === null && rows.length === 0 && <RunsEmptyState filtered={anyFilter} />}
+
+            <div className="mt-1">
+              {groups.map(([label, items]) => (
+                <DaySection key={label} label={label}>
+                  {items.map((run) => (
+                    <WebRunRow
+                      key={run.id}
+                      run={run}
+                      open={expanded === run.id}
+                      onToggle={() => setExpanded((e) => (e === run.id ? null : run.id))}
+                      onReproduce={() => reproduce(run)}
+                      onOpenConversation={() => navigate(`/app/chat/${run.sessionId}`)}
+                      onRunChanged={replaceRun}
+                      onFinished={() => void load()}
+                    />
+                  ))}
+                </DaySection>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-      {previewPath && <RunFilePreview path={previewPath} onClose={() => setPreviewPath(null)} />}
-    </FilePreviewContext.Provider>
+        {preview && <RunFilePreview path={preview.path} run={preview.run} onClose={() => setPreview(null)} />}
+      </FilePreviewContext.Provider>
+    </ConnectorsContext.Provider>
   );
 }
 
 /**
- * What produced this run, in the product's words.
- *
- * The tag used to be the raw capability id rendered `uppercase`, so the ledger
- * read `开放域 · CLINICAL-EVIDENCE-SYNTHESIS` — a Chinese connective joined to
- * a shouted English identifier. The catalog's own Chinese title is available
- * from the id without a fetch; an id this build has no name for falls back to
- * the id rather than to silence, because an unnamed capability is worth seeing.
+ * What produced this run, in the product's words. An id this build has no
+ * name for falls back to the id rather than to silence, because an unnamed
+ * capability is worth seeing.
  */
 function capabilityLabel(run: WebAgentRun): string {
   const agent = run.effectiveAgentId ?? run.agentId;
   if (!agent) return run.mode === "specialist" ? "专项科研" : "开放域科研";
-  if (agent === OPEN_DOMAIN_ANSWER_AGENT_ID) return "开放域问答";
+  if (agent === OPEN_DOMAIN_ANSWER_AGENT_ID) return "普通问答";
   const name = capabilityTitle(agent) ?? agent;
   return run.mode === "open-domain" ? `开放域 · ${name}` : name;
 }
 
-/** A hosted ledger row — same visual language as the desktop `RunRow`, but the
- *  main text is the run's brief, the tag names the capability in the product's
- *  words, and artifacts download through the web API. */
+/**
+ * A running run's own event stream, folded (contract C5). Subscribed only
+ * while the run runs; when the stream says it ended, the ledger is re-read so
+ * the row shows the verdict, not the last progress frame.
+ */
+function useLiveRun(run: WebAgentRun, onFinished: () => void): LiveRunFold | null {
+  const running = run.status === "running";
+  const { events } = useRunEvents(running ? run.id : null, { enabled: running, limit: 200 });
+  const live = useMemo(() => (events.length > 0 ? foldRunEvents(events) : null), [events]);
+  const finished = useRef(onFinished);
+  finished.current = onFinished;
+  const terminal = live?.state != null && live.state !== "running";
+  useEffect(() => {
+    if (terminal) finished.current();
+  }, [terminal]);
+  return live;
+}
+
+/** Re-renders a running row every 15 s so 「已用 N 分钟」 moves; nothing else ticks. */
+function useMinuteClock(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, [active]);
+  return now;
+}
+
+/** One ledger row: its header, and — open — what the run produced, how it
+ *  was checked, how its deliverables went, and its identifiers, in that order. */
 function WebRunRow({
   run,
   open,
   onToggle,
   onReproduce,
   onOpenConversation,
+  onRunChanged,
+  onFinished,
 }: {
   run: WebAgentRun;
   open: boolean;
   onToggle: () => void;
   onReproduce: () => void;
   onOpenConversation: () => void;
+  onRunChanged: (run: WebAgentRun) => void;
+  onFinished: () => void;
 }) {
-  const failed = run.status === "failed";
-  const ts = webRunTs(run);
-  const notices = summarizeQualityNotices(run.qualityNotices ?? []);
-  const hasArtifacts = run.artifacts.length > 0;
-  // `null` when the ledger does not carry the field at all — which is not the
-  // same as "there are none", so the row stays silent rather than claiming the
-  // run produced nothing.
-  const undelivered = undeliveredFiles(run);
+  const live = useLiveRun(run, onFinished);
+  const running = run.status === "running";
+  const now = useMinuteClock(running);
+  const progress = runProgressOf(run, live);
+  const state = runState(run);
+  const cost = runCostText(run.usage ?? progress?.usage);
+  const tag = capabilityLabel(run);
+  const title = runTitle(run);
+  const [editing, setEditing] = useState(false);
+
+  const started = Date.parse(progress?.startedAt ?? run.startedAt);
+  const elapsed = running && Number.isFinite(started) ? formatDuration(now - started) : "";
+  // The state in words on every row, from the same rule and in the same place
+  // as the sidebar's second line — colour and shape only repeat it.
+  const meta = running
+    ? [tag !== title ? tag : null, state.label, currentPhaseLabel(progress), elapsed ? `已用 ${elapsed}` : null]
+    : [tag !== title ? tag : null, state.label, relativeTime(webRunTs(run) * 1000, now), run.durationMs != null ? `用时 ${formatDuration(run.durationMs)}` : null, cost || null];
+
   return (
-    <li>
-      <button
-        className="group flex w-full items-center gap-2.5 rounded-input px-2 py-1.5 text-left hover:bg-surface-2/60"
-        onClick={onToggle}
-        aria-expanded={open}
-      >
-        {open ? (
-          <ChevronDown size={13} className="shrink-0 text-muted" aria-hidden="true" />
+    <li className="group/row">
+      <div className="flex items-start gap-1 rounded-input hover:bg-surface-2">
+        {editing ? (
+          <RunTitleEditor
+            run={run}
+            onDone={(next) => {
+              setEditing(false);
+              if (next) onRunChanged(next);
+            }}
+          />
         ) : (
-          <ChevronRight size={13} className="shrink-0 text-muted opacity-40 group-hover:opacity-100" aria-hidden="true" />
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-start gap-2.5 px-2 py-2 text-left"
+            onClick={onToggle}
+            aria-expanded={open}
+          >
+            {open ? (
+              <ChevronDown size={14} className="mt-1 shrink-0 text-muted" aria-hidden="true" />
+            ) : (
+              <ChevronRight size={14} className="mt-1 shrink-0 text-muted" aria-hidden="true" />
+            )}
+            <RunStatusDot state={state.key} labelled className="mt-1.5" />
+            <span className="min-w-0 flex-1">
+              {/* The question, when the run recorded one; `runTitle` says so
+                * when it did not. The id stays in the identifiers
+                * disclosure, where it is labelled. */}
+              <span
+                className={cn("block truncate text-ui font-medium", state.key === "failed" ? "text-muted" : "text-text")}
+                title={run.titleSource === "user" ? `${title}（你起的标题，自动命名不会覆盖）` : title}
+              >
+                {title}
+              </span>
+              <span className="block truncate text-caption text-muted tabular-nums">
+                {meta.filter(Boolean).join(" · ")}
+              </span>
+            </span>
+          </button>
         )}
-        <span
-          className={cn(
-            "h-1.5 w-1.5 shrink-0 rounded-full",
-            failed ? "bg-error" : run.status === "succeeded" ? "bg-ok" : "bg-muted",
-          )}
-          title={WEB_RUN_STATUS_LABEL[run.status]}
-        />
-        {/* The question, when the run recorded one. The list was keyed on the
-          * run id alone, so thirty analyses read as thirty hashes and telling
-          * them apart meant opening each one. When no brief was recorded
-          * `runTitle` says so; the id stays in the tooltip and in the
-          * diagnostics row, where it is labelled. */}
-        <span
-          className={cn("min-w-0 flex-1 truncate text-ui", failed ? "text-text/70" : "text-text")}
-          title={run.question ? `${run.question}\n${run.id}` : run.id}
-        >
-          {runTitle(run)}
-        </span>
-        <span className="shrink-0 text-caption font-semibold tracking-wide text-accent">
-          {capabilityLabel(run)}
-        </span>
-        {run.durationMs != null && (
-          <span className="shrink-0 tabular-nums text-caption text-muted">{formatDuration(run.durationMs)}</span>
+        {!editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            aria-label={`重命名「${title}」`}
+            title="重命名"
+            className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-input text-muted opacity-0 hover:bg-surface hover:text-text focus-visible:opacity-100 group-hover/row:opacity-100"
+          >
+            <Pencil size={14} aria-hidden="true" />
+          </button>
         )}
-        <span className="w-16 shrink-0 text-right text-caption text-muted" title={absoluteTs(ts)}>
-          {relativeTs(ts)}
-        </span>
-      </button>
+      </div>
 
       {open && (
-        <div className="ml-6 mb-1 space-y-3 border-l border-border-faint pl-4 pt-1 text-caption">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {capabilityLabel(run) && <Chip title="所用能力">{capabilityLabel(run)}</Chip>}
-            {run.phase && WEB_RUN_PHASE_LABEL[run.phase] && (
-              <Chip title={`运行阶段（由账本记录派生，不单独存储）：${run.phase}`}>
-                {WEB_RUN_PHASE_LABEL[run.phase]}
-              </Chip>
+        <RunDetail
+          run={run}
+          live={live}
+          onReproduce={onReproduce}
+          onOpenConversation={onOpenConversation}
+          onRunChanged={onRunChanged}
+        />
+      )}
+    </li>
+  );
+}
+
+/**
+ * Renaming a run in place. The server marks the title `user` and no automatic
+ * title may replace it afterwards (contract C3) — ChatGPT's auto-rename undoing
+ * its users' names is the cautionary tale (appendix C, A3).
+ */
+function RunTitleEditor({ run, onDone }: { run: WebAgentRun; onDone: (next: WebAgentRun | null) => void }) {
+  const [value, setValue] = useState(() => runTitle(run));
+  const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => { input.current?.select(); }, []);
+
+  const save = async () => {
+    const title = value.trim();
+    if (!title || title === runTitle(run)) { onDone(null); return; }
+    setSaving(true);
+    setFailure(null);
+    try {
+      const next = await renameWebAgentRun(run.id, title);
+      onDone({ ...run, ...next, title: next.title ?? title, titleSource: "user" });
+    } catch (error) {
+      setFailure(webErrorMessage(error, { fallback: "标题没有保存下来，请重试。" }));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form
+      className="flex min-w-0 flex-1 flex-wrap items-center gap-2 px-2 py-1.5"
+      onSubmit={(event) => { event.preventDefault(); void save(); }}
+    >
+      <label className="sr-only" htmlFor={`run-title-${run.id}`}>运行标题</label>
+      <input
+        ref={input}
+        id={`run-title-${run.id}`}
+        value={value}
+        maxLength={120}
+        disabled={saving}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => { if (event.key === "Escape") onDone(null); }}
+        className="h-9 min-w-0 flex-1 rounded-input border border-strong bg-surface px-3 text-ui text-text outline-none focus:border-focus"
+      />
+      <Button size="sm" type="submit" loading={saving}>保存标题</Button>
+      <Button size="sm" variant="ghost" disabled={saving} onClick={() => onDone(null)}>取消</Button>
+      <p className="w-full text-caption text-muted">改过的标题会被锁定，自动命名不再覆盖它。</p>
+      {failure && <p role="alert" className="w-full text-caption text-error">{failure}</p>}
+    </form>
+  );
+}
+
+function RunDetail({
+  run,
+  live,
+  onReproduce,
+  onOpenConversation,
+  onRunChanged,
+}: {
+  run: WebAgentRun;
+  live: LiveRunFold | null;
+  onReproduce: () => void;
+  onOpenConversation: () => void;
+  onRunChanged: (run: WebAgentRun) => void;
+}) {
+  const running = run.status === "running";
+  const hasArtifacts = run.artifacts.length > 0;
+  // `null` when the ledger does not carry the field at all — which is not the
+  // same as "there are none", so the row stays silent rather than claiming
+  // the run produced nothing.
+  const undelivered = undeliveredFiles(run);
+  const deliverables = runDeliverables(run, live);
+  const claims = claimSummaryLine(run.claimSummary);
+  const claimsOpen = (run.claimSummary?.unverified ?? 0) > 0;
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+
+  const cancel = async () => {
+    setConfirmingCancel(false);
+    setCanceling(true);
+    try {
+      const next = await cancelWebAgentRun(run.id);
+      onRunChanged(next);
+      toast.success("已取消这次运行。");
+    } catch (error) {
+      toast.error(`没能取消：${webErrorMessage(error, { fallback: "请稍后重试。" })}`);
+    } finally {
+      setCanceling(false);
+    }
+  };
+
+  return (
+    <div className="mb-3 ml-6 max-w-content space-y-5 border-l border-faint pb-2 pl-5 pt-2 text-ui">
+      {/* What happened, and what can be done about it. */}
+      <div className="space-y-2">
+        {running && <RunActivity run={run} live={live} />}
+        {/* Why this line, and how long it usually takes — informative only
+          * here: changing the line is offered right after a dispatch, when it
+          * costs seconds, not on a run that may be twenty minutes in. */}
+        {(run.routeReason || run.estimatedMinutes) && <RouteLine run={run} />}
+        {/* A failure says itself once, from the one dictionary, with the
+          * code kept as a tooltip for support. */}
+        {runDidNotDeliver(run) && <RunVerdict run={run} />}
+        {claims && (
+          <p className={cn("flex items-center gap-1.5", claimsOpen ? "text-verify-pending" : "text-verify-ok")}>
+            {claimsOpen ? <CircleHelp size={14} aria-hidden="true" /> : <Check size={14} aria-hidden="true" />}
+            {claims}
+          </p>
+        )}
+        {run.forkedFrom && (
+          <p className="flex items-center gap-1.5 text-muted">
+            <GitBranch size={14} aria-hidden="true" />
+            这次对话是从另一次对话分支出来的。
+            {/^[A-Za-z0-9_-]{1,160}$/.test(run.forkedFrom) && (
+              <Link to={`/app/chat/${encodeURIComponent(run.forkedFrom)}`} className="text-link hover:underline">打开原对话</Link>
             )}
-          </div>
-
-          {/* Identifiers, folded.
-            *
-            * These four — the run id, the kernel's session id, the model id and
-            * the raw capability id — were four chips on the open row, so the
-            * first thing a researcher read about their own work was
-            * `ses_0722bc34fffeRehfLDGbxJn4I3` (§23.2 rule 11 forbids exactly
-            * this). They are still here, because support asks for them and
-            * because a reader who wants to know which model answered is
-            * entitled to; they are behind one disclosure and labelled. */}
-          <details className="text-caption">
-            <summary className="cursor-pointer text-muted hover:text-text">技术标识（供排查使用）</summary>
-            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-caption text-muted">
-              <dt className="font-sans">运行</dt><dd className="truncate">{run.id}</dd>
-              <dt className="font-sans">会话</dt><dd className="truncate">{run.sessionId}</dd>
-              <dt className="font-sans">模型</dt><dd className="truncate">{run.model}</dd>
-              {(run.effectiveAgentId ?? run.agentId) && (
-                <><dt className="font-sans">能力</dt><dd className="truncate">{run.effectiveAgentId ?? run.agentId}</dd></>
-              )}
-            </dl>
-          </details>
-
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-            <Action icon={<RotateCcw size={12} aria-hidden="true" />} onClick={onReproduce} title="起草提示，复查该运行的证据与产物并尝试复现">
-              复查与复现
-            </Action>
-            <Action icon={<MessageSquare size={12} aria-hidden="true" />} onClick={onOpenConversation} title="打开产生此次运行的对话">
-              打开对话
-            </Action>
-            {run.durationMs != null && <span className="text-muted">耗时 {formatDuration(run.durationMs)}</span>}
-            {run.status === "running" && run.observedToolCalls != null && run.observedToolCalls > 0 && (
-              // These analyses run for tens of minutes. Showing only "执行中"
-              // for that long is indistinguishable from being stuck.
-              <span className="text-muted">
-                已完成 {run.observedToolCalls} 次检索与工具调用
-                {run.lastProgressAt && ` · 最近进展 ${relativeTs(Date.parse(run.lastProgressAt) / 1000)}`}
-              </span>
-            )}
-          </div>
-
-          {run.status === "running" && run.planItems && run.planItems.length > 0 && <PlanSteps items={run.planItems} />}
-
-          {/* What happened, said once, from the one dictionary.
-            * This row used to hold a 20-key table whose default sentence was
-            * "运行未通过核验。" — so a run killed by the stall detector, a run
-            * the researcher cancelled and a run superseded by their own next
-            * message were each told their science had failed quality control.
-            * The code stays reachable as a tooltip for support, never as the
-            * message. */}
-          {runDidNotDeliver(run) && <RunVerdict run={run} />}
-
-          {/* The verdict and its reasons were computed, stored, and returned by
-            * the API, and then rendered nowhere: a package delivered with seven
-            * named gaps looked exactly like a clean one. */}
-          {(run.verification != null || notices.total > 0) && (
-            <div className="rounded-card border border-border-faint bg-surface-2/40 p-2">
-              <div className="mb-1 flex items-center gap-1.5 text-caption font-medium uppercase tracking-wider text-muted">
-                <ScrollText size={12} aria-hidden="true" />
-                {run.verification === "unverified" && "已交付，但未完成核验"}
-                {/* Not the same statement, and it used to render as the absence
-                  * of any statement: a layer of the gate did not run here, so
-                  * nothing below says that layer found the package sound. */}
-                {run.verification === "unchecked" && "已交付，但有一层没有检查过"}
-                {run.verification == null && "核验提示"}
-                {notices.total > 0 && (
-                  <span className="normal-case tracking-normal">
-                    {notices.safety > 0 && <span className="text-error"> · 临床安全 {notices.safety} 项</span>}
-                    {" "}· 未通过核验 {notices.mustFix - notices.safety} 项 · 提示 {notices.advisory} 项
-                  </span>
-                )}
-              </div>
-              {/* The clause about files is conditional: the unverified path can
-                * finish with no files at all (an open-domain answer has none by
-                * design), and this paragraph used to promise downloadable
-                * artifacts directly above an empty artifact list. */}
-              {run.verification === "unverified" && (
-                <p className="mb-1.5 text-caption text-text/80">
-                  {hasArtifacts
-                    ? "产物可以照常下载和阅读；以下各点是本次分析未能自证的部分，请在引用前自行核对。打开报告，句末的「依据」逐条标出哪些引文已在保存的原文中核对、哪些没有。"
-                    : "本次没有文件产出；以下各点是本次分析未能自证的部分，请在引用前自行核对。"}
-                </p>
-              )}
-              {run.verification === "unchecked" && (
-                <p className="mb-1.5 text-caption text-text/80">
-                  {hasArtifacts ? "产物可以照常下载和阅读；" : ""}
-                  本次交付有一层核验根本没有执行，以下说明是哪一层、为什么没执行。 没有发现问题不等于检查过。
-                </p>
-              )}
-              <ul className="space-y-2">
-                {notices.groups.map((group) => (
-                  <li key={`${group.mustFix}-${group.label}`}>
-                    <div className="flex items-center gap-1.5 text-caption">
-                      {group.mustFix && (
-                        <span className={cn("shrink-0 rounded px-1 py-px text-caption font-medium",
-                          group.safety ? "bg-error text-error-fg" : "bg-error/10 text-error")}>
-                          {group.safety ? "临床安全" : "未通过核验"}
-                        </span>
-                      )}
-                      <span className="font-medium text-text">{group.label}</span>
-                      <span className="tabular-nums text-muted">{group.items.length}</span>
-                    </div>
-                    <ul className="mt-0.5 space-y-0.5">
-                      {group.items.map((item, index) => (
-                        <li key={index} className="flex gap-1.5 leading-relaxed text-text/70">
-                          <span className="shrink-0 text-muted">·</span>
-                          <span className="min-w-0 break-words">{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="ghost" onClick={onOpenConversation}>
+            <MessageSquare size={14} aria-hidden="true" />打开对话
+          </Button>
+          {!running && (
+            <Button size="sm" variant="ghost" onClick={onReproduce} title="起草提示，复查该运行的证据与产物并尝试复现">
+              <RotateCcw size={14} aria-hidden="true" />复查与复现
+            </Button>
           )}
-
-          {/* What the platform knew about this researcher and used here. The
-            * count is the point — an answer that silently drew on a stored
-            * preference and an answer that did not must not look the same. */}
-          {(run.recalledMemories?.length ?? 0) > 0 && (
-            <details>
-              <summary className="cursor-pointer select-none text-caption font-medium uppercase tracking-wider text-muted hover:text-text">
-                个性化依据 {run.recalledMemories?.length} 条
-              </summary>
-              <div className="mt-1 space-y-0.5 text-caption text-muted">
-                <p>这次运行读取了你的这些长期记忆。内容在「记忆」里，可以随时修改或删除。</p>
-                <ul className="space-y-0.5">
-                  {run.recalledMemories?.map((memory) => (
-                    <li key={memory.id}>
-                      <Link to="/app/memory" className="hover:text-link">
-                        {MEMORY_KIND_LABELS[memory.kind] ?? memory.kind}
-                        {memory.scope === "project" ? "（本项目）" : ""}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </details>
+          {running && (
+            <Button size="sm" variant="ghost" loading={canceling} onClick={() => setConfirmingCancel(true)}>
+              <Square size={14} aria-hidden="true" />取消运行
+            </Button>
           )}
+        </div>
+        {running && <SteerBox run={run} />}
+      </div>
 
+      {/* 1 · 产物 — what the researcher came for, first. */}
+      {(hasArtifacts || (undelivered && undelivered.length > 0)) && (
+        <section aria-labelledby={`artifacts-${run.id}`} className="space-y-2">
+          <h3 id={`artifacts-${run.id}`} className="text-ui font-semibold text-text">产物</h3>
           {hasArtifacts && (
-            <div>
-              <div className="mb-1 flex items-center gap-1 text-caption font-medium uppercase tracking-wider text-muted">
-                <FileOutput size={12} aria-hidden="true" /> 产物
-              </div>
-              <ul className="space-y-0.5">
-                {run.artifacts.map((path) => (
-                  <li key={path}>
-                    <ArtifactRow path={path} />
-                    <DeliverableFeedback runId={run.id} path={path} />
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <ul className="space-y-1">
+              {run.artifacts.map((path) => (
+                <li key={path}>
+                  <ArtifactRow path={path} run={run} />
+                  <DeliverableFeedback runId={run.id} path={path} />
+                </li>
+              ))}
+            </ul>
           )}
-
-          {/* The files a refused run wrote and the gate did not accept.
-            * Twenty-eight of 179 finished runs on the host ended with an empty
-            * artifact list while a complete nine-file package sat on disk —
-            * p90 58 minutes of work, and the ledger named none of it. Nothing
-            * deleted those files; they were unreachable, so this section hands
-            * them back and says plainly what they are. */}
+          {/* The files a refused run wrote and the gate did not accept. 28 of
+            * 179 finished runs on the host ended with an empty artifact list
+            * while a complete package sat on disk; nothing deleted those files,
+            * they were unreachable, so they are handed back labelled. */}
           {!hasArtifacts && undelivered && undelivered.length > 0 && (
             <div>
-              <div className="mb-1 flex items-center gap-1 text-caption font-medium uppercase tracking-wider text-warn">
-                <FileOutput size={12} aria-hidden="true" /> 未通过核验的文件（{undelivered.length}）
-              </div>
-              <p className="mb-1 text-text/70">
-                本次运行写出了这些文件，但它们没有通过质量门，因此没有作为成果发布。文件没有被删除，可以下载后自行判断；引用前请逐条核对。
+              <p className="font-semibold text-warn">未通过核验的文件（{undelivered.length}）</p>
+              <p className="mb-1 text-muted">
+                本次运行写出了这些文件，但它们没有通过核验，因此没有作为成果发布。文件没有被删除，可以下载后自行判断；引用前请逐条核对。
               </p>
               <ul className="space-y-0.5">
                 {undelivered.map((path) => (
                   <li key={path}>
-                    <ArtifactRow path={path} unverified />
+                    <ArtifactRow path={path} run={run} unverified />
                   </li>
                 ))}
               </ul>
             </div>
           )}
-        </div>
+        </section>
       )}
-    </li>
+
+      {/* 2 · 核验 — the gate's findings at three weights (QualityNotices). */}
+      <QualityNotices
+        notices={run.qualityNotices}
+        verification={run.verification}
+        hasArtifacts={hasArtifacts}
+        // A finding that names a claim opens the report at that claim.
+        renderLineAction={(line) => {
+          const report = reportArtifact(run);
+          if (!line.claimId || !report) return null;
+          return (
+            <Link to={`${readerHref(run.id, report)}#${line.claimId}`} className="shrink-0 text-caption text-link hover:underline">
+              在报告中查看
+            </Link>
+          );
+        }}
+        className="rounded-card border border-border bg-surface p-3"
+      />
+
+      {/* 3 · 交付进度 — kept after the run ends: which deliverable was sent
+        * back, how many submissions it took, how it came out. */}
+      {deliverables.length > 0 && <RunDeliverableList runId={run.id} items={deliverables} />}
+
+      {/* 4 · 个性化依据 — what the platform knew about this researcher and used
+        * here. An answer that silently drew on a stored preference and one that
+        * did not must not look the same. */}
+      {(run.recalledMemories?.length ?? 0) > 0 && (
+        <Disclosure summary={<>个性化依据 {run.recalledMemories?.length} 条</>}>
+          <div className="space-y-1 text-muted">
+            <p>这次运行读取了你的这些长期记忆。内容在「记忆」里，可以随时修改或删除。</p>
+            <ul className="space-y-0.5">
+              {run.recalledMemories?.map((memory) => (
+                <li key={memory.id}>
+                  <Link to="/app/memory" className="hover:text-link">
+                    {labelFor(MEMORY_KIND_LABELS, memory.kind, "其他记忆")}
+                    {memory.scope === "project" ? "（本项目）" : ""}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Disclosure>
+      )}
+
+      {/* 5 · 技术标识 — last and folded. Support asks for these, and a reader
+        * who wants to know which model answered is entitled to; they are not
+        * what a researcher reads their own work by (§23.2 rule 11). */}
+      <Disclosure summary="技术标识（供排查使用）">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-caption text-muted">
+          <dt>运行</dt><dd className="truncate font-mono">{run.id}</dd>
+          <dt>会话</dt><dd className="truncate font-mono">{run.sessionId}</dd>
+          <dt>模型</dt><dd className="truncate font-mono">{run.model}</dd>
+          {(run.effectiveAgentId ?? run.agentId) && (
+            <><dt>能力</dt><dd className="truncate font-mono">{run.effectiveAgentId ?? run.agentId}</dd></>
+          )}
+          {run.phase && (
+            <><dt>阶段</dt><dd className="truncate">{labelFor(WEB_RUN_PHASE_LABEL, run.phase)}</dd></>
+          )}
+          {run.usage && (
+            <><dt>用量</dt><dd className="truncate tabular-nums">{run.usage.requests} 次模型调用 · {runCostText(run.usage)}</dd></>
+          )}
+        </dl>
+      </Disclosure>
+
+      {confirmingCancel && (
+        <ConfirmDialog
+          title="取消这次运行？"
+          body="运行会立即停止，包括它委派出去的子任务；已经写出的文件留在工作区。取消后不能继续，需要时可以重新提问。"
+          confirmLabel="取消运行"
+          onCancel={() => setConfirmingCancel(false)}
+          onConfirm={() => void cancel()}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * A running run, as an odometer: the phase it is in, what it has done that can
+ * be counted, its subtasks, how long it has taken and what it has cost — never
+ * a percentage (appendix D §6.1). Every number is a count the ledger or the
+ * event stream observed.
+ */
+function RunActivity({ run, live }: { run: WebAgentRun; live: LiveRunFold | null }) {
+  const progress = runProgressOf(run, live);
+  const counts = progressCountsLine(progress);
+  const phase = run.phase ? WEB_RUN_PHASE_LABEL[run.phase] : null;
+  const current = currentPhaseLabel(progress);
+  const children = childrenLine(progress);
+  const cost = runCostText(progress?.usage ?? run.usage);
+  return (
+    <div role="status" aria-live="polite" className="space-y-0.5">
+      <p className="flex flex-wrap items-center gap-x-2 text-text">
+        <Loader2 size={14} className="animate-spin text-dot-running" aria-hidden="true" />
+        {[current, phase].filter(Boolean).join(" · ") || "进行中"}
+        {children && <span className="text-muted">{children}</span>}
+      </p>
+      {counts ? (
+        <p className="tabular-nums text-muted">{counts}{cost ? ` · ${cost}` : ""}</p>
+      ) : run.observedToolCalls != null && run.observedToolCalls > 0 ? (
+        // These analyses run for tens of minutes. Showing only 「运行中」 for
+        // that long is indistinguishable from being stuck.
+        <p className="text-muted">
+          已完成 {run.observedToolCalls} 次检索与工具调用
+          {run.lastProgressAt && ` · 最近进展 ${relativeTime(Date.parse(run.lastProgressAt))}`}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A correction to a run that is still going (`/steer`): same run, same
+ * contract, same gate — the input arrives after the current step. The route
+ * existed with no way to reach it from any page (review E §9.2).
+ */
+function SteerBox({ run }: { run: WebAgentRun }) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [sent, setSent] = useState<number | null>(null);
+
+  const send = async () => {
+    const value = text.trim();
+    if (!value) return;
+    setSending(true);
+    setFailure(null);
+    try {
+      const result = await steerWebAgentRun(run.id, value);
+      setText("");
+      setSent(result.corrections);
+    } catch (error) {
+      setFailure(webErrorMessage(error, { fallback: "补充没有送达，请稍后重试。" }));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Disclosure summary="补充条件或调整方向">
+      <form className="space-y-2" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+        <Textarea
+          label="给正在进行的运行补充"
+          value={text}
+          maxLength={4000}
+          rows={3}
+          disabled={sending}
+          placeholder="例如：只看 70 岁以上人群；把出血风险单独列一节"
+          onChange={(event) => setText(event.target.value)}
+        />
+        <p className="text-caption text-muted">会在当前步骤之后生效，不会重新开始；运行记录会记下你补充过几次。</p>
+        <div className="flex items-center gap-2">
+          <Button size="sm" type="submit" loading={sending} disabled={!text.trim()}>发送补充</Button>
+          {sent != null && <span role="status" className="text-caption text-muted">已送达，这是第 {sent} 次补充。</span>}
+        </div>
+        {failure && <p role="alert" className="text-caption text-error">{failure}</p>}
+      </form>
+    </Disclosure>
+  );
+}
+
+/** The run's planned deliverables with their submissions and verdicts. */
+function RunDeliverableList({ runId, items }: { runId: string; items: WebRunDeliverable[] }) {
+  const passed = items.filter((item) => item.status === "accepted" || item.status === "delivered").length;
+  const icon = (item: WebRunDeliverable) => {
+    if (item.status === "accepted" || item.status === "delivered") return <Check size={14} className="text-verify-ok" aria-hidden="true" />;
+    if (item.status === "rejected") return <AlertCircle size={14} className="text-verify-pending" aria-hidden="true" />;
+    if (item.status === "failed") return <X size={14} className="text-dot-failed" aria-hidden="true" />;
+    if (item.status === "planned") return <Circle size={12} className="text-dot-canceled" aria-hidden="true" />;
+    return <Loader2 size={14} className="animate-spin text-dot-running" aria-hidden="true" />;
+  };
+  const verdict = (item: WebRunDeliverable) => {
+    if (item.lastVerdict === "pass") return "核验通过";
+    if (item.lastVerdict === "unverified") return "未核验交付";
+    if (item.lastVerdict === "issues") return item.mustFixCount ? `${item.mustFixCount} 项必须修改` : "有待修改项";
+    return null;
+  };
+  return (
+    <section aria-labelledby={`deliverables-${runId}`} className="space-y-1.5">
+      <h3 id={`deliverables-${runId}`} className="flex items-baseline gap-2 text-ui font-semibold text-text">
+        交付进度
+        <span className="font-normal tabular-nums text-muted">{passed}/{items.length} 件已交付</span>
+      </h3>
+      <ol aria-label="交付进度" className="space-y-1">
+        {items.map((item) => (
+          <li key={item.id} className="flex items-center gap-2">
+            <span className="flex w-4 shrink-0 justify-center">{icon(item)}</span>
+            <span className="min-w-0 truncate text-text">{item.title}</span>
+            <span className="shrink-0 text-caption text-muted">
+              {DELIVERABLE_STATUS_LABEL[item.status] ?? "状态未登记"}
+              {item.attempts > 1 ? ` · 第 ${item.attempts} 次提交` : ""}
+              {verdict(item) ? ` · ${verdict(item)}` : ""}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -787,196 +1046,163 @@ function WebRunRow({
  *  whatever the ledger's own counters can add to it. */
 function RunVerdict({ run }: { run: WebAgentRun }) {
   const outcome = webRunOutcome(run);
+  const connectors = useContext(ConnectorsContext);
+  // The one source this run needed, named on this run's row — instead of a
+  // banner naming seven sources on every page (review B §7c).
+  const need = runCredentialNeed(run, connectors);
   return (
     <div className="space-y-0.5">
       <p className="text-error" title={outcome.code ? `错误码：${outcome.code}` : undefined}>
         {outcome.headline}
       </p>
-      {outcome.detail && <p className="text-text/70">{outcome.detail}</p>}
+      {outcome.detail && <p className="text-muted">{outcome.detail}</p>}
+      {need && (
+        <p className="text-text">
+          {runCredentialSentence(need)}
+          <Link to="/app/account?tab=connectors" className="ml-1 text-link hover:underline">填写凭据</Link>
+        </p>
+      )}
     </div>
   );
 }
 
+/** The account's connectors, read once for the page; null until known. */
+const ConnectorsContext = createContext<WebConnector[] | null>(null);
+
 /**
  * Did this file turn out to be useful, and did it need editing?
  *
- * This is the learning loop's first producer. `POST /api/feedback/events` has
- * existed since the loop was built and `reportWebDeliverableFeedback` has
- * existed in the client, but nothing on any page called either: on 2026-09-16
- * production held 92 feedback events, every one of them a memory inference
- * being accepted, and zero `deliverable-adopted` or `deliverable-edited`. Zero
- * distillation jobs had ever been queued, so the method library was empty not
- * because nothing was worth learning but because nobody could say so.
+ * This is the learning loop's first producer: until 2026-09-16 production
+ * held zero deliverable events because nothing on any page could record one.
+ * 「我改过」 takes a sentence, because that sentence is the whole signal.
  *
- * 「我改过」 takes a sentence, because that sentence is the whole signal: what a
- * researcher changed is what the distilled method has to learn, and "edited"
- * with no reason distils to nothing.
- *
- * Reporting twice is possible — the ledger is not read back here, so the
- * buttons reset on reload. The server owns deduplication; this surface does not
- * pretend to.
+ * What was already reported is read back from the feedback ledger (the
+ * events are subject-addressed by `<runId>:<path>`), so a reload shows
+ * 「已记录」 instead of offering both buttons again on a file already adopted.
+ * The server owns deduplication; this surface only stops inviting a repeat.
  */
 function DeliverableFeedback({ runId, path }: { runId: string; path: string }) {
-  const [state, setState] = useState<"idle" | "editing" | "sending" | "adopted" | "edited">("idle");
+  const [adopted, setAdopted] = useState(false);
+  const [edited, setEdited] = useState<string | null>(null);
+  const [mode, setMode] = useState<"idle" | "editing" | "sending">("idle");
   const [note, setNote] = useState("");
   const [failure, setFailure] = useState<string | null>(null);
 
+  useEffect(() => {
+    let active = true;
+    listWebDeliverableFeedback(runId, path)
+      .then((items) => {
+        if (!active) return;
+        if (items.some((item) => item.trigger === "deliverable-adopted")) setAdopted(true);
+        const edit = items.find((item) => item.trigger === "deliverable-edited");
+        if (edit) setEdited(typeof edit.detail?.summary === "string" ? edit.detail.summary : "");
+      })
+      // A ledger that cannot be read offers the buttons, which is what the
+      // page did before it could read one at all.
+      .catch(() => {});
+    return () => { active = false; };
+  }, [runId, path]);
+
   const send = async (trigger: "deliverable-adopted" | "deliverable-edited", summary?: string) => {
-    setState("sending");
+    setMode("sending");
     setFailure(null);
     try {
       await reportWebDeliverableFeedback({ trigger, runId, path, summary });
-      setState(trigger === "deliverable-adopted" ? "adopted" : "edited");
+      if (trigger === "deliverable-adopted") setAdopted(true);
+      else { setEdited(summary ?? ""); setNote(""); }
+      setMode("idle");
     } catch (error) {
       setFailure(webErrorMessage(error, { fallback: "反馈没有记录下来，请稍后重试。" }));
-      setState("idle");
+      setMode("idle");
     }
   };
 
-  if (state === "adopted" || state === "edited") {
-    return (
-      <p className="px-1 pb-1 text-caption text-muted">
-        {state === "adopted" ? "已记录：这份成果被采纳。" : "已记录：这份成果做过修改。"}
-      </p>
-    );
-  }
-
   return (
     <div className="px-1 pb-1">
-      {state === "editing" ? (
-        <div className="flex flex-wrap items-center gap-2">
+      {(adopted || edited !== null) && (
+        <p className="text-caption text-muted">
+          {adopted && "已记录：这份成果被采纳。"}
+          {edited !== null && `已记录：这份成果做过修改${edited ? `（${edited}）` : ""}。`}
+        </p>
+      )}
+      {mode === "editing" ? (
+        <form
+          className="mt-1 flex flex-wrap items-center gap-2"
+          onSubmit={(event) => { event.preventDefault(); void send("deliverable-edited", note.trim()); }}
+        >
           <label className="sr-only" htmlFor={`edited-${runId}-${path}`}>改了什么</label>
           <input
             id={`edited-${runId}-${path}`}
             value={note}
             onChange={(event) => setNote(event.target.value)}
             placeholder="改了什么？一句话即可"
-            className="min-h-6 min-w-0 flex-1 rounded-input border border-border bg-surface px-2 py-1 text-ui-sm text-text"
+            className="h-8 min-w-0 flex-1 rounded-input border border-strong bg-surface px-2 text-ui text-text outline-none focus:border-focus"
           />
-          <button
-            type="button"
-            disabled={note.trim().length === 0}
-            onClick={() => void send("deliverable-edited", note.trim())}
-            className="min-h-6 rounded-input border border-border px-2 py-1 text-ui-sm text-text hover:bg-surface-2 disabled:opacity-50"
-          >
-            提交
-          </button>
-          <button
-            type="button"
-            onClick={() => { setState("idle"); setNote(""); }}
-            className="min-h-6 rounded-input px-2 py-1 text-ui-sm text-muted hover:bg-surface-2"
-          >
-            取消
-          </button>
-        </div>
+          <Button size="sm" type="submit" disabled={note.trim().length === 0}>提交</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setMode("idle"); setNote(""); }}>取消</Button>
+        </form>
       ) : (
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled={state === "sending"}
-            onClick={() => void send("deliverable-adopted")}
-            className="min-h-6 rounded-input border border-border px-2 py-1 text-ui-sm text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
-          >
-            采纳
-          </button>
-          <button
-            type="button"
-            disabled={state === "sending"}
-            onClick={() => setState("editing")}
-            className="min-h-6 rounded-input border border-border px-2 py-1 text-ui-sm text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
-          >
-            我改过
-          </button>
-        </div>
+        (!adopted || edited === null) && (
+          <div className="mt-1 flex items-center gap-2">
+            {!adopted && (
+              <Button size="sm" variant="ghost" disabled={mode === "sending"} onClick={() => void send("deliverable-adopted")}>采纳</Button>
+            )}
+            {/* An edit after an adoption is the pair the distillation reads, so
+              * adopting does not take this button away. */}
+            {edited === null && (
+              <Button size="sm" variant="ghost" disabled={mode === "sending"} onClick={() => setMode("editing")}>我改过</Button>
+            )}
+          </div>
+        )
       )}
       {failure && <p role="alert" className="mt-1 text-caption text-error">{failure}</p>}
     </div>
   );
 }
 
-/** One downloadable file. `unverified` marks a file the gate did not accept;
- *  the marker carries the same weight as the path, because a reader must not
- *  be able to take one of these for graded work. */
 const FilePreviewInspector = lazy(() => import("@/components/inspector/FilePreviewInspector").then((m) => ({ default: m.FilePreviewInspector })));
 
 /** Opens a run's file in place; absent outside the runs page. */
-const FilePreviewContext = createContext<((path: string) => void) | null>(null);
+const FilePreviewContext = createContext<((path: string, run: WebAgentRun) => void) | null>(null);
+
+/** The run's clinical evidence report, the file a finding's claim lives in. */
+function reportArtifact(run: WebAgentRun): string | null {
+  return run.artifacts.find((path) => path.endsWith("/clinical-evidence-report.md") || path === "clinical-evidence-report.md") ?? null;
+}
+
+/** The standalone reader for one of a run's files. */
+function readerHref(runId: string, path: string): string {
+  return `/app/runs/${encodeURIComponent(runId)}/files/${path.split("/").map(encodeURIComponent).join("/")}`;
+}
 
 /**
  * A deliverable previewed beside the ledger (2026-09-16 review, P2 #14: a
  * run's output was a list of paths to download). The viewer is the one the
  * files page uses, so a clinical report opens with its citations.
  */
-function RunFilePreview({ path, onClose }: { path: string; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+function RunFilePreview({ path, run, onClose }: { path: string; run: WebAgentRun; onClose: () => void }) {
   const filename = path.slice(path.lastIndexOf("/") + 1);
+  // The shared drawer: a dialog named for the file, focus kept inside while it
+  // is open and handed back to 预览 when it closes (it used to be a
+  // hand-rolled overlay that did neither).
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- a click on the backdrop itself closes the panel; Escape is the keyboard equivalent, bound above.
-    <div
-      className="fixed inset-0 z-40 flex justify-end bg-black/20"
-      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`预览 ${filename}`}
-        className="h-full w-full max-w-content-wide border-l border-border bg-bg shadow-pop"
-      >
-        <Suspense fallback={<p className="p-6 text-ui text-muted">正在打开预览…</p>}>
+    <Drawer bare title={`预览 ${filename}`} onClose={onClose} widthClassName="max-w-content-wide">
+      <Suspense fallback={<p className="p-6 text-ui text-muted">正在打开预览…</p>}>
+        <ReportRunContext.Provider value={{ runId: run.id, run }}>
           <FilePreviewInspector
             data={{ variant: "file", path, filename, artifact: extToKind(extOf(filename)), root: "workspace" }}
             onClose={onClose}
           />
-        </Suspense>
-      </div>
-    </div>
+        </ReportRunContext.Provider>
+      </Suspense>
+    </Drawer>
   );
 }
 
-const PLAN_ITEM_LABEL: Record<WebRunPlanItem["status"], string> = {
-  planned: "待开始", queued: "排队中", delegated: "进行中", submitted: "检查中",
-  accepted: "已通过", rejected: "需修改", failed: "未完成",
-};
-
-/**
- * The deliverables of a run still working, as steps (2026-09-16 review, P2
- * #14). A thirteen-minute analysis showed a phase chip and a tool-call count;
- * which of its deliverables were done, being checked or sent back was only in
- * the kernel's own view.
- */
-function PlanSteps({ items }: { items: WebRunPlanItem[] }) {
-  const icon = (status: WebRunPlanItem["status"]) => {
-    if (status === "accepted") return <Check size={13} className="text-ok" aria-hidden="true" />;
-    if (status === "rejected") return <AlertCircle size={13} className="text-warn" aria-hidden="true" />;
-    if (status === "failed") return <X size={13} className="text-error" aria-hidden="true" />;
-    if (status === "planned") return <Circle size={11} className="text-muted" aria-hidden="true" />;
-    return <Loader2 size={13} className="animate-spin text-accent" aria-hidden="true" />;
-  };
-  const done = items.filter((item) => item.status === "accepted").length;
-  return (
-    <div>
-      <div className="mb-1 text-caption font-medium text-muted">交付进度 {done}/{items.length}</div>
-      <ol aria-label="交付进度" className="space-y-1">
-        {items.map((item) => (
-          <li key={item.id} className="flex items-center gap-2">
-            <span className="flex w-4 shrink-0 justify-center">{icon(item.status)}</span>
-            <span className="min-w-0 flex-1 truncate text-text">{item.title}</span>
-            <span className="shrink-0 text-caption text-muted">
-              {PLAN_ITEM_LABEL[item.status] ?? item.status}
-              {item.attempts > 1 ? ` · 第 ${item.attempts} 次提交` : ""}
-            </span>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
-
-function ArtifactRow({ path, unverified }: { path: string; unverified?: boolean }) {
+/** One downloadable file. `unverified` marks a file the gate did not accept;
+ *  the marker carries the same weight as the path, because a reader must not
+ *  be able to take one of these for graded work. */
+function ArtifactRow({ path, run, unverified }: { path: string; run: WebAgentRun; unverified?: boolean }) {
   // The file's name is what a reader recognizes; the folder it sits in is the
   // workspace's bookkeeping (2026-09-16 walk, U13), kept beside it, quieter.
   const slash = path.lastIndexOf("/");
@@ -986,59 +1212,30 @@ function ArtifactRow({ path, unverified }: { path: string; unverified?: boolean 
   return (
     <div className="flex items-center gap-1">
       <button
+        type="button"
         onClick={() => void downloadArtifact(path, "workspace")}
         aria-label={unverified ? `下载 ${name}（未通过核验）` : `下载 ${name}`}
         title={unverified ? `下载 ${path}（未通过核验）` : `下载 ${path}`}
-        className="group flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-surface-2"
+        className="group flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-1 text-left hover:bg-surface-2"
       >
         <span className="min-w-0 flex-1 truncate">
           <span className={cn("group-hover:text-link", unverified ? "text-warn" : "text-text")}>{name}</span>
           {folder && <span className="ml-2 font-mono text-caption text-muted">{folder}</span>}
         </span>
         {unverified && <span className="shrink-0 text-caption text-warn">未经核验</span>}
-        <ExternalLink size={11} className="shrink-0 text-muted opacity-0 group-hover:opacity-100" aria-hidden="true" />
+        <ExternalLink size={12} className="shrink-0 text-muted opacity-0 group-hover:opacity-100" aria-hidden="true" />
       </button>
       {preview && (
-        <button
-          type="button"
-          onClick={() => preview(path)}
-          aria-label={`预览 ${name}`}
-          className="min-h-6 shrink-0 rounded-input px-2 text-caption text-accent hover:bg-surface-2"
-        >
+        <Button size="sm" variant="ghost" onClick={() => preview(path, run)} aria-label={`预览 ${name}`}>
           预览
-        </button>
+        </Button>
+      )}
+      {/\.(md|markdown)$/i.test(name) && (
+        <Link to={readerHref(run.id, path)} className={buttonClasses({ size: "sm", variant: "ghost" })} aria-label={`在阅读器中打开 ${name}`}>
+          阅读
+        </Link>
       )}
     </div>
-  );
-}
-
-function Chip({ children, icon, title }: { children: React.ReactNode; icon?: React.ReactNode; title?: string }) {
-  return (
-    <span className="flex items-center gap-1 rounded bg-surface-2 px-1.5 py-0.5 font-mono text-muted" title={title}>
-      {icon}
-      {children}
-    </span>
-  );
-}
-
-function Action({
-  children,
-  icon,
-  onClick,
-  active,
-  title,
-}: {
-  children: React.ReactNode;
-  icon: React.ReactNode;
-  onClick: () => void;
-  active?: boolean;
-  title?: string;
-}) {
-  return (
-    <button className={cn("flex items-center gap-1 hover:underline", active ? "text-text" : "text-link")} onClick={onClick} aria-pressed={active} title={title}>
-      {icon}
-      {children}
-    </button>
   );
 }
 
@@ -1053,7 +1250,7 @@ function newestRun(runs: WebAgentRun[]): WebAgentRun | undefined {
 }
 
 /** Group newest-first rows under contiguous day labels. Input must already be
- *  sorted newest first (both backends deliver it that way). */
+ *  sorted newest first. */
 function groupByDay<T>(items: T[], ts: (item: T) => number): [string, T[]][] {
   const groups: [string, T[]][] = [];
   let current: [string, T[]] | null = null;
@@ -1075,61 +1272,25 @@ function dayLabel(ts: number): string {
   const days = Math.round((startOf(now) - startOf(d)) / 86_400_000);
   if (days <= 0) return "今天";
   if (days === 1) return "昨天";
-  if (days < 7) return d.toLocaleDateString("zh-CN", { weekday: "long" });
-  return d.toLocaleDateString("zh-CN", { month: "long", day: "numeric", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+  if (days < 7) return formatDateTime(d, { weekday: "long" });
+  return formatDateTime(d, { month: "long", day: "numeric", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
 }
 
-function relativeTs(ts: number): string {
-  const secs = Math.max(0, Math.floor(Date.now() / 1000 - ts));
-  if (secs < 60) return "刚刚";
-  if (secs < 3600) return `${Math.floor(secs / 60)} 分钟前`;
-  if (secs < 86_400) return `${Math.floor(secs / 3600)} 小时前`;
-  return new Date(ts * 1000).toLocaleDateString("zh-CN", { hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" });
-}
-
-function absoluteTs(ts: number): string {
-  return formatDateTime(ts * 1000, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms} ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)} s`;
-  const m = Math.floor(s / 60);
-  return `${m}m ${Math.round(s % 60)}s`;
-}
-
-function FacetChip({
-  label,
-  count,
-  active,
-  onClick,
-  dot,
-  accent,
-}: {
-  label: string;
-  count: number;
-  active: boolean;
-  onClick: () => void;
-  dot?: string;
-  accent?: boolean;
-}) {
+/** A status facet: the same shape and colour the rows use, and its count. */
+function FacetChip({ label, count, active, onClick, state }: Omit<RunsFilterChip, "key">) {
   return (
     <button
+      type="button"
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-caption transition-colors",
-        active
-          ? accent
-            ? "border-accent bg-accent/10 text-accent"
-            : "border-border bg-surface-2 text-text"
-          : "border-border bg-surface text-muted hover:text-text",
+        "flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-ui transition-colors duration-fast",
+        active ? "border-focus bg-accent-soft text-text" : "border-strong bg-surface text-muted hover:text-text",
       )}
     >
-      {dot && <span className={cn("h-1.5 w-1.5 rounded-full", dot)} />}
-      <span className="font-medium">{label}</span>
-      <span className="tabular-nums opacity-70">{count}</span>
+      {state && <RunStatusDot state={state} labelled />}
+      <span>{label}</span>
+      <span className="tabular-nums text-muted">{count}</span>
     </button>
   );
 }

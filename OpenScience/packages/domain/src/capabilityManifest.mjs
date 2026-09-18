@@ -201,6 +201,8 @@ export function validateCapabilityManifest(value) {
 
   const budget = normalizeBudget(raw.budget, issues)
 
+  const display = normalizeDisplay(raw.display, issues)
+
   const manifest = {
     id,
     version,
@@ -220,8 +222,88 @@ export function validateCapabilityManifest(value) {
     category: String(raw.category ?? '').trim(),
     dataSources: toStringArray(raw.dataSources),
     starterPrompts: toStringArray(raw.starterPrompts),
+    ...(display ? { display } : {}),
   }
   return { ok: issues.length === 0, manifest, issues }
+}
+
+/**
+ * The fields a `display:` block may carry, and nothing else: a key this list
+ * does not name is a typo that would otherwise render as nothing.
+ */
+const DISPLAY_FIELDS = Object.freeze(['title', 'category', 'description', 'starterPrompts', 'materials', 'estimatedMinutes', 'outputs', 'knownLimits'])
+
+/**
+ * `display:` — what a researcher is shown about the capability: its name,
+ * group, one-line description, starter questions, what they receive, the
+ * limits worth knowing before starting, and how long it usually takes.
+ *
+ * Kept apart from the fields above on purpose. `title`, `description`,
+ * `whenToUse` and `starterPrompts` at the top level are read by the
+ * orchestrator and the delegation contract, where English identifiers are
+ * right; this block is read by people, in Chinese. It used to live as a hand
+ * table in `capabilityDisplay.mjs`, one more place for a new capability to be
+ * forgotten; the generator now derives that table from these blocks.
+ *
+ * Optional here, so a manifest built inline by a test stays valid; the
+ * generator refuses a public capability in the tree that has none.
+ * `estimatedMinutes` is `{ min, max }` — the reader's "usually" — and not the
+ * `[min, max]` budget estimate above, which the orchestrator plans with.
+ *
+ * @param {unknown} value
+ * @param {ManifestIssue[]} issues
+ * @returns {Record<string, any> | null}
+ */
+function normalizeDisplay(value, issues) {
+  if (value == null) return null
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    issues.push({ code: 'capability_invalid', message: 'display must be a mapping.', field: 'display' })
+    return null
+  }
+  const raw = /** @type {Record<string, unknown>} */ (value)
+  for (const key of Object.keys(raw)) {
+    if (!DISPLAY_FIELDS.includes(key)) issues.push({ code: 'capability_invalid', message: `display.${key} is not a display field (${DISPLAY_FIELDS.join(', ')}).`, field: 'display' })
+  }
+  /** @param {string} field @param {number} max @param {boolean} required */
+  const text = (field, max, required) => {
+    const entry = raw[field]
+    if (entry == null && !required) return null
+    const result = typeof entry === 'string' ? entry.trim() : ''
+    if (!result || [...result].length > max) {
+      issues.push({ code: 'capability_invalid', message: `display.${field} must be text of 1–${max} characters.`, field: 'display' })
+      return null
+    }
+    return result
+  }
+  /** @param {string} field @param {number} min @param {number} maxItems @param {number} maxLength */
+  const list = (field, min, maxItems, maxLength) => {
+    const entry = raw[field] ?? []
+    const items = Array.isArray(entry) ? entry : null
+    const values = (items ?? []).map((item) => (typeof item === 'string' ? item.trim() : ''))
+    if (!items || values.length < min || values.length > maxItems || values.some((item) => !item || [...item].length > maxLength)) {
+      issues.push({ code: 'capability_invalid', message: `display.${field} must list ${min}–${maxItems} texts of at most ${maxLength} characters.`, field: 'display' })
+      return []
+    }
+    if (new Set(values).size !== values.length) issues.push({ code: 'capability_invalid', message: `display.${field} repeats an entry.`, field: 'display' })
+    return values
+  }
+  const minutes = /** @type {Record<string, unknown> | null} */ (raw.estimatedMinutes && typeof raw.estimatedMinutes === 'object' && !Array.isArray(raw.estimatedMinutes) ? raw.estimatedMinutes : null)
+  const min = Number(minutes?.min)
+  const max = Number(minutes?.max)
+  const minutesValid = Number.isSafeInteger(min) && Number.isSafeInteger(max) && min >= 1 && max <= 480 && min <= max
+  if (!minutesValid) issues.push({ code: 'capability_invalid', message: 'display.estimatedMinutes must be { min, max }: whole minutes, 1 ≤ min ≤ max ≤ 480.', field: 'display' })
+
+  const materials = text('materials', 80, false)
+  return {
+    title: text('title', 40, true),
+    category: text('category', 16, true),
+    description: text('description', 200, true),
+    starterPrompts: list('starterPrompts', 1, 4, 160),
+    ...(materials ? { materials } : {}),
+    estimatedMinutes: minutesValid ? { min, max } : null,
+    outputs: list('outputs', 1, 4, 60),
+    knownLimits: list('knownLimits', 0, 4, 120),
+  }
 }
 
 /** @param {unknown} value @returns {string[]} */

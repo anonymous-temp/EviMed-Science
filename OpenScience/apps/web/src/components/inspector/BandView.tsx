@@ -67,7 +67,7 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
               <span className="h-2 w-3 rounded-sm" style={{ background: "var(--series-1)" }} /> up
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-3 rounded-sm" style={{ background: "var(--series-6)" }} /> down
+              <span className="h-2 w-3 rounded-sm" style={{ background: "var(--series-8)" }} /> down
             </span>
           </span>
         )}
@@ -98,7 +98,7 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
             <path key={`u${b}`} d={pathFor(band)} fill="none" stroke="var(--series-1)" strokeWidth={1} strokeOpacity={0.85} />
           ))}
           {d.bandsDown?.map((band, b) => (
-            <path key={`d${b}`} d={pathFor(band)} fill="none" stroke="var(--series-6)" strokeWidth={1} strokeOpacity={0.8} />
+            <path key={`d${b}`} d={pathFor(band)} fill="none" stroke="var(--series-8)" strokeWidth={1} strokeOpacity={0.8} />
           ))}
           {hover && (
             <line x1={xAt(hover.k)} y1={pad.t} x2={xAt(hover.k)} y2={H - pad.b} stroke="currentColor" className="text-muted" strokeWidth={0.6} strokeDasharray="2 2" />
@@ -116,7 +116,7 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
         {hover ? (
           <>k = {hover.k} · E ≈ {hover.e.toFixed(2)} eV</>
         ) : (
-          <span className="text-muted/50">悬停查看 k 点与能量</span>
+          <span className="text-muted">悬停查看 k 点与能量</span>
         )}
       </div>
     </div>

@@ -27,6 +27,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input, Textarea } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { MemoryControls } from "@/components/memory/MemoryControls";
+import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
 import { useSearchParams } from "react-router";
 
 type MemoryState = "normal" | "archived";
@@ -257,22 +258,17 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   return (
     <div className="h-full overflow-y-auto bg-bg">
-      <main className="mx-auto w-full max-w-content-full px-6 py-8 lg:px-10 lg:py-10">
+      <div className="mx-auto w-full max-w-content-full px-6 py-8 lg:px-10 lg:py-10">
         <header className="flex flex-col gap-5 border-b border-border pb-7 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            {!embedded && (
-              <div className="mb-2 flex items-center gap-2 text-ui-sm font-medium tracking-[0.12em] text-accent">
-                <Brain size={15} aria-hidden="true" /> 个人科研记忆
-              </div>
-            )}
-            {!embedded && <h1 className="font-serif text-display font-semibold tracking-tight text-text">科研记忆</h1>}
+            {!embedded && <h1 className={PAGE_TITLE_CLASS}>科研记忆</h1>}
             <p className={embedded ? "max-w-2xl text-body text-muted" : "mt-2 max-w-2xl text-body text-muted"}>
               保存长期有效的研究背景、偏好与判断线索。EviMed 会按当前问题检索相关记录，并与知识库文件和外部证据分开处理。
             </p>
           </div>
           <div className={cn(
-            "inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-ui-sm",
-            connected ? "border-ok/30 bg-ok/10 text-ok" : "border-border bg-surface text-muted",
+            "inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-ui",
+            connected ? "border-ok bg-ok-soft text-ok" : "border-border bg-surface text-muted",
           )}>
             <span className={cn("h-1.5 w-1.5 rounded-full", connected ? "bg-ok" : "bg-muted")} />
             {statusText}
@@ -294,16 +290,16 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
               />
             )}
 
-            <section className="mt-7 overflow-hidden rounded-card border border-border bg-surface shadow-card">
+            <section className="mt-7 overflow-hidden rounded-card border border-border bg-surface">
               <textarea
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 placeholder="记录一条科研记忆… 例如：项目纳入标准、常用数据口径、某个药物证据争议或长期研究偏好。支持 Markdown 和 #标签。"
                 aria-label="科研记忆内容"
-                className="min-h-32 w-full resize-y bg-transparent px-5 pb-3 pt-5 text-body text-text outline-none placeholder:text-muted/80"
+                className="min-h-32 w-full resize-y bg-transparent px-5 pb-3 pt-5 text-body text-text outline-none placeholder:text-muted"
               />
               <div className="flex items-center justify-between border-t border-border px-4 py-3">
-                <span className="text-ui-sm text-muted">仅保存为个人私有记忆；系统会根据问题相关性选择使用。</span>
+                <span className="text-ui text-muted">仅保存为个人私有记忆；系统会根据问题相关性选择使用。</span>
                 <Button onClick={() => void create()} disabled={!draft.trim()} loading={saving}>
                   {!saving && <Plus size={14} aria-hidden="true" />}
                   保存记忆
@@ -347,7 +343,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
             ) : (
               <section className="mt-6 grid items-start gap-4 md:grid-cols-2" aria-label="科研记忆列表">
                 {filtered.map((item) => (
-                  <article key={item.id} className="group rounded-card border border-border bg-surface p-5 shadow-card transition-shadow hover:shadow-pop">
+                  <article key={item.id} className="group rounded-card border border-border bg-surface p-5 transition-colors hover:border-strong">
                     <div className="mb-4 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 text-caption text-muted">
                         {item.pinned && <span className="inline-flex items-center gap-1 font-medium text-accent"><Pin size={11} aria-hidden="true" /> 置顶</span>}
@@ -435,10 +431,10 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
                 </Button>
               ) : undefined
             }
-            className="mt-8 min-h-72 rounded-card border border-dashed border-border bg-surface/50"
+            className="mt-8 min-h-72 rounded-card border border-dashed border-border bg-surface"
           />
         )}
-      </main>
+      </div>
 
       {pendingDelete && (
         <ConfirmDialog
@@ -519,7 +515,7 @@ function MemoryProfileOverview({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-serif text-title font-semibold text-text">EviMed 对你的持续理解</h2>
-          <p className="mt-1 text-ui-sm text-muted">{profile.activeCount} 条已生效 · {profile.pendingCount} 条待确认；每条都有来源证据与版本记录。</p>
+          <p className="mt-1 text-ui text-muted">{profile.activeCount} 条已生效 · {profile.pendingCount} 条待确认；每条都有来源证据与版本记录。</p>
         </div>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
@@ -530,13 +526,13 @@ function MemoryProfileOverview({
           const holdsHighlight = highlightId !== null && records.some((record) => record.id === highlightId);
           const shown = expanded.has(section.title) || holdsHighlight ? records : records.slice(0, SECTION_PREVIEW);
           return (
-            <article key={section.title} className="rounded-card border border-border bg-surface p-4 shadow-card">
+            <article key={section.title} className="rounded-card border border-border bg-surface p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h3 className="text-body font-semibold text-text">{section.title}</h3>
                 <span className="text-caption text-muted">{records.length}</span>
               </div>
               {records.length === 0 ? (
-                <p className="text-ui-sm text-muted">尚无稳定记录</p>
+                <p className="text-ui text-muted">尚无稳定记录</p>
               ) : (
                 <div className="space-y-3">
                   {shown.map((record) => (
@@ -553,10 +549,10 @@ function MemoryProfileOverview({
                           value={editingValue}
                           onChange={(event) => setEditingValue(event.target.value)}
                           aria-label="修正结构化记忆"
-                          className="min-h-24 bg-bg text-ui-sm"
+                          className="min-h-24 bg-bg text-ui"
                         />
                       ) : (
-                        <p className="text-ui-sm text-text">{memoryExcerpt(record.summary || record.value)}</p>
+                        <p className="text-ui text-text">{memoryExcerpt(record.summary || record.value)}</p>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-muted">
                         <span>{record.evidenceCount} 条证据</span>
@@ -580,7 +576,7 @@ function MemoryProfileOverview({
                           <div className="mt-2 space-y-2 border-l border-border pl-2">
                             {record.evidence.slice(-3).reverse().map((evidence) => (
                               <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
-                                <p className="text-text/80">“{evidence.quote}”</p>
+                                <p className="text-text">“{evidence.quote}”</p>
                                 <p className="mt-0.5">{evidenceSourceLabel(evidence.sourceType)} · {formatTime(evidence.observedAt)}</p>
                               </div>
                             ))}
@@ -656,7 +652,7 @@ function MemoryProfileOverview({
                         else next.add(section.title);
                         return next;
                       })}
-                      className="min-h-6 w-full rounded-input px-2 py-1 text-ui-sm text-muted hover:bg-surface-2 hover:text-text"
+                      className="min-h-6 w-full rounded-input px-2 py-1 text-ui text-muted hover:bg-surface-2 hover:text-text"
                     >
                       {expanded.has(section.title) ? "收起" : `还有 ${records.length - SECTION_PREVIEW} 条`}
                     </button>
@@ -693,7 +689,7 @@ function MemoryAction({
       onClick={onClick}
       className={cn(
         "rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text disabled:opacity-30",
-        danger && "hover:bg-error/10 hover:text-error",
+        danger && "hover:bg-danger-soft hover:text-error",
       )}
     >
       {disabled ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : icon}

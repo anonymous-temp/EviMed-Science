@@ -10,70 +10,220 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Primitive ramps — direction A 「循证青」 (2026-09-18 review, appendix D §7.1
+   and §7.3; the owner's decision). Theme-independent: a semantic token below
+   points at a step, and the dark theme points the same name at a different
+   step rather than inverting a colour. Generated in OKLCH on one lightness
+   ladder (50 98.0% · 100 95.8% · 200 91.2% · 300 84.5% · 400 76.0% · 500 67.2%
+   · 600 58.5% · 700 50.5% · 800 43.2% · 900 36.0% · 950 26.8%) with chroma
+   clamped into sRGB, so "one step darker" is a computation, not a guess — the
+   five hand-deepened values below this block are what guessing looked like.
+   Steps appendix D publishes are copied from it verbatim; the few it does not
+   list (danger/warn/ok/info 100·400·950) come from the same ladder. The
+   frame mirrors these values through `ctx.theme.overrideTokens`. */
+:root {
+  --brand-50: #f0fbf9;
+  --brand-100: #e1f7f3;
+  --brand-200: #c3ece6;
+  --brand-300: #98dbd2;
+  --brand-400: #63c5b9;
+  --brand-500: #26ac9f;
+  --brand-600: #008f84;
+  --brand-700: #00756b;
+  --brand-800: #005e56;
+  --brand-900: #004841;
+  --brand-950: #002d29;
+  /* Cool neutral, H=232 with chroma held under 0.010 so it reads as paper,
+     not as blue paper. n-500 is 2.96:1 on white — never a text or dot colour. */
+  --n-50: #f8f8f9;
+  --n-100: #f0f1f2;
+  --n-150: #e9ebed;
+  --n-200: #dfe2e4;
+  --n-300: #c8cdcf;
+  --n-400: #acb2b5;
+  --n-500: #90979b;
+  --n-600: #767d81;
+  --n-700: #606669;
+  --n-800: #4c5154;
+  --n-900: #3a3e40;
+  --n-950: #242628;
+  /* Dark surfaces on the same hue, one step lighter per layer (Carbon's
+     layering model): canvas → surface → raised. */
+  --dark-bg: #14181a;
+  --dark-surface: #1d2225;
+  --dark-surface-2: #272d30;
+  --dark-border-faint: #292f32;
+  --dark-border: #3a4044;
+  --dark-border-strong: #646c71;
+  --danger-50: #fff6f5;
+  --danger-100: #ffecea;
+  --danger-300: #ffb7ae;
+  --danger-400: #ff8b7f;
+  --danger-600: #cf463e;
+  --danger-700: #af302b;
+  --danger-800: #8f2320;
+  --danger-950: #470f0d;
+  --warn-50: #fff7ef;
+  --warn-100: #ffeedc;
+  --warn-300: #efc392;
+  --warn-400: #e8a042;
+  --warn-600: #ab6c00;
+  --warn-700: #8c5700;
+  --warn-800: #704500;
+  --warn-950: #382000;
+  --ok-50: #f3fbf4;
+  --ok-300: #aadbb3;
+  --ok-600: #3a9052;
+  --ok-700: #25773e;
+  --ok-800: #1a5f30;
+  --ok-950: #082e14;
+  --info-50: #f4f9ff;
+  --info-100: #e8f2ff;
+  --info-300: #aacfff;
+  --info-400: #79b4ff;
+  --info-600: #1f7ae0;
+  --info-700: #0362bf;
+  --info-800: #004e9c;
+  --info-950: #01254e;
+}
+
 :root,
 [data-theme="light"] {
-  --bg: #f7f5ef;
+  /* Native controls — scrollbars, a select's list, date pickers — draw in
+     the same scheme as the tokens around them. */
+  color-scheme: light;
+  /* Direction A 「循证青」 (the owner's decision, 2026-09-18). The shell was
+     warm paper and terracotta — #f7f5ef / #b24f2a / #2a2723 — which is the
+     same palette, hue for hue, as Claude's own DESIGN.md, and its five text
+     colours sat at 4.51–4.93:1, a rounding error above AA. Every value below
+     points at a primitive step; the comment is the measured contrast on
+     --surface / --bg / --surface-2 (WCAG 2.1 relative luminance). */
+  --bg: var(--n-50);
   --surface: #ffffff;
-  --surface-2: #f2efe7;
-  --border: #e7e3da;
-  --border-faint: #efece5;
-  --text: #2a2723;
-  /* P1-6 (spec §2.1): the five text-bearing tokens below were below WCAG AA
-     4.5:1 for small text and are deepened along the same hue. Comments give
-     the measured contrast on --surface / --bg / --surface-2 (WCAG 2.1
-     relative-luminance formula). The dark set already passes and stays put. */
-  --muted: #6f6a61; /* 5.37 / 4.93 / 4.67 (was #8c877d: 3.57 / 3.28 / 3.11) */
-  /* Closest step to the original terracotta #c15f3c that clears 4.5:1 on all
-     three surfaces; white --accent-fg on it measures 5.19:1. */
-  --accent: #b24f2a; /* 5.19 / 4.76 / 4.52 (was #c15f3c: 4.23 / 3.88 / 3.68) */
+  --surface-2: var(--n-100);
+  --border: var(--n-200); /* decoration: hairlines and separators only */
+  --border-faint: var(--n-150);
+  --text: var(--n-950); /* 15.19 / 14.31 / 13.43 */
+  --muted: var(--n-700); /* 5.83 / 5.49 / 5.16 — nothing lighter carries text */
+  /* The primary action, the focus ring, the selected row and the verified
+     mark. It is no longer the unread badge, a category tag or an error:
+     red is spent on danger and unhandled work only (appendix D §1.2). */
+  --accent: var(--brand-700); /* 5.59 / 5.27 / 4.94; white on it 5.59 */
   --accent-fg: #ffffff;
-  /* Same blue deepened one step so link text clears 4.5:1 on all surfaces. */
-  --link: #2869d0; /* 5.22 / 4.79 / 4.54 (was #2a6fdb: 4.78 / 4.38 / 4.16) */
-  --warn: #96620f; /* 5.18 / 4.76 / 4.51 (was #c98a2b: 2.94 / 2.69 / 2.55) */
-  --ok: #40784e; /* 5.23 / 4.80 / 4.55 (was #4b8b5b: 4.08 / 3.75 / 3.55) */
-  --error: #b44c41; /* 5.18 / 4.76 / 4.51 (was #c0564b: 4.49 / 4.12 / 3.91) */
+  --link: var(--info-700); /* 5.99 / 5.65 / 5.30 — links are not the brand */
+  --warn: var(--warn-700); /* 6.04 / 5.69 / 5.34 */
+  --ok: var(--ok-700); /* 5.55 / 5.22 / 4.90 */
+  --error: var(--danger-700); /* 6.40 / 6.03 / 5.66 */
   --error-fg: #ffffff;
-  /* Chart design system (P1-5) — validated categorical hues + chart chrome,
-     the single source of truth shared with @ai4s/shared and the matplotlib
-     style. Light surface = --surface (#ffffff). */
-  --series-1: #2a78d6;
-  --series-2: #1baf7a;
-  --series-3: #eda100;
-  --series-4: #008300;
-  --series-5: #4a3aa7;
-  --series-6: #e34948;
-  --series-7: #e87ba4;
-  --series-8: #eb6834;
-  --chart-grid: #e7e3da;
-  --chart-axis: #cbc6bb;
+  /* Semantic roles added with direction A. Contrast is measured with the WCAG
+     2.1 relative-luminance formula on --surface / --bg unless stated. */
+  /* A control's visible boundary (WCAG 1.4.11 wants 3:1): 3.19 / 3.01.
+     Appendix D proposed #8e969b, measured 3.01 on white only — controls sit on
+     the canvas as often, where it is 2.83. `--border` stays decoration. */
+  --border-strong: #8b9195;
+  --accent-soft: var(--brand-50); /* selected rows, the ✓ chip; never text */
+  --accent-strong: var(--brand-800); /* text on --accent-soft: 7.26 */
+  --danger: var(--danger-700); /* clinical safety and unread work, nothing else */
+  --danger-soft: var(--danger-50);
+  --danger-strong: var(--danger-800); /* SAFETY chip text on --danger-soft: 8.13 */
+  --warn-soft: var(--warn-50);
+  --warn-strong: var(--warn-800); /* "needs checking" text on --warn-soft: 7.80 */
+  /* A located quotation in a source (::highlight): visible on paper, and the
+     body text on it still reads (--text on warn-300: 9.32). */
+  --highlight: var(--warn-300);
+  --ok-soft: var(--ok-50);
+  --info-soft: var(--info-50); /* citation chips: --link on it 5.66 */
+  /* The product's promise, in the brand colour on purpose: a verified claim. */
+  --verify-ok: var(--brand-700);
+  /* "Needs checking" is amber and never red — it is not a clinical alarm. */
+  --verify-pending: var(--warn-800);
+  --focus: var(--brand-700); /* 5.27 on --bg */
+  --badge: var(--danger-700); /* unread count; white on it 6.40 */
+  --badge-fg: #ffffff;
+  /* Run-state dots are graphics (1.4.11, 3:1), each paired with a shape and a
+     word — colour is never the only carrier. n-500 is 2.96 and is not used. */
+  --dot-running: var(--info-600); /* 4.27 */
+  --dot-done: var(--brand-600); /* 3.99 */
+  --dot-review: var(--warn-600); /* 4.31 */
+  --dot-failed: var(--danger-600); /* 4.57 */
+  --dot-canceled: var(--n-600); /* 4.18 */
+  /* Chart categorical slots — one fixed order shared with @ai4s/shared and the
+     matplotlib style (change all three together). The order is the
+     colour-vision mechanism, not decoration: the order these eight hues had
+     put orange beside pink (normal-vision ΔE 12.9, under the 15 floor) and,
+     in dark, pink beside red (7.8). This is the dataviz validator's passing
+     order — the same hexes, re-ordered — re-run on 2026-09-18 against the new
+     surfaces: light #ffffff and #f8f8f9, worst adjacent CVD ΔE 9.1, normal
+     19.6. Aqua, yellow and magenta sit under 3:1 on white, so a chart that
+     uses them carries direct labels or a table view. Past three series in a
+     scatter, fold to 「其他」 or facet. */
+  --series-1: #2a78d6; /* blue */
+  --series-2: #eb6834; /* orange */
+  --series-3: #1baf7a; /* aqua */
+  --series-4: #eda100; /* yellow */
+  --series-5: #e87ba4; /* magenta */
+  --series-6: #008300; /* green */
+  --series-7: #4a3aa7; /* violet */
+  --series-8: #e34948; /* red */
+  /* Chart chrome follows the surfaces: gridlines are decoration, the axis is
+     a boundary a reader has to see (1.4.11). */
+  --chart-grid: var(--border);
+  --chart-axis: var(--border-strong);
 }
 
 [data-theme="dark"] {
-  --bg: #16151a;
-  --surface: #1e1d24;
-  --surface-2: #26252d;
-  --border: #33313c;
-  --border-faint: #25242b;
-  --text: #ece9e2;
-  --muted: #9a958c;
-  --accent: #d0764f;
-  --accent-fg: #16151a;
-  --link: #7aa5f0;
-  --warn: #d7a24a;
-  --ok: #6bb07d;
-  --error: #d47a70;
-  --error-fg: #16151a;
-  /* Same hues stepped for the dark chart surface (--surface #1e1d24). */
+  color-scheme: dark;
+  /* The same names pointed at the dark steps — never the light set inverted.
+     Each layer one step lighter than the one under it; the accent moves to
+     the 400 step, lighter and less saturated, as a dark surface needs.
+     Contrast on --surface / --bg / --surface-2. */
+  --bg: var(--dark-bg);
+  --surface: var(--dark-surface);
+  --surface-2: var(--dark-surface-2);
+  --border: var(--dark-border);
+  --border-faint: var(--dark-border-faint);
+  --text: var(--n-100); /* 14.20 / 15.80 / 12.34 */
+  --muted: var(--n-400); /* 7.49 / 8.33 / 6.51 */
+  --accent: var(--brand-400); /* 7.81 / 8.69 / 6.79; --accent-fg on it 8.69 */
+  --accent-fg: var(--dark-bg);
+  --link: var(--info-300); /* 10.00 / 11.13 / 8.69 */
+  --warn: var(--warn-300); /* 9.86 / 10.97 / 8.57 */
+  --ok: var(--ok-300); /* 10.32 / 11.48 / 8.97 */
+  --error: var(--danger-300); /* 9.66 / 10.75 / 8.40 */
+  --error-fg: var(--dark-bg);
+  --border-strong: var(--dark-border-strong); /* 3.00 / 3.34 */
+  --accent-soft: var(--brand-900);
+  --accent-strong: var(--brand-300); /* on --accent-soft: 6.69 */
+  --danger: var(--danger-300);
+  --danger-soft: var(--danger-950);
+  --danger-strong: var(--danger-300); /* 9.42 */
+  --warn-soft: var(--warn-950);
+  --warn-strong: var(--warn-300); /* 9.38 */
+  --highlight: var(--warn-800);
+  --ok-soft: var(--ok-950);
+  --info-soft: var(--info-950); /* --link on it 9.51 */
+  --verify-ok: var(--brand-300); /* 10.25 */
+  --verify-pending: var(--warn-300); /* 9.86 */
+  --focus: var(--brand-400);
+  --badge: var(--danger-600); /* white on it 4.57 */
+  --badge-fg: #ffffff;
+  --dot-running: var(--info-400); /* 7.48 */
+  --dot-done: var(--brand-400); /* 7.81 */
+  --dot-review: var(--warn-400); /* 7.29 */
+  --dot-failed: var(--danger-400); /* 7.07 */
+  --dot-canceled: var(--n-500); /* 5.42 */
+  /* The same hues stepped for the dark surface, same order: validated on
+     #1d2225 and #14181a — worst adjacent CVD ΔE 8.4, normal 19.3, all 3:1+. */
   --series-1: #3987e5;
-  --series-2: #199e70;
-  --series-3: #c98500;
-  --series-4: #008300;
-  --series-5: #9085e9;
-  --series-6: #e66767;
-  --series-7: #d55181;
-  --series-8: #d95926;
-  --chart-grid: #33313c;
-  --chart-axis: #4a4753;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --chart-grid: var(--border);
+  --chart-axis: var(--border-strong);
 }
 
 html,
@@ -82,21 +232,51 @@ body,
   height: 100%;
 }
 
-/* The UI baseline language is Simplified Chinese and neither font stack named
-   a Chinese face (2026-09-16 walk, V1): `Inter, system-ui` left every Chinese
-   glyph to whatever the browser picked by itself, which on Windows is the
-   1990s bitmap-hinted SimSun and differs machine to machine. The Latin faces
-   stay first so numbers, DOIs and identifiers keep the metrics the design
-   tokens were measured against, and the CJK faces follow for the glyphs Inter
-   does not carry. Kept in one place: `tailwind.config.js` reads the same two
-   lists through `fontFamily`. */
+/* The UI baseline language is Simplified Chinese. One stack for the shell and
+   the frame (contract C10): Latin faces first so numbers, DOIs and identifiers
+   keep the metrics the scale was measured against, then every Chinese face a
+   reader's OS might carry. Without named CJK faces Windows fell to the
+   bitmap-hinted SimSun (2026-09-16 walk, V1). `tailwind.config.js` carries the
+   same list for `font-sans`.
+
+   Body text is 14/22 (the `ui` rung) — where Ant Design and TDesign both land;
+   report prose uses the 16/1.75 `body` rung. */
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: Inter, system-ui, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+  font-family: Inter, "SF Pro Text", system-ui, "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  font-size: 14px;
+  line-height: 22px;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Chinese screen faces carry no true bold at every weight; a synthesized one
+     smears strokes. A missing weight falls back to the nearest real one. */
+  font-synthesis-weight: none;
+  /* The 1/8-em gap between Chinese and Latin letters or digits
+     (阿司匹林 ASPREE 研究), set by the browser rather than typed by the model —
+     a typed space would differ, byte for byte, from the quotation it copies.
+     Chrome 140, Firefox 145 and Safari 18.4 all ship it but default it OFF, so
+     it has to be written. `normal` = ideograph-alpha ideograph-numeric. */
+  text-autospace: normal;
+  /* Chromium only: trims doubled full-width punctuation space. Progressive. */
+  text-spacing-trim: normal;
+}
+
+/* Identifiers and code are compared character by character; nothing may be
+   inserted between their characters, not even for display. */
+code,
+kbd,
+pre,
+samp,
+.font-mono {
+  text-autospace: no-autospace;
+}
+
+/* Numbers in tables line up by digit: effect sizes, sample sizes, costs. */
+table,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Thin, calm scrollbars to match the paper aesthetic. */
@@ -120,7 +300,10 @@ body {
    Text fields opt out: they already signal focus with `focus:border-accent`,
    and an accent outline on top of the accent border reads as a double ring. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  /* Its own token (--focus) so the ring can be tuned without moving the brand;
+     2 px at 3:1 or better against the canvas is WCAG 2.4.13's two measurable
+     conditions (5.27:1 light, 8.69:1 dark). */
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 input:focus-visible,
@@ -128,6 +311,14 @@ textarea:focus-visible,
 select:focus-visible,
 [contenteditable]:focus-visible {
   outline: none;
+}
+
+/* Motion: two durations (tailwind `duration-fast` / `duration-base`) and one
+   easing. A state change takes 120 ms, a container 200 ms; nothing bounces. */
+:root {
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* Honor reduced-motion (spec §11.5): collapse transitions and decorative
@@ -155,5 +346,47 @@ select:focus-visible,
   }
 }
 .fade-in {
-  animation: fade-in 150ms ease-out 150ms backwards;
+  animation: fade-in var(--dur-fast) var(--ease-standard) var(--dur-fast) backwards;
+}
+
+/* A quotation located in a preserved source (lib/quoteHighlight.ts, the CSS
+   Custom Highlight API): the amber of "check this", not the red of danger. */
+::highlight(evimed-quote) {
+  background-color: var(--highlight);
+  color: var(--text);
+}
+
+/* Paper. A report reader mounts a print copy of the report beside the app
+   (`[data-print-root]`, re-scoped to the light tokens); when one exists, the
+   printer gets only that — the report and its facts on white paper, each
+   依据 mark a plain word — and never the shell, a popover or a toast. */
+@media print {
+  @page {
+    margin: 16mm 18mm;
+  }
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+  body:has(> [data-print-root]) > *:not([data-print-root]) {
+    display: none !important;
+  }
+  [data-print-root] {
+    font-size: 11pt;
+  }
+  [data-print-root] h1,
+  [data-print-root] h2,
+  [data-print-root] h3 {
+    break-after: avoid;
+  }
+  [data-print-root] table,
+  [data-print-root] blockquote,
+  [data-print-root] figure {
+    break-inside: avoid;
+  }
+  [data-print-hide] {
+    display: none !important;
+  }
 }

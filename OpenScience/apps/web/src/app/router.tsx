@@ -24,6 +24,7 @@ const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
 const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ default: m.AccountPage })));
 const RunsPage = lazy(() => import("./routes/RunsPage").then((m) => ({ default: m.RunsPage })));
+const RunFilePage = lazy(() => import("./routes/RunFilePage").then((m) => ({ default: m.RunFilePage })));
 
 /**
  * One prefix for the workbench, so that everything outside it — the login
@@ -44,6 +45,10 @@ export const routes: RouteObject[] = [
       { path: "chat", element: <SessionRoute /> },
       { path: "chat/:sessionId", element: <SessionRoute /> },
       { path: "runs", element: <RunsPage /> },
+      // One file of one run in the reader: where the frame's 交付物 / 依据
+      // tabs land (`open-artifact`, contract C9) and where a claim's preserved
+      // source opens with its quotation marked.
+      { path: "runs/:runId/files/*", element: <RunFilePage /> },
       { path: "files", element: <KnowledgePage /> },
       { path: "autopilot", element: <AutopilotPage /> },
       { path: "memory", element: <MemoryHubPage /> },

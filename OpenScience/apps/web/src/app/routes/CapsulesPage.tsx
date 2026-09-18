@@ -9,6 +9,8 @@ import { MemorySkeleton } from "@/components/cards/Skeletons";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { cn } from "@/lib/cn";
 import { CAPSULE_ENTRY_TYPES, capsuleEntryLabel } from "@/lib/capsuleText";
+import { labelFor } from "@/lib/statusLabel";
+import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
 import {
   activateCapsule, addCapsuleEntry, createCapsule, listCapsuleEntries, listCapsules,
   productErrorMessage, restoreCapsule, trashCapsule, updateCapsuleEntry,
@@ -109,16 +111,16 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
 
   return (
     <div className="h-full overflow-y-auto">
-      <main className="mx-auto w-full max-w-content-full space-y-5 px-6 py-8">
+      <div className="mx-auto w-full max-w-content-full space-y-5 px-6 py-8">
         <header className="flex flex-wrap items-start justify-between gap-3">
           {embedded
             ? <p className="max-w-2xl text-ui text-muted">保存研究方法、偏好与经验，在后续研究中继续使用。</p>
-            : <div><h1 className="font-serif text-title text-text">方法胶囊</h1><p className="mt-2 text-ui text-muted">保存研究方法、偏好与经验，在后续研究中继续使用。</p></div>}
+            : <div><h1 className={PAGE_TITLE_CLASS}>方法胶囊</h1><p className="mt-2 text-ui text-muted">保存研究方法、偏好与经验，在后续研究中继续使用。</p></div>}
           <div className="flex gap-2"><Button variant="ghost" disabled={busy} onClick={() => setTransferring(value => !value)}>分享与导入</Button><Button disabled={busy} onClick={() => setCreating((value) => !value)}><Plus size={15} aria-hidden="true" />新建胶囊</Button></div>
         </header>
         <fieldset disabled={busy}><SegmentedControl value={view} onChange={(value) => { setView(value); setSelected(null); }} aria-label="胶囊列表"
           options={[{ value: "active", label: "我的胶囊" }, { value: "trash", label: "回收站" }]} /></fieldset>
-        {error && <div role="alert" className="flex items-center gap-3 rounded-card border border-error/30 bg-surface p-3 text-ui text-error">{error}<Button variant="ghost" size="sm" onClick={() => void reload()}>重试</Button></div>}
+        {error && <div role="alert" className="flex items-center gap-3 rounded-card border border-danger bg-surface p-3 text-ui text-error">{error}<Button variant="ghost" size="sm" onClick={() => void reload()}>重试</Button></div>}
         {notice && <p role="status" className="text-ui text-ok">{notice}</p>}
         {transferring && <CapsuleTransferPanel capsule={current} onImported={saved => { listGeneration.current++; setLoading(false); setView("active"); setCapsules(items => [saved, ...items]); setSelected(saved.id); }} />}
         {creating && <Card title="新建胶囊"><form onSubmit={create} className="space-y-3">
@@ -133,7 +135,7 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
               {capsules.map((item) => <button key={item.id} type="button" disabled={busy} onClick={() => setSelected(item.id)} aria-pressed={selected === item.id}
                 className={cn("block w-full rounded-card border bg-surface p-4 text-left", selected === item.id ? "border-accent" : "border-border hover:bg-surface-2")}>
                 <span className="block font-medium text-ui text-text">{item.payload.title}</span>
-                {item.payload.description && <span className="mt-1 block text-ui-sm text-muted">{item.payload.description}</span>}
+                {item.payload.description && <span className="mt-1 block text-ui text-muted">{item.payload.description}</span>}
               </button>)}
               {cursor && <Button variant="ghost" loading={busy} onClick={() => void perform(async () => {
                 const page = await listCapsules({ deleted: view === "trash", cursor }); setCapsules((items) => [...items, ...page.items]); setCursor(page.nextCursor);
@@ -165,7 +167,7 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
             </Card>}
           </div>
         )}
-      </main>
+      </div>
     </div>
   );
 }
@@ -176,10 +178,10 @@ function EntryCard({ entry, busy, onUpdate }: { entry: CapsuleEntry; busy: boole
   const status = entry.payload.status;
   useEffect(() => { if (!editing) setValue(entry.payload.content); }, [entry.payload.content, editing]);
   return <article className="space-y-3 rounded-card border border-border p-4">
-    <div className="flex items-center justify-between gap-2 text-ui-sm"><span className="text-muted">{capsuleEntryLabel(entry.payload.factKind)} · 版本 {entry.revision}</span>
-      <span className={status === "candidate" ? "text-warn" : "text-muted"}>{STATUS_LABEL[status] ?? status}</span></div>
+    <div className="flex items-center justify-between gap-2 text-ui"><span className="text-muted">{capsuleEntryLabel(entry.payload.factKind)} · 版本 {entry.revision}</span>
+      <span className={status === "candidate" ? "text-warn" : "text-muted"}>{labelFor(STATUS_LABEL, status)}</span></div>
     {editing ? <><Textarea label="修订条目" disabled={busy} value={value} onChange={(event) => setValue(event.target.value)} maxLength={20000} rows={4} />
-      <details className="text-ui-sm text-muted"><summary>当前已保存内容</summary><p className="mt-2 whitespace-pre-wrap">{entry.payload.content}</p></details></> : <p className="whitespace-pre-wrap text-ui text-text">{entry.payload.content}</p>}
+      <details className="text-ui text-muted"><summary>当前已保存内容</summary><p className="mt-2 whitespace-pre-wrap">{entry.payload.content}</p></details></> : <p className="whitespace-pre-wrap text-ui text-text">{entry.payload.content}</p>}
     <div className="flex flex-wrap gap-2">
       {editing ? <><Button size="sm" disabled={busy || !value.trim()} onClick={() => void onUpdate({ content: value.trim() }).then((saved) => { if (saved) setEditing(false); })}>保存修订</Button><Button variant="ghost" size="sm" onClick={() => setEditing(false)}>取消修订</Button></>
         : <Button variant="ghost" size="sm" disabled={busy} onClick={() => setEditing(true)}>修订</Button>}

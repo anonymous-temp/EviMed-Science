@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { INSPECTOR_MAX, INSPECTOR_MIN, useUiStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
+import { trapTab } from "@/lib/focusTrap";
 
 /** Dragging the divider below this pane width closes the pane — the same
  *  snap-shut behaviour as the sidebar. Sits below INSPECTOR_MIN for a clear snap. */
@@ -100,17 +101,38 @@ export function RightPane({
       <div className="h-full">{children}</div>
       {/* Drag divider: resize within [INSPECTOR_MIN, INSPECTOR_MAX]; dragging
           far right snaps the pane closed. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex -- a focusable separator is the WAI-ARIA window-splitter widget, which these rules do not model. */}
       <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整右栏宽度"
+        aria-valuemin={INSPECTOR_MIN}
+        aria-valuemax={INSPECTOR_MAX}
+        aria-valuenow={Math.round(dragWidth ?? inspectorWidth)}
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the window-splitter separator is focusable by definition.
+        tabIndex={0}
+        // The pane sits at the right edge, so ← widens it and → narrows it.
+        onKeyDown={(event) => {
+          const step = event.shiftKey ? 64 : 16;
+          const next = event.key === "ArrowLeft" ? inspectorWidth + step
+            : event.key === "ArrowRight" ? inspectorWidth - step
+              : event.key === "Home" ? INSPECTOR_MIN
+                : event.key === "End" ? INSPECTOR_MAX
+                  : null;
+          if (next == null) return;
+          event.preventDefault();
+          setInspectorWidth(clamp(next));
+        }}
         onPointerDown={onDividerPointerDown}
         onPointerMove={onDividerPointerMove}
         onPointerUp={onDividerPointerUp}
         onPointerCancel={onDividerPointerUp}
-        className="group absolute inset-y-0 left-0 z-10 w-[5px] cursor-col-resize"
+        className="group absolute inset-y-0 left-0 z-10 w-[5px] cursor-col-resize outline-none"
       >
         <div
           className={cn(
             "absolute inset-y-0 left-0 w-[2px] transition-colors",
-            dragging ? "bg-accent/60" : "bg-transparent group-hover:bg-accent/40",
+            dragging ? "bg-focus" : "bg-transparent group-hover:bg-strong group-focus-visible:bg-focus",
           )}
         />
       </div>
@@ -133,12 +155,19 @@ function OverlayPane({
   onClose: () => void;
 }) {
   const restoreFocus = useRef<HTMLElement | null>(null);
+  const layer = useRef<HTMLDivElement>(null);
   useEffect(() => {
     restoreFocus.current = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Tab") {
+        trapTab(layer.current, e);
+        return;
+      }
       if (e.key !== "Escape") return;
-      // A modal or an open menu owns Esc over the overlay.
-      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) {
+      // A modal or an open menu owns Esc over the overlay (the overlay is a
+      // dialog itself, so it does not count).
+      const owners = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]');
+      if ([...owners].some((element) => element !== layer.current)) {
         return;
       }
       e.preventDefault();
@@ -156,7 +185,15 @@ function OverlayPane({
     [],
   );
   return (
-    <div className="fixed inset-0 z-40 bg-surface">
+    // Below lg the pane covers the window: a modal layer in every sense a
+    // screen reader can tell, with Tab kept inside it.
+    <div
+      ref={layer}
+      role="dialog"
+      aria-modal="true"
+      aria-label="右栏"
+      className="fixed inset-0 z-40 bg-surface"
+    >
       {children}
     </div>
   );
