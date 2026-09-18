@@ -18,6 +18,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
+import drug_label_index
 import fixtures
 
 
@@ -1628,6 +1629,54 @@ def labels(arguments):
         ],
         "next_actions": ["Verify the exact product and current official label before making a label-status determination."],
     }
+
+
+_CHINA_JURISDICTIONS = {"cn", "china", "chinanmpa", "nmpa", "中国", "中國", "中华人民共和国"}
+
+
+def _china_or_unspecified(arguments):
+    requested = str(arguments.get("jurisdiction") or "").strip()
+    return not requested or re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", requested.casefold()) in _CHINA_JURISDICTIONS
+
+
+def drug_label_lookup(arguments):
+    """`drug_label_search`: the EviMed drug-label index first, then the label
+    connectors `labels` has always used.
+
+    With `labelId` it reads one label from the index, all sections at full
+    length; the research server preserves them before a run sees any of it.
+    Without, a Chinese or unspecified jurisdiction is searched in the index,
+    and only a search the index cannot answer goes on to the EviMed label API
+    and openFDA. `labels` itself is untouched: `biomedical_source_search` asks
+    it for openFDA by name, and the drug workflows compose it."""
+    try:
+        if arguments.get("labelId"):
+            path = drug_label_index.database_path()
+            if path is None:
+                raise PublicSourceError(
+                    "drug_label_index_unconfigured",
+                    "The EviMed drug-label index is not available in this deployment, so labels cannot be read by labelId.",
+                    False,
+                )
+            return drug_label_index.read(arguments, path)
+        note = None
+        if _china_or_unspecified(arguments):
+            path = drug_label_index.database_path()
+            if path is not None:
+                result = drug_label_index.search(arguments, path)
+                if result["data"]["items"]:
+                    return result
+                note = "The EviMed drug-label index (%s) has no Chinese label for this search." % result["data"].get("indexRelease")
+    except drug_label_index.DrugLabelIndexError as error:
+        if arguments.get("labelId"):
+            raise PublicSourceError(error.code, str(error), error.retryable) from error
+        note = "The EviMed drug-label index could not be searched: %s" % error
+    # The label connectors return whole label texts, so they keep the cap of
+    # three they always had; the index returns summaries and may list ten.
+    result = labels({**arguments, "limit": min(arguments.get("limit", 3), 3)})
+    if note:
+        result = {**result, "warnings": [note, *result.get("warnings", [])]}
+    return result
 
 
 def _event_search(arguments, include_event=True):
@@ -3851,7 +3900,7 @@ def call(name, arguments):
     if name == "pharmacy_reference_search":
         return pharmacy_reference(arguments)
     if name == "drug_label_search":
-        return labels(arguments)
+        return drug_label_lookup(arguments)
     if name == "adr_case_query":
         return adr_cases(arguments)
     if name == "adr_signal_analysis":

@@ -399,6 +399,54 @@ def test_evidence_adapter_is_authenticated_and_keeps_fixed_tool_mapping(tmp_path
     assert calls == [("offlabel_evidence_packet", {"drug": "aspirin"})]
 
 
+def test_evidence_adapter_serves_the_drug_label_index_without_depending_on_it(tmp_path, monkeypatch) -> None:
+    _, _, secret, _ = _load_service(tmp_path, monkeypatch)
+    mcp_root = Path(__file__).resolve().parents[2] / "runtime" / "mcp" / "evimed-research"
+    monkeypatch.syspath_prepend(str(mcp_root / "test"))
+    import label_fixtures
+
+    index, report = label_fixtures.build_index(tmp_path / "labels")
+    pharmacy = tmp_path / "pharmacy.sqlite"
+    connection = sqlite3.connect(pharmacy)
+    connection.executescript(
+        "CREATE TABLE records(id INTEGER PRIMARY KEY, search_text TEXT NOT NULL);"
+        "INSERT INTO records(search_text) VALUES ('aspirin');"
+        "CREATE VIRTUAL TABLE records_fts USING fts5(search_text);"
+    )
+    connection.close()
+    monkeypatch.setenv("EVIMED_MCP_ROOT", str(mcp_root))
+    monkeypatch.setenv("EVIMED_PHARMACY_REFERENCE_DB", str(pharmacy))
+    monkeypatch.setenv("EVIMED_DRUG_LABEL_DB", str(index))
+    sys.modules.pop("evimed_specialist_adapter.evidence_service", None)
+    module = importlib.import_module("evimed_specialist_adapter.evidence_service")
+    client = TestClient(module.app)
+    headers = {"Authorization": f"Bearer {_token(secret)}"}
+    endpoint = "/api/v1/evimed/drug-label-search"
+
+    health = client.get("/health").json()
+    assert health["ready"] is True
+    assert "drug_label_search" in health["tools"]
+    assert health["drugLabelIndex"]["release"] == report["release"]
+    assert client.post(endpoint, json={"labelId": "label:国药准字J20130078"}).status_code == 401
+    body = client.post(endpoint, json={"labelId": "label:国药准字J20130078", "sections": ["contraindications"]}, headers=headers).json()
+    assert body["status"] == "warning"
+    label = body["data"]["label"]
+    assert label["approvalNumber"] == "国药准字J20130078"
+    # The whole label crosses the wire: the runtime preserves it, then trims.
+    assert all(section["text"] for section in label["sections"])
+    found = client.post(endpoint, json={"drug": "阿司匹林"}, headers=headers).json()
+    assert found["data"]["items"][0]["labelId"] == "label:国药准字J20130078"
+
+    # Not shipped yet: the adapter stays ready and says so, a read by id is
+    # refused by name, and a search goes on to the public connectors.
+    monkeypatch.setenv("EVIMED_DRUG_LABEL_DB", str(tmp_path / "absent.sqlite"))
+    health = client.get("/health").json()
+    assert health["ready"] is True
+    assert health["drugLabelIndex"] == {"configured": False}
+    missing = client.post(endpoint, json={"labelId": "label:国药准字J20130078"}, headers=headers).json()
+    assert missing["error"]["code"] == "drug_label_index_unconfigured"
+
+
 @pytest.mark.parametrize("model", ["deepseek-v4.1-flash", "deepseek-unknown", ""])
 def test_capabilities_reject_an_uncertified_model(tmp_path, monkeypatch, model):
     _, client, secret, _ = _load_service(tmp_path, monkeypatch)

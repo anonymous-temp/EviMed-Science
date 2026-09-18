@@ -1,13 +1,13 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "clinical-evidence-synthesis",
-  "version": "sha256:4c4e0d9eca9061bc8d680405f20bd42fd0595ac9d0cd009774a3d6b5f81b9372",
+  "version": "sha256:36b182376fbe9688e1872d1f10ffedc98eb5606fa3c41e2afb53f9fbed1c536d",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 30,
-    "edges": 16,
+    "edges": 15,
     "byVia": {
-      "schema": 16,
+      "schema": 15,
       "model": 0,
       "executed": 0
     },
@@ -630,7 +630,7 @@
     {
       "name": "mcp__evimed__drug_label_search",
       "source": "mcp",
-      "description": "Retrieve exact-product drug-label candidates from configured jurisdictions; indexed copies still require official-current verification.",
+      "description": "Search drug labels by drug (name, brand or approval number), optionally product and manufacturer: Chinese labels from the EviMed label index, US labels with jurisdiction US. Read one label by labelId (optionally sections): it is preserved, each section citable as label:<approval>#<section>. Indexed copies are snapshots; verify against the current official label.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -644,6 +644,11 @@
             "minLength": 1,
             "maxLength": 128
           },
+          "manufacturer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
           "jurisdiction": {
             "type": "string",
             "minLength": 1,
@@ -652,13 +657,24 @@
           "limit": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 3
+            "maximum": 10
+          },
+          "labelId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "sections": {
+            "type": "array",
+            "maxItems": 17,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
           }
         },
-        "additionalProperties": false,
-        "required": [
-          "drug"
-        ]
+        "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
@@ -674,9 +690,7 @@
       "typeTags": [
         "drug_name"
       ],
-      "requiredTypeTags": [
-        "drug_name"
-      ],
+      "requiredTypeTags": [],
       "outputTypeTags": [
         "drug_name"
       ],
@@ -1596,18 +1610,6 @@
       "stateEffect": "writes_workspace",
       "matchedTypes": [
         "file_path"
-      ]
-    },
-    {
-      "from": "mcp__evimed__pharmacy_reference_search",
-      "to": "mcp__evimed__drug_label_search",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "none",
-      "matchedTypes": [
-        "drug_name"
       ]
     }
   ]

@@ -17,6 +17,7 @@ MCP_ROOT = Path(os.getenv("EVIMED_MCP_ROOT", "/mcp")).resolve()
 if str(MCP_ROOT) not in sys.path:
     sys.path.insert(0, str(MCP_ROOT))
 
+import drug_label_index  # noqa: E402
 import public_sources  # noqa: E402
 
 
@@ -27,6 +28,10 @@ ENDPOINTS = {
     "/api/v1/evimed/comprehensive-drug-evaluation": "comprehensive_drug_evaluation",
     "/api/v1/evimed/drug-selection-evaluation": "drug_selection_evaluation",
     "/api/v1/evimed/pharmacy-reference-search": "pharmacy_reference_search",
+    # Searches the drug-label index mounted at EVIMED_DRUG_LABEL_DB and reads a
+    # label by labelId; without the file it answers from the public label
+    # connectors, as the runtime would.
+    "/api/v1/evimed/drug-label-search": "drug_label_search",
 }
 
 
@@ -93,6 +98,10 @@ def _create_app() -> FastAPI:
             "status": "ok" if ready else "degraded",
             "ready": ready,
             "tools": sorted(ENDPOINTS.values()),
+            # Reported, never required: a deployment that has not shipped the
+            # label index still serves every other workflow, and label search
+            # falls back to the public connectors.
+            "drugLabelIndex": drug_label_index.status(),
         }
 
     def route_for(tool_name: str):

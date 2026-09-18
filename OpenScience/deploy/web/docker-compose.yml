@@ -1074,6 +1074,12 @@ services:
       EVIMED_EVIDENCE_SEARCH_KEY_FILE: /run/secrets/evimed-api-key
       EVIMED_PUBLIC_CONNECTORS_ENABLED: "true"
       EVIMED_PHARMACY_REFERENCE_DB: /data/pharmacy-reference.sqlite
+      # The drug-label index (runtime/mcp/evimed-research/build_drug_label_index.py),
+      # copied once into the data volume. Absent is fine: /health reports it,
+      # readiness does not depend on it, and label search falls back to the
+      # public connectors. Runtimes reach it when EVIMED_DRUG_LABEL_SEARCH_URL
+      # points at this adapter.
+      EVIMED_DRUG_LABEL_DB: /data/drug-label-index.sqlite
     volumes:
       - open-science-data:/data:ro
       - type: bind
