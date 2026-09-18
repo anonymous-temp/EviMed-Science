@@ -1,6 +1,6 @@
 import { EVIDENCE_SOURCE_TYPES, EVIDENCE_SOURCE_TYPE_LABELS_ZH } from "@evimed/domain";
 import type { WebAgentRun } from "@/lib/apiClient";
-import { claimSources, type ClaimEvidence, type ClaimMatrixMeta, type EvidenceSourceType } from "@/lib/claimCitations";
+import { claimSources, type ClaimEvidence, type ClaimMatrixMeta, type ClaimVerification, type EvidenceSourceType } from "@/lib/claimCitations";
 
 /**
  * The block above a delivered report (plan §5 act 4, appendix C §2): when the
@@ -24,13 +24,37 @@ export interface ReportFact {
 
 export const NOT_STATED = "未注明";
 
+/**
+ * The kind of each preserved source as the control plane read it from the
+ * capture's own `source.json` (C8), by artifact path. The package's matrix
+ * rarely states a kind, so without this the header of the first live aspirin
+ * report (2026-09-19) said 「指南 1 · 其他 25」 while the verification the same
+ * page had fetched typed its sources as 28 guideline and 32 RCT references.
+ */
+export function verifiedSourceTypes(verification: ClaimVerification | null | undefined): Map<string, EvidenceSourceType> {
+  const types = new Map<string, EvidenceSourceType>();
+  for (const claim of verification?.claims ?? []) {
+    for (const source of claim.sources ?? []) {
+      const type = source.sourceType;
+      if (source.artifactPath && type && (EVIDENCE_SOURCE_TYPES as readonly string[]).includes(type) && type !== "other") {
+        types.set(source.artifactPath, type as EvidenceSourceType);
+      }
+    }
+  }
+  return types;
+}
+
 /** Distinct sources the claims stand on, by kind, in the domain's order (most authoritative form first). */
-export function sourceComposition(claims: Iterable<ClaimEvidence>): { type: EvidenceSourceType; label: string; count: number }[] {
+export function sourceComposition(
+  claims: Iterable<ClaimEvidence>,
+  verified: ReadonlyMap<string, EvidenceSourceType> = new Map(),
+): { type: EvidenceSourceType; label: string; count: number }[] {
   const seen = new Map<string, EvidenceSourceType>();
   for (const claim of claims) {
     for (const source of claimSources(claim)) {
       const key = source.artifactPath ?? source.identifier ?? source.sourceUrl ?? source.sourceTitle;
-      if (key && !seen.has(key)) seen.set(key, source.sourceType);
+      const type = (source.artifactPath ? verified.get(source.artifactPath) : undefined) ?? source.sourceType;
+      if (key && !seen.has(key)) seen.set(key, type);
     }
   }
   const counts = new Map<EvidenceSourceType, number>();
@@ -49,7 +73,10 @@ export function modelLabel(model: string | null | undefined): string | null {
 
 function dateText(value: string | null | undefined): string | null {
   if (!value) return null;
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  // A bare date is a calendar day and is read as written. A timestamp is an
+  // instant and is dated where the reader is: the prefix of a UTC instant put
+  // a run started at 03:01 Beijing time on the previous day.
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
   if (match) return `${Number(match[1])}年${Number(match[2])}月${Number(match[3])}日`;
   const time = Date.parse(value);
   if (!Number.isFinite(time)) return value;
@@ -62,18 +89,29 @@ export function reportFacts({
   claims,
   run,
   limitationsTarget,
+  verification = null,
 }: {
   meta: ClaimMatrixMeta | null;
   claims: Map<string, ClaimEvidence> | null;
   run: WebAgentRun | null;
   /** The id of the report's own 「局限性」 heading, when it has one. */
   limitationsTarget?: string | null;
+  /** The control plane's check of the claims, whose sources carry their kind. */
+  verification?: ClaimVerification | null;
 }): ReportFact[] {
   const facts: ReportFact[] = [];
+  // A package that states its cutoff is taken at its word. One that does not
+  // was still searched on a known day: the run's own start, a recorded fact
+  // rather than a date read out of the prose, and said as what it is.
   const cutoff = dateText(meta?.searchCutoff);
-  facts.push({ label: "检索截止日", value: cutoff ?? NOT_STATED, missing: !cutoff });
+  const searchedOn = cutoff ? null : dateText(run?.startedAt ?? null);
+  facts.push(cutoff
+    ? { label: "检索截止日", value: cutoff, missing: false }
+    : searchedOn
+      ? { label: "检索截止日", value: `${searchedOn}（按检索执行日）`, missing: false }
+      : { label: "检索截止日", value: NOT_STATED, missing: true });
 
-  const composition = claims ? sourceComposition(claims.values()) : [];
+  const composition = claims ? sourceComposition(claims.values(), verifiedSourceTypes(verification)) : [];
   const total = composition.reduce((sum, entry) => sum + entry.count, 0);
   const scope = meta?.sourceScope
     ?? (total > 0 ? `${composition.map((entry) => `${entry.label} ${entry.count}`).join(" · ")}（共 ${total} 个来源）` : null);

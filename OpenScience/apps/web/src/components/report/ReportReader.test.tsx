@@ -68,11 +68,11 @@ beforeEach(() => {
 describe("ReportReader", () => {
   // Plan §5 act 4: the four facts a clinical reader weighs before reading,
   // 「未注明」 where the package is silent — never a date read out of prose.
-  it("states the report's facts above it, 未注明 where the package is silent", async () => {
+  it("states the report's facts above it, dating a silent package's search by its run", async () => {
     renderReader();
     const facts = await screen.findByText("检索截止日");
     const list = facts.closest("dl")!;
-    expect(within(list).getByText("检索截止日").nextElementSibling).toHaveTextContent("未注明");
+    expect(within(list).getByText("检索截止日").nextElementSibling).toHaveTextContent(/年.*月.*日（按检索执行日）/);
     await waitFor(() => expect(within(list).getByText("来源范围").nextElementSibling).toHaveTextContent("RCT 1（共 1 个来源）"));
     expect(within(list).getByText("模型").nextElementSibling).toHaveTextContent("DeepSeek · deepseek-flash");
     expect(within(list).getByRole("button", { name: "见正文「局限性」一节" })).toBeInTheDocument();

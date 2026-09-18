@@ -6,6 +6,7 @@ import { extOf, extToKind, previewKindForName } from "@/lib/artifacts";
 import { readArtifact } from "@/lib/artifactFile";
 import { isClaimMatrixPath, safeWorkspacePath } from "@/lib/claimCitations";
 import { runTitle } from "@/lib/runPresentation";
+import { artifactDisplayName } from "@/lib/artifactNames";
 import { parseFailureMessage } from "@/lib/errorText";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -84,14 +85,14 @@ export function RunFilePage() {
   return (
     <ReportRunContext.Provider value={runId ? { runId: run?.id ?? runId, run } : null}>
       <div className="flex h-full flex-col bg-bg">
-        <PageTitle page={filename || "文件"} />
+        <PageTitle page={path ? artifactDisplayName(path) : "文件"} />
         <header className="flex shrink-0 items-center gap-3 border-b border-border bg-surface px-6 py-3" data-print-hide="">
           <Link to={backTo} className="inline-flex items-center gap-1 text-ui text-link hover:underline">
             <ArrowLeft size={14} aria-hidden="true" />运行记录
           </Link>
           <span className="text-muted" aria-hidden="true">/</span>
           <h1 className="min-w-0 truncate text-ui font-semibold text-text">
-            {run ? `${runTitle(run)} · ` : ""}{filename || "文件"}
+            {run ? `${runTitle(run)} · ` : ""}{path ? artifactDisplayName(path) : "文件"}
           </h1>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto">

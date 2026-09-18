@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WebAgentRun } from "@/lib/apiClient";
 import { parseClaimMatrixDocument } from "@/lib/claimCitations";
-import { modelLabel, reportFacts, safetyClaimIds, sourceComposition } from "./reportMeta";
+import { modelLabel, reportFacts, safetyClaimIds, sourceComposition, verifiedSourceTypes } from "./reportMeta";
 
 const matrix = parseClaimMatrixDocument(JSON.stringify({ claims: [
   { claimId: "CLM-001", claim: "a", claimType: "direct", sourceType: "rct", artifactPath: ".evimed-sources/PMC1/fulltext.md", supportQuote: "q" },
@@ -14,6 +14,28 @@ const matrix = parseClaimMatrixDocument(JSON.stringify({ claims: [
 ] }));
 
 describe("report facts", () => {
+  it("takes a source's kind from the control plane's verification over the matrix's silence", () => {
+    // The first live aspirin report said 「指南 1 · 其他 25」 while the
+    // verification typed its sources; the verification's kind wins.
+    const plain = parseClaimMatrixDocument(JSON.stringify({ claims: [
+      { claimId: "CLM-001", claim: "a", claimType: "direct", artifactPath: ".evimed-sources/PMC1/fulltext.md", supportQuote: "q" },
+      { claimId: "CLM-002", claim: "b", claimType: "direct", artifactPath: ".evimed-sources/g/page.md", supportQuote: "g" },
+    ] }));
+    const verification = { claims: [
+      { claimId: "CLM-001", status: "verified", sources: [{ artifactPath: ".evimed-sources/PMC1/fulltext.md", status: "verified", sourceType: "rct" }] },
+      { claimId: "CLM-002", status: "verified", sources: [{ artifactPath: ".evimed-sources/g/page.md", status: "verified", sourceType: "guideline" }] },
+    ], counts: {} } as never;
+    expect(sourceComposition(plain.claims.values(), verifiedSourceTypes(verification)).map((entry) => [entry.label, entry.count])).toEqual([["指南", 1], ["RCT", 1]]);
+    expect(sourceComposition(plain.claims.values()).map((entry) => entry.label)).toEqual(["其他"]);
+  });
+
+  it("dates the search by the run that did it when the package states no cutoff", () => {
+    // Midday UTC is the same calendar day in every zone a test machine runs in.
+    const run = { model: "deepseek/deepseek-flash", startedAt: "2026-09-18T06:01:56Z", finishedAt: "2026-09-18T06:25:53Z" } as WebAgentRun;
+    const facts = reportFacts({ meta: null, claims: null, run });
+    expect(facts[0]).toEqual({ label: "检索截止日", value: "2026年9月18日（按检索执行日）", missing: false });
+  });
+
   it("counts distinct sources by kind, most authoritative form first", () => {
     expect(sourceComposition(matrix.claims.values())).toEqual([
       { type: "guideline", label: "指南", count: 1 },
