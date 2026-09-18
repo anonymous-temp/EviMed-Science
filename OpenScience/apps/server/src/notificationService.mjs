@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { NOTICE_PRIORITY, NOTICE_TYPES, errorCodeMessage, errorCodeOutcome, summarizeGateNotices } from "@evimed/domain";
+import { NOTICE_PRIORITY, NOTICE_TYPES, connectorCredentialSpec, errorCodeMessage, errorCodeOutcome, summarizeGateNotices } from "@evimed/domain";
 import { describedQualityNotices } from "./runNotices.mjs";
 import { HttpError } from "./security.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
@@ -131,7 +131,7 @@ function sameSemantics(item, values) {
  * A pure function over the run record, so the mapping is testable and there is
  * exactly one of it. The sentences come from the domain registry rather than a
  * table here, because a second table is how the frontend ended up with three.
- * @param {{status?: string, errorCode?: string|null, verification?: string|null,
+ * @param {{status?: string, errorCode?: string|null, verification?: string|null, missingCredential?: string|null,
  *          artifacts?: string[], unverifiedArtifacts?: string[], qualityNotices?: (string | Record<string, any>)[]}} run
  * @returns {{ outcome: string, title: string, body: string, severity: 'safety'|'attention'|'info', counts: { safety: number, mustFix: number, advice: number } }}
  */
@@ -149,6 +149,9 @@ export function runFinishedNotice(run) {
     upstream: "研究中断：外部数据源或服务异常",
     unknown: "研究运行已结束",
   }[outcome] ?? "研究运行已结束";
+  // A source the researcher can open themselves (`missingCredential`, set only
+  // for a known connector): said as the one thing to do, not as a failure.
+  const credential = run?.missingCredential ? connectorCredentialSpec(run.missingCredential) : null;
   // The body is counts and titles, never a finding's own sentence. It used to
   // carry the first two notices verbatim, cut at 200 characters — the gate's
   // English repair instructions, in a Chinese researcher's inbox (2026-09-18
@@ -156,15 +159,17 @@ export function runFinishedNotice(run) {
   // the sentence each came from stays on the run, one click away.
   const summary = summarizeGateNotices(describedQualityNotices(run?.qualityNotices ?? []));
   const failing = summary.safety + summary.mustFix;
-  const reason = run?.errorCode
-    ? errorCodeMessage(run.errorCode)
-    : run?.verification === "unverified"
-      ? failing > 0
-        ? `已交付。${failing} 项自证未通过${summary.safety ? `，其中 ${summary.safety} 项涉及临床安全` : ""}；引用前请在报告的「依据」里核对带 ⚠ 的结论。`
-        : "已交付，但有核验没有通过；引用前请在报告的「依据」里核对带 ⚠ 的结论。"
-      : run?.verification === "unchecked"
-        ? "已交付，但有一项核验没有运行，无法确认是否达标；引用前请自行核对来源。"
-        : "研究结果已准备好，可以查看运行记录和交付物。";
+  const reason = credential
+    ? `缺少 ${credential.title} 的访问凭据，这次运行没能完成。可在「账户与额度 → 数据源凭据」填入你自己的凭据，再重新发起。`
+    : run?.errorCode
+      ? errorCodeMessage(run.errorCode)
+      : run?.verification === "unverified"
+        ? failing > 0
+          ? `已交付。${failing} 项自证未通过${summary.safety ? `，其中 ${summary.safety} 项涉及临床安全` : ""}；引用前请在报告的「依据」里核对带 ⚠ 的结论。`
+          : "已交付，但有核验没有通过；引用前请在报告的「依据」里核对带 ⚠ 的结论。"
+        : run?.verification === "unchecked"
+          ? "已交付，但有一项核验没有运行，无法确认是否达标；引用前请自行核对来源。"
+          : "研究结果已准备好，可以查看运行记录和交付物。";
   // Files on disk are the researcher's own work whatever the verdict was, and
   // saying so here is the same rule the run surface follows: a refused package
   // is not a deleted one.
@@ -183,7 +188,10 @@ export function runFinishedNotice(run) {
   const severity = summary.safety > 0 ? "safety"
     : failing > 0 || ["gated", "stopped", "capped", "upstream", "unknown"].includes(outcome) || run?.verification ? "attention"
       : "info";
-  return { outcome, title, body, severity, counts: { safety: summary.safety, mustFix: summary.mustFix, advice: summary.advice } };
+  return {
+    outcome, title: credential ? "研究中断：缺少数据源凭据" : title, body, severity,
+    counts: { safety: summary.safety, mustFix: summary.mustFix, advice: summary.advice },
+  };
 }
 
 // China Standard Time has kept one offset since 1991, so a fixed +8 h is exact
