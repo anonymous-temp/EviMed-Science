@@ -37,7 +37,9 @@ function count(value) {
 
 /** @type {Readonly<Record<string, (args: Record<string, any>, result: any) => string>>} */
 const MCP_NARRATION = Object.freeze({
-  literature_search: (args, result) => withCount(`检索文献：「${excerpt(args.query)}」`, result),
+  literature_search: (args, result) => (Array.isArray(args.pmids) && args.pmids.length
+    ? `读摘要：${args.pmids.length} 篇 PubMed 记录`
+    : withCount(`检索文献：「${excerpt(args.query)}」`, result)),
   guideline_search: (args, result) => withCount(`检索指南：「${excerpt(args.query)}」`, result),
   clinical_trial_search: (args, result) => withCount(`检索临床试验：「${excerpt(args.query)}」`, result),
   patent_search: (args, result) => withCount(`检索专利：「${excerpt(args.query)}」`, result),
@@ -45,7 +47,10 @@ const MCP_NARRATION = Object.freeze({
   web_search: (args, result) => withCount(`检索网页：「${excerpt(args.query ?? args.queries)}」`, result),
   open_access_full_text: (args) => `取全文：${excerpt(args.identifier ?? args.doi ?? args.url, 48)}`,
   official_page_fetch: (args) => `读官方页面：${excerpt(args.url, 48)}`,
-  drug_label_search: (args, result) => withCount(`查说明书：${excerpt(args.drug ?? args.query)}`, result),
+  locate_quote: (args, result) => `核对引文：「${excerpt(args.quote, 24)}」${quoteVerdict(result)}`,
+  drug_label_search: (args, result) => (args.labelId
+    ? `读说明书：${labelName(args.labelId, result)}`
+    : withCount(`查说明书：${excerpt(args.drug ?? args.query)}`, result)),
   pharmacy_reference_search: (args, result) => withCount(`查药学参考：${excerpt(args.query)}`, result),
   adr_case_query: (args, result) => withCount(`查不良反应个例：${excerpt(args.drug ?? args.query)}`, result),
   adr_signal_analysis: (args) => `做不良反应信号分析：${excerpt(args.drug ?? args.query)}`,
@@ -65,12 +70,33 @@ const MCP_NARRATION = Object.freeze({
   drug_safety_analysis: (args) => jobPhrase('药物安全分析', args),
 })
 
+/** Whether a quotation check found the passage, when the result says so.
+ *  @param {any} result @returns {string} */
+function quoteVerdict(result) {
+  const found = result && typeof result === 'object' ? (result.data ?? result).found : undefined
+  if (found === true) return ' → 原文中有'
+  if (found === false) return ' → 原文中未找到'
+  return ''
+}
+
 /** @param {string} label @param {Record<string, any>} args @returns {string} */
 function jobPhrase(label, args) {
   const action = String(args?.action ?? 'start')
   if (action === 'status') return `查看${label}进度`
   if (action === 'capabilities') return `查看${label}能力`
   return `启动${label}`
+}
+
+/**
+ * The drug a label read is about: its name once the read has answered, the
+ * approval number until then.
+ * @param {unknown} labelId @param {any} result @returns {string}
+ */
+function labelName(labelId, result) {
+  const approval = excerpt(String(labelId ?? '').replace(/^label:/, '').replace(/#.*$/, ''), 32)
+  const label = result?.data?.label ?? result?.label
+  const name = typeof label?.genericName === 'string' ? excerpt(label.genericName, 32) : ''
+  return name ? `${name}（${approval}）` : approval
 }
 
 /** @param {string} phrase @param {any} result @returns {string} */

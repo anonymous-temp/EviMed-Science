@@ -6,6 +6,7 @@ reserved for protocol messages; adapters use explicit HTTP boundaries and never
 invent evidence when an upstream service is unavailable.
 """
 
+import hashlib
 import json
 import math
 import os
@@ -17,7 +18,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import public_sources
@@ -25,6 +26,10 @@ import science_connectors
 import drug_assessment
 import open_access_fulltext
 import official_pages
+import quote_locator
+import source_types
+import drug_label_index
+from immutable_capture import ImmutableCaptureError, managed_workspace, preserve
 import meta_agent
 import specialist_jobs
 import source_catalog
@@ -104,7 +109,8 @@ MR_SOURCE_SCHEMA = {
 NUMBER = {"type": "number"}
 LIMIT = {"type": "integer", "minimum": 1, "maximum": 200}
 EVIMED_SEARCH_LIMIT = {"type": "integer", "minimum": 1, "maximum": 100}
-LABEL_LIMIT = {"type": "integer", "minimum": 1, "maximum": 3}
+LABEL_LIMIT = {"type": "integer", "minimum": 1, "maximum": 10}
+LABEL_SECTIONS = {"type": "array", "maxItems": 17, "items": SHORT_STRING}
 DATE = {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
 YEAR = {"type": "integer", "minimum": 1900, "maximum": 2100}
 STATUS_WAIT_MAX_SECONDS = 45
@@ -313,11 +319,12 @@ TOOL_DEFINITIONS = [
         "description": (
             "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document "
             "through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. "
-            "Allowed routes are: "
-            + ", ".join(
-                "https://%s%s" % (host, prefix)
+            # Host, then its path prefixes: the list is in every request that
+            # mounts this tool, so it is written once per host, not per route.
+            "Allowed (https, host then path prefixes): "
+            + "; ".join(
+                "%s %s" % (host, " ".join(prefixes))
                 for host, prefixes in official_pages.OFFICIAL_PATHS.items()
-                for prefix in prefixes
             )
         ),
         "inputSchema": object_schema(
@@ -378,8 +385,30 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
+        "name": "locate_quote",
+        "description": (
+            "Find a quotation in a source this run preserved, judged exactly as the delivery gate judges a claim's "
+            "supportQuote (case, quotation marks, dashes, whitespace, full-width forms, CJK spacing, PDF line breaks, "
+            "inline citation markers and marked \u2026 elisions are forgiven; anything else is not). found=true only for a "
+            "match the gate accepts; each match has character offsets into the preserved file, its line and context. "
+            "When not found, match=near passages show what the source actually says, to quote instead. Read-only."
+        ),
+        "inputSchema": object_schema(
+            {
+                "sourceId": {
+                    "type": "string", "minLength": 1, "maxLength": 512,
+                    "description": "The .evimed-sources/... path a preserving tool returned, or the id it reported "
+                                   "(PMCID, DOI, official-page:<hash>, EVIMED-GUIDE:<id>, label:<approval number>#<section>).",
+                },
+                "quote": {"type": "string", "minLength": 1, "maxLength": quote_locator.MAX_QUOTE_CHARS},
+                "maxResults": {"type": "integer", "minimum": 1, "maximum": quote_locator.MAX_RESULTS},
+            },
+            ("sourceId", "quote"),
+        ),
+    },
+    {
         "name": "term_normalize",
-        "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization.",
+        "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization. Set mesh to map an English term to its MeSH descriptor: entry terms, tree numbers, narrower descriptors and a PubMed query that searches them.",
         "inputSchema": object_schema(
             {
                 "term": STRING,
@@ -388,13 +417,14 @@ TOOL_DEFINITIONS = [
                     "enum": ["general", "drug", "disease", "indication", "adverse_event"],
                 },
                 "annotate": {"type": "boolean"},
+                "mesh": {"type": "boolean"},
             },
             ("term",),
         ),
     },
     {
         "name": "drug_term_normalize",
-        "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms.",
+        "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms and the drug's WHO ATC codes as RxNorm carries them.",
         "inputSchema": object_schema({"term": STRING}, ("term",)),
     },
     {
@@ -423,10 +453,14 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "literature_search",
-        "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+        "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
         "inputSchema": object_schema(
             {
                 "query": STRING,
+                "pmids": {
+                    "type": "array", "minItems": 1, "maxItems": public_sources.MAX_PUBMED_ABSTRACT_PMIDS,
+                    "items": {"type": "string", "pattern": r"^\s*(?:PMID\s*:?\s*)?\d{1,9}\s*$"},
+                },
                 "relation": object_schema(
                     {
                         "subject": {"type": "string", "pattern": "^@[A-Z]+_[A-Za-z0-9_,.:+-]{1,180}$"},
@@ -458,7 +492,6 @@ TOOL_DEFINITIONS = [
                     "items": {"type": "string", "enum": ["internal", "pubmed", "crossref"]},
                 },
             },
-            ("query",),
         ),
     },
     {
@@ -518,10 +551,18 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "drug_label_search",
-        "description": "Retrieve exact-product drug-label candidates from configured jurisdictions; indexed copies still require official-current verification.",
+        "description": "Search drug labels by drug (name, brand or approval number), optionally product and manufacturer: Chinese labels from the EviMed label index, US labels with jurisdiction US. Read one label by labelId (optionally sections): it is preserved, each section citable as label:<approval>#<section>. Indexed copies are snapshots; verify against the current official label.",
         "inputSchema": object_schema(
-            {"drug": SHORT_STRING, "product": SHORT_STRING, "jurisdiction": SHORT_STRING, "limit": LABEL_LIMIT},
-            ("drug",),
+            {
+                "drug": SHORT_STRING,
+                "product": SHORT_STRING,
+                "manufacturer": SHORT_STRING,
+                "jurisdiction": SHORT_STRING,
+                "limit": LABEL_LIMIT,
+                "labelId": {"type": "string", "minLength": 1, "maxLength": 160},
+                "sections": LABEL_SECTIONS,
+            },
+            (),
         ),
     },
     {
@@ -1045,7 +1086,10 @@ def _validated_sources(value):
     # key was missing from this set, so every guideline search that succeeded
     # in preserving text failed the whole call as "sources[0] has an invalid
     # shape". Preserving more made the tool work less.
-    allowed = {"id", "title", "url", "source", "retrievedAt", "evidenceAccess", "artifactPath"}
+    # `sourceType` is the evidence badge (packages/domain/src/source-types.json):
+    # this server stamps it on the way out, and an adapter that already knows
+    # it may send it. An unknown value is dropped by the stamping, not refused.
+    allowed = {"id", "title", "url", "source", "retrievedAt", "evidenceAccess", "artifactPath", "sourceType"}
     for index, source in enumerate(value):
         if not isinstance(source, dict) or set(source) - allowed:
             raise ValueError("sources[%d] has an invalid shape" % index)
@@ -1584,6 +1628,42 @@ def _managed_status_with_wait(status_call, arguments):
 
 
 def call_tool(name, arguments):
+    return _with_source_types(name, _dispatch(name, arguments))
+
+
+def _with_source_types(name, result):
+    """Every source a tool returns carries its evidence type (C8).
+
+    Decided here, once, for every tool and every adapter, rather than in each
+    connector: this is where the tool name, the record's publication or study
+    types, its connector and its URL are all in hand, and a record that leaves
+    without a type can only be re-derived later from less. The matching data
+    item (same id) gets the same type, so the model screens by it too. A type
+    the table cannot decide is `other`; with no table at all nothing is set.
+    """
+    if not isinstance(result, dict) or not isinstance(result.get("sources"), list):
+        return result
+    data = result.get("data") if isinstance(result.get("data"), dict) else {}
+    items = [item for item in data.get("items", []) if isinstance(item, dict)] if isinstance(data.get("items"), list) else []
+    by_id = {str(item.get("id")): item for item in items if item.get("id") is not None}
+    for source in result["sources"]:
+        if not isinstance(source, dict):
+            continue
+        item = by_id.get(str(source.get("id")), {})
+        if source_types.is_source_type(source.get("sourceType")):
+            kind = source["sourceType"]
+        else:
+            source.pop("sourceType", None)
+            kind = source_types.source_type_of({**item, **source, "tool": name})
+        if kind is None:
+            continue
+        source["sourceType"] = kind
+        if item and not source_types.is_source_type(item.get("sourceType")):
+            item["sourceType"] = kind
+    return result
+
+
+def _dispatch(name, arguments):
     # Refused here as well as hidden from the catalog. A model that remembers a
     # tool from an earlier session, or a caller that hard-codes a name, must get
     # the deployment's answer rather than reach an adapter the deployment turned
@@ -1724,6 +1804,16 @@ def call_tool(name, arguments):
                         **source_catalog.integration_summary(),
                         "activeConnectorIds": list(source_catalog.active_connector_ids()),
                     },
+                    # Which copy of the domain's source-type table this process
+                    # stamps from; null means sources leave without a type.
+                    "sourceTypes": {
+                        "table": (source_types.table() or {}).get("origin"),
+                        "version": (source_types.table() or {}).get("version"),
+                    },
+                    # The drug-label index as this process sees it; in a
+                    # container runtime it lives with the drug evidence adapter,
+                    # so `configured: false` here is the expected answer.
+                    "drugLabelIndex": drug_label_index.status(),
                 },
                 name,
                 arguments,
@@ -1783,6 +1873,8 @@ def call_tool(name, arguments):
         return result
     if name == "official_page_fetch":
         return _normalize_tool_result(name, official_pages.fetch(arguments), arguments, _scope())
+    if name == "locate_quote":
+        return _locate_quote(arguments)
     if name in ("term_normalize", "drug_term_normalize"):
         normalized_key = " ".join(arguments["term"].strip().split()).casefold()
         rxnorm = None
@@ -1792,19 +1884,30 @@ def call_tool(name, arguments):
             except public_sources.PublicSourceError:
                 rxnorm = None
         if rxnorm is not None:
-            data = _data_with_provenance(
-                {
-                    "input": arguments["term"].strip(),
-                    "preferred": rxnorm["preferred"],
-                    "synonyms": rxnorm["synonyms"],
-                    "domain": "drug",
-                    "vocabulary": "rxnorm",
-                    "rxcui": rxnorm["rxcui"],
-                },
-                name,
-                arguments,
-                _scope(),
-            )
+            normalized = {
+                "input": arguments["term"].strip(),
+                "preferred": rxnorm["preferred"],
+                "synonyms": rxnorm["synonyms"],
+                "domain": "drug",
+                "vocabulary": "rxnorm",
+                "rxcui": rxnorm["rxcui"],
+            }
+            # The drug class, as WHO's ATC codes (via RxNorm/RxClass): what an
+            # evidence table groups a drug by. A failed lookup keeps the
+            # normalization and says the classes were not retrieved.
+            atc_warning = None
+            try:
+                normalized["atc"] = public_sources.rxnorm_atc(rxnorm["rxcui"])
+            except public_sources.PublicSourceError as error:
+                atc_warning = "ATC classes were not retrieved (%s); the RxNorm normalization is unaffected." % error
+            data = _data_with_provenance(normalized, name, arguments, _scope())
+            if atc_warning:
+                return warning(
+                    "Normalized the supplied term against the RxNorm vocabulary.",
+                    [atc_warning],
+                    ["Retry for the ATC classes, or classify the drug from its label."],
+                    data=data,
+                )
             return success("Normalized the supplied term against the RxNorm vocabulary.", data=data)
         data = _normalize_term(arguments["term"])
         annotation_warnings = []
@@ -1827,6 +1930,23 @@ def call_tool(name, arguments):
                     annotation_warnings.append(
                         "PubTator3 annotation was unavailable (%s); the curated normalization is unaffected." % error
                     )
+            # MeSH, on request: the controlled heading and its entry terms and
+            # narrower descriptors, which is what makes a PubMed search find the
+            # papers that did not use the run's own wording. Off by default for
+            # the same reason as the annotation: this tool runs in loops.
+            if arguments.get("mesh") and public_sources.enabled():
+                try:
+                    descriptor = public_sources.mesh_descriptor(arguments["term"])
+                    if descriptor:
+                        data["mesh"] = descriptor
+                    else:
+                        annotation_warnings.append(
+                            "MeSH has no descriptor for this term; MeSH is English, so pass the English name of a concept."
+                        )
+                except public_sources.PublicSourceError as error:
+                    annotation_warnings.append(
+                        "MeSH lookup was unavailable (%s); the curated normalization is unaffected." % error
+                    )
         else:
             data["domain"] = "drug"
             data["vocabulary"] = "curated-local" if normalized_key in TERM_VOCABULARY else "unresolved"
@@ -1840,6 +1960,11 @@ def call_tool(name, arguments):
                     data=data,
                 )
             return success("Normalized the supplied term against the curated vocabulary.", data=data)
+        if data.get("mesh"):
+            summary = "Mapped the term to the MeSH descriptor %s (%s)." % (data["mesh"]["name"], data["mesh"]["descriptorUi"])
+            if annotation_warnings:
+                return warning(summary, annotation_warnings, ["Use the MeSH query; retry the part that was unavailable if it matters."], data=data)
+            return success(summary, data=data)
         return warning(
             "No curated normalization exists for this term; returned the input unchanged.",
             ["The returned preferred term and synonyms are the unmodified input, not an authoritative normalization."]
@@ -1858,6 +1983,36 @@ def call_tool(name, arguments):
         if arguments.get("action") == "status":
             return _managed_status_with_wait(meta_agent.status_job, arguments)
         return meta_agent.call(arguments)
+    if name == "literature_search" and not any(arguments.get(key) for key in ("query", "relation", "pmids")):
+        return failure(
+            "invalid_input",
+            "Invalid input for literature_search: supply query, relation or pmids.",
+            False,
+            "Stop until the tool input matches its published JSON schema.",
+            ["Search with query, or fetch abstracts of chosen PubMed records with pmids."],
+        )
+    if name == "drug_label_search" and not (arguments.get("drug") or arguments.get("labelId")):
+        return failure(
+            "invalid_input",
+            "Invalid input for drug_label_search: supply drug to search, or labelId to read one label.",
+            False,
+            "Stop until the tool input matches its published JSON schema.",
+            ["Search with drug, or read a label a search returned with labelId."],
+        )
+    if name == "drug_label_search" and arguments.get("labelId"):
+        return _drug_label_read(arguments)
+    if name == "literature_search" and arguments.get("pmids"):
+        # Addressed by PubMed ids, so no private literature adapter can serve
+        # it: this call goes to PubMed through the gateway or is refused.
+        if not public_sources.enabled():
+            return failure(
+                "public_source_unsupported",
+                "Abstract retrieval by PMID needs the public connectors, which are disabled in this deployment.",
+                False,
+                "Stop and read the records another way.",
+                ["Use open_access_full_text for records with a PMC copy, or ask an operator to enable public connectors."],
+            )
+        return _public_adapter_call(name, arguments)
     if name == "literature_search" and arguments.get("relation"):
         # Addressed by concept identifiers, so no private literature adapter can
         # serve it however it is configured: this one call goes to the public
@@ -1879,6 +2034,132 @@ def call_tool(name, arguments):
             )
         return specialist_jobs.call(name, arguments)
     return _adapter_call(name, arguments)
+
+
+MAX_LABEL_TEXT_CHARS = 30_000
+
+
+def _drug_label_read(arguments):
+    """`drug_label_search` with `labelId`: one label, preserved, then shown.
+
+    The index answers wherever it is mounted -- the drug evidence adapter in a
+    container deployment, this process when the file is local -- and returns
+    the whole label. Every section is written into the workspace as one
+    capture before the run sees a word of it, so whichever section a claim
+    later quotes is already on disk with its digest. Only the sections asked
+    for (all of them when none are named) come back as text, up to a budget;
+    the rest are listed with their preserved paths.
+    """
+    try:
+        approval, named = drug_label_index.parse_label_id(arguments.get("labelId"))
+        requested = drug_label_index.requested_sections(arguments.get("sections"), named)
+    except drug_label_index.DrugLabelIndexError as error:
+        return failure(
+            error.code,
+            str(error),
+            False,
+            "Stop until the label id or the section names are corrected.",
+            ["Use the labelId and the section names a drug_label_search result gave."],
+        )
+    forwarded = {"labelId": drug_label_index.label_id(approval)}
+    if requested:
+        forwarded["sections"] = requested
+    result = _adapter_call("drug_label_search", forwarded)
+    if result.get("status") == "error":
+        return result
+    data = result.get("data") if isinstance(result.get("data"), dict) else {}
+    label = data.get("label")
+    try:
+        if not isinstance(label, dict) or drug_label_index.canonical_approval(label.get("approvalNumber")) != approval:
+            raise drug_label_index.DrugLabelIndexError("drug_label_index_invalid", "the label read returned no label, or another one")
+        artifacts = drug_label_index.capture_artifacts(label)
+        sidecar = source_types.sidecar({
+            "id": drug_label_index.label_id(approval),
+            "title": label.get("genericName") or label.get("productName") or approval,
+            "url": label.get("sourceUrl") or "",
+            "tool": "drug_label_search",
+            "source": drug_label_index.SOURCE_NAME,
+        })
+        if sidecar:
+            artifacts[sidecar[0]] = sidecar[1]
+        paths = preserve(managed_workspace(), Path(drug_label_index.capture_root(approval)), artifacts)
+    except drug_label_index.DrugLabelIndexError as error:
+        return _adapter_contract_failure("drug_label_search", str(error))
+    except ImmutableCaptureError as error:
+        return failure(
+            "drug_label_preservation_failed",
+            "The label could not be preserved in the workspace, so it cannot be quoted: %s" % error,
+            False,
+            "Stop; a label that is not preserved cannot carry a verified claim.",
+            ["Check the runtime's workspace configuration before reading labels."],
+        )
+    hashes = {paths[name]: hashlib.sha256(payload).hexdigest() for name, payload in artifacts.items()}
+    budget = MAX_LABEL_TEXT_CHARS
+    sections = []
+    for entry in label["sections"]:
+        record = {key: value for key, value in entry.items() if key != "text"}
+        # Each file's digest is in data.artifactSha256s, which is what the
+        # control plane reads; the run needs the path to cite.
+        record["artifactPath"] = paths["%s.md" % entry["section"]]
+        if not requested or entry["section"] in requested:
+            if len(entry["text"]) <= budget:
+                record["text"] = entry["text"]
+                budget -= len(entry["text"])
+            else:
+                record["omitted"] = "Longer than what is left of this reply's text budget; read the preserved file."
+        sections.append(record)
+    present = {entry["section"] for entry in label["sections"]}
+    shown = {**label, "sections": sections, "labelFile": paths[drug_label_index.LABEL_METADATA_NAME]}
+    missing = [section for section in requested if section not in present]
+    if missing:
+        shown["missingSections"] = missing
+    return {
+        **result,
+        "data": {**data, "label": shown, "artifactSha256s": hashes},
+        "artifacts": sorted(paths.values()),
+    }
+
+
+def _locate_quote(arguments):
+    """`locate_quote`: where a quotation is in a preserved source, if the gate
+    would accept it there, and what the source says nearby if not.
+
+    A quote that is not found is a `warning`, not an error: the tool answered,
+    and the answer — with the nearest passages — is what the run acts on."""
+    try:
+        workspace = str(managed_workspace())
+        data = quote_locator.locate(arguments, workspace)
+    except ImmutableCaptureError as error:
+        return failure(
+            "quote_workspace_unavailable", str(error), False,
+            "Stop; no preserved source can be read without the managed workspace.",
+            ["Check the runtime's workspace configuration."],
+        )
+    except quote_locator.QuoteLocatorError as error:
+        return failure(
+            error.code, str(error), error.retryable,
+            "The quote was not checked.",
+            ["Pass the exact .evimed-sources/... path a preserving tool returned, then retry."],
+        )
+    data = _data_with_provenance(data, "locate_quote", arguments, _scope())
+    if data["found"]:
+        kinds = sorted({match["match"] for match in data["matches"]})
+        return success(
+            "The quotation is in the preserved source (%s match, %d occurrence(s)); the delivery gate will accept it."
+            % ("/".join(kinds), len(data["matches"])),
+            data=data,
+        )
+    near = [match for match in data["matches"] if match["match"] == "near"]
+    return warning(
+        "The quotation is not in the preserved source as the delivery gate reads it%s."
+        % ("; %d near passage(s) returned" % len(near) if near else ""),
+        ["A claim quoting this passage would be marked unverified."],
+        [
+            "Quote the source's own words: copy the `text` of the closest near match, or cite a different preserved source."
+            if near else "Read the preserved source and quote a passage it contains, or cite a different source.",
+        ],
+        data=data,
+    )
 
 
 def _rpc_error(request_id, code, message):

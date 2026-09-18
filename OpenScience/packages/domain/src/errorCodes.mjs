@@ -202,6 +202,17 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // sources are what the tool falls back to — failing a run over it would
   // punish an agent that did exactly what it was told.
   "evimed_evidence_unconfigured",
+  // `locate_quote` (2026-09-18) asked about a preserved source that is not
+  // there, or not text, or too large to search: the quotation stays unchecked,
+  // which is what the gate would have said anyway. Nothing was fetched.
+  "quote_source_not_found",
+  "quote_source_unreadable",
+  "quote_source_too_large",
+  // The drug-label index (2026-09-18) is not shipped to this deployment, or
+  // has no label under that approval number: a fact about the source, and
+  // the other label connectors are still there to ask.
+  "drug_label_index_unconfigured",
+  "drug_label_not_found",
 ]);
 
 
@@ -224,6 +235,20 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   // A malformed request is still the run's own problem: unlike a refusal, the
   // tool never got far enough to have an opinion about the source.
   "public_source_query_invalid",
+  "public_source_pmid_invalid",
+  // `locate_quote` asked with no quote, or with a path outside the preserved
+  // sources, or ran where no managed workspace exists: the run's own request
+  // or the runtime's own set-up, never a fact about a source.
+  "quote_invalid",
+  "quote_source_invalid",
+  "quote_workspace_unavailable",
+  // A label id or section name the run built wrongly, a label that could not
+  // be written into the workspace (so nothing downstream can quote it), or an
+  // index file this server cannot trust -- as with pharmacy_reference_invalid.
+  "drug_label_id_invalid",
+  "drug_label_section_unknown",
+  "drug_label_preservation_failed",
+  "drug_label_index_invalid",
   "public_source_url_invalid",
   "public_source_dataset_invalid",
   "public_source_gateway_invalid",
@@ -836,6 +861,8 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^science_connector_/, '科学数据连接器这次没能给出结果。'],
   [/^mr_input_/, '孟德尔随机化的本地输入需要更正后才能继续。'],
   [/^pharmacy_reference_/, '药学参考数据这次没能给出结果。'],
+  [/^drug_label_/, '药品说明书库这次没能给出结果；可以改用其他说明书来源继续。'],
+  [/^quote_/, '引文核对这次没能完成；这只是一次查找，已写的报告不受影响。'],
   [/^evimed_evidence_/, '专有证据接口这次没能给出结果。'],
   [/^invalid_assessment/, '这次评估请求的格式不符合要求。'],
   [/^verification_/, '独立复核这次没能给出结论。原来的结论未被推翻。'],

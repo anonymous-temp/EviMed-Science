@@ -39,6 +39,11 @@ import {
   workspaceLayout,
 } from "@evimed/domain";
 
+// Pharmacist-authored cautions, shown to the reader as SAFETY notices (S5,
+// 2026-09-18). Imported on a line of its own so the ledger's own import list
+// stays as it is.
+import { clinicalSafetyCautionHits } from "@evimed/domain";
+
 export { repairableEvidencePackageErrorCodes, recoverableEvidenceSourceErrorCodes, terminalEvidenceSourceErrorCodes };
 
 // Exported for its own direct test: constructing a ledger event sequence that
@@ -2184,6 +2189,14 @@ async function specialistCompletionOutcome(
       sourceArtifacts,
       briefText,
     });
+    // A well-established risk of the scene the report discusses that it never
+    // mentions (clinical-safety-rules.json `cautionRules`): shown to the reader
+    // as a SAFETY notice, never a reason to withhold the package — owner
+    // decision 5 (2026-09-18). The run was advised of the same caution while it
+    // could still add the sentence.
+    for (const hit of clinicalSafetyCautionHits({ reportText: files.get("clinical-evidence-report.md") ?? "", question: briefText ?? undefined })) {
+      advisories.push(`SAFETY — ${hit.titleZh}：${hit.messageZh}`);
+    }
     // A rule that did not run is said, not implied. The question-scoped safety
     // rule reads the brief as the dispatcher holds it, in memory only, so a run
     // that outlived a server restart is judged without it — and a package

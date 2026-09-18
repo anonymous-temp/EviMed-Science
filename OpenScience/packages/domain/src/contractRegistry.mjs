@@ -13,7 +13,7 @@
 
 import { checkIdOf, clinicalEvidenceAdvisoryNotes, clinicalEvidenceCheckIds, clinicalEvidencePackageErrorCode, clinicalSafetyRuleHits, reportSectionShares, validateClinicalEvidencePackage, citationIntegrityIssues, runtimeLeakageLine, verificationGateMetrics } from './clinicalEvidence.mjs'
 import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contractKinds.mjs'
-import { matchedClinicalTriggers, matchedHighRiskEntities } from './safetyRules.mjs'
+import { clinicalSafetyCautionHits, matchedClinicalTriggers, matchedHighRiskEntities } from './safetyRules.mjs'
 import { appraisalTableFindings } from './appraisalContract.mjs'
 import { datasetScopingFindings } from './datasetScopingContract.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
@@ -62,6 +62,9 @@ export const GATE_CHECK_IDS = Object.freeze([
   // into it would cost.
   'clinical-content-trigger',
   'clinical-high-risk-entity',
+  // The pharmacist-authored cautions (`cautionRules`): advisory by owner
+  // decision 5 (2026-09-18) — a suggestion to the run, a notice to the reader.
+  'clinical-safety-cautions',
   'topic-portfolio-schema',
   'topic-evidence-lineage',
   'topic-study-plan',
@@ -319,6 +322,12 @@ function validateClinicalEvidenceReport(input) {
     // while it can still act, and can never withhold a package.
     ...clinicalEvidenceAdvisoryNotes(text(input, 'clinical-evidence-report.md'))
       .map((message) => issue('clinical_evidence_notice', message, { severity: 'advisory', check: checkIdOf(clinicalEvidenceAdvisoryNotes) })),
+    // A caution the report owes its reader: a well-established risk of the
+    // scene it discusses that it never mentions. Advisory, never required: the
+    // run is told while it can still add the sentence, and nothing is held
+    // back if it does not.
+    ...clinicalSafetyCautionHits({ reportText: text(input, 'clinical-evidence-report.md'), question: input.briefText ?? undefined })
+      .map((hit) => issue('clinical_safety_caution', hit.message, { severity: 'advisory', check: 'clinical-safety-cautions', rule: hit.ruleId })),
   ]
   const required = issues.filter((entry) => entry.severity === 'required')
   return {

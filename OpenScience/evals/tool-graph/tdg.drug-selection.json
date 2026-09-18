@@ -1,13 +1,13 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "drug-selection",
-  "version": "sha256:f1ef437ec14063976c3915f1b3df4636eec1945b552efcdb5cf0de580058a8eb",
+  "version": "sha256:a5d6b52dddccf9fa371be1a0c11c414c71e4d1a92f67d0fadd9ef526f90f02a7",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 25,
-    "edges": 6,
+    "edges": 4,
     "byVia": {
-      "schema": 6,
+      "schema": 4,
       "model": 0,
       "executed": 0
     },
@@ -19,15 +19,7 @@
       "count": 22
     }
   ],
-  "removed": [
-    {
-      "from": "mcp__evimed__drug_label_search",
-      "to": "mcp__evimed__drug_selection_evaluation",
-      "type": "parameter",
-      "via": "schema",
-      "reason": "lowest-priority edge in a dependency cycle"
-    }
-  ],
+  "removed": [],
   "nodes": [
     {
       "name": "ask_user",
@@ -754,7 +746,7 @@
     {
       "name": "mcp__evimed__drug_label_search",
       "source": "mcp",
-      "description": "Retrieve exact-product drug-label candidates from configured jurisdictions; indexed copies still require official-current verification.",
+      "description": "Search drug labels by drug (name, brand or approval number), optionally product and manufacturer: Chinese labels from the EviMed label index, US labels with jurisdiction US. Read one label by labelId (optionally sections): it is preserved, each section citable as label:<approval>#<section>. Indexed copies are snapshots; verify against the current official label.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -768,6 +760,11 @@
             "minLength": 1,
             "maxLength": 128
           },
+          "manufacturer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
           "jurisdiction": {
             "type": "string",
             "minLength": 1,
@@ -776,13 +773,24 @@
           "limit": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 3
+            "maximum": 10
+          },
+          "labelId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "sections": {
+            "type": "array",
+            "maxItems": 17,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
           }
         },
-        "additionalProperties": false,
-        "required": [
-          "drug"
-        ]
+        "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
@@ -798,9 +806,7 @@
       "typeTags": [
         "drug_name"
       ],
-      "requiredTypeTags": [
-        "drug_name"
-      ],
+      "requiredTypeTags": [],
       "outputTypeTags": [
         "drug_name"
       ],
@@ -1114,7 +1120,7 @@
     {
       "name": "mcp__evimed__drug_term_normalize",
       "source": "mcp",
-      "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms.",
+      "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms and the drug's WHO ATC codes as RxNorm carries them.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1229,7 +1235,7 @@
     {
       "name": "mcp__evimed__literature_search",
       "source": "mcp",
-      "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+      "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1237,6 +1243,15 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "pmids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "pattern": "^\\s*(?:PMID\\s*:?\\s*)?\\d{1,9}\\s*$"
+            }
           },
           "relation": {
             "type": "object",
@@ -1339,10 +1354,7 @@
             }
           }
         },
-        "additionalProperties": false,
-        "required": [
-          "query"
-        ]
+        "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
@@ -1360,6 +1372,8 @@
         ]
       },
       "typeTags": [
+        "mesh_term",
+        "pmid",
         "source_id"
       ],
       "requiredTypeTags": [],
@@ -1561,20 +1575,8 @@
       ]
     },
     {
-      "from": "mcp__evimed__drug_selection_evaluation",
-      "to": "mcp__evimed__drug_label_search",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "none",
-      "matchedTypes": [
-        "drug_name"
-      ]
-    },
-    {
-      "from": "mcp__evimed__drug_term_normalize",
-      "to": "mcp__evimed__drug_label_search",
+      "from": "mcp__evimed__drug_label_search",
+      "to": "mcp__evimed__drug_selection_evaluation",
       "type": "parameter",
       "via": "schema",
       "confidence": 0.9,
@@ -1587,18 +1589,6 @@
     {
       "from": "mcp__evimed__drug_term_normalize",
       "to": "mcp__evimed__drug_selection_evaluation",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "none",
-      "matchedTypes": [
-        "drug_name"
-      ]
-    },
-    {
-      "from": "mcp__evimed__pharmacy_reference_search",
-      "to": "mcp__evimed__drug_label_search",
       "type": "parameter",
       "via": "schema",
       "confidence": 0.9,

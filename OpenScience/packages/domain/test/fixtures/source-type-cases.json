@@ -1,0 +1,299 @@
+{
+  "$comment": "Records and the source type each must be given. Read by packages/domain/test/sourceTypeCases.test.mjs (evidenceSourceTypeOf) and runtime/mcp/evimed-research/test/test_source_types.py (source_type_of): the two readers of source-types.json must agree on every case.",
+  "cases": [
+    {
+      "note": "an explicit valid type wins",
+      "record": {
+        "sourceType": "label",
+        "publicationTypes": [
+          "Review"
+        ]
+      },
+      "expected": "label"
+    },
+    {
+      "note": "an explicit invalid type is ignored",
+      "record": {
+        "sourceType": "not-a-type",
+        "publicationTypes": [
+          "Review"
+        ]
+      },
+      "expected": "review"
+    },
+    {
+      "note": "most specific publication type first",
+      "record": {
+        "publicationTypes": [
+          "Review",
+          "Meta-Analysis"
+        ]
+      },
+      "expected": "meta-analysis"
+    },
+    {
+      "note": "an RCT is an RCT even when multicentre",
+      "record": {
+        "publicationTypes": [
+          "Randomized Controlled Trial",
+          "Multicenter Study"
+        ]
+      },
+      "expected": "rct"
+    },
+    {
+      "note": "a semicolon list of publication types",
+      "record": {
+        "publication_types": "Journal Article; Practice Guideline"
+      },
+      "expected": "guideline"
+    },
+    {
+      "note": "case reports",
+      "record": {
+        "publicationTypes": [
+          "Case Reports"
+        ]
+      },
+      "expected": "case-report"
+    },
+    {
+      "note": "a network meta-analysis",
+      "record": {
+        "pubTypes": [
+          "Network Meta-Analysis",
+          "Systematic Review"
+        ]
+      },
+      "expected": "meta-analysis"
+    },
+    {
+      "note": "a phase III trial that is not randomised",
+      "record": {
+        "publicationTypes": [
+          "Clinical Trial, Phase III"
+        ]
+      },
+      "expected": "clinical-trial"
+    },
+    {
+      "note": "a journal article says nothing about design",
+      "record": {
+        "publicationTypes": [
+          "Journal Article"
+        ],
+        "tool": "literature_search",
+        "source": "pubmed",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/1/"
+      },
+      "expected": "other"
+    },
+    {
+      "note": "EviMed's Chinese study type",
+      "record": {
+        "studyType": "随机对照试验",
+        "source": "evimed-literature"
+      },
+      "expected": "rct"
+    },
+    {
+      "note": "EviMed's Chinese guideline type",
+      "record": {
+        "articleType": "指南/共识"
+      },
+      "expected": "guideline"
+    },
+    {
+      "note": "EviMed systematic review / meta-analysis is filed as a systematic review",
+      "record": {
+        "articleTypes": [
+          "系统综述/Meta分析"
+        ]
+      },
+      "expected": "systematic-review"
+    },
+    {
+      "note": "a JATS article type from a full text",
+      "record": {
+        "articleType": "review-article",
+        "tool": "open_access_full_text"
+      },
+      "expected": "review"
+    },
+    {
+      "note": "the tool that found it",
+      "record": {
+        "tool": "mcp__evimed__drug_label_search"
+      },
+      "expected": "label"
+    },
+    {
+      "note": "a trial registry search",
+      "record": {
+        "tool": "clinical_trial_search"
+      },
+      "expected": "trial-registration"
+    },
+    {
+      "note": "the connector that produced it",
+      "record": {
+        "source": "evimed-nmpa-label",
+        "url": "https://www.evimed.com/x"
+      },
+      "expected": "label"
+    },
+    {
+      "note": "openFDA labels",
+      "record": {
+        "source": "openfda-label"
+      },
+      "expected": "label"
+    },
+    {
+      "note": "a PubMed guideline fallback",
+      "record": {
+        "source": "pubmed-guideline"
+      },
+      "expected": "guideline"
+    },
+    {
+      "note": "NICE guidance by host",
+      "record": {
+        "url": "https://www.nice.org.uk/guidance/ng136"
+      },
+      "expected": "guideline"
+    },
+    {
+      "note": "an NMPA notice by host",
+      "record": {
+        "url": "https://www.nmpa.gov.cn/xxgk/ggtg/index.html"
+      },
+      "expected": "regulatory"
+    },
+    {
+      "note": "an NMPA label revision announcement under the 2024 path",
+      "record": {
+        "url": "https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypshmshxdgg/20251222114033197.html"
+      },
+      "expected": "label"
+    },
+    {
+      "note": "a BNF monograph is a formulary entry, not a NICE guideline",
+      "record": {
+        "url": "https://bnf.nice.org.uk/drugs/metformin-hydrochloride/"
+      },
+      "expected": "other"
+    },
+    {
+      "note": "the State Council policy library carries NHC and NMPA notices",
+      "record": {
+        "url": "https://www.gov.cn/zhengce/zhengceku/202509/content_7039760.htm"
+      },
+      "expected": "regulatory"
+    },
+    {
+      "note": "EMA product information is the EU label",
+      "record": {
+        "url": "https://www.ema.europa.eu/en/documents/product-information/ozempic-epar-product-information_en.pdf"
+      },
+      "expected": "label"
+    },
+    {
+      "note": "an EPAR page is a regulator's assessment",
+      "record": {
+        "url": "https://www.ema.europa.eu/en/medicines/human/EPAR/ozempic"
+      },
+      "expected": "regulatory"
+    },
+    {
+      "note": "an ESC guideline page",
+      "record": {
+        "url": "https://www.escardio.org/guidelines/clinical-practice-guidelines/all-esc-practice-guidelines/x"
+      },
+      "expected": "guideline"
+    },
+    {
+      "note": "the ClinicalTrials.gov connector's own records",
+      "record": {
+        "source": "clinicaltrials.gov",
+        "url": "https://clinicaltrials.gov/study/NCT04280705"
+      },
+      "expected": "trial-registration"
+    },
+    {
+      "note": "an NMPA label revision announcement by path",
+      "record": {
+        "url": "https://www.nmpa.gov.cn/xxgk/ggtg/ypshmshxdgg/20240101000000000.html"
+      },
+      "expected": "label"
+    },
+    {
+      "note": "an FDA label PDF by path, above the FDA catch-all",
+      "record": {
+        "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2023/020234s058lbl.pdf"
+      },
+      "expected": "label"
+    },
+    {
+      "note": "an FDA safety communication",
+      "record": {
+        "url": "https://www.fda.gov/drugs/drug-safety-and-availability/x"
+      },
+      "expected": "regulatory"
+    },
+    {
+      "note": "DailyMed labels",
+      "record": {
+        "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=abc"
+      },
+      "expected": "label"
+    },
+    {
+      "note": "a Cochrane review",
+      "record": {
+        "url": "https://www.cochranelibrary.com/cdsr/doi/10.1002/14651858.CD000029.pub3/full"
+      },
+      "expected": "systematic-review"
+    },
+    {
+      "note": "a Cochrane plain-language summary",
+      "record": {
+        "url": "https://www.cochrane.org/evidence/CD000029_aspirin"
+      },
+      "expected": "systematic-review"
+    },
+    {
+      "note": "a host that only looks like a registry is not one",
+      "record": {
+        "url": "https://clinicaltrials.gov.example.org/study/NCT1"
+      },
+      "expected": "other"
+    },
+    {
+      "note": "a ChiCTR record",
+      "record": {
+        "url": "https://www.chictr.org.cn/showproj.html?proj=1"
+      },
+      "expected": "trial-registration"
+    },
+    {
+      "note": "a URL spelled as sourceUrl, as the evidence matrix does",
+      "record": {
+        "sourceUrl": "https://iris.who.int/handle/10665/1"
+      },
+      "expected": "guideline"
+    },
+    {
+      "note": "unknown is other",
+      "record": {
+        "url": "https://example.org/blog"
+      },
+      "expected": "other"
+    },
+    {
+      "note": "no record at all",
+      "record": null,
+      "expected": "other"
+    }
+  ]
+}
