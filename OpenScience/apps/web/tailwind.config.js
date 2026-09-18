@@ -19,6 +19,37 @@ export default {
         ok: "var(--ok)",
         error: "var(--error)",
         "error-fg": "var(--error-fg)",
+        // Direction A's added roles (src/index.css). Opacity modifiers such as
+        // `bg-accent/10` produce no CSS at all on a `var()` colour in Tailwind
+        // 3, so every tint is a token of its own rather than an alpha.
+        "accent-soft": "var(--accent-soft)",
+        "accent-strong": "var(--accent-strong)",
+        danger: "var(--danger)",
+        "danger-soft": "var(--danger-soft)",
+        "danger-strong": "var(--danger-strong)",
+        "warn-soft": "var(--warn-soft)",
+        "warn-strong": "var(--warn-strong)",
+        "ok-soft": "var(--ok-soft)",
+        "info-soft": "var(--info-soft)",
+        "verify-ok": "var(--verify-ok)",
+        "verify-pending": "var(--verify-pending)",
+        focus: "var(--focus)",
+        // `--badge` in CSS; `unread` here because `badge` is already a
+        // font-size rung, and `text-badge` would then set both at once.
+        unread: "var(--badge)",
+        "unread-fg": "var(--badge-fg)",
+        dot: {
+          running: "var(--dot-running)",
+          done: "var(--dot-done)",
+          review: "var(--dot-review)",
+          failed: "var(--dot-failed)",
+          canceled: "var(--dot-canceled)",
+        },
+      },
+      borderColor: {
+        // `border-strong`: the visible boundary of a control (3:1). Plain
+        // `border-border` is decoration.
+        strong: "var(--border-strong)",
       },
       // Latin faces first (they carry the metrics the type scale was measured
       // against), Chinese faces after them. Neither stack named a CJK face
