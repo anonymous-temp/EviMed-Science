@@ -512,3 +512,19 @@ export {
   connectorDeploymentSource,
   validateConnectorCredentialValue,
 } from './src/connectorCredentials.mjs'
+
+// runPhases — 4 exports
+export {
+  RUN_ACTIVITY_PHASES,
+  RUN_ACTIVITY_PHASE_LABELS_ZH,
+  phaseOfToolCall,
+  summarizeRunPhases,
+} from './src/runPhases.mjs'
+
+// sourceTypes — 4 exports
+export {
+  EVIDENCE_SOURCE_TYPES,
+  EVIDENCE_SOURCE_TYPE_LABELS_ZH,
+  evidenceSourceTypeOf,
+  isEvidenceSourceType,
+} from './src/sourceTypes.mjs'
