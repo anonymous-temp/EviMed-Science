@@ -213,6 +213,24 @@ function runLabel(run) {
   return characters.length > 24 ? `${characters.slice(0, 23).join("")}…` : characters.join("");
 }
 
+/**
+ * Whether a finished run is one of the moments the inbox tells a person about
+ * (C1: 完成 / 需要你 / 结论变了).
+ *
+ * Two endings are not: a dispatch refused before it started was already
+ * answered by the request that made it, and a run the researcher stopped is
+ * not news to them. One the platform stopped is, and says so
+ * (「研究运行已被平台终止」). A stop the kernel reported without saying who
+ * asked is counted as the person's: the platform's own stops are recorded as
+ * its own.
+ * @param {Record<string, any>} run
+ */
+export function runFinishedNotifies(run) {
+  if (run?.dispatchStatus === "rejected") return false;
+  if (run?.status === "canceled" && run?.canceledBy !== "platform") return false;
+  return true;
+}
+
 /** @param {{ outcome: string, severity: string }} notice */
 function routineCompletion(notice) {
   return (notice.outcome === "delivered" || notice.outcome === "qualified") && notice.severity !== "safety";

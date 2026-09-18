@@ -37,13 +37,14 @@ import {
 } from "./specialistRouting.mjs";
 import { SpecialistClassifier } from "./specialistClassifier.mjs";
 import { RunTitleScheduler, RunTitler } from "./runTitles.mjs";
+import { runEstimate } from "./runRoute.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
 import { createModelGatewayHandler, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger } from "./usageLedger.mjs";
-import { NotificationService, runFinishedInboxItem } from "./notificationService.mjs";
+import { NotificationService, runFinishedInboxItem, runFinishedNotifies } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
@@ -1240,7 +1241,8 @@ export function createWebApiApp(overrides = {}) {
       // instead of becoming a second, unguarded unhandled rejection.
       return agentRuns?.closeProject(project, status);
     },
-    onSessionAbort: (project, sessionId) => agentRuns?.cancelSession(project, sessionId),
+    // The researcher's own stop, relayed through the runtime proxy.
+    onSessionAbort: (project, sessionId) => agentRuns?.cancelSession(project, sessionId, { by: "user" }),
     onRuntimeStart: (project, runtime) => {
       runtimeEventPump.attach(project, runtime);
       if (!runtimeManager.pluginOverrides.has(runtimeManager.key(project))) {
@@ -1417,10 +1419,7 @@ export function createWebApiApp(overrides = {}) {
             : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
         }),
       }, project, run);
-      // A dispatch refused before it started was answered in the request that
-      // made it; an inbox item saying so again is none of the three moments
-      // the inbox notifies at (C1).
-      if (notificationService && !evaluationRun && run.dispatchStatus !== "rejected") {
+      if (notificationService && !evaluationRun && runFinishedNotifies(run)) {
         try {
           // Say what happened, in the notice itself. The mapping lives in
           // `notificationService.runFinishedInboxItem` so it is a tested pure
@@ -1985,6 +1984,7 @@ export function createWebApiApp(overrides = {}) {
             effectiveAgentVersion: selected.version,
             effectiveRuntimeAgent: selected.runtimeAgent,
             effectiveRouteReason: `autopilot:${episode.taskType}`,
+            ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
           }, async (binding, dispatchedRun, repairText = null) => {
             try {
               await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
@@ -2170,11 +2170,12 @@ export function createWebApiApp(overrides = {}) {
     if (!text) return {};
     const binding = await researchSessions.get(project, sessionId);
     await assertPublicSessionPrompt(project, sessionId, binding);
+    const registry = await agentRegistry;
     if (binding?.mode === "specialist") return {
       effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
       effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: "session-binding",
+      estimatedMinutes: runEstimate(registry.get(binding.agentId)),
     };
-    const registry = await agentRegistry;
     const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
     const named = routeNamedSpecialist(text, routableAgents);
     /** @type {{ failure?: string, verdict?: string }} */
@@ -2196,6 +2197,7 @@ export function createWebApiApp(overrides = {}) {
       effectiveAgentVersion: effective?.agentVersion ?? null,
       effectiveRuntimeAgent: effective?.runtimeAgent ?? null,
       effectiveRouteReason: effective?.reason ?? null,
+      estimatedMinutes: runEstimate(effective?.agentId ? registry.get(effective.agentId) : null),
     };
   }
 
@@ -2816,10 +2818,16 @@ export function createWebApiApp(overrides = {}) {
                 : "unrouted:open-domain",
             }
           : null);
+        // How long the route taken should take (C3): the bound capability's, the
+        // routed one's, or the answer line's own estimate.
+        const estimate = runEstimate(boundSession?.mode === "specialist"
+          ? registry.get(boundSession.agentId)
+          : (routedSpecialist ? registry.get(routedSpecialist.agentId) : answerAgent));
         const dispatch = () => agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
           ...(body.automated === true ? { automated: true } : {}),
+          ...(estimate ? { estimatedMinutes: estimate } : {}),
           question: text,
           effectiveAgentId: effectiveAgent?.agentId ?? null,
           effectiveAgentVersion: effectiveAgent?.agentVersion ?? null,
@@ -2901,6 +2909,13 @@ export function createWebApiApp(overrides = {}) {
 
       // A correction to a run that is already going.
       //
+      //   POST /api/agent-runs/:id/steer   { text: string }   (1–4000 chars, not blank; no other field)
+      //   202 { data: { id, corrections } }                   corrections = how many this run has taken
+      //   404 agent_run_not_found · 400 invalid_payload
+      //   409 agent_run_not_running · 409 agent_run_correction_limit (MAX_RUN_CORRECTIONS per run)
+      // The text reaches the running turn at its next step boundary (kernel
+      // `steer` delivery), wrapped in <evimed-correction> so a compaction keeps it.
+      //
       // Deliberately its own route rather than an exemption in the dispatch
       // rule. A dispatch creates a run, a run binds a deliverable contract, and
       // one research session may have one active run — so relaxing
@@ -2937,6 +2952,53 @@ export function createWebApiApp(overrides = {}) {
           strictContext: true,
         });
         sendJson(res, 202, { data: { id: runId, corrections: updated?.corrections ?? 0 } });
+        return;
+      }
+
+      // Stops a run (C3). A researcher who saw at minute three that a run was
+      // going the wrong way had no way to stop it from the runs page (E §9.2).
+      //
+      // The kernel first, then the ledger, and in that order on purpose: a
+      // ledger that says 「已取消」 while the kernel keeps spending is the one
+      // outcome worse than no button. So a kernel that cannot be reached with
+      // a runtime running is an error the caller can retry, and the run stays
+      // running; with no runtime running there is nothing left to stop.
+      //
+      // What reaches a child. `session/cancel` stops the root's current turn;
+      // the kernel refuses it for a subagent-owned session, and its
+      // `subagents/interruptByParent` interrupts only continuable children
+      // (every child the socket starts is one-shot, and the method is on the
+      // seam manifest's deny list). A one-shot child ends with its owner: the
+      // socket cancels the children a cancelled root turn orphans. The answer
+      // lists the children this control plane knew of, marked `with-root`.
+      if (pathname.startsWith("/api/agent-runs/") && pathname.endsWith("/cancel") && req.method === "POST") {
+        const rawRunId = pathname.slice("/api/agent-runs/".length, -"/cancel".length);
+        if (!rawRunId || rawRunId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
+        const runId = decodeRouteComponent(rawRunId, "agent run id");
+        const ctx = await context(req, res);
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run cancellation");
+        const unknown = Object.keys(body);
+        if (unknown.length > 0) {
+          throw new HttpError(400, "invalid_payload", `Unknown cancellation field(s): ${unknown.sort().join(", ")}.`);
+        }
+        const run = (await agentRuns.list(ctx.project)).find((item) => item.id === runId);
+        if (!run) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
+        if (run.status !== "running") {
+          sendJson(res, 200, { data: { run, cancellation: { root: "not-running", children: [] } } });
+          return;
+        }
+        let root = "canceled";
+        try {
+          if (!(await runtimeManager.cancelRuntimeSession(ctx.project, run.sessionId))) root = "runtime-not-running";
+        } catch (error) {
+          // A session the kernel no longer holds is not running either.
+          if (error?.code !== "runtime_session_not_found") throw error;
+          root = "session-not-found";
+        }
+        const children = agentRuns.knownChildSessions(run).map((childSessionId) => ({ childSessionId, stop: "with-root" }));
+        const canceled = await agentRuns.cancelRun(ctx.project, runId, { by: "user" });
+        await audit(ctx, "agent_run.cancel", "completed", { target: runId });
+        sendJson(res, 200, { data: { run: canceled, cancellation: { root, children } } });
         return;
       }
 

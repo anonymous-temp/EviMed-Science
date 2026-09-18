@@ -28,6 +28,7 @@ import {
   noticeText,
   runNotice,
 } from "./runNotices.mjs";
+import { normalizeRunEstimate, routeReasonText } from "./runRoute.mjs";
 import {
   assembleRunProgress,
   claimSummaryOf,
@@ -92,6 +93,7 @@ const dispatchFields = new Set([
   "sessionId",
   "dispatchId",
   "automated",
+  "estimatedMinutes",
   "question",
   "effectiveAgentId",
   "effectiveAgentVersion",
@@ -217,12 +219,16 @@ function normalizeDispatchInput(input) {
     throw invalid("Effective route reason is invalid.");
   }
   if (input.automated != null && typeof input.automated !== "boolean") throw invalid("automated must be a boolean.");
+  const estimatedMinutes = input.estimatedMinutes == null ? null : normalizeRunEstimate(input.estimatedMinutes);
+  if (input.estimatedMinutes != null && !estimatedMinutes) throw invalid("estimatedMinutes must be { min, max } minutes.");
   return {
     sessionId: safeId(input.sessionId, "research session id"),
     dispatchId: safeId(input.dispatchId, "agent run dispatch id"),
     // Started by a harness rather than a person; read by the inbox, which
     // records such a run's completion without notifying anyone (C1).
     automated: input.automated === true,
+    // How long the route it took should take, as the dispatcher knew it (C3).
+    estimatedMinutes,
     // What the reader asked, kept short. A run list identified only by
     // run_cf7f08fa4b78… is a list of hashes: thirty analyses side by side and
     // no way to tell which is which without opening each one.
@@ -386,6 +392,7 @@ function foldEvents(events) {
         // a ledger written before it lists the same way.
         question: typeof event.question === "string" && event.question ? questionPreview(event.question) : null,
         ...(event.automated === true ? { automated: true } : {}),
+        ...(normalizeRunEstimate(event.estimatedMinutes) ? { estimatedMinutes: normalizeRunEstimate(event.estimatedMinutes) } : {}),
         status: "running",
         createdAt: storedTimestamp(event.createdAt, "createdAt"),
         startedAt,
@@ -490,6 +497,9 @@ function foldEvents(events) {
         ...(deliverables ? { deliverables } : {}),
         ...(snapshot ? { progress: { deliverables: deliverables ?? current.deliverables ?? [], ...snapshot } } : {}),
         ...(claimSummary ? { claimSummary } : {}),
+        // Who stopped a cancelled run: the researcher, or the platform
+        // shutting down. Absent when the kernel reported the stop itself.
+        ...(event.canceledBy === "user" || event.canceledBy === "platform" ? { canceledBy: event.canceledBy } : {}),
         status: event.status,
         finishedAt: storedTimestamp(event.finishedAt, "finishedAt"),
         durationMs: event.durationMs,
@@ -600,8 +610,16 @@ function foldEvents(events) {
   // Every run has a name (C3). One nobody gave a title is called by what it
   // asked; that is `question`, the source an automatic title may replace.
   for (const [id, run] of runs) {
-    if (run.titleSource === "auto" || run.titleSource === "user") continue;
-    runs.set(id, Object.freeze({ ...run, title: derivedRunTitle(run), titleSource: "question" }));
+    // Why it went where it went, in the reader's words (C3), derived from the
+    // machine reason the ledger keeps for operations.
+    const routeReason = routeReasonText(run.effectiveRouteReason, run.effectiveAgentId);
+    const named = run.titleSource === "auto" || run.titleSource === "user";
+    if (named && !routeReason) continue;
+    runs.set(id, Object.freeze({
+      ...run,
+      ...(routeReason ? { routeReason } : {}),
+      ...(named ? {} : { title: derivedRunTitle(run), titleSource: "question" }),
+    }));
   }
   return runs;
 }
@@ -3699,6 +3717,7 @@ export class AgentRunStore {
     baselineCursor,
     dispatchId = null,
     automated = false,
+    estimatedMinutes = null,
     question = null,
     effectiveAgentId = session.mode === "specialist" ? session.agentId : null,
     effectiveAgentVersion = session.mode === "specialist" ? session.agentVersion : null,
@@ -3795,6 +3814,7 @@ export class AgentRunStore {
         model: this.model,
         question,
         ...(automated === true ? { automated: true } : {}),
+        ...(normalizeRunEstimate(estimatedMinutes) ? { estimatedMinutes: normalizeRunEstimate(estimatedMinutes) } : {}),
         createdAt: now,
         startedAt: startedAt == null ? now : storedTimestamp(startedAt, "startedAt"),
         baselineCursor,
@@ -3829,6 +3849,7 @@ export class AgentRunStore {
       sessionId,
       dispatchId,
       automated,
+      estimatedMinutes,
       question,
       briefText,
       effectiveAgentId,
@@ -3851,7 +3872,7 @@ export class AgentRunStore {
           effectiveRouteReason: "session-binding",
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
-    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, automated, question, ...selected });
+    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, automated, estimatedMinutes, question, ...selected });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
@@ -4415,6 +4436,8 @@ export class AgentRunStore {
       unverifiedArtifacts: normalizeArtifacts(terminal.unverifiedArtifacts),
       verification: normalizeVerification(terminal.verification),
       qualityNotices: normalizeQualityNotices(terminal.qualityNotices),
+      ...(terminal.status === "canceled" && (terminal.canceledBy === "user" || terminal.canceledBy === "platform")
+        ? { canceledBy: terminal.canceledBy } : {}),
     };
 
     // Delivery is a label, not a switch.
@@ -4529,12 +4552,48 @@ export class AgentRunStore {
     return result;
   }
 
-  async cancelSession(project, rawSessionId) {
+  /** @param {any} project @param {string} rawSessionId @param {{ by?: 'user' | 'platform' | null }} [options] */
+  async cancelSession(project, rawSessionId, { by = null } = {}) {
     const sessionId = safeId(rawSessionId, "research session id");
     const run = (await this.list(project)).find(
       (item) => item.sessionId === sessionId && item.status === "running",
     );
     if (!run) return null;
+    return this.cancelRunRecord(project, run, { by });
+  }
+
+  /**
+   * Stops one run's observation and records it cancelled (C3). Idempotent: a
+   * run already over is returned as it is. The kernel side — its sessions —
+   * is the caller's, because only the caller knows which it may reach.
+   * @param {any} project @param {string} rawRunId @param {{ by?: 'user' | 'platform' | null }} [options]
+   */
+  async cancelRun(project, rawRunId, { by = null } = {}) {
+    const runId = safeId(rawRunId, "agent run id");
+    const run = (await this.list(project)).find((item) => item.id === runId);
+    if (!run) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
+    if (run.status !== "running") return run;
+    return this.cancelRunRecord(project, run, { by });
+  }
+
+  /**
+   * Every child session this control plane knows a run to have: its plan's
+   * deliverables, its last progress aggregate, and what the live tracker
+   * observed. Candidates for the caller to act on, bounded.
+   * @param {Record<string, any>} run @returns {string[]}
+   */
+  knownChildSessions(run) {
+    const tracker = this.progressTrackers.get(run.id);
+    const ids = [
+      ...(Array.isArray(run.deliverables) ? run.deliverables : []).map((item) => item?.childSessionId),
+      ...(Array.isArray(run.progress?.children) ? run.progress.children : []).map((child) => child?.childSessionId),
+      ...(tracker ? [...tracker.children, ...tracker.kernelChildren.map((child) => child.sessionId)] : []),
+    ];
+    return [...new Set(ids.filter((id) => typeof id === "string" && id && id !== run.sessionId))].slice(0, 64);
+  }
+
+  /** @param {any} project @param {Record<string, any>} run @param {{ by?: 'user' | 'platform' | null }} options */
+  async cancelRunRecord(project, run, { by = null }) {
     const monitor = this.monitors.get(run.id);
     monitor?.cancel();
     let finished;
@@ -4543,6 +4602,7 @@ export class AgentRunStore {
         status: "canceled",
         errorCode: "runtime_canceled",
         artifacts: [],
+        ...(by ? { canceledBy: by } : {}),
       });
     } finally {
       // Cancellation is complete only after the observer has left every read
@@ -5783,7 +5843,7 @@ export class AgentRunStore {
    * ungated work indistinguishable from work that passed.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null, transcript?: import('@evimed/domain').RunTranscript, routeTurn?: (text: string) => Promise<any> }} [routed]
+   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null, estimatedMinutes?: { min: number, max: number } | null, transcript?: import('@evimed/domain').RunTranscript, routeTurn?: (text: string) => Promise<any> }} [routed]
    */
   async adoptRuntimeSession(project, sessionId, routed = {}) {
     const id = safeId(sessionId, "runtime session id");
@@ -5811,6 +5871,7 @@ export class AgentRunStore {
     }, {
       baselineCursor: null,
       question: routed.question ?? null,
+      estimatedMinutes: routed.estimatedMinutes ?? null,
       effectiveAgentId: routed.effectiveAgentId ?? null,
       effectiveAgentVersion: routed.effectiveAgentVersion ?? null,
       effectiveRuntimeAgent: routed.effectiveRuntimeAgent ?? null,
@@ -6021,6 +6082,7 @@ export class AgentRunStore {
           kernelRequestIds: requestIds,
           legacyRunId: legacy?.id,
           question: questionPreview(question),
+          estimatedMinutes: routed.estimatedMinutes ?? null,
           effectiveAgentId: routed.effectiveAgentId ?? binding?.agentId ?? null,
           effectiveAgentVersion: routed.effectiveAgentVersion ?? binding?.agentVersion ?? null,
           effectiveRuntimeAgent: routed.effectiveRuntimeAgent ?? binding?.runtimeAgent ?? null,
@@ -6142,6 +6204,9 @@ export class AgentRunStore {
         status,
         errorCode: "runtime_canceled",
         artifacts: [],
+        // The platform stopping, not the researcher: said, because the inbox
+        // tells the one and not the other.
+        ...(status === "canceled" ? { canceledBy: "platform" } : {}),
       });
     }
   }
