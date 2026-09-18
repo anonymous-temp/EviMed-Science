@@ -154,13 +154,14 @@ export function matchedHighRiskEntities(text) {
  */
 
 /** @typedef {{ names: readonly string[], terms: readonly CautionTerm[] }} CautionConcept */
+/** @typedef {{ authority: string, year?: number, url: string, quote?: string, note?: string }} CautionEvidence */
 /** @typedef {{ name: string, lower: string, pattern: RegExp | null }} CautionTerm */
 /** @typedef {{ concepts: readonly CautionConcept[], minDistinct: number, minMentions: number }} CautionGroup */
 /**
  * @typedef {{
  *   id: string, titleZh: string, family: string, message: string, messageZh: string,
  *   scope: 'document' | 'paragraph', when: readonly CautionGroup[], mention: CautionGroup,
- *   evidence: readonly { authority: string, year?: number, url: string }[],
+ *   evidence: readonly CautionEvidence[],
  * }} CautionRule
  */
 
@@ -330,7 +331,7 @@ export const CLINICAL_SAFETY_CAUTION_CHECK = 'clinical-safety-cautions'
  * the report.
  *
  * @param {{ reportText?: unknown, question?: unknown, rules?: readonly CautionRule[] }} input
- * @returns {{ ruleId: string, check: string, titleZh: string, message: string, messageZh: string, matched: string[][], evidence: readonly { authority: string, year?: number, url: string }[] }[]}
+ * @returns {{ ruleId: string, check: string, titleZh: string, message: string, messageZh: string, matched: string[][], evidence: readonly CautionEvidence[] }[]}
  */
 export function clinicalSafetyCautionHits({ reportText, question, rules = CLINICAL_SAFETY_CAUTION_RULES }) {
   const report = String(reportText ?? '').toLowerCase()

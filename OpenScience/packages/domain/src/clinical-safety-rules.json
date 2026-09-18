@@ -1345,19 +1345,29 @@
       "messageZh": "报告讨论阿司匹林用于一级预防，但通篇没有提到出血风险。请写明它增加的出血风险（消化道出血、颅内出血），以及净获益取决于个体的出血风险。",
       "evidence": [
         {
-          "authority": "USPSTF",
-          "year": 2022,
-          "url": "https://www.uspreventiveservicestaskforce.org/uspstf/recommendation/aspirin-to-prevent-cardiovascular-disease-preventive-medication"
+          "authority": "ASPREE trial, N Engl J Med 2018;379:1509",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/30221597/",
+          "quote": "significantly higher risk of major hemorrhage and did not result in a significantly lower risk of cardiovascular disease"
         },
         {
           "authority": "ACC/AHA Guideline on the Primary Prevention of Cardiovascular Disease",
           "year": 2019,
-          "url": "https://www.ahajournals.org/doi/10.1161/CIR.0000000000000678"
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7734661/",
+          "quote": "adults of any age who are at increased risk of bleeding",
+          "note": "Class III: Harm (C-LD) for low-dose aspirin in primary prevention."
         },
         {
-          "authority": "ASPREE trial, N Engl J Med",
-          "year": 2018,
-          "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa1805819"
+          "authority": "中国心血管病一级预防指南",
+          "year": 2020,
+          "url": "https://csc.cma.org.cn/art/2020/12/25/art_619_36880.html",
+          "quote": "出血高危险因素包括但不限于以下情况：既往有胃肠道出血或消化性溃疡疾病"
+        },
+        {
+          "authority": "USPSTF",
+          "year": 2022,
+          "url": "https://www.uspreventiveservicestaskforce.org/uspstf/recommendation/aspirin-to-prevent-cardiovascular-disease-preventive-medication",
+          "quote": "The USPSTF recommends against initiating low-dose aspirin use for the primary prevention of CVD in adults 60 years or older."
         }
       ]
     },
@@ -1393,28 +1403,40 @@
           "against initiating"
         ]
       ],
-      "message": "The report discusses aspirin for primary prevention in older adults and never states the guideline position: routine initiation is not recommended (USPSTF 2022: adults 60 or older; ACC/AHA 2019: older than 70). State it, with the trial evidence (ASPREE) behind it.",
-      "messageZh": "报告讨论老年人使用阿司匹林进行一级预防，但没有写出指南立场：不推荐常规启用（USPSTF 2022：60 岁及以上；ACC/AHA 2019：70 岁以上）。请写明这一立场及其试验依据（ASPREE）。",
+      "message": "The report discusses aspirin for primary prevention in older adults and never states the guideline position: routine initiation is not recommended (USPSTF 2022: 60 and over; ACC/AHA 2019 and the 2020 Chinese primary-prevention guideline: over 70; AGS Beers 2023: avoid initiating). State that position and its trial basis (ASPREE).",
+      "messageZh": "报告讨论老年人使用阿司匹林进行一级预防，但没有写出指南立场：不推荐常规启用（USPSTF 2022：60 岁及以上；ACC/AHA 2019 与《中国心血管病一级预防指南》2020：70 岁以上；AGS Beers 2023：避免启用）。请写明这一立场及其试验依据（ASPREE）。",
       "evidence": [
         {
           "authority": "USPSTF",
           "year": 2022,
-          "url": "https://www.uspreventiveservicestaskforce.org/uspstf/recommendation/aspirin-to-prevent-cardiovascular-disease-preventive-medication"
+          "url": "https://www.uspreventiveservicestaskforce.org/uspstf/recommendation/aspirin-to-prevent-cardiovascular-disease-preventive-medication",
+          "quote": "The USPSTF recommends against initiating low-dose aspirin use for the primary prevention of CVD in adults 60 years or older.",
+          "note": "Grade D."
         },
         {
           "authority": "ACC/AHA Guideline on the Primary Prevention of Cardiovascular Disease",
           "year": 2019,
-          "url": "https://www.ahajournals.org/doi/10.1161/CIR.0000000000000678"
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7734661/",
+          "quote": "should not be administered on a routine basis for the primary prevention of ASCVD among adults >70 years of age",
+          "note": "Class III: Harm (B-R)."
         },
         {
-          "authority": "ASPREE trial, N Engl J Med",
+          "authority": "中国心血管病一级预防指南",
+          "year": 2020,
+          "url": "https://csc.cma.org.cn/art/2020/12/25/art_619_36880.html",
+          "quote": "使用阿司匹林进行 ASCVD一级预防时，对于年龄>70岁的患者其风险大于获益，不建议常规使用"
+        },
+        {
+          "authority": "ASPREE trial, N Engl J Med 2018;379:1509",
           "year": 2018,
-          "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa1805819"
+          "url": "https://pubmed.ncbi.nlm.nih.gov/30221597/",
+          "quote": "significantly higher risk of major hemorrhage and did not result in a significantly lower risk of cardiovascular disease"
         },
         {
           "authority": "AGS Beers Criteria",
           "year": 2023,
-          "url": "https://agsjournals.onlinelibrary.wiley.com/doi/10.1111/jgs.18372"
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12478568/",
+          "quote": "Avoid initiating aspirin for primary prevention of cardiovascular disease."
         }
       ]
     },
@@ -1440,9 +1462,27 @@
       "messageZh": "报告讨论抗凝药与抗血小板药或非甾体抗炎药同用，但没有提到出血。请写明联用会增加大出血风险，以及相应的监测或胃肠保护措施。",
       "evidence": [
         {
+          "authority": "Eliquis (apixaban) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=e9481622-7cc6-418a-acb6-c5450daae9b0",
+          "quote": "Concomitant use of drugs affecting hemostasis increases the risk of bleeding."
+        },
+        {
+          "authority": "Xarelto (rivaroxaban) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=10db92f9-2300-4a80-836b-673e1ae91610",
+          "quote": "Coadministration of enoxaparin, warfarin, aspirin, clopidogrel and chronic NSAID use may increase the risk of bleeding"
+        },
+        {
+          "authority": "Warfarin sodium tablets prescribing information (Teva)",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=0cbce382-9c88-4f58-ae0f-532a841e8f95",
+          "quote": "can cause major or fatal bleeding",
+          "note": "Boxed warning; Table 3 of the label lists antiplatelet agents and NSAIDs among the drugs that raise the bleeding risk."
+        },
+        {
           "authority": "AGS Beers Criteria",
           "year": 2023,
-          "url": "https://agsjournals.onlinelibrary.wiley.com/doi/10.1111/jgs.18372"
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12478568/",
+          "quote": "Avoid short-term scheduled use in combination with oral or parenteral corticosteroids, anticoagulants, or antiplatelet agents unless other alternatives are not effective",
+          "note": "The NSAID row. Beers 2023 has no anticoagulant-with-antiplatelet entry of its own; that half of the caution rests on the labels above."
         }
       ]
     },
@@ -1483,8 +1523,17 @@
       "evidence": [
         {
           "authority": "KDIGO Clinical Practice Guideline for the Evaluation and Management of CKD",
+          "year": 2012,
+          "url": "https://kdigo.org/wp-content/uploads/2017/02/KDIGO_2012_CKD_GL.pdf",
+          "quote": "Prolonged therapy is not recommended in people with GFR <60",
+          "note": "Table 32, which also advises avoiding NSAIDs at GFR <30 ml/min/1.73 m2 and with lithium or RAAS blockade."
+        },
+        {
+          "authority": "KDIGO Clinical Practice Guideline for the Evaluation and Management of CKD",
           "year": 2024,
-          "url": "https://kdigo.org/guidelines/ckd-evaluation-and-management/"
+          "url": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+          "quote": "Indiscriminate chronic OTC NSAID use has been associated with a higher risks of kidney failure",
+          "note": "Page S247; the 2024 guideline discourages chronic over-the-counter use rather than repeating the 2012 GFR thresholds."
         }
       ]
     },
@@ -1519,13 +1568,21 @@
           "decompensation"
         ]
       ],
-      "message": "The report discusses NSAIDs in people with heart failure and never mentions that they worsen it. State that NSAIDs cause sodium and fluid retention and worsening heart failure, and should be avoided or withdrawn where possible.",
-      "messageZh": "报告讨论心衰患者使用非甾体抗炎药，但没有提到其可加重心衰。请写明 NSAID 可致水钠潴留、心衰加重，应尽量避免或停用。",
+      "message": "The report discusses NSAIDs in heart failure and never mentions that they can worsen it. State that NSAIDs cause sodium and water retention, blunt diuretics and worsen heart failure, and that they should be avoided or withdrawn in HFrEF and symptomatic heart failure.",
+      "messageZh": "报告讨论心衰患者使用非甾体抗炎药，但没有提到其可加重心衰。请写明 NSAID 可致水钠潴留、削弱利尿剂作用并加重心衰，射血分数降低或有症状的心衰患者应尽量避免或停用。",
       "evidence": [
         {
           "authority": "AHA/ACC/HFSA Guideline for the Management of Heart Failure",
           "year": 2022,
-          "url": "https://www.ahajournals.org/doi/10.1161/CIR.0000000000001063"
+          "url": "https://www.ahajournals.org/doi/10.1161/CIR.0000000000001063",
+          "quote": "In patients with HFrEF, NSAIDs worsen HF symptoms and should be avoided or withdrawn whenever possible",
+          "note": "Section 7.3.7, Class 3: Harm (B-NR). ahajournals.org refuses scripted requests; the wording was read from Guideline Central and an archived copy of the full text, which adds: NSAIDs can cause sodium and water retention and blunt the effects of diuretics."
+        },
+        {
+          "authority": "AGS Beers Criteria",
+          "year": 2023,
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12478568/",
+          "note": "NSAIDs and COX-2 inhibitors: use with caution in asymptomatic heart failure, avoid in symptomatic heart failure."
         }
       ]
     },
@@ -1569,7 +1626,8 @@
         {
           "authority": "AGS Beers Criteria",
           "year": 2023,
-          "url": "https://agsjournals.onlinelibrary.wiley.com/doi/10.1111/jgs.18372"
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12478568/",
+          "quote": "Avoid chronic use unless other alternatives are not effective and the patient can take a gastroprotective agent."
         }
       ]
     },
@@ -1605,9 +1663,22 @@
       "messageZh": "报告讨论两种或以上已知可延长 QT 间期的药物，但没有提到 QT。请写明合用时 QT 延长与尖端扭转型室速的风险，以及需要的心电图和电解质监测。",
       "evidence": [
         {
-          "authority": "CredibleMeds QTdrugs list (Known Risk of TdP)",
-          "year": 2026,
-          "url": "https://crediblemeds.org/"
+          "authority": "AHA/ACCF Scientific Statement: Prevention of Torsade de Pointes in Hospital Settings",
+          "year": 2010,
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3056123/",
+          "quote": "the risk for TdP increases significantly with concurrent use of more than 1 QT prolonging drug"
+        },
+        {
+          "authority": "MHRA Drug Safety Update: citalopram and escitalopram",
+          "year": 2011,
+          "url": "https://www.gov.uk/drug-safety-update/citalopram-and-escitalopram-qt-interval-prolongation",
+          "quote": "Coadministration of citalopram and escitalopram with medicines that prolong the QT interval is therefore contraindicated."
+        },
+        {
+          "authority": "CredibleMeds TdP risk categories",
+          "url": "https://crediblemeds.org/blog/clarification-crediblemedsr-tdp-risk-categories",
+          "quote": "prolong the QT interval AND are clearly associated with a known risk of TdP, even when taken as recommended",
+          "note": "The definition of Known Risk. The drug lists need a login, so the vocabulary's membership was not re-checked against them on 2026-09-18; a pharmacist with an account should."
         }
       ]
     },
@@ -1676,14 +1747,28 @@
       "messageZh": "报告讨论小剂量甲氨蝶呤，但没有写明每周一次给药。请写明每周一次的用法，并提示误作每日服用曾导致致死性毒性。",
       "evidence": [
         {
-          "authority": "ISMP List of High-Alert Medications",
-          "year": 2024,
-          "url": "https://www.ismp.org/recommendations/high-alert-medications-community-ambulatory-list"
+          "authority": "EMA: new measures to avoid potentially fatal dosing errors with methotrexate",
+          "year": 2019,
+          "url": "https://www.ema.europa.eu/en/news/new-measures-avoid-potentially-fatal-dosing-errors-methotrexate-inflammatory-diseases",
+          "quote": "For inflammatory conditions, methotrexate must be used just once a week."
         },
         {
-          "authority": "EMA PRAC review of methotrexate dosing errors",
-          "year": 2019,
-          "url": "https://www.ema.europa.eu/en/medicines/human/referrals/methotrexate-containing-medicinal-products"
+          "authority": "Trexall (methotrexate) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=e942f8db-510f-44d6-acb5-b822196f5e8c",
+          "quote": "Most commonly, these errors occurred in patients who were taking TREXALL daily when a weekly dosing regimen was prescribed."
+        },
+        {
+          "authority": "国家药监局 2022年第100号公告（口服甲氨蝶呤说明书修订）",
+          "year": 2022,
+          "url": "https://www.cn-healthcare.com/article/20221108/content-574540.html",
+          "quote": "本品用于非肿瘤疾病的治疗时，常规用法为每周1次",
+          "note": "nmpa.gov.cn refuses scripted requests; the announcement text was read at this mirror on 2026-09-18. The revision adds a boxed warning: wrong dosing may cause serious adverse reactions and can be life-threatening."
+        },
+        {
+          "authority": "ISMP List of High-Alert Medications in Community/Ambulatory Care",
+          "year": 2021,
+          "url": "https://www.ismp.org/recommendations/high-alert-medications-community-ambulatory-list",
+          "note": "Oral methotrexate for non-oncologic use is listed with special emphasis."
         }
       ]
     },
@@ -1735,14 +1820,33 @@
       "messageZh": "报告讨论已知致畸药物与妊娠或育龄女性，但没有提到致畸风险。请写明出生缺陷风险、妊娠期是否禁用，以及避孕或妊娠预防要求。",
       "evidence": [
         {
-          "authority": "EMA: valproate pregnancy prevention programme",
-          "year": 2018,
-          "url": "https://www.ema.europa.eu/en/medicines/human/referrals/valproate-related-substances-0"
+          "authority": "Absorica (isotretinoin) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=3ef0cff8-19c1-4441-b780-fca6c7ee1615",
+          "quote": "can cause life-threatening birth defects and is contraindicated in pregnancy",
+          "note": "Dispensed under the iPLEDGE REMS."
         },
         {
-          "authority": "FDA: iPLEDGE REMS for isotretinoin",
-          "year": 2023,
-          "url": "https://www.fda.gov/drugs/postmarket-drug-safety-information-patients-and-providers/ipledge-risk-evaluation-and-mitigation-strategy-rems"
+          "authority": "EMA: new measures to avoid valproate exposure in pregnancy",
+          "year": 2018,
+          "url": "https://www.ema.europa.eu/en/news/new-measures-avoid-valproate-exposure-pregnancy-endorsed",
+          "quote": "a ban on the use of such medicines for migraine or bipolar disorder during pregnancy, and a ban on treating epilepsy during pregnancy unless there is no other effective treatment",
+          "note": "Stricter than the US label, which contraindicates valproate in pregnancy for migraine only."
+        },
+        {
+          "authority": "Warfarin sodium tablets prescribing information (Teva)",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=0cbce382-9c88-4f58-ae0f-532a841e8f95",
+          "quote": "contraindicated in women who are pregnant except in pregnant women with mechanical heart valves"
+        },
+        {
+          "authority": "Trexall (methotrexate) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=e942f8db-510f-44d6-acb5-b822196f5e8c",
+          "quote": "For non-neoplastic diseases, methotrexate tablets are contraindicated in pregnancy."
+        },
+        {
+          "authority": "CellCept (mycophenolate mofetil) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=37241e87-4af4-4dc3-a1aa-ea6f20d8dc40",
+          "quote": "increased risks of first trimester pregnancy loss and congenital malformations",
+          "note": "FDA ended the mycophenolate REMS in 2026 (approval letter of 29 Jul 2026); the boxed warning remains."
         }
       ]
     },
@@ -1783,9 +1887,10 @@
       "messageZh": "报告讨论 ACEI、ARB 或阿利吉仑与妊娠，但没有提到胎儿毒性。请写明这类药物可致胎儿损伤甚至死亡，一旦发现妊娠应尽快停药。",
       "evidence": [
         {
-          "authority": "FDA boxed warning: fetal toxicity (ACE inhibitors, ARBs)",
-          "year": 2012,
-          "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2012/019787s062lbl.pdf"
+          "authority": "Zestril (lisinopril) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=838c2d78-d2d8-4981-9ec9-e50ef9e1a5d8",
+          "quote": "When pregnancy is detected, discontinue ZESTRIL as soon as possible",
+          "note": "Boxed warning: fetal toxicity. US ACE inhibitor and ARB labels say discontinue rather than contraindicated."
         }
       ]
     },
@@ -1817,9 +1922,22 @@
       "messageZh": "报告讨论 SSRI/SNRI 与其他 5-羟色胺能药物（MAOI、利奈唑胺、亚甲蓝、曲马多、芬太尼、曲坦类等）同用，但没有提到 5-羟色胺综合征。请写明这一风险及其预警表现。",
       "evidence": [
         {
-          "authority": "FDA Drug Safety Communication: serotonin syndrome with opioids and other serotonergic drugs",
+          "authority": "Zoloft (sertraline) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=fda754f6-d0f3-4dce-a17a-927d64f912f7",
+          "quote": "Taking, or within 14 days of stopping, MAOIs, (including the MAOIs linezolid and intravenous methylene blue) because of an increased risk of serotonin syndrome",
+          "note": "Contraindications. The fluoxetine label extends the interval to 5 weeks after stopping fluoxetine."
+        },
+        {
+          "authority": "ProvayBlue (methylene blue) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=4f6848e5-35ed-4046-b13c-3032b5ba3232",
+          "quote": "serious or fatal serotonergic syndrome when used in combination with serotonergic drugs and opioids",
+          "note": "Boxed warning."
+        },
+        {
+          "authority": "FDA Drug Safety Communication: opioid pain medicines and serotonin syndrome",
           "year": 2016,
-          "url": "https://www.fda.gov/drugs/drug-safety-and-availability/fda-drug-safety-communication-fda-warns-about-several-safety-issues-opioid-pain-medicines-requires"
+          "url": "https://www.fda.gov/drugs/drug-safety-and-availability/fda-drug-safety-communication-fda-warns-about-several-safety-issues-opioid-pain-medicines-requires",
+          "note": "The basis for fentanyl, tramadol and pethidine in the vocabulary. Not re-read on 2026-09-18; older fda.gov communications may be served only from an archived copy."
         }
       ]
     },
@@ -1852,14 +1970,23 @@
       "messageZh": "报告讨论阿片类药物与苯二氮䓬类药物同用，但没有提到呼吸抑制。请写明黑框警告所述的深度镇静、呼吸抑制、昏迷乃至死亡风险，以及仅在其他方案不足时才联用。",
       "evidence": [
         {
-          "authority": "FDA Drug Safety Communication: boxed warning for opioids with benzodiazepines",
+          "authority": "FDA Drug Safety Communication: opioids with benzodiazepines",
           "year": 2016,
-          "url": "https://www.fda.gov/drugs/drug-safety-and-availability/fda-drug-safety-communication-fda-warns-about-serious-risks-and-death-when-combining-opioid-pain-or"
+          "url": "https://www.fda.gov/drugs/drug-safety-and-availability/fda-drug-safety-communication-fda-warns-about-serious-risks-and-death-when-combining-opioid-pain-or",
+          "quote": "only to patients for whom alternative treatment options are inadequate",
+          "note": "fda.gov serves this communication from an archived copy (web.archive.org); the text was read there on 2026-09-18."
+        },
+        {
+          "authority": "Xanax (alprazolam) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=bb5cf72e-3a41-41a8-9a38-80f974eca33f",
+          "quote": "may result in profound sedation, respiratory depression, coma, and death.",
+          "note": "Boxed warning."
         },
         {
           "authority": "AGS Beers Criteria",
           "year": 2023,
-          "url": "https://agsjournals.onlinelibrary.wiley.com/doi/10.1111/jgs.18372"
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12478568/",
+          "note": "Table 5, drug-drug interactions: opioids with benzodiazepines, avoid (moderate quality, strong recommendation)."
         }
       ]
     },
@@ -1924,9 +2051,16 @@
       "messageZh": "报告讨论地高辛与胺碘酮、维拉帕米、决奈达隆、普罗帕酮或奎尼丁同用，但没有提到地高辛血药浓度。请写明联用可升高血清地高辛浓度、通常需减少地高辛剂量，并监测血药浓度。",
       "evidence": [
         {
-          "authority": "Lanoxin (digoxin) prescribing information, drug interactions",
-          "year": 2019,
-          "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2019/020405s013lbl.pdf"
+          "authority": "Lanoxin (digoxin) tablets prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=d91e3646-4c63-4512-ab22-db39c085c4dc",
+          "quote": "Reduce digoxin concentrations by decreasing dose by approximately 30-50% or by modifying the dosing frequency and continue monitoring.",
+          "note": "For drugs that raise digoxin more than 50%: amiodarone (+70%), dronedarone (+150% AUC), verapamil (+50-75%), propafenone, quinidine. Smaller increases call for a 15-30% cut."
+        },
+        {
+          "authority": "AGS Beers Criteria",
+          "year": 2023,
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12478568/",
+          "note": "Digoxin: avoid dosages >0.125 mg/day; further reduction may be needed in stage 4 or 5 chronic kidney disease."
         }
       ]
     },
@@ -1971,12 +2105,16 @@
         {
           "authority": "FDA Drug Safety Communication: metformin in reduced kidney function",
           "year": 2016,
-          "url": "https://www.fda.gov/drugs/drug-safety-and-availability/fda-drug-safety-communication-fda-revises-warnings-regarding-use-diabetes-medicine-metformin-certain"
+          "url": "https://www.fda.gov/drugs/drug-safety-and-availability/fda-drug-safety-communication-fda-revises-warnings-regarding-use-diabetes-medicine-metformin-certain",
+          "quote": "Metformin is contraindicated in patients with an eGFR below 30",
+          "note": "fda.gov serves this communication from an archived copy (web.archive.org); the text was read there on 2026-09-18. The same communication: starting metformin at an eGFR between 30 and 45 is not recommended."
         },
         {
           "authority": "KDIGO Clinical Practice Guideline for Diabetes Management in CKD",
           "year": 2022,
-          "url": "https://kdigo.org/guidelines/diabetes-ckd/"
+          "url": "https://kdigo.org/wp-content/uploads/2022/10/KDIGO-2022-Clinical-Practice-Guideline-for-Diabetes-Management-in-CKD.pdf",
+          "quote": "Adjust the dose of metformin when the eGFR is <45",
+          "note": "Practice Point 4.1.3; Figure 27: eGFR 30-44 halve the dose, eGFR <30 stop and do not initiate."
         }
       ]
     },
@@ -2010,14 +2148,31 @@
       "messageZh": "报告讨论老年人使用氟喹诺酮类药物，但没有提到肌腱或主动脉风险。请写明黑框警告所述的肌腱炎、肌腱断裂风险（60 岁以上及合用糖皮质激素时更高），以及主动脉瘤、主动脉夹层风险。",
       "evidence": [
         {
-          "authority": "FDA Drug Safety Communication: fluoroquinolones and aortic aneurysm",
-          "year": 2018,
-          "url": "https://www.fda.gov/drugs/drug-safety-and-availability/fda-warns-about-increased-risk-ruptures-or-tears-aorta-blood-vessel-fluoroquinolone-antibiotics"
+          "authority": "Cipro (ciprofloxacin) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=888dc7f9-ad9c-4c00-8d50-8ddfd9bd27c0",
+          "quote": "increased in patients over 60 years of age, in patients taking corticosteroid drugs, and in patients with kidney, heart or lung transplants.",
+          "note": "Boxed warning, tendinitis and tendon rupture."
         },
         {
-          "authority": "AGS Beers Criteria",
-          "year": 2023,
-          "url": "https://agsjournals.onlinelibrary.wiley.com/doi/10.1111/jgs.18372"
+          "authority": "FDA Drug Safety Communication: fluoroquinolones and aortic aneurysm or dissection",
+          "year": 2018,
+          "url": "https://www.fda.gov/drugs/drug-safety-and-availability/fda-warns-about-increased-risk-ruptures-or-tears-aorta-blood-vessel-fluoroquinolone-antibiotics",
+          "quote": "should not be used in patients at increased risk unless there are no other treatment options available.",
+          "note": "fda.gov serves this communication from an archived copy (web.archive.org); the text was read there on 2026-09-18."
+        },
+        {
+          "authority": "国家药监局 2017年第79号公告（氟喹诺酮类说明书修订）",
+          "year": 2017,
+          "url": "https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypshmshxdgg/20170705171401817.html",
+          "quote": "这种风险在60岁以上老年患者，服用皮质类固醇药品患者及肾脏、心脏或肺移植手术的患者中进一步增加。",
+          "note": "nmpa.gov.cn refuses scripted requests; the announcement text was read at https://www.hnysfww.com/mobile/article.php?id=299 on 2026-09-18."
+        },
+        {
+          "authority": "国家药监局 2021年第44号公告（氟喹诺酮类说明书修订：主动脉瘤和主动脉夹层）",
+          "year": 2021,
+          "url": "https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypshmshxdgg/20210323110517152.html",
+          "quote": "对于已知患有主动脉瘤或主动脉瘤高风险的患者，仅在没有其他抗菌治疗可用的情况下",
+          "note": "nmpa.gov.cn refuses scripted requests; the announcement text was read at https://cs.cnpharm.com/c/2021-03-24/782579.shtml on 2026-09-18."
         }
       ]
     },
@@ -2052,9 +2207,21 @@
       "messageZh": "报告讨论辛伐他汀或洛伐他汀与强效 CYP3A4 抑制剂（克拉霉素、红霉素、伊曲康唑、酮康唑、HIV 蛋白酶抑制剂等）或吉非罗齐、环孢素同用，但没有提到肌病。请写明因肌病和横纹肌溶解风险，联用属禁忌。",
       "evidence": [
         {
-          "authority": "FDA Drug Safety Communication: simvastatin contraindications and dose limits",
+          "authority": "Zocor (simvastatin) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=8f55d5de-5a4f-4a39-8c84-c53976dd6af9",
+          "quote": "Concomitant use of strong CYP3A4 inhibitors with ZOCOR is contraindicated",
+          "note": "Gemfibrozil, cyclosporine and danazol are contraindicated too. The label also notes that Chinese patients may be at higher risk for myopathy."
+        },
+        {
+          "authority": "Paxlovid (nirmatrelvir; ritonavir) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=8a99d6d6-fd9e-45bb-b1bf-48c7f761232a",
+          "note": "Contraindicated with lovastatin and simvastatin."
+        },
+        {
+          "authority": "FDA Drug Safety Communication: new restrictions, contraindications and dose limitations for Zocor",
           "year": 2011,
-          "url": "https://www.fda.gov/drugs/drug-safety-and-availability/fda-drug-safety-communication-new-restrictions-contraindications-and-dose-limitations-zocor-simvastatin"
+          "url": "https://www.fda.gov/drugs/drug-safety-and-availability/fda-drug-safety-communication-new-restrictions-contraindications-and-dose-limitations-zocor",
+          "note": "fda.gov serves this communication from an archived copy (web.archive.org); the text was read there on 2026-09-18."
         }
       ]
     },
@@ -2098,9 +2265,30 @@
       "messageZh": "报告讨论别嘌醇，但没有提到 HLA-B*58:01。请写明携带者（汉族、韩国、泰国人群中常见）发生 SJS/TEN 等严重皮肤不良反应的风险显著升高，建议用药前检测。",
       "evidence": [
         {
-          "authority": "CPIC Guideline for Allopurinol and HLA-B",
-          "year": 2015,
-          "url": "https://cpicpgx.org/guidelines/guideline-for-allopurinol-and-hla-b/"
+          "authority": "CPIC Guideline for HLA-B Genotype and Allopurinol Dosing",
+          "year": 2013,
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3564416/",
+          "quote": "allopurinol should not be prescribed to patients who have tested positive for HLA-B*58:01",
+          "note": "Still current after the 2015 update."
+        },
+        {
+          "authority": "ACR Guideline for the Management of Gout",
+          "year": 2020,
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10563586/",
+          "quote": "conditionally recommended for patients of Southeast Asian descent (e.g., Han Chinese, Korean, Thai) and for African American patients",
+          "note": "A conditional recommendation."
+        },
+        {
+          "authority": "中国高尿酸血症与痛风诊疗指南",
+          "year": 2019,
+          "url": "https://seleguide.yiigle.com/uploads/guide_html/%E4%B8%AD%E5%9B%BD%E9%AB%98%E5%B0%BF%E9%85%B8%E8%A1%80%E7%97%87%E4%B8%8E%E7%97%9B%E9%A3%8E%E8%AF%8A%E7%96%97%E6%8C%87%E5%8D%97(2019).html",
+          "quote": "对亚裔人群使用别嘌醇之前应进行HLA-B*5801基因检测，特别是eGFR<60",
+          "note": "The Chinese allopurinol label template (2013) carries a boxed warning for severe skin reactions but no testing requirement."
+        },
+        {
+          "authority": "Allopurinol tablets prescribing information (US)",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=19a138b8-d225-03e6-f762-abe71560204b",
+          "quote": "not recommended in HLA-B*58:01 positive patients unless the benefits clearly outweigh the risks"
         }
       ]
     },
@@ -2150,9 +2338,17 @@
       "messageZh": "报告讨论卡马西平或奥卡西平，但没有提到 HLA-B*15:02。请写明携带者（汉族等亚洲人群中常见）发生 SJS/TEN 的风险显著升高，建议用药前检测（卡马西平为黑框警告）。",
       "evidence": [
         {
-          "authority": "CPIC Guideline for Carbamazepine, Oxcarbazepine and HLA-A/HLA-B",
+          "authority": "Tegretol (carbamazepine) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=8d409411-aa9f-4f3a-a52c-fbcb0c3ec053",
+          "quote": "SHOULD BE SCREENED FOR THE PRESENCE OF HLA-B*1502 PRIOR TO INITIATING TREATMENT",
+          "note": "Boxed warning, for patients with ancestry in populations where HLA-B*1502 is common."
+        },
+        {
+          "authority": "CPIC Guideline for HLA Genotype and Use of Carbamazepine and Oxcarbazepine",
           "year": 2017,
-          "url": "https://cpicpgx.org/guidelines/guideline-for-carbamazepine-and-hla-b/"
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5847474/",
+          "quote": "If patient is carbamazepine-naïve, do not use carbamazepine",
+          "note": "Strong recommendation; the guideline makes the same recommendation for oxcarbazepine."
         }
       ]
     },
@@ -2186,9 +2382,21 @@
       "messageZh": "报告讨论保钾利尿剂或盐皮质激素受体拮抗剂与 ACEI、ARB 或补钾同用，但没有提到血钾。请写明高钾血症风险（慢性肾病时更高），以及需监测血钾和肾功能。",
       "evidence": [
         {
-          "authority": "Aldactone (spironolactone) prescribing information, hyperkalemia",
-          "year": 2020,
-          "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2020/012151s075lbl.pdf"
+          "authority": "AGS Beers Criteria",
+          "year": 2023,
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12478568/",
+          "note": "Table 5: avoid routinely using a RAS inhibitor and a potassium-sparing diuretic (amiloride, triamterene) concurrently in chronic kidney disease stage 3a or higher."
+        },
+        {
+          "authority": "Aldactone (spironolactone) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=0fed2822-3a03-4b64-9857-c682fcd462bc",
+          "quote": "Monitor serum potassium within 1 week of initiation or titration"
+        },
+        {
+          "authority": "Inspra (eplerenone) prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=1a52bedc-8e2c-4116-a296-a87770676b4a",
+          "quote": "creatinine clearance ≤30 mL/min",
+          "note": "Contraindications include serum potassium >5.5 mEq/L at initiation."
         }
       ]
     },
@@ -2230,9 +2438,16 @@
       "messageZh": "报告讨论氨基糖苷类药物，但没有提到其毒性。请写明黑框警告所述的肾毒性与耳毒性（高龄、肾功能不全及合用其他肾毒性药物时更高），以及需监测血药浓度与肾功能。",
       "evidence": [
         {
-          "authority": "Gentamicin injection prescribing information, boxed warning",
-          "year": 2019,
-          "url": "https://dailymed.nlm.nih.gov/dailymed/search.cfm?labeltype=all&query=gentamicin+injection"
+          "authority": "Gentamicin injection prescribing information",
+          "url": "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=977180b3-a222-4282-d485-4a3217674305",
+          "quote": "Other factors which may increase patient risk to toxicity are advanced age and dehydration.",
+          "note": "Boxed warning, which also requires monitoring serum concentrations."
+        },
+        {
+          "authority": "KDIGO Clinical Practice Guideline for the Evaluation and Management of CKD",
+          "year": 2012,
+          "url": "https://kdigo.org/wp-content/uploads/2017/02/KDIGO_2012_CKD_GL.pdf",
+          "note": "Table 32, aminoglycosides: monitor trough and peak serum levels and avoid concomitant ototoxic agents such as furosemide."
         }
       ]
     },

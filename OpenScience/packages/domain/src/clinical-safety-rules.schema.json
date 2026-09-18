@@ -143,8 +143,14 @@
           "type": "string",
           "pattern": "^https://\\S+$"
         },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Words copied from the page at url, for the pharmacist who re-checks the rule. Not shown to the run."
+        },
         "note": {
-          "type": "string"
+          "type": "string",
+          "description": "Where the wording was read when the page itself refuses scripted requests, and what the authority says beyond the quote."
         }
       },
       "additionalProperties": false
