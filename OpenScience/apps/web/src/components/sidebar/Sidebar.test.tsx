@@ -8,7 +8,7 @@ import { Sidebar } from "./Sidebar";
 const mocks = vi.hoisted(() => ({
   runs: [] as WebAgentRun[],
   listWebAgentRuns: vi.fn(),
-  listInbox: vi.fn(),
+  fetchInboxUnreadCount: vi.fn(),
 }));
 
 vi.mock("@/lib/apiClient", () => ({
@@ -16,7 +16,10 @@ vi.mock("@/lib/apiClient", () => ({
   getWebProjectId: () => "default",
 }));
 
-vi.mock("@/lib/inboxClient", () => ({ listInbox: mocks.listInbox }));
+vi.mock("@/lib/inboxClient", () => ({
+  fetchInboxUnreadCount: mocks.fetchInboxUnreadCount,
+  INBOX_CHANGED_EVENT: "evimed:inbox-changed",
+}));
 
 vi.mock("@/lib/store", () => ({
   SIDEBAR_MIN: 220,
@@ -84,7 +87,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.runs = [];
   mocks.listWebAgentRuns.mockImplementation(async () => mocks.runs);
-  mocks.listInbox.mockResolvedValue({ items: [], nextCursor: null });
+  mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 0, safetyUnread: 0 });
 });
 
 describe("Sidebar navigation", () => {
@@ -134,7 +137,7 @@ describe("Sidebar navigation", () => {
   });
 
   it("carries the brand, the inbox bell and the project switcher above the nav", async () => {
-    mocks.listInbox.mockResolvedValue({ items: [{ id: "n1" }, { id: "n2" }], nextCursor: null });
+    mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 2, safetyUnread: 0 });
     renderSidebar();
     expect(screen.getByRole("img", { name: "EviMed" })).toBeInTheDocument();
     expect(screen.getByTestId("project-switcher")).toBeInTheDocument();
@@ -181,13 +184,38 @@ describe("Sidebar recent runs", () => {
     renderSidebar();
 
     const clean = await screen.findByRole("link", { name: /干净的运行/ });
-    expect(clean.querySelector(".bg-ok")).not.toBeNull();
+    expect(clean).toHaveTextContent("已交付");
+    expect(clean).not.toHaveTextContent("待复核");
+    expect(clean.querySelector("[data-run-state]")).toHaveAttribute("data-run-state", "done");
 
     for (const name of [/有待复核的运行/, /降级交付的运行/]) {
       const row = screen.getByRole("link", { name });
-      expect(row.querySelector(".bg-ok")).toBeNull();
-      expect(row.querySelector(".bg-warn")).not.toBeNull();
+      expect(row).toHaveTextContent("已交付，待复核");
+      expect(row.querySelector("[data-run-state]")).toHaveAttribute("data-run-state", "review");
     }
+  });
+
+  // Twelve runs of one capability with no recorded question used to be
+  // twelve identical rows. The second line is what tells them apart.
+  it("gives every row a second line saying when and how it ended", async () => {
+    mocks.runs = [
+      run({ id: "a", status: "failed", errorCode: "runtime_stalled" }),
+      run({ id: "b", status: "canceled" }),
+      run({ id: "c", status: "running", finishedAt: null }),
+    ];
+    renderSidebar();
+    const links = await screen.findAllByRole("link", { name: /未记录题面的运行/ });
+    const text = links.map((link) => link.textContent ?? "");
+    expect(text.some((line) => line.includes("未完成"))).toBe(true);
+    expect(text.some((line) => line.includes("已取消"))).toBe(true);
+    expect(text.some((line) => line.includes("运行中"))).toBe(true);
+  });
+
+  it("titles a row with the ledger's title before its question", async () => {
+    mocks.runs = [run({ id: "t", title: "阿司匹林一级预防（≥70 岁）", question: "请以「临床证据深度分析」能力完成以下任务：原题" })];
+    renderSidebar();
+    expect(await screen.findByRole("link", { name: /阿司匹林一级预防（≥70 岁）/ })).toBeInTheDocument();
+    expect(screen.queryByText(/请以「/)).not.toBeInTheDocument();
   });
 
   it("filters the list by what the run was asked", async () => {

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import {
   Bot,
-  Bell,
   Brain,
   FlaskConical,
   FolderTree,
@@ -14,10 +13,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
-import { listInbox } from "@/lib/inboxClient";
-import { runDotClass, runTitle } from "@/lib/runPresentation";
+import { runMetaLine, runState, runTitle } from "@/lib/runPresentation";
 import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { ProjectSwitcher } from "@/components/sidebar/ProjectSwitcher";
+import { InboxBell } from "@/components/sidebar/InboxBell";
+import { RunStatusDot } from "@/components/runs/RunStatusDot";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import evimedMark from "@/assets/evimed-mark.svg";
 
@@ -58,7 +58,6 @@ const NAV: NavItem[] = [
 ];
 
 export function Sidebar() {
-  const navigate = useNavigate();
   const location = useLocation();
   const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar } =
     useUiStore();
@@ -68,24 +67,6 @@ export function Sidebar() {
   const dragging = dragWidth !== null;
   const [query, setQuery] = useState("");
   const [runs, setRuns] = useState<WebAgentRun[] | null>(null);
-  const [unread, setUnread] = useState(0);
-
-  // The inbox's unread count, for the bell. Polled on the same cadence as the
-  // run list and isolated the same way: a count that cannot be read is shown
-  // as no badge, never as an error in a sidebar.
-  useEffect(() => {
-    let active = true;
-    const load = () =>
-      listInbox({ unread: true })
-        .then((page) => { if (active) setUnread(page.items.length); })
-        .catch(() => { /* isolated: no badge rather than a broken sidebar */ });
-    void load();
-    // Only while someone is looking. Both of this sidebar's polls ran on every
-    // route including the conversation and kept running in a background tab
-    // (2026-09-16 review, D3); a badge nobody can see is spend with no reader.
-    const timer = setInterval(() => { if (document.visibilityState === "visible") void load(); }, 60_000);
-    return () => { active = false; clearInterval(timer); };
-  }, []);
 
   // The recent-runs list, refreshed while the shell is open. This used to be a
   // list of the kernel's own sessions, mirrored into the browser; the kernel's
@@ -170,32 +151,17 @@ export function Sidebar() {
             <div className="font-serif text-[17px] font-semibold leading-none tracking-tight text-text">
               EviMed
             </div>
+            <InboxBell />
+            {/* 32 px, like the bell beside it: the 22 px it was sat under the
+              * 24 px floor WCAG 2.5.8 sets for a pointer target. */}
             <button
-              onClick={() => navigate("/app/inbox")}
-              aria-label={unread > 0 ? `收件箱，${unread} 条未读` : "收件箱"}
-              title="收件箱"
-              className="relative ml-auto self-center rounded p-1.5 text-text hover:bg-surface-2"
-            >
-              <Bell size={16} strokeWidth={1.5} aria-hidden="true" />
-              {/* The count hangs off the button's corner, not over the icon:
-                * the badge used to be as tall as the 14 px bell and offset
-                * inward by 2 px, so 「31」 covered the bell entirely
-                * (2026-09-18, owner's screenshot). A 16 px pill on the
-                * `badge` rung, pushed 4 px out with a ring in the surface
-                * colour, leaves the bell readable behind a two-digit count. */}
-              {unread > 0 && (
-                <span className="pointer-events-none absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 text-badge font-medium tabular-nums text-accent-fg ring-2 ring-surface">
-                  {unread > 99 ? "99+" : unread}
-                </span>
-              )}
-            </button>
-            <button
+              type="button"
               onClick={toggleSidebar}
               aria-label="收起侧边栏"
               title="收起侧边栏 (Ctrl+B)"
-              className="self-center rounded p-1 text-text hover:bg-surface-2"
+              className="grid h-8 w-8 shrink-0 place-items-center self-center rounded-input text-muted hover:bg-surface-2 hover:text-text"
             >
-              <PanelLeft size={14} strokeWidth={1.5} aria-hidden="true" />
+              <PanelLeft size={16} strokeWidth={1.75} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -242,21 +208,29 @@ export function Sidebar() {
             * kernel's own left column is occupied by nothing, so it has to open
             * the thing itself; a run with no addressable session still has its
             * ledger entry, which is where those go. */}
-          {rows.map((run) => (
-            <NavLink
-              key={run.id}
-              to={/^[A-Za-z0-9_-]{1,160}$/.test(run.sessionId)
-                ? `/app/chat/${encodeURIComponent(run.sessionId)}`
-                : `/app/runs?run=${encodeURIComponent(run.id)}`}
-              className="flex items-center gap-2 rounded-input py-1 pl-2 pr-2 text-ui text-text/90 hover:bg-surface-2"
-            >
-              <span
-                className={cn("h-1.5 w-1.5 shrink-0 rounded-full", runDotClass(run))}
-                title={run.status === "running" ? "正在运行" : undefined}
-              />
-              <span className="flex-1 truncate">{runTitle(run)}</span>
-            </NavLink>
-          ))}
+          {rows.map((run) => {
+            const state = runState(run);
+            return (
+              <NavLink
+                key={run.id}
+                to={/^[A-Za-z0-9_-]{1,160}$/.test(run.sessionId)
+                  ? `/app/chat/${encodeURIComponent(run.sessionId)}`
+                  : `/app/runs?run=${encodeURIComponent(run.id)}`}
+                className="group flex items-start gap-2 rounded-input py-1.5 pl-2 pr-2 hover:bg-surface-2 aria-[current=page]:bg-accent-soft"
+              >
+                {/* Two lines, not one longer one (appendix D §10.3). Twelve
+                  * runs of one capability share a first line whenever their
+                  * question was not recorded; the second — when, and how it
+                  * came out — is what tells them apart, and it says the
+                  * state in words beside the dot's shape. */}
+                <RunStatusDot state={state.key} labelled className="mt-1.5" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-ui text-text">{runTitle(run)}</span>
+                  <span className="block truncate text-caption text-muted">{runMetaLine(run)}</span>
+                </span>
+              </NavLink>
+            );
+          })}
         </div>
 
         <div className="flex flex-col border-t border-border px-3 py-3">
