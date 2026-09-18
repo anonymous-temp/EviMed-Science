@@ -17,12 +17,13 @@ export type ButtonSize = "sm" | "md";
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary: "bg-accent text-accent-fg hover:opacity-90 active:opacity-80",
-  ghost: "border border-border bg-surface text-text hover:bg-surface-2 active:bg-border/40",
+  // The secondary button's border is its only edge: the control boundary.
+  ghost: "border border-strong bg-surface text-text hover:bg-surface-2 active:bg-border",
   danger: "bg-error text-error-fg hover:opacity-90 active:opacity-80",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "h-8 gap-1 px-3 text-ui-sm",
+  sm: "h-8 gap-1 px-3 text-ui",
   md: "h-9 gap-1.5 px-3.5 text-ui",
 };
 
@@ -39,7 +40,9 @@ export function buttonClasses({
 } = {}): string {
   return cn(
     "inline-flex shrink-0 items-center justify-center rounded-input font-medium outline-none transition-colors",
-    "focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1",
+    // No ring here: the global `:focus-visible` outline in index.css draws the
+    // 2 px focus ring on every control alike. This ring's offset defaulted to
+    // white and drew a white halo on dark surfaces (review B §2.1).
     "disabled:cursor-not-allowed disabled:opacity-50",
     variantClasses[variant],
     sizeClasses[size],

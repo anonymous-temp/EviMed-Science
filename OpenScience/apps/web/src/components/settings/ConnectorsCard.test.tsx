@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectorsCard } from "./ConnectorsCard";
@@ -78,6 +78,11 @@ describe("ConnectorsCard", () => {
     expect(await screen.findByText("已用你的凭据")).toBeInTheDocument();
     expect(screen.getByText(/有效期至/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "移除 OpenGWAS 凭据" }));
+    // The consequence is said first; nothing is removed until it is confirmed.
+    const dialog = await screen.findByRole("alertdialog", { name: "移除你的 OpenGWAS 凭据？" });
+    expect(dialog).toHaveTextContent("需要 OpenGWAS 的研究运行会报告缺少凭据");
+    expect(mocks.removeWebConnectorCredential).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole("button", { name: "移除凭据" }));
     await waitFor(() => expect(mocks.removeWebConnectorCredential).toHaveBeenCalledWith("opengwas"));
   });
 

@@ -5,7 +5,7 @@
 # Apply in Python with:  import matplotlib.pyplot as plt; plt.style.use(str(path))
 
 # --- Color cycle: categorical slots 1..8, fixed order (light-surface hues) ---
-axes.prop_cycle: cycler('color', ['2a78d6', '1baf7a', 'eda100', '008300', '4a3aa7', 'e34948', 'e87ba4', 'eb6834'])
+axes.prop_cycle: cycler('color', ['2a78d6', 'eb6834', '1baf7a', 'eda100', 'e87ba4', '008300', '4a3aa7', 'e34948'])
 
 # --- Figure & surface ---
 figure.facecolor: white

@@ -10,11 +10,17 @@ import { RunsPage } from "./RunsPage";
 // outside Tauri. The command boundary is mocked; the UI under test is real.
 const listWebAgentRuns = vi.fn();
 const reportWebDeliverableFeedback = vi.fn();
+const fetchWebMe = vi.fn();
+const fetchWebConnectors = vi.fn();
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   hasWebApi: true,
   listWebAgentRuns: () => listWebAgentRuns(),
   reportWebDeliverableFeedback: (input: unknown) => reportWebDeliverableFeedback(input),
+  fetchWebMe: () => fetchWebMe(),
+  fetchWebConnectors: () => fetchWebConnectors(),
+  // Read back per deliverable; nothing reported yet in these tests.
+  listWebDeliverableFeedback: async () => [],
 }));
 
 const downloadArtifact = vi.fn();
@@ -79,6 +85,10 @@ describe("RunsPage (hosted web)", () => {
   beforeEach(() => {
     listWebAgentRuns.mockReset();
     downloadArtifact.mockReset();
+    fetchWebMe.mockReset();
+    fetchWebConnectors.mockReset();
+    fetchWebConnectors.mockResolvedValue([]);
+    fetchWebMe.mockResolvedValue({ user: { id: "u1", name: "研究者" }, operator: false, project: { id: "default", name: "我的研究" }, projects: [] });
     listWebAgentRuns.mockResolvedValue([
       webRun(),
       webRun({
@@ -119,7 +129,7 @@ describe("RunsPage (hosted web)", () => {
     } as Partial<WebAgentRun>)]);
     renderPage();
     const steps = await screen.findByRole("list", { name: "交付进度" });
-    expect(screen.getByText("交付进度 1/3")).toBeInTheDocument();
+    expect(screen.getByText("1/3 件已交付")).toBeInTheDocument();
     expect(steps).toHaveTextContent("证据综述报告已通过");
     expect(steps).toHaveTextContent("文献计量分析需修改 · 第 2 次提交");
     expect(steps).toHaveTextContent("方法学附录待开始");
@@ -133,10 +143,11 @@ describe("RunsPage (hosted web)", () => {
     // Chinese connective (2026-09-15 walk, D1/D2).
     expect(await screen.findByText("临床证据深度分析")).toBeInTheDocument();
     expect(screen.getByText("今天")).toBeInTheDocument();
-    expect(screen.getByText("开放域 · 临床证据深度分析")).toBeInTheDocument();
+    expect(screen.getByText(/开放域 · 临床证据深度分析/)).toBeInTheDocument();
     expect(screen.queryByText(/clinical-evidence-synthesis/i)).not.toBeInTheDocument();
-    // The newest row is expanded: its title, its tag and its capability chip.
-    expect(screen.getAllByText("自动化 Meta 分析").length).toBeGreaterThanOrEqual(2);
+    // A row whose title already is the capability's name does not say it a
+    // second time in its tag (review B §3c, item 4).
+    expect(screen.getAllByText("自动化 Meta 分析")).toHaveLength(1);
     // The file reads by its name; the folder stays beside it (U13).
     expect(screen.getByText("report.docx")).toBeInTheDocument();
     expect(screen.getByText("output")).toBeInTheDocument();
@@ -171,10 +182,10 @@ describe("RunsPage (hosted web)", () => {
   it("filters by status via a facet chip", async () => {
     renderPage();
     await screen.findByText("run-1");
-    await userEvent.click(screen.getByRole("button", { name: /失败/ }));
+    await userEvent.click(screen.getByRole("button", { name: /未完成/, pressed: false }));
     await waitFor(() => expect(screen.queryByText("run-1")).not.toBeInTheDocument());
-    // The one surviving row, now expanded: its tag and its capability chip.
-    expect(screen.getAllByText("开放域 · 临床证据深度分析").length).toBe(2);
+    // The one surviving row, now expanded.
+    expect(screen.getByText(/开放域 · 临床证据深度分析/)).toBeInTheDocument();
     // The failed row explains itself in its expanded detail. It used to print
     // the raw code, which is a server term in the wrong language for a reader.
     expect(screen.getByTitle(`错误码：${TIMED_OUT}`)).toBeInTheDocument();
@@ -204,7 +215,29 @@ describe("RunsPage (hosted web)", () => {
     listWebAgentRuns.mockResolvedValue([webRun({ id: "run-repairing", status: "running", phase: "repairing" })]);
     renderPage();
     await screen.findByText("run-repairing");
-    expect(screen.getByText("按门禁意见修复中")).toBeInTheDocument();
+    // Said in the run's live status line, not only in its identifiers.
+    expect(screen.getByRole("status")).toHaveTextContent("按核验意见修复中");
+  });
+
+  // Why the control plane put the run on this line had no render site in the
+  // shell (appendix E §5.3). The line informs here; changing it is offered
+  // right after a dispatch, not on a run that may be twenty minutes in.
+  it("says which line a run is on and why, without offering to change it", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({
+      id: "run-routed",
+      status: "running",
+      mode: "open-domain",
+      agentId: null,
+      effectiveAgentId: "clinical-evidence-synthesis",
+      routeReason: "题面是一个需要逐条核验文献的临床问题",
+      estimatedMinutes: { min: 15, max: 30 },
+    })]);
+    renderPage();
+    const reason = await screen.findByText("题面是一个需要逐条核验文献的临床问题");
+    const line = reason.parentElement!;
+    expect(line.textContent).toContain("按 临床证据深度分析 处理");
+    expect(line.textContent).toContain("通常 15–30 分钟");
+    expect(screen.queryByRole("button", { name: "改为普通问答" })).not.toBeInTheDocument();
   });
 
   it("does not show the 待人工复核 chip when nothing needs it", async () => {
@@ -217,7 +250,7 @@ describe("RunsPage (hosted web)", () => {
   it("filters by debounced search over id, agent, model and artifacts", async () => {
     renderPage();
     await screen.findByText("run-1");
-    await userEvent.type(screen.getByPlaceholderText(/搜索专项、模型、会话或产物文件/), "zzz-no-match");
+    await userEvent.type(screen.getByPlaceholderText(/搜索题目、能力或产物文件/), "zzz-no-match");
     expect(await screen.findByText(/没有符合筛选条件的运行记录/)).toBeInTheDocument();
   });
 
@@ -247,10 +280,12 @@ describe("RunsPage (hosted web)", () => {
     expect(downloadArtifact).toHaveBeenCalledWith("output/report.docx", "workspace");
   });
 
-  it("explains the empty state", async () => {
+  it("explains the empty state and offers the way to start", async () => {
     listWebAgentRuns.mockResolvedValue([]);
     renderPage();
-    expect(await screen.findByText(/尚无运行记录/)).toBeInTheDocument();
+    expect(await screen.findByText("还没有运行记录")).toBeInTheDocument();
+    expect(screen.queryByText(/python train\.py/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "新任务" })).toHaveAttribute("href", "/app/chat");
   });
 
   it("shows why a package was delivered unverified, and what is unverified about it", async () => {
@@ -271,28 +306,90 @@ describe("RunsPage (hosted web)", () => {
     expect(await screen.findByText(/已交付，但未完成核验/)).toBeInTheDocument();
     expect(screen.getByText(/产物可以照常下载和阅读/)).toBeInTheDocument();
     // How much is owed, before any of the prose: a reader must not have to
-    // count bullets to learn there are three findings and one is blocking.
-    // Said as findings about a delivered package, not as work owed: nothing here
-    // withholds the files any more (2026-09-17), so "必须修正" was addressed to
-    // nobody. Clinical safety is counted apart and leads.
-    expect(screen.getByText(/临床安全 1 项/)).toBeInTheDocument();
-    expect(screen.getByText(/未通过核验 1 项 · 提示 2 项/)).toBeInTheDocument();
-    // Grouped and named in Chinese, with what a reader cannot see for themselves
-    // leading. The notices are written for the agent; a reader meets the shape
-    // of the problem first and the validator prose second.
-    expect(screen.getByText("未通过核验")).toBeInTheDocument();
-    const groups = screen.getAllByRole("listitem").map((item) => item.textContent ?? "");
-    expect(groups.findIndex((text) => text.startsWith("临床安全"))).toBeLessThan(groups.findIndex((text) => text.startsWith("未通过核验")));
-    expect(screen.queryByText(/^SAFETY/)).not.toBeInTheDocument();
-    expect(screen.getByText(/句末的「依据」逐条标出/)).toBeInTheDocument();
-    expect(screen.getByText("检索日志与运行记录")).toBeInTheDocument();
+    // count bullets to learn there are four findings and one is about safety.
+    expect(screen.getByText("临床安全 1 项 · 必须修改 1 项 · 提示 2 项")).toBeInTheDocument();
+    // Three weights, safety first and never folded: its line is on screen.
+    const safety = screen.getByRole("group", { name: "临床安全" });
+    expect(safety).toHaveTextContent("临床实践要点第 12 行把呼叫急救的条件写成了服药后是否缓解。");
+    const mustFix = screen.getByRole("group", { name: "必须修改" });
+    expect(safety.compareDocumentPosition(mustFix) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(mustFix).toHaveTextContent("检索日志与运行记录");
+    // Advice is folded under one quiet line, still counted.
+    expect(screen.getByText(/提示 2 项 · 不影响交付/)).toBeInTheDocument();
     expect(screen.getByText("数字与所引主张不符")).toBeInTheDocument();
-    // Two notices of one kind are one heading carrying a count, not two walls.
-    expect(screen.getByText("2")).toBeInTheDocument();
-    // The severity marker is not left glued to the sentence.
-    expect(screen.queryByText(/^MUST FIX/)).not.toBeInTheDocument();
-    // The specifics a reader checks survive.
-    expect(screen.getByText(/Report line 44 numeric facts 1\.26-1\.38/)).toBeInTheDocument();
+    // No sentence written for the agent reaches a researcher, prefixed or not.
+    expect(screen.queryByText(/^SAFETY|^MUST FIX/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Report line 44/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/search log must exactly match/)).not.toBeInTheDocument();
+    expect(screen.getByText(/句末的「依据」逐条标出/)).toBeInTheDocument();
+  });
+
+  it("renders structured findings by severity in Chinese, never their legacy sentence", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({
+      verification: "unverified",
+      qualityNotices: [
+        { code: "quote_not_found", check: "quote-bond", severity: "must-fix", title: "引文不在所引来源中", detail: "第 3 条结论的引文未在保存的原文中找到。", claimId: "CLM-003", text: "claims[2].supportQuote was not found in its preserved source artifact." },
+        { code: "numeric_fact", severity: "advice", title: "数字未在所引原文中出现", text: "claims[52].claim numeric fact 6 is not present in its direct support." },
+      ],
+      artifacts: ["clinical-evidence-report.md"],
+    })]);
+    renderPage();
+    expect(await screen.findByText("必须修改 1 项 · 提示 1 项")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "必须修改" })).toHaveTextContent("第 3 条结论的引文未在保存的原文中找到。");
+    expect(screen.queryByText(/supportQuote|numeric fact/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "临床安全" })).not.toBeInTheDocument();
+  });
+
+  // A finding that names a claim opens the report at that claim, in the reader
+  // the frame's 依据 tab opens too (`/app/runs/:runId/files/*#CLM-…`).
+  it("opens the report at the claim a finding names, and offers the reader for a report", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({
+      verification: "unverified",
+      qualityNotices: [
+        { code: "quote_not_found", check: "quote-bond", severity: "must-fix", title: "引文不在所引来源中", detail: "主张 CLM-003", claimId: "CLM-003", text: "x" },
+      ],
+      artifacts: ["deliverables/d1/clinical-evidence-report.md"],
+    })]);
+    renderPage();
+    const link = await screen.findByRole("link", { name: "在报告中查看" });
+    expect(link).toHaveAttribute("href", "/app/runs/run-1/files/deliverables/d1/clinical-evidence-report.md#CLM-003");
+    expect(screen.getByRole("link", { name: "在阅读器中打开 clinical-evidence-report.md" })).toHaveAttribute(
+      "href", "/app/runs/run-1/files/deliverables/d1/clinical-evidence-report.md",
+    );
+  });
+
+  // Support still needs the sentence the run was sent; an operator can open it.
+  it("keeps the raw text of an old finding behind a disclosure only an operator gets", async () => {
+    fetchWebMe.mockResolvedValue({ user: { id: "op", name: "运维" }, operator: true, project: { id: "default", name: "我的研究" }, projects: [] });
+    listWebAgentRuns.mockResolvedValue([webRun({
+      verification: "unverified",
+      qualityNotices: ["Something the frozen table does not know about."],
+      artifacts: ["clinical-evidence-report.md"],
+    })]);
+    renderPage();
+    expect(await screen.findByText(/技术原文 1 条（仅运维账号可见）/)).toBeInTheDocument();
+    expect(screen.getByText("Something the frozen table does not know about.")).toBeInTheDocument();
+  });
+
+  // The banner named seven sources on every page; the row names the one this
+  // run needed, and only when it stopped on it.
+  it("names the one data source a failed run needed a credential for", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({
+      status: "failed",
+      errorCode: "public_source_opengwas_credential_missing",
+      artifacts: [],
+    })]);
+    renderPage();
+    expect(await screen.findByText(/这次运行因缺少 OpenGWAS 的凭据没能继续/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "填写凭据" })).toHaveAttribute("href", "/app/account?tab=connectors");
+  });
+
+  it("says the time range in words", async () => {
+    renderPage();
+    await screen.findAllByRole("button", { name: /复查与复现/ });
+    const range = screen.getByRole("radiogroup", { name: "时间范围" });
+    expect(range).toHaveTextContent("全部时间24 小时7 天30 天");
+    expect(range.textContent).not.toMatch(/24h|7d|30d/);
   });
 
   it("states a failure in the reader's language and keeps the code for support", async () => {

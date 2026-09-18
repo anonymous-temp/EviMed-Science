@@ -17,13 +17,10 @@ import "./hljs-theme.css";
 export const CodeBlock = memo(function CodeBlock({
   code,
   language,
-  paper = false,
   className,
 }: {
   code: string;
   language?: string;
-  /** Document variant: fixed paper hues (see hljs-theme.css). */
-  paper?: boolean;
   className?: string;
 }) {
   const html = useMemo(() => {
@@ -50,7 +47,7 @@ export const CodeBlock = memo(function CodeBlock({
   };
 
   return (
-    <pre className={cn(className, paper && "hljs-paper", "group relative")}>
+    <pre className={cn(className, "group relative")}>
       <div className="absolute right-2 top-2 flex items-center gap-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
         {language && (
           <span className="px-1 font-mono text-caption uppercase tracking-wide text-muted">
@@ -61,7 +58,7 @@ export const CodeBlock = memo(function CodeBlock({
           type="button"
           onClick={() => void copy()}
           aria-label={copied ? "已复制" : "复制代码"}
-          className="flex items-center gap-1 rounded-input border border-border bg-surface px-2 py-1 text-caption text-muted shadow-card hover:text-text"
+          className="flex items-center gap-1 rounded-input border border-strong bg-surface px-2 py-1 text-caption text-muted shadow-pop hover:text-text"
         >
           {copied ? <Check size={12} className="text-ok" aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
           {copied ? "已复制" : "复制"}

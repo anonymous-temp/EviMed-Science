@@ -112,7 +112,7 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
         </span>
         {data.contigs.length > 1 ? (
           <select
-            className="rounded-input border border-border bg-surface px-2 py-1 text-caption text-text outline-none focus:border-accent/50"
+            className="rounded-input border border-strong bg-surface px-2 py-1 text-caption text-text outline-none focus:border-focus"
             value={contigIdx}
             onChange={(e) => setContigIdx(Number(e.target.value))}
             aria-label="序列片段"
@@ -222,7 +222,7 @@ export function GenomeView({ filename, text }: { filename: string; text: string 
 
         {hover && (
           <div
-            className="pointer-events-none absolute z-10 max-w-xs rounded-input border border-border bg-surface px-2.5 py-1.5 text-caption shadow-card"
+            className="pointer-events-none absolute z-10 max-w-xs rounded-input border border-border bg-surface px-2.5 py-1.5 text-caption shadow-pop"
             style={{ left: Math.min(hover.x + 12, width - 200), top: hover.y + 12 }}
           >
             {hover.f.name && <div className="font-medium text-text">{hover.f.name}</div>}

@@ -16,6 +16,8 @@ import {
   UserRound,
 } from "lucide-react";
 import { useUiStore, type Theme } from "@/lib/store";
+import { trapTab } from "@/lib/focusTrap";
+import { isMacPlatform } from "@/lib/platform";
 
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 
@@ -41,6 +43,8 @@ export function CommandPalette() {
   const toggleTheme = useUiStore((s) => s.toggleTheme);
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocus = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -48,21 +52,30 @@ export function CommandPalette() {
         e.preventDefault();
         setOpen(!useUiStore.getState().paletteOpen);
       }
+      if (!useUiStore.getState().paletteOpen) return;
       // Consume Esc only when the palette is open, so a marked-handled Esc is
       // not also read as a dismissal by whatever is behind it.
-      if (e.key === "Escape" && useUiStore.getState().paletteOpen) {
+      if (e.key === "Escape") {
         e.preventDefault();
         setOpen(false);
       }
+      // A modal layer keeps Tab inside it (appendix D §4).
+      if (e.key === "Tab") trapTab(dialogRef.current, e);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [setOpen]);
 
+  // Focus goes into the search field on open, and back to whatever had it on close.
   useEffect(() => {
     if (!open) return;
+    restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      const element = restoreFocus.current;
+      if (element && document.contains(element)) element.focus();
+    };
   }, [open]);
 
   const close = () => setOpen(false);
@@ -96,14 +109,16 @@ export function CommandPalette() {
 
   if (!open) return null;
 
+  const mod = isMacPlatform() ? "⌘" : "Ctrl ";
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- click-outside dismisses the palette; the keyboard equivalent is the global Escape handler above.
+    // The backdrop has no keyboard handler on purpose: Escape is its keyboard
+    // equivalent, bound above; role="presentation" keeps it out of the tree.
     <div
+      role="presentation"
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/20 pt-[16vh]"
-      onClick={close}
+      onClick={(e) => { if (e.target === e.currentTarget) close(); }}
     >
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- stopPropagation only, so clicks inside do not dismiss; no activation semantics here. */}
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="命令面板" className="w-full max-w-lg">
         <Command
           label="快捷操作"
           className="overflow-hidden rounded-card border border-border bg-surface shadow-pop"
@@ -120,6 +135,10 @@ export function CommandPalette() {
             <PaletteGroup heading="导航" items={navigation} />
             <PaletteGroup heading="动作" items={actions} />
           </Command.List>
+          <p className="flex items-center gap-3 border-t border-border px-4 py-2 text-caption text-muted">
+            <span>↑↓ 选择</span><span>Enter 打开</span><span>Esc 关闭</span>
+            <span className="ml-auto">{mod}K 随时打开</span>
+          </p>
         </Command>
       </div>
     </div>

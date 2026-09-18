@@ -117,4 +117,27 @@ describe("CommandPalette", () => {
     expect(useUiStore.getState().theme).toBe("dark");
     expect(useUiStore.getState().paletteOpen).toBe(false);
   });
+
+  // Appendix D §4: a modal layer is a dialog, keeps Tab inside, and hands
+  // focus back to where it was.
+  it("is a modal dialog that keeps focus inside and returns it on close", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <button type="button">外面的按钮</button>
+        <CommandPalette />
+      </MemoryRouter>,
+    );
+    const outside = screen.getByRole("button", { name: "外面的按钮" });
+    outside.focus();
+    await user.keyboard("{Control>}k{/Control}");
+    const dialog = await screen.findByRole("dialog", { name: "命令面板" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    await screen.findByPlaceholderText("搜索操作…");
+    await user.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(outside).toHaveFocus();
+  });
 });

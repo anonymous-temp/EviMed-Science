@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  CLAIM_STATUS_TEXT, claimIdsFromHref, claimMatrixPathFor, claimStatuses, claimVerificationSummary, linkClaimMarkers, parseClaimMatrix,
+  CLAIM_STATUS_TEXT, claimGuidance, claimIdsFromHref, claimMatrixPathFor, claimStatuses, claimVerificationSummary, isClaimMatrixPath,
+  linkClaimMarkers, parseClaimMatrix, parseClaimMatrixDocument, reportPathForMatrix, safeWorkspacePath,
 } from "./claimCitations";
 
 // Marker and matrix shapes copied from a production report (2026-09-16,
@@ -63,5 +64,45 @@ describe("claim citations", () => {
     expect(claims.get("CLM-020")?.supportingSources).toHaveLength(2);
     expect(claims.get("CLM-030")).toMatchObject({ derivedFrom: ["CLM-001", "CLM-020"], method: "按纳入年份相减" });
     expect(parseClaimMatrix("{not json").size).toBe(0);
+  });
+
+  it("reads each source's kind from the domain, keeps a preserved path only when it is a workspace path", () => {
+    const { claims, meta } = parseClaimMatrixDocument(JSON.stringify({
+      searchCutoff: "2026-09-01",
+      limitations: ["仅纳入英文文献", "  "],
+      claims: [
+        { claimId: "CLM-001", claim: "a", claimType: "direct", referenceNumber: 3, sourceUrl: "https://www.nice.org.uk/guidance/ng196",
+          artifactPath: ".evimed-sources/official-pages/abc/page.md", supportQuote: "q" },
+        { claimId: "CLM-002", claim: "b", claimType: "direct", sourceType: "rct", artifactPath: "../../etc/passwd", supportQuote: "q" },
+        { claimId: "CLM-003", claim: "c", claimType: "direct", artifactPath: "/abs/path.md" },
+      ],
+    }));
+    expect(meta).toEqual({ searchCutoff: "2026-09-01", limitations: ["仅纳入英文文献"] });
+    expect(claims.get("CLM-001")).toMatchObject({ sourceType: "guideline", referenceNumber: 3, artifactPath: ".evimed-sources/official-pages/abc/page.md" });
+    expect(claims.get("CLM-002")).toMatchObject({ sourceType: "rct" });
+    expect(claims.get("CLM-002")?.artifactPath).toBeUndefined();
+    expect(claims.get("CLM-003")?.artifactPath).toBeUndefined();
+    expect(claims.get("CLM-003")?.sourceType).toBe("other");
+  });
+
+  it("knows a matrix file and the report it belongs to", () => {
+    expect(isClaimMatrixPath("deliverables/d1/clinical-evidence-matrix.json")).toBe(true);
+    expect(isClaimMatrixPath("deliverables/d1/clinical-evidence-report.md")).toBe(false);
+    expect(reportPathForMatrix("deliverables/d1/clinical-evidence-matrix.json")).toBe("deliverables/d1/clinical-evidence-report.md");
+    expect(safeWorkspacePath("a/./b")).toBeUndefined();
+    expect(safeWorkspacePath("a//b")).toBeUndefined();
+    expect(safeWorkspacePath("a\\b")).toBeUndefined();
+  });
+
+  it("says which quotation to check, by position, when a claim rests on several", () => {
+    const [claim] = parseClaimMatrixDocument(JSON.stringify({ claims: [
+      { claimId: "CLM-010", claim: "x", claimType: "synthesized", supportingSources: [{ supportQuote: "a" }, { supportQuote: "b" }] },
+    ] })).claims.values();
+    const verified = { claimId: "CLM-010", claimType: "synthesized", status: "quote_not_found",
+      sources: [{ artifactPath: "a.md", status: "verified" }, { artifactPath: "b.md", status: "quote_not_found" }] };
+    expect(claimGuidance(claim, verified)).toBe("第 2 段引文没有在保存的原文中找到：请打开原文核对措辞与数字。");
+    expect(claimGuidance(claim, { ...verified, status: "verified", sources: [] })).toBeNull();
+    const single = { claimId: "CLM-011", claimType: "direct", status: "source_unavailable", sources: [{ artifactPath: null, status: "source_unavailable" }] };
+    expect(claimGuidance(undefined, single)).toBe("这段引文的原文没有保存，无法自动核对：请到原始来源核实。");
   });
 });

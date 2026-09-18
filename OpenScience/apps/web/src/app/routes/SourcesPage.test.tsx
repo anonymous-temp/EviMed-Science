@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   getSourceFamily: vi.fn(), listSourceFolders: vi.fn(), registerSourceFolder: vi.fn(), syncSourceFolder: vi.fn(),
   setSourceFolderStatus: vi.fn(), listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(),
 }));
-const context = vi.hoisted(() => ({ projectId: "project-one" }));
+const context = vi.hoisted(() => ({ projectId: "project-one", operator: false }));
 
 // Only the request functions are replaced. `sourceFailureMessage` is a pure
 // projection over the one error dictionary, and a test that stubbed it would
@@ -22,6 +22,9 @@ vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOrigi
 // proves what the shared dictionary says rather than what this file made up.
 vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal<object>()),
   getWebProjectId: () => context.projectId,
+  // Operator surfaces (raw codes, pipeline accounting) are shown only to an
+  // account `/api/me` marks as one.
+  fetchWebMe: async () => ({ user: { id: "u", name: "u" }, operator: context.operator, project: { id: context.projectId, name: "p" }, projects: [] }),
 }));
 
 const source = {
@@ -39,6 +42,7 @@ describe("SourcesPage", () => {
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
     context.projectId = "project-one";
+    context.operator = false;
     mocks.listSources.mockResolvedValue({ items: [source], nextCursor: null });
     mocks.overrideSource.mockResolvedValue(source);
     mocks.retrySource.mockResolvedValue(source);
@@ -61,7 +65,11 @@ describe("SourcesPage", () => {
     render(<SourcesPage />);
     expect(await screen.findByRole("heading", { name: "资料整理" })).toBeInTheDocument();
     expect(await screen.findByText("研究方案.docx")).toBeInTheDocument();
-    expect(screen.getByText("解析处理成功 90% · 处理台账 100% · 失败单元 2/20")).toBeInTheDocument();
+    // What was read, in the researcher's terms; the parse ledger is the
+    // pipeline's bookkeeping and stays with the operator.
+    expect(screen.getByText("已解析 90% · 2 个片段未能解析")).toBeInTheDocument();
+    expect(screen.queryByText(/处理台账/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/处理第 3 代/)).not.toBeInTheDocument();
     expect(screen.getByText("理解遗漏尚未审计")).toBeInTheDocument();
     expect(screen.queryByText(/遗漏 10%/)).not.toBeInTheDocument();
     expect(screen.queryByText("事实 8 · 方法线索 2")).not.toBeInTheDocument();
@@ -104,12 +112,12 @@ describe("SourcesPage", () => {
   it("opens the actual understanding and history endpoints from the source card", async () => {
     render(<SourcesPage />);
     await userEvent.click(await screen.findByRole("button", { name: "查看理解" }));
-    expect(await screen.findByText("此代次尚无可用理解")).toBeInTheDocument();
+    expect(await screen.findByText("这一次分析尚无可用理解")).toBeInTheDocument();
     expect(mocks.getSourceUnderstanding).toHaveBeenCalledWith("source-one");
     await userEvent.click(screen.getByRole("button", { name: "查看历史" }));
     expect(await screen.findByText("暂无历史理解")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "关闭理解详情" }));
-    expect(screen.queryByText("此代次尚无可用理解")).not.toBeInTheDocument();
+    expect(screen.queryByText("这一次分析尚无可用理解")).not.toBeInTheDocument();
   });
 
   it("preserves a correction draft while active polling advances processing state", async () => {
@@ -135,7 +143,9 @@ describe("SourcesPage", () => {
   it("no longer offers a local analysis agent this deployment does not ship", async () => {
     render(<SourcesPage />);
     await userEvent.click(await screen.findByRole("button", { name: "连接网盘资料" }));
-    expect(await screen.findByText(/未提供 SHA-256 的存储请改用平台上传/)).toBeInTheDocument();
+    // No product names, server paths or hash algorithms on a researcher's page.
+    expect(await screen.findByText(/无法提供内容指纹的文件，请改用平台上传/)).toBeInTheDocument();
+    expect(screen.queryByText(/OpenList|SHA-256|\/tenants/)).not.toBeInTheDocument();
     expect(screen.queryByText(/本地分析代理/)).not.toBeInTheDocument();
     expect(screen.queryByText(/本地代理/)).not.toBeInTheDocument();
   });
@@ -159,7 +169,7 @@ describe("SourcesPage", () => {
     await userEvent.click(await screen.findByRole("button", { name: "同步" }));
     await waitFor(() => expect(mocks.registerSourceFolder).toHaveBeenCalledWith("project-one", "/papers"));
     expect(await screen.findByText(/新增 2 · 更新 1 · 未变化 9/)).toBeInTheDocument();
-    expect(screen.getByText(/网盘未提供 SHA-256/)).toBeInTheDocument();
+    expect(screen.getByText(/网盘无法提供内容指纹/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "立即同步" }));
     await waitFor(() => expect(mocks.syncSourceFolder).toHaveBeenCalledWith("srcdir_one", 5));
     await userEvent.click(screen.getByRole("button", { name: "暂停同步" }));
@@ -291,15 +301,20 @@ describe("SourcesPage", () => {
     expect(screen.getByText(/分类依据：/)).toBeInTheDocument();
     view.unmount();
 
-    // A code the registry has no sentence for is still a Chinese sentence with
-    // the code kept as the one handle support can search on — never a bare
-    // English identifier standing alone in a Chinese interface.
+    // A code the registry has no sentence for is still a Chinese sentence —
+    // never a bare English identifier standing alone in a Chinese interface.
+    // The code itself is the handle support searches on, so an operator keeps
+    // it as a tooltip; a researcher does not get it at all.
     mocks.listSources.mockResolvedValue({ items: [{ ...failed, payload: { ...failed.payload,
       error: { code: "source_parser_timeout", message: "Source analysis failed." } } }], nextCursor: null });
-    render(<SourcesPage />);
+    const researcher = render(<SourcesPage />);
     const row = await screen.findByText(/^解析失败：/);
     expect(row.textContent).not.toBe("source_parser_timeout");
-    expect(row).toHaveAttribute("title", "source_parser_timeout");
+    expect(row).not.toHaveAttribute("title");
+    researcher.unmount();
+    context.operator = true;
+    render(<SourcesPage />);
+    await waitFor(async () => expect(await screen.findByText(/^解析失败：/)).toHaveAttribute("title", "source_parser_timeout"));
   });
 
   it("states the omission notice as an observation, in Chinese, and stays silent when it has nothing to say", async () => {
@@ -313,11 +328,14 @@ describe("SourcesPage", () => {
         disagreements: ["The audit reports an omission rate of 0.1; the anchors this output carries imply 0.32."] } } };
     mocks.listSources.mockResolvedValue({ items: [noticed], nextCursor: null });
     const view = render(<SourcesPage />);
-    expect(await screen.findByText(/仅供参考，不影响这份资料入库/)).toBeInTheDocument();
-    expect(screen.getByText(/实测遗漏率 32%，高于当前分析深度的参考值 15%/)).toBeInTheDocument();
-    expect(screen.getByText(/至少有 1 处对不上/)).toBeInTheDocument();
-    // The disagreement lines are the control plane's own English diagnostics.
-    // They are a support handle, never body copy in a Chinese interface.
+    // Something the researcher can act on, with the action beside it — not a
+    // notice whose own text says it can be ignored.
+    expect(await screen.findByText(/约 32% 的内容没有被理解进来，高于当前分析深度的参考值 15%/)).toBeInTheDocument();
+    expect(screen.queryByText(/仅供参考/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "提高分析深度" }));
+    expect(await screen.findByRole("combobox", { name: "分析深度" })).toBeInTheDocument();
+    // The run's self-audit disagreeing with itself is pipeline diagnostics.
+    expect(screen.queryByText(/至少有 1 处对不上/)).not.toBeInTheDocument();
     expect(view.container.textContent).not.toMatch(/The audit reports an omission rate/);
     view.unmount();
 
@@ -345,7 +363,7 @@ describe("SourcesPage", () => {
     await userEvent.click(await screen.findByRole("button", { name: "连接网盘资料" }));
     const failure = await screen.findByText(/上次同步失败/);
     expect(failure.textContent).toContain(knownErrorCodeMessage("connector_unauthorized") as string);
-    expect(failure).toHaveAttribute("title", "connector_unauthorized");
+    expect(failure).not.toHaveAttribute("title");
     expect(failure.textContent).toContain("同步已暂停");
     // The successful run is still shown, but no longer as "the last sync".
     expect(view.container.textContent).toContain("上次成功同步：");

@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef } from "react";
+import { trapTab } from "@/lib/focusTrap";
+import { Button } from "@/components/ui/Button";
 
 /**
  * Minimal in-app confirmation dialog. `window.confirm` is unreliable inside
@@ -15,15 +17,25 @@ export function ConfirmDialog({
   confirmLabel,
   onConfirm,
   onCancel,
+  tone = "danger",
 }: {
   title: string;
   body: string;
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  /**
+   * `danger` for what cannot be undone — deleting, stopping a running
+   * analysis. `primary` for a confirmation that is only a checkpoint (running
+   * one autopilot episode now, restoring a plugin version). The button used to
+   * be red for both, which spent the red budget on questions that were not
+   * dangerous (review B, ConfirmDialog P1).
+   */
+  tone?: "danger" | "primary";
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
   const bodyId = useId();
   // Always call the latest callbacks from the mount-once effect below, so a
   // parent re-render neither re-focuses nor re-arms the key listener.
@@ -62,55 +74,23 @@ export function ConfirmDialog({
         ref={dialogRef}
         role="alertdialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         aria-describedby={bodyId}
-        className="w-full max-w-sm rounded-card border border-border bg-surface p-4 shadow-card"
+        className="w-full max-w-sm rounded-card border border-border bg-surface p-4 shadow-modal"
       >
-        <div className="text-ui font-medium text-text">{title}</div>
+        <h2 id={titleId} className="text-ui font-semibold text-text">{title}</h2>
         <p id={bodyId} className="mt-1.5 text-ui text-muted">
           {body}
         </p>
         <div className="mt-4 flex justify-end gap-2">
-          <button
-            ref={cancelRef}
-            className="rounded-input border border-border px-3 py-1.5 text-ui text-text hover:bg-surface-2"
-            onClick={onCancel}
-          >
+          <Button ref={cancelRef} size="sm" variant="ghost" onClick={onCancel}>
             取消
-          </button>
-          <button
-            className="rounded-input bg-error px-3 py-1.5 text-ui font-medium text-error-fg hover:opacity-90"
-            onClick={onConfirm}
-          >
+          </Button>
+          <Button size="sm" variant={tone === "danger" ? "danger" : "primary"} onClick={onConfirm}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
   );
-}
-
-/** Keep Tab cycling through the dialog's focusable elements while it is open. */
-function trapTab(dialog: HTMLDivElement | null, e: KeyboardEvent): void {
-  if (!dialog) return;
-  const focusable = Array.from(
-    dialog.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    ),
-  ).filter((el) => !el.hasAttribute("disabled"));
-  if (focusable.length === 0) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  const active = document.activeElement;
-  if (!dialog.contains(active)) {
-    // Focus drifted out (e.g. the user clicked the overlay) — pull it back in.
-    e.preventDefault();
-    first.focus();
-  } else if (e.shiftKey && active === first) {
-    e.preventDefault();
-    last.focus();
-  } else if (!e.shiftKey && active === last) {
-    e.preventDefault();
-    first.focus();
-  }
 }

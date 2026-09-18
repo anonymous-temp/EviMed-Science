@@ -186,7 +186,7 @@ export function XlsxView({ bytes, scrollKey }: { bytes: ArrayBuffer; scrollKey: 
               onClick={() => setActive(i)}
               className={cn(
                 "rounded px-2 py-1 text-caption",
-                i === active ? "bg-surface text-text shadow-card" : "text-muted hover:text-text",
+                i === active ? "bg-surface text-text ring-1 ring-border" : "text-muted hover:text-text",
               )}
             >
               {s.name}

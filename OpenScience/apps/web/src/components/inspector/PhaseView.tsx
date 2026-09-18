@@ -88,7 +88,7 @@ export function PhaseView({ filename, text }: { filename: string; text: string }
                   cy={yAt(e.y)}
                   r={e.stable ? 5 : 3.5}
                   fill={e.stable ? "var(--series-1)" : "var(--surface)"}
-                  stroke={e.stable ? "var(--series-1)" : "var(--series-6)"}
+                  stroke={e.stable ? "var(--series-1)" : "var(--series-8)"}
                   strokeWidth={1.5}
                   fillOpacity={e.stable ? 1 : 0.9}
                 />
@@ -133,7 +133,7 @@ export function PhaseView({ filename, text }: { filename: string; text: string }
             );
           })()
         ) : (
-          <span className="text-muted/50">悬停查看相位 · 实心表示稳定，空心表示亚稳</span>
+          <span className="text-muted">悬停查看相位 · 实心表示稳定，空心表示亚稳</span>
         )}
       </div>
     </div>

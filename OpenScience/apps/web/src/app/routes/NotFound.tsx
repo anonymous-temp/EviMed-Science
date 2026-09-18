@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { Compass } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { PageTitle } from "@/components/layout/PageTitle";
+import { buttonClasses } from "@/components/ui/Button";
 
 export function NotFound() {
   return (
@@ -9,13 +10,12 @@ export function NotFound() {
       <PageTitle page="页面不存在" />
       <EmptyState
         icon={Compass}
-        title="404 · 页面不存在"
+        // Not 「404 · 页面不存在」: an HTTP status is a protocol fact, not a
+        // headline a reader needs (review B, NotFound P2).
+        title="页面不存在"
         description="你访问的页面不存在或已被移动。"
         action={
-          <Link
-            to="/"
-            className="inline-block rounded-input bg-accent px-4 py-2 text-ui font-medium text-accent-fg hover:opacity-90"
-          >
+          <Link to="/" className={buttonClasses()}>
             返回首页
           </Link>
         }

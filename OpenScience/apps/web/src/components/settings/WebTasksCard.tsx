@@ -4,6 +4,19 @@ import { webErrorMessage, cancelWebTask, listWebTasks, type WebTask, type WebTas
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { formatClock } from "@/lib/format";
+import { labelFor } from "@/lib/statusLabel";
+
+/** The task states in words: `timed out` and `succeeded` reached the page as
+ *  English enum values (review B, WebTasksCard P1). */
+const TASK_STATUS_LABEL: Record<WebTaskStatus, string> = {
+  queued: "排队中",
+  running: "运行中",
+  canceling: "正在取消",
+  succeeded: "已完成",
+  failed: "失败",
+  canceled: "已取消",
+  timed_out: "已超时",
+};
 
 const TONE: Record<WebTaskStatus, string> = {
   queued: "text-muted",
@@ -50,7 +63,7 @@ export function WebTasksCard() {
   };
 
   return (
-    <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
+    <section className="mt-5 rounded-card border border-border bg-surface">
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-body text-text">后台任务</h2>
@@ -86,7 +99,7 @@ export function WebTasksCard() {
                   {task.id}
                 </span>
                 <span className={cn("text-caption font-medium", TONE[task.status])}>
-                  {task.status.replace("_", " ")}
+                  {labelFor(TASK_STATUS_LABEL, task.status)}
                 </span>
                 <span className="hidden font-mono text-caption text-muted sm:inline">
                   {formatClock(task.startedAt ?? task.queuedAt ?? task.createdAt)}

@@ -7,12 +7,14 @@ import { createAgenda, decideDigest, getDigest, listAgendas, listDigests, markDi
 import { productErrorMessage } from "@/lib/productClient";
 import { toast } from "@/lib/toast";
 import { listInbox, type InboxItem } from "@/lib/inboxClient";
+import { InboxBody } from "@/components/inbox/InboxBody";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { MemorySkeleton } from "@/components/cards/Skeletons";
+import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
 import { PageTitle } from "@/components/layout/PageTitle";
 
 function pendingFollowUps(agenda: AgendaRecord): number {
@@ -117,10 +119,10 @@ function NewAgendaForm({ projectId, busy, onCreated, onError }: {
           placeholder="逗号分隔，例如：司美格鲁肽, 胰腺炎, 心血管结局"
           onChange={(event) => setTopics(event.target.value)} />
         <fieldset className="space-y-1">
-          <legend className="text-ui-sm font-medium text-text">回合类型</legend>
+          <legend className="text-ui font-medium text-text">回合类型</legend>
           <div className="flex flex-wrap gap-3">
             {TASK_TYPE_LABELS.map((type) => (
-              <label key={type.value} className="flex items-center gap-1.5 text-ui-sm text-text">
+              <label key={type.value} className="flex items-center gap-1.5 text-ui text-text">
                 <input type="checkbox" checked={taskTypes.includes(type.value)}
                   onChange={(event) => setTaskTypes((current) => event.target.checked
                     ? [...current, type.value]
@@ -136,7 +138,7 @@ function NewAgendaForm({ projectId, busy, onCreated, onError }: {
           <Input label="每周上限 ¥" type="number" min="0" step="1" value={weeklyBudgetCny} onChange={(event) => setWeeklyBudgetCny(event.target.value)} />
           <Input label="每天运行时刻" type="number" min="0" max="23" step="1" value={scheduleHour} onChange={(event) => setScheduleHour(event.target.value)} />
         </div>
-        {!budgetsOrdered && <p className="text-ui-sm text-muted">三档预算需满足：单回合 ≤ 每日 ≤ 每周，且都大于 0。</p>}
+        {!budgetsOrdered && <p className="text-ui text-muted">三档预算需满足：单回合 ≤ 每日 ≤ 每周，且都大于 0。</p>}
         <div className="flex gap-2">
           <Button size="sm" type="submit" disabled={!ready || saving}>创建议程</Button>
           <Button size="sm" type="button" variant="ghost" disabled={saving} onClick={() => setOpen(false)}>取消</Button>
@@ -365,12 +367,12 @@ export function AutopilotPage() {
       void mutate(() => scheduleAgenda(agenda.id, todayIn(agenda.payload.timeZone)));
     }}
   /> : null;
-  return <main className="h-full overflow-y-auto px-5 py-6"><div className="mx-auto max-w-content-wide space-y-5">
+  return <div className="h-full overflow-y-auto px-5 py-6"><div className="mx-auto max-w-content-wide space-y-5">
     {runDialog}
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <PageTitle page="主动科研" />
-        <h1 className="font-serif text-title text-text">主动科研</h1>
+        <h1 className={PAGE_TITLE_CLASS}>主动科研</h1>
         {/* The one line §24.9 asks the briefing to open with, from numbers the
           * ledger actually holds. The spec also wants off-peak savings and a
           * balance runway; neither is on this API, and an invented figure on a
@@ -396,7 +398,7 @@ export function AutopilotPage() {
               : [...digest.payload.headlines.map((claim) => ({ claim, kind: "重点发现" })), ...digest.payload.leads.map((claim) => ({ claim, kind: "待验证线索" }))].map(({ claim, kind }) => <div key={claim.id} className="rounded-input bg-surface-2 p-3">
               <p className="text-caption text-muted">{kind}</p><p className="mt-1 text-ui text-text">{claim.statement}</p>
               <ClaimVerification claim={claim} />
-              {decisionLabel(digest, claim.id) && <p className="mt-1 text-ui-sm text-muted">{decisionLabel(digest, claim.id)}</p>}
+              {decisionLabel(digest, claim.id) && <p className="mt-1 text-ui text-muted">{decisionLabel(digest, claim.id)}</p>}
               <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="ghost" aria-label={`采纳${claim.statement}`} disabled={busy} onClick={() => void decide(digest.id, claim.id, "adopt")}>采纳</Button>
                 <Button size="sm" variant="ghost" aria-label={`驳回${claim.statement}`} disabled={busy} onClick={() => void decide(digest.id, claim.id, "reject")}>驳回</Button>
                 <Button size="sm" variant="ghost" aria-label={`追问${claim.statement}`} disabled={busy} onClick={() => setFollowUp(followUp?.claimId === claim.id && followUp.digestId === digest.id ? null : { digestId: digest.id, claimId: claim.id, note: "" })}>追问</Button></div>
@@ -418,7 +420,7 @@ export function AutopilotPage() {
     {decisions.length > 0 && <section className="space-y-2" aria-label="需要你决定">
       <h2 className="font-serif text-body text-text">需要你决定</h2>
       {decisions.map((item) => <Card key={item.id} title={item.title} hint={item.noticeType === "review" ? "需要审阅" : "等待回答"}>
-        <p className="text-ui text-muted">{item.body}</p>
+        <InboxBody body={item.body} />
         <Button className="mt-2" size="sm" variant="ghost" onClick={() => navigate("/app/inbox")}>去收件箱处理</Button>
       </Card>)}
     </section>}
@@ -429,9 +431,9 @@ export function AutopilotPage() {
         ? <EmptyState icon={CalendarClock} title="还没有主动科研议程" description="用右上角的「新建议程」写下方向、回合类型和三档预算。议程创建后默认暂停，只有你主动开始才会运行和产生费用。" />
         : agendas.map((agenda) => <Card key={agenda.id} title={agenda.payload.title}
           hint={`${agenda.payload.status === "active" ? "运行中" : "已暂停"} · ${agenda.payload.topics.join("、")}`}><div className="space-y-3">
-          <p className="text-ui-sm text-muted">每日 ¥{agenda.payload.dailyBudgetCny} · 每周 ¥{agenda.payload.weeklyBudgetCny} · 单回合 ¥{agenda.payload.maxEpisodeCny}</p>
-          {agenda.payload.pauseReason && <p className="text-ui-sm text-muted">{agenda.payload.pauseReason}</p>}
-          {pendingFollowUps(agenda) > 0 && <p className="text-ui-sm text-muted">下一回合先回答 {pendingFollowUps(agenda)} 条追问。</p>}
+          <p className="text-ui text-muted">每日 ¥{agenda.payload.dailyBudgetCny} · 每周 ¥{agenda.payload.weeklyBudgetCny} · 单回合 ¥{agenda.payload.maxEpisodeCny}</p>
+          {agenda.payload.pauseReason && <p className="text-ui text-muted">{agenda.payload.pauseReason}</p>}
+          {pendingFollowUps(agenda) > 0 && <p className="text-ui text-muted">下一回合先回答 {pendingFollowUps(agenda)} 条追问。</p>}
           <div className="flex flex-wrap gap-2">
             {/* Spending is confirmed; a verdict is not.
               * 「立即运行一回合」 starts a paid episode on one click, so it says
@@ -444,5 +446,5 @@ export function AutopilotPage() {
               : <Button size="sm" disabled={busy} onClick={() => void mutate(() => startAgenda(agenda.id, agenda.revision))}><PlayCircle size={13} aria-hidden="true" />开始主动科研</Button>}
           </div></div></Card>)}
     </section>
-  </div></main>;
+  </div></div>;
 }

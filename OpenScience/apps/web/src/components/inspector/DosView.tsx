@@ -90,7 +90,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
           className={cn(
             "rounded-md px-2 py-1 text-caption font-medium ring-1 transition-colors",
             alignFermi
-              ? "bg-accent/15 text-accent ring-accent/30"
+              ? "bg-accent-soft text-accent ring-focus"
               : "bg-surface-2 text-muted ring-border hover:text-text",
           )}
         >
@@ -110,10 +110,10 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
           {/* filled DOS areas */}
           <path d={areaUp} fill="var(--series-1)" fillOpacity={0.85} stroke="var(--series-1)" strokeWidth={1} />
           {areaDown && (
-            <path d={areaDown} fill="var(--series-6)" fillOpacity={0.8} stroke="var(--series-6)" strokeWidth={1} />
+            <path d={areaDown} fill="var(--series-8)" fillOpacity={0.8} stroke="var(--series-8)" strokeWidth={1} />
           )}
           {/* Fermi level */}
-          <line x1={fermiX} y1={pad.t} x2={fermiX} y2={H - pad.b} stroke="var(--series-3)" strokeWidth={1.25} strokeDasharray="4 3" />
+          <line x1={fermiX} y1={pad.t} x2={fermiX} y2={H - pad.b} stroke="var(--series-4)" strokeWidth={1.25} strokeDasharray="4 3" />
           <text x={fermiX + 4} y={pad.t + 10} className="fill-muted font-mono text-caption">
             E_F
           </text>
@@ -152,7 +152,7 @@ export function DosView({ filename, bytes }: { filename: string; bytes: ArrayBuf
             {dos.down ? ` · DOS↓ = ${dos.down[hover.i].toPrecision(4)}` : ""}
           </>
         ) : (
-          <span className="text-muted/50">费米能级为 E_F · 悬停查看数据点</span>
+          <span className="text-muted">费米能级为 E_F · 悬停查看数据点</span>
         )}
       </div>
     </div>

@@ -73,14 +73,14 @@ export function TableChart({ table }: { table: ParsedTable }) {
 
   return (
     <div className="flex h-full flex-col bg-surface">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-ui-sm">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-ui">
         <Segmented value={type} onChange={(v) => setType(v as ChartType)} options={["line", "bar", "scatter"]} />
         <label className="flex items-center gap-1 text-muted">
           x:
           <select
             value={xIndex}
             onChange={(e) => setXIndex(Number(e.target.value))}
-            className="rounded-input border border-border bg-surface-2 px-1.5 py-1 text-ui-sm text-text"
+            className="rounded-input border border-strong bg-surface-2 px-1.5 py-1 text-ui text-text"
           >
             <option value={-1}>行号</option>
             {cols.map((c) => (
@@ -99,7 +99,7 @@ export function TableChart({ table }: { table: ParsedTable }) {
                 onClick={() => toggleY(c.index)}
                 className={cn(
                   "inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-caption ring-1 transition-colors",
-                  on ? "text-text ring-border" : "text-muted/60 ring-transparent hover:text-muted",
+                  on ? "text-text ring-border" : "text-muted ring-transparent hover:text-muted",
                 )}
                 style={on ? { background: "var(--surface-2)" } : undefined}
                 title={on ? "隐藏序列" : "显示序列"}
@@ -191,7 +191,7 @@ export function TableChart({ table }: { table: ParsedTable }) {
             </span>
           ))}
         </div>
-        {ys.length === 0 && <span className="text-muted/50">请选择要绘制的数据序列</span>}
+        {ys.length === 0 && <span className="text-muted">请选择要绘制的数据序列</span>}
       </div>
     </div>
   );

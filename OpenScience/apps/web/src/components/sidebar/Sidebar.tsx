@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import {
   Bot,
-  Bell,
   Brain,
+  Command,
   FlaskConical,
   FolderTree,
   Orbit,
@@ -14,12 +14,15 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
-import { listInbox } from "@/lib/inboxClient";
-import { runDotClass, runTitle } from "@/lib/runPresentation";
+import { RUNS_CHANGED_EVENT, runMetaLine, runState, runTitle } from "@/lib/runPresentation";
 import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { ProjectSwitcher } from "@/components/sidebar/ProjectSwitcher";
+import { InboxBell } from "@/components/sidebar/InboxBell";
+import { RunStatusDot } from "@/components/runs/RunStatusDot";
+import { useConnectorAttention } from "@/lib/connectorAttention";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
-import evimedMark from "@/assets/evimed-mark.svg";
+import { EviMedMark } from "@/components/brand/EviMedMark";
+import { isMacPlatform } from "@/lib/platform";
 
 /** Dragging the divider below this pointer x collapses the sidebar; dragging
  *  back past it re-expands. Sits below SIDEBAR_MIN so there is a clear "snap". */
@@ -58,9 +61,8 @@ const NAV: NavItem[] = [
 ];
 
 export function Sidebar() {
-  const navigate = useNavigate();
   const location = useLocation();
-  const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar } =
+  const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar, setPaletteOpen } =
     useUiStore();
   // While dragging, the live width lives here; the store (and localStorage)
   // are only written on pointer-up.
@@ -68,24 +70,7 @@ export function Sidebar() {
   const dragging = dragWidth !== null;
   const [query, setQuery] = useState("");
   const [runs, setRuns] = useState<WebAgentRun[] | null>(null);
-  const [unread, setUnread] = useState(0);
-
-  // The inbox's unread count, for the bell. Polled on the same cadence as the
-  // run list and isolated the same way: a count that cannot be read is shown
-  // as no badge, never as an error in a sidebar.
-  useEffect(() => {
-    let active = true;
-    const load = () =>
-      listInbox({ unread: true })
-        .then((page) => { if (active) setUnread(page.items.length); })
-        .catch(() => { /* isolated: no badge rather than a broken sidebar */ });
-    void load();
-    // Only while someone is looking. Both of this sidebar's polls ran on every
-    // route including the conversation and kept running in a background tab
-    // (2026-09-16 review, D3); a badge nobody can see is spend with no reader.
-    const timer = setInterval(() => { if (document.visibilityState === "visible") void load(); }, 60_000);
-    return () => { active = false; clearInterval(timer); };
-  }, []);
+  const connectorAttention = useConnectorAttention();
 
   // The recent-runs list, refreshed while the shell is open. This used to be a
   // list of the kernel's own sessions, mirrored into the browser; the kernel's
@@ -110,10 +95,15 @@ export function Sidebar() {
     // a list frozen at whatever it said when the reader left.
     const onVisible = () => { if (document.visibilityState === "visible") void load(); };
     document.addEventListener("visibilitychange", onVisible);
+    // A rename or a cancel on the runs page shows here at once, not on the
+    // next tick of this list's own timer.
+    const onChanged = () => { void load(); };
+    window.addEventListener(RUNS_CHANGED_EVENT, onChanged);
     return () => {
       active = false;
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener(RUNS_CHANGED_EVENT, onChanged);
     };
   }, []);
 
@@ -142,6 +132,10 @@ export function Sidebar() {
   };
 
   const needle = query.trim().toLowerCase();
+  // Local filtering over the recent runs' titles. Integration seam: the frame
+  // stream's `useRuntimeSessionSearch()` (lib/runtimeUiBridge.ts, S3) returns
+  // the kernel's own conversation matches for the same query; they merge in
+  // here, beside — not instead of — these rows.
   const rows = (runs ?? [])
     .filter((run) => !needle || runTitle(run).toLowerCase().includes(needle))
     .slice(0, RECENT_RUNS);
@@ -158,49 +152,48 @@ export function Sidebar() {
         // most of the viewport so it never pushes the page sideways; from `lg`
         // up it is the resizable column it has always been.
         "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:max-w-[85vw] max-lg:shadow-pop",
-        !dragging && "transition-[width] duration-200 ease-out",
+        !dragging && "transition-[width] duration-base ease-standard",
       )}
       style={{ width: sidebarCollapsed ? 0 : width }}
     >
       <aside className="flex h-full max-w-full flex-col border-r border-border bg-surface" style={{ width }}>
         <div className="px-4 pb-3 pt-4">
           <div className="flex items-baseline gap-1.5">
-            <img src={evimedMark} alt="EviMed" className="h-[21px] w-[21px] self-center" />
-            {/* eslint-disable-next-line no-restricted-syntax -- brand wordmark: 17px sits between the body (15px) and title (20px) rungs; moving it visibly changes the lockup */}
-            <div className="font-serif text-[17px] font-semibold leading-none tracking-tight text-text">
+            <EviMedMark className="h-5 w-5 shrink-0 self-center" />
+            <div className="font-serif text-wordmark font-semibold text-text">
               EviMed
             </div>
+            <InboxBell />
+            {/* 32 px, like the bell beside it: the 22 px it was sat under the
+              * 24 px floor WCAG 2.5.8 sets for a pointer target. */}
             <button
-              onClick={() => navigate("/app/inbox")}
-              aria-label={unread > 0 ? `收件箱，${unread} 条未读` : "收件箱"}
-              title="收件箱"
-              className="relative ml-auto self-center rounded p-1.5 text-text hover:bg-surface-2"
-            >
-              <Bell size={16} strokeWidth={1.5} aria-hidden="true" />
-              {/* The count hangs off the button's corner, not over the icon:
-                * the badge used to be as tall as the 14 px bell and offset
-                * inward by 2 px, so 「31」 covered the bell entirely
-                * (2026-09-18, owner's screenshot). A 16 px pill on the
-                * `badge` rung, pushed 4 px out with a ring in the surface
-                * colour, leaves the bell readable behind a two-digit count. */}
-              {unread > 0 && (
-                <span className="pointer-events-none absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 text-badge font-medium tabular-nums text-accent-fg ring-2 ring-surface">
-                  {unread > 99 ? "99+" : unread}
-                </span>
-              )}
-            </button>
-            <button
+              type="button"
               onClick={toggleSidebar}
               aria-label="收起侧边栏"
               title="收起侧边栏 (Ctrl+B)"
-              className="self-center rounded p-1 text-text hover:bg-surface-2"
+              className="grid h-8 w-8 shrink-0 place-items-center self-center rounded-input text-muted hover:bg-surface-2 hover:text-text"
             >
-              <PanelLeft size={14} strokeWidth={1.5} aria-hidden="true" />
+              <PanelLeft size={16} strokeWidth={1.75} aria-hidden="true" />
             </button>
           </div>
         </div>
 
-        <ProjectSwitcher />
+        <ProjectSwitcher running={(runs ?? []).some((run) => runState(run).key === "running")} />
+
+        {/* ⌘K made visible (appendix D §4): the palette reaches every view by
+          * name, and a shortcut nobody can see is a shortcut nobody uses. */}
+        <div className="px-3 pb-2">
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            aria-keyshortcuts="Meta+K Control+K"
+            className="flex h-8 w-full items-center gap-2 rounded-input px-2.5 text-ui text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text"
+          >
+            <Command size={15} strokeWidth={1.75} aria-hidden="true" />
+            <span className="flex-1 text-left">快速跳转</span>
+            <kbd className="rounded border border-border px-1 font-sans text-caption text-muted">{isMacPlatform() ? "⌘K" : "Ctrl K"}</kbd>
+          </button>
+        </div>
 
         <nav className="flex flex-col px-3">
           {NAV.map((item) => (
@@ -216,7 +209,7 @@ export function Sidebar() {
         </nav>
 
         <div className="mt-4 flex-1 overflow-y-auto px-3 pb-2">
-          <div className="px-2 py-1 text-caption font-medium tracking-wider text-muted">最近任务</div>
+          <h2 className="px-2 py-1 text-caption font-semibold text-muted">最近任务</h2>
           {(runs?.length ?? 0) > 0 && (
             <label className="relative mb-1 block">
               <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
@@ -226,7 +219,7 @@ export function Sidebar() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="搜索任务"
-                className="h-7 w-full rounded-input border border-border bg-bg pl-7 pr-2 text-caption text-text outline-none placeholder:text-muted focus:border-accent"
+                className="h-7 w-full rounded-input border border-strong bg-bg pl-7 pr-2 text-caption text-text outline-none placeholder:text-muted focus:border-focus"
               />
             </label>
           )}
@@ -242,53 +235,94 @@ export function Sidebar() {
             * kernel's own left column is occupied by nothing, so it has to open
             * the thing itself; a run with no addressable session still has its
             * ledger entry, which is where those go. */}
-          {rows.map((run) => (
-            <NavLink
-              key={run.id}
-              to={/^[A-Za-z0-9_-]{1,160}$/.test(run.sessionId)
-                ? `/app/chat/${encodeURIComponent(run.sessionId)}`
-                : `/app/runs?run=${encodeURIComponent(run.id)}`}
-              className="flex items-center gap-2 rounded-input py-1 pl-2 pr-2 text-ui text-text/90 hover:bg-surface-2"
-            >
-              <span
-                className={cn("h-1.5 w-1.5 shrink-0 rounded-full", runDotClass(run))}
-                title={run.status === "running" ? "正在运行" : undefined}
-              />
-              <span className="flex-1 truncate">{runTitle(run)}</span>
-            </NavLink>
-          ))}
+          {rows.map((run) => {
+            const state = runState(run);
+            return (
+              <NavLink
+                key={run.id}
+                to={/^[A-Za-z0-9_-]{1,160}$/.test(run.sessionId)
+                  ? `/app/chat/${encodeURIComponent(run.sessionId)}`
+                  : `/app/runs?run=${encodeURIComponent(run.id)}`}
+                className="group flex items-start gap-2 rounded-input py-1.5 pl-2 pr-2 hover:bg-surface-2 aria-[current=page]:bg-accent-soft"
+              >
+                {/* Two lines, not one longer one (appendix D §10.3). Twelve
+                  * runs of one capability share a first line whenever their
+                  * question was not recorded; the second — when, and how it
+                  * came out — is what tells them apart, and it says the
+                  * state in words beside the dot's shape. */}
+                <RunStatusDot state={state.key} labelled className="mt-1.5" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-ui text-text">{runTitle(run)}</span>
+                  <span className="block truncate text-caption text-muted">{runMetaLine(run)}</span>
+                </span>
+              </NavLink>
+            );
+          })}
         </div>
 
         <div className="flex flex-col border-t border-border px-3 py-3">
           {/* One footer row. 「设置」 was the second, and it was the deployment
             * console as much as the product's settings; it is a tab of this
             * page now, beside usage, credentials and the operator's board. */}
+          {/* The data sources nothing serves for this account, as a quiet
+            * count: a standing fact about the deployment, not unread work, so
+            * it is neutral rather than the bell's red (review B §7c). */}
           <NavRow
-            to="/app/account"
+            to={connectorAttention > 0 ? "/app/account?tab=connectors" : "/app/account"}
             icon={<UserRound size={15} aria-hidden="true" />}
             label="账户与设置"
             active={location.pathname.startsWith("/app/account")}
+            badge={connectorAttention > 0 ? {
+              text: String(connectorAttention),
+              label: `${connectorAttention} 个数据源没有可用凭据`,
+            } : undefined}
           />
         </div>
       </aside>
 
       {/* Drag divider: resize within [SIDEBAR_MIN, SIDEBAR_MAX]; dragging far
           left snaps the sidebar closed. Kept mounted while collapsed so an
-          in-flight drag (pointer capture) can re-open it. */}
+          in-flight drag (pointer capture) can re-open it. A focusable
+          separator (WAI-ARIA window splitter): ←/→ by 16 px, Home/End to the
+          limits, Enter collapses — a width a mouse can set, a keyboard can. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex -- a focusable separator is the WAI-ARIA window-splitter widget, which these rules do not model. */}
       <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整侧边栏宽度"
+        aria-valuemin={SIDEBAR_MIN}
+        aria-valuemax={SIDEBAR_MAX}
+        aria-valuenow={Math.round(width)}
+        tabIndex={sidebarCollapsed ? -1 : 0}
+        onKeyDown={(event) => {
+          const step = event.shiftKey ? 64 : 16;
+          const next = event.key === "ArrowLeft" ? sidebarWidth - step
+            : event.key === "ArrowRight" ? sidebarWidth + step
+              : event.key === "Home" ? SIDEBAR_MIN
+                : event.key === "End" ? SIDEBAR_MAX
+                  : null;
+          if (event.key === "Enter") {
+            event.preventDefault();
+            toggleSidebar();
+            return;
+          }
+          if (next == null) return;
+          event.preventDefault();
+          setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, next)));
+        }}
         onPointerDown={onDividerPointerDown}
         onPointerMove={onDividerPointerMove}
         onPointerUp={onDividerPointerUp}
         onPointerCancel={onDividerPointerUp}
         className={cn(
-          "group absolute inset-y-0 right-0 z-10 w-[5px] cursor-col-resize",
+          "group absolute inset-y-0 right-0 z-10 w-[5px] cursor-col-resize outline-none",
           sidebarCollapsed && !dragging && "pointer-events-none",
         )}
       >
         <div
           className={cn(
             "absolute inset-y-0 right-0 w-[2px] transition-colors",
-            dragging ? "bg-accent/60" : "bg-transparent group-hover:bg-accent/40",
+            dragging ? "bg-focus" : "bg-transparent group-hover:bg-strong group-focus-visible:bg-focus",
           )}
         />
       </div>
@@ -311,11 +345,14 @@ function NavRow({
   label,
   active = false,
   freshState,
+  badge,
 }: {
   to: string;
   icon: React.ReactNode;
   label: string;
   active?: boolean;
+  /** A count beside the label, with the sentence it stands for. */
+  badge?: { text: string; label: string };
   /**
    * Router state minted at the moment of the click, not at render.
    *
@@ -340,13 +377,20 @@ function NavRow({
         navigate(to, { state: freshState() });
       }}
       aria-current={active ? "page" : undefined}
+      aria-label={badge ? `${label}，${badge.label}` : undefined}
+      title={badge?.label}
       className={cn(
         "flex items-center gap-2 rounded-input px-2 py-1.5 text-ui hover:bg-surface-2",
         active ? "bg-surface-2 font-medium text-text" : "text-text",
       )}
     >
       <span className="text-muted">{icon}</span>
-      <span>{label}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge && (
+        <span aria-hidden="true" className="grid h-4 min-w-4 place-items-center rounded-full border border-strong px-1 text-badge tabular-nums text-muted">
+          {badge.text}
+        </span>
+      )}
     </Link>
   );
 }

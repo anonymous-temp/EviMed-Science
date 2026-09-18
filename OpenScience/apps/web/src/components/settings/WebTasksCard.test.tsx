@@ -55,7 +55,9 @@ describe("WebTasksCard", () => {
     fireEvent.click(screen.getByLabelText("取消 write_workspace_file"));
 
     await waitFor(() => expect(mocks.cancelWebTask).toHaveBeenCalledWith("task_1"));
-    expect(await screen.findByText("canceled")).toBeInTheDocument();
+    // The state in words, not the English enum value.
+    expect(await screen.findByText("已取消")).toBeInTheDocument();
+    expect(screen.queryByText("canceled")).not.toBeInTheDocument();
   });
 
   it("shows an empty state", async () => {

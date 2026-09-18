@@ -5,8 +5,10 @@ import { seriesColor, CHART_PALETTE_LIGHT, CHART_PALETTE_DARK } from "@ai4s/shar
 // and runtime/.../openscience.mplstyle. Lock the hexes so those three stay in sync.
 describe("chart palette (single source of truth)", () => {
   it("assigns categorical hues in fixed order and wraps only past 8", () => {
+    // The dataviz validator's passing order (2026-09-18): the order is what
+    // keeps adjacent series apart for colour-vision deficiency.
     expect(CHART_PALETTE_LIGHT.categorical).toEqual([
-      "#2a78d6", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948", "#e87ba4", "#eb6834",
+      "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948",
     ]);
     expect(seriesColor(0, "light")).toBe("#2a78d6");
     expect(seriesColor(0, "dark")).toBe("#3987e5");

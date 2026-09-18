@@ -95,7 +95,7 @@ export function WebAccountCard({
   const deleteDisabled = !account || deleting || confirmId.trim() !== account.id;
 
   return (
-    <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
+    <section className="mt-5 rounded-card border border-border bg-surface">
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-body text-text">账户</h2>
@@ -160,7 +160,7 @@ export function WebAccountCard({
             </div>
 
             {confirmingDelete && (
-              <div className="mt-3 rounded-input border border-error/30 bg-error/5 p-3">
+              <div className="mt-3 rounded-input border border-danger bg-danger-soft p-3">
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-ui font-medium text-text">删除 {account.id}？</p>
@@ -199,7 +199,7 @@ export function WebAccountCard({
                 </div>
                 <div className="mt-3 flex justify-end gap-2">
                   <button
-                    className="h-8 rounded-input border border-border px-3 text-caption text-muted hover:bg-surface hover:text-text disabled:opacity-50"
+                    className="h-8 rounded-input border border-strong px-3 text-caption text-muted hover:bg-surface hover:text-text disabled:opacity-50"
                     onClick={() => setConfirmingDelete(false)}
                     disabled={deleting}
                   >
@@ -225,8 +225,8 @@ export function WebAccountCard({
 
 const inputCls = (extra = "") =>
   cn(
-    "h-9 min-w-0 rounded-input border border-border bg-surface px-3 text-ui text-text outline-none",
-    "placeholder:text-muted focus:border-accent/60 disabled:opacity-50",
+    "h-9 min-w-0 rounded-input border border-strong bg-surface px-3 text-ui text-text outline-none",
+    "placeholder:text-muted focus:border-focus disabled:opacity-50",
     extra,
   );
 

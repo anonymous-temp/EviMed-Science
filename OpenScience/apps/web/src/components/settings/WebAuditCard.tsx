@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ClipboardList, RefreshCw } from "lucide-react";
 import { webErrorMessage, listWebAuditLog, type WebAuditRecord } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
+import { LEDGER_STATUS_LABEL, labelFor } from "@/lib/statusLabel";
 import { toast } from "@/lib/toast";
 import { formatClock, humanSize } from "@/lib/format";
 
@@ -25,7 +26,7 @@ export function WebAuditCard() {
   }, [refresh]);
 
   return (
-    <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
+    <section className="mt-5 rounded-card border border-border bg-surface">
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-body text-text">操作审计</h2>
@@ -58,8 +59,8 @@ export function WebAuditCard() {
                 <span className="w-24 shrink-0 truncate font-mono text-caption text-text" title={event.action ?? ""}>
                   {event.action ?? "操作"}
                 </span>
-                <span className={cn("w-20 shrink-0 font-mono text-caption", statusTone(event.status))}>
-                  {event.status}
+                <span className={cn("w-20 shrink-0 text-caption", statusTone(event.status))} title={event.status}>
+                  {labelFor(LEDGER_STATUS_LABEL, event.status)}
                 </span>
                 <span className="min-w-0 flex-1 truncate font-mono text-caption text-muted" title={event.target ?? ""}>
                   {event.target ?? event.command ?? "项目"}

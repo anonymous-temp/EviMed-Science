@@ -61,3 +61,23 @@ dataSources:
 starterPrompts:
 - Conduct a systematic review and meta-analysis for a clearly defined PICO question.
 - Resume an automated meta-analysis job and explain its release-gate status.
+
+# What a researcher is shown, in Chinese: read by people, not by the
+# orchestrator (the fields above). The generator derives the shell's and the
+# frame's capability table from this block, and adds what evals/ measured.
+display:
+  title: "自动化 Meta 分析"
+  category: "临床证据"
+  description: "自动完成检索、筛选、统计合并、偏倚风险与 GRADE 分级，生成图表与论文初稿；统计全部由确定性程序计算。"
+  starterPrompts:
+  - "氨甲环酸在初次全膝关节置换中减少失血的系统评价与 Meta 分析。"
+  - "围绕一个明确的 PICO 问题完成系统评价和 Meta 分析，并生成可追溯的完整研究包。"
+  estimatedMinutes:
+    min: 60
+    max: 300
+  outputs:
+  - "Meta 分析报告与论文初稿（含森林图与 GRADE 证据概要）"
+  - "可复现的分析记录"
+  knownLimits:
+  - "完整流程可能需要数小时；超过运行时限会中止，已写出的文件保留在工作区。"
+  - "统计合并由程序完成，但纳入研究的数据提取仍需人工抽查。"

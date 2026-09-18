@@ -8,6 +8,7 @@ const listNotebooks = vi.fn();
 vi.mock("@/lib/apiClient", () => ({
   hasWebApi: false,
   invokeCommand: vi.fn(),
+  webErrorMessage: (_error: unknown, overrides?: { fallback?: string }) => overrides?.fallback ?? "操作未完成，请重试。",
 }));
 vi.mock("@/lib/backend", () => ({
   addTextToWorkspace: vi.fn(),
@@ -51,4 +52,24 @@ describe("NotebooksPage", () => {
     );
   });
 
+  // Four states: 「暂无笔记本」 used to show before the first answer, and in
+  // place of a failed read.
+  it("says nothing is there only once the list has answered", async () => {
+    let answer!: (value: NotebookEntry[]) => void;
+    listNotebooks.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    const { container } = render(<NotebooksPage />);
+    expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
+    expect(screen.queryByText(/暂无笔记本|当前未配置/)).not.toBeInTheDocument();
+    answer([]);
+    expect(await screen.findByText("当前未配置可用的笔记本后端。")).toBeInTheDocument();
+  });
+
+  it("says a failed read failed, and retries it", async () => {
+    listNotebooks.mockRejectedValueOnce(new Error("network"));
+    render(<NotebooksPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("笔记本列表暂时读不到。");
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText("nature_figure.ipynb")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });

@@ -85,7 +85,8 @@ describe("FilePreviewInspector — markdown", () => {
       content: "单一机构数据库 [1]<!-- claim:CLM-001 -->。队列 50,920 人 [1]<!-- claim:CLM-002 -->。" }} onClose={() => {}} />);
     expect(await screen.findByRole("note")).toHaveTextContent("本报告 2 条主张：1 条引文已在保存的原文中核对，1 条未在原文中找到。");
     expect(screen.getByRole("button", { name: "查看这句话的依据（1 条主张，其中有未核对上的引文）" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "查看这句话的依据（1 条主张）" })).toBeInTheDocument();
+    // Every quotation of this sentence was found: the mark says so, in words.
+    expect(screen.getByRole("button", { name: "查看这句话的依据（1 条主张，引文均已核对）" })).toHaveTextContent("依据 ✓");
     expect(vi.mocked(readClaimVerification)).toHaveBeenCalledWith("deliverables/d1/clinical-evidence-matrix.json", undefined);
   });
 

@@ -61,7 +61,7 @@ describe("WebResourcesCard", () => {
     await waitFor(() => expect(mocks.fetchWebMetrics).toHaveBeenCalledTimes(2));
   });
 
-  it("restarts and stops a running hosted runtime", async () => {
+  it("restarts and stops a running hosted runtime, each only after a confirmation", async () => {
     mocks.fetchWebMetrics
       .mockResolvedValueOnce(metricsFixture({ running: true }))
       .mockResolvedValueOnce(metricsFixture({ running: true }))
@@ -71,11 +71,20 @@ describe("WebResourcesCard", () => {
 
     expect(await screen.findByText("运行中")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重启研究运行时" }));
+    // One click used to end a running analysis. It asks first now.
+    expect(mocks.restartWebRuntime).not.toHaveBeenCalled();
+    const restart = screen.getByRole("alertdialog", { name: "重启研究运行时？" });
+    expect(restart).toHaveTextContent("正在进行的研究会立即中断");
+    fireEvent.click(screen.getByRole("button", { name: "重启运行时" }));
 
     await waitFor(() => expect(mocks.restartWebRuntime).toHaveBeenCalledTimes(1));
     expect(mocks.toastSuccess).toHaveBeenCalledWith("研究运行时已重启。");
 
     fireEvent.click(screen.getByRole("button", { name: "停止研究运行时" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(mocks.stopWebRuntime).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "停止研究运行时" }));
+    fireEvent.click(screen.getByRole("button", { name: "停止运行时" }));
 
     await waitFor(() => expect(mocks.stopWebRuntime).toHaveBeenCalledTimes(1));
     expect(mocks.toastSuccess).toHaveBeenCalledWith("研究运行时已停止。");

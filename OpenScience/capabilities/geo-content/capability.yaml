@@ -104,3 +104,23 @@ dataSources:
 - guidelines
 starterPrompts:
 - 用这十个真实问法测一下五个平台现在怎么回答，然后把能站住的结论写成内容块。
+
+# What a researcher is shown, in Chinese: read by people, not by the
+# orchestrator (the fields above). The generator derives the shell's and the
+# frame's capability table from this block, and adds what evals/ measured.
+display:
+  title: "答案引擎内容优化"
+  category: "写作与传播"
+  description: "先测量各消费级答案引擎当前如何回答一组真实问题，再产出可被后续测量对照的证据绑定内容块：结论、依据、适用条件、可解析引文、作者资质与 JSON-LD。"
+  starterPrompts:
+  - "测一测「速效救心丸开封后多久失效」在各平台的回答，并写出可被引用的内容块。"
+  - "用这十个真实问法测一下五个平台现在怎么回答，然后把能站住的结论写成内容块。"
+  materials: "需要一组真实问法：写在问题里，或上传到知识库"
+  estimatedMinutes:
+    min: 60
+    max: 180
+  outputs:
+  - "测量报告与监测表"
+  - "证据绑定的内容块（含 JSON-LD 与 llms.txt）"
+  knownLimits:
+  - "测量依赖部署配置的答案引擎探测通道；通道不可用时内容块没有测量基础。"

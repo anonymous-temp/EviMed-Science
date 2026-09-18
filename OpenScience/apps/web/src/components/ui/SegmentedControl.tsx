@@ -62,7 +62,7 @@ export function SegmentedControl<T extends string>({
       role="radiogroup"
       aria-label={ariaLabel}
       onKeyDown={onKeyDown}
-      className={cn("inline-flex rounded-input border border-border bg-surface-2 p-0.5", className)}
+      className={cn("inline-flex rounded-input border border-strong bg-surface-2 p-0.5", className)}
     >
       {options.map((option, i) => {
         const checked = option.value === value;
@@ -76,8 +76,8 @@ export function SegmentedControl<T extends string>({
             onClick={() => select(i)}
             className={cn(
               "rounded-md px-3 py-1.5 text-ui outline-none transition-colors",
-              "focus-visible:ring-2 focus-visible:ring-accent",
-              checked ? "bg-surface font-medium text-text shadow-card" : "text-muted hover:text-text",
+              "focus-visible:ring-2 focus-visible:ring-focus",
+              checked ? "bg-surface font-medium text-text ring-1 ring-border" : "text-muted hover:text-text",
             )}
           >
             {option.label}

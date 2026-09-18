@@ -26,6 +26,7 @@ import { NotebookEditor } from "@/components/notebook/NotebookEditor";
 import { FilePreviewInspector } from "@/components/inspector/FilePreviewInspector";
 import { PaneTitlebarInset } from "@/components/inspector/RightPane";
 import { EmptyState } from "@/components/cards/EmptyState";
+import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { humanSize } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -119,7 +120,7 @@ export function FilesPage() {
   return (
     <div {...dropProps} className="relative flex h-full min-h-0">
       {dragging && (
-        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-bg/70 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-bg backdrop-blur-sm">
           <div className="flex items-center gap-2 rounded-card border-2 border-dashed border-accent bg-surface px-6 py-4 text-ui font-medium text-accent">
             <Upload size={15} aria-hidden="true" />
             松开以上传到个人知识库
@@ -175,7 +176,7 @@ export function FilesPage() {
 
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {entries === null && <FilesSkeleton />}
-          {error && <div className="p-2 text-ui text-error">{error}</div>}
+          {error && <LoadError message={error} onRetry={() => void load(dir)} className="m-2" />}
           {entries && entries.length === 0 && !error && (
             hasWebApi ? (
               <EmptyState
@@ -198,7 +199,7 @@ export function FilesPage() {
               onClick={() => open(entry)}
               className={cn(
                 "flex w-full items-center gap-2 rounded-input px-2 py-1.5 text-left text-ui hover:bg-surface-2",
-                selected?.path === entry.path ? "bg-surface-2 text-text" : "text-text/90",
+                selected?.path === entry.path ? "bg-surface-2 text-text" : "text-text",
               )}
             >
               {iconFor(entry)}
@@ -361,7 +362,7 @@ export function SessionFilesPane({
         </button>
       </div>
       {crumbs.length > 0 && (
-        <div className="flex flex-wrap items-center gap-0.5 border-b border-border px-3 py-2 text-ui-sm">
+        <div className="flex flex-wrap items-center gap-0.5 border-b border-border px-3 py-2 text-ui">
           <button className="rounded px-1 text-link hover:bg-surface-2" onClick={() => setDir("")}>
             {baseName(workspace)}
           </button>
@@ -384,7 +385,7 @@ export function SessionFilesPane({
       )}
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {entries === null && <FilesSkeleton />}
-        {error && <div className="p-2 text-ui text-error">{error}</div>}
+        {error && <LoadError message={error} onRetry={() => void loadEntries(dir)} className="m-2" />}
         {entries && entries.length === 0 && !error && (
           <EmptyState icon={FolderOpen} title="本次任务还没有文件" className="px-2 py-8" />
         )}
@@ -392,7 +393,7 @@ export function SessionFilesPane({
           <button
             key={entry.path}
             onClick={() => (entry.isDir ? setDir(entry.path) : setSelected(entry))}
-            className="flex w-full items-center gap-2 rounded-input px-2 py-1.5 text-left text-ui text-text/90 hover:bg-surface-2"
+            className="flex w-full items-center gap-2 rounded-input px-2 py-1.5 text-left text-ui text-text hover:bg-surface-2"
           >
             {iconFor(entry)}
             <span className="flex-1 truncate">{entry.name}</span>

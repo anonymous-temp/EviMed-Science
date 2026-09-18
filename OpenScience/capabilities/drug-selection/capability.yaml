@@ -78,3 +78,22 @@ dataSources:
 starterPrompts:
 - Compare candidate medicines for a hospital formulary decision in one indication.
 - Build an evidence-backed scorecard for selecting among equivalent medicines.
+
+# What a researcher is shown, in Chinese: read by people, not by the
+# orchestrator (the fields above). The generator derives the shell's and the
+# frame's capability table from this block, and adds what evals/ measured.
+display:
+  title: "药品遴选评价"
+  category: "药学评价"
+  description: "结合 EviMed 证据与用户提供的量表辅助药品遴选；缺项不计零，仅在数据可比时排名。"
+  starterPrompts:
+  - "在阿哌沙班、利伐沙班、达比加群之间为非瓣膜性房颤抗凝遴选一个品种。"
+  - "比较候选药品，先提示我补齐量表和关键数据，再生成可追溯评分与敏感性分析。"
+  estimatedMinutes:
+    min: 20
+    max: 50
+  outputs:
+  - "遴选评价报告"
+  - "评分表与决策摘要"
+  knownLimits:
+  - "只在候选药品的数据可比时给出排名；数据不齐时只给分维度比较。"

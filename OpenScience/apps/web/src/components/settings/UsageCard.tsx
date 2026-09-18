@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { webErrorMessage, fetchWebAccountUsage, type WebUsageSummary } from "@/lib/apiClient";
 import { Card } from "@/components/ui/Card";
+import { useOperator } from "@/lib/useOperator";
 
 /**
  * What this account has spent this month.
@@ -9,6 +10,7 @@ import { Card } from "@/components/ui/Card";
  * drives the enforced safety budget and lets the researcher understand usage.
  */
 export function UsageCard() {
+  const operator = useOperator();
   const [usage, setUsage] = useState<WebUsageSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,15 +40,20 @@ export function UsageCard() {
       {!error && !usage && <p className="text-ui text-muted">正在读取…</p>}
       {usage && (
         <div>
-          <div className="grid grid-cols-3 gap-4">
+          {/* Stacked on a phone: three title-rung numbers side by side did not
+              fit a 390 px screen (review B, UsageCard). */}
+          <div className="grid gap-4 sm:grid-cols-3">
             <Figure label="调用次数" value={usage.calls.toLocaleString("zh-CN")} />
-            <Figure label="输入 token" value={usage.promptTokens.toLocaleString("zh-CN")} />
-            <Figure label="输出 token" value={usage.completionTokens.toLocaleString("zh-CN")} />
+            <Figure label="读入量（token）" value={usage.promptTokens.toLocaleString("zh-CN")} />
+            <Figure label="生成量（token）" value={usage.completionTokens.toLocaleString("zh-CN")} />
           </div>
           <div className="mt-4 border-t border-border pt-4">
             <Figure label={`折算金额（${usage.currency}）`} value={usage.cost.toFixed(2)} />
           </div>
-          {usage.byModel.length > 0 && (
+          {/* Per model, for an operator: one model serves every run on this
+              deployment, and a model id is an engine internal a researcher's
+              bill does not need (DESIGN.md: no model names in the body). */}
+          {operator && usage.byModel.length > 0 && (
             <ul className="mt-4 flex flex-col gap-1">
               {usage.byModel.map((row) => (
                 <li key={row.model} className="flex items-baseline justify-between text-caption text-muted">
