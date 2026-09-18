@@ -51,6 +51,13 @@ export default {
         // `border-border` is decoration.
         strong: "var(--border-strong)",
       },
+      // Two durations: a state change (press, toggle, chevron) and a container
+      // (menu, drawer, panel). `prefers-reduced-motion` collapses both to an
+      // instant in src/index.css.
+      transitionDuration: {
+        fast: "120ms",
+        base: "200ms",
+      },
       // Latin faces first (they carry the metrics the type scale was measured
       // against), Chinese faces after them. Neither stack named a CJK face
       // until 2026-09-16, so `font-serif` — 31 uses, all of them Chinese page

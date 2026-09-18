@@ -154,3 +154,20 @@ it("says which outcome a finished run had, and that its files are still there", 
   expect(screen.getByText(/需要你自己复核后再使用/)).toBeInTheDocument();
   expect(screen.getByText(/本次运行产出 3 个文件，仍在工作区里/)).toBeInTheDocument();
 });
+
+// Bodies written before 2026-09-18 carried the gate's first two sentences
+// verbatim; that is where a pharmacist first met English validator prose.
+it("holds back the sentences an old run notice quoted for the agent", async () => {
+  const old: api.InboxItem = {
+    ...review, id: "old-run", noticeType: "notify", title: "研究已交付，待你复核", actions: [],
+    body: [
+      "结果已交付，但有质量检查没有通过，需要你自己复核后再使用。",
+      "MUST FIX — claims[52].claim numeric fact 6 is not present in its direct support.",
+    ].join("\n"),
+  };
+  vi.mocked(api.listInbox).mockResolvedValue({ items: [old], nextCursor: null });
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
+  expect(await screen.findByText("结果已交付，但有质量检查没有通过，需要你自己复核后再使用。")).toBeInTheDocument();
+  expect(screen.getByText(/另有 1 条技术提示/)).toBeInTheDocument();
+  expect(screen.queryByText(/numeric fact/)).not.toBeInTheDocument();
+});

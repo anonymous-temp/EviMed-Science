@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WebAgentRun } from "@/lib/apiClient";
-import { relativeTime, runDidNotDeliver, runMetaLine, runQuestion, runState, runTitle, summarizeQualityNotices, undeliveredFiles, webRunOutcome } from "./runPresentation";
+import { relativeTime, runDidNotDeliver, runMetaLine, runQuestion, runState, runTitle, undeliveredFiles, webRunOutcome } from "./runPresentation";
 
 // The run ledger's presentation had no direct test (2026-09-16 review, D5):
 // every page that shows a run reads its title, its dot and its outcome here.
@@ -83,37 +83,5 @@ describe("what happened to a run", () => {
     expect(undeliveredFiles(run())).toBeNull();
     expect(undeliveredFiles(run({ unverifiedArtifacts: [] } as Partial<WebAgentRun>))).toEqual([]);
     expect(undeliveredFiles(run({ unverifiedArtifacts: ["deliverables/report.md", "", 3] } as unknown as Partial<WebAgentRun>))).toEqual(["deliverables/report.md"]);
-  });
-});
-
-describe("the gate's notices, grouped", () => {
-  it("leads with what must be fixed and admits every notice in its counts", () => {
-    const summary = summarizeQualityNotices([
-      "claims[0].claim numeric fact 10 is not present in its direct support.",
-      "MUST FIX — Reading retrieved evidence was delegated to a child that restated it.",
-      "citation-ledger.csv row 3 has no DOI.",
-      "Something the table does not know about.",
-    ]);
-    expect(summary.total).toBe(4);
-    expect(summary.mustFix).toBe(1);
-    expect(summary.advisory).toBe(3);
-    expect(summary.groups[0]).toMatchObject({ mustFix: true, label: "检索到的原文由子任务转述" });
-    expect(summary.groups[0].items[0]).not.toMatch(/^MUST FIX/);
-    expect(summary.groups.map((group) => group.label)).toEqual(expect.arrayContaining(["证据矩阵主张", "引文台账与参考文献", "其他核验提示"]));
-  });
-
-  it("puts a clinical-safety finding ahead of everything and counts it apart", () => {
-    const summary = summarizeQualityNotices([
-      "MUST FIX — claims[2].supportQuote was not found in its preserved source artifact.",
-      "SAFETY — 临床实践要点第 12 行把呼叫急救的条件写成了服药后是否缓解。",
-      "Report line 9 numeric facts 12 have no evidence-matrix claim reference.",
-    ]);
-    expect(summary).toMatchObject({ total: 3, mustFix: 2, safety: 1, advisory: 1 });
-    expect(summary.groups.map((group) => [group.label, group.safety, group.mustFix])).toEqual([
-      ["临床安全", true, true],
-      ["证据矩阵主张", false, true],
-      ["数字未标注其来源主张", false, false],
-    ]);
-    expect(summary.groups[0].items[0]).toBe("临床实践要点第 12 行把呼叫急救的条件写成了服药后是否缓解。");
   });
 });
