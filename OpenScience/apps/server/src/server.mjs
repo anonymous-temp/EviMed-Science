@@ -642,9 +642,21 @@ function memoryRecallRejection(error) {
  * dispatch id; both are read and added. Null when nothing was attributed.
  * @param {Map<string, any>} summaries @param {Record<string, any>} run
  */
+/**
+ * How long after a run started its first attributed model call may come and
+ * the run still count as measured. A run's first call follows its start by
+ * seconds; one whose first attributed call came later than this began before
+ * calls were attributed (2026-09-18), and the sum of what was attributed
+ * afterwards — a title, a memory pass — would read as the run's whole cost.
+ */
+export const RUN_USAGE_START_SLACK_MS = 10 * 60_000;
+
 export function runUsageFrom(summaries, run) {
   const parts = [summaries.get(run.id), run.dispatchId && run.dispatchId !== run.id ? summaries.get(run.dispatchId) : null].filter(Boolean);
   if (parts.length === 0) return null;
+  const started = Date.parse(run.startedAt ?? run.createdAt ?? "");
+  const firsts = parts.map((part) => Date.parse(part.firstRequestAt ?? "")).filter(Number.isFinite);
+  if (Number.isFinite(started) && firsts.length > 0 && Math.min(...firsts) - started > RUN_USAGE_START_SLACK_MS) return null;
   const sum = (field) => parts.reduce((total, part) => total + (Number(part[field]) || 0), 0);
   return {
     requests: sum("requests"), inputTokens: sum("inputTokens"), cachedInputTokens: sum("cachedInputTokens"),
