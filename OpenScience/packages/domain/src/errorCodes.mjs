@@ -208,6 +208,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "quote_source_not_found",
   "quote_source_unreadable",
   "quote_source_too_large",
+  // The drug-label index (2026-09-18) is not shipped to this deployment, or
+  // has no label under that approval number: a fact about the source, and
+  // the other label connectors are still there to ask.
+  "drug_label_index_unconfigured",
+  "drug_label_not_found",
 ]);
 
 
@@ -237,6 +242,13 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "quote_invalid",
   "quote_source_invalid",
   "quote_workspace_unavailable",
+  // A label id or section name the run built wrongly, a label that could not
+  // be written into the workspace (so nothing downstream can quote it), or an
+  // index file this server cannot trust -- as with pharmacy_reference_invalid.
+  "drug_label_id_invalid",
+  "drug_label_section_unknown",
+  "drug_label_preservation_failed",
+  "drug_label_index_invalid",
   "public_source_url_invalid",
   "public_source_dataset_invalid",
   "public_source_gateway_invalid",
@@ -849,6 +861,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^science_connector_/, '科学数据连接器这次没能给出结果。'],
   [/^mr_input_/, '孟德尔随机化的本地输入需要更正后才能继续。'],
   [/^pharmacy_reference_/, '药学参考数据这次没能给出结果。'],
+  [/^drug_label_/, '药品说明书库这次没能给出结果；可以改用其他说明书来源继续。'],
   [/^quote_/, '引文核对这次没能完成；这只是一次查找，已写的报告不受影响。'],
   [/^evimed_evidence_/, '专有证据接口这次没能给出结果。'],
   [/^invalid_assessment/, '这次评估请求的格式不符合要求。'],

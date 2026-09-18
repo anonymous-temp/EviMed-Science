@@ -113,7 +113,12 @@ class ToolContractTests(unittest.TestCase):
             self.assertEqual(schema["type"], "object")
             self.assertFalse(schema["additionalProperties"])
             self.assertIn("properties", schema)
-        self.assertEqual(by_name["drug_label_search"]["inputSchema"]["properties"]["limit"]["maximum"], 3)
+        # Ten index summaries; the label connectors behind it still return at
+        # most three full labels (public_sources.drug_label_lookup).
+        label_schema = by_name["drug_label_search"]["inputSchema"]
+        self.assertEqual(label_schema["properties"]["limit"]["maximum"], 10)
+        self.assertEqual(set(label_schema["properties"]) >= {"drug", "labelId", "sections", "manufacturer"}, True)
+        self.assertEqual(label_schema.get("required", []), [])
         for name in {
             "meta_analysis",
             "mendelian_randomization",

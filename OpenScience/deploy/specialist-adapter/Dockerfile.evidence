@@ -7,7 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOME=/tmp \
     EVIMED_PUBLIC_CONNECTORS_ENABLED=true \
-    EVIMED_PHARMACY_REFERENCE_DB=/data/pharmacy-reference.sqlite
+    EVIMED_PHARMACY_REFERENCE_DB=/data/pharmacy-reference.sqlite \
+    EVIMED_DRUG_LABEL_DB=/data/drug-label-index.sqlite
 
 WORKDIR /adapter
 COPY OpenScience/deploy/specialist-adapter/requirements.txt /tmp/requirements.txt

@@ -43,6 +43,8 @@ import unicodedata
 from functools import lru_cache
 from pathlib import PurePosixPath
 
+import drug_label_index
+
 NORMALIZATION = "evimed-quote-v1"
 SOURCES_DIR = ".evimed-sources"
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
@@ -778,10 +780,18 @@ def _capture_roots(source_id: str) -> list[tuple[str, tuple[str, ...]]]:
     if guide:
         digest = hashlib.sha256(("evimed-guide:%s" % guide.group(1)).encode("utf-8")).hexdigest()[:16]
         return [("%s/evimed-guidelines/%s" % (SOURCES_DIR, digest), ("guideline.md",))]
-    label = re.fullmatch(r"label:([^#\s/]{1,96})#([a-z0-9-]{1,48})", value)
-    if label:
-        digest = hashlib.sha256(("evimed-label:%s" % label.group(1)).encode("utf-8")).hexdigest()[:16]
-        return [("%s/drug-labels/%s" % (SOURCES_DIR, digest), ("%s.md" % label.group(2),))]
+    if value.startswith("label:"):
+        # The drug-label index files a label under the digest of its approval
+        # number; one section is one file, and a bare label id means all of
+        # them. Parsed by the module that writes the capture, so a label id
+        # that tool would accept -- a Chinese section heading, full-width
+        # digits -- resolves here too.
+        try:
+            approval, section = drug_label_index.parse_label_id(value)
+        except drug_label_index.DrugLabelIndexError:
+            return []
+        names = (section,) if section else tuple(slug for slug, _title in drug_label_index.SECTIONS)
+        return [(drug_label_index.capture_root(approval), tuple("%s.md" % name for name in names))]
     digest = hashlib.sha256(("evimed-guide:%s" % value).encode("utf-8")).hexdigest()[:16]
     return [("%s/evimed-guidelines/%s" % (SOURCES_DIR, digest), ("guideline.md",))]
 

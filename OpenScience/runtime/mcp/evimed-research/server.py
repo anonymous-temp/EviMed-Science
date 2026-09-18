@@ -6,6 +6,7 @@ reserved for protocol messages; adapters use explicit HTTP boundaries and never
 invent evidence when an upstream service is unavailable.
 """
 
+import hashlib
 import json
 import math
 import os
@@ -17,7 +18,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import public_sources
@@ -27,7 +28,8 @@ import open_access_fulltext
 import official_pages
 import quote_locator
 import source_types
-from immutable_capture import ImmutableCaptureError, managed_workspace
+import drug_label_index
+from immutable_capture import ImmutableCaptureError, managed_workspace, preserve
 import meta_agent
 import specialist_jobs
 import source_catalog
@@ -107,7 +109,8 @@ MR_SOURCE_SCHEMA = {
 NUMBER = {"type": "number"}
 LIMIT = {"type": "integer", "minimum": 1, "maximum": 200}
 EVIMED_SEARCH_LIMIT = {"type": "integer", "minimum": 1, "maximum": 100}
-LABEL_LIMIT = {"type": "integer", "minimum": 1, "maximum": 3}
+LABEL_LIMIT = {"type": "integer", "minimum": 1, "maximum": 10}
+LABEL_SECTIONS = {"type": "array", "maxItems": 17, "items": SHORT_STRING}
 DATE = {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
 YEAR = {"type": "integer", "minimum": 1900, "maximum": 2100}
 STATUS_WAIT_MAX_SECONDS = 45
@@ -548,10 +551,18 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "drug_label_search",
-        "description": "Retrieve exact-product drug-label candidates from configured jurisdictions; indexed copies still require official-current verification.",
+        "description": "Search drug labels by drug (name, brand or approval number), optionally product and manufacturer: Chinese labels from the EviMed label index, US labels with jurisdiction US. Read one label by labelId (optionally sections): it is preserved, each section citable as label:<approval>#<section>. Indexed copies are snapshots; verify against the current official label.",
         "inputSchema": object_schema(
-            {"drug": SHORT_STRING, "product": SHORT_STRING, "jurisdiction": SHORT_STRING, "limit": LABEL_LIMIT},
-            ("drug",),
+            {
+                "drug": SHORT_STRING,
+                "product": SHORT_STRING,
+                "manufacturer": SHORT_STRING,
+                "jurisdiction": SHORT_STRING,
+                "limit": LABEL_LIMIT,
+                "labelId": {"type": "string", "minLength": 1, "maxLength": 160},
+                "sections": LABEL_SECTIONS,
+            },
+            (),
         ),
     },
     {
@@ -1799,6 +1810,10 @@ def _dispatch(name, arguments):
                         "table": (source_types.table() or {}).get("origin"),
                         "version": (source_types.table() or {}).get("version"),
                     },
+                    # The drug-label index as this process sees it; in a
+                    # container runtime it lives with the drug evidence adapter,
+                    # so `configured: false` here is the expected answer.
+                    "drugLabelIndex": drug_label_index.status(),
                 },
                 name,
                 arguments,
@@ -1976,6 +1991,16 @@ def _dispatch(name, arguments):
             "Stop until the tool input matches its published JSON schema.",
             ["Search with query, or fetch abstracts of chosen PubMed records with pmids."],
         )
+    if name == "drug_label_search" and not (arguments.get("drug") or arguments.get("labelId")):
+        return failure(
+            "invalid_input",
+            "Invalid input for drug_label_search: supply drug to search, or labelId to read one label.",
+            False,
+            "Stop until the tool input matches its published JSON schema.",
+            ["Search with drug, or read a label a search returned with labelId."],
+        )
+    if name == "drug_label_search" and arguments.get("labelId"):
+        return _drug_label_read(arguments)
     if name == "literature_search" and arguments.get("pmids"):
         # Addressed by PubMed ids, so no private literature adapter can serve
         # it: this call goes to PubMed through the gateway or is refused.
@@ -2009,6 +2034,90 @@ def _dispatch(name, arguments):
             )
         return specialist_jobs.call(name, arguments)
     return _adapter_call(name, arguments)
+
+
+MAX_LABEL_TEXT_CHARS = 30_000
+
+
+def _drug_label_read(arguments):
+    """`drug_label_search` with `labelId`: one label, preserved, then shown.
+
+    The index answers wherever it is mounted -- the drug evidence adapter in a
+    container deployment, this process when the file is local -- and returns
+    the whole label. Every section is written into the workspace as one
+    capture before the run sees a word of it, so whichever section a claim
+    later quotes is already on disk with its digest. Only the sections asked
+    for (all of them when none are named) come back as text, up to a budget;
+    the rest are listed with their preserved paths.
+    """
+    try:
+        approval, named = drug_label_index.parse_label_id(arguments.get("labelId"))
+        requested = drug_label_index.requested_sections(arguments.get("sections"), named)
+    except drug_label_index.DrugLabelIndexError as error:
+        return failure(
+            error.code,
+            str(error),
+            False,
+            "Stop until the label id or the section names are corrected.",
+            ["Use the labelId and the section names a drug_label_search result gave."],
+        )
+    forwarded = {"labelId": drug_label_index.label_id(approval)}
+    if requested:
+        forwarded["sections"] = requested
+    result = _adapter_call("drug_label_search", forwarded)
+    if result.get("status") == "error":
+        return result
+    data = result.get("data") if isinstance(result.get("data"), dict) else {}
+    label = data.get("label")
+    try:
+        if not isinstance(label, dict) or drug_label_index.canonical_approval(label.get("approvalNumber")) != approval:
+            raise drug_label_index.DrugLabelIndexError("drug_label_index_invalid", "the label read returned no label, or another one")
+        artifacts = drug_label_index.capture_artifacts(label)
+        sidecar = source_types.sidecar({
+            "id": drug_label_index.label_id(approval),
+            "title": label.get("genericName") or label.get("productName") or approval,
+            "url": label.get("sourceUrl") or "",
+            "tool": "drug_label_search",
+            "source": drug_label_index.SOURCE_NAME,
+        })
+        if sidecar:
+            artifacts[sidecar[0]] = sidecar[1]
+        paths = preserve(managed_workspace(), Path(drug_label_index.capture_root(approval)), artifacts)
+    except drug_label_index.DrugLabelIndexError as error:
+        return _adapter_contract_failure("drug_label_search", str(error))
+    except ImmutableCaptureError as error:
+        return failure(
+            "drug_label_preservation_failed",
+            "The label could not be preserved in the workspace, so it cannot be quoted: %s" % error,
+            False,
+            "Stop; a label that is not preserved cannot carry a verified claim.",
+            ["Check the runtime's workspace configuration before reading labels."],
+        )
+    hashes = {paths[name]: hashlib.sha256(payload).hexdigest() for name, payload in artifacts.items()}
+    budget = MAX_LABEL_TEXT_CHARS
+    sections = []
+    for entry in label["sections"]:
+        record = {key: value for key, value in entry.items() if key != "text"}
+        # Each file's digest is in data.artifactSha256s, which is what the
+        # control plane reads; the run needs the path to cite.
+        record["artifactPath"] = paths["%s.md" % entry["section"]]
+        if not requested or entry["section"] in requested:
+            if len(entry["text"]) <= budget:
+                record["text"] = entry["text"]
+                budget -= len(entry["text"])
+            else:
+                record["omitted"] = "Longer than what is left of this reply's text budget; read the preserved file."
+        sections.append(record)
+    present = {entry["section"] for entry in label["sections"]}
+    shown = {**label, "sections": sections, "labelFile": paths[drug_label_index.LABEL_METADATA_NAME]}
+    missing = [section for section in requested if section not in present]
+    if missing:
+        shown["missingSections"] = missing
+    return {
+        **result,
+        "data": {**data, "label": shown, "artifactSha256s": hashes},
+        "artifacts": sorted(paths.values()),
+    }
 
 
 def _locate_quote(arguments):
