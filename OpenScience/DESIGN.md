@@ -580,3 +580,7 @@ into the kernel frame through `ctx.theme.overrideTokens` (the frame layer,
 - The right pane and sidebar widths predate appendix D §8.6 (right pane default 560 px; D proposes
   360 px, never wider than the centre column).
 - No motion spec for streaming text (buffering cadence is an engineering decision).
+- A figure a report links by a relative path (`![](figures/forest.png)`) is styled for paper but
+  not yet resolved against the report's folder; it shows once the path is absolute or a data URI.
+- The reader's print copy is mounted on `beforeprint`; a headless PDF renderer that does not fire
+  that event (e.g. `page.pdf()`) prints the shell unless the event is dispatched first.
