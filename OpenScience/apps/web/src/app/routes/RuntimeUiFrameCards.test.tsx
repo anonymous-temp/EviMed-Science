@@ -1,0 +1,101 @@
+// The frame's tool-call cards in a browser DOM: what a click on 「查看子任务」
+// asks the kernel for. The body is the one the socket's build serializes into
+// the kernel's page; here it runs against a recording slot registry.
+import * as React from "react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createFrameKit } from "../../../../../packages/harness-port/src/runtimeUiKit.mjs";
+import { FRAME_VOCABULARY } from "../../../../../packages/harness-port/src/runtimeUiFrame.mjs";
+import { apply as applyToolviews } from "../../../../../packages/harness-port/src/runtimeUiToolviews.mjs";
+
+type Listener = () => void;
+
+function frame(entries: Array<Record<string, unknown>>) {
+  const components = new Map<string, (props: Record<string, unknown>) => unknown>();
+  const listeners = new Set<Listener>();
+  let snapshot = { current: "session-a", subagentsByParent: { "session-a": { entries } } };
+  const sessions = {
+    list: { getSnapshot: () => snapshot, subscribe: (fn: Listener) => { listeners.add(fn); return () => listeners.delete(fn); } },
+    refreshSubagents: vi.fn(),
+    openSubagent: vi.fn(),
+  };
+  const ctx: Record<string, unknown> = {
+    sessions,
+    slots: {
+      inject: (_name: string, setup: () => unknown) => setup(),
+      register: (options: { key: string }, component: (props: Record<string, unknown>) => unknown) => { components.set(options.key, component); return () => {}; },
+    },
+    effect: (setup: () => unknown) => setup(),
+    on: () => () => {},
+  };
+  const target = {
+    __EVIMED_FRAME__: { version: 1, frameId: "f", projectId: "p", shellOrigin: "https://app.example", cwd: "/workspace", capabilities: [] },
+    parent: { postMessage() {} }, addEventListener() {}, removeEventListener() {}, console, setTimeout, clearTimeout,
+    setInterval: globalThis.setInterval.bind(globalThis), clearInterval: globalThis.clearInterval.bind(globalThis),
+  };
+  const kit = createFrameKit(ctx, target, (id: string) => (id === "react" ? React : undefined), FRAME_VOCABULARY);
+  applyToolviews(ctx, {}, target, undefined, kit);
+  kit.hub.deliver("session", { sessionId: "session-a" });
+  return {
+    sessions, kit, card: components.get("evimed_delegate")!,
+    publish(next: Array<Record<string, unknown>>) { snapshot = { ...snapshot, subagentsByParent: { "session-a": { entries: next } } }; act(() => { for (const fn of [...listeners]) fn(); }); },
+  };
+}
+
+const started = {
+  kind: "tool-result", seq: 3, time: Date.now(), callId: "c1", callTime: Date.now() - 1000,
+  call: { name: "evimed_delegate", argsRaw: JSON.stringify({ deliverableId: "evidence" }) },
+  content: [{ type: "text", text: `ok\n${JSON.stringify({ handle: "h-1", deliverableId: "evidence", childSessionId: "child-1", status: "started" }, null, 2)}` }],
+  isError: false, subCalls: [],
+};
+
+describe("the delegation card's link to the child", () => {
+  afterEach(() => { cleanup(); });
+
+  it("opens the kernel's own subagent view at the address the parent's catalogue lists", () => {
+    const f = frame([{ id: "child-1", kind: "child", mode: "one-shot" }]);
+    const Card = f.card as (props: Record<string, unknown>) => React.ReactElement;
+    render(<Card block={started} />);
+    fireEvent.click(screen.getByRole("button", { name: "查看子任务" }));
+    expect(f.sessions.openSubagent).toHaveBeenCalledWith({ parentSessionId: "session-a", childSessionId: "child-1", mode: "one-shot" });
+    expect(f.sessions.refreshSubagents).not.toHaveBeenCalled();
+  });
+
+  it("waits for the catalogue, asks for it once, and comes alive when the child is listed", () => {
+    const f = frame([]);
+    const Card = f.card as (props: Record<string, unknown>) => React.ReactElement;
+    const view = render(<Card block={started} />);
+    const button = screen.getByRole("button", { name: "查看子任务" });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(f.sessions.openSubagent).not.toHaveBeenCalled();
+    view.rerender(<Card block={{ ...started }} />);
+    expect(f.sessions.refreshSubagents).toHaveBeenCalledTimes(1);
+    expect(f.sessions.refreshSubagents).toHaveBeenCalledWith("session-a");
+    f.publish([{ id: "child-1", kind: "child", mode: "continuable" }]);
+    expect(button).not.toBeDisabled();
+    fireEvent.click(button);
+    expect(f.sessions.openSubagent).toHaveBeenCalledWith({ parentSessionId: "session-a", childSessionId: "child-1", mode: "continuable" });
+  });
+
+  it("ticks while the child works and follows the run state the shell sends", () => {
+    vi.useFakeTimers();
+    try {
+      const f = frame([{ id: "child-1", kind: "child", mode: "one-shot" }]);
+      const Card = f.card as (props: Record<string, unknown>) => React.ReactElement;
+      const begun = Date.now();
+      const block = { ...started, callTime: begun, time: begun + 500 };
+      render(<Card block={block} />);
+      expect(screen.getByText("已启动")).toBeInTheDocument();
+      act(() => f.kit.hub.deliver("run-state", { runId: "run-1", sessionId: "session-a", progress: {
+        deliverables: [{ id: "evidence", title: "老年房颤抗凝证据综述", status: "delegated", attempts: 0 }],
+        children: [{ childSessionId: "child-1", deliverableId: "evidence", state: "running", lastActivityAt: null }],
+        currentPhase: "search", sources: { searched: 40, included: 3, fullText: 0 },
+      } }));
+      expect(screen.getByText("老年房颤抗凝证据综述")).toBeInTheDocument();
+      expect(screen.getByText("进行中")).toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(65_000); });
+      expect(screen.getByText(/已用时 1 分 0\d 秒 · 当前：检索 · 纳入 3 篇/)).toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
+  });
+});
