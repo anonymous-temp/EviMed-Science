@@ -607,6 +607,23 @@ function memoryRecallRejection(error) {
  * anyone (C1).
  * @param {Record<string, any>} run
  */
+/**
+ * One run's usage from the ledger's per-run aggregate (C3 `usage`). A run is
+ * stamped under its own id by the model gateway, and a bounded run (autopilot,
+ * verification) under the id its runtime was minted for, which is the run's
+ * dispatch id; both are read and added. Null when nothing was attributed.
+ * @param {Map<string, any>} summaries @param {Record<string, any>} run
+ */
+export function runUsageFrom(summaries, run) {
+  const parts = [summaries.get(run.id), run.dispatchId && run.dispatchId !== run.id ? summaries.get(run.dispatchId) : null].filter(Boolean);
+  if (parts.length === 0) return null;
+  const sum = (field) => parts.reduce((total, part) => total + (Number(part[field]) || 0), 0);
+  return {
+    requests: sum("requests"), inputTokens: sum("inputTokens"), cachedInputTokens: sum("cachedInputTokens"),
+    outputTokens: sum("outputTokens"), costCny: Math.round(sum("costCny") * 1e6) / 1e6,
+  };
+}
+
 export function automatedRun(run) {
   return run?.automated === true
     || String(run?.effectiveRouteReason ?? "").startsWith("autopilot:")
@@ -1105,6 +1122,24 @@ export function createWebApiApp(overrides = {}) {
   const specialistClassifier = new SpecialistClassifier(config, {
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
   });
+  // Which run an interactive runtime's model request belongs to (E §9.4):
+  // the one running in its project, when exactly one is. Remembered for a
+  // few seconds because the gateway asks on every model call, and forgotten
+  // the moment any run of the project changes state.
+  /** @type {Map<string, { at: number, runId: string | null }>} */
+  const runAttribution = new Map();
+  const attributeRun = async ({ userId, projectId }) => {
+    const key = `${userId}\0${projectId}`;
+    const known = runAttribution.get(key);
+    if (known && Date.now() - known.at < 3_000) return known.runId;
+    const user = await store.userById(userId);
+    if (!user) return null;
+    const running = await agentRuns.activeRunIds(await store.requireProject(user, projectId));
+    const runId = running.length === 1 ? running[0] : null;
+    runAttribution.set(key, { at: Date.now(), runId });
+    if (runAttribution.size > 5_000) runAttribution.delete(runAttribution.keys().next().value);
+    return runId;
+  };
   // What a run is called (C3): one metered flash call per new run, off the
   // critical path, never over a title the researcher gave it.
   const runTitles = new RunTitleScheduler({
@@ -1292,6 +1327,10 @@ export function createWebApiApp(overrides = {}) {
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
     readChildSessionActivity: (project, parentSessionId, childSessionIds, options) =>
       runtimeManager.childSessionActivity(project, parentSessionId, childSessionIds, options),
+    // What the run has spent so far, for its progress aggregate (C5).
+    readRunUsage: async (project, run) => (usageLedger
+      ? runUsageFrom(await usageLedger.summaryRuns(project.userId, [run.id, run.dispatchId].filter(Boolean)), run)
+      : null),
     runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     // Which workspace a run belongs to, re-derived rather than remembered. It
@@ -1331,6 +1370,9 @@ export function createWebApiApp(overrides = {}) {
       // it, and a finished run's stops being routed at all.
       runtimeEventPump.noteRun(project, run);
       runTitles.consider(project, run);
+      // A run started or ended: which one a model request belongs to may
+      // have changed.
+      runAttribution.delete(`${project.userId}\0${project.id}`);
     },
     // The run's own projection of itself — evidence counts and budget — read
     // off the monitor's existing cycle and forwarded on the same channel as
@@ -2079,6 +2121,7 @@ export function createWebApiApp(overrides = {}) {
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     usageLedger,
+    attributeRun,
   });
   // The evaluation corpus needs both arms to see byte-identical upstream
   // answers, so the gateway's fetch is replaceable by a fixture reader. Neither
@@ -2670,10 +2713,18 @@ export function createWebApiApp(overrides = {}) {
 
       if (pathname === "/api/agent-runs" && req.method === "GET") {
         const ctx = await context(req, res);
-        const runs = await agentRuns.withPlanProgress(ctx.project, await agentRuns.recover(ctx.project));
+        let runs = await agentRuns.withPlanProgress(ctx.project, await agentRuns.recover(ctx.project));
         // Runs adopted before their first message could be read learn it in
         // the background; this answer does not wait for that (C3).
         agentRuns.backfillQuestions(ctx.project, runs);
+        // What each run has spent (C3 `usage`), one query for the whole list.
+        // A ledger that cannot be read leaves the runs without the field
+        // rather than the list without its runs.
+        if (usageLedger && runs.length > 0) {
+          const summaries = await usageLedger.summaryRuns(ctx.project.userId, runs.flatMap((run) => [run.id, run.dispatchId]).filter(Boolean))
+            .catch(() => null);
+          if (summaries) runs = runs.map((run) => { const usage = runUsageFrom(summaries, run); return usage ? { ...run, usage } : run; });
+        }
         sendJson(res, 200, { data: runs });
         return;
       }
@@ -3486,21 +3537,25 @@ export function createWebApiApp(overrides = {}) {
         const run = (await agentRuns.list(ctx.project)).find((candidate) => candidate.id === runId);
         if (!run) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
         if (!usageLedger) throw new HttpError(503, "usage_ledger_unavailable", "The usage ledger is unavailable.");
-        // Keyed by `dispatchId`, which is what the gateway stamps on each call;
-        // the same key `finishInternal` uses, so the two agree by construction.
-        const summary = await usageLedger.summaryRun(ctx.project.userId, run.dispatchId ?? run.id);
+        // Under both ids a run's calls can carry: its own, which the gateway
+        // stamps on an interactive run's calls, and its dispatch id, which a
+        // bounded runtime (autopilot, verification) was minted for.
+        const summaries = await Promise.all([...new Set([run.id, run.dispatchId].filter(Boolean))]
+          .map((id) => usageLedger.summaryRun(ctx.project.userId, id)));
+        const total = (field) => summaries.reduce((sum, item) => sum + (Number(item[field]) || 0), 0);
+        const models = [...new Set(summaries.map((item) => item.modelId).filter(Boolean))];
         sendJson(res, 200, { data: {
           runId: run.id,
-          cost: summary.actualCost,
-          openCost: summary.openCost,
-          currency: summary.currency,
-          calls: summary.settledCalls,
-          uncertain: summary.uncertain,
+          cost: Math.round(total("actualCost") * 1e6) / 1e6,
+          openCost: Math.round(total("openCost") * 1e6) / 1e6,
+          currency: summaries[0]?.currency ?? "CNY",
+          calls: total("settledCalls"),
+          uncertain: total("uncertain"),
           cacheHitTokens: null,
           cacheMissTokens: null,
-          inputTokens: summary.inputTokens,
-          outputTokens: summary.outputTokens,
-          modelId: summary.modelId,
+          inputTokens: total("inputTokens"),
+          outputTokens: total("outputTokens"),
+          modelId: models.length === 1 ? models[0] : null,
         } });
         return;
       }

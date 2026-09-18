@@ -623,3 +623,19 @@ test("a call the provider refused is not billed", async (t) => {
   await new Promise((resolve) => setTimeout(resolve, 200));
   await assert.rejects(readFile(path.join(dataDir, ".openscience", "usage.jsonl"), "utf8"));
 });
+
+test("a reservation is estimated in tokens, not bytes, and a conversation's repeated prefix is priced as cached", async () => {
+  const { estimateModelReservation, estimatePromptTokens } = await import("../src/modelGateway.mjs");
+  const chinese = "阿司匹林一级预防在七十岁以上人群的获益与出血风险。".repeat(50);
+  assert.equal(estimatePromptTokens("阿司匹林"), 4, "one token per CJK character");
+  assert.equal(estimatePromptTokens("abcdef"), 2, "one per three of anything else");
+  const body = { model: "deepseek-flash", messages: [{ role: "user", content: chinese }], max_tokens: 1000 };
+  const cold = estimateModelReservation(body, {}, new Date("2026-09-18T02:00:00Z"));
+  assert.ok(cold.promptTokens < Buffer.byteLength(chinese, "utf8") / 2, `estimated ${cold.promptTokens} tokens for ${Buffer.byteLength(chinese)} bytes`);
+  assert.ok(cold.promptTokens >= [...chinese].length, "never below one token per character");
+  const warm = estimateModelReservation(body, {}, new Date("2026-09-18T02:00:00Z"), { cachedTokens: cold.promptTokens });
+  assert.equal(warm.cacheHitTokens, cold.promptTokens);
+  assert.ok(warm.cost < cold.cost, "the cached prefix is priced at the cache-hit rate");
+  const over = estimateModelReservation(body, {}, new Date("2026-09-18T02:00:00Z"), { cachedTokens: 10 * cold.promptTokens });
+  assert.equal(over.cacheHitTokens, cold.promptTokens, "never more cached than the prompt holds");
+});
