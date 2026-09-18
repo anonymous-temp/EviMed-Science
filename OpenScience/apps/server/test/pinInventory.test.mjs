@@ -80,8 +80,12 @@ test("what a live kernel produced is never filed as a pin", async () => {
   // claim rather than a stale one.
   const report = await checkPinInventory({});
   const kindOf = (file, line) => report.occurrences.find((entry) => entry.file === file && entry.line === line)?.verdict?.kind;
+  // Found by its own words, not its line: the adapter is a file every stream
+  // edits above this comment, and a line number made this assertion fail on
+  // an import while the occurrence itself never moved in meaning.
+  const kindAt = (file, words) => report.occurrences.find((entry) => entry.file === file && entry.text.includes(words))?.verdict?.kind;
   assert.equal(kindOf("OpenScience/apps/server/test/fixtures/dsh/golden-frames.json", 3), "provenance");
-  assert.equal(kindOf("OpenScience/apps/server/src/dshRuntimeAdapter.mjs", 58), "provenance");
+  assert.equal(kindAt("OpenScience/apps/server/src/dshRuntimeAdapter.mjs", "Recorded live from"), "provenance");
   assert.equal(kindOf("OpenScience/scripts/ops/check-kernel-defaults.mjs", 101), "provenance");
 });
 

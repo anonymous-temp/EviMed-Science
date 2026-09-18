@@ -337,15 +337,103 @@ function normalizedRequest(body, config) {
   };
 }
 
-/** Reserve a conservative request ceiling before a provider call starts. */
-export function estimateModelReservation(body, config, at = new Date()) {
-  const promptTokens = Math.min(1_000_000, Buffer.byteLength(JSON.stringify(body.messages ?? []), "utf8"));
+const cjkCharacter = /[\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef]/u;
+
+/**
+ * Prompt tokens a text will cost, estimated from above. A CJK character is
+ * at most about one token in DeepSeek's tokenizer and anything else runs
+ * three to four characters to a token, so one per CJK character and one per
+ * three of the rest never estimates low. It used to count UTF-8 *bytes* as
+ * tokens — three per Chinese character plus the JSON around them — which
+ * reserved several times what a Chinese run ever spends and brought the
+ * account caps forward by as much.
+ * @param {string} text @returns {number}
+ */
+export function estimatePromptTokens(text) {
+  let cjk = 0;
+  let other = 0;
+  for (const char of String(text ?? "")) {
+    if (cjkCharacter.test(char)) cjk += 1;
+    else other += 1;
+  }
+  return cjk + Math.ceil(other / 3);
+}
+
+/** @param {any} body @returns {number} */
+function requestPromptTokens(body) {
+  let tokens = 0;
+  for (const message of Array.isArray(body.messages) ? body.messages : []) {
+    // A few tokens of framing per message, whatever it carries.
+    tokens += 4;
+    const content = message?.content;
+    if (typeof content === "string") tokens += estimatePromptTokens(content);
+    else if (Array.isArray(content)) {
+      for (const part of content) tokens += estimatePromptTokens(typeof part?.text === "string" ? part.text : JSON.stringify(part ?? ""));
+    }
+    if (typeof message?.reasoning_content === "string") tokens += estimatePromptTokens(message.reasoning_content);
+    if (message?.tool_calls != null) tokens += estimatePromptTokens(JSON.stringify(message.tool_calls));
+  }
+  // The tool schemas are prompt too, and on a first request the largest part.
+  if (body.tools != null) tokens += estimatePromptTokens(JSON.stringify(body.tools));
+  return Math.min(1_000_000, tokens);
+}
+
+/**
+ * Reserve a conservative request ceiling before a provider call starts.
+ *
+ * Priced with the price list's cache tiers: `cachedTokens` — the part of this
+ * prompt a previous request of the same conversation already sent, which the
+ * provider serves from its prefix cache — at the cache-hit rate, the rest at
+ * the miss rate, and the whole requested output budget. Still a ceiling: the
+ * settlement uses the provider's own counts.
+ * @param {any} body @param {Record<string, any>} config @param {Date} [at]
+ * @param {{ cachedTokens?: number }} [options]
+ */
+export function estimateModelReservation(body, config, at = new Date(), { cachedTokens = 0 } = {}) {
+  const promptTokens = requestPromptTokens(body);
+  const cacheHit = Math.max(0, Math.min(promptTokens, Number(cachedTokens) || 0));
   const configured = Number(config.modelGatewayReservationMaxOutputTokens ?? 65_536);
   const fallback = Number.isSafeInteger(configured) ? configured : 65_536;
   const requested = Number(body.max_completion_tokens ?? body.max_tokens ?? fallback);
   const outputTokens = Math.max(1, Math.min(384_000, requested));
-  const price = priceUsage({ resourceType: "model", model: body.model, cacheMiss: promptTokens, output: outputTokens, peak: isPeak(at) });
-  return { promptTokens, outputTokens, ...price };
+  const price = priceUsage({
+    resourceType: "model", model: body.model, cacheHit, cacheMiss: promptTokens - cacheHit, output: outputTokens, peak: isPeak(at),
+  });
+  return { promptTokens, cacheHitTokens: cacheHit, outputTokens, ...price };
+}
+
+/**
+ * The prompt a conversation last sent, so the next request's reservation can
+ * price the repeated prefix as cached. Keyed by the caller's token and the
+ * conversation's opening messages — an agent loop resends its whole history
+ * each step, so what it sent last time is the prefix this time. Bounded, and
+ * only an estimate: a miss prices the request as uncached, which is the old,
+ * higher ceiling.
+ */
+class PromptPrefixMemo {
+  constructor(limit = 2_000) {
+    this.limit = limit;
+    /** @type {Map<string, number>} */
+    this.tokens = new Map();
+  }
+
+  /** @param {string} token @param {any} body */
+  key(token, body) {
+    const opening = (Array.isArray(body.messages) ? body.messages : []).slice(0, 2);
+    return createHash("sha256").update(JSON.stringify([token, body.model, opening])).digest("hex");
+  }
+
+  /** @param {string} key */
+  cached(key) {
+    return this.tokens.get(key) ?? 0;
+  }
+
+  /** @param {string} key @param {number} tokens */
+  remember(key, tokens) {
+    this.tokens.delete(key);
+    this.tokens.set(key, tokens);
+    if (this.tokens.size > this.limit) this.tokens.delete(this.tokens.keys().next().value);
+  }
 }
 
 function upstreamUrl(base, production = false) {
@@ -419,7 +507,15 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
   }
 }
 
-export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = fetch, usageLedger = null } = {}) {
+/**
+ * @param {Record<string, any>} config @param {any} runtimeManager
+ * @param {{ fetchImpl?: typeof fetch, usageLedger?: any,
+ *           attributeRun?: (caller: { userId: string, projectId: string }) => Promise<string | null> }} [options]
+ *   `attributeRun` names the ledger run an interactive runtime's request
+ *   belongs to (see below); a bounded runtime's token already carries one.
+ */
+export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = fetch, usageLedger = null, attributeRun = null } = {}) {
+  const prefixes = new PromptPrefixMemo();
   return async function modelGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
@@ -478,17 +574,32 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
         throw gatewayError(503, "usage_ledger_unavailable", "Durable usage accounting is unavailable.");
       }
       if (usageLedger) {
-        const estimate = estimateModelReservation(normalized, config, requestStartedAt);
+        const prefixKey = prefixes.key(token, normalized);
+        const estimate = estimateModelReservation(normalized, config, requestStartedAt, { cachedTokens: prefixes.cached(prefixKey) });
+        prefixes.remember(prefixKey, estimate.promptTokens);
         const fingerprint = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
         reservationUserId = caller.userId;
+        // Which run this request is part of. A bounded runtime (autopilot,
+        // verification, learning, source understanding) is minted per run and
+        // its token says so. An interactive runtime's token is per project,
+        // so every one of its requests reached the ledger with no run at all:
+        // per-run cost read zero and the per-run cap could never fire (E §9.4,
+        // memory "per-run usage is never attributed"). The control plane knows
+        // which run is running in the project; when exactly one is, the
+        // request is that run's. Two at once in one project stay unattributed
+        // rather than guessed — they still count toward the account's caps.
+        const attributed = caller.runId == null && attributeRun
+          ? await attributeRun({ userId: caller.userId, projectId: caller.projectId }).catch(() => null)
+          : null;
+        const runId = caller.runId ?? attributed ?? null;
         reservation = await usageLedger.reserveModel({
           id: randomUUID(), userId: caller.userId, projectId: caller.projectId, model: normalized.model,
-          runId: caller.runId ?? null,
+          runId,
           priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency, requestFingerprint: fingerprint,
           estimatedCost: estimate.cost,
           dailyLimit: minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
           weeklyLimit: minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
-          runLimit: Number(caller.runLimit) || 0,
+          runLimit: caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0),
           now: requestStartedAt,
         });
       }

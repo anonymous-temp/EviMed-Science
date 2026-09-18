@@ -13,6 +13,7 @@ import {
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
 import { capsuleMethodsDirName, materializeCapsuleMethods } from "./capsuleMethods.mjs";
+import { CAPSULE_PROFILE_FACT_KINDS, renderCapsuleProfile } from "./capsuleProfile.mjs";
 import { supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockDshRuntime } from "./mockDshRuntime.mjs";
 import { proxyRuntimeUiMux } from "./runtimeUiMuxProxy.mjs";
@@ -335,6 +336,29 @@ function proxiedRuntimeLocation(value, runtime, project, surface = "runtime", ui
   }
 }
 
+/**
+ * A kernel application file whose URL names its content: a build asset whose
+ * file name carries its hash (`/assets/index-Df-65__b.js`), or a plugin bundle
+ * addressed by revision (`/plugins/??…&rev=<12 hex>`, which the kernel itself
+ * serves as `immutable`: "versioned code is immutable; mismatched revisions
+ * are rejected instead of serving newer bytes"). The bytes behind such a URL
+ * never change, so a browser may keep them for a year instead of fetching
+ * the whole application again on every session it opens (2026-09-18 plan,
+ * session open). A format check of our own kernel's URLs, nothing more.
+ * @param {string} suffix the request target below the frame prefix
+ */
+export function isImmutableRuntimeUiAsset(suffix) {
+  const target = String(suffix ?? "");
+  const cut = target.indexOf("?");
+  const pathname = cut < 0 ? target : target.slice(0, cut);
+  const query = cut < 0 ? "" : target.slice(cut + 1);
+  if (/^\/assets\/[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|woff2?|ttf|otf|svg|png|jpe?g|gif|webp|avif|ico|wasm)$/.test(pathname)) return true;
+  return pathname.startsWith("/plugins/") && /(?:^|[?&])rev=[A-Za-z0-9._-]{6,}(?:&|$)/.test(query);
+}
+
+/** What a browser may keep of an immutable kernel file: this account's copy, for a year. */
+const IMMUTABLE_UI_CACHE = "private, max-age=31536000, immutable";
+
 function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, options = {}) {
   const surface = options.surface ?? "runtime";
   const responseHeaders = {};
@@ -357,9 +381,20 @@ function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, options 
     const embedder = options.frameAncestors ? String(options.frameAncestors) : "'none'";
     responseHeaders["content-security-policy"] = `frame-ancestors ${embedder}`;
     responseHeaders["x-content-type-options"] = "nosniff";
-    responseHeaders["cache-control"] = "private, no-store";
-    delete responseHeaders.etag;
-    delete responseHeaders["last-modified"];
+    // A file whose URL names its content is kept, privately, and revalidated
+    // by its validators when the browser asks; everything else — the
+    // document, the bootstrap, every answer — is fetched fresh, as before.
+    // Immutable when the caller knows the URL is (`isImmutableRuntimeUiAsset`)
+    // or the kernel says so itself, and only for a successful answer.
+    const immutable = upstreamRes.status >= 200 && upstreamRes.status < 300
+      && (options.immutable === true || /\bimmutable\b/i.test(String(upstreamRes.headers.get("cache-control") ?? "")));
+    if (immutable) {
+      responseHeaders["cache-control"] = IMMUTABLE_UI_CACHE;
+    } else {
+      responseHeaders["cache-control"] = "private, no-store";
+      delete responseHeaders.etag;
+      delete responseHeaders["last-modified"];
+    }
   }
   return responseHeaders;
 }
@@ -3817,13 +3852,20 @@ export class RuntimeManager {
   /** Authenticated sequence heads for declared direct children of one root.
    * Candidate ids come from the run projection; the kernel catalogue must
    * independently confirm their parent before they can count as activity.
+   *
+   * With `discoverSince`, also every direct child the kernel lists under this
+   * parent that was created after that moment, marked `discovered`: the
+   * kernel's own `origin: 'subagent'` and `parentSessionId` are what make it
+   * this run's child, so no model-written record has to name it first.
    * @param {Record<string, any>} project @param {string} parentSessionId
    * @param {readonly string[]} childSessionIds
-   * @returns {Promise<{ sessionId: string, asOfSeq: number, running: boolean }[]>}
+   * @param {{ discoverSince?: number }} [options]
+   * @returns {Promise<{ sessionId: string, asOfSeq: number, running: boolean, discovered?: boolean }[]>}
    */
-  async childSessionActivity(project, parentSessionId, childSessionIds) {
+  async childSessionActivity(project, parentSessionId, childSessionIds, { discoverSince } = {}) {
     const runtime = this.runtimes.get(this.key(project));
-    if (!runtime || !Array.isArray(childSessionIds) || childSessionIds.length === 0) return [];
+    const discovering = Number.isFinite(discoverSince);
+    if (!runtime || !Array.isArray(childSessionIds) || (childSessionIds.length === 0 && !discovering)) return [];
     const parent = safeId(parentSessionId, "parent session id");
     const candidates = childSessionIds.slice(0, 64).map((value) => safeId(value, "child session id"));
     this.beginProxy(project);
@@ -3833,7 +3875,7 @@ export class RuntimeManager {
         "runtime_history_unavailable",
         "Runtime child session status did not answer in time.",
       );
-      return childSessionHeads(sessionListItems(value), parent, candidates);
+      return childSessionHeads(sessionListItems(value), parent, candidates, discovering ? { discoverSince } : {});
     } finally {
       this.endProxy(project);
     }
@@ -3874,7 +3916,7 @@ export class RuntimeManager {
    * the pinned kernel rather than read from its documentation.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ text: string, system?: string | null, memoryContext?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer' }} input
+   * @param {{ text: string, system?: string | null, memoryContext?: string | null, residentProfile?: boolean, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer' }} input
    * @returns {Promise<void>}
    */
   async dispatchPrompt(project, sessionId, input) {
@@ -3887,7 +3929,7 @@ export class RuntimeManager {
     }
   }
 
-  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, memoryContext = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue" }) {
+  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, memoryContext = null, residentProfile = false, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue" }) {
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) {
       const error = new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
@@ -3904,6 +3946,11 @@ export class RuntimeManager {
     if (typeof memoryContext === "string") {
       await this.writeRunMemoryFile(project, memoryContext, { sessionId: strictContext ? sessionId : null, required: strictContext });
     }
+    // Only where the researcher's own context belongs: a dispatch into the
+    // project's workspace that also recalled memories. A verification, a
+    // source reading or a learning run works in a directory of its own and
+    // passes no memories on purpose; it does not ask for this either.
+    if (residentProfile) await this.syncCapsuleProfile(project);
     if (typeof runId === "string" && runId) {
       await this.writeRunBriefIndex(project, runId, {
         sessionId: strictContext ? sessionId : null,
@@ -3971,6 +4018,37 @@ export class RuntimeManager {
     try {
       await write();
     } catch { /* isolated: evimed_run_context_write_failures_total */ }
+  }
+
+  /**
+   * Writes the resident capsule profile (`workspaceLayout.capsuleProfileFile`)
+   * the socket injects at the start of every run in this workspace — including
+   * the turns typed into the kernel's own window, which no dispatch precedes;
+   * that is why the frame route calls this too.
+   *
+   * Rendered from the researcher's own capsule, and empty when recall is off
+   * (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`): a profile left from before the
+   * switch was thrown would keep reaching runs the operator meant to run
+   * without memory. Empty with no file on disk writes nothing, so a project
+   * that never had a capsule gains no directory. Isolated like the other
+   * context files — a run without the block is degraded, not invalid.
+   *
+   * @param {Record<string, any>} project
+   * @returns {Promise<{ written: boolean, chars: number, error?: string }>}
+   */
+  async syncCapsuleProfile(project) {
+    try {
+      const profile = this.capsuleService && this.config.memoryRecallEnabled !== false
+        ? renderCapsuleProfile(await this.capsuleService.profileFacts(String(project.userId), String(project.id), CAPSULE_PROFILE_FACT_KINDS))
+        : "";
+      const file = path.join(project.workspaceDir, workspaceLayout.capsuleProfileFile);
+      if (!profile && !(await fs.lstat(file).catch(() => null))) return { written: false, chars: 0 };
+      await writeFileAtomicNoFollow(project.workspaceDir, file, profile, { encoding: "utf8", mode: 0o444 });
+      return { written: true, chars: profile.length };
+    } catch (error) {
+      // isolated: evimed_capsule_profile_write_failures_total
+      return { written: false, chars: 0, error: typeof error?.code === "string" ? error.code : "capsule_profile_write_failed" };
+    }
   }
 
   /**
@@ -4448,7 +4526,15 @@ export class RuntimeManager {
    * response-header sanitising, the audit row -- is the same code, because a
    * second proxy would be a second set of those decisions to keep in step.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined } = {}) {
+  /**
+   * @param {any} req @param {any} res @param {Record<string, any>} project @param {string} suffix
+   * @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void>, uiAssetPrefix?: string | null,
+   *           immutable?: boolean, rebaseDocument?: boolean }} [options]
+   *   `uiAssetPrefix` is the project's stable path for build assets the document
+   *   is rewritten to reference; `immutable` marks a URL that names its content;
+   *   `rebaseDocument: false` serves bytes as they are (an asset route).
+   */
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -4549,6 +4635,7 @@ export class RuntimeManager {
         surface,
         frameAncestors: frameAncestorsFor(this.config),
         uiBasePath,
+        immutable,
       });
       if (!upstreamRes.body) {
         try {
@@ -4581,7 +4668,9 @@ export class RuntimeManager {
               await this.stopRuntimeIfProjectQuotaExceeded(project);
               postResponseQuotaChecked = true;
             } catch { /* a quota probe must not break a response already in flight */ }
-            const served = surface === "ui" ? rebaseRuntimeUiDocument(payload, responseHeaders, uiBasePath) : payload;
+            const served = surface === "ui" && rebaseDocument
+              ? rebaseRuntimeUiDocument(payload, responseHeaders, uiBasePath, uiAssetPrefix)
+              : payload;
             if (served !== payload) responseHeaders["content-length"] = String(served.length);
             res.writeHead(upstreamRes.status, responseHeaders);
             responseEnded = true;
@@ -5252,18 +5341,30 @@ export class RuntimeManager {
 }
 
 /** Kernel-confirmed direct child heads, isolated for contract testing.
+ *
+ * A candidate counts only when the kernel's own summary says it is a subagent
+ * of this parent. With `discoverSince`, an uncandidated child counts too when
+ * the kernel says the same and its `updatedAt` — a child's creation time, since
+ * nobody prompts a child directly — is not older than that moment: a native
+ * session keeps every turn's children under one root, and an earlier turn's
+ * child is an earlier run's work.
  * @param {readonly Record<string, any>[]} summaries @param {string} parentSessionId
  * @param {readonly string[]} childSessionIds
- * @returns {{ sessionId: string, asOfSeq: number, running: boolean }[]}
+ * @param {{ discoverSince?: number }} [options]
+ * @returns {{ sessionId: string, asOfSeq: number, running: boolean, discovered?: boolean }[]}
  */
-export function childSessionHeads(summaries, parentSessionId, childSessionIds) {
+export function childSessionHeads(summaries, parentSessionId, childSessionIds, { discoverSince } = {}) {
   const wanted = new Set(childSessionIds.map(String));
+  const discovering = Number.isFinite(discoverSince);
   return summaries.flatMap((summary) => {
     const sessionId = String(summary?.sessionId ?? summary?.id ?? "");
     const parent = String(summary?.parentSessionId ?? summary?.parentSession ?? summary?.header?.parentSession ?? "");
     const origin = String(summary?.origin ?? summary?.header?.origin ?? "");
     const asOfSeq = Number(summary?.projections?.asOfSeq ?? summary?.asOfSeq ?? NaN);
-    if (!wanted.has(sessionId) || parent !== parentSessionId || origin !== "subagent" || !Number.isSafeInteger(asOfSeq) || asOfSeq < 0) return [];
-    return [{ sessionId, asOfSeq, running: summary?.running === true }];
+    if (!sessionId || parent !== parentSessionId || origin !== "subagent" || !Number.isSafeInteger(asOfSeq) || asOfSeq < 0) return [];
+    if (wanted.has(sessionId)) return [{ sessionId, asOfSeq, running: summary?.running === true }];
+    const createdAt = Number(summary?.updatedAt ?? NaN);
+    if (!discovering || !Number.isFinite(createdAt) || createdAt < Number(discoverSince)) return [];
+    return [{ sessionId, asOfSeq, running: summary?.running === true, discovered: true }];
   }).sort((left, right) => left.sessionId.localeCompare(right.sessionId, "en"));
 }

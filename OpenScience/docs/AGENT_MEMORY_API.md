@@ -63,7 +63,9 @@ project its key is not bound to, or outrun the researcher's own switches. If
 the account has paused learning (for everything, or for that project) an
 episode extracts nothing; if it has paused recall, `recall` returns no research
 memory records (capsule entries follow each capsule's own activation). Those
-switches are on the memory page (「记忆开关」).
+switches are on the memory page (「记忆开关」). A deployment that has turned
+recall off altogether (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED=false`) answers every
+`recall` with `{ "items": [], "mode": "disabled" }`.
 
 ## The MCP adapter
 

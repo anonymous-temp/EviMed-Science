@@ -1,7 +1,7 @@
 import path from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
-import { ControlPlaneDatabase, CONTROL_PLANE_SCHEMA } from "./controlPlaneDatabase.mjs";
+import { ControlPlaneDatabase, CONTROL_PLANE_SCHEMA, CONTROL_PLANE_SCHEMA_VERSION } from "./controlPlaneDatabase.mjs";
 import {
   assertNoSymlinkPath,
   HttpError,
@@ -17,6 +17,56 @@ import {
 } from "./security.mjs";
 
 const stateWriteQueues = new Map();
+
+/**
+ * What the seeded project is called (C4, 2026-09-18). It was 「Default
+ * Project」 — English, the first thing under the wordmark, and unrenamable —
+ * and it reads as a place the researcher owns rather than a system slot.
+ * Stores older than this carry the English name until their one-time
+ * migration (the database's schema version 2; `defaultNameMigrated` in a
+ * filesystem project's project.json).
+ */
+export const DEFAULT_PROJECT_NAME = "我的研究";
+const legacyDefaultProjectName = "Default Project";
+const maxProjectName = 40;
+
+/**
+ * The id a new project gets from its name (C4): ASCII letters and digits,
+ * lowercased, everything else a hyphen, at most 40 characters; `p-<8 hex>`
+ * when the name has no ASCII letter — an all-Chinese name, the common case —
+ * or when every derived candidate is taken. The id is a directory under
+ * projects/ and never has to be seen.
+ * @param {string} name @param {ReadonlySet<string>} taken
+ * @param {() => string} [random] eight hex characters
+ */
+export function projectIdFromName(name, taken, random = () => randomBytes(4).toString("hex")) {
+  const folded = String(name ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  const base = /[A-Za-z]/.test(folded)
+    ? folded.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "")
+    : "";
+  const candidates = base ? [base, ...Array.from({ length: 8 }, (_unused, index) => `${base.slice(0, 36)}-${index + 2}`)] : [];
+  for (const candidate of candidates) {
+    if (/^[a-z0-9][a-z0-9_-]{0,63}$/.test(candidate) && candidate !== "default" && !taken.has(candidate)) return candidate;
+  }
+  for (;;) {
+    const id = `p-${random()}`;
+    if (!taken.has(id)) return id;
+  }
+}
+
+/**
+ * A project's display name: any language, one line, 1–40 characters (C4).
+ * @param {unknown} value @returns {string}
+ */
+export function projectDisplayName(value) {
+  const name = typeof value === "string"
+    ? [...value].map((char) => (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? " " : char)).join("").replace(/\s+/g, " ").trim()
+    : "";
+  if (!name || [...name].length > maxProjectName) {
+    throw new HttpError(400, "invalid_payload", `A project name is one line of 1 to ${maxProjectName} characters.`);
+  }
+  return name;
+}
 
 function serializeStateWrite(file, operation) {
   const key = path.resolve(file);
@@ -451,11 +501,11 @@ export class InMemoryStore {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const project = await this.projectFor(user, entry.name);
-      projects.push({ id: project.id, name: project.name });
+      projects.push({ id: project.id, name: project.name, archivedAt: project.archivedAt ?? null });
     }
     if (!projects.some((project) => project.id === "default")) {
       const project = await this.defaultProject(user);
-      projects.push({ id: project.id, name: project.name });
+      projects.push({ id: project.id, name: project.name, archivedAt: project.archivedAt ?? null });
     }
     projects.sort((a, b) => a.name.localeCompare(b.name));
     return projects;
@@ -507,7 +557,44 @@ export class InMemoryStore {
 
   async createProject(user, id, name = id) {
     const project = await this.projectFor(user, id, name);
-    return { id: project.id, name: project.name };
+    return { id: project.id, name: project.name, archivedAt: project.archivedAt ?? null };
+  }
+
+  /** @param {any} user @param {string} projectId @param {string} rawName */
+  async renameProject(user, projectId, rawName) {
+    const name = projectDisplayName(rawName);
+    const project = await this.requireProject(user, projectId);
+    await this.updateProjectJson(project, (meta) => ({ ...meta, name }));
+    project.name = name;
+    return { id: project.id, name, archivedAt: project.archivedAt ?? null };
+  }
+
+  /** @param {any} user @param {string} projectId @param {boolean} archived */
+  async archiveProject(user, projectId, archived) {
+    const id = safeId(projectId, "project id");
+    if (id === "default") throw new HttpError(400, "default_project_protected", "The default project cannot be archived.");
+    const project = await this.requireProject(user, id);
+    const archivedAt = archived ? (project.archivedAt ?? new Date().toISOString()) : null;
+    await this.updateProjectJson(project, (meta) => {
+      const next = { ...meta };
+      delete next.archivedAt;
+      return archivedAt ? { ...next, archivedAt } : next;
+    });
+    project.archivedAt = archivedAt;
+    return { id, name: project.name, archivedAt };
+  }
+
+  /** @param {any} project @param {(meta: Record<string, any>) => Record<string, any>} change */
+  async updateProjectJson(project, change) {
+    const metaFile = path.join(project.rootDir, "project.json");
+    await assertNoSymlinkPath(project.rootDir, metaFile, { allowMissingTail: true });
+    let meta = { id: project.id, name: project.name };
+    try {
+      meta = JSON.parse(await fs.readFile(metaFile, "utf8"));
+    } catch (err) {
+      if (err?.code !== "ENOENT") throw err;
+    }
+    await writeProjectJson(project.rootDir, metaFile, change(meta));
   }
 
   async deleteProject(user, projectId, { beforeDelete = null } = {}) {
@@ -568,7 +655,7 @@ export class InMemoryStore {
   }
 
   async defaultProject(user) {
-    return this.projectFor(user, "default", "Default Project");
+    return this.projectFor(user, "default", DEFAULT_PROJECT_NAME);
   }
 
   async requireProject(user, projectId = "default") {
@@ -611,10 +698,17 @@ export class InMemoryStore {
     await assertNoSymlinkPath(projectRoot, metaFile, { allowMissingTail: true });
     let displayName = name;
     let activeWorkspace = "";
+    let archivedAt = null;
     try {
       const meta = JSON.parse(await fs.readFile(metaFile, "utf8"));
       if (typeof meta.name === "string" && meta.name.trim()) displayName = meta.name.trim();
       if (this.isWorkspaceName(meta.activeWorkspace)) activeWorkspace = meta.activeWorkspace;
+      if (typeof meta.archivedAt === "string" && Number.isFinite(Date.parse(meta.archivedAt))) archivedAt = meta.archivedAt;
+      // The seeded English name, renamed once (see DEFAULT_PROJECT_NAME).
+      if (id === "default" && displayName === legacyDefaultProjectName && meta.defaultNameMigrated !== true) {
+        displayName = DEFAULT_PROJECT_NAME;
+        await writeProjectJson(projectRoot, metaFile, { ...meta, name: displayName, defaultNameMigrated: true });
+      }
     } catch (err) {
       if (err?.code !== "ENOENT") throw err;
       await writeProjectJson(projectRoot, metaFile, { id, name: displayName });
@@ -633,6 +727,7 @@ export class InMemoryStore {
       runtimeDir,
       metaDir,
       activeWorkspace,
+      archivedAt,
     };
     this.projects.set(key, project);
     return project;
@@ -652,8 +747,9 @@ export class InMemoryStore {
     await ensureScopedDir(project.baseDir, workspaceDir);
     project.workspaceDir = workspaceDir;
     project.activeWorkspace = activeWorkspace;
-    const metaFile = path.join(project.rootDir, "project.json");
-    await writeProjectJson(project.rootDir, metaFile, { id: project.id, name: project.name, activeWorkspace });
+    // Merged into what is there, so a workspace switch keeps an archive mark
+    // and the default name's one-time migration record.
+    await this.updateProjectJson(project, (meta) => ({ ...meta, id: project.id, name: project.name, activeWorkspace }));
     return project;
   }
 
@@ -735,7 +831,7 @@ export class PostgresStore extends InMemoryStore {
 
   async readiness() {
     const health = await this.database.health();
-    if (health.schemaVersion !== 1) {
+    if (health.schemaVersion !== CONTROL_PLANE_SCHEMA_VERSION) {
       throw new HttpError(503, "database_schema_mismatch", "The control-plane database schema is not current.");
     }
     return { mode: "postgres", shared: true, schemaVersion: health.schemaVersion };
@@ -998,6 +1094,7 @@ export class PostgresStore extends InMemoryStore {
 
   async projectFromRow(user, row) {
     if (!row) return null;
+    const archivedAt = row.archived_at == null ? null : new Date(row.archived_at).toISOString();
     const id = safeId(row.id, "project id");
     const projectsRoot = await ensureProjectsRoot(this.config, user);
     const projectRoot = path.join(projectsRoot, id);
@@ -1024,6 +1121,7 @@ export class PostgresStore extends InMemoryStore {
       metaDir,
       activeWorkspace,
       maxBytes: Number(row.quota_bytes),
+      archivedAt,
     };
     this.projects.set(`${user.id}:${id}`, project);
     return project;
@@ -1032,25 +1130,62 @@ export class PostgresStore extends InMemoryStore {
   async ensureDefaultProject(user) {
     await this.database.query(
       `INSERT INTO ${CONTROL_PLANE_SCHEMA}.projects(user_id, id, name, quota_bytes)
-       VALUES ($1, 'default', 'Default Project', $2)
+       VALUES ($1, 'default', $3, $2)
        ON CONFLICT (user_id, id) DO NOTHING`,
-      [user.id, this.config.maxProjectBytes],
+      [user.id, this.config.maxProjectBytes, DEFAULT_PROJECT_NAME],
     );
   }
 
   async listProjects(user) {
     await this.ensureDefaultProject(user);
     const result = await this.database.query(
-      `SELECT id, name FROM ${CONTROL_PLANE_SCHEMA}.projects WHERE user_id = $1 ORDER BY name, id`,
+      `SELECT id, name, archived_at FROM ${CONTROL_PLANE_SCHEMA}.projects WHERE user_id = $1 ORDER BY name, id`,
       [user.id],
     );
-    return result.rows.map((row) => ({ id: row.id, name: row.name }));
+    return result.rows.map((row) => ({
+      id: row.id, name: row.name, archivedAt: row.archived_at == null ? null : new Date(row.archived_at).toISOString(),
+    }));
+  }
+
+  /** @param {any} user @param {string} projectId @param {string} rawName */
+  async renameProject(user, projectId, rawName) {
+    const id = safeId(projectId, "project id");
+    const name = projectDisplayName(rawName);
+    if (id === "default") await this.ensureDefaultProject(user);
+    const result = await this.database.query(
+      `UPDATE ${CONTROL_PLANE_SCHEMA}.projects SET name = $3, updated_at = now()
+        WHERE user_id = $1 AND id = $2 RETURNING id, name, archived_at`,
+      [user.id, id, name],
+    );
+    if (result.rowCount !== 1) throw new HttpError(404, "project_not_found", "Project not found.");
+    const cached = this.projects.get(`${user.id}:${id}`);
+    if (cached) cached.name = name;
+    const row = result.rows[0];
+    return { id: row.id, name: row.name, archivedAt: row.archived_at == null ? null : new Date(row.archived_at).toISOString() };
+  }
+
+  /** @param {any} user @param {string} projectId @param {boolean} archived */
+  async archiveProject(user, projectId, archived) {
+    const id = safeId(projectId, "project id");
+    if (id === "default") throw new HttpError(400, "default_project_protected", "The default project cannot be archived.");
+    const result = await this.database.query(
+      `UPDATE ${CONTROL_PLANE_SCHEMA}.projects
+          SET archived_at = CASE WHEN $3::boolean THEN coalesce(archived_at, now()) ELSE NULL END, updated_at = now()
+        WHERE user_id = $1 AND id = $2 RETURNING id, name, archived_at`,
+      [user.id, id, archived === true],
+    );
+    if (result.rowCount !== 1) throw new HttpError(404, "project_not_found", "Project not found.");
+    const row = result.rows[0];
+    const archivedAt = row.archived_at == null ? null : new Date(row.archived_at).toISOString();
+    const cached = this.projects.get(`${user.id}:${id}`);
+    if (cached) cached.archivedAt = archivedAt;
+    return { id: row.id, name: row.name, archivedAt };
   }
 
   async listStoredProjects() {
     return this.database.transaction(async (client) => {
       const result = await client.query(
-        `SELECT p.id, p.name, p.active_workspace, p.quota_bytes,
+        `SELECT p.id, p.name, p.active_workspace, p.quota_bytes, p.archived_at,
                 u.id AS user_id, u.name AS user_name, u.password_hash, u.auth_type
            FROM ${CONTROL_PLANE_SCHEMA}.projects p
            JOIN ${CONTROL_PLANE_SCHEMA}.users u ON u.id = p.user_id
@@ -1080,7 +1215,7 @@ export class PostgresStore extends InMemoryStore {
         const result = await client.query(
           `INSERT INTO ${CONTROL_PLANE_SCHEMA}.projects(user_id, id, name, quota_bytes)
            VALUES ($1, $2, $3, $4)
-           RETURNING id, name, active_workspace, quota_bytes`,
+           RETURNING id, name, active_workspace, quota_bytes, archived_at`,
           [user.id, id, displayName, this.config.maxProjectBytes],
         );
         await this.projectFromRow(user, result.rows[0]);
@@ -1088,7 +1223,7 @@ export class PostgresStore extends InMemoryStore {
     } catch (error) {
       throw databaseConflict(error, "project_exists", "Project already exists.");
     }
-    return { id, name: displayName };
+    return { id, name: displayName, archivedAt: null };
   }
 
   async defaultProject(user) {
@@ -1101,7 +1236,7 @@ export class PostgresStore extends InMemoryStore {
     if (id === "default") await this.ensureDefaultProject(user);
     return this.database.transaction(async (client) => {
       const result = await client.query(
-        `SELECT id, name, active_workspace, quota_bytes
+        `SELECT id, name, active_workspace, quota_bytes, archived_at
            FROM ${CONTROL_PLANE_SCHEMA}.projects
           WHERE user_id = $1 AND id = $2 FOR SHARE`,
         [user.id, id],
@@ -1122,7 +1257,7 @@ export class PostgresStore extends InMemoryStore {
         [user.id, id, displayName, this.config.maxProjectBytes],
       );
       const result = await client.query(
-        `SELECT id, name, active_workspace, quota_bytes
+        `SELECT id, name, active_workspace, quota_bytes, archived_at
            FROM ${CONTROL_PLANE_SCHEMA}.projects
           WHERE user_id = $1 AND id = $2 FOR SHARE`,
         [user.id, id],

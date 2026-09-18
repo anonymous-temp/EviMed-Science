@@ -242,7 +242,7 @@ async function main() {
     const dispatchId = String(args["dispatch-id"] ?? `acc-${Date.now().toString(36)}`).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
     const dispatched = await api("/api/agent-runs/dispatch", {
       method: "POST",
-      body: JSON.stringify({ sessionId, dispatchId, text }),
+      body: JSON.stringify({ sessionId, dispatchId, text, automated: true }),
     });
     if (dispatched.status !== 202) {
       throw new Error(`dispatch failed: ${dispatched.status} ${JSON.stringify(dispatched.body).slice(0, 400)}`);
@@ -315,7 +315,8 @@ async function main() {
 
   say(`status=${run.status} errorCode=${run.errorCode ?? "none"} verification=${run.verification ?? "none"}`);
   say(`artifacts=${(run.artifacts ?? []).length} unverified=${(run.unverifiedArtifacts ?? []).length} saved=${saved}`);
-  for (const notice of (run.qualityNotices ?? []).slice(0, 10)) say(`notice: ${String(notice).slice(0, 300)}`);
+  // Structured since 2026-09-18 (C2): the title is the reader's, `text` the sentence.
+  for (const notice of (run.qualityNotices ?? []).slice(0, 10)) say(`notice: ${typeof notice === "string" ? notice.slice(0, 300) : `[${notice?.severity ?? "advice"}] ${notice?.title ?? ""} — ${String(notice?.text ?? "").slice(0, 300)}`}`);
   say(`results: ${path.relative(repoRoot, outDir)}`);
 
   // Release the runtime slot. Best effort: a held slot is an operational

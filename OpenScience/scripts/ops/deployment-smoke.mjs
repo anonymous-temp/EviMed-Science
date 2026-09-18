@@ -213,6 +213,7 @@ async function smokeRuntime(baseUrl, headers) {
         sessionId: session.json.data.id,
         dispatchId: `smoke-${Date.now()}`,
         text: "Create a deployment smoke-test artifact.",
+        automated: true,
       }),
     });
     assert(dispatched.res.ok, `Dispatch returned HTTP ${dispatched.res.status}.`);

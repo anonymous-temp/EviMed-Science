@@ -192,7 +192,7 @@ async function runCase(testCase, outer) {
   const dispatched = await jsonFetch(`${base}/api/agent-runs/dispatch`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...context.scopedHeaders },
-    body: JSON.stringify({ sessionId, dispatchId, text: testCase.prompt }),
+    body: JSON.stringify({ sessionId, dispatchId, text: testCase.prompt, automated: true }),
   });
   const terminal = await waitForRun(dispatched.data.data.id, context.scopedHeaders);
   const transcript = await jsonFetch(

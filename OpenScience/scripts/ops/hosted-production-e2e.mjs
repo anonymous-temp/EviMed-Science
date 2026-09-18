@@ -299,6 +299,7 @@ async function main() {
       body: JSON.stringify({
         sessionId,
         dispatchId: `dispatch-${marker}`,
+        automated: true,
         text: [
           "Analyze aspirin (drug=aspirin) with the registered drug-safety specialist.",
           "Call drug_safety_analysis with action=capabilities, then action=start, then poll status with waitSeconds=45 until terminal.",
@@ -403,11 +404,12 @@ async function main() {
       // model reticence, so it joins the same distribution as the signals table
       // before anyone decides where the requirement belongs.
       const finished = await jsonFetch(`${base}/api/agent-runs`, { headers: scoped });
+      // Notices are structured (C2) since 2026-09-18; the sentence is `text`.
       const counts = (finished.body?.data ?? []).find((item) => item.id === run.id)?.qualityNotices
-        ?.find((line) => String(line).includes("记忆抽取未产出记录"));
+        ?.find((line) => line?.code === "memory_extraction_empty" || String(line?.text ?? line).includes("记忆抽取未产出记录"));
       notice(
         "memory_extraction_produced_no_preference",
-        counts ? String(counts) : "the run recorded no extraction counts",
+        counts ? String(counts?.text ?? counts) : "the run recorded no extraction counts",
       );
     } else {
       // Six conditions under one message meant a run told you the memory was

@@ -35,7 +35,7 @@ export const MEMORY_RECALL_SCOPES = Object.freeze(["all", "capsule", "conversati
 export const MEMORY_RECALL_MAX_LIMIT = 50;
 
 /**
- * @param {{ capsules?: { recall: Function } | null, memorySubstrate?: { recall: Function } | null }} services
+ * @param {{ capsules?: { recall: Function } | null, memorySubstrate?: { recall: Function, recallEnabled?: boolean } | null }} services
  * @param {{ id: string, accountCreatedAt?: string }} user
  * @param {{ query: string, projectId?: string | null, sessionId?: string | null, limit?: number, factKinds?: readonly string[], since?: string | null, scope?: string }} input
  * @returns {Promise<{ items: Record<string, any>[], mode: string, contextOnly: true, sources: { memory: number, capsule: number } }>}
@@ -43,6 +43,15 @@ export const MEMORY_RECALL_MAX_LIMIT = 50;
 export async function recallAcrossMemory({ capsules = null, memorySubstrate = null }, user, input) {
   const scope = input.scope ?? "all";
   if (!MEMORY_RECALL_SCOPES.includes(scope)) throw new HttpError(400, "capsule_scope_unavailable", "This memory scope is unavailable.");
+  // The deployment's recall switch covers both stores. An answer, not an
+  // error: the caller asked a well-formed question of a deployment that has
+  // recall turned off, and `mode: "disabled"` says so — the same shape a
+  // researcher's own recall pause produces, so a run moves on rather than
+  // retrying a tool that is working as configured, and nothing in the answer
+  // can be read as "this researcher has no memories".
+  if (memorySubstrate && memorySubstrate.recallEnabled === false) {
+    return { items: [], mode: "disabled", contextOnly: true, sources: { memory: 0, capsule: 0 } };
+  }
   const limit = Math.max(1, Math.min(MEMORY_RECALL_MAX_LIMIT, Number(input.limit ?? 10) || 10));
   const factKinds = Array.isArray(input.factKinds) ? input.factKinds : [];
   const since = input.since ?? null;
