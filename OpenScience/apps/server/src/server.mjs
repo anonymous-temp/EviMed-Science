@@ -1113,6 +1113,10 @@ export function createWebApiApp(overrides = {}) {
     // sequence directly to the stall monitor; the model's workspace
     // projection remains useful UI detail, but is not the heartbeat.
     onRunActivity: (project, runId, activity) => agentRuns?.noteKernelActivity(project, runId, activity),
+    // The same events, into the run's progress aggregate (`run/progress`): a
+    // delegated child's tool calls reach the count within a second instead of
+    // at the monitor's next read of the child's own history.
+    onRunEvent: (project, runId, observed) => agentRuns?.noteRunEvent(project, runId, observed),
     // Recorded, not merely published: the browser shows a compaction card and
     // forgets it, while "does compaction ever fire, and what does it cost"
     // needs the ledger. Today the answer is expected to be "never" — the
@@ -1244,8 +1248,8 @@ export function createWebApiApp(overrides = {}) {
     ),
     readSessionHistory: (project, sessionId, options) => runtimeManager.sessionMessages(project, sessionId, options),
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
-    readChildSessionActivity: (project, parentSessionId, childSessionIds) =>
-      runtimeManager.childSessionActivity(project, parentSessionId, childSessionIds),
+    readChildSessionActivity: (project, parentSessionId, childSessionIds, options) =>
+      runtimeManager.childSessionActivity(project, parentSessionId, childSessionIds, options),
     runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     // Which workspace a run belongs to, re-derived rather than remembered. It

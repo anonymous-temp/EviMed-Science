@@ -14,10 +14,23 @@ import {
 } from "./security.mjs";
 import {
   citationIntegrityIssues,
+  claimVerification,
   clinicalEvidencePackageErrorCode,
   validateClinicalEvidencePackage,
 } from "./clinicalEvidenceQuality.mjs";
 import { socketToolResult } from "./dshRuntimeAdapter.mjs";
+import {
+  assembleRunProgress,
+  claimSummaryOf,
+  foldToolEvent,
+  normalizeRunUsage,
+  normalizeStoredDeliverables,
+  normalizeStoredProgress,
+  observedCallsFromHistory,
+  progressChildren,
+  progressDigest,
+  runDeliverables,
+} from "./runProgress.mjs";
 // The three classifications of a failure — repairable package, recoverable
 // source, terminal source — moved into the domain when the run side started
 // needing them too. They are re-exported here because the ledger's callers and
@@ -380,8 +393,15 @@ function foldEvents(events) {
       if (!current || current.status !== "running") continue;
       if (!Number.isSafeInteger(event.messages) || event.messages < 0) continue;
       if (!Number.isSafeInteger(event.toolCalls) || event.toolCalls < 0) continue;
+      // The run's plan and its progress aggregate, as last observed. Fields on
+      // the existing gauge rather than an event kind of their own, so an older
+      // control plane reads this ledger and simply does not fold them.
+      const deliverables = normalizeStoredDeliverables(event.deliverables);
+      const snapshot = normalizeStoredProgress(event.snapshot);
       runs.set(id, Object.freeze({
         ...current,
+        ...(deliverables ? { deliverables } : {}),
+        ...(snapshot ? { progress: { deliverables: deliverables ?? current.deliverables ?? [], ...snapshot } } : {}),
         observedMessages: event.messages,
         observedToolCalls: event.toolCalls,
         // The run's own side of the same observation. Absent on a run that
@@ -405,8 +425,18 @@ function foldEvents(events) {
       if (!Number.isSafeInteger(event.durationMs) || event.durationMs < 0) throw corrupt("Agent run duration is invalid.");
       const artifacts = normalizeStoredArtifacts(event.artifacts);
       const errorCode = event.errorCode == null ? null : String(event.errorCode);
+      // The plan as the run ended it, and what its claims came to. Kept after
+      // the end on purpose: which item was rejected and how many times it was
+      // submitted is the record a researcher wants afterwards, and a finished
+      // run's page used to have no way to show it (2026-09-18 review, B §4h).
+      const deliverables = normalizeStoredDeliverables(event.deliverables);
+      const snapshot = normalizeStoredProgress(event.snapshot);
+      const claimSummary = normalizeClaimSummary(event.claimSummary);
       runs.set(id, Object.freeze({
         ...current,
+        ...(deliverables ? { deliverables } : {}),
+        ...(snapshot ? { progress: { deliverables: deliverables ?? current.deliverables ?? [], ...snapshot } } : {}),
+        ...(claimSummary ? { claimSummary } : {}),
         status: event.status,
         finishedAt: storedTimestamp(event.finishedAt, "finishedAt"),
         durationMs: event.durationMs,
@@ -624,6 +654,34 @@ function normalizeMethodDigests(value) {
     });
   }
   return entries;
+}
+
+/**
+ * A session's observed calls with a fresh read laid over them: the read wins
+ * for every call it holds, and a call only the stream has seen so far is kept.
+ * @param {Map<string, import('./runProgress.mjs').ObservedCall> | undefined} existing
+ * @param {import('./runProgress.mjs').ObservedCall[]} read
+ */
+function mergeObservedCalls(existing, read) {
+  const calls = existing ?? new Map();
+  for (const call of read) if (call.callId) calls.set(call.callId, call);
+  return calls;
+}
+
+/** The aggregate as the ledger stores it: the plan lives beside it, not in it.
+ *  @param {import('./runProgress.mjs').RunProgress} progress */
+function withoutDeliverables(progress) {
+  const { deliverables: _deliverables, ...rest } = progress;
+  return rest;
+}
+
+/** @param {any} value @returns {{ total: number, verified: number, unverified: number } | undefined} */
+function normalizeClaimSummary(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const read = (/** @type {unknown} */ number) => (Number.isSafeInteger(number) && Number(number) >= 0 ? Number(number) : 0);
+  const total = read(value.total);
+  if (!total) return undefined;
+  return { total, verified: Math.min(total, read(value.verified)), unverified: Math.min(total, read(value.unverified)) };
 }
 
 /** @param {any} value @returns {{content: number, structural: number} | undefined} */
@@ -879,8 +937,42 @@ function nativeWorkflowNotices(proof) {
   ]);
 }
 
-/** Match plan revision and item identity, never a projection's refresh timestamp. */
-function scopeNativeProjection(projection, run) {
+/** Progress states a live run's own plan index may report as they are. None of
+ *  them claims the work passed: that is `accepted`, which stays gated. */
+const liveProjectionStates = new Set(["queued", "delegated", "submitted", "rejected", "failed"]);
+
+/**
+ * Match plan revision and item identity, never a projection's refresh timestamp.
+ *
+ * Two readings of one file, decided by whether the run is still going.
+ *
+ * Once the run has ended, every item's state is rebuilt from the tool calls the
+ * parent session was seen to complete — the attribution a terminal verdict and
+ * a skill receipt rest on, because the projection is a document the model's
+ * workspace holds.
+ *
+ * While it is going, that rebuild is structurally wrong for delegated work and
+ * it was the whole of F4 (2026-09-18): the child does the submitting, so its
+ * `evimed_submit_deliverable` never appears in the parent's transcript, and a
+ * blocking `evimed_delegate` does not complete until the child finishes, so the
+ * parent's proof named no delegation either. Every item read `planned` with 0
+ * attempts for 25 minutes while the plan index said item 1 was `rejected,
+ * attempts 2`; and because the same rebuild emptied `subagents`, the monitor
+ * never read a child's heartbeat and announced a stall. So a live run takes its
+ * progress states — delegated, submitted, rejected — and its attempt counts
+ * from the plan index, and keeps its children.
+ *
+ * `accepted` is the one state the proof exists to protect, and it stays gated
+ * on evidence either way: an acceptance the parent was seen to receive, or a
+ * delivery receipt for this kernel run whose files still match the digests
+ * they were accepted at (`receiptAccepted`, read by the caller). A plan index
+ * that says `accepted` without either reads as `submitted`.
+ *
+ * @param {Record<string, any>} projection @param {Record<string, any>} run
+ * @param {{ receiptAccepted?: ReadonlySet<string> | null }} [options]
+ * @returns {Record<string, any> | null}
+ */
+function scopeNativeProjection(projection, run, { receiptAccepted = null } = {}) {
   const proof = run.nativeWorkflow;
   if (!proof || projection.sessionId !== run.sessionId || !projection.runId) return null;
   if (proof.kernelRunId && projection.runId !== proof.kernelRunId) return null;
@@ -892,16 +984,28 @@ function scopeNativeProjection(projection, run) {
   }
   if (proof.plan?.written && projection.plan?.revision !== proof.plan.revision) return null;
   if (!definitions.length || !definitions.every((item) => rawItems.some((raw) => raw.id === item.id && raw.contractKind === item.contractKind && (!item.capability || raw.capability === item.capability)))) return null;
+  const live = run.status === "running";
   const items = definitions.map((definition) => {
     const raw = rawItems.find((item) => item.id === definition.id);
     const submission = proof.submissions.find((item) => item.id === definition.id);
-    return { ...raw, status: submission?.accepted ? "accepted" : submission?.rejected ? "submitted" : proof.delegates.includes(definition.id) ? "delegated" : "planned",
-      attempts: submission?.attempts ?? 0 };
+    const witnessed = submission?.accepted ? "accepted" : submission?.rejected ? "submitted" : proof.delegates.includes(definition.id) ? "delegated" : "planned";
+    if (!live) return { ...raw, status: witnessed, attempts: submission?.attempts ?? 0 };
+    const reported = String(raw?.status ?? "planned");
+    const accepted = witnessed === "accepted" || (reported === "accepted" && receiptAccepted?.has(definition.id) === true);
+    const status = accepted ? "accepted"
+      : liveProjectionStates.has(reported) ? reported
+        : reported === "accepted" ? "submitted"
+          : witnessed;
+    const attempts = Math.max(submission?.attempts ?? 0, Number.isSafeInteger(raw?.attempts) && raw.attempts > 0 ? raw.attempts : 0);
+    return { ...raw, status, attempts };
   });
-  const gateRuns = (Array.isArray(projection.gateRuns) ? projection.gateRuns : []).filter((gate) => proof.submissions.some((item) => item.id === gate.deliverableId
-    && [item.accepted, item.rejected].some((attempt) => attempt && Date.parse(gate.at) >= attempt.start && Date.parse(gate.at) <= attempt.end)));
-  const subagents = (Array.isArray(projection.subagents) ? projection.subagents : []).filter((child) => proof.delegates.includes(child.deliverableId)
-    && definitions.some((item) => item.id === child.deliverableId && item.capability === child.capability));
+  const planned = new Set(definitions.map((item) => item.id));
+  const gateRuns = (Array.isArray(projection.gateRuns) ? projection.gateRuns : []).filter((gate) => (live
+    ? planned.has(gate.deliverableId)
+    : proof.submissions.some((item) => item.id === gate.deliverableId
+      && [item.accepted, item.rejected].some((attempt) => attempt && Date.parse(gate.at) >= attempt.start && Date.parse(gate.at) <= attempt.end))));
+  const subagents = (Array.isArray(projection.subagents) ? projection.subagents : []).filter((child) => (live || proof.delegates.includes(child.deliverableId))
+    && definitions.some((item) => item.id === child.deliverableId && (live && !item.capability ? true : item.capability === child.capability)));
   return { ...projection, plan: { revision: proof.plan?.revision ?? projection.plan?.revision, items }, gateRuns, subagents,
     qualityNotices: nativeWorkflowNotices(proof), degraded: [] };
 }
@@ -1540,6 +1644,55 @@ async function openWorkspaceText(project, relative) {
   } finally {
     await opened?.handle.close().catch(() => {});
   }
+}
+
+/**
+ * What a run's evidence matrices say about their own claims, by the same rule
+ * the reader's 「依据」 marks use (`claimVerification`, the gate's own quote
+ * comparison), so a count on a run row and the marks in its report cannot
+ * disagree.
+ *
+ * Reads each matrix and at most 48 preserved sources it quotes, like the gate.
+ * `previousKey` makes an unchanged set of matrices free: the caller polls, and
+ * re-reading every source on every poll would be most of the monitor's work.
+ *
+ * @param {Record<string, any>} project @param {readonly string[]} relativePaths
+ * @param {string | null} [previousKey]
+ * @returns {Promise<{ key: string, total: number, verified: number, unverified: number } | null>}
+ *   null when nothing changed since `previousKey`
+ */
+async function matrixClaimSummary(project, relativePaths, previousKey = null) {
+  /** @type {{ relative: string, file: { text: string, stat: import('node:fs').Stats } }[]} */
+  const found = [];
+  for (const relative of relativePaths) {
+    const file = await openWorkspaceText(project, relative);
+    if (file) found.push({ relative, file });
+  }
+  const key = found.map(({ relative, file }) => `${relative}:${file.stat.size}:${file.stat.mtimeMs}`).join("|");
+  if (previousKey !== null && key === previousKey) return null;
+  const totals = { key, total: 0, verified: 0, unverified: 0 };
+  for (const { file } of found) {
+    let matrix;
+    try { matrix = JSON.parse(file.text); } catch { continue; }
+    const named = (Array.isArray(matrix?.claims) ? matrix.claims : []).flatMap((/** @type {any} */ claim) => [
+      claim?.artifactPath,
+      ...(Array.isArray(claim?.supportingSources) ? claim.supportingSources.map((/** @type {any} */ source) => source?.artifactPath) : []),
+    ]).filter((value) => typeof value === "string" && value.startsWith(".evimed-sources/"));
+    /** @type {Record<string, string>} */
+    const sourceArtifacts = {};
+    for (const artifactPath of [...new Set(named)].slice(0, 48)) {
+      let relative;
+      try { relative = normalizeWorkspaceRelativePath(artifactPath, "source artifact path"); } catch { continue; }
+      const source = await openWorkspaceText(project, relative);
+      if (source) sourceArtifacts[artifactPath] = source.text;
+    }
+    const summary = claimSummaryOf(claimVerification({ matrix, sourceArtifacts }));
+    if (!summary) continue;
+    totals.total += summary.total;
+    totals.verified += summary.verified;
+    totals.unverified += summary.unverified;
+  }
+  return totals;
 }
 
 /**
@@ -2662,11 +2815,50 @@ async function readRunStateProjection(project, workspaceRoot, run = null) {
       if (run && projection.runId && projection.runId !== run.id) return { state: "unattributed" };
       return { state: "read", projection };
     }
-    const scoped = scopeNativeProjection(projection, run);
+    // Only read when the plan index claims an acceptance the parent cannot
+    // have witnessed: the receipt check hashes every accepted file, and this
+    // function runs on every monitor poll.
+    const claimsAcceptance = run.status === "running" && Array.isArray(projection.plan?.items)
+      && projection.plan.items.some((/** @type {any} */ item) => item?.status === "accepted");
+    const receiptAccepted = claimsAcceptance ? await receiptAcceptedDeliverables(project, String(projection.runId ?? "")) : null;
+    const scoped = scopeNativeProjection(projection, run, { receiptAccepted });
     return scoped ? { state: "read", projection: scoped } : { state: "unattributed" };
   } catch {
     return { state: "unreadable" };
   }
+}
+
+/**
+ * The deliverables a delivery receipt accepts for one kernel run, counting
+ * only entries whose every file still matches the digest it was accepted at.
+ *
+ * The receipt is written by the run-side gate alone and only on acceptance,
+ * under a path the sandbox refuses the model's writes to, and each file it
+ * names is re-hashed here — which is what lets a live native run show a
+ * child's acceptance its parent never witnessed without taking the plan
+ * index's word for it.
+ * @param {Record<string, any>} project @param {string} kernelRunId
+ * @returns {Promise<Set<string>>}
+ */
+async function receiptAcceptedDeliverables(project, kernelRunId) {
+  /** @type {Set<string>} */
+  const accepted = new Set();
+  if (!kernelRunId) return accepted;
+  let parsed;
+  try {
+    const text = await readTextFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, workspaceLayout.receiptFile), "");
+    if (!text) return accepted;
+    parsed = JSON.parse(text);
+  } catch {
+    return accepted;
+  }
+  const validated = validateDeliveryReceipt(parsed);
+  if (!validated.ok || validated.receipt.runId !== kernelRunId) return accepted;
+  for (const entry of validated.receipt.entries ?? []) {
+    const verified = await verifiedReceiptArtifacts(project, { ...validated.receipt, entries: [entry] });
+    if (verified.artifacts.length > 0 && verified.mismatched.length === 0) accepted.add(String(entry.deliverableId));
+  }
+  return accepted;
 }
 
 /**
@@ -2792,6 +2984,7 @@ function droppedDeliverableNotices(projection, receipt) {
 function deliverableFrames(projection, receipt = null) {
   const items = Array.isArray(projection?.plan?.items) ? projection.plan.items : [];
   const entries = new Map((receipt?.entries ?? []).map((entry) => [String(entry.deliverableId), entry]));
+  const children = Array.isArray(projection?.subagents) ? projection.subagents : [];
   /** @type {Record<string, any>[]} */
   const frames = [];
   const seen = new Set();
@@ -2802,14 +2995,25 @@ function deliverableFrames(projection, receipt = null) {
     const contractKind = String(item?.contractKind ?? "").trim();
     const status = String(item?.status ?? "planned");
     const entry = entries.get(id);
+    // The plan index writes the last verdict as `issues` and names no child
+    // (the socket's `publicItem`); this read `lastIssues` and
+    // `item.childSessionId`, so every frame went out with no issues and no
+    // child — the panel a second attempt is watched on was empty by
+    // construction. The child is the plan index's delegation row.
+    const issues = normalizeGateIssues(Array.isArray(item?.issues) ? item.issues : item?.lastIssues);
+    const child = [...children].reverse().find((row) => String(row?.deliverableId ?? "") === id);
+    const childSessionId = child?.childSessionId ?? item?.childSessionId;
+    const attempts = Number.isSafeInteger(item?.attempts) && item.attempts > 0 ? item.attempts : 0;
     frames.push({
       id,
       contractKind: isContractKind(contractKind) ? contractKind : "",
       capability: String(item?.capability ?? "").trim(),
       title: String(item?.title ?? "").trim() || id,
       status: PLAN_ITEM_STATES.includes(status) ? status : "planned",
-      childSessionId: item?.childSessionId ? String(item.childSessionId) : null,
-      issues: normalizeGateIssues(item?.lastIssues),
+      attempts,
+      childSessionId: childSessionId ? String(childSessionId) : null,
+      issues,
+      mustFixCount: issues.filter((issue) => issue.severity === "required").length,
       ...(entry ? { receipt: receiptEntryView(entry) } : {}),
     });
   }
@@ -2831,8 +3035,10 @@ function deliverableFrames(projection, receipt = null) {
       capability: String(entry.capability ?? "").trim(),
       title: id,
       status: "accepted",
+      attempts: Number.isSafeInteger(entry.attempt) && entry.attempt > 0 ? entry.attempt : 0,
       childSessionId: null,
       issues: [],
+      mustFixCount: 0,
       receipt: receiptEntryView(entry),
     });
   }
@@ -2946,6 +3152,17 @@ export class AgentRunStore {
     this.resolveRunProject = options.resolveRunProject ?? (async (project) => project);
     /** Whoever forwards a run's own projection to the browser. @type {(project: any, run: any, type: string, data: any) => void} */
     this.onRunProjection = options.onRunProjection ?? (() => {});
+    // The progress aggregate (`run/progress`): the minimum gap between two
+    // frames for one run, how often a child's own history is re-read to
+    // reconcile its tool calls, and how often the kernel is asked for children
+    // nothing named yet. Each is a bound on work the monitor does per poll.
+    this.progressPublishIntervalMs = options.progressPublishIntervalMs ?? 2_000;
+    this.childHistoryIntervalMs = options.childHistoryIntervalMs ?? 20_000;
+    this.childDiscoveryIntervalMs = options.childDiscoveryIntervalMs ?? 5_000;
+    /** What one run cost so far, for the aggregate; null when unattributed. @type {(project: any, run: any) => Promise<any>} */
+    this.readRunUsage = options.readRunUsage ?? (async () => null);
+    /** runId -> the live progress state the monitor and the event pump feed. */
+    this.progressTrackers = new Map();
     /** Per-run memory, so a fixed-interval poll does not repeat itself. */
     this.projectionDigests = new Map();
     /** runId -> deliverableId -> the frame last sent for it. Same reason. */
@@ -3165,22 +3382,33 @@ export class AgentRunStore {
    * @param {Record<string, any>} project @param {Record<string, any>[]} runs
    */
   async withPlanProgress(project, runs) {
-    let budget = 3;
+    // Bounded, because each running run is a projection read on a list
+    // request; eight covers any account's concurrent runs today (the project
+    // cap is one or two), where the old three silently dropped the fourth.
+    let budget = 8;
     return Promise.all(runs.map(async (run) => {
       if (run.status !== "running" || budget <= 0) return run;
       budget -= 1;
       // `readRunStateProjection` answers every failure with a state, never a throw.
       const read = /** @type {{ state: string, projection?: any }} */ (await readRunStateProjection(project, project.workspaceDir, run));
-      const items = read.state === "read" && Array.isArray(read.projection?.plan?.items) ? read.projection.plan.items : null;
-      if (!items?.length) return run;
+      const projection = read.state === "read" ? read.projection ?? null : null;
+      const items = Array.isArray(projection?.plan?.items) ? projection.plan.items : null;
+      const deliverables = items?.length ? runDeliverables(projection, null, null) : run.deliverables;
+      const live = this.progressTrackers.get(run.id)?.last;
       return {
         ...run,
-        planItems: items.slice(0, 12).map((/** @type {any} */ item) => ({
-          id: String(item?.id ?? "").slice(0, 120),
-          title: String(item?.title ?? item?.id ?? "").slice(0, 160),
-          status: PLAN_ITEM_STATES.includes(item?.status) ? item.status : "planned",
-          attempts: Number.isSafeInteger(item?.attempts) ? item.attempts : 0,
-        })),
+        ...(items?.length ? {
+          // The pre-C3 view the shell has read since the step list shipped;
+          // `deliverables` below is the same plan with verdicts and children.
+          planItems: items.slice(0, 12).map((/** @type {any} */ item) => ({
+            id: String(item?.id ?? "").slice(0, 120),
+            title: String(item?.title ?? item?.id ?? "").slice(0, 160),
+            status: PLAN_ITEM_STATES.includes(item?.status) ? item.status : "planned",
+            attempts: Number.isSafeInteger(item?.attempts) ? item.attempts : 0,
+          })),
+        } : {}),
+        ...(deliverables?.length ? { deliverables } : {}),
+        ...(live ? { progress: { ...live, deliverables: deliverables ?? live.deliverables } } : {}),
       };
     }));
   }
@@ -3746,6 +3974,51 @@ export class AgentRunStore {
     });
   }
 
+  /**
+   * What the record keeps about a run's plan once it ends.
+   *
+   * The plan is read the way a live run's is — the plan index's own states,
+   * `accepted` gated on a witnessed acceptance or a verified receipt — because
+   * the stricter terminal reading rebuilds every item from the parent's own
+   * tool calls, and a delegated item's submissions are never among them: it
+   * would record 0 attempts for an item a child submitted twice. The outcome
+   * then decides what each item became (`runDeliverables`).
+   *
+   * @param {any} project @param {string} runId
+   * @param {{ status: string, artifacts: string[], unverifiedArtifacts: string[] }} normalized
+   */
+  async finalRunFacts(project, runId, normalized) {
+    const run = (await this.list(project)).find((item) => item.id === runId);
+    if (!run || run.status !== "running") return null;
+    const read = await readRunStateProjection(project, project.workspaceDir, run);
+    const projection = read.state === "read" ? read.projection ?? null : null;
+    const receipt = await readDeliveryReceipt(project, run).catch(() => null);
+    const deliverables = runDeliverables(projection, receipt, {
+      status: normalized.status,
+      artifacts: normalized.artifacts,
+      unverifiedArtifacts: normalized.unverifiedArtifacts,
+    });
+    const matrices = [...normalized.artifacts, ...normalized.unverifiedArtifacts]
+      .filter((file) => file.endsWith("clinical-evidence-matrix.json"));
+    const claims = matrices.length ? await matrixClaimSummary(project, matrices, null) : null;
+    const tracker = this.progressTracker(runId);
+    tracker.project ??= project;
+    tracker.startedAt ??= run.startedAt;
+    if (projection) tracker.projection = projection;
+    if (claims?.total) tracker.matrix = { ...claims, at: this.now().getTime() };
+    const progress = this.composeProgress(tracker, run, deliverables);
+    return {
+      deliverables,
+      claimSummary: claims?.total ? { total: claims.total, verified: claims.verified, unverified: claims.unverified } : null,
+      // A snapshot only of what was observed: a run this process never
+      // watched (finished from the durable record after a restart) keeps the
+      // last one its ledger holds rather than a picture of zero calls.
+      snapshot: tracker.sessions.size > 0 ? withoutDeliverables(progress) : null,
+      progress,
+      tracker,
+    };
+  }
+
   async finishInternal(project, rawRunId, terminal) {
     const runId = safeId(rawRunId, "agent run id");
     if (!terminalStatuses.has(terminal.status)) throw new Error("Invalid internal terminal status.");
@@ -3807,6 +4080,13 @@ export class AgentRunStore {
         ]);
       }
     }
+    // The plan as the run ends it, what its claims came to, and its last
+    // progress picture — computed before the terminal write and published
+    // ahead of it, because a watching tab closes its stream on the terminal
+    // `run/state` and a frame sent after that reaches nobody. Best effort: a
+    // record the run cannot be described in is still a finished run.
+    const facts = await this.finalRunFacts(project, runId, normalized).catch(() => null);
+    if (facts?.tracker && facts.progress) this.publishProgress(project, runId, facts.tracker, facts.progress, { force: true });
     const outcome = await withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const runs = foldEvents(events);
@@ -3816,7 +4096,16 @@ export class AgentRunStore {
       const finishedAt = current.nativeTurn && terminal.finishedAt
         ? storedTimestamp(terminal.finishedAt, "finishedAt") : this.now().toISOString();
       const durationMs = Math.max(0, Date.parse(finishedAt) - Date.parse(current.startedAt));
-      const event = { event: "finished", id: runId, ...normalized, finishedAt, durationMs };
+      const event = {
+        event: "finished",
+        id: runId,
+        ...normalized,
+        finishedAt,
+        durationMs,
+        ...(facts?.deliverables?.length ? { deliverables: facts.deliverables } : {}),
+        ...(facts?.claimSummary ? { claimSummary: facts.claimSummary } : {}),
+        ...(facts?.snapshot ? { snapshot: facts.snapshot } : {}),
+      };
       const text = serializeNext(events, event, this.maxBytes);
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
       const finished = foldEvents([...events, event]).get(runId);
@@ -3845,6 +4134,9 @@ export class AgentRunStore {
       // The gate has already run by the time a run reaches a terminal state,
       // so the brief has done its work; keeping it would grow with every run.
       this.dispatchedBriefs.delete(runId);
+      const tracker = this.progressTrackers.get(runId);
+      if (tracker?.timer) clearTimeout(tracker.timer);
+      this.progressTrackers.delete(runId);
     }
     if (outcome.transitioned) {
       try {
@@ -4395,7 +4687,7 @@ export class AgentRunStore {
    * them would mean reading it three times on three schedules.
    *
    * @param {any} project @param {Record<string, any>} run
-   * @returns {Promise<{ signature: string | null, unreadable: boolean, childSessionIds: string[] }>}
+   * @returns {Promise<{ signature: string | null, unreadable: boolean, childSessionIds: string[], projection: Record<string, any> | null }>}
    */
   async readRunSideActivity(project, run) {
     // Read from the host, because that is where this process opens files.
@@ -4415,8 +4707,8 @@ export class AgentRunStore {
     // `successfulEvidenceSourceArtifacts` still take the container root, and
     // correctly: they relativise paths the model wrote.
     const read = await readRunStateProjection(project, project.workspaceDir, run);
-    if (read.state === "unattributed") return { signature: null, unreadable: true, childSessionIds: [] };
-    if (read.state === "missing") return { signature: null, unreadable: false, childSessionIds: [] };
+    if (read.state === "unattributed") return { signature: null, unreadable: true, childSessionIds: [], projection: null };
+    if (read.state === "missing") return { signature: null, unreadable: false, childSessionIds: [], projection: null };
     if (read.state === "unreadable") {
       // Said once per run, not once per poll: the monitor wakes on a fixed
       // interval and a notice per wake would bury the ledger in one repeated
@@ -4427,7 +4719,7 @@ export class AgentRunStore {
           "运行自述文件 .evimed-run/state.json 无法解析，本次运行的证据与预算明细不可见；运行本身不受影响。",
         ]).catch(() => {});
       }
-      return { signature: null, unreadable: true, childSessionIds: [] };
+      return { signature: null, unreadable: true, childSessionIds: [], projection: null };
     }
     const projection = read.projection ?? {};
     this.publishRunProjection(project, run, projection);
@@ -4435,7 +4727,7 @@ export class AgentRunStore {
       .filter((child) => child?.status === "running" && typeof child?.childSessionId === "string")
       .map((child) => child.childSessionId.trim())
       .filter(Boolean))].slice(0, 64);
-    return { signature: runSideActivitySignature(projection), unreadable: false, childSessionIds };
+    return { signature: runSideActivitySignature(projection), unreadable: false, childSessionIds, projection };
   }
 
   /**
@@ -4517,6 +4809,210 @@ export class AgentRunStore {
   }
 
   /**
+   * The live progress state of one run, created on first use and dropped when
+   * the run finishes.
+   * @param {string} runId
+   */
+  progressTracker(runId) {
+    let tracker = this.progressTrackers.get(runId);
+    if (!tracker) {
+      tracker = {
+        /** sessionId -> call key -> the observed call. Root and children alike. @type {Map<string, Map<string, import('./runProgress.mjs').ObservedCall>>} */
+        sessions: new Map(),
+        /** Sessions the kernel attributed to this run as children. @type {Set<string>} */
+        children: new Set(),
+        /** childSessionId -> the head sequence its history was last read at. @type {Map<string, { at: number, seq: number }>} */
+        childReads: new Map(),
+        /** childSessionId -> how its last turn ended, from its own stream. @type {Map<string, string>} */
+        childEnds: new Map(),
+        /** sessionId -> when it was last seen doing something (epoch ms). @type {Map<string, number>} */
+        activity: new Map(),
+        /** The kernel's last word on this run's direct children. @type {{ sessionId: string, running: boolean }[]} */
+        kernelChildren: [],
+        discoveredAt: 0,
+        /** @type {{ key: string, at: number, total: number, verified: number, unverified: number } | null} */
+        matrix: null,
+        /** @type {Record<string, any> | null} */
+        projection: null,
+        /** @type {any} */
+        usage: null,
+        usageAt: 0,
+        /** @type {string | null} */
+        startedAt: null,
+        /** @type {import('./runProgress.mjs').RunProgress | null} */
+        last: null,
+        publishedDigest: "",
+        publishedAt: 0,
+        /** @type {ReturnType<typeof setTimeout> | null} */
+        timer: null,
+        /** @type {any} */
+        project: null,
+      };
+      this.progressTrackers.set(runId, tracker);
+    }
+    return tracker;
+  }
+
+  /**
+   * One event the kernel's stream carried for a run, the parent's or a
+   * child's, handed over by the event pump.
+   *
+   * The monitor reads the parent's whole history every poll and is exact
+   * about it; a child's work reached nothing at all before this, so a
+   * delegated run's progress stopped at the parent's blocked tool call. The
+   * stream is what makes a child's search count within a second, and the
+   * monitor's occasional re-read of the child's own history (see
+   * `reconcileChildCalls`) is what makes the count right if the stream missed
+   * something. A call is keyed by its id, so a replay counts once.
+   *
+   * @param {any} project @param {string} runId
+   * @param {{ sessionId: string, child?: boolean, replay?: boolean, event: import('@evimed/domain').RunEvent }} observed
+   */
+  noteRunEvent(project, runId, observed) {
+    if (!runId || !observed?.sessionId || !observed.event) return;
+    const tracker = this.progressTracker(runId);
+    tracker.project ??= project;
+    const nowMs = this.now().getTime();
+    if (!observed.replay) tracker.activity.set(observed.sessionId, nowMs);
+    if (observed.child) tracker.children.add(observed.sessionId);
+    let calls = tracker.sessions.get(observed.sessionId);
+    if (!calls) {
+      calls = new Map();
+      tracker.sessions.set(observed.sessionId, calls);
+    }
+    let changed = foldToolEvent(calls, observed.event, nowMs);
+    if (observed.child && observed.event.type === "turn/end") {
+      tracker.childEnds.set(observed.sessionId, String(observed.event.endKind ?? ""));
+      changed = true;
+    }
+    // A child that starts a new turn is running again, whatever its last one did.
+    if (observed.child && observed.event.type === "turn/start" && tracker.childEnds.delete(observed.sessionId)) changed = true;
+    if (changed && tracker.startedAt && tracker.last) {
+      this.publishProgress(tracker.project ?? project, runId, tracker, this.composeProgress(tracker, { startedAt: tracker.startedAt }));
+    }
+  }
+
+  /**
+   * The aggregate from what the tracker holds.
+   * @param {ReturnType<AgentRunStore['progressTracker']>} tracker @param {{ startedAt?: string | null }} run
+   * @param {import('./runProgress.mjs').RunDeliverable[] | null} [deliverables]
+   */
+  composeProgress(tracker, run, deliverables = null) {
+    const projection = tracker.projection;
+    return assembleRunProgress({
+      deliverables: deliverables ?? runDeliverables(projection, null, null),
+      calls: [...tracker.sessions.values()].flatMap((calls) => [...calls.values()]),
+      projection,
+      matrixClaims: tracker.matrix,
+      children: progressChildren({ projection, kernelChildren: tracker.kernelChildren, ended: tracker.childEnds, lastActivity: tracker.activity }),
+      usage: tracker.usage,
+      startedAt: run.startedAt ?? tracker.startedAt ?? null,
+      now: this.now().toISOString(),
+    });
+  }
+
+  /**
+   * Publishes one run's aggregate when it changed, at most once per
+   * `progressPublishIntervalMs`, with the last change sent when the interval
+   * ends — so a burst of child tool calls is one frame, and the frame after a
+   * burst is never the one that was dropped.
+   * isolated: evimed_run_progress_publish_failures_total
+   * @param {any} project @param {string} runId @param {ReturnType<AgentRunStore['progressTracker']>} tracker
+   * @param {import('./runProgress.mjs').RunProgress} progress @param {{ force?: boolean }} [options]
+   */
+  publishProgress(project, runId, tracker, progress, { force = false } = {}) {
+    tracker.last = progress;
+    const send = () => {
+      if (tracker.timer) clearTimeout(tracker.timer);
+      tracker.timer = null;
+      const latest = tracker.last;
+      if (!latest) return;
+      const digest = progressDigest(latest);
+      if (digest === tracker.publishedDigest) return;
+      tracker.publishedDigest = digest;
+      tracker.publishedAt = Date.now();
+      try {
+        this.onRunProjection(project, { id: runId }, "run/progress", latest);
+      } catch { /* isolated */ }
+    };
+    if (progressDigest(progress) === tracker.publishedDigest) return;
+    const wait = tracker.publishedAt + this.progressPublishIntervalMs - Date.now();
+    if (force || wait <= 0) {
+      send();
+      return;
+    }
+    if (!tracker.timer) {
+      tracker.timer = setTimeout(send, wait);
+      tracker.timer.unref?.();
+    }
+  }
+
+  /**
+   * Re-reads a child's own history when its head has moved, to reconcile the
+   * tool calls the stream reported for it.
+   *
+   * Bounded twice: only a child whose kernel head advanced since its last
+   * read, and at most once per `childHistoryIntervalMs` each. Read under the
+   * parent's address — the only one the kernel accepts for a child.
+   * @param {any} project @param {Record<string, any>} run
+   * @param {ReturnType<AgentRunStore['progressTracker']>} tracker
+   * @param {{ sessionId: string, asOfSeq: number }[]} childActivity
+   */
+  async reconcileChildCalls(project, run, tracker, childActivity) {
+    const nowMs = this.now().getTime();
+    for (const child of childActivity.slice(0, 16)) {
+      const last = tracker.childReads.get(child.sessionId);
+      if (last && (child.asOfSeq <= last.seq || nowMs - last.at < this.childHistoryIntervalMs)) continue;
+      tracker.childReads.set(child.sessionId, { at: nowMs, seq: child.asOfSeq });
+      if (last) tracker.activity.set(child.sessionId, nowMs);
+      tracker.children.add(child.sessionId);
+      let history;
+      try {
+        history = await this.readSessionHistory(project, child.sessionId, { wake: false, parentSessionId: run.sessionId });
+      } catch {
+        continue; // an unread child still counts through its live events
+      }
+      tracker.sessions.set(child.sessionId, mergeObservedCalls(tracker.sessions.get(child.sessionId), observedCallsFromHistory(Array.isArray(history) ? history : [])));
+    }
+  }
+
+  /**
+   * What the run has cost so far, for the aggregate: at most every ten
+   * seconds, because it is a query against the usage ledger per poll otherwise.
+   * An unattributed run reads null and the aggregate carries no usage rather
+   * than a zero it did not measure.
+   * @param {any} project @param {Record<string, any>} run
+   * @param {ReturnType<AgentRunStore['progressTracker']>} tracker
+   */
+  async refreshRunUsage(project, run, tracker) {
+    const nowMs = this.now().getTime();
+    if (tracker.usageAt && nowMs - tracker.usageAt < 10_000) return;
+    tracker.usageAt = nowMs;
+    const usage = await this.readRunUsage(project, run);
+    tracker.usage = usage && typeof usage === "object" && Number(usage.requests) > 0 ? normalizeRunUsage(usage) : null;
+  }
+
+  /**
+   * The claim counts of the run's evidence matrices, when no claim tool has
+   * reported them: re-read only when a matrix file changed, and at most every
+   * fifteen seconds, because it re-reads every preserved source it quotes.
+   * @param {any} project @param {ReturnType<AgentRunStore['progressTracker']>} tracker
+   */
+  async refreshMatrixClaims(project, tracker) {
+    const nowMs = this.now().getTime();
+    if (tracker.matrix && nowMs - tracker.matrix.at < 15_000) return;
+    const ids = (Array.isArray(tracker.projection?.plan?.items) ? tracker.projection.plan.items : [])
+      .map((/** @type {any} */ item) => String(item?.id ?? ""))
+      .filter((id) => id && !id.includes("/") && !id.includes("\\") && id !== "." && id !== "..")
+      .slice(0, 12);
+    const paths = ids.map((id) => `${workspaceLayout.deliverablesDir}/${id}/clinical-evidence-matrix.json`);
+    const summary = await matrixClaimSummary(project, paths, tracker.matrix?.key ?? null);
+    tracker.matrix = summary
+      ? { ...summary, at: nowMs }
+      : (tracker.matrix ? { ...tracker.matrix, at: nowMs } : null);
+  }
+
+  /**
    * Records one event already attributed by RuntimeEventPump's project-scoped
    * root/child session maps. The digest, rather than a model-writable
    * workspace counter, is what the stall monitor compares on its next poll.
@@ -4568,14 +5064,35 @@ export class AgentRunStore {
     const runSide = await this.readRunSideActivity(project, run);
     const activity = runSide.signature;
     const eventActivity = this.kernelActivities.get(`${project.userId}\0${project.id}\0${run.id}`) ?? null;
+    const tracker = this.progressTracker(run.id);
+    tracker.project = project;
+    tracker.startedAt = run.startedAt;
+    if (runSide.projection) tracker.projection = runSide.projection;
+    const nowMs = this.now().getTime();
+    // Which children to ask the kernel about. The projection names the ones a
+    // delegation recorded; the event stream names the ones the kernel itself
+    // announced on the parent's log. Both are only *candidates*: the kernel's
+    // session list must confirm each one's parent before its head counts.
+    const candidates = [...new Set([...runSide.childSessionIds, ...tracker.children])].slice(0, 64);
+    // And every few seconds, children nothing named yet. A child the kernel
+    // lists under this run's root session and created after this run began is
+    // this run's work — the case F4 was: a delegated child writing every
+    // minute that no projection row and no stream event had named.
+    const discover = nowMs - tracker.discoveredAt >= this.childDiscoveryIntervalMs;
+    if (discover) tracker.discoveredAt = nowMs;
     let childActivity = [];
     let childActivityUnreadable = false;
-    if (runSide.childSessionIds.length > 0) {
+    if (candidates.length > 0 || discover) {
       try {
-        const observed = await this.readChildSessionActivity(project, run.sessionId, runSide.childSessionIds);
-        const allowed = new Set(runSide.childSessionIds);
+        const observed = await this.readChildSessionActivity(
+          project,
+          run.sessionId,
+          candidates,
+          discover ? { discoverSince: Date.parse(run.startedAt) - 5_000 } : {},
+        );
+        const allowed = new Set(candidates);
         childActivity = (Array.isArray(observed) ? observed : []).filter((child) =>
-          allowed.has(child?.sessionId)
+          (allowed.has(child?.sessionId) || child?.discovered === true)
           && typeof child?.sessionId === "string"
           && child.sessionId.length > 0
           && child.sessionId.length <= 512
@@ -4588,10 +5105,25 @@ export class AgentRunStore {
         })).slice(0, 256).sort((left, right) => left.sessionId.localeCompare(right.sessionId, "en"));
       } catch {
         // An unreadable catalogue is unknown activity, never proof of a stall
-        // and never permission to trust the projection's own counters.
-        childActivityUnreadable = true;
+        // and never permission to trust the projection's own counters — when
+        // there was a child to ask about. A discovery read that fails finds
+        // nothing, which is what it found before it existed.
+        if (candidates.length > 0) childActivityUnreadable = true;
       }
     }
+    // The aggregate a reader sees, before any stall arithmetic: it is a
+    // statement of what was observed, and a poll that cannot tell whether the
+    // run moved can still say what it has done.
+    tracker.sessions.set(run.sessionId, mergeObservedCalls(tracker.sessions.get(run.sessionId), observedCallsFromHistory(history)));
+    if (!childActivityUnreadable) {
+      tracker.kernelChildren = childActivity.map((child) => ({ sessionId: child.sessionId, running: child.running }));
+      for (const child of childActivity) tracker.children.add(child.sessionId);
+      await this.reconcileChildCalls(project, run, tracker, childActivity);
+    }
+    await this.refreshMatrixClaims(project, tracker).catch(() => {});
+    await this.refreshRunUsage(project, run, tracker).catch(() => {});
+    const progress = this.composeProgress(tracker, run);
+    this.publishProgress(project, run.id, tracker, progress);
     if (childActivityUnreadable) return null;
     const kernelKey = `${project.userId}\0${project.id}\0${run.id}`;
     const heads = this.childKernelHeads.get(kernelKey) ?? new Map();
@@ -4649,6 +5181,11 @@ export class AgentRunStore {
         toolCalls,
         ...(activity === null ? {} : { runSideActivity: activity }),
         ...(kernelActivity === null ? {} : { kernelActivity }),
+        // The aggregate, stored so a reader who opens the run later (or a
+        // restarted control plane) sees the last observed picture. The plan
+        // is stored once, beside the snapshot, never inside it twice.
+        ...(progress.deliverables.length ? { deliverables: progress.deliverables } : {}),
+        snapshot: withoutDeliverables(progress),
       };
       // Superseded progress rows go, for every run rather than only this one:
       // `serializeNext` holds that rule now, so the terminal path drops them too.
@@ -4715,8 +5252,14 @@ export class AgentRunStore {
         if (this.monitorStallPolls > 0 && idlePolls >= this.monitorStallPolls && !stallNoticed) {
           stallNoticed = true;
           const minutes = Math.round((idlePolls * this.monitorIntervalMs) / 60_000);
+          // Says what was measured and nothing else. It used to add 「工作区
+          // 也没有变化」, which nothing here ever checks — and in F4 it was shown
+          // while a child wrote a file every minute. What the counter does
+          // read is the parent's messages and tool calls, the kernel's events
+          // for the parent and every child it attributed, and each child's
+          // head in the kernel's own session list.
           await this.appendQualityNotices(project, runId, [
-            `这次运行已有约 ${minutes} 分钟没有可观测的进展（没有新消息、没有新工具调用、工作区也没有变化）。运行仍在继续，没有被终止；如果确认它确实卡住了，可以手动停止，已经写出的文件不会丢失。`,
+            `这次运行已有约 ${minutes} 分钟没有可观测的进展：主会话和各子任务都没有新消息、也没有新工具调用。运行仍在继续，没有被终止；如果确认它确实卡住了，可以停止它，已经写出的文件不会丢失。`,
           ]).catch(() => null);
         }
         // Checked here as well as in the loop condition. A cancel that lands

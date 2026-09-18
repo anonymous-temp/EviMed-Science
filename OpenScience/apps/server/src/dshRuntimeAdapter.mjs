@@ -563,11 +563,17 @@ export class DshRuntimeAdapter {
    * the transcript endpoint: a tab that connects mid-run gets the window it
    * missed from here, in the same vocabulary as everything after it.
    *
-   * @param {{ sessionId: string, signal: AbortSignal }} input
+   * @param {{ sessionId: string, signal: AbortSignal, address?: { kind: 'subagent', parentSessionId: string, childSessionId: string, mode: string } | null }} input
    * @returns {AsyncGenerator<{ sessionId: string, event: import('@evimed/domain').RunEvent, replay: boolean }>}
    */
-  async *watchSession({ sessionId, signal }) {
-    const args = { request: { address: { kind: "session", sessionId }, assistantStream: true } };
+  async *watchSession({ sessionId, signal, address = null }) {
+    // A subagent session is followed at its parent's address. Asked for at its
+    // own id the kernel refuses the stream ("subagent Sessions require their
+    // durable parent address"), and the pump's follow loop swallows the
+    // refusal — so until the address was passed no delegated child's tool call
+    // ever reached a run's event channel, and the stall monitor could not hear
+    // a child that was writing files every minute.
+    const args = { request: { address: address ?? { kind: "session", sessionId }, assistantStream: true } };
     /** @type {{attemptId: string, startedAfterSeq: number, nextIndex: number}|null} */
     let attempt = null;
     let revision = -1;
@@ -635,7 +641,7 @@ export function normalizeTranscript(sessionId, entries) {
   const messages = [];
   /** @type {Map<string, Record<string, any>>} */
   const pendingCalls = new Map();
-  /** @type {{ sessionId: string, parentSessionId: string, label: string, capability: string }[]} */
+  /** @type {{ sessionId: string, parentSessionId: string, label: string, capability: string, mode?: string, createdAt?: number }[]} */
   const subagents = [];
   /** @type {{ kind: string, code?: string, subCode?: string } | null} */
   let turnEnd = null;
@@ -762,6 +768,24 @@ export function normalizeTranscript(sessionId, entries) {
           label: String(data.label ?? ""),
           capability: String(data.capability ?? data.label ?? ""),
         });
+        break;
+      }
+      // The parent's own record of a child it created — the event that does
+      // reach a parent's log at this pin, where `subagent/descriptor` (written
+      // into the child) never does. See `decodeMuxFrame`.
+      case "subagent/catalog": {
+        const childId = String(data.childId ?? "");
+        const mode = String(data.mode ?? "");
+        if (childId && !subagents.some((known) => known.sessionId === childId)) {
+          subagents.push({
+            sessionId: childId,
+            parentSessionId: sessionId,
+            label: String(data.label ?? ""),
+            capability: "",
+            ...(mode === "one-shot" || mode === "continuable" ? { mode } : {}),
+            ...(Number.isSafeInteger(data.childCreatedAt) ? { createdAt: data.childCreatedAt } : {}),
+          });
+        }
         break;
       }
       case "turn/end": {
@@ -999,6 +1023,35 @@ export function decodeMuxFrame(frame) {
           output,
           ...(data.error ? { errorCode: String(data.error.code ?? "") } : {}),
           narration: narrateToolCall(tool, {}, data.error ? undefined : { text: output }).text,
+        },
+      };
+    }
+    // The child's creation, as the PARENT's own log records it.
+    //
+    // `subagent/descriptor` below is written into the child's log, so a reader
+    // following only the parent never sees it — and at this pin nothing else
+    // announced a delegated child on the parent's stream, so the event pump
+    // never learned a child existed and a delegated run's progress stopped at
+    // the parent's blocked tool call (2026-09-18, F4). The kernel appends
+    // `subagent/catalog` to the parent the moment a child is established
+    // (`establishCatalogChild`, dsh-subagent 0.1.5-rc.2): `{version, childId,
+    // childCreatedAt, mode, label?}`. It is the kernel's fact, not a
+    // model-writable one, and it carries `mode` — the one field a child's
+    // durable address needs and cannot be guessed (see `subagentAddress`).
+    case "subagent/catalog": {
+      const childSessionId = String(data.childId ?? "");
+      const mode = String(data.mode ?? "");
+      if (!childSessionId) return { sessionId, event: { type: "unknown", seq, rawType: "subagent/catalog" } };
+      return {
+        sessionId,
+        event: {
+          type: "subagent/started",
+          seq,
+          childSessionId,
+          capability: "",
+          label: String(data.label ?? ""),
+          parentSessionId: sessionId,
+          ...(mode === "one-shot" || mode === "continuable" ? { mode } : {}),
         },
       };
     }

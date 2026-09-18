@@ -196,7 +196,14 @@ export async function collectRunTranscripts(runtimeManager, project, run, option
       error = [code, message].filter(Boolean).join(": ") || "unreadable";
     }
     collected.push({ ...next, transcript, error });
+    // The kernel's own `subagent/catalog` facts now fill `subagents` (see
+    // `normalizeTranscript`), and a native session keeps every turn's children
+    // in one parent log. A child the kernel created before this run began
+    // belongs to an earlier turn's run, not to this one.
+    const runStartedAt = Date.parse(String(/** @type {any} */ (run).startedAt ?? ""));
     for (const child of transcript?.subagents ?? []) {
+      const createdAt = Number(/** @type {any} */ (child).createdAt);
+      if (Number.isFinite(runStartedAt) && Number.isSafeInteger(createdAt) && createdAt + 1_000 < runStartedAt) continue;
       queue.push({
         sessionId: child.sessionId,
         parentSessionId: child.parentSessionId ?? next.sessionId,

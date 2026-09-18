@@ -29,14 +29,17 @@ async function waitFor(predicate, what, timeoutMs = 5_000) {
  */
 class FakeMux {
   constructor() {
-    /** @type {{ endpoint: string, sessionId: string | null, push: (value: any) => void, finish: () => void, ended: boolean }[]} */
+    /** @type {{ endpoint: string, sessionId: string | null, address: Record<string, any> | null, push: (value: any) => void, finish: () => void, ended: boolean }[]} */
     this.streams = [];
     this.closeCount = 0;
   }
 
   /** @param {string} endpoint @param {Record<string, any>} args @param {{ signal: AbortSignal }} options */
   async *open(endpoint, args, { signal }) {
-    const sessionId = args?.request?.address?.sessionId ?? null;
+    // A subagent is followed at `{kind:'subagent', parentSessionId,
+    // childSessionId, mode}`, which names the child as `childSessionId`.
+    const address = args?.request?.address ?? null;
+    const sessionId = address?.sessionId ?? address?.childSessionId ?? null;
     /** @type {any[]} */
     const queue = [];
     /** @type {(() => void) | null} */
@@ -46,6 +49,7 @@ class FakeMux {
     const entry = {
       endpoint,
       sessionId,
+      address,
       ended: false,
       push: (value) => { queue.push(value); nudge(); },
       finish: () => { done = true; nudge(); },
@@ -82,7 +86,7 @@ const sessionEvent = (event) => ({ type: "event", event });
 
 /**
  * Attaches a pump backed by one FakeMux and gives the test the mux back.
- * @param {{ reconnectDelayMs?: number, onOpen?: (mux: FakeMux, attempt: number) => void, onRunActivity?: (project: any, runId: string, activity: {sessionId: string, seq: number}) => void }} [options]
+ * @param {{ reconnectDelayMs?: number, onOpen?: (mux: FakeMux, attempt: number) => void, onRunActivity?: (project: any, runId: string, activity: {sessionId: string, seq: number}) => void, callUnary?: (runtime: any, method: string, payload: any) => Promise<any>, onRunEvent?: (project: any, runId: string, observed: any) => void }} [options]
  */
 function pumpOnFakeMux(options = {}) {
   const runEvents = new RunEventHub();
@@ -102,6 +106,8 @@ function pumpOnFakeMux(options = {}) {
     openMux,
     ...(options.onRunActivity === undefined ? {} : { onRunActivity: options.onRunActivity }),
     ...(options.reconnectDelayMs === undefined ? {} : { reconnectDelayMs: options.reconnectDelayMs }),
+    ...(options.callUnary === undefined ? {} : { callUnary: options.callUnary }),
+    ...(options.onRunEvent === undefined ? {} : { onRunEvent: options.onRunEvent }),
   });
   // Unless a test supplies an older cursor, these manually created sessions
   // have an explicitly empty baseline, as a real fresh dispatch does.
@@ -185,31 +191,80 @@ test("a run the ledger notes after the mux is already up gets its own follow str
   pump.detach(project);
 });
 
-test("a subagent discovered mid-run is followed, and its own turn ending becomes a subagent/update", async () => {
+test("a subagent discovered mid-run is followed at its parent address, and its own turn ending becomes a subagent/update", async () => {
   const { runEvents, pump, muxes } = pumpOnFakeMux();
   const project = { userId: "alice", id: "paper-4" };
   pump.attach(project, { url: "http://127.0.0.1:1" });
   pump.noteRun(project, { id: "run-4", sessionId: "s-root", status: "running" });
   await waitFor(() => muxes[0]?.follow("s-root"), "the root session's stream");
 
+  // The parent log's own fact, in the shape the live golden recording holds
+  // (`golden-frames.json`, `session[18]`): the kernel appends it when a child
+  // is established, and it is the only announcement of a child that reaches
+  // the parent's stream at this pin.
   muxes[0].follow("s-root").push(sessionEvent({
-    type: "subagent/descriptor",
+    type: "subagent/catalog",
     seq: 1,
-    data: { sessionId: "s-child", capability: "adr-analysis", label: "ADR 分析" },
+    time: 1,
+    data: { version: 0, childId: "s-child", childCreatedAt: 1, mode: "one-shot", label: "ADR 分析" },
   }));
   // The subagent's session is not in the ledger; it is discovered on the
   // parent's stream, so only this reconciliation can ever open a stream for it.
   await waitFor(() => muxes[0].follow("s-child"), "a follow stream for the subagent's own session");
+  // …and at the one address the kernel accepts for a child. Asked for at its
+  // own id, the kernel refuses a subagent's stream.
+  assert.deepEqual(muxes[0].follow("s-child").address, {
+    kind: "subagent", parentSessionId: "s-root", childSessionId: "s-child", mode: "one-shot",
+  });
 
   // The root session's own turn ending must not be mistaken for a subagent update.
   muxes[0].follow("s-root").push(sessionEvent({ type: "turn/end", seq: 2, data: { reason: { kind: "completed" } } }));
   await waitFor(() => eventsOf(runEvents, "run-4").some((event) => event.type === "turn/end"), "the root turn/end");
   assert.equal(runEvents.channel("run-4").buffer.some((entry) => entry.type === "subagent/update"), false);
 
+  // A child's tool call reaches the run's channel, labelled with the session
+  // it came from and the activity phase it belongs to.
+  muxes[0].follow("s-child").push(sessionEvent({
+    type: "tool/call", seq: 2, data: { callId: "c-1", name: "mcp__evimed__literature_search", arguments: "{\"query\":\"aspirin\"}" },
+  }));
+  await waitFor(() => runEvents.channel("run-4").buffer.some((entry) => entry.type === "run/event" && entry.data.sessionId === "s-child"), "the child's tool call on the run channel");
+  const childCall = runEvents.channel("run-4").buffer.find((entry) => entry.type === "run/event" && entry.data.sessionId === "s-child");
+  assert.equal(childCall.data.child, true);
+  assert.equal(childCall.data.event.phase, "search");
+
   muxes[0].follow("s-child").push(sessionEvent({ type: "turn/end", seq: 3, data: { reason: { kind: "completed" } } }));
   await waitFor(() => runEvents.channel("run-4").buffer.some((entry) => entry.type === "subagent/update"), "the subagent update");
   const update = runEvents.channel("run-4").buffer.find((entry) => entry.type === "subagent/update");
-  assert.deepEqual(update.data, { childSessionId: "s-child", label: "ADR 分析", capability: "adr-analysis", status: "completed" });
+  assert.deepEqual(update.data, { childSessionId: "s-child", label: "ADR 分析", capability: "", status: "completed" });
+  pump.detach(project);
+});
+
+test("a child announced without its mode is followed once the parent's catalogue names the mode", async () => {
+  /** @type {string[]} */
+  const lookups = [];
+  const { pump, muxes } = pumpOnFakeMux({
+    reconnectDelayMs: 10,
+    // `subagents/list` answers `SubagentCatalog { entries, parentAvailable }`
+    // and keys the child as `id` (dsh-subagent 0.1.5-rc.2 `catalogView`).
+    callUnary: async (_runtime, method, payload) => {
+      if (method !== "subagents/list") return { ok: true, value: {} };
+      lookups.push(payload.parentSessionId);
+      return { ok: true, value: { entries: [{ kind: "child", id: "s-child", activity: "running", hasChildren: false, mode: "one-shot" }], parentAvailable: true } };
+    },
+  });
+  const project = { userId: "alice", id: "paper-4b" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "run-4b", sessionId: "s-root", status: "running" });
+  await waitFor(() => muxes[0]?.follow("s-root"), "the root session's stream");
+  // A descriptor-shaped start names the child and not its mode.
+  muxes[0].follow("s-root").push(sessionEvent({
+    type: "subagent/descriptor",
+    seq: 1,
+    data: { sessionId: "s-child", capability: "adr-analysis", label: "ADR 分析" },
+  }));
+  await waitFor(() => muxes[0].follow("s-child"), "a follow opened after the catalogue named the mode");
+  assert.deepEqual(lookups, ["s-root"], "the mode is read from the parent's own catalogue, once");
+  assert.equal(muxes[0].follow("s-child").address.mode, "one-shot");
   pump.detach(project);
 });
 
@@ -226,6 +281,12 @@ test("the authenticated host child announcement drives replay-safe run activity"
     onRunActivity: (project, runId, value) => {
       if (value.sessionId === childSessionId) activity.push({ project: project.id, runId, ...value });
     },
+    reconnectDelayMs: 10,
+    // The announcement names the parent, not the address mode; the parent's
+    // catalogue supplies it, in the kernel's own `SubagentCatalog` shape.
+    callUnary: async (_runtime, method, payload) => method === "subagents/list" && payload.parentSessionId === rootSessionId
+      ? { ok: true, value: { entries: [{ kind: "child", id: childSessionId, activity: "running", hasChildren: false, mode: "one-shot" }], parentAvailable: true } }
+      : { ok: true, value: {} },
   });
   const project = { userId: "alice", id: "paper-child-activity" };
   pump.attach(project, { url: "http://127.0.0.1:1" });
