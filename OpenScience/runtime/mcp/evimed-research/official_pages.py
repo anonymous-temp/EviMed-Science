@@ -15,6 +15,15 @@ from immutable_capture import ImmutableCaptureError, managed_workspace, preserve
 
 
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+# The approved authorities and the paths of their documents. Mirrored, path for
+# path, by `officialDocumentPaths` in the server's public-source gateway, which
+# refuses anything else; `apps/server/test/officialPages.test.mjs` holds the two
+# equal. A host belongs here only when one plain GET returns the document's own
+# text as server-rendered HTML: NMPA, NHC and CDE answer a JavaScript challenge
+# (412/202), ChiCTR a firewall 405, ClinicalTrials.gov study pages and the
+# guideline registries an empty app shell, BNF only inside the UK — measured
+# 2026-09-18 from outside China, so every host here still needs one live check
+# from the production host before a run relies on it.
 OFFICIAL_PATHS = {
     "www.cochrane.org": ("/evidence/", "/zh-hans/evidence/"),
     "www.acc.org": ("/latest-in-cardiology/",),
@@ -23,6 +32,25 @@ OFFICIAL_PATHS = {
     "www.nhs.uk": ("/symptoms/chest-pain/",),
     "www.ccfdie.org": ("/zryyxxw/",),
     "mpa.hunan.gov.cn": ("/mpa/",),
+    # Guidelines.
+    "www.nice.org.uk": ("/guidance/",),
+    "www.uspreventiveservicestaskforce.org": ("/uspstf/recommendation/",),
+    "www.sign.ac.uk": ("/guidelines/",),
+    "www.who.int": ("/publications/i/item/",),
+    # Regulators: EPARs, referrals, DHPCs and PRAC highlights; FDA drug safety
+    # communications and the Drugs@FDA approval record; the State Council's
+    # policy library, which carries NHC and NMPA notices as plain HTML.
+    "www.ema.europa.eu": (
+        "/en/medicines/human/EPAR/",
+        "/en/medicines/human/referrals/",
+        "/en/medicines/dhpc/",
+        "/en/news/meeting-highlights-pharmacovigilance-risk-assessment-committee-prac-",
+    ),
+    "www.fda.gov": ("/drugs/drug-safety-communications/", "/drugs/drug-safety-and-availability/"),
+    "www.accessdata.fda.gov": ("/scripts/cder/daf/",),
+    "www.gov.cn": ("/zhengce/zhengceku/",),
+    # US labels, whole: indications, boxed warning, dosing, interactions.
+    "dailymed.nlm.nih.gov": ("/dailymed/drugInfo.cfm", "/dailymed/lookup.cfm"),
 }
 
 

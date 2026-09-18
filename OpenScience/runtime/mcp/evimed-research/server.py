@@ -316,11 +316,12 @@ TOOL_DEFINITIONS = [
         "description": (
             "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document "
             "through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. "
-            "Allowed routes are: "
-            + ", ".join(
-                "https://%s%s" % (host, prefix)
+            # Host, then its path prefixes: the list is in every request that
+            # mounts this tool, so it is written once per host, not per route.
+            "Allowed (https, host then path prefixes): "
+            + "; ".join(
+                "%s %s" % (host, " ".join(prefixes))
                 for host, prefixes in official_pages.OFFICIAL_PATHS.items()
-                for prefix in prefixes
             )
         ),
         "inputSchema": object_schema(
