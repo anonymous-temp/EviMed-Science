@@ -1755,7 +1755,8 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     dshVersion: String(config.dshVersion ?? ""),
     limits: {
       deliveryAttemptLimit: config.deliveryAttemptLimit,
-      maxParallelChildren: config.maxParallelChildren,
+      maxChildrenTotal: config.maxChildrenTotal,
+      maxConcurrentChildren: config.maxConcurrentChildren,
       maxSteps: config.runMaxSteps,
       maxTokens: config.runMaxTokens,
       evidenceStaleMinutes: config.evidenceStaleMinutes,
@@ -2270,7 +2271,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           },
           limits: {
             deliveryAttemptLimit: config.deliveryAttemptLimit,
-            maxParallelChildren: config.maxParallelChildren,
+            maxChildrenTotal: config.maxChildrenTotal,
+            maxConcurrentChildren: config.maxConcurrentChildren,
             maxSteps: config.runMaxSteps,
             maxTokens: config.runMaxTokens,
             evidenceStaleMinutes: config.evidenceStaleMinutes,

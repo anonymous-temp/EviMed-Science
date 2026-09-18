@@ -364,7 +364,9 @@ test("the screening plugin's batch size reaches the container from the control p
     },
   });
   assert.equal(env.EVIMED_SCREENING_BATCH_SIZE, "25");
-  assert.equal(env.EVIMED_MAX_PARALLEL_CHILDREN, "30");
+  // The screening wave is the concurrent-children limit, one of the two that
+  // replaced the retired single variable.
+  assert.equal(env.EVIMED_MAX_CONCURRENT_CHILDREN, "30");
   const patch = await readFile(path.join(plan.dshHomeDir, "control-plane-patch.yml"), "utf8");
   assert.ok(!patch.includes("- id: evimed-screening"), "naming a preset row here would be silently dropped");
 });

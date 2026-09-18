@@ -524,7 +524,7 @@ test("every plugin mounts against a registry with the harness's own precondition
 
   const mounted = [];
   for (const [label, apply, config] of [
-    ["run-policy", applyRunPolicy, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 2 }],
+    ["run-policy", applyRunPolicy, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit: 2 }],
     ["review", applyReview, { enabled: true }],
     ["screening", applyScreening, { batchSize: 25, concurrency: 4 }],
     ["capsule", applyCapsule, { recallUrl: "http://control-plane.invalid/api/capsule", recallTimeoutMs: 30000 }],
@@ -538,7 +538,7 @@ test("every plugin mounts against a registry with the harness's own precondition
   }
 
   const byPlugin = Object.fromEntries(mounted);
-  assert.deepEqual(byPlugin["run-policy"].sort(), ["evimed_complete_run", "evimed_delegate", "evimed_package_check", "evimed_plan", "evimed_revise_deliverable", "evimed_submit_deliverable"]);
+  assert.deepEqual(byPlugin["run-policy"].sort(), ["evimed_await", "evimed_complete_run", "evimed_delegate", "evimed_package_check", "evimed_plan", "evimed_revise_deliverable", "evimed_submit_deliverable"]);
   assert.deepEqual(byPlugin.review, ["evimed_review_run"]);
   assert.deepEqual(byPlugin.screening, ["evimed_screen_batch"]);
   assert.deepEqual(byPlugin.capsule.sort(), ["evimed_capsule_note", "evimed_capsule_recall"]);
@@ -599,7 +599,7 @@ test("mounting the run policy produces a run mirror row, not just the ability to
     },
   });
 
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 2, bundleVersion: "0.1.0" });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit: 2, bundleVersion: "0.1.0" });
 
   const started = ctx.listeners.get(SEAMS.events.sessionStart) ?? [];
   assert.ok(started.length, "the run policy must listen for a session starting");
@@ -652,7 +652,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     writeText: async (/** @type {string} */ target, /** @type {string} */ text) => { files.set(target, text); },
     listDir: async (/** @type {string} */ target) => (target === `/workspace/${workspaceLayout.knowledgeDir}` && knowledge ? knowledge.map((/** @type {string} */ name) => ({ name })) : []),
   });
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
   const step = async (/** @type {number} */ turn) => {
     for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) {
       const decision = await handler({ agent, turn, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] }));
@@ -893,6 +893,10 @@ test("a capability child may submit only the parent plan item it owns", async ()
 
   settle({ stopReason: "completed", output: { deliverableId: "d1", submitted: true, summary: "done" } });
   await pending;
+  // Delegation returns at once; the settlement is what `evimed_await` collects,
+  // and waiting on it is what makes the binding's release observable below.
+  const collected = await f.execute("evimed_await", {});
+  assert.deepEqual(collected.value.data.results.map((/** @type {any} */ result) => [result.deliverableId, result.status]), [["d1", "completed"]]);
   const status = await f.execute("evimed_plan", { action: "status" });
   assert.equal(status.value.data.items[0].status, "accepted");
   const afterSettlement = await f.ctx.tools.execute({
@@ -996,6 +1000,12 @@ test("an accepted child delivery is not retried or downgraded by a later child e
   settle({ stopReason: "error", diagnostic: "structured tail did not match the output schema" });
   const delegated = await pending;
   assert.equal(delegated.value?.ok, true);
+  // The decision not to retry is made when the child settles, which is after
+  // the delegate call returned; counting starts before collecting the
+  // settlement would pass whether or not a retry was started.
+  const collected = await f.execute("evimed_await", {});
+  assert.equal(collected.value.data.results[0].status, "completed", JSON.stringify(collected.value));
+  assert.equal(collected.value.data.results[0].submission.verdict, "pass");
   assert.equal(starts, 1, "an accepted package must not start a retry child");
   const status = await f.execute("evimed_plan", { action: "status" });
   assert.equal(status.value.data.items[0].status, "accepted");
@@ -1075,6 +1085,8 @@ test("the delegation receipt names first and hashes beside the child, and the re
   assert.deepEqual(running.skillDigests, [], "no skills dir is mounted here, and an absent list would be a different claim");
   settleRetry({ stopReason: "completed", output: "done" });
   await pending;
+  const collected = await f.execute("evimed_await", {});
+  assert.equal(collected.value.data.results[0].status, "completed", JSON.stringify(collected.value));
   const settled = [...f.childRows.values()][0];
   assert.equal(settled.status, "completed");
   assert.equal(settled.retried, true);
@@ -1376,7 +1388,7 @@ test("the safety scan reads the reply the user will actually see", async () => {
   const notices = [];
   ctx.provide("evimedDiagnostics", { degrade: (/** @type {any} */ line) => notices.push(`degrade:${line}`), notice: (/** @type {any} */ line) => notices.push(line) });
   ctx.provide("fs", { resolve: async (/** @type {any} */ relative, /** @type {{ cwd?: string }} */ { cwd }) => `${cwd}/${relative}`, readText: async () => null });
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 2, bundleVersion: "0.1.0" });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit: 2, bundleVersion: "0.1.0" });
 
   const onEvent = ctx.listeners.get(SEAMS.events.sessionEvent) ?? [];
   assert.ok(onEvent.length, "the run policy must observe session events");
@@ -1440,7 +1452,7 @@ test("a screening ledger path aimed at a protected file is refused, not written"
       result: Promise.resolve({ structured: { verdicts: [{ id: "r1", decision: "include" }] } }),
     }),
   };
-  await applyScreening(ctx, { batchSize: 25, maxParallelChildren: 4 });
+  await applyScreening(ctx, { batchSize: 25, maxConcurrentChildren: 4 });
 
   const call = (/** @type {any} */ ledgerPath) => ({
     callId: "1",
@@ -1769,7 +1781,7 @@ test("a gate run records the check that raised each issue, not only the issue", 
     writeText: async () => true,
   });
 
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 3, structuralAttemptAllowance: 2, bundleVersion: "0.1.0" });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit: 3, structuralAttemptAllowance: 2, bundleVersion: "0.1.0" });
   for (const handler of ctx.listeners.get(SEAMS.events.sessionStart) ?? []) {
     handler({ agent: { session: { id: "s-gate", header: { cwd: "/workspace" } } }, source: "startup" });
   }

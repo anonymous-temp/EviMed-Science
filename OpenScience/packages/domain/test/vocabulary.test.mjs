@@ -81,8 +81,10 @@ test("EviMed tool names cover both worlds", () => {
   // Ten since `evimed_compact_request` joined them: a tool the manager calls to
   // ask for a compaction, mounted only where the engine that serves it is.
   // Eleven since `evimed_package_check`: the submission's verdict without the
-  // submission.
-  assert.equal(SOCKET_TOOL_NAME_LIST.length, 11);
+  // submission. Twelve since `evimed_await`: delegation stopped waiting inside
+  // its own call, and the parent collects here.
+  assert.equal(SOCKET_TOOL_NAME_LIST.length, 12);
+  assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_await"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_revise_deliverable"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_compact_request"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_package_check"));

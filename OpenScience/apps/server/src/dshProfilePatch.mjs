@@ -96,7 +96,9 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} workloadTokenFile
  * @property {string} bundleVersion
  * @property {string} dshVersion
- * @property {{ deliveryAttemptLimit: number, maxParallelChildren: number, maxSteps: number, maxTokens: number, evidenceStaleMinutes: number, screeningBatchSize: number }} limits
+ * @property {{ deliveryAttemptLimit: number, maxChildrenTotal?: number, maxConcurrentChildren?: number, maxParallelChildren?: number, maxSteps: number, maxTokens: number, evidenceStaleMinutes: number, screeningBatchSize?: number }} limits
+ *   `maxParallelChildren` is the retired single limit, read only as the
+ *   fallback for the two that replaced it.
  * @property {{ hosted: boolean, askUser: boolean, review: boolean, capsule: boolean, operator?: boolean, requiredEnforcement: 'full'|'partial' }} flags
  */
 
@@ -528,7 +530,12 @@ export function runtimeEnvironment(input) {
     // written through: a plugin reading `maxParallelChildren: -1` would honour
     // it, and a misconfiguration should not be able to stop delegation.
     EVIMED_DELIVERY_ATTEMPT_LIMIT: String(integer(input.limits.deliveryAttemptLimit, 3)),
-    EVIMED_MAX_PARALLEL_CHILDREN: String(integer(input.limits.maxParallelChildren, 30)),
+    // Two limits where one variable used to carry both meanings: the children
+    // a run may start over its life, and the children that may work at once
+    // (also the screening wave). Non-blocking delegation is what made the
+    // second one real.
+    EVIMED_MAX_CHILDREN_TOTAL: String(integer(input.limits.maxChildrenTotal ?? input.limits.maxParallelChildren, 30)),
+    EVIMED_MAX_CONCURRENT_CHILDREN: String(integer(input.limits.maxConcurrentChildren ?? input.limits.maxParallelChildren, 30)),
     EVIMED_MAX_STEPS: String(integer(input.limits.maxSteps, 200)),
     EVIMED_MAX_TOKENS: String(integer(input.limits.maxTokens, 400_000)),
     EVIMED_EVIDENCE_STALE_MINUTES: String(integer(input.limits.evidenceStaleMinutes, 10)),

@@ -99,6 +99,12 @@ const operatorLevers = {
   OPEN_SCIENCE_MEMORY_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES: ["open-science-web"],
+  // The two delegation limits that replaced `maxParallelChildren` (2026-09-18).
+  // The controller builds the hosted launch plan and so is the service that
+  // actually writes them into a runtime container; the web API builds it when
+  // it launches directly. The old variable reached neither.
+  OPEN_SCIENCE_MAX_CHILDREN_TOTAL: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_MAX_CONCURRENT_CHILDREN: ["open-science-web", "open-science-runtime-controller"],
 };
 
 async function composeFiles() {

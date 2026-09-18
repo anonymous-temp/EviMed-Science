@@ -35,7 +35,6 @@ import {
   layeredIssues,
   matchedClinicalTriggers,
   normalizeWorkspacePath,
-  readyDeliverables,
   runGate,
   validateTaskPlan,
   workspaceLayout,
@@ -326,27 +325,174 @@ export function indexPlan(raw) {
 }
 
 /**
- * Which deliverables may be delegated right now. Dependency sequencing is
- * computed, not asked of the model: making the model chain deliverables by hand
- * is exactly the orchestration detail §14 rule 13 pushes down into the tool.
- * @param {any} plan
+ * The dependencies of `item` that do not yet let it start, with where each
+ * one stands. Empty means it may be delegated.
+ *
+ * Dependency sequencing is computed, not asked of the model (§14 rule 13); what
+ * changed on 2026-09-18 is what "done" means for a dependency. It was
+ * `accepted` and nothing else, so a dependency whose submissions were spent —
+ * and which is delivered to the reader as it stands, marked unverified, because
+ * a gate verdict never withholds a delivery — held everything after it forever.
+ * The caller supplies that second reading (`delivered`), because only it knows
+ * the attempt ceiling and the control plane's grants.
+ *
+ * A refusal, not a queue: nothing here waits. The tool that calls this says so
+ * in its description, and names what is missing so the refusal can be acted on.
+ *
+ * @param {Record<string, any>} item
  * @param {readonly Record<string, any>[]} items
- * @returns {Record<string, any>[]}
+ * @param {(dependency: Record<string, any>) => boolean} delivered
+ * @returns {{ id: string, status: string }[]}
  */
-export function delegatableItems(plan, items) {
-  const byId = new Map(items.map((item) => [item.id, item]))
-  const ready = readyDeliverables(plan, (id) => byId.get(id)?.status ?? 'planned')
-  // A predicate, not `filter(Boolean)`: the runtime result is the same and the
-  // declared one is not — `filter(Boolean)` leaves `undefined` in the type, so
-  // every caller of this function was reading a possibly-absent item as though
-  // it were present.
-  /** @type {Record<string, any>[]} */
-  const found = []
-  for (const deliverable of ready) {
-    const item = byId.get(deliverable.id)
-    if (item) found.push(item)
+export function unmetDependencies(item, items, delivered) {
+  const byId = new Map(items.map((candidate) => [candidate.id, candidate]))
+  /** @type {{ id: string, status: string }[]} */
+  const unmet = []
+  for (const id of item?.dependsOn ?? []) {
+    const dependency = byId.get(id)
+    if (dependency && (dependency.status === 'accepted' || delivered(dependency))) continue
+    unmet.push({ id: String(id), status: String(dependency?.status ?? 'missing') })
   }
-  return found
+  return unmet
+}
+
+/** How each plan-item state reads in a refusal the model acts on. */
+export const PLAN_ITEM_STATE_WORDS = Object.freeze({
+  planned: '尚未委派',
+  queued: '尚未委派',
+  delegated: '子代理正在做',
+  submitted: '已提交、等待裁定',
+  rejected: '提交未通过',
+  accepted: '已通过',
+  failed: '分工失败',
+  missing: '不在计划里',
+})
+
+/**
+ * The capability and contract kind of every planned deliverable, checked
+ * against the catalogue when the plan is written rather than when the
+ * deliverable is delegated.
+ *
+ * A typo'd capability id used to pass the plan — which validated `dependsOn`
+ * down to cycles and the capability only for being non-empty — and surface as
+ * `capability_unknown` at delegation, after the researcher had been shown the
+ * plan: the item then produced nothing. Same check, moved to where it can still
+ * be acted on cheaply (principle 3). Internal capabilities are admitted: the
+ * source pipeline plans them natively and submits directly; it is delegating
+ * one that is refused.
+ *
+ * An empty catalogue checks nothing. The guidance plugin already reports an
+ * unconfigured catalogue loudly, and every delegation in such a deployment is
+ * refused by name; refusing every plan too would add no information.
+ *
+ * @param {readonly Record<string, any>[]} items
+ * @param {readonly Record<string, any>[]} capabilities
+ * @returns {{ code: string, severity: 'required', message: string, deliverableId: string }[]}
+ */
+export function planCapabilityIssues(items, capabilities) {
+  if (!capabilities.length) return []
+  const byId = new Map(capabilities.map((manifest) => [String(manifest.id), manifest]))
+  const offered = capabilities.filter((manifest) => manifest.visibility !== 'internal').map((manifest) => String(manifest.id)).sort()
+  /** @type {{ code: string, severity: 'required', message: string, deliverableId: string }[]} */
+  const issues = []
+  for (const item of items) {
+    const manifest = byId.get(String(item.capability))
+    if (!manifest) {
+      issues.push({
+        code: 'capability_unknown',
+        severity: 'required',
+        deliverableId: String(item.id),
+        message: `交付物「${item.id}」写的能力「${item.capability}」不在能力目录里。能力目录中的能力：${offered.join('、')}。`,
+      })
+      continue
+    }
+    const produced = (manifest.produces ?? []).map((/** @type {any} */ entry) => String(entry.contractKind))
+    if (!produced.includes(String(item.contractKind))) {
+      issues.push({
+        code: 'contract_kind_unknown',
+        severity: 'required',
+        deliverableId: String(item.id),
+        message: `交付物「${item.id}」：能力「${manifest.id}」不产出契约种类「${item.contractKind}」，它产出 ${produced.join('、')}。`,
+      })
+    }
+  }
+  return issues
+}
+
+/**
+ * How long one `evimed_await` may wait, in seconds, when the model names a
+ * bound. Unnamed, it waits for its condition: waiting is what the parent has to
+ * do while its children work, and a short default would only turn one call into
+ * a series of identical ones.
+ */
+export const AWAIT_TIMEOUT_SECONDS = Object.freeze({ min: 1, max: 3600 })
+
+/**
+ * How much of a child's own report rides back to the parent. The parent reads
+ * it to synthesize, and it lands in a context every later request re-sends; the
+ * complete report is the child's own session, which is not going anywhere.
+ */
+export const CHILD_REPORT_LIMITS = Object.freeze({ summaryChars: 2000, listItems: 20 })
+
+/**
+ * Which delegations an `evimed_await` without handles is about: every child
+ * still running plus every settled one whose result has not been handed back
+ * yet. Once everything has been reported, all of them — the parent asking
+ * again gets the whole picture rather than an empty list it has to interpret.
+ *
+ * `mode: "any"` depends on the first half: a settled child reported by an
+ * earlier await must not satisfy the next one, or waiting for the next child to
+ * finish would return at once, every time.
+ *
+ * @template {{ status: string, reported?: boolean }} D
+ * @param {readonly D[]} delegations
+ * @returns {D[]}
+ */
+export function awaitSelection(delegations) {
+  const outstanding = delegations.filter((delegation) => delegation.status === 'running' || !delegation.reported)
+  return outstanding.length ? outstanding : [...delegations]
+}
+
+/**
+ * Where a deliverable's submissions stand, in the vocabulary the run ledger
+ * and the progress view share: `pass` when accepted, `unverified` when its
+ * submissions are spent without acceptance (it is delivered as it stands, with
+ * its findings shown), `issues` when the last verdict asked for repairs and
+ * there are submissions left.
+ * @param {{ status: string, spent: boolean }} standing
+ * @returns {'pass' | 'issues' | 'unverified'}
+ */
+export function submissionVerdict(standing) {
+  if (standing.status === 'accepted') return 'pass'
+  return standing.spent ? 'unverified' : 'issues'
+}
+
+/**
+ * The part of a child's structured report worth handing back, bounded.
+ *
+ * `DELEGATION_REPORT_SCHEMA` asks every child for `summary`, `unresolved` and
+ * `failedSources`; a child that answered in prose instead is summarised by its
+ * last words. Nothing here is required — a child with nothing to say gets an
+ * empty object, not an invented sentence.
+ * @param {{ structured?: unknown, output?: string } | null | undefined} outcome
+ * @returns {{ summary?: string, unresolved?: string[], failedSources?: string[] }}
+ */
+export function childReport(outcome) {
+  const structured = outcome?.structured && typeof outcome.structured === 'object' && !Array.isArray(outcome.structured)
+    ? /** @type {Record<string, unknown>} */ (outcome.structured)
+    : {}
+  const summaryText = typeof structured.summary === 'string' && structured.summary.trim()
+    ? structured.summary.trim()
+    : String(outcome?.output ?? '').trim()
+  /** @param {unknown} value @returns {string[]} */
+  const list = (value) => (Array.isArray(value) ? value.map((entry) => String(entry ?? '').trim()).filter(Boolean).slice(0, CHILD_REPORT_LIMITS.listItems) : [])
+  const unresolved = list(structured.unresolved)
+  const failedSources = list(structured.failedSources)
+  return {
+    ...(summaryText ? { summary: summaryText.length > CHILD_REPORT_LIMITS.summaryChars ? `${summaryText.slice(0, CHILD_REPORT_LIMITS.summaryChars)}…` : summaryText } : {}),
+    ...(unresolved.length ? { unresolved } : {}),
+    ...(failedSources.length ? { failedSources } : {}),
+  }
 }
 
 /**
@@ -621,7 +767,7 @@ export function buildDelegation(input) {
     '',
     ...outputs.map((/** @type {any} */ output) => `- \`deliverables/${input.item.id}/${output.path}\`${output.required ? '（必需）' : '（可选）'}`),
     '',
-    `全部文件必须写在 \`deliverables/${input.item.id}/\` 下。写完后调用 \`evimed_submit_deliverable{deliverableId:"${input.item.id}"}\`，它会当场返回裁定；未通过就按 issues 修好再提交，直到通过。`,
+    `全部文件必须写在 \`deliverables/${input.item.id}/\` 下。写完后调用 \`evimed_submit_deliverable{deliverableId:"${input.item.id}"}\`，它会当场返回裁定；未通过就按 issues 修好再提交，直到通过。提交次数有限，\`evimed_package_check\` 给出同一份裁定而不占提交次数。`,
     '',
     ...(Object.keys(input.inputs ?? {}).length
       ? ['## 输入参数', '', '```json', JSON.stringify(input.inputs, null, 2), '```', '']

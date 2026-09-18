@@ -105,6 +105,9 @@ export const MCP_MANAGED_JOB_BASE_NAMES = Object.freeze([
 export const SOCKET_TOOL_NAMES = Object.freeze({
   plan: 'evimed_plan',
   delegate: 'evimed_delegate',
+  // Delegation returns a handle and does not wait; this is where the parent
+  // collects (2026-09-18).
+  await: 'evimed_await',
   reviseDeliverable: 'evimed_revise_deliverable',
   submitDeliverable: 'evimed_submit_deliverable',
   // The same verdict as a submission, without spending one. A run learned the
