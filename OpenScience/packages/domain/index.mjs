@@ -530,8 +530,9 @@ export {
   isEvidenceSourceType,
 } from './src/sourceTypes.mjs'
 
-// gateIssueText — 9 exports: a gate finding's Chinese title by its identity
+// gateIssueText — 10 exports: a gate finding's Chinese title by its identity
 export {
+  GATE_CHECKS_TITLED_BY_RULE,
   GATE_CHECK_TITLES_ZH,
   GATE_CODE_TITLES_ZH,
   GATE_FALLBACK_TITLES_ZH,

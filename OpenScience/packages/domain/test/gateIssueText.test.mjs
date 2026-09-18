@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { CLINICAL_CHECK_TIERS } from "../src/clinicalEvidence.mjs";
 import {
+  GATE_CHECKS_TITLED_BY_RULE,
   GATE_CHECK_IDS,
   GATE_CHECK_TITLES_ZH,
   GATE_CODE_TITLES_ZH,
@@ -39,10 +40,18 @@ test("every check id the domain can raise has a Chinese title of its own", () =>
     assert.equal(described.title, GATE_CHECK_TITLES_ZH[id], `a finding of "${id}" is titled by its check`);
   }
   // No title for a check that no longer exists: a renamed check must not leave
-  // a dead entry that reads as coverage.
+  // a dead entry that reads as coverage. One named exception, and only while it
+  // lasts: the pharmacist-authored cautions are registered and raised on the
+  // medical-assets branch (S5, 2026-09-18), and their title is carried here
+  // ahead of that merge so the walk above passes the moment they arrive. Once
+  // registered, the id is held to the rule like every other.
+  const awaitingRegistration = ["clinical-safety-cautions"].filter((id) => !GATE_CHECK_IDS.includes(id));
   for (const id of Object.keys(GATE_CHECK_TITLES_ZH)) {
+    if (awaitingRegistration.includes(id)) continue;
     assert.ok(GATE_CHECK_IDS.includes(id), `GATE_CHECK_TITLES_ZH titles "${id}", which no module raises`);
   }
+  assert.ok(Object.hasOwn(GATE_CHECK_TITLES_ZH, "clinical-safety-cautions"), "the cautions' check has a title of its own");
+  assertReaderTitle(GATE_CHECK_TITLES_ZH["clinical-safety-cautions"], 'check "clinical-safety-cautions"');
 });
 
 test("every code a contract module raises without a check, and every run-side refusal, has a title", async () => {
@@ -150,4 +159,29 @@ test("the codes delegation that does not wait and the claim tools refuse with ar
     assert.ok(Object.hasOwn(GATE_CODE_TITLES_ZH, code), `"${code}" has no title`);
     assert.notEqual(describeGateIssue({ code, severity: "required" }).title, GATE_FALLBACK_TITLES_ZH["must-fix"], code);
   }
+});
+
+test("a pharmacist-authored caution is a safety notice titled by its own rule", () => {
+  assert.deepEqual([...GATE_CHECKS_TITLED_BY_RULE], ["clinical-safety-cautions"]);
+  // As the domain's validator raises it: advisory to the run, a rule id, an
+  // English message — and a SAFETY notice to the reader, titled by the check
+  // when no rule title came with it.
+  const bare = describeGateIssue({ code: "clinical_safety_caution", check: "clinical-safety-cautions", severity: "advisory", message: "The report discusses aspirin for primary prevention but never mentions bleeding." });
+  assert.equal(bare.severity, "safety");
+  assert.equal(bare.title, GATE_CHECK_TITLES_ZH["clinical-safety-cautions"]);
+  assert.equal(bare.detail, undefined, "an English message is never the detail");
+  // With the rule's own title — which carries a colon of its own, and English
+  // drug names, and is longer than a table title may be.
+  const titled = describeGateIssue({
+    code: "clinical_safety_caution", check: "clinical-safety-cautions", severity: "safety",
+    title: "强效 CYP3A4 抑制剂合用辛伐/洛伐他汀：横纹肌溶解", detail: "报告讨论辛伐他汀与克拉霉素同用，但没有提到横纹肌溶解。",
+  });
+  assert.equal(titled.title, "强效 CYP3A4 抑制剂合用辛伐/洛伐他汀：横纹肌溶解");
+  assert.equal(titled.detail, "报告讨论辛伐他汀与克拉霉素同用，但没有提到横纹肌溶解。");
+  // A title is honoured only where the rule is the title: anywhere else, and
+  // for anything that is not one line of Chinese, the table decides.
+  assert.equal(describeGateIssue({ code: "x", check: "claim-quote-verbatim", title: "随便写的标题" }).title, GATE_CHECK_TITLES_ZH["claim-quote-verbatim"]);
+  assert.equal(describeGateIssue({ code: "x", check: "clinical-safety-cautions", title: "Bleeding risk" }).title, GATE_CHECK_TITLES_ZH["clinical-safety-cautions"]);
+  assert.equal(describeGateIssue({ code: "x", check: "clinical-safety-cautions", title: "第一行\n第二行" }).title, GATE_CHECK_TITLES_ZH["clinical-safety-cautions"]);
+  assert.equal(describeGateIssue({ code: "clinical_safety_caution", severity: "advisory" }).title, GATE_CODE_TITLES_ZH.clinical_safety_caution);
 });
