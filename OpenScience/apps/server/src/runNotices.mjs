@@ -75,6 +75,42 @@ const legacyNoticeOpenings = Object.freeze([
   ["The repair request", "run_repair_not_dispatched", false],
 ]);
 
+/**
+ * The run side's own "degraded" lines, by the template each is written with
+ * (the socket's `evimedDiagnostics.degrade`). A closed table of the platform's
+ * own openings — plus, for the one template whose opening is a variable path,
+ * its fixed phrase — never a reading of anybody's prose. A line not on it is
+ * `run_side_degraded`. The line itself stays as `text`, and becomes the detail
+ * only when the template is written in Chinese.
+ * @type {readonly [(line: string) => boolean, string][]}
+ */
+const runSideDegradedTemplates = Object.freeze([
+  [(line) => line.startsWith("root research-tool narrowing"), "run_root_tools_unnarrowed"],
+  [(line) => line.startsWith("root claim-tool narrowing"), "run_root_claim_tools_unnarrowed"],
+  [(line) => line.startsWith("method section"), "run_method_sections_unregistered"],
+  [(line) => line.startsWith("child guidance not installed"), "run_child_guidance_missing"],
+  [(line) => line.startsWith("request size ") && line.includes("the forced compaction failed"), "run_compaction_failed"],
+  [(line) => line.startsWith("request size ") && line.includes("nothing could be compacted"), "run_compaction_nothing"],
+  [(line) => line.startsWith("request size ") && line.includes("compacted to"), "run_compaction_forced"],
+  [(line) => line.startsWith("turn ended with children still running"), "run_children_outlived_turn"],
+  [(line) => line.startsWith("children reminder steer failed"), "run_children_reminder_failed"],
+  [(line) => line.includes("被两个子代理先后写入"), "run_concurrent_write"],
+  [(line) => line.startsWith("capsule recall disabled"), "run_capsule_recall_off"],
+  [(line) => line.startsWith("web providers not registered"), "run_web_providers_missing"],
+  [(line) => line.startsWith("answer persona"), "run_answer_persona_missing"],
+  [(line) => line.startsWith("capability catalogue") || line.startsWith("capability manifest"), "run_capability_catalogue_incomplete"],
+  [(line) => line.startsWith("evidence ingest"), "run_evidence_ingest_failed"],
+  [(line) => line.startsWith("runtime_turn_end_unknown"), "run_turn_end_unknown"],
+]);
+
+/** @param {string} line @returns {StoredNotice} */
+export function runSideDegradedNotice(line) {
+  const text = String(line).slice(0, maxQualityNoticeLength);
+  const known = runSideDegradedTemplates.find(([matches]) => matches(text));
+  const chinese = /[\u3400-\u9fff]/.test(text);
+  return runNotice(known ? known[1] : "run_side_degraded", text, chinese ? { detail: text } : {});
+}
+
 /** @param {string} text @returns {StoredNotice} */
 function legacyNotice(text) {
   if (text.startsWith("SAFETY — ")) return { code: "legacy_notice", severity: "safety", text };

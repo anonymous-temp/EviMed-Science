@@ -27,6 +27,7 @@ import {
   noticeCodePattern,
   noticeText,
   runNotice,
+  runSideDegradedNotice,
 } from "./runNotices.mjs";
 import { normalizeRunEstimate, routeReasonText } from "./runRoute.mjs";
 import {
@@ -2780,12 +2781,14 @@ function runSideNotices(projection) {
   // A native run's scoped projection carries the parent's own gate findings,
   // already structured (`scopeNativeProjection`); the socket's own lines are
   // plain strings.
-  /** @param {unknown} value @param {string} code @returns {StoredNotice[]} */
-  const entries = (value, code) => (Array.isArray(value) ? value : []).flatMap((item) => (
-    typeof item === "string" ? (item ? [runNotice(code, item)] : []) : normalizeQualityNotices([item])));
+  /** @param {unknown} value @param {(line: string) => StoredNotice} named @returns {StoredNotice[]} */
+  const entries = (value, named) => (Array.isArray(value) ? value : []).flatMap((item) => (
+    typeof item === "string" ? (item ? [named(item)] : []) : normalizeQualityNotices([item])));
   return [
-    ...entries(projection?.degraded, "run_side_degraded"),
-    ...entries(projection?.qualityNotices, "run_side_notice"),
+    // Each degraded line by the template it was written with, so a reader
+    // sees what went missing rather than 「另有技术提示」.
+    ...entries(projection?.degraded, runSideDegradedNotice),
+    ...entries(projection?.qualityNotices, (line) => runNotice("run_side_notice", line)),
   ];
 }
 
