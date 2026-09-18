@@ -1,4 +1,6 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render as renderBare, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { knownErrorCodeMessage } from "@evimed/domain";
@@ -13,6 +15,10 @@ vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOrigi
 // Partial: only the project identity is stubbed, so `productErrorMessage` runs
 // against the real shared error text.
 vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal<object>()), getWebProjectId: () => mocks.projectId }));
+
+// The panel links to the research session with the router's Link, so it
+// renders inside one.
+const render = (ui: ReactElement) => renderBare(ui, { wrapper: MemoryRouter });
 
 const anchor = { sourceId: "source-one", generation: 2, unitId: "chunk-1", start: 0, end: 8, quote: "记录研究纳入标准" };
 const understanding: SourceUnderstanding = {
@@ -67,12 +73,13 @@ describe("SourceUnderstandingPanel", () => {
     const audited = render(<SourceUnderstandingPanel {...props} />);
     await screen.findByText(understanding.summary);
     const text = () => audited.container.textContent ?? "";
-    await waitFor(() => expect(text()).toMatch(/抽查 4 个单元，1 个未被理解覆盖/));
+    await waitFor(() => expect(text()).toMatch(/抽查 4 个片段，1 个未被理解覆盖/));
     expect(text()).toMatch(/遗漏率 25%/);
-    expect(text()).toMatch(/未覆盖单元 chunk-4：讨论了停药后随访/);
+    // The note is what a researcher can check; the parser's unit id is not
+    // theirs, so the gap is numbered in the list instead.
+    expect(text()).toMatch(/未覆盖片段 1：讨论了停药后随访/);
+    expect(text()).not.toMatch(/chunk-4/);
     expect(text()).not.toMatch(/遗漏尚未审计/);
-    // the three represented units are not listed as gaps
-    expect(text()).not.toMatch(/未覆盖单元 chunk-1/);
   });
 
   it("shows anchored slots, unknown reasons, draft methods, actual cost and the existing session route", async () => {
@@ -80,15 +87,20 @@ describe("SourceUnderstandingPanel", () => {
     expect(await screen.findByText(understanding.summary)).toBeInTheDocument();
     expect(screen.getByText("明确纳入标准")).toBeInTheDocument();
     expect(screen.getByText("资料没有说明实施局限。")).toBeInTheDocument();
-    expect(screen.getByText("方法草稿尚未发布为胶囊技能。" )).toBeInTheDocument();
-    expect(screen.getByText(/实际费用.*¥0.0123/)).toBeInTheDocument();
-    expect(screen.getByText(/deepseek-v4-pro/)).toBeInTheDocument();
+    expect(screen.getByText("这些方法草稿还没有发布到方法胶囊。")).toBeInTheDocument();
+    // Two decimals of yuan, not eight; the model and provider ids and the run
+    // id are engine internals a researcher never needs to read past.
+    expect(screen.getByText(/费用 ¥0\.01/)).toBeInTheDocument();
+    expect(screen.queryByText(/deepseek-v4-pro|run-one|CNY/)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看研究会话" })).toHaveAttribute("href", "/app/chat/session%20one");
     expect(screen.getByText("遗漏尚未审计")).toBeInTheDocument();
     expect(screen.queryByText(/遗漏.*0%/)).not.toBeInTheDocument();
     await userEvent.click(screen.getAllByText("查看原文依据（1）")[0]);
     expect(screen.getAllByText(anchor.quote)[0]).toBeVisible();
-    expect(screen.getAllByText(/解析文本.*0–8/)[0]).toBeVisible();
+    // Numbered for a researcher; the parser's unit id and offsets are support
+    // material.
+    expect(screen.getAllByText("原文片段 1")[0]).toBeVisible();
+    expect(screen.queryByText(/解析文本.*0–8/)).not.toBeInTheDocument();
   });
 
   it("keeps previous generations in paginated history without presenting them as current", async () => {
@@ -97,14 +109,14 @@ describe("SourceUnderstandingPanel", () => {
     mocks.listSourceUnderstandingHistory.mockResolvedValueOnce({ items: [understanding], nextCursor: "page-two" })
       .mockResolvedValueOnce({ items: [previous], nextCursor: null });
     render(<SourceUnderstandingPanel {...props} generation={3} />);
-    expect(await screen.findByText("第 3 代理解正在生成")).toBeInTheDocument();
+    expect(await screen.findByText("第 3 次分析的理解正在生成")).toBeInTheDocument();
     expect(screen.queryByText(understanding.summary)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "查看历史" }));
-    await userEvent.click(await screen.findByRole("button", { name: /第 2 代/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /第 2 次分析/ }));
     expect(screen.getByText(understanding.summary)).toBeInTheDocument();
-    expect(screen.getByText("历史理解 · 第 2 代")).toBeInTheDocument();
+    expect(screen.getByText("历史理解 · 第 2 次分析")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "加载更多历史" }));
-    expect(await screen.findByRole("button", { name: /第 1 代/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /第 1 次分析/ })).toBeInTheDocument();
     expect(mocks.listSourceUnderstandingHistory).toHaveBeenLastCalledWith("source-one", "page-two");
   });
 
@@ -157,26 +169,26 @@ describe("SourceUnderstandingPanel", () => {
     mocks.getSourceUnderstanding.mockResolvedValue({ ...result("failed"), generation: 3, current: null });
     const failed = render(<SourceUnderstandingPanel {...props} generation={3}
       error={{ code: "source_unreadable", message: "Source analysis failed." }} />);
-    expect(await screen.findByText("第 3 代解析失败，因此这一代没有理解结果")).toBeInTheDocument();
+    expect(await screen.findByText("第 3 次分析解析失败，因此这一次没有理解结果")).toBeInTheDocument();
     expect(failed.container.textContent).toContain(knownErrorCodeMessage("source_unreadable") as string);
     expect(failed.container.textContent).toContain("原件仍在知识库里");
     // The stored English literal is never shown, and the old sentence must not
     // be what a failure falls back to.
     expect(failed.container.textContent).not.toMatch(/Source analysis failed/);
-    expect(screen.queryByText("此代次尚无可用理解")).not.toBeInTheDocument();
+    expect(screen.queryByText("这一次分析尚无可用理解")).not.toBeInTheDocument();
     failed.unmount();
 
     // A failure the source row recorded without a code still says it failed.
     mocks.getSourceUnderstanding.mockResolvedValue({ ...result("failed"), generation: 3, current: null });
     const bare = render(<SourceUnderstandingPanel {...props} generation={3} />);
-    expect(await screen.findByText("第 3 代解析失败，因此这一代没有理解结果")).toBeInTheDocument();
+    expect(await screen.findByText("第 3 次分析解析失败，因此这一次没有理解结果")).toBeInTheDocument();
     expect(bare.container.textContent).toContain("系统没有记下这次失败的原因。");
     bare.unmount();
 
     // Nothing failed: the empty state is unchanged.
     mocks.getSourceUnderstanding.mockResolvedValue({ ...result("complete"), generation: 3, current: null });
     render(<SourceUnderstandingPanel {...props} generation={3} />);
-    expect(await screen.findByText("此代次尚无可用理解")).toBeInTheDocument();
+    expect(await screen.findByText("这一次分析尚无可用理解")).toBeInTheDocument();
   });
 
   it("uses normalized UTF-16 offsets and does not present an unverifiable quote as source evidence", async () => {

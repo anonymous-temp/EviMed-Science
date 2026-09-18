@@ -8,6 +8,7 @@ import { emptyIpynb } from "@/lib/notebook-file";
 import type { KernelLanguage } from "@/lib/kernel";
 import { NotebookEditor } from "@/components/notebook/NotebookEditor";
 import { Button } from "@/components/ui/Button";
+import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
 import { toast } from "@/lib/toast";
 
 /**
@@ -72,7 +73,7 @@ export function NotebooksPage({ embedded = false }: { embedded?: boolean } = {})
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-8 py-6">
         <div className="flex items-center gap-3">
-          {!embedded && <h1 className="font-serif text-display text-text">计算笔记本</h1>}
+          {!embedded && <h1 className={PAGE_TITLE_CLASS}>计算笔记本</h1>}
           <div className="flex-1" />
           <div className="relative" ref={menuRef}>
             <Button

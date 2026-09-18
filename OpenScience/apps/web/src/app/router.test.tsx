@@ -66,7 +66,7 @@ describe("every address people already have still arrives", () => {
 
   it("an address that never existed says so rather than landing somewhere", async () => {
     landOn("/app/no-such-page");
-    expect(await screen.findByText("404 · 页面不存在")).toBeInTheDocument();
+    expect(await screen.findByText("页面不存在")).toBeInTheDocument();
     expect(screen.queryByTestId("landed")).toBeNull();
   });
 });

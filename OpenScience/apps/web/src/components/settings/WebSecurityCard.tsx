@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, ShieldCheck, ShieldX } from "lucide-react";
 import { webErrorMessage, listWebSecurityEvents, type WebSecurityEvent } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
+import { LEDGER_STATUS_LABEL, labelFor } from "@/lib/statusLabel";
 import { toast } from "@/lib/toast";
 import { formatClock } from "@/lib/format";
 
@@ -62,11 +63,12 @@ export function WebSecurityCard() {
                 <span className="w-20 shrink-0 font-mono text-caption text-text">{event.action}</span>
                 <span
                   className={cn(
-                    "w-20 shrink-0 font-mono text-caption",
+                    "w-20 shrink-0 text-caption",
                     event.status === "failed" ? "text-error" : "text-accent",
                   )}
+                  title={event.status}
                 >
-                  {event.status}
+                  {labelFor(LEDGER_STATUS_LABEL, event.status)}
                 </span>
                 <span className="min-w-0 flex-1 truncate font-mono text-caption text-muted">
                   {event.code ?? event.userId ?? event.username ?? "正常"}

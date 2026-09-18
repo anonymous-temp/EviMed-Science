@@ -6,7 +6,6 @@ import { Sidebar } from "@/components/sidebar/Sidebar";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { ShortcutHelp } from "@/components/ui/ShortcutHelp";
 import { Toaster } from "@/components/ui/Toaster";
-import { ConnectorPrompt } from "@/components/settings/ConnectorPrompt";
 import { useProjectStore } from "@/lib/projects";
 import { useUiStore } from "@/lib/store";
 import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "@/lib/apiClient";
@@ -106,12 +105,6 @@ export function AppShell() {
             </button>
           </div>
         )}
-        {/* Which pages it may appear on is the prompt's own decision — an
-            allowlist there, rather than a path test here, is what keeps it off
-            the 404 page and off the connectors tab it points at. Never over the
-            session: the conversation is the product's main surface and the
-            frame inside it is the whole page. */}
-        <ConnectorPrompt />
         <div className="min-h-0 flex-1">
           <Suspense fallback={<RouteFallback />}>
             <Outlet />

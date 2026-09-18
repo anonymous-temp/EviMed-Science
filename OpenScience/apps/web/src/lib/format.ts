@@ -42,3 +42,30 @@ export function baseName(path: string | null): string {
   if (!path) return "工作区";
   return path.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || "工作区";
 }
+
+/**
+ * An amount in yuan the way a researcher reads a bill: two decimals, and
+ * 「不足 ¥0.01」 below a cent rather than eight decimals of a model call's
+ * price (review B: 「实际费用 ¥0.00123456 CNY」). Empty for a value that is
+ * not an amount.
+ */
+export function formatCny(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "";
+  if (value > 0 && value < 0.01) return "不足 ¥0.01";
+  return `¥${value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * A duration in the words a list uses: 45 秒 / 12 分钟 / 1 小时 5 分. Empty for
+ * a value that is not a duration.
+ */
+export function formatDuration(ms: number | null | undefined): string {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return "";
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} 小时 ${rest} 分` : `${hours} 小时`;
+}

@@ -18,6 +18,7 @@ import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { ProjectSwitcher } from "@/components/sidebar/ProjectSwitcher";
 import { InboxBell } from "@/components/sidebar/InboxBell";
 import { RunStatusDot } from "@/components/runs/RunStatusDot";
+import { useConnectorAttention } from "@/lib/connectorAttention";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import evimedMark from "@/assets/evimed-mark.svg";
 
@@ -67,6 +68,7 @@ export function Sidebar() {
   const dragging = dragWidth !== null;
   const [query, setQuery] = useState("");
   const [runs, setRuns] = useState<WebAgentRun[] | null>(null);
+  const connectorAttention = useConnectorAttention();
 
   // The recent-runs list, refreshed while the shell is open. This used to be a
   // list of the kernel's own sessions, mirrored into the browser; the kernel's
@@ -237,11 +239,18 @@ export function Sidebar() {
           {/* One footer row. 「设置」 was the second, and it was the deployment
             * console as much as the product's settings; it is a tab of this
             * page now, beside usage, credentials and the operator's board. */}
+          {/* The data sources nothing serves for this account, as a quiet
+            * count: a standing fact about the deployment, not unread work, so
+            * it is neutral rather than the bell's red (review B §7c). */}
           <NavRow
-            to="/app/account"
+            to={connectorAttention > 0 ? "/app/account?tab=connectors" : "/app/account"}
             icon={<UserRound size={15} aria-hidden="true" />}
             label="账户与设置"
             active={location.pathname.startsWith("/app/account")}
+            badge={connectorAttention > 0 ? {
+              text: String(connectorAttention),
+              label: `${connectorAttention} 个数据源没有可用凭据`,
+            } : undefined}
           />
         </div>
       </aside>
@@ -285,11 +294,14 @@ function NavRow({
   label,
   active = false,
   freshState,
+  badge,
 }: {
   to: string;
   icon: React.ReactNode;
   label: string;
   active?: boolean;
+  /** A count beside the label, with the sentence it stands for. */
+  badge?: { text: string; label: string };
   /**
    * Router state minted at the moment of the click, not at render.
    *
@@ -314,13 +326,20 @@ function NavRow({
         navigate(to, { state: freshState() });
       }}
       aria-current={active ? "page" : undefined}
+      aria-label={badge ? `${label}，${badge.label}` : undefined}
+      title={badge?.label}
       className={cn(
         "flex items-center gap-2 rounded-input px-2 py-1.5 text-ui hover:bg-surface-2",
         active ? "bg-surface-2 font-medium text-text" : "text-text",
       )}
     >
       <span className="text-muted">{icon}</span>
-      <span>{label}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge && (
+        <span aria-hidden="true" className="grid h-4 min-w-4 place-items-center rounded-full border border-strong px-1 text-badge tabular-nums text-muted">
+          {badge.text}
+        </span>
+      )}
     </Link>
   );
 }

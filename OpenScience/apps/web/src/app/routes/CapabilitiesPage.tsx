@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { AgentsSkeleton } from "@/components/cards/Skeletons";
 import { Button } from "@/components/ui/Button";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
 import { PageTitle } from "@/components/layout/PageTitle";
 
 /**
@@ -111,7 +112,7 @@ export function CapabilitiesPage() {
               * than a binding; that is still true, and the sentence below says
               * it, which is where it belongs. */}
             <PageTitle page="科研能力" />
-            <h1 className="font-serif text-display font-semibold tracking-tight text-text">科研能力</h1>
+            <h1 className={PAGE_TITLE_CLASS}>科研能力</h1>
             <p className="mt-2 text-ui leading-6 text-muted">
               选一项能力，它会把题面填进对话框并点名该能力；你可以随意修改，也可以在同一次对话里接着要别的产出。
               这是建议，不是绑定。

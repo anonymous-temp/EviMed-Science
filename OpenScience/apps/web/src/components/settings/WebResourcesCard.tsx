@@ -4,11 +4,15 @@ import { webErrorMessage, fetchWebMetrics, restartWebRuntime, startWebRuntime, s
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { formatClock, humanSize } from "@/lib/format";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 export function WebResourcesCard() {
   const [metrics, setMetrics] = useState<WebMetrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [runtimeAction, setRuntimeAction] = useState<"start" | "restart" | "stop" | null>(null);
+  // Stop and restart end whatever analysis is running in the container. They
+  // were one click next to 「启动」 with no confirmation (review B, P0).
+  const [confirming, setConfirming] = useState<"restart" | "stop" | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -115,7 +119,7 @@ export function WebResourcesCard() {
         </button>
         <button
           className={runtimeButtonCls}
-          onClick={() => void restartRuntime()}
+          onClick={() => setConfirming("restart")}
           disabled={controlsDisabled}
           title="重启研究运行时"
           aria-label="重启研究运行时"
@@ -125,7 +129,7 @@ export function WebResourcesCard() {
         </button>
         <button
           className={cn(runtimeButtonCls, "hover:text-error")}
-          onClick={() => void stopRuntime()}
+          onClick={() => setConfirming("stop")}
           disabled={controlsDisabled || !runtimeRunning}
           title="停止研究运行时"
           aria-label="停止研究运行时"
@@ -134,6 +138,21 @@ export function WebResourcesCard() {
           停止
         </button>
       </div>
+      {confirming && (
+        <ConfirmDialog
+          title={confirming === "stop" ? "停止研究运行时？" : "重启研究运行时？"}
+          body={confirming === "stop"
+            ? "正在进行的研究会立即中断；已写出的文件保留在工作区。下次打开任务时运行时会重新启动，通常需要十秒左右。"
+            : "正在进行的研究会立即中断；已写出的文件保留在工作区。重启通常需要十秒左右。"}
+          confirmLabel={confirming === "stop" ? "停止运行时" : "重启运行时"}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => {
+            const action = confirming;
+            setConfirming(null);
+            void (action === "stop" ? stopRuntime() : restartRuntime());
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -144,7 +163,7 @@ const runtimeButtonCls =
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div className="rounded-input border border-border bg-bg px-3 py-2.5">
-      <div className="text-caption uppercase text-muted">{label}</div>
+      <div className="text-caption text-muted">{label}</div>
       <div className="mt-1 truncate text-ui font-medium text-text">{value}</div>
       <div className="mt-0.5 truncate text-caption text-muted">{detail}</div>
     </div>

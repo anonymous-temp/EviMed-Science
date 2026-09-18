@@ -15,12 +15,21 @@ export function ConfirmDialog({
   confirmLabel,
   onConfirm,
   onCancel,
+  tone = "danger",
 }: {
   title: string;
   body: string;
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  /**
+   * `danger` for what cannot be undone — deleting, stopping a running
+   * analysis. `primary` for a confirmation that is only a checkpoint (running
+   * one autopilot episode now, restoring a plugin version). The button used to
+   * be red for both, which spent the red budget on questions that were not
+   * dangerous (review B, ConfirmDialog P1).
+   */
+  tone?: "danger" | "primary";
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -79,7 +88,9 @@ export function ConfirmDialog({
             取消
           </button>
           <button
-            className="rounded-input bg-error px-3 py-1.5 text-ui font-medium text-error-fg hover:opacity-90"
+            className={tone === "danger"
+              ? "rounded-input bg-error px-3 py-1.5 text-ui font-medium text-error-fg hover:opacity-90"
+              : "rounded-input bg-accent px-3 py-1.5 text-ui font-medium text-accent-fg hover:opacity-90"}
             onClick={onConfirm}
           >
             {confirmLabel}

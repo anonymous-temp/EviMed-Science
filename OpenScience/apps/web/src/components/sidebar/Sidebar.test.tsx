@@ -9,10 +9,12 @@ const mocks = vi.hoisted(() => ({
   runs: [] as WebAgentRun[],
   listWebAgentRuns: vi.fn(),
   fetchInboxUnreadCount: vi.fn(),
+  fetchWebConnectors: vi.fn(),
 }));
 
 vi.mock("@/lib/apiClient", () => ({
   listWebAgentRuns: mocks.listWebAgentRuns,
+  fetchWebConnectors: mocks.fetchWebConnectors,
   getWebProjectId: () => "default",
 }));
 
@@ -88,6 +90,7 @@ beforeEach(() => {
   mocks.runs = [];
   mocks.listWebAgentRuns.mockImplementation(async () => mocks.runs);
   mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 0, safetyUnread: 0 });
+  mocks.fetchWebConnectors.mockResolvedValue([]);
 });
 
 describe("Sidebar navigation", () => {
@@ -124,6 +127,20 @@ describe("Sidebar navigation", () => {
 
     await userEvent.click(screen.getByRole("link", { name: "账户与设置" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/account");
+  });
+
+  // The credentials banner used to sit across the top of seven pages. The
+  // fact it stated is now a quiet count on the account row.
+  it("counts the data sources nothing serves on the account row instead of a banner", async () => {
+    mocks.fetchWebConnectors.mockResolvedValue([
+      { id: "opengwas", needsAttention: true },
+      { id: "core", needsAttention: true },
+      { id: "semantic-scholar", needsAttention: false },
+    ]);
+    renderSidebar();
+    const row = await screen.findByRole("link", { name: "账户与设置，2 个数据源没有可用凭据" });
+    expect(row).toHaveAttribute("href", "/app/account?tab=connectors");
+    expect(row).toHaveTextContent("2");
   });
 
   // The rows that used to be here and are now tabs of one of the six. The

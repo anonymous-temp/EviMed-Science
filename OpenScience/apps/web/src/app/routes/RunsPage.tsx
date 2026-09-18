@@ -22,10 +22,13 @@ import {
   listWebAgentRuns,
   reportWebDeliverableFeedback,
   webErrorMessage,
+  fetchWebConnectors,
   type WebAgentRun,
   type WebAgentRunStatus,
+  type WebConnector,
   type WebRunPlanItem,
 } from "@/lib/apiClient";
+import { runCredentialNeed, runCredentialSentence } from "@/lib/runCredential";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { formatDateTime } from "@/lib/format";
@@ -41,11 +44,20 @@ import {
 import { capabilityTitle } from "@/lib/researchAgentUi";
 import { QualityNotices } from "@/components/runs/QualityNotices";
 import { cn } from "@/lib/cn";
-import { PageTitle } from "@/components/layout/PageTitle";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { buttonClasses } from "@/components/ui/Button";
 
 type SincePreset = "24h" | "7d" | "30d";
 
 const SINCE_SECONDS: Record<SincePreset, number> = { "24h": 86_400, "7d": 604_800, "30d": 2_592_000 };
+
+const SINCE_OPTIONS: { value: SincePreset | "all"; label: string }[] = [
+  { value: "all", label: "全部时间" },
+  { value: "24h", label: "24 小时" },
+  { value: "7d", label: "7 天" },
+  { value: "30d", label: "30 天" },
+];
 
 interface Filter {
   search: string;
@@ -88,22 +100,6 @@ const WEB_RUN_PHASE_LABEL: Record<string, string> = {
  */
 export function RunsPage() {
   return <HostedRunsView />;
-}
-
-/** The page header shared by both runs surfaces. */
-function RunsHeader({ description }: { description: ReactNode }) {
-  return (
-    <header className="mb-4 flex items-start gap-3">
-      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-input bg-accent/10 text-accent">
-        <FlaskConical size={17} strokeWidth={1.75} aria-hidden="true" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <PageTitle page="运行记录" />
-        <h1 className="font-serif text-display leading-tight text-text">运行记录</h1>
-        <p className="mt-0.5 text-ui text-muted">{description}</p>
-      </div>
-    </header>
-  );
 }
 
 interface RunsFilterChip {
@@ -159,23 +155,14 @@ function RunsFilterBar({
           accent={chip.accent}
         />
       ))}
-      <div className="flex shrink-0 items-center rounded-full border border-border bg-surface p-0.5 text-caption">
-        {(["all", "24h", "7d", "30d"] as const).map((k) => {
-          const active = (since ?? "all") === k;
-          return (
-            <button
-              key={k}
-              onClick={() => onSinceChange(k === "all" ? undefined : k)}
-              className={cn(
-                "rounded-full px-2 py-0.5 font-medium capitalize transition-colors",
-                active ? "bg-surface-2 text-text" : "text-muted hover:text-text",
-              )}
-            >
-              {k === "all" ? "任意时间" : k}
-            </button>
-          );
-        })}
-      </div>
+      {/* In words, not `24h / 7d / 30d` with `capitalize` — the one Latin
+        * control in a Chinese interface (review B §4h). */}
+      <SegmentedControl
+        aria-label="时间范围"
+        value={since ?? "all"}
+        onChange={(value) => onSinceChange(value === "all" ? undefined : value)}
+        options={SINCE_OPTIONS}
+      />
       {anyFilter && (
         <button className="text-caption text-link hover:underline" onClick={onClear}>
           清除
@@ -244,17 +231,15 @@ function RunsEmptyState({ filtered }: { filtered: boolean }) {
   if (filtered) {
     return <EmptyState icon={Search} title="没有符合筛选条件的运行记录。" className="mt-8" />;
   }
+  // It used to say 「当 EviMed 运行代码时（例如 python train.py）」 — a line
+  // left over from a machine-learning tool, on an evidence workbench.
   return (
     <EmptyState
       icon={FlaskConical}
-      title="尚无运行记录"
-      description={
-        <>
-          当 EviMed 运行代码时（例如 <span className="font-mono text-text">python train.py</span>
-          ），执行方案和产物会记录于此。
-        </>
-      }
-      className="mt-8 rounded-input border border-dashed border-border bg-surface"
+      title="还没有运行记录"
+      description="提一个研究问题，或从「科研能力」选一项开始。每次运行的计划、进展、核验结果与产物都会记在这里。"
+      action={<Link to="/app/chat" className={buttonClasses()}>新任务</Link>}
+      className="mt-8 rounded-card border border-dashed border-border bg-surface"
     />
   );
 }
@@ -293,6 +278,15 @@ function HostedRunsView() {
   // screen survive a failed refresh — a poll that misses must not empty a page
   // that is correct.
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [connectors, setConnectors] = useState<WebConnector[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    // Only to name the one source a failed run needed; a read that fails
+    // leaves that sentence out and nothing else.
+    fetchWebConnectors().then((list) => { if (active) setConnectors(list); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const load = useCallback(async (): Promise<boolean> => {
     try {
@@ -459,10 +453,15 @@ function HostedRunsView() {
   }, [deepLinked]);
 
   return (
+    <ConnectorsContext.Provider value={connectors}>
     <FilePreviewContext.Provider value={setPreviewPath}>
       <div className="h-full overflow-y-auto">
         <div className="mx-auto max-w-3xl px-8 py-8">
-          <RunsHeader description="记录开放域与专项科研任务的执行状态、模型、耗时和成果文件。" />
+          <PageHeader
+            title="运行记录"
+            description="每次研究运行的进展、核验结果与产物。"
+            className="mb-4"
+          />
 
           {(rows.length > 0 || anyFilter) && (
             <RunsFilterBar
@@ -503,6 +502,7 @@ function HostedRunsView() {
       </div>
       {previewPath && <RunFilePreview path={previewPath} onClose={() => setPreviewPath(null)} />}
     </FilePreviewContext.Provider>
+    </ConnectorsContext.Provider>
   );
 }
 
@@ -731,15 +731,28 @@ function WebRunRow({
  *  whatever the ledger's own counters can add to it. */
 function RunVerdict({ run }: { run: WebAgentRun }) {
   const outcome = webRunOutcome(run);
+  const connectors = useContext(ConnectorsContext);
+  // The one source this run needed, named on this run's row — instead of a
+  // banner naming seven sources on every page (review B §7c).
+  const need = runCredentialNeed(run, connectors);
   return (
     <div className="space-y-0.5">
       <p className="text-error" title={outcome.code ? `错误码：${outcome.code}` : undefined}>
         {outcome.headline}
       </p>
-      {outcome.detail && <p className="text-text/70">{outcome.detail}</p>}
+      {outcome.detail && <p className="text-muted">{outcome.detail}</p>}
+      {need && (
+        <p className="text-text">
+          {runCredentialSentence(need)}
+          <Link to="/app/account?tab=connectors" className="ml-1 text-link hover:underline">填写凭据</Link>
+        </p>
+      )}
     </div>
   );
 }
+
+/** The account's connectors, read once for the page; null until known. */
+const ConnectorsContext = createContext<WebConnector[] | null>(null);
 
 /**
  * Did this file turn out to be useful, and did it need editing?
