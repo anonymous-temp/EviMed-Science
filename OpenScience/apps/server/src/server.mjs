@@ -101,7 +101,7 @@ import {
   runtimeNetworkUsesHostOrContainer,
   validateEviMedAdapterConfig,
 } from "./runtimeManager.mjs";
-import { createStore } from "./store.mjs";
+import { createStore, projectDisplayName, projectIdFromName } from "./store.mjs";
 import { readinessSaasProfile } from "./saasProfile.mjs";
 import { TaskManager } from "./taskManager.mjs";
 import { RunEventHub, attachRunStream, resumePosition } from "./runEventStream.mjs";
@@ -3131,20 +3131,40 @@ export function createWebApiApp(overrides = {}) {
 
       if (pathname === "/api/projects" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
-        sendJson(res, 200, { data: await store.listProjects(user) });
+        // With how much each has been used (C4): runs and the last moment
+        // anything happened in one. A ledger that cannot be read is reported
+        // as unknown activity for that row, never as a failed list.
+        const projects = await store.listProjects(user);
+        const data = await Promise.all(projects.map(async (item) => {
+          try {
+            return { ...item, ...(await agentRuns.activitySummary(await store.requireProject(user, item.id))) };
+          } catch {
+            return { ...item, runCount: 0, lastActivityAt: null };
+          }
+        }));
+        sendJson(res, 200, { data });
         return;
       }
 
       if (pathname === "/api/projects" && req.method === "POST") {
         const user = await store.ensureUser(req, res);
-        const body = await readJson(req, config.maxJsonBytes);
-        const id = assertString(body.id, "id", { max: 64 });
-        const name = assertString(body.name ?? id, "name", { max: 128 });
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "project");
+        const unknown = Object.keys(body).filter((field) => field !== "id" && field !== "name");
+        if (unknown.length > 0) throw new HttpError(400, "invalid_payload", `Unknown project field(s): ${unknown.sort().join(", ")}.`);
+        // A name in any language, and an id the researcher never has to see
+        // (C4): the id is a path segment under projects/, so it stays ASCII
+        // and is derived; a caller that still sends one keeps it.
+        const existing = await store.listProjects(user);
+        if (body.id == null && body.name == null) throw new HttpError(400, "invalid_payload", "A project needs a name.");
+        const id = body.id == null
+          ? projectIdFromName(String(body.name), new Set(existing.map((project) => project.id)))
+          : safeId(assertString(body.id, "id", { max: 64 }), "project id");
+        const name = projectDisplayName(body.name ?? id);
         // Counted before the create, and only for a project that is new: a
         // per-project storage quota and a per-user runtime limit bound nothing
         // on their own, because an account at the limit can make another
-        // project and have another of each.
-        const existing = await store.listProjects(user);
+        // project and have another of each. Archived projects count: they
+        // still hold their storage.
         if (
           config.maxProjectsPerUser > 0 &&
           existing.length >= config.maxProjectsPerUser &&
@@ -3153,13 +3173,13 @@ export function createWebApiApp(overrides = {}) {
           throw new HttpError(
             409,
             "project_limit_reached",
-            `This account already holds ${existing.length} projects, which is its limit. Delete one to make another.`,
+            `This account already holds ${existing.length} projects, which is its limit: each has its own storage and research runtime. Export and delete one to make another.`,
           );
         }
         const data = await store.createProject(user, id, name);
         const project = await store.requireProject(user, id);
         await audit({ config, user, project }, "project.create", "completed", { target: id });
-        sendJson(res, 200, { data });
+        sendJson(res, 200, { data: { ...data, runCount: 0, lastActivityAt: null } });
         return;
       }
 
@@ -3167,6 +3187,32 @@ export function createWebApiApp(overrides = {}) {
         const [rawProjectId, action, ...extra] = pathname.slice("/api/projects/".length).split("/");
         if (!rawProjectId || extra.length > 0) throw new HttpError(404, "not_found", "Route not found.");
         const projectId = decodeRouteComponent(rawProjectId, "project id");
+        // Renamed by its name only (C4); the id is a path and does not move.
+        if (!action && req.method === "PATCH") {
+          const user = await store.ensureUser(req, res);
+          const body = assertObject(await readJson(req, config.maxJsonBytes), "project update");
+          const unknown = Object.keys(body).filter((field) => field !== "name");
+          if (unknown.length > 0) throw new HttpError(400, "invalid_payload", `Unknown project field(s): ${unknown.sort().join(", ")}.`);
+          const data = await store.renameProject(user, projectId, body.name);
+          const project = await store.requireProject(user, projectId);
+          await audit({ config, user, project }, "project.rename", "completed", { target: projectId });
+          sendJson(res, 200, { data: { ...data, ...(await agentRuns.activitySummary(project).catch(() => ({ runCount: 0, lastActivityAt: null }))) } });
+          return;
+        }
+        // Archived rather than deleted: out of the way, still whole and
+        // exportable, and back with `{ archived: false }` (C4).
+        if (action === "archive" && req.method === "POST") {
+          const user = await store.ensureUser(req, res);
+          const body = assertObject(await readJson(req, config.maxJsonBytes), "project archive");
+          const unknown = Object.keys(body).filter((field) => field !== "archived");
+          if (unknown.length > 0) throw new HttpError(400, "invalid_payload", `Unknown project field(s): ${unknown.sort().join(", ")}.`);
+          if (body.archived != null && typeof body.archived !== "boolean") throw new HttpError(400, "invalid_payload", "archived must be a boolean.");
+          const data = await store.archiveProject(user, projectId, body.archived !== false);
+          const project = await store.requireProject(user, projectId);
+          await audit({ config, user, project }, data.archivedAt ? "project.archive" : "project.unarchive", "completed", { target: projectId });
+          sendJson(res, 200, { data: { ...data, ...(await agentRuns.activitySummary(project).catch(() => ({ runCount: 0, lastActivityAt: null }))) } });
+          return;
+        }
         if (action === "export" && req.method === "GET") {
           const user = await store.ensureUser(req, res);
           const project = await store.requireProject(user, projectId);

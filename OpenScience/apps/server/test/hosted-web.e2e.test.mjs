@@ -111,7 +111,7 @@ test("mock hosted contract pins specialty identity but cannot certify specialist
       headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify({ id: "paper1", name: "Paper 1" }),
     });
-    assert.deepEqual(project.json.data, { id: "paper1", name: "Paper 1" });
+    assert.deepEqual(project.json.data, { id: "paper1", name: "Paper 1", archivedAt: null, runCount: 0, lastActivityAt: null });
     const scoped = { ...auth, "X-Open-Science-Project": "paper1" };
     const agents = await jsonFetch(`${base}/api/agents`, { headers: scoped });
     const adrAgent = agents.json.data.find((agent) => agent.id === "adr-analysis");

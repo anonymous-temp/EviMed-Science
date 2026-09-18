@@ -3605,6 +3605,23 @@ export class AgentRunStore {
     };
   }
 
+  /**
+   * How much a project has been used, for its list row (C4): how many runs it
+   * holds and when anything last happened in one. Cheaper than `list` — no
+   * phase walk — because the project list reads it for every project.
+   * @param {any} project @returns {Promise<{ runCount: number, lastActivityAt: string | null }>}
+   */
+  async activitySummary(project) {
+    const runs = [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()];
+    let last = null;
+    for (const run of runs) {
+      for (const at of [run.finishedAt, run.lastProgressAt, run.startedAt]) {
+        if (typeof at === "string" && (!last || at > last)) last = at;
+      }
+    }
+    return { runCount: runs.length, lastActivityAt: last };
+  }
+
   async list(project) {
     const events = parseEvents(await readLedgerText(project, this.maxBytes));
     const runs = [...foldEvents(events).values()];
