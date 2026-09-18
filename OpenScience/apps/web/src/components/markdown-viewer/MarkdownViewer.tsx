@@ -8,58 +8,54 @@ import { ClaimCitation } from "./ClaimCitation";
 import { claimIdsFromHref, linkClaimMarkers, type ClaimEvidence } from "@/lib/claimCitations";
 import { sanitizeAssistantText } from "@/lib/sanitizeAssistantText";
 
-/** Two contexts render markdown: chat bubbles (theme colors, compact) and the
- *  file-preview "paper" (document-neutral black-on-white, editorial scale —
- *  like the Office previews, a document keeps its own colors in dark mode). */
+/** Two contexts render markdown: chat-sized prose, and a delivered report
+ *  (the "document"). Both read from the design tokens and follow the theme. */
 type Variant = "chat" | "document";
 
 const STYLES: Record<Variant, Record<string, string>> = {
   chat: {
-    root: "text-body leading-relaxed text-text",
+    root: "text-body text-text",
     p: "my-2 first:mt-0 last:mb-0",
     a: "text-link underline underline-offset-2",
-    code: "rounded bg-surface-2 px-1 py-0.5 font-mono text-ui text-link",
+    code: "rounded bg-surface-2 px-1 py-0.5 font-mono text-ui text-text",
     pre: "my-3 overflow-x-auto rounded-input bg-surface-2 p-3 font-mono text-ui leading-5 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-text",
     ul: "my-2 ml-5 list-disc space-y-1",
     ol: "my-2 ml-5 list-decimal space-y-1",
-    h1: "mb-3 mt-5 text-2xl font-semibold first:mt-0",
-    h2: "mb-2 mt-5 text-xl font-semibold first:mt-0",
-    h3: "mb-2 mt-4 text-lg font-semibold first:mt-0",
-    h4: "mb-1.5 mt-3 text-base font-semibold first:mt-0",
-    blockquote: "my-2 border-l-2 border-border pl-3 text-muted",
+    h1: "mb-3 mt-5 text-title font-semibold first:mt-0",
+    h2: "mb-2 mt-5 text-body font-semibold first:mt-0",
+    h3: "mb-2 mt-4 text-body font-semibold first:mt-0",
+    h4: "mb-1.5 mt-3 text-ui font-semibold first:mt-0",
+    blockquote: "my-2 border-l-[3px] border-strong pl-3 text-muted",
     hr: "my-4 border-border",
-    table: "border-collapse text-sm",
+    table: "border-collapse text-ui tabular-nums",
     th: "border border-border bg-surface-2 px-3 py-1.5 text-left font-semibold",
     td: "border border-border px-3 py-1.5",
   },
-  // Editorial-blog paper: warm ink on white, serif headings, terracotta accent
-  // (#c15f3c — the app's brand). Theme-independent by design: a document reads
-  // the same in light or dark mode, so colors are fixed, not tokens.
-  //
-  // Two font stacks, both explicit so the paper never inherits the app's UI
-  // font. Body: a comfortable reading sans (SF/Segoe + PingFang for Chinese).
-  // Headings: the finest reading serifs that actually ship on macOS/Windows
-  // (Iowan/Charter → Georgia), CJK falling back to Songti.
+  // A delivered report (appendix D §8.4). It used to be warm editorial paper
+  // with a terracotta accent and fixed hexes — the old brand, frozen into the
+  // one surface researchers read longest, and white in dark mode. It reads
+  // from the tokens now: prose 16/1.75 in the shared sans (Chinese body text
+  // is never serif — Windows falls to bitmap SimSun), serif only on the two
+  // top headings, links in the link colour so a citation never looks like
+  // the primary button, and no colour for decoration at all — hierarchy is
+  // type and space. The measure (≤ 680 px, ~42 characters) is the caller's.
   document: {
-    root: "text-body leading-[1.8] text-[#2b2620] antialiased [font-feature-settings:'liga','kern'] [font-family:-apple-system,'SF_Pro_Text','Segoe_UI','PingFang_SC','Microsoft_YaHei',sans-serif] selection:bg-[#f2d9cd]",
-    p: "my-4 tracking-[0.006em] [text-wrap:pretty] first:mt-0 last:mb-0",
-    a: "font-medium text-[#bf5a34] underline decoration-[#e2bdac] decoration-1 underline-offset-[3px] transition-colors hover:decoration-[#bf5a34]",
-    code: "rounded-[4px] bg-[#f7f0ea] px-1.5 py-0.5 font-mono text-ui text-[#a94e2c] ring-1 ring-[#eee0d6]",
-    pre: "my-5 overflow-x-auto rounded-lg bg-[#faf6f2] p-4 font-mono text-ui leading-6 ring-1 ring-[#ece2d9] [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-[#4b433a] [&_code]:ring-0",
-    ul: "my-4 ml-[1.15em] list-disc space-y-2 marker:text-[#c98a6b]",
-    ol: "my-4 ml-[1.15em] list-decimal space-y-2 marker:text-ui marker:font-medium marker:text-[#c98a6b]",
-    // Serif display headings give the editorial/blog feel; the stack falls back
-    // to system CJK serif so Chinese posts read as editorial too. Tracking stays
-    // near-zero — negative tracking crams CJK glyphs.
-    h1: "mb-3 mt-10 text-[33px] font-bold leading-[1.25] tracking-[-0.01em] text-[#1c1915] [text-wrap:balance] first:mt-0 [font-family:'Iowan_Old_Style','Charter',Georgia,'Songti_SC','Noto_Serif_CJK_SC',serif]",
-    h2: "mb-4 mt-11 flex items-baseline gap-2.5 text-display font-semibold leading-snug tracking-[-0.005em] text-[#1c1915] [text-wrap:balance] before:relative before:top-[0.14em] before:h-[0.82em] before:w-[3px] before:shrink-0 before:rounded-full before:bg-[#c15f3c] before:content-[''] first:mt-0 [font-family:'Iowan_Old_Style','Charter',Georgia,'Songti_SC','Noto_Serif_CJK_SC',serif]",
-    h3: "mb-2 mt-8 text-title font-semibold leading-snug text-[#2b2620] first:mt-0 [font-family:'Iowan_Old_Style','Charter',Georgia,'Songti_SC','Noto_Serif_CJK_SC',serif]",
-    h4: "mb-2 mt-6 text-ui font-semibold uppercase tracking-[0.08em] text-[#9a8d7c] first:mt-0",
-    blockquote: "my-5 rounded-r-md border-l-[3px] border-[#d98c6a] bg-[#faf6f2] py-1.5 pl-5 pr-4 text-[#6b6155] [&_p]:my-1.5",
-    hr: "mx-auto my-10 w-12 border-t-2 border-[#e6ddd2]",
+    root: "text-body text-text [text-wrap:pretty] selection:bg-accent-soft",
+    p: "my-4 first:mt-0 last:mb-0",
+    a: "text-link underline decoration-1 underline-offset-2 hover:decoration-2",
+    code: "rounded bg-surface-2 px-1 py-0.5 font-mono text-ui text-text",
+    pre: "my-5 overflow-x-auto rounded-input bg-surface-2 p-4 font-mono text-ui leading-6 ring-1 ring-border [&_code]:bg-transparent [&_code]:p-0",
+    ul: "my-4 ml-5 list-disc space-y-2 marker:text-muted",
+    ol: "my-4 ml-5 list-decimal space-y-2 marker:text-muted",
+    h1: "mb-4 mt-10 font-serif text-display font-semibold text-text [text-wrap:balance] first:mt-0",
+    h2: "mb-3 mt-10 font-serif text-title font-semibold text-text [text-wrap:balance] first:mt-0",
+    h3: "mb-2 mt-8 text-body font-semibold text-text first:mt-0",
+    h4: "mb-2 mt-6 text-ui font-semibold text-muted first:mt-0",
+    blockquote: "my-5 border-l-[3px] border-strong pl-4 text-muted [&_p]:my-1.5",
+    hr: "my-10 border-border",
     table: "border-collapse text-ui tabular-nums",
-    th: "border-b-2 border-[#e2d5c8] px-4 py-2.5 text-left font-semibold text-[#1c1915]",
-    td: "border-b border-[#efe8df] px-4 py-2.5",
+    th: "border-b border-strong bg-surface-2 px-3 py-2 text-left font-semibold",
+    td: "border-b border-faint px-3 py-2 align-top",
   },
 };
 
@@ -118,7 +114,6 @@ export function MarkdownViewer({
               <CodeBlock
                 code={flattenText(el?.props?.children).replace(/\n$/, "")}
                 language={language}
-                paper={variant === "document"}
                 className={s.pre}
               />
             );

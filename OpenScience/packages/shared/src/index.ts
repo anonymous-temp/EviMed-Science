@@ -410,8 +410,12 @@ export interface Citation {
 // One validated palette, the single source of truth for BOTH native app charts
 // (SVG stat tiles, mini-bars) and agent-generated figures (matplotlib, via the
 // bundled `openscience.mplstyle` which carries the same hexes). Validated with
-// the dataviz skill against the app's real surfaces — light #ffffff, dark
-// #1e1d24 — for the lightness band, chroma floor, CVD separation, and contrast.
+// the dataviz skill against the app's real surfaces — light #ffffff and
+// #f8f8f9, dark #1d2225 and #14181a (2026-09-18) — for the lightness band,
+// chroma floor, CVD separation, the normal-vision floor and contrast. The
+// order is the colour-vision mechanism: the previous order of these same
+// hexes put orange beside pink (normal-vision ΔE 12.9) and, in dark, pink
+// beside red (7.8), both under the 15 floor.
 // Categorical hues are assigned in this fixed order, never cycled.
 
 export type ChartTheme = "light" | "dark";
@@ -427,14 +431,14 @@ export interface ChartPalette {
 
 /** Light-mode palette (chart surface #ffffff). */
 export const CHART_PALETTE_LIGHT: ChartPalette = {
-  categorical: ["#2a78d6", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948", "#e87ba4", "#eb6834"],
+  categorical: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"],
   sequential: ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#104281"],
   status: { good: "#0ca30c", warning: "#c98a2b", serious: "#ec835a", critical: "#d03b3b" },
 };
 
-/** Dark-mode palette — the same hues stepped for the dark surface (#1e1d24). */
+/** Dark-mode palette — the same hues stepped for the dark surface (#1d2225). */
 export const CHART_PALETTE_DARK: ChartPalette = {
-  categorical: ["#3987e5", "#199e70", "#c98500", "#008300", "#9085e9", "#e66767", "#d55181", "#d95926"],
+  categorical: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"],
   sequential: ["#104281", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb"],
   status: { good: "#0ca30c", warning: "#d7a24a", serious: "#ec835a", critical: "#d03b3b" },
 };

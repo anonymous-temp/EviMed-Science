@@ -20,7 +20,7 @@ import { InboxBell } from "@/components/sidebar/InboxBell";
 import { RunStatusDot } from "@/components/runs/RunStatusDot";
 import { useConnectorAttention } from "@/lib/connectorAttention";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
-import evimedMark from "@/assets/evimed-mark.svg";
+import { EviMedMark } from "@/components/brand/EviMedMark";
 
 /** Dragging the divider below this pointer x collapses the sidebar; dragging
  *  back past it re-expands. Sits below SIDEBAR_MIN so there is a clear "snap". */
@@ -153,7 +153,7 @@ export function Sidebar() {
       <aside className="flex h-full max-w-full flex-col border-r border-border bg-surface" style={{ width }}>
         <div className="px-4 pb-3 pt-4">
           <div className="flex items-baseline gap-1.5">
-            <img src={evimedMark} alt="EviMed" className="h-[21px] w-[21px] self-center" />
+            <EviMedMark className="h-5 w-5 shrink-0 self-center" />
             <div className="font-serif text-wordmark font-semibold text-text">
               EviMed
             </div>

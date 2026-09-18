@@ -284,16 +284,15 @@ export function FilePreviewInspector({
 }
 
 /** How much of the report was checked against a preserved source, said once
- *  above it. The page under it is document-white whatever the theme, so the
- *  colours are the document's and not the app's tokens. */
+ *  above it — amber when something could not be checked, never red: an
+ *  unchecked quotation is not a clinical alarm. */
 function ClaimSummary({ verification }: { verification?: ClaimVerification | null }) {
   const summary = claimVerificationSummary(verification);
   if (!summary) return null;
   return (
     <p
       role="note"
-      // eslint-disable-next-line no-restricted-syntax -- document-neutral canvas: fixed paper colours, like the page itself
-      className={`mb-6 rounded-input border px-3 py-2 text-ui ${summary.attention ? "border-[#e6c98a] bg-[#fdf6e3] text-[#6b4e16]" : "border-[#cfe3d4] bg-[#f3faf5] text-[#23532f]"}`}
+      className={`mb-6 rounded-input border px-3 py-2 text-ui ${summary.attention ? "border-warn bg-warn-soft text-warn-strong" : "border-border bg-accent-soft text-accent-strong"}`}
     >
       {summary.text}
     </p>
@@ -422,11 +421,12 @@ function Body({
         <Note text="当前文件暂不支持在线查看源文件。" />
       );
     }
-    // A document reads as a page: white paper, black text, whatever the app
-    // theme — the same document-neutral canvas the Office previews use.
+    // A report reads as a page on the canvas: the surface colour, a hairline
+    // edge, the reading measure. It follows the theme like the rest of the
+    // shell; printing gets white paper from the print stylesheet.
     return text !== null ? (
       <div className="min-h-full px-6 py-8">
-        <div className="mx-auto max-w-content rounded-sm bg-white px-12 py-11 shadow-[0_1px_4px_rgba(0,0,0,.25)] max-sm:px-6 max-sm:py-7">
+        <div className="mx-auto max-w-content rounded-card border border-border bg-surface px-12 py-11 max-sm:px-6 max-sm:py-7">
           <ClaimSummary verification={verification} />
           <MarkdownViewer variant="document" claims={claims ?? undefined} claimStatuses={claimStatuses(verification)}>{text}</MarkdownViewer>
         </div>

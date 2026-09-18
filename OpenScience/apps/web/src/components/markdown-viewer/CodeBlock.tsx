@@ -17,13 +17,10 @@ import "./hljs-theme.css";
 export const CodeBlock = memo(function CodeBlock({
   code,
   language,
-  paper = false,
   className,
 }: {
   code: string;
   language?: string;
-  /** Document variant: fixed paper hues (see hljs-theme.css). */
-  paper?: boolean;
   className?: string;
 }) {
   const html = useMemo(() => {
@@ -50,7 +47,7 @@ export const CodeBlock = memo(function CodeBlock({
   };
 
   return (
-    <pre className={cn(className, paper && "hljs-paper", "group relative")}>
+    <pre className={cn(className, "group relative")}>
       <div className="absolute right-2 top-2 flex items-center gap-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
         {language && (
           <span className="px-1 font-mono text-caption uppercase tracking-wide text-muted">
