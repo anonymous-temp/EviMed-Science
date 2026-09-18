@@ -67,6 +67,7 @@ export {
   planCapabilityIssues,
   rejectionEnvelope,
   renderDeliverySummary,
+  rootHiddenMcpTools,
   settleDelegation,
   sourceArtifactPaths,
   stepPolicy,

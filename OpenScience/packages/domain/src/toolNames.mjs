@@ -126,13 +126,42 @@ export const SOCKET_TOOL_NAMES = Object.freeze({
 /** @type {readonly string[]} */
 export const SOCKET_TOOL_NAME_LIST = Object.freeze(Object.values(SOCKET_TOOL_NAMES))
 
-/** The umbrella retrieval tools the root orchestrator sees (§9.7). */
+/**
+ * The research tools the root session sees; every other `mcp__evimed__*` tool
+ * is visible only to the delegated children whose capability asks for it.
+ *
+ * Two sources, because the root does two jobs. §9.7's umbrella tools are what
+ * an orchestrator needs. But the root is also the answer line: an open-domain
+ * question is answered in the root session under the `open-domain-answer`
+ * persona, which requires `biomedical_source_search` and may use a further
+ * eight, and the orchestration guidance's retrieval order names
+ * `guideline_search` and `clinical_trial_search`. A root that could not call
+ * what its own instructions tell it to call would fail exactly the plain
+ * questions that should never need a delegation. The rest — the specialist
+ * engines, the deterministic compilers, the science connectors — ride every
+ * root request today (34 schemas, ~9 K tokens) and are delegated work.
+ *
+ * `socket.test.mjs` holds this list against the persona's `agent.yaml` and the
+ * guidance text, so a tool added to either is a red test here rather than a
+ * silent refusal in production.
+ */
 export const ROOT_VISIBLE_MCP_BASE_NAMES = Object.freeze([
+  // §9.7 umbrella tools
   'literature_search',
   'web_search',
   'open_access_full_text',
   'term_normalize',
   'data_source_catalog',
+  // named by the orchestration guidance's retrieval order
+  'guideline_search',
+  'clinical_trial_search',
+  // the answer persona's declared tools (open-domain-answer/agent.yaml)
+  'biomedical_source_search',
+  'official_page_fetch',
+  'drug_term_normalize',
+  'evidence_deduplicate',
+  'drug_label_search',
+  'pharmacy_reference_search',
 ])
 
 /** @param {string} baseName @returns {string} */
@@ -242,7 +271,9 @@ export const RUNTIME_LEAKAGE_TOOL_TOKENS = Object.freeze([
 export const KERNEL_MOUNTED_TOOL_NAMES = Object.freeze([
   'bash', 'read', 'write', 'edit', 'glob', 'grep', 'list', 'skill', 'task',
   'fs_read', 'fs_write', 'fs_edit', 'fs_search', 'job_run', 'job_status',
-  'ask_user', 'subagent', 'subagent_control', 'subagent_report', 'workflow',
+  // `subagent`, `workflow` and the subagent-control tools left with their rows
+  // (2026-09-18): a method telling a run to call one would now degrade it.
+  'ask_user',
 ])
 
 /**

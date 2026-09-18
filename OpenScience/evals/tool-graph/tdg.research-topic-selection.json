@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "research-topic-selection",
-  "version": "sha256:4811d10570aac8ed854331db82d9ca72c80474c4f74cd6d6d43ee4c7809325af",
+  "version": "sha256:09f1eee5a1f03f0c2be5bd9fd005879f93a39f4d739d1529a0cd6b9752e35ae0",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 30,
+    "nodes": 26,
     "edges": 14,
     "byVia": {
       "schema": 14,
@@ -1339,91 +1339,6 @@
       "stateEffect": "none"
     },
     {
-      "name": "subagent",
-      "source": "kernel",
-      "description": "Delegate to a child agent.",
-      "inputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "properties": {
-          "task": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "task"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
-        "fields": []
-      },
-      "typeTags": [],
-      "requiredTypeTags": [],
-      "outputTypeTags": [],
-      "stateEffect": "none"
-    },
-    {
-      "name": "subagent_control",
-      "source": "kernel",
-      "description": "Steer or stop a child agent.",
-      "inputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "action": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "action"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
-        "fields": []
-      },
-      "typeTags": [],
-      "requiredTypeTags": [],
-      "outputTypeTags": [],
-      "stateEffect": "none"
-    },
-    {
-      "name": "subagent_report",
-      "source": "kernel",
-      "description": "Read a child agent's report.",
-      "inputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "properties": {
-          "id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
-        "fields": []
-      },
-      "typeTags": [],
-      "requiredTypeTags": [],
-      "outputTypeTags": [],
-      "stateEffect": "none"
-    },
-    {
       "name": "task",
       "source": "kernel",
       "description": "Run a scoped subtask in a fresh context.",
@@ -1440,33 +1355,6 @@
         },
         "required": [
           "prompt"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
-        "fields": []
-      },
-      "typeTags": [],
-      "requiredTypeTags": [],
-      "outputTypeTags": [],
-      "stateEffect": "none"
-    },
-    {
-      "name": "workflow",
-      "source": "kernel",
-      "description": "Run a declared workflow.",
-      "inputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "properties": {
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
         ]
       },
       "outputSchema": {

@@ -29,6 +29,7 @@
 
 import {
   DOMAIN_VERSION,
+  MCP_TOOL_PREFIX,
   RECEIPT_FORMAT_VERSION,
   canTransition,
   contractKindLabel,
@@ -55,6 +56,8 @@ import {
   onTurnStopping,
   readFileAt,
   registerTool,
+  registeredToolNames,
+  restrictAgentTools,
   startSubagent,
   steerContext,
   toSubagentOutcome,
@@ -77,6 +80,7 @@ import {
   indexPlan,
   planCapabilityIssues,
   rejectionEnvelope,
+  rootHiddenMcpTools,
   boundedSuggestions,
   renderDeliverySummary,
   settleDelegation,
@@ -386,8 +390,48 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** @param {string} sessionId */
   const diagnostics = (sessionId) => ctx.get('evimedDiagnostics')?.forSession?.(sessionId) ?? ctx.get('evimedDiagnostics')
 
+  /** Root agents whose research-tool surface has been narrowed. An agent
+   *  that resumes or compacts starts its session again and keeps its scope. */
+  const narrowed = new WeakSet()
+
+  /**
+   * Show the root session only the research tools its own work calls for.
+   *
+   * All 34 research schemas used to ride every root request (~9 K tokens of
+   * ~20 K in the first one), while the root is told to delegate before it
+   * retrieves and every child is already handed exactly its capability's
+   * tools. Registered at session start because the kernel assembles a step's
+   * tools before `agent/pre-step` runs: a restriction made there would miss
+   * the first request and change the cached prefix at the second. Through the
+   * agent's own scope, so no child ever inherits it (spec §9.7).
+   *
+   * A failure narrows nothing and says so; the run goes on with every tool.
+   * So does a registry that holds tools but no research tools yet: the
+   * research server registers at kernel startup (`failOnStartupError`), so a
+   * root session that finds none there would be shown every one that arrives
+   * later, and the run should say it paid for them.
+   * @param {any} agent
+   */
+  const narrowRootTools = (agent) => {
+    if (!agent?.ctx || isSubagentSession(agent) || narrowed.has(agent)) return
+    narrowed.add(agent)
+    const sessionId = String(agent?.session?.id ?? '')
+    try {
+      const registered = registeredToolNames(ctx)
+      if (registered.length && !registered.some((tool) => tool.startsWith(MCP_TOOL_PREFIX))) {
+        diagnostics(sessionId)?.degrade?.('root research-tool narrowing found no research tools registered at session start')
+        return
+      }
+      const deny = rootHiddenMcpTools(registered)
+      if (deny.length) restrictAgentTools(agent, { deny })
+    } catch (error) {
+      diagnostics(sessionId)?.degrade?.(`root research-tool narrowing failed: ${errorMessage(error)}`)
+    }
+  }
+
   // ---- each dispatch context, injected as a first-class user message -------
   ctx.effect(() => onSessionStart(ctx, (agent) => {
+    narrowRootTools(agent)
     void injectBrief(ctx, agent, sessionState, config)
   }))
 

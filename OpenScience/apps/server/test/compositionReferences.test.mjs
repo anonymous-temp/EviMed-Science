@@ -96,14 +96,14 @@ test("every reference the real composition makes resolves at the pin", async () 
   // The live instance this whole mechanism exists for: the preset still mounts
   // the package alpha.4 deleted, and today it is still published at alpha.3.
   // The canary was `dsh-tool-subagent-report` until alpha.4 deleted it and the
-  // row went with it. `dsh-tool-subagent-control` is what took over the job
-  // (it publishes send_message), so it is both present and the row worth
-  // proving is reached.
-  const subagentReport = findVerified(report.verified, "@deepseek-ai/dsh-tool-subagent-control", SOURCE_FILES.preset);
-  assert.ok(subagentReport, "the preset row for @deepseek-ai/dsh-tool-subagent-control was never checked");
-  assert.equal(subagentReport.tier, "registry");
+  // row went with it, then `dsh-tool-subagent-control` until the delegation
+  // tool rows left the preset (2026-09-18). `dsh-tool-jobs` is a registry-tier
+  // row the composition keeps, so it is the row worth proving is reached.
+  const canary = findVerified(report.verified, "@deepseek-ai/dsh-tool-jobs", SOURCE_FILES.preset);
+  assert.ok(canary, "the preset row for @deepseek-ai/dsh-tool-jobs was never checked");
+  assert.equal(canary.tier, "registry");
   const presetText = await readFile(path.join(repoRoot, SOURCE_FILES.preset), "utf8");
-  assert.match(presetText.split("\n")[subagentReport.reference.line - 1], /dsh-tool-subagent-control/);
+  assert.match(presetText.split("\n")[canary.reference.line - 1], /dsh-tool-jobs/);
 
   // One reference from each tier, so a tier that quietly stopped answering
   // cannot hide behind the other three.
@@ -130,7 +130,8 @@ test("a row mounting a package upstream deleted is named, and only that row", as
   // permanent (that package has no build after alpha.3), which makes it the
   // one canary that cannot rot. The row goes back for the length of this test.
   const preset = await readFile(path.join(repoRoot, SOURCE_FILES.preset), "utf8");
-  const anchor = "    - id: tool-subagent-control\n";
+  // Beside a row nested in a group, as the deleted row was.
+  const anchor = "    - id: tool-result-pruner\n";
   assert.ok(preset.includes(anchor), "the row this test inserts beside has moved");
   const presetPath = await changedPreset(t, preset, (value) =>
     value.replace(anchor, "    - id: tool-subagent-report\n      name: '@deepseek-ai/dsh-tool-subagent-report'\n" + anchor));
@@ -154,7 +155,7 @@ test("a row mounting a package upstream deleted is named, and only that row", as
 
   // A checker that failed everything would also have named this one. The rest
   // of the composition is published at the pin, so the rest has to be green.
-  for (const specifier of ["@deepseek-ai/dsh-tool-bash", "@deepseek-ai/dsh-tool-subagent", "@deepseek-ai/dsh-persona"]) {
+  for (const specifier of ["@deepseek-ai/dsh-tool-bash", "@deepseek-ai/dsh-tool-jobs", "@deepseek-ai/dsh-persona"]) {
     assert.ok(findVerified(report.verified, specifier, SOURCE_FILES.preset), specifier);
   }
   assert.deepEqual(
@@ -251,10 +252,10 @@ test("a preset row whose name went missing is named by id and line", async (t) =
   const fixture = await writeFixture(t, { preset: stripped });
   const report = await verifyCompositionReferences({ overrideFiles: fixture, fetchImpl: registryStub() });
   assert.equal(report.ok, false);
-  const orphan = report.problems.find((problem) => problem.specifier === "tool-subagent-control");
+  const orphan = report.problems.find((problem) => problem.specifier === "tool-result-pruner");
   assert.ok(orphan, `a preset row with an id and no name was not reported:\n${formatReport(report)}`);
   assert.equal(orphan.kind, "extraction-drift");
-  assert.equal(stripped.split("\n")[orphan.line - 1].trim(), "- id: tool-subagent-control");
+  assert.equal(stripped.split("\n")[orphan.line - 1].trim(), "- id: tool-result-pruner");
 });
 
 test("a package mounted by the composition but missing from the seam manifest is reported", async (t) => {

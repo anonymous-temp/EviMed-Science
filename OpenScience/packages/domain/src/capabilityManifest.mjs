@@ -64,9 +64,10 @@ export const DELEGATION_BASE_TOOLS = Object.freeze([
  *
  * Derived from the plugin rows our preset mounts: `tool-fs` publishes
  * read/write/edit, `tool-fs-search` glob/grep, `tool-skill` skill, `tool-bash`
- * bash, `tool-subagent` subagent, `tool-ask-user` ask_user. Kept as data next
- * to the list it constrains so that adding a name to one without the other is
- * a test failure rather than a runtime exception at the first delegation.
+ * bash, `tool-ask-user` ask_user. (`tool-subagent` left the preset on
+ * 2026-09-18; delegation never went through it.) Kept as data next to the list
+ * it constrains so that adding a name to one without the other is a test
+ * failure rather than a runtime exception at the first delegation.
  * @type {ReadonlySet<string>}
  */
 export const KERNEL_GLOBAL_TOOL_NAMES = Object.freeze(new Set([
@@ -77,7 +78,6 @@ export const KERNEL_GLOBAL_TOOL_NAMES = Object.freeze(new Set([
   'grep',
   'skill',
   'bash',
-  'subagent',
   'ask_user',
 ]))
 
