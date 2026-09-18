@@ -586,12 +586,106 @@ export type WebRunPhase =
   | "reserved" | "dispatched" | "running" | "delivering" | "repairing"
   | "accepted" | "degraded" | "failed" | "canceled";
 
+/**
+ * One finding the delivery gate attached to a run (2026-09-18, contract C2).
+ *
+ * It used to be a flattened English sentence written for the agent that had to
+ * repair it, and the ledger and the inbox showed it verbatim. Now the gate's
+ * own `code` travels with it and the Chinese `title`/`detail` come from one
+ * domain table (`gateIssueText.mjs`). `text` is the old sentence, kept only
+ * for old readers: it is never the primary text on screen.
+ */
+export type WebQualityNoticeSeverity = "safety" | "must-fix" | "advice";
+
+export interface WebQualityNotice {
+  code: string;
+  check?: string;
+  severity: WebQualityNoticeSeverity;
+  title: string;
+  detail?: string;
+  claimId?: string;
+  file?: string;
+  text: string;
+}
+
+/** What one run cost, attributed to it (contract C3). */
+export interface WebRunUsage {
+  requests: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  costCny: number;
+}
+
+/** A planned deliverable's state, kept after the run ends (contract C3). */
+export type WebRunDeliverableStatus =
+  | "planned" | "delegated" | "submitted" | "rejected" | "accepted" | "delivered" | "failed";
+
+export interface WebRunDeliverable {
+  id: string;
+  title: string;
+  capability?: string;
+  status: WebRunDeliverableStatus;
+  /** Submissions so far; above one means the gate sent it back at least once. */
+  attempts: number;
+  lastVerdict?: "pass" | "issues" | "unverified";
+  mustFixCount?: number;
+  childSessionId?: string;
+}
+
+/** The medical activity a tool call belongs to (`RUN_ACTIVITY_PHASES`). */
+export type WebRunActivityPhase = "search" | "screen" | "fulltext" | "claims" | "write" | "deliver";
+
+/**
+ * The one aggregate every progress surface renders (contract C5): published on
+ * the run's event stream as `run/progress` and stored on the record as
+ * `progress`. Every count is a count of something observed — tool calls,
+ * preserved sources, checked claims — never an estimate.
+ */
+export interface WebRunProgress {
+  deliverables: WebRunDeliverable[];
+  phaseCounts: Record<WebRunActivityPhase, number>;
+  currentPhase: WebRunActivityPhase | null;
+  sources: { searched: number; included: number; fullText: number };
+  claims: { total: number; verified: number };
+  children: Array<{
+    childSessionId: string;
+    deliverableId?: string;
+    state: "running" | "idle" | "done" | "failed";
+    lastActivityAt: string | null;
+  }>;
+  usage?: WebRunUsage;
+  startedAt: string | null;
+  updatedAt: string;
+}
+
 export interface WebAgentRun {
   id: string;
   dispatchId: string | null;
+  /**
+   * The run's name in every list (contract C3). `titleSource` says where it
+   * came from: `user` means a researcher typed it and nothing automatic may
+   * overwrite it; `question` and `auto` are the server's reading.
+   */
+  title?: string | null;
+  titleSource?: "auto" | "question" | "user";
   // The question as asked, truncated. A run list keyed only by id is a list of
   // hashes.
   question?: string | null;
+  /** Why the router chose this capability, in the reader's words. */
+  routeReason?: string | null;
+  /** How long this capability usually takes, as a range in minutes. */
+  estimatedMinutes?: { min: number; max: number } | null;
+  usage?: WebRunUsage | null;
+  /** The plan, per deliverable, kept after the run ends. */
+  deliverables?: WebRunDeliverable[];
+  /** Set when this run's session was forked from another session. */
+  forkedFrom?: string | null;
+  /** How many of the report's claims were checked against a preserved source. */
+  claimSummary?: { total: number; verified: number; unverified: number } | null;
+  progress?: WebRunProgress | null;
+  /** The finer code under `errorCode`, when the ledger recorded one. */
+  errorSubCode?: string | null;
   dispatchStatus: "dispatching" | "accepted" | "unknown" | "rejected";
   sessionId: string;
   mode: "open-domain" | "specialist";
@@ -629,8 +723,10 @@ export interface WebAgentRun {
   // lost on restart. Null means every layer ran and none of them objected, so
   // "not checked" must never be reported as null.
   verification?: "unverified" | "unchecked" | null;
-  // Human-readable gate reasons attached to a failed or unverified run.
-  qualityNotices?: string[];
+  // The gate's findings on a failed or unverified run. Structured since
+  // 2026-09-18 (`WebQualityNotice`); a record written before that holds the
+  // flattened sentences, which is why both shapes are read.
+  qualityNotices?: Array<string | WebQualityNotice>;
   // Liveness for a run that legitimately takes tens of minutes.
   observedMessages?: number;
   observedToolCalls?: number;

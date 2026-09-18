@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WebAgentRun } from "@/lib/apiClient";
-import { runDidNotDeliver, runDotClass, runTitle, summarizeQualityNotices, undeliveredFiles, webRunOutcome } from "./runPresentation";
+import { relativeTime, runDidNotDeliver, runMetaLine, runQuestion, runState, runTitle, summarizeQualityNotices, undeliveredFiles, webRunOutcome } from "./runPresentation";
 
 // The run ledger's presentation had no direct test (2026-09-16 review, D5):
 // every page that shows a run reads its title, its dot and its outcome here.
@@ -25,15 +25,39 @@ describe("what a run is called", () => {
     expect(untitled).toBe("未记录题面的运行");
     expect(untitled).not.toContain("run_");
   });
+
+  it("prefers the ledger's title, which a researcher may have set by hand", () => {
+    expect(runTitle(run({ title: "≥70 岁阿司匹林一级预防", titleSource: "user", question: "别的题面" }))).toBe("≥70 岁阿司匹林一级预防");
+  });
+
+  // Every capability-card run began with the same twenty characters, so a
+  // truncated row of any of them showed nothing but the template.
+  it("drops the capability-card preamble from the question it titles with", () => {
+    const templated = run({ question: "请以「临床证据深度分析」能力完成以下任务：≥70 岁人群阿司匹林一级预防的获益与出血风险" });
+    expect(runQuestion(templated)).toBe("≥70 岁人群阿司匹林一级预防的获益与出血风险");
+    expect(runTitle(templated)).toBe("≥70 岁人群阿司匹林一级预防的获益与出血风险");
+    // A question that only happens to mention the phrase keeps it.
+    expect(runQuestion(run({ question: "为什么要请以「X」能力完成以下任务？" }))).toBe("为什么要请以「X」能力完成以下任务？");
+  });
 });
 
-describe("the dot beside a run", () => {
-  it("separates a clean delivery from one that still needs a person", () => {
-    expect(runDotClass(run({ status: "running" }))).toContain("animate-pulse");
-    expect(runDotClass(run({ status: "succeeded" }))).toBe("bg-ok");
-    expect(runDotClass(run({ status: "succeeded", verification: "unverified" } as Partial<WebAgentRun>))).toBe("bg-warn");
-    expect(runDotClass(run({ status: "failed" }))).toBe("bg-error");
-    expect(runDotClass(run({ status: "canceled" }))).toBe("bg-muted");
+describe("the state a run is shown in", () => {
+  it("separates a clean delivery from one that still needs a person, in words as well as colour", () => {
+    expect(runState(run({ status: "running" }))).toEqual({ key: "running", label: "运行中" });
+    expect(runState(run({ status: "succeeded" }))).toEqual({ key: "done", label: "已交付" });
+    expect(runState(run({ status: "succeeded", verification: "unverified" } as Partial<WebAgentRun>)).key).toBe("review");
+    expect(runState(run({ status: "succeeded", phase: "degraded" } as Partial<WebAgentRun>)).key).toBe("review");
+    expect(runState(run({ status: "failed", errorCode: "runtime_stalled" }))).toEqual({ key: "failed", label: "未完成" });
+    expect(runState(run({ status: "canceled" }))).toEqual({ key: "canceled", label: "已取消" });
+  });
+
+  it("dates a row by when it ended and says how it came out on the second line", () => {
+    const now = Date.parse("2026-09-18T10:00:00Z");
+    const finished = run({ startedAt: "2026-09-18T09:00:00Z", finishedAt: "2026-09-18T09:50:00Z", verification: "unverified" } as Partial<WebAgentRun>);
+    expect(runMetaLine(finished, now)).toBe("10 分钟前 · 已交付，待复核");
+    expect(relativeTime(now - 30_000, now)).toBe("刚刚");
+    expect(relativeTime(now - 3 * 3_600_000, now)).toBe("3 小时前");
+    expect(relativeTime(0, now)).toBe("");
   });
 });
 

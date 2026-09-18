@@ -1,5 +1,5 @@
 import { errorCodeMessage, runOutcomeKind } from "@evimed/domain";
-import type { WebAgentRun, WebAgentRunStatus } from "@/lib/apiClient";
+import type { WebAgentRun, WebAgentRunStatus, WebQualityNotice } from "@/lib/apiClient";
 import { capabilityTitle } from "@/lib/researchAgentUi";
 
 export const WEB_RUN_STATUS_LABEL: Record<WebAgentRunStatus, string> = {
@@ -10,24 +10,75 @@ export const WEB_RUN_STATUS_LABEL: Record<WebAgentRunStatus, string> = {
 };
 
 /**
- * The dot beside a run, by what the ledger says about it.
+ * The five states a run is shown in, and the one rule that picks them.
  *
- * `degraded` is a phase and not a status: the run delivered, and something in
- * the gate's verdict is still open. It reads amber rather than green because
- * an accepted run and one waiting on a person are not the same result, and the
- * ledger is where that difference has to be visible.
+ * The sidebar and the ledger used to carry a rule each and disagreed about the
+ * same run: amber in the sidebar (delivered, verdict still open), grey or green
+ * in the ledger, which had no amber branch at all (2026-09-18 review, B §3d).
+ * Both now read this function and render its answer through `RunStatusDot`.
+ *
+ * `review` is a phase and not a status: the run delivered, and something in
+ * the gate's verdict is still open. It is its own state because an accepted
+ * run and one waiting on a person are not the same result.
  */
-export function runDotClass(run: WebAgentRun): string {
-  if (run.status === "running") return "animate-pulse bg-accent";
-  if (run.phase === "degraded" || run.verification != null) return "bg-warn";
-  if (run.status === "succeeded") return "bg-ok";
-  if (run.status === "failed") return "bg-error";
-  return "bg-muted";
+export type RunStateKey = "running" | "done" | "review" | "failed" | "canceled";
+
+export interface RunStatePresentation {
+  key: RunStateKey;
+  /** The word that always travels with the dot — colour is never the only carrier. */
+  label: string;
+}
+
+export const RUN_STATE_LABEL: Record<RunStateKey, string> = {
+  running: "运行中",
+  done: "已交付",
+  review: "已交付，待复核",
+  // Not 「失败」: a run the stall detector stopped, one refused for a missing
+  // credential and one whose package the gate could not read all land here,
+  // and none of those says the science failed.
+  failed: "未完成",
+  canceled: "已取消",
+};
+
+export function runState(run: WebAgentRun): RunStatePresentation {
+  const key: RunStateKey = run.status === "running"
+    ? "running"
+    : run.status === "canceled"
+      ? "canceled"
+      : run.status === "failed" || runDidNotDeliver(run)
+        ? "failed"
+        : run.phase === "degraded" || run.verification != null
+          ? "review"
+          : "done";
+  return { key, label: RUN_STATE_LABEL[key] };
 }
 
 /**
- * What to call a run in a list: its question, else the capability's product
- * name, else a sentence saying the brief was not recorded.
+ * The template every capability-card brief starts with
+ * (`capabilityBrief` in `@evimed/domain`: 「请以「X」能力完成以下任务：」).
+ *
+ * Stripped where a title is made, never where the brief is made — the brief
+ * stays byte-identical because the gate reads it as the expectation. This is a
+ * closed, product-owned template matched by its exact shape, not a pattern
+ * over open prose: twelve runs of one capability all began with the same
+ * twenty characters, and a truncated row showed nothing else.
+ */
+const CAPABILITY_BRIEF_PREAMBLE = /^请以「[^」\n]{1,40}」能力完成以下任务[:：]\s*/;
+
+/** The question as a reader asked it, without the capability-card preamble. */
+export function runQuestion(run: Pick<WebAgentRun, "question">): string | null {
+  const question = run.question?.replace(CAPABILITY_BRIEF_PREAMBLE, "").trim();
+  return question ? question : null;
+}
+
+/**
+ * What to call a run in a list: the title the ledger holds, else its question,
+ * else the capability's product name, else a sentence saying the brief was not
+ * recorded.
+ *
+ * The ledger's `title` comes first because it is the one a researcher may have
+ * set by hand (`titleSource: "user"`, locked against every automatic rename),
+ * and otherwise the server's own reading of the question.
  *
  * It used to end `return run.id`, and a ledger row whose brief predates the
  * `question` column is exactly the row that reaches that line: the run list a
@@ -37,13 +88,49 @@ export function runDotClass(run: WebAgentRun): string {
  * The id stays reachable in the run's own detail, where it is labelled.
  */
 export function runTitle(run: WebAgentRun): string {
-  const question = run.question?.trim();
+  const title = run.title?.trim();
+  if (title) return title;
+  const question = runQuestion(run);
   if (question) return question;
   const agent = run.effectiveAgentId ?? run.agentId;
   const named = runAgentName(agent);
   if (named) return named;
   if (agent) return agent;
   return "未记录题面的运行";
+}
+
+/**
+ * The moment a list should date a run by: when it ended, or when it started if
+ * it has not. Epoch milliseconds; 0 when the ledger carries neither.
+ */
+export function runMoment(run: Pick<WebAgentRun, "startedAt" | "finishedAt">): number {
+  const at = Date.parse(run.finishedAt ?? run.startedAt ?? "");
+  return Number.isNaN(at) ? 0 : at;
+}
+
+/**
+ * How long ago, in the words the lists use: 刚刚 / N 分钟前 / N 小时前, then a
+ * date. The single implementation — the sidebar and the ledger each had one.
+ */
+export function relativeTime(ms: number, now = Date.now()): string {
+  if (!ms) return "";
+  const seconds = Math.max(0, Math.floor((now - ms) / 1000));
+  if (seconds < 60) return "刚刚";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)} 小时前`;
+  const date = new Date(ms);
+  const sameYear = date.getFullYear() === new Date(now).getFullYear();
+  return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+}
+
+/**
+ * The second line of a run row: when, and how it came out. Twelve runs of one
+ * capability are told apart by this line, not by a longer first one.
+ */
+export function runMetaLine(run: WebAgentRun, now = Date.now()): string {
+  const when = relativeTime(runMoment(run), now);
+  const { label } = runState(run);
+  return when ? `${when} · ${label}` : label;
 }
 
 /** The answer line every unrouted open-domain question runs on (server:
@@ -250,7 +337,10 @@ export interface NoticeSummary {
  * be refused again for the fifth they were never shown. Callers may render
  * fewer detail lines than there are, but never fewer than they admit to.
  */
-export function summarizeQualityNotices(notices: string[]): NoticeSummary {
+export function summarizeQualityNotices(input: Array<string | WebQualityNotice>): NoticeSummary {
+  const notices = input.map((notice) => typeof notice === "string"
+    ? notice
+    : `${notice.severity === "safety" ? "SAFETY — " : notice.severity === "must-fix" ? "MUST FIX — " : ""}${notice.title}`);
   const groups = new Map<string, NoticeGroup>();
   let mustFixCount = 0;
   let safetyCount = 0;
