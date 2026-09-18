@@ -8,6 +8,8 @@ import { apply as applyNativeBridge } from "../../../../../packages/harness-port
 import { createFrameKit } from "../../../../../packages/harness-port/src/runtimeUiKit.mjs";
 import { apply as applyFrameTheme } from "../../../../../packages/harness-port/src/runtimeUiTheme.mjs";
 import { useUiStore } from "@/lib/store";
+import { useRuntimeSessionSearch } from "@/lib/runtimeUiBridge";
+import { renderHook } from "@testing-library/react";
 
 const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources }));
@@ -27,7 +29,8 @@ vi.mock("@/lib/apiClient", async importOriginal => ({
 const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
 function PathProbe() {
   const navigate = useNavigate();
-  return <div><span data-testid="path">{useLocation().pathname}</span>
+  const location = useLocation();
+  return <div><span data-testid="path">{location.pathname}</span><span data-testid="state">{JSON.stringify(location.state ?? null)}</span>
     <button onClick={() => navigate("/app/chat/session-b")}>Open B</button>
     <button onClick={() => navigate(-1)}>Back</button>
   </div>;
@@ -584,6 +587,34 @@ describe("the run behind the task, in the frame", () => {
     mocks.listSources.mockRejectedValue(new Error("offline"));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(sent("kb-result")).toHaveLength(1);
+  });
+
+  it("offers the kernel's conversation search to the shell while the frame is ready, answered by request id", async () => {
+    const hook = renderHook(() => useRuntimeSessionSearch());
+    expect(hook.result.current.available).toBe(false);
+    expect(await hook.result.current.search("阿司匹林")).toEqual({ ok: false, items: [], hasMore: false, error: "search_unavailable" });
+    const { frame, sent, unmount } = await openTask();
+    await waitFor(() => expect(hook.result.current.available).toBe(true));
+    const pending = hook.result.current.search("  阿司匹林  ");
+    await waitFor(() => expect(sent("search")).toHaveLength(1));
+    const request = sent("search")[0];
+    expect(request).toMatchObject({ query: "阿司匹林", frameId: "frame-a" });
+    emit(frame, { type: "evimed.runtime-ui.search-result", seq: 3, requestId: "someone-else", ok: true, items: [] });
+    emit(frame, { type: "evimed.runtime-ui.search-result", seq: 4, requestId: request.requestId, ok: true, hasMore: true, items: [
+      { sessionId: "session-b", title: "老年房颤抗凝", snippet: "……阿司匹林……" }, { sessionId: "bad id!", title: "x", snippet: "y" },
+    ] });
+    expect(await pending).toEqual({ ok: true, hasMore: true, items: [{ sessionId: "session-b", title: "老年房颤抗凝", snippet: "……阿司匹林……" }] });
+    const waiting = hook.result.current.search("华法林");
+    unmount();
+    expect(await waiting).toMatchObject({ ok: false, error: "search_unavailable" });
+    await waitFor(() => expect(hook.result.current.available).toBe(false));
+  });
+
+  it("follows a branch of a finished turn as a task of its own, saying where it came from", async () => {
+    const { frame } = await openTask();
+    emit(frame, { type: "evimed.runtime-ui.session", seq: 3, sessionId: "session-fork", forkedFrom: "session-a" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-fork"));
+    expect(screen.getByTestId("state")).toHaveTextContent('{"forkedFrom":"session-a"}');
   });
 
   it("opens a file the frame names in the shell's reader, and nothing it could spell as an escape", async () => {

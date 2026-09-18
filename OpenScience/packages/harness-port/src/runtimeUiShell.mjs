@@ -98,6 +98,14 @@ export function shellStylesheet(pin) {
     // seat, `conversation.hero.agentPreset` — and that is why an occupant there
     // once "registered nothing and rendered nothing".
     'button[aria-label="选择工作区"],button[aria-label="Choose workspace"]{display:none !important}',
+    // The composer's paperclip. Uploads are refused on this surface
+    // (`fileUploads`, `session/uploadFileBinary` — knowledge enters a project
+    // through the knowledge base, not a chat attachment), so the button only
+    // ever led to a refusal. It is drawn by the input bar itself, outside any
+    // slot, so it goes by its accessible name (`file.attach`); the
+    // `file-upload` row stays mounted, because the deliverables panel and the
+    // attachment presenter inject its service.
+    'button[aria-label="添加附件"],button[aria-label="Add attachment"]{display:none !important}',
     // The left column, which `sidebar` occupies with nothing.
     //
     // Occupying the slot replaces the column's CONTENT; the frame still sizes
@@ -218,6 +226,11 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     // The picker is a popup the chip opens; an occupant that renders nothing
     // removes the choice (the chip itself is hidden by the stylesheet).
     kit.guarded('workspace picker', () => kit.occupy({ slot: 'conversation.hero.workspace', priority: below }, Nothing));
+    // The draft's attachment strip, for the same reason as the paperclip: a
+    // file pasted or dropped into the composer cannot be uploaded here, and a
+    // strip of chips that will be refused at send is a promise the page does
+    // not keep.
+    kit.guarded('attachment strip', () => kit.occupy({ slot: 'conversation.input.attachments', priority: below }, Nothing));
   }
 
   const doc = target.document;
