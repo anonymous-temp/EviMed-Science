@@ -80,9 +80,12 @@ test("EviMed tool names cover both worlds", () => {
   assert.ok(!isEviMedToolName("bash"));
   // Ten since `evimed_compact_request` joined them: a tool the manager calls to
   // ask for a compaction, mounted only where the engine that serves it is.
-  assert.equal(SOCKET_TOOL_NAME_LIST.length, 10);
+  // Eleven since `evimed_package_check`: the submission's verdict without the
+  // submission.
+  assert.equal(SOCKET_TOOL_NAME_LIST.length, 11);
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_revise_deliverable"));
   assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_compact_request"));
+  assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_package_check"));
 });
 
 test("the path guard refuses the question, the receipt and the state projection", () => {

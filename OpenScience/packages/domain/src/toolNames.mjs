@@ -107,6 +107,10 @@ export const SOCKET_TOOL_NAMES = Object.freeze({
   delegate: 'evimed_delegate',
   reviseDeliverable: 'evimed_revise_deliverable',
   submitDeliverable: 'evimed_submit_deliverable',
+  // The same verdict as a submission, without spending one. A run learned the
+  // contract by failing submissions because nothing else could tell it where it
+  // stood (2026-09-18 review, appendix E §1.3).
+  packageCheck: 'evimed_package_check',
   completeRun: 'evimed_complete_run',
   capsuleRecall: 'evimed_capsule_recall',
   capsuleNote: 'evimed_capsule_note',

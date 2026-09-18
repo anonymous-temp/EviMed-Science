@@ -501,17 +501,19 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   // plugin's apply failed on its first line and the run either refused to start
   // or came up with no gate at all. The effect callbacks stay synchronous
   // because what they return is the disposer.
-  const [plan, delegate, revise, submit, complete] = await Promise.all([
+  const [plan, delegate, revise, submit, packageCheck, complete] = await Promise.all([
     planTool(),
     delegateTool(),
     reviseTool(),
     submitTool(),
+    packageCheckTool(),
     completeTool(),
   ])
   ctx.effect(() => registerTool(ctx, plan))
   ctx.effect(() => registerTool(ctx, delegate))
   ctx.effect(() => registerTool(ctx, revise))
   ctx.effect(() => registerTool(ctx, submit))
+  ctx.effect(() => registerTool(ctx, packageCheck))
   ctx.effect(() => registerTool(ctx, complete))
 
   async function planTool() {
@@ -753,6 +755,61 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     })
   }
 
+  /**
+   * Which deliverable a call is about, and whether this session may ask.
+   *
+   * One answer for the submission and the check. A child is bound to the one
+   * plan item that created it, and a check that answered for a sibling's item
+   * would be a verdict on a package the asking child can neither repair nor
+   * submit — the same refusal, for the same reason, keeps the two tools one
+   * contract.
+   *
+   * @param {Record<string, any>} call @param {unknown} deliverableId
+   * @returns {{ refusal: { ok: false, code: string, issues: any[] } } | { refusal?: undefined, entry: Record<string, any>, binding: Record<string, any> | null, item: any }}
+   */
+  const resolveDeliverable = (call, deliverableId) => {
+    const { entry, binding } = ownedSessionState(call.sessionId)
+    if (binding && binding.deliverableId !== deliverableId) {
+      return { refusal: { ok: false, code: 'deliverable_not_owned', issues: [issue('deliverable_not_owned', `此能力子代理只负责交付物「${binding.deliverableId}」。`)] } }
+    }
+    const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === deliverableId)
+    if (!item) return { refusal: { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${deliverableId}」。`)] } }
+    if (binding && item.childSessionId !== call.sessionId) {
+      return { refusal: { ok: false, code: 'deliverable_not_owned', issues: [issue('deliverable_not_owned', '此能力子代理已不再是该交付物的当前负责人。')] } }
+    }
+    return { entry, binding, item }
+  }
+
+  /**
+   * The gate's verdict on a deliverable exactly as it stands on disk.
+   *
+   * The submission and the check both call this and nothing else, which is
+   * the whole guarantee `evimed_package_check` makes: the same files, the same
+   * source texts from the same ledger join, the same control-plane copy of the
+   * question, the same `gateDeliverable`. A check with its own reading of any
+   * of the four would be a second opinion, and the run would learn to satisfy
+   * the one that does not decide anything.
+   *
+   * @param {Record<string, any>} entry @param {Record<string, any>} item @param {Record<string, any>} call
+   * @returns {Promise<{ verdict: ReturnType<typeof gateDeliverable>, files: Map<string, string> }>}
+   */
+  const judgeDeliverable = async (entry, item, call) => {
+    const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
+    const expectedOutputs = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
+    const files = await readDeliverableFiles(ctx, entry.cwd || call.cwd, item.id, expectedOutputs)
+    const sourceArtifacts = await collectSourceArtifacts(ctx, entry, call)
+    const verdict = gateDeliverable({
+      contractKind: item.contractKind,
+      files,
+      expectedOutputs,
+      briefText: entry.briefText,
+      matrix: parseJson(files.get('clinical-evidence-matrix.json')),
+      sourceArtifacts,
+      staleEvidenceCount: 0,
+    })
+    return { verdict, files }
+  }
+
   async function submitTool() {
     return defineTool({
       name: 'evimed_submit_deliverable',
@@ -764,32 +821,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
       },
       async execute(args, call) {
-        const { entry, binding } = ownedSessionState(call.sessionId)
-        if (binding && binding.deliverableId !== args.deliverableId) {
-          return { ok: false, code: 'deliverable_not_owned', issues: [issue('deliverable_not_owned', `此能力子代理只负责交付物「${binding.deliverableId}」。`)] }
-        }
-        const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
-        if (!item) return { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)] }
-        if (binding && item.childSessionId !== call.sessionId) {
-          return { ok: false, code: 'deliverable_not_owned', issues: [issue('deliverable_not_owned', '此能力子代理已不再是该交付物的当前负责人。')] }
-        }
+        const resolved = resolveDeliverable(call, args.deliverableId)
+        if (resolved.refusal) return resolved.refusal
+        const { entry, item } = resolved
         // Counted after the verdict, not before it: what a submission costs
         // depends on whether the gate could read it. See below.
         const attempts = (entry.attempts.get(item.id) ?? 0) + 1
 
-        const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
-        const expectedOutputs = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
-        const files = await readDeliverableFiles(ctx, entry.cwd || call.cwd, item.id, expectedOutputs)
-        const sourceArtifacts = await collectSourceArtifacts(ctx, entry, call)
-        const verdict = gateDeliverable({
-          contractKind: item.contractKind,
-          files,
-          expectedOutputs,
-          briefText: entry.briefText,
-          matrix: parseJson(files.get('clinical-evidence-matrix.json')),
-          sourceArtifacts,
-          staleEvidenceCount: 0,
-        })
+        const { verdict, files } = await judgeDeliverable(entry, item, call)
         // The late avalanche, charged honestly.
         //
         // A submission the gate could not read — wrong matrix schema, a required
@@ -854,6 +893,65 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // every notice; the reply carries a bounded few, because a long list
         // after "ok" reads as work still owed on a package that is now frozen.
         return { ok: true, data: { deliverableId: item.id, contractKind: item.contractKind, label: contractKindLabel(item.contractKind), metrics: verdict.metrics, notices: boundedSuggestions(receiptEntry.notices, (count) => `另有 ${count} 条建议记在回执里，不需要再处理。`) } }
+      },
+    })
+  }
+
+  /**
+   * How many submissions this deliverable still has, as a check reports it.
+   *
+   * The verdict is the gate's and says nothing about the budget; a run that
+   * reads "ok" from a check with its submissions spent would otherwise try to
+   * submit and meet the guard. A control-plane grant is the one extra
+   * submission past the ceiling, counted only where the ceiling has been hit.
+   *
+   * @param {Record<string, any>} entry @param {Record<string, any>} item
+   * @returns {{ used: number, limit: number, remaining: number }}
+   */
+  const attemptStanding = (entry, item) => {
+    const used = Number(entry.attempts.get(item.id) ?? 0)
+    const limit = Number(config.deliveryAttemptLimit)
+    const granted = used >= limit && revisionSubmissionGrantMatches(entry, item, entry.revisionSubmissionGrants.get(item.id))
+    return { used, limit, remaining: Math.max(0, limit - used) + (granted ? 1 : 0) }
+  }
+
+  async function packageCheckTool() {
+    return defineTool({
+      name: 'evimed_package_check',
+      description: [
+        '对一件交付物运行与 evimed_submit_deliverable 完全相同的核验，返回同样的裁定。',
+        '不提交、不写回执、不占提交次数；提交前随时可用它看还差什么。',
+      ].join(' '),
+      parameters: {
+        deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
+      },
+      // Reads the deliverable and the preserved sources, writes nothing, and
+      // touches no counter — so it may share a step with the calls around it.
+      concurrencySafe: true,
+      async execute(args, call) {
+        const resolved = resolveDeliverable(call, args.deliverableId)
+        if (resolved.refusal) return resolved.refusal
+        const { entry, item } = resolved
+        // Deliberately nothing past the verdict: no attempt counted, no gate run
+        // recorded, no receipt, no mirror write. The ledger's gate runs are the
+        // record of what was *submitted*, and a check that wrote one would turn
+        // every look into a charge in the distribution the blocking budget is
+        // computed from.
+        const { verdict } = await judgeDeliverable(entry, item, call)
+        const attempts = attemptStanding(entry, item)
+        if (!verdict.ok) return { ...rejectionEnvelope(verdict), data: { deliverableId: item.id, attempts } }
+        const notices = verdict.issues.filter((entryIssue) => entryIssue.severity !== 'required').map((entryIssue) => entryIssue.message)
+        return {
+          ok: true,
+          data: {
+            deliverableId: item.id,
+            contractKind: item.contractKind,
+            label: contractKindLabel(item.contractKind),
+            metrics: verdict.metrics,
+            notices: boundedSuggestions(notices, (count) => `另有 ${count} 条建议没有列出，它们不影响通过。`),
+            attempts,
+          },
+        }
       },
     })
   }

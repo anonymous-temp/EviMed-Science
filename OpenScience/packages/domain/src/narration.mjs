@@ -92,6 +92,14 @@ const SOCKET_NARRATION = Object.freeze({
     const required = Array.isArray(record.issues) ? record.issues.filter((i) => i?.severity !== 'advisory' && i?.severity !== 'optional').length : 0
     return `提交交付物 ${id}：被退回（${required} 项必修）`
   },
+  [SOCKET_TOOL_NAMES.packageCheck]: (args, result) => {
+    const id = excerpt(args?.deliverableId, 32)
+    if (!result || typeof result !== 'object') return `自查交付物 ${id}`
+    const record = /** @type {Record<string, any>} */ (result)
+    if (record.ok) return `自查交付物 ${id}：可以提交`
+    const required = Array.isArray(record.issues) ? record.issues.filter((i) => i?.severity !== 'advisory' && i?.severity !== 'optional').length : 0
+    return `自查交付物 ${id}：${required} 项必修`
+  },
   [SOCKET_TOOL_NAMES.completeRun]: (args) => (args?.partial ? '以部分交付结束' : '结束运行'),
   [SOCKET_TOOL_NAMES.capsuleRecall]: (args, result) => withCount(`回忆胶囊：「${excerpt(args?.query)}」`, result),
   [SOCKET_TOOL_NAMES.capsuleNote]: (args) => `记到胶囊：${excerpt(args?.content, 32)}`,
