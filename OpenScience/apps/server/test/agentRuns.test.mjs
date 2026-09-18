@@ -7502,3 +7502,48 @@ test("a harness's dispatch is recorded as automated, and nothing but a boolean s
   assert.equal(Object.hasOwn(typed, "automated"), false, "a person's run carries no flag at all");
   await person.closeAll();
 });
+
+test("a run that ends without a verdict recovers only the files it wrote, not an earlier run's", async () => {
+  // Cancelled on 2026-09-19 two minutes in, a metformin run listed 34 files an
+  // aspirin run had written two days before in the same workspace as its own
+  // 「未核验」 delivery, and counted their 284 claims as its claim summary.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-recovered-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.metaDir, { recursive: true });
+    await mkdir(path.join(project.workspaceDir, workspaceLayout.runStateDir), { recursive: true });
+    const earlier = path.join(project.workspaceDir, workspaceLayout.deliverablesDir, "adr-analysis");
+    await mkdir(earlier, { recursive: true });
+    await writeFile(path.join(earlier, "safety-report.md"), "# an earlier run's report\n", "utf8");
+    const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000);
+    await utimes(path.join(earlier, "safety-report.md"), twoDaysAgo, twoDaysAgo);
+    await writeFile(
+      path.join(project.workspaceDir, workspaceLayout.runStateFile),
+      JSON.stringify({ formatVersion: 1, plan: { revision: 1, items: [{ id: "d1", status: "planned", attempts: 0 }] }, degraded: [] }),
+      "utf8",
+    );
+    const binding = { sessionId: "ses_r", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-flash",
+      readSessionHistory: async () => [],
+      monitorIntervalMs: 60_000,
+    });
+    const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
+    const mine = path.join(project.workspaceDir, workspaceLayout.deliverablesDir, "d1");
+    await mkdir(mine, { recursive: true });
+    await writeFile(path.join(mine, "clinical-evidence-report.md"), "# this run's report\n", "utf8");
+    await store.closeProject(project, "failed");
+    const finished = (await store.list(project)).find((item) => item.id === started.id);
+    assert.deepEqual(finished?.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"],
+      "what this run wrote is said; what an earlier run wrote is not claimed");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
