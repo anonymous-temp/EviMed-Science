@@ -2514,6 +2514,131 @@ def rxnorm_resolve(term):
     }
 
 
+# WHO's fourteen ATC anatomical main groups: the first letter of every code,
+# so a reader sees what "B01AC06" is for without a second lookup.
+ATC_ANATOMICAL_GROUPS = {
+    "A": "Alimentary tract and metabolism", "B": "Blood and blood forming organs", "C": "Cardiovascular system",
+    "D": "Dermatologicals", "G": "Genito-urinary system and sex hormones",
+    "H": "Systemic hormonal preparations, excluding sex hormones and insulins", "J": "Antiinfectives for systemic use",
+    "L": "Antineoplastic and immunomodulating agents", "M": "Musculo-skeletal system", "N": "Nervous system",
+    "P": "Antiparasitic products, insecticides and repellents", "R": "Respiratory system", "S": "Sensory organs",
+    "V": "Various",
+}
+_ATC_CODE = re.compile(r"^[A-Z]\d{2}[A-Z]{2}\d{2}$")
+
+
+def rxnorm_atc(rxcui):
+    """The ATC codes RxNorm carries for one ingredient, with their class names.
+
+    Two RxNav calls: the concept's ATC property gives the full seven-character
+    codes (B01AC06), RxClass names the fourth-level class each belongs to
+    (B01AC, platelet aggregation inhibitors). The codes are WHO's, as NLM
+    redistributes them in RxNorm; nothing here assigns one. An ingredient with
+    several (aspirin: A01AD05, B01AC06, N02BA01) keeps all of them, because the
+    indication decides which applies and that is the report's judgement."""
+    identifier = str(rxcui or "").strip()
+    if not re.fullmatch(r"\d{1,10}", identifier):
+        return []
+    base = _base("EVIMED_RXNORM_BASE_URL", "https://rxnav.nlm.nih.gov/REST")
+    properties = _list(_dict(_get_json(_url(base, "rxcui/%s/property.json" % identifier, {"propName": "ATC"})).get("propConceptGroup")).get("propConcept"))
+    codes = []
+    for record in properties:
+        code = str(_dict(record).get("propValue") or "").strip().upper()
+        if _ATC_CODE.match(code) and code not in codes:
+            codes.append(code)
+    if not codes:
+        return []
+    names = {}
+    try:
+        classes = _get_json(_url(base, "rxclass/class/byRxcui.json", {"rxcui": identifier, "relaSource": "ATC"}))
+        info = _dict(classes.get("rxclassDrugInfoList"))
+        for record in _list(info.get("rxclassDrugInfo")) or _list(info.get("rxclassMinConceptItem")):
+            record = _dict(record)
+            item = _dict(record.get("rxclassMinConceptItem")) or record
+            if str(_dict(record.get("minConcept")).get("rxcui") or identifier) != identifier:
+                continue
+            class_id = str(item.get("classId") or "").strip().upper()
+            if class_id:
+                names[class_id] = str(item.get("className") or "").strip()
+    except PublicSourceError:
+        # The codes stand without their names: the classification is the fact,
+        # the name only helps a reader.
+        names = {}
+    return [{
+        "code": code,
+        "class": code[:5],
+        "className": names.get(code[:5]) or None,
+        "anatomicalGroup": ATC_ANATOMICAL_GROUPS.get(code[0]),
+    } for code in codes[:12]]
+
+
+def mesh_descriptor(term, narrower_limit=20):
+    """A free-text term mapped to its MeSH descriptor, for building a query.
+
+    E-utilities, keyless, through the gateway: `esearch db=mesh` finds
+    candidate records, `esummary` gives each record's entry terms, tree numbers
+    and child descriptors. The record whose own entry terms contain the term
+    wins; otherwise the first descriptor NCBI ranked. Returns None when MeSH
+    has nothing — MeSH is English, so a Chinese term finds nothing and the
+    caller says so rather than guessing a translation.
+
+    What comes back is what a recall-oriented PubMed query is built from: the
+    heading (which PubMed explodes to every narrower descriptor by default),
+    its entry terms for the title/abstract field, the narrower descriptors by
+    name, and one query string that combines them."""
+    text = " ".join(str(term or "").strip().split())[:200]
+    if not text:
+        return None
+    base = _base("EVIMED_PUBMED_BASE_URL", "https://eutils.ncbi.nlm.nih.gov/entrez/eutils")
+    found = _ncbi_get_json(_url(base, "esearch.fcgi", _ncbi_params({"db": "mesh", "term": text, "retmax": 5, "retmode": "json"})))
+    ids = [str(value) for value in _list(_dict(found.get("esearchresult")).get("idlist")) if str(value).strip()][:5]
+    if not ids:
+        return None
+    summary = _dict(_ncbi_get_json(_url(base, "esummary.fcgi", _ncbi_params({"db": "mesh", "id": ",".join(ids), "retmode": "json"}))).get("result"))
+    records = [_dict(summary.get(identifier)) for identifier in ids if str(_dict(summary.get(identifier)).get("ds_meshui") or "").startswith("D")]
+    if not records:
+        return None
+    wanted = text.casefold()
+    chosen = next(
+        (record for record in records if any(str(name).casefold() == wanted for name in _list(record.get("ds_meshterms")))),
+        records[0],
+    )
+    terms = [str(name).strip() for name in _list(chosen.get("ds_meshterms")) if str(name).strip()]
+    heading = terms[0] if terms else text
+    links = [_dict(link) for link in _list(chosen.get("ds_idxlinks"))]
+    tree_numbers = [str(link.get("treenum")) for link in links if link.get("treenum")]
+    child_ids = []
+    for link in links:
+        for child in _list(link.get("children")):
+            child = str(child)
+            # Descriptor uids are 68 followed by the D-number's digits; the
+            # rest are supplementary concepts, which are not narrower headings.
+            if child.startswith("68") and child not in child_ids:
+                child_ids.append(child)
+    narrower = []
+    if child_ids and narrower_limit:
+        try:
+            children = _dict(_ncbi_get_json(_url(base, "esummary.fcgi", _ncbi_params({"db": "mesh", "id": ",".join(child_ids[:narrower_limit]), "retmode": "json"}))).get("result"))
+            for child in child_ids[:narrower_limit]:
+                names = _list(_dict(children.get(child)).get("ds_meshterms"))
+                if names:
+                    narrower.append({"descriptorUi": str(_dict(children.get(child)).get("ds_meshui") or ""), "name": str(names[0])})
+        except PublicSourceError:
+            narrower = []
+    entry_terms = [name for name in terms[1:] if "," not in name][:15]
+    query = " OR ".join(['"%s"[MeSH Terms]' % heading] + ['"%s"[tiab]' % name for name in [heading] + entry_terms[:8]])
+    return {
+        "descriptorUi": str(chosen.get("ds_meshui") or ""),
+        "name": heading,
+        "entryTerms": entry_terms,
+        "treeNumbers": tree_numbers[:10],
+        "narrower": narrower,
+        "scopeNote": str(chosen.get("ds_scopenote") or "").strip()[:600] or None,
+        "pubmedQuery": query,
+        "url": "https://www.ncbi.nlm.nih.gov/mesh/%s" % urllib.parse.quote(str(chosen.get("uid") or "")),
+    }
+
+
 def _simple_json_source(source_id, query, limit):
     if source_id == "cbioportal":
         base = _base("EVIMED_CBIOPORTAL_BASE_URL", "https://www.cbioportal.org/api")

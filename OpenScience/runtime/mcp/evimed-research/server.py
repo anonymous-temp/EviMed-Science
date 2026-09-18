@@ -405,7 +405,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "term_normalize",
-        "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization.",
+        "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization. Set mesh to map an English term to its MeSH descriptor: entry terms, tree numbers, narrower descriptors and a PubMed query that searches them.",
         "inputSchema": object_schema(
             {
                 "term": STRING,
@@ -414,13 +414,14 @@ TOOL_DEFINITIONS = [
                     "enum": ["general", "drug", "disease", "indication", "adverse_event"],
                 },
                 "annotate": {"type": "boolean"},
+                "mesh": {"type": "boolean"},
             },
             ("term",),
         ),
     },
     {
         "name": "drug_term_normalize",
-        "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms.",
+        "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms and the drug's WHO ATC codes as RxNorm carries them.",
         "inputSchema": object_schema({"term": STRING}, ("term",)),
     },
     {
@@ -1868,19 +1869,30 @@ def _dispatch(name, arguments):
             except public_sources.PublicSourceError:
                 rxnorm = None
         if rxnorm is not None:
-            data = _data_with_provenance(
-                {
-                    "input": arguments["term"].strip(),
-                    "preferred": rxnorm["preferred"],
-                    "synonyms": rxnorm["synonyms"],
-                    "domain": "drug",
-                    "vocabulary": "rxnorm",
-                    "rxcui": rxnorm["rxcui"],
-                },
-                name,
-                arguments,
-                _scope(),
-            )
+            normalized = {
+                "input": arguments["term"].strip(),
+                "preferred": rxnorm["preferred"],
+                "synonyms": rxnorm["synonyms"],
+                "domain": "drug",
+                "vocabulary": "rxnorm",
+                "rxcui": rxnorm["rxcui"],
+            }
+            # The drug class, as WHO's ATC codes (via RxNorm/RxClass): what an
+            # evidence table groups a drug by. A failed lookup keeps the
+            # normalization and says the classes were not retrieved.
+            atc_warning = None
+            try:
+                normalized["atc"] = public_sources.rxnorm_atc(rxnorm["rxcui"])
+            except public_sources.PublicSourceError as error:
+                atc_warning = "ATC classes were not retrieved (%s); the RxNorm normalization is unaffected." % error
+            data = _data_with_provenance(normalized, name, arguments, _scope())
+            if atc_warning:
+                return warning(
+                    "Normalized the supplied term against the RxNorm vocabulary.",
+                    [atc_warning],
+                    ["Retry for the ATC classes, or classify the drug from its label."],
+                    data=data,
+                )
             return success("Normalized the supplied term against the RxNorm vocabulary.", data=data)
         data = _normalize_term(arguments["term"])
         annotation_warnings = []
@@ -1903,6 +1915,23 @@ def _dispatch(name, arguments):
                     annotation_warnings.append(
                         "PubTator3 annotation was unavailable (%s); the curated normalization is unaffected." % error
                     )
+            # MeSH, on request: the controlled heading and its entry terms and
+            # narrower descriptors, which is what makes a PubMed search find the
+            # papers that did not use the run's own wording. Off by default for
+            # the same reason as the annotation: this tool runs in loops.
+            if arguments.get("mesh") and public_sources.enabled():
+                try:
+                    descriptor = public_sources.mesh_descriptor(arguments["term"])
+                    if descriptor:
+                        data["mesh"] = descriptor
+                    else:
+                        annotation_warnings.append(
+                            "MeSH has no descriptor for this term; MeSH is English, so pass the English name of a concept."
+                        )
+                except public_sources.PublicSourceError as error:
+                    annotation_warnings.append(
+                        "MeSH lookup was unavailable (%s); the curated normalization is unaffected." % error
+                    )
         else:
             data["domain"] = "drug"
             data["vocabulary"] = "curated-local" if normalized_key in TERM_VOCABULARY else "unresolved"
@@ -1916,6 +1945,11 @@ def _dispatch(name, arguments):
                     data=data,
                 )
             return success("Normalized the supplied term against the curated vocabulary.", data=data)
+        if data.get("mesh"):
+            summary = "Mapped the term to the MeSH descriptor %s (%s)." % (data["mesh"]["name"], data["mesh"]["descriptorUi"])
+            if annotation_warnings:
+                return warning(summary, annotation_warnings, ["Use the MeSH query; retry the part that was unavailable if it matters."], data=data)
+            return success(summary, data=data)
         return warning(
             "No curated normalization exists for this term; returned the input unchanged.",
             ["The returned preferred term and synonyms are the unmodified input, not an authoritative normalization."]

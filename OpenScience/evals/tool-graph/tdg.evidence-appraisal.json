@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "evidence-appraisal",
-  "version": "sha256:7feed8c567e69fd2d33e1cad520f603b19e1c9b063747438e945f7fe02d91500",
+  "version": "sha256:92cc3b6763b262dcc2a197765f646ac6668ea1a7ecb56ad86e69303a7174faeb",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 28,
@@ -1057,7 +1057,7 @@
     {
       "name": "mcp__evimed__term_normalize",
       "source": "mcp",
-      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization.",
+      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization. Set mesh to map an English term to its MeSH descriptor: entry terms, tree numbers, narrower descriptors and a PubMed query that searches them.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1077,6 +1077,9 @@
             ]
           },
           "annotate": {
+            "type": "boolean"
+          },
+          "mesh": {
             "type": "boolean"
           }
         },

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-content",
-  "version": "sha256:e83e00ee8a20594a4d22abe0921ebbfa96dffe770a99c0093dbec6c61841d407",
+  "version": "sha256:f7f4a36fc2d73aea2d219f2920ca6010e7ceede8b8c07774b64534620f837227",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 33,
@@ -737,7 +737,7 @@
     {
       "name": "mcp__evimed__drug_term_normalize",
       "source": "mcp",
-      "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms.",
+      "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms and the drug's WHO ATC codes as RxNorm carries them.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1284,7 +1284,7 @@
     {
       "name": "mcp__evimed__term_normalize",
       "source": "mcp",
-      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization.",
+      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization. Set mesh to map an English term to its MeSH descriptor: entry terms, tree numbers, narrower descriptors and a PubMed query that searches them.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1304,6 +1304,9 @@
             ]
           },
           "annotate": {
+            "type": "boolean"
+          },
+          "mesh": {
             "type": "boolean"
           }
         },

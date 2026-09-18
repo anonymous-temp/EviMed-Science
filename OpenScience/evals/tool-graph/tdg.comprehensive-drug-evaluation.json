@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "comprehensive-drug-evaluation",
-  "version": "sha256:6c973b53906c1dbb98f4093553bef9090980233def0197a6daa8cc541e05668e",
+  "version": "sha256:75e2ffe61c1b0f161e42c714bae8410a56c85278e0904fc2092c87fbd9b15d10",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -1181,7 +1181,7 @@
     {
       "name": "mcp__evimed__drug_term_normalize",
       "source": "mcp",
-      "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms.",
+      "description": "Normalize a drug name against the public RxNorm vocabulary (curated local table as fallback) and return known deterministic synonyms and the drug's WHO ATC codes as RxNorm carries them.",
       "inputSchema": {
         "type": "object",
         "properties": {
