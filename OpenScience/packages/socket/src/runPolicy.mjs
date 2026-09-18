@@ -27,6 +27,8 @@
 
 import {
   MAX_DELEGATION_DEPTH,
+  MCP_TOOL_PREFIX,
+  ROOT_VISIBLE_MCP_BASE_NAMES,
   errorCodeMessage,
   deliverableIdOfPath,
   isGateImplementationPath,
@@ -354,6 +356,24 @@ export function unmetDependencies(item, items, delivered) {
     unmet.push({ id: String(id), status: String(dependency?.status ?? 'missing') })
   }
   return unmet
+}
+
+/**
+ * The registered research tools the root session is not shown.
+ *
+ * Every `mcp__evimed__*` name whose base is not on the root's list — read off
+ * what the registry actually holds rather than off the domain's list of known
+ * tools, because a restriction naming a tool the registry does not have is
+ * refused outright, and a tool the server gained after this build still
+ * belongs to the children that ask for it.
+ * @param {readonly string[]} registered
+ * @returns {string[]}
+ */
+export function rootHiddenMcpTools(registered) {
+  const visible = new Set(ROOT_VISIBLE_MCP_BASE_NAMES)
+  return [...new Set(registered)]
+    .filter((name) => name.startsWith(MCP_TOOL_PREFIX) && !visible.has(name.slice(MCP_TOOL_PREFIX.length)))
+    .sort()
 }
 
 /** How each plan-item state reads in a refusal the model acts on. */

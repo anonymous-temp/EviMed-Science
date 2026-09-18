@@ -126,7 +126,9 @@ export const EXTRACTION_FLOORS = {
   // with a floor of six meant three could vanish and the run stayed green.
   // Changing this number is how a reviewer says "the composition's ban list
   // changed on purpose", which is exactly the moment worth stopping at.
-  derivedFromAbsentListExactly: 9,
+  // 13 since 2026-09-18: the kernel's subagent, subagent-control, workflow and
+  // workflow-worker rows left the preset and joined the list.
+  derivedFromAbsentListExactly: 13,
 };
 
 /**

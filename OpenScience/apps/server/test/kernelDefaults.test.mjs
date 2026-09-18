@@ -87,7 +87,11 @@ test("every setting the runtime depends on still holds in the composition the im
   // provider swap that preserves a run's durable handles across a compaction.
   // It sits beside the kernel's own engine rather than replacing the row,
   // because it registers nothing at all on the default policy.
-  assert.equal(report.counts.presetRows, 25, "the preset includes the managed citation bridge, the compaction provider, and grouped native tools");
+  // 20 since 2026-09-18: the `delegation` group and its four rows (the
+  // kernel's subagent, subagent-control, workflow and workflow-worker tools)
+  // left the preset; delegation is evimed_delegate over the host's subagent
+  // service, and nothing called the workflow tool.
+  assert.equal(report.counts.presetRows, 20, "the preset includes the managed citation bridge, the compaction provider, and grouped native tools");
   const preset = parseCordisDocument(await readFile(source("preset"), "utf8"));
   assert.equal(preset.rows.filter(row => row.id === "evimed-compaction").length, 1);
   assert.equal(preset.rows.filter(row => row.id === "evimed-citation-bridge").length, 1);
@@ -166,7 +170,8 @@ test("the invariant list is read out of the composition, not retyped beside it",
   const names = absent.map((invariant) => invariant.row);
   assert.deepEqual(
     names,
-    ["tool-todo", "agent-instructions", "str_replace_editor", "tool-web", "plan-mode", "tool-ralph", "tool-lsp", "code-runtime", "tool-goal"],
+    ["tool-todo", "agent-instructions", "str_replace_editor", "tool-web", "plan-mode", "tool-ralph", "tool-lsp", "code-runtime", "tool-goal",
+      "tool-subagent", "tool-subagent-control", "tool-workflow", "workflow-worker-thread"],
     "the preset's deliberately-absent block is the list; if it changed, this is where you notice",
   );
   // A reason that spans three comment lines has to arrive whole, or the entry
@@ -467,7 +472,7 @@ test("losing one entry from the ban list is caught, not absorbed", async () => {
   const report = await checkKernelDefaults({ overrideFiles: { preset: presetPath } });
   const drift = report.problems.filter((problem) => problem.kind === "extraction-drift");
   assert.equal(drift.length, 1, "one demoted entry must be reported");
-  assert.match(drift[0].detail, /found 8, expected exactly 9/);
+  assert.match(drift[0].detail, /found 12, expected exactly 13/);
 });
 
 test("a row form the parser cannot read stops it, rather than shrinking the list", () => {

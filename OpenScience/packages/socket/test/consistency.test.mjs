@@ -622,6 +622,51 @@ test("mounting the run policy produces a run mirror row, not just the ability to
   assert.ok("cwd" in RUN_DOMAIN_SPEC.tables.run_mirror, "the field the projection reads must be declared");
 });
 
+test("a root session is shown only its own research tools, in its own scope, once; a child is left to its capability's filter", async () => {
+  const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
+  const { MCP_TOOL_NAMES: mcpNames } = await import("@evimed/domain");
+  const ctx = harness();
+  /** @type {string[]} */
+  const degraded = [];
+  ctx.provide("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line), notice() {} });
+  // What the MCP bridge registered in the global layer, plus the kernel's own.
+  /** @type {any} */ (ctx.tools).schemas = () => [...mcpNames, "bash", "read", "skill"].map((name) => ({ name }));
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit: 2, bundleVersion: "0.1.0" });
+  /** @param {any} agent */
+  const start = (agent) => { for (const handler of ctx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent, source: "startup" }); };
+  /** @type {any[]} */
+  const rootFilters = [];
+  const root = { id: "root", session: { id: "root", header: { cwd: "/workspace" } }, ctx: { tools: { restrict: (/** @type {any} */ filter) => { rootFilters.push(filter); return () => {}; } } }, inject() {} };
+  start(root);
+  assert.equal(rootFilters.length, 1, "the root is narrowed at session start, before its first request is assembled");
+  assert.ok(rootFilters[0].deny.includes("mcp__evimed__comprehensive_drug_evaluation"));
+  assert.ok(!rootFilters[0].deny.includes("mcp__evimed__literature_search"), "the root keeps its own retrieval");
+  assert.ok(!rootFilters[0].deny.includes("bash"), "kernel tools are not this narrowing's business");
+  assert.equal(rootFilters[0].allow, undefined, "a deny list, so nothing the root was not told about disappears with it");
+  start(root);
+  assert.equal(rootFilters.length, 1, "a resumed or compacted session keeps its scope and is not narrowed twice");
+
+  /** @type {any[]} */
+  const childFilters = [];
+  const child = { id: "child", session: { id: "child", header: { cwd: "/workspace", origin: "subagent", parentSession: "root" } }, ctx: { tools: { restrict: (/** @type {any} */ filter) => { childFilters.push(filter); return () => {}; } } } };
+  start(child);
+  assert.equal(childFilters.length, 0, "a child is narrowed by its capability's own filter, never by the root's");
+
+  const broken = { id: "broken", session: { id: "broken", header: { cwd: "/workspace" } }, ctx: { tools: { restrict: () => { throw new Error("tools.restrict() names unknown global tool"); } } }, inject() {} };
+  assert.doesNotThrow(() => start(broken), "a failed narrowing must not fail the session");
+  assert.ok(degraded.some((line) => /narrowing failed/.test(line)), `the failure is said out loud: ${JSON.stringify(degraded)}`);
+
+  // A registry with the kernel's tools but no research server yet: nothing to
+  // deny, and the run says the root will see whatever registers later.
+  /** @type {any} */ (ctx.tools).schemas = () => ["bash", "read", "skill"].map((name) => ({ name }));
+  /** @type {any[]} */
+  const earlyFilters = [];
+  const early = { id: "early", session: { id: "early", header: { cwd: "/workspace" } }, ctx: { tools: { restrict: (/** @type {any} */ filter) => { earlyFilters.push(filter); return () => {}; } } }, inject() {} };
+  start(early);
+  assert.equal(earlyFilters.length, 0);
+  assert.ok(degraded.some((line) => /found no research tools registered/.test(line)), `an empty narrowing is said out loud: ${JSON.stringify(degraded)}`);
+});
+
 /** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number, structuralAttemptAllowance?: number, knowledge?: string[]|null }} [options] */
 async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, knowledge = null } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");

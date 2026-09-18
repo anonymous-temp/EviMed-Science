@@ -3,7 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 import { SEAMS } from "@evimed/harness-port";
-import { CONTRACT_KINDS, workspaceLayout, TOOL_RESULT_PRUNER } from "@evimed/domain";
+import { CONTRACT_KINDS, MCP_TOOL_NAMES, ROOT_VISIBLE_MCP_BASE_NAMES, workspaceLayout, TOOL_RESULT_PRUNER } from "@evimed/domain";
 
 import {
   AGENT_PLUGIN_IDS,
@@ -26,6 +26,7 @@ import {
   mergeEvidence,
   projectRunState,
   rejectionEnvelope,
+  rootHiddenMcpTools,
   sourceArtifactPaths,
   renderDeliverySummary,
   settleDelegation,
@@ -84,28 +85,24 @@ test("the composition mounts every agent plugin we own and nothing we ruled out"
 test("a child cannot interrupt its parent's synthesis by choosing how its report is delivered", async () => {
   // This used to be `assert.match(preset, /reportDelivery: quiet/)`, and that
   // string has not been a setting since 0.1.2-alpha.4 — the row carrying it was
-  // removed upstream. The assertion went on matching the comment that explains
-  // its removal, so it passed while checking nothing about the composition.
-  //
-  // What holds now, and is worth asserting: the row that took the setting is
-  // gone, its replacement takes no configuration at all, and the retired
-  // report tool is mounted nowhere. The property is the same; the mechanism is
-  // construction rather than a value we set.
+  // removed upstream. It then became "the control row is mounted and takes no
+  // configuration". Since 2026-09-18 no kernel messaging row is mounted at all:
+  // a child's only channel to its parent is its submission, which reaches the
+  // root through `evimed_await` or, when the root is idle between turns, one
+  // steer carrying the settled results (combinedPlan.test.mjs: "a root inside
+  // its turn collects for itself, and a cancelled run is never woken").
+  // Neither lets a child choose to break into the parent's synthesis.
   const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
   const rows = preset.split("\n").filter((line) => /^\s*-?\s*name: '@deepseek-ai\//.test(line));
   assert.ok(rows.length > 0, "no plugin rows were read, so this test walked nothing");
-  assert.ok(
-    !rows.some((row) => row.includes("dsh-tool-subagent-report")),
-    "the retired one-way report tool is mounted; delivery would be the model's choice again",
-  );
-  assert.ok(
-    rows.some((row) => row.includes("dsh-tool-subagent-control")),
-    "the replacement row is absent, so a child has no way to reach its parent at all",
-  );
-  const control = preset.slice(preset.indexOf("id: tool-subagent-control"));
-  const nextRow = control.slice(control.indexOf("\n") + 1).search(/^\s*- id: /m);
-  assert.doesNotMatch(control.slice(0, nextRow > 0 ? nextRow : 200), /config:/,
-    "the control row takes configuration, so delivery is a setting again and must be asserted as one");
+  for (const retired of ["dsh-tool-subagent-report", "dsh-tool-subagent-control", "dsh-tool-subagent'"]) {
+    assert.ok(!rows.some((row) => row.includes(retired)), `${retired} is mounted; a child could address its parent directly again`);
+  }
+  const { DELEGATION_BASE_TOOLS } = await import("@evimed/domain");
+  assert.ok(DELEGATION_BASE_TOOLS.length > 0, "no child tools were read, so this test walked nothing");
+  for (const messaging of ["send_message", "interrupt_agent", "list_agents", "report", "subagent", "subagent_report"]) {
+    assert.ok(!DELEGATION_BASE_TOOLS.includes(messaging), `a child is handed ${messaging}`);
+  }
 });
 
 test("a specialist deliverable is delegated before the parent retrieves its evidence", async () => {
@@ -1159,4 +1156,47 @@ test("every compaction observation is emitted under a topic the vocabulary defin
   for (const value of topics) {
     assert.match(value, /^compaction\//, `${value} is not a full topic, so the emit would need a prefix`);
   }
+});
+
+/* ------------------------------------------------ what the root is shown */
+
+test("the root is shown every research tool its own instructions name, and the specialist tools stay with the children", async () => {
+  // The root is the answer line as well as the orchestrator: an open-domain
+  // question is answered in the root session under the open-domain-answer
+  // persona. A tool that persona declares, or that the orchestration guidance
+  // names, must stay visible to the root, or the plain questions that should
+  // never need a delegation are the ones that fail.
+  const agentYaml = await readFile(new URL("../../../runtime/skills/evimed/open-domain-answer/agent.yaml", import.meta.url), "utf8");
+  /** The two lists, read line by line: they are plain YAML sequences under a key. @param {string} key */
+  const list = (key) => {
+    const lines = agentYaml.split("\n");
+    const start = lines.findIndex((line) => line.trim() === `${key}:`);
+    assert.ok(start >= 0, `agent.yaml has no ${key}: list; the read is wrong, not the persona`);
+    const items = [];
+    for (const line of lines.slice(start + 1)) {
+      const match = /^\s+-\s+([a-z_]+)\s*$/.exec(line);
+      if (!match) break;
+      items.push(match[1]);
+    }
+    return items;
+  };
+  const personaTools = [...list("requiredTools"), ...list("optionalTools")];
+  assert.ok(personaTools.length >= 8 && personaTools.includes("biomedical_source_search"), `read ${personaTools.join(", ")}`);
+  const guidance = buildGuidanceText([], { askUserEnabled: false, capsuleActive: true, reviewEnabled: false });
+  const guidanceTools = [...guidance.matchAll(/mcp__evimed__([a-z_]+)/g)].map((match) => match[1]);
+  assert.ok(guidanceTools.length >= 3, `read ${guidanceTools.join(", ")} from the guidance`);
+  const personaSkill = await readFile(new URL("../../../runtime/skills/evimed/open-domain-answer/SKILL.md", import.meta.url), "utf8");
+  const personaSkillTools = [...personaSkill.matchAll(/mcp__evimed__([a-z_]+)/g)].map((match) => match[1]);
+  for (const tool of new Set([...personaTools, ...guidanceTools, ...personaSkillTools])) {
+    assert.ok(ROOT_VISIBLE_MCP_BASE_NAMES.includes(tool), `the root's instructions name ${tool} and the root would not be shown it`);
+  }
+
+  const hidden = rootHiddenMcpTools([...MCP_TOOL_NAMES, "bash", "evimed_plan", "mcp__tooluniverse__execute_tool", "mcp__evimed__a_tool_added_later"]);
+  for (const tool of ["comprehensive_drug_evaluation", "mendelian_randomization", "offlabel_evidence_packet", "drug_selection_evaluation", "meta_analysis"]) {
+    assert.ok(hidden.includes(`mcp__evimed__${tool}`), `${tool} is delegated work and must not ride every root request`);
+  }
+  for (const tool of ROOT_VISIBLE_MCP_BASE_NAMES) assert.ok(!hidden.includes(`mcp__evimed__${tool}`), `${tool} is the root's own`);
+  assert.ok(!hidden.includes("bash") && !hidden.includes("evimed_plan"), "only research-server tools are narrowed");
+  assert.ok(!hidden.includes("mcp__tooluniverse__execute_tool"), "another server's tools are not this list's business");
+  assert.ok(hidden.includes("mcp__evimed__a_tool_added_later"), "a research tool this build does not know is delegated work by default");
 });

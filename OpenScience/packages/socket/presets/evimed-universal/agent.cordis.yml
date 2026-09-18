@@ -218,44 +218,6 @@
         headChars: 4096
         tailChars: 1024
 
-- id: delegation
-  name: cordis:group
-  group: true
-  isolate:
-    workflowEngine: true
-  config:
-    - id: tool-subagent
-      name: '@deepseek-ai/dsh-tool-subagent'
-      config:
-        provider: spawn
-        toolName: subagent
-        backgroundMode: continuable
-    # `send_message`, `interrupt_agent`, `list_agents`. Since 0.1.2-alpha.4 this
-    # row is also what a child uses to reach its parent: the one-way `report`
-    # tool was removed upstream and @deepseek-ai/dsh-tool-subagent-report has no
-    # build after alpha.3, so the row that mounted it is gone rather than
-    # replaced.
-    #
-    # What that costs and what it does not. The old row carried
-    # `reportDelivery: quiet` because delivery had to be a deployment policy —
-    # a model able to pick `next-step` can interrupt its own synthesis at will.
-    # The new tool takes no configuration at all, so that property now holds by
-    # construction rather than by our setting it. What changed underneath is
-    # the shape: `send_message` returns acceptance and never a reply, and a
-    # message to a live parent arrives at its nearest step boundary through
-    # Steer (an idle parent starts a turn). So there are no quiet reports any
-    # more, because there are no reports — there are addressed messages, and a
-    # child can now wake its parent. That was already true of settlement
-    # notifications; it is newly true of anything a child chooses to say.
-    - id: tool-subagent-control
-      name: '@deepseek-ai/dsh-tool-subagent-control'
-    - id: workflow-worker-thread
-      name: '@deepseek-ai/dsh-workflow-worker-thread'
-      config:
-        provider: spawn
-    - id: tool-workflow
-      name: '@deepseek-ai/dsh-tool-workflow'
-
 # Deliberately absent, each for a reason:
 #   tool-todo            a second planning surface; the plan is task-plan.json alone
 #   agent-instructions   it injects AGENTS.md from the workspace and from every
@@ -270,3 +232,14 @@
 #   tool-lsp, code-runtime   this is not a coding agent
 #   tool-goal            state, not scheduling; cross-day scheduling is the
 #                        control plane's job
+#   tool-subagent, tool-subagent-control  delegation is evimed_delegate over
+#                        the kernel's subagent service, not these tools; their
+#                        schemas rode every root request and nothing called
+#                        them, and send_message was never in a child's allow-
+#                        list. The `subagent` service and its spawn provider --
+#                        what evimed_delegate starts children through, and what
+#                        the session header's child catalogue reads -- are host
+#                        rows and stay (2026-09-18)
+#   tool-workflow, workflow-worker-thread  no skill, manifest or code path
+#                        calls the workflow tool; its schema (4 K characters)
+#                        rode every root request (2026-09-18)

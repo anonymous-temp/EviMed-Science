@@ -206,6 +206,38 @@ export function registerTool(ctx, tool) {
 }
 
 /**
+ * Narrow the tools one agent sees, in that agent's own scope.
+ *
+ * Through `agent.ctx` and nowhere else: the kernel's registry intersects every
+ * restriction on an agent's scope chain, so a restriction registered in the
+ * preset's scope would narrow every child joined under it too (spec §9.7). A
+ * child joins the preset's standing scope, not its parent's, so a restriction
+ * here stays with the one agent. Names the registry does not know make it
+ * throw; the caller derives the list from `registeredToolNames`.
+ * @param {any} agent @param {{ allow?: readonly string[], deny?: readonly string[] }} filter
+ * @returns {() => void} the registry's disposer
+ */
+export function restrictAgentTools(agent, filter) {
+  return agent.ctx.tools.restrict({
+    ...(filter.allow ? { allow: [...filter.allow] } : {}),
+    ...(filter.deny ? { deny: [...filter.deny] } : {}),
+  })
+}
+
+/**
+ * Names of the tools registered in the global layer — the host composition's,
+ * which is where the MCP bridge registers the research server's tools. Empty
+ * where the registry offers no schema projection, so a caller narrows nothing
+ * rather than guessing names the registry would refuse.
+ * @param {any} ctx @returns {string[]}
+ */
+export function registeredToolNames(ctx) {
+  const tools = ctx?.get?.('tools') ?? ctx?.tools
+  if (typeof tools?.schemas !== 'function') return []
+  return tools.schemas().map((/** @type {any} */ schema) => String(schema?.name ?? '')).filter(Boolean)
+}
+
+/**
  * The monotonic, final refusal. Reserved for policy: an attempt ceiling, a
  * budget, a path guard. A business verdict is a return value, never this.
  * @param {any} ctx

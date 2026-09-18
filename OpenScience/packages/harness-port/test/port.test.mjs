@@ -16,7 +16,9 @@ import {
   registerRightSidebarTab,
   registerWebFetchProvider,
   registerWebSearchProvider,
+  registeredToolNames,
   renderEnvelope,
+  restrictAgentTools,
   steerContext,
   toArgs,
   toSessionRef,
@@ -59,6 +61,18 @@ test("steered context is the same identified plugin message, handed to the kerne
   assert.ok(typeof steered[0].id === "string" && steered[0].id.length > 0);
   assert.deepEqual(steered[0].source, { kind: "plugin", plugin: "evimed-run-policy" });
   assert.deepEqual(steered[0].content, [{ type: "text", text: "Collect the children's results." }]);
+});
+
+test("an agent's tools are narrowed through its own scope, from names the registry actually holds", () => {
+  /** @type {any[]} */
+  const filters = [];
+  const agent = { ctx: { tools: { restrict: (/** @type {any} */ filter) => { filters.push(filter); return () => "disposed"; } } } };
+  const dispose = restrictAgentTools(agent, { deny: ["mcp__evimed__meta_analysis"] });
+  assert.deepEqual(filters, [{ deny: ["mcp__evimed__meta_analysis"] }], "exactly the filter asked for, and no empty allow list beside it");
+  assert.equal(dispose(), "disposed", "the registry's own disposer is handed back");
+  const ctx = { get: (/** @type {string} */ key) => (key === "tools" ? { schemas: () => [{ name: "bash" }, { name: "mcp__evimed__meta_analysis" }, { name: "" }] } : undefined) };
+  assert.deepEqual(registeredToolNames(ctx), ["bash", "mcp__evimed__meta_analysis"]);
+  assert.deepEqual(registeredToolNames({ get: () => ({}) }), [], "a registry without a schema projection narrows nothing rather than guessing");
 });
 
 test("context added during pre-step enters that request rather than the next inbox claim", async () => {
