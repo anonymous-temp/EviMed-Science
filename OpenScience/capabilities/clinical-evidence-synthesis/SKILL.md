@@ -1087,7 +1087,7 @@ paragraph that reads as assembled by copying rather than written.
 
 ### Evidence matrix
 
-`clinical-evidence-matrix.json` holds the report's atomic material claims in a top-level `claims` array. Write them one at a time with `evimed_claim_upsert{deliverableId, claim}`: it writes the claim (replacing the one with the same `claimId`, or numbering a new one), judges it on the spot by the rules the submission applies — the quote verbatim in its preserved source, the fields present, every numeral carried by the quote — and answers `verified` or `unverified` with the reasons. An unverified claim is written anyway: fix what it names and write it again under its `claimId`. Writing the file yourself still works; the tool is only cheaper than a script that builds it. Do not split prose into artificial micro-claims merely to increase the count. Every claim must contain:
+`clinical-evidence-matrix.json` holds the report's atomic material claims in a top-level `claims` array. Write them with `evimed_claim_upsert{deliverableId, claims: [...]}` — up to 60 claims in one call (or one `claim`): it writes each (replacing the one with the same `claimId`, or numbering a new one), judges each on the spot by the rules the submission applies — the quote verbatim in its preserved source, the fields present, every numeral carried by the quote — and answers `verified` or `unverified` with the reasons, claim by claim. An unverified claim is written anyway: fix what it names and write it again under its `claimId`. One batch is one step, so a script that builds the file costs more and checks nothing; writing the file yourself still works. Do not split prose into artificial micro-claims merely to increase the count. Every claim must contain:
 
 - `claimId`
 - `claim`

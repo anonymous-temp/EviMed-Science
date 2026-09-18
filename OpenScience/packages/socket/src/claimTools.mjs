@@ -45,6 +45,12 @@ export const CLAIM_VERDICT_MEMORY = 512
 /** Findings one upsert returns about its claim. A claim with more is a claim to rewrite. */
 export const CLAIM_ISSUE_LIMIT = 20
 
+/**
+ * Claims one `evimed_claim_upsert` call may write: a matrix section's worth,
+ * small enough that one malformed field does not cost a long reply.
+ */
+export const CLAIM_BATCH_LIMIT = 60
+
 /** The claim-id shape the gate accepts. */
 const CLAIM_ID = /^CLM-(\d{3,6})$/
 
