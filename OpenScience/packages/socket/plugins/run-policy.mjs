@@ -104,6 +104,7 @@ import { advancePlanItem } from '../src/runMirror.mjs'
 import { capSkillBodies, deferredSectionSkill } from '../src/skillBodies.mjs'
 import { proseShape } from '../src/proseShape.mjs'
 import {
+  CLAIM_BATCH_LIMIT,
   CLAIM_ISSUE_LIMIT,
   CLAIM_MATRIX_FILE,
   CLAIM_REPORT_FILE,
@@ -1606,13 +1607,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     return defineTool({
       name: SOCKET_TOOL_NAMES.claimUpsert,
       description: [
-        '在证据矩阵里写入或更新一条主张（按 claimId；不给 claimId 则分配下一个），并当场用门禁自己的规则核验它：引文是否逐字出现在所引来源的保存原文里、字段是否齐全、数字是否有出处。',
-        '返回 verified 或 unverified 与原因；unverified 的主张也照样写入，改好后用同一个 claimId 再写一次即可。',
+        '在证据矩阵里写入或更新主张（按 claimId；不给 claimId 则分配下一个），并当场用门禁自己的规则核验：引文是否逐字出现在所引来源的保存原文里、字段是否齐全、数字是否有出处。',
+        `一次可写一条（claim）或一批（claims，至多 ${CLAIM_BATCH_LIMIT} 条）；逐条返回 verified 或 unverified 与原因。unverified 的主张也照样写入，改好后用同一个 claimId 再写一次即可。`,
         '主张带 certainty / riskOfBias 时，另返回按各分项重算的等级，与你标注的并列。',
       ].join(' '),
       parameters: {
         deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
-        claim: { type: 'object', required: true, additionalProperties: true, description: '一条主张，字段同 clinical-evidence-matrix.json 的 claims[]。' },
+        claim: { type: 'object', additionalProperties: true, description: '一条主张，字段同 clinical-evidence-matrix.json 的 claims[]。与 claims 二选一。' },
+        claims: { type: 'array', items: { type: 'object', additionalProperties: true }, description: `一批主张（至多 ${CLAIM_BATCH_LIMIT} 条），字段同 claims[]。与 claim 二选一。` },
       },
       // Writes go through the deliverable's own lock, so parallel calls in one
       // step each land on the file the previous one wrote.
@@ -1621,26 +1623,46 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         const resolved = claimDeliverable(call, args.deliverableId)
         if (resolved.refusal) return resolved.refusal
         const { entry, item } = resolved
-        let claim = args.claim
-        if (typeof claim === 'string') {
-          try { claim = JSON.parse(claim) } catch { claim = null }
+        /** @param {unknown} value */
+        const parsed = (value) => {
+          if (typeof value !== 'string') return value
+          try { return JSON.parse(value) } catch { return null }
         }
-        if (!claim || typeof claim !== 'object' || Array.isArray(claim)) {
-          return refusal('claim_invalid', '`claim` 必须是一个 JSON 对象，字段同证据矩阵的 claims[]。')
+        // One claim per call was the first release's shape, and it lost to a
+        // script on the live aspirin run of 2026-09-19: 74 claims were 74 model
+        // steps through the tool and one through `python3 mkmatrix.py`, so the
+        // run wrote the script (105 Python calls, no upsert at all). A batch is
+        // one step, judged claim by claim, which is what makes the tool the
+        // cheaper way and not only the checked one.
+        const batchInput = parsed(args.claims)
+        const batch = Array.isArray(batchInput) ? batchInput.map(parsed) : (args.claim !== undefined ? [parsed(args.claim)] : [])
+        if (batch.length === 0) return refusal('claim_invalid', '给出 `claim`（一条）或 `claims`（一批），字段同证据矩阵的 claims[]。')
+        if (batch.length > CLAIM_BATCH_LIMIT) return refusal('claim_invalid', `一次至多 ${CLAIM_BATCH_LIMIT} 条主张；分几次写。`)
+        const bad = batch.findIndex((claim) => !claim || typeof claim !== 'object' || Array.isArray(claim))
+        if (bad >= 0) {
+          return refusal('claim_invalid', args.claims === undefined
+            ? '`claim` 必须是一个 JSON 对象，字段同证据矩阵的 claims[]。'
+            : `claims[${bad}] 必须是一个 JSON 对象，字段同证据矩阵的 claims[]。`)
         }
         return withDeliverableLock(entry, item.id, async () => {
           const cwd = entry.cwd || call.cwd
           const path = deliverablePath(item.id, CLAIM_MATRIX_FILE)
           const read = readMatrix(await readFileAt(ctx, cwd, path))
           if (!read.ok) return refusal('matrix_unreadable', `${read.reason} 这个文件不会被覆盖；修好后再写主张。`)
-          const written = upsertClaim(read.matrix, claim)
+          let matrix = read.matrix
+          /** @type {{ claim: any, created: boolean }[]} */
+          const writtenClaims = []
+          for (const claim of batch) {
+            const written = upsertClaim(matrix, claim)
+            matrix = written.matrix
+            writtenClaims.push({ claim: written.claim, created: written.created })
+          }
           // Written whatever the verdict: a claim that does not verify yet is
           // work in progress the run can see and fix, not work to lose.
-          await writeFileAt(ctx, cwd, path, `${JSON.stringify(written.matrix, null, 2)}\n`)
+          await writeFileAt(ctx, cwd, path, `${JSON.stringify(matrix, null, 2)}\n`)
           const sourceArtifacts = await collectSourceArtifacts(ctx, entry, call)
-          const claims = written.matrix.claims
+          const claims = matrix.claims
           const sourceTypes = await collectSourceTypes(ctx, entry, call, citedSourcePaths(claims, sourceArtifacts))
-          const verdict = judgeClaim(entry, written.claim, claims, sourceArtifacts, sourceTypes)
           const verified = claims.filter((/** @type {any} */ entryClaim) => entryClaim && typeof entryClaim === 'object'
             && judgeClaim(entry, entryClaim, claims, sourceArtifacts, sourceTypes).status === 'verified').length
           const totals = { total: claims.length, verified }
@@ -1649,22 +1671,24 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           // rather than one submission at minute twenty-four.
           item.claims = totals
           await putPlanIndex(store(), entry)
-          const appraisal = recomputedAppraisal(written.claim, sourceTypes)
-          return {
-            ok: true,
-            data: {
-              claimId: verdict.claimId || written.claim.claimId,
+          const results = writtenClaims.map(({ claim, created }) => {
+            const verdict = judgeClaim(entry, claim, claims, sourceArtifacts, sourceTypes)
+            const appraisal = recomputedAppraisal(claim, sourceTypes)
+            return {
+              claimId: verdict.claimId || claim.claimId,
               status: verdict.status,
               issues: verdict.issues.slice(0, CLAIM_ISSUE_LIMIT).map((finding) => ({
                 code: finding.code,
                 message: finding.message,
                 severity: finding.tier === 'advisory' ? 'advisory' : 'required',
               })),
-              totals,
               ...(appraisal ? { appraisal } : {}),
-              ...(written.created ? { created: true } : {}),
-            },
-          }
+              ...(created ? { created: true } : {}),
+            }
+          })
+          // One claim answers in the shape it always had; a batch lists each.
+          if (args.claims === undefined) return { ok: true, data: { ...results[0], totals } }
+          return { ok: true, data: { results, totals } }
         })
       },
     })

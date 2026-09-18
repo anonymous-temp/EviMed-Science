@@ -1637,6 +1637,40 @@ test("a claim that does not verify is written anyway, judged by the gate's own r
   assert.deepEqual((await f.status())["d-clin"].claims, { total: 2, verified: 2 }, "evidence progress the control plane can read");
 });
 
+test("a batch of claims is one call, written together and judged claim by claim", async () => {
+  // One claim per call lost to a script on the live aspirin run of
+  // 2026-09-19 (74 claims = 74 steps through the tool, one through
+  // mkmatrix.py). A batch is one step and still says which claim fails.
+  const f = await clinicalFixture();
+  const reply = await f.execute("evimed_claim_upsert", {
+    deliverableId: "d-clin",
+    claims: [
+      clinicalClaim(),
+      clinicalClaim({ claimId: "CLM-002", supportQuote: "aspirin eliminated all bleeding events" }),
+      JSON.stringify(clinicalClaim({ claimId: undefined, claim: "心血管事件未见减少（HR 0.95）。", supportQuote: "did not reduce cardiovascular events (HR 0.95, 95% CI 0.83-1.08)" })),
+    ],
+  });
+  assert.equal(reply.value.ok, true, JSON.stringify(reply.value));
+  assert.deepEqual(reply.value.data.results.map((/** @type {any} */ result) => [result.claimId, result.status]), [
+    ["CLM-001", "verified"],
+    ["CLM-002", "unverified"],
+    ["CLM-003", "verified"],
+  ]);
+  assert.ok(reply.value.data.results[1].issues.some((/** @type {any} */ entry) => entry.code === "claim-quote-verbatim"));
+  assert.equal(reply.value.data.results[2].created, true);
+  assert.deepEqual(reply.value.data.totals, { total: 3, verified: 2 });
+  assert.equal(JSON.parse(String(f.files.get(MATRIX_FILE))).claims.length, 3, "all three are on disk, the failing one too");
+  assert.deepEqual((await f.status())["d-clin"].claims, { total: 3, verified: 2 });
+
+  const tooMany = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claims: Array.from({ length: 61 }, () => clinicalClaim()) });
+  assert.equal(tooMany.value.code, "claim_invalid");
+  const oneBad = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claims: [clinicalClaim(), "not json"] });
+  assert.equal(oneBad.value.code, "claim_invalid");
+  assert.match(oneBad.value.message ?? JSON.stringify(oneBad.value), /claims\[1\]/);
+  const neither = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin" });
+  assert.equal(neither.value.code, "claim_invalid");
+});
+
 test("the claim tools refuse what they cannot write safely, and never overwrite a matrix they cannot read", async () => {
   const f = await clinicalFixture();
   f.files.set(MATRIX_FILE, '{"claims": [ {"claimId": "CLM-001", "claim": "未闭合的"支撑"引号"} ]}');
