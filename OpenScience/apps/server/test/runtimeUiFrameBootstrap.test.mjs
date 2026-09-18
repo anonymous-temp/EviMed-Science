@@ -13,11 +13,13 @@
  *    `/能力` command shows beside the title.
  */
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
+
+import { FRAME_SWITCHABLE_BODIES } from "@evimed/harness-port/runtime-ui-frame";
 
 import { createWebApiApp } from "../src/server.mjs";
 
@@ -84,3 +86,15 @@ test("each capability card carries its summary and typical duration for the /能
     assert.ok(Array.isArray(card.minutes) && card.minutes.length === 2 && card.minutes[0] <= card.minutes[1], `${card.id} has no duration`);
   }
 });
+
+test("every body an operator can switch off is named where the switch is documented", async () => {
+  const example = await readFile(new URL("../../../deploy/web/.env.example", import.meta.url), "utf8");
+  const block = example.slice(example.indexOf("The EviMed layer inside that page"), example.indexOf("# OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF="));
+  assert.ok(block.length > 100, "the documentation block was not found");
+  assert.ok(FRAME_SWITCHABLE_BODIES.length >= 8, `only ${FRAME_SWITCHABLE_BODIES.length} bodies were read`);
+  for (const name of FRAME_SWITCHABLE_BODIES) {
+    assert.match(block, new RegExp(`\\b${name}\\b`), `${name} can be switched off but the documentation does not say what it is`);
+  }
+  assert.ok(!FRAME_SWITCHABLE_BODIES.includes("bridge"));
+});
+
