@@ -132,7 +132,8 @@ function sameSemantics(item, values) {
  * exactly one of it. The sentences come from the domain registry rather than a
  * table here, because a second table is how the frontend ended up with three.
  * @param {{status?: string, errorCode?: string|null, verification?: string|null, missingCredential?: string|null,
- *          artifacts?: string[], unverifiedArtifacts?: string[], qualityNotices?: (string | Record<string, any>)[]}} run
+ *          artifacts?: string[], unverifiedArtifacts?: string[], qualityNotices?: (string | Record<string, any>)[],
+ *          artifactCounts?: { deliverable?: number, revisionNotes?: number, work?: number, superseded?: number }}} run
  * @returns {{ outcome: string, title: string, body: string, severity: 'safety'|'attention'|'info', counts: { safety: number, mustFix: number, advice: number } }}
  */
 export function runFinishedNotice(run) {
