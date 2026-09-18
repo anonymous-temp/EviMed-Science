@@ -137,6 +137,7 @@ export const GATE_CHECK_IDS = Object.freeze([
  * @property {string | null} [briefText]          the dispatcher's copy of the question
  * @property {any} [matrix]
  * @property {Record<string, string>} [sourceArtifacts]
+ * @property {Record<string, string>} [sourceTypes]  evidence type stamped on each preserved source, by path (C8)
  * @property {number} [staleEvidenceCount]
  * @property {string} [finalReplyText]
  */
@@ -266,6 +267,7 @@ function validateClinicalEvidenceReport(input) {
     reportText: text(input, 'clinical-evidence-report.md'),
     matrix,
     sourceArtifacts: input.sourceArtifacts ?? {},
+    sourceTypes: input.sourceTypes ?? {},
     briefText: input.briefText ?? null,
   })
   // The gate's own distinction between blocking and degradable is preserved,

@@ -34,6 +34,7 @@ import {
   RECEIPT_FORMAT_VERSION,
   SOCKET_TOOL_NAMES,
   canTransition,
+  claimAppraisal,
   contractKindLabel,
   delegationToolFilter,
   deliverableDir,
@@ -41,6 +42,8 @@ import {
   errorCodeMessage,
   mcpToolName,
   resolveContractKind,
+  sourceTypeOfSidecar,
+  sourceTypeSidecarPath,
   workspaceLayout,
 } from '@evimed/domain'
 import {
@@ -1352,13 +1355,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     const expectedOutputs = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
     const files = await readDeliverableFiles(ctx, entry.cwd || call.cwd, item.id, expectedOutputs)
     const sourceArtifacts = await collectSourceArtifacts(ctx, entry, call)
+    const matrix = parseJson(files.get('clinical-evidence-matrix.json'))
     const verdict = gateDeliverable({
       contractKind: item.contractKind,
       files,
       expectedOutputs,
       briefText: entry.briefText,
-      matrix: parseJson(files.get('clinical-evidence-matrix.json')),
+      matrix,
       sourceArtifacts,
+      sourceTypes: await collectSourceTypes(ctx, entry, call, citedSourcePaths(matrix?.claims, sourceArtifacts)),
       staleEvidenceCount: 0,
     })
     return { verdict, files, expectedOutputs }
@@ -1569,20 +1574,22 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    * judgement reads its whole source; the claims that did not change need not
    * be read again.
    * @param {Record<string, any>} entry @param {Record<string, any>} claim @param {readonly any[]} claims
-   * @param {Record<string, string>} sourceArtifacts
+   * @param {Record<string, string>} sourceArtifacts @param {Record<string, string>} sourceTypes
    * @returns {ReturnType<typeof validateEvidenceClaim>}
    */
-  const judgeClaim = (entry, claim, claims, sourceArtifacts) => {
+  const judgeClaim = (entry, claim, claims, sourceArtifacts, sourceTypes) => {
     const paths = [claim?.artifactPath, ...(Array.isArray(claim?.supportingSources) ? claim.supportingSources.map((/** @type {any} */ source) => source?.artifactPath) : [])]
       .filter((path) => typeof path === 'string')
     // A derived result is judged against the claims it reasons from, so it is
     // never served from memory; it reads no source and costs nothing to redo.
+    // A source's stamped type is part of what a verdict depends on: a GRADE
+    // certainty is read against it.
     const key = claim?.claimType === 'derived'
       ? null
-      : `${JSON.stringify(claim)}\u0000${paths.map((path) => `${path}:${sourceArtifacts[path] ? sourceArtifacts[path].length : 0}`).join('\u0000')}`
+      : `${JSON.stringify(claim)}\u0000${paths.map((path) => `${path}:${sourceArtifacts[path] ? sourceArtifacts[path].length : 0}:${sourceTypes[path] ?? ''}`).join('\u0000')}`
     entry.claimVerdicts ??= new Map()
     if (key && entry.claimVerdicts.has(key)) return entry.claimVerdicts.get(key)
-    const verdict = validateEvidenceClaim({ claim, claims, sourceArtifacts })
+    const verdict = validateEvidenceClaim({ claim, claims, sourceArtifacts, sourceTypes })
     if (key) {
       if (entry.claimVerdicts.size >= CLAIM_VERDICT_MEMORY) entry.claimVerdicts.delete(entry.claimVerdicts.keys().next().value)
       entry.claimVerdicts.set(key, verdict)
@@ -1596,6 +1603,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       description: [
         '在证据矩阵里写入或更新一条主张（按 claimId；不给 claimId 则分配下一个），并当场用门禁自己的规则核验它：引文是否逐字出现在所引来源的保存原文里、字段是否齐全、数字是否有出处。',
         '返回 verified 或 unverified 与原因；unverified 的主张也照样写入，改好后用同一个 claimId 再写一次即可。',
+        '主张带 certainty / riskOfBias 时，另返回按各分项重算的等级，与你标注的并列。',
       ].join(' '),
       parameters: {
         deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
@@ -1626,15 +1634,17 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           await writeFileAt(ctx, cwd, path, `${JSON.stringify(written.matrix, null, 2)}\n`)
           const sourceArtifacts = await collectSourceArtifacts(ctx, entry, call)
           const claims = written.matrix.claims
-          const verdict = judgeClaim(entry, written.claim, claims, sourceArtifacts)
+          const sourceTypes = await collectSourceTypes(ctx, entry, call, citedSourcePaths(claims, sourceArtifacts))
+          const verdict = judgeClaim(entry, written.claim, claims, sourceArtifacts, sourceTypes)
           const verified = claims.filter((/** @type {any} */ entryClaim) => entryClaim && typeof entryClaim === 'object'
-            && judgeClaim(entry, entryClaim, claims, sourceArtifacts).status === 'verified').length
+            && judgeClaim(entry, entryClaim, claims, sourceArtifacts, sourceTypes).status === 'verified').length
           const totals = { total: claims.length, verified }
           // The running count is progress the control plane can show while the
           // run works: seventy-two claims read as seventy-two steps of evidence
           // rather than one submission at minute twenty-four.
           item.claims = totals
           await putPlanIndex(store(), entry)
+          const appraisal = recomputedAppraisal(written.claim, sourceTypes)
           return {
             ok: true,
             data: {
@@ -1646,6 +1656,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
                 severity: finding.tier === 'advisory' ? 'advisory' : 'required',
               })),
               totals,
+              ...(appraisal ? { appraisal } : {}),
               ...(written.created ? { created: true } : {}),
             },
           }
@@ -2212,6 +2223,74 @@ async function collectSourceArtifacts(ctx, entry, call) {
     if (typeof text === 'string' && text) artifacts[artifactPath] = text
   }
   return artifacts
+}
+
+/**
+ * The preserved sources a matrix's claims cite — each claim's own and each
+ * synthesized claim's supporting ones — among those this run preserved.
+ * @param {unknown} claims @param {Record<string, string>} sourceArtifacts
+ * @returns {string[]}
+ */
+function citedSourcePaths(claims, sourceArtifacts) {
+  const cited = (Array.isArray(claims) ? claims : []).flatMap((/** @type {any} */ claim) => [
+    claim?.artifactPath,
+    ...(Array.isArray(claim?.supportingSources) ? claim.supportingSources.map((/** @type {any} */ source) => source?.artifactPath) : []),
+  ])
+  return [...new Set(cited.filter((path) => typeof path === 'string' && Object.hasOwn(sourceArtifacts, path)))]
+}
+
+/**
+ * The evidence type the preserving tool stamped beside each cited source
+ * (`source.json`, contract C8), by path. The same file the control plane's
+ * `claim_verification` reads for its badge, so the design a GRADE certainty is
+ * judged against here is the one a reader's badge is drawn from. A capture
+ * older than the stamp has no entry; its certainty falls back to the
+ * instrument and the stated start.
+ * @param {any} ctx @param {Record<string, any>} entry @param {Record<string, any>} call
+ * @param {readonly string[]} artifactPaths
+ * @returns {Promise<Record<string, string>>}
+ */
+async function collectSourceTypes(ctx, entry, call, artifactPaths) {
+  const cwd = entry.cwd || call.cwd
+  /** @type {Record<string, string>} */
+  const types = {}
+  for (const artifactPath of artifactPaths) {
+    const sidecar = sourceTypeSidecarPath(artifactPath)
+    const type = sidecar ? sourceTypeOfSidecar(await readFileAt(ctx, cwd, sidecar)) : null
+    if (type) types[artifactPath] = type
+  }
+  return types
+}
+
+/**
+ * What an upsert says about the claim's structured appraisal: each certainty
+ * and each risk-of-bias overall as stated, beside what its parts give. The
+ * PICO is not echoed — the run wrote it and nothing in it is recomputed.
+ * @param {Record<string, any>} claim @param {Record<string, string>} sourceTypes
+ * @returns {Record<string, any> | null}
+ */
+function recomputedAppraisal(claim, sourceTypes) {
+  const view = claimAppraisal(claim, { sourceTypes })
+  if (!view?.certainty && !view?.riskOfBias) return null
+  return {
+    ...(view.certainty ? {
+      certainty: view.certainty.map((entry) => ({
+        ...(entry.outcome ? { outcome: entry.outcome } : {}),
+        stated: entry.stated,
+        computed: entry.computed,
+        agrees: entry.agrees,
+      })),
+    } : {}),
+    ...(view.riskOfBias ? {
+      riskOfBias: view.riskOfBias.map((entry) => ({
+        ...(entry.source !== null ? { source: entry.source } : {}),
+        tool: entry.toolName,
+        stated: entry.stated,
+        computed: entry.computed,
+        agrees: entry.agrees,
+      })),
+    } : {}),
+  }
 }
 
 /**
