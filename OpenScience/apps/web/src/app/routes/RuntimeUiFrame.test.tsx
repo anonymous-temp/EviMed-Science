@@ -11,7 +11,7 @@ import { useUiStore } from "@/lib/store";
 import { useRuntimeSessionSearch } from "@/lib/runtimeUiBridge";
 import { renderHook } from "@testing-library/react";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources }));
 // The run's event stream, held by the test: the frame's run view follows it.
 vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/runEvents")>()), subscribeRunEvents: mocks.subscribe }));
@@ -22,7 +22,7 @@ vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<t
 // dictionary renders, which is the defect this change removes, not the fix.
 vi.mock("@/lib/apiClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
-  hasWebApi: true, fetchWebMe: () => Promise.resolve({}), webRuntimeProfile: () => mocks.profile,
+  hasWebApi: true, fetchWebMe: () => mocks.me(), webRuntimeProfile: () => mocks.profile,
   getWebProjectId: () => mocks.projectId, createWebRuntimeUiFrame: mocks.create, releaseWebRuntimeUiFrame: mocks.release,
   renewWebRuntimeUiFrame: mocks.renew, listWebAgentRuns: mocks.listRuns,
 }));
@@ -51,6 +51,7 @@ beforeEach(() => {
   mocks.create.mockResolvedValue(binding);
   mocks.listRuns.mockReset(); mocks.listRuns.mockResolvedValue([]);
   mocks.subscribe.mockReset(); mocks.subscribe.mockReturnValue(() => {});
+  mocks.me.mockReset(); mocks.me.mockResolvedValue({});
   mocks.renew.mockImplementation(async () => ({ ...binding, expiresAt: Date.now() + 300_000 }));
   mocks.profile.uiOrigin = "https://host.example:8443";
 });
@@ -174,15 +175,18 @@ describe("native frame identity and readiness", () => {
     const frame = container.querySelector("iframe")!;
     expect(mocks.create).toHaveBeenCalledWith("default"); expect(frame.src).toBe(binding.frameUrl);
     act(() => frame.dispatchEvent(new Event("load")));
-    expect(screen.getByText("正在启动研究运行时…")).toBeInTheDocument();
+    // The binding is here, the runtime prepared; the interface is loading.
+    expect(screen.getByText("正在载入界面…")).toBeInTheDocument();
+    expect(screen.getByText("✓ 准备运行时")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ready" }, "https://evil.example");
     emit(frame, { type: "evimed.runtime-ui.ready" }, mocks.profile.uiOrigin, window);
     emit(frame, { type: "evimed.runtime-ui.ready", frameId: "frame-b" });
-    expect(screen.getByText("正在启动研究运行时…")).toBeInTheDocument();
+    expect(screen.getByText("正在载入界面…")).toBeInTheDocument();
     const post = vi.spyOn(frame.contentWindow!, "postMessage");
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("正在打开研究任务…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开任务…")).toBeInTheDocument();
+    expect(screen.getByText("✓ 载入界面")).toBeInTheDocument();
     const command = post.mock.calls[0][0];
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: command.requestId, ok: true, sessionId: command.intent.sessionId });
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
@@ -289,9 +293,9 @@ describe("native frame identity and readiness", () => {
     expect(post.mock.calls[0][0]).toMatchObject({ type: "evimed.runtime-ui.navigate", requestId: "request-a", frameId: "frame-a", intent: { sessionId: "session-new", draft: "Evidence brief" } });
     expect(post.mock.calls[0][1]).toBe(mocks.profile.uiOrigin);
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "wrong", ok: true, sessionId: "session-new" });
-    expect(screen.getByText("正在打开研究任务…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开任务…")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: "request-a", ok: true, sessionId: "session-canonical" });
-    await waitFor(() => expect(screen.queryByText("正在打开研究任务…")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("正在打开任务…")).toBeNull());
     expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-canonical");
   });
 
@@ -379,7 +383,7 @@ describe("native frame identity and readiness", () => {
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "wrong-session" });
-    expect(screen.getByText("正在打开研究任务…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开任务…")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
     emit(frame, { type: "evimed.runtime-ui.error", seq: 4, error: "NATIVE_NOT_READY" });
     await waitFor(() => expect(mocks.renew).toHaveBeenCalledTimes(1));
@@ -626,6 +630,54 @@ describe("the run behind the task, in the frame", () => {
     emit(frame, { type: "evimed.runtime-ui.open-artifact", seq: 6, runId: "run-1", path: "deliverables/evidence/clinical-evidence-report.md", anchor: "CLM-002" });
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/runs/run-1/files/deliverables/evidence/clinical-evidence-report.md"));
     expect(screen.getByText("run file reader")).toBeInTheDocument();
+  });
+});
+
+describe("opening a task", () => {
+  it("names the moment it is in, advanced by the event that ends each one, and says more after five seconds", async () => {
+    vi.useFakeTimers();
+    let resolveFrame!: (value: typeof binding) => void;
+    mocks.create.mockImplementation(() => new Promise(resolve => { resolveFrame = resolve; }));
+    const view = mount(null, "/app/chat/session-a");
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const status = screen.getByRole("status");
+    expect(status).toHaveAttribute("data-open-stage", "0");
+    // The composer the reader is about to type into is drawn from the start.
+    expect(status.querySelector('[aria-hidden="true"] .animate-pulse')).not.toBeNull();
+    expect(screen.getByText("正在准备运行时…")).toBeInTheDocument();
+    expect(screen.queryByText(/通常需要 10–30 秒/)).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(screen.getByText(/通常需要 10–30 秒/)).toBeInTheDocument();
+    await act(async () => { resolveFrame(binding); await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole("status")).toHaveAttribute("data-open-stage", "1");
+    expect(screen.getByText("✓ 准备运行时")).toBeInTheDocument();
+    expect(screen.queryByText(/通常需要 10–30 秒/)).toBeNull();
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole("status")).toHaveAttribute("data-open-stage", "2");
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(screen.getByText(/正在读取这个任务的完整记录/)).toBeInTheDocument();
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.queryByRole("status")).toBeNull();
+    view.unmount();
+  });
+
+  it("resumes the conversation the account last had open, without walking the ledger", async () => {
+    mocks.me.mockResolvedValue({ lastSessionId: "session-last" });
+    mocks.listRuns.mockResolvedValue([{ sessionId: "session-from-ledger" }]);
+    mount();
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-last"));
+    expect(mocks.listRuns).not.toHaveBeenCalled();
+  });
+
+  it("walks the ledger when the account's answer has no usable last conversation", async () => {
+    mocks.me.mockResolvedValue({ lastSessionId: "not a session id!" });
+    mocks.listRuns.mockResolvedValue([{ sessionId: "session-from-ledger" }]);
+    mount();
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-from-ledger"));
   });
 });
 
