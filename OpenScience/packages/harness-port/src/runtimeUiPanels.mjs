@@ -133,7 +133,8 @@ export function progressModel(live, now, kit) {
     cost,
     phases,
     sources: sources && Number.isFinite(sources.included)
-      ? `检索 ${Number(sources.searched) || 0} 篇 · 纳入 ${Number(sources.included) || 0} 篇 · 全文 ${Number(sources.fullText) || 0} 篇` : null,
+      // `searched` counts search calls, not records found: 「次」, never 「篇」.
+      ? `检索 ${Number(sources.searched) || 0} 次 · 纳入 ${Number(sources.included) || 0} 篇 · 全文 ${Number(sources.fullText) || 0} 篇` : null,
     claims: claims && Number.isFinite(claims.total) && claims.total > 0
       ? `主张 ${claims.total} 条 · 已核对 ${Number(claims.verified) || 0} 条` : null,
     deliverables,
@@ -221,7 +222,7 @@ export function sourcesModel(evidence, live, kit) {
   const list = evidence && Array.isArray(evidence.sources) && !(live && evidence.runId && evidence.runId !== live.runId) ? evidence.sources : [];
   return {
     counts: counts && Number.isFinite(counts.included)
-      ? `检索 ${Number(counts.searched) || 0} 篇 · 纳入 ${Number(counts.included) || 0} 篇 · 获取全文 ${Number(counts.fullText) || 0} 篇` : null,
+      ? `检索 ${Number(counts.searched) || 0} 次 · 纳入 ${Number(counts.included) || 0} 篇 · 获取全文 ${Number(counts.fullText) || 0} 篇` : null,
     sources: list.filter((/** @type {any} */ source) => source && (source.title || source.identifier)).map((/** @type {any} */ source) => ({
       title: String(source.title || source.identifier),
       identifier: typeof source.identifier === 'string' && source.identifier !== source.title ? source.identifier : null,
