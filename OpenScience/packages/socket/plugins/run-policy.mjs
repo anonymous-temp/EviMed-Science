@@ -56,12 +56,14 @@ import {
   readFileAt,
   registerTool,
   startSubagent,
+  steerContext,
   toSubagentOutcome,
   toUsage,
   writeFileAt,
 } from '@evimed/harness-port'
 import {
   AWAIT_TIMEOUT_SECONDS,
+  CHILDREN_REMINDER_LIMIT,
   PLAN_ITEM_STATE_WORDS,
   accumulateBudget,
   awaitSelection,
@@ -305,7 +307,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         producedTexts: [],
         finalReply: '',
         steered: false,
-        childrenNudged: false,
+        /** How many times a stopping turn was told children are outstanding. */
+        childrenReminders: 0,
+        /** Whether the root is inside a turn; a settlement that lands while it
+         *  is not is handed to it by waking it. */
+        rootActive: false,
+        /** The root agent, for the wake. Agent and session share one id. */
+        agentId: '',
+        /** Set when the researcher cancelled: nothing may wake the run again. */
+        wakeSuppressed: false,
         completed: false,
       }
       state.set(sessionId, entry)
@@ -387,6 +397,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     async (step) => {
       const entry = sessionState(step.sessionId)
       entry.cwd = step.cwd || entry.cwd
+      if (step.root) {
+        entry.rootActive = true
+        entry.agentId = step.agentId || entry.agentId
+        entry.wakeSuppressed = false
+      }
       // Every control-plane dispatch commits a new context revision. Reading it
       // before every root step covers both a session's first request and later
       // follow-up or repair requests; `injectBrief` itself de-duplicates the
@@ -550,16 +565,23 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (session.subagent) return
     const entry = sessionState(session.sessionId)
     entry.lastTurnEnd = end
+    entry.rootActive = false
     // A root turn that was cancelled cancels the run's children. The turn a
     // child was started in cascades on its own (the child holds that turn's
     // signal); a child started in an earlier turn is reached only from here.
+    // And nothing wakes a run the researcher stopped.
     if (end.kind === 'aborted') {
+      entry.wakeSuppressed = true
       for (const delegation of runningDelegations(entry)) delegation.abort.abort(new Error('研究者停止了本次运行'))
     } else if (runningDelegations(entry).length) {
-      // Recorded, never acted on: a turn can legitimately end while children
-      // work, and the stopping nudge has already said what to do. What must not
-      // happen is that nobody can tell afterwards.
+      // Recorded: the turn ended with work still out, after the stopping
+      // reminders. The settlement will wake the root (`wakeForSettlements`);
+      // what must not happen is that nobody can tell afterwards.
       diagnostics(session.sessionId)?.degrade?.(`turn ended with children still running: ${runningDelegations(entry).map((delegation) => delegation.handle).join(', ')}`)
+    } else {
+      // Every child settled while the turn was still going and the turn ended
+      // without collecting them: hand them over rather than leave them unread.
+      void withRunLock(entry, async () => wakeForSettlements(entry))
     }
     void putRunMirror(ctx, entry, config.bundleVersion)
     if (end.kind === 'unknown') {
@@ -575,23 +597,33 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     const sessionId = String(agent?.session?.id ?? '')
     const entry = sessionState(sessionId)
     if (entry.completed) return
-    const running = runningDelegations(entry)
-    // Children still working is a different situation from deliverables still
-    // unaccepted, and it gets its own one nudge: the parent cannot deliver
-    // what it has not collected, and a turn that ends here leaves the children
-    // working for a run nobody is waiting on.
-    const nudge = running.length && !entry.childrenNudged
-      ? `<evimed-run>还有 ${running.length} 个子代理在工作（${running.map((delegation) => delegation.handle).join('、')}）。用 evimed_await 取回它们的结果；要现在结束，用 evimed_complete_run{partial:true}，它们会被取消。</evimed-run>`
-      : !running.length && !entry.steered && entry.items.length && !entry.items.every((/** @type {any} */ item) => item.status === 'accepted')
-        ? '<evimed-run>计划里还有未通过的交付物。请继续提交，或调用 evimed_complete_run{partial:true} 以部分交付结束。</evimed-run>'
-        : ''
-    if (!nudge) return
-    if (running.length) entry.childrenNudged = true
-    else entry.steered = true
+    // Children whose results the root has not collected — still working, or
+    // settled and never awaited — are work this turn has not finished. The
+    // kernel's contract for objecting to a turn closing is a steer: the turn
+    // runs another step with the reminder in it. Bounded, because the kernel's
+    // own design lets a parent end its turn while background children work,
+    // and a model that stops three times has decided; past the bound the turn
+    // closes and the children's settlement wakes the root instead.
+    const outstanding = [...entry.delegations.values()].filter((delegation) => delegation.runId === entry.runId && (delegation.status === 'running' || !delegation.reported))
+    if (outstanding.length && entry.childrenReminders < CHILDREN_REMINDER_LIMIT) {
+      entry.childrenReminders += 1
+      const running = outstanding.filter((delegation) => delegation.status === 'running')
+      const reminder = `<evimed-run>还有 ${outstanding.length} 个子代理的结果没有取回（${outstanding.map((delegation) => delegation.handle).join('、')}${running.length ? `，其中 ${running.length} 个仍在工作` : ''}）。`
+        + '用 evimed_await 取回它们的结果后再汇总；要现在结束，用 evimed_complete_run{partial:true}，仍在工作的会被取消。</evimed-run>'
+      try {
+        steerContext(agent, reminder, name)
+      } catch {
+        diagnostics(sessionId)?.degrade?.('children reminder steer failed')
+      }
+      return
+    }
+    if (outstanding.length || entry.steered || !entry.items.length) return
+    if (entry.items.every((/** @type {any} */ item) => item.status === 'accepted')) return
+    entry.steered = true
     // isolated: evimed_steer_failures_total — a nudge that throws must not turn
     // a finishing turn into a failed one.
     try {
-      injectContext(agent, nudge, name)
+      injectContext(agent, '<evimed-run>计划里还有未通过的交付物。请继续提交，或调用 evimed_complete_run{partial:true} 以部分交付结束。</evimed-run>', name)
     } catch {
       diagnostics(sessionId)?.degrade?.('steer injection failed')
     }
@@ -680,7 +712,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           entry.plan = indexed
           entry.completed = false
           entry.steered = false
-          entry.childrenNudged = false
+          entry.childrenReminders = 0
           entry.items = items.map((item) => ({ ...item, ...(previous.get(item.id) ?? {}), contractKind: item.contractKind, capability: item.capability, dependsOn: item.dependsOn }))
           // A child working on a deliverable this revision dropped has nowhere
           // to deliver: its submissions would name an item that no longer
@@ -994,8 +1026,47 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (entry.runId === delegation.runId) {
       await putPlanIndex(store(), entry)
       await putRunMirror(ctx, entry, config.bundleVersion)
+      wakeForSettlements(entry)
     }
     return null
+  }
+
+  /**
+   * Hand settled results to a root that is not waiting for them.
+   *
+   * A root that ended its turn while its children worked is idle, and nothing
+   * in the kernel would ever start it again: the run would sit with finished
+   * children and no final answer while the control plane saw an idle session.
+   * When the last running child of the run settles and the root is between
+   * turns, the uncollected results are steered to it — an idle driver starts a
+   * turn for a steer, which is how DSH's own background subagents report — in
+   * the same shape `evimed_await` returns, and they count as collected.
+   *
+   * Never after the researcher cancelled, never after the run completed, and
+   * never while the root is inside a turn: there it collects with
+   * `evimed_await`, and a second copy of the results would be noise.
+   * @param {Record<string, any>} entry
+   * @returns {void}
+   */
+  const wakeForSettlements = (entry) => {
+    if (entry.rootActive || entry.completed || entry.wakeSuppressed) return
+    if (runningDelegations(entry).length) return
+    const unreported = [...entry.delegations.values()].filter((delegation) => delegation.runId === entry.runId && !delegation.reported)
+    if (!unreported.length) return
+    const agent = ctx.get('agents')?.get?.(entry.agentId)
+    if (!agent) return
+    const results = unreported.map((delegation) => delegationResult(entry, delegation))
+    try {
+      steerContext(agent, [
+        '<evimed-run>',
+        '你委派的子代理都已结束，下面是它们的结果（与 evimed_await 返回的相同）。汇总后用 evimed_complete_run 结束本次运行。',
+        JSON.stringify({ results }, null, 2),
+        '</evimed-run>',
+      ].join('\n'), name)
+      for (const delegation of unreported) delegation.reported = true
+    } catch (error) {
+      diagnostics(entry.sessionId)?.degrade?.(`waking the root for settled children failed: ${errorMessage(error)}`)
+    }
   }
 
   /**
@@ -1709,7 +1780,8 @@ function resetRunState(entry, runId) {
   entry.finalReply = ''
   entry.lastTurnEnd = null
   entry.steered = false
-  entry.childrenNudged = false
+  entry.childrenReminders = 0
+  entry.wakeSuppressed = false
   entry.completed = false
 }
 

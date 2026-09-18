@@ -17,6 +17,7 @@ import {
   registerWebFetchProvider,
   registerWebSearchProvider,
   renderEnvelope,
+  steerContext,
   toArgs,
   toSessionRef,
   toSkillName,
@@ -40,6 +41,24 @@ test("injected context is an identified user message accepted by session format 
   assert.notEqual(messages[0].id, messages[1].id);
   assert.deepEqual(messages[0].source, { kind: "plugin", plugin: "evimed-guidance" });
   assert.deepEqual(messages[0].content, [{ type: "text", text: "Retain the research constraints." }]);
+});
+
+test("steered context is the same identified plugin message, handed to the kernel's steer and never to inject", () => {
+  // Steer is what wakes an idle driver and what objects to a closing turn;
+  // inject does neither. The message must still read as the plugin's, never as
+  // the researcher's, because transcript readers tell the two apart by source.
+  /** @type {any[]} */
+  const steered = [];
+  /** @type {any[]} */
+  const injected = [];
+  const agent = { steer: (/** @type {any} */ message) => steered.push(message), inject: (/** @type {any} */ message) => injected.push(message) };
+  steerContext(agent, "Collect the children's results.", "evimed-run-policy");
+  assert.equal(injected.length, 0);
+  assert.equal(steered.length, 1);
+  assert.equal(steered[0].role, "user");
+  assert.ok(typeof steered[0].id === "string" && steered[0].id.length > 0);
+  assert.deepEqual(steered[0].source, { kind: "plugin", plugin: "evimed-run-policy" });
+  assert.deepEqual(steered[0].content, [{ type: "text", text: "Collect the children's results." }]);
 });
 
 test("context added during pre-step enters that request rather than the next inbox claim", async () => {
