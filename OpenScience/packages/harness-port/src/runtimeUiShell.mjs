@@ -1,274 +1,238 @@
 /**
- * The hosted shell of the kernel's browser application.
+ * The hosted shell of the kernel's browser application: brand, the left
+ * column, the document's identity, and the stylesheet for what no token or
+ * slot reaches.
  *
  * The kernel's web client is a slot system: packages declare slots
  * (`sidebar.brand.mark`, `conversation.hero.brand.mark`, ...) and any plugin
  * may occupy one. Its own brand package fills them only in an `official`
  * build, and its README says a deployment with its own identity "composes a
- * different package into the same slots instead". This is that package, in
- * the same shape as the official one: no DOM patching, no CSS by hashed class
- * name, only the composition surfaces the kernel documents.
+ * different package into the same slots instead". This body is that package,
+ * in the same shape as the official one.
  *
- * Four things it does, and why each is here rather than in our own page:
+ * What it does, and why each is here rather than in our own page:
  *
  *  - The left column. `sidebar` is the whole navigation column, and the layout
  *    package's own contract says occupying it replaces that column rather than
  *    adding to it. The hosted product has one navigation, in the shell around
  *    this frame; the kernel's second one — brand, new session, workspace tree,
  *    session list — was the same information under different words beside it.
- *    A rail takes its place (the frame reserves 56 px even closed, so this is
- *    the smallest the column gets).
  *  - Brand. The EviMed mark occupies the sidebar mark, the sidebar name and
  *    the conversation hero; the kernel's fish and wordmark fall back only
- *    where nothing occupies the slot, so this leaves nothing of theirs. The
- *    two sidebar brand seats are declared by the column this file replaces, so
- *    they are dead while the rail is registered — kept because they are what
- *    the page falls back to if the rail registration ever does not take, and
- *    the kernel's own wordmark appearing there would be worse than dead code.
- *  - Language. The kernel ships `zh` and `en` and picks by the browser's
- *    `navigator` on a non-loopback page, where the user cannot switch (the
- *    General settings row is disabled in the hosted composition). A Chinese
- *    product face must not depend on a browser preference, so this registers
- *    a private-use language `zh-x-evimed` whose fallback is `zh` and selects
- *    it. Its own dictionary is small: the kernel's copy speaks of "building",
- *    which is the wrong verb for a research bench, and the "Preview" badge
- *    describes the kernel's release stage, not ours. Lookup walks the fallback
- *    chain per namespace, so every string this pack does not name stays the
- *    kernel's own Chinese.
+ *    where nothing occupies the slot. The two sidebar brand seats are declared
+ *    by the column this body replaces, so they are dead while the column is
+ *    shadowed — kept because they are what the page falls back to if that
+ *    registration ever does not take, and the kernel's own wordmark appearing
+ *    there would be worse than dead code.
  *  - Surfaces the hosted deployment does not offer. The hero's workspace
  *    picker slot is occupied by nothing, because a project's workspace is
  *    bound by the control plane and `workspace/create` is refused for any
- *    other path. The sidebar's "add workspace" button reaches the same refused
- *    method, and is hidden by its accessible name in both shipped languages.
- *    Hiding a control is presentation; the refusal lives in
- *    `@evimed/domain`'s runtime-UI surface and does not depend on this file.
+ *    other path. Hiding a control is presentation; the refusal lives in
+ *    `@evimed/domain`'s runtime-UI surface and does not depend on this body.
  *
- * The body is self-contained for browser bundling: the socket's build emits
- * `apply.toString()`, so nothing here may close over a module import. React
- * arrives through the loader's `require`, exactly as the kernel's own client
- * bundles receive it.
+ * The language pack is its own body (`runtimeUiLocale.mjs`), so either can be
+ * switched off without the other.
+ *
+ * @module @evimed/harness-port/runtime-ui-shell
  */
 
-/** Services this plugin needs: the slot registry and the locale runtime. */
-export const inject = ['slots', 'locale'];
+/** Services this body needs: the slot registry. */
+export const inject = ['slots'];
+
+/**
+ * The kernel client version the stylesheet's selectors were read against.
+ *
+ * The rules below reach the frame's layout through CSS-module class suffixes
+ * (`_sidebarCol`) and stable data attributes, none of which the kernel
+ * promises. A test holds this pin to the kernel pin in `deps-version.json`, so
+ * moving the kernel forces someone to re-read the layout before the rules ship
+ * against markup they were not written for.
+ */
+export const GEOMETRY_KERNEL_PIN = '0.1.5-rc.2';
 
 /**
  * The product's mark as a data URL, for the document's icon.
  *
  * Inline because this module is bundled into the frame's own page and has no
- * asset pipeline behind it; the same geometry as the React `Mark` below.
+ * asset pipeline behind it; the same geometry as the React mark below, in the
+ * brand's primary teal (`#00756b`, direction A).
+ *
+ * @returns {string}
  */
-export const EVIMED_FAVICON =
-  'data:image/svg+xml,'
-  + "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E"
-  + "%3Crect width='48' height='48' rx='10' fill='%231f6f5c'/%3E"
-  + "%3Cpath d='M15 24h18M24 15v18' stroke='white' stroke-width='5' stroke-linecap='round'/%3E"
-  + '%3C/svg%3E';
+export function evimedFavicon() {
+  return 'data:image/svg+xml,'
+    + "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E"
+    + "%3Crect width='48' height='48' rx='10' fill='%2300756b'/%3E"
+    + "%3Cpath d='M15 24h18M24 15v18' stroke='white' stroke-width='5' stroke-linecap='round'/%3E"
+    + '%3C/svg%3E';
+}
 
-/** The private-use tag of the product's language pack; falls back to `zh`. */
-export const EVIMED_LOCALE = 'zh-x-evimed';
+/** The same icon, for callers outside the frame. */
+export const EVIMED_FAVICON = evimedFavicon();
 
 /**
- * The strings the product rephrases, per kernel namespace. Keys are the
- * kernel's own; anything absent here resolves through `zh`.
+ * The stylesheet: layout the frame computes from its own store, and controls
+ * this deployment does not offer. Presentation only; every rule is a hide or a
+ * placement, and a renamed class upstream costs the rule, not the page.
+ *
+ * @param {string} pin the kernel version the selectors were read against
+ * @returns {string}
  */
-export const EVIMED_DICTIONARIES = Object.freeze({
-  conversation: Object.freeze({
-    'hero.headline': '从一个研究问题开始',
-    'hero.preview': '',
-    'placeholder.hero': '描述你的研究问题或任务… / 调用指令，@ 引用文件或会话',
-    'placeholder.default': '继续这项研究，或提出下一个任务… / 调用指令，@ 引用文件或会话',
-  }),
-  // The working indicator under the last message. The kernel's copy is its
-  // vendor's Chinese name plus 中 (「深度求索中...」), which on this product's
-  // face reads as another company thinking. The product's own name goes there.
-  chat: Object.freeze({
-    'chat.deepDiving': 'EviMed 思考中…',
-  }),
-});
+export function shellStylesheet(pin) {
+  return [
+    `/* evimed-shell: selectors read against dsh-client ${pin} */`,
+    // Accessible names in both shipped languages, from the kernel's own
+    // dictionaries (`workspace.add`).
+    'button[aria-label="Add workspace"],button[aria-label="添加工作区"]{display:none !important}',
+    // An empty preview badge keeps its pill without this rule.
+    '[class$="_previewBadge"]:empty{display:none !important}',
+    // The hero's workspace chip. The kernel renders the button itself, outside
+    // any slot; only the picker it opens lives in `conversation.hero.workspace`,
+    // which this body occupies with nothing. Left alone the chip is a button
+    // labelled with the container's directory name that opens nothing — a dead
+    // control on the first screen. Hidden by its accessible name
+    // (`hero.chooseWorkspace`), and as a button: the composer's own editable
+    // carries the same label while it waits for a workspace, and must stay.
+    //
+    // The whole row used to be hidden instead, which also hid the row's second
+    // seat, `conversation.hero.agentPreset` — and that is why an occupant there
+    // once "registered nothing and rendered nothing".
+    'button[aria-label="选择工作区"],button[aria-label="Choose workspace"]{display:none !important}',
+    // The composer's paperclip. Uploads are refused on this surface
+    // (`fileUploads`, `session/uploadFileBinary` — knowledge enters a project
+    // through the knowledge base, not a chat attachment), so the button only
+    // ever led to a refusal. It is drawn by the input bar itself, outside any
+    // slot, so it goes by its accessible name (`file.attach`); the
+    // `file-upload` row stays mounted, because the deliverables panel and the
+    // attachment presenter inject its service.
+    'button[aria-label="添加附件"],button[aria-label="Add attachment"]{display:none !important}',
+    // The left column, which `sidebar` occupies with nothing.
+    //
+    // Occupying the slot replaces the column's CONTENT; the frame still sizes
+    // the column from its own store, so on its own that leaves 280 px of empty
+    // gutter between the product's navigation and the conversation (measured
+    // on the deployed build, 2026-09-15).
+    //
+    // Removing the column from flow shifts the remaining items up a track —
+    // the conversation landed in the 280 px sidebar track and the right column
+    // took the 1fr one, also measured — so each is pinned to the track it
+    // belongs in and the conversation spans the two on the left.
+    //
+    // The two resize handles carry one class and are told apart by position:
+    // the frame's children are the three columns, the overlay layer, then the
+    // handles, so the sidebar's handle is the one directly after the overlay
+    // layer and the right panel's is the one after that. With the panel closed
+    // there is only ONE handle in the DOM, and an nth-of-type rule would have
+    // hidden the overlay layer instead.
+    '[class$="_sidebarCol"]{display:none !important}',
+    '[class$="_centerCol"]{grid-column:1 / 3 !important}',
+    '[class$="_rightbarCol"]{grid-column:3 !important}',
+    '[class$="_overlayLayer"] + [class$="_handle"]{display:none !important}',
+    // The conversation never scrolls sideways.
+    //
+    // Measured at 1440 px with the right panel opening (2026-09-18 walk,
+    // screenshot 14): everything inside the conversation's scroll body —
+    // messages and composer alike — shifted about 224 px left and was cut at
+    // the frame's edge, while the header above it stayed put. That is a
+    // horizontal scroll offset on the scroll body, which exists only while
+    // something inside overflows it sideways: the transcript's own column is
+    // `width:100%` under a max width, but a wide block's bleed is computed
+    // from a container width that lags a squeeze reflow by a frame. Clipping
+    // at the transcript's own padding box keeps every intended bleed (it is
+    // bounded by that box by construction) and removes the offset's cause;
+    // the scroll body itself is held to vertical scrolling. `clip` and not
+    // `hidden` on the transcript, because `clip` creates no scroll container
+    // and so leaves the sticky turn rail and "to bottom" button attached to the
+    // real one.
+    '[data-conversation-scroll]{overflow-x:hidden !important}',
+    '[class$="_scroll"]:has(> [data-chat-flow]){overflow-x:clip !important}',
+  ].join('\n');
+}
 
 /**
  * @param {any} ctx Native Cordis client context.
  * @param {any} [_config]
  * @param {any} target Browser global, injectable by the contract suite.
- * @param {(id: string) => any} [require] The loader's module resolver; React comes from it.
+ * @param {(id: string) => any} [_require] The loader's module resolver (React arrives through the kit).
+ * @param {any} [kit] The frame kit (`runtimeUiKit.mjs`).
  */
-export function apply(ctx, _config, target = globalThis, require = undefined) {
-  const frame = target.__EVIMED_FRAME__;
+export function apply(ctx, _config, target = globalThis, _require = undefined, kit = undefined) {
   // `__EVIMED_FRAME__` is the control plane's own bootstrap object, so its
   // presence — not the window's position — is what says this page is ours.
-  //
-  // The guard used to also require `target.parent !== target`, which meant that
-  // opening the frame's address in a tab got the kernel unbranded: its whale
-  // mark in the sidebar, its own `DeepSeek Harness` title, and the swimming
-  // fish on an empty conversation (2026-09-16 review, §4.1 item 8). One
-  // condition, one uncovered path.
-  if (!frame || frame.version !== 1) return;
+  // The guard used to also require `target.parent !== target`, which meant
+  // that opening the frame's address in a tab got the kernel unbranded (its
+  // whale mark, its `DeepSeek Harness` title, the swimming fish on an empty
+  // conversation; 2026-09-16 review, §4.1 item 8). One condition, one
+  // uncovered path.
+  if (!kit || !kit.ours) return;
+  const h = kit.h;
 
-  const dictionaries = {
-    conversation: {
-      'hero.headline': '从一个研究问题开始',
-      'hero.preview': '',
-      'placeholder.hero': '描述你的研究问题或任务… / 调用指令，@ 引用文件或会话',
-      'placeholder.default': '继续这项研究，或提出下一个任务… / 调用指令，@ 引用文件或会话',
-    },
-    chat: {
-      'chat.deepDiving': 'EviMed 思考中…',
-    },
-  };
-  const localeId = 'zh-x-evimed';
-  /**
-   * The capability cards the hero offers, handed over in the frame's bootstrap
-   * object by the control plane. Validated rather than trusted: this file
-   * renders them, and a malformed entry must cost that entry, not the hero.
-   */
-  const capabilities = (Array.isArray(frame.capabilities) ? frame.capabilities : [])
-    .filter((/** @type {any} */ entry) => entry && typeof entry.id === 'string' && typeof entry.title === 'string'
-      && typeof entry.category === 'string' && typeof entry.brief === 'string'
-      && entry.title && entry.brief && entry.brief.length <= 100_000)
-    .slice(0, 24);
-
-  // --- brand -------------------------------------------------------------
-  /** @type {any} */
-  let react = null;
-  try { react = typeof require === 'function' ? require('react') : null; } catch { react = null; }
-  const h = react && typeof react.createElement === 'function' ? react.createElement : null;
   if (h) {
     /** @param {{size?: number, className?: string}} props */
     const Mark = ({ size, className }) => {
       const px = Number(size) > 0 ? Number(size) : 24;
+      // The brand's accent, through the frame's own token so the mark follows
+      // the theme layer (and its lighter dark-scheme step) like every other
+      // accent on the page. Not the deepseek ramp: under direction A its 500
+      // step is the working line's muted grey. As style and not as a
+      // presentation attribute: an SVG attribute is not a place `var()`
+      // resolves.
+      const color = 'var(--dsw-alias-state-business-primary, #00756b)';
       return h('svg', { xmlns: 'http://www.w3.org/2000/svg', viewBox: '0 0 48 48', width: px, height: px,
         role: 'img', 'aria-label': 'EviMed', className: className || undefined },
-      h('g', { fill: 'none', stroke: '#2563EB', strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 3.5 },
+      h('g', { style: { fill: 'none', stroke: color }, strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 3.5 },
         h('path', { d: 'M18 27 9.5 18.5M18 27 29.5 12.5M18 27l16 7' })),
-      h('g', { fill: '#2563EB' },
+      h('g', { style: { fill: color } },
         h('circle', { cx: 9, cy: 18, r: 5 }), h('circle', { cx: 18, cy: 27, r: 5.5 }),
         h('circle', { cx: 30, cy: 12, r: 5 }), h('circle', { cx: 35, cy: 34, r: 5 })));
     };
-    const Name = () => h('span', { style: { fontWeight: 600, letterSpacing: '0.01em' } }, 'EviMed');
+    const Name = () => h('span', { style: { fontWeight: 600 } }, 'EviMed');
     const Nothing = () => null;
 
-    /**
-     * The fifteen research capabilities, one row above the composer.
-     *
-     * They were a navigation row and a page of cards, which is a page most
-     * researchers never opened; what an empty composer asks instead is that
-     * you already know what to type (2026-09-15 walk, P2-1). This is the
-     * catalogue where the typing happens.
-     *
-     * `conversation.input.dock` and not the blank-session hero, for a reason
-     * worth writing down: the hero's own seat is `conversation.hero.agentPreset`,
-     * and `ui-agent-preset` is one of the fourteen rows this deployment
-     * disables — a disabled row declares no slot, so occupying it registered
-     * nothing and rendered nothing, silently. Measured on the deployed build
-     * before this line was written. The dock is declared by `ui-conversation`,
-     * which the hosted composition must load for there to be a conversation at
-     * all. A list slot is registered with an `id` — `key`, which the right
-     * sidebar's tab slot takes, is refused here with `requires options.id`,
-     * and the refusal is caught, so the dock simply did not appear.
-     *
-     * Always visible rather than only on a blank session, which is the honest
-     * reading of §9.8 anyway: a capability is a suggestion, not a binding, and
-     * the turn where someone realises they want a Meta-analysis is usually not
-     * the first one.
-     *
-     * A card fills the brief and names the capability in it — a high-confidence
-     * expectation the delivery gate reads (§9.4). The brief comes from
-     * `@evimed/domain`, the same function the 「科研能力」 page calls: two
-     * spellings would be two different expectations.
-     *
-     * The click leaves through the shell rather than writing the draft here.
-     * The shell opens a task carrying it, which is the path the capability page
-     * has always taken and the only one that also works from the hero, where
-     * there is no session yet to write into.
-     */
-    const CapabilityDock = () => h('details', {
-      style: { width: '100%', margin: '0 0 6px' },
-    },
-    h('summary', {
-      style: { cursor: 'pointer', fontSize: '12px', opacity: 0.6, listStyle: 'none', padding: '2px 0' },
-    }, `科研能力 · ${capabilities.length} 项`),
-    h('div', {
-      style: { display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '6px 0 2px' },
-    }, capabilities.map((/** @type {any} */ capability) => h('button', {
-      key: capability.id,
-      type: 'button',
-      title: `${capability.category} · ${capability.title}`,
-      onClick: () => {
-        try { target.__EVIMED_SHELL__?.navigate?.('new-task', capability.brief); } catch { /* no channel, no navigation */ }
-      },
-      style: { padding: '4px 10px', borderRadius: '999px', border: '1px solid rgba(127,127,127,0.28)',
-        background: 'transparent', color: 'inherit', cursor: 'pointer', font: 'inherit', fontSize: '12px' },
-    }, capability.title))));
-
-    /**
-     * The left column, removed.
-     *
-     * The kernel's own left column is a second navigation: brand, new session,
-     * a workspace tree and the session list — all of which the hosted shell
-     * already shows one column to the left, under different words (任务 /
-     * 会话 / 运行). Side by side that is what made the session page read as
-     * three shells nested in each other, which is the first thing an operator
-     * said about it (2026-09-15 walk, A1/A6).
-     *
-     * Occupying `sidebar` replaces the column outright — the layout package's
-     * own contract says so, and says the seats it declares go with it. What it
-     * does not do is take the column's WIDTH: the frame sizes that from its own
-     * store, so an occupant that renders nothing leaves 280 px of empty column
-     * (measured on the deployed build, 2026-09-15). `ctx.layout.toggleSidebar`
-     * would close it to a 56 px rail, and did not fire from inside the
-     * occupant; the rule below removes the column instead, which is the better
-     * outcome anyway — there is nothing in it the shell does not already offer.
-     *
-     * Presentation only, and the same handle the two rules beside it use: a
-     * CSS-module class has a stable suffix and a hashed prefix. If upstream
-     * renames it the column comes back, which is a cosmetic regression and not
-     * a broken page.
-     */
     // A single slot renders its LOWEST-priority registration and refuses a
     // second one at the same priority. The kernel's own occupants register at
     // the default 0 — the workspace picker always, the official brand in an
     // official build — so ours sit below them and shadow rather than collide.
-    // Registered at 0, the picker slot threw "already has a registration",
-    // and that one throw failed the whole loader entry, bridge included: the
-    // frame never bound its session (2026-09-09, first release of this file).
+    // Registered at 0, the picker slot threw "already has a registration", and
+    // that one throw failed the whole loader entry, bridge included: the frame
+    // never bound its session (2026-09-09, first release of this file).
     const below = -1;
-    /** Cosmetic work must never sink the bridge that shares this bundle.
-     *  @param {string} label @param {() => unknown} fn */
-    const guarded = (label, fn) => {
-      try { return fn(); } catch (error) { target.console?.warn?.(`[evimed-shell] ${label} unavailable:`, error); return undefined; }
+    kit.guarded('sidebar brand', () => {
+      kit.occupy({ slot: 'sidebar.brand.mark', priority: below }, Mark);
+      kit.occupy({ slot: 'sidebar.brand.name', priority: below }, Name);
+    });
+    kit.guarded('hero brand', () => kit.occupy({ slot: 'conversation.hero.brand.mark', priority: below }, Mark));
+    // The left column, removed: occupying `sidebar` replaces the column's
+    // content, and the stylesheet removes its width. The frame's own room
+    // arithmetic still counts the column, though — expanded it is 280 px of
+    // the width the right column is weighed against, and with it counted the
+    // right column refuses to open below a 980 px frame and sits narrower
+    // above. So the column is also told it is collapsed (a 56 px rail in that
+    // arithmetic) whenever it says it is not: `ctx.layout.toggleSidebar()` is
+    // the layout's own public switch, and the owner props say which way it
+    // stands, so this never toggles it open.
+    /** @type {any} */
+    let layout = null;
+    kit.withServices(['layout'], (/** @type {any} */ scope) => { layout = scope.layout; });
+    /** @param {{ collapsed?: boolean }} props */
+    const LeftColumn = ({ collapsed }) => {
+      kit.react.useEffect(() => {
+        if (collapsed !== false || !layout || typeof layout.toggleSidebar !== 'function') return;
+        try { layout.toggleSidebar(); } catch { /* the column keeps its width; only the room arithmetic suffers */ }
+      }, [collapsed]);
+      return null;
     };
-    guarded('sidebar brand', () => ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.inject('sidebar.brand.name', function* () {
-      yield ctx.slots.register({ name: 'sidebar.brand.mark', priority: below }, Mark);
-      yield ctx.slots.register({ name: 'sidebar.brand.name', priority: below }, Name);
-    })));
-    guarded('hero brand', () => ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({ name: 'conversation.hero.brand.mark', priority: below }, Mark)));
-    guarded('sidebar column', () => ctx.slots.inject('sidebar', () => ctx.slots.register({ name: 'sidebar', priority: below }, Nothing)));
-    if (capabilities.length) {
-      guarded('capability dock', () => ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({ name: 'conversation.input.dock', id: 'evimed-capabilities' }, CapabilityDock)));
-    }
+    kit.guarded('sidebar column', () => kit.occupy({ slot: 'sidebar', priority: below }, kit.react ? LeftColumn : Nothing));
     // The picker is a popup the chip opens; an occupant that renders nothing
-    // leaves the chip (the bound workspace's name) and removes the choice.
-    guarded('workspace picker', () => ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register({ name: 'conversation.hero.workspace', priority: below }, Nothing)));
+    // removes the choice (the chip itself is hidden by the stylesheet).
+    kit.guarded('workspace picker', () => kit.occupy({ slot: 'conversation.hero.workspace', priority: below }, Nothing));
+    // The draft's attachment strip, for the same reason as the paperclip: a
+    // file pasted or dropped into the composer cannot be uploaded here, and a
+    // strip of chips that will be refused at send is a promise the page does
+    // not keep.
+    kit.guarded('attachment strip', () => kit.occupy({ slot: 'conversation.input.attachments', priority: below }, Nothing));
   }
 
-  // --- language ----------------------------------------------------------
-  const locale = ctx.locale;
-  if (locale && typeof locale.addLanguage === 'function' && typeof locale.register === 'function' && typeof locale.setLocale === 'function') {
-    try {
-      ctx.effect(() => locale.addLanguage({ id: localeId, label: '中文', fallback: 'zh' }), 'evimed-shell: language');
-      for (const [ns, dict] of Object.entries(dictionaries)) {
-        ctx.effect(() => locale.register(ns, localeId, dict), `evimed-shell: ${ns} dictionary`);
-      }
-      locale.setLocale(localeId);
-    } catch (error) {
-      // The pack is a refinement; the language is the requirement.
-      try { locale.setLocale('zh'); } catch { /* the kernel keeps its browser-derived choice */ }
-      target.console?.warn?.('[evimed-shell] language pack unavailable:', error);
-    }
-  }
-
-  // --- controls the deployment does not offer -----------------------------
   const doc = target.document;
   if (doc && typeof doc.createElement === 'function' && doc.head) {
     // The document's own name and icon.
@@ -276,72 +240,27 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
     // Invisible inside an iframe — the shell's frame carries its own accessible
     // name — and the whole page when the address is opened directly, where the
     // tab read `DeepSeek Harness` under a whale favicon. The kernel's packages
-    // are MIT and its brand package documents exactly this substitution ("a
-    // deployment with its own brand composes a different package into the same
-    // slots"); DeepSeek's platform terms §5.2 forbid using their marks without
+    // are MIT and its brand package documents exactly this substitution;
+    // DeepSeek's platform terms §5.2 forbid using their marks without
     // permission and impose no attribution duty, so carrying their mark is the
     // wrong default rather than the polite one.
-    //
-    // Presentation only, like the stylesheet below it: no DOM of the kernel's
-    // is patched and `node_modules` is untouched.
     try {
       doc.title = 'EviMed 研究会话';
       const icon = doc.querySelector('link[rel~="icon"]') ?? doc.createElement('link');
       icon.setAttribute('rel', 'icon');
       icon.setAttribute('type', 'image/svg+xml');
-      icon.setAttribute('href', EVIMED_FAVICON);
+      icon.setAttribute('href', evimedFavicon());
       if (!icon.parentNode) doc.head.appendChild(icon);
     } catch { /* a document that refuses either is still a working conversation */ }
 
     const style = doc.createElement('style');
     style.setAttribute('data-evimed-shell', '');
-    // Accessible names in both shipped languages, from the kernel's own
-    // dictionaries (`workspace.add`). An empty preview badge keeps its pill
-    // without this rule.
-    //
-    // The hero's workspace chip is rendered by the kernel itself, outside any
-    // slot; only the picker it opens lives in `conversation.hero.workspace`,
-    // which the shell occupies with nothing. Left alone, the chip stays as a
-    // button labelled with the container's directory name that opens nothing —
-    // a dead control on the first screen. Its row is a CSS-module class, so
-    // the suffix selector is the only handle, and hiding is all it is used for.
-    style.textContent = [
-      'button[aria-label="Add workspace"],button[aria-label="添加工作区"]{display:none !important}',
-      '[class$="_previewBadge"]:empty{display:none !important}',
-      '[class$="_heroWorkspaceRow"]{display:none !important}',
-      // The left column, which `sidebar` occupies with nothing.
-      //
-      // Occupying the slot replaces the column's CONTENT; the frame still
-      // sizes the column from its own store, so on its own that leaves 280 px
-      // of empty gutter between the product's navigation and the conversation
-      // (measured on the deployed build, 2026-09-15). `ctx.layout.toggleSidebar`
-      // would narrow it and did not fire from inside the occupant.
-      //
-      // Removing the column from flow shifts the remaining items up a track —
-      // the conversation landed in the 280 px sidebar track and the right
-      // column took the 1fr one, also measured — so each is pinned to the
-      // track it belongs in and the conversation spans the two on the left.
-      // Verified in the live frame with the right panel both open (680 + 528)
-      // and closed (1208 + 0) before it was written here.
-      //
-      // The two resize handles carry one class, so hiding by class took the
-      // right panel's drag with the sidebar's. They are distinguishable by
-      // position instead: the frame's children are the three columns, the
-      // overlay layer, then the handles, so the sidebar's handle is the one
-      // directly after the overlay layer and the right panel's is the one
-      // after that. Read off the live frame in both states, which is also
-      // where the earlier claim that they were indistinguishable came from:
-      // with the panel closed there is only ONE handle in the DOM, and an
-      // nth-of-type rule would have hidden the overlay layer instead.
-      //
-      //   panel open   handle[prev=overlayLayer] none, handle[prev=handle] 8px col-resize
-      //   panel closed handle[prev=overlayLayer] none, and no second handle
-      '[class$="_sidebarCol"]{display:none !important}',
-      '[class$="_centerCol"]{grid-column:1 / 3 !important}',
-      '[class$="_rightbarCol"]{grid-column:3 !important}',
-      '[class$="_overlayLayer"] + [class$="_handle"]{display:none !important}',
-    ].join('\n');
+    style.setAttribute('data-evimed-kernel', String(kit.vocabulary?.kernelPin ?? ''));
+    style.textContent = shellStylesheet(String(kit.vocabulary?.kernelPin ?? ''));
     doc.head.appendChild(style);
     ctx.effect(() => () => { style.remove(); }, 'evimed-shell: stylesheet');
   }
 }
+
+/** The body as the socket's build composes it: its helpers, then `apply`. */
+export const BODY = Object.freeze({ name: 'shell', inject, parts: Object.freeze([evimedFavicon, shellStylesheet, apply]) });

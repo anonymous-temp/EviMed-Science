@@ -226,7 +226,11 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
    * the table has no name for is left out rather than shown by its id: a start
    * screen is the wrong place to meet `dataset-research-scoping`.
    *
-   * @returns {Promise<{ id: string, title: string, category: string, brief: string }[]>}
+   * Each card also carries the display table's one-line description and the
+   * manifest's typical duration, which the frame's `/能力` command shows beside
+   * the title (2026-09-18 plan, §7.3).
+   *
+   * @returns {Promise<{ id: string, title: string, category: string, brief: string, summary: string, minutes: readonly number[] }[]>}
    */
   let capabilityCards = null;
   async function heroCapabilities() {
@@ -242,6 +246,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
           title: display.title,
           category: display.category,
           brief: capabilityBrief(display.title, display.starterPrompts[0] ?? ""),
+          summary: display.description,
+          minutes: agent.estimatedMinutes,
         }))
         .sort((left, right) => left.category.localeCompare(right.category, "zh") || left.title.localeCompare(right.title, "zh"));
     } catch {
@@ -277,7 +283,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     }
 
     if (!["GET", "HEAD", "OPTIONS"].includes(String(req.method).toUpperCase())) assertBrowserOrigin(req, config);
-    const { project, frame, claims } = await resolveFrame(req, res);
+    const { user, project, frame, claims } = await resolveFrame(req, res);
     const pathname = new URL(frame.suffix, "http://runtime.local").pathname;
     const hostResult = SEAMS.wire.gatewayEndpoints.hostInteractionResult;
     const method = pathname === `/api/${hostResult}` ? hostResult : runtimeUiMethodFromPath(pathname);
@@ -330,7 +336,17 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     if (pathname === "/__evimed_bootstrap.js" && ["GET", "HEAD"].includes(req.method)) {
       const { installRuntimeUiTransport } = await import("@evimed/harness-port/runtime-ui-transport");
       await revalidate();
-      const source = runtimeUiBootstrapSource({ version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix, shellOrigin: runtimeUiOrigins(config).shellOrigin, cwd: runtimeManager.runtimeWorkspaceRoot(project), capabilities: await heroCapabilities() }, installRuntimeUiTransport);
+      // `operator` releases the rows a researcher's page hides (the assembled
+      // system prompt, injected context) to an operator diagnosing a run — the
+      // same id allowlist the operations page reads. `off` names the frame
+      // bodies this deployment switched off.
+      const source = runtimeUiBootstrapSource({
+        version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix,
+        shellOrigin: runtimeUiOrigins(config).shellOrigin, cwd: runtimeManager.runtimeWorkspaceRoot(project),
+        capabilities: await heroCapabilities(),
+        operator: Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(user?.id ?? "")),
+        off: Array.isArray(config.runtimeUiFrameOff) ? config.runtimeUiFrameOff : [],
+      }, installRuntimeUiTransport);
       res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Content-Length": String(Buffer.byteLength(source)), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
       res.end(req.method === "HEAD" ? undefined : source);
       return;

@@ -40,8 +40,12 @@ test('plugin apply returns synchronously before loader readiness and navigates w
   const f = fixture();
   /** @type {any} */ let ready;
   f.ctx.loader.await = () => new Promise(resolve => { ready = resolve; });
-  assert.equal(apply(f.ctx, {}, f.target), undefined); assert.equal(f.sent.length, 0);
-  ready(); await settle(); assert.equal(f.sent[0].message.type, 'evimed.runtime-ui.ready');
+  assert.equal(apply(f.ctx, {}, f.target), undefined);
+  // Only the announcement goes out before the kernel is ready: the shell
+  // answers it with its theme, which is the difference between a first paint
+  // that follows the reader's choice and one that follows the default.
+  assert.deepEqual(f.sent.map(row => row.message.type), ['evimed.runtime-ui.booted']);
+  ready(); await settle(); assert.equal(f.sent[1].message.type, 'evimed.runtime-ui.ready');
   f.navigate(); await settle();
   assert.deepEqual(f.calls, [['create', 'session-new'], ['open', 'session-new'], ['draft', 'session-new', 'Review this evidence']]);
   assert.ok(f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === true));
@@ -285,4 +289,124 @@ test('the shell shortcuts pressed inside the frame are forwarded, and only those
 
   f.ctx.dispose();
   assert.equal(f.listeners.get('keydown'), undefined, 'the listener leaves with the bridge');
+});
+
+// ---------------------------------------------------------------------------
+// The channel the other frame bodies use (2026-09-18 plan, C9).
+// ---------------------------------------------------------------------------
+
+import { createHub } from '../src/runtimeUiKit.mjs';
+
+/** @param {ReturnType<typeof fixture>} f @param {Record<string, any>} data @param {Record<string, any>} [event] */
+function shellSends(f, data, event = {}) {
+  f.listeners.get('message')({ origin: 'https://app.example', source: f.target.parent,
+    data: { version: 1, frameId: 'frame-a', projectId: 'project-a', ...data }, ...event });
+}
+
+test('what the shell sends in is validated once and handed to the bodies through the hub', async () => {
+  const f = fixture(); const hub = createHub(f.target);
+  apply(f.ctx, {}, f.target, undefined, { hub }); await settle();
+  shellSends(f, { type: 'evimed.runtime-ui.theme', seq: 1, preference: 'dark', resolved: 'dark' });
+  assert.deepEqual(hub.getState().theme, { preference: 'dark', resolved: 'dark' });
+  // A preference the kernel does not have, a replayed sequence, another origin: dropped.
+  shellSends(f, { type: 'evimed.runtime-ui.theme', seq: 2, preference: 'sepia', resolved: 'dark' });
+  shellSends(f, { type: 'evimed.runtime-ui.theme', seq: 1, preference: 'light', resolved: 'light' });
+  shellSends(f, { type: 'evimed.runtime-ui.theme', seq: 3, preference: 'light', resolved: 'light' }, { origin: 'https://evil.example' });
+  assert.deepEqual(hub.getState().theme, { preference: 'dark', resolved: 'dark' });
+
+  shellSends(f, { type: 'evimed.runtime-ui.run-state', seq: 4, runId: 'run_abc', state: 'running', title: '阿司匹林', progress: { deliverables: [] } });
+  assert.deepEqual(hub.getState().runState, { runId: 'run_abc', state: 'running', title: '阿司匹林', progress: { deliverables: [] } });
+  shellSends(f, { type: 'evimed.runtime-ui.run-state', seq: 5, runId: '../etc', state: 'running' });
+  assert.equal(hub.getState().runState.runId, 'run_abc', 'a run id that is not an id is not delivered');
+  shellSends(f, { type: 'evimed.runtime-ui.run-state', seq: 6, runId: null });
+  assert.equal(hub.getState().runState.runId, null, 'the shell can say the session has no run');
+
+  const answer = hub.request('kb-query', { query: '阿司匹林' });
+  const query = /** @type {any} */ (f.sent.find(row => row.message.type === 'evimed.runtime-ui.kb-query')).message;
+  assert.equal(query.query, '阿司匹林');
+  shellSends(f, { type: 'evimed.runtime-ui.kb-result', seq: 7, requestId: query.requestId,
+    items: [{ id: 'src_0123abcd', title: 'ASPREE', detail: 'NEJM 2018' }, { id: 'not-a-source', title: 'x' }] });
+  assert.deepEqual((await answer).items, [{ id: 'src_0123abcd', title: 'ASPREE', detail: 'NEJM 2018' }]);
+  f.ctx.dispose();
+});
+
+test('a body leaves only through a closed vocabulary, and an artifact path cannot climb out', async () => {
+  const f = fixture(); const hub = createHub(f.target);
+  apply(f.ctx, {}, f.target, undefined, { hub }); await settle();
+  hub.send('open-artifact', { runId: 'run_abc', path: 'deliverables/clinical-evidence-synthesis/clinical-evidence-report.md', anchor: 'CLM-001' });
+  hub.send('open-artifact', { runId: 'run_abc', path: '../secrets/key' });
+  hub.send('open-artifact', { runId: 'run_abc', path: '/etc/passwd' });
+  hub.send('open-artifact', { runId: 'bad id', path: 'deliverables/x.md' });
+  hub.send('shell-navigate', { destination: 'anywhere' });
+  const opened = f.sent.filter(row => row.message.type === 'evimed.runtime-ui.open-artifact').map(row => row.message);
+  assert.equal(opened.length, 1);
+  assert.equal(opened[0].path, 'deliverables/clinical-evidence-synthesis/clinical-evidence-report.md');
+  assert.equal(opened[0].anchor, 'CLM-001');
+  assert.ok(!f.sent.some(row => row.message.type === 'evimed.runtime-ui.shell-navigate'), 'the hub is not a way around the navigation vocabulary');
+  f.ctx.dispose();
+  assert.equal(hub.send('open-artifact', { runId: 'run_abc', path: 'a.md' }), false, 'the channel closes with the bridge');
+});
+
+test('the shell can search this project\'s sessions through the frame', async () => {
+  const f = fixture();
+  /** @type {any[]} */ const queries = [];
+  f.ctx.sessions.search = async (/** @type {string} */ query) => { queries.push(query); return { ok: true, value: { items: [{ sessionId: 'session-a', snippet: '……阿司匹林一级预防……' }, { sessionId: 'bad id', snippet: 'x' }], hasMore: true } }; };
+  f.ctx.sessions.list.getSnapshot = () => ({ current: 'session-a', byId: { 'session-a': { displayTitle: '70 岁以上阿司匹林' } } });
+  apply(f.ctx, {}, f.target); await settle();
+  shellSends(f, { type: 'evimed.runtime-ui.search', seq: 1, requestId: 'q1', query: ' 阿司匹林 ' });
+  await settle();
+  assert.deepEqual(queries, ['阿司匹林']);
+  const result = /** @type {any} */ (f.sent.find(row => row.message.type === 'evimed.runtime-ui.search-result')).message;
+  assert.equal(result.requestId, 'q1');
+  assert.equal(result.ok, true);
+  assert.equal(result.hasMore, true);
+  assert.deepEqual(result.items, [{ sessionId: 'session-a', snippet: '……阿司匹林一级预防……', title: '70 岁以上阿司匹林' }]);
+
+  f.ctx.sessions.search = async () => ({ ok: false, error: { code: 'session/search-unavailable', message: 'private details' } });
+  shellSends(f, { type: 'evimed.runtime-ui.search', seq: 2, requestId: 'q2', query: 'x' });
+  await settle();
+  const failed = /** @type {any} */ (f.sent.findLast(row => row.message.type === 'evimed.runtime-ui.search-result')).message;
+  assert.deepEqual({ ok: failed.ok, error: failed.error }, { ok: false, error: 'session/search-unavailable' });
+  assert.ok(!JSON.stringify(failed).includes('private'));
+  // An empty or oversized query is not a search.
+  shellSends(f, { type: 'evimed.runtime-ui.search', seq: 3, requestId: 'q3', query: '   ' });
+  shellSends(f, { type: 'evimed.runtime-ui.search', seq: 4, requestId: 'q4', query: 'x'.repeat(201) });
+  await settle();
+  assert.equal(f.sent.filter(row => row.message.type === 'evimed.runtime-ui.search-result').length, 2);
+  f.ctx.dispose();
+});
+
+test('a session change says whether the session is a fork or a delegated child, and of what', async () => {
+  const f = fixture(); const hub = createHub(f.target);
+  /** @type {() => void} */ let changed = () => {};
+  /** @type {any} */ let snapshot = { current: 'session-new', byId: {} };
+  f.ctx.sessions.list = { getSnapshot: () => snapshot, subscribe: (/** @type {() => void} */ listener) => { changed = listener; return () => {}; } };
+  apply(f.ctx, {}, f.target, undefined, { hub }); await settle();
+  f.navigate(); await settle();
+  const sessions = () => f.sent.filter(row => row.message.type === 'evimed.runtime-ui.session').map(row => row.message);
+
+  // A branch of a finished turn: the kernel's fork, same parent field, no
+  // subagent origin. The shell takes it into the ledger.
+  snapshot = { current: 'session-fork', byId: { 'session-fork': { parentId: 'session-new' } } };
+  changed();
+  assert.equal(sessions().at(-1).forkedFrom, 'session-new');
+  assert.equal(sessions().at(-1).subagent, undefined);
+
+  // A delegated child, opened from the catalogue: addressed by its parent,
+  // and its root is the session the researcher started.
+  snapshot = {
+    current: 'child-2',
+    currentAddress: { parentSessionId: 'child-1', childSessionId: 'child-2', mode: 'one-shot' },
+    byId: { 'child-1': { origin: 'subagent', parentId: 'session-new' } },
+  };
+  changed();
+  assert.deepEqual({ subagent: sessions().at(-1).subagent, root: sessions().at(-1).rootSessionId, forkedFrom: sessions().at(-1).forkedFrom },
+    { subagent: true, root: 'session-new', forkedFrom: undefined });
+  assert.equal(hub.getState().session.rootSessionId, 'session-new', 'the bodies learn it too');
+
+  // An ordinary session carries neither.
+  snapshot = { current: 'session-plain', byId: { 'session-plain': {} } };
+  changed();
+  assert.deepEqual(Object.keys(sessions().at(-1)).filter(key => ['forkedFrom', 'subagent', 'rootSessionId'].includes(key)), []);
+  f.ctx.dispose();
 });

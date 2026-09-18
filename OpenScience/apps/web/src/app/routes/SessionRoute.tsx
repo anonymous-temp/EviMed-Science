@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { fetchWebMe, listWebAgentRuns, webRuntimeProfile } from "@/lib/apiClient";
-import { RuntimeUiFrame } from "./RuntimeUiFrame";
+import { FrameWaiting, RuntimeUiFrame } from "./RuntimeUiFrame";
 import { Button } from "@/components/ui/Button";
 import { PageTitle } from "@/components/layout/PageTitle";
 
@@ -56,12 +56,25 @@ export function SessionRoute() {
     // creating a session, which is the behaviour this replaced: never a
     // blocked session page.
     const giveUp = setTimeout(() => { if (active) setResolving(false); }, 8_000);
-    void listWebAgentRuns()
-      .then((runs) => {
-        if (!active) return;
-        const recent = runs.find((run) => /^[A-Za-z0-9_-]{1,160}$/.test(run.sessionId));
-        if (recent) navigate(`/app/chat/${encodeURIComponent(recent.sessionId)}`, { replace: true });
-        else setResolving(false);
+    const resume = (candidate: unknown) => {
+      if (typeof candidate !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(candidate)) return false;
+      navigate(`/app/chat/${encodeURIComponent(candidate)}`, { replace: true });
+      return true;
+    };
+    // The account's own answer first (C4): `/api/me` names the conversation
+    // last opened in this project, and it is fetched for this page anyway —
+    // the ledger walk below is one more round trip, and it finds a run's
+    // session, not the conversation the reader was in. Read defensively: a
+    // control plane that predates the field answers without it.
+    void fetchWebMe()
+      .then((me) => {
+        if (!active) return null;
+        if (resume((me as { lastSessionId?: unknown } | null)?.lastSessionId)) return null;
+        return listWebAgentRuns().then((runs) => {
+          if (!active) return;
+          const recent = runs.find((run) => /^[A-Za-z0-9_-]{1,160}$/.test(run.sessionId));
+          if (!recent || !resume(recent.sessionId)) setResolving(false);
+        });
       })
       .catch(() => { if (active) setResolving(false); })
       .finally(() => clearTimeout(giveUp));
@@ -86,16 +99,18 @@ export function SessionRoute() {
   // while it loads makes the browser's tab strip flicker.
   if (uiOrigin && resolving) {
     return (
-      <div role="status" className="flex h-full items-center justify-center text-ui-sm text-muted">
-        <PageTitle page="研究会话" />正在打开最近的任务…
+      <div className="relative h-full w-full">
+        <PageTitle page="研究会话" />
+        <FrameWaiting stage={0} line="正在打开最近的任务…" />
       </div>
     );
   }
   if (uiOrigin) return <><PageTitle page="研究会话" /><RuntimeUiFrame /></>;
   if (loading) {
     return (
-      <div role="status" className="flex h-full items-center justify-center text-ui-sm text-muted">
-        <PageTitle page="研究会话" />正在启动研究运行时…
+      <div className="relative h-full w-full">
+        <PageTitle page="研究会话" />
+        <FrameWaiting stage={0} />
       </div>
     );
   }
