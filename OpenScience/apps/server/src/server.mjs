@@ -59,7 +59,7 @@ import {
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { ResearchMemoryStore } from "./researchMemory.mjs";
-import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
+import { MEMORY_KIND_LABELS_ZH, migrateResearchMemory } from "./researchMemoryPersistence.mjs";
 import { MemorySubstrate, selectedMemoryIndexProvider } from "./memorySubstrate.mjs";
 import { MemoryRerank } from "./memoryRerank.mjs";
 import { OpenVikingClient } from "./openVikingClient.mjs";
@@ -1716,7 +1716,7 @@ export function createWebApiApp(overrides = {}) {
         // mid-sentence loses the part that says the old value is recoverable.
         // The inbox notice carries the full excerpts.
         const changed = memoryResult.conflicts.slice(0, 2).map((item) =>
-          `「${item.key.slice(0, 40)}」由「${item.previousValue.slice(0, 30)}」改为「${item.nextValue.slice(0, 30)}」`);
+          `一条「${MEMORY_KIND_LABELS_ZH[item.kind] ?? "记忆"}」由「${item.previousValue.slice(0, 30)}」改为「${item.nextValue.slice(0, 30)}」`);
         const sentence = `本次对话改写了 ${memoryResult.conflicts.length} 条你确认过的记忆：${changed.join("；")}`
           + `${memoryResult.conflicts.length > changed.length ? "等" : ""}`
           + "。新值已生效，原值保留在该记忆的修订记录中，可在记忆管理中改回。";

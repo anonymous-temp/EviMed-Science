@@ -7547,3 +7547,26 @@ test("a run that ends without a verdict recovers only the files it wrote, not an
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a plain answer typed into the kernel's page counts the persona its session was given", async () => {
+  // No plan, so nothing for the native-projection scope to admit; the answer
+  // persona was still injected into the session and the run's index says so.
+  // Every such answer was delivered 未核验 until 2026-09-19.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-persona-"));
+  try {
+    const project = { id: "project-1", userId: "user-1", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+    await mkdir(path.join(project.workspaceDir, workspaceLayout.runStateDir), { recursive: true });
+    const writeIndex = (sessionId) => writeFile(
+      path.join(project.workspaceDir, workspaceLayout.runStateFile),
+      JSON.stringify({ formatVersion: 1, runId: "native_1", sessionId, injectedSkills: ["open-domain-answer"], plan: { revision: 0, items: [] }, degraded: [] }),
+      "utf8",
+    );
+    const run = { id: "run_plain", sessionId: "ses_plain", status: "succeeded", nativeTurn: { startSeq: 1, userSeq: 2 } };
+    await writeIndex("ses_plain");
+    assert.ok((await loadedOrInjectedSkillsForTest(project, [], run)).has("open-domain-answer"), "the session's own persona counts");
+    await writeIndex("ses_other");
+    assert.equal((await loadedOrInjectedSkillsForTest(project, [], run)).has("open-domain-answer"), false, "another session's record does not");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

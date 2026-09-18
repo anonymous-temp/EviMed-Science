@@ -2162,7 +2162,24 @@ async function loadedOrInjectedSkills(project, assistantMessages, run = null) {
     if (typeof name === "string" && name.trim()) loaded.add(name.trim());
   }
   const read = await readRunStateProjection(project, project.workspaceDir, run);
-  if (read.state !== "read") return loaded;
+  if (read.state !== "read") {
+    // A native turn with no plan has nothing for `scopeNativeProjection` to
+    // admit — a plain question the researcher typed into the kernel's page —
+    // yet the composition put the answer persona into that session's system
+    // prompt and the run's own index records it. Read the index as written
+    // and take its injected skills, and nothing else, when it names this very
+    // session: every plain question asked on the adopted path was delivered
+    // 未核验 with 「运行时未载入能力方法」 (2026-09-15, again 2026-09-19).
+    if (run?.nativeTurn && read.state === "unattributed" && run.sessionId) {
+      const raw = await readRunStateProjection(project, project.workspaceDir, null);
+      if (raw.state === "read" && raw.projection?.sessionId === run.sessionId) {
+        for (const name of raw.projection?.injectedSkills ?? []) {
+          if (typeof name === "string" && name.trim()) loaded.add(name.trim());
+        }
+      }
+    }
+    return loaded;
+  }
   // A skill receipt is completion authority, so unlike display-only legacy
   // projections it must identify this exact control-plane run. A native turn's
   // projection already does: `scopeNativeProjection` admitted it by session
