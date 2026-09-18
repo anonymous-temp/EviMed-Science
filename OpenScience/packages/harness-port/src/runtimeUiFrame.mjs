@@ -29,6 +29,7 @@ import {
   CONTRACT_KIND_LABELS,
   EVIDENCE_SOURCE_TYPE_LABELS_ZH,
   EVIDENCE_SOURCE_TYPES,
+  KNOWLEDGE_DIR,
   RUN_ACTIVITY_PHASE_LABELS_ZH,
   RUN_ACTIVITY_PHASES,
   SOCKET_TOOL_NAMES,
@@ -76,6 +77,9 @@ export const FRAME_VOCABULARY = Object.freeze({
   sourceTypes: EVIDENCE_SOURCE_TYPES,
   sourceTypeLabels: EVIDENCE_SOURCE_TYPE_LABELS_ZH,
   contractKindLabels: CONTRACT_KIND_LABELS,
+  // Where the researcher's knowledge base is synced in the workspace: the
+  // `@` reference tells the model where a cited source's text is.
+  knowledgeDir: KNOWLEDGE_DIR,
   // The socket tools whose calls the frame draws. The names are contractual
   // (C6/C7 of the 2026-09-18 plan); the domain's table is preferred where it
   // already lists one, so a rename there reaches the frame.

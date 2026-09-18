@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router";
 import { errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
 import { createWebRuntimeUiFrame, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, getWebProjectId, webErrorMessage, WebApiError, webRuntimeProfile, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
-import { useFrameRunBinding } from "@/lib/runtimeUiBridge";
+import { searchKnowledgeSources, useFrameRunBinding } from "@/lib/runtimeUiBridge";
 import { Button } from "@/components/ui/Button";
 import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
 import { useUiStore } from "@/lib/store";
@@ -249,6 +249,14 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
     return () => clearTimeout(timeout);
   }, [navigated, error, attempt]);
 
+  /** One message to the frame's bridge, in the envelope and sequence it checks. */
+  const postToFrame = useCallback((type: string, fields: object) => {
+    if (!frameId) return;
+    iframe.current?.contentWindow?.postMessage({
+      ...fields, type: `evimed.runtime-ui.${type}`, version: 1, frameId, projectId, seq: ++outgoing.current,
+    }, origin);
+  }, [frameId, projectId, origin]);
+
   useLayoutEffect(() => {
     if (!binding) return;
     const onMessage = (event: MessageEvent) => {
@@ -329,6 +337,18 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         incoming.current = message.seq;
         const anchor = typeof message.anchor === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(message.anchor) ? `#${message.anchor}` : "";
         navigate(`/app/runs/${encodeURIComponent(runId)}/files/${path.split("/").map(encodeURIComponent).join("/")}${anchor}`);
+      } else if (message.type === "evimed.runtime-ui.kb-query"
+        && typeof message.requestId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(message.requestId)) {
+        // The frame's `@` menu asking for the project's parsed sources. The
+        // answer carries ids and names only; the run reads the text from its
+        // own synced knowledge base.
+        incoming.current = message.seq;
+        const requestId = message.requestId;
+        const query = typeof message.query === "string" ? message.query.slice(0, 200) : "";
+        void searchKnowledgeSources(projectId, query).then(
+          (items) => postToFrame("kb-result", { requestId, ok: true, items }),
+          () => postToFrame("kb-result", { requestId, ok: false, items: [] }),
+        );
       } else if (message.type === "evimed.runtime-ui.ack") {
         const request = currentRequest.current;
         if (!request || message.requestId !== request.requestId || typeof message.ok !== "boolean"
@@ -371,7 +391,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [binding, origin, projectId, intent, location, navigate, navigated, attempt]);
+  }, [binding, origin, projectId, intent, location, navigate, navigated, attempt, postToFrame]);
 
   useEffect(() => {
     if (!ready || error || !binding || !intent || !iframe.current?.contentWindow) return;
@@ -393,14 +413,6 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   // application is ready: the flip happens under the waiting cover, not in
   // front of the reader. `resolved` follows the system scheme while the
   // preference is `system`.
-  /** One message to the frame's bridge, in the envelope and sequence it checks. */
-  const postToFrame = useCallback((type: string, fields: object) => {
-    if (!frameId) return;
-    iframe.current?.contentWindow?.postMessage({
-      ...fields, type: `evimed.runtime-ui.${type}`, version: 1, frameId, projectId, seq: ++outgoing.current,
-    }, origin);
-  }, [frameId, projectId, origin]);
-
   useEffect(() => {
     if (!booted || error || !frameId) return;
     const media = typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: dark)") : null;

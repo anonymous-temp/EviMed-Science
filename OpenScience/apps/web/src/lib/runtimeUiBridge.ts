@@ -28,6 +28,7 @@ import { listWebAgentRuns, type WebAgentRun } from "./apiClient";
 import { readArtifact, readClaimVerification } from "./artifactFile";
 import { claimMatrixPathFor, parseClaimMatrix, type ClaimVerification } from "./claimCitations";
 import { subscribeRunEvents, type RunStreamEvent } from "./runEvents";
+import { listSources, type SourceRecord } from "./sourceClient";
 
 /** One deliverable as the frame reads it (C3 `deliverables[]`). */
 export interface FrameDeliverable {
@@ -339,3 +340,54 @@ export function useFrameRunBinding({ sessionId, enabled, postRunState, postEvide
     };
   }, [sessionId, enabled, pollMs]);
 }
+
+/** One knowledge-base source the frame's `@` menu offers (`kb-result` items). */
+export interface FrameKnowledgeItem {
+  id: string;
+  title: string;
+  detail?: string;
+}
+
+const KNOWLEDGE_CACHE_MS = 30_000;
+const knowledgeCache = new Map<string, { at: number; items: Promise<SourceRecord[]> }>();
+
+/** The project's parsed sources, fetched at most every 30 s: the `@` menu asks on every keystroke. */
+function parsedSources(projectId: string): Promise<SourceRecord[]> {
+  const cached = knowledgeCache.get(projectId);
+  if (cached && Date.now() - cached.at < KNOWLEDGE_CACHE_MS) return cached.items;
+  const items = listSources(projectId, { status: "complete" }).then((page) => page.items.filter((item) => !item.deletedAt));
+  knowledgeCache.set(projectId, { at: Date.now(), items });
+  items.catch(() => { if (knowledgeCache.get(projectId)?.items === items) knowledgeCache.delete(projectId); });
+  return items;
+}
+
+/** A source's name for a reader: its file's name, never its id. */
+function sourceTitle(record: SourceRecord): string {
+  const path = record.payload.paths?.[0] ?? "";
+  return path.slice(path.lastIndexOf("/") + 1) || record.id;
+}
+
+/**
+ * The `@` menu's answer for one query: the project's parsed sources whose name
+ * or summary contains it, at most twenty. Only parsed sources, because the
+ * reference points the run at the parsed text, which a queued source does not
+ * have yet.
+ */
+export async function searchKnowledgeSources(projectId: string, query: string): Promise<FrameKnowledgeItem[]> {
+  const needle = query.trim().toLowerCase();
+  const records = await parsedSources(projectId);
+  return records
+    .filter((record) => /^src_[A-Za-z0-9_-]{1,120}$/.test(record.id))
+    .map((record) => {
+      const summary = record.payload.outputs?.summary?.trim();
+      return { id: record.id, title: sourceTitle(record), ...(summary ? { detail: summary.length > 80 ? `${summary.slice(0, 79)}…` : summary } : {}) };
+    })
+    .filter((item) => !needle || item.title.toLowerCase().includes(needle) || (item.detail?.toLowerCase().includes(needle) ?? false))
+    .slice(0, 20);
+}
+
+/** Forget cached source lists (tests; a project switch refetches anyway). */
+export function forgetKnowledgeSources(): void {
+  knowledgeCache.clear();
+}
+

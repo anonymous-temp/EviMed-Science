@@ -9,7 +9,8 @@ import { createFrameKit } from "../../../../../packages/harness-port/src/runtime
 import { apply as applyFrameTheme } from "../../../../../packages/harness-port/src/runtimeUiTheme.mjs";
 import { useUiStore } from "@/lib/store";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources }));
 // The run's event stream, held by the test: the frame's run view follows it.
 vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/runEvents")>()), subscribeRunEvents: mocks.subscribe }));
 // Only the four frame calls and the profile are stubbed. Everything else is the
@@ -569,6 +570,20 @@ describe("the run behind the task, in the frame", () => {
     // Another task inside the frame is a navigation, and its run is looked up.
     emit(frame, { type: "evimed.runtime-ui.session", seq: 5, sessionId: "session-b" });
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-b"));
+  });
+
+  it("answers the frame's @ menu with the project's parsed sources, by the request's id", async () => {
+    mocks.listSources.mockResolvedValue({ items: [{ id: "src_kb1", revision: 1, projectId: "default", createdAt: "", updatedAt: "", deletedAt: null,
+      payload: { paths: ["文献/老年房颤.pdf"], status: "complete", outputs: {} } }], nextCursor: null });
+    const { frame, sent } = await openTask();
+    emit(frame, { type: "evimed.runtime-ui.kb-query", seq: 3, requestId: "r1", query: "房颤" });
+    await waitFor(() => expect(sent("kb-result")).toHaveLength(1));
+    expect(sent("kb-result")[0]).toMatchObject({ requestId: "r1", ok: true, items: [{ id: "src_kb1", title: "老年房颤.pdf" }], frameId: "frame-a" });
+    // A request id the frame could not have minted is not answered.
+    emit(frame, { type: "evimed.runtime-ui.kb-query", seq: 4, requestId: "bad id!", query: "x" });
+    mocks.listSources.mockRejectedValue(new Error("offline"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sent("kb-result")).toHaveLength(1);
   });
 
   it("opens a file the frame names in the shell's reader, and nothing it could spell as an escape", async () => {

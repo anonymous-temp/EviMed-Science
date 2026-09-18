@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebAgentRun } from "./apiClient";
 import type { RunStreamEvent } from "./runEvents";
 import {
-  boundRunFor, createThrottledSender, foldRunEvent, frameEvidenceFrom, reportPathOf, runStateFromRecord, useFrameRunBinding,
-  type FrameRunState,
+  boundRunFor, createThrottledSender, foldRunEvent, forgetKnowledgeSources, frameEvidenceFrom, reportPathOf, runStateFromRecord,
+  searchKnowledgeSources, useFrameRunBinding, type FrameRunState,
 } from "./runtimeUiBridge";
 
 const mocks = vi.hoisted(() => ({
@@ -15,7 +15,9 @@ const mocks = vi.hoisted(() => ({
   subscribe: vi.fn(),
   readArtifact: vi.fn(),
   readClaimVerification: vi.fn(),
+  listSources: vi.fn(),
 }));
+vi.mock("./sourceClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("./sourceClient")>()), listSources: mocks.listSources }));
 vi.mock("./apiClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("./apiClient")>()), listWebAgentRuns: mocks.listRuns }));
 vi.mock("./runEvents", async (importOriginal) => ({ ...(await importOriginal<typeof import("./runEvents")>()), subscribeRunEvents: mocks.subscribe }));
 vi.mock("./artifactFile", async (importOriginal) => ({
@@ -164,3 +166,27 @@ describe("keeping the frame's run view current", () => {
     expect(postRunState).not.toHaveBeenCalled();
   });
 });
+
+describe("the @ menu's knowledge-base answer", () => {
+  beforeEach(() => { mocks.listSources.mockReset(); forgetKnowledgeSources(); });
+
+  const source = (id: string, path: string, summary?: string, deletedAt: string | null = null) => ({
+    id, revision: 1, projectId: "default", createdAt: "", updatedAt: "", deletedAt,
+    payload: { paths: [path], status: "complete", outputs: summary ? { summary } : {} },
+  });
+
+  it("names the project's parsed sources by file, matches name or summary, and asks the ledger at most every 30 s", async () => {
+    mocks.listSources.mockResolvedValue({ items: [
+      source("src_a1", "文献/ROCKET-AF.pdf", "利伐沙班与华法林在非瓣膜性房颤中的比较"),
+      source("src_b2", "指南/2023 房颤指南.pdf"),
+      source("src_c3", "removed.pdf", undefined, "2026-09-01T00:00:00.000Z"),
+      source("not-an-id", "odd.pdf"),
+    ], nextCursor: null });
+    expect(await searchKnowledgeSources("default", "rocket")).toEqual([{ id: "src_a1", title: "ROCKET-AF.pdf", detail: "利伐沙班与华法林在非瓣膜性房颤中的比较" }]);
+    expect(await searchKnowledgeSources("default", "华法林")).toEqual([expect.objectContaining({ id: "src_a1" })]);
+    expect((await searchKnowledgeSources("default", "")).map((item) => item.id)).toEqual(["src_a1", "src_b2"]);
+    expect(mocks.listSources).toHaveBeenCalledTimes(1);
+    expect(mocks.listSources).toHaveBeenCalledWith("default", { status: "complete" });
+  });
+});
+

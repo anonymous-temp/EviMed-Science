@@ -9,6 +9,7 @@ import { FRAME_VOCABULARY } from "../../../../../packages/harness-port/src/runti
 import { apply as applyToolviews } from "../../../../../packages/harness-port/src/runtimeUiToolviews.mjs";
 import { apply as applyPanels } from "../../../../../packages/harness-port/src/runtimeUiPanels.mjs";
 import { apply as applyShell } from "../../../../../packages/harness-port/src/runtimeUiShell.mjs";
+import { apply as applyCommands } from "../../../../../packages/harness-port/src/runtimeUiCommands.mjs";
 
 type Listener = () => void;
 
@@ -143,6 +144,35 @@ describe("the right column's tabs", () => {
     view.rerender(<LeftColumn collapsed />);
     view.rerender(<LeftColumn collapsed />);
     expect(layout.toggleSidebar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the role cards on a blank conversation", () => {
+  afterEach(() => { cleanup(); });
+
+  it("fill the open conversation's composer with the role's brief", () => {
+    const drafts: Array<[string, string]> = [];
+    const components = new Map<string, (props: Record<string, unknown>) => unknown>();
+    const ctx: Record<string, unknown> = {
+      slots: { inject: (_name: string, setup: () => unknown) => setup(),
+        register: (options: { name: string }, component: (props: Record<string, unknown>) => unknown) => { components.set(options.name, component); return () => {}; } },
+      sessions: { list: { getSnapshot: () => ({ current: "session-a" }), subscribe: () => () => {} }, scope: (id: string) => ({ id }) },
+      conversation: { input: { for: (scope: { id: string }) => ({ setDraft: (text: string) => drafts.push([scope.id, text]) }) } },
+      effect: (setup: () => unknown) => setup(),
+      on: () => () => {},
+    };
+    const target = {
+      __EVIMED_FRAME__: { version: 1, frameId: "f", projectId: "p", shellOrigin: "https://app.example", cwd: "/workspace", capabilities: [
+        { id: "clinical-evidence-synthesis", title: "临床证据深度分析", category: "临床证据", brief: "请以「临床证据深度分析」能力完成以下任务：\n……" },
+      ] },
+      parent: { postMessage() {} }, addEventListener() {}, removeEventListener() {}, console,
+    };
+    const kit = createFrameKit(ctx, target, (id: string) => (id === "react" ? React : undefined), FRAME_VOCABULARY);
+    applyCommands(ctx, {}, target, undefined, kit);
+    const Cards = components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
+    render(<Cards />);
+    fireEvent.click(screen.getByRole("button", { name: /临床问题/ }));
+    expect(drafts).toEqual([["session-a", "请以「临床证据深度分析」能力完成以下任务：\n……"]]);
   });
 });
 
