@@ -45,7 +45,8 @@ export const PLUGIN_SPECIFIERS = Object.freeze({
   'evimed-compaction': './plugins/compaction.mjs',
 })
 
-export { buildGuidanceText, GUIDANCE_SECTION_NAME, GUIDANCE_SECTION_ORDER } from './src/guidanceText.mjs'
+export { buildChildGuidanceText, buildGuidanceText, GUIDANCE_SECTION_NAME, GUIDANCE_SECTION_ORDER } from './src/guidanceText.mjs'
+export { SKILL_BODY_MAX_CHARS, capSkillBodies, deferredSectionSkill, sectionSkillName, splitSkillSections } from './src/skillBodies.mjs'
 export { RUN_DOMAIN_SPEC, RUN_STATE_FORMAT_VERSION, projectRunState, staleEvidence } from './src/runMirror.mjs'
 export {
   evidenceFromOutcome,

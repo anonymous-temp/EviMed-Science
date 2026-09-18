@@ -5,14 +5,19 @@ import test from "node:test";
 import {
   SEAMS,
   __setHarnessModule,
+  agentSeesTool,
   defineTool,
   injectContext,
+  isSubagentSession,
   loadHarnessModule,
   onPreStep,
   onToolObserved,
   onToolPolicy,
   onTurnEnd,
+  parentSessionOf,
   probeSeams,
+  registerAgentSection,
+  registerAgentSkill,
   registerRightSidebarTab,
   registerWebFetchProvider,
   registerWebSearchProvider,
@@ -631,4 +636,46 @@ test("a withdrawn upstream prompt section is an empty section under the upstream
   assert.equal(typeof dispose, "function");
   assert.deepEqual(sections, [{ name: "ui:deliverable-file-references", order: 9000, text: "" }]);
   assert.equal(SEAMS.promptSections.deliverableFileReferences.package, "@deepseek-ai/dsh-client-ui-deliverables");
+});
+
+test("a child is recognised by the kernel's own header fields, and what it sees is asked of its own scope", () => {
+  const child = { session: { header: { origin: "subagent", parentSession: "root-1" } } };
+  const root = { session: { header: { cwd: "/workspace" } } };
+  assert.equal(isSubagentSession(child), true);
+  assert.equal(isSubagentSession(root), false);
+  assert.equal(isSubagentSession(undefined), false);
+  assert.equal(parentSessionOf(child), "root-1");
+  assert.equal(parentSessionOf(root), "");
+
+  /** @type {any[]} */
+  const lookups = [];
+  const ctx = { get: (/** @type {string} */ key) => (key === "tools" ? { get: (/** @type {string} */ name, /** @type {any} */ scope) => { lookups.push([name, scope]); return name === "read" ? {} : undefined; } } : undefined) };
+  assert.equal(agentSeesTool(ctx, child, "read"), true);
+  assert.equal(agentSeesTool(ctx, child, "evimed_submit_deliverable"), false);
+  assert.equal(lookups[0][1], child, "the lookup is scoped to the agent, which is what applies its restriction");
+  assert.equal(agentSeesTool({ get: () => ({}) }, child, "read"), false, "a registry without a scoped lookup answers no");
+});
+
+test("a section and a skill registered for one agent go through that agent's own context", () => {
+  /** @type {any[]} */
+  const sections = [];
+  /** @type {any[]} */
+  const skills = [];
+  const agent = { ctx: {
+    systemPrompt: { section: (/** @type {any} */ section) => { sections.push(section); return () => {}; } },
+    skills: { register: (/** @type {any} */ skill) => { skills.push(skill); return () => {}; } },
+  } };
+  registerAgentSection(agent, { name: "evimed:orchestration", order: 120, text: "child" });
+  assert.deepEqual(sections, [{ name: "evimed:orchestration", order: 120, text: "child" }]);
+  registerAgentSkill(agent, { name: "demo-section-02", description: "demo 的第 2 节：Two", content: "## Two", resourceDir: "/skills/demo" });
+  registerAgentSkill(agent, { name: "demo-section-03", description: "demo 的第 3 节：Three", content: "## Three" });
+  assert.deepEqual(skills[0], {
+    name: "demo-section-02",
+    description: "demo 的第 2 节：Two",
+    content: "## Two",
+    source: "runtime",
+    invocation: { modelInvocable: true, userInvocable: false },
+    resourceBase: { kind: "directory", path: "/skills/demo" },
+  });
+  assert.equal(skills[1].resourceBase, undefined);
 });
