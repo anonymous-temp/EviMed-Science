@@ -300,7 +300,9 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   const files = new Map();
   /** @type {any[]} */
   const gateRuns = [];
-  const agent = { id: "root-agent", session: { id: "root-session", header: { cwd: "/workspace" } }, inject: () => {} };
+  /** @type {any[]} */
+  const steered = [];
+  const agent = { id: "root-agent", session: { id: "root-session", header: { cwd: "/workspace" } }, inject: () => {}, steer: (/** @type {any} */ message) => steered.push(message) };
   ctx.provide("agents", { get: () => agent });
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
@@ -432,6 +434,7 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   };
   return {
     ctx,
+    steered,
     rows,
     // The real store owns its own `subagents` Map, so `childRows` has to be
     // that one under `projected` — handing back the unused stub Map would make
@@ -1365,4 +1368,95 @@ test("a cancelled root turn cancels the run's children, and a plan revision canc
   const collected = await f.execute("evimed_await", {});
   assert.deepEqual(collected.value.data.results.map((/** @type {any} */ result) => result.status), ["failed", "failed"]);
   assert.equal(f.starts.length, 2, "cancelled children are not retried");
+});
+
+/* ------------------------------------ a root that stops while children work */
+
+/** Emit one root turn end, as the kernel's session event does. @param {any} f @param {string} kind */
+function endRootTurn(f, kind) {
+  for (const handler of f.ctx.listeners.get(SEAMS.events.sessionEvent) ?? []) {
+    handler(f.agent.session, { type: "turn/end", seq: 50, data: { reason: { kind } } });
+  }
+}
+
+/** Wait until the fixture has recorded `count` steers, or fail naming the count. @param {any} f @param {number} count */
+async function steeredAtLeast(f, count) {
+  for (let turn = 0; turn < 200 && f.steered.length < count; turn += 1) await new Promise((resolve) => setTimeout(resolve, 1));
+  assert.ok(f.steered.length >= count, `expected ${count} steer(s), saw ${f.steered.length}`);
+}
+
+test("a root turn about to close with children outstanding is steered back to collect them, a bounded number of times", async () => {
+  // The kernel's contract for objecting to a turn closing is a steer: the turn
+  // runs another step with the reminder in it. Its own design also lets a
+  // parent end a turn while background children work, so the objection is
+  // bounded rather than a wall.
+  const children = controllableChildren();
+  const f = await combinedFixture({ subagentStart: children.subagentStart });
+  await f.step(1);
+  await f.plan();
+  await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  const stopping = async () => {
+    for (const handler of f.ctx.listeners.get(SEAMS.events.turnStopping) ?? []) await handler({ agent: f.agent, turn: 1 });
+  };
+  for (let index = 0; index < 5; index += 1) await stopping();
+  assert.equal(f.steered.length, 3, "three reminders, then the turn may close");
+  const reminder = f.steered[0];
+  assert.equal(reminder.role, "user");
+  assert.deepEqual(reminder.source, { kind: "plugin", plugin: "evimed-run-policy" }, "machine text is marked as the plugin's, never as the researcher's");
+  assert.match(reminder.content[0].text, /d-bib#1/);
+  assert.match(reminder.content[0].text, /evimed_await/);
+  // A result that settled but was never collected is outstanding too.
+  children.settlers.get(children.idFor("child-bib"))?.({ stopReason: "completed", output: "done" });
+  const collected = await f.execute("evimed_await", {});
+  assert.equal(collected.value.data.results[0].status, "completed");
+});
+
+test("a root that ended its turn while its child worked is woken with the child's result when the child settles", async () => {
+  const children = controllableChildren();
+  const f = await combinedFixture({ subagentStart: children.subagentStart });
+  await f.step(1);
+  await f.plan();
+  await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  await f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
+  endRootTurn(f, "completed");
+  assert.equal(f.steered.length, 0, "nothing to hand over while the children still work");
+
+  // One settles: the other is still working, so the root is not woken for half
+  // the answer.
+  children.settlers.get(children.idFor("child-bib"))?.({ stopReason: "completed", structured: { deliverableId: "d-bib", submitted: false, summary: "计量完成。" } });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(f.steered.length, 0, "the root is woken once, for the whole set, not once per child");
+
+  children.settlers.get(children.idFor("child-appraise"))?.({ stopReason: "completed", output: "done" });
+  await steeredAtLeast(f, 1);
+  assert.equal(f.steered.length, 1);
+  const wake = f.steered[0];
+  assert.deepEqual(wake.source, { kind: "plugin", plugin: "evimed-run-policy" });
+  const handed = JSON.parse(/\{[\s\S]*\}/.exec(wake.content[0].text)?.[0] ?? "{}");
+  assert.deepEqual(handed.results.map((/** @type {any} */ result) => [result.handle, result.status]).sort(), [["d-appraise#1", "completed"], ["d-bib#1", "completed"]]);
+  assert.equal(handed.results.find((/** @type {any} */ result) => result.handle === "d-bib#1").summary, "计量完成。");
+  // What was handed over counts as collected: the next stopping turn is not
+  // told about it again.
+  for (const handler of f.ctx.listeners.get(SEAMS.events.turnStopping) ?? []) await handler({ agent: f.agent, turn: 2 });
+  assert.equal(f.steered.length, 1, "results already handed over are not outstanding");
+});
+
+test("a root inside its turn collects for itself, and a cancelled run is never woken", async () => {
+  const children = controllableChildren();
+  const f = await combinedFixture({ subagentStart: children.subagentStart });
+  await f.step(1);
+  await f.plan();
+  await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
+  // Still inside its turn: the settlement is for evimed_await, not a wake.
+  children.settlers.get(children.idFor("child-bib"))?.({ stopReason: "completed", output: "done" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(f.steered.length, 0, "a root that is mid-turn is not steered a second copy of its results");
+  await f.execute("evimed_await", {});
+
+  await f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
+  endRootTurn(f, "aborted");
+  assert.equal(children.signals.get(children.idFor("child-appraise"))?.aborted, true);
+  children.settlers.get(children.idFor("child-appraise"))?.({ stopReason: "aborted" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(f.steered.length, 0, "the researcher stopped the run; nothing may start it again");
 });

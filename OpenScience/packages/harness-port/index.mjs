@@ -475,15 +475,41 @@ export function registerSection(ctx, section) {
  * @returns {void}
  */
 export function injectContext(agent, text, plugin) {
-  const message = {
+  const message = pluginMessage(text, plugin)
+  const entering = enteringStepContext.get(agent)
+  if (entering) entering.push(message)
+  else agent.inject(message)
+}
+
+/**
+ * Makes text model-visible *and* wakes the agent for it: the kernel's steer.
+ *
+ * `inject` queues context for a driver that is already running and leaves an
+ * idle one idle. Two moments need the other half. At `agent/turn-stopping` the
+ * kernel's own contract is that "a listener that objects steers
+ * (`agent.steer(...)`)" and the turn runs another step; and a parent whose
+ * turn has ended while children it started were still working is idle, which
+ * is exactly when a steer "starts a turn" — the same route DSH's native
+ * background subagents use to hand a parent their settlement.
+ *
+ * The message is the one `injectContext` writes — a user-role message with a
+ * plugin source — so every transcript reader that tells the researcher's words
+ * from machine text by source keeps doing so.
+ * @param {any} agent @param {string} text @param {string} plugin
+ * @returns {void}
+ */
+export function steerContext(agent, text, plugin) {
+  agent.steer(pluginMessage(text, plugin))
+}
+
+/** @param {string} text @param {string} plugin */
+function pluginMessage(text, plugin) {
+  return {
     id: globalThis.crypto.randomUUID(),
     role: 'user',
     content: [{ type: 'text', text }],
     source: { kind: 'plugin', plugin },
   }
-  const entering = enteringStepContext.get(agent)
-  if (entering) entering.push(message)
-  else agent.inject(message)
 }
 
 /**

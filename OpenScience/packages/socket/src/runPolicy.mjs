@@ -428,6 +428,14 @@ export function planCapabilityIssues(items, capabilities) {
 export const AWAIT_TIMEOUT_SECONDS = Object.freeze({ min: 1, max: 3600 })
 
 /**
+ * How many times a root turn that is about to close is told children are
+ * outstanding. The kernel's own design lets a parent end its turn while
+ * background children work; past this many reminders the turn closes, and the
+ * children's settlement wakes the root instead.
+ */
+export const CHILDREN_REMINDER_LIMIT = 3
+
+/**
  * How much of a child's own report rides back to the parent. The parent reads
  * it to synthesize, and it lands in a context every later request re-sends; the
  * complete report is the child's own session, which is not going anywhere.
