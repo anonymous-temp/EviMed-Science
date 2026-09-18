@@ -128,14 +128,14 @@ export function CapabilitiesPage() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="搜索科研能力"
-                className="h-9 w-full rounded-input border border-border bg-surface pl-9 pr-3 text-ui text-text outline-none placeholder:text-muted focus:border-accent"
+                className="h-9 w-full rounded-input border border-strong bg-surface pl-9 pr-3 text-ui text-text outline-none placeholder:text-muted focus:border-focus"
               />
             </label>
             <select
               aria-label="按分类筛选"
               value={category}
               onChange={(event) => setCategory(event.target.value)}
-              className="h-9 rounded-input border border-border bg-surface px-3 text-ui text-text outline-none focus:border-accent"
+              className="h-9 rounded-input border border-strong bg-surface px-3 text-ui text-text outline-none focus:border-focus"
             >
               <option value="all">全部分类</option>
               {categories.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -150,7 +150,7 @@ export function CapabilitiesPage() {
             * the alternative to a retry button is asking the reader to reload
             * the whole app. */}
           {!loading && error && (
-            <div role="alert" className="my-5 flex flex-wrap items-center gap-3 rounded-input border border-error/30 bg-error/10 px-4 py-3 text-ui text-error">
+            <div role="alert" className="my-5 flex flex-wrap items-center gap-3 rounded-input border border-danger bg-danger-soft px-4 py-3 text-ui text-error">
               <span className="min-w-0 flex-1 break-words">无法加载能力目录：{error}</span>
               <Button size="sm" variant="ghost" onClick={() => setReloads((value) => value + 1)}>
                 <RefreshCw size={12} aria-hidden /> 重试
@@ -185,7 +185,7 @@ function AgentRow({ agent, onOpen }: { agent: WebResearchAgent; onOpen: () => vo
       type="button"
       onClick={onOpen}
       aria-label={`使用${ui.title}能力`}
-      className="group grid w-full grid-cols-[3rem_minmax(0,1fr)_auto] gap-4 py-6 text-left transition-colors hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+      className="group grid w-full grid-cols-[3rem_minmax(0,1fr)_auto] gap-4 py-6 text-left transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
     >
       <div className="flex h-9 w-9 items-center justify-center rounded-input bg-surface-2 font-mono text-caption font-semibold tracking-wide text-accent ring-1 ring-border">
         {ui.code}
@@ -202,7 +202,7 @@ function AgentRow({ agent, onOpen }: { agent: WebResearchAgent; onOpen: () => vo
           {outputLabels.map((label) => (
             <span key={label} className="rounded-full bg-surface-2 px-2 py-0.5 text-caption font-medium text-muted ring-1 ring-border">{label}</span>
           ))}
-          <span className="truncate text-caption text-muted/80">示例：{ui.starterPrompts[0]}</span>
+          <span className="truncate text-caption text-muted">示例：{ui.starterPrompts[0]}</span>
         </div>
       </div>
       <div className="flex h-full items-center px-3 text-muted transition-transform group-hover:translate-x-1 group-hover:text-accent">

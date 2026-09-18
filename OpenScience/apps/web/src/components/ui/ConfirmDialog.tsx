@@ -82,7 +82,7 @@ export function ConfirmDialog({
         <div className="mt-4 flex justify-end gap-2">
           <button
             ref={cancelRef}
-            className="rounded-input border border-border px-3 py-1.5 text-ui text-text hover:bg-surface-2"
+            className="rounded-input border border-strong px-3 py-1.5 text-ui text-text hover:bg-surface-2"
             onClick={onCancel}
           >
             取消

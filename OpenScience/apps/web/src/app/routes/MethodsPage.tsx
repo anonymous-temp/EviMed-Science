@@ -203,7 +203,7 @@ export function MethodsPage() {
                   </div>
                   <div className="flex shrink-0 items-center gap-2 text-caption">
                     <span className={cn("rounded-full px-2 py-0.5",
-                      method.status === "approved" ? "bg-ok/10 text-ok" : method.status === "retired" ? "bg-surface-2 text-muted" : "bg-warn/10 text-warn")}>
+                      method.status === "approved" ? "bg-ok-soft text-ok" : method.status === "retired" ? "bg-surface-2 text-muted" : "bg-warn-soft text-warn")}>
                       {labelFor(STATUS_LABEL, method.status)}
                     </span>
                     <span className="text-muted">{method.origin === "explicit" ? "你写下的" : "从任务中提炼"}</span>

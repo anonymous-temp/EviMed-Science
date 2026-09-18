@@ -158,7 +158,7 @@ export function WebResourcesCard() {
 }
 
 const runtimeButtonCls =
-  "inline-flex h-8 items-center gap-1.5 rounded-input border border-border px-3 text-caption font-medium text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-40";
+  "inline-flex h-8 items-center gap-1.5 rounded-input border border-strong px-3 text-caption font-medium text-muted transition-colors hover:bg-surface-2 hover:text-text disabled:opacity-40";
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (

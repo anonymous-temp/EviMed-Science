@@ -119,7 +119,7 @@ export function FilesPage() {
   return (
     <div {...dropProps} className="relative flex h-full min-h-0">
       {dragging && (
-        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-bg/70 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-bg backdrop-blur-sm">
           <div className="flex items-center gap-2 rounded-card border-2 border-dashed border-accent bg-surface px-6 py-4 text-ui font-medium text-accent">
             <Upload size={15} aria-hidden="true" />
             松开以上传到个人知识库
@@ -198,7 +198,7 @@ export function FilesPage() {
               onClick={() => open(entry)}
               className={cn(
                 "flex w-full items-center gap-2 rounded-input px-2 py-1.5 text-left text-ui hover:bg-surface-2",
-                selected?.path === entry.path ? "bg-surface-2 text-text" : "text-text/90",
+                selected?.path === entry.path ? "bg-surface-2 text-text" : "text-text",
               )}
             >
               {iconFor(entry)}
@@ -392,7 +392,7 @@ export function SessionFilesPane({
           <button
             key={entry.path}
             onClick={() => (entry.isDir ? setDir(entry.path) : setSelected(entry))}
-            className="flex w-full items-center gap-2 rounded-input px-2 py-1.5 text-left text-ui text-text/90 hover:bg-surface-2"
+            className="flex w-full items-center gap-2 rounded-input px-2 py-1.5 text-left text-ui text-text hover:bg-surface-2"
           >
             {iconFor(entry)}
             <span className="flex-1 truncate">{entry.name}</span>

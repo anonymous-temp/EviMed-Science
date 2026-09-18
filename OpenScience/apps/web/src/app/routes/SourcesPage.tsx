@@ -461,9 +461,9 @@ function EditSource({ source, busy, onSave, onCancel }: { source: SourceRecord; 
     event.preventDefault(); onSave({ expectedRevision: source.revision, docType, depth, reason });
   }}>
     <label className="space-y-1 text-ui-sm text-text"><span>资料类型</span><select aria-label="资料类型" value={docType} onChange={(event) => setDocType(event.target.value)}
-      className="h-9 w-full rounded-input border border-border bg-bg px-2 text-ui">{TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      className="h-9 w-full rounded-input border border-strong bg-bg px-2 text-ui">{TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
     <label className="space-y-1 text-ui-sm text-text"><span>分析深度</span><select aria-label="分析深度" value={depth} onChange={(event) => setDepth(event.target.value as SourceRecord["payload"]["depth"])}
-      className="h-9 w-full rounded-input border border-border bg-bg px-2 text-ui">{DEPTH_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      className="h-9 w-full rounded-input border border-strong bg-bg px-2 text-ui">{DEPTH_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
     <Input label="调整原因" value={reason} onChange={(event) => setReason(event.target.value)} required maxLength={1000} />
     <div className="flex gap-2 md:col-span-3"><Button type="submit" loading={busy}>保存并重新分析</Button><Button variant="ghost" disabled={busy} onClick={onCancel}>取消</Button></div>
   </form></Card>;

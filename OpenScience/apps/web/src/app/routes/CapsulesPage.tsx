@@ -120,7 +120,7 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
         </header>
         <fieldset disabled={busy}><SegmentedControl value={view} onChange={(value) => { setView(value); setSelected(null); }} aria-label="胶囊列表"
           options={[{ value: "active", label: "我的胶囊" }, { value: "trash", label: "回收站" }]} /></fieldset>
-        {error && <div role="alert" className="flex items-center gap-3 rounded-card border border-error/30 bg-surface p-3 text-ui text-error">{error}<Button variant="ghost" size="sm" onClick={() => void reload()}>重试</Button></div>}
+        {error && <div role="alert" className="flex items-center gap-3 rounded-card border border-danger bg-surface p-3 text-ui text-error">{error}<Button variant="ghost" size="sm" onClick={() => void reload()}>重试</Button></div>}
         {notice && <p role="status" className="text-ui text-ok">{notice}</p>}
         {transferring && <CapsuleTransferPanel capsule={current} onImported={saved => { listGeneration.current++; setLoading(false); setView("active"); setCapsules(items => [saved, ...items]); setSelected(saved.id); }} />}
         {creating && <Card title="新建胶囊"><form onSubmit={create} className="space-y-3">

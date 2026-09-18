@@ -116,7 +116,7 @@ export function BandView({ filename, bytes }: { filename: string; bytes: ArrayBu
         {hover ? (
           <>k = {hover.k} · E ≈ {hover.e.toFixed(2)} eV</>
         ) : (
-          <span className="text-muted/50">悬停查看 k 点与能量</span>
+          <span className="text-muted">悬停查看 k 点与能量</span>
         )}
       </div>
     </div>

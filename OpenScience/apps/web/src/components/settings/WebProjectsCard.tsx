@@ -212,7 +212,7 @@ export function WebProjectsCard({
         </div>
 
         {pendingDelete && (
-          <div className="mt-3 rounded-input border border-error/30 bg-error/5 p-3">
+          <div className="mt-3 rounded-input border border-danger bg-danger-soft p-3">
             <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-ui font-medium text-text">删除 {pendingDelete.name}？</p>
@@ -232,7 +232,7 @@ export function WebProjectsCard({
             </div>
             <div className="mt-3 flex justify-end gap-2">
               <button
-                className="h-8 rounded-input border border-border px-3 text-caption text-muted hover:bg-surface hover:text-text disabled:opacity-50"
+                className="h-8 rounded-input border border-strong px-3 text-caption text-muted hover:bg-surface hover:text-text disabled:opacity-50"
                 onClick={() => setPendingDelete(null)}
                 disabled={busyProjectId === pendingDelete.id}
               >
@@ -289,8 +289,8 @@ export function WebProjectsCard({
 
 const inputCls = (extra = "") =>
   cn(
-    "h-9 min-w-0 rounded-input border border-border bg-surface px-3 text-ui text-text outline-none",
-    "placeholder:text-muted focus:border-accent/60 disabled:opacity-50",
+    "h-9 min-w-0 rounded-input border border-strong bg-surface px-3 text-ui text-text outline-none",
+    "placeholder:text-muted focus:border-focus disabled:opacity-50",
     extra,
   );
 

@@ -156,8 +156,9 @@ function RunsFilterBar({
   onClear: () => void;
 }) {
   return (
-    // An opaque canvas: the `bg-bg/95` it had generated no CSS at all (an
-    // opacity modifier on a var() colour), so rows scrolled visibly under it.
+    // An opaque canvas: the 95 %-alpha canvas class it had generated no CSS at
+    // all (an opacity modifier on a var() colour), so rows scrolled visibly
+    // under it.
     <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 bg-bg px-1 py-2">
       <label className="relative min-w-48 flex-1">
         <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
@@ -277,6 +278,11 @@ function HostedRunsView() {
   const [params] = useSearchParams();
   const deepLinked = params.get("run");
   const [expanded, setExpanded] = useState<string | null>(deepLinked);
+  // The run a link named, until the ledger has been read and it can be opened.
+  // It used to be applied once at mount, and the "keep the open row visible"
+  // effect below ran first against the still-empty list and cleared it, so a
+  // link from the sidebar or the inbox opened the newest run instead.
+  const pendingDeepLink = useRef<string | null>(deepLinked);
   const navigate = useNavigate();
 
   // The ledger is a trust surface, so a failed read says so, and the rows
@@ -296,7 +302,13 @@ function HostedRunsView() {
     try {
       const value = await listWebAgentRuns();
       setRuns(value);
-      setExpanded((current) => current ?? newestRun(value)?.id ?? null);
+      const linked = pendingDeepLink.current;
+      if (linked && value.some((run) => run.id === linked)) {
+        pendingDeepLink.current = null;
+        setExpanded(linked);
+      } else {
+        setExpanded((current) => current ?? newestRun(value)?.id ?? null);
+      }
       setLoadError(null);
       return true;
     } catch (error) {
@@ -438,15 +450,24 @@ function HostedRunsView() {
   const groups = useMemo(() => groupByDay(rows, webRunTs), [rows]);
 
   // Keep the expanded row visible: when a filter change drops it from the
-  // list, fall back to the newest row.
+  // list, fall back to the newest row. Not while the ledger is still loading —
+  // an empty list is not a filter result.
   useEffect(() => {
+    if (runs === null) return;
     setExpanded((cur) => (cur && rows.some((r) => r.id === cur) ? cur : (rows[0]?.id ?? null)));
-  }, [rows]);
+  }, [rows, runs]);
 
   // A new `?run=` on an already-mounted page (clicking a second sidebar row)
   // must move the expansion, not be ignored because the first one won.
+  const runsRef = useRef(runs);
+  runsRef.current = runs;
   useEffect(() => {
-    if (deepLinked) setExpanded(deepLinked);
+    if (!deepLinked) return;
+    pendingDeepLink.current = deepLinked;
+    if (runsRef.current?.some((run) => run.id === deepLinked)) {
+      pendingDeepLink.current = null;
+      setExpanded(deepLinked);
+    }
   }, [deepLinked]);
 
   return (
@@ -739,7 +760,7 @@ function RunDetail({
   };
 
   return (
-    <div className="mb-3 ml-6 space-y-5 border-l border-faint pb-2 pl-5 pt-2 text-ui">
+    <div className="mb-3 ml-6 max-w-content space-y-5 border-l border-faint pb-2 pl-5 pt-2 text-ui">
       {/* What happened, and what can be done about it. */}
       <div className="space-y-2">
         {running && <RunActivity run={run} live={live} />}
@@ -985,13 +1006,13 @@ function RunDeliverableList({ runId, items }: { runId: string; items: WebRunDeli
     <section aria-labelledby={`deliverables-${runId}`} className="space-y-1.5">
       <h3 id={`deliverables-${runId}`} className="flex items-baseline gap-2 text-ui font-semibold text-text">
         交付进度
-        <span className="font-normal tabular-nums text-muted">交付进度 {passed}/{items.length}</span>
+        <span className="font-normal tabular-nums text-muted">{passed}/{items.length} 件已交付</span>
       </h3>
       <ol aria-label="交付进度" className="space-y-1">
         {items.map((item) => (
           <li key={item.id} className="flex items-center gap-2">
             <span className="flex w-4 shrink-0 justify-center">{icon(item)}</span>
-            <span className="min-w-0 flex-1 truncate text-text">{item.title}</span>
+            <span className="min-w-0 truncate text-text">{item.title}</span>
             <span className="shrink-0 text-caption text-muted">
               {DELIVERABLE_STATUS_LABEL[item.status] ?? "状态未登记"}
               {item.attempts > 1 ? ` · 第 ${item.attempts} 次提交` : ""}

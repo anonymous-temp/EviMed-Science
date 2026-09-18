@@ -71,7 +71,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
                 onClick={() => setActive(on ? null : c.name)}
                 className={cn(
                   "mb-0.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-sm transition-colors",
-                  on ? "bg-surface-2 ring-1 ring-border" : "hover:bg-surface-2/60",
+                  on ? "bg-surface-2 ring-1 ring-border" : "hover:bg-surface-2",
                 )}
                 title={c.description}
               >
@@ -97,7 +97,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
         {/* Sources with highlighted spans */}
         <div className="min-w-0 flex-1 overflow-y-auto p-4">
           {doc.warnings.length > 0 && (
-            <div className="mb-3 flex items-start gap-2 rounded-card border border-warn/30 bg-warn/10 p-2 text-ui-sm text-muted">
+            <div className="mb-3 flex items-start gap-2 rounded-card border border-warn bg-warn-soft p-2 text-ui-sm text-muted">
               <AlertTriangle size={13} className="mt-0.5 shrink-0 text-warn" aria-hidden="true" />
               <div>
                 {doc.warnings.length} 条批注被跳过或标记：
@@ -146,7 +146,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
             <span className="text-text">“{hoverSeg.text}”</span> → {hoverSeg.codes.join(", ")}
           </span>
         ) : (
-          <span className="text-muted/50">
+          <span className="text-muted">
             悬停高亮查看编码 · 点击编码筛选对应片段
           </span>
         )}

@@ -19,8 +19,10 @@ const controlBase = cn(
 
 function borderClasses(error: boolean): string {
   return error
-    ? "border-error focus:border-error focus-visible:ring-2 focus-visible:ring-error/40"
-    : "border-border focus:border-accent focus-visible:ring-2 focus-visible:ring-accent/40";
+    ? "border-error focus:border-error focus-visible:ring-1 focus-visible:ring-danger"
+    // `border-strong`: a text field's edge is the only thing that says where
+    // it is, so it gets the 3:1 control boundary, not the decorative hairline.
+    : "border-strong focus:border-focus focus-visible:ring-1 focus-visible:ring-focus";
 }
 
 export function inputClasses({ error = false, className }: { error?: boolean; className?: string } = {}): string {

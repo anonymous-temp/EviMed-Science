@@ -40,7 +40,7 @@ describe("Button", () => {
       </>,
     );
     expect(screen.getByRole("button", { name: "主按钮" })).toHaveClass("bg-accent", "text-accent-fg", "h-9");
-    expect(screen.getByRole("button", { name: "次按钮" })).toHaveClass("border", "border-border", "bg-surface");
+    expect(screen.getByRole("button", { name: "次按钮" })).toHaveClass("border", "border-strong", "bg-surface");
     expect(screen.getByRole("button", { name: "删除" })).toHaveClass("bg-error", "text-error-fg", "h-8");
   });
 

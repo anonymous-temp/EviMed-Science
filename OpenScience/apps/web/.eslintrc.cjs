@@ -21,6 +21,17 @@ const tokenRules = [
     "/\\bshadow-(sm|md|lg)\\b/",
     "Bare shadow-sm/md/lg are banned in components. Use shadow-card for static cards or shadow-pop for overlays (see boxShadow in tailwind.config.js).",
   ),
+  // `bg-accent/10`, `text-muted/50`, `border-error/30` … emit no CSS at all:
+  // the tokens are `var()` colours, and Tailwind 3 can only apply an opacity
+  // modifier to a colour it can decompose. 81 such classes sat in the shell
+  // doing nothing (2026-09-18) — a sticky bar with no background, an error box
+  // with no border. A tint is a token of its own (`-soft` / `-strong`). The
+  // slash is written `\x2F` because an esquery regex literal cannot contain
+  // one.
+  ...banned(
+    "/(^|[\\s:])(bg|text|border|ring|outline|divide|placeholder|decoration|fill|stroke|from|to|via|shadow|caret)-(bg|surface|surface-2|border|faint|strong|text|muted|accent|accent-fg|accent-soft|accent-strong|link|warn|warn-soft|warn-strong|ok|ok-soft|error|error-fg|danger|danger-soft|danger-strong|info-soft|verify-ok|verify-pending|focus|unread|unread-fg|dot-[a-z]+)\\x2F\\d+/",
+    "An opacity modifier on a design-token colour generates no CSS (the tokens are var() colours). Use a solid token or its -soft / -strong partner from src/index.css.",
+  ),
   ...banned(
     "/-\\[#[0-9a-fA-F]{3,8}\\]/",
     "Arbitrary hex colors are banned in components. Use the color tokens (text-text / text-muted / bg-surface / border-border / text-accent …, defined as CSS variables in src/index.css).",

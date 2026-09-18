@@ -188,7 +188,7 @@ function UnderstandingContent({ understanding: item, historical }: { understandi
     </div>
     <div className="space-y-3"><h3 className="font-medium">方法草稿（{item.methods.length}）</h3><p className="text-ui-sm text-muted">这些方法草稿还没有发布到方法胶囊。</p>
       {item.methods.length === 0 ? <p className="text-ui-sm text-muted">暂无已保存的方法草稿。</p> : item.methods.map(method => <details key={method.id} className="rounded-input border border-border p-3">
-        <summary className="cursor-pointer font-medium focus-visible:outline-accent">{method.title} · 草稿</summary>
+        <summary className="cursor-pointer font-medium focus-visible:outline-focus">{method.title} · 草稿</summary>
         <div className="mt-3 space-y-3"><p>{method.description}</p><p>适用情境：{method.whenToUse}</p>
           <MethodList label="步骤" items={method.steps} /><MethodList label="检查项" items={method.checks} /><MethodList label="常见问题" items={method.pitfalls} />
           <Evidence anchors={method.evidence} understanding={item} /></div>
@@ -227,7 +227,7 @@ function OmissionAudit({ audit }: { audit: SourceUnderstanding["omissionAudit"] 
 function Evidence({ anchors, understanding }: { anchors: SourceAnchor[]; understanding: SourceUnderstanding }) {
   const operator = useOperator();
   if (!anchors.length) return <p className="text-ui-sm text-muted">暂无可展示的原文依据。</p>;
-  return <details className="text-ui-sm"><summary className="cursor-pointer text-accent focus-visible:outline-accent">查看原文依据（{anchors.length}）</summary>
+  return <details className="text-ui-sm"><summary className="cursor-pointer text-accent focus-visible:outline-focus">查看原文依据（{anchors.length}）</summary>
     <div className="mt-2 space-y-3">{anchors.map((anchor, index) => {
       const unit = understanding.units.find(candidate => candidate.id === anchor.unitId);
       const verified = unit && anchor.sourceId === understanding.sourceId && anchor.generation === understanding.generation

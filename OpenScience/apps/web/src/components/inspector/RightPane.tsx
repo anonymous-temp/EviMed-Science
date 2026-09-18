@@ -110,7 +110,7 @@ export function RightPane({
         <div
           className={cn(
             "absolute inset-y-0 left-0 w-[2px] transition-colors",
-            dragging ? "bg-accent/60" : "bg-transparent group-hover:bg-accent/40",
+            dragging ? "bg-focus" : "bg-transparent group-hover:bg-strong",
           )}
         />
       </div>
