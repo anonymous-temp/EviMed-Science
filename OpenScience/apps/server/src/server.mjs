@@ -2546,6 +2546,10 @@ export function createWebApiApp(overrides = {}) {
             tenant: { id: user.tenantId ?? user.id, model: "individual-account", role: "owner" },
             project: { id: project.id, name: project.name },
             projects: await store.listProjects(user),
+            // The conversation to reopen in this project (C4), or null when
+            // the researcher has not worked here yet — or the ledger cannot be
+            // read, which is not a reason the shell should fail to render.
+            lastSessionId: await agentRuns.lastSessionId(project).catch(() => null),
             csrfToken: session.csrfToken,
             // Whether this account sees the operations page. Presentation
             // only: `config.operatorUsers` decides which menu the shell draws,

@@ -161,3 +161,25 @@ test("the project ceiling is refused with its reason, in the reader's language, 
     assert.match(errorCodeMessage("project_limit_reached"), /项目数已达上限.*存储空间.*运行时/);
   }, { maxProjectsPerUser: 2 });
 });
+
+test("the account payload names the conversation to reopen in the current project", async () => {
+  await withApp(async ({ call, dataDir }) => {
+    assert.equal((await call("GET", "/api/me")).body.data.lastSessionId, null, "nothing to reopen yet");
+    const ledger = path.join(dataDir, "users", "dev", "projects", "default", ".openscience", "runs.jsonl");
+    const started = (id, sessionId, at, extra = {}) => ({
+      event: "started", id, dispatchId: null, dispatchStatus: "accepted", kernelRequestIds: [], sessionId,
+      mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null, effectiveAgentId: null, effectiveAgentVersion: null,
+      effectiveRuntimeAgent: null, effectiveRouteReason: null, model: "deepseek/deepseek-flash", question: "q", createdAt: at, startedAt: at, baselineCursor: null, ...extra,
+    });
+    await mkdir(path.dirname(ledger), { recursive: true });
+    await writeFile(ledger, [
+      started("run_a", "ses_older", "2026-09-10T01:00:00.000Z"),
+      { event: "finished", id: "run_a", status: "succeeded", errorCode: null, artifacts: [], finishedAt: "2026-09-17T09:00:00.000Z", durationMs: 1 },
+      started("run_b", "ses_newer_start", "2026-09-12T01:00:00.000Z"),
+      { event: "finished", id: "run_b", status: "succeeded", errorCode: null, artifacts: [], finishedAt: "2026-09-12T02:00:00.000Z", durationMs: 1 },
+      // A machine's work is newer and is not what the researcher reopens.
+      started("run_eval", "ses_eval", "2026-09-18T01:00:00.000Z", { automated: true }),
+    ].map((line) => JSON.stringify(line)).join("\n") + "\n", "utf8");
+    assert.equal((await call("GET", "/api/me")).body.data.lastSessionId, "ses_older", "the run that moved last, not the one started last");
+  });
+});

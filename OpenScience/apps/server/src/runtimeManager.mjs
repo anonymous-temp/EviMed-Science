@@ -335,6 +335,29 @@ function proxiedRuntimeLocation(value, runtime, project, surface = "runtime", ui
   }
 }
 
+/**
+ * A kernel application file whose URL names its content: a build asset whose
+ * file name carries its hash (`/assets/index-Df-65__b.js`), or a plugin bundle
+ * addressed by revision (`/plugins/??…&rev=<12 hex>`, which the kernel itself
+ * serves as `immutable`: "versioned code is immutable; mismatched revisions
+ * are rejected instead of serving newer bytes"). The bytes behind such a URL
+ * never change, so a browser may keep them for a year instead of fetching
+ * the whole application again on every session it opens (2026-09-18 plan,
+ * session open). A format check of our own kernel's URLs, nothing more.
+ * @param {string} suffix the request target below the frame prefix
+ */
+export function isImmutableRuntimeUiAsset(suffix) {
+  const target = String(suffix ?? "");
+  const cut = target.indexOf("?");
+  const pathname = cut < 0 ? target : target.slice(0, cut);
+  const query = cut < 0 ? "" : target.slice(cut + 1);
+  if (/^\/assets\/[A-Za-z0-9._-]+-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|woff2?|ttf|otf|svg|png|jpe?g|gif|webp|avif|ico|wasm)$/.test(pathname)) return true;
+  return pathname.startsWith("/plugins/") && /(?:^|[?&])rev=[A-Za-z0-9._-]{6,}(?:&|$)/.test(query);
+}
+
+/** What a browser may keep of an immutable kernel file: this account's copy, for a year. */
+const IMMUTABLE_UI_CACHE = "private, max-age=31536000, immutable";
+
 function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, options = {}) {
   const surface = options.surface ?? "runtime";
   const responseHeaders = {};
@@ -357,9 +380,20 @@ function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, options 
     const embedder = options.frameAncestors ? String(options.frameAncestors) : "'none'";
     responseHeaders["content-security-policy"] = `frame-ancestors ${embedder}`;
     responseHeaders["x-content-type-options"] = "nosniff";
-    responseHeaders["cache-control"] = "private, no-store";
-    delete responseHeaders.etag;
-    delete responseHeaders["last-modified"];
+    // A file whose URL names its content is kept, privately, and revalidated
+    // by its validators when the browser asks; everything else — the
+    // document, the bootstrap, every answer — is fetched fresh, as before.
+    // Immutable when the caller knows the URL is (`isImmutableRuntimeUiAsset`)
+    // or the kernel says so itself, and only for a successful answer.
+    const immutable = upstreamRes.status >= 200 && upstreamRes.status < 300
+      && (options.immutable === true || /\bimmutable\b/i.test(String(upstreamRes.headers.get("cache-control") ?? "")));
+    if (immutable) {
+      responseHeaders["cache-control"] = IMMUTABLE_UI_CACHE;
+    } else {
+      responseHeaders["cache-control"] = "private, no-store";
+      delete responseHeaders.etag;
+      delete responseHeaders["last-modified"];
+    }
   }
   return responseHeaders;
 }
@@ -4435,7 +4469,15 @@ export class RuntimeManager {
    * response-header sanitising, the audit row -- is the same code, because a
    * second proxy would be a second set of those decisions to keep in step.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined } = {}) {
+  /**
+   * @param {any} req @param {any} res @param {Record<string, any>} project @param {string} suffix
+   * @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void>, uiAssetPrefix?: string | null,
+   *           immutable?: boolean, rebaseDocument?: boolean }} [options]
+   *   `uiAssetPrefix` is the project's stable path for build assets the document
+   *   is rewritten to reference; `immutable` marks a URL that names its content;
+   *   `rebaseDocument: false` serves bytes as they are (an asset route).
+   */
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -4536,6 +4578,7 @@ export class RuntimeManager {
         surface,
         frameAncestors: frameAncestorsFor(this.config),
         uiBasePath,
+        immutable,
       });
       if (!upstreamRes.body) {
         try {
@@ -4568,7 +4611,9 @@ export class RuntimeManager {
               await this.stopRuntimeIfProjectQuotaExceeded(project);
               postResponseQuotaChecked = true;
             } catch { /* a quota probe must not break a response already in flight */ }
-            const served = surface === "ui" ? rebaseRuntimeUiDocument(payload, responseHeaders, uiBasePath) : payload;
+            const served = surface === "ui" && rebaseDocument
+              ? rebaseRuntimeUiDocument(payload, responseHeaders, uiBasePath, uiAssetPrefix)
+              : payload;
             if (served !== payload) responseHeaders["content-length"] = String(served.length);
             res.writeHead(upstreamRes.status, responseHeaders);
             responseEnded = true;
