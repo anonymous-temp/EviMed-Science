@@ -6,7 +6,6 @@ import {
   SKILL_BODY_MAX_CHARS,
   buildDelegation,
   capSkillBodies,
-  deferredSectionSkill,
   sectionSkillName,
   splitSkillSections,
 } from "../index.mjs";
@@ -79,22 +78,18 @@ test("over the cap, the largest sections are deferred, nothing is lost, and ever
       assert.ok(inline || deferred, `${skill.name} / ${original.heading} is neither inline nor loadable`);
     }
   }
-  // Each deferred heading keeps its place, with the name that loads it.
+  // Each deferred heading keeps its place, with the file and lines that hold it.
   for (const entry of capped.deferred) {
     assert.equal(entry.name, sectionSkillName(entry.skill, entry.index));
-    assert.match(entry.name, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, "the kernel accepts kebab-case skill names only");
+    assert.equal(entry.file, `${entry.skill}/SKILL.md`, "no skills directory given, the file is named relative to it");
+    const original = bodies.find((skill) => skill.name === entry.skill)?.body.split("\n") ?? [];
+    assert.equal(original.slice(entry.startLine - 1, entry.endLine).join("\n"), entry.content, `lines ${entry.startLine}–${entry.endLine} are the section`);
     const body = capped.inline.find((skill) => skill.name === entry.skill)?.body ?? "";
-    assert.ok(body.includes(`## ${entry.heading}\n\n〔本节 ${entry.chars} 字未随任务注入。用到它之前调用 \`skill\`，name 填 \`${entry.name}\``), `no stub for ${entry.name}`);
+    assert.ok(body.includes(`## ${entry.heading}\n\n〔本节 ${entry.chars} 字未随任务注入。用到它之前用 \`read\` 读取 \`${entry.file}\` 第 ${entry.startLine}–${entry.endLine} 行（offset ${entry.startLine}，limit ${entry.endLine - entry.startLine + 1}）`), `no stub for ${entry.name}`);
   }
+  const located = capSkillBodies(bodies, { maxChars: 12_000, skillsDir: "/opt/evimed/capability-skills/" });
+  assert.ok(located.deferred.every((entry) => entry.file === `/opt/evimed/capability-skills/${entry.skill}/SKILL.md`), "with a skills directory, the path is absolute");
   assert.deepEqual(capSkillBodies(bodies, { maxChars: 12_000 }), capped, "the same bodies always split the same way");
-});
-
-test("a deferred section is registered as a model-only skill whose relative paths resolve in its own directory", () => {
-  const skill = deferredSectionSkill({ skill: "clinical-evidence-synthesis", index: 6, name: "clinical-evidence-synthesis-section-06", heading: "Citation and traceability integrity", content: "## Citation and traceability integrity\n…" }, "/opt/evimed/capability-skills/");
-  assert.equal(skill.name, "clinical-evidence-synthesis-section-06");
-  assert.equal(skill.content, "## Citation and traceability integrity\n…");
-  assert.match(skill.description, /clinical-evidence-synthesis 的第 6 节：Citation and traceability integrity/);
-  assert.equal(skill.resourceDir, "/opt/evimed/capability-skills/clinical-evidence-synthesis");
 });
 
 test("the delegation message opens with the stable method and says how to reach what was deferred", () => {
@@ -111,7 +106,7 @@ test("the delegation message opens with the stable method and says how to reach 
     deferredSections: [{ name: "demo-section-02" }, { name: "demo-section-03" }], skillsDir: "/opt/evimed/capability-skills",
   });
   assert.match(capped.prompt, new RegExp(`方法正文超过 ${SKILL_BODY_MAX_CHARS} 字，较长的 2 节没有随任务注入`));
-  assert.match(capped.prompt, /`\/opt\/evimed\/capability-skills\/<技能名>\/SKILL\.md`/, "the file stays a fallback when the skill tool cannot find a section");
+  assert.match(capped.prompt, /标题下写着原文所在的文件与行号/, "the child is told the stubs say where the text is");
 });
 
 test("the shipped clinical method fits the cap with its safety boundaries inline", async () => {

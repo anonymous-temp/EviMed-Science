@@ -1483,37 +1483,29 @@ test("a root inside its turn collects for itself, and a cancelled run is never w
 
 /* --------------------------------------------- a capped method, loaded later */
 
-test("a method over the cap reaches the child capped, and its deferred sections are registered in that child's scope alone", async () => {
+test("a method over the cap reaches the child capped, each deferred section named by its file and lines, and nothing registered", async () => {
+  // Registering the sections as skills in the child's own scope failed on
+  // every live run (2026-09-19): a child's context does not carry the skills
+  // service. The stub now says where the text is, and the child reads it.
   const section = (/** @type {string} */ title, /** @type {number} */ size) => `## ${title}\n\n${"证".repeat(size)}\n`;
   const bigBody = ["# 文献计量\n", section("检索与去重", 20_000), section("网络分析", 18_000), section("解读", 16_000), section("安全边界", 800)].join("\n");
   /** @type {{ sessionId: string, skill: any }[]} */
   const registered = [];
   /** @type {any} */
   let fixtureCtx = null;
-  /** @param {string} sessionId @param {readonly string[]} visible */
-  const childAgent = (sessionId, visible) => ({
-    id: `agent-${sessionId}`,
-    visible,
-    session: { id: sessionId, header: { cwd: "/workspace", origin: "subagent", parentSession: "root-session" } },
-    ctx: { skills: { register: (/** @type {any} */ skill) => { registered.push({ sessionId, skill }); return () => {}; } } },
-  });
-  /** @type {Map<string, (value: any) => void>} */
-  const settlers = new Map();
-  let startOnlyUnrelatedChild = false;
   const subagentStart = (/** @type {any} */ _provider, /** @type {any} */ options) => {
-    const starting = (/** @type {any} */ agent) => {
-      for (const handler of fixtureCtx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent, source: "startup" });
+    const id = "child-1";
+    const agent = {
+      id: `agent-${id}`,
+      visible: options.toolFilter.allow,
+      session: { id, header: { cwd: "/workspace", origin: "subagent", parentSession: "root-session" } },
+      ctx: { skills: { register: (/** @type {any} */ skill) => { registered.push({ sessionId: id, skill }); return () => {}; } } },
     };
-    // A screening child of the same parent starts first and must not take the
-    // sections: it cannot submit a deliverable.
-    starting(childAgent(`screen-${settlers.size + 1}`, ["read"]));
-    const id = `child-${settlers.size + 1}`;
-    if (!startOnlyUnrelatedChild) starting(childAgent(id, options.toolFilter.allow));
-    return { id, result: new Promise((resolve) => settlers.set(id, resolve)) };
+    for (const handler of fixtureCtx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent, source: "startup" });
+    return { id, result: new Promise(() => {}) };
   };
   const f = await combinedFixture({ subagentStart, skillBodies: { ...SKILL_BODIES, "bibliometric-analysis": bigBody } });
   fixtureCtx = f.ctx;
-  /** @type {any} */ (f.ctx.tools).get = (/** @type {string} */ name, /** @type {any} */ scope) => (scope?.visible?.includes(name) ? { name } : undefined);
   /** @type {string[]} */
   const degraded = [];
   f.ctx.provide("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line), notice() {} });
@@ -1527,22 +1519,20 @@ test("a method over the cap reaches the child capped, and its deferred sections 
   assert.ok(prompt.startsWith("## 方法"), "the method opens the message");
   assert.ok(/较长的 2 节没有随任务注入/.test(prompt), "the child is told two sections wait for it");
   assert.ok(prompt.includes(section("解读", 16_000)) && prompt.includes(section("安全边界", 800)), "what fits stays inline");
-  assert.deepEqual(
-    registered.map((entry) => [entry.sessionId, entry.skill.name]),
-    [["child-1", "bibliometric-analysis-section-01"], ["child-1", "bibliometric-analysis-section-02"]],
-    "only the child that can submit takes the sections, and only its own",
-  );
-  assert.ok(registered[0].skill.content === section("检索与去重", 20_000), "the loaded section is the original text");
-  assert.deepEqual(registered[0].skill.invocation, { modelInvocable: true, userInvocable: false });
-  assert.equal(registered[0].skill.resourceBase.path, "/skills/bibliometric-analysis");
-  assert.deepEqual(degraded, []);
-
-  // A child that never showed up to take its sections is said out loud.
-  startOnlyUnrelatedChild = true;
-  settlers.get("child-1")?.({ stopReason: "error", output: "" });
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.ok(degraded.some((line) => /method sections for d-bib were not registered/.test(line)), `the retry's missing registration is reported: ${JSON.stringify(degraded)}`);
-  assert.equal(registered.length, 2, "the unrelated child took nothing");
+  // Each stub names the skill's own file and the lines that hold the section.
+  const lines = bigBody.split("\n");
+  const stubs = [...prompt.matchAll(/`([^`]+SKILL\.md)` 第 (\d+)–(\d+) 行（offset (\d+)，limit (\d+)）/g)];
+  assert.equal(stubs.length, 2, prompt.slice(0, 400));
+  for (const [, file, start, end, offset, limit] of stubs) {
+    assert.equal(file, "/skills/bibliometric-analysis/SKILL.md");
+    assert.equal(Number(offset), Number(start));
+    assert.equal(Number(limit), Number(end) - Number(start) + 1);
+    const text = lines.slice(Number(start) - 1, Number(end)).join("\n");
+    assert.ok(text.startsWith("## 检索与去重") || text.startsWith("## 网络分析"), `lines ${start}–${end} open a deferred section`);
+    assert.ok(bigBody.includes(text) && text.length > 18_000, "and hold all of it");
+  }
+  assert.deepEqual(registered, [], "nothing is registered in the child's scope");
+  assert.deepEqual(degraded, [], "and nothing fails to register");
 });
 
 /* ------------------------------------------------ claim-level evidence tools */

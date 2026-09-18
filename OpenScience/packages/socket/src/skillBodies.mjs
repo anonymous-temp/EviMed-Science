@@ -8,8 +8,15 @@
  * (review appendix E §2.4), while the answer persona beside it was capped at
  * 32,000 characters. The same cap now applies here, and nothing is deleted:
  * every `##` section that is not inlined keeps its heading, in place, with the
- * name the child loads it by, and that name resolves — through the kernel's
- * own `skill` tool — to the section's exact text.
+ * file and the lines it is in, which the child reads with `read` when it gets
+ * there — the same bytes, from the skill file the deployment ships.
+ *
+ * The first release registered each deferred section as a skill in the
+ * child's own scope, loadable through the kernel's `skill` tool. A child's
+ * context does not carry the skills service, so every registration failed on
+ * the first live runs (2026-09-19) and the children found the sections by
+ * reading the file with `cat`; the file and its lines are now what the stub
+ * gives, so the fallback is the path.
  *
  * The largest sections go first. A method's long sections are its phase
  * procedures — the search protocol, the citation-traceability rules, the report
@@ -85,15 +92,19 @@ export function sectionSkillName(skill, index) {
 }
 
 /**
- * What stands in a capped body where a section was not inlined.
- * @param {string} name @param {{ heading: string, text: string }} section
+ * What stands in a capped body where a section was not inlined: where its
+ * text is, by file and line, so one `read` with that offset and limit returns
+ * it whole.
+ * @param {{ heading: string, text: string }} section
+ * @param {{ file: string, startLine: number, endLine: number }} location
  * @returns {string}
  */
-function sectionStub(name, section) {
+function sectionStub(section, location) {
+  const lines = location.endLine - location.startLine + 1
   return [
     `## ${section.heading}`,
     '',
-    `〔本节 ${section.text.length} 字未随任务注入。用到它之前调用 \`skill\`，name 填 \`${name}\`；内容与原文逐字相同，可随时重新加载。〕`,
+    `〔本节 ${section.text.length} 字未随任务注入。用到它之前用 \`read\` 读取 \`${location.file}\` 第 ${location.startLine}–${location.endLine} 行（offset ${location.startLine}，limit ${lines}）；内容与原文逐字相同。〕`,
     '',
   ].join('\n')
 }
@@ -109,27 +120,36 @@ function sectionStub(name, section) {
  * holds. Deterministic: the same bodies always produce the same split, so the
  * child's first message stays a stable prefix.
  *
- * @param {readonly { name: string, body: string }[]} bodies
- * @param {{ maxChars?: number }} [options]
+ * @param {readonly { name: string, body: string }[]} bodies each body is its skill's whole SKILL.md, so a section's lines in the body are its lines in the file
+ * @param {{ maxChars?: number, skillsDir?: string }} [options] `skillsDir` is where the files are; without it the stub names `<skill>/SKILL.md`
  * @returns {{
  *   inline: { name: string, body: string }[],
- *   deferred: { skill: string, index: number, name: string, heading: string, chars: number, content: string }[],
+ *   deferred: { skill: string, index: number, name: string, heading: string, chars: number, content: string, file: string, startLine: number, endLine: number }[],
  *   total: number,
  * }}
  */
 export function capSkillBodies(bodies, options = {}) {
   const maxChars = options.maxChars ?? SKILL_BODY_MAX_CHARS
+  const skillsDir = String(options.skillsDir ?? '').replace(/\/+$/, '')
   const total = bodies.reduce((sum, skill) => sum + String(skill.body ?? '').length, 0)
   if (total <= maxChars) return { inline: bodies.map((skill) => ({ name: skill.name, body: skill.body })), deferred: [], total }
 
   const parsed = bodies.map((skill) => {
     const { preamble, sections } = splitSkillSections(skill.body)
+    const file = skillsDir ? `${skillsDir}/${skill.name}/SKILL.md` : `${skill.name}/SKILL.md`
+    // Joined with one newline each, preamble first: a section starts on the
+    // line after everything before it.
+    let nextLine = preamble ? preamble.split('\n').length + 1 : 1
     return {
       name: skill.name,
       preamble,
       sections: sections.map((section, position) => {
         const name = sectionSkillName(skill.name, position + 1)
-        return { ...section, index: position + 1, name, stub: sectionStub(name, section), keep: true }
+        const startLine = nextLine
+        const endLine = startLine + section.text.split('\n').length - 1
+        nextLine = endLine + 1
+        const location = { file, startLine, endLine }
+        return { ...section, index: position + 1, name, location, stub: sectionStub(section, location), keep: true }
       }),
     }
   })
@@ -173,25 +193,8 @@ export function capSkillBodies(bodies, options = {}) {
         heading: section.heading,
         chars: section.text.length,
         content: section.text,
+        ...section.location,
       }))),
     total,
-  }
-}
-
-/**
- * The skill a deferred section is registered as in its child's own scope.
- * `resourceDir` lets a relative path inside the section resolve against the
- * skill's own directory, the way it would in the whole body.
- * @param {{ skill: string, index: number, name: string, heading: string, content: string }} section
- * @param {string} skillsDir
- * @returns {{ name: string, description: string, content: string, resourceDir?: string }}
- */
-export function deferredSectionSkill(section, skillsDir) {
-  const heading = section.heading.length > 160 ? `${section.heading.slice(0, 157)}...` : section.heading
-  return {
-    name: section.name,
-    description: `${section.skill} 的第 ${section.index} 节：${heading}`,
-    content: section.content,
-    ...(skillsDir ? { resourceDir: `${skillsDir.replace(/\/+$/, '')}/${section.skill}` } : {}),
   }
 }
