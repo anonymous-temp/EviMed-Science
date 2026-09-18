@@ -48,6 +48,8 @@ import {
 // its tests have always imported them from this module, and because a second
 // definition is exactly the drift the move was made to stop.
 import {
+  CONNECTOR_CREDENTIALS,
+  CONNECTOR_CREDENTIAL_IDS,
   PLAN_ITEM_STATES,
   SOCKET_TOOL_NAMES,
   capabilityBriefTask,
@@ -504,6 +506,11 @@ function foldEvents(events) {
         // Who stopped a cancelled run: the researcher, or the platform
         // shutting down. Absent when the kernel reported the stop itself.
         ...(event.canceledBy === "user" || event.canceledBy === "platform" ? { canceledBy: event.canceledBy } : {}),
+        // The kernel's finer reason, or the connector a failed research call
+        // had no credential for — written since the sub-code existed and read
+        // back only now, so a reader can say what to do about it.
+        ...(typeof event.errorSubCode === "string" && /^[a-z][a-z0-9_.-]{0,63}$/.test(event.errorSubCode) ? { errorSubCode: event.errorSubCode } : {}),
+        ...(typeof event.missingCredential === "string" && CONNECTOR_CREDENTIAL_IDS.has(event.missingCredential) ? { missingCredential: event.missingCredential } : {}),
         status: event.status,
         finishedAt: storedTimestamp(event.finishedAt, "finishedAt"),
         durationMs: event.durationMs,
@@ -1491,6 +1498,29 @@ function successfulToolPart(part) {
     && parsedToolResultStatus(part) !== "error";
 }
 
+/**
+ * The connector a failed research call was missing a credential for: the
+ * public-source gateway refuses with `public_source_<connector>_credential_missing`
+ * (hyphens as underscores), and a connector is one of the closed list a
+ * researcher can hold a credential for (`CONNECTOR_CREDENTIALS`). Null for any
+ * other code. A format, not a reading of prose.
+ * @type {ReadonlyMap<string, string>}
+ */
+const missingCredentialCodes = new Map(CONNECTOR_CREDENTIALS.map((spec) => [
+  `public_source_${spec.id.replaceAll("-", "_")}_credential_missing`, spec.id,
+]));
+
+/** @param {string | null} errorCode @returns {string | null} */
+function missingCredentialConnector(errorCode) {
+  return (errorCode && missingCredentialCodes.get(errorCode)) ?? null;
+}
+
+/**
+ * The terminal outcome a turn's messages decide. Callers go on to add the
+ * delivery verdict to it (`verification`, `qualityNotices`, …), hence open.
+ * @param {any[]} messages
+ * @returns {{ status: string, errorCode: string | null, errorSubCode: string | null, missingCredential?: string } & Record<string, any>}
+ */
 function terminalFromMessages(messages) {
   for (const message of messages) {
     const error = message?.info?.error;
@@ -1534,7 +1564,14 @@ function terminalFromMessages(messages) {
     const correctedByLaterSuccess = toolParts.slice(index + 1).some((candidate) => (
       candidate.tool === part.tool && successfulToolPart(candidate)
     ));
-    if (!correctedByLaterSuccess) return { status: "failed", errorCode: "runtime_tool_error", errorSubCode: null };
+    if (!correctedByLaterSuccess) {
+      // A source the researcher can open themselves: the account page takes
+      // their own credential (connectorCredentials.mjs). Named as the sub-code
+      // and as its own field, so the reader is told what to add rather than
+      // that a tool failed.
+      const missingCredential = missingCredentialConnector(errorCode);
+      return { status: "failed", errorCode: "runtime_tool_error", errorSubCode: missingCredential, ...(missingCredential ? { missingCredential } : {}) };
+    }
   }
   return { status: "succeeded", errorCode: null, errorSubCode: null };
 }
@@ -4487,6 +4524,7 @@ export class AgentRunStore {
       // other things key on, and a context overflow is a different remedy from
       // a session fault -- which the ledger could not distinguish at all.
       ...(sanitizeErrorCode(terminal.errorSubCode) ? { errorSubCode: sanitizeErrorCode(terminal.errorSubCode) } : {}),
+      ...(CONNECTOR_CREDENTIAL_IDS.has(terminal.missingCredential) ? { missingCredential: terminal.missingCredential } : {}),
       artifacts: normalizeArtifacts(terminal.artifacts),
       /** Files the run wrote that no gate accepted. Empty is "none"; the field
        *  is always present so a reader never has to treat absent as unknown. */
