@@ -1157,7 +1157,9 @@ class AdapterTests(unittest.TestCase):
                 "workspaceDir": "/workspace",
             },
         })
-        self.assertEqual(result["sources"], body["sources"])
+        # Unchanged but for the evidence badge this server stamps on every
+        # source: a PubMed record with no publication types is `other`.
+        self.assertEqual(result["sources"], [{**source, "sourceType": "other"} for source in body["sources"]])
 
     def test_valid_prewrapped_warning_adds_input_provenance(self):
         os.environ["OPEN_SCIENCE_USER_ID"] = "user-1"

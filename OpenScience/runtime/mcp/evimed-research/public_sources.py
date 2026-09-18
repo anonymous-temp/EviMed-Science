@@ -1057,6 +1057,13 @@ def _evimed_literature_records(arguments):
 # once, with its digests beside it. A second copy of "write into the managed
 # workspace safely" is a second place for that rule to drift.
 from immutable_capture import managed_workspace, preserve
+import source_types
+
+
+def _with_sidecar(artifacts, record):
+    """A capture's artifacts plus `source.json`, what the text is (C8)."""
+    sidecar = source_types.sidecar(record)
+    return {**artifacts, sidecar[0]: sidecar[1]} if sidecar else artifacts
 
 
 def _preserve_guideline_text(identifier, title, record):
@@ -1101,7 +1108,11 @@ def _preserve_guideline_text(identifier, title, record):
             if record.get(key)
         )
         payload = ("%s%s\n%s\n" % (header, meta, body)).encode("utf-8")
-        paths = preserve(workspace, Path(".evimed-sources") / "evimed-guidelines" / digest, {"guideline.md": payload})
+        artifacts = _with_sidecar({"guideline.md": payload}, {
+            "id": "EVIMED-GUIDE:%s" % identifier, "title": title or identifier,
+            "url": _evimed_record_url(record.get("url")), "tool": "guideline_search", "source": "evimed-guideline",
+        })
+        paths = preserve(workspace, Path(".evimed-sources") / "evimed-guidelines" / digest, artifacts)
         return {"path": paths["guideline.md"], "sha256": hashlib.sha256(payload).hexdigest()}
     except Exception:
         # isolated: evimed_guideline_preservation_failures_total
@@ -2185,7 +2196,12 @@ def _preserve_pubmed_abstract(record):
     abstract is still returned, and the result says it cannot carry a claim."""
     try:
         payload = _pubmed_abstract_markdown(record).encode("utf-8")
-        paths = preserve(managed_workspace(), Path(".evimed-sources") / "pubmed" / ("PMID%s" % record["pmid"]), {"abstract.md": payload})
+        artifacts = _with_sidecar({"abstract.md": payload}, {
+            "id": "PMID:%s" % record["pmid"], "title": record["title"],
+            "url": "https://pubmed.ncbi.nlm.nih.gov/%s/" % record["pmid"],
+            "publicationTypes": record["publicationTypes"], "tool": "literature_search", "source": "pubmed",
+        })
+        paths = preserve(managed_workspace(), Path(".evimed-sources") / "pubmed" / ("PMID%s" % record["pmid"]), artifacts)
         return {"path": paths["abstract.md"], "sha256": hashlib.sha256(payload).hexdigest()}
     except Exception:
         # isolated: evimed_pubmed_abstract_preservation_failures_total

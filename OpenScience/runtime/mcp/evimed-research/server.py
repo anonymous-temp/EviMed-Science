@@ -26,6 +26,7 @@ import drug_assessment
 import open_access_fulltext
 import official_pages
 import quote_locator
+import source_types
 from immutable_capture import ImmutableCaptureError, managed_workspace
 import meta_agent
 import specialist_jobs
@@ -1072,7 +1073,10 @@ def _validated_sources(value):
     # key was missing from this set, so every guideline search that succeeded
     # in preserving text failed the whole call as "sources[0] has an invalid
     # shape". Preserving more made the tool work less.
-    allowed = {"id", "title", "url", "source", "retrievedAt", "evidenceAccess", "artifactPath"}
+    # `sourceType` is the evidence badge (packages/domain/src/source-types.json):
+    # this server stamps it on the way out, and an adapter that already knows
+    # it may send it. An unknown value is dropped by the stamping, not refused.
+    allowed = {"id", "title", "url", "source", "retrievedAt", "evidenceAccess", "artifactPath", "sourceType"}
     for index, source in enumerate(value):
         if not isinstance(source, dict) or set(source) - allowed:
             raise ValueError("sources[%d] has an invalid shape" % index)
@@ -1611,6 +1615,42 @@ def _managed_status_with_wait(status_call, arguments):
 
 
 def call_tool(name, arguments):
+    return _with_source_types(name, _dispatch(name, arguments))
+
+
+def _with_source_types(name, result):
+    """Every source a tool returns carries its evidence type (C8).
+
+    Decided here, once, for every tool and every adapter, rather than in each
+    connector: this is where the tool name, the record's publication or study
+    types, its connector and its URL are all in hand, and a record that leaves
+    without a type can only be re-derived later from less. The matching data
+    item (same id) gets the same type, so the model screens by it too. A type
+    the table cannot decide is `other`; with no table at all nothing is set.
+    """
+    if not isinstance(result, dict) or not isinstance(result.get("sources"), list):
+        return result
+    data = result.get("data") if isinstance(result.get("data"), dict) else {}
+    items = [item for item in data.get("items", []) if isinstance(item, dict)] if isinstance(data.get("items"), list) else []
+    by_id = {str(item.get("id")): item for item in items if item.get("id") is not None}
+    for source in result["sources"]:
+        if not isinstance(source, dict):
+            continue
+        item = by_id.get(str(source.get("id")), {})
+        if source_types.is_source_type(source.get("sourceType")):
+            kind = source["sourceType"]
+        else:
+            source.pop("sourceType", None)
+            kind = source_types.source_type_of({**item, **source, "tool": name})
+        if kind is None:
+            continue
+        source["sourceType"] = kind
+        if item and not source_types.is_source_type(item.get("sourceType")):
+            item["sourceType"] = kind
+    return result
+
+
+def _dispatch(name, arguments):
     # Refused here as well as hidden from the catalog. A model that remembers a
     # tool from an earlier session, or a caller that hard-codes a name, must get
     # the deployment's answer rather than reach an adapter the deployment turned
@@ -1750,6 +1790,12 @@ def call_tool(name, arguments):
                     "dataSourceCatalog": {
                         **source_catalog.integration_summary(),
                         "activeConnectorIds": list(source_catalog.active_connector_ids()),
+                    },
+                    # Which copy of the domain's source-type table this process
+                    # stamps from; null means sources leave without a type.
+                    "sourceTypes": {
+                        "table": (source_types.table() or {}).get("origin"),
+                        "version": (source_types.table() or {}).get("version"),
                     },
                 },
                 name,
