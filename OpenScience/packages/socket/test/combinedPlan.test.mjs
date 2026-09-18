@@ -901,6 +901,23 @@ test("the gate ledger records each capability's verdicts under its own deliverab
   }
 });
 
+test("two unreadable submissions in a row are two gate records, not one overwriting the other", async () => {
+  // Inside the structural allowance a submission is not charged, so the
+  // attempt number stands still; the record's key used to be that number, and
+  // the second unreadable package's issues replaced the first's (E §9.5).
+  const f = await combinedFixture({ structuralAttemptAllowance: 2 });
+  await f.step(1);
+  await f.plan();
+  f.writeFiles(appraisalFiles({ complete: false }));
+  await f.execute("evimed_submit_deliverable", { deliverableId: "d-appraise" });
+  await f.execute("evimed_submit_deliverable", { deliverableId: "d-appraise" });
+  const rows = f.gateRuns.filter((/** @type {any} */ row) => row.deliverableId === "d-appraise");
+  assert.equal(rows.length, 2);
+  assert.equal(new Set(rows.map((/** @type {any} */ row) => row.key)).size, 2, `two submissions collided onto one key: ${JSON.stringify(rows.map((/** @type {any} */ row) => row.key))}`);
+  assert.deepEqual(rows.map((/** @type {any} */ row) => row.attempt), [0, 0], "neither was charged to the content budget");
+  assert.deepEqual(rows.map((/** @type {any} */ row) => row.sequence), [1, 2]);
+});
+
 test("the projection the control plane reads keeps both children, each separable by the join the server performs", async () => {
   // The layer every other test in this file stops short of. `store.subagents`,
   // `run_mirror` and `plan_index` are container-local: DSH's storage format

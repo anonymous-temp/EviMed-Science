@@ -4938,8 +4938,10 @@ test("the brief reaches the gate and the workspace, and never the run ledger", a
  *
  *  `finished` is the delivery decision as reconcileSession returned it.
  *  `delivered` is what a later reader of /api/agent-runs sees.
- *  `forgetBrief` drops the server's in-memory copy of the brief before the gate
- *  runs, which is exactly the state a restart leaves a run in.
+ *  `forgetBrief: "memory"` drops the server's in-memory copy of the brief
+ *  before the gate runs — the state a restart leaves a run in, which the copy
+ *  kept beside the ledger now survives. `forgetBrief: true` drops that copy
+ *  too: a run dispatched before briefs were kept, or whose copy is unreadable.
  *  @param {string} label @param {Record<string, any>} options */
 async function deliverClinicalPackage(label, {
   mutate = null,
@@ -5031,6 +5033,7 @@ async function deliverClinicalPackage(label, {
     ],
   }];
   if (forgetBrief) store.dispatchedBriefs.delete(run.id);
+  if (forgetBrief === true) await rm(store.briefFile(project, run.id), { force: true });
   const finished = await store.reconcileSession(project, binding.sessionId);
   assert.equal(finished.id, run.id);
   const delivered = (await store.list(project)).find((item) => item.id === run.id);
@@ -5087,11 +5090,12 @@ test("a notice that arrives before the run finishes is not overwritten by the te
 });
 
 test("a run whose brief the server no longer holds is delivered unchecked, and says which rule did not run", async () => {
-  // The brief lives in the dispatcher's memory only, so a run that outlives a
-  // server restart reaches the gate without it, and the question-scoped safety
-  // rule — does the report bring in a medicine the question never named? —
-  // cannot run. The same package with its brief in hand is delivered with no
-  // mark at all (next test); without it, it must not read as the same thing.
+  // A run whose brief is gone — dispatched before briefs were kept beside the
+  // ledger, or its kept copy unreadable — reaches the gate without it, and the
+  // question-scoped safety rule — does the report bring in a medicine the
+  // question never named? — cannot run. The same package with its brief in
+  // hand is delivered with no mark at all (next test); without it, it must not
+  // read as the same thing.
   const { finished, delivered } = await deliverClinicalPackage("brief-lost", { forgetBrief: true });
   assert.equal(finished.status, "succeeded", "a lost brief is not the run's fault");
   assert.equal(finished.errorCode, null);
@@ -5115,6 +5119,12 @@ test("a clean package with every layer run stays null, and a finding still outra
   assert.equal(clean.finished.status, "succeeded");
   assert.equal(clean.finished.verification, null);
   assert.deepEqual(noticeTexts(clean.finished), []);
+
+  // A restart no longer costs the safety layer: the process lost its memory,
+  // the brief kept beside the ledger did not (E §9.1).
+  const restarted = await deliverClinicalPackage("brief-restarted", { forgetBrief: "memory" });
+  assert.equal(restarted.finished.verification, null, JSON.stringify(restarted.finished.qualityNotices));
+  assert.deepEqual(noticeTexts(restarted.finished), []);
 
   // Brief lost AND a blocking finding of another kind: "we checked and it did
   // not hold up" is the more serious statement and is the one shown.
