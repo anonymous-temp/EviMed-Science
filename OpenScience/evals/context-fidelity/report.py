@@ -154,6 +154,19 @@ def compaction_tokens(record: dict[str, Any]) -> tuple[int | None, int | None]:
     return None, None
 
 
+def _notice_texts(notices):
+    """The sentence of each run notice. A ledger written before 2026-09-18
+    stores sentences; since then a notice is a structured item whose
+    sentence is its `text` (code, check and severity beside it)."""
+    texts = []
+    for item in notices:
+        if isinstance(item, str):
+            texts.append(item)
+        elif isinstance(item, dict) and isinstance(item.get("text"), str):
+            texts.append(item["text"])
+    return texts
+
+
 def fold_ledger(lines: Iterable[str]) -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
     """Fold `runs.jsonl` the way `agentRuns.mjs` folds it, minus the corruption checks.
 
@@ -209,7 +222,7 @@ def fold_ledger(lines: Iterable[str]) -> tuple[dict[str, dict[str, Any]], dict[s
             current["errorCode"] = event.get("errorCode")
             notices = event.get("qualityNotices")
             if isinstance(notices, list):
-                current["qualityNotices"] = [item for item in notices if isinstance(item, str)] + current["qualityNotices"]
+                current["qualityNotices"] = _notice_texts(notices) + current["qualityNotices"]
         elif kind == "learning":
             # A gauge: every writer sends the whole cumulative value, so the
             # last row for a field wins rather than accumulating.
@@ -224,7 +237,7 @@ def fold_ledger(lines: Iterable[str]) -> tuple[dict[str, dict[str, Any]], dict[s
         elif kind == "notice":
             notices = event.get("qualityNotices")
             if isinstance(notices, list):
-                current["qualityNotices"].extend(item for item in notices if isinstance(item, str))
+                current["qualityNotices"].extend(_notice_texts(notices))
     return runs, problems
 
 

@@ -315,7 +315,8 @@ async function main() {
 
   say(`status=${run.status} errorCode=${run.errorCode ?? "none"} verification=${run.verification ?? "none"}`);
   say(`artifacts=${(run.artifacts ?? []).length} unverified=${(run.unverifiedArtifacts ?? []).length} saved=${saved}`);
-  for (const notice of (run.qualityNotices ?? []).slice(0, 10)) say(`notice: ${String(notice).slice(0, 300)}`);
+  // Structured since 2026-09-18 (C2): the title is the reader's, `text` the sentence.
+  for (const notice of (run.qualityNotices ?? []).slice(0, 10)) say(`notice: ${typeof notice === "string" ? notice.slice(0, 300) : `[${notice?.severity ?? "advice"}] ${notice?.title ?? ""} — ${String(notice?.text ?? "").slice(0, 300)}`}`);
   say(`results: ${path.relative(repoRoot, outDir)}`);
 
   // Release the runtime slot. Best effort: a held slot is an operational

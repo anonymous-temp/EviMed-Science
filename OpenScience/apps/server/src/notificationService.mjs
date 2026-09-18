@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { NOTICE_PRIORITY, NOTICE_TYPES, errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
+import { NOTICE_PRIORITY, NOTICE_TYPES, errorCodeMessage, errorCodeOutcome, summarizeGateNotices } from "@evimed/domain";
+import { describedQualityNotices } from "./runNotices.mjs";
 import { HttpError } from "./security.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
@@ -106,7 +107,8 @@ function sameSemantics(item, values) {
  * exactly one of it. The sentences come from the domain registry rather than a
  * table here, because a second table is how the frontend ended up with three.
  * @param {{status?: string, errorCode?: string|null, verification?: string|null,
- *          artifacts?: string[], unverifiedArtifacts?: string[], qualityNotices?: string[]}} run
+ *          artifacts?: string[], unverifiedArtifacts?: string[], qualityNotices?: (string | Record<string, any>)[]}} run
+ * @returns {{ outcome: string, title: string, body: string, severity: 'safety'|'attention'|'info', counts: { safety: number, mustFix: number, advice: number } }}
  */
 export function runFinishedNotice(run) {
   const outcome = run?.errorCode
@@ -115,29 +117,48 @@ export function runFinishedNotice(run) {
   const title = {
     delivered: "研究已完成",
     qualified: "研究已交付，待你复核",
-    gated: "交付物未通过质量门",
+    // 「核验」, the reader's word; 「质量门」 is the engineering one (B §1g).
+    gated: "交付物未通过核验",
     stopped: "研究运行已被平台终止",
     capped: "研究未开始：额度或并发受限",
     upstream: "研究中断：外部数据源或服务异常",
     unknown: "研究运行已结束",
   }[outcome] ?? "研究运行已结束";
+  // The body is counts and titles, never a finding's own sentence. It used to
+  // carry the first two notices verbatim, cut at 200 characters — the gate's
+  // English repair instructions, in a Chinese researcher's inbox (2026-09-18
+  // review, E §9.7). The titles are the domain's (`describeGateIssue`), and
+  // the sentence each came from stays on the run, one click away.
+  const summary = summarizeGateNotices(describedQualityNotices(run?.qualityNotices ?? []));
+  const failing = summary.safety + summary.mustFix;
   const reason = run?.errorCode
     ? errorCodeMessage(run.errorCode)
     : run?.verification === "unverified"
-      ? "结果已交付，但有质量检查没有通过，需要你自己复核后再使用。"
+      ? failing > 0
+        ? `已交付。${failing} 项自证未通过${summary.safety ? `，其中 ${summary.safety} 项涉及临床安全` : ""}；引用前请在报告的「依据」里核对带 ⚠ 的结论。`
+        : "已交付，但有核验没有通过；引用前请在报告的「依据」里核对带 ⚠ 的结论。"
       : run?.verification === "unchecked"
-        ? "结果已交付，但有质量检查没有运行，无法确认是否达标。"
+        ? "已交付，但有一项核验没有运行，无法确认是否达标；引用前请自行核对来源。"
         : "研究结果已准备好，可以查看运行记录和交付物。";
   // Files on disk are the researcher's own work whatever the verdict was, and
   // saying so here is the same rule the run surface follows: a refused package
   // is not a deleted one.
   const files = [...(run?.artifacts ?? []), ...(run?.unverifiedArtifacts ?? [])].length;
+  // What to look at first: at most the two largest groups a reader must check,
+  // by title. Advice is on the run; it does not need an inbox line.
+  const named = summary.groups.filter((group) => group.severity !== "advice").slice(0, 2)
+    .map((group) => (group.count > 1 ? `${group.title}（${group.count} 项）` : group.title));
   const body = [
     reason,
     files > 0 ? `本次运行产出 ${files} 个文件，仍在工作区里，可以直接打开。` : null,
-    ...(run?.qualityNotices ?? []).slice(0, 2).map((notice) => String(notice).slice(0, 200)),
+    named.length ? `请先核对：${named.join("；")}。` : null,
   ].filter(Boolean).join("\n");
-  return { outcome, title, body };
+  // Only clinical safety may interrupt (C1); anything the reader must check is
+  // attention; a clean delivery is information.
+  const severity = summary.safety > 0 ? "safety"
+    : failing > 0 || ["gated", "stopped", "capped", "upstream", "unknown"].includes(outcome) || run?.verification ? "attention"
+      : "info";
+  return { outcome, title, body, severity, counts: { safety: summary.safety, mustFix: summary.mustFix, advice: summary.advice } };
 }
 
 export class NotificationService {
