@@ -33,6 +33,9 @@ test("every route reason the router mints reads as one Chinese sentence, and an 
     assert.match(String(text), expected, `${reason} → ${text}`);
     assert.doesNotMatch(String(text), /[a-z]{4,}/, `${reason} leaked a machine word: ${text}`);
   }
+  assert.equal(routeReasonText("choice:answer", "open-domain-answer"), "按你的选择：普通问答");
+  assert.equal(routeReasonText("choice:clinical-evidence-synthesis", "clinical-evidence-synthesis"), "按你的选择：临床证据深度分析");
+  assert.equal(routeReasonText("choice:no-such-capability", "no-such-capability"), "按你的选择：对应的能力");
   assert.equal(routeReasonText("something-new", "x"), null, "a reason this build does not know is not guessed at");
   assert.equal(routeReasonText(null, null), null);
   assert.equal(routeReasonText("llm:0.87", "no-such-capability"), "按问题内容交给对应的能力");
@@ -175,6 +178,57 @@ test("the cancel route stops the kernel first, then the ledger, and the dispatch
     assert.equal(unreachable.status, 504);
     const still = (await (await fetch(`${base}/api/agent-runs`, { headers })).json()).data.find((item) => item.id === "run_unreachable");
     assert.equal(still.status, "running");
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("a line the researcher chose replaces the router and is said as theirs", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-run-line-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false });
+  const address = await app.listen(0, "127.0.0.1");
+  const base = `http://127.0.0.1:${address.port}`;
+  const headers = { "X-Open-Science-Project": "default", "Content-Type": "application/json" };
+  const put = (sessionId, binding) => fetch(`${base}/api/research-sessions/${sessionId}`, { method: "PUT", headers, body: JSON.stringify(binding) });
+  const dispatch = (body) => fetch(`${base}/api/agent-runs/dispatch`, { method: "POST", headers, body: JSON.stringify(body) });
+  // Asked of the router, this names a capability and goes to it.
+  const text = capabilityBrief("药品安全性分析", "华法林与阿司匹林合用的出血风险");
+  try {
+    assert.equal((await put("ses_routed", { mode: "open-domain" })).status, 200);
+    const routed = (await (await dispatch({ sessionId: "ses_routed", dispatchId: "line_routed", text })).json()).data;
+    assert.notEqual(routed.effectiveAgentId, "open-domain-answer", "the control: without a choice this question is routed to a capability");
+
+    // 「改为普通问答」: the same question, pinned to the answer line.
+    assert.equal((await put("ses_answer", { mode: "open-domain" })).status, 200);
+    const answered = await dispatch({ sessionId: "ses_answer", dispatchId: "line_answer", text, line: "answer" });
+    assert.equal(answered.status, 202, await answered.clone().text());
+    const answer = (await answered.json()).data;
+    assert.equal(answer.effectiveAgentId, "open-domain-answer");
+    assert.equal(answer.effectiveRouteReason, "choice:answer", "no router and no classifier had a say");
+    assert.equal(answer.routeReason, "按你的选择：普通问答");
+
+    // Any public capability, by id, for a question the router would send elsewhere.
+    assert.equal((await put("ses_meta", { mode: "open-domain" })).status, 200);
+    const meta = (await (await dispatch({ sessionId: "ses_meta", dispatchId: "line_meta", text: "今天天气怎么样", line: "meta-analysis" })).json()).data;
+    assert.equal(meta.effectiveAgentId, "meta-analysis");
+    assert.equal(meta.effectiveRouteReason, "choice:meta-analysis");
+    assert.match(meta.routeReason, /^按你的选择：/);
+    assert.ok(meta.estimatedMinutes, "the chosen capability's estimate comes with it");
+
+    // Refused, not ignored: a line that is not one, a capability this
+    // deployment does not offer publicly, and a conversation that already has one.
+    assert.equal((await put("ses_bad", { mode: "open-domain" })).status, 200);
+    for (const line of ["Answer", "", 7, "no-such-capability", "source-understanding", "open-domain-answer"]) {
+      const refused = await dispatch({ sessionId: "ses_bad", dispatchId: `line_bad_${String(line).length}_${typeof line}`, text: "问题", line });
+      assert.equal(refused.status, 400, `line ${JSON.stringify(line)}`);
+      assert.equal((await refused.json()).code, "invalid_agent_run");
+    }
+    const agents = (await (await fetch(`${base}/api/agents`, { headers })).json()).data;
+    const adr = (agents.agents ?? agents).find((agent) => agent.id === "adr-analysis");
+    assert.equal((await put("ses_bound", { mode: "specialist", agentId: "adr-analysis", agentVersion: adr.version })).status, 200);
+    const bound = await dispatch({ sessionId: "ses_bound", dispatchId: "line_bound", text: "问题", line: "answer" });
+    assert.equal(bound.status, 400);
   } finally {
     await app.close();
     await rm(dataDir, { recursive: true, force: true });

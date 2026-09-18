@@ -589,6 +589,32 @@ class OperationalMetrics {
  *
  * @param {any} error
  */
+/**
+ * A dispatch's explicit line (`line` on `POST /api/agent-runs/dispatch`):
+ * `"answer"` for the answer line, or the id of a public capability. Null when
+ * the caller chose nothing. A choice is only meaningful where the platform
+ * would otherwise route — an open conversation; one bound to a capability
+ * already has its line, and a choice there is refused rather than ignored.
+ *
+ * @param {unknown} value
+ * @param {any} boundSession
+ * @param {readonly any[]} routableAgents public capabilities, answer line excluded
+ * @returns {{ agent: any | null } | null}
+ */
+function chosenDispatchLine(value, boundSession, routableAgents) {
+  if (value == null) return null;
+  if (typeof value !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(value)) {
+    throw new HttpError(400, "invalid_agent_run", "line must be \"answer\" or a capability id.");
+  }
+  if (boundSession?.mode !== "open-domain") {
+    throw new HttpError(400, "invalid_agent_run", "A line can be chosen only in an open conversation; this one is bound to a capability.");
+  }
+  if (value === "answer") return { agent: null };
+  const agent = routableAgents.find((candidate) => candidate.id === value);
+  if (!agent) throw new HttpError(400, "invalid_agent_run", "line names no capability this deployment offers.");
+  return { agent };
+}
+
 function memoryRecallRejection(error) {
   /** @type {any} */
   const rejection = error instanceof HttpError
@@ -2789,10 +2815,21 @@ export function createWebApiApp(overrides = {}) {
         return;
       }
 
+      // A question, dispatched as a run.
+      //
+      //   POST /api/agent-runs/dispatch
+      //     { sessionId, dispatchId?, text, automated?: boolean, line?: "answer" | "<capability id>" }
+      //   202 { data: run }   run.routeReason (zh) and run.estimatedMinutes say where it went (C3)
+      //   400 invalid_agent_run — an unknown field; a `line` that is neither `answer` nor a public
+      //       capability id; a `line` on a conversation already bound to a capability
+      //
+      // `line` is the researcher's own choice and replaces the router and the
+      // classifier: `answer` pins the answer line (「改为普通问答」), an id pins
+      // that capability; the run records `choice:<line>`.
       if (pathname === "/api/agent-runs/dispatch" && req.method === "POST") {
         const ctx = await context(req, res);
         const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run dispatch");
-        const unknown = Object.keys(body).filter((field) => !["sessionId", "dispatchId", "text", "automated"].includes(field));
+        const unknown = Object.keys(body).filter((field) => !["sessionId", "dispatchId", "text", "automated", "line"].includes(field));
         if (unknown.length > 0) {
           throw new HttpError(400, "invalid_agent_run", `Unknown agent run field(s): ${unknown.sort().join(", ")}.`);
         }
@@ -2830,6 +2867,12 @@ export function createWebApiApp(overrides = {}) {
         // The default open-domain answer agent is the fallback handler, never
         // a routable specialist: exclude it from router/classifier candidates.
         const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
+        // The researcher's own choice of line (2026-09-18): `line: "answer"`
+        // for the answer line — the shell's 「改为普通问答」 — or the id of a
+        // public capability. A choice is an instruction, not a hint: it
+        // replaces the router and the classifier outright, and is recorded as
+        // `choice:<line>` so the ledger and the reader both see it was chosen.
+        const chosenLine = chosenDispatchLine(body.line, boundSession, routableAgents);
         // Routing is a judgement about what deliverable the request commissions,
         // and a word list cannot make it. Deciding by regex first sent six real
         // requests for a clinical evidence review to other pipelines because
@@ -2842,10 +2885,13 @@ export function createWebApiApp(overrides = {}) {
         // made. That preserves the property the old order was built for — a
         // high-risk medicine asked about in a report request always reaches the
         // clinical gate — without letting keyword matching outrank judgement.
-        let routedSpecialist = null;
+        /** @type {{ agentId: string, agentVersion: string, runtimeAgent: string, reason: string } | null} */
+        let routedSpecialist = chosenLine?.agent
+          ? { agentId: chosenLine.agent.id, agentVersion: chosenLine.agent.version, runtimeAgent: chosenLine.agent.runtimeAgent, reason: `choice:${chosenLine.agent.id}` }
+          : null;
         /** @type {{ failure?: string, verdict?: string }} */
         const classifierTrace = {};
-        if (boundSession?.mode === "open-domain") {
+        if (boundSession?.mode === "open-domain" && !chosenLine) {
           const named = routeNamedSpecialist(text, routableAgents);
           // Naming the package is an instruction, not a guess at intent.
           routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace);
@@ -2879,9 +2925,11 @@ export function createWebApiApp(overrides = {}) {
               // So when the classifier never got to decide, the ledger says so:
               // a batch cannot be read afterwards if a timed-out routing and a
               // genuinely open-domain question leave the same record.
-              reason: classifierTrace.failure
-                ? classifierFailureReason("unrouted:open-domain", classifierTrace.failure)
-                : "unrouted:open-domain",
+              reason: chosenLine
+                ? "choice:answer"
+                : classifierTrace.failure
+                  ? classifierFailureReason("unrouted:open-domain", classifierTrace.failure)
+                  : "unrouted:open-domain",
             }
           : null);
         // How long the route taken should take (C3): the bound capability's, the

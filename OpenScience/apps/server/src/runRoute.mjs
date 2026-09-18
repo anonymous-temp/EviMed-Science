@@ -50,7 +50,10 @@ export function routeReasonText(reason, agentId) {
     if (!rest) return `${adopted}${fallback}`;
   }
   let sentence = null;
-  if (rest === "session-binding") sentence = `按这个对话选定的能力${named(agentId)}运行`;
+  // The researcher's own choice, said as theirs.
+  if (rest === "choice:answer") sentence = "按你的选择：普通问答";
+  else if (rest.startsWith("choice:")) sentence = `按你的选择：${capabilityTitle(agentId) ?? "对应的能力"}`;
+  else if (rest === "session-binding") sentence = `按这个对话选定的能力${named(agentId)}运行`;
   else if (rest === "unrouted:open-domain") sentence = "直接回答：这个问题不需要交付报告";
   else if (/^llm:(?:0|1)(?:\.\d+)?$/.test(rest)) sentence = `按问题内容交给${named(agentId)}`;
   else if (rest.startsWith("matched:named:")) sentence = `你在问题里点名了${named(agentId)}`;
