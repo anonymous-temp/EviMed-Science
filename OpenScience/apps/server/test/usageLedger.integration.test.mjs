@@ -353,8 +353,9 @@ test("an interactive run's attributed calls are capped by its own limit, and a l
   const unrelated = await ledger.reserveModel(reservation(other, { runId: otherRun, runLimit: 1, estimatedCost: 0.6, now }));
   assert.ok(unrelated.id, "another run's budget is its own");
   const summaries = await ledger.summaryRuns(other, [runId, otherRun, "run_never_used"]);
-  assert.deepEqual(summaries.get(runId), { requests: 1, inputTokens: 1000, cachedInputTokens: 300, outputTokens: 50, costCny: 0.5 });
-  assert.deepEqual(summaries.get(otherRun), { requests: 1, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, costCny: 0 }, "a reserved call is counted, its tokens are not yet");
+  const withoutFirst = (/** @type {any} */ summary) => { const { firstRequestAt, ...rest } = summary; assert.ok(Number.isFinite(Date.parse(firstRequestAt)), "the first call's time is read"); return rest; };
+  assert.deepEqual(withoutFirst(summaries.get(runId)), { requests: 1, inputTokens: 1000, cachedInputTokens: 300, outputTokens: 50, costCny: 0.5 });
+  assert.deepEqual(withoutFirst(summaries.get(otherRun)), { requests: 1, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, costCny: 0 }, "a reserved call is counted, its tokens are not yet");
   assert.equal(summaries.has("run_never_used"), false);
   assert.equal((await ledger.summaryRuns(owner, [runId])).size, 0, "another account's runs are not read");
 });
