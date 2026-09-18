@@ -35,7 +35,10 @@ import {
   compactionConfigFromEnv,
   configSchema,
   defineTool,
+  forceCompaction,
   loadEvimedCompactionEngine,
+  nextRequestBytes,
+  onPreStep,
   openDomain,
   registerTool,
 } from '@evimed/harness-port'
@@ -58,6 +61,7 @@ export const inject = ['storageDomain']
  * @property {number} thresholdRatio
  * @property {number} retainRatio
  * @property {number} maxTokens
+ * @property {number} maxRequestBytes
  */
 
 export const Config = Schema.object({
@@ -69,6 +73,8 @@ export const Config = Schema.object({
     .description('Fraction of the window kept verbatim after the summary node.'),
   maxTokens: Schema.number().default(8192)
     .description('Ceiling for the summary itself.'),
+  maxRequestBytes: Schema.number().default(0)
+    .description('Estimated request size, in bytes, at which one compaction is forced before the model gateway would refuse the request. 0 turns the guard off.'),
 })
 
 /**
@@ -82,7 +88,11 @@ export async function apply(ctx, config) {
     EVIMED_COMPACTION_THRESHOLD_RATIO: String(config.thresholdRatio),
     EVIMED_COMPACTION_RETAIN_RATIO: String(config.retainRatio),
     EVIMED_COMPACTION_MAX_TOKENS: String(config.maxTokens),
+    EVIMED_COMPACTION_MAX_REQUEST_BYTES: String(config.maxRequestBytes ?? 0),
   })
+  // On every policy, because the wall it guards is the gateway's and the
+  // kernel's own engine does not know it is there.
+  if (derived.maxRequestBytes > 0) ctx.effect(() => guardRequestBytes(ctx, derived.maxRequestBytes))
   if (!COMPACTION_POLICIES.includes(derived.policy) || derived.policy === 'basic') {
     // `basic` is not a degraded mode, it is the kernel's own engine mounted by
     // the row this one replaces. Registering nothing leaves the service exactly
@@ -157,6 +167,47 @@ export async function apply(ctx, config) {
     },
   })
   ctx.effect(() => registerTool(ctx, compactTool))
+}
+
+/**
+ * Force one compaction when the next request would pass the byte limit.
+ *
+ * Pressure compaction counts tokens against the declared context window; the
+ * model gateway counts bytes against its body limit and answers a request over
+ * it with a 413 the run does not survive. Measured at the step boundary, where
+ * the kernel's own pressure check runs, so a compaction here changes the
+ * request this step sends. A history that could not be compacted is not tried
+ * again until it has grown.
+ * @param {any} ctx @param {number} limit
+ * @returns {() => void}
+ */
+export function guardRequestBytes(ctx, limit) {
+  /** @type {WeakMap<object, number>} */
+  const sizes = new WeakMap()
+  /** @type {WeakMap<object, number>} the size at the last attempt that compacted nothing */
+  const stuckAt = new WeakMap()
+  return onPreStep(ctx, async (_step, payload) => {
+    const agent = payload?.agent
+    const signal = payload?.signal
+    if (!agent || signal?.aborted) return { allow: true }
+    const claimed = Array.isArray(payload?.messages) ? payload.messages : []
+    const bytes = nextRequestBytes(agent, claimed, sizes)
+    if (bytes < limit || bytes <= (stuckAt.get(agent) ?? 0)) return { allow: true }
+    const diagnostics = ctx.get('evimedDiagnostics')?.forSession?.(sessionKey(agent)) ?? ctx.get('evimedDiagnostics')
+    try {
+      const result = await forceCompaction(ctx, agent, signal)
+      const after = nextRequestBytes(agent, claimed, sizes)
+      if (result === null || after >= bytes) stuckAt.set(agent, after)
+      else stuckAt.delete(agent)
+      diagnostics?.degrade?.(result === null
+        ? `request size ${bytes} bytes passed the compaction byte limit ${limit} and nothing could be compacted`
+        : `request size ${bytes} bytes passed the compaction byte limit ${limit}; compacted to ${after} bytes before the model gateway could refuse it`)
+    } catch (error) {
+      stuckAt.set(agent, bytes)
+      diagnostics?.degrade?.(`request size ${bytes} bytes passed the compaction byte limit ${limit}; the forced compaction failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    return { allow: true }
+  }, () => ({ first: false, root: false }))
 }
 
 /** The session a tool call or an agent belongs to, as a marker key.

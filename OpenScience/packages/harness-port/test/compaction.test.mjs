@@ -16,12 +16,15 @@ import {
   correctionHandles,
   COMPACTION_PLUGIN,
   COMPACTION_POLICIES,
+  REQUEST_BYTES_GUARD,
   buildStateHandlePacket,
   compactionConfigFromEnv,
   compactionProviderIssues,
   compactionRuntimeEnv,
   createEvimedCompactionEngine,
+  forceCompaction,
   missingHandles,
+  nextRequestBytes,
   probeCompactionProvider,
   summaryResultText,
 } from '../src/compaction.mjs'
@@ -329,6 +332,8 @@ test('an empty env yields the upstream defaults and the basic policy', () => {
   assert.deepEqual(derived, {
     policy: 'basic',
     config: { thresholdRatio: 0.8, maxTokens: 8192, retainRatio: 0.16 },
+    // Three quarters of the model gateway's default 2 MiB body limit.
+    maxRequestBytes: 1_572_864,
     invalid: [],
   })
   assert.deepEqual(derived.config.thresholdRatio, COMPACTION_DEFAULTS.thresholdRatio)
@@ -347,6 +352,7 @@ test('the in-container names win over the control-plane names for the same setti
   assert.deepEqual(derived, {
     policy: 'structured',
     config: { thresholdRatio: 0.5, maxTokens: 4096, retainRatio: 0.3 },
+    maxRequestBytes: 1_572_864,
     invalid: [],
   })
   assert.ok(COMPACTION_POLICIES.includes(derived.policy))
@@ -382,6 +388,7 @@ test('an absolute retain budget replaces the ratio, because upstream refuses to 
     EVIMED_COMPACTION_POLICY: 'basic',
     EVIMED_COMPACTION_THRESHOLD_RATIO: '0.8',
     EVIMED_COMPACTION_MAX_TOKENS: '8192',
+    EVIMED_COMPACTION_MAX_REQUEST_BYTES: '1572864',
     EVIMED_COMPACTION_RETAIN_TOKENS: '20000',
   })
 })
@@ -393,6 +400,7 @@ test('every knob the derivation reads is forwarded into the container under one 
     EVIMED_COMPACTION_POLICY: 'structured',
     EVIMED_COMPACTION_THRESHOLD_RATIO: '0.8',
     EVIMED_COMPACTION_MAX_TOKENS: '8192',
+    EVIMED_COMPACTION_MAX_REQUEST_BYTES: '1572864',
     EVIMED_COMPACTION_RETAIN_RATIO: '0.16',
   })
   // A knob the container reads that the control plane never forwards does
@@ -615,3 +623,44 @@ test("a correction reaches the summary packet ahead of the sources it constrains
   assert.match(packet, /randomised trials only/, "a run with no other handles still carries its corrections");
   assert.match(packet, /correction/);
 });
+
+test('the request-size guard is a share of the gateway limit, can be set outright, and 0 turns it off', () => {
+  assert.equal(compactionConfigFromEnv({ OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: '4194304' }).maxRequestBytes, 3_145_728)
+  assert.equal(compactionConfigFromEnv({ OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_REQUEST_BYTES: '1000000' }).maxRequestBytes, 1_000_000)
+  assert.equal(compactionConfigFromEnv({ EVIMED_COMPACTION_MAX_REQUEST_BYTES: '0' }).maxRequestBytes, 0)
+  const malformed = compactionConfigFromEnv({ EVIMED_COMPACTION_MAX_REQUEST_BYTES: '-1', OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: 'lots' })
+  assert.equal(malformed.maxRequestBytes, 1_572_864, 'both malformed values lose to the default')
+  assert.deepEqual(malformed.invalid, [
+    'OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES=lots (must be a positive integer)',
+    'EVIMED_COMPACTION_MAX_REQUEST_BYTES=-1 (must be a non-negative integer)',
+  ])
+  assert.equal(REQUEST_BYTES_GUARD.ratio, 0.75)
+})
+
+test('the next request is measured from the kernel\'s own history, each message once', () => {
+  const first = Object.freeze({ role: 'user', content: [{ type: 'text', text: '题面' }] })
+  const second = Object.freeze({ role: 'assistant', content: [{ type: 'text', text: 'ok' }] })
+  /** @type {any[]} */
+  let history = [first]
+  const tools = [{ name: 'read', description: 'Read a file.', parameters: {} }]
+  const agent = { session: { deriveMessages: () => [...history], requestHeader: () => ({ tools }) } }
+  const bytes = (/** @type {unknown} */ value) => new TextEncoder().encode(JSON.stringify(value)).byteLength
+  const sizes = new WeakMap()
+  assert.equal(nextRequestBytes(agent, [], sizes), bytes(first) + bytes(tools))
+  assert.equal(sizes.get(first), bytes(first), 'a UTF-8 count: the brief is two CJK characters, six bytes')
+  history = [first, second]
+  const claimed = [{ role: 'user', content: [{ type: 'text', text: 'steer' }] }]
+  assert.equal(nextRequestBytes(agent, claimed, sizes), bytes(first) + bytes(second) + bytes(claimed[0]) + bytes(tools))
+  assert.equal(nextRequestBytes({}, []), 0, 'no session, nothing to measure')
+})
+
+test('a forced compaction goes through the backend\'s context-overflow path, and is null without a backend', async () => {
+  /** @type {any[]} */
+  const calls = []
+  const compaction = { compactIfNeeded: async (/** @type {any[]} */ ...args) => { calls.push(args); return { shadowedTokenCount: 10 } } }
+  const agent = { id: 'a' }
+  const signal = AbortSignal.timeout(1000)
+  assert.deepEqual(await forceCompaction({ get: (/** @type {string} */ key) => (key === 'compaction' ? compaction : undefined) }, agent, signal), { shadowedTokenCount: 10 })
+  assert.deepEqual(calls, [[agent, 'context-overflow', signal]])
+  assert.equal(await forceCompaction({ get: () => undefined }, agent, signal), null)
+})

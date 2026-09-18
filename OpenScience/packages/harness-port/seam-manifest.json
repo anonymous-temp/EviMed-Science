@@ -114,6 +114,10 @@
         "compactRegion",
         "compactNow"
       ],
+      "triggers": [
+        "pressure",
+        "context-overflow"
+      ],
       "statics": [
         "inject",
         "Config"

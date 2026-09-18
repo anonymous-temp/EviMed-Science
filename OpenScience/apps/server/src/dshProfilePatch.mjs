@@ -540,7 +540,7 @@ export function runtimeEnvironment(input) {
     EVIMED_MAX_TOKENS: String(integer(input.limits.maxTokens, 400_000)),
     EVIMED_EVIDENCE_STALE_MINUTES: String(integer(input.limits.evidenceStaleMinutes, 10)),
     EVIMED_SCREENING_BATCH_SIZE: String(integer(input.limits.screeningBatchSize, 50)),
-    // The compaction rows read these four with `!!js`, so all four are always
+    // The compaction rows read these five with `!!js`, so all five are always
     // sent. Written out rather than spread from the caller for the reason this
     // whole function exists: the preset and this map are one contract in two
     // files, and a name that appears only when a caller happens to pass it is a
@@ -551,6 +551,10 @@ export function runtimeEnvironment(input) {
     EVIMED_COMPACTION_THRESHOLD_RATIO: String(input.compaction?.EVIMED_COMPACTION_THRESHOLD_RATIO ?? 0.8),
     EVIMED_COMPACTION_RETAIN_RATIO: String(input.compaction?.EVIMED_COMPACTION_RETAIN_RATIO ?? 0.16),
     EVIMED_COMPACTION_MAX_TOKENS: String(integer(Number(input.compaction?.EVIMED_COMPACTION_MAX_TOKENS), 8192)),
+    // The request size at which the run forces a compaction before the model
+    // gateway would refuse the body. 0 is off; the launch plan derives it from
+    // the gateway's own limit (`compactionConfigFromEnv`).
+    EVIMED_COMPACTION_MAX_REQUEST_BYTES: String(integer(Number(input.compaction?.EVIMED_COMPACTION_MAX_REQUEST_BYTES), 0)),
   };
 }
 

@@ -207,6 +207,11 @@
         thresholdRatio: !!js Number(process.env.EVIMED_COMPACTION_THRESHOLD_RATIO ?? 0.8)
         retainRatio: !!js Number(process.env.EVIMED_COMPACTION_RETAIN_RATIO ?? 0.16)
         maxTokens: !!js Number(process.env.EVIMED_COMPACTION_MAX_TOKENS ?? 8192)
+        # The request size at which one compaction is forced on either policy,
+        # before the control plane's model gateway would refuse the body (a 413
+        # the run does not survive). The control plane sends three quarters of
+        # the gateway's limit; unset, as on a laptop with no gateway, it is off.
+        maxRequestBytes: !!js Number(process.env.EVIMED_COMPACTION_MAX_REQUEST_BYTES ?? 0)
     - id: tool-result-pruner
       name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
       # These three are mirrored in `@evimed/domain`'s TOOL_RESULT_PRUNER, which
