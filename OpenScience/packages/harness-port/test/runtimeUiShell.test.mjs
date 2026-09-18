@@ -25,13 +25,16 @@ test('the shell requires only the slot registry', () => {
   assert.deepEqual(inject, ['slots']);
 });
 
-test('the left column, the three brand slots and the hero workspace picker are occupied below the kernel, nothing else', () => {
+test('the left column, the three brand slots, the hero workspace picker and the attachment strip are occupied below the kernel, nothing else', () => {
   const f = fixture();
   apply(f.ctx, {}, f.target, undefined, f.kit);
   const occupants = f.occupants();
   assert.deepEqual(Object.keys(occupants).sort(), [
-    'conversation.hero.brand.mark', 'conversation.hero.workspace', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name',
+    'conversation.hero.brand.mark', 'conversation.hero.workspace', 'conversation.input.attachments', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name',
   ]);
+  // Uploads are refused on this surface; the strip of chips that would be
+  // refused at send renders nothing.
+  assert.equal(renderStatic(occupants['conversation.input.attachments'].component), '');
   for (const entry of Object.values(occupants)) assert.ok(entry.options.priority < 0, `${entry.name} sits at or above the kernel's own occupant`);
   // The mark honours the size its host asks for and names the product.
   const mark = renderStatic(occupants['sidebar.brand.mark'].component, { size: 34, className: 'fish' });
@@ -68,6 +71,7 @@ test('the stylesheet removes the left column, keeps the right panel resizable, a
   assert.ok(css.includes('[class$="_scroll"]:has(> [data-chat-flow]){overflow-x:clip'));
   // Hidden controls are named by their accessible names in both shipped languages.
   assert.match(css, /aria-label="Add workspace"/);
+  assert.ok(css.includes('button[aria-label="添加附件"],button[aria-label="Add attachment"]{display:none'), 'the paperclip leads only to a refusal here');
   assert.match(css, /aria-label="添加工作区"/);
   assert.match(css, /_previewBadge"\]:empty/);
   // The hero's workspace chip is hidden as a button — not the whole row, whose
@@ -87,7 +91,7 @@ test('a slot the kernel refuses costs that slot, never the rest of the body', ()
     return register(options, component);
   };
   assert.doesNotThrow(() => apply(f.ctx, {}, f.target, undefined, f.kit));
-  assert.deepEqual(Object.keys(f.occupants()).sort(), ['conversation.hero.brand.mark', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name']);
+  assert.deepEqual(Object.keys(f.occupants()).sort(), ['conversation.hero.brand.mark', 'conversation.input.attachments', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name']);
 });
 
 test('without React the brand is left to the kernel fallback and the stylesheet still applies', () => {

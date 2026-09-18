@@ -23,7 +23,7 @@
  *    second (the latest one always arrives), and the evidence — a matrix of up
  *    to hundreds of claims — only when the report it comes from changed.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { listWebAgentRuns, type WebAgentRun } from "./apiClient";
 import { readArtifact, readClaimVerification } from "./artifactFile";
 import { claimMatrixPathFor, parseClaimMatrix, type ClaimVerification } from "./claimCitations";
@@ -389,5 +389,62 @@ export async function searchKnowledgeSources(projectId: string, query: string): 
 /** Forget cached source lists (tests; a project switch refetches anyway). */
 export function forgetKnowledgeSources(): void {
   knowledgeCache.clear();
+}
+
+/** One conversation the kernel's full-text index found (`search-result` items). */
+export interface FrameSessionSearchItem {
+  sessionId: string;
+  title: string;
+  snippet: string;
+}
+
+/** What a search over the project's conversations came back with. */
+export interface FrameSessionSearchResult {
+  ok: boolean;
+  items: FrameSessionSearchItem[];
+  hasMore: boolean;
+  /** A short code when `ok` is false: `search_unavailable`, `search_failed`, `search_timeout`, `aborted`. */
+  error?: string;
+}
+
+/** A search over the conversations of the project on screen. */
+export type FrameSessionSearch = (query: string, signal?: AbortSignal) => Promise<FrameSessionSearchResult>;
+
+let sessionSearch: FrameSessionSearch | null = null;
+const sessionSearchListeners = new Set<() => void>();
+const announceSessionSearch = () => { for (const listener of [...sessionSearchListeners]) listener(); };
+
+/**
+ * Offers the kernel's full-text session search to the rest of the shell. The
+ * frame route calls it once its bridge is ready and releases it when the frame
+ * goes; only the frame can ask the kernel, because only the frame holds the
+ * connection. Returns the release.
+ */
+export function provideFrameSessionSearch(search: FrameSessionSearch): () => void {
+  sessionSearch = search;
+  announceSessionSearch();
+  return () => {
+    if (sessionSearch !== search) return;
+    sessionSearch = null;
+    announceSessionSearch();
+  };
+}
+
+const unavailableSearch: FrameSessionSearch = () => Promise.resolve({ ok: false, items: [], hasMore: false, error: "search_unavailable" });
+
+/**
+ * The shell's handle on the kernel's conversation search (for the task list's
+ * search box): `available` while a research frame is open and ready, and
+ * `search(query, signal)` resolving — never rejecting — with the matches, or
+ * `ok: false` and a code when the frame is gone, the kernel refused, or eight
+ * seconds passed.
+ */
+export function useRuntimeSessionSearch(): { available: boolean; search: FrameSessionSearch } {
+  const current = useSyncExternalStore(
+    (listener) => { sessionSearchListeners.add(listener); return () => { sessionSearchListeners.delete(listener); }; },
+    () => sessionSearch,
+    () => null,
+  );
+  return { available: current !== null, search: current ?? unavailableSearch };
 }
 

@@ -26,7 +26,8 @@
     "./runtime-ui-toolviews": "./src/runtimeUiToolviews.mjs",
     "./runtime-ui-transcript": "./src/runtimeUiTranscript.mjs",
     "./runtime-ui-panels": "./src/runtimeUiPanels.mjs",
-    "./runtime-ui-styles": "./src/runtimeUiStyles.mjs"
+    "./runtime-ui-styles": "./src/runtimeUiStyles.mjs",
+    "./runtime-ui-controls": "./src/runtimeUiControls.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",

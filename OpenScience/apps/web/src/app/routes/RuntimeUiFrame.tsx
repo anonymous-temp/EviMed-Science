@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router";
 import { errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
 import { createWebRuntimeUiFrame, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, getWebProjectId, webErrorMessage, WebApiError, webRuntimeProfile, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
-import { searchKnowledgeSources, useFrameRunBinding } from "@/lib/runtimeUiBridge";
+import { provideFrameSessionSearch, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
 import { Button } from "@/components/ui/Button";
 import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
 import { useUiStore } from "@/lib/store";
@@ -125,6 +125,8 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   const [attempt, setAttempt] = useState(0);
   const incoming = useRef(0);
   const outgoing = useRef(0);
+  // Conversation searches waiting for the frame's answer, by request id.
+  const searches = useRef(new Map<string, (result: FrameSessionSearchResult) => void>());
   const currentRequest = useRef<RuntimeUiIntent | null>(null);
   const lastSent = useRef("");
   const releaseBinding = useRef<(() => void) | null>(null);
@@ -337,6 +339,19 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         incoming.current = message.seq;
         const anchor = typeof message.anchor === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(message.anchor) ? `#${message.anchor}` : "";
         navigate(`/app/runs/${encodeURIComponent(runId)}/files/${path.split("/").map(encodeURIComponent).join("/")}${anchor}`);
+      } else if (message.type === "evimed.runtime-ui.search-result" && typeof message.requestId === "string" && searches.current.has(message.requestId)) {
+        incoming.current = message.seq;
+        const settle = searches.current.get(message.requestId)!;
+        searches.current.delete(message.requestId);
+        const raw: unknown[] = Array.isArray(message.items) ? message.items : [];
+        const items = raw
+          .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+          .filter((item) => typeof item.sessionId === "string" && SESSION_ID.test(item.sessionId))
+          .slice(0, 20)
+          .map((item) => ({ sessionId: String(item.sessionId), title: String(item.title ?? "").slice(0, 200), snippet: String(item.snippet ?? "").slice(0, 240) }));
+        settle(message.ok === true
+          ? { ok: true, items, hasMore: message.hasMore === true }
+          : { ok: false, items: [], hasMore: false, error: typeof message.error === "string" ? message.error.slice(0, 80) : "search_failed" });
       } else if (message.type === "evimed.runtime-ui.kb-query"
         && typeof message.requestId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(message.requestId)) {
         // The frame's `@` menu asking for the project's parsed sources. The
@@ -386,7 +401,12 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         // deliberate new task, and says so, so the route does not go looking
         // for a recent task to resume instead.
         if (message.sessionId === null) navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } });
-        else navigate(`/app/chat/${encodeURIComponent(message.sessionId)}`, { state: null });
+        // A branch of a finished turn (`session/fork`) is a task of its own —
+        // the control plane takes it into the ledger — and says where it came
+        // from, for whatever renders the task.
+        else navigate(`/app/chat/${encodeURIComponent(message.sessionId)}`, {
+          state: typeof message.forkedFrom === "string" && SESSION_ID.test(message.forkedFrom) ? { forkedFrom: message.forkedFrom } : null,
+        });
       }
     };
     window.addEventListener("message", onMessage);
@@ -425,6 +445,29 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
     media.addEventListener("change", post);
     return () => media.removeEventListener("change", post);
   }, [booted, error, frameId, theme, postToFrame]);
+
+  // The kernel's full-text conversation search, offered to the shell's task
+  // list while the frame is ready: only the frame holds the connection that
+  // can ask. Each question is answered by request id or given up after 8 s.
+  useEffect(() => {
+    if (!ready || error || !frameId) return undefined;
+    const pending = searches.current;
+    const release = provideFrameSessionSearch((query, signal) => new Promise<FrameSessionSearchResult>((resolve) => {
+      const trimmed = query.trim().slice(0, 200);
+      if (!trimmed) { resolve({ ok: true, items: [], hasMore: false }); return; }
+      const requestId = `s${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
+      const finish = (result: FrameSessionSearchResult) => { clearTimeout(timer); pending.delete(requestId); resolve(result); };
+      const timer = setTimeout(() => finish({ ok: false, items: [], hasMore: false, error: "search_timeout" }), 8000);
+      pending.set(requestId, finish);
+      signal?.addEventListener("abort", () => finish({ ok: false, items: [], hasMore: false, error: "aborted" }), { once: true });
+      postToFrame("search", { requestId, query: trimmed });
+    }));
+    return () => {
+      release();
+      for (const settle of [...pending.values()]) settle({ ok: false, items: [], hasMore: false, error: "search_unavailable" });
+      pending.clear();
+    };
+  }, [ready, error, frameId, postToFrame]);
 
   // The run bound to the task on screen, for the frame's cards and panels
   // (C9 `run-state`, plus the claims and sources of its report). Only once the
