@@ -26,6 +26,7 @@ const inputPaths = [
   "pnpm-workspace.yaml",
   "apps/web/package.json",
   "apps/web/index.html",
+  "apps/web/public",
   "apps/web/postcss.config.js",
   "apps/web/tailwind.config.js",
   "apps/web/tsconfig.json",

@@ -89,6 +89,9 @@
 
 :root,
 [data-theme="light"] {
+  /* Native controls — scrollbars, a select's list, date pickers — draw in
+     the same scheme as the tokens around them. */
+  color-scheme: light;
   /* Direction A 「循证青」 (the owner's decision, 2026-09-18). The shell was
      warm paper and terracotta — #f7f5ef / #b24f2a / #2a2723 — which is the
      same palette, hue for hue, as Claude's own DESIGN.md, and its five text
@@ -169,6 +172,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   /* The same names pointed at the dark steps — never the light set inverted.
      Each layer one step lighter than the one under it; the accent moves to
      the 400 step, lighter and less saturated, as a dark surface needs.
