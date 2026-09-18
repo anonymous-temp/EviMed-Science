@@ -16,7 +16,7 @@
 
 import { errorMessage } from '../src/runPolicy.mjs'
 import { validateCapabilityManifest } from '@evimed/domain'
-import { configSchema, listDirAt, readFileAt, registerSection } from '@evimed/harness-port'
+import { configSchema, listDirAt, readFileAt, registerSection, withdrawPromptSection } from '@evimed/harness-port'
 import { GUIDANCE_SECTION_NAME, GUIDANCE_SECTION_ORDER, buildGuidanceText } from '../src/guidanceText.mjs'
 
 const Schema = await configSchema()
@@ -86,6 +86,13 @@ export async function apply(ctx, config) {
   })
   ctx.provide('evimedCapabilities', capabilities, true)
   ctx.effect(() => registerSection(ctx, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text }))
+  // The kernel's produced-files row asks every request to cite changed files
+  // as inline code so it can link them. It never renders here: its fold reads
+  // `write`/`edit` while our runs write through `bash`, `present` is not
+  // mounted, and the click target is a disabled preview pane (review appendix
+  // A, 2026-09-18). The paragraph goes; the row stays, so the recorded host
+  // composition does not move.
+  ctx.effect(() => withdrawPromptSection(ctx, 'deliverableFileReferences'))
 
   const persona = await loadAnswerPersona(ctx, config.answerPersonaDir)
   if (persona) {
