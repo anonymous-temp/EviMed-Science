@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
-import { runMetaLine, runState, runTitle } from "@/lib/runPresentation";
+import { RUNS_CHANGED_EVENT, runMetaLine, runState, runTitle } from "@/lib/runPresentation";
 import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { ProjectSwitcher } from "@/components/sidebar/ProjectSwitcher";
 import { InboxBell } from "@/components/sidebar/InboxBell";
@@ -93,10 +93,15 @@ export function Sidebar() {
     // a list frozen at whatever it said when the reader left.
     const onVisible = () => { if (document.visibilityState === "visible") void load(); };
     document.addEventListener("visibilitychange", onVisible);
+    // A rename or a cancel on the runs page shows here at once, not on the
+    // next tick of this list's own timer.
+    const onChanged = () => { void load(); };
+    window.addEventListener(RUNS_CHANGED_EVENT, onChanged);
     return () => {
       active = false;
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener(RUNS_CHANGED_EVENT, onChanged);
     };
   }, []);
 

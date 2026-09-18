@@ -19,6 +19,8 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
   reportWebDeliverableFeedback: (input: unknown) => reportWebDeliverableFeedback(input),
   fetchWebMe: () => fetchWebMe(),
   fetchWebConnectors: () => fetchWebConnectors(),
+  // Read back per deliverable; nothing reported yet in these tests.
+  listWebDeliverableFeedback: async () => [],
 }));
 
 const downloadArtifact = vi.fn();
@@ -141,10 +143,11 @@ describe("RunsPage (hosted web)", () => {
     // Chinese connective (2026-09-15 walk, D1/D2).
     expect(await screen.findByText("临床证据深度分析")).toBeInTheDocument();
     expect(screen.getByText("今天")).toBeInTheDocument();
-    expect(screen.getByText("开放域 · 临床证据深度分析")).toBeInTheDocument();
+    expect(screen.getByText(/开放域 · 临床证据深度分析/)).toBeInTheDocument();
     expect(screen.queryByText(/clinical-evidence-synthesis/i)).not.toBeInTheDocument();
-    // The newest row is expanded: its title, its tag and its capability chip.
-    expect(screen.getAllByText("自动化 Meta 分析").length).toBeGreaterThanOrEqual(2);
+    // A row whose title already is the capability's name does not say it a
+    // second time in its tag (review B §3c, item 4).
+    expect(screen.getAllByText("自动化 Meta 分析")).toHaveLength(1);
     // The file reads by its name; the folder stays beside it (U13).
     expect(screen.getByText("report.docx")).toBeInTheDocument();
     expect(screen.getByText("output")).toBeInTheDocument();
@@ -179,10 +182,10 @@ describe("RunsPage (hosted web)", () => {
   it("filters by status via a facet chip", async () => {
     renderPage();
     await screen.findByText("run-1");
-    await userEvent.click(screen.getByRole("button", { name: /失败/ }));
+    await userEvent.click(screen.getByRole("button", { name: /未完成/, pressed: false }));
     await waitFor(() => expect(screen.queryByText("run-1")).not.toBeInTheDocument());
-    // The one surviving row, now expanded: its tag and its capability chip.
-    expect(screen.getAllByText("开放域 · 临床证据深度分析").length).toBe(2);
+    // The one surviving row, now expanded.
+    expect(screen.getByText(/开放域 · 临床证据深度分析/)).toBeInTheDocument();
     // The failed row explains itself in its expanded detail. It used to print
     // the raw code, which is a server term in the wrong language for a reader.
     expect(screen.getByTitle(`错误码：${TIMED_OUT}`)).toBeInTheDocument();
@@ -212,7 +215,8 @@ describe("RunsPage (hosted web)", () => {
     listWebAgentRuns.mockResolvedValue([webRun({ id: "run-repairing", status: "running", phase: "repairing" })]);
     renderPage();
     await screen.findByText("run-repairing");
-    expect(screen.getByText("按门禁意见修复中")).toBeInTheDocument();
+    // Said in the run's live status line, not only in its identifiers.
+    expect(screen.getByRole("status")).toHaveTextContent("按核验意见修复中");
   });
 
   it("does not show the 待人工复核 chip when nothing needs it", async () => {
@@ -225,7 +229,7 @@ describe("RunsPage (hosted web)", () => {
   it("filters by debounced search over id, agent, model and artifacts", async () => {
     renderPage();
     await screen.findByText("run-1");
-    await userEvent.type(screen.getByPlaceholderText(/搜索专项、模型、会话或产物文件/), "zzz-no-match");
+    await userEvent.type(screen.getByPlaceholderText(/搜索题目、能力或产物文件/), "zzz-no-match");
     expect(await screen.findByText(/没有符合筛选条件的运行记录/)).toBeInTheDocument();
   });
 
