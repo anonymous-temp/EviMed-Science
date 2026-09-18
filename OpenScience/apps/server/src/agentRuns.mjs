@@ -43,6 +43,10 @@ import {
 // 2026-09-18). Imported on a line of its own so the ledger's own import list
 // stays as it is.
 import { clinicalSafetyCautionHits } from "@evimed/domain";
+// The evidence type stamped beside each preserved capture (C8), which a
+// claim's structured GRADE certainty is read against (S6, 2026-09-18). A line
+// of its own for the same reason as the one above.
+import { sourceTypeOfSidecar, sourceTypeSidecarPath } from "@evimed/domain";
 
 export { repairableEvidencePackageErrorCodes, recoverableEvidenceSourceErrorCodes, terminalEvidenceSourceErrorCodes };
 
@@ -2119,6 +2123,7 @@ async function specialistCompletionOutcome(
       };
     }
     const sourceArtifacts = new Map();
+    const sourceTypes = new Map();
     // Which preserved sources to read: the ones the claims name, and nothing
     // else. It used to be a list in the run's own receipt, which failed a run
     // whole over one omitted field and let a path no claim cited decide the
@@ -2182,11 +2187,17 @@ async function specialistCompletionOutcome(
         };
       }
       sourceArtifacts.set(relative, sourceFile.text);
+      // The design a GRADE upgrade depends on: the same `source.json` the run
+      // side and the reader's claim_verification read, so all three agree.
+      const sidecar = sourceTypeSidecarPath(relative);
+      const stamped = sidecar ? sourceTypeOfSidecar((await openWorkspaceText(project, sidecar))?.text) : null;
+      if (stamped) sourceTypes.set(relative, stamped);
     }
     const validation = validateClinicalEvidencePackage({
       reportText: files.get("clinical-evidence-report.md") ?? "",
       matrix,
       sourceArtifacts,
+      sourceTypes,
       briefText,
     });
     // A well-established risk of the scene the report discusses that it never
