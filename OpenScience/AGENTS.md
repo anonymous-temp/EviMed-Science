@@ -113,14 +113,18 @@ per-project workspace + JSONL provenance.
 
 - UI baseline language is **Simplified Chinese** (code/comments stay English);
   technical identifiers (URLs, enum values, model/provider ids) stay as-is.
-- Design tokens are the single source of truth: colors via CSS variables in
-  `src/index.css` + `tailwind.config.js` semantic mapping (light/dark via
-  `[data-theme]`); type scale `text-caption/ui-sm/ui/body/title/display`;
-  containers `max-w-content-narrow/content/content-wide/content-full`;
-  radii `rounded-input/rounded-card`; shadows `shadow-card` (static) / `shadow-pop` (overlays).
+- Design tokens are the single source of truth, written down in `DESIGN.md`
+  (direction A 「循证青」): colors via CSS variables in `src/index.css` +
+  `tailwind.config.js` semantic mapping (light/dark via `[data-theme]`); type
+  scale `text-caption/ui/body/title/display` (+ `badge`, `wordmark`);
+  containers `max-w-content-narrow/content/content-wide/content-full`; radii
+  `rounded/rounded-input/rounded-card/rounded-panel`; static cards have no
+  shadow — `shadow-pop` (menus, popovers) / `shadow-modal` (dialogs, drawers).
 - ESLint bans new arbitrary values (`text-[Npx]`, `rounded-[Npx]`, bare
-  `shadow-sm/md/lg`) across `src/**` — use the semantic scales; rare exceptions
-  need an inline `eslint-disable` with a reason. `eslint-plugin-jsx-a11y` is enforced.
+  `shadow-sm/md/lg`, `shadow-card`, opacity modifiers on token colours) across
+  `src/**` — use the semantic scales; rare exceptions need an inline
+  `eslint-disable` with a reason. A test fails on hex literals outside the
+  token file. `eslint-plugin-jsx-a11y` is enforced.
 - New UI must use the `components/ui/` primitives instead of hand-rolled
   buttons/inputs/empty states; keep the four-state discipline (loading skeleton /
   empty / error-with-retry / success) on every list page.
