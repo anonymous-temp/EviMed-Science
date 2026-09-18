@@ -140,9 +140,13 @@ describe("ProjectSwitcher", () => {
     await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
     await userEvent.type(screen.getByRole("textbox", { name: "新项目名" }), "第三个{Enter}");
 
+    // The sentence is the error-code registry's (one place for every code's
+    // Chinese), not a second copy kept here: the limit, why it exists, and what
+    // to do about it.
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("这个账号已有 2 个项目，达到上限");
-    expect(alert).toHaveTextContent("每个项目都有自己的研究运行时和工作区");
+    expect(alert).toHaveTextContent("项目数已达上限");
+    expect(alert).toHaveTextContent("每个项目都有独立的存储空间和研究运行时");
+    expect(alert).toHaveTextContent("再新建");
     expect(alert.textContent).not.toMatch(/[A-Za-z]{4,}/);
   });
 
