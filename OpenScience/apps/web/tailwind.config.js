@@ -101,6 +101,8 @@ export default {
       boxShadow: {
         card: "0 1px 2px rgba(40, 39, 35, 0.04), 0 4px 16px rgba(40, 39, 35, 0.05)",
         pop: "0 8px 30px rgba(40, 39, 35, 0.14)",
+        // Dialogs and drawers: the one tier above a popover.
+        modal: "0 16px 48px rgba(20, 24, 26, 0.18), 0 2px 8px rgba(20, 24, 26, 0.08)",
       },
     },
   },

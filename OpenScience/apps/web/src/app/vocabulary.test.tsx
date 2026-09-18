@@ -68,7 +68,9 @@ describe("runtime vocabulary never leads a surface", () => {
 
     // Prove the walk happened before asserting what it did not see: an
     // assertion over an empty page passes forever.
-    const row = await screen.findByRole("button", { name: /临床证据深度分析/ });
+    // The row's own toggle (it carries `aria-expanded`); the rename control
+    // beside it names the run too, which is what a screen reader needs.
+    const row = await screen.findByRole("button", { name: /临床证据深度分析/, expanded: true });
     const visible = row.textContent ?? "";
     expect(visible.length).toBeGreaterThan(0);
 
@@ -86,7 +88,7 @@ describe("runtime vocabulary never leads a surface", () => {
     // Seen at 390 px in the 2026-09-16 scripted walk: 「开放域 · open-domain-answer」.
     listWebAgentRuns.mockResolvedValue([{ ...leakyRun(), effectiveAgentId: "open-domain-answer", effectiveRuntimeAgent: null }]);
     render(<MemoryRouter initialEntries={["/app/runs"]}><RunsPage /></MemoryRouter>);
-    const row = await screen.findByRole("button", { name: /开放域问答/ });
+    const row = await screen.findByRole("button", { name: /开放域问答/, expanded: true });
     expect(row.textContent).not.toMatch(/open-domain-answer/);
   });
 
@@ -94,7 +96,7 @@ describe("runtime vocabulary never leads a surface", () => {
     listWebAgentRuns.mockResolvedValue([leakyRun()]);
     render(<MemoryRouter initialEntries={["/app/runs"]}><RunsPage /></MemoryRouter>);
 
-    await screen.findByRole("button", { name: /临床证据深度分析/ });
+    await screen.findByRole("button", { name: /临床证据深度分析/, expanded: true });
     const details = screen.getByText("技术标识（供排查使用）").closest("details");
     expect(details).not.toBeNull();
     // Closed by default: support can open it, a reader never meets it.

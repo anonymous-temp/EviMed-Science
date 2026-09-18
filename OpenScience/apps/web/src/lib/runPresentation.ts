@@ -133,6 +133,16 @@ export function runMetaLine(run: WebAgentRun, now = Date.now()): string {
   return when ? `${when} · ${label}` : label;
 }
 
+/**
+ * A run's record changed on this page (renamed, cancelled). The sidebar's
+ * recent list reads the same ledger on its own timer; this tells it now.
+ */
+export const RUNS_CHANGED_EVENT = "evimed:runs-changed";
+
+export function announceRunsChanged(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(RUNS_CHANGED_EVENT));
+}
+
 /** The answer line every unrouted open-domain question runs on (server:
  *  `OPEN_DOMAIN_ANSWER_AGENT_ID`). It is not a catalog capability, so the
  *  catalog has no title for it and the ledger printed its id (seen in the

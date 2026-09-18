@@ -1507,6 +1507,64 @@ export async function listWebAgentRuns(): Promise<WebAgentRun[]> {
   return parseApiResponse<WebAgentRun[]>(res);
 }
 
+/**
+ * Stops a run: the root session and every child session the ledger knows
+ * about (contract C3). The researcher's own ■ in the conversation already
+ * reached the kernel; the runs page had no way to stop a run at all.
+ */
+export async function cancelWebAgentRun(runId: string): Promise<WebAgentRun> {
+  if (!hasWebApi) throw new BackendUnavailableError("agentRuns.cancel");
+  const res = await fetchWithWebAuth(apiUrl(`/agent-runs/${encodeURIComponent(runId)}/cancel`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  return (await parseApiResponse<{ run: WebAgentRun }>(res)).run;
+}
+
+/**
+ * Names a run by hand. The server records it as `titleSource: "user"`, and no
+ * automatic title may overwrite it afterwards — the lesson of every product
+ * whose auto-rename kept undoing its users (appendix C, A3).
+ */
+export async function renameWebAgentRun(runId: string, title: string): Promise<WebAgentRun> {
+  if (!hasWebApi) throw new BackendUnavailableError("agentRuns.rename");
+  const res = await fetchWithWebAuth(apiUrl(`/agent-runs/${encodeURIComponent(runId)}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  return parseApiResponse<WebAgentRun>(res);
+}
+
+/**
+ * A correction to a run that is still going: same run, same contract, same
+ * gate, one more input (`POST /api/agent-runs/:id/steer`, `{ text }` of at most
+ * 4 000 characters, answered 202 with the run's correction count). The route
+ * existed with no way to reach it from the page.
+ */
+export async function steerWebAgentRun(runId: string, text: string): Promise<{ id: string; corrections: number }> {
+  if (!hasWebApi) throw new BackendUnavailableError("agentRuns.steer");
+  const res = await fetchWithWebAuth(apiUrl(`/agent-runs/${encodeURIComponent(runId)}/steer`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  return parseApiResponse<{ id: string; corrections: number }>(res);
+}
+
+/**
+ * What the researcher already reported about one deliverable — the newest
+ * adoption and the newest edit, if any. The subject id is the server's own
+ * `deliverableSubjectId(runId, path)`: `<runId>:<path>`.
+ */
+export async function listWebDeliverableFeedback(runId: string, path: string): Promise<WebFeedbackEvent[]> {
+  if (!hasWebApi) throw new BackendUnavailableError("feedback.list");
+  const query = new URLSearchParams({ subjectType: "deliverable", subjectId: `${runId}:${path}`, limit: "20" });
+  const res = await fetchWithWebAuth(apiUrl(`/feedback/events?${query}`));
+  return (await parseApiResponse<{ items: WebFeedbackEvent[]; nextCursor: string | null }>(res)).items;
+}
+
 export async function dispatchWebAgentRun(
   sessionId: string,
   text: string,
