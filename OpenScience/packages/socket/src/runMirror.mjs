@@ -74,6 +74,8 @@ export const RUN_DOMAIN_SPEC = Object.freeze({
       sourceId: 'string',
       doi: 'string?',
       artifactPath: 'string?',
+      // The evidence badge (C8); an undeclared field is stripped on open().
+      sourceType: 'string?',
       digest: 'string',
       status: 'string',
       recordedAt: 'string',

@@ -14,7 +14,7 @@
  * @module @evimed/dsh-socket/src/evidenceIngest
  */
 
-import { mcpToolBaseName } from '@evimed/domain'
+import { evidenceSourceTypeOf, mcpToolBaseName } from '@evimed/domain'
 
 /** Tools whose results carry retrievable sources worth recording. */
 export const EVIDENCE_TOOL_BASE_NAMES = Object.freeze([
@@ -43,6 +43,7 @@ const PRESERVING_TOOL_BASE_NAMES = new Set(['open_access_full_text', 'official_p
  * @property {string} sourceId
  * @property {string} [doi]
  * @property {string} [artifactPath]
+ * @property {string} [sourceType]
  * @property {string} digest
  * @property {string} status
  * @property {string} recordedAt
@@ -105,6 +106,9 @@ export function evidenceFromOutcome(call, outcome, context) {
       sourceId,
       ...(source.doi ? { doi: String(source.doi) } : {}),
       ...(artifactPath ? { artifactPath } : {}),
+      // The evidence badge (C8): the research server stamps it; a record from
+      // anywhere else is typed from the same table here.
+      sourceType: evidenceSourceTypeOf({ ...source, tool: base }),
       digest: context.digest(JSON.stringify(source)),
       // A search result is a lead; only a preserved artifact is readable text.
       // Recording the difference is what lets the gate tell "cited" from "read".

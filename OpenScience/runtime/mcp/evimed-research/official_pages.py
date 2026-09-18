@@ -10,6 +10,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 import public_sources
+import source_types
 from immutable_capture import ImmutableCaptureError, managed_workspace, preserve
 
 
@@ -162,8 +163,16 @@ def fetch(arguments: dict) -> dict:
         ])
         workspace = _workspace()
         markdown_payload = markdown.encode("utf-8")
+        artifacts = {"page.md": markdown_payload}
+        # What the page is, beside it (C8): decided by the authority's host and
+        # path in the domain's table — a NICE guideline, an NMPA notice.
+        sidecar = source_types.sidecar({
+            "id": "official-page:" + digest[:16], "title": title, "url": url, "tool": "official_page_fetch",
+        })
+        if sidecar:
+            artifacts[sidecar[0]] = sidecar[1]
         try:
-            paths = preserve(workspace, Path(".evimed-sources") / "official-pages" / digest[:16], {"page.md": markdown_payload})
+            paths = preserve(workspace, Path(".evimed-sources") / "official-pages" / digest[:16], artifacts)
         except ImmutableCaptureError as error:
             raise OfficialPageError("official_page_output_invalid", str(error)) from error
         relative = paths["page.md"]
