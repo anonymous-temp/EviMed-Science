@@ -66,7 +66,9 @@ export function evimedThemeTokens() {
   const both = (light, dark = light) => ({ light, dark });
   // Direction A. Brand (OKLCH H=185), cold neutral (H=232), semantic (§7.3).
   const brand = { 50: '#f0fbf9', 100: '#e1f7f3', 200: '#c3ece6', 300: '#98dbd2', 400: '#63c5b9', 500: '#26ac9f', 600: '#008f84', 700: '#00756b', 800: '#005e56', 900: '#004841' };
-  const n = { 50: '#f8f8f9', 100: '#f0f1f2', 150: '#e9ebed', 200: '#dfe2e4', 300: '#c8cdcf', 400: '#acb2b5', 500: '#90979b', 600: '#767d81', 700: '#606669', 800: '#4c5154', 900: '#3a3e40', 950: '#242628', strong: '#8e969b' };
+  // `strong` is the control border. Appendix D's #8e969b is 2.83:1 on the
+  // page ground; #8b9195 clears 3:1 and is the value the shell ships (DESIGN.md).
+  const n = { 50: '#f8f8f9', 100: '#f0f1f2', 150: '#e9ebed', 200: '#dfe2e4', 300: '#c8cdcf', 400: '#acb2b5', 500: '#90979b', 600: '#767d81', 700: '#606669', 800: '#4c5154', 900: '#3a3e40', 950: '#242628', strong: '#8b9195' };
   const dark = { bg: '#14181a', surface: '#1d2225', surface2: '#272d30', faint: '#292f32', border: '#3a4044', strong: '#646c71' };
   const danger = { 300: '#ffb7ae', 400: '#ff8b7f', 600: '#cf463e', 700: '#af302b' };
   const warn = { 50: '#fff7ef', 300: '#efc392', 600: '#ab6c00', 700: '#8c5700' };
