@@ -1,0 +1,230 @@
+{
+  "runCount": 25,
+  "runSample": [
+    {
+      "id": "run_9924d620594011d56a6f64f865862986",
+      "status": "running",
+      "verification": null,
+      "sessionId": "73b4aa0f-643a-4109-9c9e-ae8924315cb7",
+      "startedAt": "2026-09-17T22:26:43.598Z",
+      "prompt": "70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议以及adr都有哪些，给我最详细的循证分析报告"
+    },
+    {
+      "id": "run_fe04cd4fe4e567c321c40b6cb4b2fe34",
+      "status": "succeeded",
+      "verification": "unverified",
+      "sessionId": "080eb836-9fa3-4c67-926d-3dbff9c88d1d",
+      "startedAt": "2026-09-15T06:47:23.232Z",
+      "prompt": "简单说说：70 岁以上老年人用阿司匹林做心血管一级预防，现在主要指南怎么建议？两三句话即可，并点出依据的关键研究。"
+    },
+    {
+      "id": "run_c657a9e0b079c8e9e401a19ed95f42e7",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_0722bc34fffeRehfLDGbxJn4I3",
+      "startedAt": "2026-07-23T07:15:25.326Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_a5c4b72afd4acf44fb1df107f51ccb39",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_0723aff08ffeTnqm8BSnyrqJjz",
+      "startedAt": "2026-07-23T06:58:46.783Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_0a1c9cc82927e9acfafc9af32cae0a90",
+      "status": "succeeded",
+      "verification": null,
+      "sessionId": "ses_072f48bfcffeSiNEGieoupOjxe",
+      "startedAt": "2026-07-23T03:36:06.442Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_7e9418e4268d97caf469b4786c3c46cc",
+      "status": "succeeded",
+      "verification": null,
+      "sessionId": "ses_072fab3ddffe0BEpM1wNRvEjvH",
+      "startedAt": "2026-07-23T03:29:23.119Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_6abb65fe412e8ecd52d5cfdbde66b11c",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_0730d0087ffezd5tGG0H2l64YU",
+      "startedAt": "2026-07-23T03:09:23.787Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_b8563087d9287e2a6adde174d1ecff1f",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_073310a93ffewl5D2b66GPtvis",
+      "startedAt": "2026-07-23T02:30:02.065Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_9c7dc52fc15689facf159f84bfeb648e",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_0734629ccffeXyD9kMNHaRgW4N",
+      "startedAt": "2026-07-23T02:06:57.764Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_70687203b245298f0f52cd26d2ef4f69",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_0735c1223ffeXerW0SkUmYCNYv",
+      "startedAt": "2026-07-23T01:43:01.958Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_05667881e60ae29810dfd46b9a87c4b7",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_0736c7e68ffeRFks5zCXJLfIrf",
+      "startedAt": "2026-07-23T01:25:05.773Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_19464f5f817b30f44c440a2e07e43f73",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_075aad033ffeS9PL8Ncc7QpmDT",
+      "startedAt": "2026-07-22T14:57:47.128Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_b78a2998a5bedc683df27e2da6f0348f",
+      "status": "succeeded",
+      "verification": null,
+      "sessionId": "ses_075e3938cffe1MJinUC7JuXKL0",
+      "startedAt": "2026-07-22T13:55:47.297Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_8e94a582e2eb713cdb824d1fec345471",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_075f98abdffeSVYnxlPpA0U1mT",
+      "startedAt": "2026-07-22T13:31:47.658Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_134e0582954c0d185f73534abd5cf6dd",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_07615fc78ffe9kbgxSFqPhsm1k",
+      "startedAt": "2026-07-22T13:00:43.794Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_41c226bdbc1bb8baa64bf9cf6a632409",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_0769e0b9affeXxj7TvZoUbalXo",
+      "startedAt": "2026-07-22T10:32:06.663Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_b7218f23f2becee9376536248ea59390",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_076c2ef4effey5XQHk8bupe9Xa",
+      "startedAt": "2026-07-22T09:51:49.091Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_6619ce8159a30d47c2efd5028ae5a2ff",
+      "status": "succeeded",
+      "verification": null,
+      "sessionId": "ses_0772194dfffe4PuVxGAOhWqv1k",
+      "startedAt": "2026-07-22T08:08:26.182Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_2e71016704bec9fc1d7c53aa48fe5275",
+      "status": "succeeded",
+      "verification": null,
+      "sessionId": "ses_07725e190ffev09EdBCibn7mNu",
+      "startedAt": "2026-07-22T08:03:44.356Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_7bf810816ecbd476dd2b78d32de25c8f",
+      "status": "succeeded",
+      "verification": null,
+      "sessionId": "ses_07731a254ffew3zQkHiOsbHRCD",
+      "startedAt": "2026-07-22T07:50:54.243Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_1b5b84c8d57394ece166f1f76e554c8c",
+      "status": "succeeded",
+      "verification": null,
+      "sessionId": "ses_0773792ddffev9Jhmf4ypWnW8p",
+      "startedAt": "2026-07-22T07:44:24.884Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_893863e58923fa3d407dfb9698c2361e",
+      "status": "succeeded",
+      "verification": null,
+      "sessionId": "ses_0773d7f3dffeZDYM40GdePbCh3",
+      "startedAt": "2026-07-22T07:37:56.779Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_63c1bbfb234ffc1417fac8c8d74d6446",
+      "status": "succeeded",
+      "verification": null,
+      "sessionId": "ses_07de5a510ffeRbtzy4CFnlZJSr",
+      "startedAt": "2026-07-21T00:36:58.705Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_bf3fd39f5e61eadffe5348ebd4eda4e8",
+      "status": "failed",
+      "verification": null,
+      "sessionId": "ses_07e10a9fcffewXJ3QaKoL4dpZT",
+      "startedAt": "2026-07-20T23:49:35.878Z",
+      "prompt": ""
+    },
+    {
+      "id": "run_99c3c029b83f39055a382a3ef77350fe",
+      "status": "succeeded",
+      "verification": null,
+      "sessionId": "ses_07f0ec12bffeJTCdZRhaJM6S4x",
+      "startedAt": "2026-07-20T19:12:03.591Z",
+      "prompt": ""
+    }
+  ],
+  "bell": {
+    "button": {
+      "x": 165,
+      "y": 16,
+      "w": 22,
+      "h": 22
+    },
+    "icon": {
+      "x": 169,
+      "y": 20,
+      "w": 14,
+      "h": 14
+    },
+    "badge": {
+      "x": 173.6,
+      "y": 14,
+      "w": 15.4,
+      "h": 14
+    },
+    "text": "2",
+    "fontSize": "12px",
+    "lineHeight": "18px",
+    "bg": "rgb(178, 79, 42)",
+    "color": "rgb(255, 255, 255)"
+  }
+}
