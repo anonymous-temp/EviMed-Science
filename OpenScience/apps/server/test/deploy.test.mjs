@@ -1827,10 +1827,14 @@ test("a capability's two skill copies never drift apart by more than their known
   // renumbering, read-back and prose self-check procedure now points at
   // evimed_claim_upsert, evimed_render_report and evimed_package_check, and the
   // Python self-check it replaced is gone.
+  // Raised by 1 later that day, same direction: one paragraph in the clinical
+  // skill's evidence-matrix section says a claim may carry its appraisal in
+  // parts (certainty, riskOfBias, a quoted PICO part) and that the platform
+  // recomputes them.
   const knownDivergence = {
     "adr-analysis": 18,
     "bibliometric-analysis": 18,
-    "clinical-evidence-synthesis": 219,
+    "clinical-evidence-synthesis": 220,
     "comprehensive-drug-evaluation": 18,
     "dataset-research-scoping": 41,
     "drug-selection": 18,
