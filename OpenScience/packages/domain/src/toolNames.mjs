@@ -36,9 +36,11 @@ export const MCP_TOOL_PREFIX = `mcp__${MCP_SERVER_NAME}__`
 export const OPENCODE_MCP_TOOL_PREFIX = `${OPENCODE_MCP_SERVER_NAME}_`
 
 /**
- * The 26 research tools the MCP server publishes, without any prefix.
- * Order is the routing-table order of the design (§21.2), not alphabetical,
- * so a reader can see the subgroups.
+ * The research tools the MCP server publishes, without any prefix — exactly
+ * `server.py`'s `TOOL_DEFINITIONS`, which `apps/server/test/evimedMcp.test.mjs`
+ * asks the server for rather than counting here (a count in this comment said
+ * 26 while the list held 34). Order is the routing-table order of the design
+ * (§21.2), not alphabetical, so a reader can see the subgroups.
  */
 export const MCP_TOOL_BASE_NAMES = Object.freeze([
   // retrieval (public + private adapters)
@@ -51,6 +53,8 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'open_access_full_text',
   'official_page_fetch',
   'web_search',
+  // claim work over preserved sources (the gate's own quotation check)
+  'locate_quote',
   // measured visibility (the consumer LLM front-ends, not the record)
   'geo_visibility_probe',
   // pharmacy data

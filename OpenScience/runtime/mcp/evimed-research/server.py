@@ -25,6 +25,8 @@ import science_connectors
 import drug_assessment
 import open_access_fulltext
 import official_pages
+import quote_locator
+from immutable_capture import ImmutableCaptureError, managed_workspace
 import meta_agent
 import specialist_jobs
 import source_catalog
@@ -375,6 +377,28 @@ TOOL_DEFINITIONS = [
         "inputSchema": object_schema(
             {"identifier": {"type": "string", "minLength": 1, "maxLength": 512}},
             ("identifier",),
+        ),
+    },
+    {
+        "name": "locate_quote",
+        "description": (
+            "Find a quotation in a source this run preserved, judged exactly as the delivery gate judges a claim's "
+            "supportQuote (case, quotation marks, dashes, whitespace, full-width forms, CJK spacing, PDF line breaks, "
+            "inline citation markers and marked \u2026 elisions are forgiven; anything else is not). found=true only for a "
+            "match the gate accepts; each match has character offsets into the preserved file, its line and context. "
+            "When not found, match=near passages show what the source actually says, to quote instead. Read-only."
+        ),
+        "inputSchema": object_schema(
+            {
+                "sourceId": {
+                    "type": "string", "minLength": 1, "maxLength": 512,
+                    "description": "The .evimed-sources/... path a preserving tool returned, or the id it reported "
+                                   "(PMCID, DOI, official-page:<hash>, EVIMED-GUIDE:<id>, label:<approval number>#<section>).",
+                },
+                "quote": {"type": "string", "minLength": 1, "maxLength": quote_locator.MAX_QUOTE_CHARS},
+                "maxResults": {"type": "integer", "minimum": 1, "maximum": quote_locator.MAX_RESULTS},
+            },
+            ("sourceId", "quote"),
         ),
     },
     {
@@ -1783,6 +1807,8 @@ def call_tool(name, arguments):
         return result
     if name == "official_page_fetch":
         return _normalize_tool_result(name, official_pages.fetch(arguments), arguments, _scope())
+    if name == "locate_quote":
+        return _locate_quote(arguments)
     if name in ("term_normalize", "drug_term_normalize"):
         normalized_key = " ".join(arguments["term"].strip().split()).casefold()
         rxnorm = None
@@ -1879,6 +1905,48 @@ def call_tool(name, arguments):
             )
         return specialist_jobs.call(name, arguments)
     return _adapter_call(name, arguments)
+
+
+def _locate_quote(arguments):
+    """`locate_quote`: where a quotation is in a preserved source, if the gate
+    would accept it there, and what the source says nearby if not.
+
+    A quote that is not found is a `warning`, not an error: the tool answered,
+    and the answer — with the nearest passages — is what the run acts on."""
+    try:
+        workspace = str(managed_workspace())
+        data = quote_locator.locate(arguments, workspace)
+    except ImmutableCaptureError as error:
+        return failure(
+            "quote_workspace_unavailable", str(error), False,
+            "Stop; no preserved source can be read without the managed workspace.",
+            ["Check the runtime's workspace configuration."],
+        )
+    except quote_locator.QuoteLocatorError as error:
+        return failure(
+            error.code, str(error), error.retryable,
+            "The quote was not checked.",
+            ["Pass the exact .evimed-sources/... path a preserving tool returned, then retry."],
+        )
+    data = _data_with_provenance(data, "locate_quote", arguments, _scope())
+    if data["found"]:
+        kinds = sorted({match["match"] for match in data["matches"]})
+        return success(
+            "The quotation is in the preserved source (%s match, %d occurrence(s)); the delivery gate will accept it."
+            % ("/".join(kinds), len(data["matches"])),
+            data=data,
+        )
+    near = [match for match in data["matches"] if match["match"] == "near"]
+    return warning(
+        "The quotation is not in the preserved source as the delivery gate reads it%s."
+        % ("; %d near passage(s) returned" % len(near) if near else ""),
+        ["A claim quoting this passage would be marked unverified."],
+        [
+            "Quote the source's own words: copy the `text` of the closest near match, or cite a different preserved source."
+            if near else "Read the preserved source and quote a passage it contains, or cite a different source.",
+        ],
+        data=data,
+    )
 
 
 def _rpc_error(request_id, code, message):

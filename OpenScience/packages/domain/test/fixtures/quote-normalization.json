@@ -1,0 +1,277 @@
+{
+  "$comment": "Shared by the domain (packages/domain/test/quoteNormalizationFixture.test.mjs, through claimVerification) and the research MCP (runtime/mcp/evimed-research/test/test_quote_locator.py). `normalization` pairs are whole strings and `expected` is what the gate's normalizedPassage produces; `presence` cases are the gate's verdict (quoteIsPresent). Expectations were produced by the domain code itself; a change to the gate's normalisation must update this file, and the Python port must follow.",
+  "version": "evimed-quote-v1",
+  "normalization": [
+    {
+      "input": "“Aspirin” reduced ‘events’",
+      "expected": "aspirin reduced events",
+      "note": "typographic quotation marks are dropped, case is folded"
+    },
+    {
+      "input": "2019–2020 — results",
+      "expected": "2019-2020 - results",
+      "note": "en and em dashes become a hyphen"
+    },
+    {
+      "input": "line one\n\n  line\ttwo",
+      "expected": "line one line two",
+      "note": "line breaks, tabs and runs of spaces become one space"
+    },
+    {
+      "input": "ＡＢＣ１２３，（ｎ＝４５）",
+      "expected": "abc123,(n=45)",
+      "note": "full-width forms fold to ASCII (NFKC)"
+    },
+    {
+      "input": "速 效 救 心 丸",
+      "expected": "速效救心丸",
+      "note": "PDF extraction spacing inside a CJK run is removed"
+    },
+    {
+      "input": "阿司匹林 ， 每日 100 mg",
+      "expected": "阿司匹林 , 每日 100 mg",
+      "note": "a full-width comma is ASCII after NFKC, so the spaces around it stay"
+    },
+    {
+      "input": "10³ cells, 10⁻⁵ M",
+      "expected": "10^3 cells, 10^-5 m",
+      "note": "superscript exponents keep their meaning as ^3 and ^-5"
+    },
+    {
+      "input": "acetyl\u00adsalicylic\u200bacid",
+      "expected": "acetylsalicylicacid",
+      "note": "soft hyphens and zero-width characters are removed"
+    },
+    {
+      "input": "5'3\" tall",
+      "expected": "5′3′′ tall",
+      "note": "marks after a digit are units (prime, double prime), not quotation marks"
+    },
+    {
+      "input": "1⁄2 dose and ½ tablet",
+      "expected": "1/2 dose and 1/2 tablet",
+      "note": "fraction slash and vulgar fractions become 1/2"
+    },
+    {
+      "input": "ΣΙΓΜΑΣ test",
+      "expected": "σιγμας test",
+      "note": "lowercasing uses the word-final sigma"
+    },
+    {
+      "input": "中文\u3000测试",
+      "expected": "中文测试",
+      "note": "an ideographic space between CJK characters is removed"
+    },
+    {
+      "input": "10 mg",
+      "expected": "10 mg",
+      "note": "a no-break space is a space"
+    },
+    {
+      "input": "  padded  ",
+      "expected": "padded",
+      "note": "surrounding whitespace is trimmed"
+    },
+    {
+      "input": "ﬁbrinolysis",
+      "expected": "fibrinolysis",
+      "note": "ligatures decompose"
+    },
+    {
+      "input": "\ud835\udc43 < 0.05",
+      "expected": "p < 0.05",
+      "note": "mathematical italic letters from PDF text layers fold to ASCII"
+    },
+    {
+      "input": "İstanbul",
+      "expected": "i̇stanbul",
+      "note": "capital dotted I lowercases to two characters"
+    },
+    {
+      "input": "a\u001cb\u0085c",
+      "expected": "a\u001cb\u0085c",
+      "note": "U+001C and U+0085 are not whitespace in JavaScript and survive"
+    },
+    {
+      "input": "éclair",
+      "expected": "éclair",
+      "note": "a combining accent composes with its base"
+    },
+    {
+      "input": "각",
+      "expected": "각",
+      "note": "conjoining Hangul jamo compose into one syllable"
+    },
+    {
+      "input": "㎎ ㎖ ℃",
+      "expected": "mg ml °c",
+      "note": "squared unit symbols decompose"
+    },
+    {
+      "input": "Ⅻ ①",
+      "expected": "xii 1",
+      "note": "Roman numerals and circled digits decompose"
+    },
+    {
+      "input": "tab\u000bvt",
+      "expected": "tab vt",
+      "note": "a vertical tab is whitespace"
+    },
+    {
+      "input": "“阿司匹林”——出血风险增加（HR 1.43）",
+      "expected": "阿司匹林--出血风险增加(hr 1.43)",
+      "note": "Chinese quotation marks, double em dash and full-width parentheses"
+    },
+    {
+      "input": "a\u2028b\u2029c",
+      "expected": "a b c",
+      "note": "line and paragraph separators are whitespace"
+    }
+  ],
+  "presence": [
+    {
+      "source": "The trial showed benefit.",
+      "quote": "the trial showed benefit",
+      "present": true,
+      "note": "a lowercased leading word is still the quotation"
+    },
+    {
+      "source": "Aspirin  reduced\nevents in older adults",
+      "quote": "“aspirin reduced events”",
+      "present": true,
+      "note": "spacing, case and quotation marks differ only"
+    },
+    {
+      "source": "hypertensive patients",
+      "quote": "tensive patients",
+      "present": false,
+      "note": "a match may not start inside a word"
+    },
+    {
+      "source": "non-steroidal agents were avoided",
+      "quote": "steroidal agents were avoided",
+      "present": false,
+      "note": "a hyphenated compound is one word at the boundary"
+    },
+    {
+      "source": "a dose of 100 mg daily",
+      "quote": "00 mg daily",
+      "present": false,
+      "note": "a match may not start inside a number"
+    },
+    {
+      "source": "rate 0.25 per year",
+      "quote": "25 per year",
+      "present": false,
+      "note": "a decimal is one number: 25 is not in 0.25"
+    },
+    {
+      "source": "HR 1.43 (95% CI 1.20–1.70)",
+      "quote": "43 (95% CI 1.20",
+      "present": false,
+      "note": "a hazard ratio is not cut in half"
+    },
+    {
+      "source": "Aspirin reduced events. It also increased bleeding.",
+      "quote": "Aspirin reduced events … increased bleeding",
+      "present": true,
+      "note": "a marked elision, segments in order"
+    },
+    {
+      "source": "Aspirin reduced events. It also increased bleeding.",
+      "quote": "Aspirin reduced events ... increased bleeding",
+      "present": true,
+      "note": "three full stops mark an elision too"
+    },
+    {
+      "source": "Aspirin reduced events. It also increased bleeding.",
+      "quote": "increased bleeding … Aspirin reduced events",
+      "present": false,
+      "note": "elided segments must appear in the order quoted"
+    },
+    {
+      "source": "Aspirin reduced events. It also increased bleeding.",
+      "quote": "Aspirin reduced events increased bleeding",
+      "present": false,
+      "note": "joining two passages without marking the gap is not a quotation"
+    },
+    {
+      "source": "coronary spasm patients.23 Li et al found",
+      "quote": "coronary spasm patients. Li et al found",
+      "present": true,
+      "note": "an inline superscript citation marker is ignored"
+    },
+    {
+      "source": "coronary artery dis-\nease was common",
+      "quote": "coronary artery disease was common",
+      "present": true,
+      "note": "a word broken across a PDF line is rejoined"
+    },
+    {
+      "source": "call 999 if:\n- you get sudden pain",
+      "quote": "call 999 if: you get sudden pain",
+      "present": true,
+      "note": "a list bullet inside a sentence is ignored"
+    },
+    {
+      "source": "physical activity 37 . next",
+      "quote": "physical activity 37. next",
+      "present": true,
+      "note": "a space an extractor left before punctuation is ignored"
+    },
+    {
+      "source": "速 效 救 心 丸 可 用 于",
+      "quote": "速效救心丸可用于",
+      "present": true,
+      "note": "spaced-out CJK matches the unspaced quotation"
+    },
+    {
+      "source": "中文abc 以后",
+      "quote": "abc",
+      "present": true,
+      "note": "CJK text has no word boundary to violate"
+    },
+    {
+      "source": "（ｎ＝４５）",
+      "quote": "(n=45)",
+      "present": true,
+      "note": "full-width characters match their ASCII forms"
+    },
+    {
+      "source": "\ud801\udc00abc",
+      "quote": "abc",
+      "present": true,
+      "note": "an astral letter before a match is two UTF-16 units, neither a word character"
+    },
+    {
+      "source": "\ud83d\ude00abc",
+      "quote": "abc",
+      "present": true,
+      "note": "an emoji is not a word character"
+    },
+    {
+      "source": "nothing about the topic here",
+      "quote": "absent passage",
+      "present": false,
+      "note": "a passage the source does not contain"
+    },
+    {
+      "source": "some source text",
+      "quote": "“”",
+      "present": false,
+      "note": "a quotation of nothing is not present"
+    },
+    {
+      "source": "阿司匹林用于一级预防时，出血风险增加。",
+      "quote": "阿司匹林用于一级预防时,出血风险增加",
+      "present": true,
+      "note": "a full-width comma matches an ASCII one"
+    },
+    {
+      "source": "Dose: 10³ cells per kg.",
+      "quote": "dose: 10^3 cells per kg",
+      "present": true,
+      "note": "a superscript exponent matches its caret form"
+    }
+  ]
+}

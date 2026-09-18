@@ -45,6 +45,7 @@ const MCP_NARRATION = Object.freeze({
   web_search: (args, result) => withCount(`检索网页：「${excerpt(args.query ?? args.queries)}」`, result),
   open_access_full_text: (args) => `取全文：${excerpt(args.identifier ?? args.doi ?? args.url, 48)}`,
   official_page_fetch: (args) => `读官方页面：${excerpt(args.url, 48)}`,
+  locate_quote: (args, result) => `核对引文：「${excerpt(args.quote, 24)}」${quoteVerdict(result)}`,
   drug_label_search: (args, result) => withCount(`查说明书：${excerpt(args.drug ?? args.query)}`, result),
   pharmacy_reference_search: (args, result) => withCount(`查药学参考：${excerpt(args.query)}`, result),
   adr_case_query: (args, result) => withCount(`查不良反应个例：${excerpt(args.drug ?? args.query)}`, result),
@@ -64,6 +65,15 @@ const MCP_NARRATION = Object.freeze({
   peer_review: (args) => jobPhrase('论文审稿', args),
   drug_safety_analysis: (args) => jobPhrase('药物安全分析', args),
 })
+
+/** Whether a quotation check found the passage, when the result says so.
+ *  @param {any} result @returns {string} */
+function quoteVerdict(result) {
+  const found = result && typeof result === 'object' ? (result.data ?? result).found : undefined
+  if (found === true) return ' → 原文中有'
+  if (found === false) return ' → 原文中未找到'
+  return ''
+}
 
 /** @param {string} label @param {Record<string, any>} args @returns {string} */
 function jobPhrase(label, args) {
