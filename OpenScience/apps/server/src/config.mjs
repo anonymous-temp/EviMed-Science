@@ -796,6 +796,19 @@ export function loadConfig(overrides = {}) {
     maxParallelChildren: Number(
       overrides.maxParallelChildren ?? process.env.OPEN_SCIENCE_MAX_PARALLEL_CHILDREN ?? 30,
     ),
+    // S2 delegation limits (2026-09-18). `maxParallelChildren` above was one
+    // name with two meanings — a lifetime total in delegation, a wave size in
+    // screening — and non-blocking delegation needs both, separately. Each
+    // falls back to the old variable, so a deployment that set it keeps what
+    // it had; unset, both are the old default.
+    maxChildrenTotal: Number(
+      overrides.maxChildrenTotal ?? overrides.maxParallelChildren
+        ?? process.env.OPEN_SCIENCE_MAX_CHILDREN_TOTAL ?? process.env.OPEN_SCIENCE_MAX_PARALLEL_CHILDREN ?? 30,
+    ),
+    maxConcurrentChildren: Number(
+      overrides.maxConcurrentChildren ?? overrides.maxParallelChildren
+        ?? process.env.OPEN_SCIENCE_MAX_CONCURRENT_CHILDREN ?? process.env.OPEN_SCIENCE_MAX_PARALLEL_CHILDREN ?? 30,
+    ),
     runMaxSteps: Number(overrides.runMaxSteps ?? process.env.OPEN_SCIENCE_RUN_MAX_STEPS ?? 0),
     runMaxTokens: Number(overrides.runMaxTokens ?? process.env.OPEN_SCIENCE_RUN_MAX_TOKENS ?? 0),
     evidenceStaleMinutes: Number(

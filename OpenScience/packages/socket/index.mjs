@@ -55,18 +55,22 @@ export {
 export { chunk, renderScreeningLedger, screeningPrompt, SCREEN_VERDICT_SCHEMA } from './src/screening.mjs'
 export {
   accumulateBudget,
+  awaitSelection,
   buildDelegation,
+  childReport,
   completionCheck,
-  delegatableItems,
   evidenceSourceErrorCode,
   gateDeliverable,
   concurrentWriteNotice,
   guardedBashTarget,
   indexPlan,
+  planCapabilityIssues,
   rejectionEnvelope,
   renderDeliverySummary,
   settleDelegation,
   sourceArtifactPaths,
   stepPolicy,
+  submissionVerdict,
   toolPolicy,
+  unmetDependencies,
 } from './src/runPolicy.mjs'

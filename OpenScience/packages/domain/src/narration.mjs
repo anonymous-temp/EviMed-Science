@@ -82,7 +82,16 @@ function withCount(phrase, result) {
 /** @type {Readonly<Record<string, (args: Record<string, any>, result: any) => string>>} */
 const SOCKET_NARRATION = Object.freeze({
   [SOCKET_TOOL_NAMES.plan]: (args) => (args?.action === 'status' ? '查看计划进度' : '写下计划'),
-  [SOCKET_TOOL_NAMES.delegate]: (args) => `分工给 ${excerpt(args?.capability, 32)}`,
+  // `deliverableId` is what the call carries; it used to read `capability`,
+  // which is not one of its arguments, so every delegation narrated as 「分工给 」.
+  [SOCKET_TOOL_NAMES.delegate]: (args) => `分工：交付物 ${excerpt(args?.deliverableId, 32)}`,
+  [SOCKET_TOOL_NAMES.await]: (args, result) => {
+    const record = result && typeof result === 'object' ? /** @type {Record<string, any>} */ (result) : null
+    const results = Array.isArray(record?.data?.results) ? record.data.results : null
+    if (!results) return args?.mode === 'any' ? '等待任一子任务结束' : '等待子任务结束'
+    const done = results.filter((/** @type {any} */ entry) => entry?.status !== 'running').length
+    return `等待子任务：${done}/${results.length} 已结束`
+  },
   [SOCKET_TOOL_NAMES.reviseDeliverable]: (args) => `开启交付物新修订：${excerpt(args?.deliverableId, 32)}`,
   [SOCKET_TOOL_NAMES.submitDeliverable]: (args, result) => {
     const id = excerpt(args?.deliverableId, 32)

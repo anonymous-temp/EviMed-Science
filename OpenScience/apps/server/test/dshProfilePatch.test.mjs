@@ -94,13 +94,25 @@ test("limits reach the plugins from the control plane, not from a second default
   // travel as container environment; the patch cannot reach those rows.
   const env = runtimeEnvironment(input);
   assert.equal(env.EVIMED_DELIVERY_ATTEMPT_LIMIT, "3");
-  assert.equal(env.EVIMED_MAX_PARALLEL_CHILDREN, "30");
+  // One retired variable became two limits (2026-09-18); the retired name is
+  // no longer written, because no row reads it.
+  assert.equal(env.EVIMED_MAX_CHILDREN_TOTAL, "30");
+  assert.equal(env.EVIMED_MAX_CONCURRENT_CHILDREN, "30");
+  assert.equal(env.EVIMED_MAX_PARALLEL_CHILDREN, undefined);
   assert.equal(env.EVIMED_MAX_STEPS, "200");
   assert.equal(env.EVIMED_EVIDENCE_STALE_MINUTES, "10");
 
-  const odd = runtimeEnvironment({ ...input, limits: { ...input.limits, deliveryAttemptLimit: -1, maxParallelChildren: 1.5 } });
+  const odd = runtimeEnvironment({ ...input, limits: { ...input.limits, deliveryAttemptLimit: -1, maxChildrenTotal: 1.5, maxConcurrentChildren: -2 } });
   assert.equal(odd.EVIMED_DELIVERY_ATTEMPT_LIMIT, "3", "a nonsense limit falls back rather than being written through");
-  assert.equal(odd.EVIMED_MAX_PARALLEL_CHILDREN, "30");
+  assert.equal(odd.EVIMED_MAX_CHILDREN_TOTAL, "30");
+  assert.equal(odd.EVIMED_MAX_CONCURRENT_CHILDREN, "30");
+
+  // The two limits are independent, and each falls back to the retired single
+  // one where a caller still passes only that.
+  const split = runtimeEnvironment({ ...input, limits: { ...input.limits, maxChildrenTotal: 12, maxConcurrentChildren: 4 } });
+  assert.deepEqual([split.EVIMED_MAX_CHILDREN_TOTAL, split.EVIMED_MAX_CONCURRENT_CHILDREN], ["12", "4"]);
+  const legacy = runtimeEnvironment({ ...input, limits: { deliveryAttemptLimit: 3, maxParallelChildren: 6, maxSteps: 200, maxTokens: 4000000, evidenceStaleMinutes: 10 } });
+  assert.deepEqual([legacy.EVIMED_MAX_CHILDREN_TOTAL, legacy.EVIMED_MAX_CONCURRENT_CHILDREN], ["6", "6"]);
 });
 
 test("the MCP environment is sorted, empty values are dropped, and the token file is always present", () => {

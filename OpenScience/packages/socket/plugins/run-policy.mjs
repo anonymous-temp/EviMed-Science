@@ -8,11 +8,21 @@
  * splitting them apart (an earlier draft had `gate`, `orchestration` and
  * `budget`) meant three plugins reading each other's state.
  *
- * The four tools it registers are the only way a run can plan, delegate,
- * deliver or finish. `evimed_submit_deliverable` returns its verdict as a value
- * — a first submission failing is the normal case, and normal cases delivered
- * as exceptions force every caller to catch them (ch.10). `tools/pre-execute`
- * is used for policy alone.
+ * The tools it registers are the only way a run can plan, delegate, wait for a
+ * child, check, deliver or finish. `evimed_submit_deliverable` returns its
+ * verdict as a value — a first submission failing is the normal case, and
+ * normal cases delivered as exceptions force every caller to catch them
+ * (ch.10). `tools/pre-execute` is used for policy alone.
+ *
+ * Delegation does not wait (2026-09-18). `evimed_delegate` starts a child and
+ * returns its handle; `evimed_await` collects. The tool used to await the child
+ * inside its own call, so a plan of two independent deliverables ran them one
+ * after the other (26m53s where ~13 minutes would do), and the parent's
+ * transcript stood still for as long as a child worked — which is what starved
+ * the control plane's stall detector into announcing a working run as stuck.
+ * Everything a child's settlement changes is written under one per-run lock,
+ * because the state it touches (attempts, item statuses, the plan index) used
+ * to be read and written across awaits by whichever call happened to run.
  *
  * @module @evimed/dsh-socket/plugins/run-policy
  */
@@ -20,6 +30,7 @@
 import {
   DOMAIN_VERSION,
   RECEIPT_FORMAT_VERSION,
+  canTransition,
   contractKindLabel,
   delegationToolFilter,
   deliverableDir,
@@ -50,22 +61,28 @@ import {
   writeFileAt,
 } from '@evimed/harness-port'
 import {
+  AWAIT_TIMEOUT_SECONDS,
+  PLAN_ITEM_STATE_WORDS,
   accumulateBudget,
+  awaitSelection,
   buildDelegation,
+  childReport,
   completionCheck,
   contentTriggerIssues,
-  delegatableItems,
   errorMessage,
   evidenceSourceErrorCode,
   gateDeliverable,
   indexPlan,
+  planCapabilityIssues,
   rejectionEnvelope,
   boundedSuggestions,
   renderDeliverySummary,
   settleDelegation,
   sourceArtifactPaths,
   stepPolicy,
+  submissionVerdict,
   toolPolicy,
+  unmetDependencies,
 } from '../src/runPolicy.mjs'
 import { advancePlanItem } from '../src/runMirror.mjs'
 import { concurrentWriteNotice } from '../src/runPolicy.mjs'
@@ -82,7 +99,8 @@ export const inject = ['tools', 'agents', 'sessions', 'subagents']
  * @typedef {object} Config
  * @property {number} deliveryAttemptLimit
  * @property {number} structuralAttemptAllowance
- * @property {number} maxParallelChildren
+ * @property {number} maxChildrenTotal
+ * @property {number} maxConcurrentChildren
  * @property {number} maxSteps
  * @property {number} maxTokens
  * @property {string} capabilitiesDir
@@ -101,8 +119,16 @@ export const Config = Schema.object({
     .description('How many times one deliverable may be submitted before the run must finish partially. Set by the control plane.'),
   structuralAttemptAllowance: Schema.number().default(3)
     .description('How many submissions the gate could not read at all — wrong matrix schema, a required file absent — are charged apart from the content repair budget. Beyond it they count normally, so a run cannot loop on malformed packages.'),
-  maxParallelChildren: Schema.number().default(30)
-    .description('Concurrent delegations per run. The control plane owns it; a smaller container sets it lower.'),
+  // Two numbers where there used to be one name with two meanings.
+  // `maxParallelChildren` was documented as a concurrency and enforced as a
+  // lifetime total (`budget.children` is never decremented), while screening
+  // read the same variable as its wave size — so an operator raising it to get
+  // more parallelism raised a total nothing was near. Both default to the old
+  // value, which keeps every deployment where it was.
+  maxChildrenTotal: Schema.number().default(30)
+    .description('Delegations one run may start over its whole life, retries included. The control plane owns it.'),
+  maxConcurrentChildren: Schema.number().default(30)
+    .description('Delegated children of one run that may be working at the same moment. A smaller container sets it lower.'),
   maxSteps: Schema.number().default(0)
     .description('Step ceiling for one run; 0 means the capability manifest decides. Set per deployment class.'),
   maxTokens: Schema.number().default(0)
@@ -129,20 +155,27 @@ export const Config = Schema.object({
 /**
  * One delegated child's durable record, keyed by deliverable so a retry
  * replaces its first attempt rather than accumulating beside it.
+ *
+ * The run is named by the caller where it can differ from the session's
+ * current one: a child settles on its own schedule now, and a session that has
+ * moved on to a follow-up run in the meantime must not file the previous run's
+ * child under the new run's id.
  * @param {any} ctx @param {Record<string, any>} entry @param {string} key @param {Record<string, any>} record
+ * @param {string} [runId]
  */
-function recordSubagent(ctx, entry, key, record) {
+function recordSubagent(ctx, entry, key, record, runId = entry.runId) {
   const store = ctx.get('evimedRun')
   if (!store) return
-  store.subagents.set(`${entry.runId}:${key}`, { ...record, runId: entry.runId })
+  store.subagents.set(`${runId}:${key}`, { ...record, runId })
 }
 
 /** Publish the kernel-owned child identity before waiting for its result.
  * @param {any} ctx @param {Record<string, any>} entry @param {Record<string, any>} item
  * @param {readonly string[]} skills @param {any} run @param {Record<string, any>} [extra]
+ * @param {string} [runId]
  * @returns {string}
  */
-function recordStartedSubagent(ctx, entry, item, skills, run, extra = {}) {
+function recordStartedSubagent(ctx, entry, item, skills, run, extra = {}, runId = entry.runId) {
   const childSessionId = toSubagentOutcome(run, null).childSessionId
   item.childSessionId = childSessionId || null
   recordSubagent(ctx, entry, item.id, {
@@ -152,7 +185,7 @@ function recordStartedSubagent(ctx, entry, item, skills, run, extra = {}) {
     status: 'running',
     childSessionId,
     ...extra,
-  })
+  }, runId)
   return childSessionId
 }
 
@@ -180,11 +213,11 @@ function recordStartedSubagent(ctx, entry, item, skills, run, extra = {}) {
  * by the bookkeeping beside it, and an empty receipt that says why is one the
  * ledger can tell from a child that loaded nothing.
  *
- * @param {any} ctx @param {Record<string, any>} entry @param {string} itemId
+ * @param {any} ctx @param {string} runId @param {string} itemId
  * @param {readonly {name: string, body: string}[]} skillBodies @param {string} childSessionId
  * @returns {Promise<{skillDigests: {name: string, digest: string}[], methods: {name: string, digest: string}[], receiptError?: string}>}
  */
-function delegationReceipt(ctx, entry, itemId, skillBodies, childSessionId) {
+function delegationReceipt(ctx, runId, itemId, skillBodies, childSessionId) {
   const capsuleMethods = ctx.get('evimedCapsuleMethods') ?? []
   return Promise.all([
     Promise.all(skillBodies.map(async (skill) => ({ name: skill.name, digest: await skillBodyDigestAsync(skill.body) }))),
@@ -192,11 +225,28 @@ function delegationReceipt(ctx, entry, itemId, skillBodies, childSessionId) {
   ]).then(([skillDigests, methods]) => {
     const receipt = { skillDigests, methods }
     const store = ctx.get('evimedRun')
-    const key = `${entry.runId}:${itemId}`
+    const key = `${runId}:${itemId}`
     const row = store?.subagents.get(key)
     if (row && row.status === 'running' && row.childSessionId === childSessionId) store.subagents.set(key, { ...row, ...receipt })
     return receipt
   }, (error) => ({ skillDigests: [], methods: [], receiptError: errorMessage(error) }))
+}
+
+/**
+ * A run's ceilings: the deployment's, unless the dispatch's own index names a
+ * tighter one. `maxChildren` keeps its name because it is the field the run
+ * mirror and the control plane's projection already read, and it always meant
+ * the lifetime total there.
+ * @param {Record<string, any>} config @param {Record<string, any>} [budget]
+ * @returns {{ maxSteps: number, maxTokens: number, maxChildren: number, maxConcurrentChildren: number }}
+ */
+function runLimits(config, budget = {}) {
+  return {
+    maxSteps: Number(budget.maxSteps ?? config.maxSteps) || 0,
+    maxTokens: Number(budget.maxTokens ?? config.maxTokens) || 0,
+    maxChildren: Number(budget.maxChildren ?? config.maxChildrenTotal) || 0,
+    maxConcurrentChildren: Number(budget.maxConcurrentChildren ?? config.maxConcurrentChildren) || 0,
+  }
 }
 
 /** Whether a one-shot submission grant still names this exact repair.
@@ -241,7 +291,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         plan: null,
         items: [],
         budget: { steps: 0, tokens: 0, children: 0 },
-        limits: { maxSteps: config.maxSteps, maxTokens: config.maxTokens, maxChildren: config.maxParallelChildren },
+        limits: runLimits(config),
+        /** Every child this run delegated, by handle, running or settled. */
+        delegations: new Map(),
+        /** Tail of the run's write lock; see `withRunLock`. */
+        lock: Promise.resolve(),
         attempts: new Map(),
         /** Submissions the gate could not read, budgeted apart from content repairs. */
         structuralAttempts: new Map(),
@@ -251,6 +305,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         producedTexts: [],
         finalReply: '',
         steered: false,
+        childrenNudged: false,
         completed: false,
       }
       state.set(sessionId, entry)
@@ -288,6 +343,34 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       childOwners.delete(childSessionId)
     }
   }
+
+  /**
+   * Run `fn` while no other read-modify-write of this run's state is in flight.
+   *
+   * The state a submission, a plan revision and a child's settlement touch —
+   * `attempts`, the item statuses, the plan index persisted whole — was read
+   * before an `await` and written after it, and with children running in
+   * parallel two of those can interleave: one submission's charge overwritten
+   * by another's, or a settlement writing into an item a plan revision had just
+   * replaced. A promise chain rather than a flag, so waiters queue in arrival
+   * order and a failed holder releases the next one.
+   *
+   * Never held across waiting for a child: a child's own submission takes this
+   * same lock, and a holder that waited for the child would wait forever.
+   *
+   * @template T
+   * @param {Record<string, any>} entry @param {() => Promise<T>} fn
+   * @returns {Promise<T>}
+   */
+  const withRunLock = (entry, fn) => {
+    const turn = (entry.lock ?? Promise.resolve()).then(fn, fn)
+    entry.lock = turn.then(() => undefined, () => undefined)
+    return turn
+  }
+
+  /** The delegations of this run that have not settled.
+   * @param {Record<string, any>} entry @returns {Record<string, any>[]} */
+  const runningDelegations = (entry) => [...entry.delegations.values()].filter((delegation) => delegation.status === 'running')
 
   const store = () => ctx.get('evimedRun')
   /** @param {string} sessionId */
@@ -467,6 +550,17 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (session.subagent) return
     const entry = sessionState(session.sessionId)
     entry.lastTurnEnd = end
+    // A root turn that was cancelled cancels the run's children. The turn a
+    // child was started in cascades on its own (the child holds that turn's
+    // signal); a child started in an earlier turn is reached only from here.
+    if (end.kind === 'aborted') {
+      for (const delegation of runningDelegations(entry)) delegation.abort.abort(new Error('研究者停止了本次运行'))
+    } else if (runningDelegations(entry).length) {
+      // Recorded, never acted on: a turn can legitimately end while children
+      // work, and the stopping nudge has already said what to do. What must not
+      // happen is that nobody can tell afterwards.
+      diagnostics(session.sessionId)?.degrade?.(`turn ended with children still running: ${runningDelegations(entry).map((delegation) => delegation.handle).join(', ')}`)
+    }
     void putRunMirror(ctx, entry, config.bundleVersion)
     if (end.kind === 'unknown') {
       diagnostics(session.sessionId)?.degrade?.(`runtime_turn_end_unknown: ${end.rawKind ?? ''}`)
@@ -480,20 +574,30 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   ctx.effect(() => onTurnStopping(ctx, async (agent) => {
     const sessionId = String(agent?.session?.id ?? '')
     const entry = sessionState(sessionId)
-    if (entry.completed || entry.steered) return
-    if (!entry.items.length) return
-    if (entry.items.every((/** @type {any} */ item) => item.status === 'accepted')) return
-    entry.steered = true
+    if (entry.completed) return
+    const running = runningDelegations(entry)
+    // Children still working is a different situation from deliverables still
+    // unaccepted, and it gets its own one nudge: the parent cannot deliver
+    // what it has not collected, and a turn that ends here leaves the children
+    // working for a run nobody is waiting on.
+    const nudge = running.length && !entry.childrenNudged
+      ? `<evimed-run>还有 ${running.length} 个子代理在工作（${running.map((delegation) => delegation.handle).join('、')}）。用 evimed_await 取回它们的结果；要现在结束，用 evimed_complete_run{partial:true}，它们会被取消。</evimed-run>`
+      : !running.length && !entry.steered && entry.items.length && !entry.items.every((/** @type {any} */ item) => item.status === 'accepted')
+        ? '<evimed-run>计划里还有未通过的交付物。请继续提交，或调用 evimed_complete_run{partial:true} 以部分交付结束。</evimed-run>'
+        : ''
+    if (!nudge) return
+    if (running.length) entry.childrenNudged = true
+    else entry.steered = true
     // isolated: evimed_steer_failures_total — a nudge that throws must not turn
     // a finishing turn into a failed one.
     try {
-      injectContext(agent, '<evimed-run>计划里还有未通过的交付物。请继续提交，或调用 evimed_complete_run{partial:true} 以部分交付结束。</evimed-run>', name)
+      injectContext(agent, nudge, name)
     } catch {
       diagnostics(sessionId)?.degrade?.('steer injection failed')
     }
   }))
 
-  // ---- the four tools -----------------------------------------------------
+  // ---- the tools -----------------------------------------------------------
   // Resolved before registering, not inside the effect. `defineTool` is async
   // (it lazily loads the harness module), and the harness's `tools.register()`
   // reads `definition.output` synchronously — handed a Promise it throws
@@ -501,9 +605,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   // plugin's apply failed on its first line and the run either refused to start
   // or came up with no gate at all. The effect callbacks stay synchronous
   // because what they return is the disposer.
-  const [plan, delegate, revise, submit, packageCheck, complete] = await Promise.all([
+  const [plan, delegate, awaitChildren, revise, submit, packageCheck, complete] = await Promise.all([
     planTool(),
     delegateTool(),
+    awaitTool(),
     reviseTool(),
     submitTool(),
     packageCheckTool(),
@@ -511,6 +616,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   ])
   ctx.effect(() => registerTool(ctx, plan))
   ctx.effect(() => registerTool(ctx, delegate))
+  ctx.effect(() => registerTool(ctx, awaitChildren))
   ctx.effect(() => registerTool(ctx, revise))
   ctx.effect(() => registerTool(ctx, submit))
   ctx.effect(() => registerTool(ctx, packageCheck))
@@ -550,31 +656,43 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         if (args.action === 'status') {
           return { ok: true, data: { runId: entry.runId, revision: entry.plan?.revision ?? 0, items: entry.items.map(publicItem) } }
         }
-        const revision = (entry.plan?.revision ?? 0) + 1
-        const raw = {
-          revision,
-          clarifications: args.clarifications ?? [],
-          deliverables: args.deliverables ?? [],
-          ...(args.reason ? { reason: args.reason } : {}),
-        }
-        // Aliased: `plan` in the enclosing scope is the registered tool
-        // handle, and two unrelated things under one name in one file is how a
-        // later edit reaches for the wrong one.
-        const { ok, plan: indexed, items, issues } = indexPlan(raw)
-        if (!ok) return { ok: false, code: 'plan_invalid', issues: issues.map(withSeverity) }
-        // A revision keeps what was already accepted: re-planning must not undo
-        // delivered work, or a model that adds one deliverable loses five.
-        const previous = new Map(entry.items.map((/** @type {any} */ item) => [item.id, item]))
-        // A revision authorization belongs to the exact plan the control plane
-        // inspected. Even a same-id rewrite creates a new plan identity.
-        entry.revisionSubmissionGrants.clear()
-        entry.plan = indexed
-        entry.completed = false
-        entry.steered = false
-        entry.items = items.map((item) => ({ ...item, ...(previous.get(item.id) ?? {}), contractKind: item.contractKind, capability: item.capability, dependsOn: item.dependsOn }))
-        await writeFileAt(ctx, entry.cwd || call.cwd, workspaceLayout.planFile, `${JSON.stringify(raw, null, 2)}\n`)
-        await putPlanIndex(store(), entry)
-        return { ok: true, data: { runId: entry.runId, revision, deliverables: entry.items.map(publicItem) } }
+        return withRunLock(entry, async () => {
+          const revision = (entry.plan?.revision ?? 0) + 1
+          const raw = {
+            revision,
+            clarifications: args.clarifications ?? [],
+            deliverables: args.deliverables ?? [],
+            ...(args.reason ? { reason: args.reason } : {}),
+          }
+          // Aliased: `plan` in the enclosing scope is the registered tool
+          // handle, and two unrelated things under one name in one file is how a
+          // later edit reaches for the wrong one.
+          const { ok, plan: indexed, items, issues } = indexPlan(raw)
+          if (!ok) return { ok: false, code: 'plan_invalid', issues: issues.map(withSeverity) }
+          const unknownCapabilities = planCapabilityIssues(items, ctx.get('evimedCapabilities') ?? [])
+          if (unknownCapabilities.length) return { ok: false, code: 'plan_invalid', issues: unknownCapabilities }
+          // A revision keeps what was already accepted: re-planning must not undo
+          // delivered work, or a model that adds one deliverable loses five.
+          const previous = new Map(entry.items.map((/** @type {any} */ item) => [item.id, item]))
+          // A revision authorization belongs to the exact plan the control plane
+          // inspected. Even a same-id rewrite creates a new plan identity.
+          entry.revisionSubmissionGrants.clear()
+          entry.plan = indexed
+          entry.completed = false
+          entry.steered = false
+          entry.childrenNudged = false
+          entry.items = items.map((item) => ({ ...item, ...(previous.get(item.id) ?? {}), contractKind: item.contractKind, capability: item.capability, dependsOn: item.dependsOn }))
+          // A child working on a deliverable this revision dropped has nowhere
+          // to deliver: its submissions would name an item that no longer
+          // exists. Cancelled by name rather than left to spend its budget.
+          for (const delegation of runningDelegations(entry)) {
+            if (entry.items.some((/** @type {any} */ item) => item.id === delegation.deliverableId)) continue
+            delegation.abort.abort(new Error(`计划修订后不再包含交付物「${delegation.deliverableId}」`))
+          }
+          await writeFileAt(ctx, entry.cwd || call.cwd, workspaceLayout.planFile, `${JSON.stringify(raw, null, 2)}\n`)
+          await putPlanIndex(store(), entry)
+          return { ok: true, data: { runId: entry.runId, revision, deliverables: entry.items.map(publicItem) } }
+        })
       },
     })
   }
@@ -590,12 +708,31 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     + `它的文件留在 deliverables/${id}/ 里，会连同没有通过的核验项按「未核验」交付给读者——这不是失败。`
     + '不要为同一件事重新规划一个新交付物；请调用 evimed_complete_run{partial:true} 结束本次运行。'
 
+  /** A refusal the model can act on, as every tool here answers one.
+   * @param {string} code @param {string} message */
+  const refusal = (code, message) => ({ ok: false, code, issues: [issue(code, message)] })
+
+  /** Whether a dependency is delivered even though it was never accepted: its
+   *  submissions are spent, so it goes to the reader as it stands.
+   *  @param {Record<string, any>} entry */
+  const deliveredUnaccepted = (entry) => (/** @type {Record<string, any>} */ dependency) => submissionsSpent(entry, dependency)
+
+  /** A pending dependency as the refusal names it.
+   * @param {Record<string, any>} entry @param {{ id: string, status: string }} dependency */
+  const describeDependency = (entry, dependency) => {
+    const running = runningDelegations(entry).find((delegation) => delegation.deliverableId === dependency.id)
+    if (running) return `${dependency.id}（子代理正在做，句柄 ${running.handle}）`
+    const word = /** @type {Record<string, string>} */ (PLAN_ITEM_STATE_WORDS)[dependency.status] ?? dependency.status
+    return `${dependency.id}（${word}）`
+  }
+
   async function delegateTool() {
     return defineTool({
       name: 'evimed_delegate',
       description: [
-        '把一件交付物委派给能力目录中的一项能力。子代理会带着这件能力的技能正文、工具集与人设启动，把文件写进 deliverables/<交付物 id>/ 并自行提交。',
-        '依赖未满足时会排队，不需要你自己排序。',
+        '把一件交付物委派给能力目录中的一项能力：启动一个子代理后立即返回句柄（handle），不等它完成；用 evimed_await 取回结果。',
+        '子代理带着该能力的技能正文、工具集与人设启动，把文件写进 deliverables/<交付物 id>/ 并自行提交。互不依赖的交付物可以一起委派，它们会同时进行。',
+        '它依赖的交付物还没有交付时，委派会被拒绝，并告诉你还差哪一件。',
         '委派前不要替子代理检索、读取来源或预写交付文件；需要证据时，让同一个子代理完成完整证据链。',
       ].join(' '),
       parameters: {
@@ -603,154 +740,334 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         brief: { type: 'string', description: '交给子代理的题面摘录；留空则使用本次运行的题面。' },
         inputs: { type: 'object', additionalProperties: true, description: '能力清单声明的输入参数。' },
       },
+      // Two delegations in one step is the parallelism this tool exists for,
+      // and the kernel runs a group only when every call in it says so. What
+      // the calls share is guarded by the run lock, not by running one at a time.
+      concurrencySafe: true,
       async execute(args, call) {
         const entry = sessionState(call.sessionId)
-        const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
-        if (!item) return { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)] }
-        // A deliverable that has used its submissions cannot be helped by
-        // another child: the attempts are counted per deliverable, so the new
-        // child researches and writes for twenty minutes and is then refused at
-        // its first submit. Measured on the first non-blocking batch
-        // (memory-ablation v10 cell 2, 2026-09-17): three submissions spent by
-        // 12:41, a second child started, and the run was still going at 13:10.
-        // What the run wrote is delivered either way — marked, with the open
-        // findings attached — so the honest next step is to finish.
-        if (submissionsSpent(entry, item)) {
-          return { ok: false, code: 'deliverable_attempts_spent', issues: [issue('deliverable_attempts_spent', attemptsSpentAdvice(item.id))] }
-        }
-        const ready = delegatableItems(entry.plan, entry.items).some((candidate) => candidate.id === item.id)
-        if (!ready) {
-          const pending = item.dependsOn.filter((/** @type {any} */ dep) => entry.items.find((/** @type {any} */ candidate) => candidate.id === dep)?.status !== 'accepted')
-          return { ok: false, code: 'deliverable_dependency_pending', issues: [issue('deliverable_dependency_pending', `它依赖 ${pending.join('、')}，等这些通过后再委派。`)] }
-        }
-        const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
-        if (!manifest) return { ok: false, code: 'capability_unknown', issues: [issue('capability_unknown', `能力目录里没有「${item.capability}」。`)] }
-        if (manifest.visibility === 'internal') return { ok: false, code: 'capability_background_only',
-          issues: [issue('capability_background_only', 'This capability is managed by its background workflow; use the Sources page to adjust or retry source understanding.')] }
-        const kind = resolveContractKind(manifest, item.contractKind)
-        if (!kind.ok) return { ok: false, code: kind.code, issues: [issue(kind.code, kind.message)] }
-
-        const skillBodies = await readSkillBodies(ctx, config.skillsDir, manifest)
-        const request = buildDelegation({
-          manifest,
-          item,
-          briefExcerpt: String(args.brief ?? entry.briefText ?? ''),
-          skillBodies,
-          capsuleMethods: ctx.get('evimedCapsuleMethods') ?? [],
-          inputs: args.inputs ?? {},
-          toolFilter: delegationToolFilter(manifest, { allowBash: true }),
-          memoryText: entry.memoryText ?? null,
-          knowledgeEntries: Number(entry.knowledgeEntries ?? 0),
-        })
-        // Recorded as soon as the child has actually started, and again when it settles. The
-        // `subagents` medium had no writer at all: `projectRunState` published
-        // an empty array beside a `budget.children` that counted delegations,
-        // so the durable record said "no children" for a run that had them.
-        //
-        // `skills` is the injection receipt. `skillsLoaded` is true by
-        // construction here — the bodies travel inside the child's prompt, so
-        // the model never calls the `skill` tool and a transcript scan for that
-        // call can only ever conclude the skill was missing.
-        const injected = skillBodies.map((skill) => skill.name)
-        let run
-        try {
-          run = await startSubagent(ctx, request, ctx.get('agents')?.get?.(call.agentId), call.signal)
-        } catch (error) {
-          // Starting is the commit point. A constructor can reject a stale
-          // tool filter before any child exists; charging a child, marking the
-          // item delegated, or recording a running subagent before that point
-          // leaves a job that can never settle and cannot be retried.
-          const detail = errorMessage(error)
-          return {
-            ok: false,
-            code: 'subagent_start_failed',
-            issues: [issue('subagent_start_failed', `分工没有启动：${detail}`)],
+        return withRunLock(entry, async () => {
+          const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
+          if (!item) return refusal('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)
+          if (item.status === 'accepted') return refusal('deliverable_already_accepted', `交付物「${item.id}」已经通过，不需要再委派。`)
+          if (item.status === 'failed') {
+            return refusal('deliverable_failed', `交付物「${item.id}」的分工已经连续失败，不会再自动委派。修订计划换一种做法，或调用 evimed_complete_run{partial:true} 结束。`)
           }
-        }
-        const childSessionId = recordStartedSubagent(ctx, entry, item, injected, run)
-        bindChildOwner(childSessionId, entry, item)
-        entry.budget.children += 1
-        Object.assign(item, advancePlanItem(item, 'delegate'))
-        await putPlanIndex(store(), entry)
-        await putRunMirror(ctx, entry, config.bundleVersion)
-        // The receipt's digests, computed beside the running child rather than
-        // in front of it. See `delegationReceipt` for why the order matters.
-        const receipt = delegationReceipt(ctx, entry, item.id, skillBodies, childSessionId)
-        const outcome = await awaitOwnedSubagent(run, childSessionId)
-        const { skillDigests, methods: methodDigests, receiptError } = await receipt
-        item.childSessionId = outcome.childSessionId
-        recordSubagent(ctx, entry, item.id, {
-          deliverableId: item.id,
-          capability: item.capability,
-          skills: injected,
-          skillDigests,
-          methods: methodDigests,
-          ...(receiptError ? { receiptError } : {}),
-          status: outcome.stopReason,
-          childSessionId: outcome.childSessionId,
-        })
-        // The gate receipt is the completion fact. A child can submit and then
-        // fail while formatting its final structured reply; retrying at that
-        // point cannot improve the frozen accepted bytes and can only lose the
-        // receipt or attempt an illegal accepted -> failed transition.
-        if (item.status === 'accepted') {
-          await putPlanIndex(store(), entry)
-          return { ok: true, data: { deliverableId: item.id, childSessionId: outcome.childSessionId, report: outcome.structured ?? null, status: item.status } }
-        }
-        // Settled as it stands when the submissions are spent, whatever the
-        // child's stop reason: the automatic retry below would start a child
-        // that cannot submit (see the refusal at the top of this tool).
-        if (submissionsSpent(entry, item)) {
-          await putPlanIndex(store(), entry)
-          return { ok: true, data: { deliverableId: item.id, childSessionId: outcome.childSessionId, report: outcome.structured ?? null, status: item.status, next: attemptsSpentAdvice(item.id) } }
-        }
-        const settlement = settleDelegation({ item, outcome, alreadyRetried: entry.redelegated.has(item.id) })
-        if (settlement.action === 'redelegate') {
-          entry.redelegated.add(item.id)
-          // The same parent the first attempt was given. This read `call.agent`,
-          // which `ToolCall` does not have, so every retried child was spawned
-          // with `parent: undefined` while the first attempt got a real one —
-          // two different spawns for the same delegation, and only reachable
-          // after a child had already failed, which is why nothing ever saw it.
-          const parent = ctx.get('agents')?.get?.(call.agentId)
-          const retry = await startSubagent(ctx, { ...request, prompt: `${request.prompt}\n\n## 上一次失败\n\n${settlement.reason}` }, parent, call.signal)
-          const retryChildSessionId = recordStartedSubagent(ctx, entry, item, injected, retry, { retried: true, skillDigests, methods: methodDigests })
-          bindChildOwner(retryChildSessionId, entry, item)
-          await putPlanIndex(store(), entry)
-          await putRunMirror(ctx, entry, config.bundleVersion)
-          const retried = await awaitOwnedSubagent(retry, retryChildSessionId)
-          recordSubagent(ctx, entry, item.id, {
+          const working = runningDelegations(entry).find((delegation) => delegation.deliverableId === item.id)
+          if (working) {
+            return refusal('deliverable_already_delegated', `交付物「${item.id}」的子代理（句柄 ${working.handle}）还在工作；用 evimed_await 等它的结果，不要再委派一次。`)
+          }
+          // A deliverable that has used its submissions cannot be helped by
+          // another child: the attempts are counted per deliverable, so the new
+          // child researches and writes for twenty minutes and is then refused
+          // at its first submit. Measured on the first non-blocking batch
+          // (memory-ablation v10 cell 2, 2026-09-17): three submissions spent by
+          // 12:41, a second child started, and the run was still going at 13:10.
+          // What the run wrote is delivered either way — marked, with the open
+          // findings attached — so the honest next step is to finish.
+          if (submissionsSpent(entry, item)) return refusal('deliverable_attempts_spent', attemptsSpentAdvice(item.id))
+          const unmet = unmetDependencies(item, entry.items, deliveredUnaccepted(entry))
+          if (unmet.length) {
+            return refusal('deliverable_dependency_pending', `交付物「${item.id}」依赖的 ${unmet.map((dependency) => describeDependency(entry, dependency)).join('、')} 还没有交付。`
+              + '等它们交付后再委派这一件；正在运行的可以用 evimed_await 等待。')
+          }
+          const concurrent = runningDelegations(entry).length
+          if (entry.limits.maxConcurrentChildren > 0 && concurrent >= entry.limits.maxConcurrentChildren) {
+            return refusal('delegation_concurrency_limit', `已有 ${concurrent} 个子代理在运行，达到本部署同时运行的上限 ${entry.limits.maxConcurrentChildren}。`
+              + '用 evimed_await{mode:"any"} 等其中一个结束，再委派这一件。')
+          }
+          const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
+          if (!manifest) return refusal('capability_unknown', `能力目录里没有「${item.capability}」。`)
+          if (manifest.visibility === 'internal') {
+            return refusal('capability_background_only', 'This capability is managed by its background workflow; use the Sources page to adjust or retry source understanding.')
+          }
+          const kind = resolveContractKind(manifest, item.contractKind)
+          if (!kind.ok) return refusal(kind.code, kind.message)
+
+          const skillBodies = await readSkillBodies(ctx, config.skillsDir, manifest)
+          const request = buildDelegation({
+            manifest,
+            item,
+            briefExcerpt: String(args.brief ?? entry.briefText ?? ''),
+            skillBodies,
+            capsuleMethods: ctx.get('evimedCapsuleMethods') ?? [],
+            inputs: args.inputs ?? {},
+            toolFilter: delegationToolFilter(manifest, { allowBash: true }),
+            memoryText: entry.memoryText ?? null,
+            knowledgeEntries: Number(entry.knowledgeEntries ?? 0),
+          })
+          // `skills` is the injection receipt. `skillsLoaded` is true by
+          // construction here — the bodies travel inside the child's prompt, so
+          // the model never calls the `skill` tool and a transcript scan for that
+          // call can only ever conclude the skill was missing.
+          const injected = skillBodies.map((skill) => skill.name)
+          // The child lives past this call now, so what may cancel it is the
+          // turn it was started in (the researcher pressing stop cancels the
+          // turn, and the kernel cascades that to the child through this very
+          // signal) or this run deciding it no longer wants it — a partial
+          // completion, a plan revision that dropped its deliverable, a later
+          // turn cancelled, a follow-up run superseding this one.
+          const abort = new AbortController()
+          const signal = AbortSignal.any([call.signal, abort.signal])
+          let run
+          try {
+            run = await startSubagent(ctx, request, ctx.get('agents')?.get?.(call.agentId), signal)
+          } catch (error) {
+            // Starting is the commit point. A constructor can reject a stale
+            // tool filter before any child exists; charging a child, marking the
+            // item delegated, or recording a running subagent before that point
+            // leaves a job that can never settle and cannot be retried.
+            return refusal('subagent_start_failed', `分工没有启动：${errorMessage(error)}`)
+          }
+          const runId = entry.runId
+          const sequence = [...entry.delegations.values()].filter((delegation) => delegation.deliverableId === item.id).length + 1
+          const handle = `${item.id}#${sequence}`
+          // Recorded as soon as the child has actually started, and again when
+          // it settles. The `subagents` medium had no writer at all:
+          // `projectRunState` published an empty array beside a
+          // `budget.children` that counted delegations, so the durable record
+          // said "no children" for a run that had them.
+          const childSessionId = recordStartedSubagent(ctx, entry, item, injected, run, { handle }, runId)
+          bindChildOwner(childSessionId, entry, item)
+          entry.budget.children += 1
+          Object.assign(item, advancePlanItem(item, 'delegate'))
+          /** @type {Record<string, any>} */
+          const delegation = {
+            handle,
+            runId,
             deliverableId: item.id,
             capability: item.capability,
-            skills: injected,
-            // The retry was handed the same request, so the same receipt: a
-            // retried child without digests is a child the learning loop
-            // cannot attribute, and the retry is exactly the outcome worth
-            // attributing.
-            skillDigests,
-            methods: methodDigests,
-            status: retried.stopReason,
-            childSessionId: retried.childSessionId,
-            retried: true,
-          })
-          if (item.status === 'accepted') {
-            await putPlanIndex(store(), entry)
-            return { ok: true, data: { deliverableId: item.id, childSessionId: retried.childSessionId, report: retried.structured ?? null, retried: true, status: item.status } }
+            childSessionId,
+            status: 'running',
+            startedAt: new Date().toISOString(),
+            abort,
+            reported: false,
+            retried: false,
           }
-          if (retried.stopReason !== 'completed') {
-            Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_failed', settlement.reason)] }))
-            await putPlanIndex(store(), entry)
-            return { ok: false, code: 'subagent_failed', issues: [issue('subagent_failed', `分工两次都没有完成：${retried.diagnostic || retried.stopReason}`)] }
-          }
-          return { ok: true, data: { deliverableId: item.id, childSessionId: retried.childSessionId, report: retried.structured ?? null, retried: true } }
-        }
-        if (settlement.action === 'fail') {
-          Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_failed', settlement.reason)] }))
+          entry.delegations.set(handle, delegation)
+          // The receipt's digests, computed beside the running child rather than
+          // in front of it. See `delegationReceipt` for why the order matters.
+          const receipt = delegationReceipt(ctx, runId, item.id, skillBodies, childSessionId)
+          delegation.settled = followDelegation(entry, delegation, run, { request, receipt, injected, signal, parentAgentId: call.agentId })
           await putPlanIndex(store(), entry)
-          return { ok: false, code: 'subagent_failed', issues: [issue('subagent_failed', settlement.reason)] }
+          await putRunMirror(ctx, entry, config.bundleVersion)
+          // The child's own session id is in the reply the moment it exists: the
+          // control plane finds delegated children in the parent's transcript by
+          // this field, and while the tool waited for the child the field did not
+          // exist until the child was done.
+          return { ok: true, data: { handle, deliverableId: item.id, childSessionId, status: 'started' } }
+        })
+      },
+    })
+  }
+
+  /**
+   * Everything that follows a child's settlement, off the call that started it.
+   *
+   * Loops at most twice: a child that did not complete is retried once with its
+   * diagnostic attached, then marked failed — a failure that disappears at the
+   * boundary is the one failure the orchestrator cannot recover from (§14 rule
+   * 20). The run lock is taken to decide and released to wait, because the
+   * child being waited for takes the same lock to submit.
+   *
+   * Never rejects: `evimed_await` waits on the promise this returns, and a
+   * rejection there would turn one child's bookkeeping failure into every
+   * waiting call's error.
+   *
+   * @param {Record<string, any>} entry @param {Record<string, any>} delegation @param {any} firstRun
+   * @param {{ request: any, receipt: Promise<Record<string, any>>, injected: string[], signal: AbortSignal, parentAgentId: string }} context
+   * @returns {Promise<void>}
+   */
+  const followDelegation = async (entry, delegation, firstRun, context) => {
+    let run = firstRun
+    try {
+      for (;;) {
+        const outcome = await awaitOwnedSubagent(run, delegation.childSessionId)
+        const receipt = await context.receipt
+        const retry = await withRunLock(entry, () => settleRound(entry, delegation, outcome, receipt, context))
+        if (!retry) return
+        run = retry
+      }
+    } catch (error) {
+      await withRunLock(entry, () => finishDelegation(entry, delegation, 'failed', { reason: `子代理的结算没有完成：${errorMessage(error)}` }))
+    }
+  }
+
+  /**
+   * One settled child, decided under the run lock. Returns the retry's run when
+   * one was started, null when the delegation is finished.
+   *
+   * @param {Record<string, any>} entry @param {Record<string, any>} delegation
+   * @param {ReturnType<typeof toSubagentOutcome>} outcome @param {Record<string, any>} receipt
+   * @param {{ request: any, injected: string[], signal: AbortSignal, parentAgentId: string }} context
+   * @returns {Promise<any>}
+   */
+  const settleRound = async (entry, delegation, outcome, receipt, context) => {
+    const { skillDigests = [], methods = [], receiptError } = receipt ?? {}
+    recordSubagent(ctx, entry, delegation.deliverableId, {
+      deliverableId: delegation.deliverableId,
+      capability: delegation.capability,
+      skills: context.injected,
+      // A retried child was handed the same request, so the same receipt: a
+      // retried child without digests is a child the learning loop cannot
+      // attribute, and the retry is exactly the outcome worth attributing.
+      skillDigests,
+      methods,
+      ...(receiptError ? { receiptError } : {}),
+      status: outcome.stopReason,
+      childSessionId: outcome.childSessionId,
+      handle: delegation.handle,
+      ...(delegation.retried ? { retried: true } : {}),
+    }, delegation.runId)
+    const report = childReport(outcome)
+    // The session moved on while this child worked: a follow-up run replaced the
+    // plan, or a revision dropped this deliverable. The child's work has no item
+    // to land on, and the record above is what remains of it.
+    const item = entry.runId === delegation.runId
+      ? entry.items.find((/** @type {any} */ candidate) => candidate.id === delegation.deliverableId)
+      : null
+    if (!item) {
+      return finishDelegation(entry, delegation, 'failed', {
+        ...report,
+        reason: entry.runId === delegation.runId ? `交付物「${delegation.deliverableId}」已不在当前计划中。` : '本次运行已被后续运行取代，这个子代理随之取消。',
+      })
+    }
+    item.childSessionId = outcome.childSessionId
+    // The gate receipt is the completion fact. A child can submit and then
+    // fail while formatting its final structured reply; retrying at that point
+    // cannot improve the frozen accepted bytes and can only lose the receipt or
+    // attempt an illegal accepted -> failed transition.
+    if (item.status === 'accepted') return finishDelegation(entry, delegation, 'completed', report)
+    // Settled as it stands when the submissions are spent, whatever the
+    // child's stop reason: a retry would start a child that cannot submit.
+    if (submissionsSpent(entry, item)) {
+      return finishDelegation(entry, delegation, outcome.stopReason === 'completed' ? 'completed' : 'failed', { ...report, next: attemptsSpentAdvice(item.id) })
+    }
+    // Cancelled on purpose — by the researcher, by a partial completion, by a
+    // plan revision — is not a failure to retry: the one retry exists for a
+    // child that broke, and restarting work somebody just stopped is the
+    // opposite of what they asked for.
+    if (context.signal.aborted) {
+      const reason = cancellationReason(context.signal)
+      if (canTransition('planItem', item.status, 'fail')) {
+        Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_cancelled', reason)] }))
+      }
+      return finishDelegation(entry, delegation, 'failed', { ...report, reason })
+    }
+    const settlement = settleDelegation({ item, outcome, alreadyRetried: entry.redelegated.has(item.id) })
+    if (settlement.action === 'settled') return finishDelegation(entry, delegation, 'completed', report)
+    if (settlement.action === 'fail') {
+      Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_failed', settlement.reason)] }))
+      return finishDelegation(entry, delegation, 'failed', { ...report, reason: settlement.reason })
+    }
+    entry.redelegated.add(item.id)
+    let retry
+    try {
+      // The same parent the first attempt was given. This read `call.agent`,
+      // which `ToolCall` does not have, so every retried child was spawned with
+      // `parent: undefined` while the first attempt got a real one — two
+      // different spawns for the same delegation, and only reachable after a
+      // child had already failed, which is why nothing ever saw it.
+      retry = await startSubagent(ctx, { ...context.request, prompt: `${context.request.prompt}\n\n## 上一次失败\n\n${settlement.reason}` }, ctx.get('agents')?.get?.(context.parentAgentId), context.signal)
+    } catch (error) {
+      Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_failed', settlement.reason)] }))
+      return finishDelegation(entry, delegation, 'failed', { ...report, reason: `${settlement.reason} 重派没有启动：${errorMessage(error)}` })
+    }
+    delegation.retried = true
+    delegation.childSessionId = recordStartedSubagent(ctx, entry, item, context.injected, retry, { retried: true, handle: delegation.handle, skillDigests, methods }, delegation.runId)
+    bindChildOwner(delegation.childSessionId, entry, item)
+    await putPlanIndex(store(), entry)
+    await putRunMirror(ctx, entry, config.bundleVersion)
+    return retry
+  }
+
+  /**
+   * Close a delegation: its final status, what the child said, the time — and
+   * the durable write that lets the control plane see it without waiting for
+   * the parent's next tool call. Returns null so a settlement can return it.
+   * @param {Record<string, any>} entry @param {Record<string, any>} delegation
+   * @param {'completed'|'failed'} status @param {Record<string, any>} [details]
+   * @returns {Promise<null>}
+   */
+  const finishDelegation = async (entry, delegation, status, details = {}) => {
+    Object.assign(delegation, details, { status, settledAt: new Date().toISOString() })
+    if (entry.runId === delegation.runId) {
+      await putPlanIndex(store(), entry)
+      await putRunMirror(ctx, entry, config.bundleVersion)
+    }
+    return null
+  }
+
+  /**
+   * One delegation as `evimed_await` reports it (contract C6).
+   * @param {Record<string, any>} entry @param {Record<string, any>} delegation
+   */
+  const delegationResult = (entry, delegation) => {
+    const item = entry.runId === delegation.runId
+      ? entry.items.find((/** @type {any} */ candidate) => candidate.id === delegation.deliverableId)
+      : null
+    const attempts = item ? Number(entry.attempts.get(item.id) ?? 0) : 0
+    const summary = delegation.status === 'failed' && delegation.reason
+      ? [delegation.reason, delegation.summary].filter(Boolean).join(' ')
+      : delegation.summary
+    return {
+      handle: delegation.handle,
+      deliverableId: delegation.deliverableId,
+      childSessionId: delegation.childSessionId,
+      status: delegation.status,
+      ...(summary ? { summary } : {}),
+      ...(delegation.unresolved ? { unresolved: delegation.unresolved } : {}),
+      ...(delegation.failedSources ? { failedSources: delegation.failedSources } : {}),
+      ...(item && attempts > 0 ? { submission: { attempts, verdict: submissionVerdict({ status: item.status, spent: submissionsSpent(entry, item) }) } } : {}),
+      ...(delegation.next ? { next: delegation.next } : {}),
+    }
+  }
+
+  async function awaitTool() {
+    return defineTool({
+      name: 'evimed_await',
+      description: [
+        '等待已委派的子代理并取回结果：每个句柄的状态（completed / failed / running）、子代理的总结与提交情况。',
+        'mode=all 等全部结束（默认），mode=any 等任意一个结束；省略 handles 时，等本次运行里还没取回过结果的子代理。',
+        'timeoutSeconds 可限定最长等待时间，到时仍在运行的标为 running。',
+      ].join(' '),
+      parameters: {
+        handles: { type: 'array', items: { type: 'string' }, description: 'evimed_delegate 返回的句柄；省略则按上面的规则选择。' },
+        mode: { type: 'string', enum: ['all', 'any'], description: 'all（默认）或 any。' },
+        timeoutSeconds: { type: 'number', description: `最多等待的秒数，${AWAIT_TIMEOUT_SECONDS.min}–${AWAIT_TIMEOUT_SECONDS.max}；省略则一直等到满足条件。` },
+      },
+      // Reading and waiting only; several awaits, or an await beside another
+      // read, change nothing for each other.
+      concurrencySafe: true,
+      async execute(args, call) {
+        const entry = sessionState(call.sessionId)
+        const all = [...entry.delegations.values()]
+        const requested = Array.isArray(args.handles) ? args.handles.map((handle) => String(handle)) : null
+        if (requested) {
+          const unknown = requested.filter((handle) => !entry.delegations.has(handle))
+          if (unknown.length) {
+            return refusal('delegation_handle_unknown', `本次运行没有这些句柄：${unknown.join('、')}。本次运行的句柄：${all.map((delegation) => delegation.handle).join('、') || '（还没有委派过）'}。`)
+          }
         }
-        await putPlanIndex(store(), entry)
-        return { ok: true, data: { deliverableId: item.id, childSessionId: outcome.childSessionId, report: outcome.structured ?? null, status: item.status } }
+        const selected = requested ? requested.map((handle) => entry.delegations.get(handle)) : awaitSelection(all)
+        if (!selected.length) return { ok: true, data: { results: [], note: '本次运行还没有委派过子代理。' } }
+        const mode = args.mode === 'any' ? 'any' : 'all'
+        const seconds = Number(args.timeoutSeconds)
+        const timeoutMs = Number.isFinite(seconds) && seconds > 0
+          ? Math.min(Math.max(seconds, AWAIT_TIMEOUT_SECONDS.min), AWAIT_TIMEOUT_SECONDS.max) * 1000
+          : 0
+        const running = selected.filter((delegation) => delegation.status === 'running')
+        const satisfied = !running.length || (mode === 'any' && running.length < selected.length)
+        const waitedOut = satisfied
+          ? false
+          : await settleWithin(
+            mode === 'all' ? Promise.all(running.map((delegation) => delegation.settled)) : Promise.race(running.map((delegation) => delegation.settled)),
+            timeoutMs,
+            call.signal,
+          )
+        const results = selected.map((delegation) => delegationResult(entry, delegation))
+        for (const delegation of selected) if (delegation.status !== 'running') delegation.reported = true
+        return { ok: true, data: { results, ...(waitedOut ? { timedOut: true } : {}) } }
       },
     })
   }
@@ -821,78 +1138,84 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
       },
       async execute(args, call) {
-        const resolved = resolveDeliverable(call, args.deliverableId)
-        if (resolved.refusal) return resolved.refusal
-        const { entry, item } = resolved
-        // Counted after the verdict, not before it: what a submission costs
-        // depends on whether the gate could read it. See below.
-        const attempts = (entry.attempts.get(item.id) ?? 0) + 1
+        // Under the run lock from the attempt count to the persisted verdict:
+        // the count is read here, two awaits pass, and it is written below —
+        // with children submitting in parallel, an unlocked read-modify-write
+        // lets one submission's charge overwrite another's.
+        return withRunLock(ownedSessionState(call.sessionId).entry, async () => {
+          const resolved = resolveDeliverable(call, args.deliverableId)
+          if (resolved.refusal) return resolved.refusal
+          const { entry, item } = resolved
+          // Counted after the verdict, not before it: what a submission costs
+          // depends on whether the gate could read it. See below.
+          const attempts = (entry.attempts.get(item.id) ?? 0) + 1
 
-        const { verdict, files } = await judgeDeliverable(entry, item, call)
-        // The late avalanche, charged honestly.
-        //
-        // A submission the gate could not read — wrong matrix schema, a required
-        // file absent — teaches the run the contract, not the work. Two runs
-        // spent four such submissions each before any content rule had run at
-        // all, then met eighty-three findings with three attempts left. Those
-        // four are counted against a small separate allowance so a run cannot
-        // loop on malformed packages, and they do not spend the attempts
-        // reserved for repairing content.
-        const unreadable = unreadableSubmission(verdict)
-        const structural = (entry.structuralAttempts.get(item.id) ?? 0) + (unreadable ? 1 : 0)
-        const structuralAllowanceApplies = unreadable && structural <= config.structuralAttemptAllowance
-        if (structuralAllowanceApplies) {
-          entry.structuralAttempts.set(item.id, structural)
-        } else {
-          entry.attempts.set(item.id, attempts)
-          item.attempts = attempts
-        }
-        // A control-plane authorization promises one judgeable submission.
-        // An unreadable package within the separate structural allowance did
-        // not spend an ordinary attempt, so it must not spend this grant.
-        const revisionGrant = entry.revisionSubmissionGrants.get(item.id)
-        const grantMatches = revisionSubmissionGrantMatches(entry, item, revisionGrant)
-        if (!structuralAllowanceApplies && grantMatches) entry.revisionSubmissionGrants.delete(item.id)
-        const charged = entry.attempts.get(item.id) ?? 0
-        await recordGateRun(store(), entry, item, verdict, charged)
-        // The attempt count the mirror carries is what the control plane reads
-        // to tell a run being repaired from one that has stopped.
-        await putRunMirror(ctx, entry, config.bundleVersion)
+          const { verdict, files } = await judgeDeliverable(entry, item, call)
+          // The late avalanche, charged honestly.
+          //
+          // A submission the gate could not read — wrong matrix schema, a required
+          // file absent — teaches the run the contract, not the work. Two runs
+          // spent four such submissions each before any content rule had run at
+          // all, then met eighty-three findings with three attempts left. Those
+          // four are counted against a small separate allowance so a run cannot
+          // loop on malformed packages, and they do not spend the attempts
+          // reserved for repairing content.
+          const unreadable = unreadableSubmission(verdict)
+          const structural = (entry.structuralAttempts.get(item.id) ?? 0) + (unreadable ? 1 : 0)
+          const structuralAllowanceApplies = unreadable && structural <= config.structuralAttemptAllowance
+          if (structuralAllowanceApplies) {
+            entry.structuralAttempts.set(item.id, structural)
+          } else {
+            entry.attempts.set(item.id, attempts)
+            item.attempts = attempts
+          }
+          // A control-plane authorization promises one judgeable submission.
+          // An unreadable package within the separate structural allowance did
+          // not spend an ordinary attempt, so it must not spend this grant.
+          const revisionGrant = entry.revisionSubmissionGrants.get(item.id)
+          const grantMatches = revisionSubmissionGrantMatches(entry, item, revisionGrant)
+          if (!structuralAllowanceApplies && grantMatches) entry.revisionSubmissionGrants.delete(item.id)
+          const charged = entry.attempts.get(item.id) ?? 0
+          await recordGateRun(store(), entry, item, verdict, charged)
+          // The attempt count the mirror carries is what the control plane reads
+          // to tell a run being repaired from one that has stopped.
+          await putRunMirror(ctx, entry, config.bundleVersion)
 
-        if (!verdict.ok) {
-          // Acceptance is not revocable by a later attempt. This forced the item
-          // to `submitted` and then applied `reject` whatever it had been, so a
-          // seventh submission took a package that had passed at attempt 4 back
-          // to rejected — and the run finished 部分交付 holding a receipt for an
-          // accepted delivery. The files are frozen at acceptance now, so this
-          // is the second lock rather than the first.
-          if (item.status === 'accepted') {
-            Object.assign(item, { lastIssues: verdict.issues })
+          if (!verdict.ok) {
+            // Acceptance is not revocable by a later attempt. This forced the item
+            // to `submitted` and then applied `reject` whatever it had been, so a
+            // seventh submission took a package that had passed at attempt 4 back
+            // to rejected — and the run finished 部分交付 holding a receipt for an
+            // accepted delivery. The files are frozen at acceptance now, so this
+            // is the second lock rather than the first.
+            if (item.status === 'accepted') {
+              Object.assign(item, { lastIssues: verdict.issues })
+              await putPlanIndex(store(), entry)
+              return rejectionEnvelope(verdict)
+            }
+            Object.assign(item, { status: item.status === 'delegated' ? 'submitted' : item.status, lastIssues: verdict.issues })
+            Object.assign(item, advancePlanItem({ ...item, status: 'submitted' }, 'reject', { lastIssues: verdict.issues }))
             await putPlanIndex(store(), entry)
             return rejectionEnvelope(verdict)
           }
-          Object.assign(item, { status: item.status === 'delegated' ? 'submitted' : item.status, lastIssues: verdict.issues })
-          Object.assign(item, advancePlanItem({ ...item, status: 'submitted' }, 'reject', { lastIssues: verdict.issues }))
-          await putPlanIndex(store(), entry)
-          return rejectionEnvelope(verdict)
-        }
 
-        const receiptEntry = {
-          deliverableId: item.id,
-          contractKind: item.contractKind,
-          capability: item.capability,
-          files: await digestFiles(files, item.id),
-          acceptedAt: new Date().toISOString(),
-          attempt: attempts,
-          notices: verdict.issues.filter((entryIssue) => entryIssue.severity !== 'required').map((entryIssue) => entryIssue.message),
-        }
-        await writeReceipt(ctx, entry, receiptEntry, config.bundleVersion, call)
-        Object.assign(item, advancePlanItem({ ...item, status: 'submitted' }, 'accept', { receiptDigest: await sha256Hex(JSON.stringify(receiptEntry)), lastIssues: [] }))
-        await putPlanIndex(store(), entry)
-        // Accepted: the run is done with this deliverable. The receipt keeps
-        // every notice; the reply carries a bounded few, because a long list
-        // after "ok" reads as work still owed on a package that is now frozen.
-        return { ok: true, data: { deliverableId: item.id, contractKind: item.contractKind, label: contractKindLabel(item.contractKind), metrics: verdict.metrics, notices: boundedSuggestions(receiptEntry.notices, (count) => `另有 ${count} 条建议记在回执里，不需要再处理。`) } }
+          const receiptEntry = {
+            deliverableId: item.id,
+            contractKind: item.contractKind,
+            capability: item.capability,
+            files: await digestFiles(files, item.id),
+            acceptedAt: new Date().toISOString(),
+            attempt: attempts,
+            notices: verdict.issues.filter((entryIssue) => entryIssue.severity !== 'required').map((entryIssue) => entryIssue.message),
+          }
+          await writeReceipt(ctx, entry, receiptEntry, config.bundleVersion, call)
+          Object.assign(item, advancePlanItem({ ...item, status: 'submitted' }, 'accept', { receiptDigest: await sha256Hex(JSON.stringify(receiptEntry)), lastIssues: [] }))
+          await putPlanIndex(store(), entry)
+          // Accepted: the run is done with this deliverable. The receipt keeps
+          // every notice; the reply carries a bounded few, because a long list
+          // after "ok" reads as work still owed on a package that is now frozen.
+          return { ok: true, data: { deliverableId: item.id, contractKind: item.contractKind, label: contractKindLabel(item.contractKind), metrics: verdict.metrics, notices: boundedSuggestions(receiptEntry.notices, (count) => `另有 ${count} 条建议记在回执里，不需要再处理。`) } }
+        })
       },
     })
   }
@@ -970,45 +1293,47 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       },
       async execute(args, call) {
         const entry = sessionState(call.sessionId)
-        const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
-        if (!item) return { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)] }
-        if (item.status !== 'accepted') return { ok: false, code: 'deliverable_revision_unavailable', issues: [issue('deliverable_revision_unavailable', '只有已经通过门禁且仍与当前回执一致的交付物才能开启新修订。')] }
-        const reason = String(args.reason ?? '').trim()
-        if (!reason || reason.length > 1000) return { ok: false, code: 'deliverable_revision_reason_invalid', issues: [issue('deliverable_revision_reason_invalid', '修订原因必须是 1 到 1000 个字符。')] }
-        const runStore = store()
-        if (!runStore) return { ok: false, code: 'deliverable_revision_store_unavailable', issues: [issue('deliverable_revision_store_unavailable', '运行状态存储当前不可用，原版本未解除冻结。')] }
-        const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
-        const expectedOutputs = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
-        const cwd = entry.cwd || call.cwd
-        const files = await readDeliverableFiles(ctx, cwd, item.id, expectedOutputs)
-        const receipt = parseJson(await readFileAt(ctx, cwd, workspaceLayout.receiptFile) ?? '')
-        const priorReceipt = Array.isArray(receipt?.entries) ? receipt.entries.find((/** @type {any} */ candidate) => candidate.deliverableId === item.id) : null
-        const currentDigests = await digestFiles(files, item.id)
-        const receiptFiles = Array.isArray(priorReceipt?.files) ? priorReceipt.files : []
-        const matches = currentDigests.length === receiptFiles.length && currentDigests.every((file) => receiptFiles.some((/** @type {any} */ recorded) => (
-          recorded.path === file.path && recorded.sha256 === file.sha256 && recorded.bytes === file.bytes
-        )))
-        if (!priorReceipt || !matches) return { ok: false, code: 'accepted_deliverable_drifted', issues: [issue('accepted_deliverable_drifted', '当前文件已经不再匹配已接受回执，不能把它登记为原始版本；请保留现场并让控制面重判。')] }
-        const acceptedDigest = await sha256Hex(JSON.stringify(priorReceipt))
-        const authorized = await requestRevisionAuthorization(ctx, config, {
-          runId: entry.runId,
-          deliverableId: item.id,
-          acceptedDigest,
+        return withRunLock(entry, async () => {
+          const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
+          if (!item) return { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)] }
+          if (item.status !== 'accepted') return { ok: false, code: 'deliverable_revision_unavailable', issues: [issue('deliverable_revision_unavailable', '只有已经通过门禁且仍与当前回执一致的交付物才能开启新修订。')] }
+          const reason = String(args.reason ?? '').trim()
+          if (!reason || reason.length > 1000) return { ok: false, code: 'deliverable_revision_reason_invalid', issues: [issue('deliverable_revision_reason_invalid', '修订原因必须是 1 到 1000 个字符。')] }
+          const runStore = store()
+          if (!runStore) return { ok: false, code: 'deliverable_revision_store_unavailable', issues: [issue('deliverable_revision_store_unavailable', '运行状态存储当前不可用，原版本未解除冻结。')] }
+          const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
+          const expectedOutputs = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
+          const cwd = entry.cwd || call.cwd
+          const files = await readDeliverableFiles(ctx, cwd, item.id, expectedOutputs)
+          const receipt = parseJson(await readFileAt(ctx, cwd, workspaceLayout.receiptFile) ?? '')
+          const priorReceipt = Array.isArray(receipt?.entries) ? receipt.entries.find((/** @type {any} */ candidate) => candidate.deliverableId === item.id) : null
+          const currentDigests = await digestFiles(files, item.id)
+          const receiptFiles = Array.isArray(priorReceipt?.files) ? priorReceipt.files : []
+          const matches = currentDigests.length === receiptFiles.length && currentDigests.every((file) => receiptFiles.some((/** @type {any} */ recorded) => (
+            recorded.path === file.path && recorded.sha256 === file.sha256 && recorded.bytes === file.bytes
+          )))
+          if (!priorReceipt || !matches) return { ok: false, code: 'accepted_deliverable_drifted', issues: [issue('accepted_deliverable_drifted', '当前文件已经不再匹配已接受回执，不能把它登记为原始版本；请保留现场并让控制面重判。')] }
+          const acceptedDigest = await sha256Hex(JSON.stringify(priorReceipt))
+          const authorized = await requestRevisionAuthorization(ctx, config, {
+            runId: entry.runId,
+            deliverableId: item.id,
+            acceptedDigest,
+          })
+          if (!authorized) return { ok: false, code: 'deliverable_revision_unauthorized', issues: [issue('deliverable_revision_unauthorized', '控制面尚未为当前已接受字节创建可消费的修订授权，原版本继续冻结。')] }
+          const revisionId = `${entry.runId}:${item.id}:${acceptedDigest}`
+          Object.assign(item, advancePlanItem(item, 'revise', { revisionId, lastIssues: [] }))
+          entry.revisionSubmissionGrants.set(item.id, {
+            kind: 'accepted-revision',
+            revisionId,
+            planRevision: entry.plan?.revision ?? 0,
+            contractKind: item.contractKind,
+            capability: item.capability,
+          })
+          entry.completed = false
+          await putPlanIndex(runStore, entry)
+          await putRunMirror(ctx, entry, config.bundleVersion)
+          return { ok: true, data: { deliverableId: item.id, revisionId, priorFiles: receiptFiles.length } }
         })
-        if (!authorized) return { ok: false, code: 'deliverable_revision_unauthorized', issues: [issue('deliverable_revision_unauthorized', '控制面尚未为当前已接受字节创建可消费的修订授权，原版本继续冻结。')] }
-        const revisionId = `${entry.runId}:${item.id}:${acceptedDigest}`
-        Object.assign(item, advancePlanItem(item, 'revise', { revisionId, lastIssues: [] }))
-        entry.revisionSubmissionGrants.set(item.id, {
-          kind: 'accepted-revision',
-          revisionId,
-          planRevision: entry.plan?.revision ?? 0,
-          contractKind: item.contractKind,
-          capability: item.capability,
-        })
-        entry.completed = false
-        await putPlanIndex(runStore, entry)
-        await putRunMirror(ctx, entry, config.bundleVersion)
-        return { ok: true, data: { deliverableId: item.id, revisionId, priorFiles: receiptFiles.length } }
       },
     })
   }
@@ -1019,37 +1344,63 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       description: [
         '结束本次运行。核对每件交付物是否已通过、计划里是否写了澄清，并对全部产物与你的最终回复跑一遍安全扫描。',
         '通过则本回合到此结束。仍有未完成项时会返回原因；确实无法完成时用 partial:true 交付已完成的部分。',
+        '还有子代理在工作时不会结束，并列出它们的句柄；partial:true 会取消这些子代理并如实记录。',
       ].join(' '),
       parameters: {
         partial: { type: 'boolean', description: '以部分交付结束。只有交付语义才用布尔值。' },
       },
       async execute(args, call) {
         const entry = sessionState(call.sessionId)
-        const partial = Boolean(args.partial)
-        const finalReply = String(entry.finalReply ?? '')
-        const check = completionCheck({
-          plan: entry.plan,
-          items: entry.items,
-          producedTexts: entry.producedTexts,
-          finalReplyText: finalReply,
-          partial,
+        return withRunLock(entry, async () => {
+          const partial = Boolean(args.partial)
+          // A run does not end while a child it started is still working. With
+          // delegation no longer waiting inside its own call, a parent can reach
+          // this tool with children mid-flight; ending there would leave them
+          // writing into a delivery the control plane has already closed. So an
+          // ordinary completion is refused with the handles to wait for, and a
+          // partial one — the exit a run takes when it cannot finish — cancels
+          // them, marks their deliverables, and says so in its reply.
+          const running = runningDelegations(entry)
+          if (running.length && !partial) {
+            return refusal('children_running', `还有 ${running.length} 个子代理在工作：${running.map((delegation) => `${delegation.deliverableId}（句柄 ${delegation.handle}）`).join('、')}。`
+              + '用 evimed_await 等它们结束后再结束运行；确实要现在结束，用 partial:true，它们会被取消并如实记录。')
+          }
+          /** @type {string[]} */
+          const cancelledChildren = []
+          for (const delegation of running) {
+            delegation.abort.abort(new Error('运行以部分交付结束时它仍在工作'))
+            cancelledChildren.push(delegation.handle)
+            const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === delegation.deliverableId)
+            if (item && canTransition('planItem', item.status, 'fail')) {
+              Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_cancelled', '运行以部分交付结束时这件交付物的子代理仍在工作，已取消。')] }))
+            }
+          }
+          const finalReply = String(entry.finalReply ?? '')
+          const check = completionCheck({
+            plan: entry.plan,
+            items: entry.items,
+            producedTexts: entry.producedTexts,
+            finalReplyText: finalReply,
+            partial,
+          })
+          const summary = renderDeliverySummary({
+            plan: entry.plan,
+            items: entry.items,
+            issues: check.issues,
+            partial,
+            runId: entry.runId,
+            at: new Date().toISOString(),
+          })
+          // The report node is unconditional. A run that failed silently and a run
+          // that never started are indistinguishable without one.
+          await writeFileAt(ctx, entry.cwd || call.cwd, workspaceLayout.deliverySummaryFile, summary)
+          if (cancelledChildren.length) await putPlanIndex(store(), entry)
+          if (!check.ok) {
+            return { ok: false, code: 'run_incomplete', issues: check.issues.map(withSeverity) }
+          }
+          entry.completed = true
+          return { ok: true, data: { partial, issues: check.issues.map(withSeverity), ...(cancelledChildren.length ? { cancelledChildren } : {}) }, concludeTurn: true }
         })
-        const summary = renderDeliverySummary({
-          plan: entry.plan,
-          items: entry.items,
-          issues: check.issues,
-          partial,
-          runId: entry.runId,
-          at: new Date().toISOString(),
-        })
-        // The report node is unconditional. A run that failed silently and a run
-        // that never started are indistinguishable without one.
-        await writeFileAt(ctx, entry.cwd || call.cwd, workspaceLayout.deliverySummaryFile, summary)
-        if (!check.ok) {
-          return { ok: false, code: 'run_incomplete', issues: check.issues.map(withSeverity) }
-        }
-        entry.completed = true
-        return { ok: true, data: { partial, issues: check.issues.map(withSeverity) }, concludeTurn: true }
       },
     })
   }
@@ -1099,6 +1450,10 @@ function publicItem(item) {
     status: item.status,
     attempts: item.attempts ?? 0,
     issues: (item.lastIssues ?? []).slice(0, 20),
+    // The child currently working on the item, from the moment it starts. The
+    // control plane used to learn it only when the delegate call returned,
+    // which was when the child was done.
+    ...(item.childSessionId ? { childSessionId: String(item.childSessionId) } : {}),
   }
 }
 
@@ -1110,6 +1465,48 @@ function issue(code, message) {
 /** @param {Record<string, any>} entry @returns {Record<string, any>} */
 function withSeverity(entry) {
   return { severity: 'required', ...entry }
+}
+
+/**
+ * Wait for `promise`, but no longer than `timeoutMs` (0 = no bound) and no
+ * longer than the calling tool's own signal allows. Resolves true when it
+ * stopped waiting before the promise settled, false when the promise settled.
+ * Never rejects: what the caller does next is read the state, whichever way
+ * the wait ended.
+ * @param {Promise<unknown>} promise @param {number} timeoutMs @param {AbortSignal} [signal]
+ * @returns {Promise<boolean>}
+ */
+function settleWithin(promise, timeoutMs, signal) {
+  return new Promise((resolve) => {
+    /** @type {ReturnType<typeof setTimeout> | null} */
+    let timer = null
+    /** @param {boolean} stopped */
+    const done = (stopped) => {
+      if (timer) clearTimeout(timer)
+      signal?.removeEventListener?.('abort', onAbort)
+      resolve(stopped)
+    }
+    const onAbort = () => done(true)
+    if (signal?.aborted) {
+      done(true)
+      return
+    }
+    signal?.addEventListener?.('abort', onAbort, { once: true })
+    if (timeoutMs > 0) timer = setTimeout(() => done(true), timeoutMs)
+    promise.then(() => done(false), () => done(false))
+  })
+}
+
+/**
+ * Why a child was cancelled, in the words the parent is told. Our own
+ * cancellations carry an Error saying which of them it was; a cancelled turn
+ * carries whatever the kernel put there, which is not ours to render.
+ * @param {AbortSignal} signal @returns {string}
+ */
+function cancellationReason(signal) {
+  const reason = /** @type {unknown} */ (signal?.reason)
+  const detail = reason instanceof Error && reason.message ? reason.message : ''
+  return detail ? `子代理已取消：${detail}` : '子代理随所在回合一起取消。'
 }
 
 /** @param {string | undefined} text @returns {any} */
@@ -1250,11 +1647,7 @@ async function injectBriefRevision(ctx, agent, entry, config) {
     }
     entry.completed = false
   }
-  entry.limits = {
-    maxSteps: Number(index?.budget?.maxSteps ?? config.maxSteps) || 0,
-    maxTokens: Number(index?.budget?.maxTokens ?? config.maxTokens) || 0,
-    maxChildren: Number(index?.budget?.maxChildren ?? config.maxParallelChildren) || 0,
-  }
+  entry.limits = runLimits(config, index?.budget && typeof index.budget === 'object' ? index.budget : {})
   const brief = await readFileAt(ctx, cwd, workspaceLayout.briefFile)
   const context = await readFileAt(ctx, cwd, `${sessionBriefDir}/context.md`)
     ?? await readFileAt(ctx, cwd, workspaceLayout.briefContextFile)
@@ -1292,6 +1685,13 @@ async function injectBriefRevision(ctx, agent, entry, config) {
  * @param {Record<string, any>} entry @param {string} runId
  */
 function resetRunState(entry, runId) {
+  // A child still working for the previous run would go on writing into that
+  // run's deliverable directories and submitting into a plan this reset is
+  // about to discard. It is cancelled here, by name, rather than left to finish
+  // unobserved; its settlement is still recorded under the run it belonged to.
+  for (const delegation of entry.delegations?.values?.() ?? []) {
+    if (delegation.status === 'running') delegation.abort?.abort?.(new Error('本次运行已被后续运行取代'))
+  }
   entry.runId = runId
   entry.startedAt = new Date().toISOString()
   entry.briefText = null
@@ -1299,6 +1699,7 @@ function resetRunState(entry, runId) {
   entry.knowledgeEntries = 0
   entry.plan = null
   entry.items = []
+  entry.delegations = new Map()
   entry.budget = { steps: 0, tokens: 0, children: 0 }
   entry.attempts = new Map()
   entry.structuralAttempts = new Map()
@@ -1308,6 +1709,7 @@ function resetRunState(entry, runId) {
   entry.finalReply = ''
   entry.lastTurnEnd = null
   entry.steered = false
+  entry.childrenNudged = false
   entry.completed = false
 }
 

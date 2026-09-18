@@ -16,7 +16,7 @@ import {
   buildGuidanceText,
   completionCheck,
   concurrentWriteNotice,
-  delegatableItems,
+  unmetDependencies,
   evidenceFromOutcome,
   evidenceSourceErrorCode,
   sourceProbe,
@@ -297,8 +297,8 @@ test("the budget refuses a step and the refusal names what to do next", () => {
   assert.deepEqual(accumulateBudget(zeroBudget, { input: 10, output: 5, cacheHit: 8, cacheMiss: 2 }), { steps: 1, tokens: 15, children: 0 });
 });
 
-test("a delegation is queued until its dependencies are accepted", () => {
-  const { plan, items } = indexPlan({
+test("a delegation waits on nothing: it is refused until its dependencies are delivered, naming what is missing", () => {
+  const { items } = indexPlan({
     revision: 1,
     clarifications: ["assumed adults"],
     deliverables: [
@@ -306,9 +306,20 @@ test("a delegation is queued until its dependencies are accepted", () => {
       { id: "b", contractKind: "research-brief", capability: "research-brief", title: "B", dependsOn: ["a"] },
     ],
   });
-  assert.deepEqual(delegatableItems(plan, items).map((item) => item.id), ["a"]);
+  const neverSpent = () => false;
+  assert.deepEqual(unmetDependencies(items[0], items, neverSpent), [], "an item with no dependencies may start at once");
+  assert.deepEqual(unmetDependencies(items[1], items, neverSpent), [{ id: "a", status: "planned" }],
+    "the refusal names the dependency and where it stands, so it can be acted on");
   const accepted = items.map((item) => (item.id === "a" ? { ...item, status: "accepted" } : item));
-  assert.deepEqual(delegatableItems(plan, accepted).map((item) => item.id), ["b"]);
+  assert.deepEqual(unmetDependencies(accepted[1], accepted, neverSpent), []);
+  // A dependency whose submissions are spent goes to the reader as it stands,
+  // marked unverified — a gate verdict never withholds a delivery — so it no
+  // longer holds back the item that builds on it. It used to, forever.
+  const rejected = items.map((item) => (item.id === "a" ? { ...item, status: "rejected" } : item));
+  assert.deepEqual(unmetDependencies(rejected[1], rejected, neverSpent), [{ id: "a", status: "rejected" }]);
+  assert.deepEqual(unmetDependencies(rejected[1], rejected, (dependency) => dependency.id === "a"), []);
+  // A dependency the plan does not contain is reported, never assumed done.
+  assert.deepEqual(unmetDependencies({ id: "c", dependsOn: ["ghost"] }, items, () => true), [{ id: "ghost", status: "missing" }]);
 });
 
 test("a delegated child gets a writable tool set and its own deliverable directory", () => {
