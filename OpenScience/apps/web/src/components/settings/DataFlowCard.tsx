@@ -15,7 +15,7 @@ export function DataFlowCard({
   hosted?: boolean;
 }) {
   return (
-    <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
+    <section className="mt-5 rounded-card border border-border bg-surface">
       <header className="border-b border-border px-5 py-3">
         <h2 className="font-serif text-body text-text">隐私与数据流向</h2>
         <p className="mt-0.5 text-caption text-muted">

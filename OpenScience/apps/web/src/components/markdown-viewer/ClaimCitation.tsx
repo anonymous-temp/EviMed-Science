@@ -18,7 +18,7 @@ function Source({ source }: { source: ClaimSource }) {
   return (
     <div className="mt-2">
       {source.supportQuote && (
-        <blockquote className="border-l-2 border-border pl-2 text-ui-sm text-text">“{source.supportQuote}”</blockquote>
+        <blockquote className="border-l-2 border-border pl-2 text-ui text-text">“{source.supportQuote}”</blockquote>
       )}
       <p className="mt-1 text-caption text-muted">
         {href ? (
@@ -83,7 +83,7 @@ export function ClaimCitation({ ids, claims, statuses }: {
             {ids.map((id) => {
               const claim = claims.get(id);
               if (!claim) {
-                return <li key={id} className="text-ui-sm text-warn">证据矩阵里没有这条主张（{id}）。</li>;
+                return <li key={id} className="text-ui text-warn">证据矩阵里没有这条主张（{id}）。</li>;
               }
               const sources = claim.claimType === "synthesized" && claim.supportingSources?.length
                 ? claim.supportingSources

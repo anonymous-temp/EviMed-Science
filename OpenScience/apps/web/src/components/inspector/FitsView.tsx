@@ -151,7 +151,7 @@ function ImageView({ filename, img }: { filename: string; img: FitsImage }) {
           ref={canvasRef}
           onMouseMove={onMove}
           onMouseLeave={() => setHover(null)}
-          className="max-h-full max-w-full object-contain shadow-card"
+          className="max-h-full max-w-full object-contain ring-1 ring-border"
           style={{ imageRendering: "pixelated", aspectRatio: `${img.width} / ${img.height}` }}
         />
       </div>

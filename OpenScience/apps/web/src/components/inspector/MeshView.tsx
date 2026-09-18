@@ -259,7 +259,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
     <div className="relative h-full min-h-[420px] w-full touch-none select-none overflow-hidden">
       <div ref={mountRef} className="absolute inset-0" aria-label={`${filename} 3D model viewer`} />
 
-      <div className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border bg-surface p-1 shadow-card backdrop-blur">
+      <div className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border bg-surface p-1 shadow-pop backdrop-blur">
         <div className="flex items-center gap-1 px-1.5 text-caption font-medium text-muted">
           <Box size={13} aria-hidden="true" /> 3D
         </div>
@@ -277,7 +277,7 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
               }}
               className={cn(
                 "rounded px-2 py-1 text-caption font-medium transition-colors",
-                shaded === o.v ? "bg-surface text-text shadow-card" : "text-muted hover:text-text",
+                shaded === o.v ? "bg-surface text-text ring-1 ring-border" : "text-muted hover:text-text",
               )}
             >
               {o.label}
@@ -295,19 +295,19 @@ export function MeshView({ filename, bytes }: { filename: string; bytes: ArrayBu
         </button>
       </div>
 
-      <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-card backdrop-blur">
+      <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-pop backdrop-blur">
         <span className="font-medium text-text">{ext.toUpperCase()}</span>
         {meta && <span className="ml-2">{meta.tris.toLocaleString()} triangles</span>}
       </div>
 
       {(rendering || error) && (
-        <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-card backdrop-blur">
+        <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-pop backdrop-blur">
           {rendering ? "正在渲染模型…" : error}
         </div>
       )}
 
       {notice && !rendering && !error && (
-        <div className="pointer-events-none absolute left-1/2 top-1/2 max-w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-input border border-warn bg-surface px-4 py-3 text-center text-ui text-text shadow-card backdrop-blur">
+        <div className="pointer-events-none absolute left-1/2 top-1/2 max-w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-input border border-warn bg-surface px-4 py-3 text-center text-ui text-text shadow-pop backdrop-blur">
           <div className="mb-1 flex items-center justify-center gap-1.5 font-medium text-warn">
             <AlertTriangle size={14} aria-hidden="true" /> File problem
           </div>

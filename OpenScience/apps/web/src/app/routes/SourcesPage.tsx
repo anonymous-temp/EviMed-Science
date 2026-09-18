@@ -195,7 +195,7 @@ function OpenListBrowser({ projectId, busy, setBusy, onImported, onFolderRegiste
       </form>
       {entries && <div className="divide-y divide-border rounded-input border border-border">{remotePath !== "/" && <button type="button"
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-ui text-text hover:bg-surface-2" onClick={() => void browse(parent)}><Folder size={15} aria-hidden="true" />返回上级</button>}
-        {entries.length === 0 ? <p className="px-3 py-4 text-ui-sm text-muted">这里没有可导入的资料。</p> : entries.map((entry) => <div key={entry.path}
+        {entries.length === 0 ? <p className="px-3 py-4 text-ui text-muted">这里没有可导入的资料。</p> : entries.map((entry) => <div key={entry.path}
           className="flex items-center gap-3 px-3 py-2 text-ui text-text"><span className="flex min-w-0 flex-1 items-center gap-2">{entry.entryType === "dir" ? <Folder size={15} aria-hidden="true" /> : <FileSearch size={15} aria-hidden="true" />}<span className="truncate">{entry.name}</span></span>
           {entry.entryType === "dir" ? <><Button size="sm" variant="ghost" disabled={busy} onClick={() => void browse(entry.path)}>打开</Button>
             <Button size="sm" variant="ghost" disabled={busy} title="持续同步这个文件夹" onClick={() => void registerFolder(entry.path)}><FolderSync size={13} aria-hidden="true" />同步</Button></>
@@ -247,7 +247,7 @@ function SyncedFolders({ projectId, refreshToken, onError }: { projectId: string
   };
   return <Card title="已注册的同步文件夹" hint="同步只走你明确注册的文件夹，不会自行遍历整个网盘；子文件夹请单独注册。同步在注册、恢复同步或点击“立即同步”时执行，不会自动定时轮询。">
     {folders === null ? <MemorySkeleton /> : folders.length === 0
-      ? <p className="text-ui-sm text-muted">还没有注册同步文件夹。在上面的网盘目录里点“同步”即可。</p>
+      ? <p className="text-ui text-muted">还没有注册同步文件夹。在上面的网盘目录里点“同步”即可。</p>
       : <div className="space-y-3">{folders.map((folder) => {
         const sync = folder.payload.lastSync;
         // `lastSync` is written only on the success path, so on its own it says a
@@ -262,22 +262,22 @@ function SyncedFolders({ projectId, refreshToken, onError }: { projectId: string
                 (which is the gateway path, tenant namespace and all). */}
             <Folder size={15} aria-hidden="true" /><span className="min-w-0 flex-1 truncate" title={displayPath(folder.payload.connector.id)}>
               {baseName(displayPath(folder.payload.connector.id))}</span>
-            <span className="text-ui-sm text-muted">{folder.payload.status === "active" ? "已启用同步" : "已暂停"}</span>
+            <span className="text-ui text-muted">{folder.payload.status === "active" ? "已启用同步" : "已暂停"}</span>
             <Button size="sm" variant="ghost" disabled={busy || folder.payload.status !== "active"}
               onClick={() => void mutate(() => syncSourceFolder(folder.id, folder.revision))}><RefreshCw size={13} aria-hidden="true" />立即同步</Button>
             <Button size="sm" variant="ghost" disabled={busy}
               onClick={() => void mutate(() => setSourceFolderStatus(folder.id, folder.revision, folder.payload.status === "active" ? "paused" : "active"))}>
               {folder.payload.status === "active" ? <><Pause size={13} aria-hidden="true" />暂停同步</> : <><Play size={13} aria-hidden="true" />恢复同步</>}</Button>
           </div>
-          {lastError && <p className="text-ui-sm text-error" title={operator ? lastError.code : undefined}>上次同步失败：{sourceFailureMessage(lastError)}
+          {lastError && <p className="text-ui text-error" title={operator ? lastError.code : undefined}>上次同步失败：{sourceFailureMessage(lastError)}
             {folder.payload.status === "paused" ? "同步已暂停，处理后点「恢复同步」。" : "已入库的资料不受影响，可点「立即同步」重试。"}</p>}
-          <p className="text-ui-sm text-muted">{sync
+          <p className="text-ui text-muted">{sync
             ? `上次成功同步：新增 ${sync.registered} · 更新 ${sync.updated} · 未变化 ${sync.unchanged} · 已看到 ${sync.scanned} 项${sync.complete ? "" : "（本轮未走完，已排入后续任务）"}`
             : "尚未完成第一次同步。"}</p>
           {/* The lists are bounded examples; the counts are what actually happened. */}
-          {sync && sync.skippedCount > 0 && <p className="text-ui-sm text-muted">跳过 {sync.skippedCount} 项，例如：
+          {sync && sync.skippedCount > 0 && <p className="text-ui text-muted">跳过 {sync.skippedCount} 项，例如：
             {sync.skipped.slice(0, 3).map((item) => `${baseName(item.path)}（${skipReason(item.reason)}）`).join("、")}</p>}
-          {sync && sync.removalCheck === "full" && sync.removedCount > 0 && <p className="text-ui-sm text-muted">
+          {sync && sync.removalCheck === "full" && sync.removedCount > 0 && <p className="text-ui text-muted">
             网盘里已不见 {sync.removedCount} 个文件；已入库的分析结果仍然保留。</p>}
         </div>;
       })}</div>}
@@ -313,17 +313,17 @@ function DuplicateDesk({ projectId, onError }: { projectId: string; onError: (va
   };
   return <Card title="疑似重复" hint="只按哈希、版本家族、文件大小和归一化文件名判断，不做语义比对。">
     {groups === null ? <MemorySkeleton /> : groups.length === 0
-      ? <p className="text-ui-sm text-muted">没有发现疑似重复的资料。</p>
+      ? <p className="text-ui text-muted">没有发现疑似重复的资料。</p>
       : <div className="space-y-3">{groups.map((group) => <div key={group.groupKey} className="space-y-2 rounded-input border border-border px-3 py-2">
         <div className="flex flex-wrap items-center gap-2 text-ui text-text">
           <Copy size={15} aria-hidden="true" /><span className="flex-1 truncate">{baseName(group.label)}</span>
-          <span className="text-ui-sm text-muted">{labelFor(DUPLICATE_KINDS, group.kind, "其他相似情况")}</span>
+          <span className="text-ui text-muted">{labelFor(DUPLICATE_KINDS, group.kind, "其他相似情况")}</span>
         </div>
-        <ul className="space-y-1 text-ui-sm text-muted">{group.members.map((item) => <li key={item.sourceId}>
+        <ul className="space-y-1 text-ui text-muted">{group.members.map((item) => <li key={item.sourceId}>
           第 {item.version} 版 · {item.paths.map(baseName).join("、")} · {Math.max(1, Math.round(item.size / 1024))} KB · {labelFor(STATUS, item.status)}
         </li>)}</ul>
         {group.decision
-          ? <p className="text-ui-sm text-muted">已标记为{group.decision.decision === "linked" ? "同一份资料" : "不是重复"}。可重新选择。</p>
+          ? <p className="text-ui text-muted">已标记为{group.decision.decision === "linked" ? "同一份资料" : "不是重复"}。可重新选择。</p>
           : null}
         <div className="flex flex-wrap gap-2">
           {/* Linking is a statement about two sources. A shared-content group is
@@ -345,10 +345,10 @@ function VersionChain({ sourceId }: { sourceId: string }) {
       .catch((failure) => { if (active) setError(productErrorMessage(failure)); });
     return () => { active = false; };
   }, [sourceId]);
-  if (error) return <p className="text-ui-sm text-error">{error}</p>;
-  if (!family) return <p className="text-ui-sm text-muted">正在读取版本链…</p>;
-  if (family.items.length === 0) return <p className="text-ui-sm text-muted">这份资料还没有其他版本。</p>;
-  return <ul className="space-y-1 rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-muted">
+  if (error) return <p className="text-ui text-error">{error}</p>;
+  if (!family) return <p className="text-ui text-muted">正在读取版本链…</p>;
+  if (family.items.length === 0) return <p className="text-ui text-muted">这份资料还没有其他版本。</p>;
+  return <ul className="space-y-1 rounded-input bg-surface-2 px-3 py-2 text-ui text-muted">
     {family.items.map((item) => <li key={item.id} className={item.id === sourceId ? "text-text" : undefined}>
       第 {item.payload.version} 版 · {baseName(item.payload.paths[0] ?? item.id)} · {labelFor(STATUS, item.payload.status)}
       {item.id === sourceId ? " · 当前查看" : ""}
@@ -384,7 +384,7 @@ function OmissionNotice({ notice, onRaiseDepth }: { notice?: SourceOmissionNotic
   // It used to open with 「仅供参考，不影响这份资料入库，也不需要你处理」 — a
   // notice whose own text told the reader to ignore it (review B). It is
   // either something they can act on, or it is not shown to them.
-  return <div className="space-y-1 rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-muted">
+  return <div className="space-y-1 rounded-input bg-surface-2 px-3 py-2 text-ui text-muted">
     {over !== null && <div className="flex flex-wrap items-center gap-2">
       <p className="min-w-0 flex-1 text-text">抽查 {notice.audited} 个片段，约 {percent(over)} 的内容没有被理解进来，高于当前分析深度的参考值 {percent(notice.target)}。</p>
       <Button size="sm" variant="ghost" onClick={onRaiseDepth}>提高分析深度</Button>
@@ -421,7 +421,7 @@ function SourceCard({ source, busy, onEdit, onRaiseDepth, onRetry, onCancel, onD
   return <Card title={baseName(source.payload.paths[0] ?? source.id)} hint={`第 ${source.payload.version} 版${generationNote} · ${status}`}>
     <div className="space-y-3 text-ui text-text">
       {source.payload.outputs.summary && <p>{source.payload.outputs.summary}</p>}
-      <div className="flex flex-wrap gap-2 text-ui-sm text-muted">
+      <div className="flex flex-wrap gap-2 text-ui text-muted">
         <span>{labelFor(TYPE_LABEL, source.payload.docType, "其他资料")}</span><span>·</span>
         <span>{labelFor(DEPTH_LABEL, source.payload.depth, "分析深度未登记")}</span>
         {coverage && <><span>·</span><span>已解析 {coverage.percent}%{coverage.failed > 0 ? ` · ${coverage.failed} 个片段未能解析` : ""}</span></>}
@@ -435,9 +435,9 @@ function SourceCard({ source, busy, onEdit, onRaiseDepth, onRetry, onCancel, onD
           component and rendered by nothing. Key on the code, never on the stored
           `message`: that is the literal English "Source analysis failed." for
           every failure, while the code is the fact `@evimed/domain` translates. */}
-      {failure && <div className="rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-error" title={operator ? failure.code : undefined}>
+      {failure && <div className="rounded-input bg-surface-2 px-3 py-2 text-ui text-error" title={operator ? failure.code : undefined}>
         <AlertCircle size={14} className="mr-1 inline" aria-hidden="true" />解析失败：{sourceFailureMessage(failure)}原件已保留，「重新分析」会新起一代。</div>}
-      <div className="rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-muted"><FileSearch size={14} className="mr-1 inline" aria-hidden="true" />分类依据：{source.payload.reasons[0]}</div>
+      <div className="rounded-input bg-surface-2 px-3 py-2 text-ui text-muted"><FileSearch size={14} className="mr-1 inline" aria-hidden="true" />分类依据：{source.payload.reasons[0]}</div>
       <OmissionNotice notice={source.payload.omissionNotice} onRaiseDepth={onRaiseDepth} />
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="ghost" onClick={onUnderstanding}><FileSearch size={13} aria-hidden="true" />查看理解</Button>
@@ -460,9 +460,9 @@ function EditSource({ source, busy, onSave, onCancel }: { source: SourceRecord; 
   return <Card title="调整分析" hint={baseName(source.payload.paths[0] ?? source.id)}><form className="grid gap-3 md:grid-cols-3" onSubmit={(event) => {
     event.preventDefault(); onSave({ expectedRevision: source.revision, docType, depth, reason });
   }}>
-    <label className="space-y-1 text-ui-sm text-text"><span>资料类型</span><select aria-label="资料类型" value={docType} onChange={(event) => setDocType(event.target.value)}
+    <label className="space-y-1 text-ui text-text"><span>资料类型</span><select aria-label="资料类型" value={docType} onChange={(event) => setDocType(event.target.value)}
       className="h-9 w-full rounded-input border border-strong bg-bg px-2 text-ui">{TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-    <label className="space-y-1 text-ui-sm text-text"><span>分析深度</span><select aria-label="分析深度" value={depth} onChange={(event) => setDepth(event.target.value as SourceRecord["payload"]["depth"])}
+    <label className="space-y-1 text-ui text-text"><span>分析深度</span><select aria-label="分析深度" value={depth} onChange={(event) => setDepth(event.target.value as SourceRecord["payload"]["depth"])}
       className="h-9 w-full rounded-input border border-strong bg-bg px-2 text-ui">{DEPTH_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
     <Input label="调整原因" value={reason} onChange={(event) => setReason(event.target.value)} required maxLength={1000} />
     <div className="flex gap-2 md:col-span-3"><Button type="submit" loading={busy}>保存并重新分析</Button><Button variant="ghost" disabled={busy} onClick={onCancel}>取消</Button></div>

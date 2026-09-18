@@ -178,7 +178,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
       <div ref={containerRef} className="absolute inset-0" aria-label={`${filename} 三维分子视图`} />
 
       <div
-        className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border bg-surface p-1 shadow-card backdrop-blur"
+        className="absolute left-3 top-3 flex items-center gap-2 rounded-input border border-border bg-surface p-1 shadow-pop backdrop-blur"
         data-molecule-controls="true"
       >
         <div className="flex items-center gap-1 px-1.5 text-caption font-medium text-muted">
@@ -192,7 +192,7 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
               onClick={() => setStyleMode(o.value)}
               className={cn(
                 "rounded px-2 py-1 text-caption font-medium transition-colors",
-                styleMode === o.value ? "bg-surface text-text shadow-card" : "text-muted hover:text-text",
+                styleMode === o.value ? "bg-surface text-text ring-1 ring-border" : "text-muted hover:text-text",
               )}
             >
               {o.label}
@@ -210,13 +210,13 @@ export function MoleculeView({ filename, text }: { filename: string; text: strin
         </button>
       </div>
 
-      <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-card backdrop-blur">
+      <div className="pointer-events-none absolute bottom-3 right-3 rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-pop backdrop-blur">
         <span className="font-medium text-text">{format.toUpperCase()}</span>
         {atomCount !== null && <span className="ml-2">{atomCount} 个原子</span>}
       </div>
 
       {(rendering || error) && (
-        <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-card backdrop-blur">
+        <div className="pointer-events-none absolute bottom-3 left-3 max-w-[70%] rounded-input border border-border bg-surface px-3 py-1.5 text-caption text-muted shadow-pop backdrop-blur">
           {rendering ? "正在渲染结构…" : error}
         </div>
       )}

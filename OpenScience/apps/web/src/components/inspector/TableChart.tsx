@@ -73,14 +73,14 @@ export function TableChart({ table }: { table: ParsedTable }) {
 
   return (
     <div className="flex h-full flex-col bg-surface">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-ui-sm">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-ui">
         <Segmented value={type} onChange={(v) => setType(v as ChartType)} options={["line", "bar", "scatter"]} />
         <label className="flex items-center gap-1 text-muted">
           x:
           <select
             value={xIndex}
             onChange={(e) => setXIndex(Number(e.target.value))}
-            className="rounded-input border border-strong bg-surface-2 px-1.5 py-1 text-ui-sm text-text"
+            className="rounded-input border border-strong bg-surface-2 px-1.5 py-1 text-ui text-text"
           >
             <option value={-1}>行号</option>
             {cols.map((c) => (

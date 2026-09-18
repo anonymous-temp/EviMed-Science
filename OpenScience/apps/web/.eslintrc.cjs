@@ -7,19 +7,24 @@ const banned = (pattern, message) => [
 const tokenRules = [
   ...banned(
     "/text-\\[\\d+(\\.\\d+)?px\\]/",
-    "Arbitrary px font sizes are banned in components. Use the semantic type scale: text-caption / text-ui-sm / text-ui / text-body / text-title / text-display (see fontSize in tailwind.config.js).",
+    "Arbitrary px font sizes are banned in components. Use the semantic type scale: text-caption (12) / text-ui (14) / text-body (16) / text-title (20) / text-display (26), plus text-badge and text-wordmark (see fontSize in tailwind.config.js).",
   ),
   ...banned(
     "/(^|[\\s:])text-(xs|sm|base|lg|xl|[2-9]xl)($|\\s)/",
-    "Tailwind's default text sizes bypass the six-rung scale. Use text-caption (12px) / text-ui-sm (13px) / text-ui / text-body / text-title / text-display (see fontSize in tailwind.config.js).",
+    "Tailwind's default text sizes bypass the type scale. Use text-caption (12px) / text-ui (14px) / text-body (16px) / text-title (20px) / text-display (26px) (see fontSize in tailwind.config.js).",
   ),
   ...banned(
     "/rounded-\\[\\d+px\\]/",
-    "Arbitrary px radii are banned in components. Use rounded-input (10px) or rounded-card (14px) (see borderRadius in tailwind.config.js).",
+    "Arbitrary px radii are banned in components. Use rounded (4px), rounded-input (8px), rounded-card (12px) or rounded-panel (16px) (see borderRadius in tailwind.config.js).",
   ),
   ...banned(
     "/\\bshadow-(sm|md|lg)\\b/",
-    "Bare shadow-sm/md/lg are banned in components. Use shadow-card for static cards or shadow-pop for overlays (see boxShadow in tailwind.config.js).",
+    "Bare shadow-sm/md/lg are banned in components. A static card has no shadow (its 1px border is its edge); use shadow-pop for menus and popovers, shadow-modal for dialogs and drawers (see boxShadow in tailwind.config.js).",
+  ),
+  // Two tiers and a hairline (appendix D §9.3): the static-card shadow is gone.
+  ...banned(
+    "/\\bshadow-card\\b/",
+    "shadow-card was retired: a static card has no shadow, its 1px border-border is its whole edge. Floating layers use shadow-pop (menus, popovers) or shadow-modal (dialogs, drawers).",
   ),
   // `bg-accent/10`, `text-muted/50`, `border-error/30` … emit no CSS at all:
   // the tokens are `var()` colours, and Tailwind 3 can only apply an opacity
@@ -37,6 +42,14 @@ const tokenRules = [
     "Arbitrary hex colors are banned in components. Use the color tokens (text-text / text-muted / bg-surface / border-border / text-accent …, defined as CSS variables in src/index.css).",
   ),
 ];
+
+// The 13 px rung merged into `text-ui` (14 px). Its own list so the two frame
+// files the frame stream owns can be exempted until that stream next edits
+// them (the class is kept as an alias of `ui`, so they render correctly).
+const retiredTypeRules = banned(
+  "/(^|[\\s:])text-ui-sm($|\\s)/",
+  "text-ui-sm (13px) was merged into text-ui (14px): the 13 and 13.5 px rungs were one rung half a pixel apart. Use text-ui, or text-caption for metadata.",
+);
 
 const errorTextRules = [
   {
@@ -89,6 +102,15 @@ module.exports = {
       // the six-rung scale that way. Exceptions get an inline eslint-disable
       // with a reason, or an entry in the override below.
       files: ["src/**/*.{ts,tsx}"],
+      rules: {
+        "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...errorTextRules],
+      },
+    },
+    {
+      // The frame bridge and the session route belong to the frame stream
+      // (2026-09-18 file ownership); they still say text-ui-sm, which renders
+      // as text-ui through the retired alias.
+      files: ["src/app/routes/RuntimeUiFrame.tsx", "src/app/routes/SessionRoute.tsx"],
       rules: {
         "no-restricted-syntax": ["error", ...tokenRules, ...errorTextRules],
       },

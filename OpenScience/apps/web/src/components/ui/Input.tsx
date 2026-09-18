@@ -46,13 +46,13 @@ function FieldShell({ id, label, error, children }: FieldShellProps) {
   return (
     <div>
       {label != null && (
-        <label htmlFor={id} className="mb-1.5 block text-ui-sm font-medium text-text">
+        <label htmlFor={id} className="mb-1.5 block text-ui font-medium text-text">
           {label}
         </label>
       )}
       {children}
       {error != null && (
-        <p id={`${id}-error`} role="alert" className="mt-1.5 text-ui-sm text-error">
+        <p id={`${id}-error`} role="alert" className="mt-1.5 text-ui text-error">
           {error}
         </p>
       )}

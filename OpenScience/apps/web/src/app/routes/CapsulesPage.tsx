@@ -135,7 +135,7 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
               {capsules.map((item) => <button key={item.id} type="button" disabled={busy} onClick={() => setSelected(item.id)} aria-pressed={selected === item.id}
                 className={cn("block w-full rounded-card border bg-surface p-4 text-left", selected === item.id ? "border-accent" : "border-border hover:bg-surface-2")}>
                 <span className="block font-medium text-ui text-text">{item.payload.title}</span>
-                {item.payload.description && <span className="mt-1 block text-ui-sm text-muted">{item.payload.description}</span>}
+                {item.payload.description && <span className="mt-1 block text-ui text-muted">{item.payload.description}</span>}
               </button>)}
               {cursor && <Button variant="ghost" loading={busy} onClick={() => void perform(async () => {
                 const page = await listCapsules({ deleted: view === "trash", cursor }); setCapsules((items) => [...items, ...page.items]); setCursor(page.nextCursor);
@@ -178,10 +178,10 @@ function EntryCard({ entry, busy, onUpdate }: { entry: CapsuleEntry; busy: boole
   const status = entry.payload.status;
   useEffect(() => { if (!editing) setValue(entry.payload.content); }, [entry.payload.content, editing]);
   return <article className="space-y-3 rounded-card border border-border p-4">
-    <div className="flex items-center justify-between gap-2 text-ui-sm"><span className="text-muted">{capsuleEntryLabel(entry.payload.factKind)} · 版本 {entry.revision}</span>
+    <div className="flex items-center justify-between gap-2 text-ui"><span className="text-muted">{capsuleEntryLabel(entry.payload.factKind)} · 版本 {entry.revision}</span>
       <span className={status === "candidate" ? "text-warn" : "text-muted"}>{labelFor(STATUS_LABEL, status)}</span></div>
     {editing ? <><Textarea label="修订条目" disabled={busy} value={value} onChange={(event) => setValue(event.target.value)} maxLength={20000} rows={4} />
-      <details className="text-ui-sm text-muted"><summary>当前已保存内容</summary><p className="mt-2 whitespace-pre-wrap">{entry.payload.content}</p></details></> : <p className="whitespace-pre-wrap text-ui text-text">{entry.payload.content}</p>}
+      <details className="text-ui text-muted"><summary>当前已保存内容</summary><p className="mt-2 whitespace-pre-wrap">{entry.payload.content}</p></details></> : <p className="whitespace-pre-wrap text-ui text-text">{entry.payload.content}</p>}
     <div className="flex flex-wrap gap-2">
       {editing ? <><Button size="sm" disabled={busy || !value.trim()} onClick={() => void onUpdate({ content: value.trim() }).then((saved) => { if (saved) setEditing(false); })}>保存修订</Button><Button variant="ghost" size="sm" onClick={() => setEditing(false)}>取消修订</Button></>
         : <Button variant="ghost" size="sm" disabled={busy} onClick={() => setEditing(true)}>修订</Button>}

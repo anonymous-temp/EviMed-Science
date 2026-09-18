@@ -115,7 +115,7 @@ function ProjectPluginsCard({ projectId }: { projectId: string }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-serif text-body text-text">项目插件</h2>
-          <p className="mt-0.5 text-ui-sm text-muted">当前项目：{projectId}</p>
+          <p className="mt-0.5 text-ui text-muted">当前项目：{projectId}</p>
         </div>
         <Button variant="ghost" size="sm" onClick={() => void refresh(true)} disabled={fetching || mutating !== null} aria-label="刷新插件状态">
           <RefreshCw size={14} aria-hidden="true" />刷新
@@ -130,8 +130,8 @@ function ProjectPluginsCard({ projectId }: { projectId: string }) {
         <EmptyState icon={Puzzle} title="暂无可配置的插件" description="此项目没有已批准的可配置插件。" />
       ) : (
         <div className="space-y-6">
-          {loadError && <div role="alert" className="text-ui-sm text-error">无法刷新插件状态，当前显示上次读取结果。<Button className="ml-2" variant="ghost" size="sm" onClick={() => void refresh(true)}>重试</Button></div>}
-          {pending && pollCount >= 24 && <p className="text-ui-sm text-muted">配置仍在等待处理，自动刷新已暂停。可点击“刷新插件状态”继续查看。</p>}
+          {loadError && <div role="alert" className="text-ui text-error">无法刷新插件状态，当前显示上次读取结果。<Button className="ml-2" variant="ghost" size="sm" onClick={() => void refresh(true)}>重试</Button></div>}
+          {pending && pollCount >= 24 && <p className="text-ui text-muted">配置仍在等待处理，自动刷新已暂停。可点击“刷新插件状态”继续查看。</p>}
           {plugins.map((item, index) => (
             <div key={item.id} className={index ? "border-t border-border pt-6" : undefined}>
               <PluginPanel
@@ -261,25 +261,25 @@ function PluginPanel({ projectId, plugin, fetching, loadError, mutating, lifetim
     <section aria-label={`插件 ${pluginDisplayName(plugin.id)}`} className="space-y-4">
       <div>
         <h3 className="text-ui font-semibold text-text">{pluginDisplayName(plugin.id)}</h3>
-        <p className="mt-1 text-ui-sm text-muted">已安装版本 {plugin.binaryVersion}</p>
-        <details className="text-ui-sm text-muted">
+        <p className="mt-1 text-ui text-muted">已安装版本 {plugin.binaryVersion}</p>
+        <details className="text-ui text-muted">
           <summary className="cursor-pointer select-none">技术标识</summary>
           <p className="mt-1">插件标识 <span className="font-mono">{plugin.id}</span></p>
           {plugin.tools.length > 0 && <p>提供的工具：<span className="font-mono">{plugin.tools.join("、")}</span></p>}
         </details>
-        <p className="text-ui-sm text-muted">{availabilityText(plugin)}</p>
+        <p className="text-ui text-muted">{availabilityText(plugin)}</p>
         {plugin.availableUpdate && (
           <>
             <Button variant="ghost" size="sm" aria-expanded={updateOpen} onClick={() => setUpdateOpen(!updateOpen)}>查看更新</Button>
-            {updateOpen && <p className="mt-1 text-ui-sm text-muted">
+            {updateOpen && <p className="mt-1 text-ui text-muted">
               插件程序随运行时镜像发布：平台发布包含 {plugin.availableUpdate.version} 的新镜像后，此项目会自动使用新版本，本页无需操作，已保存的配置会保留。
             </p>}
           </>
         )}
-        {plugin.removed && <p className="mt-1 text-ui-sm text-muted">此项目已移除该插件：已停用并恢复默认配置，配置历史保留。</p>}
+        {plugin.removed && <p className="mt-1 text-ui text-muted">此项目已移除该插件：已停用并恢复默认配置，配置历史保留。</p>}
       </div>
-      {unsupportedSettings && <p role="alert" className="text-ui-sm text-error">当前程序版本不支持配置，请联系平台管理员。</p>}
-      <div className="rounded-input border border-border bg-bg p-3 text-ui-sm">
+      {unsupportedSettings && <p role="alert" className="text-ui text-error">当前程序版本不支持配置，请联系平台管理员。</p>}
+      <div className="rounded-input border border-border bg-bg p-3 text-ui">
         <p role="status" className="font-medium text-text">{phaseLabels[plugin.phase]}</p>
         {pending && <p className="mt-1 text-muted">配置将在项目空闲时应用，进行中的任务不会被中断。应用完成前请以已验证生效配置为准。</p>}
         {unverifiedRecovery && <p className="mt-1 text-muted">下方保留上次通过验证的配置记录，当前运行状态尚未确认。</p>}
@@ -289,7 +289,7 @@ function PluginPanel({ projectId, plugin, fetching, loadError, mutating, lifetim
         </div>
       </div>
       {stale && (
-        <div role="alert" className="rounded-input border border-border p-3 text-ui-sm text-text">
+        <div role="alert" className="rounded-input border border-border p-3 text-ui text-text">
           <p>配置版本已发生变化，你的未保存输入已保留。请核对最新配置后继续。</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <Button size="sm" variant="ghost" disabled={busy || fetching || loadError} onClick={() => adoptLatest(true)}>保留输入并采用最新版本</Button>
@@ -297,7 +297,7 @@ function PluginPanel({ projectId, plugin, fetching, loadError, mutating, lifetim
           </div>
         </div>
       )}
-      {actionError && <p role="alert" className="text-ui-sm text-error">{actionError}</p>}
+      {actionError && <p role="alert" className="text-ui text-error">{actionError}</p>}
       {draft && (
         <form className="space-y-4" noValidate onSubmit={(event) => {
           event.preventDefault();
@@ -308,15 +308,15 @@ function PluginPanel({ projectId, plugin, fetching, loadError, mutating, lifetim
         }}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-ui-sm font-medium text-text">在此项目中启用</p>
-              <p className="mt-1 text-ui-sm text-muted">禁用后，此项目将不再加载该插件提供的工具。</p>
+              <p className="text-ui font-medium text-text">在此项目中启用</p>
+              <p className="mt-1 text-ui text-muted">禁用后，此项目将不再加载该插件提供的工具。</p>
             </div>
             <Button variant="ghost" size="sm" role="switch" aria-checked={draft.enabled} aria-label={`启用插件 ${pluginDisplayName(plugin.id)}`} disabled={formDisabled} onClick={() => setDraft({ ...draft, enabled: !draft.enabled })}>{draft.enabled ? "已启用" : "已禁用"}</Button>
           </div>
           {timeoutField && (
             <div className="max-w-sm">
               <Input label="请求超时（毫秒）" type="number" min={minTimeout} max={maxTimeout} step={1} value={draft.timeout} error={timeoutError} disabled={formDisabled} onChange={(event) => setDraft({ ...draft, timeout: event.target.value })} />
-              <p className="mt-1 text-ui-sm text-muted">允许范围：{minTimeout}–{maxTimeout} 毫秒。引用格式和语言由每次任务指定。</p>
+              <p className="mt-1 text-ui text-muted">允许范围：{minTimeout}–{maxTimeout} 毫秒。引用格式和语言由每次任务指定。</p>
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
@@ -334,12 +334,12 @@ function PluginPanel({ projectId, plugin, fetching, loadError, mutating, lifetim
         }}>配置历史</Button>
         {historyOpen && (
           <div className="mt-3">
-            <p className="mb-3 text-ui-sm text-muted">恢复历史配置会创建新的配置版本，程序版本保持 {plugin.binaryVersion}。</p>
+            <p className="mb-3 text-ui text-muted">恢复历史配置会创建新的配置版本，程序版本保持 {plugin.binaryVersion}。</p>
             {historyLoading ? <div role="status"><span className="sr-only">正在读取配置历史</span><FilesSkeleton /></div>
               : historyError ? <EmptyState title="无法读取配置历史" action={<Button onClick={() => void loadHistory()}>重试读取历史</Button>} />
                 : !history?.length ? <EmptyState title="暂无配置历史" />
                   : <ul className="divide-y divide-border">{history.map((item) => (
-                    <li key={item.revision} className="flex flex-wrap items-center justify-between gap-3 py-3 text-ui-sm text-text">
+                    <li key={item.revision} className="flex flex-wrap items-center justify-between gap-3 py-3 text-ui text-text">
                       <span>{configurationText(item)}</span>
                       <Button variant="ghost" size="sm" disabled={mutationDisabled || dirty || item.revision === desired?.revision} onClick={() => setRestoreTarget(item)}>恢复配置版本 {item.revision}</Button>
                     </li>

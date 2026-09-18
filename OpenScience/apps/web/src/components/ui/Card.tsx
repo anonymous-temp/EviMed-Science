@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * The one card container (P2-1, spec §7): rounded-card + border + surface +
- * shadow-card, a p-4/p-5 padding scale, and optional header (title + hint, or
+ * The one card container (P2-1, spec §7): rounded-card + border + surface,
+ * no shadow — a static card's hairline is its whole edge (appendix D §9.3) —
+ * a p-4/p-5 padding scale, and optional header (title + hint, or
  * a raw slot) / footer slots. Page sections compose from this instead of
  * re-declaring the same box classes.
  */
@@ -31,13 +32,13 @@ export function Card({
 }) {
   const hasHeader = header != null || title != null || hint != null;
   return (
-    <section className={cn("rounded-card border border-border bg-surface shadow-card", className)}>
+    <section className={cn("rounded-card border border-border bg-surface", className)}>
       {hasHeader && (
         <header className="border-b border-border px-5 py-3">
           {header ?? (
             <>
               {title != null && <h2 className="font-serif text-body text-text">{title}</h2>}
-              {hint != null && <p className="mt-0.5 text-ui-sm text-muted">{hint}</p>}
+              {hint != null && <p className="mt-0.5 text-ui text-muted">{hint}</p>}
             </>
           )}
         </header>

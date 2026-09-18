@@ -267,7 +267,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
             </p>
           </div>
           <div className={cn(
-            "inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-ui-sm",
+            "inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-ui",
             connected ? "border-ok bg-ok-soft text-ok" : "border-border bg-surface text-muted",
           )}>
             <span className={cn("h-1.5 w-1.5 rounded-full", connected ? "bg-ok" : "bg-muted")} />
@@ -290,7 +290,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
               />
             )}
 
-            <section className="mt-7 overflow-hidden rounded-card border border-border bg-surface shadow-card">
+            <section className="mt-7 overflow-hidden rounded-card border border-border bg-surface">
               <textarea
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
@@ -299,7 +299,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
                 className="min-h-32 w-full resize-y bg-transparent px-5 pb-3 pt-5 text-body text-text outline-none placeholder:text-muted"
               />
               <div className="flex items-center justify-between border-t border-border px-4 py-3">
-                <span className="text-ui-sm text-muted">仅保存为个人私有记忆；系统会根据问题相关性选择使用。</span>
+                <span className="text-ui text-muted">仅保存为个人私有记忆；系统会根据问题相关性选择使用。</span>
                 <Button onClick={() => void create()} disabled={!draft.trim()} loading={saving}>
                   {!saving && <Plus size={14} aria-hidden="true" />}
                   保存记忆
@@ -343,7 +343,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
             ) : (
               <section className="mt-6 grid items-start gap-4 md:grid-cols-2" aria-label="科研记忆列表">
                 {filtered.map((item) => (
-                  <article key={item.id} className="group rounded-card border border-border bg-surface p-5 shadow-card transition-shadow hover:shadow-pop">
+                  <article key={item.id} className="group rounded-card border border-border bg-surface p-5 transition-colors hover:border-strong">
                     <div className="mb-4 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 text-caption text-muted">
                         {item.pinned && <span className="inline-flex items-center gap-1 font-medium text-accent"><Pin size={11} aria-hidden="true" /> 置顶</span>}
@@ -515,7 +515,7 @@ function MemoryProfileOverview({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-serif text-title font-semibold text-text">EviMed 对你的持续理解</h2>
-          <p className="mt-1 text-ui-sm text-muted">{profile.activeCount} 条已生效 · {profile.pendingCount} 条待确认；每条都有来源证据与版本记录。</p>
+          <p className="mt-1 text-ui text-muted">{profile.activeCount} 条已生效 · {profile.pendingCount} 条待确认；每条都有来源证据与版本记录。</p>
         </div>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
@@ -526,13 +526,13 @@ function MemoryProfileOverview({
           const holdsHighlight = highlightId !== null && records.some((record) => record.id === highlightId);
           const shown = expanded.has(section.title) || holdsHighlight ? records : records.slice(0, SECTION_PREVIEW);
           return (
-            <article key={section.title} className="rounded-card border border-border bg-surface p-4 shadow-card">
+            <article key={section.title} className="rounded-card border border-border bg-surface p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h3 className="text-body font-semibold text-text">{section.title}</h3>
                 <span className="text-caption text-muted">{records.length}</span>
               </div>
               {records.length === 0 ? (
-                <p className="text-ui-sm text-muted">尚无稳定记录</p>
+                <p className="text-ui text-muted">尚无稳定记录</p>
               ) : (
                 <div className="space-y-3">
                   {shown.map((record) => (
@@ -549,10 +549,10 @@ function MemoryProfileOverview({
                           value={editingValue}
                           onChange={(event) => setEditingValue(event.target.value)}
                           aria-label="修正结构化记忆"
-                          className="min-h-24 bg-bg text-ui-sm"
+                          className="min-h-24 bg-bg text-ui"
                         />
                       ) : (
-                        <p className="text-ui-sm text-text">{memoryExcerpt(record.summary || record.value)}</p>
+                        <p className="text-ui text-text">{memoryExcerpt(record.summary || record.value)}</p>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-muted">
                         <span>{record.evidenceCount} 条证据</span>
@@ -652,7 +652,7 @@ function MemoryProfileOverview({
                         else next.add(section.title);
                         return next;
                       })}
-                      className="min-h-6 w-full rounded-input px-2 py-1 text-ui-sm text-muted hover:bg-surface-2 hover:text-text"
+                      className="min-h-6 w-full rounded-input px-2 py-1 text-ui text-muted hover:bg-surface-2 hover:text-text"
                     >
                       {expanded.has(section.title) ? "收起" : `还有 ${records.length - SECTION_PREVIEW} 条`}
                     </button>

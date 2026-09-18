@@ -13,7 +13,9 @@ describe("Card", () => {
     expect(screen.getByText("主题保存在本浏览器中")).toBeInTheDocument();
     expect(screen.getByText("内容")).toBeInTheDocument();
     const section = screen.getByText("内容").closest("section");
-    expect(section).toHaveClass("rounded-card", "border", "border-border", "bg-surface", "shadow-card");
+    expect(section).toHaveClass("rounded-card", "border", "border-border", "bg-surface");
+    // A static card is a hairline, not a shadow (appendix D §9.3).
+    expect(section?.className).not.toMatch(/shadow/);
   });
 
   it("applies the padding scale to the body (p-5 default, p-4 dense)", () => {

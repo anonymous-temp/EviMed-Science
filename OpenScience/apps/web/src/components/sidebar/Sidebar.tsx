@@ -146,7 +146,7 @@ export function Sidebar() {
         // most of the viewport so it never pushes the page sideways; from `lg`
         // up it is the resizable column it has always been.
         "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:max-w-[85vw] max-lg:shadow-pop",
-        !dragging && "transition-[width] duration-200 ease-out",
+        !dragging && "transition-[width] duration-base ease-standard",
       )}
       style={{ width: sidebarCollapsed ? 0 : width }}
     >
@@ -154,8 +154,7 @@ export function Sidebar() {
         <div className="px-4 pb-3 pt-4">
           <div className="flex items-baseline gap-1.5">
             <img src={evimedMark} alt="EviMed" className="h-[21px] w-[21px] self-center" />
-            {/* eslint-disable-next-line no-restricted-syntax -- brand wordmark: 17px sits between the body (15px) and title (20px) rungs; moving it visibly changes the lockup */}
-            <div className="font-serif text-[17px] font-semibold leading-none tracking-tight text-text">
+            <div className="font-serif text-wordmark font-semibold text-text">
               EviMed
             </div>
             <InboxBell />
@@ -189,7 +188,7 @@ export function Sidebar() {
         </nav>
 
         <div className="mt-4 flex-1 overflow-y-auto px-3 pb-2">
-          <div className="px-2 py-1 text-caption font-medium tracking-wider text-muted">最近任务</div>
+          <h2 className="px-2 py-1 text-caption font-semibold text-muted">最近任务</h2>
           {(runs?.length ?? 0) > 0 && (
             <label className="relative mb-1 block">
               <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />

@@ -77,7 +77,7 @@ export function SegmentedControl<T extends string>({
             className={cn(
               "rounded-md px-3 py-1.5 text-ui outline-none transition-colors",
               "focus-visible:ring-2 focus-visible:ring-focus",
-              checked ? "bg-surface font-medium text-text shadow-card" : "text-muted hover:text-text",
+              checked ? "bg-surface font-medium text-text ring-1 ring-border" : "text-muted hover:text-text",
             )}
           >
             {option.label}

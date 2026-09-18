@@ -126,7 +126,7 @@ function RouteFallback() {
   return (
     <div className="flex h-full items-center justify-center bg-bg text-muted" role="status" aria-live="polite">
       <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-      <span className="ml-2 text-ui-sm">正在载入…</span>
+      <span className="ml-2 text-ui">正在载入…</span>
     </div>
   );
 }

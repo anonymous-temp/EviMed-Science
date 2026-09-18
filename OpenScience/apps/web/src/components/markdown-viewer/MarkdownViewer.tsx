@@ -54,7 +54,7 @@ const STYLES: Record<Variant, Record<string, string>> = {
     h1: "mb-3 mt-10 text-[33px] font-bold leading-[1.25] tracking-[-0.01em] text-[#1c1915] [text-wrap:balance] first:mt-0 [font-family:'Iowan_Old_Style','Charter',Georgia,'Songti_SC','Noto_Serif_CJK_SC',serif]",
     h2: "mb-4 mt-11 flex items-baseline gap-2.5 text-display font-semibold leading-snug tracking-[-0.005em] text-[#1c1915] [text-wrap:balance] before:relative before:top-[0.14em] before:h-[0.82em] before:w-[3px] before:shrink-0 before:rounded-full before:bg-[#c15f3c] before:content-[''] first:mt-0 [font-family:'Iowan_Old_Style','Charter',Georgia,'Songti_SC','Noto_Serif_CJK_SC',serif]",
     h3: "mb-2 mt-8 text-title font-semibold leading-snug text-[#2b2620] first:mt-0 [font-family:'Iowan_Old_Style','Charter',Georgia,'Songti_SC','Noto_Serif_CJK_SC',serif]",
-    h4: "mb-2 mt-6 text-ui-sm font-semibold uppercase tracking-[0.08em] text-[#9a8d7c] first:mt-0",
+    h4: "mb-2 mt-6 text-ui font-semibold uppercase tracking-[0.08em] text-[#9a8d7c] first:mt-0",
     blockquote: "my-5 rounded-r-md border-l-[3px] border-[#d98c6a] bg-[#faf6f2] py-1.5 pl-5 pr-4 text-[#6b6155] [&_p]:my-1.5",
     hr: "mx-auto my-10 w-12 border-t-2 border-[#e6ddd2]",
     table: "border-collapse text-ui tabular-nums",

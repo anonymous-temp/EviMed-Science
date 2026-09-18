@@ -76,13 +76,13 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
       }}
     />}
     <div className="space-y-5">
-      <p className="text-ui-sm text-muted">撤销仅对本服务上的快照生效，已下载的离线副本无法收回。更新会生成新的独立快照。</p>
-      {error && <div role="alert" className="space-y-2 text-ui-sm text-error"><p>{error}</p><Button variant="ghost" disabled={busy} onClick={() => { setError(null); setRefresh(value => value + 1); }}>刷新记录</Button></div>}
-      {notice && <p role="status" className="text-ui-sm text-ok">{notice}</p>}
+      <p className="text-ui text-muted">撤销仅对本服务上的快照生效，已下载的离线副本无法收回。更新会生成新的独立快照。</p>
+      {error && <div role="alert" className="space-y-2 text-ui text-error"><p>{error}</p><Button variant="ghost" disabled={busy} onClick={() => { setError(null); setRefresh(value => value + 1); }}>刷新记录</Button></div>}
+      {notice && <p role="status" className="text-ui text-ok">{notice}</p>}
       <section className="space-y-3" aria-label="加密导出">
         <h3 className="text-ui font-medium text-text">导出{capsule ? `「${capsule.payload.title}」` : "胶囊"}</h3>
         <Input label="导出口令" type="password" autoComplete="new-password" value={exportPassword} disabled={busy || !capsuleId} onChange={event => setExportPassword(event.target.value)} maxLength={1024} />
-        <div className="flex flex-wrap gap-4 text-ui-sm text-text">
+        <div className="flex flex-wrap gap-4 text-ui text-text">
           <span>✓ 工作方式（默认）</span>
           <label><input type="checkbox" checked={profile} disabled={busy} onChange={event => setProfile(event.target.checked)} /> 额外分享个人背景</label>
           <label><input type="checkbox" checked={knowledge} disabled={busy} onChange={event => setKnowledge(event.target.checked)} /> 额外分享知识与项目事实</label>
@@ -92,7 +92,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
       </section>
       <section className="space-y-3 border-t border-border pt-4" aria-label="胶囊导入">
         <h3 className="text-ui font-medium text-text">导入加密胶囊</h3>
-        <label className="block space-y-1 text-ui-sm text-text">选择胶囊文件<input type="file" accept=".evimedcap" className={inputClasses()} disabled={busy} onChange={event => {
+        <label className="block space-y-1 text-ui text-text">选择胶囊文件<input type="file" accept=".evimedcap" className={inputClasses()} disabled={busy} onChange={event => {
           const file = event.target.files?.[0]; setArchive(""); setPreview(null);
           if (!file) return;
           if (!file.name.endsWith(".evimedcap") || file.size > 2 * 1024 * 1024) { setError("请选择不超过 2 MiB 的 .evimedcap 文件。"); return; }
@@ -103,10 +103,10 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
           const result = await previewCapsuleImport({ archive, password: importPassword }); if (mounted.current) setPreview(result);
         })}>解密并预览</Button>
         {preview && <div className="space-y-3 rounded-card border border-border p-3">
-          <p className="text-ui-sm text-text">{preview.issuerTrust === "verified" ? "来源身份已由本服务验证" : "作者身份未验证（外部自签名）"}</p>
-          <p className="text-ui-sm text-muted">在线状态：{preview.hostedStatus === "revoked" ? "已撤销，无法导入" : preview.hostedStatus === "active" ? "有效" : "未知，无法核验外部撤销状态"} · {preview.entries.length} 条内容</p>
-          {preview.newerSnapshotId && <p className="text-ui-sm text-warn">发布者已有更新快照，可向发布者索取新版本。</p>}
-          {preview.entries.map(entry => <details key={entry.id} className="text-ui-sm"><summary>{capsuleEntryLabel(entry.factKind)} · 来源版本 {entry.version}</summary><p className="mt-2 whitespace-pre-wrap text-text">{entry.content}</p></details>)}
+          <p className="text-ui text-text">{preview.issuerTrust === "verified" ? "来源身份已由本服务验证" : "作者身份未验证（外部自签名）"}</p>
+          <p className="text-ui text-muted">在线状态：{preview.hostedStatus === "revoked" ? "已撤销，无法导入" : preview.hostedStatus === "active" ? "有效" : "未知，无法核验外部撤销状态"} · {preview.entries.length} 条内容</p>
+          {preview.newerSnapshotId && <p className="text-ui text-warn">发布者已有更新快照，可向发布者索取新版本。</p>}
+          {preview.entries.map(entry => <details key={entry.id} className="text-ui"><summary>{capsuleEntryLabel(entry.factKind)} · 来源版本 {entry.version}</summary><p className="mt-2 whitespace-pre-wrap text-text">{entry.content}</p></details>)}
           <Input label="导入后的胶囊名称" value={importTitle} disabled={busy} maxLength={150} onChange={event => setImportTitle(event.target.value)} />
           <p className="text-caption text-muted">将新建胶囊；条目全部待确认，不自动启用，也不会执行包内方法。</p>
           <Button disabled={busy || !preview.canImport || !importTitle.trim()} onClick={() => void perform(async () => {
@@ -116,8 +116,8 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
         </div>}
       </section>
       {capsuleId && <section className="space-y-2 border-t border-border pt-4" aria-label="导出历史"><h3 className="text-ui font-medium text-text">导出历史</h3>
-        {loading ? <p role="status" className="text-ui-sm text-muted">正在读取导出记录…</p> : history.length === 0 ? <p className="text-ui-sm text-muted">尚无导出快照。</p> : history.map(snapshot => <div key={snapshot.id} className="space-y-2 rounded-card border border-border p-3">
-          <p className="text-ui-sm text-text">{new Date(snapshot.createdAt).toLocaleString()} · 胶囊版本 {snapshot.capsuleRevision} · {snapshot.entryCount} 条 · {snapshot.status === "revoked" ? "已撤销" : "有效"}</p>
+        {loading ? <p role="status" className="text-ui text-muted">正在读取导出记录…</p> : history.length === 0 ? <p className="text-ui text-muted">尚无导出快照。</p> : history.map(snapshot => <div key={snapshot.id} className="space-y-2 rounded-card border border-border p-3">
+          <p className="text-ui text-text">{new Date(snapshot.createdAt).toLocaleString()} · 胶囊版本 {snapshot.capsuleRevision} · {snapshot.entryCount} 条 · {snapshot.status === "revoked" ? "已撤销" : "有效"}</p>
           <details className="text-caption text-muted"><summary>快照校验信息</summary><p className="break-all">{snapshot.id} · {snapshot.archiveSha256}</p><p>条目版本：{snapshot.entryVersions.map(entry => entry.version).join("、")}</p></details>
           <p className="text-caption text-muted">分享范围：{snapshot.scopes.map(scope => labelFor({ workstyle: "工作方式", "+profile": "个人背景", "+knowledge": "知识与项目事实" }, scope, "其他范围")).join("、")}</p>
           <div className="flex flex-wrap gap-2"><Button size="sm" variant="ghost" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
