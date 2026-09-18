@@ -537,6 +537,7 @@ export function childReport(outcome) {
  *   briefText?: string | null,
  *   matrix?: any,
  *   sourceArtifacts?: Record<string, string>,
+ *   sourceTypes?: Record<string, string>,
  *   staleEvidenceCount?: number,
  * }} input
  * @returns {ReturnType<typeof runGate>}
