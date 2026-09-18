@@ -13,6 +13,7 @@ import {
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
 import { capsuleMethodsDirName, materializeCapsuleMethods } from "./capsuleMethods.mjs";
+import { CAPSULE_PROFILE_FACT_KINDS, renderCapsuleProfile } from "./capsuleProfile.mjs";
 import { supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockDshRuntime } from "./mockDshRuntime.mjs";
 import { proxyRuntimeUiMux } from "./runtimeUiMuxProxy.mjs";
@@ -3895,7 +3896,7 @@ export class RuntimeManager {
    * the pinned kernel rather than read from its documentation.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ text: string, system?: string | null, memoryContext?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer' }} input
+   * @param {{ text: string, system?: string | null, memoryContext?: string | null, residentProfile?: boolean, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer' }} input
    * @returns {Promise<void>}
    */
   async dispatchPrompt(project, sessionId, input) {
@@ -3908,7 +3909,7 @@ export class RuntimeManager {
     }
   }
 
-  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, memoryContext = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue" }) {
+  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, memoryContext = null, residentProfile = false, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue" }) {
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) {
       const error = new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
@@ -3925,6 +3926,11 @@ export class RuntimeManager {
     if (typeof memoryContext === "string") {
       await this.writeRunMemoryFile(project, memoryContext, { sessionId: strictContext ? sessionId : null, required: strictContext });
     }
+    // Only where the researcher's own context belongs: a dispatch into the
+    // project's workspace that also recalled memories. A verification, a
+    // source reading or a learning run works in a directory of its own and
+    // passes no memories on purpose; it does not ask for this either.
+    if (residentProfile) await this.syncCapsuleProfile(project);
     if (typeof runId === "string" && runId) {
       await this.writeRunBriefIndex(project, runId, {
         sessionId: strictContext ? sessionId : null,
@@ -3992,6 +3998,37 @@ export class RuntimeManager {
     try {
       await write();
     } catch { /* isolated: evimed_run_context_write_failures_total */ }
+  }
+
+  /**
+   * Writes the resident capsule profile (`workspaceLayout.capsuleProfileFile`)
+   * the socket injects at the start of every run in this workspace — including
+   * the turns typed into the kernel's own window, which no dispatch precedes;
+   * that is why the frame route calls this too.
+   *
+   * Rendered from the researcher's own capsule, and empty when recall is off
+   * (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`): a profile left from before the
+   * switch was thrown would keep reaching runs the operator meant to run
+   * without memory. Empty with no file on disk writes nothing, so a project
+   * that never had a capsule gains no directory. Isolated like the other
+   * context files — a run without the block is degraded, not invalid.
+   *
+   * @param {Record<string, any>} project
+   * @returns {Promise<{ written: boolean, chars: number, error?: string }>}
+   */
+  async syncCapsuleProfile(project) {
+    try {
+      const profile = this.capsuleService && this.config.memoryRecallEnabled !== false
+        ? renderCapsuleProfile(await this.capsuleService.profileFacts(String(project.userId), String(project.id), CAPSULE_PROFILE_FACT_KINDS))
+        : "";
+      const file = path.join(project.workspaceDir, workspaceLayout.capsuleProfileFile);
+      if (!profile && !(await fs.lstat(file).catch(() => null))) return { written: false, chars: 0 };
+      await writeFileAtomicNoFollow(project.workspaceDir, file, profile, { encoding: "utf8", mode: 0o444 });
+      return { written: true, chars: profile.length };
+    } catch (error) {
+      // isolated: evimed_capsule_profile_write_failures_total
+      return { written: false, chars: 0, error: typeof error?.code === "string" ? error.code : "capsule_profile_write_failed" };
+    }
   }
 
   /**
