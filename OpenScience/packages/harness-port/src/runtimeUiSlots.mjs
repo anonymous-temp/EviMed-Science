@@ -106,6 +106,7 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
  */
 export const RUNTIME_UI_OPTIONAL_SERVICES = Object.freeze({
   theme: Object.freeze({ row: 'ui-theme', package: '@deepseek-ai/dsh-client-ui-theme' }),
+  layout: Object.freeze({ row: 'ui-layout', package: '@deepseek-ai/dsh-client-ui-layout' }),
   sidebarRight: Object.freeze({ row: 'ui-sidebar-right', package: '@deepseek-ai/dsh-client-ui-sidebar-right' }),
   sidebarRightTabs: Object.freeze({ row: 'ui-sidebar-right', package: '@deepseek-ai/dsh-client-ui-sidebar-right' }),
   commandUi: Object.freeze({ row: 'ui-commands', package: '@deepseek-ai/dsh-client-ui-commands' }),

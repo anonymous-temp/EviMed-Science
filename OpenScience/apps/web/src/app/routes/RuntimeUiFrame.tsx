@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
 import { createWebRuntimeUiFrame, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, getWebProjectId, webErrorMessage, WebApiError, webRuntimeProfile, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { useFrameRunBinding } from "@/lib/runtimeUiBridge";
 import { Button } from "@/components/ui/Button";
 import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
 import { useUiStore } from "@/lib/store";
@@ -75,6 +76,20 @@ function noticedFrame(code: string, detail: string): FrameFailure {
   return { text, retryable: true, capped, ledger: capped };
 }
 
+const SESSION_ID = /^[A-Za-z0-9_-]{1,160}$/;
+
+/**
+ * A delivered file's path as the frame names it, or null. The frame is
+ * third-party-composed code on another origin: the path becomes part of a
+ * route here, so it is held to a workspace-relative shape — no leading slash,
+ * no backslash, no `.` or `..` segment — before it is used.
+ */
+function artifactPath(value: unknown): string | null {
+  if (typeof value !== "string" || !value || value.length > 1024 || value.startsWith("/") || value.includes("\\")) return null;
+  const segments = value.split("/");
+  return segments.every((segment) => segment && segment !== "." && segment !== "..") ? value : null;
+}
+
 /** The native application stays on its own origin and immutable project frame. */
 export function RuntimeUiFrame() {
   const projectId = getWebProjectId();
@@ -97,6 +112,10 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   // posts `booted` as soon as it runs, before the kernel's application is
   // ready, and that is the earliest moment it can receive anything.
   const [booted, setBooted] = useState(0);
+  // The task the frame shows: the session it opened, or — while the reader is
+  // in a delegated child's view — that child's root task. The run bound to it
+  // is what the frame's cards and panels draw.
+  const [frameTask, setFrameTask] = useState<string | null>(null);
   const theme = useUiStore((state) => state.theme);
   const [pending, setPending] = useState(false);
   const [navigated, setNavigated] = useState(false);
@@ -147,7 +166,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         // Cookie cleanup is best effort; login expiry and revocation remain authoritative.
       });
     };
-    setBinding(null); setReady(false); setBooted(0); setPending(false); setNavigated(false); setError(null); setLeaseError(null); setRenewing(false);
+    setBinding(null); setReady(false); setBooted(0); setFrameTask(null); setPending(false); setNavigated(false); setError(null); setLeaseError(null); setRenewing(false);
     recoveryAttempted.current = false;
     nativeReady.current = false;
     incoming.current = 0; outgoing.current = 0; lastSent.current = ""; currentRequest.current = null;
@@ -300,6 +319,16 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         if (!run) return;
         incoming.current = message.seq;
         run();
+      } else if (message.type === "evimed.runtime-ui.open-artifact") {
+        // A file the frame's 交付物 or 依据 tab asked to read. It opens in the
+        // shell's reader, behind the control plane's own file boundary; the
+        // frame never reads a file itself.
+        const runId = typeof message.runId === "string" && SESSION_ID.test(message.runId) ? message.runId : null;
+        const path = artifactPath(message.path);
+        if (!runId || !path) return;
+        incoming.current = message.seq;
+        const anchor = typeof message.anchor === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(message.anchor) ? `#${message.anchor}` : "";
+        navigate(`/app/runs/${encodeURIComponent(runId)}/files/${path.split("/").map(encodeURIComponent).join("/")}${anchor}`);
       } else if (message.type === "evimed.runtime-ui.ack") {
         const request = currentRequest.current;
         if (!request || message.requestId !== request.requestId || typeof message.ok !== "boolean"
@@ -309,6 +338,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         if (!message.ok) { setError({ ...frameFailure("研究任务暂时无法打开"), newTask: request.kind === "open" }); return; }
         currentRequest.current = null; setPending(false); setNavigated(true);
         mirroredSession.current = { sessionId: message.sessionId, attempt };
+        setFrameTask(message.sessionId);
         // Remove only this acknowledged request. A later navigation intent
         // must survive an acknowledgement from the previous operation.
         if (intent?.requestId === request.requestId) {
@@ -316,9 +346,19 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
           delete nextState.runtimeUiIntent;
           navigate(`/app/chat/${encodeURIComponent(message.sessionId)}`, { replace: true, state: nextState });
         }
-      } else if (message.type === "evimed.runtime-ui.session" && (message.sessionId === null
-        || (typeof message.sessionId === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(message.sessionId)))) {
+      } else if (message.type === "evimed.runtime-ui.session" && message.subagent === true
+        && typeof message.sessionId === "string" && SESSION_ID.test(message.sessionId)
+        && typeof message.rootSessionId === "string" && SESSION_ID.test(message.rootSessionId)) {
+        // A delegated child's view. Its address is its parent's — the kernel
+        // refuses to open a child by its own id — so it is not a task of its
+        // own: the URL stays on the task, and the run bound to the task keeps
+        // drawing in the frame.
         incoming.current = message.seq;
+        if (!currentRequest.current && navigated) setFrameTask(message.rootSessionId);
+      } else if (message.type === "evimed.runtime-ui.session" && (message.sessionId === null
+        || (typeof message.sessionId === "string" && SESSION_ID.test(message.sessionId)))) {
+        incoming.current = message.seq;
+        if (!currentRequest.current && navigated) setFrameTask(message.sessionId);
         if (currentRequest.current || !navigated || mirroredSession.current?.sessionId === message.sessionId) return;
         mirroredSession.current = message.sessionId === null ? null : { sessionId: message.sessionId, attempt };
         // Pushed, not replaced: choosing another task inside the frame is a
@@ -353,20 +393,34 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   // application is ready: the flip happens under the waiting cover, not in
   // front of the reader. `resolved` follows the system scheme while the
   // preference is `system`.
+  /** One message to the frame's bridge, in the envelope and sequence it checks. */
+  const postToFrame = useCallback((type: string, fields: object) => {
+    if (!frameId) return;
+    iframe.current?.contentWindow?.postMessage({
+      ...fields, type: `evimed.runtime-ui.${type}`, version: 1, frameId, projectId, seq: ++outgoing.current,
+    }, origin);
+  }, [frameId, projectId, origin]);
+
   useEffect(() => {
     if (!booted || error || !frameId) return;
     const media = typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: dark)") : null;
     const post = () => {
       const resolved = theme === "system" ? (media?.matches ? "dark" : "light") : theme;
-      iframe.current?.contentWindow?.postMessage({
-        type: "evimed.runtime-ui.theme", version: 1, frameId, projectId, seq: ++outgoing.current, preference: theme, resolved,
-      }, origin);
+      postToFrame("theme", { preference: theme, resolved });
     };
     post();
     if (theme !== "system" || !media) return;
     media.addEventListener("change", post);
     return () => media.removeEventListener("change", post);
-  }, [booted, error, frameId, projectId, origin, theme]);
+  }, [booted, error, frameId, theme, postToFrame]);
+
+  // The run bound to the task on screen, for the frame's cards and panels
+  // (C9 `run-state`, plus the claims and sources of its report). Only once the
+  // frame's bridge is listening and a task is open; cleared when the task
+  // changes or has no run.
+  const postRunState = useCallback((state: object) => postToFrame("run-state", state), [postToFrame]);
+  const postEvidence = useCallback((evidence: object | null) => postToFrame("evidence", evidence ?? { runId: null }), [postToFrame]);
+  useFrameRunBinding({ sessionId: frameTask, enabled: booted > 0 && !error && Boolean(frameId), postRunState, postEvidence });
 
   // Focus goes where the next keystroke belongs (U8): into the conversation
   // once it is open — unless the reader already put focus somewhere else in the

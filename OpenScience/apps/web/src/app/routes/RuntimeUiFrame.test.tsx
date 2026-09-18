@@ -9,7 +9,9 @@ import { createFrameKit } from "../../../../../packages/harness-port/src/runtime
 import { apply as applyFrameTheme } from "../../../../../packages/harness-port/src/runtimeUiTheme.mjs";
 import { useUiStore } from "@/lib/store";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+// The run's event stream, held by the test: the frame's run view follows it.
+vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/runEvents")>()), subscribeRunEvents: mocks.subscribe }));
 // Only the four frame calls and the profile are stubbed. Everything else is the
 // real module on purpose: `WebApiError` has to be the same class the component
 // tests with `instanceof`, and `webErrorMessage` has to be the real projection
@@ -33,6 +35,7 @@ function mount(state: unknown = null, path = "/app/chat") {
   return render(<MemoryRouter initialEntries={[{ pathname: path, state }]}><PathProbe /><Routes>
     <Route path="/app/chat" element={<SessionRoute />} /><Route path="/app/chat/:sessionId" element={<SessionRoute />} />
     <Route path="/app/account" element={<div>account and usage</div>} />
+    <Route path="/app/runs/:runId/files/*" element={<div>run file reader</div>} />
   </Routes></MemoryRouter>);
 }
 function emit(frame: HTMLIFrameElement, data: Record<string, unknown>, origin = mocks.profile.uiOrigin, source: MessageEventSource | null = frame.contentWindow) {
@@ -43,6 +46,7 @@ beforeEach(() => {
   window.localStorage.clear(); mocks.create.mockReset(); mocks.renew.mockReset(); mocks.release.mockReset(); mocks.release.mockResolvedValue(undefined); mocks.projectId = "default";
   mocks.create.mockResolvedValue(binding);
   mocks.listRuns.mockReset(); mocks.listRuns.mockResolvedValue([]);
+  mocks.subscribe.mockReset(); mocks.subscribe.mockReturnValue(() => {});
   mocks.renew.mockImplementation(async () => ({ ...binding, expiresAt: Date.now() + 300_000 }));
   mocks.profile.uiOrigin = "https://host.example:8443";
 });
@@ -524,6 +528,58 @@ describe("the shell's theme in the frame", () => {
     act(() => useUiStore.getState().setTheme("light"));
     await waitFor(() => expect(setTheme).toHaveBeenLastCalledWith("light"));
     for (const dispose of disposers.reverse()) dispose();
+  });
+});
+
+describe("the run behind the task, in the frame", () => {
+  async function openTask() {
+    const view = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+    return { ...view, frame, post, sent: (type: string) => post.mock.calls.filter(([data]) => data.type === `evimed.runtime-ui.${type}`).map(([data]) => data) };
+  }
+  const run = { id: "run-1", sessionId: "session-a", status: "running", startedAt: "2026-09-18T01:00:00.000Z", createdAt: "2026-09-18T01:00:00.000Z",
+    artifacts: [], unverifiedArtifacts: [], planItems: [{ id: "evidence", title: "证据综述", status: "delegated", attempts: 0 }] };
+
+  it("reaches the frame once its bridge listens, and follows the run's stream", async () => {
+    mocks.listRuns.mockResolvedValue([run]);
+    let onEvent: (event: Record<string, unknown>) => void = () => {};
+    mocks.subscribe.mockImplementation((_id: string, handler: typeof onEvent) => { onEvent = handler; return () => {}; });
+    const { frame, sent } = await openTask();
+    expect(mocks.listRuns).not.toHaveBeenCalled();
+    emit(frame, { type: "evimed.runtime-ui.booted", seq: 3 });
+    await waitFor(() => expect(sent("run-state").at(-1)).toMatchObject({ runId: "run-1", sessionId: "session-a", state: "running", frameId: "frame-a", projectId: "default" }));
+    act(() => onEvent({ seq: 1, time: "2026-09-18T01:01:00.000Z", type: "run/progress", currentPhase: "search", phaseCounts: { search: 2 }, children: [] }));
+    await waitFor(() => expect(sent("run-state").at(-1)).toMatchObject({ progress: { currentPhase: "search" } }));
+    const seqs = sent("run-state").map((data) => data.seq);
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+  });
+
+  it("keeps the task when the reader opens a delegated child's view inside the frame", async () => {
+    mocks.listRuns.mockResolvedValue([run]);
+    const { frame } = await openTask();
+    emit(frame, { type: "evimed.runtime-ui.booted", seq: 3 });
+    await waitFor(() => expect(mocks.listRuns).toHaveBeenCalledTimes(1));
+    emit(frame, { type: "evimed.runtime-ui.session", seq: 4, sessionId: "child-1", subagent: true, rootSessionId: "session-a" });
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a");
+    // Another task inside the frame is a navigation, and its run is looked up.
+    emit(frame, { type: "evimed.runtime-ui.session", seq: 5, sessionId: "session-b" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-b"));
+  });
+
+  it("opens a file the frame names in the shell's reader, and nothing it could spell as an escape", async () => {
+    const { frame } = await openTask();
+    emit(frame, { type: "evimed.runtime-ui.open-artifact", seq: 3, runId: "run-1", path: "../../etc/passwd" });
+    emit(frame, { type: "evimed.runtime-ui.open-artifact", seq: 4, runId: "run-1", path: "/etc/passwd" });
+    emit(frame, { type: "evimed.runtime-ui.open-artifact", seq: 5, runId: "run 1", path: "deliverables/a.md" });
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a");
+    emit(frame, { type: "evimed.runtime-ui.open-artifact", seq: 6, runId: "run-1", path: "deliverables/evidence/clinical-evidence-report.md", anchor: "CLM-002" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/runs/run-1/files/deliverables/evidence/clinical-evidence-report.md"));
+    expect(screen.getByText("run file reader")).toBeInTheDocument();
   });
 });
 
