@@ -746,6 +746,7 @@ function readPicoPart(value, where) {
  * @typedef {object} PicoView
  * @property {string | null} population
  * @property {string | null} intervention
+ * @property {boolean} exposure     the second part was given as an exposure (PECO) rather than an intervention
  * @property {string | null} comparator
  * @property {string[]} outcomes
  * @property {string | null} timeframe
@@ -816,6 +817,7 @@ function readPico(value, at, claim) {
     view: {
       population,
       intervention,
+      exposure: interventionKey === 'exposure' && intervention !== null,
       comparator: optional('comparator', value.comparator),
       outcomes,
       timeframe: optional('timeframe', value.timeframe),

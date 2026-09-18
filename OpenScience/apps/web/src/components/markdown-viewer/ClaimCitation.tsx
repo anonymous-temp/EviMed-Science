@@ -10,7 +10,9 @@ import {
   type ClaimSource,
   type ClaimVerification,
 } from "@/lib/claimCitations";
+import { claimAppraisalDisplay } from "@/lib/claimAppraisal";
 import { cn } from "@/lib/cn";
+import { ClaimAppraisalSummary } from "./ClaimAppraisal";
 
 const TYPE_LABEL: Record<string, string> = { direct: "直接证据", synthesized: "综合结论", derived: "推导结果" };
 const ACCESS_LABEL: Record<string, string> = {
@@ -117,6 +119,7 @@ export function ClaimEvidenceList({ ids, claims, statuses, reading }: {
         const status = verified?.status ?? statuses?.get(id);
         const statusText = status ? CLAIM_STATUS_TEXT[status] : undefined;
         const guidance = claimGuidance(claim, verified);
+        const appraisal = claimAppraisalDisplay(claim, verified);
         return (
           <li key={id}>
             <p className="text-caption text-muted">
@@ -124,6 +127,7 @@ export function ClaimEvidenceList({ ids, claims, statuses, reading }: {
               {claim.confidence ? ` · 把握度${CONFIDENCE_LABEL[claim.confidence] ?? "未注明"}` : ""}
             </p>
             <p className="mt-0.5 text-ui text-text">{claim.claim}</p>
+            {appraisal && <ClaimAppraisalSummary display={appraisal} sourceCount={sources.length} />}
             {status && (
               <p className={cn("mt-1 text-caption", TONE_CLASS[statusText?.tone ?? "muted"])}>
                 {statusText?.label ?? "这条主张还没有被核对"}

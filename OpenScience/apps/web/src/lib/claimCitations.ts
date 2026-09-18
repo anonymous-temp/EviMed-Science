@@ -26,6 +26,8 @@ export interface ClaimSource {
   artifactPath?: string;
   /** What kind of evidence the source is, decided once by the domain (C8). */
   sourceType: EvidenceSourceType;
+  /** The source's risk of bias by a named tool, as the run recorded it (read by `claimAppraisalDisplay`). */
+  riskOfBias?: unknown;
 }
 
 export interface ClaimEvidence extends ClaimSource {
@@ -38,6 +40,9 @@ export interface ClaimEvidence extends ClaimSource {
   supportingSources?: ClaimSource[];
   derivedFrom?: string[];
   method?: string;
+  /** The claim's PICO and GRADE certainty in parts, as the run recorded them (read by `claimAppraisalDisplay`). */
+  pico?: unknown;
+  certainty?: unknown;
 }
 
 /**
@@ -64,7 +69,13 @@ export interface ClaimMatrixDocument {
 export type ClaimStatus = "verified" | "quote_not_found" | "source_unavailable" | "no_quote" | "derived";
 
 export interface ClaimVerification {
-  claims: { claimId: string; claimType: string; status: ClaimStatus | string; sources: { artifactPath: string | null; status: string }[] }[];
+  claims: {
+    claimId: string;
+    claimType: string;
+    status: ClaimStatus | string;
+    /** `sourceType` is what the preserving tool stamped beside the capture (C8), added by the control plane. */
+    sources: { artifactPath: string | null; status: string; sourceType?: string }[];
+  }[];
   counts: Record<string, number>;
 }
 
@@ -177,6 +188,7 @@ export function parseClaimMatrixDocument(text: string): ClaimMatrixDocument {
       supportQuote: text(record.supportQuote),
       artifactPath: safeWorkspacePath(record.artifactPath),
       sourceType: evidenceSourceTypeOf(record),
+      ...(record.riskOfBias !== undefined && record.riskOfBias !== null ? { riskOfBias: record.riskOfBias } : {}),
     });
     const referenceNumber = Number(claim.referenceNumber);
     claims.set(claim.claimId, {
@@ -192,6 +204,10 @@ export function parseClaimMatrixDocument(text: string): ClaimMatrixDocument {
         : undefined,
       derivedFrom: Array.isArray(claim.derivedFrom) ? claim.derivedFrom.filter((id): id is string => typeof id === "string") : undefined,
       method: text(claim.method),
+      // Kept as written: what they mean is the domain's to read, once, in
+      // `claimAppraisalDisplay`, not this parser's.
+      ...(claim.pico !== undefined && claim.pico !== null ? { pico: claim.pico } : {}),
+      ...(claim.certainty !== undefined && claim.certainty !== null ? { certainty: claim.certainty } : {}),
     });
   }
   return { claims, meta };
