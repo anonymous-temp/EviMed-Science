@@ -31,6 +31,7 @@ import { deepResearchPackage, researchBrief } from "./fixtures/clinicalEvidenceP
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 import { HttpError } from "../src/security.mjs";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
+import { noticeTexts } from "./helpers/noticeTexts.mjs";
 
 /**
  * A completed `skill` tool call as the kernel reports one: the result is the
@@ -819,7 +820,9 @@ test("every fact the durable finish path reads, the live one reads too", async (
 
   for (const [fact, marker] of [
     ["receipt digests", "verifiedReceiptArtifacts"],
-    ["acceptance notices", "entry.notices"],
+    // Read through `receiptNotices` on both paths, which is where
+    // `entry.notices` is opened now: the call is the marker.
+    ["acceptance notices", "receiptNotices("],
     ["nothing accepted", "specialist_deliverable_not_accepted"],
     ["the run-state projection", "readRunStateProjection"],
   ]) {
@@ -864,14 +867,14 @@ test("the notices a package was accepted with reach the ledger on both paths", a
     await relabelReceipt(project, dispatched.id);
     appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
     const run = await store.reconcileSession(project, binding.sessionId);
-    assert.equal(run.status, "succeeded", (run.qualityNotices ?? []).join(" | "));
+    assert.equal(run.status, "succeeded", noticeTexts(run).join(" | "));
     assert.ok(
-      (run.qualityNotices ?? []).some((line) => /GRADE/.test(String(line))),
+      noticeTexts(run).some((line) => /GRADE/.test(String(line))),
       `the acceptance notices must travel: ${JSON.stringify(run.qualityNotices)}`,
     );
     // Deduplicated: a notice already admitted while the run was alive is the
     // same notice, and reporting it twice is the noise this whole area is about.
-    const repeated = (run.qualityNotices ?? []).filter((line) => String(line) === "重复的一条");
+    const repeated = noticeTexts(run).filter((line) => String(line) === "重复的一条");
     assert.equal(repeated.length, 1, "one notice, once");
   });
 });
@@ -902,7 +905,7 @@ test("a deliverable no gate accepted is never a clean success: failed with nothi
     assert.equal(run.status, "failed", "seven rejections and nothing on disk is not a success");
     assert.equal(run.errorCode, "specialist_deliverable_not_accepted");
     assert.ok(
-      (run.qualityNotices ?? []).some((line) => /没有一件通过契约校验/.test(String(line))),
+      noticeTexts(run).some((line) => /没有一件通过契约校验/.test(String(line))),
       "the verdict must say why",
     );
 
@@ -924,7 +927,7 @@ test("a deliverable no gate accepted is never a clean success: failed with nothi
     assert.equal(delivered.status, "succeeded", JSON.stringify(delivered.qualityNotices));
     assert.equal(delivered.verification, "unverified", "and never a clean success");
     assert.deepEqual(delivered.artifacts, [relative]);
-    assert.ok((delivered.qualityNotices ?? []).some((line) => /没有通过运行内的契约校验，文件按「未核验」交付/.test(String(line))));
+    assert.ok(noticeTexts(delivered).some((line) => /没有通过运行内的契约校验，文件按「未核验」交付/.test(String(line))));
   });
 });
 
@@ -948,7 +951,7 @@ test("an accepted deliverable and an answer-line turn are both still successes",
     await dispatch("turn_accepted_item");
     appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
     const passed = await store.reconcileSession(project, binding.sessionId);
-    assert.equal(passed.status, "succeeded", (passed.qualityNotices ?? []).join(" | "));
+    assert.equal(passed.status, "succeeded", noticeTexts(passed).join(" | "));
   });
 
   await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
@@ -1000,10 +1003,10 @@ test("a run whose files drifted from its receipt does not ship, container alive 
     assert.deepEqual(run.artifacts, [], "a package no gate has seen is not graded output");
     assert.deepEqual(run.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"]);
     assert.ok(
-      (run.qualityNotices ?? []).some((line) => /digest the file no longer matches/.test(String(line))),
+      noticeTexts(run).some((line) => /digest the file no longer matches/.test(String(line))),
       "the verdict must say which file drifted",
     );
-    assert.ok((run.qualityNotices ?? []).some((line) => String(line).includes("未经核验")),
+    assert.ok(noticeTexts(run).some((line) => String(line).includes("未经核验")),
       "and must label the files it lists as ungraded");
   });
 });
@@ -1040,7 +1043,7 @@ test("a receipt whose digests still match does not block an ordinary success", a
     await relabelReceipt(project, dispatched.id);
     appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
     const run = await store.reconcileSession(project, binding.sessionId);
-    assert.equal(run.status, "succeeded", (run.qualityNotices ?? []).join(" | "));
+    assert.equal(run.status, "succeeded", noticeTexts(run).join(" | "));
     assert.equal(run.errorCode, null);
 
     // The path that runs every time publishes the receipt too, and before the
@@ -1084,7 +1087,7 @@ test("an answer-mode turn delivers unverified (not failed) when its answer skill
     assert.equal(run.verification, "unverified");
     // The sentence is shown to the researcher, on the run ledger and in
     // their inbox, so it is in the product's language (2026-09-15 walk, B8).
-    assert.match(run.qualityNotices.join("\n"), /没有加载「open-domain-answer」方法/);
+    assert.match(noticeTexts(run).join("\n"), /没有加载「open-domain-answer」方法/);
   });
 });
 
@@ -1104,7 +1107,7 @@ test("a citation a reader can open is delivered; one they cannot is marked unver
     assert.equal(insecure.status, "succeeded");
     assert.equal(insecure.errorCode, null);
     assert.notEqual(insecure.verification, "unverified");
-    assert.match(insecure.qualityNotices.join("\n"), /plain HTTP/);
+    assert.match(noticeTexts(insecure).join("\n"), /plain HTTP/);
 
     // A fragment is how a citation points at the passage it means.
     await dispatch("turn_answer_fragment_citation");
@@ -1115,7 +1118,7 @@ test("a citation a reader can open is delivered; one they cannot is marked unver
     const fragment = await store.reconcileSession(project, binding.sessionId);
     assert.equal(fragment.status, "succeeded");
     assert.equal(fragment.errorCode, null);
-    assert.deepEqual(fragment.qualityNotices, []);
+    assert.deepEqual(noticeTexts(fragment), []);
 
     // An address outside this deployment cannot resolve — that a reader cannot
     // work around, so it is named and the reply is marked unverified.
@@ -1127,7 +1130,7 @@ test("a citation a reader can open is delivered; one they cannot is marked unver
     const internal = await store.reconcileSession(project, binding.sessionId);
     assert.equal(internal.status, "succeeded");
     assert.equal(internal.verification, "unverified");
-    assert.match(internal.qualityNotices.join("\n"), /points inside this deployment/);
+    assert.match(noticeTexts(internal).join("\n"), /points inside this deployment/);
 
     // The same defect wearing a different address.
     await dispatch("turn_answer_loopback_citation");
@@ -1137,7 +1140,7 @@ test("a citation a reader can open is delivered; one they cannot is marked unver
     ]);
     const loopback = await store.reconcileSession(project, binding.sessionId);
     assert.equal(loopback.verification, "unverified");
-    assert.match(loopback.qualityNotices.join("\n"), /points inside this deployment/);
+    assert.match(noticeTexts(loopback).join("\n"), /points inside this deployment/);
 
     // Credentials in a citation must never ship, whatever the scheme.
     await dispatch("turn_answer_credentialed_citation");
@@ -1147,9 +1150,9 @@ test("a citation a reader can open is delivered; one they cannot is marked unver
     ]);
     const credentialed = await store.reconcileSession(project, binding.sessionId);
     assert.equal(credentialed.verification, "unverified");
-    assert.match(credentialed.qualityNotices.join("\n"), /carries credentials/);
+    assert.match(noticeTexts(credentialed).join("\n"), /carries credentials/);
     // The notice names the host and never repeats the credential it found.
-    assert.doesNotMatch(credentialed.qualityNotices.join("\n"), /placeholder-token/);
+    assert.doesNotMatch(noticeTexts(credentialed).join("\n"), /placeholder-token/);
   });
 });
 
@@ -1277,8 +1280,8 @@ test("a routed clinical evidence turn honors a configured bounded repair limit",
     assert.equal(finished.verification, "unverified");
     assert.ok(finished.artifacts.length > 0, "the deliverables must reach the reader");
     assert.ok(finished.qualityNotices.length > 0);
-    assert.match(finished.qualityNotices[0], /^MUST FIX — /, "an unverifiable claim leads the notices");
-    assert.match(finished.qualityNotices.join("\n"), /evidence matrix must contain the report's material claims/i);
+    assert.match(noticeTexts(finished)[0], /^MUST FIX — /, "an unverifiable claim leads the notices");
+    assert.match(noticeTexts(finished).join("\n"), /evidence matrix must contain the report's material claims/i);
 
     const malformed = await store.dispatch(project, {
       sessionId: binding.sessionId,
@@ -1478,7 +1481,7 @@ for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused",
         // matrix's citation.
         for (const source of [sourceA, sourceB]) {
           assert.ok(
-            finished.qualityNotices.some((notice) => notice.includes(`The evidence matrix cites ${source}, but no evidence tool reported preserving that file`)),
+            noticeTexts(finished).some((notice) => notice.includes(`The evidence matrix cites ${source}, but no evidence tool reported preserving that file`)),
             JSON.stringify(finished.qualityNotices),
           );
         }
@@ -1644,7 +1647,7 @@ test("a run whose subagents are working is not judged stalled because its root s
   // The stall signal must not even have fired: a delegating run whose children
   // are working has observable progress, and telling the researcher it looks
   // stuck would be as wrong as ending it was.
-  assert.doesNotMatch(finished.qualityNotices.join("\n"), /没有可观测的进展/);
+  assert.doesNotMatch(noticeTexts(finished).join("\n"), /没有可观测的进展/);
 });
 
 test("a running-subagent label without child activity does not keep a stalled run alive", async (t) => {
@@ -1668,7 +1671,7 @@ test("a running-subagent label without child activity does not keep a stalled ru
   // judgement does: it says so and the run carries on to the global clock,
   // because a threshold is a guess about liveness and ending a run on a guess
   // is what left finished work undelivered.
-  assert.match(finished.qualityNotices.join("\n"), /没有可观测的进展/, "a silent child must still reach the stall threshold");
+  assert.match(noticeTexts(finished).join("\n"), /没有可观测的进展/, "a silent child must still reach the stall threshold");
   assert.equal(finished.errorCode, "runtime_monitor_timeout", "the stall threshold must not end the run any more");
 });
 
@@ -1756,7 +1759,7 @@ test("candidate and running-state churn cannot replace per-child sequence progre
   const run = await store.start(project, { sessionId: "ses_deleg" });
   await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
   const [finished] = await store.list(project);
-  assert.match(finished.qualityNotices.join("\n"), /没有可观测的进展/);
+  assert.match(noticeTexts(finished).join("\n"), /没有可观测的进展/);
   assert.equal(finished.errorCode, "runtime_monitor_timeout");
   assert.ok(calls >= 3, "the fixture did not exercise repeated candidate churn");
 });
@@ -1786,7 +1789,7 @@ test("changing model-writable projection counters cannot keep a stalled run aliv
   if (projectionWriteError) throw projectionWriteError;
 
   const [finished] = await store.list(project);
-  assert.match(finished.qualityNotices.join("\n"), /没有可观测的进展/, "workspace counters are display data, not a trusted heartbeat");
+  assert.match(noticeTexts(finished).join("\n"), /没有可观测的进展/, "workspace counters are display data, not a trusted heartbeat");
   assert.equal(finished.errorCode, "runtime_monitor_timeout");
 });
 
@@ -1801,11 +1804,11 @@ test("a run-side projection that will not parse is a named notice, never evidenc
   const [finished] = await store.list(project);
   assert.notEqual(finished.errorCode, "runtime_monitor_stalled", "an unreadable projection fed the stall counter");
   assert.ok(
-    (finished.qualityNotices ?? []).some((line) => /state\.json/.test(line)),
-    `the unreadable projection was never said out loud: ${JSON.stringify(finished.qualityNotices ?? [])}`,
+    noticeTexts(finished).some((line) => /state\.json/.test(line)),
+    `the unreadable projection was never said out loud: ${JSON.stringify(noticeTexts(finished))}`,
   );
   // Said once, not once per poll: the monitor woke many times over the same file.
-  assert.equal((finished.qualityNotices ?? []).filter((line) => /state\.json/.test(line)).length, 1);
+  assert.equal(noticeTexts(finished).filter((line) => /state\.json/.test(line)).length, 1);
 });
 
 test("projection frames are sent when the projection changes and not on every poll", async (t) => {
@@ -1952,12 +1955,12 @@ test("a run that stops making progress is told so, and is not ended on that gues
     await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
 
     const [finished] = await store.list(project);
-    assert.match(finished.qualityNotices.join("\n"), /没有可观测的进展/, "the quiet stretch must still be detected and reported");
+    assert.match(noticeTexts(finished).join("\n"), /没有可观测的进展/, "the quiet stretch must still be detected and reported");
     assert.equal(finished.errorCode, "runtime_monitor_timeout", "only the global clock ends a run");
     assert.ok(finished.observedToolCalls >= 1, "the progress it did make is recorded");
     // Said once. A notice repeated every poll is a log, and the run row caps
     // notices, so a chatty one would push the real findings off the end.
-    assert.equal(finished.qualityNotices.filter((notice) => /没有可观测的进展/.test(notice)).length, 1);
+    assert.equal(noticeTexts(finished).filter((notice) => /没有可观测的进展/.test(notice)).length, 1);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -3231,7 +3234,7 @@ test("delivers a package whose only gap is bookkeeping, and does not stamp it un
     // Every layer ran, so it is not "unchecked" either.
     assert.equal(finished.verification ?? null, null);
     // The gap is still said, as a remark on the delivery rather than a must-fix.
-    const notices = (finished.qualityNotices ?? []).join("\n");
+    const notices = noticeTexts(finished).join("\n");
     assert.match(notices, /claims\[12\] is not paired with its standard numbered in-text citation\./);
     assert.doesNotMatch(notices, /MUST FIX|SAFETY/);
     assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
@@ -3359,7 +3362,7 @@ test("sources a delegated child preserved count for the parent's package, read f
     assert.equal(finished.errorCode, null);
     // The child's receipts vouch for every path the claims cite. Unread, each
     // path would be named as one no tool preserved and the package stamped.
-    const notices = (finished.qualityNotices ?? []).join("\n");
+    const notices = noticeTexts(finished).join("\n");
     assert.doesNotMatch(notices, /no evidence tool reported preserving that file/);
     assert.equal(finished.verification ?? null, null);
     assert.match(notices, /claims\[12\] is not paired with its standard numbered in-text citation\./);
@@ -3479,11 +3482,11 @@ test("one plain-HTTP citation is a notice on a delivered package, not a reason t
     assert.equal(finished.errorCode, null);
     assert.ok(finished.artifacts.includes("clinical-evidence-report.md"));
     // Delivered, and the scheme is said out loud with the URL that carries it.
-    assert.match(finished.qualityNotices.join("\n"), /plain HTTP/);
+    assert.match(noticeTexts(finished).join("\n"), /plain HTTP/);
     // A reachable source over plain HTTP says nothing about the evidence, and
     // every layer ran: no mark at all.
     assert.equal(finished.verification ?? null, null);
-    assert.match(finished.qualityNotices.join("\n"), /escardio\.org\/evidence\/source-3/);
+    assert.match(noticeTexts(finished).join("\n"), /escardio\.org\/evidence\/source-3/);
     await store.closeProject(project, "canceled");
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -3803,7 +3806,7 @@ test("an authorized revision that did not pass gets its next round, and ends del
     history = [...history, turn("msg_revision_one")];
 
     const roundTwo = await store.reconcileSession(project, binding.sessionId);
-    assert.equal(roundTwo.status, "running", `round two is sent, not refused: ${JSON.stringify(roundTwo.qualityNotices ?? [])}`);
+    assert.equal(roundTwo.status, "running", `round two is sent, not refused: ${JSON.stringify(noticeTexts(roundTwo))}`);
     assert.equal(repairPrompts.length, 2);
     assert.doesNotMatch(repairPrompts[1], /evimed_revise_deliverable/, "the revision is already open");
 
@@ -3817,11 +3820,11 @@ test("an authorized revision that did not pass gets its next round, and ends del
     assert.equal(finished.verification, "unverified");
     assert.ok(finished.artifacts.includes("deliverables/review/clinical-evidence-report.md"), JSON.stringify(finished.artifacts));
     assert.match(
-      finished.qualityNotices.join("\n"),
+      noticeTexts(finished).join("\n"),
       /The evidence matrix cites \.evimed-sources\/official-pages\/source-a\/page\.md, but no evidence tool reported preserving that file/,
     );
-    assert.match(finished.qualityNotices.join("\n"), /交付物在写下回执之后被改动了 1 个文件/);
-    assert.doesNotMatch(finished.qualityNotices.join("\n"), /重判并通过/, "an unverified package is not said to have passed");
+    assert.match(noticeTexts(finished).join("\n"), /交付物在写下回执之后被改动了 1 个文件/);
+    assert.doesNotMatch(noticeTexts(finished).join("\n"), /重判并通过/, "an unverified package is not said to have passed");
 
     await store.closeProject(project, "canceled");
   } finally {
@@ -3924,7 +3927,7 @@ test("a repair the runtime refuses is named, and the package is delivered with i
     // the run, which threw away a finished report over our own dispatch.
     assert.equal(finished.status, "succeeded");
     assert.equal(finished.verification, "unverified");
-    const notices = finished.qualityNotices.join("\n");
+    const notices = noticeTexts(finished).join("\n");
     assert.match(
       notices,
       /The evidence matrix cites \.evimed-sources\/official-pages\/source-a\/page\.md, but no evidence tool reported preserving that file/,
@@ -4132,7 +4135,7 @@ test("a repair refused for good is not sent again", async () => {
     assert.equal(repairPrompts.length, 1, "a refusal that cannot clear is not retried");
     assert.equal(finished.status, "succeeded");
     assert.equal(finished.verification, "unverified");
-    const notices = finished.qualityNotices.join("\n");
+    const notices = noticeTexts(finished).join("\n");
     assert.match(
       notices,
       /The evidence matrix cites \.evimed-sources\/official-pages\/source-a\/page\.md, but no evidence tool reported preserving that file/,
@@ -4329,7 +4332,7 @@ test("a structural rejection does not spend the content repair budget, and still
     // it cannot be read, and the mark says exactly that.
     assert.equal(third.status, "succeeded");
     assert.equal(third.verification, "unverified");
-    assert.match(third.qualityNotices.join("\n"), /clinical-evidence-matrix\.json must contain strict valid JSON/);
+    assert.match(noticeTexts(third).join("\n"), /clinical-evidence-matrix\.json must contain strict valid JSON/);
 
     await store.closeProject(project, "canceled");
   } finally {
@@ -5020,7 +5023,7 @@ test("a notice that arrives before the run finishes is not overwritten by the te
     await store.appendQualityNotices(project, run.id, ["某一层没有运行：早到的说明。"], { unchecked: true });
     const running = (await store.list(project)).find((item) => item.id === run.id);
     assert.equal(running.status, "running", "a notice must not finish a run");
-    assert.deepEqual(running.qualityNotices, ["某一层没有运行：早到的说明。"]);
+    assert.deepEqual(noticeTexts(running), ["某一层没有运行：早到的说明。"]);
 
     const finished = await store.finishInternal(project, run.id, {
       status: "succeeded",
@@ -5029,7 +5032,7 @@ test("a notice that arrives before the run finishes is not overwritten by the te
       qualityNotices: ["门禁自己的说明。"],
     });
     // The gate's own notices lead; the early notice survives behind them.
-    assert.deepEqual(finished.qualityNotices, ["门禁自己的说明。", "某一层没有运行：早到的说明。"]);
+    assert.deepEqual(noticeTexts(finished), ["门禁自己的说明。", "某一层没有运行：早到的说明。"]);
     // And so does the admission it carried: a terminal event that says nothing
     // about verification must not silently overwrite one that already did.
     assert.equal(finished.verification, "unchecked");
@@ -5052,10 +5055,13 @@ test("a run whose brief the server no longer holds is delivered unchecked, and s
   assert.equal(finished.verification, "unchecked");
   // Said once, in the reader's language, naming the rule that did not run.
   assert.equal(finished.qualityNotices.length, 1, JSON.stringify(finished.qualityNotices));
-  assert.match(finished.qualityNotices[0], /^本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」/);
+  assert.match(noticeTexts(finished)[0], /^本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」/);
   // And what /api/agent-runs serves afterwards says the same.
   assert.equal(delivered.verification, "unchecked");
   assert.deepEqual(delivered.qualityNotices, finished.qualityNotices);
+  // Structured for the reader (C2): a code, a severity and a Chinese title.
+  assert.equal(finished.qualityNotices[0].code, "run_brief_lost");
+  assert.equal(finished.qualityNotices[0].title, "未按原始题面核对药品范围");
 });
 
 test("a clean package with every layer run stays null, and a finding still outranks an admission", async () => {
@@ -5064,7 +5070,7 @@ test("a clean package with every layer run stays null, and a finding still outra
   const clean = await deliverClinicalPackage("brief-held");
   assert.equal(clean.finished.status, "succeeded");
   assert.equal(clean.finished.verification, null);
-  assert.deepEqual(clean.finished.qualityNotices, []);
+  assert.deepEqual(noticeTexts(clean.finished), []);
 
   // Brief lost AND a blocking finding of another kind: "we checked and it did
   // not hold up" is the more serious statement and is the one shown.
@@ -5073,9 +5079,9 @@ test("a clean package with every layer run stays null, and a finding still outra
     mutate: (pkg) => { pkg.matrix.claims[0].supportQuote = "这句话在它所引的来源里并不存在。"; },
   });
   assert.equal(both.finished.verification, "unverified");
-  assert.match(both.finished.qualityNotices[0], /^MUST FIX — .*supportQuote was not found in its preserved source artifact/);
+  assert.match(noticeTexts(both.finished)[0], /^MUST FIX — .*supportQuote was not found in its preserved source artifact/);
   // The admission is still said, behind the finding.
-  assert.match(both.finished.qualityNotices.at(-1), /^本次交付没有按原始题面核对/);
+  assert.match(noticeTexts(both.finished).at(-1), /^本次交付没有按原始题面核对/);
 });
 
 test("GET /api/agent-runs serves the unchecked verdict and the notice that landed after delivery", async () => {
@@ -5126,7 +5132,7 @@ test("GET /api/agent-runs serves the unchecked verdict and the notice that lande
     const run = listed.body.data.find((item) => item.id === "run_0001");
     assert.equal(run.status, "succeeded");
     assert.equal(run.verification, "unchecked");
-    assert.deepEqual(run.qualityNotices, [
+    assert.deepEqual(noticeTexts(run), [
       "本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」。",
       "记忆已记录但暂缓生效 1 条：1 条因来源待确认。",
     ]);
@@ -5463,7 +5469,7 @@ test("a run whose container is already gone is judged from its receipt, not fail
     assert.equal(finished?.status, "succeeded", "a receipt that verifies is a delivered run, whatever became of the container");
     assert.deepEqual(finished?.artifacts, ["deliverables/d1/clinical-evidence-report.md"]);
     assert.deepEqual(finished?.unverifiedArtifacts, [], "a delivered package has nothing ungraded to report");
-    assert.deepEqual(finished?.qualityNotices, ["one advisory"]);
+    assert.deepEqual(noticeTexts(finished), ["one advisory"]);
 
     // And the receipt reaches the browser, ahead of the terminal state.
     //
@@ -5698,9 +5704,9 @@ test("a container that exits with nothing durable still says what the run last k
     assert.equal(finished?.status, "failed");
     assert.equal(finished?.errorCode, "runtime_stopped");
     assert.deepEqual(finished?.artifacts, []);
-    assert.ok(finished?.qualityNotices?.includes(fresh), "a line the run admitted only in its final state must still reach the verdict");
+    assert.ok(noticeTexts(finished).includes(fresh), "a line the run admitted only in its final state must still reach the verdict");
     assert.equal(
-      finished.qualityNotices.filter((line) => line === admitted).length,
+      noticeTexts(finished).filter((line) => line === admitted).length,
       0,
       "a line already on the ledger must not be repeated by the verdict that closes the run",
     );
@@ -6204,7 +6210,7 @@ test("a package written and never submitted is not reported as a stopped runtime
     const abandoned = await finish();
     assert.equal(abandoned?.errorCode, "runtime_deliverable_never_submitted");
     assert.ok(
-      abandoned?.qualityNotices?.some((line) => line.includes("d1") && line.includes("1")),
+      noticeTexts(abandoned).some((line) => line.includes("d1") && line.includes("1")),
       `the verdict must name the deliverable and what was written: ${JSON.stringify(abandoned?.qualityNotices)}`,
     );
     // Ungraded is a label on the files, not a reason to hide them.
@@ -6219,7 +6225,7 @@ test("a package written and never submitted is not reported as a stopped runtime
     assert.deepEqual(abandoned?.artifacts, [], "ungraded files are not graded output");
     assert.deepEqual(abandoned?.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"],
       "but the run must still say what it wrote");
-    assert.ok(abandoned?.qualityNotices?.some((line) => line.includes("未经核验")),
+    assert.ok(noticeTexts(abandoned).some((line) => line.includes("未经核验")),
       `the files must be labelled unverified rather than passed off as graded: ${JSON.stringify(abandoned?.qualityNotices)}`);
 
     // Negative controls — the three ways this could lie.
@@ -6234,7 +6240,7 @@ test("a package written and never submitted is not reported as a stopped runtime
     assert.equal(graded?.errorCode, "specialist_deliverable_not_accepted");
     assert.notEqual(graded?.errorCode, "runtime_deliverable_never_submitted");
     assert.ok(
-      graded?.qualityNotices?.some((line) => line.includes("d1") && line.includes("2")),
+      noticeTexts(graded).some((line) => line.includes("d1") && line.includes("2")),
       `the verdict must name the deliverable and how many times it was rejected: ${JSON.stringify(graded?.qualityNotices)}`,
     );
     // 2. An item never started is a run that stopped, not a package left
@@ -6312,7 +6318,7 @@ test("a receipt naming a file that no longer matches its digest is refused, not 
     // Same rule on the container-gone path: refused, and still on disk.
     assert.deepEqual(finished?.artifacts, []);
     assert.deepEqual(finished?.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"]);
-    assert.ok(finished?.qualityNotices?.some((line) => String(line).includes("未经核验")));
+    assert.ok(noticeTexts(finished).some((line) => String(line).includes("未经核验")));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -6375,7 +6381,7 @@ test("with the runtime gone, files moved by an authorized revision end as a revi
     assert.equal(finished?.status, "failed");
     assert.equal(finished?.errorCode, "specialist_deliverable_not_accepted");
     assert.deepEqual(finished?.artifacts, []);
-    assert.match(String(finished?.qualityNotices?.[0]), /交付物「d1」按服务端门禁的要求开启了修订/);
+    assert.match(String(noticeTexts(finished)[0]), /交付物「d1」按服务端门禁的要求开启了修订/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -6582,10 +6588,10 @@ test("a package edited after its receipt is re-judged, not destroyed", async () 
     appendHistory([{ type: "text", text: "done" }]);
 
     const run = await store.reconcileSession(project, binding.sessionId);
-    assert.equal(run.status, "succeeded", (run.qualityNotices ?? []).join(" | "));
+    assert.equal(run.status, "succeeded", noticeTexts(run).join(" | "));
     assert.deepEqual(run.artifacts, ["note.md"], "the bytes the server itself verified are what ships");
     assert.ok(
-      (run.qualityNotices ?? []).some((line) => /回执之后被改动/.test(String(line))),
+      noticeTexts(run).some((line) => /回执之后被改动/.test(String(line))),
       "an amended delivery must say so, and name what moved",
     );
   });
@@ -7004,7 +7010,7 @@ test("a control-plane mounted persona satisfies skillsLoaded with no skill tool 
     // This is the notice that fired on 11 of 17 production answer-line runs.
     assert.equal(unmounted.status, "succeeded");
     assert.equal(unmounted.verification, "unverified");
-    assert.match(unmounted.qualityNotices.join("\n"), /没有加载「open-domain-answer」方法/);
+    assert.match(noticeTexts(unmounted).join("\n"), /没有加载「open-domain-answer」方法/);
     assert.equal(first.id, unmounted.id);
 
     // The same turn, with the control plane having mounted the body.
@@ -7020,7 +7026,7 @@ test("a control-plane mounted persona satisfies skillsLoaded with no skill tool 
     // The difference the mount makes, and the whole point of it: same reply,
     // same absence of a `skill` tool call, no notice and nothing unverified.
     assert.equal(mounted.verification, null);
-    assert.deepEqual(mounted.qualityNotices, []);
+    assert.deepEqual(noticeTexts(mounted), []);
     assert.deepEqual(mounted.mountedSkills, ["open-domain-answer"]);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -7076,7 +7082,7 @@ test("a mounted name the control plane never recorded does not pass the check", 
     }];
     const finished = await store.reconcileSession(project, binding.sessionId);
     assert.equal(finished.verification, "unverified");
-    assert.match(finished.qualityNotices.join("\n"), /没有加载「open-domain-answer」方法/);
+    assert.match(noticeTexts(finished).join("\n"), /没有加载「open-domain-answer」方法/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

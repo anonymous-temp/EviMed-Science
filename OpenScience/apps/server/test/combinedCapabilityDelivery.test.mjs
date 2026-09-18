@@ -56,6 +56,7 @@ import { normalizeTranscript, transcriptToLedgerMessages } from "../src/dshRunti
 // this file would keep proving the scope handles a field nobody sends. Same
 // relative-import shape as `citationGateway.test.mjs` and `capsuleMethods.test.mjs`.
 import { projectRunState } from "../../../packages/socket/src/runMirror.mjs";
+import { noticeTexts } from "./helpers/noticeTexts.mjs";
 
 const fixture = JSON.parse(await readFile(new URL("./fixtures/dsh/native-turn-frames.json", import.meta.url), "utf8"));
 const secondInput = fixture.events.filter((event) => event.type === "user/message" && event.data.source.kind === "user")[1];
@@ -369,7 +370,7 @@ test("a combined delivery ships both capabilities' packages, with both capabilit
   assert.equal(finished.errorCode, null);
   assert.deepEqual(finished.artifacts, [BIBLIOMETRIC_FILE, EVIDENCE_FILE].sort(),
     "a combined delivery that ships one capability's files is half a delivery");
-  assert.deepEqual(finished.qualityNotices.sort(), ["文献计量接受时的提示", "证据综述接受时的提示"].sort(),
+  assert.deepEqual(noticeTexts(finished).sort(), ["文献计量接受时的提示", "证据综述接受时的提示"].sort(),
     "each capability's acceptance notices must reach the reader");
 });
 
@@ -410,7 +411,7 @@ test("a receipt entry naming a capability the plan never gave that deliverable i
     "an entry whose capability the plan never bound to that deliverable must not have its files claimed as delivered");
   // Nor may its notices be read as an acceptance that happened: the honest
   // entry still ships, so this is scoping the receipt, not discarding it.
-  assert.deepEqual(finished.qualityNotices, ["证据综述接受时的提示"]);
+  assert.deepEqual(noticeTexts(finished), ["证据综述接受时的提示"]);
   assert.equal(finished.status, "succeeded");
 });
 
@@ -497,7 +498,10 @@ test("a combined run whose second capability was never accepted still delivers t
   assert.equal(submissions.get(EVIDENCE.id).accepted.contractKind, EVIDENCE.contractKind);
   assert.equal(submissions.get(EVIDENCE.id).rejected, null);
   assert.equal(submissions.get(BIBLIOMETRIC.id).accepted, null);
-  assert.deepEqual(submissions.get(BIBLIOMETRIC.id).rejected.notices, ["文献计量报告缺少必需文件"]);
+  // With its identity: the rendered reply carries the code and severity, and a
+  // notice that kept only the sentence could not be titled for a reader (C2).
+  assert.deepEqual(submissions.get(BIBLIOMETRIC.id).rejected.notices,
+    [{ code: "required_output_missing", severity: "must-fix", text: "文献计量报告缺少必需文件" }]);
 
   const finished = await f.store.finishFromDurableRecord(f.project, run);
 
@@ -577,7 +581,7 @@ test("a partial combined delivery names the deliverable it dropped", async (t) =
 
   assert.equal(finished.status, "succeeded");
   assert.ok(
-    finished.qualityNotices.some((notice) => notice.includes(BIBLIOMETRIC.id) || notice.includes(BIBLIOMETRIC.title)),
+    noticeTexts(finished).some((notice) => notice.includes(BIBLIOMETRIC.id) || notice.includes(BIBLIOMETRIC.title)),
     "a succeeded run whose receipt has no entry for a planned deliverable must still name it: "
     + `${JSON.stringify(finished.qualityNotices)}`,
   );

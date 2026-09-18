@@ -20,6 +20,14 @@ import {
 } from "./clinicalEvidenceQuality.mjs";
 import { socketToolResult } from "./dshRuntimeAdapter.mjs";
 import {
+  describedQualityNotices,
+  maxQualityNotices,
+  normalizeQualityNotices,
+  noticeCodePattern,
+  noticeText,
+  runNotice,
+} from "./runNotices.mjs";
+import {
   assembleRunProgress,
   claimSummaryOf,
   foldToolEvent,
@@ -39,6 +47,7 @@ import {
 import {
   PLAN_ITEM_STATES,
   SOCKET_TOOL_NAMES,
+  gateIssueSeverity,
   isContractKind,
   isMcpToolName,
   recoverableEvidenceSourceErrorCodes,
@@ -54,6 +63,8 @@ import {
 
 export { repairableEvidencePackageErrorCodes, recoverableEvidenceSourceErrorCodes, terminalEvidenceSourceErrorCodes };
 
+/** @typedef {import('./runNotices.mjs').StoredNotice} StoredNotice */
+
 // Exported for its own direct test: constructing a ledger event sequence that
 // reaches this function while also being illegal under the *phase* table, but
 // not under any of `foldEvents`' own (much stricter) corruption checks, is not
@@ -66,6 +77,10 @@ export { runPhaseHistory };
 // what a future kernel change would break.
 export { readRequiredFile as readRequiredFileForTest };
 export { serializeNext as ledgerTextForTest };
+// A notice the platform raises about a run, for the composition root's own
+// notices (memory extraction) — one constructor, so a notice raised there is
+// shaped like every other one.
+export { runNotice };
 
 const ledgerFileName = "runs.jsonl";
 const terminalStatuses = new Set(["succeeded", "failed", "canceled"]);
@@ -86,8 +101,6 @@ const defaultMaxBytes = 1024 * 1024;
 // whole list to the run; a reader needs the shape of the problem, not 300 lines.
 const maxDeliverableIssues = 40;
 const maxArtifacts = 64;
-const maxQualityNotices = 40;
-const maxQualityNoticeLength = 300;
 const maxObservedChildSessions = 64;
 
 // Which rule picked the agent: `matched:adr-analysis`, `matched:named:peer-review`
@@ -213,13 +226,6 @@ function normalizeVerification(value) {
   return verificationValues.includes(value) ? value : null;
 }
 
-function normalizeQualityNotices(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item) => typeof item === "string" && item.trim())
-    .slice(0, maxQualityNotices)
-    .map((item) => item.slice(0, maxQualityNoticeLength));
-}
 
 function normalizeArtifacts(value) {
   if (value == null) return [];
@@ -461,8 +467,10 @@ function foldEvents(events) {
         // The run's own notices lead; anything appended after the fact — a
         // coverage judgement that was still running when the run finished —
         // follows, in whichever order the two events reached the ledger.
+        // Described on read (C2): a stored notice, or a sentence an older
+        // build wrote, becomes a titled item a reader can use.
         qualityNotices: [
-          ...(Array.isArray(event.qualityNotices) ? event.qualityNotices.filter((item) => typeof item === "string") : []),
+          ...describedQualityNotices(event.qualityNotices),
           ...current.qualityNotices,
         ].slice(0, maxQualityNotices),
       }));
@@ -518,9 +526,7 @@ function foldEvents(events) {
       const id = safeStoredId(event.id, "id");
       const current = runs.get(id);
       if (!current) throw corrupt("Agent run ledger contains a notice for an unknown run.");
-      const added = Array.isArray(event.qualityNotices)
-        ? event.qualityNotices.filter((item) => typeof item === "string" && item)
-        : [];
+      const added = describedQualityNotices(event.qualityNotices);
       runs.set(id, Object.freeze({
         ...current,
         verification: event.verification === "unchecked" && current.verification === null
@@ -910,14 +916,20 @@ function nativeWorkflowEvidence(run, history) {
       const entry = submissions.get(id) ?? { id, attempts: 0, accepted: null, rejected: null };
       entry.attempts++;
       if (result.ok && result.data?.deliverableId === id && isContractKind(result.data?.contractKind)) {
-        entry.accepted = { ...span, contractKind: result.data.contractKind, notices: normalizeQualityNotices(result.data.notices) };
+        // An accepted submission's notices are the run-side gate's advisory
+        // messages; the tool reply carries their text only.
+        entry.accepted = { ...span, contractKind: result.data.contractKind,
+          notices: normalizeQualityNotices((Array.isArray(result.data.notices) ? result.data.notices : []).map((text) => (
+            typeof text === "string" ? runNotice("gate_advisory", text) : text))) };
       } else if (!result.ok) {
-        entry.rejected = { ...span, code: String(result.code ?? ""), notices: normalizeQualityNotices((result.issues ?? []).map((issue) => issue.message)) };
+        // A rejection's issues keep their code and severity: the rendered
+        // reply carries both (`- (<severity>) <code> <message>`).
+        entry.rejected = { ...span, code: String(result.code ?? ""), notices: normalizeQualityNotices(result.issues ?? []) };
       }
       submissions.set(id, entry);
     }
     if (part.tool === "evimed_delegate" && result.ok && result.data?.deliverableId === args.deliverableId) delegates.add(args.deliverableId);
-    if (part.tool === "evimed_complete_run") completion = { ok: result.ok, notices: normalizeQualityNotices((result.issues ?? result.data?.issues ?? []).map((issue) => issue.message)), ...span };
+    if (part.tool === "evimed_complete_run") completion = { ok: result.ok, notices: normalizeQualityNotices(result.issues ?? result.data?.issues ?? []), ...span };
   }
   if (!plan && !submissions.size && !delegates.size && !completion) return null;
   const throughSeq = history.reduce((head, message) => Math.max(head,
@@ -1862,12 +1874,17 @@ function assistantProse(messages) {
  *   artifacts: any[],
  *   errorCode: string|null,
  *   qualityIssues?: string[],
+ *   qualityFindings?: StoredNotice[],
  *   qualityStructural?: boolean,
  *   qualityDegradable?: boolean,
  *   qualityUnverified?: boolean,
  *   qualityUnchecked?: boolean,
- *   qualityNotices?: string[],
+ *   qualityNotices?: StoredNotice[],
  * }} SpecialistCompletionVerdict
+ *
+ * `qualityIssues` are the strings the repair loop hands back to the run,
+ * verbatim; `qualityFindings` are the same findings with their identity, for
+ * the record. `qualityNotices` are findings that decide nothing.
  */
 
 /**
@@ -1902,6 +1919,7 @@ async function requiredSpecialistArtifacts(
   // Notices a check raises that do not decide the verdict. Collected here
   // because the checks below each return the moment they conclude, so a finding
   // that is not a reason to withhold anything has nowhere else to survive.
+  /** @type {StoredNotice[]} */
   const advisories = [];
   // Layers that did not run. Separate from the advisories because "we looked
   // and found nothing to say" and "we did not look" are different facts, and
@@ -1919,15 +1937,59 @@ async function requiredSpecialistArtifacts(
     skippedChecks,
   );
   const unchecked = skippedChecks.length > 0 ? { qualityUnchecked: true } : {};
-  if (advisories.length === 0) return { ...outcome, ...unchecked };
+  // The structured twin of `qualityIssues`, for the reader. The strings stay
+  // exactly what they were, because the repair loop hands them back to the run
+  // verbatim; the findings carry each one's identity, so the record can title
+  // it in Chinese without translating the sentence (C2).
+  const findings = qualityFindingsOf(outcome);
+  if (advisories.length === 0) return { ...outcome, ...unchecked, ...(findings.length ? { qualityFindings: findings } : {}) };
   // An advisory riding along is a second fact, so the rejection is no longer
   // attributable to the structural cause alone and must be charged normally.
   // Marking the return site was the honest place to decide it; this is the one
   // place that can add to that list afterwards, so it is the one place that has
   // to take the mark back.
   return outcome.errorCode
-    ? { ...outcome, ...unchecked, qualityStructural: false, qualityIssues: [...(outcome.qualityIssues ?? []), ...advisories] }
+    ? { ...outcome, ...unchecked, qualityStructural: false,
+      qualityIssues: [...(outcome.qualityIssues ?? []), ...advisories.map(noticeText)],
+      qualityFindings: [...findings, ...advisories] }
     : { ...outcome, ...unchecked, qualityNotices: advisories };
+}
+
+/**
+ * Verdict codes whose issues are defects in the evidence a reader cannot see
+ * for themselves — `must-fix`. Every other verdict's issues are advice: a
+ * process gap, a bookkeeping gap, something the reader can check.
+ */
+const mustFixVerdictCodes = new Set([
+  "specialist_citation_invalid",
+  "specialist_citation_integrity_failed",
+  "specialist_cited_source_unrecorded",
+  "specialist_evidence_snapshot_missing",
+  "specialist_evidence_snapshot_invalid",
+  "specialist_evidence_snapshot_empty",
+  "specialist_evidence_traceability_failed",
+  "specialist_evidence_provenance_failed",
+  "specialist_evidence_integrity_failed",
+  "specialist_delegated_evidence_read",
+  "specialist_required_output_missing",
+  "specialist_required_output_stale",
+]);
+
+/**
+ * The structured findings of a completion verdict: the ones the verdict built
+ * itself (the clinical path, which knows each finding's check), or one per
+ * issue string, identified by the verdict's own code.
+ * @param {SpecialistCompletionVerdict} outcome @returns {StoredNotice[]}
+ */
+function qualityFindingsOf(outcome) {
+  if (Array.isArray(outcome.qualityFindings)) return outcome.qualityFindings;
+  const code = outcome.errorCode ?? "gate_notice";
+  const severity = mustFixVerdictCodes.has(code) ? "must-fix" : "advice";
+  return (outcome.qualityIssues ?? []).filter((issue) => typeof issue === "string" && issue.trim()).map((issue) => (
+    issue.startsWith("SAFETY — ") ? runNotice(code, issue, { severity: "safety" })
+      : issue.startsWith("MUST FIX — ") ? runNotice(code, issue, { severity: "must-fix" })
+        : runNotice(code, issue, { severity })
+  ));
 }
 
 /**
@@ -1962,7 +2024,7 @@ async function loadedOrInjectedSkills(project, assistantMessages, run = null) {
  *  @param {any} agentRegistry
  *  @param {any} sourceArtifactProvenance
  *  @param {any} assistantMessages
- *  @param {string[]} advisories
+ *  @param {StoredNotice[]} advisories
  *  @param {any} briefText
  *  @param {string[]} skippedChecks
  *  @returns {Promise<SpecialistCompletionVerdict>}
@@ -1996,6 +2058,11 @@ async function specialistCompletionOutcome(
       const loadedSkills = await loadedOrInjectedSkills(project, assistantMessages, run);
       const requiredSkills = [...(agent.companionSkills ?? []), agent.skill];
       if (requiredSkills.some((skill) => !loadedSkills.has(skill))) {
+        // Said in the product's language, because this sentence is shown to
+        // the researcher on the run ledger and in their inbox — it was
+        // English, and it was the first thing a first-time user read about
+        // their own first answer (2026-09-15 walk, B8).
+        const sentence = `本轮没有加载「${agent.skill}」方法，回答按未经人设校验交付。内容本身未被判定有误，可直接阅读；如需严格校验，重新提问即可。`;
         return {
           artifacts: [],
           errorCode: "specialist_required_skill_missing",
@@ -2004,19 +2071,14 @@ async function specialistCompletionOutcome(
           // literally means. Unlike a bookkeeping gap between the report and
           // its apparatus, a reader cannot see that it was skipped.
           qualityUnverified: true,
-          // Said in the product's language, because this sentence is shown to
-          // the researcher on the run ledger and in their inbox — it was
-          // English, and it was the first thing a first-time user read about
-          // their own first answer (2026-09-15 walk, B8).
-          qualityIssues: [
-            `本轮没有加载「${agent.skill}」方法，回答按未经人设校验交付。内容本身未被判定有误，可直接阅读；如需严格校验，重新提问即可。`,
-          ],
+          qualityIssues: [sentence],
+          qualityFindings: [runNotice("specialist_required_skill_missing", sentence, { detail: sentence })],
         };
       }
     }
     if (agent.completionChecks.includes("citationsResolvable")) {
       const { blocking, advisory } = citationUrlDefects(assistantProse(assistantMessages));
-      advisories.push(...advisory);
+      advisories.push(...advisory.map((text) => runNotice("citation_plain_http", text)));
       if (blocking.length > 0) {
         return {
           artifacts: [],
@@ -2133,7 +2195,7 @@ async function specialistCompletionOutcome(
   if (agent.completionChecks.includes("citationsResolvable")) {
     const markdown = [...files].filter(([relative]) => relative.endsWith(".md")).map(([, text]) => text);
     const defects = markdown.map((text) => citationUrlDefects(text));
-    advisories.push(...defects.flatMap((defect) => defect.advisory));
+    advisories.push(...defects.flatMap((defect) => defect.advisory).map((text) => runNotice("citation_plain_http", text)));
     const blocking = defects.flatMap((defect) => defect.blocking);
     if (blocking.length > 0) {
       // Naming the URL, as every other gate message here does. This returned a
@@ -2283,20 +2345,27 @@ async function specialistCompletionOutcome(
     const sourcePaths = [...new Set(namedPaths)];
     /** @type {string[]} */
     const sourceGaps = [];
+    /** The same gaps with their cause and file, for the record. @type {StoredNotice[]} */
+    const sourceGapFindings = [];
+    /** @param {string} text @param {string} code @param {string} [file] */
+    const gap = (text, code, file) => {
+      sourceGaps.push(text);
+      sourceGapFindings.push(runNotice(code, text, { severity: "must-fix", ...(file ? { file } : {}) }));
+    };
     let provenanceGap = false;
     if (sourcePaths.length > 48) {
-      sourceGaps.push(`The package names ${sourcePaths.length} source artifacts; the first 48 were read. Cite one canonical path per distinct document rather than every companion file.`);
+      gap(`The package names ${sourcePaths.length} source artifacts; the first 48 were read. Cite one canonical path per distinct document rather than every companion file.`, "specialist_evidence_traceability_failed");
     }
     for (const rawPath of sourcePaths.slice(0, 48)) {
       let relative;
       try {
         relative = normalizeWorkspaceRelativePath(rawPath, "source artifact path");
       } catch {
-        sourceGaps.push(`${JSON.stringify(rawPath)} is named as a source artifact and is not a safe workspace path, so it was not read.`);
+        gap(`${JSON.stringify(rawPath)} is named as a source artifact and is not a safe workspace path, so it was not read.`, "specialist_evidence_traceability_failed");
         continue;
       }
       if (relative !== rawPath || !relative.startsWith(".evimed-sources/")) {
-        sourceGaps.push(`${JSON.stringify(rawPath)} is named as a source artifact; it must be the exact .evimed-sources/... path a preserving tool returned, copied rather than typed. It was not read.`);
+        gap(`${JSON.stringify(rawPath)} is named as a source artifact; it must be the exact .evimed-sources/... path a preserving tool returned, copied rather than typed. It was not read.`, "specialist_evidence_traceability_failed");
         continue;
       }
       const expectedDigest = sourceArtifactProvenance.get(relative);
@@ -2305,12 +2374,12 @@ async function specialistCompletionOutcome(
         // run — a path typed from memory, a leftover from an earlier run, or a
         // file the run created itself.
         provenanceGap = true;
-        sourceGaps.push(`The evidence matrix cites ${relative}, but no evidence tool reported preserving that file during this run. Cite only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.`);
+        gap(`The evidence matrix cites ${relative}, but no evidence tool reported preserving that file during this run. Cite only the exact .evimed-sources/... paths the preserving tools returned in this run, copied from their output rather than typed.`, "specialist_evidence_provenance_failed", relative);
         continue;
       }
       const sourceFile = await readRequiredFile(project, relative);
       if (!sourceFile) {
-        sourceGaps.push(`The source artifact ${relative} named by the package does not exist in the workspace.`);
+        gap(`The source artifact ${relative} named by the package does not exist in the workspace.`, "specialist_evidence_traceability_failed", relative);
         continue;
       }
       // The current run's preserving-tool receipt binds these bytes. Immutable
@@ -2342,10 +2411,9 @@ async function specialistCompletionOutcome(
     // that outlived a server restart is judged without it — and a package
     // judged without a rule must not read like one that passed it.
     if (briefText == null) {
-      advisories.push(
-        "本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」：服务端已不再持有这次运行的题面"
-        + "（题面只保存在服务进程内存里，服务重启后即丢失）。其余检查照常完成。",
-      );
+      const sentence = "本次交付没有按原始题面核对「报告是否引入了题面没有提到的药品」：服务端已不再持有这次运行的题面"
+        + "（题面只保存在服务进程内存里，服务重启后即丢失）。其余检查照常完成。";
+      advisories.push(runNotice("run_brief_lost", sentence, { detail: sentence }));
       skippedChecks.push("question-scoped-safety-rules");
     }
     // Which defect leads when a source named by the package had no tool
@@ -2359,6 +2427,7 @@ async function specialistCompletionOutcome(
         errorCode: "specialist_evidence_traceability_failed",
         ...provenanceVerdict,
         qualityIssues: sourceGaps,
+        qualityFindings: sourceGapFindings,
         qualityDegradable: true,
         qualityUnverified: true,
       };
@@ -2377,6 +2446,16 @@ async function specialistCompletionOutcome(
       // framing that is unsafe. They are not hidden — they are the headline.
       const blocking = [...validation.blockingIssues];
       const rest = validation.issues.filter((issue) => !blocking.includes(issue));
+      // Which check raised each finding, read off the validator's own record
+      // (`issueChecks`, same texts, same order) rather than recovered from the
+      // sentence. `clinical_evidence_issue` / `_notice` are the codes the
+      // run-side gate gives the same findings.
+      const checkOf = new Map((validation.issueChecks ?? []).map((/** @type {{ check: string | null, text: string }} */ entry) => [entry.text, entry.check]));
+      /** @param {string} issue @param {'safety'|'must-fix'|'advice'} severity @param {string} text */
+      const finding = (issue, severity, text) => runNotice(severity === "advice" ? "clinical_evidence_notice" : "clinical_evidence_issue", text, {
+        severity,
+        ...(checkOf.get(issue) ? { check: String(checkOf.get(issue)) } : {}),
+      });
       return {
         artifacts,
         // Which defect this is, so the repair loop hands the run the named
@@ -2393,6 +2472,13 @@ async function specialistCompletionOutcome(
           ...sourceGaps.map((issue) => `MUST FIX — ${issue}`),
           ...blocking.filter((/** @type {string} */ issue) => !validation.safetyIssues.includes(issue)).map((/** @type {string} */ issue) => `MUST FIX — ${issue}`),
           ...rest,
+        ],
+        qualityFindings: [
+          ...validation.safetyIssues.map((/** @type {string} */ issue) => finding(issue, "safety", `SAFETY — ${issue}`)),
+          ...(delegationNotice ? [runNotice("specialist_delegated_evidence_read", `MUST FIX — ${delegationNotice}`, { severity: "must-fix" })] : []),
+          ...sourceGapFindings,
+          ...blocking.filter((/** @type {string} */ issue) => !validation.safetyIssues.includes(issue)).map((/** @type {string} */ issue) => finding(issue, "must-fix", `MUST FIX — ${issue}`)),
+          ...rest.map((/** @type {string} */ issue) => finding(issue, "advice", issue)),
         ],
         qualityDegradable: true,
         // "Unverified" is a statement about the evidence, so only a finding
@@ -2574,9 +2660,71 @@ async function revisionDrift(project, verified) {
 }
 
 /** What the ledger says about an authorized revision that did not pass.
- *  @param {{ mismatched: string[], receipt: Record<string, any> }} verified @param {Set<string>} revising */
+ *  @param {{ mismatched: string[], receipt: Record<string, any> }} verified @param {Set<string>} revising
+ *  @returns {StoredNotice} */
 function revisionNotAcceptedNotice(verified, revising) {
-  return `交付物「${[...revising].join("、")}」按服务端门禁的要求开启了修订，改动了 ${verified.mismatched.length} 个文件，修订版没有通过门禁，所以没有新的回执；被接受时的版本另存在控制面。`;
+  const sentence = `交付物「${[...revising].join("、")}」按服务端门禁的要求开启了修订，改动了 ${verified.mismatched.length} 个文件，修订版没有通过门禁，所以没有新的回执；被接受时的版本另存在控制面。`;
+  return runNotice("run_revision_not_accepted", sentence, { detail: sentence });
+}
+
+/**
+ * The run's own admissions from its projection: `degraded` lines say part of
+ * its bookkeeping could not be kept, `qualityNotices` lines are its own notes.
+ * Both are the socket's technical English, kept as `text` only.
+ * @param {Record<string, any>} projection @returns {StoredNotice[]}
+ */
+function runSideNotices(projection) {
+  // A native run's scoped projection carries the parent's own gate findings,
+  // already structured (`scopeNativeProjection`); the socket's own lines are
+  // plain strings.
+  /** @param {unknown} value @param {string} code @returns {StoredNotice[]} */
+  const entries = (value, code) => (Array.isArray(value) ? value : []).flatMap((item) => (
+    typeof item === "string" ? (item ? [runNotice(code, item)] : []) : normalizeQualityNotices([item])));
+  return [
+    ...entries(projection?.degraded, "run_side_degraded"),
+    ...entries(projection?.qualityNotices, "run_side_notice"),
+  ];
+}
+
+/** The kernel could not tie this run's work state to this request. @returns {StoredNotice} */
+function unattributedNotice() {
+  const sentence = "内核没有把这次运行的工作状态对应到本次请求，因此无法确认交付是否通过验收。";
+  return runNotice("run_unattributed", sentence, { detail: sentence });
+}
+
+/**
+ * The run-side gate's advisory findings on an accepted package, with their
+ * identity back.
+ *
+ * The receipt keeps each finding's message only. The gate run that accepted
+ * the package keeps the whole finding in the run's projection, so a note whose
+ * text is exactly one of those findings' messages takes that finding's code,
+ * check and position — a lookup by the finding's own text, never a reading of
+ * it. A note no gate run carries is advice under `gate_advisory`.
+ * @param {readonly any[]} entries receipt entries
+ * @param {Record<string, any> | null} projection
+ * @returns {StoredNotice[]}
+ */
+function receiptNotices(entries, projection) {
+  /** @type {Map<string, Record<string, any>>} */
+  const known = new Map();
+  for (const gate of Array.isArray(projection?.gateRuns) ? projection.gateRuns : []) {
+    for (const issue of Array.isArray(gate?.issues) ? gate.issues : []) {
+      if (issue && typeof issue.message === "string" && !known.has(issue.message)) known.set(issue.message, issue);
+    }
+  }
+  return (entries ?? []).flatMap((entry) => (Array.isArray(entry?.notices) ? entry.notices : []))
+    .filter((line) => typeof line === "string" && line)
+    .map((line) => {
+      const issue = known.get(line);
+      if (!issue) return runNotice("gate_advisory", line);
+      return runNotice(noticeCodePattern.test(String(issue.code ?? "")) ? String(issue.code) : "gate_advisory", line, {
+        severity: gateIssueSeverity(issue),
+        ...(typeof issue.check === "string" && issue.check ? { check: issue.check } : {}),
+        ...(typeof issue.path === "string" && issue.path ? { file: issue.path } : {}),
+        ...(Number.isSafeInteger(issue.line) && issue.line > 0 ? { line: issue.line } : {}),
+      });
+    });
 }
 
 /**
@@ -2916,7 +3064,7 @@ async function unsubmittedDeliverables(project, projection) {
  * reader is owed the fact that something else they asked for is not here.
  * @param {any} projection a `readRunStateProjection` result
  * @param {any} receipt
- * @returns {string[]}
+ * @returns {StoredNotice[]}
  */
 function droppedDeliverableNotices(projection, receipt) {
   if (projection?.state !== "read") return [];
@@ -2938,9 +3086,10 @@ function droppedDeliverableNotices(projection, receipt) {
     const state = String(item?.status ?? item?.state ?? "");
     if (state === "accepted") continue;
     const label = String(item?.title ?? item?.capability ?? "").trim();
-    notices.push(label
+    const sentence = label
       ? `计划中的交付物「${label}」（${id}）没有通过验收，本次运行没有交付它；其余通过验收的内容不受影响。`
-      : `计划中的交付物 ${id} 没有通过验收，本次运行没有交付它；其余通过验收的内容不受影响。`);
+      : `计划中的交付物 ${id} 没有通过验收，本次运行没有交付它；其余通过验收的内容不受影响。`;
+    notices.push(runNotice("run_deliverable_dropped", sentence, { detail: sentence }));
   }
   return notices.slice(0, 10);
 }
@@ -3879,10 +4028,9 @@ export class AgentRunStore {
       // for a run the monitor had been watching, and not at all for one that
       // died before its first poll. The set is the same one that path keeps.
       const admitted = this.projectionAdmissions.get(run.id) ?? new Set();
-      const notices = (projection.state === "read"
-        ? [...(projection.projection?.degraded ?? []), ...(projection.projection?.qualityNotices ?? [])]
-        : []
-      ).filter((line) => typeof line === "string" && line && !admitted.has(line));
+      const notices = projection.state === "read"
+        ? runSideNotices(projection.projection ?? {}).filter((notice) => !admitted.has(notice.text))
+        : [];
       // Two failures end here and they are not the same failure. A run cut off
       // mid-flight lost its work; a run that wrote every file its contract asks
       // for and never submitted any of them for grading produced a complete
@@ -3919,11 +4067,15 @@ export class AgentRunStore {
           : rejected.length ? "specialist_deliverable_not_accepted" : "runtime_stopped",
         artifacts: [],
         qualityNotices: [
-          ...(projection.state === "unattributed" ? ["内核没有把这次运行的工作状态对应到本次请求，因此无法确认交付是否通过验收。"] : []),
-          ...unsubmitted.map((entry) => `交付物「${entry.id}」的文件已经写好（${entry.files} 个），但从未提交校验，因此没有通过质量门。`),
-          ...(unsubmitted.length ? [] : rejected.map((entry) => (
-            `交付物「${entry.id}」提交了 ${Number(entry.attempts ?? 0)} 次，每次都被契约校验拒绝，因此产物未经质量门。`
-          ))),
+          ...(projection.state === "unattributed" ? [unattributedNotice()] : []),
+          ...unsubmitted.map((entry) => {
+            const sentence = `交付物「${entry.id}」的文件已经写好（${entry.files} 个），但从未提交校验，因此没有通过质量门。`;
+            return runNotice("run_deliverable_never_submitted", sentence, { detail: sentence });
+          }),
+          ...(unsubmitted.length ? [] : rejected.map((entry) => {
+            const sentence = `交付物「${entry.id}」提交了 ${Number(entry.attempts ?? 0)} 次，每次都被契约校验拒绝，因此产物未经质量门。`;
+            return runNotice("run_deliverable_rejected_every_time", sentence, { detail: sentence });
+          })),
           ...notices,
         ].slice(0, 20),
       });
@@ -3955,7 +4107,9 @@ export class AgentRunStore {
         status: "failed",
         errorCode: "specialist_receipt_digest_mismatch",
         artifacts: [],
-        qualityNotices: mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the runtime is gone so no gate can judge the current bytes`),
+        qualityNotices: mismatched.slice(0, 10).map((entry) => runNotice("run_receipt_mismatch",
+          `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the runtime is gone so no gate can judge the current bytes`,
+          { file: entry, detail: "回执记下的文件在通过之后被改动，运行已经结束，改动后的内容无法再核验。" })),
       });
     }
     const delivered = await readRunStateProjection(project, project.workspaceDir, run);
@@ -3966,7 +4120,7 @@ export class AgentRunStore {
       errorCode: null,
       artifacts,
       qualityNotices: [
-        ...receipt.entries.flatMap((/** @type {any} */ entry) => entry.notices ?? []),
+        ...receiptNotices(receipt.entries, delivered.state === "read" ? delivered.projection ?? null : null),
         // The plan, not just the receipt. A receipt can only speak for what it
         // holds an entry for, so on its own it cannot report an absence.
         ...droppedDeliverableNotices(delivered, receipt),
@@ -4076,7 +4230,7 @@ export class AgentRunStore {
         normalized.unverifiedArtifacts = normalizeArtifacts(recovered);
         normalized.qualityNotices = normalizeQualityNotices([
           ...normalized.qualityNotices,
-          UNVERIFIED_DELIVERY_NOTICE,
+          runNotice("run_unverified_delivery", UNVERIFIED_DELIVERY_NOTICE, { detail: UNVERIFIED_DELIVERY_NOTICE }),
         ]);
       }
     }
@@ -4311,13 +4465,15 @@ export class AgentRunStore {
       // may well have copied. The verdict itself is unchanged: this states what
       // the verdict rests on, it does not soften it.
       if (completion.errorCode === "specialist_evidence_provenance_failed" && delegated.unreadable.length > 0) {
+        const partial = `This check could read only part of the run: ${delegated.unreadable.length} delegated session(s) `
+          + `(${delegated.unreadable.slice(0, 4).join(", ")}) could not be read, so a source one of them preserved `
+          + "is not visible here. Re-list the paths from the preserving tools' own output.";
         completion = {
           ...completion,
-          qualityIssues: [
-            ...(completion.qualityIssues ?? []),
-            `This check could read only part of the run: ${delegated.unreadable.length} delegated session(s) `
-            + `(${delegated.unreadable.slice(0, 4).join(", ")}) could not be read, so a source one of them preserved `
-            + "is not visible here. Re-list the paths from the preserving tools' own output.",
+          qualityIssues: [...(completion.qualityIssues ?? []), partial],
+          qualityFindings: [
+            ...(completion.qualityFindings ?? []),
+            runNotice("run_partial_read", partial, { detail: `有 ${delegated.unreadable.length} 个子任务的记录无法读取，这一项结论只基于能读到的部分。` }),
           ],
         };
       }
@@ -4433,7 +4589,12 @@ export class AgentRunStore {
             repairNotRun = repairRefusal;
           }
         }
-        const notices = [...(completion.qualityIssues ?? []), ...(repairNotRun ? [repairNotRun] : [])];
+        // The findings with their identity (C2), and why a repair that was due
+        // did not happen, when it did not.
+        const notices = [
+          ...qualityFindingsOf(completion),
+          ...(repairNotRun ? [runNotice("run_repair_not_dispatched", repairNotRun)] : []),
+        ];
         if (completion.qualityDegradable) {
           // What the run wrote is delivered with what was found said about it,
           // never withheld for it (2026-09-17). Withholding is for a package
@@ -4489,7 +4650,10 @@ export class AgentRunStore {
           const refusal = repairDispatchFailure(repair.failures);
           terminal.status = "failed";
           terminal.errorCode = "specialist_evidence_repair_failed";
-          terminal.qualityNotices = ["The server accepted the current package, but the run-side receipt resubmission could not be dispatched.", refusal];
+          terminal.qualityNotices = [
+            runNotice("run_resubmit_not_dispatched", "The server accepted the current package, but the run-side receipt resubmission could not be dispatched."),
+            runNotice("run_resubmit_not_dispatched", refusal),
+          ];
         }
       }
     }
@@ -4503,7 +4667,9 @@ export class AgentRunStore {
     if (rewrites.length > 0) {
       terminal.qualityNotices = [
         ...(terminal.qualityNotices ?? []),
-        `The report was replaced with the write tool ${rewrites.length} time(s) while repairing, instead of being patched with edit; a rewrite regenerates the report from context rather than from the evidence on disk.`,
+        runNotice("run_report_rewritten", `The report was replaced with the write tool ${rewrites.length} time(s) while repairing, instead of being patched with edit; a rewrite regenerates the report from context rather than from the evidence on disk.`, {
+          detail: `修订时有 ${rewrites.length} 次整篇重写了报告，而不是按问题逐处修改；整篇重写凭记忆重生成内容，可能遗漏原有证据。`,
+        }),
       ];
     }
     const repairSizes = this.clinicalRepairReportSizes.get(run.id) ?? [];
@@ -4514,7 +4680,9 @@ export class AgentRunStore {
         const lost = Math.round(((startSize - finalSize) / startSize) * 100);
         terminal.qualityNotices = [
           ...(terminal.qualityNotices ?? []),
-          `Repair reduced the report from ${startSize} to ${finalSize} characters (${lost}% smaller) over ${repairSizes.length} round(s); traceability was restored by removing analysis rather than by grounding it.`,
+          runNotice("run_report_shrunk", `Repair reduced the report from ${startSize} to ${finalSize} characters (${lost}% smaller) over ${repairSizes.length} round(s); traceability was restored by removing analysis rather than by grounding it.`, {
+            detail: `经过 ${repairSizes.length} 轮修订，报告从 ${startSize} 字缩短到 ${finalSize} 字（少了 ${lost}%）：问题是靠删内容而不是补依据解决的。`,
+          }),
         ];
       }
     }
@@ -4549,7 +4717,7 @@ export class AgentRunStore {
     // unaffected.
     if (terminal.status === "succeeded") {
       const projection = await readRunStateProjection(project, project.workspaceDir, run);
-      /** @param {string[]} notices */
+      /** @param {(string | StoredNotice)[]} notices */
       const unaccepted = (notices) => {
         if (artifacts.length === 0) {
           terminal.status = "failed";
@@ -4566,7 +4734,7 @@ export class AgentRunStore {
         const incomplete = proof?.completion?.ok === false || (requiresAcceptance && !currentReceipt);
         if (incomplete || (projection.state === "unattributed" && artifacts.length > 0 && !currentReceipt)) {
           unaccepted([...nativeWorkflowNotices(proof),
-            ...(projection.state === "unattributed" ? ["内核没有把这次运行的工作状态对应到本次请求，因此无法确认交付是否通过验收。"] : []),
+            ...(projection.state === "unattributed" ? [unattributedNotice()] : []),
           ]);
         }
       }
@@ -4575,11 +4743,12 @@ export class AgentRunStore {
         : [];
       const accepted = planned.filter((item) => item?.status === "accepted");
       if (terminal.status === "succeeded" && planned.length > 0 && accepted.length === 0 && !(await readDeliveryReceipt(project, run))) {
-        unaccepted([artifacts.length === 0
+        const sentence = artifacts.length === 0
           ? `本次运行计划了 ${planned.length} 件交付物，没有一件通过契约校验，也没有留下文件。`
           : serverGateClean
             ? `本次运行计划的 ${planned.length} 件交付物没有拿到运行内的回执；服务端已用同一套规则核验了盘上的文件并通过。`
-            : `本次运行计划的 ${planned.length} 件交付物没有通过运行内的契约校验，文件按「未核验」交付，未通过的项列在下面。`]);
+            : `本次运行计划的 ${planned.length} 件交付物没有通过运行内的契约校验，文件按「未核验」交付，未通过的项列在下面。`;
+        unaccepted([runNotice("run_planned_none_accepted", sentence, { detail: sentence })]);
       }
     }
     const finalReceipt = await readDeliveryReceipt(project, run);
@@ -4605,9 +4774,9 @@ export class AgentRunStore {
       // twenty-five advisory notes reached the ledger with zero. Deduplicated,
       // because a notice already admitted while the run was alive is the same
       // notice.
-      const seen = new Set(terminal.qualityNotices ?? []);
-      const accepted = finalReceipt.entries.flatMap((entry) => entry.notices ?? [])
-        .filter((line) => typeof line === "string" && line && !seen.has(line));
+      const seen = new Set((terminal.qualityNotices ?? []).map(noticeText));
+      const accepted = receiptNotices(finalReceipt.entries, finalProjection.state === "read" ? finalProjection.projection ?? null : null)
+        .filter((notice) => !seen.has(notice.text));
       if (accepted.length) {
         terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...accepted].slice(0, 20);
       }
@@ -4649,18 +4818,21 @@ export class AgentRunStore {
             // First: behind twenty gate issues they were cut off, and the
             // ledger never said which files had moved.
             qualityNotices: [
-              ...verified.mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the package did not pass on the bytes now on disk`),
+              ...verified.mismatched.slice(0, 10).map((entry) => runNotice("run_receipt_mismatch",
+                `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the package did not pass on the bytes now on disk`,
+                { file: entry, detail: `回执记下的文件在通过之后被改动，改动后的内容没有通过核验。` })),
               ...(terminal.qualityNotices ?? []),
             ].slice(0, 20),
           });
         } else {
-          terminal.qualityNotices = [
-            ...(terminal.qualityNotices ?? []),
-            `交付物在写下回执之后被改动了 ${verified.mismatched.length} 个文件：${verified.mismatched.slice(0, 6).join("、")}。`
+          const changed = `交付物在写下回执之后被改动了 ${verified.mismatched.length} 个文件：${verified.mismatched.slice(0, 6).join("、")}。`
             + (terminal.verification
               ? "服务端已用同一套规则对盘上的实际字节重新核验，结论就是这次交付的核验标签；发出去的是盘上的这一版，不是回执记下的那一版。"
               : "服务端已用同一套门禁对盘上的实际字节重判并通过，按实际交付重出回执；发出去的就是被验过的那一版。")
-            + "若这不是有意的收尾修改，请让运行在最后一次修改之后再提交一次。",
+            + "若这不是有意的收尾修改，请让运行在最后一次修改之后再提交一次。";
+          terminal.qualityNotices = [
+            ...(terminal.qualityNotices ?? []),
+            runNotice("run_files_changed_after_receipt", changed, { detail: changed }),
           ].slice(0, 20);
         }
       }
@@ -4715,8 +4887,9 @@ export class AgentRunStore {
       // sentence. isolated: evimed_run_projection_unreadable_total
       if (!this.projectionNoticed.has(run.id)) {
         this.projectionNoticed.add(run.id);
+        const sentence = "运行自述文件 .evimed-run/state.json 无法解析，本次运行的证据与预算明细不可见；运行本身不受影响。";
         await this.appendQualityNotices(project, run.id, [
-          "运行自述文件 .evimed-run/state.json 无法解析，本次运行的证据与预算明细不可见；运行本身不受影响。",
+          runNotice("run_projection_unreadable", sentence, { detail: sentence }),
         ]).catch(() => {});
       }
       return { signature: null, unreadable: true, childSessionIds: [], projection: null };
@@ -4770,14 +4943,11 @@ export class AgentRunStore {
     // The run's own admissions ride the ledger, not the stream: they outlive
     // the socket a browser is holding, and a reader who opens the run tomorrow
     // must still see that a layer went unchecked.
-    const admissions = [
-      ...(Array.isArray(projection?.degraded) ? projection.degraded : []),
-      ...(Array.isArray(projection?.qualityNotices) ? projection.qualityNotices : []),
-    ].filter((line) => typeof line === "string" && line);
+    const admissions = runSideNotices(projection);
     const already = this.projectionAdmissions.get(run.id) ?? new Set();
-    const fresh = admissions.filter((line) => !already.has(line));
+    const fresh = admissions.filter((notice) => !already.has(notice.text));
     if (!fresh.length) return;
-    for (const line of fresh) already.add(line);
+    for (const notice of fresh) already.add(notice.text);
     this.projectionAdmissions.set(run.id, already);
     this.appendQualityNotices(project, run.id, fresh).catch(() => {});
   }
@@ -5258,8 +5428,9 @@ export class AgentRunStore {
           // read is the parent's messages and tool calls, the kernel's events
           // for the parent and every child it attributed, and each child's
           // head in the kernel's own session list.
+          const sentence = `这次运行已有约 ${minutes} 分钟没有可观测的进展：主会话和各子任务都没有新消息、也没有新工具调用。运行仍在继续，没有被终止；如果确认它确实卡住了，可以停止它，已经写出的文件不会丢失。`;
           await this.appendQualityNotices(project, runId, [
-            `这次运行已有约 ${minutes} 分钟没有可观测的进展：主会话和各子任务都没有新消息、也没有新工具调用。运行仍在继续，没有被终止；如果确认它确实卡住了，可以停止它，已经写出的文件不会丢失。`,
+            runNotice("run_stall_observed", sentence, { detail: sentence }),
           ]).catch(() => null);
         }
         // Checked here as well as in the loop condition. A cancel that lands
@@ -5408,7 +5579,9 @@ export class AgentRunStore {
       // Nothing to grade against: no text to route, so no contract. Said in the
       // one machine-readable field rather than left to look like a pass.
       await this.appendQualityNotices(project, run.id, [
-        "Adopted from the runtime's own browser application with no readable first message, so no deliverable contract could be selected and the delivery gate did not run on this session.",
+        runNotice("run_adopted_unchecked",
+          "Adopted from the runtime's own browser application with no readable first message, so no deliverable contract could be selected and the delivery gate did not run on this session.",
+          { detail: "这次对话没有可读的首条提问，无法匹配交付契约，所以没有做交付核验。" }),
       ], { unchecked: true });
     }
     return (await this.list(project)).find((item) => item.id === run.id) ?? run;
@@ -5567,8 +5740,9 @@ export class AgentRunStore {
           run = await this.bindLegacyKernelRequests(legacyProject, matches[0].id, requestIds);
           knownRuns[knownRuns.findIndex((item) => item.id === run.id)] = run;
         } else if (matches.length > 1 || unknownLegacy) {
-          const notice = "Native replay could not be attributed because a legacy ordinary run has no unique verifiable input boundary.";
-          for (const item of legacyOrdinary) if (!item.qualityNotices?.includes(notice) && !notifiedLegacy.has(item.id)) {
+          const notice = runNotice("run_legacy_unattributed",
+            "Native replay could not be attributed because a legacy ordinary run has no unique verifiable input boundary.");
+          for (const item of legacyOrdinary) if (!item.qualityNotices?.some((existing) => noticeText(existing) === notice.text) && !notifiedLegacy.has(item.id)) {
             const legacyProject = await this.resolveRunProject(project, item);
             if (!legacyProject) continue;
             await this.appendQualityNotices(legacyProject, item.id, [notice], { unchecked: true });
@@ -5603,7 +5777,9 @@ export class AgentRunStore {
         if (knownIndex >= 0) knownRuns[knownIndex] = run;
         else knownRuns.push(run);
         if (reservation.owner && !run.effectiveRuntimeAgent) {
-          await this.appendQualityNotices(project, run.id, ["The native input could not be assigned a deliverable contract; its delivery checks are unchecked."], { unchecked: true });
+          await this.appendQualityNotices(project, run.id, [runNotice("run_adopted_unchecked",
+            "The native input could not be assigned a deliverable contract; its delivery checks are unchecked.",
+            { detail: "这次提问没有匹配到交付契约，所以没有做交付核验。" })], { unchecked: true });
         }
       }
       if (run.status === "running" && !(run.dispatchStatus === "dispatching" && this.dispatchOwners.has(run.id))) {

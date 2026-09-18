@@ -7,6 +7,7 @@ import test from "node:test";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { normalizeTranscript, transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
+import { noticeTexts } from "./helpers/noticeTexts.mjs";
 
 const fixture = JSON.parse(await readFile(new URL("./fixtures/dsh/native-turn-frames.json", import.meta.url), "utf8"));
 const question = (event) => event.data.content.map((part) => part.text ?? "").join(" ");
@@ -341,7 +342,7 @@ test("a legacy numeric cursor missing from the transcript is explicitly unattrib
   await f.adopt();
   const runs = await f.runs();
   assert.equal(runs.length, 1);
-  assert.ok(runs[0].qualityNotices.some((notice) => notice.includes("no unique verifiable input boundary")));
+  assert.ok(noticeTexts(runs[0]).some((notice) => notice.includes("no unique verifiable input boundary")));
 });
 
 function workflowEvents(accepted) {
@@ -403,7 +404,7 @@ test("a current native plan rejected seven times is not hidden by a different ke
   assert.equal(run.status, "succeeded");
   assert.equal(run.verification, "unverified");
   assert.deepEqual(run.artifacts, ["report.md"]);
-  assert.ok(run.qualityNotices.some((notice) => notice.includes("Current native gate rejection")));
+  assert.ok(noticeTexts(run).some((notice) => notice.includes("Current native gate rejection")));
 });
 
 test("a witnessed current native receipt survives kernel loss and a control-plane restart", async (t) => {
@@ -414,7 +415,7 @@ test("a witnessed current native receipt survives kernel loss and a control-plan
   const finished = await f.store.finishFromDurableRecord(f.project, run);
   assert.equal(finished.status, "succeeded");
   assert.deepEqual(finished.artifacts, ["report.md"]);
-  assert.ok(finished.qualityNotices.includes("Current native gate note"));
+  assert.ok(noticeTexts(finished).includes("Current native gate note"));
 });
 
 test("a legacy basename receipt resolves only within its named deliverable and verifies the digest", async (t) => {
@@ -462,7 +463,7 @@ test("a cumulative receipt contributes only entries witnessed in the current nat
   const finished = await f.store.finishFromDurableRecord(f.project, (await f.runs())[0]);
   assert.equal(finished.status, "succeeded");
   assert.deepEqual(finished.artifacts, ["report.md"]);
-  assert.ok(!finished.qualityNotices.includes("Old unrelated notice"));
+  assert.ok(!noticeTexts(finished).includes("Old unrelated notice"));
 });
 
 test("fresh files without witnessed workflow tools cannot silently bypass an unattributed rejection", async (t) => {
@@ -473,7 +474,7 @@ test("fresh files without witnessed workflow tools cannot silently bypass an una
   // "Silently" is what this forbids: the files go out marked, with the reason.
   assert.equal(run.status, "succeeded");
   assert.equal(run.verification, "unverified");
-  assert.ok(run.qualityNotices.some((notice) => notice.includes("无法确认交付是否通过验收")),
+  assert.ok(noticeTexts(run).some((notice) => notice.includes("无法确认交付是否通过验收")),
     "the one gate notice a researcher could see is Chinese now (2026-09-16 walk, U4)");
 });
 
@@ -500,7 +501,7 @@ test("an old acceptance is not reused after the current native submissions are r
   const run = (await f.runs())[0];
   // The old receipt neither vouches for this turn's files nor lends its notes.
   assert.equal(run.verification, "unverified");
-  assert.ok(!run.qualityNotices.includes("Old acceptance"));
+  assert.ok(!noticeTexts(run).includes("Old acceptance"));
 });
 
 test("a late older native snapshot cannot erase a persisted acceptance", async (t) => {
@@ -534,7 +535,7 @@ test("durable native completion respects the current complete_run rejection desp
   const finished = await f.store.finishFromDurableRecord(f.project, (await f.runs())[0]);
   assert.equal(finished.status, "failed");
   assert.equal(finished.errorCode, "specialist_deliverable_not_accepted");
-  assert.ok(finished.qualityNotices.includes("Current completion safety rejection"));
+  assert.ok(noticeTexts(finished).includes("Current completion safety rejection"));
 });
 
 test("a genuinely later successful complete_run replaces an earlier rejection in the same native turn", async (t) => {

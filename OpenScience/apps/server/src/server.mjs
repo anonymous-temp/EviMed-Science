@@ -14,7 +14,7 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
-import { AgentRunStore } from "./agentRuns.mjs";
+import { AgentRunStore, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
@@ -1545,15 +1545,16 @@ export function createWebApiApp(overrides = {}) {
       // testing for one of them is how every run of an excluded evaluation
       // project came to be stamped with it.
       if (memoryResult.extracted === 0 && !MEMORY_WRITE_SKIPPED_SOURCES.has(memoryResult.source)) {
-        await agentRuns.appendQualityNotices(project, run.id, [
-          `记忆抽取未产出记录：消息 ${messages.length} 条、候选 ${memoryResult.proposed} 条、`
+        const sentence = `记忆抽取未产出记录：消息 ${messages.length} 条、候选 ${memoryResult.proposed} 条、`
           + `采纳 ${memoryResult.extracted} 条、驳回 ${memoryResult.rejected} 条`
           // A third cause of the same zero: the transcript was mostly our own
           // injected context, which the extractor refuses to read back as if
           // the user had said it.
           + `${memoryResult.excluded?.length ? `、未读取 ${memoryResult.excluded.map((item) => `${item.count} 条（${item.reason === "injected" ? "系统注入" : "回合未完成"}）`).join("")}` : ""}`
           + `${memoryResult.extractionError ? `（抽取报错：${memoryResult.extractionError}）` : ""}`
-          + "。空对话与抽取失效在结果上一样，这行区分它们。",
+          + "。空对话与抽取失效在结果上一样，这行区分它们。";
+        await agentRuns.appendQualityNotices(project, run.id, [
+          runNotice("memory_extraction_empty", sentence, { detail: sentence }),
         // A notice, not a verification downgrade. `unchecked` means a layer of
         // the delivery gate did not run, and the researcher's inbox renders it
         // as 「有质量检查没有运行，无法确认是否达标」. Memory extraction is not a
@@ -1571,10 +1572,11 @@ export function createWebApiApp(overrides = {}) {
       // makes it legible. No `unchecked` flag: parking a memory says nothing
       // about whether the run's own deliverables were checked.
       if (memoryResult.pending > 0) {
-        await agentRuns.appendQualityNotices(project, run.id, [
-          `记忆已记录但暂缓生效 ${memoryResult.pending} 条：`
+        const sentence = `记忆已记录但暂缓生效 ${memoryResult.pending} 条：`
           + memoryResult.pendingReasons.map((item) => `${item.count} 条因${item.text}`).join("；")
-          + "。记录与证据都已保存，可在记忆管理中确认后启用。",
+          + "。记录与证据都已保存，可在记忆管理中确认后启用。";
+        await agentRuns.appendQualityNotices(project, run.id, [
+          runNotice("memory_pending", sentence, { detail: sentence }),
         ]).catch(() => {});
       }
       // A memory the researcher had confirmed, changed by this conversation.
@@ -1591,10 +1593,11 @@ export function createWebApiApp(overrides = {}) {
         // The inbox notice carries the full excerpts.
         const changed = memoryResult.conflicts.slice(0, 2).map((item) =>
           `「${item.key.slice(0, 40)}」由「${item.previousValue.slice(0, 30)}」改为「${item.nextValue.slice(0, 30)}」`);
-        await agentRuns.appendQualityNotices(project, run.id, [
-          `本次对话改写了 ${memoryResult.conflicts.length} 条你确认过的记忆：${changed.join("；")}`
+        const sentence = `本次对话改写了 ${memoryResult.conflicts.length} 条你确认过的记忆：${changed.join("；")}`
           + `${memoryResult.conflicts.length > changed.length ? "等" : ""}`
-          + "。新值已生效，原值保留在该记忆的修订记录中，可在记忆管理中改回。",
+          + "。新值已生效，原值保留在该记忆的修订记录中，可在记忆管理中改回。";
+        await agentRuns.appendQualityNotices(project, run.id, [
+          runNotice("memory_conflicts", sentence, { detail: sentence }),
         ]).catch(() => {});
       }
       securityAudit(config, "memory.agent_run.record", "completed", {

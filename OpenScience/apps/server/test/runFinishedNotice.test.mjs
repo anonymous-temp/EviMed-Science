@@ -31,7 +31,7 @@ test("a refused package and a platform stop do not share a sentence", () => {
   assert.notEqual(gated.body, stopped.body);
   // The distinction that matters to the reader: one is a statement about their
   // work, the other is a statement about the platform.
-  assert.match(gated.title, /质量门/);
+  assert.match(gated.title, /核验/);
   assert.match(stopped.title, /平台终止/);
 });
 
@@ -46,11 +46,35 @@ test("an unverified delivery is reported as delivered-but-check-it, not as a fai
 
   assert.equal(notice.outcome, "qualified");
   assert.match(notice.title, /待你复核/);
-  assert.match(notice.body, /需要你自己复核/);
+  assert.match(notice.body, /依据/, "the body names where to check");
   // The files are the researcher's work whatever the verdict; a notice that
   // omits them reads as though the run produced nothing.
   assert.match(notice.body, /本次运行产出 2 个文件/);
-  assert.match(notice.body, /检索日志与实际检索不吻合/);
+  // A notice's own sentence is never the body: it stays on the run.
+  assert.doesNotMatch(notice.body, /检索日志与实际检索不吻合/);
+});
+
+test("the body is counts and titles, and never a validator's sentence", () => {
+  const english = "claims[52].claim numeric fact 6 is not present in its direct support. Quote the passage that states it.";
+  const notice = runFinishedNotice({
+    status: "succeeded",
+    verification: "unverified",
+    artifacts: ["deliverables/review/clinical-evidence-report.md"],
+    qualityNotices: [
+      { code: "clinical_evidence_issue", check: "clinical-safety-rules", severity: "safety", text: "SAFETY — the practical section tells a chest-pain patient to wait" },
+      { code: "clinical_evidence_issue", check: "claim-quote-verbatim", severity: "must-fix", text: "MUST FIX — claims[3].supportQuote was not found in its source" },
+      { code: "clinical_evidence_issue", check: "claim-quote-verbatim", severity: "must-fix", text: "MUST FIX — claims[9].supportQuote was not found in its source" },
+      { code: "clinical_evidence_notice", check: "claim-numeric-support", severity: "advice", text: english },
+      "MUST FIX — a legacy sentence from an older ledger",
+    ],
+  });
+  assert.equal(notice.body.split("\n")[0], "已交付。4 项自证未通过，其中 1 项涉及临床安全；引用前请在报告的「依据」里核对带 ⚠ 的结论。");
+  assert.match(notice.body, /请先核对：命中临床安全规则，请核对；引文在所引来源中找不到原句（2 项）/);
+  assert.doesNotMatch(notice.body, /[a-z]{5,}/, `an English sentence reached the body: ${notice.body}`);
+  assert.equal(notice.severity, "safety", "clinical safety is the one class that interrupts");
+  assert.deepEqual(notice.counts, { safety: 1, mustFix: 3, advice: 1 });
+  assert.equal(runFinishedNotice({ status: "succeeded", verification: null, artifacts: [] }).severity, "info");
+  assert.equal(runFinishedNotice({ status: "failed", errorCode: "specialist_deliverable_not_accepted" }).severity, "attention");
 });
 
 test("a run refused before it started never claims files exist", () => {
