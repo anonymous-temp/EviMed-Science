@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import {
   HttpError,
@@ -3075,7 +3075,12 @@ async function consumeRepairAuthorization(project, input, {
  * @param {Record<string, any>} project
  * @returns {Promise<string[]>}
  */
-async function writtenDeliverableFiles(project) {
+/**
+ * @param {any} project
+ * @param {number | null} [since] epoch ms the run started; a file last written
+ *   before it is an earlier run's, in the same workspace
+ */
+async function writtenDeliverableFiles(project, since = null) {
   /** @type {string[]} */
   const found = [];
   /** @type {import('node:fs').Dirent[]} */
@@ -3099,6 +3104,11 @@ async function writtenDeliverableFiles(project) {
     for (const file of files) {
       if (found.length >= maxArtifacts) break;
       if (!file.isFile()) continue;
+      if (since != null) {
+        // The same second of slack the required-output freshness rule allows.
+        const written = await stat(path.join(project.workspaceDir, workspaceLayout.deliverablesDir, id, file.name)).catch(() => null);
+        if (!written || written.mtimeMs + 1_000 < since) continue;
+      }
       found.push(`${workspaceLayout.deliverablesDir}/${id}/${file.name}`);
     }
   }
@@ -4557,7 +4567,13 @@ export class AgentRunStore {
     tracker.startedAt ??= run.startedAt;
     if (projection) tracker.projection = projection;
     if (claims?.total) tracker.matrix = { ...claims, at: this.now().getTime() };
-    const progress = this.composeProgress(tracker, run, deliverables);
+    const composed = this.composeProgress(tracker, run, deliverables);
+    // A run that has ended has no child still working: the last observation
+    // before a cancel said `running`, and the finished record kept saying it.
+    const closed = normalized.status === "succeeded" ? "done" : "failed";
+    const progress = composed && Array.isArray(composed.children)
+      ? { ...composed, children: composed.children.map((/** @type {any} */ child) => (child?.state === "running" || child?.state === "idle" ? { ...child, state: closed } : child)) }
+      : composed;
     return {
       deliverables,
       claimSummary: claims?.total ? { total: claims.total, verified: claims.verified, unverified: claims.unverified } : null,
@@ -4625,7 +4641,12 @@ export class AgentRunStore {
     // their work. A run that genuinely wrote nothing still reports nothing,
     // because this reads the workspace instead of asserting.
     if (normalized.status !== "succeeded" && normalized.artifacts.length === 0) {
-      const recovered = await writtenDeliverableFiles(project).catch(() => []);
+      // Only what this run wrote. Unfiltered, the metformin run cancelled on
+      // 2026-09-19 two minutes in "recovered" 34 files an aspirin run had
+      // written two days earlier in the same workspace, and its claim summary
+      // counted their 284 claims.
+      const started = Date.parse((await this.list(project).catch(() => [])).find((item) => item.id === runId)?.startedAt ?? "");
+      const recovered = await writtenDeliverableFiles(project, Number.isFinite(started) ? started : null).catch(() => []);
       if (recovered.length > 0) {
         normalized.unverifiedArtifacts = normalizeArtifacts(recovered);
         normalized.qualityNotices = normalizeQualityNotices([
