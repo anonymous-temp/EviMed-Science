@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -66,6 +66,24 @@ const agents = [
     ],
     completionChecks: ["requiredOutputsExist"],
     runtimeAgent: "evimed-meta-analysis",
+  },
+  {
+    id: "peer-review",
+    version: "1.0.0",
+    title: "Peer Review",
+    category: "Research Quality",
+    description: "Review a manuscript.",
+    skill: "peer-review",
+    estimatedMinutes: [20, 120] as [number, number],
+    starterPrompts: ["Review my manuscript."],
+    requiredInputs: ["manuscript"],
+    optionalInputs: [],
+    requiredTools: [],
+    optionalTools: [],
+    dataSources: ["uploaded-files"],
+    outputs: [{ path: "peer-review-report.md", required: true }],
+    completionChecks: ["requiredOutputsExist"],
+    runtimeAgent: "evimed-peer-review",
   },
 ];
 
@@ -151,62 +169,89 @@ describe("CapabilitiesPage", () => {
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
   });
 
-  it("renders a compact vertical catalog with time, file support, outputs, and starter prompts", async () => {
-    render(
-      <MemoryRouter initialEntries={["/agents"]}>
-        <Routes>
-          <Route path="/agents" element={<CapabilitiesPage />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole("heading", { name: "科研能力" })).toBeInTheDocument();
-    expect(await screen.findByText("药品安全性分析")).toBeInTheDocument();
-    expect(screen.getByText("超说明书用药分析")).toBeInTheDocument();
-    expect(screen.getByText("自动化 Meta 分析")).toBeInTheDocument();
-    expect(screen.getByText("SA")).toBeInTheDocument();
-    expect(screen.getByText("OL")).toBeInTheDocument();
-    expect(screen.getByText("MA")).toBeInTheDocument();
-    expect(screen.queryByText("01")).not.toBeInTheDocument();
-    expect(screen.queryByText("02")).not.toBeInTheDocument();
-    expect(screen.getByText("约 20–40 分钟")).toBeInTheDocument();
-    expect(screen.getAllByText("支持知识库资料")).toHaveLength(3);
-    expect(screen.getAllByText("报告")).toHaveLength(3);
-    expect(screen.getByText("表格")).toBeInTheDocument();
-    expect(screen.getByText("图表")).toBeInTheDocument();
-    expect(screen.getByText(/分析奥希替尼相关的心脏安全性信号/)).toBeInTheDocument();
-  });
-
-  it("filters by search and category without turning the catalog into cards", async () => {
+  // Appendix D §10.4: compact rows grouped by what they are for, a line icon
+  // instead of the two-letter monogram, one line of what it does, how long.
+  it("groups compact rows by category, in the product's words, without monograms", async () => {
     render(
       <MemoryRouter>
         <CapabilitiesPage />
       </MemoryRouter>,
     );
-    await screen.findByText("药品安全性分析");
 
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索科研能力" }), "超说明书");
-    expect(screen.queryByText("药品安全性分析")).not.toBeInTheDocument();
-    expect(screen.getByText("超说明书用药分析")).toBeInTheDocument();
-
-    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索科研能力" }));
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "按分类筛选" }), "药物警戒");
-    expect(screen.getByText("药品安全性分析")).toBeInTheDocument();
-    expect(screen.queryByText("超说明书用药分析")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "科研能力" })).toBeInTheDocument();
+    const groups = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
+    expect(groups).toEqual(["临床证据1 项", "写作与传播1 项", "药学评价2 项"]);
+    const pharmacy = screen.getByRole("heading", { level: 2, name: /药学评价/ }).closest("section")!;
+    expect(within(pharmacy).getByRole("button", { name: "药品安全性分析：查看说明并开始" })).toHaveTextContent("通常 20–40 分钟");
+    expect(within(pharmacy).getByRole("button", { name: "超说明书用药分析：查看说明并开始" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "论文审稿：查看说明并开始" })).toHaveTextContent("需要你的资料");
+    expect(screen.queryByText("SA")).not.toBeInTheDocument();
+    expect(screen.queryByText("Drug Safety Analysis")).not.toBeInTheDocument();
   });
 
-  // Owner decision 3: 开始 runs at once — no plan to approve first — and the
-  // route line says what the control plane decided the moment it answers.
-  it("starts a capability directly: binds a session to it, dispatches, and shows the route line", async () => {
+  it("filters by search, including example questions, and by category", async () => {
+    render(
+      <MemoryRouter>
+        <CapabilitiesPage />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("button", { name: /药品安全性分析/ });
+
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索科研能力" }), "氨甲环酸");
+    expect(screen.getByRole("button", { name: /自动化 Meta 分析/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
+
+    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索科研能力" }));
+    const filters = screen.getByRole("group", { name: "按分类筛选" });
+    await userEvent.click(within(filters).getByRole("button", { name: "药学评价" }));
+    expect(within(filters).getByRole("button", { name: "药学评价" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /药品安全性分析/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /自动化 Meta 分析/ })).not.toBeInTheDocument();
+  });
+
+  it("opens a model card: what it does, how well it has done, its limits and what you receive", async () => {
+    render(
+      <MemoryRouter>
+        <CapabilitiesPage />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "药品安全性分析：查看说明并开始" }));
+
+    const card = screen.getByRole("dialog", { name: "药品安全性分析" });
+    expect(card).toHaveTextContent("开展不良事件信号挖掘、说明书比对与安全性证据汇总。");
+    // How well: from evals/ (the acceptance ledger), never estimated.
+    expect(within(card).getByRole("heading", { name: "实测表现" })).toBeInTheDocument();
+    expect(card).toHaveTextContent("最近一次真实交付（2026年9月4日）已通过验收。");
+    expect(within(card).getByRole("heading", { name: "已知局限" })).toBeInTheDocument();
+    expect(card).toHaveTextContent("报告数不等于发生率");
+    expect(within(card).getByRole("heading", { name: "你会拿到" })).toBeInTheDocument();
+    expect(card).toHaveTextContent("安全性证据报告");
+    expect(within(card).getAllByRole("button", { name: /^开始：/ })).toHaveLength(3);
+
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("opens the card a link names", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/capabilities?capability=meta-analysis"]}>
+        <CapabilitiesPage />
+      </MemoryRouter>,
+    );
+    const card = await screen.findByRole("dialog", { name: "自动化 Meta 分析" });
+    expect(card).toHaveTextContent("没有通过验收");
+  });
+
+  // Owner decision 3: a starter question starts a run when clicked — no plan
+  // to approve first — and the route line says what the control plane decided.
+  it("starts a starter question directly: binds a session, dispatches, and shows the route line", async () => {
     render(
       <MemoryRouter initialEntries={["/app/capabilities"]}>
         <CapabilitiesPage />
       </MemoryRouter>,
     );
-    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析能力/ }));
-    const question = screen.getByRole("textbox", { name: "你的问题" });
-    expect(question).toHaveValue("分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。");
-    await userEvent.click(screen.getByRole("button", { name: "开始" }));
+    await userEvent.click(await screen.findByRole("button", { name: "药品安全性分析：查看说明并开始" }));
+    await userEvent.click(screen.getByRole("button", { name: "开始：分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。" }));
 
     await waitFor(() => expect(mocks.dispatchWebAgentRun).toHaveBeenCalled());
     const [sessionId, selection] = mocks.putWebResearchSession.mock.calls[0];
@@ -214,12 +259,46 @@ describe("CapabilitiesPage", () => {
     expect(mocks.dispatchWebAgentRun.mock.calls[0][0]).toBe(sessionId);
     expect(mocks.dispatchWebAgentRun.mock.calls[0][1]).toBe("分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。");
 
+    // The card closes; the receipt takes the focus, with the route line.
     const receipt = await screen.findByRole("heading", { name: /^已开始：/ });
-    expect(receipt).toHaveFocus();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     const section = receipt.closest("section")!;
     expect(section.textContent).toContain("按 药品安全性分析 处理");
     expect(section.textContent).toContain("通常 20–40 分钟");
     expect(section.textContent).toContain("题面要一份可追溯的安全性证据报告");
+  });
+
+  it("starts the researcher's own question from the card", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/capabilities"]}>
+        <CapabilitiesPage />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "自动化 Meta 分析：查看说明并开始" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "你的问题" }), "他汀类药物与糖尿病新发风险");
+    await userEvent.click(screen.getByRole("button", { name: "开始" }));
+
+    await waitFor(() => expect(mocks.dispatchWebAgentRun).toHaveBeenCalled());
+    expect(mocks.putWebResearchSession.mock.calls[0][1]).toEqual({ mode: "specialist", agentId: "meta-analysis", agentVersion: "1.0.0" });
+    expect(mocks.dispatchWebAgentRun.mock.calls[0][1]).toBe("他汀类药物与糖尿病新发风险");
+  });
+
+  // A capability that works on the researcher's own material would begin by
+  // asking for a file nobody gave it; its starter question goes into the box.
+  it("puts a starter question into the box, not into a run, when the capability needs your material", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/capabilities"]}>
+        <CapabilitiesPage />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "论文审稿：查看说明并开始" }));
+    const card = screen.getByRole("dialog", { name: "论文审稿" });
+    expect(card).toHaveTextContent("开始前：需要先把稿件上传到知识库");
+    await userEvent.click(within(card).getByRole("button", { name: /^放进问题框：审查我上传的论文/ }));
+
+    expect(within(card).getByRole("textbox", { name: "你的问题" })).toHaveValue("审查我上传的论文，定位方法学、统计学、报告规范和完整性问题。");
+    expect(within(card).getByRole("textbox", { name: "你的问题" })).toHaveFocus();
+    expect(mocks.dispatchWebAgentRun).not.toHaveBeenCalled();
   });
 
   it("changes the line from the receipt: the run stops and the same question starts on the answer line", async () => {
@@ -228,8 +307,8 @@ describe("CapabilitiesPage", () => {
         <CapabilitiesPage />
       </MemoryRouter>,
     );
-    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析能力/ }));
-    await userEvent.click(screen.getByRole("button", { name: "开始" }));
+    await userEvent.click(await screen.findByRole("button", { name: "药品安全性分析：查看说明并开始" }));
+    await userEvent.click(screen.getAllByRole("button", { name: /^开始：/ })[0]);
     await screen.findByRole("heading", { name: /^已开始：/ });
 
     mocks.dispatchWebAgentRun.mockImplementationOnce(async (sessionId: string, text: string) => ({
@@ -257,8 +336,8 @@ describe("CapabilitiesPage", () => {
         <CapabilitiesPage />
       </MemoryRouter>,
     );
-    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析能力/ }));
-    await userEvent.click(screen.getByRole("button", { name: "开始" }));
+    await userEvent.click(await screen.findByRole("button", { name: "药品安全性分析：查看说明并开始" }));
+    await userEvent.click(screen.getAllByRole("button", { name: /^开始：/ })[0]);
     await screen.findByRole("heading", { name: /^已开始：/ });
 
     mocks.dispatchWebAgentRun.mockImplementationOnce(async (sessionId: string, text: string) => ({
@@ -280,10 +359,11 @@ describe("CapabilitiesPage", () => {
         <CapabilitiesPage />
       </MemoryRouter>,
     );
-    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析能力/ }));
-    await userEvent.click(screen.getByRole("button", { name: "开始" }));
+    await userEvent.click(await screen.findByRole("button", { name: "药品安全性分析：查看说明并开始" }));
+    await userEvent.click(screen.getAllByRole("button", { name: /^开始：/ })[0]);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("运行时出现问题，稍后重试。");
+    expect(screen.getByRole("dialog", { name: "药品安全性分析" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /^已开始：/ })).not.toBeInTheDocument();
   });
 
@@ -299,7 +379,7 @@ describe("CapabilitiesPage", () => {
         </Routes>
       </MemoryRouter>,
     );
-    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析能力/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "药品安全性分析：查看说明并开始" }));
     await userEvent.click(screen.getByRole("button", { name: "在对话里写" }));
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
@@ -310,10 +390,7 @@ describe("CapabilitiesPage", () => {
     expect(intent).toMatchObject({ kind: "create", projectId: "default" });
     expect(intent.sessionId).toBeTruthy();
     expect(intent.requestId).toBeTruthy();
-    const draft = intent.draft;
-    expect(draft).toContain("药品安全性分析");
-    expect(draft).toContain("分析奥希替尼相关的心脏安全性信号");
-    expect(draft).toBe(capabilityBrief("药品安全性分析", "分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。"));
+    expect(intent.draft).toBe(capabilityBrief("药品安全性分析", "分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。"));
   });
 
   it("offers a retry when the catalogue could not be loaded, rather than a dead error line", async () => {
@@ -329,7 +406,7 @@ describe("CapabilitiesPage", () => {
 
     mocks.listWebResearchAgents.mockResolvedValue(agents);
     await userEvent.click(screen.getByRole("button", { name: /重试/ }));
-    expect(await screen.findByText("药品安全性分析")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /药品安全性分析/ })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });

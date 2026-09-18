@@ -84,3 +84,25 @@ dataSources:
 starterPrompts:
 - Analyze acute chest pressure, the differential diagnosis, and the appropriate role of Suxiao Jiuxin
   Wan.
+
+# What a researcher is shown, in Chinese: read by people, not by the
+# orchestrator (the fields above). The generator derives the shell's and the
+# frame's capability table from this block, and adds what evals/ measured.
+display:
+  title: "临床证据深度分析"
+  category: "临床证据"
+  description: "把一个开放的临床问题做成可复现检索、逐条核验引文、主张可追溯的深度证据分析，并单独给出以安全为先的实践性回答。"
+  starterPrompts:
+  - "≥70 岁人群阿司匹林一级预防的获益与出血风险。"
+  - "分析急性胸闷胸痛的鉴别诊断，以及速效救心丸在其中的合理定位。"
+  - "SGLT2 抑制剂在 eGFR 低于 30 的患者中还有肾脏获益吗？"
+  estimatedMinutes:
+    min: 30
+    max: 70
+  outputs:
+  - "证据综述报告"
+  - "证据矩阵：每条主张对应一段保存的原文引文"
+  knownLimits:
+  - "只读取可公开获取的全文；付费墙后的文献只能用摘要。"
+  - "报告里标 ⚠ 的结论没能在保存的原文中逐字核对到，引用前请核对。"
+  - "不提供个体诊疗建议。"

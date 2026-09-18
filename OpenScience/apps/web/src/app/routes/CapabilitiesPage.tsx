@@ -1,30 +1,35 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bot, ChevronDown, Clock3, FileCheck2, RefreshCw, Search, ServerCrash } from "lucide-react";
+import { useSearchParams } from "react-router";
+import { ChevronRight, Clock3, FolderUp, RefreshCw, Search, ServerCrash } from "lucide-react";
 import { capabilityBrief } from "@evimed/domain";
-import { webErrorMessage, hasWebApi, listWebResearchAgents, type WebAgentRun, type WebResearchAgent, type WebResearchAgentOutput } from "@/lib/apiClient";
-import { researchAgentUi } from "@/lib/researchAgentUi";
+import { webErrorMessage, hasWebApi, listWebResearchAgents, type WebAgentRun, type WebResearchAgent } from "@/lib/apiClient";
+import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
+import { capabilityIcon } from "@/lib/capabilityIcons";
+import { minutesText } from "@/lib/dispatch";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { AgentsSkeleton } from "@/components/cards/Skeletons";
-import { CapabilityStart } from "@/components/capabilities/CapabilityStart";
+import { CapabilityCard } from "@/components/capabilities/CapabilityCard";
 import { DispatchReceipt } from "@/components/runs/DispatchReceipt";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
-import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
-import { PageTitle } from "@/components/layout/PageTitle";
+import { Drawer } from "@/components/ui/Drawer";
 
 /**
- * Capability templates (§9.8).
+ * The capability catalogue (plan §8.4, appendix D §5.2 and §10.4).
  *
- * Hidden knowledge: what changed here is the *meaning* of a click, not the
- * list. Under the retiring kernel a row bound the session to one package for
- * its whole life, so picking wrong meant starting over. Under one composition
- * the orchestrator composes capabilities itself, and a template is a
- * suggestion: picking one fills the brief and names the capability in it — a
- * high-confidence expectation the delivery gate reads (§9.4) — and the same
- * conversation can go on to ask for something else without switching anything.
+ * Fifteen capabilities are too many for chips and too important for a
+ * dropdown, and fifteen 220 px cards showed three to a screen. So: grouped by
+ * what they are for, searchable, one compact row each — a line icon, the name,
+ * one line of what it does, how long it usually takes. A row opens the
+ * capability's model card: what it does, how well it has done (from `evals/`),
+ * what it cannot do, what the researcher receives, and a way to start.
  *
- * The row opens a native session and fills its draft through the scoped input
- * API. The researcher still chooses whether to submit that brief.
+ * Starting dispatches at once (owner decision 3) and the receipt at the top of
+ * the page shows the route line; 在对话里写 is kept for the researcher who
+ * would rather shape the brief in the conversation first.
+ *
+ * `?capability=<id>` opens a card directly, so a capability can be linked to.
  */
 
 /**
@@ -39,13 +44,14 @@ export { capabilityBrief };
 
 export function CapabilitiesPage() {
   const [agents, setAgents] = useState<WebResearchAgent[]>([]);
-  const [startingId, setStartingId] = useState<string | null>(null);
-  const [receipt, setReceipt] = useState<{ run: WebAgentRun; question: string } | null>(null);
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("all");
+  const [category, setCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(hasWebApi);
   const [error, setError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
+  const [receipt, setReceipt] = useState<{ run: WebAgentRun; question: string } | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openId = searchParams.get("capability");
 
   useEffect(() => {
     let active = true;
@@ -70,92 +76,94 @@ export function CapabilitiesPage() {
     };
   }, [reloads]);
 
-  const localizedAgents = useMemo(() => agents.map(researchAgentUi), [agents]);
+  const capabilities = useMemo(() => agents.map(researchAgentUi), [agents]);
   const categories = useMemo(
-    () => [...new Set(localizedAgents.map((agent) => agent.category))].sort((a, b) => a.localeCompare(b)),
-    [localizedAgents],
+    () => [...new Set(capabilities.map((agent) => agent.category))].sort((a, b) => a.localeCompare(b, "zh")),
+    [capabilities],
   );
-  const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return localizedAgents.filter((agent) => {
-      if (category !== "all" && agent.category !== category) return false;
+  const needle = query.trim().toLowerCase();
+  const visible = useMemo(
+    () => capabilities.filter((agent) => {
+      if (category && agent.category !== category) return false;
       if (!needle) return true;
-      return [agent.title, agent.description, agent.category, ...agent.starterPrompts]
+      return [agent.title, agent.description, agent.category, ...agent.starterPrompts, ...agent.deliverables]
         .join(" ")
         .toLowerCase()
         .includes(needle);
-    });
-  }, [localizedAgents, category, query]);
+    }),
+    [capabilities, category, needle],
+  );
+  const groups = useMemo(() => {
+    const byCategory = new Map<string, CapabilityUi[]>();
+    for (const agent of visible) byCategory.set(agent.category, [...(byCategory.get(agent.category) ?? []), agent]);
+    return [...byCategory.entries()]
+      .sort(([a], [b]) => a.localeCompare(b, "zh"))
+      .map(([name, items]) => [name, items.sort((a, b) => a.title.localeCompare(b.title, "zh"))] as const);
+  }, [visible]);
+
+  const opened = openId ? capabilities.find((agent) => agent.id === openId) ?? null : null;
+  const openCard = (id: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set("capability", id);
+    else next.delete("capability");
+    setSearchParams(next, { replace: true });
+  };
 
   return (
     <div className="h-full overflow-y-auto bg-bg">
-      <div className="mx-auto max-w-5xl px-8 py-9">
-        <div className="flex flex-col gap-6 border-b border-border pb-7 md:flex-row md:items-end md:justify-between">
-          <div className="max-w-2xl">
-            {/* `uppercase` on a line that is already Chinese did nothing to
-              * the Chinese and shouted the one English word in it. */}
-            <div className="mb-2 flex items-center gap-2 text-caption font-medium tracking-[0.16em] text-accent">
-              <Bot size={14} aria-hidden="true" /> EviMed 能力目录
+      <div className="mx-auto max-w-content-full px-8 py-9">
+        <PageHeader
+          title="科研能力"
+          description="选一项能力，看它做什么、实测做得怎样、有哪些局限，写下问题就能直接开始；开始后会说明按哪条线处理、通常要多久，不合适可以一键改线。"
+        />
+
+        <div className="mt-6 flex flex-col gap-3 border-b border-border pb-5 md:flex-row md:items-center">
+          <label className="relative w-full md:w-72">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} aria-hidden="true" />
+            <span className="sr-only">搜索科研能力</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜索能力、产物或示例问题"
+              className="h-9 w-full rounded-input border border-strong bg-surface pl-9 pr-3 text-ui text-text outline-none placeholder:text-muted focus:border-focus"
+            />
+          </label>
+          {categories.length > 1 && (
+            <div role="group" aria-label="按分类筛选" className="flex flex-wrap gap-1.5">
+              {[null, ...categories].map((name) => {
+                const selected = category === name;
+                return (
+                  <button
+                    key={name ?? "all"}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setCategory(name)}
+                    className={cn(
+                      "h-8 rounded-full border px-3 text-ui transition-colors duration-fast",
+                      selected ? "border-text bg-surface-2 font-medium text-text" : "border-border bg-surface text-muted hover:border-strong hover:text-text",
+                    )}
+                  >
+                    {name ?? "全部"}
+                  </button>
+                );
+              })}
             </div>
-            {/* 「能力模板」 read as document templates. These are the fifteen
-              * specialist research capabilities — drug safety, meta-analysis,
-              * Mendelian randomization, peer review — and a researcher who was
-              * told the platform ships research plugins did not find them under
-              * a word that means stationery (2026-09-15 walk, C2). §9.8 renamed
-              * them from "agents" because a pick became a suggestion rather
-              * than a binding; that is still true, and the sentence below says
-              * it, which is where it belongs. */}
-            <PageTitle page="科研能力" />
-            <h1 className={PAGE_TITLE_CLASS}>科研能力</h1>
-            <p className="mt-2 text-ui leading-6 text-muted">
-              选一项能力，写下问题就能直接开始；开始后会告诉你按哪条线处理、通常要多久，不合适可以一键改线。
-              也可以把题面放进对话框，改好再自己发出。
-            </p>
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
-            <label className="relative min-w-64 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} aria-hidden="true" />
-              <span className="sr-only">搜索科研能力</span>
-              <input
-                type="search"
-                aria-label="搜索科研能力"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索科研能力"
-                className="h-9 w-full rounded-input border border-strong bg-surface pl-9 pr-3 text-ui text-text outline-none placeholder:text-muted focus:border-focus"
-              />
-            </label>
-            <select
-              aria-label="按分类筛选"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              className="h-9 rounded-input border border-strong bg-surface px-3 text-ui text-text outline-none focus:border-focus"
-            >
-              <option value="all">全部分类</option>
-              {categories.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </div>
+          )}
         </div>
 
         {receipt && (
           <div className="mt-6">
-            <DispatchReceipt
-              run={receipt.run}
-              question={receipt.question}
-              catalog={agents}
-              onDismiss={() => setReceipt(null)}
-            />
+            <DispatchReceipt run={receipt.run} question={receipt.question} catalog={agents} onDismiss={() => setReceipt(null)} />
           </div>
         )}
 
-        <div className="mt-2 divide-y divide-border border-b border-border">
+        <div className="mt-6 space-y-8">
           {loading && <AgentsSkeleton />}
           {/* Error with a way out, not a dead end: a catalogue that failed to
-            * load once is usually a control plane that was briefly away, and
-            * the alternative to a retry button is asking the reader to reload
-            * the whole app. */}
+            * load once is usually a control plane that was briefly away. */}
           {!loading && error && (
-            <div role="alert" className="my-5 flex flex-wrap items-center gap-3 rounded-input border border-danger bg-danger-soft px-4 py-3 text-ui text-error">
+            <div role="alert" className="flex flex-wrap items-center gap-3 rounded-input border border-danger bg-danger-soft px-4 py-3 text-ui text-danger-strong">
               <span className="min-w-0 flex-1 break-words">无法加载能力目录：{error}</span>
               <Button size="sm" variant="ghost" onClick={() => setReloads((value) => value + 1)}>
                 <RefreshCw size={12} aria-hidden /> 重试
@@ -170,90 +178,69 @@ export function CapabilitiesPage() {
             />
           )}
           {!loading && !error && hasWebApi && visible.length === 0 && (
-            <EmptyState icon={Search} title="没有符合条件的科研能力" />
-          )}
-          {!loading && !error && visible.map((agent) => (
-            <AgentRow
-              key={agent.id}
-              agent={agent}
-              starting={startingId === agent.id}
-              onToggleStart={() => setStartingId((current) => (current === agent.id ? null : agent.id))}
-              onDispatched={(run, question) => {
-                setStartingId(null);
-                setReceipt({ run, question });
-              }}
+            <EmptyState
+              icon={Search}
+              title="没有符合条件的科研能力"
+              description={needle ? `没有能力的名称、说明或示例里有「${query.trim()}」。` : undefined}
             />
+          )}
+          {!loading && !error && groups.map(([name, items]) => (
+            <section key={name} aria-labelledby={`capability-group-${name}`}>
+              <h2 id={`capability-group-${name}`} className="mb-3 flex items-baseline gap-2 text-ui font-semibold text-text">
+                {name}<span className="text-caption font-normal text-muted">{items.length} 项</span>
+              </h2>
+              <ul className="grid gap-2 xl:grid-cols-2">
+                {items.map((agent) => (
+                  <li key={agent.id}><CapabilityRow agent={agent} onOpen={() => openCard(agent.id)} /></li>
+                ))}
+              </ul>
+            </section>
           ))}
         </div>
       </div>
+
+      {opened && (
+        <Drawer
+          title={opened.title}
+          description={`${opened.category} · 版本 ${opened.version}`}
+          onClose={() => openCard(null)}
+          widthClassName="max-w-xl"
+        >
+          <CapabilityCard
+            agent={agents.find((agent) => agent.id === opened.id) ?? opened}
+            onDispatched={(run, question) => {
+              openCard(null);
+              setReceipt({ run, question });
+            }}
+          />
+        </Drawer>
+      )}
     </div>
   );
 }
 
-function AgentRow({
-  agent,
-  starting,
-  onToggleStart,
-  onDispatched,
-}: {
-  agent: WebResearchAgent;
-  starting: boolean;
-  onToggleStart: () => void;
-  onDispatched: (run: WebAgentRun, question: string) => void;
-}) {
-  const ui = researchAgentUi(agent);
-  const outputLabels = [...new Set(ui.outputs.map(outputLabel))];
-  const supportsFiles = agent.optionalInputs.includes("uploadedFiles") || agent.requiredInputs.includes("uploadedFiles");
-  const panelId = `capability-start-${agent.id}`;
+/** One compact row (appendix D §10.4): icon, name, one line, how long. */
+function CapabilityRow({ agent, onOpen }: { agent: CapabilityUi; onOpen: () => void }) {
+  const Icon = capabilityIcon(agent.id);
+  const minutes = minutesText({ min: agent.estimatedMinutes[0], max: agent.estimatedMinutes[1] });
   return (
-    <article aria-labelledby={`capability-${agent.id}`} className="py-6">
-      <div className="grid grid-cols-[3rem_minmax(0,1fr)_auto] gap-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded-input bg-surface-2 font-mono text-caption font-semibold tracking-wide text-accent ring-1 ring-border">
-          {ui.code}
-        </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted">
-            <span className="font-medium tracking-[0.12em] text-accent">{ui.category}</span>
-            <span className="inline-flex items-center gap-1"><Clock3 size={12} aria-hidden="true" /> 约 {ui.estimatedMinutes[0]}–{ui.estimatedMinutes[1]} 分钟</span>
-            {supportsFiles && <span className="inline-flex items-center gap-1"><FileCheck2 size={12} aria-hidden="true" /> 支持知识库资料</span>}
-          </div>
-          <h2 id={`capability-${agent.id}`} className="mt-2 text-title font-semibold text-text">{ui.title}</h2>
-          <p className="mt-1 max-w-3xl text-ui leading-6 text-muted">{ui.description}</p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {outputLabels.map((label) => (
-              <span key={label} className="rounded-full bg-surface-2 px-2 py-0.5 text-caption font-medium text-muted ring-1 ring-border">{label}</span>
-            ))}
-            <span className="truncate text-caption text-muted">示例：{ui.starterPrompts[0]}</span>
-          </div>
-        </div>
-        <div className="flex items-start">
-          <Button
-            size="sm"
-            variant={starting ? "ghost" : "primary"}
-            aria-expanded={starting}
-            aria-controls={panelId}
-            aria-label={`使用${ui.title}能力`}
-            onClick={onToggleStart}
-          >
-            使用
-            <ChevronDown size={14} className={cn("transition-transform duration-fast", starting && "rotate-180")} aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
-      {starting && (
-        <div id={panelId} className="mt-4 pl-16">
-          <CapabilityStart agent={agent} onDispatched={onDispatched} />
-        </div>
-      )}
-    </article>
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-haspopup="dialog"
+      aria-label={`${agent.title}：查看说明并开始`}
+      className="group flex min-h-[4.75rem] w-full items-start gap-3 rounded-card border border-border bg-surface p-4 text-left transition-colors duration-fast hover:border-strong hover:bg-surface-2"
+    >
+      <Icon size={20} strokeWidth={1.75} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-ui font-semibold text-text">{agent.title}</span>
+        <span className="mt-0.5 block truncate text-ui text-muted">{agent.description}</span>
+        <span className="mt-1 flex flex-wrap items-center gap-x-3 text-caption text-muted">
+          {minutes && <span className="inline-flex items-center gap-1"><Clock3 size={12} aria-hidden="true" />{minutes}</span>}
+          {agent.materials && <span className="inline-flex items-center gap-1"><FolderUp size={12} aria-hidden="true" />需要你的资料</span>}
+        </span>
+      </span>
+      <ChevronRight size={16} className="mt-0.5 shrink-0 text-muted transition-transform duration-fast group-hover:translate-x-0.5" aria-hidden="true" />
+    </button>
   );
-}
-
-function outputLabel(output: WebResearchAgentOutput): string {
-  const ext = output.path.split(".").pop()?.toLowerCase();
-  if (ext === "md" || ext === "pdf" || ext === "doc" || ext === "docx") return "报告";
-  if (ext === "csv" || ext === "xls" || ext === "xlsx") return "表格";
-  if (["png", "jpg", "jpeg", "svg", "webp"].includes(ext ?? "")) return "图表";
-  if (ext === "json") return "数据";
-  return "成果文件";
 }

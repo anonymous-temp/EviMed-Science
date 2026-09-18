@@ -6,6 +6,7 @@ import {
   type WebAgentRun,
   type WebResearchAgent,
 } from "@/lib/apiClient";
+import { CAPABILITY_DISPLAY } from "@evimed/domain";
 import { announceRunsChanged, OPEN_DOMAIN_ANSWER_AGENT_ID, runAgentName } from "@/lib/runPresentation";
 
 /**
@@ -97,9 +98,11 @@ export interface RouteLine {
 /**
  * What a run's route line says. The typical duration is the run's own
  * `estimatedMinutes` (the dispatch response carries it), else the
- * catalogue's figure for the capability; a line with neither says nothing
- * about time rather than guessing one. The reason is only ever the Chinese
- * `routeReason` — never the ledger's internal `effectiveRouteReason` code.
+ * capability's display figure (its `display.estimatedMinutes`, the same one
+ * the control plane reads), else the catalogue's planning estimate; a line
+ * with none says nothing about time rather than guessing one. The reason is
+ * only ever the Chinese `routeReason` — never the ledger's internal
+ * `effectiveRouteReason` code.
  */
 export function routeLineOf(run: WebAgentRun, catalog: ReadonlyArray<WebResearchAgent> = []): RouteLine {
   const agentId = run.effectiveAgentId ?? run.agentId ?? null;
@@ -109,6 +112,7 @@ export function routeLineOf(run: WebAgentRun, catalog: ReadonlyArray<WebResearch
     ? ANSWER_LINE_LABEL
     : runAgentName(agentId) ?? entry?.title ?? "所选能力";
   const range = run.estimatedMinutes
+    ?? (agentId && !answerLine ? CAPABILITY_DISPLAY[agentId]?.estimatedMinutes : undefined)
     ?? (entry?.estimatedMinutes ? { min: entry.estimatedMinutes[0], max: entry.estimatedMinutes[1] } : null);
   const reason = typeof run.routeReason === "string" && run.routeReason.trim() ? run.routeReason.trim() : null;
   return { agentId: answerLine ? null : agentId, label, answerLine, minutes: minutesText(range), reason };

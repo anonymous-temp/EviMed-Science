@@ -50,3 +50,22 @@ dataSources:
 - literature
 starterPrompts:
 - 审查我上传的论文，定位方法学、统计学、报告规范和科研诚信问题。
+
+# What a researcher is shown, in Chinese: read by people, not by the
+# orchestrator (the fields above). The generator derives the shell's and the
+# frame's capability table from this block, and adds what evals/ measured.
+display:
+  title: "论文审稿"
+  category: "写作与传播"
+  description: "按研究类型审查方法学、统计、报告规范、完整性并给出可执行修改建议。"
+  starterPrompts:
+  - "审查我上传的论文，定位方法学、统计学、报告规范和完整性问题。"
+  - "按 CONSORT 审查这篇随机对照试验稿件的报告完整性。"
+  materials: "需要先把稿件上传到知识库"
+  estimatedMinutes:
+    min: 20
+    max: 120
+  outputs:
+  - "审稿意见报告与可执行的修改建议"
+  knownLimits:
+  - "按报告规范清单逐项审查；学科前沿与创新性的判断仍需同行专家。"

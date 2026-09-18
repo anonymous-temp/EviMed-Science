@@ -49,7 +49,7 @@ describe("RouteLine", () => {
     // The current capability is not offered as a change to itself.
     expect(screen.queryByRole("button", { name: "改为临床证据深度分析" })).not.toBeInTheDocument();
     const group = screen.getByRole("group", { name: "其他能力" });
-    expect(within(group).getByRole("button", { name: "改为药品安全性分析" })).toHaveAttribute("title", "药物警戒");
+    expect(within(group).getByRole("button", { name: "改为药品安全性分析" })).toHaveAttribute("title", "药学评价");
     await userEvent.click(within(group).getByRole("button", { name: "改为药品安全性分析" }));
     expect(onReroute).toHaveBeenLastCalledWith(
       { kind: "capability", agentId: "adr-analysis", agentVersion: "1.0.0" },

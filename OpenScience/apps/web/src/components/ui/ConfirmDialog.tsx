@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from "react";
+import { trapTab } from "@/lib/focusTrap";
 
 /**
  * Minimal in-app confirmation dialog. `window.confirm` is unreliable inside
@@ -99,29 +100,4 @@ export function ConfirmDialog({
       </div>
     </div>
   );
-}
-
-/** Keep Tab cycling through the dialog's focusable elements while it is open. */
-function trapTab(dialog: HTMLDivElement | null, e: KeyboardEvent): void {
-  if (!dialog) return;
-  const focusable = Array.from(
-    dialog.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    ),
-  ).filter((el) => !el.hasAttribute("disabled"));
-  if (focusable.length === 0) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  const active = document.activeElement;
-  if (!dialog.contains(active)) {
-    // Focus drifted out (e.g. the user clicked the overlay) — pull it back in.
-    e.preventDefault();
-    first.focus();
-  } else if (e.shiftKey && active === first) {
-    e.preventDefault();
-    last.focus();
-  } else if (!e.shiftKey && active === last) {
-    e.preventDefault();
-    first.focus();
-  }
 }

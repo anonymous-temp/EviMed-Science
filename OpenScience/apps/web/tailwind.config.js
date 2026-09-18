@@ -122,6 +122,17 @@ export default {
         pop: "0 4px 16px rgba(20, 24, 26, 0.10), 0 1px 3px rgba(20, 24, 26, 0.06)",
         modal: "0 16px 48px rgba(20, 24, 26, 0.18), 0 2px 8px rgba(20, 24, 26, 0.08)",
       },
+      // A drawer arrives from the edge it lives on, in the base duration;
+      // used as `motion-safe:animate-drawer-in`, so reduced motion gets none.
+      keyframes: {
+        "drawer-in": {
+          from: { transform: "translateX(24px)", opacity: "0" },
+          to: { transform: "translateX(0)", opacity: "1" },
+        },
+      },
+      animation: {
+        "drawer-in": "drawer-in var(--dur-base) var(--ease-standard)",
+      },
     },
   },
   plugins: [],

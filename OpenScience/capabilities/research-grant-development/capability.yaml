@@ -87,3 +87,23 @@ dataSources:
 - clinical-trials
 starterPrompts:
 - 这是基金申报指南和我的研究方向，帮我把具体目标和里程碑写出来，并逐条对照评审要点自查。
+
+# What a researcher is shown, in Chinese: read by people, not by the
+# orchestrator (the fields above). The generator derives the shell's and the
+# frame's capability table from this block, and adds what evals/ measured.
+display:
+  title: "基金申报书开发"
+  category: "写作与传播"
+  description: "把一份申报指南和一个研究方向转成具体目标、申报书大纲、里程碑表和面向评审的自查；引用的每条指南要求都逐字来自指南本身。"
+  starterPrompts:
+  - "这是基金申报指南和我的研究方向，帮我把具体目标和里程碑写出来，并逐条对照评审要点自查。"
+  - "按国自然面上项目指南，把我的研究方向写成立项依据和研究目标。"
+  materials: "需要先把申报指南上传到知识库"
+  estimatedMinutes:
+    min: 20
+    max: 45
+  outputs:
+  - "具体目标与申报书大纲"
+  - "里程碑表与逐条对照指南的自查"
+  knownLimits:
+  - "指南要求逐字引自你给的指南；指南没写到的要求不会补充，以官方最新版为准。"
