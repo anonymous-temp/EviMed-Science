@@ -400,6 +400,9 @@ services:
       OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT:
       OPEN_SCIENCE_LLM_ROUTING_ENABLED:
       OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD:
+      # Automatic run titles (one metered flash call per new run). Value-less:
+      # unset keeps config.mjs's default, on.
+      OPEN_SCIENCE_RUN_TITLES_ENABLED:
       # The learning loop's levers. It defaults on, which is exactly why these
       # have to be here: compose passes environment item by item, so a knob
       # missing from this list is a knob that does nothing and says nothing —
