@@ -67,6 +67,7 @@ const allowedHosts = new Set([
   "waterservices.usgs.gov",
   "webservice.thebiogrid.org",
   "www.acc.org",
+  "www.accessdata.fda.gov",
   "www.cbioportal.org",
   "www.ccfdie.org",
   "www.cochrane.org",
@@ -77,15 +78,27 @@ const allowedHosts = new Set([
   "www.eqtlgen.org",
   "www.escardio.org",
   "www.evimed.com",
+  "www.fda.gov",
+  "www.gov.cn",
   "www.guidetopharmacology.org",
   "www.isrctn.com",
   "www.metabolomicsworkbench.org",
   "www.ncbi.nlm.nih.gov",
   "www.nhs.uk",
+  "www.nice.org.uk",
   "www.proteinatlas.org",
+  "www.sign.ac.uk",
+  "www.uspreventiveservicestaskforce.org",
+  "www.who.int",
   "wwwn.cdc.gov",
 ]);
 
+// The official pages `official_page_fetch` may preserve, path for path the
+// runtime's own `OFFICIAL_PATHS` (official_pages.py); `officialPages.test.mjs`
+// holds the two equal. Measured 2026-09-18 (review P2-22): each added host
+// answers one plain GET with the document's text in server-rendered HTML.
+// NMPA, NHC and CDE are absent because they answer a JavaScript challenge
+// instead, not because they were overlooked.
 const officialDocumentPaths = new Map([
   ["www.cochrane.org", ["/evidence/", "/zh-hans/evidence/"]],
   ["www.acc.org", ["/latest-in-cardiology/"]],
@@ -94,6 +107,20 @@ const officialDocumentPaths = new Map([
   ["www.nhs.uk", ["/symptoms/chest-pain/"]],
   ["www.ccfdie.org", ["/zryyxxw/"]],
   ["mpa.hunan.gov.cn", ["/mpa/"]],
+  ["www.nice.org.uk", ["/guidance/"]],
+  ["www.uspreventiveservicestaskforce.org", ["/uspstf/recommendation/"]],
+  ["www.sign.ac.uk", ["/guidelines/"]],
+  ["www.who.int", ["/publications/i/item/"]],
+  ["www.ema.europa.eu", [
+    "/en/medicines/human/EPAR/",
+    "/en/medicines/human/referrals/",
+    "/en/medicines/dhpc/",
+    "/en/news/meeting-highlights-pharmacovigilance-risk-assessment-committee-prac-",
+  ]],
+  ["www.fda.gov", ["/drugs/drug-safety-communications/", "/drugs/drug-safety-and-availability/"]],
+  ["www.accessdata.fda.gov", ["/scripts/cder/daf/"]],
+  ["www.gov.cn", ["/zhengce/zhengceku/"]],
+  ["dailymed.nlm.nih.gov", ["/dailymed/drugInfo.cfm", "/dailymed/lookup.cfm"]],
 ]);
 
 // Hosts approved for one API surface rather than for themselves.
@@ -101,8 +128,16 @@ const officialDocumentPaths = new Map([
 // front end, every download path, every redirect into the rest of the NIH —
 // and the only thing approved on it is PubTator3. `officialDocumentPaths`
 // cannot express that: it also forces `text/html`, and PubTator3 answers JSON.
+//
+// A host may carry both: DailyMed serves the JSON API the connector searches
+// (`/dailymed/services/v2/`) and the label pages `official_page_fetch`
+// preserves. There an HTML GET is held to the document paths and every other
+// request to the API paths — before this, listing a document path on a host
+// forbade everything else on it, so adding DailyMed's label pages would have
+// broken its search.
 const apiPathPrefixes = new Map([
   ["www.ncbi.nlm.nih.gov", ["/research/pubtator3-api/"]],
+  ["dailymed.nlm.nih.gov", ["/dailymed/services/v2/"]],
 ]);
 
 const credentialProfiles = new Map([
@@ -488,18 +523,22 @@ function validatedRequest(value) {
   }
   const hostname = url.hostname.toLowerCase();
   const documentPrefixes = officialDocumentPaths.get(hostname);
-  if (documentPrefixes && !documentPrefixes.some((prefix) => url.pathname.startsWith(prefix))) {
-    throw gatewayError(403, "public_source_document_path_forbidden", "The official-document path is not approved.");
-  }
-  if (documentPrefixes && (method !== "GET" || value.accept.length !== 1 || value.accept[0] !== "text/html")) {
-    throw gatewayError(403, "public_source_document_request_forbidden", "Official-document sources permit only HTML GET requests.");
-  }
   const apiPrefixes = apiPathPrefixes.get(hostname);
-  if (apiPrefixes && !apiPrefixes.some((prefix) => url.pathname.startsWith(prefix))) {
-    throw gatewayError(403, "public_source_api_path_forbidden", "The API path is not approved on this host.");
-  }
-  if (apiPrefixes && method !== "GET") {
-    throw gatewayError(403, "public_source_api_request_forbidden", "This host is approved for read-only API requests.");
+  const documentRequest = method === "GET" && value.accept.length === 1 && value.accept[0] === "text/html";
+  if (documentPrefixes && (documentRequest || !apiPrefixes)) {
+    if (!documentPrefixes.some((prefix) => url.pathname.startsWith(prefix))) {
+      throw gatewayError(403, "public_source_document_path_forbidden", "The official-document path is not approved.");
+    }
+    if (!documentRequest) {
+      throw gatewayError(403, "public_source_document_request_forbidden", "Official-document sources permit only HTML GET requests.");
+    }
+  } else if (apiPrefixes) {
+    if (!apiPrefixes.some((prefix) => url.pathname.startsWith(prefix))) {
+      throw gatewayError(403, "public_source_api_path_forbidden", "The API path is not approved on this host.");
+    }
+    if (method !== "GET") {
+      throw gatewayError(403, "public_source_api_request_forbidden", "This host is approved for read-only API requests.");
+    }
   }
   if (profile && (hostname !== profile.host || !url.pathname.startsWith(profile.path))) {
     throw gatewayError(403, "public_source_gateway_credential_profile_forbidden", "The credential profile does not match this official endpoint.");
@@ -971,6 +1010,7 @@ export function publicSourceCredentialReadiness(config) {
 
 export const PUBLIC_SOURCE_GATEWAY_PATH = gatewayPath;
 export const PUBLIC_SOURCE_ALLOWED_HOSTS = allowedHosts;
+export const PUBLIC_SOURCE_OFFICIAL_DOCUMENT_PATHS = officialDocumentPaths;
 export const PUBLIC_SOURCE_ALLOWED_POST_ENDPOINTS = allowedPostEndpoints;
 export const PUBLIC_SOURCE_CREDENTIAL_PROFILES = credentialProfiles;
 export const PUBLIC_SOURCE_ALLOWED_ACCEPT_TYPES = allowedAcceptTypes;

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "dataset-research-scoping",
-  "version": "sha256:8d512f56966c470cfba3913082f6e94b6d46564f053407231ef1e57bcfe08776",
+  "version": "sha256:2b70246cce4eedde09fc6ccaa24a2be2defcaa9f52aa74355c1ca7ddb6565e50",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 33,
@@ -1134,7 +1134,7 @@
     {
       "name": "mcp__evimed__official_page_fetch",
       "source": "mcp",
-      "description": "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. Allowed routes are: https://www.cochrane.org/evidence/, https://www.cochrane.org/zh-hans/evidence/, https://www.acc.org/latest-in-cardiology/, https://professional.heart.org/en/science-news/, https://cpr.heart.org/en/resuscitation-science/, https://www.nhs.uk/symptoms/chest-pain/, https://www.ccfdie.org/zryyxxw/, https://mpa.hunan.gov.cn/mpa/",
+      "description": "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. Allowed (https, host then path prefixes): www.cochrane.org /evidence/ /zh-hans/evidence/; www.acc.org /latest-in-cardiology/; professional.heart.org /en/science-news/; cpr.heart.org /en/resuscitation-science/; www.nhs.uk /symptoms/chest-pain/; www.ccfdie.org /zryyxxw/; mpa.hunan.gov.cn /mpa/; www.nice.org.uk /guidance/; www.uspreventiveservicestaskforce.org /uspstf/recommendation/; www.sign.ac.uk /guidelines/; www.who.int /publications/i/item/; www.ema.europa.eu /en/medicines/human/EPAR/ /en/medicines/human/referrals/ /en/medicines/dhpc/ /en/news/meeting-highlights-pharmacovigilance-risk-assessment-committee-prac-; www.fda.gov /drugs/drug-safety-communications/ /drugs/drug-safety-and-availability/; www.accessdata.fda.gov /scripts/cder/daf/; www.gov.cn /zhengce/zhengceku/; dailymed.nlm.nih.gov /dailymed/drugInfo.cfm /dailymed/lookup.cfm",
       "inputSchema": {
         "type": "object",
         "properties": {
