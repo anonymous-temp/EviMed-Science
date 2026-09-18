@@ -70,3 +70,24 @@ dataSources:
 starterPrompts:
 - Analyze cardiac safety signals associated with osimertinib.
 - Summarize the leading adverse events reported for a drug in FAERS.
+
+# What a researcher is shown, in Chinese: read by people, not by the
+# orchestrator (the fields above). The generator derives the shell's and the
+# frame's capability table from this block, and adds what evals/ measured.
+display:
+  title: "药品安全性分析"
+  category: "药学评价"
+  description: "开展不良事件信号挖掘、说明书比对与安全性证据汇总。"
+  starterPrompts:
+  - "分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。"
+  - "比较阿托伐他汀与瑞舒伐他汀的肝损伤报告信号。"
+  - "梳理达格列净相关酮症酸中毒的报告特征与时间分布。"
+  estimatedMinutes:
+    min: 20
+    max: 40
+  outputs:
+  - "安全性证据报告"
+  - "信号统计表（ROR、PRR 等）"
+  knownLimits:
+  - "信号来自 FAERS 自发报告：报告数不等于发生率，不能单凭信号推断因果或比较两药风险。"
+  - "国内药品不良反应监测数据不在数据源里。"

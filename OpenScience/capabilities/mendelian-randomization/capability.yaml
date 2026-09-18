@@ -58,3 +58,23 @@ dataSources:
 - uploaded-files
 starterPrompts:
 - 使用孟德尔随机化评估体重指数对冠心病的因果效应。
+
+# What a researcher is shown, in Chinese: read by people, not by the
+# orchestrator (the fields above). The generator derives the shell's and the
+# frame's capability table from this block, and adds what evals/ measured.
+display:
+  title: "孟德尔随机化"
+  category: "研究设计与数据"
+  description: "基于 GWAS 工具变量完成因果推断、敏感性分析与 STROBE-MR 研究报告。"
+  starterPrompts:
+  - "评估体重指数对冠心病的因果效应，并完成双向孟德尔随机化分析。"
+  - "LDL 胆固醇对阿尔茨海默病风险的因果效应。"
+  estimatedMinutes:
+    min: 30
+    max: 180
+  outputs:
+  - "STROBE-MR 研究报告"
+  - "分析记录与工具变量清单"
+  knownLimits:
+  - "在线 GWAS 汇总数据需要在「数据源」里配置 OpenGWAS 令牌，令牌每 14 天过期。"
+  - "结论依赖工具变量假设；敏感性分析能检验部分假设，但不能替代随机对照试验。"

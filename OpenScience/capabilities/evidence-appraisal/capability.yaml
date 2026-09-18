@@ -97,3 +97,23 @@ dataSources:
 - drug-labels
 starterPrompts:
 - 这 9 篇是我准备写进综述的文献，帮我逐篇评一下质量，再给个整体证据确定性。
+
+# What a researcher is shown, in Chinese: read by people, not by the
+# orchestrator (the fields above). The generator derives the shell's and the
+# frame's capability table from this block, and adds what evals/ measured.
+display:
+  title: "证据质量评价"
+  category: "临床证据"
+  description: "对你手上已有的一组研究逐篇评价设计、偏倚风险、间接性与不精确性，再按结局汇总成一个证据确定性判断，每次升降级都注明来自哪个领域。"
+  starterPrompts:
+  - "这 9 篇是我准备写进综述的文献，帮我逐篇评一下质量，再给个整体证据确定性。"
+  - "按 GRADE 评价这组关于 SGLT2 抑制剂治疗射血分数保留心衰的研究。"
+  materials: "需要你给出要评价的研究：上传到知识库，或在问题里列出 PMID / DOI"
+  estimatedMinutes:
+    min: 10
+    max: 30
+  outputs:
+  - "逐篇评价表（设计、偏倚风险、间接性、不精确性）"
+  - "按结局汇总的证据确定性"
+  knownLimits:
+  - "只评价你给出的研究，不负责找全文献；需要检索请用「临床证据深度分析」或「自动化 Meta 分析」。"

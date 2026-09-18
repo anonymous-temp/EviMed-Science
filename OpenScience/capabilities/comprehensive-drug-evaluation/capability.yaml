@@ -81,3 +81,23 @@ dataSources:
 starterPrompts:
 - Evaluate the overall clinical value of dapagliflozin for chronic kidney disease.
 - Compare the evidence, safety, and economic implications of two medicines for one indication.
+
+# What a researcher is shown, in Chinese: read by people, not by the
+# orchestrator (the fields above). The generator derives the shell's and the
+# frame's capability table from this block, and adds what evals/ measured.
+display:
+  title: "综合药品评价"
+  category: "药学评价"
+  description: "从有效性、安全性、适用性、经济性与可及性等维度完成可追溯评价；提供量表时可辅助计分。"
+  starterPrompts:
+  - "围绕司美格鲁肽用于 2 型糖尿病合并肥胖完成综合评价，先提示我需要补充的数据。"
+  - "对恩格列净用于射血分数降低的心衰做一次综合药品评价，重点看安全性与经济性。"
+  estimatedMinutes:
+    min: 25
+    max: 60
+  outputs:
+  - "综合评价报告"
+  - "证据表与评价摘要"
+  knownLimits:
+  - "经济性与可及性依赖你提供的价格、医保与采购数据；缺项会列为缺口，不计零分。"
+  - "只有在你提供量表时才计分。"

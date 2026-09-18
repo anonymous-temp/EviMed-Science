@@ -130,9 +130,12 @@ describe("routeLineOf", () => {
     });
   });
 
-  it("falls back to the catalogue's duration, and says nothing about time without one", () => {
-    expect(routeLineOf(run(), catalog).minutes).toBe("通常 15–30 分钟");
-    expect(routeLineOf(run()).minutes).toBeNull();
+  it("falls back to the capability's display figure, then the catalogue's, and says nothing without one", () => {
+    // clinical-evidence-synthesis's display block says 30–70.
+    expect(routeLineOf(run()).minutes).toBe("通常 30–70 分钟");
+    const unknown = { effectiveAgentId: "not-in-the-table", agentId: "not-in-the-table" };
+    expect(routeLineOf(run(unknown), [{ ...catalog[0], id: "not-in-the-table" }]).minutes).toBe("通常 15–30 分钟");
+    expect(routeLineOf(run(unknown)).minutes).toBeNull();
   });
 
   it("calls the answer line 普通问答", () => {
