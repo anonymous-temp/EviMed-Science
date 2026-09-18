@@ -209,3 +209,17 @@ test("a run is automated when a harness said so, or when autopilot started it", 
   assert.equal(automatedRun({ effectiveRouteReason: "unrouted:open-domain", dispatchId: "dispatch-1" }), false);
   assert.equal(automatedRun({ automated: "yes" }), false, "only the boolean the dispatch validated counts");
 });
+
+test("the notice counts what was delivered apart from what the run wrote for itself", () => {
+  // The aspirin run of 2026-09-19: five deliverable files, one revision note,
+  // 24 scratch scripts. 「产出 30 个文件」 counted the scripts as products.
+  const artifacts = Array.from({ length: 30 }, (_, index) => `file-${index}`);
+  const notice = runFinishedNotice({
+    status: "succeeded", errorCode: null, verification: null, artifacts,
+    artifactCounts: { deliverable: 5, revisionNotes: 1, work: 24, superseded: 0 },
+  });
+  assert.match(notice.body, /交付 6 个文件（另有 24 个过程文件）/);
+  assert.doesNotMatch(notice.body, /产出 30 个文件/);
+  const scratchOnly = runFinishedNotice({ status: "succeeded", errorCode: null, verification: null, artifacts: ["work/a.py"], artifactCounts: { deliverable: 0, revisionNotes: 0, work: 1, superseded: 0 } });
+  assert.match(scratchOnly.body, /本次运行产出 1 个文件/, "with nothing delivered, the files are still said to be there");
+});

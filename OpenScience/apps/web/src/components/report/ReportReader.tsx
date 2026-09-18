@@ -159,7 +159,7 @@ export function ReportReader({
   }, [focusClaim, matrix, verification, reading, view]);
 
   const limitationsTarget = toc.find((entry) => LIMITATIONS_HEADINGS.has(entry.text))?.id ?? null;
-  const facts = reportFacts({ meta: matrix?.meta ?? null, claims: matrix?.claims ?? null, run, limitationsTarget });
+  const facts = reportFacts({ meta: matrix?.meta ?? null, claims: matrix?.claims ?? null, run, limitationsTarget, verification });
 
   const scrollTo = (id: string) => {
     const element = document.getElementById(id);

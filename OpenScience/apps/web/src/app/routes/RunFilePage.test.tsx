@@ -54,7 +54,7 @@ beforeEach(() => {
 describe("RunFilePage", () => {
   it("opens a run's report in the reader, under the run's title, and opens the claim the fragment names", async () => {
     renderAt(`/app/runs/run_1/files/${REPORT}#CLM-001`);
-    expect(await screen.findByRole("heading", { level: 1, name: "阿司匹林一级预防 · clinical-evidence-report.md" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "阿司匹林一级预防 · 证据分析报告" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "运行记录" })).toHaveAttribute("href", "/app/runs?run=run_1");
     const evidence = await screen.findByRole("dialog");
     expect(within(evidence).getByText("结论。")).toBeInTheDocument();

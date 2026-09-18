@@ -174,13 +174,23 @@ export function runFinishedNotice(run) {
   // saying so here is the same rule the run surface follows: a refused package
   // is not a deleted one.
   const files = [...(run?.artifacts ?? []), ...(run?.unverifiedArtifacts ?? [])].length;
+  // What was delivered, apart from what the run wrote for itself on the way
+  // (`artifactCounts`, runArtifacts.mjs): the aspirin run of 2026-09-19 left
+  // five deliverable files, one revision note and 24 scratch scripts, and
+  // 「产出 30 个文件」 counted the scripts as products.
+  const counts = run?.artifactCounts;
+  const delivered = counts && Number.isFinite(counts.deliverable) ? counts.deliverable + (Number(counts.revisionNotes) || 0) : null;
+  const work = counts && Number.isFinite(counts.work) ? counts.work + (Number(counts.superseded) || 0) : 0;
+  const filesLine = delivered != null && delivered > 0
+    ? `交付 ${delivered} 个文件${work > 0 ? `（另有 ${work} 个过程文件）` : ""}，都在工作区里，可以直接打开。`
+    : files > 0 ? `本次运行产出 ${files} 个文件，仍在工作区里，可以直接打开。` : null;
   // What to look at first: at most the two largest groups a reader must check,
   // by title. Advice is on the run; it does not need an inbox line.
   const named = summary.groups.filter((group) => group.severity !== "advice").slice(0, 2)
     .map((group) => (group.count > 1 ? `${group.title}（${group.count} 项）` : group.title));
   const body = [
     reason,
-    files > 0 ? `本次运行产出 ${files} 个文件，仍在工作区里，可以直接打开。` : null,
+    filesLine,
     named.length ? `请先核对：${named.join("；")}。` : null,
   ].filter(Boolean).join("\n");
   // Only clinical safety may interrupt (C1); anything the reader must check is
