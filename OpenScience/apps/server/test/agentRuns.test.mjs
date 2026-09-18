@@ -1700,6 +1700,45 @@ test("a kernel-confirmed child sequence keeps a delegated run alive", async (t) 
   assert.deepEqual(calls[0], { parentSessionId: "ses_deleg", childSessionIds: ["child-live"] });
 });
 
+test("a child named only on its plan item, or only by a delegation receipt, is asked about", async (t) => {
+  // Since 2026-09-18 a plan item carries its child's session id from the
+  // moment the child exists, and the non-blocking delegate answers with it at
+  // once. Neither the kernel's catalogue fact nor the `subagents` row is
+  // needed any more for the kernel to be asked about a child — and a child
+  // one of them names is still only a candidate the kernel has to confirm.
+  const asked = new Set();
+  let resolveBoth;
+  const both = new Promise((resolve) => { resolveBoth = resolve; });
+  const { project, store, writeProjection } = await delegatingRunFixture(t, {
+    stallPolls: 1_000,
+    maxPolls: 400,
+    readChildSessionActivity: async (_project, parentSessionId, childSessionIds) => {
+      assert.equal(parentSessionId, "ses_deleg");
+      for (const id of childSessionIds) asked.add(id);
+      if (asked.has("child-plan") && asked.has("child-receipt")) resolveBoth();
+      return [];
+    },
+  });
+  await writeProjection({
+    plan: { items: [
+      { id: "d1", title: "证据综述", status: "delegated", attempts: 0, childSessionId: "child-plan" },
+      { id: "d2", title: "证据矩阵", status: "accepted", attempts: 1, childSessionId: "child-settled" },
+    ] },
+    evidence: {}, budget: { children: 2 },
+  });
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  store.noteRunEvent(project, run.id, {
+    sessionId: "ses_deleg",
+    event: {
+      type: "tool/result", seq: 7, callId: "c-7", tool: "evimed_delegate", status: "completed", narration: "",
+      output: kernelToolText({ ok: true, data: { handle: "h-2", deliverableId: "d3", childSessionId: "child-receipt", status: "started" } }),
+    },
+  });
+  await Promise.race([both, new Promise((_, reject) => setTimeout(() => reject(new Error("the monitor never asked about both children")), 5_000))]);
+  assert.equal(asked.has("child-settled"), false, "an accepted item's child is not a candidate");
+  await store.closeAll();
+});
+
 test("a retry child's authenticated head replaces the failed child's stall signal", async (t) => {
   let retryHead = 20;
   let calls = 0;

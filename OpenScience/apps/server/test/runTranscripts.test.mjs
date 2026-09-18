@@ -309,6 +309,55 @@ test("a deliverable delegated twice keeps both children, not just the one the pr
   });
 });
 
+test("a retried child that only the collecting call names is collected, and counted as started", async () => {
+  // Delegation stopped waiting on 2026-09-18: `evimed_delegate` answers with
+  // the first child at once, and a retry after that child breaks starts after
+  // the call has returned. `evimed_await` is then the only receipt in the
+  // parent's history that names the retry — which is the child that finished
+  // the work.
+  await withProject(async (project) => {
+    const call = (seq, tool, data) => ({
+      ...message(seq, tool),
+      parts: [{ type: "tool", tool, status: "completed", output: kernelToolText({ ok: true, data }) }],
+    });
+    const runtime = new FakeRuntime({
+      ses_root: transcript("ses_root", [
+        call(1, "evimed_delegate", { handle: "h-1", deliverableId: "d1", childSessionId: "ses_first", status: "started" }),
+        call(2, "evimed_await", { results: [{ handle: "h-1", deliverableId: "d1", childSessionId: "ses_retry", status: "completed" }] }),
+      ]),
+      ses_first: transcript("ses_first", [message(3, "broke")]),
+      ses_retry: transcript("ses_retry", [message(4, "finished the review")]),
+    }, {
+      ses_root: [
+        { kind: "child", id: "ses_first", mode: "one-shot" },
+        { kind: "child", id: "ses_retry", mode: "one-shot" },
+      ],
+    });
+    const sessions = await collectRunTranscripts(runtime, project, { id: "run_retry", sessionId: "ses_root" });
+    const receipt = await persistRunTranscript({ project, run: { id: "run_retry", sessionId: "ses_root" }, sessions, now: new Date(CAPTURED_AT) });
+    assert.deepEqual(sessions.map((entry) => entry.sessionId).sort(), ["ses_first", "ses_retry", "ses_root"]);
+    assert.equal(receipt.completeness, "complete", "two children started, two collected");
+  });
+  // And the other way round: a retry the collecting call named and nobody
+  // collected is a missing child, not a complete record.
+  const root = {
+    sessionId: "root-1", parentSessionId: null, label: "root", capability: null, error: null,
+    transcript: {
+      sessionId: "root-1", lastSeq: 1, exhausted: true, subagents: [],
+      messages: [{ role: "assistant", source: "assistant", seq: 1, time: 1, turn: 1, step: 1, parts: [
+        { type: "tool", tool: "evimed_delegate", status: "completed", output: kernelToolText({ ok: true, data: { childSessionId: "child-a", status: "started" } }) },
+        { type: "tool", tool: "evimed_await", status: "completed", output: kernelToolText({ ok: true, data: { results: [{ childSessionId: "child-b", status: "completed" }] } }) },
+      ] }],
+    },
+  };
+  const child = {
+    sessionId: "child-a", parentSessionId: "root-1", label: "d1", capability: null, error: null,
+    transcript: { sessionId: "child-a", lastSeq: 0, exhausted: true, subagents: [], messages: [{ role: "assistant", source: "assistant", seq: 0, time: 0, turn: 1, step: 0, parts: [{ type: "text", text: "x" }] }] },
+  };
+  const { header } = serializeRunTranscript({ runId: "run_1", capturedAt: CAPTURED_AT, sessions: [root, child] });
+  assert.deepEqual(header.missing.map((gap) => gap.reason), ["child_undiscovered"]);
+});
+
 test("a subagent session that can no longer be read is recorded as a partial transcript, not a smaller complete one", async () => {
   await withProject(async (project) => {
     const runtime = delegatingRun();

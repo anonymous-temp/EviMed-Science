@@ -36,7 +36,7 @@ import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { SOCKET_TOOL_NAMES, hasSensitiveText } from "@evimed/domain";
-import { socketToolResult } from "./dshRuntimeAdapter.mjs";
+import { delegatedChildrenOf, socketToolResult } from "./dshRuntimeAdapter.mjs";
 import { HttpError, readTextFileNoFollow, safeId, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
 /** Directory under a project's meta root that holds one file per finished run. */
@@ -422,9 +422,12 @@ export function serializeRunTranscript({ runId, capturedAt, sessions, maxBytes =
 }
 
 /**
- * The child session ids a transcript's own completed `evimed_delegate` calls
- * returned, in order, without repeats. A call whose output does not parse or
- * names no child proves nothing and is skipped.
+ * The child session ids a transcript's own completed delegation calls named,
+ * in order, without repeats: what `evimed_delegate` returned and what
+ * `evimed_await` reported. The second matters since delegation stopped
+ * waiting (2026-09-18): a retried child starts after the delegate call has
+ * returned, so the collecting call is the only receipt that names it. A call
+ * whose output does not parse or names no child proves nothing and is skipped.
  *
  * @param {any} transcript
  * @returns {string[]}
@@ -434,15 +437,20 @@ function delegatedChildren(transcript) {
   const ids = [];
   for (const message of transcript?.messages ?? []) {
     for (const part of message?.parts ?? []) {
-      if (part?.type !== "tool" || part?.tool !== SOCKET_TOOL_NAMES.delegate || part?.status !== "completed") continue;
+      if (part?.type !== "tool" || part?.status !== "completed") continue;
       // The kernel's rendered text (`ok` + JSON), not bare JSON: see
-      // `socketToolResult`. A structured value is taken as it is.
-      const result = typeof part.output === "string" ? socketToolResult(part.output) : part.output;
-      const id = result?.ok === true ? String(result?.data?.childSessionId ?? "").trim() : "";
-      if (id && !ids.includes(id)) ids.push(id);
+      // `socketToolResult`. A structured value is read in its JSON form.
+      for (const child of delegatedChildrenOf(part.tool, toolOutputText(part.output))) {
+        if (!ids.includes(child.childSessionId)) ids.push(child.childSessionId);
+      }
     }
   }
   return ids.slice(0, 64);
+}
+
+/** @param {unknown} output */
+function toolOutputText(output) {
+  return typeof output === "string" ? output : JSON.stringify(output ?? null);
 }
 
 /**
@@ -467,12 +475,14 @@ function countAcceptedDelegations(sessions) {
     if (session.parentSessionId != null) continue;
     for (const message of session.transcript?.messages ?? []) {
       for (const part of message?.parts ?? []) {
-        if (part?.type !== "tool" || part?.tool !== SOCKET_TOOL_NAMES.delegate || part?.status !== "completed") continue;
+        if (part?.type !== "tool" || part?.status !== "completed") continue;
+        // A collected child counts as started too: a retry's child is named
+        // only by the collecting call (see `delegatedChildren`).
+        const named = delegatedChildrenOf(part.tool, toolOutputText(part.output));
+        for (const child of named) children.add(child.childSessionId);
+        if (part.tool !== SOCKET_TOOL_NAMES.delegate || named.length > 0) continue;
         const result = typeof part.output === "string" ? socketToolResult(part.output) : part.output;
-        if (result?.ok === false) continue;
-        const id = result?.ok === true ? String(result?.data?.childSessionId ?? "").trim() : "";
-        if (id) children.add(id);
-        else unnamed += 1;
+        if (result?.ok !== false) unnamed += 1;
       }
     }
   }

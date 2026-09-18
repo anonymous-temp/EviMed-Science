@@ -268,6 +268,61 @@ test("a child announced without its mode is followed once the parent's catalogue
   pump.detach(project);
 });
 
+test("a child named only by the delegation's own receipts is followed, the retried one included", async () => {
+  // 2026-09-18: `evimed_delegate` answers the moment its child exists, and a
+  // preset change removed four subagent rows in the same release. Whether the
+  // parent's `subagent/catalog` fact survives that is the kernel's business;
+  // the delegation receipt is ours, so a child it names is followed even when
+  // no catalogue event ever arrives.
+  /** @type {any[]} */
+  const observed = [];
+  const { pump, muxes } = pumpOnFakeMux({
+    reconnectDelayMs: 10,
+    callUnary: async (_runtime, method, payload) => {
+      if (method !== "subagents/list" || payload.parentSessionId !== "s-root") return { ok: true, value: {} };
+      return { ok: true, value: { entries: [
+        { kind: "child", id: "s-child", activity: "running", hasChildren: false, mode: "one-shot" },
+        { kind: "child", id: "s-retry", activity: "running", hasChildren: false, mode: "one-shot" },
+      ], parentAvailable: true } };
+    },
+    onRunEvent: (_project, runId, event) => observed.push({ runId, ...event }),
+  });
+  const project = { userId: "alice", id: "paper-4c" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "run-4c", sessionId: "s-root", status: "running" });
+  await waitFor(() => muxes[0]?.follow("s-root"), "the root session's stream");
+  const receipt = (seq, name, value) => sessionEvent({
+    type: "tool/result",
+    seq,
+    // The kernel renders a socket tool's structured result to text (see
+    // `socketToolResult`): `ok`, then the data as JSON.
+    data: { message: { name, callId: `c-${seq}`, content: [{ type: "text", text: `ok\n${JSON.stringify(value, null, 2)}` }] } },
+  });
+  muxes[0].follow("s-root").push(receipt(1, "evimed_delegate", { handle: "h-1", deliverableId: "review", childSessionId: "s-child", status: "started" }));
+  await waitFor(() => muxes[0].follow("s-child"), "a follow for the child the delegate receipt named");
+  assert.deepEqual(muxes[0].follow("s-child").address, {
+    kind: "subagent", parentSessionId: "s-root", childSessionId: "s-child", mode: "one-shot",
+  });
+  // A retry starts after the delegate call returned; only the collecting
+  // call's answer names that child.
+  muxes[0].follow("s-root").push(receipt(2, "evimed_await", { results: [
+    { handle: "h-1", deliverableId: "review", childSessionId: "s-retry", status: "running" },
+  ] }));
+  await waitFor(() => muxes[0].follow("s-retry"), "a follow for the retried child only evimed_await named");
+  muxes[0].follow("s-retry").push(sessionEvent({
+    type: "tool/call", seq: 1, data: { callId: "r-1", name: "mcp__evimed__literature_search", arguments: "{\"query\":\"x\"}" },
+  }));
+  await waitFor(() => observed.some((entry) => entry.sessionId === "s-retry" && entry.child === true), "the retried child's call reaching the run's progress feed");
+  // A failed receipt names nothing, and a tool that is not a delegation is not read.
+  muxes[0].follow("s-root").push(sessionEvent({
+    type: "tool/result", seq: 3, data: { message: { name: "evimed_delegate", callId: "c-3", content: [{ type: "text", text: "failed: dependency_unmet\n- (required) dependency_unmet wait for h-1" }] } },
+  }));
+  muxes[0].follow("s-root").push(receipt(4, "evimed_plan", { childSessionId: "s-not-a-child" }));
+  await waitFor(() => observed.some((entry) => entry.sessionId === "s-root" && entry.event.seq === 4), "the last root event");
+  assert.equal(muxes[0].follow("s-not-a-child"), null);
+  pump.detach(project);
+});
+
 test("the authenticated host child announcement drives replay-safe run activity", async () => {
   const fixture = JSON.parse(await readFile(new URL("./fixtures/dsh/evidence/alpha5-subagent-run.json", import.meta.url), "utf8"));
   const added = fixture.events.find((event) => event.event === "api-session/added" && event.args?.[0]?.origin === "subagent");

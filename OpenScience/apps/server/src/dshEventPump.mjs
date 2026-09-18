@@ -27,7 +27,7 @@
  * @module dshEventPump
  */
 
-import { DshRuntimeAdapter, decodeHostInteraction, sessionListItems, subagentAddress } from "./dshRuntimeAdapter.mjs";
+import { DshRuntimeAdapter, decodeHostInteraction, delegatedChildrenOf, sessionListItems, subagentAddress } from "./dshRuntimeAdapter.mjs";
 import { Buffer } from "node:buffer";
 import { randomBytes } from "node:crypto";
 import { phaseOfToolCall } from "@evimed/domain";
@@ -928,6 +928,26 @@ export class RuntimeEventPump {
           ...(parentSessionId ? { parentSessionId } : {}),
           ...(mode ? { mode } : {}),
           ...(existing?.modeLookups ? { modeLookups: existing.modeLookups } : {}),
+        });
+        state.resync?.();
+      }
+    }
+    if (event.type === "tool/result" && runId) {
+      // The delegation's own receipt names its child too, the moment the child
+      // exists. A third way in, beside the parent's `subagent/catalog` fact and
+      // the session list's parentage, so following a child never rests on one
+      // kernel fact. The session that made the call is the child's parent; the
+      // mode is not in the receipt and is looked up like any other child's.
+      for (const found of delegatedChildrenOf(event.tool, event.output)) {
+        const firstOwner = state.childOwners.get(found.childSessionId);
+        if (found.childSessionId === sessionId || state.childSessions.has(found.childSessionId)
+          || (firstOwner && firstOwner !== runId)) continue;
+        state.childOwners.set(found.childSessionId, runId);
+        state.childSessions.set(found.childSessionId, {
+          runId,
+          label: found.deliverableId ?? "",
+          capability: "",
+          parentSessionId: sessionId,
         });
         state.resync?.();
       }
