@@ -171,3 +171,130 @@ it("holds back the sentences an old run notice quoted for the agent", async () =
   expect(screen.getByText(/另有 1 条技术提示/)).toBeInTheDocument();
   expect(screen.queryByText(/numeric fact/)).not.toBeInTheDocument();
 });
+
+const today = new Date();
+const at = (hoursAgo: number) => new Date(today.getTime() - hoursAgo * 3_600_000).toISOString();
+const yesterdayNoon = (() => { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(12, 0, 0, 0); return d.toISOString(); })();
+const todayEarly = (() => { const d = new Date(); d.setHours(0, 30, 0, 0); return d.toISOString(); })();
+
+function runNotice(over: Partial<api.InboxItem>): api.InboxItem {
+  return {
+    ...review, noticeType: "notify", title: "研究已完成", body: "研究结果已准备好，可以查看运行记录和交付物。",
+    source: { type: "run", id: `run_${over.id ?? "x"}` },
+    actions: [{ id: "open", label: "查看运行", style: "primary" }],
+    createdAt: todayEarly, ...over,
+  };
+}
+
+// B §1e: every run notice carries an 「查看运行」 action, and the page only
+// offered 标为已读 on items with none — so the commonest item could never be
+// marked read without clicking through.
+it("marks any unread item read, including one that carries actions", async () => {
+  const notice = runNotice({ id: "with-action" });
+  vi.mocked(api.listInbox).mockResolvedValue({ items: [notice], nextCursor: null, unreadTotal: 1 });
+  vi.mocked(api.markInboxRead).mockResolvedValue({ ...notice, readAt: at(0), revision: 2 });
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
+
+  await userEvent.click(await screen.findByRole("button", { name: "标为已读" }));
+  await waitFor(() => expect(api.markInboxRead).toHaveBeenCalledWith("with-action", 1));
+  // The bell hears about it at once rather than on its next poll.
+  expect(api.announceInboxChanged).toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "标为已读" })).not.toBeInTheDocument();
+});
+
+it("reads the whole inbox in one request", async () => {
+  vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice({ id: "a" })], nextCursor: null, unreadTotal: 7 });
+  vi.mocked(api.markAllInboxRead).mockResolvedValue({ updated: 7 });
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
+
+  expect(await screen.findByText("7 条未读")).toBeInTheDocument();
+  vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice({ id: "a", readAt: at(0) })], nextCursor: null, unreadTotal: 0 });
+  await userEvent.click(screen.getByRole("button", { name: "全部已读" }));
+
+  await waitFor(() => expect(api.markAllInboxRead).toHaveBeenCalledTimes(1));
+  expect(api.markInboxRead).not.toHaveBeenCalled();
+  expect(await screen.findByText("已把 7 条标为已读。")).toBeInTheDocument();
+  expect(api.announceInboxChanged).toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "全部已读" })).toBeDisabled();
+});
+
+it("reads a notice when its link is followed", async () => {
+  const notice = runNotice({ id: "follow" });
+  vi.mocked(api.listInbox).mockResolvedValue({ items: [notice], nextCursor: null });
+  vi.mocked(api.markInboxRead).mockResolvedValue({ ...notice, readAt: at(0), revision: 2 });
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
+
+  await userEvent.click(await screen.findByRole("link", { name: "查看运行" }));
+  await waitFor(() => expect(api.markInboxRead).toHaveBeenCalledWith("follow", 1));
+});
+
+it("groups by day, newest day first", async () => {
+  vi.mocked(api.listInbox).mockResolvedValue({
+    items: [
+      { ...review, id: "old", title: "昨天的审阅", createdAt: yesterdayNoon },
+      { ...review, id: "new", title: "今天的审阅", createdAt: todayEarly },
+    ],
+    nextCursor: null,
+  });
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
+
+  const headings = await screen.findAllByRole("heading", { level: 2 });
+  expect(headings.map((heading) => heading.textContent)).toEqual(["今天", "昨天"]);
+});
+
+// Older per-run items: ten identical 「研究已完成」 cards for one afternoon.
+it("folds a day's older per-run completions into one line", async () => {
+  vi.mocked(api.listInbox).mockResolvedValue({
+    items: [runNotice({ id: "c1" }), runNotice({ id: "c2", readAt: at(0) }), runNotice({ id: "c3", title: "研究已交付，待你复核" })],
+    nextCursor: null,
+  });
+  vi.mocked(api.markInboxRead).mockImplementation(async (id: string) => ({ ...runNotice({ id }), readAt: at(0), revision: 2 }));
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
+
+  const row = await screen.findByRole("article", { name: "研究已完成 × 3" });
+  expect(row).toHaveTextContent("其中 1 项待你复核");
+  expect(screen.getAllByRole("link", { name: "查看运行" })).toHaveLength(3);
+  await userEvent.click(screen.getByRole("button", { name: "标为已读" }));
+  // Reading the line reads each unread item it stands for, and only those.
+  await waitFor(() => expect(api.markInboxRead).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(api.markInboxRead).mock.calls.map(([id]) => id).sort()).toEqual(["c1", "c3"]);
+});
+
+it("keeps automated runs quiet, folded under one line", async () => {
+  vi.mocked(api.listInbox).mockResolvedValue({
+    items: [
+      runNotice({ id: "eval-1", silent: true, readAt: at(0), title: "研究已完成" }),
+      runNotice({ id: "eval-2", silent: true, readAt: at(0), title: "研究已完成" }),
+      { ...review, id: "person", title: "需要你回答一个问题", noticeType: "question", createdAt: todayEarly },
+    ],
+    nextCursor: null,
+  });
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
+
+  expect(await screen.findByText("需要你回答一个问题")).toBeInTheDocument();
+  const fold = screen.getByText(/自动运行 2 条/).closest("details")!;
+  expect(fold).not.toHaveAttribute("open");
+  expect(screen.queryByRole("article", { name: "研究已完成" })).not.toBeInTheDocument();
+});
+
+// C1: SAFETY is the only class allowed to interrupt.
+it("pins an unread clinical-safety finding above everything, in the danger colour", async () => {
+  vi.mocked(api.listInbox).mockResolvedValue({
+    items: [
+      { ...review, id: "later", title: "今天的审阅", createdAt: at(0) },
+      runNotice({ id: "safety", title: "交付物涉及临床安全", severity: "safety", createdAt: yesterdayNoon }),
+    ],
+    nextCursor: null,
+  });
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
+
+  const pinned = await screen.findByRole("heading", { name: /涉及临床安全 · 未读 1 条/ });
+  const section = pinned.closest("section")!;
+  const article = screen.getByRole("article", { name: "交付物涉及临床安全" });
+  expect(section).toContainElement(article);
+  expect(article.closest("li")).toHaveClass("border-danger");
+  // Nothing else wears it.
+  expect(screen.getByRole("article", { name: "今天的审阅" }).closest("li")).not.toHaveClass("border-danger");
+  const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
+  expect(headings[0]).toMatch(/涉及临床安全/);
+});
