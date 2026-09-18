@@ -47,6 +47,8 @@ import {
 import {
   PLAN_ITEM_STATES,
   SOCKET_TOOL_NAMES,
+  capabilityBriefTask,
+  capabilityTitle,
   gateIssueSeverity,
   isContractKind,
   isMcpToolName,
@@ -153,9 +155,45 @@ const maxQuestionPreview = 160;
 
 function questionPreview(value) {
   if (typeof value !== "string") return null;
-  const collapsed = value.replace(/\s+/g, " ").trim();
+  // What the person asked, without the capability card's naming line: twelve
+  // runs of one capability were listed under twelve copies of 「请以「X」能力完成
+  // 以下任务：」 (B §4b). The capability itself is on the run as its route.
+  const collapsed = capabilityBriefTask(value).task.replace(/\s+/g, " ").trim();
   if (!collapsed) return null;
   return collapsed.length > maxQuestionPreview ? `${collapsed.slice(0, maxQuestionPreview)}…` : collapsed;
+}
+
+/** What a run is called, and where that name came from (C3). */
+const titleSources = new Set(["auto", "question", "user"]);
+const maxRunTitle = 80;
+const maxDerivedTitle = 40;
+
+/**
+ * A title a run may carry: one line, bounded, and not blank. The same rule
+ * for the researcher's own and the model's, because both are shown in the
+ * same place.
+ * @param {unknown} value @returns {string | null}
+ */
+export function normalizeRunTitle(value) {
+  if (typeof value !== "string") return null;
+  const line = [...value].map((char) => (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? " " : char)).join("")
+    .replace(/\s+/g, " ").trim();
+  if (!line || [...line].length > maxRunTitle) return null;
+  return line;
+}
+
+/**
+ * The title a run has before anyone named it: what was asked, else the
+ * capability it was routed to, else a plain placeholder. Marked `question`,
+ * which is what an automatic title replaces and a researcher's never is.
+ * @param {Record<string, any>} run
+ */
+function derivedRunTitle(run) {
+  const question = typeof run.question === "string" ? [...run.question] : [];
+  if (question.length) {
+    return question.length > maxDerivedTitle ? `${question.slice(0, maxDerivedTitle - 1).join("")}…` : question.join("");
+  }
+  return capabilityTitle(run.effectiveAgentId) ?? "未命名的研究";
 }
 
 function normalizeDispatchInput(input) {
@@ -343,7 +381,9 @@ function foldEvents(events) {
         effectiveRuntimeAgent,
         effectiveRouteReason,
         model: event.model,
-        question: typeof event.question === "string" && event.question ? event.question : null,
+        // Read through the same preamble rule a new dispatch writes with, so
+        // a ledger written before it lists the same way.
+        question: typeof event.question === "string" && event.question ? questionPreview(event.question) : null,
         ...(event.automated === true ? { automated: true } : {}),
         status: "running",
         createdAt: storedTimestamp(event.createdAt, "createdAt"),
@@ -533,8 +573,20 @@ function foldEvents(events) {
       const current = runs.get(id);
       if (!current) throw corrupt("Agent run ledger contains a notice for an unknown run.");
       const added = describedQualityNotices(event.qualityNotices);
+      // What the run is called and what it asked, when either was learned
+      // after the start (C3). Fields on this event rather than a kind of their
+      // own, so a control plane older than them reads the ledger and ignores
+      // them. A researcher's title is locked: nothing but another of theirs
+      // replaces it. A question is filled once and never rewritten.
+      const title = normalizeRunTitle(event.title);
+      const titleSource = titleSources.has(event.titleSource) ? event.titleSource : null;
+      const labelled = title && titleSource && titleSource !== "question"
+        && (current.titleSource !== "user" || titleSource === "user");
+      const question = current.question == null && typeof event.question === "string" ? questionPreview(event.question) : null;
       runs.set(id, Object.freeze({
         ...current,
+        ...(labelled ? { title, titleSource } : {}),
+        ...(question ? { question } : {}),
         verification: event.verification === "unchecked" && current.verification === null
           ? "unchecked"
           : current.verification,
@@ -543,6 +595,12 @@ function foldEvents(events) {
       continue;
     }
     throw corrupt("Agent run ledger contains an unsupported event.");
+  }
+  // Every run has a name (C3). One nobody gave a title is called by what it
+  // asked; that is `question`, the source an automatic title may replace.
+  for (const [id, run] of runs) {
+    if (run.titleSource === "auto" || run.titleSource === "user") continue;
+    runs.set(id, Object.freeze({ ...run, title: derivedRunTitle(run), titleSource: "question" }));
   }
   return runs;
 }
@@ -887,6 +945,18 @@ function runHistory(run, history) {
 
 function actualUserMessage(message) {
   return messageRole(message) === "user" && message.info?.source === "user";
+}
+
+/**
+ * What the person typed first in this run's own turns, as plain text: the
+ * question a run adopted before it could be read was asked. By sender, not by
+ * role — injected context is a user-role message too.
+ * @param {Record<string, any>} run @param {any[]} history
+ */
+function firstUserText(run, history) {
+  const message = runHistory(run, history).find(actualUserMessage);
+  return (message?.parts ?? []).filter((part) => part?.type === "text" && typeof part.text === "string")
+    .map((part) => part.text).join(" ").trim();
 }
 
 /** Only completed control tools in the owned turn may establish workflow provenance. */
@@ -3322,6 +3392,10 @@ export class AgentRunStore {
     this.readRunUsage = options.readRunUsage ?? (async () => null);
     /** runId -> the live progress state the monitor and the event pump feed. */
     this.progressTrackers = new Map();
+    /** runId -> when its question was last looked for (epoch ms). @type {Map<string, number>} */
+    this.questionBackfills = new Map();
+    /** Label writes still in flight, awaited on close. @type {Set<Promise<void>>} */
+    this.backgroundLabels = new Set();
     /** Per-run memory, so a fixed-interval poll does not repeat itself. */
     this.projectionDigests = new Map();
     /** runId -> deliverableId -> the frame last sent for it. Same reason. */
@@ -3846,6 +3920,79 @@ export class AgentRunStore {
       this.notifyState(project, noticed);
       return noticed;
     });
+  }
+
+  /**
+   * What a run is called and what it asked, when either is learned after the
+   * run started (C3).
+   *
+   * One `notice` event carries both, which an older control plane folds as a
+   * notice with nothing in it. A title from anywhere but the researcher never
+   * replaces theirs, and a question is filled once: this returns the run
+   * unchanged, without writing, when there is nothing it may change.
+   * @param {any} project @param {string} rawRunId
+   * @param {{ title?: string, titleSource?: 'auto'|'user', question?: string }} labels
+   */
+  async recordRunLabels(project, rawRunId, { title, titleSource, question } = {}) {
+    const runId = safeId(rawRunId, "agent run id");
+    const named = title === undefined ? null : normalizeRunTitle(title);
+    if (title !== undefined && !named) throw new HttpError(400, "invalid_payload", `A run title is one line of 1 to ${maxRunTitle} characters.`);
+    if (named && titleSource !== "auto" && titleSource !== "user") throw invalid("A run title needs its source.");
+    const asked = question === undefined ? null : questionPreview(question);
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const current = foldEvents(events).get(runId);
+      if (!current) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
+      const retitle = named && (current.titleSource !== "user" || titleSource === "user")
+        && !(current.title === named && current.titleSource === titleSource);
+      const fill = asked && current.question == null;
+      if (!retitle && !fill) return current;
+      const event = {
+        event: "notice",
+        id: runId,
+        at: this.now().toISOString(),
+        qualityNotices: [],
+        ...(retitle ? { title: named, titleSource } : {}),
+        ...(fill ? { question: asked } : {}),
+      };
+      const text = serializeNext(events, event, this.maxBytes);
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+      const labelled = foldEvents([...events, event]).get(runId);
+      this.notifyState(project, labelled);
+      return labelled;
+    });
+  }
+
+  /**
+   * Fills in, in the background, what a few runs with no question asked.
+   *
+   * A session typed into the kernel's own application is adopted before its
+   * first message can be read, and a monitor that never runs (nothing to
+   * grade) never reads it afterwards, so those runs were listed forever by a
+   * placeholder. The list route calls this and does not wait: the answer goes
+   * out as it stands, the ledger is filled from the session's own first user
+   * message — read without waking a stopped runtime — and the next read shows
+   * it. Bounded per call and per run, because a list is read often.
+   * isolated: evimed_run_question_backfill_failures_total
+   * @param {any} project @param {readonly Record<string, any>[]} runs @param {{ limit?: number }} [options]
+   */
+  backfillQuestions(project, runs, { limit = 3 } = {}) {
+    const nowMs = this.now().getTime();
+    const due = runs
+      .filter((run) => run?.question == null && run?.sessionId
+        && nowMs - (this.questionBackfills.get(run.id) ?? -Infinity) >= 10 * 60_000)
+      .slice(0, limit);
+    for (const run of due) {
+      this.questionBackfills.set(run.id, nowMs);
+      if (this.questionBackfills.size > 2_000) this.questionBackfills.delete(this.questionBackfills.keys().next().value);
+      const pending = (async () => {
+        const history = await this.readSessionHistory(project, run.sessionId, { wake: false });
+        const asked = Array.isArray(history) ? firstUserText(run, history) : "";
+        if (asked) await this.recordRunLabels(project, run.id, { question: asked });
+      })().catch(() => {});
+      this.backgroundLabels.add(pending);
+      void pending.finally(() => this.backgroundLabels.delete(pending));
+    }
   }
 
   /**
@@ -5251,6 +5398,12 @@ export class AgentRunStore {
       return null;
     }
     if (!Array.isArray(history)) return null;
+    // A run adopted before its first message could be read learns what it
+    // asked here, on the first poll that can read it (C3).
+    if (run.question == null) {
+      const asked = firstUserText(run, history);
+      if (asked) await this.recordRunLabels(project, run.id, { question: asked }).catch(() => {});
+    }
     history = runHistory(run, history);
     const messages = history.length;
     const toolCalls = history.reduce(
@@ -5946,6 +6099,7 @@ export class AgentRunStore {
         // other project's runs from being marked canceled on shutdown.
       }
     }
+    await Promise.allSettled([...this.backgroundLabels]);
     this.projects.clear();
     this.dispatchOwners.clear();
     this.clinicalRepairAttempts.clear();

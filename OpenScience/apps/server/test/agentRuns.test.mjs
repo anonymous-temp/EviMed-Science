@@ -1518,14 +1518,19 @@ test("rejects every browser terminal-state mutation", async () => {
       body: JSON.stringify({ sessionId: "ses_open" }),
     });
     assert.equal(startOnly.status, 404);
-    for (const method of ["PATCH", "PUT"]) {
-      const attempt = await finishRun(base, started.body.data.id, {
-        status: "succeeded",
-        artifacts: ["forged.md"],
-      }, "default", method);
-      assert.equal(attempt.response.status, 404);
-      assert.equal(attempt.body.code, "not_found");
-    }
+    const put = await finishRun(base, started.body.data.id, { status: "succeeded", artifacts: ["forged.md"] }, "default", "PUT");
+    assert.equal(put.response.status, 404);
+    assert.equal(put.body.code, "not_found");
+    // PATCH names a run (C3) and takes a title and nothing else, so a status
+    // or an artifact list is refused by name rather than folded in.
+    const patch = await finishRun(base, started.body.data.id, { status: "succeeded", artifacts: ["forged.md"] }, "default", "PATCH");
+    assert.equal(patch.response.status, 400);
+    assert.equal(patch.body.code, "invalid_payload");
+    const smuggled = await finishRun(base, started.body.data.id, { title: "改名", status: "succeeded" }, "default", "PATCH");
+    assert.equal(smuggled.response.status, 400);
+    const [run] = (await listRuns(base)).body.data;
+    assert.equal(run.artifacts.includes("forged.md"), false);
+    assert.notEqual(run.title, "改名");
   });
 });
 

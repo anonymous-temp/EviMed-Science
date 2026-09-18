@@ -99,6 +99,9 @@ const operatorLevers = {
   OPEN_SCIENCE_MEMORY_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES: ["open-science-web"],
+  // Automatic run titles default on and spend a model call per run; the off
+  // switch has to arrive (2026-09-18).
+  OPEN_SCIENCE_RUN_TITLES_ENABLED: ["open-science-web"],
 };
 
 async function composeFiles() {

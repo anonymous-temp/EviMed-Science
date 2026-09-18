@@ -185,10 +185,11 @@ export {
   validateCapabilityManifest,
 } from './src/capabilityManifest.mjs'
 
-// capabilityDisplay — 3 exports
+// capabilityDisplay — 4 exports
 export {
   CAPABILITY_DISPLAY,
   capabilityBrief,
+  capabilityBriefTask,
   capabilityTitle,
 } from './src/capabilityDisplay.mjs'
 

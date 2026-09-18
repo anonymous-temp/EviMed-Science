@@ -166,3 +166,36 @@ export function capabilityTitle(id) {
 export function capabilityBrief(title, prompt) {
   return `请以「${title}」能力完成以下任务：\n${prompt}`
 }
+
+// The two halves of the preamble, read off `capabilityBrief` itself rather than
+// restated, so the brief and its reader cannot drift apart: a changed template
+// changes both. The mark is a character no title contains.
+const briefMark = String.fromCharCode(0)
+const [briefHead, briefTail] = capabilityBrief(briefMark, '').split(briefMark)
+const briefClose = briefTail.trimEnd()
+
+/**
+ * The task a capability-card brief carries, without the card's naming line.
+ *
+ * `capabilityBrief` puts 「请以「X」能力完成以下任务：」 above what the person asked,
+ * and every run started from a card stored that line as the first thing its
+ * question said, so twelve runs of one capability were listed under twelve
+ * copies of the same sentence (2026-09-18 plan, B §4b). This reads exactly the
+ * shape `capabilityBrief` writes and nothing else — a question that merely
+ * contains similar words is returned as it was — so it is a format, not a
+ * language judgement.
+ *
+ * @param {string | null | undefined} text
+ * @returns {{ task: string, capability: string | null }}
+ */
+export function capabilityBriefTask(text) {
+  const value = String(text ?? '')
+  const unchanged = { task: value, capability: null }
+  if (!value.startsWith(briefHead)) return unchanged
+  const close = value.indexOf(briefClose, briefHead.length)
+  if (close < 0) return unchanged
+  const capability = value.slice(briefHead.length, close)
+  if (!capability.trim() || capability.length > 40 || /[\n「」]/.test(capability)) return unchanged
+  const task = value.slice(close + briefClose.length).replace(/^\s+/, '')
+  return task ? { task, capability } : unchanged
+}

@@ -36,6 +36,7 @@ import {
   routeOpenDomainSpecialist,
 } from "./specialistRouting.mjs";
 import { SpecialistClassifier } from "./specialistClassifier.mjs";
+import { RunTitleScheduler, RunTitler } from "./runTitles.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
@@ -1103,6 +1104,12 @@ export function createWebApiApp(overrides = {}) {
   const specialistClassifier = new SpecialistClassifier(config, {
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
   });
+  // What a run is called (C3): one metered flash call per new run, off the
+  // critical path, never over a title the researcher gave it.
+  const runTitles = new RunTitleScheduler({
+    titler: new RunTitler(config, { usageLedger, fetchImpl: overrides.runTitleFetch ?? globalThis.fetch }),
+    recordTitle: (project, runId, title) => agentRuns.recordRunLabels(project, runId, { title, titleSource: "auto" }),
+  });
   // One fan-out per live run. The browser subscribes here, never to a kernel.
   const runEvents = new RunEventHub();
   // The kernel's own live stream, decoded onto the same fan-out. The flag is
@@ -1307,11 +1314,16 @@ export function createWebApiApp(overrides = {}) {
         errorCode: run.errorCode ?? null,
         verification: run.verification ?? null,
         attempts: run.attempts ?? 0,
+        // A rename, automatic or by hand, reaches every open surface on the
+        // same frame as the state it belongs to.
+        title: run.title ?? null,
+        titleSource: run.titleSource ?? null,
       });
       // The event pump's own session map, kept current on the same signal:
       // a fresh run's session becomes routable the moment the ledger knows
       // it, and a finished run's stops being routed at all.
       runtimeEventPump.noteRun(project, run);
+      runTitles.consider(project, run);
     },
     // The run's own projection of itself — evidence counts and budget — read
     // off the monitor's existing cycle and forwarded on the same channel as
@@ -2648,7 +2660,28 @@ export function createWebApiApp(overrides = {}) {
 
       if (pathname === "/api/agent-runs" && req.method === "GET") {
         const ctx = await context(req, res);
-        sendJson(res, 200, { data: await agentRuns.withPlanProgress(ctx.project, await agentRuns.recover(ctx.project)) });
+        const runs = await agentRuns.withPlanProgress(ctx.project, await agentRuns.recover(ctx.project));
+        // Runs adopted before their first message could be read learn it in
+        // the background; this answer does not wait for that (C3).
+        agentRuns.backfillQuestions(ctx.project, runs);
+        sendJson(res, 200, { data: runs });
+        return;
+      }
+
+      // A researcher names a run (C3). Locked from then on: no automatic
+      // title replaces it, and the next rename by hand does.
+      if (pathname.startsWith("/api/agent-runs/") && req.method === "PATCH") {
+        const rawRunId = pathname.slice("/api/agent-runs/".length);
+        if (!rawRunId || rawRunId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
+        const runId = decodeRouteComponent(rawRunId, "agent run id");
+        const ctx = await context(req, res);
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run update");
+        const unknown = Object.keys(body).filter((field) => field !== "title");
+        if (unknown.length > 0) {
+          throw new HttpError(400, "invalid_payload", `Unknown agent run field(s): ${unknown.sort().join(", ")}.`);
+        }
+        if (typeof body.title !== "string") throw new HttpError(400, "invalid_payload", "title must be a string.");
+        sendJson(res, 200, { data: await agentRuns.recordRunLabels(ctx.project, runId, { title: body.title, titleSource: "user" }) });
         return;
       }
 
@@ -3838,6 +3871,7 @@ export function createWebApiApp(overrides = {}) {
       // Before the runtimes, because stopping a runtime the pump is still
       // following makes it reconnect to a kernel that is going away.
       await runtimeEventPump.closeAll();
+      await runTitles.settle();
       await agentRuns.closeAll();
       // After the run store, before the runtimes — and that order is the whole
       // point rather than a detail.

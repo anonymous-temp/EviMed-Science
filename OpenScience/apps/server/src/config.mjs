@@ -1393,5 +1393,10 @@ export function loadConfig(overrides = {}) {
     allowFullApproval: overrides.allowFullApproval ?? boolEnv("OPEN_SCIENCE_ALLOW_FULL_APPROVAL", false),
     approvalMode: overrides.approvalMode ?? process.env.OPEN_SCIENCE_APPROVAL_MODE ?? "approve",
     sessionCookieName: overrides.sessionCookieName ?? "os_session",
+    // --- S1 (run ledger & control-plane APIs, 2026-09-18) ---
+    // Automatic run titles: one metered deepseek-flash call per new run, off
+    // the critical path (runTitles.mjs). Off leaves every run named by its
+    // question, which is also what any failure leaves.
+    runTitlesEnabled: overrides.runTitlesEnabled ?? boolEnv("OPEN_SCIENCE_RUN_TITLES_ENABLED", true),
   };
 }
