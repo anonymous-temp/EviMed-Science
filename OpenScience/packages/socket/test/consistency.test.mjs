@@ -697,13 +697,16 @@ test("a root session is shown only its own research tools, in its own scope, onc
   const rootFilters = [];
   const root = { id: "root", session: { id: "root", header: { cwd: "/workspace" } }, ctx: { tools: { restrict: (/** @type {any} */ filter) => { rootFilters.push(filter); return () => {}; } } }, inject() {} };
   start(root);
-  assert.equal(rootFilters.length, 1, "the root is narrowed at session start, before its first request is assembled");
-  assert.ok(rootFilters[0].deny.includes("mcp__evimed__comprehensive_drug_evaluation"));
-  assert.ok(!rootFilters[0].deny.includes("mcp__evimed__literature_search"), "the root keeps its own retrieval");
-  assert.ok(!rootFilters[0].deny.includes("bash"), "kernel tools are not this narrowing's business");
-  assert.equal(rootFilters[0].allow, undefined, "a deny list, so nothing the root was not told about disappears with it");
+  assert.equal(rootFilters.length, 2, "the root is narrowed at session start, before its first request is assembled");
+  assert.deepEqual(rootFilters[0].deny, ["evimed_claim_upsert", "evimed_render_report"], "the claim tools are a child's");
+  const research = rootFilters[1];
+  assert.ok(research.deny.includes("mcp__evimed__comprehensive_drug_evaluation"));
+  assert.ok(!research.deny.includes("mcp__evimed__literature_search"), "the root keeps its own retrieval");
+  assert.ok(!research.deny.includes("bash"), "kernel tools are not this narrowing's business");
+  assert.ok(!research.deny.includes("evimed_package_check"), "the root keeps the check it may need in a repair");
+  assert.equal(research.allow, undefined, "a deny list, so nothing the root was not told about disappears with it");
   start(root);
-  assert.equal(rootFilters.length, 1, "a resumed or compacted session keeps its scope and is not narrowed twice");
+  assert.equal(rootFilters.length, 2, "a resumed or compacted session keeps its scope and is not narrowed twice");
 
   /** @type {any[]} */
   const childFilters = [];
@@ -722,7 +725,7 @@ test("a root session is shown only its own research tools, in its own scope, onc
   const earlyFilters = [];
   const early = { id: "early", session: { id: "early", header: { cwd: "/workspace" } }, ctx: { tools: { restrict: (/** @type {any} */ filter) => { earlyFilters.push(filter); return () => {}; } } }, inject() {} };
   start(early);
-  assert.equal(earlyFilters.length, 0);
+  assert.equal(earlyFilters.length, 1, "only the claim tools; no research tool to deny yet");
   assert.ok(degraded.some((line) => /found no research tools registered/.test(line)), `an empty narrowing is said out loud: ${JSON.stringify(degraded)}`);
 });
 

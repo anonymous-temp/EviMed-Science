@@ -28,6 +28,7 @@
  */
 
 import {
+  CLAIM_TOOLS,
   DOMAIN_VERSION,
   MCP_TOOL_PREFIX,
   RECEIPT_FORMAT_VERSION,
@@ -441,6 +442,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (!agent?.ctx || isSubagentSession(agent) || narrowed.has(agent)) return
     narrowed.add(agent)
     const sessionId = String(agent?.session?.id ?? '')
+    // The claim tools are a child's: the root delegates the evidence work, and
+    // their two schemas would otherwise ride every root request. Their own
+    // restriction, so a failure here leaves the research narrowing standing.
+    // They are this plugin's own registrations, known before any session.
+    try {
+      restrictAgentTools(agent, { deny: CLAIM_TOOLS })
+    } catch (error) {
+      diagnostics(sessionId)?.degrade?.(`root claim-tool narrowing failed: ${errorMessage(error)}`)
+    }
     try {
       const registered = registeredToolNames(ctx)
       if (registered.length && !registered.some((tool) => tool.startsWith(MCP_TOOL_PREFIX))) {
