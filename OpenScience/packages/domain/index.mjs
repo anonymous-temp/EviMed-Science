@@ -173,11 +173,13 @@ export {
   validateDeliveryReceipt,
 } from './src/receipt.mjs'
 
-// capabilityManifest — 8 exports
+// capabilityManifest — 10 exports
 export {
   AUTOPILOT_TASK_TYPES,
+  CLAIM_TOOLS,
   COST_CLASSES,
   DELEGATION_BASE_TOOLS,
+  EVIDENCE_MATRIX_OUTPUT,
   KERNEL_GLOBAL_TOOL_NAMES,
   capabilityCatalogueLine,
   delegationToolFilter,

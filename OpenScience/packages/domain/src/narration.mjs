@@ -109,6 +109,20 @@ const SOCKET_NARRATION = Object.freeze({
     const required = Array.isArray(record.issues) ? record.issues.filter((i) => i?.severity !== 'advisory' && i?.severity !== 'optional').length : 0
     return `自查交付物 ${id}：${required} 项必修`
   },
+  [SOCKET_TOOL_NAMES.claimUpsert]: (args, result) => {
+    const record = result && typeof result === 'object' ? /** @type {Record<string, any>} */ (result) : null
+    const data = record?.data
+    const id = excerpt(data?.claimId ?? args?.claim?.claimId, 16)
+    if (!data || !record?.ok) return id ? `登记主张 ${id}` : '登记一条主张'
+    const totals = data.totals && typeof data.totals === 'object' ? `（已核实 ${Number(data.totals.verified) || 0}/${Number(data.totals.total) || 0}）` : ''
+    return `登记主张 ${id}：${data.status === 'verified' ? '已核实' : '待核实'}${totals}`
+  },
+  [SOCKET_TOOL_NAMES.renderReport]: (args, result) => {
+    const record = result && typeof result === 'object' ? /** @type {Record<string, any>} */ (result) : null
+    const data = record?.data
+    if (!data || !record?.ok) return '整理参考文献与编号'
+    return `整理参考文献：${Number(data.references) || 0} 条${data.renumbered ? '，已按出现顺序重新编号' : ''}`
+  },
   [SOCKET_TOOL_NAMES.completeRun]: (args) => (args?.partial ? '以部分交付结束' : '结束运行'),
   [SOCKET_TOOL_NAMES.capsuleRecall]: (args, result) => withCount(`回忆胶囊：「${excerpt(args?.query)}」`, result),
   [SOCKET_TOOL_NAMES.capsuleNote]: (args) => `记到胶囊：${excerpt(args?.content, 32)}`,

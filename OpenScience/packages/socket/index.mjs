@@ -47,6 +47,8 @@ export const PLUGIN_SPECIFIERS = Object.freeze({
 
 export { buildChildGuidanceText, buildGuidanceText, GUIDANCE_SECTION_NAME, GUIDANCE_SECTION_ORDER } from './src/guidanceText.mjs'
 export { SKILL_BODY_MAX_CHARS, capSkillBodies, deferredSectionSkill, sectionSkillName, splitSkillSections } from './src/skillBodies.mjs'
+export { CLAIM_MATRIX_FILE, CLAIM_REPORT_FILE, nextClaimId, readMatrix, renderClinicalReport, upsertClaim } from './src/claimTools.mjs'
+export { proseShape } from './src/proseShape.mjs'
 export { RUN_DOMAIN_SPEC, RUN_STATE_FORMAT_VERSION, projectRunState, staleEvidence } from './src/runMirror.mjs'
 export {
   evidenceFromOutcome,

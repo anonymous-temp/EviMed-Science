@@ -15,7 +15,7 @@
 
 import { isContractKind } from './contractKinds.mjs'
 import { SAFETY_CLASSES } from './contractKinds.mjs'
-import { MCP_TOOL_NAMES, SOCKET_TOOL_NAME_LIST, mcpToolBaseName, mcpToolName } from './toolNames.mjs'
+import { MCP_TOOL_NAMES, SOCKET_TOOL_NAMES, SOCKET_TOOL_NAME_LIST, mcpToolBaseName, mcpToolName } from './toolNames.mjs'
 
 /**
  * Tools every delegated child gets regardless of its manifest (§9.5 step 3).
@@ -322,15 +322,38 @@ export function resolveContractKind(manifest, declared) {
 }
 
 /**
+ * The output whose presence makes a deliverable one the claim tools serve: the
+ * clinical contract's evidence matrix, as the contract registry names it.
+ */
+export const EVIDENCE_MATRIX_OUTPUT = 'clinical-evidence-matrix.json'
+
+/**
+ * Socket tools a child is given when its deliverable carries an evidence
+ * matrix: write and judge one claim at a time, render the numbering.
+ * Registered on every deployment, so `tools.restrict()` always knows them.
+ */
+export const CLAIM_TOOLS = Object.freeze([SOCKET_TOOL_NAMES.claimUpsert, SOCKET_TOOL_NAMES.renderReport])
+
+/**
  * The full tool allow-list for a delegated child: what the manifest asks for
- * plus the tools every child needs to be able to deliver at all (G3).
- * @param {{ tools: readonly string[] }} manifest
- * @param {{ allowBash?: boolean }} [options]
+ * plus the tools every child needs to be able to deliver at all (G3), plus the
+ * claim tools when the delegated contract's outputs include an evidence matrix.
+ * The contract is the one named, or the manifest's only one; a child whose
+ * deliverable has no matrix is not shown two tools it could only misuse.
+ * @param {{ tools: readonly string[], produces?: readonly { contractKind: string, outputs?: readonly { path: string }[] }[] }} manifest
+ * @param {{ allowBash?: boolean, contractKind?: string }} [options]
  * @returns {string[]}
  */
 export function delegationToolFilter(manifest, options = {}) {
   const set = new Set([...DELEGATION_BASE_TOOLS, ...manifest.tools])
   if (options.allowBash) set.add('bash')
+  const produces = manifest.produces ?? []
+  const contract = options.contractKind
+    ? produces.find((entry) => entry.contractKind === options.contractKind)
+    : produces.length === 1 ? produces[0] : undefined
+  if (contract?.outputs?.some((output) => output.path === EVIDENCE_MATRIX_OUTPUT)) {
+    for (const tool of CLAIM_TOOLS) set.add(tool)
+  }
   return [...set].sort()
 }
 
