@@ -538,7 +538,7 @@ test("every plugin mounts against a registry with the harness's own precondition
   }
 
   const byPlugin = Object.fromEntries(mounted);
-  assert.deepEqual(byPlugin["run-policy"].sort(), ["evimed_complete_run", "evimed_delegate", "evimed_plan", "evimed_revise_deliverable", "evimed_submit_deliverable"]);
+  assert.deepEqual(byPlugin["run-policy"].sort(), ["evimed_complete_run", "evimed_delegate", "evimed_package_check", "evimed_plan", "evimed_revise_deliverable", "evimed_submit_deliverable"]);
   assert.deepEqual(byPlugin.review, ["evimed_review_run"]);
   assert.deepEqual(byPlugin.screening, ["evimed_screen_batch"]);
   assert.deepEqual(byPlugin.capsule.sort(), ["evimed_capsule_note", "evimed_capsule_recall"]);

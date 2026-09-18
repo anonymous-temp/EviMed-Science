@@ -1000,3 +1000,102 @@ test("the projection the control plane reads keeps both children, each separable
     "the shared projection and the run-scoped one must tell the same story about who the children are",
   );
 });
+
+/* --------------------------------------------------- the package check */
+
+test("a package check answers with the submission's own verdict and spends nothing", async () => {
+  // The check exists because the only way to learn what the gate thought was
+  // to spend a submission finding out. It is worth something only if it says
+  // exactly what the submission would say: a check with its own reading of the
+  // files would teach the run to satisfy a second opinion that decides nothing.
+  const f = await combinedFixture({ deliveryAttemptLimit: 3, structuralAttemptAllowance: 0 });
+  await f.step(1);
+  await f.plan();
+  f.writeFiles(appraisalFiles({ complete: false }));
+
+  const checked = await f.execute("evimed_package_check", { deliverableId: "d-appraise" });
+  assert.equal(checked.value.ok, false, JSON.stringify(checked.value));
+  assert.ok(
+    checked.value.issues.some((/** @type {any} */ issue) => issue.code === "required_output_missing" && issue.path === "delivery-summary.md"),
+    `the check must name the file to fix: ${JSON.stringify(checked.value.issues)}`,
+  );
+  assert.deepEqual(checked.value.data, { deliverableId: "d-appraise", attempts: { used: 0, limit: 3, remaining: 3 } });
+
+  // Nothing was charged and nothing was recorded: the gate ledger holds what
+  // was submitted, and a look is not a submission.
+  assert.equal(f.gateRuns.length, 0, `a check wrote a gate run: ${JSON.stringify(f.gateRuns)}`);
+  assert.equal((await f.status())["d-appraise"].attempts, 0);
+  assert.equal((await f.status())["d-appraise"].status, "planned", "a check must not move the item");
+  assert.equal(f.receipt(), null, "a check must not write a receipt");
+
+  // The submission of the same bytes answers with the same code and the same
+  // issues, in the same order.
+  const submitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d-appraise" });
+  assert.equal(submitted.value.ok, false);
+  assert.equal(submitted.value.code, checked.value.code);
+  assert.deepEqual(submitted.value.issues, checked.value.issues);
+  assert.equal(f.gateRuns.length, 1);
+  assert.equal((await f.status())["d-appraise"].attempts, 1);
+
+  // And on a package that passes, the check says ok with the same contract and
+  // metrics the acceptance reports — without accepting it.
+  f.writeFiles(bibliometricFiles());
+  const passing = await f.execute("evimed_package_check", { deliverableId: "d-bib" });
+  assert.equal(passing.value.ok, true, JSON.stringify(passing.value));
+  assert.equal((await f.status())["d-bib"].status, "planned", "an ok from a check is not an acceptance");
+  const accepted = await f.execute("evimed_submit_deliverable", { deliverableId: "d-bib" });
+  assert.equal(accepted.value.ok, true);
+  assert.deepEqual(
+    [passing.value.data.contractKind, passing.value.data.label, passing.value.data.metrics],
+    [accepted.value.data.contractKind, accepted.value.data.label, accepted.value.data.metrics],
+  );
+});
+
+test("a package check still answers once the submissions are spent, and says there are none left", async () => {
+  // The guard refuses the fourth submission, and that is right; it is also the
+  // moment a run most needs to know what is still wrong, because what it wrote
+  // is delivered marked either way.
+  const f = await combinedFixture({ deliveryAttemptLimit: 1, structuralAttemptAllowance: 0 });
+  await f.step(1);
+  await f.plan();
+  f.writeFiles(appraisalFiles({ complete: false }));
+  assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d-appraise" })).value.ok, false);
+  const guarded = await f.execute("evimed_submit_deliverable", { deliverableId: "d-appraise" });
+  assert.equal(guarded.error?.code, "GUARDED", "the ceiling still holds for submissions");
+
+  const checked = await f.execute("evimed_package_check", { deliverableId: "d-appraise" });
+  assert.equal(checked.error, undefined, "the ceiling is a ceiling on submissions, not on looking");
+  assert.equal(checked.value.ok, false);
+  assert.deepEqual(checked.value.data.attempts, { used: 1, limit: 1, remaining: 0 });
+  assert.equal(f.gateRuns.length, 1, "the check after the ceiling recorded nothing either");
+});
+
+test("a child may check only the deliverable it owns, as it may submit only that one", async () => {
+  /** @type {Map<string, (value: any) => void>} */
+  const settlers = new Map();
+  const f = await combinedFixture({
+    subagentStart: (_provider, options) => {
+      const id = options.toolFilter.allow.includes(BIBLIOMETRIC_ONLY_TOOL) ? "child-bib" : "child-appraise";
+      return { id, result: new Promise((resolve) => settlers.set(id, resolve)) };
+    },
+  });
+  await f.step(1);
+  await f.plan();
+  const delegations = [
+    f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} }),
+    f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} }),
+  ];
+  await startedChildren(f, 2);
+  // Every child is handed the check, because every child submits.
+  for (const start of f.starts) {
+    assert.ok(start.options.toolFilter.allow.includes("evimed_package_check"), "a child that submits must be able to check first");
+  }
+  f.writeFiles(bibliometricFiles());
+  const own = await f.asChild("child-bib")("evimed_package_check", { deliverableId: "d-bib" });
+  assert.equal(own.value.ok, true, JSON.stringify(own.value));
+  const across = await f.asChild("child-bib")("evimed_package_check", { deliverableId: "d-appraise" });
+  assert.equal(across.value.ok, false);
+  assert.equal(across.value.code, "deliverable_not_owned");
+  for (const [, settle] of settlers) settle({ stopReason: "completed", output: "done" });
+  await Promise.all(delegations);
+});

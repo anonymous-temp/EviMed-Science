@@ -44,6 +44,10 @@ export const DELEGATION_BASE_TOOLS = Object.freeze([
   'grep',
   'skill',
   'evimed_submit_deliverable',
+  // Every child submits, so every child may ask for the verdict first. The
+  // check runs the gate the submission runs and spends nothing; without it the
+  // only way to learn what the gate thinks was to spend an attempt finding out.
+  'evimed_package_check',
   // Memory is the researcher's, not the orchestrator's: the child does the work
   // a memory is about, so it gets the same pull channel the root has. The
   // socket registers this tool on every deployment — answering
