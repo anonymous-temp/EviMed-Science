@@ -219,6 +219,27 @@ describe("RunsPage (hosted web)", () => {
     expect(screen.getByRole("status")).toHaveTextContent("按核验意见修复中");
   });
 
+  // Why the control plane put the run on this line had no render site in the
+  // shell (appendix E §5.3). The line informs here; changing it is offered
+  // right after a dispatch, not on a run that may be twenty minutes in.
+  it("says which line a run is on and why, without offering to change it", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({
+      id: "run-routed",
+      status: "running",
+      mode: "open-domain",
+      agentId: null,
+      effectiveAgentId: "clinical-evidence-synthesis",
+      routeReason: "题面是一个需要逐条核验文献的临床问题",
+      estimatedMinutes: { min: 15, max: 30 },
+    })]);
+    renderPage();
+    const reason = await screen.findByText("题面是一个需要逐条核验文献的临床问题");
+    const line = reason.parentElement!;
+    expect(line.textContent).toContain("按 临床证据深度分析 处理");
+    expect(line.textContent).toContain("通常 15–30 分钟");
+    expect(screen.queryByRole("button", { name: "改为普通问答" })).not.toBeInTheDocument();
+  });
+
   it("does not show the 待人工复核 chip when nothing needs it", async () => {
     listWebAgentRuns.mockResolvedValue([webRun({ status: "succeeded", phase: "accepted" })]);
     renderPage();

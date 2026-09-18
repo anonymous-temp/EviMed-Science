@@ -88,7 +88,7 @@ describe("runtime vocabulary never leads a surface", () => {
     // Seen at 390 px in the 2026-09-16 scripted walk: 「开放域 · open-domain-answer」.
     listWebAgentRuns.mockResolvedValue([{ ...leakyRun(), effectiveAgentId: "open-domain-answer", effectiveRuntimeAgent: null }]);
     render(<MemoryRouter initialEntries={["/app/runs"]}><RunsPage /></MemoryRouter>);
-    const row = await screen.findByRole("button", { name: /开放域问答/, expanded: true });
+    const row = await screen.findByRole("button", { name: /普通问答/, expanded: true });
     expect(row.textContent).not.toMatch(/open-domain-answer/);
   });
 

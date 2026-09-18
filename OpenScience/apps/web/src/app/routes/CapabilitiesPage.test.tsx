@@ -69,8 +69,28 @@ const agents = [
   },
 ];
 
+function dispatchedRun(sessionId: string, text: string) {
+  return {
+    id: "run_dispatched",
+    sessionId,
+    status: "running",
+    mode: "specialist",
+    agentId: "adr-analysis",
+    effectiveAgentId: "adr-analysis",
+    question: text,
+    routeReason: "题面要一份可追溯的安全性证据报告",
+    estimatedMinutes: { min: 20, max: 40 },
+    artifacts: [],
+    createdAt: new Date().toISOString(),
+    startedAt: new Date().toISOString(),
+  };
+}
+
 const mocks = vi.hoisted(() => ({
   listWebResearchAgents: vi.fn(),
+  putWebResearchSession: vi.fn(),
+  dispatchWebAgentRun: vi.fn(),
+  cancelWebAgentRun: vi.fn(),
   hasWebApi: true,
 }));
 
@@ -83,6 +103,9 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
     return mocks.hasWebApi;
   },
   listWebResearchAgents: mocks.listWebResearchAgents,
+  putWebResearchSession: mocks.putWebResearchSession,
+  dispatchWebAgentRun: mocks.dispatchWebAgentRun,
+  cancelWebAgentRun: mocks.cancelWebAgentRun,
   getWebProjectId: () => "default",
 }));
 
@@ -95,6 +118,12 @@ describe("CapabilitiesPage", () => {
   beforeEach(() => {
     mocks.listWebResearchAgents.mockReset();
     mocks.listWebResearchAgents.mockResolvedValue(agents);
+    mocks.putWebResearchSession.mockReset();
+    mocks.putWebResearchSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
+    mocks.dispatchWebAgentRun.mockReset();
+    mocks.dispatchWebAgentRun.mockImplementation(async (sessionId: string, text: string) => dispatchedRun(sessionId, text));
+    mocks.cancelWebAgentRun.mockReset();
+    mocks.cancelWebAgentRun.mockImplementation(async (id: string) => ({ ...dispatchedRun("web-old", ""), id, status: "canceled" }));
     mocks.hasWebApi = true;
   });
 
@@ -166,11 +195,102 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByText("超说明书用药分析")).not.toBeInTheDocument();
   });
 
-  it("prefills a brief that names the capability, and binds nothing (§9.8)", async () => {
-    // The change F1 makes here is what a click *means*. Under one composition a
-    // template is a suggestion the orchestrator reads out of the brief, not a
-    // package the session is married to — so the URL carries no agent and the
-    // draft carries the capability by name.
+  // Owner decision 3: 开始 runs at once — no plan to approve first — and the
+  // route line says what the control plane decided the moment it answers.
+  it("starts a capability directly: binds a session to it, dispatches, and shows the route line", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/capabilities"]}>
+        <CapabilitiesPage />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析能力/ }));
+    const question = screen.getByRole("textbox", { name: "你的问题" });
+    expect(question).toHaveValue("分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。");
+    await userEvent.click(screen.getByRole("button", { name: "开始" }));
+
+    await waitFor(() => expect(mocks.dispatchWebAgentRun).toHaveBeenCalled());
+    const [sessionId, selection] = mocks.putWebResearchSession.mock.calls[0];
+    expect(selection).toEqual({ mode: "specialist", agentId: "adr-analysis", agentVersion: "1.0.0" });
+    expect(mocks.dispatchWebAgentRun.mock.calls[0][0]).toBe(sessionId);
+    expect(mocks.dispatchWebAgentRun.mock.calls[0][1]).toBe("分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。");
+
+    const receipt = await screen.findByRole("heading", { name: /^已开始：/ });
+    expect(receipt).toHaveFocus();
+    const section = receipt.closest("section")!;
+    expect(section.textContent).toContain("按 药品安全性分析 处理");
+    expect(section.textContent).toContain("通常 20–40 分钟");
+    expect(section.textContent).toContain("题面要一份可追溯的安全性证据报告");
+  });
+
+  it("changes the line from the receipt: the run stops and the same question starts on the answer line", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/capabilities"]}>
+        <CapabilitiesPage />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析能力/ }));
+    await userEvent.click(screen.getByRole("button", { name: "开始" }));
+    await screen.findByRole("heading", { name: /^已开始：/ });
+
+    mocks.dispatchWebAgentRun.mockImplementationOnce(async (sessionId: string, text: string) => ({
+      ...dispatchedRun(sessionId, text),
+      id: "run_answer",
+      mode: "open-domain",
+      agentId: null,
+      effectiveAgentId: "open-domain-answer",
+      routeReason: "这是一个可以直接回答的问题",
+      estimatedMinutes: { min: 1, max: 3 },
+    }));
+    await userEvent.click(screen.getByRole("button", { name: "改为普通问答" }));
+
+    await waitFor(() => expect(mocks.cancelWebAgentRun).toHaveBeenCalledWith("run_dispatched"));
+    expect(mocks.putWebResearchSession.mock.calls[1][1]).toEqual({ mode: "open-domain" });
+    // A new session: a binding cannot change once it exists.
+    expect(mocks.putWebResearchSession.mock.calls[1][0]).not.toBe(mocks.putWebResearchSession.mock.calls[0][0]);
+    expect(await screen.findByText("已改为按「普通问答」处理；原来那次运行已停止。")).toBeInTheDocument();
+    expect(screen.getByText("普通问答", { selector: "strong" })).toBeInTheDocument();
+  });
+
+  it("says so when the router still claims the question after 普通问答 was asked for", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/capabilities"]}>
+        <CapabilitiesPage />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析能力/ }));
+    await userEvent.click(screen.getByRole("button", { name: "开始" }));
+    await screen.findByRole("heading", { name: /^已开始：/ });
+
+    mocks.dispatchWebAgentRun.mockImplementationOnce(async (sessionId: string, text: string) => ({
+      ...dispatchedRun(sessionId, text),
+      id: "run_rerouted",
+      mode: "open-domain",
+      agentId: null,
+      effectiveAgentId: "adr-analysis",
+    }));
+    await userEvent.click(screen.getByRole("button", { name: "改为普通问答" }));
+
+    expect(await screen.findByText(/路由判断这个问题仍需要「药品安全性分析」/)).toBeInTheDocument();
+  });
+
+  it("says why a start failed, in place, and starts nothing", async () => {
+    mocks.dispatchWebAgentRun.mockRejectedValueOnce(new WebApiError("HTTP 503", { status: 503, code: "runtime_unavailable" }));
+    render(
+      <MemoryRouter initialEntries={["/app/capabilities"]}>
+        <CapabilitiesPage />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析能力/ }));
+    await userEvent.click(screen.getByRole("button", { name: "开始" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("运行时出现问题，稍后重试。");
+    expect(screen.queryByRole("heading", { name: /^已开始：/ })).not.toBeInTheDocument();
+  });
+
+  it("can still put a brief that names the capability into the conversation, binding nothing (§9.8)", async () => {
+    // The other way in: a template as a suggestion the orchestrator reads out
+    // of the brief, not a package the session is married to — so the URL
+    // carries no agent and the draft carries the capability by name.
     render(
       <MemoryRouter initialEntries={["/app/capabilities"]}>
         <Routes>
@@ -180,8 +300,11 @@ describe("CapabilitiesPage", () => {
       </MemoryRouter>,
     );
     await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析能力/ }));
+    await userEvent.click(screen.getByRole("button", { name: "在对话里写" }));
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+    expect(mocks.putWebResearchSession).not.toHaveBeenCalled();
+    expect(mocks.dispatchWebAgentRun).not.toHaveBeenCalled();
     expect(screen.getByTestId("location")).not.toHaveTextContent("agent=");
     const intent = JSON.parse(screen.getByTestId("intent").textContent!);
     expect(intent).toMatchObject({ kind: "create", projectId: "default" });
