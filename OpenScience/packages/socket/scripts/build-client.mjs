@@ -1,12 +1,13 @@
 import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { bridge, bridgeInject, shell, shellInject } from '../client.mjs';
+import { renderFrameClient } from '../client.mjs';
 
 const output = new URL('../dist/client.js', import.meta.url);
 await mkdir(fileURLToPath(new URL('.', output)), { recursive: true });
-// The port owns the complete browser bodies, so this bundle needs no dynamic
-// imports or duplicated upstream libraries. The native loader owns execution
-// and hands the factory its `require`, which is how React reaches the shell.
+// The port owns the complete browser bodies and their composition, so this
+// bundle needs no dynamic imports or duplicated upstream libraries. The native
+// loader owns execution and hands the factory its `require`, which is how
+// React reaches the bodies.
 // Published atomically, because this file has five readers and two of them
 // rebuild it. `node --test test/*.test.mjs` runs the files of one package
 // concurrently, so a plain write truncates the bundle under a reader that is
@@ -14,17 +15,6 @@ await mkdir(fileURLToPath(new URL('.', output)), { recursive: true });
 // never called, and the failure reads as "the scanner omitted the client"
 // rather than as the file race it is. Rename is atomic within a directory, so
 // every reader sees either the previous bundle or the whole new one.
-const inject = [...new Set([...bridgeInject, ...shellInject])];
 const staging = new URL(`../dist/.client.${process.pid}.js`, import.meta.url);
-await writeFile(staging, [
-  'globalThis.__ModuleLoader__.load({',
-  "  id: '@evimed/dsh-socket',",
-  '  factory: (require) => {',
-  `    const bridge = ${bridge.toString()};`,
-  `    const shell = ${shell.toString()};`,
-  `    return { inject: ${JSON.stringify(inject)}, apply: (ctx, config) => { bridge(ctx, config); shell(ctx, config, globalThis, require); } };`,
-  '  }',
-  '});',
-  '',
-].join('\n'));
+await writeFile(staging, renderFrameClient());
 await rename(staging, output);

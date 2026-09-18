@@ -16,7 +16,12 @@
     "./runtime-ui-transport": "./src/runtimeUiTransport.mjs",
     "./runtime-ui-bridge": "./src/runtimeUiBridge.mjs",
     "./compaction": "./src/compaction.mjs",
-    "./runtime-ui-shell": "./src/runtimeUiShell.mjs"
+    "./runtime-ui-shell": "./src/runtimeUiShell.mjs",
+    "./runtime-ui-frame": "./src/runtimeUiFrame.mjs",
+    "./runtime-ui-kit": "./src/runtimeUiKit.mjs",
+    "./runtime-ui-slots": "./src/runtimeUiSlots.mjs",
+    "./runtime-ui-locale": "./src/runtimeUiLocale.mjs",
+    "./runtime-ui-commands": "./src/runtimeUiCommands.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",

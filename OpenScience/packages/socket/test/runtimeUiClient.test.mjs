@@ -20,7 +20,9 @@ test('the packaged native client registers a browser-safe synchronous plugin', a
   // way and nowhere else.
   /** @type {string[]} */ const required = [];
   const plugin = registration.factory((/** @type {string} */ id) => { required.push(id); return undefined; });
-  assert.deepEqual(Array.from(plugin.inject), ['sessions', 'conversation', 'connection', 'workspaces', 'slots', 'locale']);
+  // The services the bodies require outright, and nothing optional: a
+  // required service that is absent parks the whole plugin, bridge included.
+  assert.deepEqual(Array.from(plugin.inject).sort(), ['connection', 'conversation', 'locale', 'sessions', 'slots', 'workspaces']);
   assert.equal(plugin.apply.constructor.name, 'Function');
   assert.equal(plugin.apply({}, {}), undefined);
   assert.deepEqual(required, [], 'outside a hosted frame neither body touches the loader');
