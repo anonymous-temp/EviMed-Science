@@ -318,9 +318,9 @@ class FakePool extends EventEmitter {
     if (/^SELECT 1 FROM evimed_control\.projects WHERE user_id = \$1 AND id = \$2 FOR UPDATE/.test(sql)) {
       return values[0] === USER_ID && values[1] === PROJECT_ID ? { rows: [{ "?column?": 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
-    if (/^SELECT id, name, active_workspace, quota_bytes FROM evimed_control\.projects/.test(sql)) {
+    if (/^SELECT id, name, active_workspace, quota_bytes(?:, archived_at)? FROM evimed_control\.projects/.test(sql)) {
       return values[0] === USER_ID && values[1] === PROJECT_ID
-        ? { rows: [{ id: PROJECT_ID, name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000 }], rowCount: 1 }
+        ? { rows: [{ id: PROJECT_ID, name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT request_id,requested_at,expires_at FROM evimed_product\.maintenance_lease/.test(sql)) {
