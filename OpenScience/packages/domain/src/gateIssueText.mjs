@@ -92,6 +92,15 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'reference-number-unresolved': '引用编号缺少文献条目',
   'claim-inline-citation': '主张未配正文编号引用',
   'advisory-notes': '写作层面的改进建议',
+  // A claim's structured appraisal (`appraisalStructure.mjs`, S6 2026-09-18):
+  // advice, every one.
+  'claim-pico-schema': 'PICO 字段格式有误',
+  'claim-pico-quote': 'PICO 引文未在原文中核对到',
+  'claim-certainty-schema': 'GRADE 确定性字段格式有误',
+  'claim-certainty-arithmetic': '标注的确定性与各分项不符',
+  'claim-certainty-design': '确定性起点或升级与设计不符',
+  'claim-rob-schema': '偏倚风险字段格式有误',
+  'claim-rob-overall': '偏倚风险总体判断与各领域不符',
   // The contract registry and the per-kind contract modules.
   'required-output': '缺少必需的交付文件',
   'deliverable-json-parse': '交付文件不是有效的 JSON',
