@@ -16,6 +16,9 @@ import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { MemorySkeleton } from "@/components/cards/Skeletons";
 import { SourceUnderstandingPanel } from "@/components/sources/SourceUnderstandingPanel";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { labelFor } from "@/lib/statusLabel";
+import { useOperator } from "@/lib/useOperator";
 
 const STATUS: Record<string, string> = {
   queued: "等待分析", parsing: "正在解析", complete: "已完成", needs_attention: "需要你看一下",
@@ -31,6 +34,14 @@ const TYPE_OPTIONS = [
   ["administrative-record", "行政或财务资料"], ["certificate-scan", "证书或扫描件"], ["image-figure", "图片或图表"], ["other", "其他"],
 ] as const;
 const DEPTH_OPTIONS = [["skip", "仅保留指纹"], ["index_only", "只建索引"], ["structured", "结构化抽取"], ["deep", "深度分析"]] as const;
+const TYPE_LABEL: Record<string, string> = Object.fromEntries(TYPE_OPTIONS);
+const DEPTH_LABEL: Record<string, string> = Object.fromEntries(DEPTH_OPTIONS);
+
+/** A synced folder's path as the researcher typed it: the tenant namespace the
+ *  gateway prefixes is the platform's, not theirs (review B, SourcesPage). */
+function displayPath(path: string) {
+  return path.replace(/^\/tenants\/[^/]+/, "") || "/";
+}
 
 /** @param embedded rendered as one view of 知识库 rather than as its own
  *  destination, so the hub above it owns the title. */
@@ -53,6 +64,7 @@ function ProjectSourcesPage({ projectId, embedded }: { projectId: string; embedd
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [folderRefresh, setFolderRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const generation = useRef(0);
   const loadingRequest = useRef<number | null>(null);
   const load = useCallback(async (background = false) => {
@@ -88,26 +100,26 @@ function ProjectSourcesPage({ projectId, embedded }: { projectId: string; embedd
   const mutate = async (operation: () => Promise<unknown>) => {
     if (getWebProjectId() !== projectId) return;
     setBusy(true);
+    setActionError(null);
     try {
       await operation();
       if (getWebProjectId() !== projectId) return;
       setEditing(null); setDeleting(null); await load();
-    } catch (operationError) { if (getWebProjectId() === projectId) setError(productErrorMessage(operationError)); }
+    } catch (operationError) { if (getWebProjectId() === projectId) setActionError(productErrorMessage(operationError)); }
     finally { if (getWebProjectId() === projectId) setBusy(false); }
   };
   const selectedSource = sources?.find(source => source.id === understandingId);
 
   return (
-    <main className="h-full overflow-y-auto px-5 py-6">
+    <div className="h-full overflow-y-auto px-5 py-6">
       <div className="mx-auto max-w-content-wide space-y-5">
-        <header className="flex flex-wrap items-start justify-between gap-3">
-          {embedded
-            ? <p className="max-w-2xl text-ui text-muted">查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。</p>
-            : <div><h1 className="font-serif text-title text-text">资料整理</h1><p className="mt-2 text-ui text-muted">查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。</p></div>}
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" onClick={() => setShowDuplicates((value) => !value)}><Copy size={15} aria-hidden="true" />疑似重复</Button>
-            <Button variant="ghost" onClick={() => setShowOpenList((value) => !value)}><Cloud size={15} aria-hidden="true" />连接网盘资料</Button>
-          </div></header>
+        {embedded
+          ? <header className="flex flex-wrap items-start justify-between gap-3">
+            <p className="max-w-2xl text-ui text-muted">查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。</p>
+            <SourcesActions onDuplicates={() => setShowDuplicates((value) => !value)} onOpenList={() => setShowOpenList((value) => !value)} />
+          </header>
+          : <PageHeader title="资料整理" description="查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。"
+            actions={<SourcesActions onDuplicates={() => setShowDuplicates((value) => !value)} onOpenList={() => setShowOpenList((value) => !value)} />} />}
         {showDuplicates && <DuplicateDesk projectId={projectId} onError={setError} />}
         {showOpenList && <OpenListBrowser projectId={projectId} busy={busy} setBusy={setBusy} onImported={load}
           onFolderRegistered={() => setFolderRefresh((value) => value + 1)} onError={setError} />}
@@ -115,11 +127,17 @@ function ProjectSourcesPage({ projectId, embedded }: { projectId: string; embedd
         <SegmentedControl value={filter} onChange={setFilter} aria-label="资料状态"
           options={[{ value: "all", label: "全部" }, { value: "needs_attention", label: "需要处理" }, { value: "parsing", label: "分析中" }, { value: "complete", label: "已完成" }]} />
         {error && <Card><div className="flex items-center gap-2 text-ui text-error"><AlertCircle size={16} aria-hidden="true" /><span className="flex-1">{error}</span><Button size="sm" variant="ghost" onClick={() => void load()}>重试</Button></div></Card>}
+        {/* A failed delete or re-analysis is not a failed read: it used to
+            overwrite the page error, whose 「重试」 re-listed the page instead of
+            retrying the action (review B, SourcesPage P1). */}
+        {actionError && <div role="alert" className="flex items-center gap-2 rounded-card border border-danger bg-danger-soft px-3 py-2 text-ui text-danger-strong">
+          <AlertCircle size={16} aria-hidden="true" /><span className="flex-1">{actionError}</span>
+          <Button size="sm" variant="ghost" onClick={() => setActionError(null)}>知道了</Button></div>}
         {sources === null ? <MemorySkeleton /> : sources.length === 0 && !error ? <EmptyState icon={Database} title="还没有进入分析流程的资料"
           description="从知识库上传资料后，系统会先建立索引，再按价值进行结构化或深度分析。" /> : (
           <div className="space-y-4">{sources.map((source) => <SourceCard key={source.id} source={source} busy={busy}
             onUnderstanding={() => setUnderstandingId(source.id)}
-            onEdit={() => setEditing(source)} onRetry={() => void mutate(() => retrySource(source.id, source.revision))}
+            onEdit={() => setEditing(source)} onRaiseDepth={() => setEditing(source)} onRetry={() => void mutate(() => retrySource(source.id, source.revision))}
             onCancel={() => void mutate(() => cancelSource(source.id, source.revision))} onDelete={() => setDeleting(source)} />)}</div>
         )}
         {selectedSource && <SourceUnderstandingPanel key={selectedSource.id} projectId={projectId} sourceId={selectedSource.id}
@@ -130,7 +148,7 @@ function ProjectSourcesPage({ projectId, embedded }: { projectId: string; embedd
       </div>
       {deleting && <ConfirmDialog title="删除资料分析记录？" body="原始文件仍由知识库管理；来源索引和后续派生理解会停止使用。"
         confirmLabel="删除记录" onCancel={() => setDeleting(null)} onConfirm={() => void mutate(() => removeSource(deleting.id, deleting.revision))} />}
-    </main>
+    </div>
   );
 }
 
@@ -168,7 +186,7 @@ function OpenListBrowser({ projectId, busy, setBusy, onImported, onFolderRegiste
     finally { if (valid()) setBusy(false); }
   };
   const parent = remotePath === "/" ? "/" : remotePath.split("/").slice(0, -1).join("/") || "/";
-  return <Card title="OpenList 网盘" hint="每个账号只能浏览自己的 /tenants 命名空间；未提供 SHA-256 的存储请改用平台上传。">
+  return <Card title="网盘资料" hint="只显示你自己的网盘空间。无法提供内容指纹的文件，请改用平台上传。">
     <div className="space-y-3">
       <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void browse(); }}>
         <Input label="网盘路径" value={remotePath} onChange={(event) => setRemotePath(event.target.value)} />
@@ -181,7 +199,7 @@ function OpenListBrowser({ projectId, busy, setBusy, onImported, onFolderRegiste
           className="flex items-center gap-3 px-3 py-2 text-ui text-text"><span className="flex min-w-0 flex-1 items-center gap-2">{entry.entryType === "dir" ? <Folder size={15} aria-hidden="true" /> : <FileSearch size={15} aria-hidden="true" />}<span className="truncate">{entry.name}</span></span>
           {entry.entryType === "dir" ? <><Button size="sm" variant="ghost" disabled={busy} onClick={() => void browse(entry.path)}>打开</Button>
             <Button size="sm" variant="ghost" disabled={busy} title="持续同步这个文件夹" onClick={() => void registerFolder(entry.path)}><FolderSync size={13} aria-hidden="true" />同步</Button></>
-            : <Button size="sm" variant="ghost" disabled={busy || !entry.providerHash?.startsWith("sha256:")} title={entry.providerHash?.startsWith("sha256:") ? "导入并分析" : "此存储未提供 SHA-256，请改用平台上传"}
+            : <Button size="sm" variant="ghost" disabled={busy || !entry.providerHash?.startsWith("sha256:")} title={entry.providerHash?.startsWith("sha256:") ? "导入并分析" : "这个存储无法提供内容指纹，请改用平台上传"}
               onClick={() => void importFile(entry.path)}><FilePlus2 size={13} aria-hidden="true" />导入</Button>}</div>)}</div>}
     </div>
   </Card>;
@@ -191,12 +209,12 @@ function OpenListBrowser({ projectId, busy, setBusy, onImported, onFolderRegiste
 // is not one of them: the sync filters on the SHA-256 pattern before it ever
 // builds a manifest, so that code cannot reach this card.
 const SKIP_REASONS: Record<string, string> = {
-  provider_hash_unsupported: "网盘未提供 SHA-256",
+  provider_hash_unsupported: "网盘无法提供内容指纹",
   entry_budget_exhausted: "超出本文件夹的跟踪上限",
   source_scope_conflict: "同样内容已属于其他项目",
   source_payload_invalid: "文件路径或属性不合规",
   source_path_invalid: "文件路径或属性不合规",
-  source_digest_invalid: "网盘给出的 SHA-256 不合规",
+  source_digest_invalid: "网盘给出的内容指纹不合规",
   source_size_invalid: "文件大小超出可入库范围",
   source_connector_invalid: "网盘条目无法映射成资料",
 };
@@ -206,6 +224,7 @@ const SKIP_REASONS: Record<string, string> = {
 function skipReason(code: string) { return SKIP_REASONS[code] ?? "这一项无法入库"; }
 
 function SyncedFolders({ projectId, refreshToken, onError }: { projectId: string; refreshToken: number; onError: (value: string | null) => void }) {
+  const operator = useOperator();
   const [folders, setFolders] = useState<SourceFolderRecord[] | null>(null);
   const [busy, setBusy] = useState(false);
   const request = useRef(0);
@@ -239,7 +258,10 @@ function SyncedFolders({ projectId, refreshToken, onError }: { projectId: string
         const lastError = folder.payload.lastError;
         return <div key={folder.id} className="space-y-2 rounded-input border border-border px-3 py-2">
           <div className="flex flex-wrap items-center gap-2 text-ui text-text">
-            <Folder size={15} aria-hidden="true" /><span className="flex-1 truncate">{folder.payload.connector.id}</span>
+            {/* The folder's own name, not the connector id it is stored under
+                (which is the gateway path, tenant namespace and all). */}
+            <Folder size={15} aria-hidden="true" /><span className="min-w-0 flex-1 truncate" title={displayPath(folder.payload.connector.id)}>
+              {baseName(displayPath(folder.payload.connector.id))}</span>
             <span className="text-ui-sm text-muted">{folder.payload.status === "active" ? "已启用同步" : "已暂停"}</span>
             <Button size="sm" variant="ghost" disabled={busy || folder.payload.status !== "active"}
               onClick={() => void mutate(() => syncSourceFolder(folder.id, folder.revision))}><RefreshCw size={13} aria-hidden="true" />立即同步</Button>
@@ -247,7 +269,7 @@ function SyncedFolders({ projectId, refreshToken, onError }: { projectId: string
               onClick={() => void mutate(() => setSourceFolderStatus(folder.id, folder.revision, folder.payload.status === "active" ? "paused" : "active"))}>
               {folder.payload.status === "active" ? <><Pause size={13} aria-hidden="true" />暂停同步</> : <><Play size={13} aria-hidden="true" />恢复同步</>}</Button>
           </div>
-          {lastError && <p className="text-ui-sm text-error" title={lastError.code}>上次同步失败：{sourceFailureMessage(lastError)}
+          {lastError && <p className="text-ui-sm text-error" title={operator ? lastError.code : undefined}>上次同步失败：{sourceFailureMessage(lastError)}
             {folder.payload.status === "paused" ? "同步已暂停，处理后点「恢复同步」。" : "已入库的资料不受影响，可点「立即同步」重试。"}</p>}
           <p className="text-ui-sm text-muted">{sync
             ? `上次成功同步：新增 ${sync.registered} · 更新 ${sync.updated} · 未变化 ${sync.unchanged} · 已看到 ${sync.scanned} 项${sync.complete ? "" : "（本轮未走完，已排入后续任务）"}`
@@ -295,10 +317,10 @@ function DuplicateDesk({ projectId, onError }: { projectId: string; onError: (va
       : <div className="space-y-3">{groups.map((group) => <div key={group.groupKey} className="space-y-2 rounded-input border border-border px-3 py-2">
         <div className="flex flex-wrap items-center gap-2 text-ui text-text">
           <Copy size={15} aria-hidden="true" /><span className="flex-1 truncate">{baseName(group.label)}</span>
-          <span className="text-ui-sm text-muted">{DUPLICATE_KINDS[group.kind] ?? group.kind}</span>
+          <span className="text-ui-sm text-muted">{labelFor(DUPLICATE_KINDS, group.kind, "其他相似情况")}</span>
         </div>
         <ul className="space-y-1 text-ui-sm text-muted">{group.members.map((item) => <li key={item.sourceId}>
-          第 {item.version} 版 · {item.paths.map(baseName).join("、")} · {Math.max(1, Math.round(item.size / 1024))} KB · {STATUS[item.status] ?? item.status}
+          第 {item.version} 版 · {item.paths.map(baseName).join("、")} · {Math.max(1, Math.round(item.size / 1024))} KB · {labelFor(STATUS, item.status)}
         </li>)}</ul>
         {group.decision
           ? <p className="text-ui-sm text-muted">已标记为{group.decision.decision === "linked" ? "同一份资料" : "不是重复"}。可重新选择。</p>
@@ -328,7 +350,7 @@ function VersionChain({ sourceId }: { sourceId: string }) {
   if (family.items.length === 0) return <p className="text-ui-sm text-muted">这份资料还没有其他版本。</p>;
   return <ul className="space-y-1 rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-muted">
     {family.items.map((item) => <li key={item.id} className={item.id === sourceId ? "text-text" : undefined}>
-      第 {item.payload.version} 版 · {baseName(item.payload.paths[0] ?? item.id)} · {STATUS[item.payload.status] ?? item.payload.status}
+      第 {item.payload.version} 版 · {baseName(item.payload.paths[0] ?? item.id)} · {labelFor(STATUS, item.payload.status)}
       {item.id === sourceId ? " · 当前查看" : ""}
     </li>)}
   </ul>;
@@ -353,42 +375,57 @@ function percent(value: number) { return `${Math.round(value * 1000) / 10}%`; }
  * support. Putting English validator prose in front of a Chinese-reading
  * researcher is the defect this whole pass exists to remove, not a shortcut to
  * reuse here. */
-function OmissionNotice({ notice }: { notice?: SourceOmissionNotice | null }) {
+function OmissionNotice({ notice, onRaiseDepth }: { notice?: SourceOmissionNotice | null; onRaiseDepth: () => void }) {
+  const operator = useOperator();
   if (!notice) return null;
   const over = notice.withinTarget === false && typeof notice.omissionRate === "number" ? notice.omissionRate : null;
   const disagreements = notice.disagreements?.length ?? 0;
-  if (over === null && !disagreements) return null;
+  if (over === null && !(operator && disagreements)) return null;
+  // It used to open with 「仅供参考，不影响这份资料入库，也不需要你处理」 — a
+  // notice whose own text told the reader to ignore it (review B). It is
+  // either something they can act on, or it is not shown to them.
   return <div className="space-y-1 rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-muted">
-    <p className="text-text">遗漏审计提示 · 仅供参考，不影响这份资料入库，也不需要你处理</p>
-    {over !== null && <p>抽查了 {notice.audited} 个单元，实测遗漏率 {percent(over)}，高于当前分析深度的参考值 {percent(notice.target)}。想补齐可以提高分析深度后重新分析。</p>}
-    {/* Capped at five lines by `boundedOmissionNotice`, so the count is a floor,
-        not a total — the same discipline the skipped-entry list already keeps. */}
-    {disagreements > 0 && <p title={notice.disagreements.join("\n")}>
+    {over !== null && <div className="flex flex-wrap items-center gap-2">
+      <p className="min-w-0 flex-1 text-text">抽查 {notice.audited} 个片段，约 {percent(over)} 的内容没有被理解进来，高于当前分析深度的参考值 {percent(notice.target)}。</p>
+      <Button size="sm" variant="ghost" onClick={onRaiseDepth}>提高分析深度</Button>
+    </div>}
+    {/* The run's self-reported audit disagreeing with what it delivered is
+        pipeline diagnostics — capped at five English lines by
+        `boundedOmissionNotice`. An operator can read them; a researcher has
+        nothing to do with them. */}
+    {operator && disagreements > 0 && <p title={notice.disagreements.join("\n")}>
       运行自报的审计与它实际交付的引用至少有 {disagreements} 处对不上；页面上的遗漏率按交付内容重算，不采用自报值。</p>}
   </div>;
 }
 
-function SourceCard({ source, busy, onEdit, onRetry, onCancel, onDelete, onUnderstanding }: {
-  source: SourceRecord; busy: boolean; onEdit: () => void; onRetry: () => void; onCancel: () => void; onDelete: () => void; onUnderstanding: () => void;
+const AUDIT_STATUS: Record<string, string> = { not_run: "理解遗漏尚未审计", audited: "理解遗漏已审计" };
+
+function SourceCard({ source, busy, onEdit, onRaiseDepth, onRetry, onCancel, onDelete, onUnderstanding }: {
+  source: SourceRecord; busy: boolean; onEdit: () => void; onRaiseDepth: () => void; onRetry: () => void; onCancel: () => void; onDelete: () => void; onUnderstanding: () => void;
 }) {
+  const operator = useOperator();
   const [showChain, setShowChain] = useState(false);
   const coverage = source.payload.coverage;
   const accountedPercent = coverage ? coverage.accountedPercent ?? Math.round((coverage.accounted / Math.max(1, coverage.total)) * 100) : 0;
-  const status = source.payload.status === "parsing" && source.payload.analysis?.phase === "understanding" ? "正在理解资料" : STATUS[source.payload.status] ?? source.payload.status;
+  const status = source.payload.status === "parsing" && source.payload.analysis?.phase === "understanding" ? "正在理解资料" : labelFor(STATUS, source.payload.status);
   // The audit verdict comes from the understanding contract; the card states what
   // that contract said instead of asserting a fixed "not audited".
   const audit = source.payload.omissionAudit;
   const failure = source.payload.error;
-  const auditLabel = !audit || audit.status === "not_run" ? "理解遗漏尚未审计"
+  const auditLabel = !audit || audit.status === "not_run" ? AUDIT_STATUS.not_run
     : typeof audit.omissionRate === "number" ? `理解遗漏 ${Math.round(audit.omissionRate * 100)}%`
-      : `理解遗漏审计：${audit.status}`;
-  return <Card title={baseName(source.payload.paths[0] ?? source.id)} hint={`文件版本 ${source.payload.version}${source.payload.generation != null ? ` · 处理第 ${source.payload.generation} 代` : ""} · ${status}`}>
+      : labelFor(AUDIT_STATUS, audit.status, "理解遗漏审计状态未登记");
+  // The generation counter and the parse ledger are the pipeline's
+  // bookkeeping; the version and the state are what a researcher recognises.
+  const generationNote = operator && source.payload.generation != null ? ` · 处理第 ${source.payload.generation} 代` : "";
+  return <Card title={baseName(source.payload.paths[0] ?? source.id)} hint={`第 ${source.payload.version} 版${generationNote} · ${status}`}>
     <div className="space-y-3 text-ui text-text">
       {source.payload.outputs.summary && <p>{source.payload.outputs.summary}</p>}
       <div className="flex flex-wrap gap-2 text-ui-sm text-muted">
-        <span>{TYPE_OPTIONS.find(([value]) => value === source.payload.docType)?.[1] ?? source.payload.docType}</span><span>·</span>
-        <span>{DEPTH_OPTIONS.find(([value]) => value === source.payload.depth)?.[1] ?? source.payload.depth}</span>
-        {coverage && <><span>·</span><span>解析处理成功 {coverage.percent}% · 处理台账 {accountedPercent}% · 失败单元 {coverage.failed}/{coverage.total}</span></>}
+        <span>{labelFor(TYPE_LABEL, source.payload.docType, "其他资料")}</span><span>·</span>
+        <span>{labelFor(DEPTH_LABEL, source.payload.depth, "分析深度未登记")}</span>
+        {coverage && <><span>·</span><span>已解析 {coverage.percent}%{coverage.failed > 0 ? ` · ${coverage.failed} 个片段未能解析` : ""}</span></>}
+        {coverage && operator && <><span>·</span><span>处理台账 {accountedPercent}% · 失败单元 {coverage.failed}/{coverage.total}</span></>}
         <span>·</span><span>{auditLabel}</span>
       </div>
       {/* The failure, before anything else. Until 2026-09-08 a failed source
@@ -398,10 +435,10 @@ function SourceCard({ source, busy, onEdit, onRetry, onCancel, onDelete, onUnder
           component and rendered by nothing. Key on the code, never on the stored
           `message`: that is the literal English "Source analysis failed." for
           every failure, while the code is the fact `@evimed/domain` translates. */}
-      {failure && <div className="rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-error" title={failure.code}>
+      {failure && <div className="rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-error" title={operator ? failure.code : undefined}>
         <AlertCircle size={14} className="mr-1 inline" aria-hidden="true" />解析失败：{sourceFailureMessage(failure)}原件已保留，「重新分析」会新起一代。</div>}
       <div className="rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-muted"><FileSearch size={14} className="mr-1 inline" aria-hidden="true" />分类依据：{source.payload.reasons[0]}</div>
-      <OmissionNotice notice={source.payload.omissionNotice} />
+      <OmissionNotice notice={source.payload.omissionNotice} onRaiseDepth={onRaiseDepth} />
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="ghost" onClick={onUnderstanding}><FileSearch size={13} aria-hidden="true" />查看理解</Button>
         <Button size="sm" variant="ghost" onClick={() => setShowChain((value) => !value)}><GitBranch size={13} aria-hidden="true" />查看版本链</Button>
@@ -430,4 +467,12 @@ function EditSource({ source, busy, onSave, onCancel }: { source: SourceRecord; 
     <Input label="调整原因" value={reason} onChange={(event) => setReason(event.target.value)} required maxLength={1000} />
     <div className="flex gap-2 md:col-span-3"><Button type="submit" loading={busy}>保存并重新分析</Button><Button variant="ghost" disabled={busy} onClick={onCancel}>取消</Button></div>
   </form></Card>;
+}
+
+/** The page's two secondary actions; neither is the primary one, so both are quiet. */
+function SourcesActions({ onDuplicates, onOpenList }: { onDuplicates: () => void; onOpenList: () => void }) {
+  return <div className="flex flex-wrap gap-2">
+    <Button variant="ghost" onClick={onDuplicates}><Copy size={15} aria-hidden="true" />疑似重复</Button>
+    <Button variant="ghost" onClick={onOpenList}><Cloud size={15} aria-hidden="true" />连接网盘资料</Button>
+  </div>;
 }

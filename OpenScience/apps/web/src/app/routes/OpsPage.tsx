@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { ShieldCheck } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { fetchWebMe, getWebProjectId } from "@/lib/apiClient";
 import { WebReadinessCard } from "@/components/settings/WebReadinessCard";
 import { WebResourcesCard } from "@/components/settings/WebResourcesCard";
@@ -40,11 +42,16 @@ export function OpsPage({ embedded = false }: { embedded?: boolean } = {}) {
     <div className="h-full overflow-y-auto bg-bg">
       <div className="mx-auto max-w-content px-8 py-10">
         {!embedded && (
-          <>
-            <h1 className="font-serif text-display font-semibold text-text">运维台</h1>
-            <p className="mt-2 text-body text-muted">部署就绪、运行资源与三本运维账本。仅运维账号可见。</p>
-          </>
+          <PageHeader title="运维台" description="部署就绪、运行资源与三本运维账本。" />
         )}
+        {/* Said inside the tab as well. The page is only ever rendered embedded
+          * (AccountPage), and the notice used to render only when it was not —
+          * so a console that can stop a running analysis appeared as an
+          * ordinary tab with nothing saying whose it is (review B, P0). */}
+        <p role="note" className="mt-2 flex items-center gap-2 rounded-input border border-strong bg-surface-2 px-3 py-2 text-ui text-text">
+          <ShieldCheck size={16} className="shrink-0 text-muted" aria-hidden="true" />
+          仅运维账号可见。这里的操作作用于整个部署，停止或重启会中断正在进行的研究。
+        </p>
         <WebReadinessCard />
         <WebResourcesCard key={`resources-${projectId}`} />
         <WebTasksCard key={`tasks-${projectId}`} />

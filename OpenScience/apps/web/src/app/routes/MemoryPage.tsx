@@ -27,6 +27,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input, Textarea } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { MemoryControls } from "@/components/memory/MemoryControls";
+import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
 import { useSearchParams } from "react-router";
 
 type MemoryState = "normal" | "archived";
@@ -257,15 +258,10 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   return (
     <div className="h-full overflow-y-auto bg-bg">
-      <main className="mx-auto w-full max-w-content-full px-6 py-8 lg:px-10 lg:py-10">
+      <div className="mx-auto w-full max-w-content-full px-6 py-8 lg:px-10 lg:py-10">
         <header className="flex flex-col gap-5 border-b border-border pb-7 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            {!embedded && (
-              <div className="mb-2 flex items-center gap-2 text-ui-sm font-medium tracking-[0.12em] text-accent">
-                <Brain size={15} aria-hidden="true" /> 个人科研记忆
-              </div>
-            )}
-            {!embedded && <h1 className="font-serif text-display font-semibold tracking-tight text-text">科研记忆</h1>}
+            {!embedded && <h1 className={PAGE_TITLE_CLASS}>科研记忆</h1>}
             <p className={embedded ? "max-w-2xl text-body text-muted" : "mt-2 max-w-2xl text-body text-muted"}>
               保存长期有效的研究背景、偏好与判断线索。EviMed 会按当前问题检索相关记录，并与知识库文件和外部证据分开处理。
             </p>
@@ -438,7 +434,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
             className="mt-8 min-h-72 rounded-card border border-dashed border-border bg-surface/50"
           />
         )}
-      </main>
+      </div>
 
       {pendingDelete && (
         <ConfirmDialog

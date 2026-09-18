@@ -8,9 +8,11 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { inboxErrorMessage, listInbox, markInboxRead, resolveInboxItem, type InboxItem } from "@/lib/inboxClient";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { InboxBody } from "@/components/inbox/InboxBody";
+import { labelFor } from "@/lib/statusLabel";
+import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
 import { Link } from "react-router";
 
-const TYPE_LABEL = { review: "需要审阅", question: "等待回答", notify: "通知" } as const;
+const TYPE_LABEL: Record<string, string> = { review: "需要审阅", question: "等待回答", notify: "通知" };
 
 export function InboxPage() {
   const [filter, setFilter] = useState<"all" | "unread">("all");
@@ -88,9 +90,9 @@ export function InboxPage() {
   };
 
   return <div className="h-full overflow-y-auto">
-    <main className="mx-auto w-full max-w-content space-y-5 px-6 py-8">
+    <div className="mx-auto w-full max-w-content space-y-5 px-6 py-8">
       <PageTitle page="收件箱" />
-      <header><h1 className="font-serif text-title text-text">收件箱</h1><p className="mt-2 text-ui text-muted">审阅和提问排在前面；普通通知随后显示。</p></header>
+      <header><h1 className={PAGE_TITLE_CLASS}>收件箱</h1><p className="mt-2 text-ui text-muted">审阅和提问排在前面；普通通知随后显示。</p></header>
       <SegmentedControl value={filter} onChange={(value) => setFilter(value)} aria-label="消息筛选"
         options={[{ value: "all", label: "全部" }, { value: "unread", label: "未读" }]} />
       {error && <div role="alert" className="flex items-center justify-between gap-3 rounded-card border border-error/30 bg-surface p-3 text-ui text-error">
@@ -104,7 +106,7 @@ export function InboxPage() {
           onResolve={(actionId) => update(item, () => resolveInboxItem(item.id, actionId, item.revision))} />)}
           {cursor && <Button variant="ghost" loading={loadingMore} onClick={() => void loadMore()}>加载更多</Button>}
         </div>}
-    </main>
+    </div>
   </div>;
 }
 
@@ -122,7 +124,7 @@ function InboxCard({ item, busy, onRead, onResolve }: {
   return <Card>
     <article className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2"><span className="text-caption font-medium text-accent">{TYPE_LABEL[item.noticeType]}</span>
+        <div className="flex items-center gap-2"><span className="text-caption font-medium text-accent">{labelFor(TYPE_LABEL, item.noticeType, "通知")}</span>
           {item.count > 1 && <span className="text-caption text-muted">合并 {item.count} 条</span>}</div>
         {completed && <span className="flex items-center gap-1 text-caption text-ok"><CheckCircle2 size={13} aria-hidden="true" />已处理</span>}
       </div>

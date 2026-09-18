@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { capsuleEntryLabel } from "@/lib/capsuleText";
 import { Input, inputClasses } from "@/components/ui/Input";
+import { labelFor } from "@/lib/statusLabel";
 import {
   downloadCapsuleExport, exportCapsule, importCapsule, listCapsuleExports, previewCapsuleImport,
   productErrorMessage, revokeCapsuleExport, saveCapsuleDownload,
@@ -118,7 +119,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
         {loading ? <p role="status" className="text-ui-sm text-muted">正在读取导出记录…</p> : history.length === 0 ? <p className="text-ui-sm text-muted">尚无导出快照。</p> : history.map(snapshot => <div key={snapshot.id} className="space-y-2 rounded-card border border-border p-3">
           <p className="text-ui-sm text-text">{new Date(snapshot.createdAt).toLocaleString()} · 胶囊版本 {snapshot.capsuleRevision} · {snapshot.entryCount} 条 · {snapshot.status === "revoked" ? "已撤销" : "有效"}</p>
           <details className="text-caption text-muted"><summary>快照校验信息</summary><p className="break-all">{snapshot.id} · {snapshot.archiveSha256}</p><p>条目版本：{snapshot.entryVersions.map(entry => entry.version).join("、")}</p></details>
-          <p className="text-caption text-muted">分享范围：{snapshot.scopes.map(scope => ({ workstyle: "工作方式", "+profile": "个人背景", "+knowledge": "知识与项目事实" })[scope] ?? scope).join("、")}</p>
+          <p className="text-caption text-muted">分享范围：{snapshot.scopes.map(scope => labelFor({ workstyle: "工作方式", "+profile": "个人背景", "+knowledge": "知识与项目事实" }, scope, "其他范围")).join("、")}</p>
           <div className="flex flex-wrap gap-2"><Button size="sm" variant="ghost" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
             <Button size="sm" variant="ghost" disabled={busy || !exportPassword} onClick={() => void createExport(snapshot.id, snapshot.scopes)}>更新快照</Button>
             <Button size="sm" variant="ghost" disabled={busy || snapshot.status === "revoked"} onClick={() => setRevoking(snapshot)}>撤销此快照</Button></div>

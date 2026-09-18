@@ -11,6 +11,7 @@ import { cn } from "@/lib/cn";
 import { formatDateTime } from "@/lib/format";
 import { createMethod, listMethods, retireMethod, rollbackMethod, type MethodPromotionDetail, type WebMethod } from "@/lib/methodsClient";
 import { productErrorMessage } from "@/lib/productClient";
+import { labelFor } from "@/lib/statusLabel";
 import { toast } from "@/lib/toast";
 
 type StatusFilter = "all" | "candidate" | "approved" | "retired";
@@ -29,7 +30,7 @@ function missingLine(detail: MethodPromotionDetail | undefined, sentence: string
     case "runs_needed": return `这些成功只来自 ${detail.have} 次运行，需要 ${detail.need} 次独立运行。`;
     case "counters_reset": return "方法内容改过，之前的使用记录已清零，需要重新积累。";
     case "no_evaluation": return "还没有和固定基线做过配对评测。";
-    case "evaluation_not_passing": return `最近一次评测结论为「${VERDICT_LABEL[String(detail.verdict)] ?? detail.verdict}」，没有达到采用标准。`;
+    case "evaluation_not_passing": return `最近一次评测结论为「${labelFor(VERDICT_LABEL, String(detail.verdict), "未登记的结论")}」，没有达到采用标准。`;
     case "evaluation_stale_revision": return "最近一次评测测的是旧版本，当前版本需要重新评测。";
     case "evaluation_unnamed_text": return "最近一次评测没有记下所测的版本，需要重新评测。";
     case "baseline_unavailable": return "当前基线暂时不可用，需要重新对比。";
@@ -138,7 +139,7 @@ export function MethodsPage() {
 
   return (
     <div className="h-full overflow-y-auto bg-bg">
-      <main className="mx-auto w-full max-w-content-full px-6 py-8 lg:px-10">
+      <div className="mx-auto w-full max-w-content-full px-6 py-8 lg:px-10">
         <p className="max-w-2xl text-body text-muted">
           EviMed 从交付与修复中提炼出的研究方法，以及你自己写下的方法。提炼出的方法要先积累足够的成功使用、再通过配对评测才会被采用；你写下的立即生效。任何方法都可以随时停用或回到上一版。
         </p>
@@ -203,7 +204,7 @@ export function MethodsPage() {
                   <div className="flex shrink-0 items-center gap-2 text-caption">
                     <span className={cn("rounded-full px-2 py-0.5",
                       method.status === "approved" ? "bg-ok/10 text-ok" : method.status === "retired" ? "bg-surface-2 text-muted" : "bg-warn/10 text-warn")}>
-                      {STATUS_LABEL[method.status] ?? method.status}
+                      {labelFor(STATUS_LABEL, method.status)}
                     </span>
                     <span className="text-muted">{method.origin === "explicit" ? "你写下的" : "从任务中提炼"}</span>
                   </div>
@@ -256,7 +257,7 @@ export function MethodsPage() {
             <Button variant="ghost" onClick={() => void load(filter, cursor)}>加载更多</Button>
           </div>
         )}
-      </main>
+      </div>
 
       {retiring && (
         <ConfirmDialog

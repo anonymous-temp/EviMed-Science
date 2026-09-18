@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { toast } from "@/lib/toast";
+import { announceConnectorsChanged } from "@/lib/connectorAttention";
 import { cn } from "@/lib/cn";
 
 /**
@@ -32,6 +33,9 @@ export function ConnectorsCard() {
       .then((list) => {
         setConnectors(list);
         setError(null);
+        // The account row's count reads the same list; tell it now rather
+        // than on its next mount.
+        announceConnectorsChanged();
       })
       .catch((err) => setError(webErrorMessage(err)));
 

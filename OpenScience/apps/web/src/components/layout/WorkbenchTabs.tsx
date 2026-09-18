@@ -1,6 +1,7 @@
 import { useRef, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { PageTitle } from "@/components/layout/PageTitle";
+import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/cn";
 
 export interface WorkbenchTab {
@@ -57,7 +58,7 @@ export function WorkbenchTabs({
       <div className="shrink-0 border-b border-border px-8 pt-8">
         <div className="mx-auto flex max-w-content-full flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="font-serif text-title font-semibold tracking-tight text-text">{title}</h1>
+            <h1 className={PAGE_TITLE_CLASS}>{title}</h1>
             {description && <p className="mt-2 max-w-2xl text-ui text-muted">{description}</p>}
           </div>
           {actions}

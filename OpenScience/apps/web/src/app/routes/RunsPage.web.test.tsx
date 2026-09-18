@@ -11,12 +11,14 @@ import { RunsPage } from "./RunsPage";
 const listWebAgentRuns = vi.fn();
 const reportWebDeliverableFeedback = vi.fn();
 const fetchWebMe = vi.fn();
+const fetchWebConnectors = vi.fn();
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   hasWebApi: true,
   listWebAgentRuns: () => listWebAgentRuns(),
   reportWebDeliverableFeedback: (input: unknown) => reportWebDeliverableFeedback(input),
   fetchWebMe: () => fetchWebMe(),
+  fetchWebConnectors: () => fetchWebConnectors(),
 }));
 
 const downloadArtifact = vi.fn();
@@ -82,6 +84,8 @@ describe("RunsPage (hosted web)", () => {
     listWebAgentRuns.mockReset();
     downloadArtifact.mockReset();
     fetchWebMe.mockReset();
+    fetchWebConnectors.mockReset();
+    fetchWebConnectors.mockResolvedValue([]);
     fetchWebMe.mockResolvedValue({ user: { id: "u1", name: "研究者" }, operator: false, project: { id: "default", name: "我的研究" }, projects: [] });
     listWebAgentRuns.mockResolvedValue([
       webRun(),
@@ -251,10 +255,12 @@ describe("RunsPage (hosted web)", () => {
     expect(downloadArtifact).toHaveBeenCalledWith("output/report.docx", "workspace");
   });
 
-  it("explains the empty state", async () => {
+  it("explains the empty state and offers the way to start", async () => {
     listWebAgentRuns.mockResolvedValue([]);
     renderPage();
-    expect(await screen.findByText(/尚无运行记录/)).toBeInTheDocument();
+    expect(await screen.findByText("还没有运行记录")).toBeInTheDocument();
+    expect(screen.queryByText(/python train\.py/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "新任务" })).toHaveAttribute("href", "/app/chat");
   });
 
   it("shows why a package was delivered unverified, and what is unverified about it", async () => {
@@ -320,6 +326,27 @@ describe("RunsPage (hosted web)", () => {
     renderPage();
     expect(await screen.findByText(/另有 1 条技术原文（仅运维账号可见）/)).toBeInTheDocument();
     expect(screen.getByText("Something the frozen table does not know about.")).toBeInTheDocument();
+  });
+
+  // The banner named seven sources on every page; the row names the one this
+  // run needed, and only when it stopped on it.
+  it("names the one data source a failed run needed a credential for", async () => {
+    listWebAgentRuns.mockResolvedValue([webRun({
+      status: "failed",
+      errorCode: "public_source_opengwas_credential_missing",
+      artifacts: [],
+    })]);
+    renderPage();
+    expect(await screen.findByText(/这次运行因缺少 OpenGWAS 的凭据没能继续/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "填写凭据" })).toHaveAttribute("href", "/app/account?tab=connectors");
+  });
+
+  it("says the time range in words", async () => {
+    renderPage();
+    await screen.findAllByRole("button", { name: /复查与复现/ });
+    const range = screen.getByRole("radiogroup", { name: "时间范围" });
+    expect(range).toHaveTextContent("全部时间24 小时7 天30 天");
+    expect(range.textContent).not.toMatch(/24h|7d|30d/);
   });
 
   it("states a failure in the reader's language and keeps the code for support", async () => {

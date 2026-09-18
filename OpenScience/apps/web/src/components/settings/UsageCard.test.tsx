@@ -34,7 +34,9 @@ describe("UsageCard", () => {
     render(<UsageCard />);
     expect(await screen.findByText("12")).toBeInTheDocument();
     expect(screen.getByText("3.46")).toBeInTheDocument();
-    expect(screen.getByText(/deepseek-v4-pro/)).toBeInTheDocument();
+    // One model serves every run; its id is an engine internal and stays off
+    // a researcher's bill.
+    expect(screen.queryByText(/deepseek-v4-pro/)).not.toBeInTheDocument();
     expect(screen.getByText(/不是账单，也不会触发收款/)).toBeInTheDocument();
   });
 

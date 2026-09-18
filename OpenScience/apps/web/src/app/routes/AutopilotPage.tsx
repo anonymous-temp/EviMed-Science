@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { MemorySkeleton } from "@/components/cards/Skeletons";
+import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
 import { PageTitle } from "@/components/layout/PageTitle";
 
 function pendingFollowUps(agenda: AgendaRecord): number {
@@ -366,12 +367,12 @@ export function AutopilotPage() {
       void mutate(() => scheduleAgenda(agenda.id, todayIn(agenda.payload.timeZone)));
     }}
   /> : null;
-  return <main className="h-full overflow-y-auto px-5 py-6"><div className="mx-auto max-w-content-wide space-y-5">
+  return <div className="h-full overflow-y-auto px-5 py-6"><div className="mx-auto max-w-content-wide space-y-5">
     {runDialog}
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <PageTitle page="主动科研" />
-        <h1 className="font-serif text-title text-text">主动科研</h1>
+        <h1 className={PAGE_TITLE_CLASS}>主动科研</h1>
         {/* The one line §24.9 asks the briefing to open with, from numbers the
           * ledger actually holds. The spec also wants off-peak savings and a
           * balance runway; neither is on this API, and an invented figure on a
@@ -445,5 +446,5 @@ export function AutopilotPage() {
               : <Button size="sm" disabled={busy} onClick={() => void mutate(() => startAgenda(agenda.id, agenda.revision))}><PlayCircle size={13} aria-hidden="true" />开始主动科研</Button>}
           </div></div></Card>)}
     </section>
-  </div></main>;
+  </div></div>;
 }
