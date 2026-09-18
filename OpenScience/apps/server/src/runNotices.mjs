@@ -17,7 +17,8 @@
  * @module runNotices
  */
 
-import { describeGateIssue, gateIssueSeverity } from "@evimed/domain";
+import * as domain from "@evimed/domain";
+import { GATE_CHECKS_TITLED_BY_RULE, describeGateIssue, gateIssueSeverity } from "@evimed/domain";
 
 /** How many notices one run keeps, and how long one sentence may be. */
 export const maxQualityNotices = 40;
@@ -30,8 +31,12 @@ export const maxQualityNoticeLength = 300;
  * read (`describedQualityNotices`), so a better title reaches every run ever
  * recorded rather than only the next one.
  *
+ * The one exception is a finding its rule titles (`GATE_CHECKS_TITLED_BY_RULE`):
+ * a pharmacist-authored caution keeps its rule's own title and id, because
+ * that title is the rule's data rather than anything the table could hold.
+ *
  * @typedef {{ code: string, check?: string, severity: 'safety'|'must-fix'|'advice', text: string,
- *   claimId?: string, file?: string, line?: number, detail?: string }} StoredNotice
+ *   claimId?: string, file?: string, line?: number, detail?: string, title?: string, rule?: string }} StoredNotice
  */
 
 /**
@@ -111,9 +116,80 @@ export function runSideDegradedNotice(line) {
   return runNotice(known ? known[1] : "run_side_degraded", text, chinese ? { detail: text } : {});
 }
 
+/** The check the pharmacist-authored cautions are raised under (S5, 2026-09-18). */
+const cautionCheck = "clinical-safety-cautions";
+const ruleIdPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+/** @type {{ id: string, title: string, message: string }[] | null} */
+let cautionRuleList = null;
+
+/**
+ * The cautions' rules, longest title first, from the domain's rule table when
+ * this build carries one (`CLINICAL_SAFETY_CAUTION_RULES`). Read through the
+ * namespace so a build without the table reads as no rules rather than a
+ * failed import.
+ * @returns {{ id: string, title: string, message: string }[]}
+ */
+function cautionRules() {
+  if (!cautionRuleList) {
+    const rules = /** @type {any} */ (domain).CLINICAL_SAFETY_CAUTION_RULES;
+    cautionRuleList = (Array.isArray(rules) ? rules : [])
+      .map((rule) => ({ id: String(rule?.id ?? ""), title: String(rule?.titleZh ?? "").trim(), message: String(rule?.messageZh ?? "").trim() }))
+      .filter((rule) => rule.title)
+      .sort((left, right) => right.title.length - left.title.length);
+  }
+  return cautionRuleList;
+}
+
+/**
+ * A pharmacist-authored caution as the ledger stores it, from the rule hit
+ * that raised it: its rule's own title, its Chinese message as the detail, and
+ * the legacy sentence as `text`. The shape to push instead of the flattened
+ * `SAFETY — <title>：<message>` sentence, which cannot be split back at a
+ * colon — most rule titles carry one of their own (「阿司匹林一级预防：出血风险」).
+ * @param {{ ruleId?: string, titleZh?: string, messageZh?: string }} hit
+ * @returns {StoredNotice}
+ */
+export function clinicalSafetyCautionNotice(hit) {
+  const title = String(hit?.titleZh ?? "").trim();
+  const message = String(hit?.messageZh ?? "").trim();
+  const rule = String(hit?.ruleId ?? "");
+  return runNotice("clinical_safety_caution", `SAFETY — ${title}：${message}`.slice(0, maxQualityNoticeLength), {
+    severity: "safety",
+    check: cautionCheck,
+    ...(title ? { title } : {}),
+    ...(message ? { detail: message.slice(0, maxQualityNoticeLength) } : {}),
+    ...(ruleIdPattern.test(rule) ? { rule } : {}),
+  });
+}
+
+/**
+ * A flattened caution sentence, identified by its rule's title — a closed
+ * vocabulary the pharmacists edit, matched as a whole prefix, never a split at
+ * the first colon. Null when no rule's title opens it.
+ * @param {string} text @returns {StoredNotice | null}
+ */
+function cautionFromSentence(text) {
+  const body = text.slice("SAFETY — ".length);
+  const rule = cautionRules().find((candidate) => body.startsWith(`${candidate.title}：`));
+  if (!rule) return null;
+  const detail = body.slice(rule.title.length + 1).trim();
+  return {
+    code: "clinical_safety_caution", check: cautionCheck, severity: "safety", text, title: rule.title,
+    ...(ruleIdPattern.test(rule.id) ? { rule: rule.id } : {}),
+    ...(detail ? { detail } : {}),
+  };
+}
+
 /** @param {string} text @returns {StoredNotice} */
 function legacyNotice(text) {
-  if (text.startsWith("SAFETY — ")) return { code: "legacy_notice", severity: "safety", text };
+  if (text.startsWith("SAFETY — ")) {
+    // Otherwise the platform's own safety sentence: shown as the detail when
+    // it is written in Chinese (a rule's data), kept only as `text` when it is
+    // a validator's English.
+    const rest = text.slice("SAFETY — ".length).trim();
+    return cautionFromSentence(text) ?? { code: "legacy_notice", severity: "safety", text, ...(/[\u3400-\u9fff]/.test(rest) ? { detail: rest } : {}) };
+  }
   if (text.startsWith("MUST FIX — ")) return { code: "legacy_notice", severity: "must-fix", text };
   // Two templates that open with the same words and differ later; both are
   // the platform's own, so the distinguishing phrase is part of the template.
@@ -149,15 +225,26 @@ export function normalizeQualityNotices(value) {
     const text = String(raw.text ?? raw.message ?? "").trim().slice(0, maxQualityNoticeLength);
     const code = String(raw.code ?? "").trim();
     if (!text || !noticeCodePattern.test(code)) continue;
+    const check = typeof raw.check === "string" && raw.check && raw.check.length <= 64 ? raw.check : null;
+    const rule = typeof raw.rule === "string" && ruleIdPattern.test(raw.rule) ? raw.rule : null;
+    // A finding its rule titles keeps the title it came with, or takes its
+    // rule's from the table — a GateIssue from the domain's validator carries
+    // the rule id and an English message, never the title.
+    const titledByRule = Boolean(check && GATE_CHECKS_TITLED_BY_RULE.includes(check));
+    const known = titledByRule && rule ? cautionRules().find((candidate) => candidate.id === rule) : undefined;
+    const title = titledByRule ? String(raw.title ?? "").trim().slice(0, 60) || known?.title || "" : "";
+    const detail = typeof raw.detail === "string" && raw.detail.trim() ? raw.detail.trim() : (known?.message ?? "");
     notices.push({
       code,
-      ...(typeof raw.check === "string" && raw.check && raw.check.length <= 64 ? { check: raw.check } : {}),
+      ...(check ? { check } : {}),
       severity: gateIssueSeverity(raw),
       text,
       ...(typeof raw.claimId === "string" && raw.claimId && raw.claimId.length <= 40 ? { claimId: raw.claimId } : {}),
       ...(typeof (raw.file ?? raw.path) === "string" && (raw.file ?? raw.path) ? { file: String(raw.file ?? raw.path).slice(0, 300) } : {}),
       ...(Number.isSafeInteger(raw.line) && raw.line > 0 ? { line: raw.line } : {}),
-      ...(typeof raw.detail === "string" && raw.detail.trim() ? { detail: raw.detail.trim().slice(0, maxQualityNoticeLength) } : {}),
+      ...(detail ? { detail: detail.slice(0, maxQualityNoticeLength) } : {}),
+      ...(title ? { title } : {}),
+      ...(rule ? { rule } : {}),
     });
   }
   return notices;
@@ -188,6 +275,7 @@ export function describedQualityNotices(value) {
         ...(stored.claimId ? { claimId: stored.claimId } : {}),
         ...(stored.file ? { file: stored.file } : {}),
         ...(stored.line ? { line: stored.line } : {}),
+        ...(stored.rule ? { rule: stored.rule } : {}),
         text: stored.text,
       });
       if (describedNoticeMemo.size >= 4_000) describedNoticeMemo.clear();

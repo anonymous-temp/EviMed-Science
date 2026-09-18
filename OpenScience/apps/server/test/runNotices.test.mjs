@@ -10,8 +10,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import * as domain from "@evimed/domain";
 import { AgentRunStore } from "../src/agentRuns.mjs";
-import { describedQualityNotices, normalizeQualityNotices, runNotice } from "../src/runNotices.mjs";
+import { clinicalSafetyCautionNotice, describedQualityNotices, normalizeQualityNotices, runNotice } from "../src/runNotices.mjs";
 
 test("a sentence from an older ledger is read by the prefix it was written with, and never shown as it was", () => {
   const [safety, mustFix, stall, english, unknown] = describedQualityNotices([
@@ -123,4 +124,54 @@ test("the run side's degraded lines are titled by the template they were written
   assert.equal(concurrent.code, "run_concurrent_write");
   assert.match(concurrent.detail, /被两个子代理先后写入/, "a line written in Chinese is its own detail");
   assert.equal(runSideDegradedNotice("something the table does not know").code, "run_side_degraded");
+});
+
+test("a pharmacist-authored caution reaches the reader titled by its rule, as a SAFETY notice", () => {
+  // The structured shape: what the completion verdict pushes for a rule hit.
+  const hit = {
+    ruleId: "aspirin-primary-prevention-bleeding",
+    titleZh: "阿司匹林一级预防：出血风险",
+    messageZh: "报告讨论阿司匹林用于一级预防，但通篇没有提到出血风险。请写明它增加的出血风险。",
+  };
+  const [described] = describedQualityNotices([clinicalSafetyCautionNotice(hit)]);
+  assert.deepEqual(described, {
+    code: "clinical_safety_caution",
+    check: "clinical-safety-cautions",
+    severity: "safety",
+    title: "阿司匹林一级预防：出血风险",
+    detail: "报告讨论阿司匹林用于一级预防，但通篇没有提到出血风险。请写明它增加的出血风险。",
+    rule: "aspirin-primary-prevention-bleeding",
+    text: "SAFETY — 阿司匹林一级预防：出血风险：报告讨论阿司匹林用于一级预防，但通篇没有提到出血风险。请写明它增加的出血风险。",
+  });
+  // The ledger round trip keeps the rule's title: it is stored, not looked up.
+  assert.deepEqual(describedQualityNotices(JSON.parse(JSON.stringify(normalizeQualityNotices([clinicalSafetyCautionNotice(hit)])))), [described]);
+
+  // The flattened sentence. Most rule titles carry a colon of their own, so it
+  // is never split at the first one: with the rule table in this build the
+  // title is recognised whole; without it the reader still gets the whole
+  // Chinese sentence under the safety title, and never a half-title.
+  const rules = /** @type {any} */ (domain).CLINICAL_SAFETY_CAUTION_RULES;
+  const [flat] = describedQualityNotices([`SAFETY — ${hit.titleZh}：${hit.messageZh}`]);
+  assert.equal(flat.severity, "safety");
+  assert.notEqual(flat.title, "阿司匹林一级预防", "split at the first colon — the title would lose half of itself");
+  if (Array.isArray(rules) && rules.length) {
+    for (const rule of rules) {
+      const [read] = describedQualityNotices([`SAFETY — ${rule.titleZh}：${rule.messageZh}`]);
+      assert.equal(read.code, "clinical_safety_caution", rule.id);
+      assert.equal(read.check, "clinical-safety-cautions", rule.id);
+      assert.equal(read.title, rule.titleZh, rule.id);
+      assert.equal(read.rule, rule.id);
+      assert.ok(rule.messageZh.startsWith(String(read.detail).slice(0, 20)), rule.id);
+    }
+    // As the domain's validator raises it: a rule id and an English message.
+    const [issued] = describedQualityNotices([{ code: "clinical_safety_caution", check: "clinical-safety-cautions", severity: "advisory", rule: rules[0].id, message: "English repair text." }]);
+    assert.equal(issued.title, rules[0].titleZh);
+    assert.equal(issued.severity, "safety");
+  } else {
+    assert.equal(flat.title, "涉及临床安全，请核对");
+    assert.equal(flat.detail, `${hit.titleZh}：${hit.messageZh}`);
+  }
+  // A validator's English SAFETY sentence is still never shown as the detail.
+  const [english] = describedQualityNotices(["SAFETY — The practical section tells a chest-pain patient to wait at home."]);
+  assert.equal(english.detail, undefined);
 });

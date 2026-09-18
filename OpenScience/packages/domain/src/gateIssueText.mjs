@@ -98,6 +98,9 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'structured-output': '结构化产物格式有误',
   'clinical-content-trigger': '非临床交付物含临床内容',
   'clinical-high-risk-entity': '提及高警示药品，请核对',
+  // What a caution is called when its rule's own title is not at hand (see
+  // `GATE_CHECKS_TITLED_BY_RULE`).
+  'clinical-safety-cautions': '报告缺少一条安全提示',
   'topic-portfolio-schema': '选题组合结构不完整',
   'topic-evidence-lineage': '选题证据来源无法追溯',
   'topic-study-plan': '研究设计要素尚未确定',
@@ -151,6 +154,7 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   clinical_high_risk_entity_notice: '提及高警示药品，请核对',
   clinical_safety_rule_notice: '命中临床安全规则，请核对',
   clinical_safety_rule: '命中临床安全规则，请核对',
+  clinical_safety_caution: '报告缺少一条安全提示',
   clinical_evidence_issue: '证据包有一处依据需核对',
   clinical_evidence_notice: '证据包的改进建议',
   geo_surface_undeclared: '可见度测量记录不完整',
@@ -273,6 +277,16 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   memory_conflicts: '对话改写了你确认过的记忆',
 })
 
+/**
+ * Checks whose findings are titled by the rule that raised them rather than by
+ * the check. A pharmacist-authored caution carries its rule's own Chinese
+ * title (「阿司匹林一级预防：出血风险」) — data a pharmacist edits in
+ * `clinical-safety-rules.json`, not a validator's sentence — and thirty-two
+ * rules under one check title would all read the same. The table's check
+ * title is what such a finding is called when it arrives without one.
+ */
+export const GATE_CHECKS_TITLED_BY_RULE = Object.freeze(['clinical-safety-cautions'])
+
 /** What a finding with no known identity is called, by severity. */
 export const GATE_FALLBACK_TITLES_ZH = Object.freeze({
   safety: '涉及临床安全，请核对',
@@ -294,9 +308,18 @@ export const GATE_FALLBACK_TITLES_ZH = Object.freeze({
 export function gateIssueSeverity(issue) {
   const given = String(issue?.severity ?? '')
   if (given === 'safety' || given === 'must-fix' || given === 'advice') return given
-  if (typeof issue?.check === 'string' && CLINICAL_CHECK_TIERS[issue.check] === 'safety') return 'safety'
+  if (typeof issue?.check === 'string'
+    && (CLINICAL_CHECK_TIERS[issue.check] === 'safety' || READER_SAFETY_CHECKS.includes(issue.check))) return 'safety'
   return given === 'required' ? 'must-fix' : 'advice'
 }
+
+/**
+ * Checks outside the clinical gate's tiers that a reader is shown as safety:
+ * the pharmacist-authored cautions are advisory to the run and never withhold
+ * a delivery, and are a SAFETY notice to the reader (owner decision 5,
+ * 2026-09-18).
+ */
+const READER_SAFETY_CHECKS = Object.freeze(['clinical-safety-cautions'])
 
 /**
  * The identifiers a finding's own text carries, read as formats rather than
@@ -348,6 +371,17 @@ export function gateIssueDetail(issue) {
 }
 
 /**
+ * A rule's own title, when it is one: Chinese, one line, and short. Anything
+ * else is not a title and the table's is used.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function ruleTitle(value) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text && /[㐀-鿿]/.test(text) && !/[\r\n]/.test(text) && [...text].length <= 40 ? text : ''
+}
+
+/**
  * One finding, described for a reader.
  *
  * Accepts a `GateIssue` (`{code, message, severity, check?, path?, line?}`),
@@ -363,7 +397,8 @@ export function describeGateIssue(issue) {
   const code = String(issue?.code ?? '').trim() || 'unnamed_issue'
   const check = typeof issue?.check === 'string' && issue.check.trim() ? issue.check.trim() : undefined
   const severity = gateIssueSeverity(issue ?? {})
-  const title = (check && GATE_CHECK_TITLES_ZH[check]) || GATE_CODE_TITLES_ZH[code] || GATE_FALLBACK_TITLES_ZH[severity]
+  const title = (check && GATE_CHECKS_TITLED_BY_RULE.includes(check) && ruleTitle(issue?.title))
+    || (check && GATE_CHECK_TITLES_ZH[check]) || GATE_CODE_TITLES_ZH[code] || GATE_FALLBACK_TITLES_ZH[severity]
   const given = typeof issue?.detail === 'string' && /[㐀-鿿]/.test(issue.detail) ? issue.detail.trim() : ''
   const detail = given || gateIssueDetail(issue ?? {})
   return { code, ...(check ? { check } : {}), severity, title, ...(detail ? { detail } : {}) }
@@ -387,7 +422,7 @@ export function summarizeGateNotices(notices) {
     else if (severity === 'must-fix') counts.mustFix += 1
     else counts.advice += 1
     const title = String(notice.title ?? '') || GATE_FALLBACK_TITLES_ZH[severity]
-    const key = `${severity} ${title}`
+    const key = `${severity}\u0000${title}`
     const group = groups.get(key) ?? { title, severity, count: 0 }
     group.count += 1
     groups.set(key, group)
