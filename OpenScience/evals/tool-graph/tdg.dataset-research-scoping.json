@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "dataset-research-scoping",
-  "version": "sha256:112c3278e56c1f86d37d0f370160ed45671c1f979c773f12b749825fcc0a09ab",
+  "version": "sha256:8d512f56966c470cfba3913082f6e94b6d46564f053407231ef1e57bcfe08776",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 33,
@@ -983,7 +983,7 @@
     {
       "name": "mcp__evimed__literature_search",
       "source": "mcp",
-      "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+      "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -991,6 +991,15 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "pmids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "pattern": "^\\s*(?:PMID\\s*:?\\s*)?\\d{1,9}\\s*$"
+            }
           },
           "relation": {
             "type": "object",
@@ -1093,10 +1102,7 @@
             }
           }
         },
-        "additionalProperties": false,
-        "required": [
-          "query"
-        ]
+        "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
@@ -1114,6 +1120,8 @@
         ]
       },
       "typeTags": [
+        "mesh_term",
+        "pmid",
         "source_id"
       ],
       "requiredTypeTags": [],

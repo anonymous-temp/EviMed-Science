@@ -929,6 +929,46 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, { fetch
   };
 }
 
+/**
+ * Which server-held public-source credentials this deployment has, for
+ * `/api/ready`: configured or not, and from where — never the value.
+ *
+ * Informational by design. Every connector with a keyless tier still answers
+ * without its key, so an absent credential is a fact about reach, not a reason
+ * to refuse traffic, and this never fails readiness. It is here because one
+ * absence was invisible and expensive: with no Unpaywall contact address the
+ * gateway answers `public_source_unpaywall_credential_missing` before any
+ * lookup, so a DOI with no Europe PMC copy can never be read at full text and
+ * so can never carry a claim — and nothing an operator looks at said so
+ * (review 2026-09-18, P0-7). `fullTextRoutes` states that consequence directly.
+ *
+ * @param {any} config
+ * @returns {{ informational: true, credentials: Record<string, { configured: boolean, source: string, error?: string }>, unconfigured: string[], fullTextRoutes: string[] }}
+ */
+export function publicSourceCredentialReadiness(config) {
+  const values = config?.publicSourceCredentials && typeof config.publicSourceCredentials === "object" ? config.publicSourceCredentials : {};
+  const sources = config?.publicSourceCredentialSources ?? {};
+  const errors = config?.publicSourceCredentialErrors ?? {};
+  /** @type {Record<string, { configured: boolean, source: string, error?: string }>} */
+  const credentials = {};
+  for (const profile of Object.keys(values).sort()) {
+    const configured = String(values[profile] ?? "").trim().length > 0;
+    credentials[profile] = {
+      configured,
+      source: configured ? String(sources[profile] ?? "none") : "none",
+      // A file that exists and could not be used (permissions, a symlink) is
+      // the one case where "unconfigured" would mislead: someone tried.
+      ...(errors[profile] ? { error: String(errors[profile]) } : {}),
+    };
+  }
+  return {
+    informational: true,
+    credentials,
+    unconfigured: Object.keys(credentials).filter((profile) => !credentials[profile].configured),
+    fullTextRoutes: credentials.unpaywall?.configured ? ["europe-pmc", "unpaywall-open-access-pdf"] : ["europe-pmc"],
+  };
+}
+
 export const PUBLIC_SOURCE_GATEWAY_PATH = gatewayPath;
 export const PUBLIC_SOURCE_ALLOWED_HOSTS = allowedHosts;
 export const PUBLIC_SOURCE_ALLOWED_POST_ENDPOINTS = allowedPostEndpoints;

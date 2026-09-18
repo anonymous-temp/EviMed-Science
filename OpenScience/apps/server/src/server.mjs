@@ -52,6 +52,7 @@ import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
+  publicSourceCredentialReadiness,
 } from "./publicSourceGateway.mjs";
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
@@ -4895,6 +4896,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     observability: await readinessCheck(() => readinessObservability(config)),
     evimedAdapters: await readinessCheck(() => readinessEviMedAdapters(config)),
     scienceConnectors: await readinessCheck(() => readinessScienceConnectors(config)),
+    publicSourceCredentials: await readinessCheck(() => publicSourceCredentialReadiness(config)),
     modelGateway: await readinessCheck(() => readinessModelGateway(config)),
     release: await readinessCheck(() => readinessRelease(config)),
     resources: await readinessCheck(() => readinessResources(config)),
