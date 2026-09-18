@@ -172,7 +172,7 @@ export function Sidebar() {
           </div>
         </div>
 
-        <ProjectSwitcher />
+        <ProjectSwitcher running={(runs ?? []).some((run) => runState(run).key === "running")} />
 
         <nav className="flex flex-col px-3">
           {NAV.map((item) => (

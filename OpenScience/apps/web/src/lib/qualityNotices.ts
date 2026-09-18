@@ -143,7 +143,7 @@ export function summarizeQualityNotices(input: ReadonlyArray<unknown> | null | u
     }
     group.count += 1;
     if (line && line.text !== group.label && !group.lines.some((existing) => existing.text === line.text)) group.lines.push(line);
-    if (technical) group.technical.push(technical);
+    if (technical && !group.technical.includes(technical)) group.technical.push(technical);
   };
   for (const notice of input ?? []) {
     if (isStructured(notice)) {
@@ -153,7 +153,8 @@ export function summarizeQualityNotices(input: ReadonlyArray<unknown> | null | u
         notice.check || notice.code || notice.title,
         notice.title.trim(),
         { text: detail || notice.title.trim(), claimId: notice.claimId, file: notice.file },
-        null,
+        // The sentence the run was sent, for support: operator-only, never a line.
+        typeof notice.text === "string" && notice.text.trim() ? notice.text.trim() : null,
       );
     } else if (typeof notice === "string" && notice.trim()) {
       const legacy = legacyNotice(notice.trim());

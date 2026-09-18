@@ -328,7 +328,7 @@ describe("RunsPage (hosted web)", () => {
       artifacts: ["clinical-evidence-report.md"],
     })]);
     renderPage();
-    expect(await screen.findByText(/另有 1 条技术原文（仅运维账号可见）/)).toBeInTheDocument();
+    expect(await screen.findByText(/技术原文 1 条（仅运维账号可见）/)).toBeInTheDocument();
     expect(screen.getByText("Something the frozen table does not know about.")).toBeInTheDocument();
   });
 

@@ -111,7 +111,7 @@ describe("apiClient", () => {
 
     // A POST reads a CSRF token first (its own /me request), then creates.
     fetchMock.mockResolvedValueOnce(csrfMeResponse()).mockResolvedValueOnce(responseJson({ id: "project-c", name: "C" }));
-    await client.createWebProject("project-c");
+    await client.createWebProject("C");
     expect(fetchMock).toHaveBeenCalledTimes(7);
     await client.fetchWebMe();
     expect(fetchMock).toHaveBeenCalledTimes(8);
@@ -298,7 +298,7 @@ describe("apiClient", () => {
 
     client.setWebProjectId("paper1");
     await client.logoutWeb();
-    await client.createWebProject("next", "Next");
+    await client.createWebProject("Next");
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
@@ -343,19 +343,21 @@ describe("apiClient", () => {
     );
   });
 
-  it("lists and creates hosted projects", async () => {
+  // Contract C4: a project is created from its name, in any language; the
+  // server derives the id unless the caller names one.
+  it("lists and creates hosted projects by name", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(responseJson([{ id: "default", name: "Default Project" }]))
+      .mockResolvedValueOnce(responseJson([{ id: "default", name: "我的研究" }]))
       .mockResolvedValueOnce(csrfMeResponse())
-      .mockResolvedValueOnce(responseJson({ id: "paper1", name: "Paper 1" }));
+      .mockResolvedValueOnce(responseJson({ id: "p-1a2b3c4d", name: "论文一" }));
     const client = await loadClient("https://science.example/api");
 
     await expect(client.listWebProjects()).resolves.toEqual([
-      { id: "default", name: "Default Project" },
+      { id: "default", name: "我的研究" },
     ]);
-    await expect(client.createWebProject("paper1", "Paper 1")).resolves.toEqual({
-      id: "paper1",
-      name: "Paper 1",
+    await expect(client.createWebProject("论文一")).resolves.toEqual({
+      id: "p-1a2b3c4d",
+      name: "论文一",
     });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -374,11 +376,36 @@ describe("apiClient", () => {
       expect.objectContaining({
         method: "POST",
         credentials: "include",
-        body: JSON.stringify({ id: "paper1", name: "Paper 1" }),
+        body: JSON.stringify({ name: "论文一" }),
       }),
     );
     expect(callHeaders(fetchMock, 2).get("Content-Type")).toBe("application/json");
     expect(callHeaders(fetchMock, 2).get("X-Open-Science-CSRF")).toBe("csrf_test");
+  });
+
+  it("sends a chosen id beside the name, and renames by PATCH", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(csrfMeResponse())
+      .mockResolvedValueOnce(responseJson({ id: "cardiology", name: "心内科" }))
+      .mockResolvedValueOnce(responseJson({ id: "cardiology", name: "心血管内科" }));
+    const client = await loadClient("https://science.example/api");
+
+    await client.createWebProject("心内科", { id: "cardiology" });
+    await expect(client.renameWebProject("cardiology", "心血管内科")).resolves.toEqual({
+      id: "cardiology",
+      name: "心血管内科",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://science.example/api/projects",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "心内科", id: "cardiology" }) }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "https://science.example/api/projects/cardiology",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ name: "心血管内科" }) }),
+    );
   });
 
   it("lists specialty agents and persists project-scoped research sessions", async () => {

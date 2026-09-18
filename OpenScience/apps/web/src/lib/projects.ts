@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { webErrorMessage, createWebProject, fetchWebMe, getWebProjectId, hasWebApi, listWebProjects, setWebProjectId, type WebProject } from "@/lib/apiClient";
+import { webErrorMessage, createWebProject, fetchWebMe, getWebProjectId, hasWebApi, listWebProjects, renameWebProject, setWebProjectId, type WebProject } from "@/lib/apiClient";
 
 /**
  * The projects this account owns, and which one the shell is looking at.
@@ -23,9 +23,23 @@ interface ProjectState {
   error: string | null;
   load: () => Promise<void>;
   select: (projectId: string) => Promise<void>;
-  create: (projectId: string, name?: string) => Promise<WebProject>;
+  /** Creates a project from its name; the server chooses the id. */
+  create: (name: string) => Promise<WebProject>;
+  rename: (projectId: string, name: string) => Promise<WebProject>;
   /** Forget the account's projects after logout. */
   clear: () => void;
+}
+
+/**
+ * The order every project list shows: the account's own 「我的研究」 first,
+ * then by name as a Chinese reader sorts (pinyin). The server's own order
+ * depends on its database collation, which is not a reading order.
+ */
+export function sortProjects(projects: WebProject[]): WebProject[] {
+  return [...projects].sort((a, b) => {
+    if (a.id === "default" || b.id === "default") return a.id === "default" ? -1 : 1;
+    return a.name.localeCompare(b.name, "zh") || a.id.localeCompare(b.id);
+  });
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -38,7 +52,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!hasWebApi) return;
     set({ loading: true, error: null });
     try {
-      const projects = await listWebProjects();
+      const projects = sortProjects(await listWebProjects());
       // The selected id comes from this browser's memory, so it can name a
       // project that no longer exists. The list is the authority: fall back to
       // the one project that is always there rather than showing a switcher
@@ -79,14 +93,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     else set({ currentId: projectId });
   },
 
-  create: async (projectId, name = projectId) => {
-    const project = await createWebProject(projectId, name);
-    set((state) => ({
-      projects: [...state.projects.filter((p) => p.id !== project.id), project].sort((a, b) =>
-        a.name.localeCompare(b.name),
-      ),
-    }));
+  create: async (name) => {
+    const project = await createWebProject(name.trim());
+    set((state) => ({ projects: sortProjects([...state.projects.filter((p) => p.id !== project.id), project]) }));
     return project;
+  },
+
+  rename: async (projectId, name) => {
+    const renamed = await renameWebProject(projectId, name.trim());
+    set((state) => ({
+      projects: sortProjects(state.projects.map((p) => (p.id === projectId ? { ...p, ...renamed } : p))),
+    }));
+    return renamed;
   },
 
   clear: () => set({ projects: [], currentId: getWebProjectId(), loading: false, error: null }),
