@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { TextDecoder } from "node:util";
+import { evidenceSourceTypeOf, isEvidenceSourceType } from "@evimed/domain";
 import { claimVerification } from "./clinicalEvidenceQuality.mjs";
 import { assertDockerDataVolumeSupport, dockerWorkspaceMount } from "./dockerMounts.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
@@ -585,7 +586,29 @@ export function createCommandRegistry({ config, runtimeManager }) {
         try { source = await readText(ctx.project.workspaceDir, resolveScopedPath(ctx.project.workspaceDir, artifactPath)); } catch { /* an unsafe path is an unread source */ }
         if (source) sourceArtifacts[artifactPath] = source;
       }
-      return claimVerification({ matrix, sourceArtifacts });
+      const verdict = claimVerification({ matrix, sourceArtifacts });
+      // What each quoted source is (C8), for the badge beside it. The
+      // preserving tool wrote it into the capture as `source.json` when it
+      // preserved the text; a capture from before that is typed from the URL
+      // the claim cites, by the same domain table.
+      /** @type {Map<string, string | null>} */
+      const preservedTypes = new Map();
+      for (const artifactPath of Object.keys(sourceArtifacts)) {
+        const sidecar = path.posix.join(path.posix.dirname(artifactPath), "source.json");
+        let declared = null;
+        try { declared = JSON.parse(await readText(ctx.project.workspaceDir, resolveScopedPath(ctx.project.workspaceDir, sidecar)) ?? "null")?.sourceType; } catch { /* no sidecar */ }
+        preservedTypes.set(artifactPath, isEvidenceSourceType(declared) ? declared : null);
+      }
+      const matrixClaims = new Map((Array.isArray(matrix?.claims) ? matrix.claims : []).map((/** @type {any} */ claim) => [String(claim?.claimId), claim]));
+      for (const claim of verdict.claims) {
+        const cited = matrixClaims.get(claim.claimId);
+        claim.sources.forEach((/** @type {Record<string, any>} */ source, index) => {
+          const origin = claim.claimType === "synthesized" ? cited?.supportingSources?.[index] : cited;
+          source.sourceType = (source.artifactPath && preservedTypes.get(source.artifactPath))
+            || evidenceSourceTypeOf({ url: origin?.sourceUrl });
+        });
+      }
+      return verdict;
     },
 
     async resolve_artifact(args, ctx) {

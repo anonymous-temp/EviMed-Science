@@ -41,6 +41,13 @@ TASK_FIXTURES = {
         "url": "https://www.nhs.uk/symptoms/chest-pain/",
     },
     "open_access_full_text": {"identifier": "PMC8010506"},
+    # Added 2026-09-18 with the tool. It reads the capture the fixture above has
+    # just preserved, by the id that tool reports, so it runs after it (this
+    # dict's order is the probe order); the title line is in every rendering.
+    "locate_quote": {
+        "sourceId": "PMC8010506",
+        "quote": "Review of deep learning: concepts, CNN architectures, challenges, applications, future directions",
+    },
     # Added 2026-08-26. It had been in the registry, model-facing, and covered
     # by no fixture: the guard above reported that as "does not exactly cover"
     # and `ci:web` reported the whole audit as stale evidence, so a tool nobody

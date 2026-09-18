@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import public_sources
+import source_types
 from immutable_capture import ImmutableCaptureError, managed_workspace, preserve
 
 
@@ -112,6 +113,23 @@ def _resolve(identifier: str) -> dict:
         "full_text_not_available",
         "No Europe PMC record was found for this identifier.",
     )
+
+
+def _publication_types(metadata: dict) -> list[str]:
+    """Europe PMC's `pubTypeList` (MEDLINE publication types) for a resolved record."""
+    value = (metadata.get("pubTypeList") or {}).get("pubType") if isinstance(metadata.get("pubTypeList"), dict) else None
+    if isinstance(value, str):
+        value = [value]
+    return [str(item).strip() for item in value or [] if str(item).strip()][:12]
+
+
+def _with_sidecar(artifacts: dict, record: dict) -> dict:
+    """The capture's artifacts plus `source.json`, what the text is (C8).
+
+    Written into the same content-addressed capture as the text, so a reader
+    holding only the text's path finds its type beside it."""
+    sidecar = source_types.sidecar({**record, "tool": "open_access_full_text"})
+    return {**artifacts, sidecar[0]: sidecar[1]} if sidecar else artifacts
 
 
 def _pdf_markdown(payload: bytes, metadata: dict, provenance: dict) -> tuple[str, dict]:
@@ -257,7 +275,12 @@ def _render_markdown(xml_payload: bytes, metadata: dict) -> tuple[str, dict]:
         lines.extend(["", "## References", ""])
         lines.extend("%d. %s" % (index, value) for index, value in enumerate(references, 1))
     markdown = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip() + "\n"
-    return markdown, {"title": title, "doi": doi, "pmcid": pmcid, "references": len(references)}
+    return markdown, {
+        "title": title, "doi": doi, "pmcid": pmcid, "references": len(references),
+        # JATS `article-type` ("review-article", "case-report", ...): the one
+        # design fact a PMC full text states about itself.
+        "articleType": str(article.attrib.get("article-type") or "").strip(),
+    }
 
 
 def _workspace() -> Path:
@@ -290,8 +313,12 @@ def _fetch_open_access_pdf(metadata: dict, workspace: Path) -> dict:
     markdown, details = _pdf_markdown(payload, metadata, provenance)
     relative_root = Path(".evimed-sources") / _doi_slug(doi.casefold())
     markdown_payload = markdown.encode("utf-8")
+    artifacts = _with_sidecar({"fulltext.md": markdown_payload, "fulltext.pdf": payload}, {
+        "id": doi, "title": details["title"], "url": "https://doi.org/" + doi,
+        "publicationTypes": _publication_types(metadata),
+    })
     try:
-        paths = preserve(workspace, relative_root, {"fulltext.md": markdown_payload, "fulltext.pdf": payload})
+        paths = preserve(workspace, relative_root, artifacts)
     except ImmutableCaptureError as error:
         raise FullTextError("full_text_output_invalid", str(error)) from error
     markdown_relative = paths["fulltext.md"]
@@ -347,8 +374,12 @@ def fetch(arguments: dict) -> dict:
         markdown, details = _render_markdown(xml_payload, {**metadata, "pmcid": pmcid})
         relative_root = Path(".evimed-sources") / pmcid
         markdown_payload = markdown.encode("utf-8")
+        artifacts = _with_sidecar({"fulltext.md": markdown_payload, "fulltext.xml": xml_payload}, {
+            "id": pmcid, "title": details["title"], "url": "https://europepmc.org/articles/%s" % pmcid,
+            "publicationTypes": _publication_types(metadata), "articleType": details.get("articleType"),
+        })
         try:
-            paths = preserve(workspace, relative_root, {"fulltext.md": markdown_payload, "fulltext.xml": xml_payload})
+            paths = preserve(workspace, relative_root, artifacts)
         except ImmutableCaptureError as error:
             raise FullTextError("full_text_output_invalid", str(error)) from error
         markdown_relative = paths["fulltext.md"]

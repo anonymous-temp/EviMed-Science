@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "manuscript-support",
-  "version": "sha256:e609dd9ce46c3f0b7dabb5fbfb66099b63e3afaaeb6ad063d2addc20810061bc",
+  "version": "sha256:7778a938cf7ea77ce097979d2a9ea4e4fb6d2ec0c04d4a34272dc293586c8ebc",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 24,
+    "nodes": 25,
     "edges": 15,
     "byVia": {
       "schema": 15,
@@ -838,7 +838,7 @@
     {
       "name": "mcp__evimed__literature_search",
       "source": "mcp",
-      "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+      "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -846,6 +846,15 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "pmids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "pattern": "^\\s*(?:PMID\\s*:?\\s*)?\\d{1,9}\\s*$"
+            }
           },
           "relation": {
             "type": "object",
@@ -948,10 +957,7 @@
             }
           }
         },
-        "additionalProperties": false,
-        "required": [
-          "query"
-        ]
+        "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
@@ -969,6 +975,8 @@
         ]
       },
       "typeTags": [
+        "mesh_term",
+        "pmid",
         "source_id"
       ],
       "requiredTypeTags": [],
@@ -979,9 +987,54 @@
       "stateEffect": "none"
     },
     {
+      "name": "mcp__evimed__locate_quote",
+      "source": "mcp",
+      "description": "Find a quotation in a source this run preserved, judged exactly as the delivery gate judges a claim's supportQuote (case, quotation marks, dashes, whitespace, full-width forms, CJK spacing, PDF line breaks, inline citation markers and marked … elisions are forgiven; anything else is not). found=true only for a match the gate accepts; each match has character offsets into the preserved file, its line and context. When not found, match=near passages show what the source actually says, to quote instead. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "The .evimed-sources/... path a preserving tool returned, or the id it reported (PMCID, DOI, official-page:<hash>, EVIMED-GUIDE:<id>, label:<approval number>#<section>)."
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "maxResults": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "sourceId",
+          "quote"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [
+        "source_id"
+      ],
+      "requiredTypeTags": [
+        "source_id"
+      ],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
       "name": "mcp__evimed__official_page_fetch",
       "source": "mcp",
-      "description": "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. Allowed routes are: https://www.cochrane.org/evidence/, https://www.cochrane.org/zh-hans/evidence/, https://www.acc.org/latest-in-cardiology/, https://professional.heart.org/en/science-news/, https://cpr.heart.org/en/resuscitation-science/, https://www.nhs.uk/symptoms/chest-pain/, https://www.ccfdie.org/zryyxxw/, https://mpa.hunan.gov.cn/mpa/",
+      "description": "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. Allowed (https, host then path prefixes): www.cochrane.org /evidence/ /zh-hans/evidence/; www.acc.org /latest-in-cardiology/; professional.heart.org /en/science-news/; cpr.heart.org /en/resuscitation-science/; www.nhs.uk /symptoms/chest-pain/; www.ccfdie.org /zryyxxw/; mpa.hunan.gov.cn /mpa/; www.nice.org.uk /guidance/; www.uspreventiveservicestaskforce.org /uspstf/recommendation/; www.sign.ac.uk /guidelines/; www.who.int /publications/i/item/; www.ema.europa.eu /en/medicines/human/EPAR/ /en/medicines/human/referrals/ /en/medicines/dhpc/ /en/news/meeting-highlights-pharmacovigilance-risk-assessment-committee-prac-; www.fda.gov /drugs/drug-safety-communications/ /drugs/drug-safety-and-availability/; www.accessdata.fda.gov /scripts/cder/daf/; www.gov.cn /zhengce/zhengceku/; dailymed.nlm.nih.gov /dailymed/drugInfo.cfm /dailymed/lookup.cfm",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1069,7 +1122,7 @@
     {
       "name": "mcp__evimed__term_normalize",
       "source": "mcp",
-      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization.",
+      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization. Set mesh to map an English term to its MeSH descriptor: entry terms, tree numbers, narrower descriptors and a PubMed query that searches them.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1089,6 +1142,9 @@
             ]
           },
           "annotate": {
+            "type": "boolean"
+          },
+          "mesh": {
             "type": "boolean"
           }
         },

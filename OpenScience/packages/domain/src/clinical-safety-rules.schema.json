@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evimed.local/schema/clinical-safety-rules.schema.json",
+  "title": "EviMed clinical safety rules",
+  "description": "The pharmacist-owned safety data read by packages/domain/src/safetyRules.mjs and clinicalEvidence.mjs. Editors that understand $schema validate the rules file as it is typed; packages/domain/test/clinicalSafetyCautions.test.mjs validates it in CI. To add a caution: add its vocabulary (or reuse one) under cautionVocabularies, add a rule under cautionRules, and add at least one positive and one negative case for it in packages/domain/test/fixtures/clinical-safety-cautions.json.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "rules"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "$comment": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "routingEntities": {
+      "$ref": "#/$defs/termList"
+    },
+    "routingEntitiesNote": {
+      "type": "string"
+    },
+    "highRiskEntities": {
+      "$ref": "#/$defs/termList"
+    },
+    "highRiskEntitiesNote": {
+      "type": "string"
+    },
+    "rules": {
+      "description": "Regular-expression rules, required inside the run (check clinical-safety-rules, tier safety). Do not add new ones here: a new medicine or scenario is a caution rule below.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/patternRule"
+      }
+    },
+    "cautionVocabulariesNote": {
+      "type": "string"
+    },
+    "cautionVocabularies": {
+      "description": "Named closed vocabularies a caution rule refers to as @name. Each entry is one concept: a single term, or an array of names for the same thing (Chinese and English generic names, brand names).",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/conceptList"
+      }
+    },
+    "cautionRulesNote": {
+      "type": "string"
+    },
+    "cautionRules": {
+      "description": "Advisory cautions (check clinical-safety-cautions): when a report discusses the scene, it should mention the caution. A rule never withholds a delivery; it is a suggestion to the run and a SAFETY notice to the reader.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/cautionRule"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "termList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "concept": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "conceptList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/concept"
+      }
+    },
+    "group": {
+      "description": "A list of concepts or @vocabulary references, any one of which sets this part of the scene; or an object that asks for several distinct ones.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/conceptList"
+        },
+        {
+          "type": "object",
+          "required": [
+            "anyOf"
+          ],
+          "properties": {
+            "anyOf": {
+              "$ref": "#/$defs/conceptList"
+            },
+            "minDistinct": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "minMentions": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many times, in all, the group must be named: separates a report about a drug from one that lists it."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "authority",
+        "url"
+      ],
+      "properties": {
+        "authority": {
+          "type": "string",
+          "minLength": 1
+        },
+        "year": {
+          "type": "integer",
+          "minimum": 1900,
+          "maximum": 2100
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https://\\S+$"
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Words copied from the page at url, for the pharmacist who re-checks the rule. Not shown to the run."
+        },
+        "note": {
+          "type": "string",
+          "description": "Where the wording was read when the page itself refuses scripted requests, and what the authority says beyond the quote."
+        }
+      },
+      "additionalProperties": false
+    },
+    "cautionRule": {
+      "type": "object",
+      "required": [
+        "id",
+        "family",
+        "titleZh",
+        "when",
+        "mention",
+        "message",
+        "messageZh",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "family": {
+          "type": "string",
+          "enum": [
+            "drug-scenario",
+            "drug-interaction",
+            "pregnancy",
+            "pharmacogenomics",
+            "tcm-incompatibility"
+          ]
+        },
+        "titleZh": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "when": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/group"
+          }
+        },
+        "mention": {
+          "$ref": "#/$defs/group"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 20
+        },
+        "messageZh": {
+          "type": "string",
+          "minLength": 10
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "document",
+            "paragraph"
+          ],
+          "description": "document (default): the scene may be spread over the question and the whole report; paragraph: every group must be named in the question or in one paragraph of the report."
+        }
+      },
+      "additionalProperties": false
+    },
+    "patternRule": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "pattern",
+        "message"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "report_forbidden",
+            "practical_forbidden",
+            "entity_requires_question_mention",
+            "practical_required_when_report_matches"
+          ]
+        },
+        "pattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "flags": {
+          "type": "string"
+        },
+        "triggerPattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "triggerFlags": {
+          "type": "string"
+        },
+        "reportSubstitutions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "find",
+              "replace"
+            ],
+            "properties": {
+              "find": {
+                "type": "string"
+              },
+              "replace": {
+                "type": "string"
+              },
+              "flags": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

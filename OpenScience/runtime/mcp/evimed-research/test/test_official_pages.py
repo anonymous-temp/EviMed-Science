@@ -160,5 +160,30 @@ class OfficialPageTests(unittest.TestCase):
         self.assertEqual(list(outside.iterdir()), [])
 
 
+    def test_the_authorities_added_2026_09_18_are_approved_on_their_document_paths_only(self):
+        for url in (
+            "https://www.nice.org.uk/guidance/ng136/chapter/Recommendations",
+            "https://www.uspreventiveservicestaskforce.org/uspstf/recommendation/aspirin-to-prevent-cardiovascular-disease-preventive-medication",
+            "https://www.sign.ac.uk/guidelines/management-of-chronic-pain/",
+            "https://www.who.int/publications/i/item/9789240118164",
+            "https://www.ema.europa.eu/en/medicines/human/referrals/valproate-related-substances-0",
+            "https://www.fda.gov/drugs/drug-safety-communications/x",
+            "https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?event=overview.process&ApplNo=020357",
+            "https://www.gov.cn/zhengce/zhengceku/202509/content_7039760.htm",
+            "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=56d13a1c-b289-4528-b23c-60f5427b4552",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(self.module._validated_url(url), url)
+        for url in (
+            "https://www.nice.org.uk/about",
+            "https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json",
+            "https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypshmshxdgg/20251222114033197.html",
+            "https://www.cde.org.cn/zdyz/domesticinfopage?zdyzIdCODE=1",
+            "http://www.nice.org.uk/guidance/ng136",
+        ):
+            with self.subTest(url=url), self.assertRaises(self.module.OfficialPageError) as raised:
+                self.module._validated_url(url)
+            self.assertEqual(raised.exception.code, "official_page_url_forbidden")
+
 if __name__ == "__main__":
     unittest.main()

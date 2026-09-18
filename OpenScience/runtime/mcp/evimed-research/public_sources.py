@@ -18,6 +18,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
+import drug_label_index
 import fixtures
 
 
@@ -32,7 +33,14 @@ EVIMED_EVIDENCE_BASE_URL = os.environ.get(
 _OPENFDA_CASE_BATCH_SIZE = 5
 _OPENFDA_PUBLIC_CASE_LIMIT = 25
 MAX_ABSTRACT_CHARS = 4000
-PUBMED_ABSTRACT_FETCH_LIMIT = 5
+# Abstracts are fetched for the records a run asks for, not for the top of a
+# search. The old rule — efetch the first five hits — meant screening beyond
+# rank five was title-only, which the clinical skill forbids ("every included
+# source was inspected beyond title-only metadata"). NCBI accepts up to 200 ids
+# per efetch GET; a request for more is split into batches of that size.
+PUBMED_EFETCH_BATCH = 200
+MAX_PUBMED_ABSTRACT_PMIDS = 200
+_PMID_PATTERN = re.compile(r"^\s*(?:PMID\s*:?\s*)?(\d{1,9})\s*$", re.I)
 _RXNORM_RESOLVE_LIMIT = 10
 
 
@@ -567,6 +575,11 @@ def _pubmed(query, limit, date_from=None, date_to=None, source_name="pubmed"):
             "authors": [item.get("name") for item in record.get("authors", []) if isinstance(item, dict) and item.get("name")],
             **({"doi": doi} if doi else {}),
             "url": record_url,
+            # NLM's own classification of the record, for every hit: what lets
+            # a run screen by design before it spends a call on the abstract,
+            # and what a source-type badge is derived from.
+            "publicationTypes": _esummary_publication_types(record),
+            "hasAbstract": "Has Abstract" in _list(record.get("attributes")),
         })
         sources.append(_source("PMID:%s" % pmid, title, record_url, source_name))
     return {
@@ -574,6 +587,10 @@ def _pubmed(query, limit, date_from=None, date_to=None, source_name="pubmed"):
         "data": {"items": items},
         "sources": sources,
     }
+
+
+def _esummary_publication_types(record):
+    return [str(value).strip() for value in _list(record.get("pubtype")) if str(value).strip()][:12]
 
 
 def _crossref(query, limit):
@@ -1041,6 +1058,13 @@ def _evimed_literature_records(arguments):
 # once, with its digests beside it. A second copy of "write into the managed
 # workspace safely" is a second place for that rule to drift.
 from immutable_capture import managed_workspace, preserve
+import source_types
+
+
+def _with_sidecar(artifacts, record):
+    """A capture's artifacts plus `source.json`, what the text is (C8)."""
+    sidecar = source_types.sidecar(record)
+    return {**artifacts, sidecar[0]: sidecar[1]} if sidecar else artifacts
 
 
 def _preserve_guideline_text(identifier, title, record):
@@ -1085,7 +1109,11 @@ def _preserve_guideline_text(identifier, title, record):
             if record.get(key)
         )
         payload = ("%s%s\n%s\n" % (header, meta, body)).encode("utf-8")
-        paths = preserve(workspace, Path(".evimed-sources") / "evimed-guidelines" / digest, {"guideline.md": payload})
+        artifacts = _with_sidecar({"guideline.md": payload}, {
+            "id": "EVIMED-GUIDE:%s" % identifier, "title": title or identifier,
+            "url": _evimed_record_url(record.get("url")), "tool": "guideline_search", "source": "evimed-guideline",
+        })
+        paths = preserve(workspace, Path(".evimed-sources") / "evimed-guidelines" / digest, artifacts)
         return {"path": paths["guideline.md"], "sha256": hashlib.sha256(payload).hexdigest()}
     except Exception:
         # isolated: evimed_guideline_preservation_failures_total
@@ -1351,13 +1379,21 @@ def _bibliographic_metadata_only(result):
             "Public literature results contain bibliographic metadata only; titles do not establish study design, evidence level, outcomes, effect estimates, or causality."
         ],
         "next_actions": [
-            "Retrieve and review the abstract or full text before classifying study design or summarizing findings."
+            "Retrieve and review the abstract or full text before classifying study design or summarizing findings: "
+            "literature_search with pmids=[...] returns and preserves the abstracts of the PubMed records you keep."
         ],
     }
 
 
 def literature(arguments):
-    query = arguments["query"]
+    # Addressed by PMIDs: the abstracts of records a run has already found and
+    # decided to keep. Answered from PubMed whatever else is configured, because
+    # no keyword search can return a named set of records.
+    if arguments.get("pmids"):
+        return pubmed_abstracts(arguments["pmids"])
+    # Optional since `pmids` and `relation` address records without words; the
+    # server refuses a call that carries none of the three.
+    query = arguments.get("query") or ""
     limit = arguments.get("limit", 10)
     # A relation query is addressed by concept identifiers, not by words, so no
     # keyword database can serve it and there is nothing to fall back to. It
@@ -1593,6 +1629,54 @@ def labels(arguments):
         ],
         "next_actions": ["Verify the exact product and current official label before making a label-status determination."],
     }
+
+
+_CHINA_JURISDICTIONS = {"cn", "china", "chinanmpa", "nmpa", "中国", "中國", "中华人民共和国"}
+
+
+def _china_or_unspecified(arguments):
+    requested = str(arguments.get("jurisdiction") or "").strip()
+    return not requested or re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", requested.casefold()) in _CHINA_JURISDICTIONS
+
+
+def drug_label_lookup(arguments):
+    """`drug_label_search`: the EviMed drug-label index first, then the label
+    connectors `labels` has always used.
+
+    With `labelId` it reads one label from the index, all sections at full
+    length; the research server preserves them before a run sees any of it.
+    Without, a Chinese or unspecified jurisdiction is searched in the index,
+    and only a search the index cannot answer goes on to the EviMed label API
+    and openFDA. `labels` itself is untouched: `biomedical_source_search` asks
+    it for openFDA by name, and the drug workflows compose it."""
+    try:
+        if arguments.get("labelId"):
+            path = drug_label_index.database_path()
+            if path is None:
+                raise PublicSourceError(
+                    "drug_label_index_unconfigured",
+                    "The EviMed drug-label index is not available in this deployment, so labels cannot be read by labelId.",
+                    False,
+                )
+            return drug_label_index.read(arguments, path)
+        note = None
+        if _china_or_unspecified(arguments):
+            path = drug_label_index.database_path()
+            if path is not None:
+                result = drug_label_index.search(arguments, path)
+                if result["data"]["items"]:
+                    return result
+                note = "The EviMed drug-label index (%s) has no Chinese label for this search." % result["data"].get("indexRelease")
+    except drug_label_index.DrugLabelIndexError as error:
+        if arguments.get("labelId"):
+            raise PublicSourceError(error.code, str(error), error.retryable) from error
+        note = "The EviMed drug-label index could not be searched: %s" % error
+    # The label connectors return whole label texts, so they keep the cap of
+    # three they always had; the index returns summaries and may list ten.
+    result = labels({**arguments, "limit": min(arguments.get("limit", 3), 3)})
+    if note:
+        result = {**result, "warnings": [note, *result.get("warnings", [])]}
+    return result
 
 
 def _event_search(arguments, include_event=True):
@@ -2064,37 +2148,188 @@ def _metadata_result(source_id, items, sources, limitation=None):
     }
 
 
-def _pubmed_abstracts(base, ids):
-    """Fetch abstracts for the top PubMed hits without ever breaking the metadata path."""
-    fetch_ids = [identifier for identifier in ids[:PUBMED_ABSTRACT_FETCH_LIMIT]]
-    if not fetch_ids:
-        return {}, None
-    fetch_url = _url(base, "efetch.fcgi", _ncbi_params({
-        "db": "pubmed", "id": ",".join(fetch_ids), "rettype": "abstract", "retmode": "xml",
-    }))
+def _pubmed_article(article):
+    """One `PubmedArticle` as the fields a record carries, or None without a PMID."""
+    citation = article.find("MedlineCitation")
+    if citation is None:
+        return None
+    pmid = (citation.findtext("PMID") or "").strip()
+    if not pmid:
+        return None
+    node = citation.find("Article")
+    title = " ".join("".join(node.find("ArticleTitle").itertext()).split()) if node is not None and node.find("ArticleTitle") is not None else ""
+    sections = []
+    for element in article.findall(".//Abstract/AbstractText"):
+        text = " ".join("".join(element.itertext()).split())
+        if not text:
+            continue
+        label = (element.get("Label") or "").strip()
+        sections.append("%s: %s" % (label, text) if label else text)
+    journal = (citation.findtext("Article/Journal/Title") or citation.findtext("MedlineJournalInfo/MedlineTA") or "").strip()
+    year = (
+        citation.findtext("Article/Journal/JournalIssue/PubDate/Year")
+        or (citation.findtext("Article/Journal/JournalIssue/PubDate/MedlineDate") or "")[:4]
+        or ""
+    ).strip()
+    identifiers = {
+        (element.get("IdType") or "").strip().lower(): (element.text or "").strip()
+        for element in article.findall("PubmedData/ArticleIdList/ArticleId")
+    }
+    publication_types = [
+        " ".join((element.text or "").split())
+        for element in citation.findall("Article/PublicationTypeList/PublicationType")
+        if (element.text or "").strip()
+    ]
+    mesh = []
+    for heading in citation.findall("MeshHeadingList/MeshHeading"):
+        descriptor = heading.find("DescriptorName")
+        if descriptor is None or not (descriptor.text or "").strip():
+            continue
+        name = " ".join(descriptor.text.split())
+        major = descriptor.get("MajorTopicYN") == "Y" or any(
+            qualifier.get("MajorTopicYN") == "Y" for qualifier in heading.findall("QualifierName")
+        )
+        mesh.append(name + ("*" if major else ""))
+    return {
+        "pmid": pmid,
+        "title": title or "Untitled PubMed record",
+        "sections": sections,
+        "journal": journal,
+        "year": year,
+        "doi": identifiers.get("doi", ""),
+        "pmcid": identifiers.get("pmc", ""),
+        "publicationTypes": publication_types[:12],
+        "meshHeadings": mesh[:30],
+    }
+
+
+def _pubmed_efetch_records(base, pmids):
+    """Parsed PubMed records for these PMIDs, in E-utilities batches of 200."""
+    records = {}
+    for start in range(0, len(pmids), PUBMED_EFETCH_BATCH):
+        batch = pmids[start:start + PUBMED_EFETCH_BATCH]
+        fetch_url = _url(base, "efetch.fcgi", _ncbi_params({
+            "db": "pubmed", "id": ",".join(batch), "rettype": "abstract", "retmode": "xml",
+        }))
+        try:
+            root = ET.fromstring(_ncbi_get_text(fetch_url))
+        except ET.ParseError as error:
+            raise PublicSourceError("public_source_invalid_response", "PubMed returned invalid XML: %s." % error, True)
+        for article in root.findall(".//PubmedArticle"):
+            record = _pubmed_article(article)
+            if record and record["pmid"] in batch:
+                records[record["pmid"]] = record
+    return records
+
+
+def _pubmed_abstract_markdown(record):
+    """The preserved rendering of one abstract: deterministic, so fetching the
+    same record again reuses its capture instead of writing a new version."""
+    lines = ["# " + record["title"], "", "- PMID: " + record["pmid"]]
+    if record["doi"]:
+        lines.append("- DOI: " + record["doi"].casefold())
+    if record["journal"]:
+        lines.append("- Journal: %s%s" % (record["journal"], (" (%s)" % record["year"]) if record["year"] else ""))
+    if record["publicationTypes"]:
+        lines.append("- Publication types: " + "; ".join(record["publicationTypes"]))
+    lines.extend(["- Primary source: https://pubmed.ncbi.nlm.nih.gov/%s/" % record["pmid"], "", "## Abstract", ""])
+    for section in record["sections"]:
+        lines.extend([section, ""])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _preserve_pubmed_abstract(record):
+    """Preserve one abstract so a claim can quote it; None when it cannot be.
+
+    Failure to write is never fatal, exactly as for guideline prose: the
+    abstract is still returned, and the result says it cannot carry a claim."""
     try:
-        root = ET.fromstring(_ncbi_get_text(fetch_url))
-    except (PublicSourceError, ET.ParseError):
-        return {}, "PubMed abstract retrieval failed; results are bibliographic metadata only."
-    abstracts = {}
-    for article in root.findall(".//PubmedArticle"):
-        citation = article.find("MedlineCitation")
-        if citation is None:
+        payload = _pubmed_abstract_markdown(record).encode("utf-8")
+        artifacts = _with_sidecar({"abstract.md": payload}, {
+            "id": "PMID:%s" % record["pmid"], "title": record["title"],
+            "url": "https://pubmed.ncbi.nlm.nih.gov/%s/" % record["pmid"],
+            "publicationTypes": record["publicationTypes"], "tool": "literature_search", "source": "pubmed",
+        })
+        paths = preserve(managed_workspace(), Path(".evimed-sources") / "pubmed" / ("PMID%s" % record["pmid"]), artifacts)
+        return {"path": paths["abstract.md"], "sha256": hashlib.sha256(payload).hexdigest()}
+    except Exception:
+        # isolated: evimed_pubmed_abstract_preservation_failures_total
+        return None
+
+
+def pubmed_abstracts(pmids):
+    """`literature_search` with `pmids`: abstracts, publication types and MeSH
+    headings for records a run chose, each abstract preserved as a source."""
+    values = _list(pmids)
+    if not values or len(values) > MAX_PUBMED_ABSTRACT_PMIDS:
+        raise PublicSourceError("public_source_pmid_invalid", "Pass between 1 and %d PubMed ids." % MAX_PUBMED_ABSTRACT_PMIDS)
+    requested = []
+    for value in values:
+        match = _PMID_PATTERN.match(str(value))
+        if not match:
+            raise PublicSourceError("public_source_pmid_invalid", "%r is not a PubMed id; pass digits, optionally prefixed PMID:." % value)
+        if match.group(1) not in requested:
+            requested.append(match.group(1))
+    base = _base("EVIMED_PUBMED_BASE_URL", "https://eutils.ncbi.nlm.nih.gov/entrez/eutils")
+    records = _pubmed_efetch_records(base, requested)
+    items, sources, artifact_sha256s = [], [], {}
+    missing, without_abstract, unpreserved = [], [], []
+    for pmid in requested:
+        record = records.get(pmid)
+        if record is None:
+            missing.append(pmid)
             continue
-        pmid = (citation.findtext("PMID") or "").strip()
-        if not pmid:
-            continue
-        sections = []
-        for element in article.findall(".//Abstract/AbstractText"):
-            text = " ".join("".join(element.itertext()).split())
-            if not text:
-                continue
-            label = (element.get("Label") or "").strip()
-            sections.append("%s: %s" % (label, text) if label else text)
-        abstract = _clean_abstract(" ".join(sections))
+        record_url = "https://pubmed.ncbi.nlm.nih.gov/%s/" % urllib.parse.quote(pmid)
+        abstract = " ".join(record["sections"])
+        item = {
+            "id": "PMID:%s" % pmid,
+            "pmid": pmid,
+            "title": record["title"],
+            "journal": record["journal"] or None,
+            "year": record["year"] or None,
+            "doi": record["doi"] or None,
+            "pmcid": record["pmcid"] or None,
+            "url": record_url,
+            "publicationTypes": record["publicationTypes"],
+            "meshHeadings": record["meshHeadings"],
+            "evidenceLevel": "abstract" if abstract else "metadata",
+        }
+        source = _source("PMID:%s" % pmid, record["title"], record_url, "pubmed")
         if abstract:
-            abstracts[pmid] = abstract
-    return abstracts, None
+            item["abstract"] = abstract[:MAX_ABSTRACT_CHARS]
+            if len(abstract) > MAX_ABSTRACT_CHARS:
+                item["abstractTruncated"] = True
+            captured = _preserve_pubmed_abstract(record)
+            if captured:
+                item["artifactPath"] = captured["path"]
+                artifact_sha256s[captured["path"]] = captured["sha256"]
+                source["artifactPath"] = captured["path"]
+                source["evidenceAccess"] = "abstract"
+            else:
+                unpreserved.append(pmid)
+        else:
+            without_abstract.append(pmid)
+        items.append({key: value for key, value in item.items() if value not in (None, "", [])})
+        sources.append(source)
+    warnings = []
+    if missing:
+        warnings.append("PubMed returned no record for PMID %s." % ", ".join(missing))
+    if without_abstract:
+        warnings.append("PubMed has no abstract for PMID %s; screen those by full text or leave them out." % ", ".join(without_abstract))
+    if unpreserved:
+        warnings.append("The abstract of PMID %s could not be preserved, so it cannot carry a claim." % ", ".join(unpreserved))
+    result = {
+        "status": "warning" if warnings else "success",
+        "summary": "Fetched %d PubMed abstract(s) for %d requested id(s); %d preserved as quotable sources."
+        % (len(items) - len(without_abstract), len(requested), len(artifact_sha256s)),
+        "data": {"items": items, "artifactSha256s": artifact_sha256s, "requested": len(requested)},
+        "sources": sources,
+        "artifacts": list(artifact_sha256s),
+    }
+    if warnings:
+        result["warnings"] = warnings
+        result["next_actions"] = ["Quote an abstract only through its artifactPath, and read the full text before claiming what the abstract does not state."]
+    return result
 
 
 def _ncbi_database(source_id, query, limit):
@@ -2135,19 +2370,17 @@ def _ncbi_database(source_id, query, limit):
             "url": record_url,
             "description": _first_text(record.get("description"), record.get("summary"), title)[:1500],
         }
+        if source_id == "pubmed":
+            item["publicationTypes"] = _esummary_publication_types(record)
+            item["hasAbstract"] = "Has Abstract" in _list(record.get("attributes"))
+            item["evidenceLevel"] = "metadata"
         items.append(item)
         sources.append(_source(identifier, title, record_url, source_id))
-    if source_id != "pubmed":
-        return _metadata_result(source_id, items, sources)
-    abstracts, note = _pubmed_abstracts(base, ids)
-    for item in items:
-        abstract = abstracts.get(item["id"])
-        item["evidenceLevel"] = "abstract" if abstract else "metadata"
-        if abstract:
-            item["abstract"] = abstract
     result = _metadata_result(source_id, items, sources)
-    if note:
-        result["warnings"].append(note)
+    if source_id == "pubmed":
+        result["next_actions"].append(
+            "Fetch the abstracts of the records you keep with literature_search pmids=[...]; they are preserved and quotable."
+        )
     return result
 
 
@@ -2327,6 +2560,131 @@ def rxnorm_resolve(term):
         "rxcui": preferred_concept["rxcui"],
         "preferred": preferred_concept["name"],
         "synonyms": synonyms[:20],
+    }
+
+
+# WHO's fourteen ATC anatomical main groups: the first letter of every code,
+# so a reader sees what "B01AC06" is for without a second lookup.
+ATC_ANATOMICAL_GROUPS = {
+    "A": "Alimentary tract and metabolism", "B": "Blood and blood forming organs", "C": "Cardiovascular system",
+    "D": "Dermatologicals", "G": "Genito-urinary system and sex hormones",
+    "H": "Systemic hormonal preparations, excluding sex hormones and insulins", "J": "Antiinfectives for systemic use",
+    "L": "Antineoplastic and immunomodulating agents", "M": "Musculo-skeletal system", "N": "Nervous system",
+    "P": "Antiparasitic products, insecticides and repellents", "R": "Respiratory system", "S": "Sensory organs",
+    "V": "Various",
+}
+_ATC_CODE = re.compile(r"^[A-Z]\d{2}[A-Z]{2}\d{2}$")
+
+
+def rxnorm_atc(rxcui):
+    """The ATC codes RxNorm carries for one ingredient, with their class names.
+
+    Two RxNav calls: the concept's ATC property gives the full seven-character
+    codes (B01AC06), RxClass names the fourth-level class each belongs to
+    (B01AC, platelet aggregation inhibitors). The codes are WHO's, as NLM
+    redistributes them in RxNorm; nothing here assigns one. An ingredient with
+    several (aspirin: A01AD05, B01AC06, N02BA01) keeps all of them, because the
+    indication decides which applies and that is the report's judgement."""
+    identifier = str(rxcui or "").strip()
+    if not re.fullmatch(r"\d{1,10}", identifier):
+        return []
+    base = _base("EVIMED_RXNORM_BASE_URL", "https://rxnav.nlm.nih.gov/REST")
+    properties = _list(_dict(_get_json(_url(base, "rxcui/%s/property.json" % identifier, {"propName": "ATC"})).get("propConceptGroup")).get("propConcept"))
+    codes = []
+    for record in properties:
+        code = str(_dict(record).get("propValue") or "").strip().upper()
+        if _ATC_CODE.match(code) and code not in codes:
+            codes.append(code)
+    if not codes:
+        return []
+    names = {}
+    try:
+        classes = _get_json(_url(base, "rxclass/class/byRxcui.json", {"rxcui": identifier, "relaSource": "ATC"}))
+        info = _dict(classes.get("rxclassDrugInfoList"))
+        for record in _list(info.get("rxclassDrugInfo")) or _list(info.get("rxclassMinConceptItem")):
+            record = _dict(record)
+            item = _dict(record.get("rxclassMinConceptItem")) or record
+            if str(_dict(record.get("minConcept")).get("rxcui") or identifier) != identifier:
+                continue
+            class_id = str(item.get("classId") or "").strip().upper()
+            if class_id:
+                names[class_id] = str(item.get("className") or "").strip()
+    except PublicSourceError:
+        # The codes stand without their names: the classification is the fact,
+        # the name only helps a reader.
+        names = {}
+    return [{
+        "code": code,
+        "class": code[:5],
+        "className": names.get(code[:5]) or None,
+        "anatomicalGroup": ATC_ANATOMICAL_GROUPS.get(code[0]),
+    } for code in codes[:12]]
+
+
+def mesh_descriptor(term, narrower_limit=20):
+    """A free-text term mapped to its MeSH descriptor, for building a query.
+
+    E-utilities, keyless, through the gateway: `esearch db=mesh` finds
+    candidate records, `esummary` gives each record's entry terms, tree numbers
+    and child descriptors. The record whose own entry terms contain the term
+    wins; otherwise the first descriptor NCBI ranked. Returns None when MeSH
+    has nothing — MeSH is English, so a Chinese term finds nothing and the
+    caller says so rather than guessing a translation.
+
+    What comes back is what a recall-oriented PubMed query is built from: the
+    heading (which PubMed explodes to every narrower descriptor by default),
+    its entry terms for the title/abstract field, the narrower descriptors by
+    name, and one query string that combines them."""
+    text = " ".join(str(term or "").strip().split())[:200]
+    if not text:
+        return None
+    base = _base("EVIMED_PUBMED_BASE_URL", "https://eutils.ncbi.nlm.nih.gov/entrez/eutils")
+    found = _ncbi_get_json(_url(base, "esearch.fcgi", _ncbi_params({"db": "mesh", "term": text, "retmax": 5, "retmode": "json"})))
+    ids = [str(value) for value in _list(_dict(found.get("esearchresult")).get("idlist")) if str(value).strip()][:5]
+    if not ids:
+        return None
+    summary = _dict(_ncbi_get_json(_url(base, "esummary.fcgi", _ncbi_params({"db": "mesh", "id": ",".join(ids), "retmode": "json"}))).get("result"))
+    records = [_dict(summary.get(identifier)) for identifier in ids if str(_dict(summary.get(identifier)).get("ds_meshui") or "").startswith("D")]
+    if not records:
+        return None
+    wanted = text.casefold()
+    chosen = next(
+        (record for record in records if any(str(name).casefold() == wanted for name in _list(record.get("ds_meshterms")))),
+        records[0],
+    )
+    terms = [str(name).strip() for name in _list(chosen.get("ds_meshterms")) if str(name).strip()]
+    heading = terms[0] if terms else text
+    links = [_dict(link) for link in _list(chosen.get("ds_idxlinks"))]
+    tree_numbers = [str(link.get("treenum")) for link in links if link.get("treenum")]
+    child_ids = []
+    for link in links:
+        for child in _list(link.get("children")):
+            child = str(child)
+            # Descriptor uids are 68 followed by the D-number's digits; the
+            # rest are supplementary concepts, which are not narrower headings.
+            if child.startswith("68") and child not in child_ids:
+                child_ids.append(child)
+    narrower = []
+    if child_ids and narrower_limit:
+        try:
+            children = _dict(_ncbi_get_json(_url(base, "esummary.fcgi", _ncbi_params({"db": "mesh", "id": ",".join(child_ids[:narrower_limit]), "retmode": "json"}))).get("result"))
+            for child in child_ids[:narrower_limit]:
+                names = _list(_dict(children.get(child)).get("ds_meshterms"))
+                if names:
+                    narrower.append({"descriptorUi": str(_dict(children.get(child)).get("ds_meshui") or ""), "name": str(names[0])})
+        except PublicSourceError:
+            narrower = []
+    entry_terms = [name for name in terms[1:] if "," not in name][:15]
+    query = " OR ".join(['"%s"[MeSH Terms]' % heading] + ['"%s"[tiab]' % name for name in [heading] + entry_terms[:8]])
+    return {
+        "descriptorUi": str(chosen.get("ds_meshui") or ""),
+        "name": heading,
+        "entryTerms": entry_terms,
+        "treeNumbers": tree_numbers[:10],
+        "narrower": narrower,
+        "scopeNote": str(chosen.get("ds_scopenote") or "").strip()[:600] or None,
+        "pubmedQuery": query,
+        "url": "https://www.ncbi.nlm.nih.gov/mesh/%s" % urllib.parse.quote(str(chosen.get("uid") or "")),
     }
 
 
@@ -3542,7 +3900,7 @@ def call(name, arguments):
     if name == "pharmacy_reference_search":
         return pharmacy_reference(arguments)
     if name == "drug_label_search":
-        return labels(arguments)
+        return drug_label_lookup(arguments)
     if name == "adr_case_query":
         return adr_cases(arguments)
     if name == "adr_signal_analysis":

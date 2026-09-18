@@ -83,6 +83,10 @@ function isDeliverablePath(path) {
 export function phaseOfToolCall(toolName, input = null) {
   const name = String(toolName ?? '')
   const base = mcpToolBaseName(name) ?? name.replace(/^mcp__[a-z0-9-]+__/, '')
+  // Two search tools also read what a search found: a label by its id is
+  // read in full, and abstracts fetched for chosen PubMed ids are screening.
+  if (base === 'drug_label_search' && input?.labelId) return 'fulltext'
+  if (base === 'literature_search' && Array.isArray(input?.pmids) && input.pmids.length > 0) return 'screen'
   if (SEARCH_TOOLS.has(base)) return 'search'
   if (SCREEN_TOOLS.has(base)) return 'screen'
   if (FULLTEXT_TOOLS.has(base)) return 'fulltext'

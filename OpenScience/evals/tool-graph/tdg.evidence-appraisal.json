@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "evidence-appraisal",
-  "version": "sha256:f7b3e7964fe4224b648c457c73ce15a7ddd2ea1a98e52250cd1ff22296e474e8",
+  "version": "sha256:0ed3fdb111f6fd9ef858c7a5a87ae2b5aab8bc84b531c9935eb6ba46f5bfc14f",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 24,
@@ -682,7 +682,7 @@
     {
       "name": "mcp__evimed__drug_label_search",
       "source": "mcp",
-      "description": "Retrieve exact-product drug-label candidates from configured jurisdictions; indexed copies still require official-current verification.",
+      "description": "Search drug labels by drug (name, brand or approval number), optionally product and manufacturer: Chinese labels from the EviMed label index, US labels with jurisdiction US. Read one label by labelId (optionally sections): it is preserved, each section citable as label:<approval>#<section>. Indexed copies are snapshots; verify against the current official label.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -696,6 +696,11 @@
             "minLength": 1,
             "maxLength": 128
           },
+          "manufacturer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
           "jurisdiction": {
             "type": "string",
             "minLength": 1,
@@ -704,13 +709,24 @@
           "limit": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 3
+            "maximum": 10
+          },
+          "labelId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "sections": {
+            "type": "array",
+            "maxItems": 17,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
           }
         },
-        "additionalProperties": false,
-        "required": [
-          "drug"
-        ]
+        "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
@@ -726,9 +742,7 @@
       "typeTags": [
         "drug_name"
       ],
-      "requiredTypeTags": [
-        "drug_name"
-      ],
+      "requiredTypeTags": [],
       "outputTypeTags": [
         "drug_name"
       ],
@@ -818,7 +832,7 @@
     {
       "name": "mcp__evimed__literature_search",
       "source": "mcp",
-      "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+      "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -826,6 +840,15 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "pmids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "pattern": "^\\s*(?:PMID\\s*:?\\s*)?\\d{1,9}\\s*$"
+            }
           },
           "relation": {
             "type": "object",
@@ -928,10 +951,7 @@
             }
           }
         },
-        "additionalProperties": false,
-        "required": [
-          "query"
-        ]
+        "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
@@ -949,6 +969,8 @@
         ]
       },
       "typeTags": [
+        "mesh_term",
+        "pmid",
         "source_id"
       ],
       "requiredTypeTags": [],
@@ -961,7 +983,7 @@
     {
       "name": "mcp__evimed__official_page_fetch",
       "source": "mcp",
-      "description": "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. Allowed routes are: https://www.cochrane.org/evidence/, https://www.cochrane.org/zh-hans/evidence/, https://www.acc.org/latest-in-cardiology/, https://professional.heart.org/en/science-news/, https://cpr.heart.org/en/resuscitation-science/, https://www.nhs.uk/symptoms/chest-pain/, https://www.ccfdie.org/zryyxxw/, https://mpa.hunan.gov.cn/mpa/",
+      "description": "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. Allowed (https, host then path prefixes): www.cochrane.org /evidence/ /zh-hans/evidence/; www.acc.org /latest-in-cardiology/; professional.heart.org /en/science-news/; cpr.heart.org /en/resuscitation-science/; www.nhs.uk /symptoms/chest-pain/; www.ccfdie.org /zryyxxw/; mpa.hunan.gov.cn /mpa/; www.nice.org.uk /guidance/; www.uspreventiveservicestaskforce.org /uspstf/recommendation/; www.sign.ac.uk /guidelines/; www.who.int /publications/i/item/; www.ema.europa.eu /en/medicines/human/EPAR/ /en/medicines/human/referrals/ /en/medicines/dhpc/ /en/news/meeting-highlights-pharmacovigilance-risk-assessment-committee-prac-; www.fda.gov /drugs/drug-safety-communications/ /drugs/drug-safety-and-availability/; www.accessdata.fda.gov /scripts/cder/daf/; www.gov.cn /zhengce/zhengceku/; dailymed.nlm.nih.gov /dailymed/drugInfo.cfm /dailymed/lookup.cfm",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1049,7 +1071,7 @@
     {
       "name": "mcp__evimed__term_normalize",
       "source": "mcp",
-      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization.",
+      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization. Set mesh to map an English term to its MeSH descriptor: entry terms, tree numbers, narrower descriptors and a PubMed query that searches them.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1069,6 +1091,9 @@
             ]
           },
           "annotate": {
+            "type": "boolean"
+          },
+          "mesh": {
             "type": "boolean"
           }
         },

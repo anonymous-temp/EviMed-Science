@@ -72,6 +72,7 @@ class ToolContractTests(unittest.TestCase):
             "official_page_fetch",
             "open_access_full_text",
             "web_search",
+            "locate_quote",
             "geo_visibility_probe",
             "term_normalize",
             "drug_term_normalize",
@@ -112,7 +113,12 @@ class ToolContractTests(unittest.TestCase):
             self.assertEqual(schema["type"], "object")
             self.assertFalse(schema["additionalProperties"])
             self.assertIn("properties", schema)
-        self.assertEqual(by_name["drug_label_search"]["inputSchema"]["properties"]["limit"]["maximum"], 3)
+        # Ten index summaries; the label connectors behind it still return at
+        # most three full labels (public_sources.drug_label_lookup).
+        label_schema = by_name["drug_label_search"]["inputSchema"]
+        self.assertEqual(label_schema["properties"]["limit"]["maximum"], 10)
+        self.assertEqual(set(label_schema["properties"]) >= {"drug", "labelId", "sections", "manufacturer"}, True)
+        self.assertEqual(label_schema.get("required", []), [])
         for name in {
             "meta_analysis",
             "mendelian_randomization",
@@ -1156,7 +1162,9 @@ class AdapterTests(unittest.TestCase):
                 "workspaceDir": "/workspace",
             },
         })
-        self.assertEqual(result["sources"], body["sources"])
+        # Unchanged but for the evidence badge this server stamps on every
+        # source: a PubMed record with no publication types is `other`.
+        self.assertEqual(result["sources"], [{**source, "sourceType": "other"} for source in body["sources"]])
 
     def test_valid_prewrapped_warning_adds_input_provenance(self):
         os.environ["OPEN_SCIENCE_USER_ID"] = "user-1"
