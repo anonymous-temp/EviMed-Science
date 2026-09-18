@@ -99,6 +99,9 @@ const operatorLevers = {
   OPEN_SCIENCE_MEMORY_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES: ["open-science-web"],
+  // The frame layer's per-body off switches: the control every body is
+  // measured against has to be reachable from .env.
+  OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF: ["open-science-web"],
 };
 
 async function composeFiles() {
