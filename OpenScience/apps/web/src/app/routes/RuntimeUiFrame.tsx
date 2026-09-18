@@ -90,6 +90,56 @@ function artifactPath(value: unknown): string | null {
   return segments.every((segment) => segment && segment !== "." && segment !== "..") ? value : null;
 }
 
+/** The three moments of opening a task, in the order they happen. */
+const OPEN_STAGES = ["准备运行时", "载入界面", "打开任务"] as const;
+/** What each moment is doing, said once it has taken five seconds. */
+const OPEN_STAGE_NOTES = [
+  "首次打开需要先启动一个研究运行时，通常需要 10–30 秒；已在运行的会更快。",
+  "运行时已就绪，正在载入会话界面；网络较慢时会多等一会儿。",
+  "正在读取这个任务的完整记录；运行了很久的任务，记录会大一些。",
+] as const;
+
+/**
+ * The wait before a task is on screen, drawn as what it is: the composer the
+ * reader is about to type into, and the three moments the opening goes
+ * through, each advanced by the event that ends it — the control plane's
+ * frame binding (the runtime is prepared), the kernel's page reporting ready
+ * (the interface is loaded), the task's acknowledgement (it is open). A
+ * single sentence used to stand for all three, so a slow cold start and a
+ * slow task read looked the same, and neither said which it was. After five
+ * seconds in one moment a line says what that moment is doing.
+ */
+export function FrameWaiting({ stage, line }: { stage: 0 | 1 | 2; line?: string }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    setSlow(false);
+    const timer = setTimeout(() => setSlow(true), 5_000);
+    return () => clearTimeout(timer);
+  }, [stage]);
+  return (
+    <div role="status" aria-live="polite" data-open-stage={stage} className="absolute inset-0 z-10 flex flex-col bg-bg">
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+        <ol aria-label="打开进度" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-ui-sm">
+          {OPEN_STAGES.map((label, index) => (
+            <li
+              key={label}
+              aria-current={index === stage ? "step" : undefined}
+              className={index < stage ? "text-ok" : index === stage ? "font-medium text-text" : "text-muted"}
+            >
+              {index < stage ? `✓ ${label}` : label}
+            </li>
+          ))}
+        </ol>
+        <p className="text-ui-sm text-muted">{line ?? `正在${OPEN_STAGES[stage]}…`}</p>
+        {slow && <p className="max-w-content-narrow text-caption text-muted">{OPEN_STAGE_NOTES[stage]}</p>}
+      </div>
+      <div aria-hidden="true" className="mx-auto mb-6 w-full max-w-content px-4">
+        <div className="h-24 animate-pulse rounded-card border border-border bg-surface" />
+      </div>
+    </div>
+  );
+}
+
 /** The native application stays on its own origin and immutable project frame. */
 export function RuntimeUiFrame() {
   const projectId = getWebProjectId();
@@ -515,9 +565,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
               {leaseError && <Button variant="ghost" onClick={() => renewBinding.current?.()} disabled={renewing}>重新连接</Button>}
             </div>
           )}
-          {(!navigated || pending) && <div role="status" className="absolute inset-0 z-10 flex items-center justify-center bg-bg text-ui-sm text-muted">
-            {pending ? "正在打开研究任务…" : "正在启动研究运行时…"}
-          </div>}
+          {(!navigated || pending) && <FrameWaiting stage={!binding ? 0 : !ready && !pending ? 1 : 2} />}
           {binding && <iframe
             key={binding.frameId} ref={iframe} src={binding.frameUrl} title="研究会话"
             className="h-full w-full border-0"
