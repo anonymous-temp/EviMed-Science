@@ -280,6 +280,10 @@ services:
       # Value-less, so an unset one stays absent and config.mjs's own default
       # applies (see deploymentEnvReachesTheContainer.test.mjs).
       OPEN_SCIENCE_MEMORY_ENABLED:
+      # Whether any memory reaches a run: the recalled block, the resident
+      # capsule profile, the recall tool and API. Value-less: unset follows
+      # OPEN_SCIENCE_MEMORY_ENABLED (config.mjs), so the default stays on.
+      OPEN_SCIENCE_MEMORY_RECALL_ENABLED:
       # Publishes an account's memory to whoever holds one of its API keys;
       # off unless a deployment decides otherwise (docs/AGENT_MEMORY_API.md).
       OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED:

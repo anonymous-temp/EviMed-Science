@@ -1106,10 +1106,13 @@ export function loadConfig(overrides = {}) {
     // the term matcher inside the research-memory store and needs nothing
     // deployed; `openviking` delegates the ranking to a context database. The
     // record itself stays authoritative in the control-plane database either
-    // way, so this switch changes recall quality and nothing else.
+    // way, so this switch changes recall quality and nothing else. Unset, the
+    // index is selected exactly when it is configured (an OpenViking URL and
+    // its key) — `memorySubstrate.memoryIndexSelection` decides, and readiness
+    // says which way and why.
     memoryIndexProvider: String(
-      overrides.memoryIndexProvider ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_PROVIDER ?? "builtin",
-    ),
+      overrides.memoryIndexProvider ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_PROVIDER ?? "",
+    ).trim(),
     // Report-only by default (development principle 4: a new check ships as a
     // notice before it may block). Set this and a recall whose index is down
     // fails instead of falling back to the term matcher.
@@ -1403,5 +1406,16 @@ export function loadConfig(overrides = {}) {
     // the run (modelGateway.mjs `attributeRun`); bounded runtimes carry
     // their own cap in their token.
     userRunSpendLimit: Number(overrides.userRunSpendLimit ?? process.env.OPEN_SCIENCE_USER_RUN_SPEND_LIMIT ?? 0),
+    // Memory recall, everywhere a run or an agent could receive a memory: the
+    // block recalled at dispatch, the resident capsule profile, and the recall
+    // tool and API. Off is the native control arm a memory evaluation needs
+    // (principle 11) — the ablations had to flip database rows because there
+    // was none. Unset follows the memory subsystem's own switch, so a
+    // deployment that hid memory from its researchers does not keep feeding it
+    // to their runs.
+    memoryRecallEnabled: overrides.memoryRecallEnabled ?? boolEnv(
+      "OPEN_SCIENCE_MEMORY_RECALL_ENABLED",
+      overrides.memoryEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_ENABLED", true),
+    ),
   };
 }

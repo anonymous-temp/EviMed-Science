@@ -2067,7 +2067,7 @@ export function createWebApiApp(overrides = {}) {
             });
             return runtimeManager.dispatchPrompt(project, session.id, {
               text: `<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}\n${promptText}`,
-              system: prepared.system, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
+              system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
               model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),
             });
@@ -2577,6 +2577,12 @@ export function createWebApiApp(overrides = {}) {
         const projectId = assertString(body.projectId, "projectId", { max: 128 });
         const project = await store.requireProject(user, projectId);
         const frame = issueRuntimeUiFrame({ config, req, user, session, project });
+        // A turn typed into this window reaches the kernel without a dispatch,
+        // so this is the last moment the control plane sees before it: bring
+        // the resident capsule profile up to date here. Not awaited — opening
+        // the window must not wait on the product database — and the window's
+        // own boot takes far longer than the write.
+        void runtimeManager.syncCapsuleProfile(project);
         res.setHeader("Set-Cookie", frame.cookie);
         res.setHeader("Cache-Control", "no-store");
         sendJson(res, 201, { data: { frameId: frame.frameId, frameUrl: frame.frameUrl, expiresAt: frame.expiresAt, renewalToken: frame.renewalToken } });
@@ -2955,6 +2961,7 @@ export function createWebApiApp(overrides = {}) {
             text: promptText,
             system: prepared.system,
             memoryContext: prepared.memoryContext,
+            residentProfile: true,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
             model: `deepseek/${config.deepseekModel}`,
             runId: dispatchedRun.id,
@@ -5129,7 +5136,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     publicUrl: await readinessCheck(() => readinessPublicUrl(config)),
     auth: await readinessCheck(async () => readinessAuth(config, store)),
     stateStore: await readinessCheck(async () => readinessStateStore(config, store)),
-    memory: await readinessCheck(async () => readinessMemory(researchMemory)),
+    memory: await readinessCheck(async () => readinessMemory(researchMemory, config)),
     memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memorySubstrate, memoryIndexWorker)),
     usageLedger: await readinessCheck(async () => readinessUsageLedger(config, usageLedger)),
     inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
@@ -5217,16 +5224,23 @@ async function readinessStateStore(config, store) {
  * no research memory at all, which is a configuration rather than a fault and
  * says so as `required: false`. A store that exists and cannot answer IS a
  * fault, because every recall and every extraction goes through it. */
-async function readinessMemory(researchMemory) {
-  if (!researchMemory?.configured) return { required: false, configured: false };
+/** Whether the memory store answers, and whether recall is on at all
+ *  (`OPEN_SCIENCE_MEMORY_RECALL_ENABLED`). The switch is reported with the
+ *  store rather than as a check of its own: an evaluation keeps `/api/ready`
+ *  verbatim, and "memory off" has to be readable there as a setting, not
+ *  inferred from runs that happened to recall nothing. */
+async function readinessMemory(researchMemory, config) {
+  const recallEnabled = config?.memoryRecallEnabled !== false;
+  if (!researchMemory?.configured) return { required: false, configured: false, recallEnabled };
   const status = await researchMemory.status();
   if (!status.connected) {
     throw readinessFailure(status.code ?? "memory_unavailable", {
       configured: Boolean(status.configured),
       connected: false,
+      recallEnabled,
     });
   }
-  return { required: true, connected: true };
+  return { required: true, connected: true, recallEnabled };
 }
 
 /** Which component ranks a recall, whether it can be reached, and what the
@@ -5265,9 +5279,15 @@ async function readinessMemoryIndex(config, substrate, worker) {
     : substrate?.active
       ? { configured: rerankStatus.configured, code: config.dashscopeApiKeyError ?? rerankStatus.code ?? null }
       : { configured: false, code: "memory_rerank_not_reached" };
+  // Why this provider: every memory evaluation recorded `builtin` from a
+  // deployment whose compose file said `openviking`, and the bare name could
+  // not tell a pin from an accident (E §10.5). `indexConfigured` beside a
+  // `builtin` provider is the pin, visible.
+  const selection = substrate?.selection ?? null;
   const details = {
     required,
     provider: status.provider,
+    ...(selection ? { providerSource: selection.source, indexConfigured: selection.indexConfigured } : {}),
     configured: Boolean(status.configured),
     connected: Boolean(status.connected),
     ...(status.code ? { code: status.code } : {}),
