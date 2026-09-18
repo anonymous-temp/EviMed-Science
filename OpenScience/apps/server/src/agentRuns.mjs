@@ -393,6 +393,9 @@ function foldEvents(events) {
         question: typeof event.question === "string" && event.question ? questionPreview(event.question) : null,
         ...(event.automated === true ? { automated: true } : {}),
         ...(normalizeRunEstimate(event.estimatedMinutes) ? { estimatedMinutes: normalizeRunEstimate(event.estimatedMinutes) } : {}),
+        // The session this run's session was forked from (C3), so a branch
+        // can be followed back to the conversation it came from.
+        ...(typeof event.forkedFrom === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(event.forkedFrom) ? { forkedFrom: event.forkedFrom } : {}),
         status: "running",
         createdAt: storedTimestamp(event.createdAt, "createdAt"),
         startedAt,
@@ -3735,6 +3738,7 @@ export class AgentRunStore {
     dispatchId = null,
     automated = false,
     estimatedMinutes = null,
+    forkedFrom = null,
     question = null,
     effectiveAgentId = session.mode === "specialist" ? session.agentId : null,
     effectiveAgentVersion = session.mode === "specialist" ? session.agentVersion : null,
@@ -3832,6 +3836,7 @@ export class AgentRunStore {
         question,
         ...(automated === true ? { automated: true } : {}),
         ...(normalizeRunEstimate(estimatedMinutes) ? { estimatedMinutes: normalizeRunEstimate(estimatedMinutes) } : {}),
+        ...(typeof forkedFrom === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(forkedFrom) ? { forkedFrom } : {}),
         createdAt: now,
         startedAt: startedAt == null ? now : storedTimestamp(startedAt, "startedAt"),
         baselineCursor,
@@ -5860,11 +5865,11 @@ export class AgentRunStore {
    * ungated work indistinguishable from work that passed.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null, estimatedMinutes?: { min: number, max: number } | null, transcript?: import('@evimed/domain').RunTranscript, routeTurn?: (text: string) => Promise<any> }} [routed]
+   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null, estimatedMinutes?: { min: number, max: number } | null, forkedFrom?: string | null, transcript?: import('@evimed/domain').RunTranscript, routeTurn?: (text: string) => Promise<any> }} [routed]
    */
   async adoptRuntimeSession(project, sessionId, routed = {}) {
     const id = safeId(sessionId, "runtime session id");
-    if (routed.transcript) return this.adoptRuntimeTurns(project, id, routed.transcript, routed.routeTurn);
+    if (routed.transcript) return this.adoptRuntimeTurns(project, id, routed.transcript, routed.routeTurn, { forkedFrom: routed.forkedFrom ?? null });
     const existing = (await this.list(project)).find((run) => run.sessionId === id);
     if (existing) return existing;
     // A session this control plane is starting is announced by the kernel
@@ -6021,15 +6026,21 @@ export class AgentRunStore {
    * @param {any} project @param {string} sessionId
    * @param {import('@evimed/domain').RunTranscript} transcript
    * @param {(text: string) => Promise<any>} [routeTurn]
+   * @param {{ forkedFrom?: string | null }} [options] the session this one was forked from
    */
-  async adoptRuntimeTurns(project, sessionId, transcript, routeTurn = async () => ({})) {
+  async adoptRuntimeTurns(project, sessionId, transcript, routeTurn = async () => ({}), { forkedFrom = null } = {}) {
     if (transcript.sessionId !== sessionId) throw new HttpError(400, "invalid_agent_run", "Runtime transcript identity does not match.");
     const binding = await this.researchSessions.get(project, sessionId);
+    // A fork begins with a copy of the session it branched from. Those turns
+    // are that session's runs already; only what came after the cut is work
+    // done here.
+    const seedEnd = Number.isSafeInteger(transcript.seedEndSeq) ? Number(transcript.seedEndSeq) : -1;
     const turns = (transcript.turns ?? []).map((turn) => ({
       ...turn,
       inputs: transcript.messages.filter((message) => message.turnStartSeq === turn.startSeq && message.role === "user" && message.source === "user"),
-    })).filter((turn) => turn.inputs.length > 0);
+    })).filter((turn) => turn.inputs.length > 0 && turn.startSeq > seedEnd);
     const knownRuns = await this.list(project);
+    const source = forkedFrom && /^[A-Za-z0-9_-]{1,128}$/.test(forkedFrom) ? forkedFrom : null;
     const notifiedLegacy = new Set();
     for (const [index, turn] of turns.entries()) {
       const first = turn.inputs[0];
@@ -6100,12 +6111,24 @@ export class AgentRunStore {
           legacyRunId: legacy?.id,
           question: questionPreview(question),
           estimatedMinutes: routed.estimatedMinutes ?? null,
+          forkedFrom: source,
           effectiveAgentId: routed.effectiveAgentId ?? binding?.agentId ?? null,
           effectiveAgentVersion: routed.effectiveAgentVersion ?? binding?.agentVersion ?? null,
           effectiveRuntimeAgent: routed.effectiveRuntimeAgent ?? binding?.runtimeAgent ?? null,
           effectiveRouteReason: `${adoptedRouteReason}${routed.effectiveRouteReason ? `:${routed.effectiveRouteReason}` : ""}`.slice(0, 64),
         });
         run = reservation.run;
+        // The first run of a fork is named after the line it branched from,
+        // 「分支：<that run's title>」; the researcher can rename it like any.
+        if (reservation.owner && source && !knownRuns.some((item) => item.sessionId === sessionId && item.id !== run.id)) {
+          const origin = knownRuns.filter((item) => item.sessionId === source)
+            .sort((left, right) => String(right.startedAt).localeCompare(String(left.startedAt)))[0];
+          const named = [...String(origin?.title ?? "一次对话")];
+          run = await this.recordRunLabels(project, run.id, {
+            title: `分支：${named.length > 40 ? `${named.slice(0, 39).join("")}…` : named.join("")}`,
+            titleSource: "auto",
+          }).catch(() => run);
+        }
         const knownIndex = knownRuns.findIndex((item) => item.id === run.id);
         if (knownIndex >= 0) knownRuns[knownIndex] = run;
         else knownRuns.push(run);

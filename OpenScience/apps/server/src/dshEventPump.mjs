@@ -646,7 +646,12 @@ export class RuntimeEventPump {
     const sessionId = String(summary?.sessionId ?? summary?.id ?? "");
     const parentSessionId = String(summary?.parentSessionId ?? summary?.parentSession ?? summary?.header?.parentSession ?? "");
     const origin = String(summary?.origin ?? summary?.header?.origin ?? "");
-    if (!parentSessionId && origin !== "subagent") return false;
+    // A child is what the kernel says is one: `origin: 'subagent'`. A session
+    // with a parent and no such origin is a fork — `session/fork` records the
+    // source as its parent — and a fork is a researcher's own new line of
+    // work, adopted as a run of its own (2026-09-18 decision 6), never bound
+    // as a child of the run it branched from.
+    if (origin !== "subagent") return false;
     if (!sessionId || !parentSessionId) return true;
     const parentChild = state.childSessions.get(parentSessionId);
     const rootRunId = state.rootSessions.get(parentSessionId);
@@ -727,8 +732,9 @@ export class RuntimeEventPump {
     // A minted session can later be opened in the native UI. Its committed
     // input's request identity, not who created the session, decides ownership.
     // A subagent's session is already owned by its parent's run; adopting it
-    // would file the same work twice.
-    if (summary?.parentSessionId || summary?.origin === "subagent") return;
+    // would file the same work twice. A fork has a parent too and is adopted:
+    // see `#considerChildSession`.
+    if (summary?.origin === "subagent") return;
     const head = summary?.projections?.asOfSeq;
     if (Number.isSafeInteger(head) && state.adoptionHeads.get(sessionId) === head) return;
     if (state.adopting.has(sessionId)) return;
@@ -736,7 +742,7 @@ export class RuntimeEventPump {
     // Tracked, not fired and forgotten. An adoption writes to the project's
     // ledger, and a pump that closed without waiting for it left a write
     // landing in a directory the caller had already started removing.
-    const inFlight = Promise.resolve(this.adoptSession(state.project, sessionId))
+    const inFlight = Promise.resolve(this.adoptSession(state.project, sessionId, summary))
       .then((run) => {
         if (state.controller.signal.aborted) return;
         if (Number.isSafeInteger(head)) state.adoptionHeads.set(sessionId, head);
@@ -759,7 +765,9 @@ export class RuntimeEventPump {
         const sessionId = String(summary.sessionId ?? summary.id ?? "");
         const parentSessionId = String(summary.parentSessionId ?? summary.parentSession ?? summary.header?.parentSession ?? "");
         const origin = String(summary.origin ?? summary.header?.origin ?? "");
-        if (!parentSessionId && origin !== "subagent") return;
+        // Only a subagent is announced as a child; a fork is adopted by the
+        // sweep as a run of its own.
+        if (origin !== "subagent") return;
         const parentChild = state.childSessions.get(parentSessionId);
         const rootRunId = state.rootSessions.get(parentSessionId);
         const runId = parentChild?.runId ?? rootRunId ?? null;

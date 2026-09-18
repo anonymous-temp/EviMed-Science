@@ -644,8 +644,12 @@ test("a session the kernel holds and no run owns is adopted on the sweep", async
   const listed = [
     { sessionId: "s-blank", blank: true },
     { sessionId: "s-typed", blank: false, projections: { asOfSeq: 12 } },
-    { sessionId: "s-child", blank: false, parentSessionId: "s-typed" },
+    // A child is what the kernel marks as one; a parent alone is a fork
+    // (`session/fork` records its source as the parent), and a fork is the
+    // researcher's own branch, adopted as a run of its own.
+    { sessionId: "s-child", blank: false, parentSessionId: "s-typed", origin: "subagent" },
     { sessionId: "s-origin-child", blank: false, origin: "subagent" },
+    { sessionId: "s-fork", blank: false, parentSessionId: "s-typed", projections: { asOfSeq: 14 } },
     { sessionId: "s-minted", blank: false, projections: { asOfSeq: 15 } },
   ];
   const pump = new RuntimeEventPump({
@@ -657,11 +661,13 @@ test("a session the kernel holds and no run owns is adopted on the sweep", async
     callUnary: async (_runtime, method) => (
       method === "session/list" ? { ok: true, value: listed } : { ok: true, value: {} }
     ),
-    adoptSession: async (_project, sessionId) => {
+    adoptSession: async (_project, sessionId, summary) => {
       adopted.push(sessionId);
+      summaries.set(sessionId, summary);
       return { id: `run-for-${sessionId}`, sessionId, status: "running" };
     },
   });
+  const summaries = new Map();
   const project = { userId: "alice", id: "paper-1" };
   pump.attach(project, { url: "http://127.0.0.1:1" });
   // Minting does not exempt later committed native inputs from observation.
@@ -669,7 +675,10 @@ test("a session the kernel holds and no run owns is adopted on the sweep", async
   await waitFor(() => adopted.includes("s-typed"), "the unowned session to be adopted");
   await new Promise((resolve) => setTimeout(resolve, 60));
 
-  assert.deepEqual(adopted, ["s-typed", "s-minted"], `adopted ${JSON.stringify(adopted)}`);
+  assert.deepEqual(adopted, ["s-typed", "s-fork", "s-minted"], `adopted ${JSON.stringify(adopted)}`);
+  // The adopter is handed the kernel's summary, which is where a fork's
+  // parent — the session it branched from — is read.
+  assert.equal(summaries.get("s-fork").parentSessionId, "s-typed");
   await pump.closeAll();
 });
 

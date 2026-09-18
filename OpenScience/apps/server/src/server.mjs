@@ -1128,7 +1128,7 @@ export function createWebApiApp(overrides = {}) {
     // record. Handing them the pump's stub made both lookups fail quietly, and
     // a check that cannot see the research session adopts every session the
     // control plane is in the middle of starting.
-    adoptSession: async (project, sessionId) => {
+    adoptSession: async (project, sessionId, summary = null) => {
       const user = await store.userById(project.userId);
       if (!user) return null;
       const full = await store.requireProject(user, project.id);
@@ -1139,9 +1139,14 @@ export function createWebApiApp(overrides = {}) {
       // Each committed user turn carries its own input and request identity;
       // an existing conversation is not a permanent ownership exemption.
       const transcript = await runtimeManager.sessionTranscript(full, sessionId, { wake: false });
+      // A fork names its source as its parent and is no subagent: the
+      // kernel's own parentage, which is what makes this a branch (decision 6).
+      const parent = String(summary?.parentSessionId ?? summary?.parentSession ?? summary?.header?.parentSession ?? "");
+      const origin = String(summary?.origin ?? summary?.header?.origin ?? "");
       return agentRuns.adoptRuntimeSession(full, sessionId, {
         transcript,
         routeTurn: (text) => routeAdoptedInput(full, sessionId, text),
+        ...(parent && origin !== "subagent" ? { forkedFrom: parent } : {}),
       });
     },
     // The pump has already authenticated the runtime and attributed root and
