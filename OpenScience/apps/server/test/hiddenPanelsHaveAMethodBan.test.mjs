@@ -65,6 +65,10 @@ const WHAT_STOPS_IT = {
   // opened.
   "ui-sidebar-files": { namespace: "workspaceFiles" },
   "ui-sidebar-documentpreview": { namespace: "workspaceFiles" },
+  // The browser half of dynamic Cordis packages: every call it makes is a
+  // `dynamicCordisRunner/*` method, refused wholesale. Unmounted so it stops
+  // syncing a manifest into two 403s per session open.
+  "cordis-client-runner": { namespace: "dynamicCordisRunner" },
   // Operator-only rather than hidden, and the reason is worth stating without
   // flattering it: this removes the affordance, not the data. The kernel
   // streams the prompt, the reminders and the raw tool JSON to the browser over
