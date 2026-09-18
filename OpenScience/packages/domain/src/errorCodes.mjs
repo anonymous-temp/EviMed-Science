@@ -554,8 +554,10 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   'runtime_limit_exceeded',
   'agent_run_active',
   'agent_run_limit_reached',
-  // 2026-09-18 (C4): the per-account project ceiling, said with its reason.
+  // 2026-09-18 (C4): the per-account project ceiling, said with its reason,
+  // and the one project that can be neither archived nor deleted.
   'project_limit_reached',
+  'default_project_protected',
   'illegal_state_transition',
   'verification_run_failed',
   'verification_result_missing',
@@ -787,6 +789,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   agent_run_active: '这个研究会话已经有一次运行在进行中。等它结束，或先取消它，再发起新的。',
   agent_run_limit_reached: '这个项目同时进行的研究运行已达上限。等其中一次结束后再发起。',
   project_limit_reached: '这个账户的项目数已达上限。每个项目都有独立的存储空间和研究运行时，上限用来保证服务器资源够用。可以先导出并删除不再需要的项目，再新建。',
+  default_project_protected: '「我的研究」是账户的默认项目，不能归档或删除。可以改名，或把不再需要的内容移到别的项目。',
 
   // ——— The autopilot's independent-check episode ———
   //
@@ -957,6 +960,7 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   agent_run_active: 'capped',
   agent_run_limit_reached: 'capped',
   project_limit_reached: 'capped',
+  default_project_protected: 'capped',
   usage_budget_exceeded: 'capped',
   // The gate's own named defects, which carry no recognizable prefix.
   'declared-appraisal-must-execute': 'gated',
