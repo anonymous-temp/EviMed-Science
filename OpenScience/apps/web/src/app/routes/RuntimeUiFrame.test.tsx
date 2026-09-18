@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionRoute } from "./SessionRoute";
 import { WebApiError } from "@/lib/apiClient";
 import { apply as applyNativeBridge } from "../../../../../packages/harness-port/src/runtimeUiBridge.mjs";
+import { createFrameKit } from "../../../../../packages/harness-port/src/runtimeUiKit.mjs";
+import { apply as applyFrameTheme } from "../../../../../packages/harness-port/src/runtimeUiTheme.mjs";
+import { useUiStore } from "@/lib/store";
 
 const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 // Only the four frame calls and the profile are stubbed. Everything else is the
@@ -429,6 +432,99 @@ describe("native frame identity and readiness", () => {
     expect(container.querySelector("iframe")).toBe(frame);
   });
 
+});
+
+describe("the shell's theme in the frame", () => {
+  // jsdom has no matchMedia; the shell asks it only while the preference is
+  // "system", to say which scheme that resolves to.
+  function stubScheme(dark: boolean) {
+    const listeners = new Set<() => void>();
+    const media = { matches: dark, addEventListener: (_type: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_type: string, fn: () => void) => listeners.delete(fn) };
+    const original = window.matchMedia;
+    window.matchMedia = (() => media) as unknown as typeof window.matchMedia;
+    return { flip(next: boolean) { media.matches = next; act(() => { for (const fn of [...listeners]) fn(); }); }, listeners,
+      restore() { window.matchMedia = original; } };
+  }
+  // Unmounted first: the store is shared by every test in this file, and a
+  // reset while the frame is still mounted re-renders it outside act().
+  afterEach(() => { cleanup(); useUiStore.setState({ theme: "system" }); });
+
+  it("answers the frame's first word with the shell's choice, and follows every change", async () => {
+    const scheme = stubScheme(false);
+    try {
+      useUiStore.setState({ theme: "dark" });
+      const { container } = mount(null, "/app/chat/session-a");
+      await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+      const frame = container.querySelector("iframe")!;
+      const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      const themes = () => post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.theme").map(([data, origin]) => ({ ...data, origin }));
+      // A bridge that never said it was listening is told nothing: an older
+      // frame document has no use for the message.
+      emit(frame, { type: "evimed.runtime-ui.ready", seq: 2 });
+      await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+      expect(themes()).toHaveLength(0);
+      emit(frame, { type: "evimed.runtime-ui.booted", seq: 3 });
+      await waitFor(() => expect(themes()).toHaveLength(1));
+      expect(themes()[0]).toMatchObject({ version: 1, frameId: "frame-a", projectId: "default", preference: "dark", resolved: "dark", origin: mocks.profile.uiOrigin });
+      expect(themes()[0].seq).toBeGreaterThan(post.mock.calls[0][0].seq);
+      act(() => useUiStore.getState().setTheme("system"));
+      await waitFor(() => expect(themes()).toHaveLength(2));
+      expect(themes()[1]).toMatchObject({ preference: "system", resolved: "light" });
+      // Under "system" an OS flip is news too; under an explicit choice it is not.
+      scheme.flip(true);
+      await waitFor(() => expect(themes()).toHaveLength(3));
+      expect(themes()[2]).toMatchObject({ preference: "system", resolved: "dark" });
+      act(() => useUiStore.getState().setTheme("light"));
+      await waitFor(() => expect(themes()).toHaveLength(4));
+      expect(scheme.listeners.size).toBe(0);
+      scheme.flip(false);
+      expect(themes()).toHaveLength(4);
+      expect(themes().map(entry => entry.seq)).toEqual([...themes().map(entry => entry.seq)].sort((a, b) => a - b));
+    } finally { scheme.restore(); }
+  });
+
+  it("reaches the kernel's theme runtime through the real bridge and the frame's theme body", async () => {
+    useUiStore.setState({ theme: "dark" });
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const origin = "https://shell.example";
+    let listener = (_event: unknown) => {};
+    const parent = { postMessage: (data: Record<string, unknown>) => {
+      window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: mocks.profile.uiOrigin, data }));
+    } };
+    vi.spyOn(frame.contentWindow!, "postMessage").mockImplementation(data => listener({ data, origin, source: parent }));
+    const setTheme = vi.fn();
+    const overrideTokens = vi.fn(() => () => {});
+    const disposers: Array<() => void> = [];
+    const ctx: Record<string, unknown> = {
+      loader: { await: () => new Promise(() => {}) },
+      connection: { generation: { getSnapshot: () => ({}), subscribe: () => () => {} } },
+      sessions: { refresh: vi.fn(), create: vi.fn(), open: vi.fn(), scope: () => ({}), list: { getSnapshot: () => ({ current: null }), subscribe: () => () => {} } },
+      workspaces: { create: vi.fn(), list: { getSnapshot: () => ({ items: [] }) } },
+      conversation: { input: { for: () => ({ setDraft: vi.fn() }) } },
+      theme: { setTheme, overrideTokens },
+      effect: (setup: () => (() => void) | void) => { const dispose = setup(); if (typeof dispose === "function") disposers.push(dispose); },
+      on: () => () => {},
+    };
+    ctx.inject = (_names: string[], callback: (scope: unknown) => void) => callback(ctx);
+    const target = {
+      __EVIMED_FRAME__: { version: 1, frameId: binding.frameId, projectId: "default", shellOrigin: origin, cwd: "/workspace" },
+      parent, addEventListener: (type: string, fn: typeof listener) => { if (type === "message") listener = fn; }, removeEventListener() {},
+      setTimeout, clearTimeout, console,
+    };
+    const kit = createFrameKit(ctx, target, () => undefined, {});
+    await act(async () => {
+      applyNativeBridge(ctx, {}, target, undefined, kit);
+      applyFrameTheme(ctx, {}, target, undefined, kit);
+    });
+    await waitFor(() => expect(setTheme).toHaveBeenCalledWith("dark"));
+    expect(overrideTokens).toHaveBeenCalledWith("@evimed/dsh-socket", expect.objectContaining({ "--dsw-alias-button-info-fill": { light: "#00756b", dark: "#00756b" } }));
+    act(() => useUiStore.getState().setTheme("light"));
+    await waitFor(() => expect(setTheme).toHaveBeenLastCalledWith("light"));
+    for (const dispose of disposers.reverse()) dispose();
+  });
 });
 
 it("a new valid navigation recovers automatically after an unknown-session error", async () => {
