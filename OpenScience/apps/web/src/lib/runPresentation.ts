@@ -151,7 +151,7 @@ export const OPEN_DOMAIN_ANSWER_AGENT_ID = "open-domain-answer";
 
 /** What produced a run, in the product's words, or null for an id with no name. */
 export function runAgentName(agent: string | null | undefined): string | null {
-  if (agent === OPEN_DOMAIN_ANSWER_AGENT_ID) return "开放域问答";
+  if (agent === OPEN_DOMAIN_ANSWER_AGENT_ID) return "普通问答";
   return capabilityTitle(agent);
 }
 

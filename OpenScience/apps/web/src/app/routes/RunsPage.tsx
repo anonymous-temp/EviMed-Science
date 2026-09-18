@@ -70,6 +70,7 @@ import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { QualityNotices } from "@/components/runs/QualityNotices";
 import { RunStatusDot } from "@/components/runs/RunStatusDot";
+import { RouteLine } from "@/components/runs/RouteLine";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Button, buttonClasses } from "@/components/ui/Button";
@@ -533,7 +534,7 @@ function HostedRunsView() {
 function capabilityLabel(run: WebAgentRun): string {
   const agent = run.effectiveAgentId ?? run.agentId;
   if (!agent) return run.mode === "specialist" ? "专项科研" : "开放域科研";
-  if (agent === OPEN_DOMAIN_ANSWER_AGENT_ID) return "开放域问答";
+  if (agent === OPEN_DOMAIN_ANSWER_AGENT_ID) return "普通问答";
   const name = capabilityTitle(agent) ?? agent;
   return run.mode === "open-domain" ? `开放域 · ${name}` : name;
 }
@@ -764,6 +765,10 @@ function RunDetail({
       {/* What happened, and what can be done about it. */}
       <div className="space-y-2">
         {running && <RunActivity run={run} live={live} />}
+        {/* Why this line, and how long it usually takes — informative only
+          * here: changing the line is offered right after a dispatch, when it
+          * costs seconds, not on a run that may be twenty minutes in. */}
+        {(run.routeReason || run.estimatedMinutes) && <RouteLine run={run} />}
         {/* A failure says itself once, from the one dictionary, with the
           * code kept as a tooltip for support. */}
         {runDidNotDeliver(run) && <RunVerdict run={run} />}

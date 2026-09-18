@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, Bot, Clock3, FileCheck2, RefreshCw, Search, ServerCrash } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Bot, ChevronDown, Clock3, FileCheck2, RefreshCw, Search, ServerCrash } from "lucide-react";
 import { capabilityBrief } from "@evimed/domain";
-import { webErrorMessage, hasWebApi, listWebResearchAgents, type WebResearchAgent, type WebResearchAgentOutput } from "@/lib/apiClient";
+import { webErrorMessage, hasWebApi, listWebResearchAgents, type WebAgentRun, type WebResearchAgent, type WebResearchAgentOutput } from "@/lib/apiClient";
 import { researchAgentUi } from "@/lib/researchAgentUi";
+import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { AgentsSkeleton } from "@/components/cards/Skeletons";
+import { CapabilityStart } from "@/components/capabilities/CapabilityStart";
+import { DispatchReceipt } from "@/components/runs/DispatchReceipt";
 import { Button } from "@/components/ui/Button";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { PAGE_TITLE_CLASS } from "@/components/layout/PageHeader";
 import { PageTitle } from "@/components/layout/PageTitle";
 
@@ -37,8 +38,9 @@ import { PageTitle } from "@/components/layout/PageTitle";
 export { capabilityBrief };
 
 export function CapabilitiesPage() {
-  const navigate = useNavigate();
   const [agents, setAgents] = useState<WebResearchAgent[]>([]);
+  const [startingId, setStartingId] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<{ run: WebAgentRun; question: string } | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [loading, setLoading] = useState(hasWebApi);
@@ -67,14 +69,6 @@ export function CapabilitiesPage() {
       active = false;
     };
   }, [reloads]);
-
-  const open = useCallback(
-    (agent: WebResearchAgent) => {
-      const ui = researchAgentUi(agent);
-      navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(capabilityBrief(ui.title, ui.starterPrompts[0] ?? "")) } });
-    },
-    [navigate],
-  );
 
   const localizedAgents = useMemo(() => agents.map(researchAgentUi), [agents]);
   const categories = useMemo(
@@ -114,8 +108,8 @@ export function CapabilitiesPage() {
             <PageTitle page="科研能力" />
             <h1 className={PAGE_TITLE_CLASS}>科研能力</h1>
             <p className="mt-2 text-ui leading-6 text-muted">
-              选一项能力，它会把题面填进对话框并点名该能力；你可以随意修改，也可以在同一次对话里接着要别的产出。
-              这是建议，不是绑定。
+              选一项能力，写下问题就能直接开始；开始后会告诉你按哪条线处理、通常要多久，不合适可以一键改线。
+              也可以把题面放进对话框，改好再自己发出。
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
@@ -143,6 +137,17 @@ export function CapabilitiesPage() {
           </div>
         </div>
 
+        {receipt && (
+          <div className="mt-6">
+            <DispatchReceipt
+              run={receipt.run}
+              question={receipt.question}
+              catalog={agents}
+              onDismiss={() => setReceipt(null)}
+            />
+          </div>
+        )}
+
         <div className="mt-2 divide-y divide-border border-b border-border">
           {loading && <AgentsSkeleton />}
           {/* Error with a way out, not a dead end: a catalogue that failed to
@@ -168,7 +173,16 @@ export function CapabilitiesPage() {
             <EmptyState icon={Search} title="没有符合条件的科研能力" />
           )}
           {!loading && !error && visible.map((agent) => (
-            <AgentRow key={agent.id} agent={agent} onOpen={() => open(agent)} />
+            <AgentRow
+              key={agent.id}
+              agent={agent}
+              starting={startingId === agent.id}
+              onToggleStart={() => setStartingId((current) => (current === agent.id ? null : agent.id))}
+              onDispatched={(run, question) => {
+                setStartingId(null);
+                setReceipt({ run, question });
+              }}
+            />
           ))}
         </div>
       </div>
@@ -176,39 +190,62 @@ export function CapabilitiesPage() {
   );
 }
 
-function AgentRow({ agent, onOpen }: { agent: WebResearchAgent; onOpen: () => void }) {
+function AgentRow({
+  agent,
+  starting,
+  onToggleStart,
+  onDispatched,
+}: {
+  agent: WebResearchAgent;
+  starting: boolean;
+  onToggleStart: () => void;
+  onDispatched: (run: WebAgentRun, question: string) => void;
+}) {
   const ui = researchAgentUi(agent);
   const outputLabels = [...new Set(ui.outputs.map(outputLabel))];
   const supportsFiles = agent.optionalInputs.includes("uploadedFiles") || agent.requiredInputs.includes("uploadedFiles");
+  const panelId = `capability-start-${agent.id}`;
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label={`使用${ui.title}能力`}
-      className="group grid w-full grid-cols-[3rem_minmax(0,1fr)_auto] gap-4 py-6 text-left transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
-    >
-      <div className="flex h-9 w-9 items-center justify-center rounded-input bg-surface-2 font-mono text-caption font-semibold tracking-wide text-accent ring-1 ring-border">
-        {ui.code}
-      </div>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted">
-          <span className="font-medium tracking-[0.12em] text-accent">{ui.category}</span>
-          <span className="inline-flex items-center gap-1"><Clock3 size={12} aria-hidden="true" /> 约 {ui.estimatedMinutes[0]}–{ui.estimatedMinutes[1]} 分钟</span>
-          {supportsFiles && <span className="inline-flex items-center gap-1"><FileCheck2 size={12} aria-hidden="true" /> 支持知识库资料</span>}
+    <article aria-labelledby={`capability-${agent.id}`} className="py-6">
+      <div className="grid grid-cols-[3rem_minmax(0,1fr)_auto] gap-4">
+        <div className="flex h-9 w-9 items-center justify-center rounded-input bg-surface-2 font-mono text-caption font-semibold tracking-wide text-accent ring-1 ring-border">
+          {ui.code}
         </div>
-        <h2 className="mt-2 text-title font-semibold text-text">{ui.title}</h2>
-        <p className="mt-1 max-w-3xl text-ui leading-6 text-muted">{ui.description}</p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {outputLabels.map((label) => (
-            <span key={label} className="rounded-full bg-surface-2 px-2 py-0.5 text-caption font-medium text-muted ring-1 ring-border">{label}</span>
-          ))}
-          <span className="truncate text-caption text-muted">示例：{ui.starterPrompts[0]}</span>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted">
+            <span className="font-medium tracking-[0.12em] text-accent">{ui.category}</span>
+            <span className="inline-flex items-center gap-1"><Clock3 size={12} aria-hidden="true" /> 约 {ui.estimatedMinutes[0]}–{ui.estimatedMinutes[1]} 分钟</span>
+            {supportsFiles && <span className="inline-flex items-center gap-1"><FileCheck2 size={12} aria-hidden="true" /> 支持知识库资料</span>}
+          </div>
+          <h2 id={`capability-${agent.id}`} className="mt-2 text-title font-semibold text-text">{ui.title}</h2>
+          <p className="mt-1 max-w-3xl text-ui leading-6 text-muted">{ui.description}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {outputLabels.map((label) => (
+              <span key={label} className="rounded-full bg-surface-2 px-2 py-0.5 text-caption font-medium text-muted ring-1 ring-border">{label}</span>
+            ))}
+            <span className="truncate text-caption text-muted">示例：{ui.starterPrompts[0]}</span>
+          </div>
+        </div>
+        <div className="flex items-start">
+          <Button
+            size="sm"
+            variant={starting ? "ghost" : "primary"}
+            aria-expanded={starting}
+            aria-controls={panelId}
+            aria-label={`使用${ui.title}能力`}
+            onClick={onToggleStart}
+          >
+            使用
+            <ChevronDown size={14} className={cn("transition-transform duration-fast", starting && "rotate-180")} aria-hidden="true" />
+          </Button>
         </div>
       </div>
-      <div className="flex h-full items-center px-3 text-muted transition-transform group-hover:translate-x-1 group-hover:text-accent">
-        <ArrowRight size={17} aria-hidden="true" />
-      </div>
-    </button>
+      {starting && (
+        <div id={panelId} className="mt-4 pl-16">
+          <CapabilityStart agent={agent} onDispatched={onDispatched} />
+        </div>
+      )}
+    </article>
   );
 }
 
