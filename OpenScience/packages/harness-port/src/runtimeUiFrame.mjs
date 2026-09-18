@@ -26,6 +26,7 @@
  */
 
 import {
+  CONTRACT_KIND_LABELS,
   EVIDENCE_SOURCE_TYPE_LABELS_ZH,
   EVIDENCE_SOURCE_TYPES,
   RUN_ACTIVITY_PHASE_LABELS_ZH,
@@ -40,6 +41,8 @@ import { BODY as LOCALE } from './runtimeUiLocale.mjs';
 import { BODY as SHELL } from './runtimeUiShell.mjs';
 import { RUNTIME_UI_KERNEL_PIN, RUNTIME_UI_SLOTS } from './runtimeUiSlots.mjs';
 import { BODY as THEME } from './runtimeUiTheme.mjs';
+import { BODY as TOOLVIEWS } from './runtimeUiToolviews.mjs';
+import { BODY as TRANSCRIPT } from './runtimeUiTranscript.mjs';
 
 /**
  * @typedef {object} FrameBody
@@ -54,7 +57,7 @@ import { BODY as THEME } from './runtimeUiTheme.mjs';
  * before anything that renders.
  * @type {readonly FrameBody[]}
  */
-export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, COMMANDS]);
+export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, TRANSCRIPT, TOOLVIEWS, COMMANDS]);
 
 /** The switch names an operator may list; the bridge is not one of them. */
 export const FRAME_SWITCHABLE_BODIES = Object.freeze(FRAME_BODIES.map((body) => body.name).filter((name) => name !== 'bridge'));
@@ -71,6 +74,7 @@ export const FRAME_VOCABULARY = Object.freeze({
   phaseLabels: RUN_ACTIVITY_PHASE_LABELS_ZH,
   sourceTypes: EVIDENCE_SOURCE_TYPES,
   sourceTypeLabels: EVIDENCE_SOURCE_TYPE_LABELS_ZH,
+  contractKindLabels: CONTRACT_KIND_LABELS,
   // The socket tools whose calls the frame draws. The names are contractual
   // (C6/C7 of the 2026-09-18 plan); the domain's table is preferred where it
   // already lists one, so a rename there reaches the frame.

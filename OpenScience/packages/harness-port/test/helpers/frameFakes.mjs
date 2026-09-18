@@ -56,6 +56,16 @@ export function fakeSlots(declared) {
       registrations.push({ name: options.name, options, component });
       return () => {};
     },
+    /**
+     * The ledger's inspection view, lowest priority first as the kernel keeps
+     * it: entries carry their component and options.
+     * @param {string} name
+     */
+    entries(name) {
+      return registrations.filter((entry) => entry.name === name)
+        .map((entry) => ({ component: entry.component, options: entry.options }))
+        .sort((a, b) => (a.options.priority ?? 0) - (b.options.priority ?? 0));
+    },
   };
   return slots;
 }
