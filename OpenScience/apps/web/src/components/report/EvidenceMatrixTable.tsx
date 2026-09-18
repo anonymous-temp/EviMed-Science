@@ -2,8 +2,10 @@ import { Link } from "react-router";
 import { EVIDENCE_SOURCE_TYPE_LABELS_ZH } from "@evimed/domain";
 import { ExternalLink } from "lucide-react";
 import { CLAIM_STATUS_TEXT, claimSources, type ClaimEvidence } from "@/lib/claimCitations";
+import { claimAppraisalDisplay } from "@/lib/claimAppraisal";
 import { cn } from "@/lib/cn";
 import { preservedSourceHref, type VerifiedClaim } from "@/components/markdown-viewer/ClaimCitation";
+import { ClaimAppraisalSummary } from "@/components/markdown-viewer/ClaimAppraisal";
 
 const TYPE_LABEL: Record<string, string> = { direct: "直接证据", synthesized: "综合结论", derived: "推导结果" };
 const ACCESS_LABEL: Record<string, string> = {
@@ -64,6 +66,7 @@ export function EvidenceMatrixTable({
             const sources = claimSources(claim);
             const check = verified?.get(claim.claimId);
             const overall = check ? STATUS_MARK[check.status] : undefined;
+            const appraisal = claimAppraisalDisplay(claim, check);
             return (
               <tr key={claim.claimId} id={`matrix-${claim.claimId}`} className="group border-b border-faint align-top hover:bg-surface-2">
                 <th scope="row" className="sticky left-0 z-10 bg-surface px-3 py-2 font-mono text-caption font-medium text-text group-hover:bg-surface-2">
@@ -73,6 +76,7 @@ export function EvidenceMatrixTable({
                 <td className="px-3 py-2 text-text">
                   {claim.claim}
                   {claim.claimType === "derived" && claim.method && <p className="mt-1 text-caption text-muted">方法：{claim.method}</p>}
+                  {appraisal && <ClaimAppraisalSummary display={appraisal} sourceCount={sources.length} />}
                 </td>
                 <td className="px-3 py-2 text-muted">
                   {TYPE_LABEL[claim.claimType] ?? "主张"}

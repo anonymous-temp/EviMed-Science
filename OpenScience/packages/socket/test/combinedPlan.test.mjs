@@ -1736,3 +1736,133 @@ test("the check and the submission reach the same verdict on a clinical package,
   assert.deepEqual(prose.phrases, { 此外: 1 }, "only phrases present are counted");
   assert.ok(prose.paragraphs.some((/** @type {any} */ row) => row.section === "摘要" && row.opening.startsWith("此外")), JSON.stringify(prose.paragraphs));
 });
+
+/* ---------------------------------------------- structured appraisal ----- */
+
+// A claim may carry its PICO, a GRADE certainty in parts and a risk-of-bias
+// record (plan §9.8, P2-22). The tool writes them as given, recomputes what is
+// arithmetic, and answers with the stated level beside the computed one; a
+// disagreement is advice and never unverifies the claim.
+test("a claim's PICO, certainty and risk of bias are written as given, recomputed, and a disagreement is advice", async () => {
+  const f = await clinicalFixture();
+  // The preserving tool stamped the capture as a randomized trial (C8).
+  f.files.set("/workspace/.evimed-sources/aspirin/source.json", '{"schemaVersion":1,"sourceType":"rct","sourceId":"NEJMoa1805819"}\n');
+  const appraised = /** @type {Record<string, any>} */ (clinicalClaim({
+    pico: {
+      population: { text: "≥70 岁社区成人", quote: "In adults aged 70 years or older" },
+      intervention: "每日低剂量阿司匹林",
+      comparator: "安慰剂",
+      outcomes: [{ text: "大出血", quote: "increased major hemorrhage" }],
+    },
+    certainty: {
+      start: "high",
+      imprecision: -1,
+      upgrades: { largeEffect: 1 },
+      rationale: { imprecision: "单一试验，事件数有限", largeEffect: "HR 1.38" },
+      label: "high",
+    },
+    riskOfBias: { tool: "RoB 2", domains: { D1: "low", D2: "low", D3: "low", D4: "low", D5: "some concerns" }, overall: "low" },
+  }));
+  // The fixture's claim draws one piece of advice of its own (its 70 is not in
+  // the quote); only what the appraisal adds is under test here.
+  /** @param {any} reply @returns {string[]} */
+  const appraisalIssues = (reply) => reply.value.data.issues
+    .filter((/** @type {any} */ entry) => /^claim-(?:pico|certainty|rob)-/.test(entry.code))
+    .map((/** @type {any} */ entry) => `${entry.code}|${entry.severity}`)
+    .sort();
+  const baseline = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim() });
+  const reply = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: appraised });
+  assert.equal(reply.value.ok, true, JSON.stringify(reply.value));
+  const data = reply.value.data;
+  assert.equal(data.status, "verified", "advice never unverifies a claim");
+  assert.deepEqual(appraisalIssues(reply), ["claim-certainty-arithmetic|advisory", "claim-certainty-design|advisory", "claim-rob-overall|advisory"], JSON.stringify(data.issues));
+  assert.match(
+    data.issues.find((/** @type {any} */ entry) => entry.code === "claim-certainty-design").message,
+    /every source it cites is a randomized trial/,
+    "the reason is the type stamped beside the capture, not a guess from the instrument",
+  );
+  assert.deepEqual(
+    data.issues.filter((/** @type {any} */ entry) => !/^claim-(?:pico|certainty|rob)-/.test(entry.code)),
+    baseline.value.data.issues,
+    "the claim's other findings are exactly what they were without the appraisal",
+  );
+  // The upgrade is not counted for a randomized source: high, one step down,
+  // is moderate — beside the label the run wrote.
+  assert.deepEqual(data.appraisal, {
+    certainty: [{ stated: "high", computed: "moderate", agrees: false }],
+    riskOfBias: [{ tool: "RoB 2", stated: "low", computed: "some-concerns", agrees: false }],
+  });
+  const written = JSON.parse(String(f.files.get(MATRIX_FILE))).claims[0];
+  assert.deepEqual([written.pico, written.certainty, written.riskOfBias], [appraised.pico, appraised.certainty, appraised.riskOfBias], "stored exactly as given");
+
+  // Fixed by writing the same claim again: nothing left to say.
+  const fixed = await f.execute("evimed_claim_upsert", {
+    deliverableId: "d-clin",
+    claim: { ...appraised, certainty: { ...appraised.certainty, upgrades: undefined, rationale: { imprecision: "单一试验" }, label: "moderate" }, riskOfBias: { ...appraised.riskOfBias, overall: "some concerns" } },
+  });
+  assert.deepEqual(appraisalIssues(fixed), []);
+  assert.deepEqual(fixed.value.data.issues, baseline.value.data.issues);
+  assert.deepEqual(fixed.value.data.appraisal, {
+    certainty: [{ stated: "moderate", computed: "moderate", agrees: true }],
+    riskOfBias: [{ tool: "RoB 2", stated: "some-concerns", computed: "some-concerns", agrees: true }],
+  });
+
+  // A claim with none of the three fields answers exactly as before.
+  const plain = await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim() });
+  assert.equal(plain.value.data.appraisal, undefined);
+  assert.deepEqual(plain.value.data.issues, baseline.value.data.issues);
+});
+
+test("the package check reads the same stamped design the claim tool does", async () => {
+  const f = await clinicalFixture();
+  f.files.set("/workspace/.evimed-sources/aspirin/source.json", '{"schemaVersion":1,"sourceType":"rct"}\n');
+  await f.execute("evimed_claim_upsert", { deliverableId: "d-clin", claim: clinicalClaim({ certainty: { start: "low", label: "low" } }) });
+  f.files.set(REPORT_FILE, [
+    "# 阿司匹林用于 70 岁及以上人群一级预防的获益与风险",
+    "",
+    "## 摘要",
+    "",
+    "70 岁及以上成人每日低剂量阿司匹林使大出血风险升高（HR 1.38）[1]。<!-- claim:CLM-001 -->",
+    "",
+    "## 临床问题与证据",
+    "",
+    "一级预防的获益需要与出血风险权衡。",
+    "",
+    "## 检索与方法",
+    "",
+    "证据来源覆盖随机对照试验与系统评价，按预设资格标准筛选，并逐条核对主张与来源原文。",
+    "",
+    "## 结果",
+    "",
+    "纳入的随机对照试验提示出血风险升高。",
+    "",
+    "## 讨论",
+    "",
+    "单一大型试验的结果需要结合个体出血风险解读。",
+    "",
+    "## 局限性",
+    "",
+    "证据来自单一试验，外推到其他人群存在间接性。",
+    "",
+    "## 结论与实际处置",
+    "",
+    "使用阿司匹林做一级预防前应评估出血风险 [1]。<!-- claim:CLM-001 -->",
+    "",
+    "## 参考文献",
+    "",
+    "1. McNeil JJ. Effect of Aspirin on Cardiovascular Events and Bleeding in the Healthy Elderly. N Engl J Med. 2018. doi:10.1056/NEJMoa1805819",
+    "",
+  ].join("\n"));
+  const check = await f.execute("evimed_package_check", { deliverableId: "d-clin" });
+  /** @type {string[]} */
+  const said = check.value.ok
+    ? check.value.data.notices
+    : check.value.issues.map((/** @type {any} */ entry) => String(entry.message));
+  assert.ok(
+    said.some((message) => /certainty starts at low, but every source it cites is a randomized trial/.test(message)),
+    `the gate read the stamped design: ${JSON.stringify(said)}`,
+  );
+  // Advice only: whatever else this small report is told, the appraisal is not what holds it.
+  const required = check.value.ok ? [] : check.value.issues.filter((/** @type {any} */ entry) => entry.severity === "required");
+  assert.equal(required.some((/** @type {any} */ entry) => /certainty|riskOfBias|pico/.test(String(entry.message))), false, JSON.stringify(required));
+});

@@ -4,6 +4,7 @@
 // attribute is the ESM way to say "this file is data", and it keeps the rules
 // exactly one file rather than one file plus a loader.
 import clinicalSafetyRulesData from "./clinical-safety-rules.json" with { type: "json" };
+import { claimAppraisalFindings } from "./appraisalStructure.mjs";
 
 const claimFields = Object.freeze([
   "claimId",
@@ -374,6 +375,18 @@ export const clinicalEvidenceCheckIds = Object.freeze([
   "reference-number-unresolved",
   "claim-inline-citation",
   "advisory-notes",
+  // The structured appraisal a claim may carry (`appraisalStructure.mjs`):
+  // PICO parts and their quotes, a GRADE certainty in parts, a risk-of-bias
+  // record by a named tool. Advisory, every one — none is named in
+  // CLINICAL_CHECK_TIERS, and owner decision 5 (2026-09-18) is that medical
+  // assets add information, never interception.
+  "claim-pico-schema",
+  "claim-pico-quote",
+  "claim-certainty-schema",
+  "claim-certainty-arithmetic",
+  "claim-certainty-design",
+  "claim-rob-schema",
+  "claim-rob-overall",
 ]);
 
 /**
@@ -2994,21 +3007,98 @@ checkedBy(validateSynthesizedClaim, "synthesized-claim");
  * before its report — and then only the reference number's shape is checked;
  * the package gate always passes the report's own list.
  *
+ * Two halves, in this order: the evidence bond, which the tiers can make a
+ * must-fix, and then the structured appraisal the claim may carry, which is
+ * advice by construction. The order is the order a run should fix them in.
+ *
  * @param {any} value
  * @param {string} label
- * @param {{
+ * @param {ClaimAuditContext} context
+ * @returns {void}
+ */
+function auditClaim(value, label, context) {
+  auditClaimEvidence(value, label, context);
+  auditClaimAppraisal(value, label, context);
+}
+
+/**
+ * @typedef {{
  *   issues: IssueLog,
  *   reportReferenceNumbers: Set<number> | null,
  *   successfulArtifacts: Set<string>,
  *   artifactText: Map<string, string>,
+ *   sourceTypes: Map<string, string>,
  *   sourceDomains: Set<string>,
  *   seen: Set<string>,
  *   claimIds: string[],
  *   derivedClaims: { label: string, claim: Record<string, any> }[],
- * }} context
+ * }} ClaimAuditContext
+ */
+
+/**
+ * A PICO part's quote, judged by the comparison every quotation in the matrix
+ * gets (`quoteIsPresent`), in the source the part names or, for a direct
+ * claim, the claim's own. A part whose source is the claim's own and was never
+ * preserved says nothing: the claim's artifact-path finding already names that
+ * source, and one unreadable document is one finding.
+ * @param {{ where: string, quote: string, artifactPath: string | null, ownSource: boolean }} part
+ * @param {{ artifactText: Map<string, string>, successfulArtifacts: Set<string> }} context
+ * @returns {string | null}
+ */
+function picoQuoteIssue(part, { artifactText, successfulArtifacts }) {
+  const { where, quote, artifactPath, ownSource } = part;
+  if (!artifactPath) {
+    return `${where}.quote names no source: give the part an artifactPath — the preserved .evimed-sources/ file whose wording it quotes.`;
+  }
+  if (!validSourceArtifactPath(artifactPath) || !successfulArtifacts.has(artifactPath)) {
+    if (ownSource) return null;
+    return `${where}.quote could not be checked: ${JSON.stringify(artifactPath)} is not a source this run preserved. Name the preserved .evimed-sources/ path a preserving tool returned.`;
+  }
+  const artifact = artifactText.get(artifactPath);
+  if (!artifact) {
+    return `${where}.quote could not be checked: no preserved text for ${JSON.stringify(artifactPath)} reached this check.`;
+  }
+  return quoteIsPresent(artifact, quote) ? null : `${where}.quote ${quoteFailure(artifact, quote)}.`;
+}
+
+/**
+ * The structured appraisal half of a claim's audit: PICO, GRADE certainty and
+ * risk of bias (`appraisalStructure.mjs`). Every id it records under is
+ * advisory — none is named in CLINICAL_CHECK_TIERS — so nothing here can make
+ * a claim unverified or hold a package back. A claim that carries none of the
+ * three fields raises nothing at all.
+ * @param {any} value @param {string} label @param {ClaimAuditContext} context
  * @returns {void}
  */
-function auditClaim(value, label, context) {
+function auditClaimAppraisal(value, label, { issues, artifactText, successfulArtifacts, sourceTypes }) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || !claimTypes.has(value.claimType ?? "direct")) return;
+  const found = claimAppraisalFindings(value, { label, sourceTypes });
+  issues.region("claim-pico-schema");
+  issues.push(...found.picoSchema);
+  issues.region("claim-pico-quote");
+  for (const part of found.picoQuotes) {
+    const problem = picoQuoteIssue(part, { artifactText, successfulArtifacts });
+    if (problem) issues.push(problem);
+  }
+  issues.region("claim-certainty-schema");
+  issues.push(...found.certaintySchema);
+  issues.region("claim-certainty-arithmetic");
+  issues.push(...found.certaintyArithmetic);
+  issues.region("claim-certainty-design");
+  issues.push(...found.certaintyDesign);
+  issues.region("claim-rob-schema");
+  issues.push(...found.robSchema);
+  issues.region("claim-rob-overall");
+  issues.push(...found.robOverall);
+}
+
+/**
+ * The evidence half of a claim's audit: its schema, its sources and the
+ * quotation bond.
+ * @param {any} value @param {string} label @param {ClaimAuditContext} context
+ * @returns {void}
+ */
+function auditClaimEvidence(value, label, context) {
   const { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, seen, claimIds, derivedClaims } = context;
   issues.region("claim-schema");
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -3148,6 +3238,17 @@ function derivedGroundingIssue(label, claim, claimsById) {
 }
 
 /**
+ * Stamped evidence types by preserved path, however the caller holds them.
+ * Only string values are kept: a type is a word from `source-types.json`,
+ * and anything else is a caller's mistake that must not reach the design rule.
+ * @param {unknown} value @returns {Map<string, string>}
+ */
+function typeMap(value) {
+  const entries = value instanceof Map ? [...value.entries()] : Object.entries(value && typeof value === "object" ? value : {});
+  return new Map(entries.filter(([path, type]) => typeof path === "string" && typeof type === "string" && type));
+}
+
+/**
  * One claim, judged by the gate's own rules, for a caller writing claims one
  * at a time (`evimed_claim_upsert`).
  *
@@ -3162,10 +3263,15 @@ function derivedGroundingIssue(label, claim, claimsById) {
  * Never throws and never refuses: a claim that fails comes back `unverified`
  * with the reasons, which is what lets the caller write it anyway.
  *
- * @param {{ claim?: any, claims?: readonly any[], sourceArtifacts?: Map<string, string> | Record<string, string>, reportText?: string | null }} input
+ * `sourceTypes` is the evidence type stamped on each preserved source
+ * (`source.json` beside it, contract C8), by path; the structured GRADE
+ * certainty reads it to tell randomized evidence from observational. Absent,
+ * the certainty falls back to the instrument and the stated start.
+ *
+ * @param {{ claim?: any, claims?: readonly any[], sourceArtifacts?: Map<string, string> | Record<string, string>, sourceTypes?: Map<string, string> | Record<string, string>, reportText?: string | null }} input
  * @returns {{ claimId: string, status: 'verified' | 'unverified', verification: string, issues: { code: string, message: string, tier: 'blocking' | 'safety' | 'advisory' }[] }}
  */
-export function validateEvidenceClaim({ claim, claims = [], sourceArtifacts = {}, reportText = null } = {}) {
+export function validateEvidenceClaim({ claim, claims = [], sourceArtifacts = {}, sourceTypes = {}, reportText = null } = {}) {
   const artifactText = sourceArtifacts instanceof Map
     ? sourceArtifacts
     : new Map(Object.entries(sourceArtifacts && typeof sourceArtifacts === "object" ? sourceArtifacts : {}));
@@ -3179,6 +3285,7 @@ export function validateEvidenceClaim({ claim, claims = [], sourceArtifacts = {}
     reportReferenceNumbers: reportText == null ? null : numberedReferenceNumbers(reportText),
     successfulArtifacts: new Set([...artifactText.keys()].filter((path) => typeof path === "string" && path)),
     artifactText,
+    sourceTypes: typeMap(sourceTypes),
     sourceDomains: new Set(),
     seen: new Set(),
     claimIds: [],
@@ -3216,6 +3323,11 @@ export function validateClinicalEvidencePackage({
   // it; null means it is not available (an in-flight run whose server
   // restarted), and those rules then do not run.
   briefText = null,
+  // The evidence type stamped on each preserved source (`source.json` beside
+  // it, C8), by path. Read only by the structured GRADE certainty, to tell a
+  // randomized body from an observational one; absent, it falls back to the
+  // instrument and the stated start, and nothing else in the gate changes.
+  sourceTypes = {},
 } = {}) {
   const issues = new IssueLog();
   /** @type {string[]} */
@@ -3431,7 +3543,7 @@ export function validateClinicalEvidencePackage({
   const seen = new Set();
   /** @type {{ label: string, claim: Record<string, any> }[]} */
   const derivedClaims = [];
-  const claimContext = { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, seen, claimIds, derivedClaims };
+  const claimContext = { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceTypes: typeMap(sourceTypes), sourceDomains, seen, claimIds, derivedClaims };
   for (const [index, value] of claims.entries()) auditClaim(value, `claims[${index}]`, claimContext);
   const reportClaims = reportClaimIds(reportText);
   const reportSet = new Set(reportClaims);
