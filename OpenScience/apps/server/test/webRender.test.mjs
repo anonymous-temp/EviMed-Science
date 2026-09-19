@@ -7,15 +7,16 @@ import { createWebRenderer, WEB_RENDER_IMAGE_ID } from "../src/agentbay/browser.
 
 const SECRET_ENDPOINT = "wss://cdp.agentbay.example/session/s-1?token=cdp-token-must-not-leak";
 
-/** A Playwright page double: `contents` is what `content()` returns, call by call. */
+/**
+ * A Playwright page double: `contents` is the page's HTML, look by look.
+ * `evaluate` runs the renderer's own in-page function against a stand-in
+ * document holding the next of them, so the bound it applies is the real one.
+ */
 function fakePage({ contents, url, status = 200, gotoError = null, visible = 5_000 }) {
-  const routes = [];
   const listeners = {};
   let reads = 0;
   const mainFrame = {};
   return {
-    routes,
-    async route(_pattern, handler) { routes.push(handler); },
     on(event, handler) { listeners[event] = handler; },
     mainFrame: () => mainFrame,
     async goto() {
@@ -24,14 +25,26 @@ function fakePage({ contents, url, status = 200, gotoError = null, visible = 5_0
       return { status: () => status };
     },
     async waitForLoadState() {},
-    async content() { return contents[Math.min(reads++, contents.length - 1)]; },
-    async evaluate() { return visible; },
+    async evaluate(pageFunction, argument) {
+      const saved = Object.getOwnPropertyDescriptor(globalThis, "document");
+      globalThis.document = {
+        doctype: null,
+        documentElement: { outerHTML: contents[Math.min(reads++, contents.length - 1)] },
+        body: { innerText: "x".repeat(visible) },
+      };
+      try {
+        return pageFunction(argument);
+      } finally {
+        if (saved) Object.defineProperty(globalThis, "document", saved);
+        else delete globalThis.document;
+      }
+    },
     url: () => url,
   };
 }
 
 function fakeBrowserStack({ pages }) {
-  const log = { sessions: [], deleted: [], contexts: 0, closedContexts: 0, initialize: [], connects: [] };
+  const log = { sessions: [], deleted: [], contexts: 0, closedContexts: 0, initialize: [], connects: [], routes: [], webSocketRoutes: [] };
   let connected = true;
   let pageIndex = 0;
   const browser = {
@@ -42,6 +55,8 @@ function fakeBrowserStack({ pages }) {
       log.contexts += 1;
       log.lastContextOptions = options;
       return {
+        async route(_pattern, handler) { log.routes.push(handler); },
+        async routeWebSocket(matcher, handler) { log.webSocketRoutes.push({ matcher, handler }); },
         async newPage() { return pages[Math.min(pageIndex++, pages.length - 1)]; },
         async close() { log.closedContexts += 1; },
       };
@@ -101,30 +116,97 @@ test("one warm session serves every render; each render gets a fresh incognito c
   assert.equal(renderer.stats().sessionsReleased, 1);
 });
 
-test("inside the page, images and private addresses are never requested", async () => {
-  const url = "https://www.cde.org.cn/main/news/listpage/x";
-  const page = fakePage({ contents: [documentHtml], url });
-  const stack = fakeBrowserStack({ pages: [page] });
-  const renderer = createWebRenderer(enabledConfig, { createClient: async () => stack.client, loadPlaywright: async () => stack.playwright });
-  await renderer.render({ url: new URL(url) });
-  const [handler] = page.routes;
-  const decide = (requestUrl, resourceType = "document") => {
+/** The context's route handler as a function of one request: "continue" or "abort". */
+function routeDecider(handler) {
+  return async (requestUrl, resourceType = "document") => {
     let decision = null;
-    handler({
+    await handler({
       request: () => ({ url: () => requestUrl, resourceType: () => resourceType }),
-      abort: () => { decision = "abort"; },
-      continue: () => { decision = "continue"; },
+      abort: async () => { decision = "abort"; },
+      continue: async () => { decision = "continue"; },
     });
     return decision;
   };
-  assert.equal(decide("https://www.cde.org.cn/api/list"), "continue");
-  assert.equal(decide("https://www.cde.org.cn/logo.png", "image"), "abort");
-  assert.equal(decide("https://fonts.example.org/x.woff2", "font"), "abort");
-  assert.equal(decide("http://100.100.100.200/latest/meta-data/"), "abort", "the VM's own metadata service");
-  assert.equal(decide("http://127.0.0.1:9222/json"), "abort");
-  assert.equal(decide("http://localhost/"), "abort");
-  assert.equal(decide("file:///etc/passwd"), "abort");
-  assert.equal(decide("data:text/plain,x"), "continue");
+}
+
+test("inside the page, a request reaches only public addresses on default ports, and no WebSocket opens", async () => {
+  const url = "https://www.cde.org.cn/main/news/listpage/x";
+  const stack = fakeBrowserStack({ pages: [fakePage({ contents: [documentHtml], url })] });
+  const addresses = {
+    "www.cde.org.cn": "59.110.190.10",
+    "cdn.example.org": "93.184.216.34",
+    "metadata.example.org": "100.100.100.200",
+    "rebound.example.org": "10.0.0.8",
+    "v6.example.org": "fd00::1",
+  };
+  const lookups = [];
+  const resolveImpl = async (hostname) => {
+    lookups.push(hostname);
+    if (!addresses[hostname]) throw new Error("NXDOMAIN");
+    return [{ address: addresses[hostname], family: addresses[hostname].includes(":") ? 6 : 4 }];
+  };
+  const renderer = createWebRenderer(enabledConfig, { createClient: async () => stack.client, loadPlaywright: async () => stack.playwright, resolveImpl });
+  await renderer.render({ url: new URL(url) });
+  assert.equal(stack.log.routes.length, 1, "the rules are the context's, so a window the page opens is held to them");
+  const decide = routeDecider(stack.log.routes[0]);
+  assert.equal(await decide("https://www.cde.org.cn/api/list"), "continue");
+  assert.equal(await decide("https://cdn.example.org/app.js", "script"), "continue");
+  assert.equal(await decide("https://www.cde.org.cn/logo.png", "image"), "abort");
+  assert.equal(await decide("https://fonts.example.org/x.woff2", "font"), "abort");
+  // The security review of the 2026-09-20 release: the check read the name
+  // alone, so any name resolving to the metadata service passed.
+  assert.equal(await decide("http://100.100.100.200/latest/meta-data/"), "abort", "the VM's own metadata service");
+  assert.equal(await decide("http://metadata.example.org/latest/meta-data/"), "abort", "a name that resolves to it");
+  assert.equal(await decide("https://rebound.example.org/"), "abort");
+  assert.equal(await decide("https://v6.example.org/"), "abort");
+  assert.equal(await decide("https://unresolvable.example.org/"), "abort");
+  assert.equal(await decide("https://www.cde.org.cn:8443/admin"), "abort", "a non-default port");
+  assert.equal(await decide("https://user:test-only-password@www.cde.org.cn/"), "abort");
+  assert.equal(await decide("http://127.0.0.1:9222/json"), "abort");
+  assert.equal(await decide("http://localhost/"), "abort");
+  assert.equal(await decide("file:///etc/passwd"), "abort");
+  assert.equal(await decide("data:text/plain,x"), "continue");
+  assert.equal(lookups.filter((name) => name === "www.cde.org.cn").length, 1, "a host is looked up once per render");
+
+  assert.equal(stack.log.webSocketRoutes.length, 1);
+  const { matcher, handler } = stack.log.webSocketRoutes[0];
+  assert.equal(matcher(new URL("wss://www.cde.org.cn/socket")), true, "every WebSocket, whatever its address");
+  const socket = { closedWith: null, connected: false, async close(options) { this.closedWith = options; }, connectToServer() { this.connected = true; } };
+  await handler(socket);
+  assert.equal(socket.closedWith?.code, 1008);
+  assert.equal(socket.connected, false, "closed before it ever reaches a server");
+  assert.equal(renderer.stats().requestsRefused, 11);
+  await renderer.close();
+});
+
+test("one render reaches at most sixteen hosts, each looked up once", async () => {
+  const url = "https://www.nmpa.gov.cn/xxgk/ggtg/index.html";
+  const stack = fakeBrowserStack({ pages: [fakePage({ contents: [documentHtml], url })] });
+  let lookups = 0;
+  const resolveImpl = async () => {
+    lookups += 1;
+    return [{ address: "93.184.216.34", family: 4 }];
+  };
+  const renderer = createWebRenderer(enabledConfig, { createClient: async () => stack.client, loadPlaywright: async () => stack.playwright, resolveImpl });
+  await renderer.render({ url: new URL(url) });
+  const decide = routeDecider(stack.log.routes[0]);
+  for (let index = 0; index < 16; index += 1) assert.equal(await decide(`https://host-${index}.example.org/x.js`, "script"), "continue");
+  assert.equal(await decide("https://host-16.example.org/x.js", "script"), "abort");
+  assert.equal(await decide("https://host-3.example.org/again.js", "script"), "continue", "a host already reached costs nothing more");
+  assert.equal(lookups, 16);
+  await renderer.close();
+});
+
+test("a page drawn past the size cap is refused as it stands, not waited out", async () => {
+  const url = "https://huge.example.org/";
+  const page = fakePage({ contents: [`<html><body>${"x".repeat(5 * 1024 * 1024)}</body></html>`], url });
+  let looks = 0;
+  page.waitForLoadState = async () => { looks += 1; };
+  const stack = fakeBrowserStack({ pages: [page] });
+  const renderer = createWebRenderer(enabledConfig, { createClient: async () => stack.client, loadPlaywright: async () => stack.playwright });
+  await assert.rejects(renderer.render({ url: new URL(url) }), (error) => error.code === "web_read_response_too_large" && error.status === 502);
+  assert.equal(looks, 1, "the settle loop stopped at its first look");
+  assert.equal(stack.log.closedContexts, 1);
   await renderer.close();
 });
 
