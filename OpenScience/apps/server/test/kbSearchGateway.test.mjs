@@ -104,6 +104,6 @@ test("the runtime learns the route only when the switch is on and the address is
   const url = "http://open-science-web:8787/internal/kb/v1/search";
   assert.equal(kbSearchGatewayProviderUrl({ kbSearchEnabled: true, kbSearchGatewayInternalUrl: url }), url);
   assert.equal(kbSearchGatewayProviderUrl({ kbSearchEnabled: false, kbSearchGatewayInternalUrl: url }), "");
-  assert.equal(kbSearchGatewayProviderUrl({ kbSearchEnabled: true, kbSearchGatewayInternalUrl: "http://user:pw@host/x" }), "");
+  assert.equal(kbSearchGatewayProviderUrl({ kbSearchEnabled: true, kbSearchGatewayInternalUrl: "http://user:fake@host/x" }), "");
   assert.equal(kbSearchGatewayProviderUrl({ kbSearchEnabled: true, kbSearchGatewayInternalUrl: "not a url" }), "");
 });

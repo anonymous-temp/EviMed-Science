@@ -104,7 +104,7 @@ export async function recordParserContract({ baseUrl, token = "", outDir = defau
       { name: "extract-checksum-failed.json", request: "POST /api/v1/extract/text/file, a checksum that is not the file's, valid key", method: "POST",
         route: "/api/v1/extract/text/file", body: () => form({ checksum: "0".repeat(64) }), key: token },
       { name: "extract-unauthorized.json", request: "POST /api/v1/extract/text/file, the sample PDF, a key the service never issued", method: "POST",
-        route: "/api/v1/extract/text/file", body: () => form(), key: "sk-evimed-recorder-not-a-key" },
+        route: "/api/v1/extract/text/file", body: () => form(), key: "sk-fake-key-the-service-never-issued" },
     );
   }
   const recorded = [];

@@ -8,7 +8,7 @@ import test from "node:test";
 import { SAMPLE_TEXT, assertNoSecret, contractSamplePdf, recordParserContract } from "../../../scripts/ops/record-parser-contract.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const KEY = "sk-test-recorder-key-0123456789";
+const KEY = "sk-test-only-recorder-key-0123456789";
 
 async function fakeParser(t, { echoKey = false } = {}) {
   const seen = [];
