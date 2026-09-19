@@ -325,7 +325,11 @@ export class MemorySubstrate {
   async #matchingNotes(userId, query) {
     const terms = searchTokens(query);
     if (terms.length === 0) return [];
-    const notes = await this.store.list(userId, { pageSize: 100 });
+    // Every note that shares a token with the question, not the newest
+    // hundred (plan §3.4 #8); a store without the search keeps the old read.
+    const notes = typeof this.store.searchNotes === "function"
+      ? await this.store.searchNotes(userId, query)
+      : await this.store.list(userId, { pageSize: 100 });
     return notes
       .map((memo) => {
         const haystack = memo.content.toLowerCase();

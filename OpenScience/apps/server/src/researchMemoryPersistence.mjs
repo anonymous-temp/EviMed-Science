@@ -116,6 +116,12 @@ CREATE TABLE IF NOT EXISTS evimed_memory.notes (
 );
 CREATE INDEX IF NOT EXISTS memory_notes_order_idx ON evimed_memory.notes
   (user_id, state, pinned DESC, updated_at DESC, id DESC);
+-- Every note searchable, not the newest hundred (plan §3.4 #8): the note's
+-- tokens by the recall tokenizer (CJK bigrams included), written by
+-- researchMemory on every write; NULL on a row written before this column,
+-- filled lazily the first time that account's notes are searched.
+ALTER TABLE evimed_memory.notes ADD COLUMN IF NOT EXISTS search_vector tsvector;
+CREATE INDEX IF NOT EXISTS memory_notes_search_idx ON evimed_memory.notes USING GIN (search_vector);
 -- The researcher's own switches over their memory. No row means every switch
 -- is off, which is how the platform behaved before the switches existed.
 CREATE TABLE IF NOT EXISTS evimed_memory.settings (

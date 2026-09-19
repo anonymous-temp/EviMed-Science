@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { DURABLE_RECALL_KINDS, recallContent, searchTokens, selectWithinBudget, setAsideIn } from "./memoryRecallPolicy.mjs";
+import {
+  DURABLE_RECALL_KINDS, noteSearchQuery, noteSearchTokens, recallContent, searchTokens, selectWithinBudget, setAsideIn,
+} from "./memoryRecallPolicy.mjs";
 import { HttpError } from "./security.mjs";
 import {
   MEMORY_EVIDENCE_LIMIT,
@@ -652,6 +654,9 @@ const recordColumns = "user_id,id,scope,scope_id,kind,key,value,summary,origin,s
   + "sensitive,evidence,revisions,version,created_at,updated_at,last_confirmed_at,expires_at,superseded_by,invalid_since";
 
 export class ResearchMemoryStore {
+  /** Accounts whose notes all carry search tokens, in this process. */
+  #vectorsReady = new Set();
+
   /**
    * `jobs` is the derived index's outbox, and it is handed over only when
    * something will claim from it — the same rule the feedback ledger follows
@@ -1249,10 +1254,10 @@ export class ResearchMemoryStore {
     if (!text || text.length > MEMORY_NOTE_CONTENT_LIMIT) throw invalid("content");
     // One read of the clock for both stamps: two evaluations of a volatile
     // function in one statement can land either side of a second boundary.
-    const result = await this.#query(`INSERT INTO evimed_memory.notes(user_id,id,content,state,pinned,tags,created_at,updated_at)
-      SELECT $1,$2,$3,'normal',false,$4::text[],stamp,stamp
+    const result = await this.#query(`INSERT INTO evimed_memory.notes(user_id,id,content,state,pinned,tags,created_at,updated_at,search_vector)
+      SELECT $1,$2,$3,'normal',false,$4::text[],stamp,stamp,array_to_tsvector($5::text[])
       FROM (SELECT date_trunc('second',clock_timestamp()) AS stamp) clock RETURNING *`,
-    [owner, randomUUID(), text, extractTags(text)]);
+    [owner, randomUUID(), text, extractTags(text), noteSearchTokens(text)]);
     return publicNote(result.rows[0]);
   }
 
@@ -1278,11 +1283,53 @@ export class ResearchMemoryStore {
         return current;
       }
       const updated = await client.query(`UPDATE evimed_memory.notes
-        SET content=$3,pinned=$4,state=$5,tags=$6::text[],updated_at=date_trunc('second',clock_timestamp())
+        SET content=$3,pinned=$4,state=$5,tags=$6::text[],updated_at=date_trunc('second',clock_timestamp()),
+          search_vector=array_to_tsvector($7::text[])
         WHERE user_id=$1 AND id=$2 RETURNING *`,
-      [owner, noteId, next.content, next.pinned, next.state, extractTags(next.content)]);
+      [owner, noteId, next.content, next.pinned, next.state, extractTags(next.content), noteSearchTokens(next.content)]);
       return publicNote(updated.rows[0]);
     });
+  }
+
+  /**
+   * The notes a question can reach: every note of the account that shares a
+   * token with it, and every pinned note — the same two things the matcher
+   * below always let through, now over all of them rather than the newest
+   * hundred (plan §3.4 #8). Ordered by how much of the question each matches;
+   * the caller scores them. Reached only through this store (principle 18):
+   * the knowledge-base search never reads memory, nor this the KB.
+   * @param {string} userId @param {string} query @param {{ limit?: number }} [options]
+   */
+  async searchNotes(userId, query, { limit = 100 } = {}) {
+    const owner = assertUserId(userId);
+    await this.#backfillNoteVectors(owner);
+    const result = await this.#query(`SELECT * FROM evimed_memory.notes
+      WHERE user_id=$1 AND state='normal' AND (pinned OR ($2::tsquery IS NOT NULL AND search_vector @@ $2::tsquery))
+      ORDER BY CASE WHEN $2::tsquery IS NULL THEN 0 ELSE ts_rank(search_vector, $2::tsquery) END DESC,
+        pinned DESC, updated_at DESC, id DESC
+      LIMIT $3`,
+    [owner, noteSearchQuery(query), Math.max(1, Math.min(200, Number(limit) || 100))]);
+    return result.rows.map(publicNote);
+  }
+
+  /**
+   * Give the notes written before `search_vector` existed their tokens, once
+   * per account per process. A row edited meanwhile keeps the tokens its edit
+   * wrote: the update matches on the content it tokenized.
+   * @param {string} owner
+   */
+  async #backfillNoteVectors(owner) {
+    if (this.#vectorsReady.has(owner)) return;
+    for (let round = 0; round < 50; round += 1) {
+      const pending = await this.#query(`SELECT id, content FROM evimed_memory.notes
+        WHERE user_id=$1 AND search_vector IS NULL ORDER BY id LIMIT 200`, [owner]);
+      if (pending.rowCount === 0) break;
+      for (const row of pending.rows) {
+        await this.#query(`UPDATE evimed_memory.notes SET search_vector=array_to_tsvector($4::text[])
+          WHERE user_id=$1 AND id=$2 AND content=$3 AND search_vector IS NULL`, [owner, row.id, row.content, noteSearchTokens(row.content)]);
+      }
+    }
+    this.#vectorsReady.add(owner);
   }
 
   /** @param {string} userId @param {string} id */
@@ -1315,7 +1362,7 @@ export class ResearchMemoryStore {
     // runs the page is all episodes and the user's long-term picture becomes
     // permanently unreachable — silently, because a full page still looks fine.
     const [memos, durableRecords, episodicRecords] = await Promise.all([
-      this.list(userId, { pageSize: 100 }),
+      this.searchNotes(userId, query),
       this.listRecords(userId, { statuses: ["active"], kinds: [...DURABLE_RECALL_KINDS], pageSize: 100 }),
       this.listRecords(userId, { statuses: ["active"], pageSize: 100 }),
     ]);
