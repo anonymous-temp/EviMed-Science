@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "comprehensive-drug-evaluation",
-  "version": "sha256:ff8f8ef3f4de8437308bf847570c3cce5d8ba2fe3ed915bd9cf35d5da65b91cd",
+  "version": "sha256:5ba2ba524b853841513115681298f69548ea7ee9b291f6e06ed010d8864c874e",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 27,
+    "nodes": 28,
     "edges": 8,
     "byVia": {
       "schema": 8,
@@ -1378,6 +1378,48 @@
       "outputTypeTags": [
         "doi"
       ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__kb_search",
+      "source": "mcp",
+      "description": "Search the researcher's own knowledge base (this project's uploaded documents and their personal library) for passages. Answers with quotable snippets, the document, page and character offsets; a small library is answered with the files to read instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "sourceIds": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "pattern": "^src_[a-f0-9]{32}$"
+            }
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
       "stateEffect": "none"
     },
     {

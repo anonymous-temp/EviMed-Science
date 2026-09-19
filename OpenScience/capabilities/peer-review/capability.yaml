@@ -20,6 +20,7 @@ tools:
 - mcp__evimed__peer_review
 - mcp__evimed__data_source_catalog
 - mcp__evimed__literature_search
+- mcp__evimed__kb_search
 produces:
 - contractKind: peer-review-report
   outputs:

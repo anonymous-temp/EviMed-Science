@@ -28,6 +28,7 @@ tools:
 - mcp__evimed__biomedical_source_search
 - mcp__evimed__open_access_full_text
 - mcp__evimed__locate_quote
+- mcp__evimed__kb_search
 - mcp__evimed__web_read
 - mcp__evimed__web_search
 - mcp__evimed__clinical_trial_search

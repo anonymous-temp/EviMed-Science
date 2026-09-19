@@ -18,6 +18,7 @@
     "mcp__evimed__adr_signal_analysis",
     "mcp__evimed__drug_label_search",
     "mcp__evimed__literature_search",
+    "mcp__evimed__kb_search",
     "mcp__evimed__pharmacy_reference_search"
   ],
   "produces": [
