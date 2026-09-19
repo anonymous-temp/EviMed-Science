@@ -202,7 +202,29 @@ test("a previous output file is not evidence that this native turn produced a de
   }]]));
   await f.adopt(async () => ({ effectiveAgentId: "meta-analysis", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-meta-analysis" }));
   const run = (await f.runs())[0];
-  assert.equal(run.status, "failed");
+  assert.deepEqual(run.artifacts, [], "the old file is not this turn's");
+  // And a turn that started no delivery is an answer, not a failed delivery:
+  // the route was the classifier's guess (see the next test).
+  assert.equal(run.status, "succeeded");
+});
+
+test("a conversation-window follow-up the classifier routed to a capability, answered without starting a delivery, is an answer", async (t) => {
+  // 2026-09-19: a follow-up in a finished aspirin conversation was routed to
+  // clinical-evidence-synthesis, answered in two sentences pointing at the
+  // report already delivered, and recorded as 「失败：运行时未载入能力方法」.
+  const f = await setup(t, fixture.events.filter((event) => event.seq >= 137));
+  f.store.agentRegistry = Promise.resolve(new Map([["clinical-evidence-synthesis", {
+    id: "clinical-evidence-synthesis", version: "2.0.0", runtimeAgent: "evimed-clinical-evidence-synthesis",
+    skill: "clinical-evidence-synthesis", companionSkills: ["deep-research"],
+    completionChecks: ["requiredOutputsExist", "skillsLoaded"], outputs: [{ path: "clinical-evidence-report.md", required: true }],
+  }]]));
+  await f.adopt(async () => ({
+    effectiveAgentId: "clinical-evidence-synthesis", effectiveAgentVersion: "2.0.0",
+    effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis", effectiveRouteReason: "llm:0.76",
+  }));
+  const run = (await f.runs())[0];
+  assert.equal(run.status, "succeeded");
+  assert.equal(run.errorCode ?? null, null);
   assert.deepEqual(run.artifacts, []);
 });
 
@@ -288,8 +310,10 @@ test("a file overwritten in the second turn cannot be delivered by the first tur
   await f.adopt(async () => ({ effectiveAgentId: "meta-analysis", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-meta-analysis" }));
   const runs = await f.runs();
   const first = runs.find((run) => run.nativeTurn.startSeq === 4);
-  assert.equal(first.status, "failed");
-  assert.deepEqual(first.artifacts, []);
+  assert.deepEqual(first.artifacts, [], "the first turn cannot deliver the second turn's file");
+  // It started no delivery of its own, so it is an answer rather than a
+  // failed delivery (a conversation-window route is the classifier's guess).
+  assert.equal(first.status, "succeeded");
   assert.equal(runs.find((run) => run.nativeTurn.startSeq === 137).status, "succeeded");
 });
 
