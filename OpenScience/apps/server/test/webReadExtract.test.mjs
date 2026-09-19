@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { decodePage, extractHtml, pageCharset, renderReason, SHELL_VISIBLE_CHARS } from "../src/webReadExtract.mjs";
+import { decodePage, extractHtml, extractHtmlIsolated, pageCharset, renderReason, SHELL_VISIBLE_CHARS } from "../src/webReadExtract.mjs";
 
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "web-read");
 const manifest = JSON.parse(readFileSync(path.join(fixtureDir, "manifest.json"), "utf8"));
@@ -26,6 +26,14 @@ test("every recorded fixture is the file its manifest describes", async () => {
   for (const entry of manifest.files) {
     const bytes = readFileSync(path.join(fixtureDir, entry.file));
     assert.equal(createHash("sha256").update(bytes).digest("hex"), entry.sha256, entry.file);
+  }
+});
+
+test("a page parsed in its own thread reads exactly as it does on the event loop", async () => {
+  for (const entry of manifest.files) {
+    const html = decodePage(readFileSync(path.join(fixtureDir, entry.file)), entry.contentType);
+    const isolated = await extractHtmlIsolated(html, { baseUrl: entry.url, timeoutMs: 10_000 });
+    assert.deepEqual(isolated, extractHtml(html, { baseUrl: entry.url }), entry.file);
   }
 });
 

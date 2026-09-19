@@ -232,15 +232,17 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // `web_read` (2026-09-20) reads any public page, so most answers it can get
   // are facts about the page: the site's robots.txt says no, the site needs a
   // browser this deployment does not have, the page is still unreadable after
-  // rendering, gone, behind a login, too slow, or a type nothing reads. Each
-  // is a limitation to report and another source to try — a run that read
-  // eight regulator pages and hit one challenge page has not failed.
+  // rendering, gone, behind a login, too slow, built too deep to parse, or a
+  // type nothing reads. Each is a limitation to report and another source to
+  // try — a run that read eight regulator pages and hit one challenge page has
+  // not failed.
   "web_read_robots_disallowed",
   "web_read_host_forbidden",
   "web_read_host_unresolved",
   "web_read_url_forbidden",
   "web_read_needs_browser",
   "web_read_unreadable",
+  "web_read_page_too_complex",
   "web_read_not_found",
   "web_read_login_required",
   "web_read_upstream_error",
@@ -252,6 +254,7 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "web_read_timeout",
   "web_read_aborted",
   "web_read_busy",
+  "web_read_runtime_busy",
   "web_read_host_busy",
   "web_read_page_out_of_range",
   // The deployment's own switches and the gateway being unreachable: host

@@ -4663,7 +4663,7 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
   // them through to the run unchanged (2026-09-20).
   for (const relative of [
     "../src/publicSourceGateway.mjs", "../src/webSearchGateway.mjs", "../src/geoProbeGateway.mjs",
-    "../src/webRead.mjs", "../src/webReadNetwork.mjs", "../src/webReadLimits.mjs", "../src/agentbay/browser.mjs",
+    "../src/webRead.mjs", "../src/webReadNetwork.mjs", "../src/webReadLimits.mjs", "../src/webReadExtract.mjs", "../src/agentbay/browser.mjs",
     "../src/kbSearchGateway.mjs",
   ]) {
     const text = await readFile(new URL(relative, import.meta.url), "utf8");

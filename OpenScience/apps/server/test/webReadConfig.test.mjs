@@ -19,6 +19,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const LEVERS = [
   ["OPEN_SCIENCE_WEB_READ_ENABLED", "webReadEnabled"],
   ["OPEN_SCIENCE_WEB_READ_CONCURRENCY", "webReadConcurrency"],
+  ["OPEN_SCIENCE_WEB_READ_RUNTIME_CONCURRENCY", "webReadRuntimeConcurrency"],
   ["OPEN_SCIENCE_WEB_READ_HOST_INTERVAL_MS", "webReadHostIntervalMs"],
   ["OPEN_SCIENCE_WEB_READ_TIMEOUT_MS", "webReadTimeoutMs"],
   ["OPEN_SCIENCE_WEB_RENDER_ENABLED", "webRenderEnabled"],

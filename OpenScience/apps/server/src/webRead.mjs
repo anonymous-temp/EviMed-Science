@@ -24,8 +24,8 @@
 
 import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
-import { decodePage, extractHtml, HTML_EXTRACTOR, renderReason, SHELL_VISIBLE_CHARS } from "./webReadExtract.mjs";
-import { ConcurrencyGate, HostPacer } from "./webReadLimits.mjs";
+import { decodePage, extractHtmlIsolated, HTML_EXTRACTOR, renderReason, SHELL_VISIBLE_CHARS } from "./webReadExtract.mjs";
+import { ConcurrencyGate, HostPacer, KeyedConcurrencyGate } from "./webReadLimits.mjs";
 import {
   assertPublicWebHost,
   fetchWebTransport,
@@ -46,8 +46,30 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
  * HTML beyond this is cut before parsing. A parsed DOM costs ten to twenty
  * times its source in memory, and eight concurrent 16 MiB pages would ask a
  * shared 15.5 GB host for gigabytes; no document page is anywhere near this.
+ * The render tier holds a browser's HTML to it too (agentbay/browser.mjs).
  */
-const HTML_MAX_BYTES = 5 * 1024 * 1024;
+export const HTML_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * One page's parse, in its own thread (webReadExtract.extractHtmlIsolated).
+ * The most HTML a read parses, 5 MiB, takes 0.4–0.7 s here (measured
+ * 2026-09-19: a 5 MiB table of notices 0.44 s, 5 MiB of prose 0.64 s); the
+ * security review's 360 KB of nested tags took 16 s. Ten seconds is over ten
+ * times the real worst case, and stops a hostile page holding a parse slot
+ * and a core for the read's whole budget. Counted, with pages nested past
+ * what the thread's stack can walk, in
+ * open_science_web_read_limits_total{limit="parse"}.
+ */
+const HTML_PARSE_TIMEOUT_MS = 10_000;
+
+/**
+ * Parses at once, each a thread with its own heap — about 150 MB for 5 MiB of
+ * real HTML, 300 MB for 5 MiB of bare tags (measured) — and a core. On the
+ * event loop they ran one at a time; two keep the worst case near that, and a
+ * parse is short enough that a queue behind two is brief. Counted in
+ * open_science_web_read_limits_total{limit="parse_concurrency"}.
+ */
+const HTML_PARSES_AT_ONCE = 2;
 
 /**
  * Media types handed to the document parser: PDFs — society guidelines,
@@ -156,6 +178,7 @@ function documentFilename(url, extension) {
  *   renderer?: WebRenderer | null,
  *   documentParser?: any,
  *   now?: () => Date,
+ *   parseTimeoutMs?: number,
  * }} [dependencies]
  */
 export function createWebReader(config, {
@@ -164,14 +187,38 @@ export function createWebReader(config, {
   renderer = null,
   documentParser = null,
   now = () => new Date(),
+  parseTimeoutMs = HTML_PARSE_TIMEOUT_MS,
 } = {}) {
   const userAgent = webReadUserAgent(config);
   const maxBytes = Math.max(1024, Number(config.publicSourceGatewayMaxResponseBytes) || 16 * 1024 * 1024);
   const robots = new RobotsPolicy({ transport, userAgent });
   const pacer = new HostPacer({ intervalMs: Number(config.webReadHostIntervalMs ?? 1_000) });
   const gate = new ConcurrencyGate({ limit: Number(config.webReadConcurrency ?? 8), busyCode: "web_read_busy" });
+  const parseGate = new ConcurrencyGate({ limit: HTML_PARSES_AT_ONCE, busyCode: "web_read_busy" });
+  // A whole read — fetch, render, parse — holds one of its runtime's slots.
+  const runtimeGates = new KeyedConcurrencyGate({
+    limit: Number(config.webReadRuntimeConcurrency ?? 3),
+    maxQueue: 16,
+    busyCode: "web_read_runtime_busy",
+    busyMessage: "This project already has as many web reads under way as it may queue; let them finish before reading more.",
+  });
+  /** Parses refused: out of time, or nested past what the thread can walk. */
+  let parsesRefused = 0;
   /** How each read ended, for the operator's metrics. */
   const outcomes = { html: 0, rendered: 0, document: 0, text: 0, thin: 0, refused: 0, failed: 0 };
+
+  /**
+   * An HTML page's text, parsed off the event loop.
+   * @param {string} html @param {URL} baseUrl @param {AbortSignal | undefined} signal
+   */
+  async function extract(html, baseUrl, signal) {
+    try {
+      return await parseGate.run(() => extractHtmlIsolated(html, { baseUrl, timeoutMs: parseTimeoutMs, signal }), { signal });
+    } catch (error) {
+      if (error?.code === "web_read_page_too_complex") parsesRefused += 1;
+      throw error;
+    }
+  }
 
   /**
    * Fetch, following redirects by hand so every hop is validated, robots
@@ -245,8 +292,12 @@ export function createWebReader(config, {
     const rendered = await /** @type {WebRenderer} */ (renderer).render({ url: finalUrl, signal });
     const renderedUrl = validatedWebUrl(rendered.finalUrl || finalUrl.href);
     await assertPublicWebHost(renderedUrl.hostname, resolveImpl);
-    const html = String(rendered.html ?? "");
-    const page = extractHtml(html, { baseUrl: renderedUrl });
+    // Held to the fetched page's cap: after a browser, the page's own script
+    // decided how large its document grew.
+    const drawn = Buffer.from(String(rendered.html ?? ""), "utf8");
+    const bytes = drawn.length > HTML_MAX_BYTES ? drawn.subarray(0, HTML_MAX_BYTES) : drawn;
+    const html = bytes.toString("utf8");
+    const page = await extract(html, renderedUrl, signal);
     const status = Number(rendered.status) || 200;
     const still = renderReason({ status, html, visibleChars: page.visibleChars });
     // After a browser, a short page that is a real 2xx document with no
@@ -257,9 +308,9 @@ export function createWebReader(config, {
     }
     outcomes.rendered += 1;
     return {
-      receipt: receipt(requested, renderedUrl, Buffer.from(html, "utf8"), {
+      receipt: receipt(requested, renderedUrl, bytes, {
         title: page.title, rendered: true, contentType: "html", mediaType: "text/html", status,
-        extractor: HTML_EXTRACTOR, truncated: page.truncated,
+        extractor: HTML_EXTRACTOR, truncated: page.truncated || bytes.length < drawn.length,
       }),
       text: page.text,
       links: page.links,
@@ -286,7 +337,7 @@ export function createWebReader(config, {
     if (HTML_MEDIA_TYPES.has(mediaType)) {
       const bytes = response.body.length > HTML_MAX_BYTES ? response.body.subarray(0, HTML_MAX_BYTES) : response.body;
       const html = decodePage(bytes, contentTypeHeader);
-      const page = extractHtml(html, { baseUrl: finalUrl });
+      const page = await extract(html, finalUrl, signal);
       // An empty page that says where the document is: one more hop, the
       // same way a 3xx is followed.
       if (ok && page.visibleChars < SHELL_VISIBLE_CHARS && page.refreshUrl && fetched.hopsLeft > 0) {
@@ -381,13 +432,16 @@ export function createWebReader(config, {
 
   /**
    * @param {string | URL} rawUrl
-   * @param {{ signal?: AbortSignal }} [options]
+   * @param {{ signal?: AbortSignal, runtime?: { userId: string, projectId: string } }} [options]
+   *   `runtime`: the project runtime asking, whose reads share one limit
    * @returns {Promise<WebReadResult>}
    */
-  async function read(rawUrl, { signal } = {}) {
+  async function read(rawUrl, { signal, runtime } = {}) {
     try {
       const requested = validatedWebUrl(rawUrl);
-      return await interpret(requested, await fetchPage(requested, signal, WEB_READ_MAX_REDIRECTS), signal);
+      const whole = async () => interpret(requested, await fetchPage(requested, signal, WEB_READ_MAX_REDIRECTS), signal);
+      if (!runtime) return await whole();
+      return await runtimeGates.run(`${runtime.userId}\u0000${runtime.projectId}`, whole, { signal });
     } catch (error) {
       if (error instanceof WebReadError && error.status < 500) outcomes.refused += 1;
       else outcomes.failed += 1;
@@ -404,6 +458,8 @@ export function createWebReader(config, {
         robots: { ...robots.counts },
         pacing: { ...pacer.counts },
         concurrency: { ...gate.counts, active: gate.active },
+        parsing: { ...parseGate.counts, active: parseGate.active, refusedPages: parsesRefused },
+        runtimeConcurrency: { ...runtimeGates.counts, runtimes: runtimeGates.gates.size },
         render: renderer?.stats?.() ?? null,
       };
     },
@@ -452,15 +508,21 @@ export function webReadMetricFamilies(stats) {
         { value: stats.concurrency.refused, labels: { limit: "concurrency", action: "refused" } },
         { value: stats.robots.disallowed, labels: { limit: "robots", action: "refused" } },
         { value: stats.robots.unreachable, labels: { limit: "robots", action: "unreachable_allowed" } },
+        { value: stats.parsing.queued, labels: { limit: "parse_concurrency", action: "queued" } },
+        { value: stats.parsing.refused, labels: { limit: "parse_concurrency", action: "refused" } },
+        { value: stats.parsing.refusedPages, labels: { limit: "parse", action: "refused" } },
+        { value: stats.runtimeConcurrency.queued, labels: { limit: "runtime_concurrency", action: "queued" } },
+        { value: stats.runtimeConcurrency.refused, labels: { limit: "runtime_concurrency", action: "refused" } },
       ],
     },
     {
       name: "open_science_web_render_events_total",
-      help: "Cloud-browser renders and warm-session lifecycle events.",
+      help: "Cloud-browser renders, requests refused inside a rendered page, and warm-session lifecycle events.",
       type: "counter",
       series: [
         { value: Number(render.renders ?? 0), labels: { event: "render" } },
         { value: Number(render.failures ?? 0), labels: { event: "render_failed" } },
+        { value: Number(render.requestsRefused ?? 0), labels: { event: "request_refused" } },
         { value: Number(render.sessionsCreated ?? 0), labels: { event: "session_created" } },
         { value: Number(render.sessionsReleased ?? 0), labels: { event: "session_released" } },
         { value: Number(render.sessionFailures ?? 0), labels: { event: "session_failed" } },
@@ -468,10 +530,11 @@ export function webReadMetricFamilies(stats) {
     },
     {
       name: "open_science_web_read_in_flight",
-      help: "Web reads and renders in progress right now.",
+      help: "Web reads, HTML parses and renders in progress right now.",
       type: "gauge",
       series: [
         { value: stats.concurrency.active, labels: { tier: "read" } },
+        { value: stats.parsing.active, labels: { tier: "parse" } },
         { value: Number(render.inFlight ?? 0), labels: { tier: "render" } },
       ],
     },

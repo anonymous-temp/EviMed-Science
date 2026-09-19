@@ -857,7 +857,7 @@ async function sendParsedPdf(res, buffer, provenance, documentParser) {
  * @param {any} config
  * @param {any} runtimeManager
  * @param {{ fetchImpl?: typeof fetch, resolveImpl?: any, connectorCredentials?: any,
- *   webReader?: { read: (url: string, options: { signal?: AbortSignal }) => Promise<any> } | null,
+ *   webReader?: { read: (url: string, options: { signal?: AbortSignal, runtime?: { userId: string, projectId: string } }) => Promise<any> } | null,
  *   documentParser?: any }} [options]
  */
 export function createPublicSourceGatewayHandler(config, runtimeManager, {
@@ -869,6 +869,13 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
       return;
     }
     const controller = new AbortController();
+    // A caller that hung up — its tool call given up, its run cancelled, its
+    // runtime stopped — is owed nothing more, so what it started stops. A web
+    // read otherwise held its slots for the rest of its 150 s budget with
+    // nobody left to answer.
+    res.once("close", () => {
+      if (!res.writableFinished) controller.abort(new DOMException("The caller closed the request.", "AbortError"));
+    });
     const timeoutMs = Math.max(1_000, Number(config.publicSourceGatewayTimeoutMs) || 60_000);
     const arm = (/** @type {number} */ ms) => {
       const timer = setTimeout(
@@ -903,7 +910,10 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
         timeout = arm(Math.max(1_000, Number(config.webReadTimeoutMs) || 150_000));
         let result;
         try {
-          result = await webReader.read(request.url, { signal: controller.signal });
+          result = await webReader.read(request.url, {
+            signal: controller.signal,
+            runtime: { userId: String(identity?.userId ?? ""), projectId: String(identity?.projectId ?? "") },
+          });
         } catch (error) {
           if (controller.signal.reason?.name === "TimeoutError") {
             throw gatewayError(504, "web_read_timeout", "The web page could not be read in time; try another source or retry later.");

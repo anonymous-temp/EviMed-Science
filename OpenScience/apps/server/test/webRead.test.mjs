@@ -161,6 +161,22 @@ test("a page still unreadable after rendering, or a browser that lands inward, i
   await assert.rejects(inward.read(cde), (error) => error.code === "web_read_host_forbidden");
 });
 
+test("a rendered page is held to the size cap a fetched page is", async () => {
+  const ctgov = "https://clinicaltrials.gov/study/NCT03036124";
+  const { transport } = fakeTransport({ [ctgov]: html(fixture("ctgov-NCT03036124.direct.html")) });
+  const drawn = `<html><body><main><p>Start of the study record.</p>${`<p>${"x".repeat(1_000)}</p>`.repeat(6 * 1024)}<p>Past the cap.</p></main></body></html>`;
+  const renderer = fakeRenderer({ [ctgov]: { html: drawn, finalUrl: ctgov, status: 200 } });
+  const reader = createWebReader(config, { transport, renderer, resolveImpl: publicResolver });
+  const result = await reader.read(ctgov);
+  const cap = 5 * 1024 * 1024;
+  assert.equal(result.receipt.rendered, true);
+  assert.equal(result.receipt.bytes, cap);
+  assert.equal(result.receipt.truncated, true);
+  assert.equal(result.receipt.sha256, createHash("sha256").update(Buffer.from(drawn).subarray(0, cap)).digest("hex"), "the digest is of the bytes the text came from");
+  assert.match(result.text, /Start of the study record/);
+  assert.doesNotMatch(result.text, /Past the cap/);
+});
+
 test("without a browser: a challenge is a named error, a thin real page is kept and says so", async () => {
   const ctgov = "https://clinicaltrials.gov/study/NCT03036124";
   const thin = "https://thin.example.org/brief";
@@ -233,6 +249,73 @@ test("PDFs and office documents go to the parser; other downloads are refused by
   await assert.rejects(failing.read("https://www.escardio.org/Guidelines/hf.pdf"), (error) => error.code === "source_format_unsupported" && error.status === 415);
 });
 
+// The 2026-09-20 release's security review used this page: nested <div>s
+// then stray </p>s make parse5 quadratic, and these 360 KB held the event
+// loop for 16 s, every other request on the server waiting behind one read.
+const stallingPage = () => `<html><body>${"<div>".repeat(40_000)}${"</p>".repeat(40_000)}</body></html>`;
+
+/** Runs `work` beside a 10 ms interval: how it ended, and the loop's longest silence meanwhile. */
+async function besideA10msInterval(work) {
+  let ticks = 0;
+  let last = Date.now();
+  let longestGapMs = 0;
+  const timer = setInterval(() => {
+    const now = Date.now();
+    longestGapMs = Math.max(longestGapMs, now - last);
+    last = now;
+    ticks += 1;
+  }, 10);
+  let error = null;
+  try {
+    await work();
+  } catch (caught) {
+    error = caught;
+  } finally {
+    clearInterval(timer);
+  }
+  return { error, ticks, longestGapMs: Math.max(longestGapMs, Date.now() - last) };
+}
+
+test("a page built to stall the parser is refused by name while the event loop keeps ticking", async () => {
+  const { transport } = fakeTransport({ "https://hostile.example.org/page": html(stallingPage()) });
+  const reader = createWebReader(config, { transport, parseTimeoutMs: 500 });
+  const watched = await besideA10msInterval(() => reader.read("https://hostile.example.org/page"));
+  assert.equal(watched.error?.code, "web_read_page_too_complex");
+  assert.equal(watched.error?.status, 422);
+  assert.match(watched.error.message, /hostile\.example\.org's page did not parse within 1 s/);
+  assert.ok(watched.ticks >= 10, `the interval ticked ${watched.ticks} times`);
+  assert.ok(watched.longestGapMs < 1_000, `the event loop went ${watched.longestGapMs} ms without ticking`);
+  const families = Object.fromEntries(webReadMetricFamilies(reader.stats()).map((family) => [family.name, family]));
+  const limit = families.open_science_web_read_limits_total.series.find((item) => item.labels.limit === "parse" && item.labels.action === "refused");
+  assert.equal(limit?.value, 1);
+  assert.equal(families.open_science_web_read_in_flight.series.find((item) => item.labels.tier === "parse")?.value, 0);
+});
+
+test("the read's deadline, or its caller hanging up, ends the parse thread", async () => {
+  const { transport } = fakeTransport({ "https://hostile.example.org/page": html(stallingPage()) });
+  const reader = createWebReader(config, { transport });
+  const started = Date.now();
+  await assert.rejects(
+    reader.read("https://hostile.example.org/page", { signal: AbortSignal.timeout(300) }),
+    (error) => error.code === "web_read_timeout",
+  );
+  assert.ok(Date.now() - started < 5_000, "the read's deadline ended it, not the ten-second parse budget");
+  const caller = new AbortController();
+  setTimeout(() => caller.abort(), 200);
+  await assert.rejects(reader.read("https://hostile.example.org/page", { signal: caller.signal }), (error) => error.code === "web_read_aborted");
+  // Ended, not abandoned: a thread still parsing would burn a core for 16 s.
+  const before = process.cpuUsage();
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  const used = process.cpuUsage(before);
+  assert.ok((used.user + used.system) / 1_000 < 400, `the process used ${((used.user + used.system) / 1_000).toFixed(0)} ms of CPU after both reads ended`);
+});
+
+test("a page nested past what the parse thread can walk is refused by name", async () => {
+  const { transport } = fakeTransport({ "https://deep.example.org/page": html(`<html><body>${"<span>".repeat(50_000)}deep text</body></html>`) });
+  const reader = createWebReader(config, { transport });
+  await assert.rejects(reader.read("https://deep.example.org/page"), (error) => error.code === "web_read_page_too_complex" && /nested too deeply/.test(error.message));
+});
+
 test("the authorities of the plan's five pages are labelled official, a blog is not", () => {
   for (const url of [
     "https://www.nmpa.gov.cn/xxgk/ggtg/index.html",
@@ -269,7 +352,8 @@ const post = (base, body, token = "runtime-token") => fetch(`${base}/internal/so
 
 test("the gateway serves a web read to the runtime, and the switch refuses it by name", async (t) => {
   const reads = [];
-  const webReader = { async read(url) { reads.push(url); return { receipt: { url, finalUrl: url }, text: "page text", links: [] }; } };
+  const asked = [];
+  const webReader = { async read(url, options) { reads.push(url); asked.push(options.runtime); return { receipt: { url, finalUrl: url }, text: "page text", links: [] }; } };
   const server = createServer(createPublicSourceGatewayHandler({ webReadEnabled: true }, runtimeManager, { webReader }));
   const base = await listen(server);
   t.after(() => server.close());
@@ -281,6 +365,7 @@ test("the gateway serves a web read to the runtime, and the switch refuses it by
   assert.equal((await (await post(base, { webRead: { url: "https://x.example.org", accept: ["text/html"] } })).json()).error.code, "public_source_gateway_field_invalid");
   assert.equal((await (await post(base, { webRead: { url: "https://x.example.org" }, url: "https://x.example.org" })).json()).error.code, "public_source_gateway_field_invalid");
   assert.equal(reads.length, 1);
+  assert.deepEqual(asked, [{ userId: "alice", projectId: "paper-1" }], "the read is counted against the runtime that asked");
 
   const off = createServer(createPublicSourceGatewayHandler({ webReadEnabled: false }, runtimeManager, { webReader }));
   const offBase = await listen(off);
@@ -366,6 +451,83 @@ test("an open-access PDF can come back parsed, with the PDF beside the text", as
   const raw = await post(bareBase, { openAccessPdfDoi: "10.1234/oa.1" });
   assert.equal(raw.headers.get("content-type"), "application/pdf");
   assert.equal((await (await post(bareBase, { openAccessPdfDoi: "10.1234/oa.1", parse: "yes" })).json()).error.code, "public_source_gateway_field_invalid");
+});
+
+/** Resolves once `predicate` holds, polling every few milliseconds, or fails after `ms`. */
+async function until(predicate, ms = 5_000) {
+  const deadline = Date.now() + ms;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error("the condition never held");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+test("one project's runtime holds at most its share of reads, and another project's is not queued behind it", async () => {
+  // The 2026-09-20 release's security review: eight shared slots and reads of
+  // up to 150 s, so one run fanning out held every slot.
+  const releases = [];
+  const inFlight = { alice: 0, other: 0 };
+  let alicePeak = 0;
+  const transport = async ({ url }) => {
+    if (url.pathname === "/robots.txt") return noRobots();
+    const owner = url.hostname.startsWith("alice-") ? "alice" : "other";
+    inFlight[owner] += 1;
+    alicePeak = Math.max(alicePeak, inFlight.alice);
+    await new Promise((resolve) => releases.push(resolve));
+    inFlight[owner] -= 1;
+    return html(article("Guidance text. "));
+  };
+  const reader = createWebReader({ ...config, webReadConcurrency: 8, webReadRuntimeConcurrency: 3 }, { transport });
+  const alice = Array.from({ length: 5 }, (_, index) => reader.read(`https://alice-${index}.example.org/page`, { runtime: { userId: "alice", projectId: "paper-1" } }));
+  await until(() => inFlight.alice === 3);
+  const other = reader.read("https://other.example.org/page", { runtime: { userId: "alice", projectId: "paper-2" } });
+  await until(() => inFlight.other === 1);
+  assert.equal(inFlight.alice, 3, "the first project's other two reads wait their turn");
+  const families = Object.fromEntries(webReadMetricFamilies(reader.stats()).map((family) => [family.name, family]));
+  const queued = families.open_science_web_read_limits_total.series.find((item) => item.labels.limit === "runtime_concurrency" && item.labels.action === "queued");
+  assert.equal(queued?.value, 2);
+  let settled = false;
+  const all = Promise.all([...alice, other]).finally(() => { settled = true; });
+  await until(() => {
+    while (releases.length) releases.shift()();
+    return settled;
+  }, 30_000);
+  assert.equal((await all).length, 6);
+  assert.equal(alicePeak, 3);
+  assert.equal(reader.stats().runtimeConcurrency.runtimes, 0, "no runtime's gate outlives its reads");
+});
+
+test("a caller that hangs up ends its read, and its runtime's slot goes to the next read", async (t) => {
+  let slowSignal = null;
+  const transport = async ({ url, signal }) => {
+    if (url.pathname === "/robots.txt") return noRobots();
+    if (url.hostname === "slow.example.org") {
+      slowSignal = signal;
+      await new Promise((resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+    }
+    return html(article("Guidance text. "));
+  };
+  const gatewayConfig = { ...config, webReadEnabled: true, webReadRuntimeConcurrency: 1, webReadTimeoutMs: 20_000 };
+  const server = createServer(createPublicSourceGatewayHandler(gatewayConfig, runtimeManager, { webReader: createWebReader(gatewayConfig, { transport }) }));
+  const base = await listen(server);
+  t.after(() => server.close());
+  const request = (url, signal) => fetch(`${base}/internal/sources/v1/fetch`, {
+    method: "POST",
+    headers: { authorization: "Bearer runtime-token", "content-type": "application/json" },
+    body: JSON.stringify({ webRead: { url } }),
+    signal,
+  });
+
+  const caller = new AbortController();
+  const first = request("https://slow.example.org/page", caller.signal);
+  await until(() => slowSignal !== null);
+  caller.abort();
+  await assert.rejects(first);
+  await until(() => slowSignal.aborted, 2_000);
+  const started = Date.now();
+  const second = await request("https://fast.example.org/page");
+  assert.equal(second.status, 200);
+  assert.ok(Date.now() - started < 5_000, "the next read did not wait out the abandoned one's budget");
 });
 
 test("what reads came to and every limit that bit them reach the operator's metrics", async () => {

@@ -1568,6 +1568,14 @@ export function loadConfig(overrides = {}) {
     webReadConcurrency: Math.max(1, Number(
       overrides.webReadConcurrency ?? process.env.OPEN_SCIENCE_WEB_READ_CONCURRENCY ?? 8,
     ) || 8),
+    // Of those, the most one project's runtime holds at once (sixteen more of
+    // its reads may wait their turn): without it one run fanning out took all
+    // eight, and every other project's read waited up to a whole read's budget
+    // behind it (the 2026-09-20 release's security review). Counted in
+    // open_science_web_read_limits_total{limit="runtime_concurrency"}.
+    webReadRuntimeConcurrency: Math.max(1, Number(
+      overrides.webReadRuntimeConcurrency ?? process.env.OPEN_SCIENCE_WEB_READ_RUNTIME_CONCURRENCY ?? 3,
+    ) || 3),
     // The least time between two requests to one site (a robots.txt
     // Crawl-delay stretches it): a run fanning out over a regulator's notice
     // list must not read as a flood from our address. Counted in
