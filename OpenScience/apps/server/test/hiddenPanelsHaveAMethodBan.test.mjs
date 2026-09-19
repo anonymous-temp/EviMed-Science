@@ -20,7 +20,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RUNTIME_UI_DENIED_HOST_ROUTES, RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
+import { RUNTIME_UI_DENIED_HOST_ROUTES, RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES, runtimeUiMethodFromPath } from "@evimed/domain";
 
 import { HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, OPERATOR_ONLY_BROWSER_PANELS } from "../src/dshProfilePatch.mjs";
 
@@ -30,9 +30,11 @@ import { HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, OPERATOR_ONLY
  * `namespace` and `methods` are checked against the deny lists. `hostRoute`
  * is the third kind, and 0.1.5 is what made it necessary: a panel whose backing
  * endpoint is not an `/api/` method at all but a route on the kernel's web
- * server, stopped by path rather than by name. `cosmetic` means the panel draws
- * something with no endpoint behind it, and the string is the argument for
- * that — reviewed when the pairing changes, not assumed.
+ * server, stopped by path rather than by name. `nonMethodApiRoute` is its
+ * sibling under `/api/`: a route there whose name is not `<namespace>/<name>`,
+ * which the proxy refuses before any method rule is asked. `cosmetic` means the
+ * panel draws something with no endpoint behind it, and the string is the
+ * argument for that — reviewed when the pairing changes, not assumed.
  */
 const WHAT_STOPS_IT = {
   "ui-settings-general": { namespace: "settings" },
@@ -51,10 +53,13 @@ const WHAT_STOPS_IT = {
   // ui-conversation from the profile's own permission table and switches by
   // sending a prompt, which is the product's main path and cannot be denied.
   // What bounds it is the table: one row, so every choice it offers is the
-  // same sandbox. That is asserted below rather than described here.
+  // same sandbox. Since 2026-09-19 the hosted `permission` row also mounts
+  // without the command registry, so the `/permission` it would send does not
+  // exist there. Both are asserted below and in dshProfilePatch.test.mjs.
   "ui-permission": {
     cosmetic: "the access-mode chip switches by sending /permission on the prompt path, which no method rule can see; "
-      + "the hosted permission table is narrowed to one preset instead, and that is what bounds it.",
+      + "the hosted permission table is narrowed to one preset and the hosted permission row registers no /permission "
+      + "command at all; those two are what bound it.",
   },
   // 0.1.5. The split button posts to /open-in-app/open, which is a web-server
   // route and not a method — so the pairing is the path, and the hosted profile
@@ -69,6 +74,15 @@ const WHAT_STOPS_IT = {
   // `dynamicCordisRunner/*` method, refused wholesale. Unmounted so it stops
   // syncing a manifest into two 403s per session open.
   "cordis-client-runner": { namespace: "dynamicCordisRunner" },
+  // The owner of `/feedback`. Its only Remote is `sessionFeedback/record`,
+  // refused wholesale; the command's text form reached nothing that reads it.
+  "command-feedback": { namespace: "sessionFeedback" },
+  // The owner of `/export` and the header's download item. Neither is a method:
+  // both fetch the ZIP from a kernel route whose name has no `/`, and the proxy
+  // answers 400 to every `/api/` path that is not `<namespace>/<name>` (see
+  // "encoded or malformed native API paths ..." and "the session-log ZIP route
+  // ..." in runtimeUiPolicy.test.mjs).
+  "session-log-download": { nonMethodApiRoute: "/api/session.export" },
   // Operator-only rather than hidden, and the reason is worth stating without
   // flattering it: this removes the affordance, not the data. The kernel
   // streams the prompt, the reminders and the raw tool JSON to the browser over
@@ -104,6 +118,12 @@ test("every hidden panel has something that stops what it does, not just what it
     }
     if (stop.hostRoute) {
       assert.ok(hostRoutes.has(stop.hostRoute), `${panel} is paired with the ${stop.hostRoute} route, which is not denied`);
+      continue;
+    }
+    if (stop.nonMethodApiRoute) {
+      assert.ok(stop.nonMethodApiRoute.startsWith("/api/"), `${panel} is paired with ${stop.nonMethodApiRoute}, which is not under /api/`);
+      assert.equal(runtimeUiMethodFromPath(stop.nonMethodApiRoute), null,
+        `${panel} is paired with ${stop.nonMethodApiRoute}, which now reads as a method, so the proxy would forward it`);
       continue;
     }
     assert.equal(typeof stop.cosmetic, "string");
