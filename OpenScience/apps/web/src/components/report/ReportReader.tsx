@@ -75,8 +75,8 @@ export function ReportReader({
 
   const safety = useMemo(() => safetyClaimIds(run?.qualityNotices), [run?.qualityNotices]);
   const reading: ClaimReading = useMemo(
-    () => ({ verified, runId: runId ?? run?.id ?? null, safety }),
-    [verified, runId, run?.id, safety],
+    () => ({ verified, runId: runId ?? run?.id ?? null, safety, pagesRead: run?.pagesRead }),
+    [verified, runId, run?.id, safety, run?.pagesRead],
   );
   const statuses = useMemo(() => claimStatuses(verification), [verification]);
   const summary = claimVerificationSummary(verification);
