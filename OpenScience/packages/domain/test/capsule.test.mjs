@@ -35,3 +35,15 @@ test("additional share scopes permit exactly their listed paths", () => {
   assert.ok(validateCapsuleManifest(fixture({ scope: ["workstyle", "+profile"], layers: ["profile"], entries: [entry] })).ok);
   assert.equal(validateCapsuleManifest(fixture({ scope: ["workstyle", "+profile"], layers: ["knowledge"], entries: [{ ...entry, path: "documents/private.txt", layer: "knowledge" }] })).ok, false);
 });
+
+test("a capsule is used as one's own or as a reference, and the retired third mode reads as a reference", async () => {
+  const { CAPSULE_ACTIVATION_MODES, capsuleActivationMode } = await import("../index.mjs");
+  // `blend` («合并参考») was never told apart from `guest` by any reader; the
+  // page offers the two behaviours that exist (2026-09-19 plan §3.3 #4).
+  assert.deepEqual([...CAPSULE_ACTIVATION_MODES], ["own", "guest"]);
+  assert.equal(capsuleActivationMode("own"), "own");
+  assert.equal(capsuleActivationMode("guest"), "guest");
+  assert.equal(capsuleActivationMode("blend"), "guest", "a stored blend needs no migration");
+  assert.equal(capsuleActivationMode("merge"), null);
+  assert.equal(capsuleActivationMode(undefined), null);
+});

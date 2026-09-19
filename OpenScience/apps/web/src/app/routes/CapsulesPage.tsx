@@ -145,7 +145,9 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
               {view === "trash" ? <Button loading={busy} onClick={() => void perform(async () => { await restoreCapsule(current.id, current.revision); await reload(); setNotice("胶囊已恢复，可在我的胶囊中查看。"); })}><RotateCcw size={15} aria-hidden="true" />恢复胶囊</Button> : <div className="space-y-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <select aria-label="使用方式" disabled={busy} className={inputClasses({ className: "w-auto" })} value={mode} onChange={(event) => setMode(event.target.value)}>
-                    <option value="own">主要胶囊</option><option value="guest">参考胶囊</option><option value="blend">合并参考</option>
+                    {/* Two, because the server has two: 合并参考 was never told
+                        apart from 参考胶囊 by anything (2026-09-19 plan §3.3 #4). */}
+                    <option value="own">主要胶囊</option><option value="guest">参考胶囊</option>
                   </select>
                   <Button loading={busy} onClick={() => void perform(async () => { await activateCapsule(current.id, mode); setNotice("已用于当前项目。"); })}>用于当前项目</Button>
                   <Button variant="ghost" disabled={busy} onClick={() => void perform(async () => { await trashCapsule(current.id, current.revision); await reload(); setNotice("已移至回收站，可在那里恢复。"); })}>移至回收站</Button>

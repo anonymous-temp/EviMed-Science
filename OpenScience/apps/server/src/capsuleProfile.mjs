@@ -17,7 +17,7 @@
  * What goes in is decided by closed vocabularies, not by reading the text:
  * approved entries, of the kinds that describe the person rather than a
  * project or an episode, from capsules that are the researcher's own. A guest
- * or blend activation brings someone else's methods and standards and, by
+ * (reference) activation brings someone else's methods and standards and, by
  * design, never their identity (spec §19.15). Methods are not here either:
  * they are mounted as skills (`capsuleMethods.mjs`). Everything else stays one
  * recall away.
