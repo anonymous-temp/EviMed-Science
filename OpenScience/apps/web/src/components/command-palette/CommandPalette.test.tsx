@@ -29,8 +29,8 @@ describe("CommandPalette", () => {
     const input = await screen.findByPlaceholderText("搜索操作…");
     expect(input).toBeInTheDocument();
 
-    await user.type(input, "记忆");
-    expect(screen.getByText("记忆")).toBeInTheDocument();
+    await user.type(input, "记忆胶囊");
+    expect(screen.getByText("记忆胶囊")).toBeInTheDocument();
     expect(screen.queryByText("知识库")).not.toBeInTheDocument();
   });
 
@@ -48,8 +48,8 @@ describe("CommandPalette", () => {
       "新任务",
       "运行记录",
       "知识库",
-      "记忆",
-      "方法胶囊",
+      "记忆胶囊",
+      "方法",
       "主动科研",
       "科研能力",
       "收件箱",

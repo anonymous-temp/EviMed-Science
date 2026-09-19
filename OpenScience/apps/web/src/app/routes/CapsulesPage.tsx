@@ -46,6 +46,9 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
   currentView.current = view;
   currentSelection.current = selected;
   const current = capsules.find((item) => item.id === selected) ?? null;
+  // Someone else's pack is trusted whole (plan §3.3 #4): enabled, tried and
+  // disabled on the received shelf, never adopted entry by entry here.
+  const received = (current?.payload as { imported?: boolean } | undefined)?.imported === true;
 
   const reload = useCallback(async () => {
     if (currentView.current !== view) return;
@@ -110,8 +113,10 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
   });
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-content-full space-y-5 px-6 py-8">
+    // Embedded, it is folded inside the capsule page's 「方法」 section, which
+    // owns the scrolling.
+    <div className={embedded ? undefined : "h-full overflow-y-auto"}>
+      <div className={embedded ? "space-y-5 pt-3" : "mx-auto w-full max-w-content-full space-y-5 px-6 py-8"}>
         <header className="flex flex-wrap items-start justify-between gap-3">
           {embedded
             ? <p className="max-w-2xl text-ui text-muted">保存研究方法、偏好与经验，在后续研究中继续使用。</p>
@@ -142,10 +147,18 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
               })}>加载更多胶囊</Button>}
             </div>
             {current && <Card className="lg:col-span-2" title={current.payload.title} hint="胶囊提供背景和方法，不改变研究证据的校验规则。">
-              {view === "trash" ? <Button loading={busy} onClick={() => void perform(async () => { await restoreCapsule(current.id, current.revision); await reload(); setNotice("胶囊已恢复，可在我的胶囊中查看。"); })}><RotateCcw size={15} aria-hidden="true" />恢复胶囊</Button> : <div className="space-y-5">
+              {view === "trash" ? <Button loading={busy} onClick={() => void perform(async () => { await restoreCapsule(current.id, current.revision); await reload(); setNotice("胶囊已恢复，可在我的胶囊中查看。"); })}><RotateCcw size={15} aria-hidden="true" />恢复胶囊</Button> : received ? <div className="space-y-3">
+                <p className="text-ui text-muted">这是别人分享给你的胶囊：整包启用或停用，在「方法 › 收到的胶囊」里操作，不逐条采用。</p>
+                <Button variant="ghost" disabled={busy} onClick={() => void perform(async () => { await trashCapsule(current.id, current.revision); await reload(); setNotice("已移至回收站，可在那里恢复。"); })}>移至回收站</Button>
+                {entries === null ? <MemorySkeleton /> : <div className="space-y-3">
+                  {entries.map((entry) => <article key={entry.id} className="space-y-1 rounded-card border border-border p-4"><p className="text-caption text-muted">{capsuleEntryLabel(entry.payload.factKind)} · {labelFor(STATUS_LABEL, entry.payload.status)}</p><p className="whitespace-pre-wrap text-ui text-text">{entry.payload.content}</p></article>)}
+                </div>}
+              </div> : <div className="space-y-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <select aria-label="使用方式" disabled={busy} className={inputClasses({ className: "w-auto" })} value={mode} onChange={(event) => setMode(event.target.value)}>
-                    <option value="own">主要胶囊</option><option value="guest">参考胶囊</option><option value="blend">合并参考</option>
+                    {/* Two, because the server has two: 合并参考 was never told
+                        apart from 参考胶囊 by anything (2026-09-19 plan §3.3 #4). */}
+                    <option value="own">主要胶囊</option><option value="guest">参考胶囊</option>
                   </select>
                   <Button loading={busy} onClick={() => void perform(async () => { await activateCapsule(current.id, mode); setNotice("已用于当前项目。"); })}>用于当前项目</Button>
                   <Button variant="ghost" disabled={busy} onClick={() => void perform(async () => { await trashCapsule(current.id, current.revision); await reload(); setNotice("已移至回收站，可在那里恢复。"); })}>移至回收站</Button>

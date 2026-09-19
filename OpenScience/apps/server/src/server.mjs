@@ -18,6 +18,7 @@ import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mj
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
+import { LearningTriggers } from "./learningTriggers.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
 import { evaluateLearnedMethod } from "./learningEvaluation.mjs";
 import { freezeLearningBaseline } from "./learningBaseline.mjs";
@@ -48,6 +49,8 @@ import { NotificationService, runFinishedInboxItem, runFinishedNotifies } from "
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
+import { createMemorySessionRoutes, mountedMethodsFor, sessionDispatchNotes } from "./memorySessions.mjs";
+import { createMemoryTimelineRoutes } from "./memoryTimeline.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
@@ -85,6 +88,7 @@ import { KB_RERANK_INSTRUCT, KnowledgeBaseIndex } from "./kbIndex.mjs";
 import { createLibrary } from "./libraryService.mjs";
 import { KbEmbedder } from "./kbEmbedding.mjs";
 import { KB_SEARCH_GATEWAY_PATH, createKbSearchGatewayHandler } from "./kbSearchGateway.mjs";
+import { CapsuleScanner } from "./capsuleScan.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
@@ -992,14 +996,23 @@ export function createWebApiApp(overrides = {}) {
   let learningRuntime = null;
   /** @type {any} */
   let learningWorker = null;
+  /** What queues a lesson when a run finishes (learningTriggers.mjs). */
+  /** @type {LearningTriggers | null} */
+  let learningTriggers = null;
   // Strictness reaches the capsules too. An operator who asked for a failing
   // index to be visible must not be given the lexical fallback in silence on
   // one of the two recall paths.
+  // The automatic scan a shared capsule passes (capsuleScan.mjs), metered like
+  // every control-plane model call.
+  const capsuleScanner = new CapsuleScanner(config, { usageLedger, fetchImpl: overrides.capsuleScanFetch ?? globalThis.fetch });
   const capsuleService = productDocuments
-    ? new CapsuleService(productDocuments, { indexing: memoryIndexing, strictIndex: config.memoryIndexStrict })
+    ? new CapsuleService(productDocuments, { indexing: memoryIndexing, strictIndex: config.memoryIndexStrict, scanner: capsuleScanner })
     : null;
-  const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir }) : null;
-  const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
+  const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner }) : null;
+  const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes,
+    // A 「试用一次」 conversation is marked in its own memory state.
+    trials: researchMemory.configured ? { mark: (userId, projectId, sessionId, capsuleId) => researchMemory.updateSessionState(userId, projectId, sessionId,
+      { trialCapsuleId: capsuleId }) } : null });
   const memoryRoutes = createMemoryRoutes({
     config, researchMemory, memorySubstrate, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
   });
@@ -1205,6 +1218,9 @@ export function createWebApiApp(overrides = {}) {
     fetchImpl: overrides.memoryExtractionFetch ?? globalThis.fetch,
     // Extraction is a model call on the user's behalf and is billed as one.
     usageLedger,
+    // What the researcher removed or undid, so an inference cannot write it
+    // straight back (memoryIntelligence.mjs #rejectedKeys).
+    feedbackEvents,
   });
   // Registered after `memoryIntelligence` because the episodes endpoint feeds
   // it: an external agent posts turns and the same extractor decides what is
@@ -1728,38 +1744,20 @@ export function createWebApiApp(overrides = {}) {
       // Evaluation receipts feed only the measured method. They must not
       // recursively distil benchmark answers or seed the researcher's memory.
       if (evaluationRun) return;
-      // Queue the run for distillation when it is worth learning from.
-      //
-      // Trigger (b) of the plan's three: a package that needed at least one
-      // repair round and was then accepted. That is the cheapest honest signal
-      // the system has — the run was wrong in a specific, recorded way and then
-      // became right — and unlike the other two triggers it needs no feedback
-      // event, so it works on the day this ships.
-      //
-      // A run with no repair rounds is not queued. A loop that learns from
-      // every success learns mostly that things usually work.
-      if (learningWorker && productJobs && run.status === "succeeded") {
-        const rounds = (run.repairRounds?.content ?? 0) + (run.repairRounds?.structural ?? 0);
-        if (rounds >= 1 && run.transcript?.completeness === "complete") {
-          await productJobs.enqueue(project.userId, "distill", {
-            runId: run.id,
-            trigger: "repair_accepted",
-            repairRounds: run.repairRounds,
-          }, {
-            idempotencyKey: `distill:${run.id}:repair_accepted`,
-            projectId: project.id,
-          }).catch(async (error) => {
-            await securityAudit(config, "learning.distill.enqueue", "failed", {
-              userId: project.userId, projectId: project.id, runId: run.id,
-              code: typeof error?.code === "string" ? error.code : "learning_enqueue_failed",
-            });
-          });
-        }
-      }
+      // Queue the lessons this run is evidence for — a finished delivery, a
+      // correction, a repeated routine (learningTriggers.mjs). After the
+      // memory write when there is one, because the extractor is what says the
+      // researcher corrected the assistant.
+      const queueLessons = (memoryResult) => (learningWorker && learningTriggers
+        ? learningTriggers.afterRun(project, run, memoryResult).catch(() => null)
+        : null);
       // A deployment with no control-plane database has no research memory, so
       // there is nothing to record the run into. It is still a deployment whose
       // runs are learnable, which is why the transcript above is written first.
-      if (!researchMemory.configured) return;
+      if (!researchMemory.configured) {
+        await queueLessons(null);
+        return;
+      }
       let messages = [];
       let historyError = null;
       try {
@@ -1809,16 +1807,16 @@ export function createWebApiApp(overrides = {}) {
         // and not unchecked".
         ]).catch(() => {});
       }
-      // A record that was stored and then parked as `pending` looks, from the
-      // outside, exactly like memory that is not learning: it is not recalled,
-      // and nothing anywhere said why. The demotion is unchanged — see
-      // demotionReason in memoryIntelligence.mjs for why it stays — this only
-      // makes it legible. No `unchecked` flag: parking a memory says nothing
+      // The one kind of record held for its owner (checkpointReason in
+      // memoryIntelligence.mjs): a lasting memory naming a clinical-safety
+      // medicine. Everything else takes effect at once, labelled. Said on the
+      // run because a held record is not recalled, and silence would read as
+      // memory not learning. No `unchecked` flag: holding a memory says nothing
       // about whether the run's own deliverables were checked.
       if (memoryResult.pending > 0) {
-        const sentence = `记忆已记录但暂缓生效 ${memoryResult.pending} 条：`
-          + memoryResult.pendingReasons.map((item) => `${item.count} 条因${item.text}`).join("；")
-          + "。记录与证据都已保存，可在记忆管理中确认后启用。";
+        const sentence = `有 ${memoryResult.pending} 条长期记忆等你看过再用：`
+          + memoryResult.pendingReasons.map((item) => `${item.count} 条${item.text}`).join("；")
+          + "。记录与证据都已保存，可在记忆胶囊中确认或删除。";
         await agentRuns.appendQualityNotices(project, run.id, [
           runNotice("memory_pending", sentence, { detail: sentence }),
         ]).catch(() => {});
@@ -1881,6 +1879,7 @@ export function createWebApiApp(overrides = {}) {
         pendingReasons: memoryResult.pendingReasons ?? [],
         extractionError: memoryResult.extractionError,
       }).catch(() => {});
+      await queueLessons(memoryResult);
     },
     onRunFinishedError: async (error, project, run) => {
       await securityAudit(config, "memory.agent_run.record", "failed", {
@@ -1964,6 +1963,17 @@ export function createWebApiApp(overrides = {}) {
         code: typeof detail?.verdict === "string" ? detail.verdict : "unknown",
         detail: `method=${detail?.methodId ?? ""}`,
       }),
+    });
+    learningTriggers = new LearningTriggers({
+      jobs: productJobs, agentRuns, memory: researchMemory,
+      // An incognito conversation teaches the loop nothing either.
+      sessionState: researchMemory.configured
+        ? (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId) : null,
+      // The loop's own bounded runs and source understanding are internal
+      // capabilities: a lesson distilled from a distillation is the loop
+      // grading its own homework.
+      internalAgent: async (agentId) => (await agentRegistry)?.get?.(agentId)?.visibility === "internal",
+      audit: (event, detail) => securityAudit(config, event, "failed", detail),
     });
     learningWorker = new LearningWorker({
       jobs: productJobs, distillation, consolidation,
@@ -2286,7 +2296,24 @@ export function createWebApiApp(overrides = {}) {
     steerRun: ({ project, runId, text }) => steerChannelRun(project, runId, text),
     loadSdk: overrides.loadFeishuSdk,
   });
-  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate });
+  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate,
+    // Whose conversation a runtime's recall is (capsuleGateway.mjs): the
+    // project's running runs, each conversation's memory state, and the run
+    // ledger line the 「本次用到的背景」 panel reads.
+    sessions: researchMemory.configured ? {
+      running: (_user, project) => agentRuns.activeRuns(project),
+      state: (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId),
+      recordRecall: (project, runId, items) => agentRuns.recordLearning(project, runId, {
+        appendRecalledMemories: items.map((item) => (item.source === "capsule"
+          ? { id: `capsule:${item.id}`, kind: item.factKind ?? "capsule", scope: "capsule" }
+          : { id: item.id, kind: item.kind ?? "note", scope: item.scope ?? "user" })),
+      }),
+    } : null });
+  // 「本次用到的背景」, 「本次不用」 and the incognito switch, per conversation.
+  const memorySessionRoutes = createMemorySessionRoutes({ config, researchMemory, agentRuns, capsules: capsuleService, context, audit,
+    mountedMethods: (project) => mountedMethodsFor({ runtimeManager, capsules: capsuleService, learning: learningService }, project) });
+  // 「时间轴」, derived when read from the records, the ledger and the methods.
+  const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService, context });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
@@ -2956,6 +2983,8 @@ export function createWebApiApp(overrides = {}) {
       }
 
       if (await memoryRoutes(req, res)) return;
+      if (await memorySessionRoutes(req, res)) return;
+      if (await memoryTimelineRoutes(req, res)) return;
       if (await agentKeyRoutes(req, res)) return;
 
       if (pathname === "/api/feedback/events" && req.method === "GET") {
@@ -3299,6 +3328,10 @@ export function createWebApiApp(overrides = {}) {
                 }
               : routedSpecialist,
           });
+          // What this conversation's own memory state adds (memorySessions.mjs):
+          // a method set aside with 「本次不用」, which recall cannot withhold,
+          // and the capsule a 「试用一次」 conversation is trying.
+          const sessionNotes = await sessionDispatchNotes({ researchMemory, capsules: capsuleService }, ctx.user.id, ctx.project.id, session.sessionId);
           // Before the prompt goes out, like the brief: a mount the ledger has
           // not recorded cannot be told apart from one that never happened.
           // The same rule for what was recalled: a memory this dispatch used
@@ -3311,7 +3344,7 @@ export function createWebApiApp(overrides = {}) {
           }
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             text: promptText,
-            system: prepared.system,
+            system: sessionNotes.length ? `${prepared.system}\n\n${sessionNotes.join("\n\n")}` : prepared.system,
             memoryContext: prepared.memoryContext,
             residentProfile: true,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
@@ -4174,7 +4207,9 @@ export function createWebApiApp(overrides = {}) {
         WHERE kind='method' AND deleted_at IS NULL AND project_id IS NOT NULL
           AND payload->>'status' IS DISTINCT FROM 'retired'
         ORDER BY user_id,project_id LIMIT 200`);
-      const date = new Date().toISOString().slice(0, 10);
+      // The night this pass belongs to, in the window's own zone — not the
+      // UTC date, which turns over at 08:00 Beijing, inside the window.
+      const date = learningWorker?.nightKey?.(new Date()) ?? new Date().toISOString().slice(0, 10);
       for (const row of result.rows) {
         try {
           await productJobs.enqueue(row.user_id, "consolidate", { action: "sleep", date }, {

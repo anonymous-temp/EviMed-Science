@@ -363,3 +363,72 @@ test("an unreachable index fails an account deletion without emptying the accoun
   assert.equal(exported.records.length, 1, "a deletion that failed must not have deleted anything");
   assert.equal(exported.manualMemos.length, 1);
 });
+
+test("one click undoes an automatic write: an edit goes back, a creation goes away and stays away from inference", options, async (t) => {
+  // Owner ruling 2026-09-19: memory changes by itself and asks nobody first,
+  // so every change has to be reversible in one step, and an undone memory
+  // must not be written straight back by the next run's inference.
+  const { app, base, headers, user } = await fixture(t);
+  const evidence = (quote) => ({ sourceType: "conversation_message", sourceRef: "sessions/s-undo/messages/m1", quote, observedAt: new Date().toISOString(), weight: 1 });
+  const created = await app.researchMemory.upsertRecord(user.id, {
+    scope: "user", scopeId: "", kind: "preference", key: "preference.table_first",
+    value: "证据先用表格呈现", summary: "表格优先", origin: "inferred", status: "active", confidence: 0.6, importance: 0.7, sensitive: false,
+  }, evidence("先用表格"), { reason: "conversation evidence created the memory", by: "extraction", runId: "run_a" });
+  const changed = await app.researchMemory.upsertRecord(user.id, { ...created, value: "证据先用文字叙述", summary: "叙述优先" },
+    evidence("先用文字"), { expectedVersion: created.version, reason: "conversation evidence updated the current memory", by: "extraction", runId: "run_b" });
+  assert.deepEqual([changed.revisions.at(-1).by, changed.revisions.at(-1).runId], ["extraction", "run_b"], "a revision says who changed it, in which run");
+
+  // The write prompt lists it, for this conversation and since a moment.
+  const since = new Date(Date.parse(created.createdAt) - 1_000).toISOString();
+  const changes = (await (await fetch(`${base}/api/memory/changes?since=${encodeURIComponent(since)}&sessionId=s-undo`, { headers })).json()).data;
+  assert.deepEqual(changes.map((item) => [item.id, item.change, item.version]), [[created.id, "updated", changed.version]]);
+  assert.deepEqual((await (await fetch(`${base}/api/memory/changes?since=${encodeURIComponent(since)}&sessionId=elsewhere`, { headers })).json()).data, []);
+
+  const undone = await fetch(`${base}/api/memory/records/${created.id}/undo`, {
+    method: "POST", headers, body: JSON.stringify({ expectedVersion: changed.version }),
+  });
+  assert.equal(undone.status, 200);
+  const restored = (await undone.json()).data;
+  assert.equal(restored.undone, "restored");
+  assert.equal(restored.record.value, "证据先用表格呈现");
+  assert.match(restored.record.revisions.at(-1).reason, /^undone: conversation evidence updated/);
+  assert.equal(restored.record.revisions.at(-1).by, "user");
+  const stale = await fetch(`${base}/api/memory/records/${created.id}/undo`, {
+    method: "POST", headers, body: JSON.stringify({ expectedVersion: changed.version }),
+  });
+  assert.equal(stale.status, 409, "an undo of a version already moved on is refused");
+
+  // A memory whose only history is its creation: undoing it removes it, and
+  // the removal is the researcher rejecting it.
+  const fresh = await app.researchMemory.upsertRecord(user.id, {
+    scope: "user", scopeId: "", kind: "behavior", key: "behavior.late_night",
+    value: "常在深夜工作", summary: "深夜工作", origin: "inferred", status: "active", confidence: 0.6, importance: 0.3, sensitive: false,
+  }, evidence("又是深夜"), { reason: "conversation evidence created the memory", by: "extraction" });
+  const removed = (await (await fetch(`${base}/api/memory/records/${fresh.id}/undo`, {
+    method: "POST", headers, body: JSON.stringify({ expectedVersion: fresh.version }),
+  })).json()).data;
+  assert.equal(removed.undone, "removed");
+  await assert.rejects(app.researchMemory.getRecord(user.id, fresh.id), { code: "memory_not_found" });
+  const rejections = await app.feedbackEvents.list(user.id, { trigger: "memory-rejected" });
+  assert.deepEqual(rejections.items.map((item) => [item.detail.key, item.detail.reason]), [["behavior.late_night", "undone"]],
+    "the extractor reads this ledger and will not infer it back");
+});
+
+test("undoing a replacement puts the fact it replaced back in force", options, async (t) => {
+  const { app, base, headers, user } = await fixture(t);
+  const project = (await app.store.listProjects(user))[0];
+  const fact = (key, value) => ({
+    scope: "project", scopeId: project.id, kind: "project_fact", key, value, summary: value,
+    origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false,
+  });
+  const old = await app.researchMemory.upsertRecord(user.id, fact("project.dose.old", "利伐沙班 20 mg"));
+  const { record } = await app.researchMemory.supersede(user.id, old.id, fact("project.dose.new", "利伐沙班 15 mg"), null,
+    { reason: "conversation evidence replaced an earlier fact", by: "extraction" });
+  const undone = (await (await fetch(`${base}/api/memory/records/${record.id}/undo`, {
+    method: "POST", headers, body: JSON.stringify({ expectedVersion: record.version }),
+  })).json()).data;
+  assert.equal(undone.undone, "removed");
+  assert.deepEqual(undone.restored.map((item) => [item.id, item.status, item.supersededBy, item.invalidSince]),
+    [[old.id, "active", null, null]]);
+  assert.match(undone.restored[0].revisions.at(-1).reason, /^back in force: project\.dose\.new/);
+});

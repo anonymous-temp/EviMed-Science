@@ -38,8 +38,15 @@ import { HttpError } from "./security.mjs";
 /** The file the run reads its frozen input from. */
 export const DISTILLATION_INPUT_FILE = "distillation-input.json";
 
-/** What may set a distillation job going. */
-export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepted", "correction"]);
+/**
+ * What may set a distillation job going.
+ *
+ * `delivered` and `routine` joined on 2026-09-20, when the loop stopped
+ * waiting for clicks (`learningTriggers.mjs`): a delivery that finished, and
+ * the Nth successful run of one capability, whose shared routine is induced
+ * from all N transcripts at once.
+ */
+export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepted", "correction", "delivered", "routine"]);
 
 /** Bumped when the input shape or the cleaning rules change, so a re-run under
  *  new rules is a different job rather than a duplicate of the old one. */
@@ -52,14 +59,20 @@ export const DISTILLATION_EXTRACTOR_VERSION = "1";
  * rounds; a correction points at the sentences either side of it. Handing all
  * three the same window would mean two of them get the wrong one.
  */
-const TRIGGER_WINDOW = Object.freeze({ edit_diff: 60, repair_accepted: 80, correction: 30 });
+const TRIGGER_WINDOW = Object.freeze({ edit_diff: 60, repair_accepted: 80, correction: 30, delivered: 60, routine: 40 });
+
+/** How many other runs a routine induction reads beside the one that
+ *  triggered it — the job's own list, bounded again here because the payload
+ *  is only as trustworthy as whoever queued it. */
+const MAX_PEER_RUNS = 4;
 
 /**
  * Assemble the frozen input for one distillation run.
  *
  * Pure apart from the transcript read, so the cleaning rules are testable
  * without a container.
- * @param {{run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], repairIssues?: any[], relatedMethods?: any[], mountedTools?: string[]}} input
+ * @param {{run: any, trigger: string, transcript: {header: any, messages: any[]} | null, feedback?: any[], repairIssues?: any[], relatedMethods?: any[], mountedTools?: string[],
+ *   peerRuns?: {runId: string, transcript: {header: any, messages: any[]} | null}[]}} input
  */
 export function buildDistillationInput(input) {
   if (!DISTILLATION_TRIGGERS.includes(input.trigger)) {
@@ -97,6 +110,20 @@ export function buildDistillationInput(input) {
       minTestScenarios: SKILL_AUTHORING_LIMITS.minTestScenarios,
     },
     mountedTools: input.mountedTools ?? [],
+    // The other successful runs of the same capability a `routine` induction
+    // compares against, each under the same cleaning rules as the main
+    // excerpt. Empty for every other trigger.
+    peerRuns: (input.peerRuns ?? []).slice(0, MAX_PEER_RUNS).map((peer) => {
+      const peerExcerpt = peer.transcript
+        ? transcriptExcerpt(peer.transcript.messages, { limit })
+        : { messages: [], dropped: { sensitive: 0, bounded: 0 } };
+      return {
+        runId: peer.runId,
+        transcriptCompleteness: peer.transcript?.header?.completeness ?? "unavailable",
+        excerptDropped: peerExcerpt.dropped,
+        transcriptExcerpts: peerExcerpt.messages,
+      };
+    }),
   };
 }
 
@@ -133,7 +160,14 @@ export class MethodDistillationRuns {
     const related = await this.learning.listMethods(job.userId, { projectId: job.projectId, limit: 20 })
       .then((page) => page.items ?? [])
       .catch(() => []);
-    const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related });
+    const peerRunIds = trigger === "routine" && Array.isArray(job.payload?.peerRunIds)
+      ? job.payload.peerRunIds.filter((id) => typeof id === "string" && id && id !== run.id).slice(0, MAX_PEER_RUNS)
+      : [];
+    const peerRuns = [];
+    for (const runId of peerRunIds) {
+      peerRuns.push({ runId, transcript: await readRunTranscript(project, runId).catch(() => null) });
+    }
+    const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns });
     const dispatchId = distillationDispatchId(run.id, trigger);
     const identity = await this.dispatch({
       userId: job.userId,
@@ -143,7 +177,7 @@ export class MethodDistillationRuns {
       capabilityId: "method-distillation",
       contractKind: "method-candidate",
       input,
-      question: "Distil at most one reusable method from the finished run described in "
+      question: `Distil at most one reusable method from the finished run${peerRuns.length ? "s" : ""} described in `
         + `${DISTILLATION_INPUT_FILE}, using the method-distillation capability. `
         + "Read relatedMethods first and prefer amending an existing method over writing a near-duplicate. "
         + "Write SKILL.md and method-candidate.json and submit the method-candidate contract. "

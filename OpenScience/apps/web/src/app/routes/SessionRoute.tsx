@@ -4,6 +4,7 @@ import { fetchWebMe, listWebAgentRuns, warmWebRuntime, webRuntimeProfile } from 
 import { FrameWaiting, RuntimeUiFrame } from "./RuntimeUiFrame";
 import { Button } from "@/components/ui/Button";
 import { PageTitle } from "@/components/layout/PageTitle";
+import { SessionMemoryBar } from "@/components/memory/SessionMemoryBar";
 
 /**
  * The session surface is the kernel's own application, and nothing else.
@@ -109,7 +110,17 @@ export function SessionRoute() {
       </div>
     );
   }
-  if (uiOrigin) return <><PageTitle page="研究会话" /><RuntimeUiFrame /></>;
+  // The conversation's memory controls sit above it once it has an id: the
+  // incognito switch and 「本次用到的背景」 (SessionMemoryBar).
+  if (uiOrigin) {
+    return (
+      <div className="flex h-full w-full flex-col">
+        <PageTitle page="研究会话" />
+        {sessionId && <SessionMemoryBar sessionId={sessionId} />}
+        <div className="min-h-0 flex-1"><RuntimeUiFrame /></div>
+      </div>
+    );
+  }
   if (loading) {
     return (
       <div className="relative h-full w-full">

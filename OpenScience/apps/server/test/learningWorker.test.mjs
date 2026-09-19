@@ -7,7 +7,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { LearningWorker, parseWindow, withinWindow } from "../src/learningWorker.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { loadConfig } from "../src/config.mjs";
+import { LearningWorker, parseWindow, resolvesTimeZone, windowNightKey, withinWindow } from "../src/learningWorker.mjs";
 
 /** A ProductJobs stand-in with the three failure signals the real one has:
  *  claim returns null, renew returns a boolean, fail/finish throw on lease loss. */
@@ -267,4 +270,58 @@ test("the worker declines to claim outside its window, and says which reason", a
   const disabled = worker({ enabled: false, jobs: fakeJobs([{ id: "j1", kind: "distill", userId: "u1", payload: {} }]) });
   assert.equal(await disabled.worker.tick(), null);
   assert.equal(disabled.worker.status().lastSkippedReason, "learning_disabled");
+});
+
+test("the window is read in Beijing time by default, whatever clock the container runs", () => {
+  // The variable existed and no compose file passed it, so on the UTC web
+  // container 22:00-09:00 opened at 06:00 Beijing (plan 2026-09-19 §3.3 #2).
+  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  const saved = { zone: process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE, tz: process.env.TZ };
+  delete process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE;
+  process.env.TZ = "UTC";
+  try {
+    const config = loadConfig({ rootDir: repoRoot });
+    assert.equal(config.learningWindowTimeZone, "Asia/Shanghai", "a container clock set to UTC must not move the night");
+    process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE = "Europe/Berlin";
+    assert.equal(loadConfig({ rootDir: repoRoot }).learningWindowTimeZone, "Europe/Berlin", "and an operator can name another");
+  } finally {
+    if (saved.zone == null) delete process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE;
+    else process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE = saved.zone;
+    if (saved.tz == null) delete process.env.TZ;
+    else process.env.TZ = saved.tz;
+  }
+});
+
+test("this Node resolves the zone from its own ICU, and a worker built on it opens at 22:00 Beijing", () => {
+  // The web image is node:*-slim with no /usr/share/zoneinfo: `date` in it
+  // prints UTC whatever TZ says. What the window reads is Node's bundled ICU,
+  // so this asserts on Node itself rather than on the system zone database.
+  assert.equal(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Shanghai" }).resolvedOptions().timeZone, "Asia/Shanghai");
+  assert.equal(resolvesTimeZone("Asia/Shanghai"), true);
+  assert.equal(resolvesTimeZone("Mars/Olympus"), false);
+
+  const at = (iso) => new LearningWorker({
+    jobs: {}, distillation: {}, consolidation: {},
+    window: "22:00-09:00", windowTimeZone: "Asia/Shanghai", now: () => new Date(iso),
+  });
+  // 14:30 UTC is 22:30 Beijing: inside. 03:00 UTC is 11:00 Beijing: outside —
+  // the UTC reading of the same numbers would say the opposite both times.
+  assert.equal(at("2026-09-19T14:30:00.000Z").claimBlockedReason(), null);
+  assert.equal(at("2026-09-19T03:00:00.000Z").claimBlockedReason(), "outside_learning_window");
+  assert.deepEqual(
+    [at("2026-09-19T03:00:00.000Z").status().windowTimeZone, at("2026-09-19T03:00:00.000Z").status().windowTimeZoneResolved],
+    ["Asia/Shanghai", true],
+  );
+  const unknown = new LearningWorker({ jobs: {}, distillation: {}, consolidation: {}, window: "22:00-09:00", windowTimeZone: "Mars/Olympus" });
+  assert.equal(unknown.status().windowTimeZoneResolved, false, "an unresolvable zone is visible, not silent");
+});
+
+test("one night has one key in the window's zone, and the day before it names the night to come", () => {
+  const night = parseWindow("22:00-09:00");
+  const key = (iso) => windowNightKey(night, new Date(iso), "Asia/Shanghai");
+  // Beijing 2026-09-19 22:30 and 2026-09-20 08:30 are the same night.
+  assert.equal(key("2026-09-19T14:30:00.000Z"), "2026-09-19");
+  assert.equal(key("2026-09-20T00:30:00.000Z"), "2026-09-19", "the UTC date turned over at 08:00 Beijing; the night did not");
+  // Beijing 2026-09-20 12:00: the next night to open is the 20th's.
+  assert.equal(key("2026-09-20T04:00:00.000Z"), "2026-09-20");
 });

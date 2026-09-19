@@ -557,6 +557,14 @@ export interface WebStructuredMemory {
   updatedAt: string | null;
   lastConfirmedAt: string | null;
   expiresAt: string | null;
+  /** Who it came from and how established it is, counted from its evidence
+   *  (`recordProvenance` in researchMemory.mjs). Absent from a control plane
+   *  older than it. */
+  provenance?: WebMemoryProvenance;
+  /** The record that replaced this one, and since when it stopped holding —
+   *  the timeline's 「曾经如此」. */
+  supersededBy?: string | null;
+  invalidSince?: string | null;
   evidence: Array<{
     sourceType: string;
     sourceRef: string;
@@ -572,14 +580,28 @@ export interface WebStructuredMemory {
     status: "active" | "pending" | "superseded" | "archived";
     changedAt: string | null;
     reason: string;
+    /** Who made the change and in which run (absent before 2026-09-20). */
+    by?: "extraction" | "user" | "system";
+    runId?: string;
   }>;
+}
+
+/** The provenance label a memory keeps for good, and its counted strength. */
+export interface WebMemoryProvenance {
+  basis: "stated" | "confirmed" | "edited" | "inferred" | "tool" | "assistant";
+  observations: number;
+  runs: number;
+  conversations: number;
 }
 
 export interface WebMemoryProfile {
   records: WebStructuredMemory[];
   groups: Record<WebStructuredMemoryKind, WebStructuredMemory[]>;
+  /** Memories in force, run summaries not included. */
   activeCount: number;
   pendingCount: number;
+  /** Run summaries: entries on the timeline, never counted as memory in force. */
+  episodeCount?: number;
 }
 
 export type WebAgentRunStatus = "running" | "succeeded" | "failed" | "canceled";

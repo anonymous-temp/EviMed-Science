@@ -63,8 +63,33 @@ export const CAPSULE_FACT_STATES = Object.freeze(['candidate', 'approved', 'reti
 /** What a share may contain. The default is the workstyle pack. */
 export const CAPSULE_SHARE_SCOPES = Object.freeze(['workstyle', '+profile', '+knowledge', '+documents'])
 
-/** How a received pack is activated. */
-export const CAPSULE_ACTIVATION_MODES = Object.freeze(['own', 'guest', 'blend'])
+/**
+ * How a capsule is used: as the researcher's own (`own` — who they are and how
+ * they work) or as a reference (`guest` — someone else's methods and
+ * standards, never their identity).
+ *
+ * There used to be a third, `blend` (「合并参考」), and nothing ever told it
+ * apart from `guest`: every reader asks only "own or not" (2026-09-19 plan
+ * §3.3 #4). A page offering three choices over two behaviours is a page that
+ * misdescribes one of them, so it offers two. `blend` survives as a legacy
+ * spelling a stored activation may still carry, read and written as `guest`
+ * (`capsuleActivationMode`) — no data migration.
+ */
+export const CAPSULE_ACTIVATION_MODES = Object.freeze(['own', 'guest'])
+
+/** Retired spellings and what they mean now. */
+export const CAPSULE_LEGACY_ACTIVATION_MODES = Object.freeze({ blend: 'guest' })
+
+/**
+ * The mode a stored or requested activation means, or null for one that is
+ * neither current nor a known legacy spelling.
+ * @param {unknown} value @returns {'own' | 'guest' | null}
+ */
+export function capsuleActivationMode(value) {
+  const mode = String(value ?? '')
+  const current = /** @type {Record<string, 'own' | 'guest'>} */ (CAPSULE_LEGACY_ACTIVATION_MODES)[mode] ?? mode
+  return current === 'own' || current === 'guest' ? current : null
+}
 
 /** Timeline event kinds. */
 export const CAPSULE_TIMELINE_EVENT_TYPES = Object.freeze([

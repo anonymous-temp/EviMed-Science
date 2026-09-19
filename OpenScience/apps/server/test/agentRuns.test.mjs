@@ -7426,6 +7426,24 @@ test("a dispatch's recalled memories are on the run, as ids and kinds and never 
     // in the memory store, where deleting it deletes it.
     const text = await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8");
     assert.ok(!text.includes("PRIVATE VALUE"), "a memory's value reached the run ledger");
+
+    // What the run pulled in through the recall tool is added, not swapped
+    // in: the 「本次用到的背景」 panel lists both, each once.
+    await store.recordLearning(project, run.id, {
+      appendRecalledMemories: [
+        { id: "mem_b", kind: "behavior", scope: "user" },
+        { id: "capsule:fact_1", kind: "workflow", scope: "capsule", value: "PRIVATE FACT" },
+      ],
+    });
+    const [appended] = await store.list(project);
+    assert.deepEqual(appended.recalledMemories.map((item) => item.id), ["mem_a", "mem_b", "capsule:fact_1"]);
+    assert.ok(!(await readFile(path.join(project.metaDir, "runs.jsonl"), "utf8")).includes("PRIVATE FACT"));
+    // A later write that says nothing about memories keeps them.
+    await store.recordLearning(project, run.id, { mountedSkills: ["open-domain-answer"] });
+    assert.equal((await store.list(project))[0].recalledMemories.length, 3);
+
+    // Whose conversation a gateway call is: the running runs, with their session.
+    assert.deepEqual(await store.activeRuns(project), [{ id: run.id, sessionId: "ses_recall" }]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

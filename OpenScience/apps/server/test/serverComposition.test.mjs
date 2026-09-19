@@ -1460,8 +1460,12 @@ test("the memory extractor the composition root built reports a rewritten memory
   assert.equal(stored.status, "active");
 
   // And the researcher was told, in the table the composed inbox writes to.
-  const notices = [...fixture.pool.inbox.values()];
+  // Beside it, recorded silently, the write prompt every automatic write gets
+  // (「刚记住了 …」, 2026-09-20); the conflict is the one that notifies.
+  const all = [...fixture.pool.inbox.values()];
+  const notices = all.filter((row) => !row.silent);
   assert.equal(notices.length, 1, "the conflict notice never reached evimed_inbox.notifications");
+  assert.deepEqual(all.filter((row) => row.silent).map((row) => row.title), ["刚记住了 1 条"]);
   assert.equal(notices[0].user_id, USER_ID);
   assert.equal(notices[0].notice_type, "notify", "the change already happened; there is nothing left to ask");
   // 「结论变了」 is one of the three moments the inbox notifies at (C1).
@@ -1483,5 +1487,6 @@ test("the memory extractor the composition root built reports a rewritten memory
     id: "run-memory-2", sessionId: "session-memory", status: "succeeded", artifacts: [],
     startedAt: "2026-09-08T07:59:00.000Z", finishedAt: "2026-09-08T08:00:00.000Z",
   }, [{ info: { id: "message-2", role: "user" }, parts: [{ type: "text", text: "回答请用英文" }] }]);
-  assert.equal([...fixture.pool.inbox.values()].length, 1, "one change is one notice, however many runs observe it");
+  assert.equal([...fixture.pool.inbox.values()].filter((row) => !row.silent).length, 1, "one change is one notice, however many runs observe it");
+  assert.equal([...fixture.pool.inbox.values()].length, 2, "and a change observed again is not news");
 });

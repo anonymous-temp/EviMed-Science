@@ -67,7 +67,9 @@ test("the unconsumed constants are named, so the next reader knows which ones ar
   // alone deliberately rather than left unnoticed. This test fails if one of
   // them is deleted or renamed without the loop that was going to read it,
   // which is the moment to decide which of the two happened.
-  for (const name of ["METHOD_INDUCTION_MIN_TRAJECTORIES", "CAPSULE_SOURCE_WEIGHTS", "SKILL_AUTHORING_LIMITS"]) {
+  // `MEMORY_PROMOTION_MIN_OCCURRENCES` joined them on 2026-09-20, when research
+  // memory stopped holding inferences back until they had been seen this often.
+  for (const name of ["METHOD_INDUCTION_MIN_TRAJECTORIES", "CAPSULE_SOURCE_WEIGHTS", "SKILL_AUTHORING_LIMITS", "MEMORY_PROMOTION_MIN_OCCURRENCES"]) {
     assert.ok(name in constants, `${name} disappeared; it was reserved for the learned-method loop`);
   }
   // And the file still explains why a number lives here rather than in the

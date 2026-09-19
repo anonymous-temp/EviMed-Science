@@ -5,7 +5,7 @@ import {
   projectMemoryUri,
   recallTargets,
 } from "./openVikingClient.mjs";
-import { recallContent, searchTokens, selectWithinBudget } from "./memoryRecallPolicy.mjs";
+import { recallContent, searchTokens, selectWithinBudget, setAsideIn } from "./memoryRecallPolicy.mjs";
 import { memoryPausedFor } from "./researchMemory.mjs";
 import { HttpError } from "./security.mjs";
 import { TERMINAL_INDEX_FAILURES } from "./memoryIndexWorker.mjs";
@@ -135,7 +135,11 @@ function recordUri(userId, record) {
  *  would mean the state of the index depended on which path last touched it. */
 function publishableContent(record, now) {
   if (!record || record.status !== "active" || record.sensitive) return "";
+  // The timeline's, not recall's (see `ResearchMemoryStore.relevant`): an
+  // index copy of a run summary is a copy nothing may retrieve.
+  if (record.kind === "run_summary") return "";
   if (record.expiresAt && Date.parse(record.expiresAt) <= now) return "";
+  if (record.invalidSince && Date.parse(record.invalidSince) <= now) return "";
   return recallContent(record) || "";
 }
 
@@ -183,30 +187,36 @@ export class MemorySubstrate {
    *
    * @param {string} userId
    * @param {string} query
-   * @param {{ projectId?: string|null, sessionId?: string|null }} scope
+   * @param {{ projectId?: string|null, sessionId?: string|null, excluded?: readonly { type: string, id: string }[] }} scope
+   *   `excluded` adds to what the session itself set aside — the capsule
+   *   gateway passes the union of every conversation running in the project.
    */
-  async recall(userId, query, { projectId = null, sessionId = null } = {}) {
+  async recall(userId, query, { projectId = null, sessionId = null, excluded = [] } = {}) {
     // The deployment's switch, before the researcher's: off means no memory
     // reaches a run from this port, which is what makes "memory off" a control
     // arm rather than an account whose records happen not to match.
     if (!this.recallEnabled) return [];
     // The researcher's own switch, for the account or for this project
-    // (2026-09-16 review, M4④). Before either path, so a paused account gets no
-    // memories whichever index is serving.
-    if ((await memoryPausedFor(this.store, userId, projectId)).recall) return [];
-    if (!this.active) return this.store.relevant(userId, query, { projectId, sessionId });
+    // (2026-09-16 review, M4④) — and for this conversation, when it is
+    // incognito (2026-09-20). Before either path, so nothing is recalled
+    // whichever index is serving.
+    const pause = await memoryPausedFor(this.store, userId, projectId, sessionId);
+    if (pause.recall) return [];
+    const setAside = [...pause.excluded, ...excluded];
+    if (!this.active) return this.store.relevant(userId, query, { projectId, sessionId, excluded: setAside });
     try {
-      return await this.#rankedRecall(userId, query, { projectId, sessionId });
+      return await this.#rankedRecall(userId, query, { projectId, sessionId, excluded: setAside });
     } catch (error) {
       this.lastError = error?.code ?? "memory_index_unavailable";
       if (this.strict) throw error;
       // Fall back rather than fail: the term matcher needs no index and reads
       // the same authoritative records.
-      return this.store.relevant(userId, query, { projectId, sessionId });
+      return this.store.relevant(userId, query, { projectId, sessionId, excluded: setAside });
     }
   }
 
-  async #rankedRecall(userId, query, { projectId, sessionId }) {
+  async #rankedRecall(userId, query, { projectId, sessionId, excluded = [] }) {
+    const setAside = setAsideIn(excluded);
     if (this.contextLimit === 0 || this.contextMaxChars === 0) return [];
     const hits = await this.openViking.find(userId, query, {
       targets: recallTargets(userId, { projectId, sessionId }),
@@ -242,8 +252,10 @@ export class MemorySubstrate {
     ))
       .filter(Boolean)
       .filter(({ record }) => record.status === "active")
+      .filter(({ record }) => record.kind !== "run_summary")
       .filter(({ record }) => !record.sensitive)
       .filter(({ record }) => !record.expiresAt || Date.parse(record.expiresAt) > now)
+      .filter(({ record }) => !record.invalidSince || Date.parse(record.invalidSince) > now)
       // The index is asked only for subtrees this caller may read, but the
       // check is repeated against the record itself: a scope is a permission,
       // and a permission proved by the thing being read beats one proved by
@@ -260,17 +272,18 @@ export class MemorySubstrate {
         memoryType: "structured",
         kind: record.kind,
         scope: record.scope,
+        origin: record.origin,
         confidence: record.confidence,
         importance: record.importance,
       },
       score,
-    })).filter((row) => row.memo.content);
+    })).filter((row) => row.memo.content && !setAside(row.memo));
 
     // Notes stay on the term matcher. They are user-authored, few, and already
     // found by the words the user chose; putting them through an embedding
     // would change behaviour that nobody complained about, for no measured
     // gain. Records are the machine-extracted many, and the reason for an index.
-    const notes = await this.#matchingNotes(userId, query);
+    const notes = (await this.#matchingNotes(userId, query)).filter((row) => !setAside(row.memo));
 
     const ranked = fuseByRank([structured, notes]);
     return selectWithinBudget(await this.#reranked(query, ranked), {
@@ -312,7 +325,11 @@ export class MemorySubstrate {
   async #matchingNotes(userId, query) {
     const terms = searchTokens(query);
     if (terms.length === 0) return [];
-    const notes = await this.store.list(userId, { pageSize: 100 });
+    // Every note that shares a token with the question, not the newest
+    // hundred (plan §3.4 #8); a store without the search keeps the old read.
+    const notes = typeof this.store.searchNotes === "function"
+      ? await this.store.searchNotes(userId, query)
+      : await this.store.list(userId, { pageSize: 100 });
     return notes
       .map((memo) => {
         const haystack = memo.content.toLowerCase();
