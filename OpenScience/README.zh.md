@@ -1,7 +1,7 @@
 # EviMed
 
 EviMed 是一套可追溯的医学科研智能体平台。它把开放域科研工作台与多个医学专项科研
-Agent 统一在同一套运行时、工件、溯源、Notebook、工具和数据源底座上。
+Agent 统一在同一套运行时、工件、溯源、工具和数据源底座上。
 
 [English](./README.md)
 
@@ -20,7 +20,7 @@ Agent 统一在同一套运行时、工件、溯源、Notebook、工具和数据
 
 EviMed 只有托管 SaaS 一种形态：React/TypeScript 前端统一通过 EviMed Server 访问
 隔离的 DeepSeek Harness（DSH）运行时、DeepSeek 模型网关、追加式运行记录、工件溯源、
-Jupyter 内核、精选科学 Skills 和 EviMed 数据/工具适配器。可选的 Tauri 桌面壳已于
+精选科学 Skills 和 EviMed 数据/工具适配器。可选的 Tauri 桌面壳已于
 2026-09-04 删除。
 
 专项服务通过 `EVIMED_*_URL` 环境变量接入。Meta 分析服务已经纳入托管版 Compose；

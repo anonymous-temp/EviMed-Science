@@ -5,7 +5,7 @@
 > as current.**
 >
 > Its go-live blocker lists are kept below unchanged, and their substance is
-> still open. Its architecture description is superseded in three ways:
+> still open. Its architecture description is superseded in four ways:
 >
 > - **Kernel.** Every mention of OpenCode below names a runtime that no longer
 >   exists: it was deleted on 2026-09-01, and the agent kernel is DeepSeek
@@ -27,6 +27,11 @@
 >   and this checkout has no `src-tauri` tree and no `packages/sdk`
 >   (`OpenScience/AGENTS.md`, "Repository map": the Tauri shell, its Rust command
 >   layer and `packages/sdk` were deleted on 2026-09-04).
+> - **Notebook.** The hosted notebook described below — notebook creation and
+>   cell execution, `kernel_execute`/`kernel_reset`, the `OPEN_SCIENCE_*KERNEL*`
+>   settings, and the Runtime Controller's kernel limits and orphan cleanup — was
+>   deleted on 2026-09-19. The Controller now executes no caller-supplied code,
+>   and a notebook a run delivers is an ordinary file.
 > - **Consequence for the lists.** The P0 blockers stand on their substance —
 >   identity, model keys, data governance, runtime image, third-party
 >   skills/exporters, deployment acceptance — but their wording is dated. "the

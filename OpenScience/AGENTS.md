@@ -57,9 +57,9 @@ per-project workspace + JSONL provenance.
   (`dsh` / `openlist` / `mineru` / `openviking`). A Dockerfile ARG, a seam manifest,
   a peer dependency and a release manifest that each carried their own copy
   meant "bump the pin" was four edits and one was always missed.
-- `runtime/` — `mcp` (the `evimed` research server, 35 tools), `kernel` (the
-  Python/R notebook bridge), `skills` (the general skill libraries the image ships:
-  `core`, `community`, `curated-scientific`, `office`; `evimed` and `external`
+- `runtime/` — `mcp` (the `evimed` research server, 35 tools), `skills` (the
+  general skill libraries the image ships: `core`, `community`,
+  `curated-scientific`, `office`; `evimed` and `external`
   predate `capabilities/` — the image takes only `open-domain-answer` out of
   `evimed`, and the rest of that tree survives as one of the four places a
   capability's `preflight.py` is copied to).
