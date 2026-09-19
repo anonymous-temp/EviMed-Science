@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ConcurrencyGate, HostPacer } from "../src/webReadLimits.mjs";
+import { ConcurrencyGate, HostPacer, KeyedConcurrencyGate } from "../src/webReadLimits.mjs";
 
 test("one site is paced; a request that would wait too long is refused by name", async () => {
   let clock = 1_000_000;
@@ -84,4 +84,31 @@ test("a full queue refuses with the gate's code; an abandoned waiter leaves the 
   await first;
   assert.equal(await gate.run(async () => "after"), "after");
   assert.equal(gate.active, 0);
+});
+
+test("each key has its own limit and queue; an idle key's gate is dropped and the counts are shared", async () => {
+  const gates = new KeyedConcurrencyGate({ limit: 2, maxQueue: 1, busyCode: "web_read_runtime_busy", busyMessage: "This project is busy." });
+  const running = { alice: 0, bob: 0 };
+  const peak = { alice: 0, bob: 0 };
+  const releases = [];
+  const job = (key) => gates.run(key, async () => {
+    running[key] += 1;
+    peak[key] = Math.max(peak[key], running[key]);
+    await new Promise((resolve) => releases.push(resolve));
+    running[key] -= 1;
+  });
+  const alice = [job("alice"), job("alice"), job("alice")];
+  await assert.rejects(job("alice"), (error) => error.code === "web_read_runtime_busy" && error.status === 503 && error.message === "This project is busy.");
+  // Another key is not held behind the first one's queue.
+  const bob = job("bob");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(running, { alice: 2, bob: 1 });
+  assert.deepEqual(gates.counts, { queued: 1, refused: 1 });
+  for (let round = 0; round < 10 && (releases.length || gates.gates.size); round += 1) {
+    while (releases.length) releases.shift()();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  await Promise.all([...alice, bob]);
+  assert.deepEqual(peak, { alice: 2, bob: 1 });
+  assert.equal(gates.gates.size, 0, "no gate outlives its last job");
 });

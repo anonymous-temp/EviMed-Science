@@ -1,7 +1,8 @@
 /**
- * The two limits web reading holds itself to: how often one site hears from
- * us, and how many reads are in flight at once. Both protect a resource — the
- * site's patience, this host's memory — and neither changes what is read
+ * The limits web reading holds itself to: how often one site hears from us,
+ * how many reads are in flight at once, and how many of them one project's
+ * runtime holds. Each protects a resource — the site's patience, this host's
+ * memory, the other projects' share — and none changes what is read
  * (principle 15). Each counts what it did, so an operator can see a limit
  * biting before a researcher reports a slow run.
  *
@@ -76,19 +77,24 @@ export class HostPacer {
 
 /**
  * At most `limit` operations at once; up to `maxQueue` wait their turn and the
- * rest are refused. Used twice: plain reads (each can hold a 16 MiB body in
- * memory) and renders (each is a browser context in the one warm session).
+ * rest are refused. Used for plain reads (each can hold a 16 MiB body in
+ * memory), HTML parses (each a thread with its own heap), renders (each is a
+ * browser context in the one warm session), and one per project runtime.
  */
 export class ConcurrencyGate {
-  /** @param {{ limit: number, maxQueue?: number, busyCode: string }} options */
-  constructor({ limit, maxQueue = 64, busyCode }) {
+  /**
+   * @param {{ limit: number, maxQueue?: number, busyCode: string, busyMessage?: string,
+   *   counts?: { queued: number, refused: number } }} options
+   */
+  constructor({ limit, maxQueue = 64, busyCode, busyMessage = "Too many web reads are in progress; retry shortly.", counts = { queued: 0, refused: 0 } }) {
     this.limit = Math.max(1, Math.floor(Number(limit) || 1));
     this.maxQueue = Math.max(0, Math.floor(Number(maxQueue) || 0));
     this.busyCode = busyCode;
+    this.busyMessage = busyMessage;
     this.active = 0;
     /** @type {Array<() => void>} */
     this.queue = [];
-    this.counts = { queued: 0, refused: 0 };
+    this.counts = counts;
   }
 
   /**
@@ -103,7 +109,7 @@ export class ConcurrencyGate {
     } else {
       if (this.queue.length >= this.maxQueue) {
         this.counts.refused += 1;
-        throw webReadError(503, this.busyCode, "Too many web reads are in progress; retry shortly.", { retryable: true });
+        throw webReadError(503, this.busyCode, this.busyMessage, { retryable: true });
       }
       this.counts.queued += 1;
       // The finishing operation hands its slot straight to the next waiter
@@ -129,6 +135,42 @@ export class ConcurrencyGate {
       const next = this.queue.shift();
       if (next) next();
       else this.active -= 1;
+    }
+  }
+}
+
+/**
+ * One ConcurrencyGate per key — per project runtime, for web reading — so one
+ * caller's burst waits in its own queue instead of taking every shared slot.
+ * A key's gate exists while it has work running or queued; the counts are all
+ * the keys' together.
+ */
+export class KeyedConcurrencyGate {
+  /** @param {{ limit: number, maxQueue?: number, busyCode: string, busyMessage?: string }} options */
+  constructor(options) {
+    this.options = options;
+    /** @type {Map<string, ConcurrencyGate>} */
+    this.gates = new Map();
+    this.counts = { queued: 0, refused: 0 };
+  }
+
+  /**
+   * @template T
+   * @param {string} key
+   * @param {() => Promise<T>} work
+   * @param {{ signal?: AbortSignal }} [options]
+   * @returns {Promise<T>}
+   */
+  async run(key, work, { signal } = {}) {
+    let gate = this.gates.get(key);
+    if (!gate) {
+      gate = new ConcurrencyGate({ ...this.options, counts: this.counts });
+      this.gates.set(key, gate);
+    }
+    try {
+      return await gate.run(work, { signal });
+    } finally {
+      if (gate.active === 0 && gate.queue.length === 0 && this.gates.get(key) === gate) this.gates.delete(key);
     }
   }
 }

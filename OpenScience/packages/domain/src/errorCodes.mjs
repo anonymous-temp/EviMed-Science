@@ -254,6 +254,7 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "web_read_timeout",
   "web_read_aborted",
   "web_read_busy",
+  "web_read_runtime_busy",
   "web_read_host_busy",
   "web_read_page_out_of_range",
   // The deployment's own switches and the gateway being unreachable: host
