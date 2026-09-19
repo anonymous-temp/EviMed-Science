@@ -2130,12 +2130,17 @@ test("a container that dies on its own is asked why, and only then removed", asy
   for (const field of ["exitCode", "exitSignal", "exitOutput"]) {
     assert.ok(body.includes(`${field}: runtime.${field}`) || body.includes(`${field}: runtime.exitOutput`), `the exited record must carry ${field}`);
   }
-  // Removal comes after the record, or the evidence is gone again.
+  // Removal comes after the record, or the evidence is gone again. The
+  // removal is the provider's (`afterExit`), and the Docker provider's is the
+  // container removal — both halves are held.
   const recordAt = body.indexOf(marker);
-  const removeAt = body.indexOf("cleanupDockerContainer(plan)");
+  const removeAt = body.indexOf("this.provider.afterExit(project, plan)");
   assert.ok(recordAt >= 0, "the exit must be recorded");
   assert.ok(removeAt >= 0, "a container that dies on its own must still be removed, or dropping --rm leaks it");
   assert.ok(removeAt > recordAt, "ask, then remove — the other order is what deleted the evidence");
+  const dockerAfterExit = code.slice(code.indexOf("afterExit(project, plan) {", code.indexOf("class DockerRuntimeProvider")));
+  assert.match(dockerAfterExit.slice(0, dockerAfterExit.indexOf("\n  }\n")), /cleanupDockerContainer\(plan\)/,
+    "the Docker provider's own after-exit step is the container removal");
 
   // And the controller reports what a code alone cannot distinguish.
   const controller = await readFile(new URL("../src/runtimeControllerServer.mjs", import.meta.url), "utf8");

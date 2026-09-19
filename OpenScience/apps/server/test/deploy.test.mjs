@@ -803,8 +803,18 @@ test("web compose includes a buildable runtime image profile with every download
 // The kernel is an npm global now, so there is no archive to digest and its
 // license ships inside the package. What binds it instead is the publish-date
 // filter and the whole-tree version assertion, checked below in their place.
+/** The Docker runtime image's build: the Dockerfile with each install phase it
+ *  RUNs read in place (deploy/runtime-dsh/install-runtime.sh, rt 2026-09-20). */
+async function runtimeImageBuild() {
+  const { expandInstallPhases } = await import(pathToFileURL(path.join(repoRoot, "scripts/ops/runtime-install-phases.mjs")).href);
+  return expandInstallPhases(
+    await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8"),
+    await readFile(path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh"), "utf8"),
+  );
+}
+
 test("the runtime image pins and verifies tools, architectures, and licenses", async () => {
-  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const dockerfile = await runtimeImageBuild();
   const dshPin = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8")).dsh.version;
   assert.match(dockerfile, /^ARG TARGETARCH$/m);
   assert.doesNotMatch(dockerfile, /^ARG TARGETARCH=/m);
@@ -888,7 +898,7 @@ test("the runtime image pins and verifies tools, architectures, and licenses", a
     assert.match(dockerfile, new RegExp(`${packageName.replace("-", "\\-")}==\\d+\\.`));
   }
   assert.match(dockerfile, /importlib\.import_module\(package\)/);
-  assert.match(dockerfile, /RUN Rscript -e 'stopifnot\(getRversion\(\) >= "4\.0\.0"/);
+  assert.match(dockerfile, /^\s*Rscript -e 'stopifnot\(getRversion\(\) >= "4\.0\.0"/m);
   assert.match(dockerfile, /\bsocat\b/);
   assert.match(dockerfile, /COPY deploy\/runtime-dsh\/open-science-dsh-serve\.sh/);
   assert.match(dockerfile, /CMD \["dsh", "--version"\]/);
@@ -1182,7 +1192,7 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
   // The runtime proof used to be a single negative -- "not the retired kernel"
   // -- which a deployment running no kernel at all would also satisfy. The
   // script now names what it requires instead, as two separate claims: a
-  // sandboxed Docker runtime, and that the runtime is DSH. Both are listed
+  // sandboxed runtime (Docker or AgentBay), and that the runtime is DSH. Both are listed
   // because a deployment can satisfy one without the other.
   for (const proof of [
     'checks.runtime?.mode !== "kernel"',
@@ -1195,7 +1205,9 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
     // serve a certified model, and the ledger must show the run went through
     // DeepSeek — stated against that value instead of one of its members.
     'supportedDeepSeekModels.has(String(checks.modelGateway?.model ?? ""))',
-    'checks.runtime?.sandboxMode !== "docker"',
+    // A container on the host or an AgentBay session (rt, 2026-09-20): the
+    // proof names both real runtimes, and so still refuses the mock.
+    '!["docker", "agentbay"].includes(checks.runtime?.sandboxMode)',
     'run.runtimeAgent !== "evimed-adr-analysis"',
     'run.model !== `deepseek/${certifiedModel}`',
     'agent.requiredInputs?.includes("drug")',
@@ -1389,7 +1401,7 @@ test("every COPY source the DSH runtime Dockerfile names exists in the repositor
 // network) on every single boot, silently defeating the entire point of
 // pre-initializing anything.
 test("the profile is pre-initialized outside the path the runtime volume mounts over", async () => {
-  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const dockerfile = await runtimeImageBuild();
   const seedMatch = dockerfile.match(/^ENV DSH_HOME_SEED=(\S+)$/m);
   assert.ok(seedMatch, "the build-time profile must be initialized at a seed path distinct from the runtime DSH_HOME");
   const seedPath = seedMatch[1];

@@ -106,7 +106,7 @@ export function SessionRoute() {
     return (
       <div className="relative h-full w-full">
         <PageTitle page="研究会话" />
-        <FrameWaiting stage={0} line="正在打开最近的任务…" />
+        <FrameWaiting step="environment" line="正在打开最近的任务…" />
       </div>
     );
   }
@@ -125,7 +125,7 @@ export function SessionRoute() {
     return (
       <div className="relative h-full w-full">
         <PageTitle page="研究会话" />
-        <FrameWaiting stage={0} />
+        <FrameWaiting step="environment" />
       </div>
     );
   }

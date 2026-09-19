@@ -14,6 +14,7 @@ import {
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
 import { capsuleMethodsDirName, materializeCapsuleMethods } from "./capsuleMethods.mjs";
+import { KNOWLEDGE_BASE_DIR } from "./researchContext.mjs";
 import { CAPSULE_PROFILE_FACT_KINDS, renderCapsuleProfile } from "./capsuleProfile.mjs";
 import { supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockDshRuntime } from "./mockDshRuntime.mjs";
@@ -26,6 +27,10 @@ import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 // Knowledge-base search reaches the MCP server by this one variable (2026-09-20).
 import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
+import { createAgentBayClient } from "./agentbay/client.mjs";
+// A cycle, on purpose and safe: the provider module reads this one's exports
+// only when a method runs, never while either module is being evaluated.
+import { AgentBayRuntimeProvider } from "./agentbay/runtimeProvider.mjs";
 import {
   isAllowedWireMethod,
   mapWireError,
@@ -41,6 +46,7 @@ import {
   assertNoSymlinkPath,
   assertProjectUsageWithinQuota,
   ensureDir,
+  openScopedDirectoryNoFollow,
   randomId,
   safeId,
   readBody,
@@ -750,9 +756,29 @@ async function appendRuntimeEvent(project, event, fields = {}, config = null) {
   }).catch(() => {});
 }
 
+/** The runtime ledger row writer, for a provider's own events. */
+export const appendRuntimeEventForProvider = (project, event, fields = {}, config = null) => appendRuntimeEvent(project, event, fields, config);
+
 function runtimeStateFile(project) {
   return path.join(project.metaDir, "runtime-state.json");
 }
+
+/**
+ * The moments a runtime start goes through, in order, as the reader sees them
+ * while waiting (plan §3.1 #8): 准备环境 (a container or a cloud session, and
+ * room made for it), 同步文件 (the project's files carried into a remote
+ * session — a local container mounts them, so the Docker provider has no such
+ * moment and never reports it) and 启动内核 (the kernel composing its plugin
+ * tree until its first wire call answers). The shell drew one sentence for all
+ * of them, so a slow kernel, a slow copy and a slot the deployment had run out
+ * of all read as "a cold start is slow".
+ */
+export const RUNTIME_START_STAGES = Object.freeze(["environment", "sync", "kernel"]);
+
+/** How long a refused start stays on the status the shell polls. Long enough
+ *  for a frame that is still waiting to read it; short enough that a refusal
+ *  from an earlier visit is not reported against a later one. */
+const START_FAILURE_VISIBLE_MS = 60_000;
 
 function publicRuntimeStatus(runtime, fields = {}) {
   return {
@@ -772,10 +798,16 @@ function publicRuntimeStatus(runtime, fields = {}) {
     agentsGenerated: Number.isSafeInteger(fields.agentsGenerated) ? fields.agentsGenerated : null,
     capsuleMethodsMounted: Number.isSafeInteger(fields.capsuleMethodsMounted) ? fields.capsuleMethodsMounted : null,
     error: fields.error ?? null,
+    provider: fields.provider ?? null,
+    startStage: fields.startStage ?? null,
+    startError: fields.startError ?? null,
+    // What a remote runtime's guest reported at start: its kernel release and
+    // the Landlock level the kernel's write fence got there (plan §3.1 #9).
+    sandbox: runtime?.sandbox ?? null,
   };
 }
 
-function publicRuntimeStatusFromState(state) {
+function publicRuntimeStatusFromState(state, fields = {}) {
   const wasRunning = state?.running === true || state?.event === "starting";
   return {
     running: false,
@@ -794,6 +826,10 @@ function publicRuntimeStatusFromState(state) {
     agentsGenerated: Number.isSafeInteger(state?.agentsGenerated) ? state.agentsGenerated : null,
     capsuleMethodsMounted: Number.isSafeInteger(state?.capsuleMethodsMounted) ? state.capsuleMethodsMounted : null,
     error: typeof state?.error === "string" ? state.error : wasRunning ? "runtime_not_attached" : null,
+    provider: fields.provider ?? null,
+    startStage: fields.startStage ?? null,
+    startError: fields.startError ?? null,
+    sandbox: state?.sandbox && typeof state.sandbox === "object" ? state.sandbox : null,
   };
 }
 
@@ -842,6 +878,9 @@ async function writeRuntimeState(project, event, fields = {}) {
     // sibling plugin `guidance.mjs` reports the same class of fact through
     // `evimedDiagnostics.degrade` for the same reason.
     capsuleMethodsMounted: Number.isSafeInteger(fields.capsuleMethodsMounted) ? fields.capsuleMethodsMounted : null,
+    // What a remote runtime's guest reported at start (plan §3.1 #9): its
+    // kernel release and the Landlock level DSH's write fence gets there.
+    sandbox: fields.sandbox && typeof fields.sandbox === "object" ? fields.sandbox : null,
     error: fields.error ?? null,
   };
   await writeJsonFileAtomicNoFollow(project.rootDir, file, state);
@@ -1409,6 +1448,7 @@ export async function refreshEviMedWorkloadToken(
     nowSeconds = Math.floor(Date.now() / 1000),
     jti = randomId("jwt_"),
     writeToken = writeFileAtomicNoFollow,
+    ttlSeconds = config.evimedWorkloadTokenTtlSeconds ?? 300,
   } = {},
 ) {
   const token = issueEviMedWorkloadToken({
@@ -1416,7 +1456,7 @@ export async function refreshEviMedWorkloadToken(
     userId: String(project.userId),
     projectId: String(project.id),
     nowSeconds,
-    ttlSeconds: config.evimedWorkloadTokenTtlSeconds ?? 300,
+    ttlSeconds,
     jti,
   });
   await writeToken(project.rootDir, tokenFile, `${token}\n`, {
@@ -1448,7 +1488,12 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     OPEN_SCIENCE_PROJECT_ID: String(project.id),
     OPEN_SCIENCE_WORKSPACE_DIR: String(plan.proxyWorkspaceDir),
   };
-  const publicSourceGatewayUrl = publicSourceGatewayProviderUrl(config);
+  // A remote session reaches every gateway through the public prefix
+  // (`plan.gateways`, plan §3.1 #5); a container reaches them by name.
+  const gateways = plan.gateways ?? null;
+  // Neither a container nor a remote session can see a path on this host.
+  const containerized = plan.sandboxMode === "docker" || plan.sandboxMode === "agentbay";
+  const publicSourceGatewayUrl = gateways ? String(gateways.publicSource ?? "") : publicSourceGatewayProviderUrl(config);
   if (publicSourceGatewayUrl) {
     environment.EVIMED_PUBLIC_SOURCE_GATEWAY_URL = publicSourceGatewayUrl;
     // Open-web search rides the same runtime token as the source gateway, and
@@ -1456,7 +1501,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     // Its URL is the server's own route: the runtime never learns which
     // aggregator, or which engines, sit behind it.
     if (String(config.webSearchUrl ?? "").trim()) {
-      const webSearchGatewayUrl = String(config.webSearchGatewayInternalUrl ?? "").trim();
+      const webSearchGatewayUrl = String(gateways ? gateways.webSearch ?? "" : config.webSearchGatewayInternalUrl ?? "").trim();
       let parsedSearch;
       try {
         parsedSearch = new URL(webSearchGatewayUrl);
@@ -1480,7 +1525,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     // reads an unreachable channel as a channel where nobody mentions the
     // product.
     if (String(config.geoProbeUrl ?? "").trim()) {
-      const geoProbeGatewayUrl = String(config.geoProbeGatewayInternalUrl ?? "").trim();
+      const geoProbeGatewayUrl = String(gateways ? gateways.geoProbe ?? "" : config.geoProbeGatewayInternalUrl ?? "").trim();
       let parsedProbe;
       try {
         parsedProbe = new URL(geoProbeGatewayUrl);
@@ -1500,7 +1545,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     }
     // Knowledge-base search rides the same runtime token. Absent when the
     // switch is off, so the tool says "disabled" without asking.
-    const kbSearchGatewayUrl = kbSearchGatewayProviderUrl(config);
+    const kbSearchGatewayUrl = gateways ? String(gateways.kbSearch ?? "") : kbSearchGatewayProviderUrl(config);
     if (kbSearchGatewayUrl) environment.EVIMED_KB_SEARCH_GATEWAY_URL = kbSearchGatewayUrl;
   }
   // Keyless-public Unpaywall tier: when the operator configured an email, the
@@ -1522,7 +1567,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
         "The pharmacy reference database must be an absolute path.",
       );
     }
-    if (plan.sandboxMode === "docker") {
+    if (containerized) {
       if (!String(configured.pharmacyReferenceSearch ?? "").trim()) {
         throw runtimeMcpError(
           "runtime_pharmacy_reference_adapter_required",
@@ -1553,7 +1598,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     if (!path.isAbsolute(metaAgentRoot) || /[\r\n\0]/.test(metaAgentRoot)) {
       throw runtimeMcpError("runtime_meta_agent_root_invalid", "MetaAgent root must be an absolute path.");
     }
-    if (plan.sandboxMode === "docker") {
+    if (containerized) {
       if (!String(configured.metaAnalysis ?? "").trim()) {
         throw runtimeMcpError(
           "runtime_meta_agent_adapter_required",
@@ -1578,7 +1623,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     if (!path.isAbsolute(specialistRoot) || /[\r\n\0]/.test(specialistRoot)) {
       throw runtimeMcpError("runtime_specialist_agent_root_invalid", `${key} root must be an absolute path.`);
     }
-    if (plan.sandboxMode === "docker") {
+    if (containerized) {
       if (!String(configured[key] ?? "").trim()) {
         throw runtimeMcpError(
           "runtime_specialist_agent_adapter_required",
@@ -1611,7 +1656,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   if (config.modelGatewaySigningSecret) {
     environment.EVIMED_MODEL_GATEWAY_TOKEN_FILE = `${runtimeDshHome}/${modelGatewayTokenFileName}`;
   }
-  environment.EVIMED_MODEL_GATEWAY_URL = modelGatewayProviderUrl(config);
+  environment.EVIMED_MODEL_GATEWAY_URL = gateways ? String(gateways.model) : modelGatewayProviderUrl(config);
   environment.EVIMED_MODEL_GATEWAY_MODEL = String(config.deepseekModel ?? "");
   // Set even when empty, unlike the adapter URLs below. A container that keeps
   // a value from a previous deployment because the new one had nothing to say
@@ -1624,7 +1669,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), "web_read"])].join(",");
   }
   for (const [key, envName] of Object.entries(evimedAdapterEnvironment)) {
-    const value = String(configured[key] ?? "").trim();
+    const value = String((gateways ? gateways.adapters?.[key] : configured[key]) ?? "").trim();
     if (!value) continue;
     let parsed;
     try {
@@ -1804,8 +1849,13 @@ export function runtimeCompactionSettings(config, env = process.env) {
  * @returns {import("./dshProfilePatch.mjs").ProfilePatchInput}
  */
 export function dshProfileInput(config, project, plan, model, workloadTokenPath) {
+  // The public prefix for a remote session (plan §3.1 #5): the kernel's
+  // `baseURL` is then our gateway at an address the session can reach, which
+  // is the only thing about the model provider that differs.
+  const gateways = plan.gateways ?? null;
+  const capsuleGatewayUrl = gateways ? String(gateways.capsule ?? "") : capsuleGatewayProviderUrl(config);
   return {
-    modelGatewayUrl: modelGatewayProviderUrl(config),
+    modelGatewayUrl: gateways ? String(gateways.model) : modelGatewayProviderUrl(config),
     model,
     // Rendered into the profile so the kernel asks for what the gateway will
     // send anyway; the gateway is the one that decides.
@@ -1832,10 +1882,10 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     // plan: the methods the container mounts and the methods the profile names
     // are one directory or the feature is dark in whichever half is wrong.
     capsuleMethodsDir: capsuleMethodsRuntimePath(plan),
-    capsuleGatewayUrl: capsuleGatewayProviderUrl(config),
-    revisionGatewayUrl: revisionGatewayProviderUrl(config),
-    publicSourceGatewayUrl: publicSourceGatewayProviderUrl(config),
-    webSearchGatewayUrl: webSearchGatewayProviderUrl(config),
+    capsuleGatewayUrl,
+    revisionGatewayUrl: gateways ? String(gateways.revision ?? "") : revisionGatewayProviderUrl(config),
+    publicSourceGatewayUrl: gateways ? String(gateways.publicSource ?? "") : publicSourceGatewayProviderUrl(config),
+    webSearchGatewayUrl: gateways ? String(gateways.webSearch ?? "") : webSearchGatewayProviderUrl(config),
     pluginConfig: plan.pluginConfig,
     modelGatewayTokenFile: config.modelGatewaySigningSecret
       ? (plan.sandboxMode === "docker" ? `${runtimeDshHome}/${modelGatewayTokenFileName}` : path.join(plan.dshHomeDir, modelGatewayTokenFileName))
@@ -1863,15 +1913,24 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
       review: Boolean(config.runtimeReviewEnabled),
       // Not a setting: the capsule is active when a recall endpoint is
       // configured, and the plugin reports its own absence.
-      capsule: Boolean(capsuleGatewayProviderUrl(config)),
+      capsule: Boolean(capsuleGatewayUrl),
       // Who this runtime belongs to decides whether the kernel's trajectory
       // panel is mounted. It renders the assembled system prompt, the injected
       // run context and every tool's raw JSON; useful for diagnosing a run,
       // and not something a researcher account should be handed. The same list
       // `/api/me` reads to decide which menu the shell draws.
       operator: Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(project.userId ?? "")),
-      requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
+      // Per provider (plan §3.1 #9): a remote session may run `partial` when
+      // its guest kernel says so and the deployment accepted it by name.
+      requiredEnforcement: /** @type {'full'|'partial'} */ (plan.sandboxMode === "agentbay"
+        ? config.agentbaySandboxEnforcement ?? "full"
+        : config.runtimeSandboxEnforcement),
     },
+    // The community client bundles a deployment switched off (rt, plan §3.9).
+    disabledClientBundles: [
+      ...(config.runtimeAnnotationEnabled === false ? ["annotation"] : []),
+      ...(config.runtimeMermaidEnabled === false ? ["mermaid"] : []),
+    ],
   };
 }
 
@@ -1901,14 +1960,25 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
  * @param {any} config
  * @param {any} project
  * @param {any} plan
- * @param {{ nowSeconds?: number, jti?: string, writeFile?: typeof writeFileAtomicNoFollow, budgetScope?: Record<string, any>|null }} [options]
+ * `hostHome: false` is a remote runtime's bootstrap (the AgentBay provider):
+ * `plan.dshHomeDir` is a path inside the session, never created on this host,
+ * and `writeFile` carries each file there. It may keep the browser-session
+ * secret a running kernel already holds (`browserSessionSecret`) and give the
+ * workload token the provider's own lifetime (`workloadTokenTtlSeconds`).
+ *
+ * @param {{ nowSeconds?: number, jti?: string, writeFile?: (root: string, file: string, content: string, options?: any) => Promise<any>, budgetScope?: Record<string, any>|null,
+ *   hostHome?: boolean, browserSessionSecret?: string, workloadTokenTtlSeconds?: number, modelGatewayIssuedAt?: number }} [options]
  * @returns {Promise<{ configured: boolean, providerConfigured: boolean, workloadTokenFile: string | null, workloadTokenRefreshMs: number | null, token: string | null, payload: Record<string, any> | null, browserSessionSecret: string }>}
  */
 export async function syncRuntimeDshProfile(
   config,
   project,
   plan,
-  { nowSeconds = Math.floor(Date.now() / 1000), jti = randomId("mgw_"), writeFile = writeFileAtomicNoFollow, budgetScope = null } = {},
+  {
+    nowSeconds = Math.floor(Date.now() / 1000), jti = randomId("mgw_"), writeFile = writeFileAtomicNoFollow, budgetScope = null,
+    hostHome = true, browserSessionSecret: keptBrowserSessionSecret = undefined, workloadTokenTtlSeconds = undefined,
+    modelGatewayIssuedAt = nowSeconds,
+  } = {},
 ) {
   const providerConfigured = Boolean(config.deepseekProviderEnabled);
   if (!plan.dshHomeDir || !plan.proxyWorkspaceDir) {
@@ -1922,23 +1992,28 @@ export async function syncRuntimeDshProfile(
   if (config.modelGatewaySigningSecretError) {
     throw new HttpError(500, config.modelGatewaySigningSecretError, "Model gateway signing secret could not be loaded.");
   }
-  await assertNoSymlinkPath(project.rootDir, plan.dshHomeDir, { allowMissingTail: true });
-  await fs.mkdir(plan.dshHomeDir, { recursive: true, mode: 0o700 });
-  await assertNoSymlinkPath(project.rootDir, plan.dshHomeDir);
-  const dshHome = await fs.open(plan.dshHomeDir, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
-  try {
-    await dshHome.chmod(0o700);
-  } finally {
-    await dshHome.close();
+  if (hostHome) {
+    await assertNoSymlinkPath(project.rootDir, plan.dshHomeDir, { allowMissingTail: true });
+    await fs.mkdir(plan.dshHomeDir, { recursive: true, mode: 0o700 });
+    await assertNoSymlinkPath(project.rootDir, plan.dshHomeDir);
+    const dshHome = await fs.open(plan.dshHomeDir, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
+    try {
+      await dshHome.chmod(0o700);
+    } finally {
+      await dshHome.close();
+    }
   }
 
   // Public-source retrieval authenticates with this token too. Disabling
   // DeepSeek must not revoke the platform identity needed by those tools.
+  // `modelGatewayIssuedAt` with the same `jti` and scope re-renders a token a
+  // running kernel already holds, byte for byte: how a remote session that
+  // outlived its control plane keeps the credential it booted with.
   const modelGatewayToken = providerConfigured || config.modelGatewaySigningSecret ? issueModelGatewayRuntimeToken({
     secret: config.modelGatewaySigningSecret,
     userId: String(project.userId),
     projectId: String(project.id),
-    nowSeconds,
+    nowSeconds: modelGatewayIssuedAt,
     jti,
     budgetScope,
   }) : null;
@@ -1967,7 +2042,7 @@ export async function syncRuntimeDshProfile(
   // stdout — which would mean scraping a container's log for a secret and
   // racing its boot. Seeding it into the credentials file this function already
   // writes lets the control plane mint the cookie before the container exists.
-  const browserSessionSecret = generateBrowserSessionSecret();
+  const browserSessionSecret = keptBrowserSessionSecret ?? generateBrowserSessionSecret();
   // Keep model metadata pinned to the managed gateway even while disabled:
   // This preserves session creation, and omitting the patch would restore the
   // upstream baseURL and DEEPSEEK_API_KEY reference. No LLM credential is
@@ -2003,7 +2078,9 @@ export async function syncRuntimeDshProfile(
   // kernel's sync guarded this call; the rewrite dropped the guard.
   const workloadTokenFile = signingSecret ? dshWorkloadTokenHostPath(plan) : null;
   if (workloadTokenFile) {
-    await refreshEviMedWorkloadToken(config, project, workloadTokenFile, { nowSeconds, writeToken: writeFile });
+    await refreshEviMedWorkloadToken(config, project, workloadTokenFile, {
+      nowSeconds, writeToken: writeFile, ...(workloadTokenTtlSeconds ? { ttlSeconds: workloadTokenTtlSeconds } : {}),
+    });
   } else {
     // Clear a previous deployment's token without following a replaced path.
     await writeFile(project.rootDir, dshWorkloadTokenHostPath(plan), "", { encoding: "utf8", mode: 0o600 });
@@ -2202,6 +2279,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     const socketPath = path.join(controlDir, RUNTIME_SOCKET_FILE_NAME);
     assertConnectableSocketPath(socketPath, Boolean(config.runtimeDataVolume));
     const containerName = runtimeContainerName(project);
+    const readOnlyViews = readOnlyWorkspaceViews(config, project);
     return {
       sandboxMode,
       containerName,
@@ -2237,6 +2315,14 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         String(config.runtimeMemoryLimit),
         "--mount",
         dockerWorkspaceMount(config, project),
+        // Nested over the workspace mount, so the same directory is reachable
+        // only through the read-only view (see `readOnlyWorkspaceViews`).
+        ...(readOnlyViews.knowledgeBase
+          ? ["--mount", `${dockerRuntimeMount(config, readOnlyViews.knowledgeBase, RUNTIME_KNOWLEDGE_BASE_DIR)},readonly`]
+          : []),
+        ...(readOnlyViews.library
+          ? ["--mount", `${dockerRuntimeMount(config, readOnlyViews.library, RUNTIME_LIBRARY_DIR)},readonly`]
+          : []),
         "--mount",
         dockerRuntimeMount(config, runtimeRoot),
         // Only when something was written. `--mount type=bind` refuses a source
@@ -2385,6 +2471,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
       // other half of the deployment -- the directory the profile names -- from
       // the same number that decided whether anything is mounted at all.
       capsuleMethodCount,
+      readOnlyViews,
       runtimeDirs: [
         runtimeRoot,
         controlDir,
@@ -2540,11 +2627,77 @@ function mountedCapsuleMethodCount(directory) {
  * but `docker` by name (`invalid_runtime_sandbox`), so a branch for one would be
  * a branch no launch can reach and a claim that a mode still exists.
  *
- * @param {{ capsuleMethodCount?: number }} plan
+ * @param {{ capsuleMethodCount?: number, capsuleMethodsRuntimeDir?: string }} plan
  * @returns {string}
  */
 export function capsuleMethodsRuntimePath(plan) {
-  return plan.capsuleMethodCount ? runtimeCapsuleMethodsDir : "";
+  // A remote session keeps its methods where its launcher installs them
+  // read-only (`capsuleMethodsRuntimeDir`); a container mounts them here.
+  return plan.capsuleMethodCount ? (plan.capsuleMethodsRuntimeDir ?? runtimeCapsuleMethodsDir) : "";
+}
+
+/** Where a runtime sees the project's knowledge base: inside its workspace,
+ *  where the source pipeline has always written it, but read-only. */
+export const RUNTIME_KNOWLEDGE_BASE_DIR = `/workspace/${KNOWLEDGE_BASE_DIR}`;
+
+/** Where a runtime sees its account's personal library (plan §3.2 #4). */
+export const RUNTIME_LIBRARY_DIR = "/workspace/library";
+
+/**
+ * The host directory of an account's personal library, shared by every project
+ * of the account and read-only in all of them.
+ *
+ * Derived from the data directory the same way the account's own root is
+ * (`<dataDir>/users/<userId>`), because the library is the account's and not a
+ * project's. The knowledge-base stream owns the library itself
+ * (`libraryService.mjs`, `userLibraryDir`); this is the path the runtime side
+ * mounts, and the two must name one directory.
+ *
+ * @param {Record<string, any>} config @param {string} userId
+ */
+export function personalLibraryDir(config, userId) {
+  return path.join(config.dataDir, "users", safeId(String(userId), "user id"), "library");
+}
+
+/** A real directory, not a symlink to one: a mount source the run could have
+ *  redirected would be a way out of the project. */
+function realDirectory(target) {
+  try {
+    const stat = lstatSync(target);
+    return stat.isDirectory() && !stat.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The two read-only views a runtime gets into its workspace, as host paths, or
+ * null for a view this launch does not mount.
+ *
+ * The knowledge base is the project's source material (plan §3.2 #3, §3.1 #4):
+ * a run reads it and cites it, and a run that could rewrite it could make a
+ * quotation true after the fact — the verbatim-quote gate reads the same
+ * bytes. It is mounted only where it already sits inside the mounted
+ * workspace (a scratch sub-workspace for a verification or a source reading
+ * never contained it and gains no view of it here).
+ *
+ * The library is mounted only once it exists; the knowledge-base stream creates
+ * it with the first entry. Both sides of the controller boundary decide from
+ * the filesystem, the way the capsule methods mount does, so the privileged
+ * controller and the API build the same argv from the same facts.
+ *
+ * @param {Record<string, any>} config @param {Record<string, any>} project
+ * @returns {{ knowledgeBase: string | null, library: string | null }}
+ */
+export function readOnlyWorkspaceViews(config, project) {
+  const inBaseWorkspace = Boolean(project.baseDir)
+    && path.resolve(String(project.workspaceDir)) === path.resolve(String(project.baseDir));
+  const knowledgeBase = inBaseWorkspace ? path.join(project.baseDir, KNOWLEDGE_BASE_DIR) : null;
+  const library = config.dataDir && project.userId ? personalLibraryDir(config, project.userId) : null;
+  return {
+    knowledgeBase: knowledgeBase && realDirectory(knowledgeBase) ? knowledgeBase : null,
+    library: library && realDirectory(library) ? library : null,
+  };
 }
 
 /** `sockaddr_un.sun_path` is a fixed 108-byte field on Linux, NUL included, so
@@ -2642,6 +2795,232 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
   return true;
 }
 
+/**
+ * Where a project's runtime runs, behind one interface (plan §3.1 #1).
+ *
+ * The manager owns a runtime's lifecycle — admission, the ledger rows, the
+ * readiness wait, the tokens it activates, the reaper — and asks its provider
+ * only for what differs between a container on this host and a session in the
+ * cloud: preparing the environment, writing the kernel's bootstrap files,
+ * launching the kernel, stopping it, and what to read or clean up around it.
+ * `OPEN_SCIENCE_RUNTIME_PROVIDER` picks one; `docker` is the default and what
+ * production runs until an operator switches.
+ *
+ * @typedef {object} RuntimeProvider
+ * @property {'docker'|'agentbay'} name
+ * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number }) => Promise<Record<string, any>>} prepare
+ *   the launch plan: `sandboxMode`, `runtimeUrl`, `socketPath`, `proxyWorkspaceDir`, `containerName`, …
+ * @property {(project: Record<string, any>, plan: Record<string, any>, options: { budgetScope?: any }) => Promise<Record<string, any>>} bootstrap
+ *   writes the profile patch, the credentials and the tokens where the kernel reads them
+ * @property {(project: Record<string, any>, plan: Record<string, any>, input: { port: number, password: string }) => Promise<any>} launch
+ *   starts the kernel; returns the process handle whose `exit` the manager watches
+ * @property {(project: Record<string, any>, plan: Record<string, any>, child: any) => Promise<void>} close
+ * @property {(project: Record<string, any>, plan: Record<string, any>) => void} afterExit
+ * @property {(project: Record<string, any>, runtime: Record<string, any>) => Promise<void>} sampleResources
+ * @property {(project: Record<string, any>, state: Record<string, any>) => Promise<{ cleaned: boolean, missing: boolean, failed?: boolean, reason?: string, error?: string | null, reattached?: boolean, skipped?: boolean }>} cleanupOrphan
+ * @property {(project: Record<string, any>, runtime: Record<string, any>) => Promise<any>} writeWorkloadToken
+ * @property {(project: Record<string, any>) => Promise<void>} [beforeDelivery] brings the host copy up to date before the gate reads it
+ * @property {(project: Record<string, any>, relative: string, content: string) => Promise<void>} [mirrorWrite] a control-plane write the running kernel must see
+ * @property {(project: Record<string, any>, plan: Record<string, any>) => Promise<void>} [abandon] lets go of what a failed launch prepared outside this process
+ * @property {(project: Record<string, any>) => string[]} [acceptedWorkloadTokens] the workload tokens a runtime whose token file is not on this host may present
+ * @property {(runtime: Record<string, any>) => boolean} [tolerateTokenRefreshFailure] whether a failed renewal can wait for the next one
+ * @property {(project: Record<string, any>, relative: string, content: Buffer) => Promise<boolean>} [mirrorUpload] a researcher's upload the running kernel should see now
+ * @property {(child: any) => Record<string, any> | null} [describe] what the runtime's own machine reported at start
+ * @property {() => Promise<Record<string, any>>} [readiness] the provider's readiness, when it is not the Docker controller's
+ * @property {() => Promise<void> | void} [preflight] what the provider cannot start without, checked before anything is written
+ */
+
+/**
+ * The runtime as a container on this host, started through the runtime
+ * controller (or directly, outside production). Today's code, moved here from
+ * the manager unchanged in behaviour.
+ */
+export class DockerRuntimeProvider {
+  /** @param {any} manager */
+  constructor(manager) {
+    this.manager = manager;
+    /** @type {'docker'} */
+    this.name = "docker";
+  }
+
+  get config() { return this.manager.config; }
+
+  /** A daemon that is not there, refused before the launch writes anything. */
+  async preflight() {
+    if (this.config.runtimeSandboxMode === "docker") {
+      await this.manager.assertDockerSupport();
+    }
+  }
+
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number }} input */
+  async prepare(project, { port, pluginConfig, capsuleMethodsMounted }) {
+    const manager = this.manager;
+    // Before the plan, for the same reason as the capsule methods: the
+    // read-only view of the knowledge base is mounted when the directory
+    // exists, and a project whose first source arrives while its runtime runs
+    // must not find it writable then.
+    await manager.ensureKnowledgeBaseDir(project);
+    const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig });
+    plan.pluginConfig = pluginConfig;
+    await Promise.all(plan.runtimeDirs.map((dir) => fs.mkdir(dir, { recursive: true, mode: 0o700 })));
+    let socketStat = null;
+    if (plan.socketPath) {
+      await assertNoSymlinkPath(plan.socketTrustRoot ?? project.rootDir, path.dirname(plan.socketPath));
+      socketStat = await fs.lstat(plan.socketPath).catch((error) => {
+        if (error?.code === "ENOENT") return null;
+        throw error;
+      });
+      if (socketStat?.isSymbolicLink()) {
+        throw new HttpError(403, "runtime_socket_symlink", "Runtime sockets must not be symbolic links.");
+      }
+    }
+    if (plan.sandboxMode === "docker") {
+      const cleanup = await manager.cleanupDocker(plan, project);
+      if (cleanup.cleaned) {
+        await appendRuntimeEvent(project, "cleaned_orphan", {
+          kind: RUNTIME_KERNEL_NAME,
+          sandboxMode: plan.sandboxMode,
+          containerName: plan.containerName,
+        }, this.config);
+      } else if (cleanup.failed) {
+        await appendRuntimeEvent(project, "cleanup_failed", {
+          kind: RUNTIME_KERNEL_NAME,
+          sandboxMode: plan.sandboxMode,
+          containerName: plan.containerName,
+          error: cleanup.error,
+        }, this.config);
+        await recordRuntimeState(project, "failed", {
+          running: false,
+          kind: RUNTIME_KERNEL_NAME,
+          startedAt: null,
+          pid: null,
+          exitedAt: null,
+          sandboxMode: plan.sandboxMode,
+          networkMode: this.config.runtimeNetworkMode,
+          containerName: plan.containerName ?? null,
+          skillsCopied: 0,
+          agentSkillsCopied: 0,
+          agentsGenerated: 0,
+          capsuleMethodsMounted,
+          error: "runtime_cleanup_failed",
+        });
+        throw new HttpError(502, "runtime_cleanup_failed", "Runtime container cleanup failed before startup.");
+      }
+    }
+    if (plan.socketPath && socketStat) await fs.rm(plan.socketPath, { force: true });
+    return plan;
+  }
+
+  /** The kernel's bootstrap files, written host-side into the directory the
+   *  container mounts as `$DSH_HOME` before it starts. */
+  bootstrap(project, plan, { budgetScope = null } = {}) {
+    return syncRuntimeDshProfile(this.config, project, plan, { budgetScope });
+  }
+
+  async launch(project, plan, { port, password }) {
+    const manager = this.manager;
+    let child;
+    if (plan.sandboxMode === "docker" && manager.runtimeController) {
+      await manager.runtimeController.startRuntime(
+        project,
+        port,
+        password,
+        capsuleGatewayProviderUrl(this.config),
+        revisionGatewayProviderUrl(this.config),
+        publicSourceGatewayProviderUrl(this.config),
+        plan.pluginConfig,
+      );
+      child = new RemoteRuntimeProcess(
+        manager.runtimeController,
+        project,
+        this.config.runtimeControllerPollMs,
+      );
+    } else {
+      child = spawn(plan.command, plan.args, {
+        cwd: plan.cwd,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: plan.env,
+      });
+      // The unsandboxed path needs the same last words as the controller path,
+      // and gets them the same way: a small tail, both streams, read by
+      // `runtimeExitDiagnosis`. Piping rather than ignoring also means a
+      // runtime that writes faster than anyone reads no longer blocks — these
+      // handlers drain it.
+      const local = /** @type {any} */ (child);
+      local.exitOutput = "";
+      const collect = (chunk) => {
+        local.exitOutput = appendTailOutput(local.exitOutput, chunk, RUNTIME_EXIT_OUTPUT_BYTES);
+      };
+      child.stdout?.on("data", collect);
+      child.stderr?.on("data", collect);
+    }
+    return child;
+  }
+
+  async close(project, plan, child) {
+    if (plan.sandboxMode === "docker" && this.manager.runtimeController) {
+      await /** @type {any} */ (child).stop();
+    } else {
+      if (plan.sandboxMode === "docker") await cleanupDockerContainer(plan);
+      await terminateChild(child);
+    }
+    if (plan.socketPath) await fs.rm(plan.socketPath, { force: true }).catch(() => {});
+  }
+
+  /** Removed here, after the exit record has been written. `close()` cleans up
+   *  when the manager stops a runtime, but a container that dies on its own
+   *  never reaches it — that was `--rm`'s job, and `--rm` is what deleted the
+   *  evidence before anyone could read it. The order is the whole point: ask,
+   *  then remove. */
+  afterExit(project, plan) {
+    if (plan.sandboxMode === "docker" && !this.manager.runtimeController) {
+      void cleanupDockerContainer(plan).catch(() => {
+        // isolated: a container that cannot be removed is a leak worth a
+        // metric, not a reason to fail a run that has already ended.
+      });
+    }
+  }
+
+  sampleResources(project) {
+    return this.manager.sampleDockerResources(project);
+  }
+
+  /** One stale container, named by the state a previous control plane left. */
+  async cleanupOrphan(project, state) {
+    if (state.sandboxMode !== "docker" || typeof state.containerName !== "string" || !state.containerName) {
+      return { cleaned: false, missing: false, failed: false, reason: "not_docker", skipped: true };
+    }
+    const plan = {
+      command: this.config.runtimeContainerBin,
+      containerName: state.containerName,
+      cwd: project.workspaceDir,
+      env: process.env,
+    };
+    return this.manager.cleanupDocker(plan, project);
+  }
+
+  /** Docker's token lives in a host file the container mounts: rewritten in
+   *  place, which is the whole renewal (`refreshEviMedWorkloadToken`). */
+  writeWorkloadToken(project, runtime) {
+    return this.manager.workloadTokenWriter(this.config, project, runtime.workloadTokenFile);
+  }
+}
+
+/**
+ * The provider a configuration names.
+ * @param {any} manager
+ * @param {{ agentbay?: (manager: any) => RuntimeProvider }} [factories]
+ * @returns {RuntimeProvider}
+ */
+export function createRuntimeProvider(manager, { agentbay = null } = {}) {
+  const name = String(manager.config.runtimeProvider ?? "docker");
+  if (name === "agentbay") {
+    if (!agentbay) throw new HttpError(503, "runtime_provider_unavailable", "The AgentBay runtime provider is not available in this build.");
+    return agentbay(manager);
+  }
+  return new DockerRuntimeProvider(manager);
+}
+
 export class RuntimeManager {
   constructor(config, {
     agentRegistry = null,
@@ -2653,6 +3032,7 @@ export class RuntimeManager {
     onSessionAbort = async () => {},
     onRuntimeStart = () => {},
     hasRunningRuns = async () => false,
+    agentbayClient = null,
   } = {}) {
     this.config = config;
     /** @type {any} */ this.pluginService = null;
@@ -2682,9 +3062,15 @@ export class RuntimeManager {
     this.pluginOverrides = new Map();
     this.agentRegistry = agentRegistry;
     this.runtimeControllerMode = config.runtimeControllerMode ?? "direct";
-    this.runtimeController = this.runtimeControllerMode === "socket"
+    // The privileged Docker controller exists only for the Docker provider: an
+    // AgentBay deployment has no container on this host to control.
+    this.runtimeController = this.runtimeControllerMode === "socket" && String(config.runtimeProvider ?? "docker") === "docker"
       ? new RuntimeControllerClient(config)
       : null;
+    /** @type {RuntimeProvider} */
+    this.provider = createRuntimeProvider(this, {
+      agentbay: (manager) => new AgentBayRuntimeProvider(manager, { client: agentbayClient ?? createAgentBayClient(config) }),
+    });
     this.runtimes = new Map();
     // Which learned methods the last launch of each project mounted, by
     // project key. Read by the observation producer, which otherwise knows only
@@ -2724,6 +3110,21 @@ export class RuntimeManager {
      */
     this.hasRunningRuns = hasRunningRuns;
     this.lastOrphanCleanup = null;
+    /** Where each pending start is, by project key (`RUNTIME_START_STAGES`). */
+    this.startProgress = new Map();
+    /** The last start of each project that was refused, by project key, for
+     *  the status the waiting shell polls: `{ code, status, at }`. */
+    this.startFailures = new Map();
+  }
+
+  /** The runtime provider this deployment runs (`OPEN_SCIENCE_RUNTIME_PROVIDER`). */
+  providerName() {
+    return String(this.config.runtimeProvider ?? "docker");
+  }
+
+  /** @param {Record<string, any>} project @param {string} stage one of `RUNTIME_START_STAGES` */
+  noteStartStage(project, stage) {
+    this.startProgress.set(this.key(project), { stage, at: Date.now() });
   }
 
   usesRuntimeController() {
@@ -2827,6 +3228,22 @@ export class RuntimeManager {
       const key = this.key({ userId: payload.userId, id: payload.projectId });
       const runtime = this.runtimes.get(key);
       if (!runtime?.workloadTokenFile || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
+      if (typeof this.provider.acceptedWorkloadTokens === "function") {
+        // A remote runtime's token file is in its session, not on this host:
+        // the provider holds what it installed there (and the one it is
+        // installing, and the one that one replaces until it expires).
+        const actual = Buffer.from(token);
+        const accepted = this.provider.acceptedWorkloadTokens({ userId: payload.userId, id: payload.projectId })
+          .some((candidate) => {
+            const expected = Buffer.from(String(candidate));
+            return expected.length === actual.length && timingSafeEqual(expected, actual);
+          });
+        if (!accepted || this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
+        return {
+          ...payload,
+          runtimeGeneration: typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null,
+        };
+      }
       const handle = await fs.open(runtime.workloadTokenFile, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
       let current;
       try {
@@ -3041,6 +3458,7 @@ export class RuntimeManager {
     if (pending) return pending;
 
     const started = (async () => {
+      this.noteStartStage(project, "environment");
       // Measured, and room made, inside the pending start: registered before
       // the first wait, it is what a second caller arriving meanwhile joins
       // instead of beginning a second container. Its own entry in `starts` is
@@ -3066,6 +3484,7 @@ export class RuntimeManager {
       // The fake speaks the kernel's protocol. A fake that spoke any other
       // would make every test in the suite exercise a code path production
       // does not have.
+      this.noteStartStage(project, "kernel");
       const mock = await startMockDshRuntime();
       const runtime = {
         kind: "mock",
@@ -3111,6 +3530,7 @@ export class RuntimeManager {
     this.starts.set(key, started);
     try {
       const runtime = await started;
+      this.startFailures.delete(key);
       try {
         this.onRuntimeStart(project, runtime);
       } catch {
@@ -3119,8 +3539,22 @@ export class RuntimeManager {
         // calls never depend on it.
       }
       return runtime;
+    } catch (error) {
+      // Kept for the waiting shell. The start that failed is usually the one a
+      // frame document triggered, and a refusal served into a frame is a page
+      // the shell cannot read the status of: on 2026-09-15 a 429 for the one
+      // runtime slot this deployment had was shown as "cold starts sometimes
+      // take longer", and the retry looped forever. The status it polls says
+      // what happened instead.
+      this.startFailures.set(key, {
+        code: typeof error?.code === "string" ? error.code : "runtime_start_failed",
+        status: Number.isSafeInteger(error?.status) ? error.status : 502,
+        at: Date.now(),
+      });
+      throw error;
     } finally {
       this.starts.delete(key);
+      this.startProgress.delete(key);
     }
   }
 
@@ -3133,9 +3567,9 @@ export class RuntimeManager {
     // authenticates with the browser-session cookie minted in
     // `syncRuntimeDshProfile`, so nothing inside the container reads a password.
     const password = randomId("pw_");
-    if (this.config.runtimeSandboxMode === "docker") {
-      await this.assertDockerSupport();
-    }
+    // What the provider cannot start without, refused before anything is
+    // written: Docker's daemon, AgentBay's settings.
+    await this.provider.preflight?.();
     const pluginConfig = this.pluginOverrides?.get(key) ?? (this.pluginService ? (await this.pluginService.get(project.userId, project)).desired
       : { revision: 0, enabled: true, settings: { timeoutMs: 15000 } });
     // Before the plan, because the plan reads the result: both this side and
@@ -3148,54 +3582,9 @@ export class RuntimeManager {
     // can say which revision of which method was in the room. A digest recorded
     // at mount time is the only record that survives the container.
     this.lastMountedLearnedMethods.set(this.key(project), mountedMethods.learned ?? []);
-    const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig });
-    plan.pluginConfig = pluginConfig;
-    await Promise.all(plan.runtimeDirs.map((dir) => fs.mkdir(dir, { recursive: true, mode: 0o700 })));
-    let socketStat = null;
-    if (plan.socketPath) {
-      await assertNoSymlinkPath(plan.socketTrustRoot ?? project.rootDir, path.dirname(plan.socketPath));
-      socketStat = await fs.lstat(plan.socketPath).catch((error) => {
-        if (error?.code === "ENOENT") return null;
-        throw error;
-      });
-      if (socketStat?.isSymbolicLink()) {
-        throw new HttpError(403, "runtime_socket_symlink", "Runtime sockets must not be symbolic links.");
-      }
-    }
-    if (plan.sandboxMode === "docker") {
-      const cleanup = await this.cleanupDocker(plan, project);
-      if (cleanup.cleaned) {
-        await appendRuntimeEvent(project, "cleaned_orphan", {
-          kind: RUNTIME_KERNEL_NAME,
-          sandboxMode: plan.sandboxMode,
-          containerName: plan.containerName,
-        }, this.config);
-      } else if (cleanup.failed) {
-        await appendRuntimeEvent(project, "cleanup_failed", {
-          kind: RUNTIME_KERNEL_NAME,
-          sandboxMode: plan.sandboxMode,
-          containerName: plan.containerName,
-          error: cleanup.error,
-        }, this.config);
-        await recordRuntimeState(project, "failed", {
-          running: false,
-          kind: RUNTIME_KERNEL_NAME,
-          startedAt: null,
-          pid: null,
-          exitedAt: null,
-          sandboxMode: plan.sandboxMode,
-          networkMode: this.config.runtimeNetworkMode,
-          containerName: plan.containerName ?? null,
-          skillsCopied: 0,
-          agentSkillsCopied: 0,
-          agentsGenerated: 0,
-          capsuleMethodsMounted,
-          error: "runtime_cleanup_failed",
-        });
-        throw new HttpError(502, "runtime_cleanup_failed", "Runtime container cleanup failed before startup.");
-      }
-    }
-    if (plan.socketPath && socketStat) await fs.rm(plan.socketPath, { force: true });
+    // The provider's own preparation: a container's plan, directories and
+    // orphan cleanup, or a cloud session with the project's files carried in.
+    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted });
 
     // Nothing is copied into a project any more: the image carries the skill
     // roots and the agent packages read-only, shared across every project. The
@@ -3227,7 +3616,7 @@ export class RuntimeManager {
       // (read-only, shared across every project), so there is nothing to copy
       // here. The retired kernel needed three copying passes at this point;
       // they are gone with it.
-      const dshSync = await syncRuntimeDshProfile(this.config, project, plan, { budgetScope: modelGatewayScope });
+      const dshSync = await this.provider.bootstrap(project, plan, { budgetScope: modelGatewayScope });
       mcpSync = {
         copied: 0,
         configured: dshSync.configured ? 1 : 0,
@@ -3308,40 +3697,29 @@ export class RuntimeManager {
       mcpServersCopied: mcpSync.copied,
       mcpServersConfigured: mcpSync.configured,
     });
+    this.noteStartStage(project, "kernel");
     let child;
-    if (plan.sandboxMode === "docker" && this.runtimeController) {
-      await this.runtimeController.startRuntime(
-        project,
-        port,
-        password,
-        capsuleGatewayProviderUrl(this.config),
-        revisionGatewayProviderUrl(this.config),
-        publicSourceGatewayProviderUrl(this.config),
-        plan.pluginConfig,
-      );
-      child = new RemoteRuntimeProcess(
-        this.runtimeController,
-        project,
-        this.config.runtimeControllerPollMs,
-      );
-    } else {
-      child = spawn(plan.command, plan.args, {
-        cwd: plan.cwd,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: plan.env,
-      });
-      // The unsandboxed path needs the same last words as the controller path,
-      // and gets them the same way: a small tail, both streams, read by
-      // `runtimeExitDiagnosis`. Piping rather than ignoring also means a
-      // runtime that writes faster than anyone reads no longer blocks — these
-      // handlers drain it.
-      const local = /** @type {any} */ (child);
-      local.exitOutput = "";
-      const collect = (chunk) => {
-        local.exitOutput = appendTailOutput(local.exitOutput, chunk, RUNTIME_EXIT_OUTPUT_BYTES);
-      };
-      child.stdout?.on("data", collect);
-      child.stderr?.on("data", collect);
+    try {
+      child = await this.provider.launch(project, plan, { port, password });
+    } catch (error) {
+      // A provider that holds something outside this process — a cloud
+      // session — lets it go and says why; the Docker provider has nothing to
+      // abandon and fails exactly as it always did.
+      if (typeof this.provider.abandon === "function") {
+        await this.provider.abandon(project, plan).catch(() => {});
+        await appendRuntimeEvent(project, "failed", {
+          kind: RUNTIME_KERNEL_NAME,
+          sandboxMode: plan.sandboxMode,
+          containerName: plan.containerName ?? null,
+          error: typeof error?.code === "string" ? error.code : "runtime_launch_failed",
+        }, this.config);
+        await recordRuntimeState(project, "failed", {
+          running: false, kind: RUNTIME_KERNEL_NAME, startedAt: null, pid: null, exitedAt: null,
+          sandboxMode: plan.sandboxMode, networkMode: plan.networkMode ?? null, containerName: plan.containerName ?? null,
+          capsuleMethodsMounted, error: typeof error?.code === "string" ? error.code : "runtime_launch_failed",
+        });
+      }
+      throw error;
     }
     const runtime = {
       pluginConfig: plan.pluginConfig,
@@ -3365,9 +3743,11 @@ export class RuntimeManager {
         })
         : null,
       sandboxMode: plan.sandboxMode,
-      networkMode: this.config.runtimeNetworkMode,
+      networkMode: plan.networkMode ?? this.config.runtimeNetworkMode,
       workspaceDir: project.workspaceDir,
       proxyWorkspaceDir: plan.proxyWorkspaceDir ?? project.workspaceDir,
+      // What a remote session's guest reported: kernel release, Landlock.
+      sandbox: this.provider.describe?.(child) ?? null,
       child,
       startedAt: new Date().toISOString(),
       pid: child.pid,
@@ -3389,15 +3769,7 @@ export class RuntimeManager {
       exitedAt: null,
       spawnError: null,
       project,
-      close: async () => {
-        if (plan.sandboxMode === "docker" && this.runtimeController) {
-          await /** @type {any} */ (child).stop();
-        } else {
-          if (plan.sandboxMode === "docker") await cleanupDockerContainer(plan);
-          await terminateChild(child);
-        }
-        if (plan.socketPath) await fs.rm(plan.socketPath, { force: true }).catch(() => {});
-      },
+      close: async () => this.provider.close(project, plan, child),
     };
     /** @type {any} */ (child).once("error", (err) => {
       runtime.spawnError = err;
@@ -3474,12 +3846,7 @@ export class RuntimeManager {
       // that dies on its own never reaches it — that was `--rm`'s job, and
       // `--rm` is what deleted the evidence before anyone could read it. The
       // order is the whole point: ask, then remove.
-      if (plan.sandboxMode === "docker" && !this.runtimeController) {
-        void cleanupDockerContainer(plan).catch(() => {
-          // isolated: a container that cannot be removed is a leak worth a
-          // metric, not a reason to fail a run that has already ended.
-        });
-      }
+      this.provider.afterExit(project, plan);
       void recordRuntimeState(project, "exited", {
         running: false,
         kind: runtime.kind,
@@ -3498,7 +3865,7 @@ export class RuntimeManager {
     try {
       await this.waitUntilReady(runtime);
       if (runtime.workloadTokenFile) {
-        await this.workloadTokenWriter(this.config, project, runtime.workloadTokenFile);
+        await this.provider.writeWorkloadToken(project, runtime);
       }
       this.activateModelGatewayRuntime(project, runtime);
       await appendRuntimeEvent(project, "started", {
@@ -3525,6 +3892,7 @@ export class RuntimeManager {
         agentSkillsCopied: runtime.agentSkillsCopied,
         agentsGenerated: runtime.agentsGenerated,
         capsuleMethodsMounted: runtime.capsuleMethodsMounted,
+        sandbox: runtime.sandbox,
       });
     } catch (err) {
       this.deactivateModelGatewayRuntime(runtime);
@@ -3555,6 +3923,19 @@ export class RuntimeManager {
     return runtime;
   }
 
+  /**
+   * The project's knowledge-base directory, created empty when missing, so the
+   * launch can mount it read-only (`readOnlyWorkspaceViews`). A failure leaves
+   * the launch without that view rather than without a runtime.
+   * @param {Record<string, any>} project
+   */
+  async ensureKnowledgeBaseDir(project) {
+    if (!project.baseDir || path.resolve(String(project.workspaceDir)) !== path.resolve(String(project.baseDir))) return;
+    const opened = await openScopedDirectoryNoFollow(project.baseDir, path.join(project.baseDir, KNOWLEDGE_BASE_DIR), { create: true })
+      .catch(() => null);
+    await opened?.handle.close();
+  }
+
   async waitUntilReady(runtime) {
     // Not the per-call connect timeout: starting is not calling. See the note
     // on `runtimeReadyTimeoutMs` in config.mjs.
@@ -3563,7 +3944,7 @@ export class RuntimeManager {
     // plugin tree takes a minute. A host runtime starts a process that either
     // binds a port or does not, and giving it three minutes to do so would turn
     // "the binary is missing" into a three-minute wait.
-    const timeoutMs = runtime.sandboxMode === "docker"
+    const timeoutMs = runtime.sandboxMode === "docker" || runtime.sandboxMode === "agentbay"
       ? (this.config.runtimeReadyTimeoutMs ?? this.config.runtimeProxyConnectTimeoutMs)
       : this.config.runtimeProxyConnectTimeoutMs;
     const deadline = Date.now() + timeoutMs;
@@ -3644,7 +4025,9 @@ export class RuntimeManager {
   }
 
   async status(project) {
-    const runtime = this.runtimes.get(this.key(project));
+    const key = this.key(project);
+    const runtime = this.runtimes.get(key);
+    const provider = this.providerName();
     if (runtime) {
       return publicRuntimeStatus(runtime, {
         stale: false,
@@ -3654,16 +4037,72 @@ export class RuntimeManager {
         agentSkillsCopied: runtime.agentSkillsCopied,
         agentsGenerated: runtime.agentsGenerated,
         capsuleMethodsMounted: runtime.capsuleMethodsMounted,
+        provider,
       });
     }
+    // Where a start is, or why the last one did not happen, for the shell that
+    // is waiting on it. A refusal is reported only while it is recent and no
+    // start is under way: a start that followed it is the newer answer.
+    const startStage = this.starts.has(key) ? this.startProgress.get(key)?.stage ?? "environment" : null;
+    const failure = startStage ? null : this.startFailures.get(key);
+    const startError = failure && Date.now() - failure.at < START_FAILURE_VISIBLE_MS
+      ? { code: failure.code, status: failure.status, at: new Date(failure.at).toISOString() }
+      : null;
+    const fields = { provider, startStage, startError };
     const state = await readRuntimeState(project);
-    if (state) return publicRuntimeStatusFromState(state);
-    return publicRuntimeStatus(null);
+    if (state) return publicRuntimeStatusFromState(state, fields);
+    return publicRuntimeStatus(null, fields);
   }
 
   runtimeWorkspaceRoot(project) {
     const runtime = this.runtimes.get(this.key(project));
     return runtime?.proxyWorkspaceDir ?? project.workspaceDir;
+  }
+
+  /**
+   * The same root, asked by the run ledger right before the delivery gate
+   * reads a finished run's files: a provider whose runtime writes somewhere
+   * other than the host copy brings that copy up to date first (plan §3.1
+   * #4). A sync that fails or does not finish leaves the gate the host copy
+   * as it is — the gate still runs, and the Context's own upload is the net.
+   * @param {Record<string, any>} project
+   */
+  async workspaceRootForDelivery(project) {
+    await this.provider.beforeDelivery?.(project)?.catch?.(() => {});
+    return this.runtimeWorkspaceRoot(project);
+  }
+
+  /**
+   * A control-plane write into the workspace that a running remote kernel
+   * must see too. The host copy is already written; this carries it over.
+   * @param {Record<string, any>} project @param {string} relative @param {string} content @param {boolean} required
+   */
+  async mirrorWorkspaceWrite(project, relative, content, required = false) {
+    if (typeof this.provider.mirrorWrite !== "function") return;
+    try {
+      await this.provider.mirrorWrite(project, relative, content);
+    } catch (error) {
+      if (required) throw error;
+      // isolated: evimed_runtime_mirror_write_failures_total
+    }
+  }
+
+  /**
+   * A researcher's upload that a running remote kernel should see now; the
+   * host copy is already written. Only a file inside the project's workspace
+   * is carried, and a failure waits for the next start's push.
+   * @param {Record<string, any>} project @param {string} file absolute host path @param {Buffer} content
+   */
+  async mirrorWorkspaceUpload(project, file, content) {
+    if (typeof this.provider.mirrorUpload !== "function") return false;
+    const relative = path.relative(path.resolve(project.workspaceDir), path.resolve(file));
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return false;
+    try {
+      return await this.provider.mirrorUpload(project, relative.split(path.sep).join("/"), content);
+    } catch {
+      // isolated: evimed_runtime_mirror_upload_failures_total
+      return false;
+    }
   }
 
   /** Every call into a runtime container needs a deadline. Without one, a socket
@@ -4060,6 +4499,7 @@ export class RuntimeManager {
       const relative = session ? `.evimed-brief/sessions/${session}/context.md` : ".evimed-brief/context.md";
       const file = path.join(project.workspaceDir, relative);
       await writeFileAtomicNoFollow(project.workspaceDir, file, context, { encoding: "utf8", mode: 0o444 });
+      await this.mirrorWorkspaceWrite(project, relative, context, required);
     };
     if (required) return write();
     // isolated: evimed_run_context_write_failures_total
@@ -4092,6 +4532,7 @@ export class RuntimeManager {
       const file = path.join(project.workspaceDir, workspaceLayout.capsuleProfileFile);
       if (!profile && !(await fs.lstat(file).catch(() => null))) return { written: false, chars: 0 };
       await writeFileAtomicNoFollow(project.workspaceDir, file, profile, { encoding: "utf8", mode: 0o444 });
+      await this.mirrorWorkspaceWrite(project, workspaceLayout.capsuleProfileFile, profile);
       return { written: true, chars: profile.length };
     } catch (error) {
       // isolated: evimed_capsule_profile_write_failures_total
@@ -4116,6 +4557,7 @@ export class RuntimeManager {
       const relative = session ? `.evimed-brief/sessions/${session}/memory.md` : workspaceLayout.briefMemoryFile;
       const file = path.join(project.workspaceDir, relative);
       await writeFileAtomicNoFollow(project.workspaceDir, file, memoryContext, { encoding: "utf8", mode: 0o444 });
+      await this.mirrorWorkspaceWrite(project, relative, memoryContext, required);
     };
     if (required) return write();
     // isolated: evimed_run_memory_write_failures_total
@@ -4148,15 +4590,53 @@ export class RuntimeManager {
         runId,
         ...(typeof contextRevision === "string" && contextRevision ? { contextRevision } : {}),
       };
-      await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), `${JSON.stringify(index, null, 2)}\n`, {
+      const text = `${JSON.stringify(index, null, 2)}\n`;
+      await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), text, {
         encoding: "utf8", mode: 0o444,
       });
+      await this.mirrorWorkspaceWrite(project, relative, text, required);
     };
     if (required) return write();
     // isolated: evimed_run_brief_index_write_failures_total
     try {
       await write();
     } catch { /* isolated: evimed_run_brief_index_write_failures_total */ }
+  }
+
+  /**
+   * Start, in the background of a sign-in, the runtime of the project this
+   * account used last (plan §3.1 #8), so the project the reader opens next is
+   * already running when they reach it.
+   *
+   * "Last" is read from each project's own runtime state file — the time its
+   * runtime last changed state — because nothing else in the control plane
+   * remembers which project an account used: the browser's remembered project
+   * is wiped on sign-out, which is exactly the moment before this runs. A
+   * project that never had a runtime is older than any that did, and among
+   * those `default` wins, which is where a first sign-in lands.
+   *
+   * Returns the id it started, or null. The caller does not wait on it: a warm
+   * start is a head start, never a precondition, and the start it triggers is
+   * the same admitted, capped start any request would make.
+   *
+   * @param {Record<string, any>[]} projects the account's open projects
+   * @returns {Promise<string | null>}
+   */
+  async warmMostRecent(projects) {
+    if (!this.config.runtimeWarmOnSignIn || !Array.isArray(projects) || projects.length === 0) return null;
+    let chosen = null;
+    let chosenAt = -1;
+    for (const project of projects) {
+      const state = await readRuntimeState(project).catch(() => null);
+      const at = Date.parse(String(state?.updatedAt ?? "")) || (project.id === "default" ? 0.5 : 0);
+      if (at > chosenAt) {
+        chosen = project;
+        chosenAt = at;
+      }
+    }
+    if (!chosen) return null;
+    await this.start(chosen);
+    return String(chosen.id);
   }
 
   /** Reserve a control-plane session id without starting it in DSH. The caller
@@ -4472,20 +4952,24 @@ export class RuntimeManager {
         continue;
       }
       summary.scanned += 1;
-      if (state.sandboxMode === "docker" && typeof state.containerName === "string" && state.containerName) {
-        const plan = {
-          command: this.config.runtimeContainerBin,
-          containerName: state.containerName,
-          cwd: project.workspaceDir,
-          env: process.env,
-        };
-        const cleanup = await this.cleanupDocker(plan, project);
+      if (state.sandboxMode === this.provider.name) {
+        const cleanup = await this.provider.cleanupOrphan(project, state);
+        if (cleanup.reattached) {
+          // A cloud session outlives the control plane that started it; the
+          // provider took it back rather than removing it (plan §3.1 #7).
+          summary.reattached = (summary.reattached ?? 0) + 1;
+          continue;
+        }
+        if (cleanup.skipped) {
+          summary.skipped += 1;
+          continue;
+        }
         if (cleanup.cleaned || cleanup.missing) {
           if (cleanup.cleaned) summary.cleaned += 1;
           else summary.missing += 1;
           await appendRuntimeEvent(project, "startup_orphan_cleanup", {
             kind: state.kind ?? RUNTIME_KERNEL_NAME,
-            sandboxMode: "docker",
+            sandboxMode: state.sandboxMode,
             networkMode: state.networkMode ?? this.config.runtimeNetworkMode,
             containerName: state.containerName,
             result: cleanup.reason,
@@ -4496,7 +4980,7 @@ export class RuntimeManager {
             startedAt: state.startedAt ?? null,
             pid: Number.isSafeInteger(state.pid) ? state.pid : null,
             exitedAt: new Date().toISOString(),
-            sandboxMode: "docker",
+            sandboxMode: state.sandboxMode,
             networkMode: state.networkMode ?? this.config.runtimeNetworkMode,
             containerName: state.containerName,
             skillsCopied: state.skillsCopied,
@@ -4506,7 +4990,7 @@ export class RuntimeManager {
         summary.failed += 1;
         await appendRuntimeEvent(project, "startup_orphan_cleanup_failed", {
           kind: state.kind ?? RUNTIME_KERNEL_NAME,
-          sandboxMode: "docker",
+          sandboxMode: state.sandboxMode,
           networkMode: state.networkMode ?? this.config.runtimeNetworkMode,
           containerName: state.containerName,
           error: cleanup.error,
@@ -4517,7 +5001,7 @@ export class RuntimeManager {
           startedAt: state.startedAt ?? null,
           pid: Number.isSafeInteger(state.pid) ? state.pid : null,
           exitedAt: new Date().toISOString(),
-          sandboxMode: "docker",
+          sandboxMode: state.sandboxMode,
           networkMode: state.networkMode ?? this.config.runtimeNetworkMode,
           containerName: state.containerName,
           skillsCopied: state.skillsCopied,
@@ -4959,15 +5443,11 @@ export class RuntimeManager {
       if (Date.now() - Number(activity.lastUseAt ?? 0) < timeoutMs) continue;
       const project = runtime.project;
       if (!project) continue;
-      let busy = false;
-      try {
-        busy = await this.runtimeBusy(project);
-      } catch {
-        // Unreadable means unknown, and unknown is not idle. A runtime whose
-        // kernel cannot be asked stays up; the next sweep asks again.
-        continue;
-      }
-      if (busy) {
+      const verdict = await this.idleVerdict(project);
+      // Unreadable means unknown, and unknown is not idle. A runtime whose
+      // kernel cannot be asked stays up; the next sweep asks again.
+      if (verdict === "unknown") continue;
+      if (verdict === "working") {
         activity.lastUseAt = Date.now();
         continue;
       }
@@ -4975,6 +5455,34 @@ export class RuntimeManager {
       stopped++;
     }
     return stopped;
+  }
+
+  /**
+   * Whether this runtime is idle by both accounts that can tell: the kernel's
+   * (no session mid-turn) and the run ledger's (no run it still calls
+   * `running`).
+   *
+   * The ledger's half is the rule `makeRoomFor` already applied, and the idle
+   * reaper did not (plan §3.1 #8, spec G16): a nightly proactive-research run
+   * sits between two turns — the monitor finishing one delivery, the repair
+   * the next — with its kernel idle, and a stop in that window closes the run
+   * as cancelled at 03:00 with nobody watching. The ledger is asked second
+   * because it is the more expensive read.
+   *
+   * @param {Record<string, any>} project
+   * @returns {Promise<'idle'|'working'|'unknown'>}
+   */
+  async idleVerdict(project) {
+    try {
+      if (await this.runtimeBusy(project)) return "working";
+    } catch {
+      return "unknown";
+    }
+    try {
+      return (await this.hasRunningRuns(project)) ? "working" : "idle";
+    } catch {
+      return "unknown";
+    }
   }
 
   /**
@@ -5044,13 +5552,26 @@ export class RuntimeManager {
       this.evimedWorkloadRefreshTimers.get(key) !== monitor
     ) return false;
     try {
-      await this.workloadTokenWriter(this.config, project, runtime.workloadTokenFile);
+      await this.provider.writeWorkloadToken(project, runtime);
       await appendRuntimeEvent(project, "workload_token_refreshed", {
         kind: runtime.kind,
         sandboxMode: runtime.sandboxMode,
       }, this.config);
       return true;
     } catch (error) {
+      // A remote runtime's renewal goes through the session's file API, which
+      // can fail for a moment; its token outlives two renewals (900 s against
+      // 300 s), so a failure that the next attempt can still cover is waited
+      // out rather than ending the run.
+      if (this.provider.tolerateTokenRefreshFailure?.(runtime)) {
+        await appendRuntimeEvent(project, "workload_token_refresh_failed", {
+          kind: runtime.kind,
+          sandboxMode: runtime.sandboxMode,
+          error: typeof error?.code === "string" ? error.code : "runtime_workload_token_refresh_failed",
+          stopping: false,
+        }, this.config);
+        return true;
+      }
       await this.notifyRuntimeStopping(project);
       this.runtimes.delete(key);
       this.clearIdleTimer(key);
@@ -5104,6 +5625,14 @@ export class RuntimeManager {
    *  same number.
    *  @param {any} project @returns {Promise<void>} */
   async recordRuntimePidPressure(project) {
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime) return;
+    await this.provider.sampleResources(project, runtime);
+  }
+
+  /** The Docker provider's sample: both cgroup ceilings, read on one exec.
+   *  @param {any} project @returns {Promise<void>} */
+  async sampleDockerResources(project) {
     const runtime = this.runtimes.get(this.key(project));
     const containerName = runtime?.containerName;
     if (!containerName || runtime.sandboxMode !== "docker") return;
@@ -5227,9 +5756,26 @@ export class RuntimeManager {
     if (activity.activeProxies > 0) return;
     this.clearIdleTimer(key);
     activity.idleTimer = setTimeout(() => {
-      void this.stopIdleRuntime(project);
+      void this.reapIdleRuntime(project).catch(() => {});
     }, timeoutMs);
     activity.idleTimer.unref?.();
+  }
+
+  /**
+   * The per-runtime idle timer's stop, held to the sweep's rule
+   * (`idleVerdict`): a runtime whose kernel or ledger is still working is
+   * asked again one idle period later instead of being stopped.
+   * @param {Record<string, any>} project
+   */
+  async reapIdleRuntime(project) {
+    const key = this.key(project);
+    if (this.runtimes.has(key) && (this.runtimeActivity.get(key)?.activeProxies ?? 0) === 0) {
+      if (await this.idleVerdict(project) !== "idle") {
+        if (this.runtimes.has(key)) this.scheduleIdleStop(project);
+        return;
+      }
+    }
+    await this.stopIdleRuntime(project);
   }
 
   /**

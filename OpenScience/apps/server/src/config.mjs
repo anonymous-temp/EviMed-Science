@@ -498,11 +498,31 @@ export function loadConfig(overrides = {}) {
   // default silently and produce a container that died during boot saying it
   // had no profile. Kept as a refusal rather than a silent coercion: a
   // deployment that asked for TCP is a deployment expecting a published port.
-  const runtimeTransport =
-    overrides.runtimeTransport ?? process.env.OPEN_SCIENCE_RUNTIME_TRANSPORT ?? "unix";
-  if (runtimeTransport !== "unix") {
-    throw new Error(`OPEN_SCIENCE_RUNTIME_TRANSPORT must be "unix", got "${runtimeTransport}".`);
+  // rt: which provider runs a project's runtime (plan §3.1 #1). `docker` is a
+  // container on this host behind the runtime controller; `agentbay` is one
+  // Alibaba AgentBay cloud session per project, reached over its session link.
+  const runtimeProvider = String(overrides.runtimeProvider ?? process.env.OPEN_SCIENCE_RUNTIME_PROVIDER ?? "docker").trim().toLowerCase();
+  if (!["docker", "agentbay"].includes(runtimeProvider)) {
+    throw new Error(`OPEN_SCIENCE_RUNTIME_PROVIDER must be "docker" or "agentbay", got "${runtimeProvider}".`);
   }
+  // `wss` is the AgentBay session link: the kernel still listens on loopback
+  // inside the session, and the control plane reaches it through the link and
+  // the session bridge (deploy/runtime-dsh/evimed-session-bridge.mjs). Each
+  // provider has exactly one transport. A Docker runtime asked to use `wss` is
+  // refused by name; an AgentBay runtime is always reached over its links, and
+  // a `unix` beside it is accepted because the compose files hand the Docker
+  // value to every service that builds a launch plan — the controller and the
+  // receipt scheduler keep running Docker runtimes on this host — so the switch
+  // is the provider alone.
+  const runtimeTransportSetting =
+    overrides.runtimeTransport ?? process.env.OPEN_SCIENCE_RUNTIME_TRANSPORT ?? (runtimeProvider === "agentbay" ? "wss" : "unix");
+  if (!["unix", "wss"].includes(runtimeTransportSetting)) {
+    throw new Error(`OPEN_SCIENCE_RUNTIME_TRANSPORT must be "unix" or "wss", got "${runtimeTransportSetting}".`);
+  }
+  if (runtimeProvider === "docker" && runtimeTransportSetting === "wss") {
+    throw new Error(`OPEN_SCIENCE_RUNTIME_TRANSPORT "wss" does not fit OPEN_SCIENCE_RUNTIME_PROVIDER "docker": a Docker runtime is reached over its unix socket; "wss" is the AgentBay provider's link.`);
+  }
+  const runtimeTransport = runtimeProvider === "agentbay" ? "wss" : runtimeTransportSetting;
   const backupDir = overrides.backupDir ?? process.env.OPEN_SCIENCE_BACKUP_DIR ?? "";
 
   return {
@@ -704,7 +724,9 @@ export function loadConfig(overrides = {}) {
         process.env.OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS_PER_PROJECT ??
         8,
     ),
-    maxRunningRuntimes: Number(overrides.maxRunningRuntimes ?? process.env.OPEN_SCIENCE_MAX_RUNNING_RUNTIMES ?? 8),
+    // rt: an AgentBay session costs this host nothing, so its provider's
+    // default is the plan's 100 (Pro allows 200 sessions); Docker keeps 8.
+    maxRunningRuntimes: Number(overrides.maxRunningRuntimes ?? process.env.OPEN_SCIENCE_MAX_RUNNING_RUNTIMES ?? (runtimeProvider === "agentbay" ? 100 : 8)),
     // Spend caps, in the price list's currency, per account. Zero means no
     // cap, which is the default: a limit nobody chose is a limit that fires at
     // the worst moment, and until the deployment has seen a month of real
@@ -725,7 +747,7 @@ export function loadConfig(overrides = {}) {
       ?? 65_536,
     ),
     maxRunningRuntimesPerUser: Number(
-      overrides.maxRunningRuntimesPerUser ?? process.env.OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER ?? 4,
+      overrides.maxRunningRuntimesPerUser ?? process.env.OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER ?? (runtimeProvider === "agentbay" ? 2 : 4),
     ),
     runtimeMode,
     dshBin,
@@ -1587,11 +1609,86 @@ export function loadConfig(overrides = {}) {
     sourceUpdatesTimeoutMs: Math.max(500, Number(
       overrides.sourceUpdatesTimeoutMs ?? process.env.OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS ?? 3_000,
     ) || 3_000),
-    // --- AgentBay (contract X3; the runtime-provider stream adds the same
-    // three keys — one block survives the merge). The key is read from its
-    // file by the control plane only; empty means AgentBay is off. ---
+    // --- rt: runtime UX (plan §3.1 #8, 2026-09-20) ---
+    // Start the runtime of the account's most recently used project in the
+    // background of a sign-in, so it is up by the time the project is opened.
+    // Off costs the reader the cold start on first open and nothing else; the
+    // idle reaper stops a warmed runtime nobody used, like any other.
+    runtimeWarmOnSignIn: overrides.runtimeWarmOnSignIn ?? boolEnv("OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN", true),
+    // --- X3: AgentBay client (shared by the rt and web streams; one block) ---
+    // The key lives in a file only the control plane reads (agentbay/client.mjs);
+    // it never reaches a runtime, a log or an error message. Empty = AgentBay off.
     agentbayApiKeyFile: String(overrides.agentbayApiKeyFile ?? process.env.OPEN_SCIENCE_AGENTBAY_API_KEY_FILE ?? "").trim(),
-    agentbayRegion: String(overrides.agentbayRegion ?? process.env.OPEN_SCIENCE_AGENTBAY_REGION ?? "cn-hangzhou").trim() || "cn-hangzhou",
+    // `cn-hangzhou` is AgentBay's only mainland region (2026-09); keys are
+    // region-specific.
+    agentbayRegion: String(overrides.agentbayRegion ?? process.env.OPEN_SCIENCE_AGENTBAY_REGION ?? "cn-hangzhou").trim(),
+    // Empty = the SDK's own endpoint for the region.
     agentbayEndpoint: String(overrides.agentbayEndpoint ?? process.env.OPEN_SCIENCE_AGENTBAY_ENDPOINT ?? "").trim(),
+    // --- rt: the AgentBay runtime provider (plan §3.1) ---
+    runtimeProvider,
+    // The activated custom image (`imgc-…`) the runtime sessions boot from;
+    // empty refuses every AgentBay start by name.
+    agentbayImageId: String(overrides.agentbayImageId ?? process.env.OPEN_SCIENCE_AGENTBAY_IMAGE_ID ?? "").trim(),
+    // Session lifecycle, in minutes, set on every session so the console's
+    // defaults (5 idle / 30 max) never apply. Idle 30 matches this control
+    // plane's own reaper; the reaper, not AgentBay, decides idleness while the
+    // control plane is up (it keeps the session alive), so this only releases a
+    // session the control plane lost. 240 bounds a runaway session: a deep run
+    // takes ~40 min.
+    agentbayIdleReleaseMinutes: Number(overrides.agentbayIdleReleaseMinutes ?? process.env.OPEN_SCIENCE_AGENTBAY_IDLE_RELEASE_MINUTES ?? 30),
+    agentbayMaxRuntimeMinutes: Number(overrides.agentbayMaxRuntimeMinutes ?? process.env.OPEN_SCIENCE_AGENTBAY_MAX_RUNTIME_MINUTES ?? 240),
+    // An AgentBay policy id for sessions (connection rules bound in the
+    // console); empty uses the API key's own policy.
+    agentbayPolicyId: String(overrides.agentbayPolicyId ?? process.env.OPEN_SCIENCE_AGENTBAY_POLICY_ID ?? "").trim(),
+    // The session bridge's port: AgentBay links open 30100–30199 only.
+    agentbayBridgePort: Number(overrides.agentbayBridgePort ?? process.env.OPEN_SCIENCE_AGENTBAY_BRIDGE_PORT ?? 30100),
+    // How the per-session bridge secret travels through AgentBay's link proxy:
+    // `header` (x-evimed-bridge-secret) or `path` (a /__evimed_bridge/<secret>/
+    // prefix) for a proxy that strips custom headers. The bridge accepts both;
+    // the first live bring-up decides which one survives the proxy.
+    agentbayBridgeSecretMode: String(overrides.agentbayBridgeSecretMode ?? process.env.OPEN_SCIENCE_AGENTBAY_BRIDGE_SECRET_MODE ?? "header").trim().toLowerCase(),
+    // How often the link is proven and the session's idle timer refreshed.
+    // AgentBay counts SDK calls, not link traffic, as activity; 25 s also sits
+    // under any idle cut a proxy in front of a long-lived WebSocket may apply.
+    agentbayHeartbeatMs: Number(overrides.agentbayHeartbeatMs ?? process.env.OPEN_SCIENCE_AGENTBAY_HEARTBEAT_MS ?? 25_000),
+    // The workload token a remote runtime holds (plan §3.1 #4): renewed every
+    // 300 s through the session file API, valid 900 s, so two failed renewals
+    // in a row still leave a valid token. Docker keeps its 300 s in-place
+    // rewrite (OPEN_SCIENCE_EVIMED_WORKLOAD_TOKEN_TTL_SECONDS).
+    agentbayWorkloadTokenTtlSeconds: Number(overrides.agentbayWorkloadTokenTtlSeconds ?? process.env.OPEN_SCIENCE_AGENTBAY_WORKLOAD_TOKEN_TTL_SECONDS ?? 900),
+    agentbayWorkloadTokenRefreshSeconds: Number(overrides.agentbayWorkloadTokenRefreshSeconds ?? process.env.OPEN_SCIENCE_AGENTBAY_WORKLOAD_TOKEN_REFRESH_SECONDS ?? 300),
+    // Minimum Landlock enforcement a remote runtime must report (plan §3.1 #9).
+    // `partial` is the stated fallback for a guest kernel between 5.13 and 6.9:
+    // the per-project VM is the outer boundary and DSH's write fence the inner
+    // one. No Landlock at all is never accepted: DSH's bash tool refuses to run.
+    agentbaySandboxEnforcement: String(overrides.agentbaySandboxEnforcement ?? process.env.OPEN_SCIENCE_AGENTBAY_SANDBOX_ENFORCEMENT ?? "full").trim().toLowerCase(),
+    // The in-image firewall that limits the runtime user to DNS and the
+    // gateway domain. Required by default; false leaves AgentBay's domain
+    // policy as the only egress control and records that it did.
+    agentbayFirewallRequired: overrides.agentbayFirewallRequired ?? boolEnv("OPEN_SCIENCE_AGENTBAY_FIREWALL_REQUIRED", true),
+    // How often a live session's workspace changes are mirrored back to the
+    // host copy the UI and the ledger read (the delivery gate forces one).
+    agentbaySyncIntervalMs: Number(overrides.agentbaySyncIntervalMs ?? process.env.OPEN_SCIENCE_AGENTBAY_SYNC_INTERVAL_MS ?? 15_000),
+    // The largest single file carried between the host and a session; larger
+    // ones stay where they are and are named in the runtime ledger.
+    agentbaySyncMaxFileBytes: Number(overrides.agentbaySyncMaxFileBytes ?? process.env.OPEN_SCIENCE_AGENTBAY_SYNC_MAX_FILE_BYTES ?? 256 * 1024 * 1024),
+    // Prefix of every AgentBay Context this deployment creates, so two
+    // deployments on one account cannot read each other's projects.
+    agentbayContextPrefix: String(overrides.agentbayContextPrefix ?? process.env.OPEN_SCIENCE_AGENTBAY_CONTEXT_PREFIX ?? "evimed").trim(),
+    // The public HTTPS prefix a remote runtime reaches the gateways through
+    // (plan §3.1 #5), e.g. https://evimed.example/runtime-gateway. The host
+    // nginx forwards it to this process; empty keeps every gateway internal.
+    runtimeGatewayPublicUrl: String(overrides.runtimeGatewayPublicUrl ?? process.env.OPEN_SCIENCE_RUNTIME_GATEWAY_PUBLIC_URL ?? "").trim(),
+    // Requests per minute one runtime may make through that prefix. A deep run
+    // makes ~13 model calls a minute and bursts with up to 30 children; 600
+    // leaves room for both and stops a runaway loop from starving the others.
+    runtimeGatewayRateLimitPerMinute: Number(overrides.runtimeGatewayRateLimitPerMinute ?? process.env.OPEN_SCIENCE_RUNTIME_GATEWAY_RATE_LIMIT_PER_MINUTE ?? 600),
+    // --- rt: community client bundles in the runtime image (plan §3.9) ---
+    // Selection annotation (`@changfenhuang/dsh-annotation`) and fenced
+    // Mermaid rendering (`dsh-mermaid`) in the kernel's own conversation view.
+    // Each is on by default and switched off deployment-wide by its own key —
+    // the answer when an upgrade breaks one, rather than holding the upgrade.
+    runtimeAnnotationEnabled: overrides.runtimeAnnotationEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ANNOTATION_ENABLED", true),
+    runtimeMermaidEnabled: overrides.runtimeMermaidEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED", true),
   };
 }

@@ -43,6 +43,7 @@ import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
 import { createModelGatewayHandler, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
+import { createRuntimeGatewayEntry } from "./runtimeGatewayEntry.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger } from "./usageLedger.mjs";
 import { NotificationService, runFinishedInboxItem, runFinishedNotifies } from "./notificationService.mjs";
@@ -1496,7 +1497,9 @@ export function createWebApiApp(overrides = {}) {
     readRunUsage: async (project, run) => (usageLedger
       ? runUsageFrom(await usageLedger.summaryRuns(project.userId, [run.id, run.dispatchId].filter(Boolean)), run)
       : null),
-    runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
+    // rt: asked right before the delivery gate reads a run's files, so a
+    // remote runtime's host copy is brought up to date first (plan §3.1 #4).
+    runtimeWorkspaceRoot: (project) => runtimeManager.workspaceRootForDelivery(project),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     // Which workspace a run belongs to, re-derived rather than remembered. It
     // is asked on recovery, so a verification in flight when the control plane
@@ -2350,6 +2353,9 @@ export function createWebApiApp(overrides = {}) {
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
   });
+  // rt: the same gateways at https://<domain>/runtime-gateway/… for a runtime
+  // outside this host (plan §3.1 #5).
+  const runtimeGatewayEntry = createRuntimeGatewayEntry({ config, runtimeManager });
   // Retraction and correction notices on cited sources (plan §3.9), for the
   // 「依据」 popover; off leaves the source cards without them.
   const sourceUpdates = config.sourceUpdatesEnabled === false ? null : createSourceUpdateLookup({
@@ -2575,6 +2581,21 @@ export function createWebApiApp(overrides = {}) {
     return { corrections: updated?.corrections ?? 0 };
   }
 
+  // rt: warm the most recently used project's runtime at sign-in (plan §3.1 #8).
+  // Kernel mode only: the mock runtime is the suite's fake, and a fake started
+  // on every sign-in would be a runtime no test asked for.
+  function warmAfterSignIn(userId) {
+    if (!config.runtimeWarmOnSignIn || config.runtimeMode !== "kernel") return;
+    void (async () => {
+      const user = await store.userById(String(userId));
+      if (!user) return;
+      const listed = (await store.listProjects(user)).filter((entry) => !entry.archivedAt);
+      await runtimeManager.warmMostRecent(await Promise.all(listed.map((entry) => store.requireProject(user, entry.id))));
+    })().catch(() => {
+      // isolated: a warm start is a head start, never a precondition.
+    });
+  }
+
   async function context(req, res) {
     const user = await store.ensureUser(req, res);
     const project = await store.selectedProject(req, user);
@@ -2583,6 +2604,9 @@ export function createWebApiApp(overrides = {}) {
   }
 
   async function handle(req, res) {
+    // rt: a public gateway request is answered here or rewritten to the
+    // internal gateway path the dispatch below knows (plan §3.1 #5).
+    if (runtimeGatewayEntry.matches(req) && await runtimeGatewayEntry.handle(req, res)) return;
     const requestId = requestIdFor(req);
     const pathname = routePath(req);
     const operation = operationalMetrics.start(req, pathname);
@@ -2790,6 +2814,7 @@ export function createWebApiApp(overrides = {}) {
         try {
           const user = await oidcService.callback(req, res);
           await securityAudit(config, "auth.oidc.callback", "completed", { userId: user.id });
+          warmAfterSignIn(user.id);
         } catch (err) {
           await securityAudit(config, "auth.oidc.callback", "failed", {
             code: err instanceof HttpError ? err.code : "internal_error",
@@ -2811,6 +2836,7 @@ export function createWebApiApp(overrides = {}) {
           const login = await store.login(username, password, req, res);
           await securityAudit(config, "auth.login", "completed", { username });
           sendJson(res, 200, { data: login });
+          warmAfterSignIn(login.user.id);
         } catch (err) {
           await securityAudit(config, "auth.login", "failed", {
             username,
@@ -2845,6 +2871,7 @@ export function createWebApiApp(overrides = {}) {
           const login = await store.login(username, password, req, res);
           await securityAudit(config, "auth.register", "completed", { username });
           sendJson(res, 201, { data: login });
+          warmAfterSignIn(login.user.id);
         } catch (err) {
           await securityAudit(config, "auth.register", "failed", {
             username,
@@ -2870,6 +2897,7 @@ export function createWebApiApp(overrides = {}) {
         }
         const ctx = await context(req, res);
         sendJson(res, 200, { data: { user: { id: ctx.user.id, name: ctx.user.name } } });
+        warmAfterSignIn(ctx.user.id);
         return;
       }
 
@@ -4012,6 +4040,8 @@ export function createWebApiApp(overrides = {}) {
           await assertProjectCapacity(ctx.project, full, buffer.length, config);
           await writeFileAtomicNoFollow(base, full, buffer, { mode: 0o600 });
         });
+        // rt: a running remote runtime sees the upload now (plan §3.1 #4).
+        await runtimeManager.mirrorWorkspaceUpload(ctx.project, full, buffer);
         await audit(ctx, "file.upload", "completed", {
           target: root === "base" ? `${root}:${rel}` : rel,
           bytes: buffer.length,
@@ -6427,6 +6457,15 @@ async function readinessRuntime(config, runtimeManager) {
   }
   if (config.runtimeMode !== "kernel") {
     throw readinessFailure("runtime_mode_invalid");
+  }
+  // rt: an AgentBay deployment has no container on this host and no runtime
+  // controller to ask; its provider states what it needs (plan §3.1 #1).
+  if (config.runtimeProvider === "agentbay") {
+    try {
+      return { mode: "kernel", ...(await runtimeManager.provider.readiness()), ...kernel };
+    } catch (error) {
+      throw readinessFailure(error?.code ?? "agentbay_unconfigured");
+    }
   }
   if (config.runtimeSandboxMode === "docker") {
     if (!config.runtimeContainerBin) throw readinessFailure("runtime_container_bin_missing");

@@ -1921,6 +1921,34 @@ export function warmWebRuntime(projectId: string = getWebProjectId()): void {
   });
 }
 
+/** Where the control plane says a project's runtime start is. */
+export interface WebRuntimeStartStatus {
+  running: boolean;
+  /** `docker` or `agentbay`: only a remote session has files to carry over. */
+  provider: string | null;
+  /** The moment a start under way is in; null when none is. */
+  startStage: "environment" | "sync" | "kernel" | null;
+  /** The last start of this project that was refused, while it is recent. */
+  startError: { code: string; status: number; at: string } | null;
+}
+
+/**
+ * The runtime's start status for the current project, read while a frame
+ * waits on it. The frame document is what triggers the start, and a start
+ * refused into a frame is a page whose status the shell cannot read — so the
+ * shell asks the control plane instead of inferring from a clock.
+ */
+export async function fetchWebRuntimeStatus(): Promise<WebRuntimeStartStatus> {
+  if (!hasWebApi) throw new BackendUnavailableError("runtime.status");
+  const value = await invokeWebCommand<Partial<WebRuntimeStartStatus> | null>("runtime_status");
+  return {
+    running: value?.running === true,
+    provider: typeof value?.provider === "string" ? value.provider : null,
+    startStage: value?.startStage === "environment" || value?.startStage === "sync" || value?.startStage === "kernel" ? value.startStage : null,
+    startError: value?.startError && typeof value.startError.code === "string" ? value.startError : null,
+  };
+}
+
 export async function stopWebRuntime(): Promise<void> {
   if (!hasWebApi) throw new BackendUnavailableError("runtime.stop");
   await invokeWebCommand<null>("stop_runtime");

@@ -30,6 +30,7 @@
     "pg": "8.16.3",
     "playwright-core": "1.63.0",
     "ws": "8.21.3",
+    "wuying-agentbay-sdk": "0.22.0",
     "yaml": "2.8.3"
   },
   "devDependencies": {
