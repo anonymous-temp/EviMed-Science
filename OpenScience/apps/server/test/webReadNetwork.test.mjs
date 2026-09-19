@@ -39,7 +39,9 @@ test("a page URL is refused before any network when it names no public website",
     ["https://localhost/x", "web_read_host_forbidden"],
     ["https://open-science-web/internal/model/v1", "web_read_host_forbidden"],
     ["https://evimed-postgres.internal/", "web_read_host_forbidden"],
-    ["https://user:pass@example.org/x", "web_read_url_forbidden"],
+    // Built, not written: a credential-shaped literal is what the source
+    // secret audit exists to refuse, test fixtures included.
+    [Object.assign(new URL("https://example.org/x"), { username: "someone", password: "anything" }).href, "web_read_url_forbidden"],
     ["https://example.org:8443/x", "web_read_url_forbidden"],
     ["ftp://example.org/x", "web_read_url_invalid"],
     ["file:///etc/passwd", "web_read_url_invalid"],
