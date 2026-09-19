@@ -47,6 +47,22 @@ test("memory extraction is given longer than one extraction actually takes", () 
   );
 });
 
+test("the deployment's own files do not hand the extraction a shorter budget than the code", async () => {
+  // The test above held config.mjs at 120 s while docker-compose.yml passed
+  // ${OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS:-30000} and .env.example said
+  // 30000, so production ran at 30 s and a deep run's extraction aborted with
+  // nothing remembered (2026-09-19). What the container gets is what counts.
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  const composeDefault = Number(/OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: \$\{OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS:-(\d+)\}/.exec(compose)?.[1]);
+  const exampleValue = Number(/^OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS=(\d+)$/m.exec(example)?.[1]);
+  const config = loadConfig({ rootDir: repoRoot });
+  for (const [where, value] of [["docker-compose.yml", composeDefault], [".env.example", exampleValue]]) {
+    assert.ok(Number.isFinite(value), `${where} no longer names the extraction budget; this test read nothing`);
+    assert.ok(value >= config.memoryExtractionTimeoutMs, `${where} gives the extraction ${value}ms, less than config.mjs's ${config.memoryExtractionTimeoutMs}ms`);
+  }
+});
+
 test("the retired kernel's runtime mode is refused by name, not ignored", async () => {
   // The value "opencode" meant "a real kernel in a container" back when there
   // was only one. A deployment still setting it is configuring something this
