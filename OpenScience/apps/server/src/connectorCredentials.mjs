@@ -280,6 +280,18 @@ function assertChannelConnector(connector) {
 export const CONNECTOR_CREDENTIAL_GATEWAY_PATH = "/internal/connectors/v1/credential";
 
 /**
+ * The connectors a specialist job may be handed a credential for: what the
+ * adapters actually ask for (`_JOB_CONNECTOR_ENV` in the specialist adapter's
+ * service.py — OpenGWAS for the MR engine, nothing else). Any other connector's
+ * credential is injected by the public-source gateway server-side and never
+ * leaves the control plane. Found 2026-09-20 in the release's security review:
+ * answering every connector let any active runtime token read the deployment's
+ * licensed keys (UMLS, OMIM, NCBI, …) — a runtime's token is a file the run
+ * can print.
+ */
+export const JOB_SCOPED_CONNECTORS = Object.freeze(new Set(["opengwas"]));
+
+/**
  * The credential a specialist adapter should use for one job, resolved for
  * the workload that asked.
  *
@@ -304,6 +316,9 @@ export function createConnectorCredentialGatewayHandler({ runtimeManager, store 
       const connector = url.searchParams.get("connector") ?? "";
       if (!connectorDeploymentSource(connector)) {
         throw new HttpError(400, "connector_unknown", "The connector is not one a credential can be held for.");
+      }
+      if (!JOB_SCOPED_CONNECTORS.has(connector)) {
+        throw new HttpError(403, "connector_not_job_scoped", "This connector's credential is used by the gateway, not handed to a job.");
       }
       const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
       let identity;

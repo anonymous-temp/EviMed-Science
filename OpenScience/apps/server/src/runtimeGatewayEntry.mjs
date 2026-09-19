@@ -38,7 +38,13 @@ export const RUNTIME_GATEWAY_PREFIX = "/runtime-gateway/";
 
 /** The gateways reachable through the prefix; each name is its internal
  *  path's own (`/internal/<name>/…`), so the mapping is the name. */
-export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "connectors", "geo-probe", "kb"]);
+/*
+ * `connectors` is deliberately absent: the connector-credential gateway serves
+ * a specialist adapter inside this host (connectorCredentials.mjs), never a
+ * runtime, and a credential endpoint reachable from the internet with a token
+ * the run can print is what the 2026-09-20 security review found here.
+ */
+export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb"]);
 
 export const RUNTIME_GATEWAY_SPECIALIST = "specialist";
 
@@ -68,7 +74,6 @@ export function publicRuntimeGatewayUrls(config) {
     revision: revisionGatewayProviderUrl(config) ? `${base}/revisions/v1/authorize` : "",
     geoProbe: String(config.geoProbeUrl ?? "").trim() ? `${base}/geo-probe/v1` : "",
     kbSearch: kbSearchGatewayProviderUrl(config) ? `${base}/kb/v1/search` : "",
-    connectors: `${base}/connectors/v1`,
     adapters,
   };
 }
@@ -82,6 +87,16 @@ export function publicRuntimeGatewayUrls(config) {
 export function resolveRuntimeGatewayPath(rawUrl) {
   const url = String(rawUrl ?? "");
   if (!url.startsWith(RUNTIME_GATEWAY_PREFIX)) return null;
+  // The server's own router decodes percent-escapes and backslashes before it
+  // resolves a path, so `%2e%2e`, `.%2e` and `\` escaped the literal `..` check
+  // below and reached other /internal/ handlers and /api/ routes (security
+  // review, 2026-09-20). A gateway path is plain: any escape of a dot, a slash
+  // or a backslash, a raw backslash, or a dot segment is refused outright.
+  const pathPart = url.split("?")[0];
+  if (/%(?:2e|2f|5c)/i.test(pathPart) || pathPart.includes("\\")) return null;
+  let decoded;
+  try { decoded = decodeURIComponent(pathPart); } catch { return null; }
+  if (decoded.split("/").some((segment) => segment === "." || segment === "..")) return null;
   const rest = url.slice(RUNTIME_GATEWAY_PREFIX.length);
   const cut = rest.search(/[/?]/);
   const name = cut < 0 ? rest : rest.slice(0, cut);
@@ -101,6 +116,11 @@ export function resolveRuntimeGatewayPath(rawUrl) {
 export function createRuntimeGatewayEntry({ config, runtimeManager }) {
   /** Requests per runtime in the current minute. */
   const windows = new Map();
+  // Only a deployment whose runtimes live outside this host has a use for a
+  // public way in, and only once it has said where that is. A Docker
+  // deployment — production until the AgentBay switch — keeps these gateways
+  // on the internal network alone, as before the entry existed.
+  const enabled = String(config.runtimeProvider ?? "docker") === "agentbay" && Boolean(publicRuntimeGatewayUrls(config));
 
   /** The active runtime a request's token belongs to, or a refusal. */
   async function identify(req) {
@@ -185,6 +205,7 @@ export function createRuntimeGatewayEntry({ config, runtimeManager }) {
      */
     async handle(req, res) {
       try {
+        if (!enabled) throw new HttpError(404, "runtime_gateway_not_found", "No runtime gateway at that address.");
         const resolved = resolveRuntimeGatewayPath(req.url);
         if (!resolved) throw new HttpError(404, "runtime_gateway_not_found", "No runtime gateway at that address.");
         admit(await identify(req));

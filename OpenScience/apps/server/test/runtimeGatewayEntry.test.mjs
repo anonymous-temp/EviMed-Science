@@ -34,8 +34,11 @@ function listen(server) {
  * rewritten request is answered with the path it was rewritten to.
  * @param {import("node:test").TestContext} t @param {Record<string, any>} config
  */
+/** An AgentBay deployment with its public prefix: the only kind the entry answers for. */
+const AGENTBAY = { runtimeProvider: "agentbay", runtimeGatewayPublicUrl: "https://evimed.example/runtime-gateway" };
+
 async function entryServer(t, config) {
-  const entry = createRuntimeGatewayEntry({ config, runtimeManager });
+  const entry = createRuntimeGatewayEntry({ config: { ...AGENTBAY, ...config }, runtimeManager });
   const server = http.createServer(async (req, res) => {
     if (entry.matches(req) && await entry.handle(req, res)) return;
     res.writeHead(200, { "content-type": "application/json" });
@@ -61,7 +64,33 @@ test("a public gateway path maps to the gateway's own internal path, and nothing
     "/runtime-gateway/specialist/",
     "/internal/model/v1/chat/completions",
     "/api/runtime-gateway/model/v1",
+    "/runtime-gateway/connectors/v1/credential?connector=umls",
+    // What the server's router decodes before it resolves: each reached
+    // another handler through a literal-only `..` check (review, 2026-09-20).
+    "/runtime-gateway/model/%2e%2e/usage/v1/engine",
+    "/runtime-gateway/model/.%2E/usage/v1/engine",
+    "/runtime-gateway/model/x/..\\..\\usage/v1/engine",
+    "/runtime-gateway/kb/%2e%2e/%2e%2e/api/me",
+    "/runtime-gateway/specialist/meta/%2e%2e/x",
+    "/runtime-gateway/model%2fv1",
   ]) assert.equal(resolveRuntimeGatewayPath(refused), null, refused);
+});
+
+test("a Docker deployment, or one without a public prefix, has no public gateway entry", async (t) => {
+  for (const config of [{ runtimeProvider: "docker" }, { runtimeProvider: "agentbay", runtimeGatewayPublicUrl: "" }]) {
+    const entry = createRuntimeGatewayEntry({ config: { runtimeGatewayRateLimitPerMinute: 600, ...config }, runtimeManager });
+    const server = http.createServer(async (req, res) => {
+      if (entry.matches(req) && await entry.handle(req, res)) return;
+      res.writeHead(200).end("dispatched");
+    });
+    const port = await listen(server);
+    t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(() => resolve(undefined)); }));
+    const answer = await fetch(`http://127.0.0.1:${port}/runtime-gateway/model/v1/chat/completions`, {
+      method: "POST", headers: { authorization: "Bearer model-alice" },
+    });
+    assert.equal(answer.status, 404, JSON.stringify(config));
+    assert.equal((await answer.json()).code, "runtime_gateway_not_found");
+  }
 });
 
 test("a remote runtime is offered exactly the gateways a local one is, at the public prefix", () => {

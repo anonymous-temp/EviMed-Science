@@ -137,8 +137,12 @@ test("an adapter gets the credential its workload's user should run with, and no
   assert.equal(alice.status, 200);
   assert.deepEqual((await alice.json()).data, { connector: "opengwas", source: "user", value: jwt(future) });
   assert.equal(alice.headers.get("cache-control"), "no-store");
+  // Only what an adapter job needs leaves the control plane: a runtime token is
+  // a file the run can print, so a deployment's licensed keys stay with the
+  // gateway that injects them (security review, 2026-09-20).
   const deployment = await ask("umls", "bob-workload");
-  assert.deepEqual((await deployment.json()).data, { connector: "umls", source: "deployment", value: "deployment-umls" });
+  assert.equal(deployment.status, 403);
+  assert.equal((await deployment.json()).code, "connector_not_job_scoped");
   assert.equal((await ask("opengwas", "bob-workload")).status, 404);
   assert.equal((await ask("opengwas", "nobody")).status, 401);
   assert.equal((await ask("opengwas")).status, 401);
