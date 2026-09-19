@@ -24,7 +24,8 @@ and the browser-side kernel client. See `README.md`, `docs/PRD.md`, and
 `docs/TECHNICAL_DESIGN.md`.
 
 Stack: **React + TypeScript + Vite**, Tailwind (design-token CSS variables; hand-built components + cmdk + lucide; only one Radix package remains: `react-popover`),
-**DeepSeek Harness** as the agent kernel, one per project runtime container, reached
+**DeepSeek Harness** as the agent kernel, one per project runtime (a Docker container on the
+host, or an AgentBay session with `OPEN_SCIENCE_RUNTIME_PROVIDER=agentbay`), reached
 only by the control plane (never by a browser),
 per-project workspace + JSONL provenance.
 
