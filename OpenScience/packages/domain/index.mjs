@@ -246,10 +246,12 @@ export {
   matchedHighRiskEntities,
 } from './src/safetyRules.mjs'
 
-// capsule — 17 exports
+// capsule — 19 exports
 export {
   CAPSULE_ACTIVATION_MODES,
   CAPSULE_ENCRYPTION_SCHEME,
+  CAPSULE_LEGACY_ACTIVATION_MODES,
+  capsuleActivationMode,
   CAPSULE_FACT_KINDS,
   CAPSULE_FACT_ORIGINS,
   CAPSULE_FACT_STATES,

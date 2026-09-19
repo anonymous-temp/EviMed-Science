@@ -85,3 +85,15 @@ it("waits for the initial entry list before accepting additions", async () => {
   await userEvent.type(screen.getByLabelText("新增条目"), "保留新写入条目");
   expect(screen.getByRole("button", { name: "保存条目" })).toBeEnabled();
 });
+
+it("offers the two ways a capsule is actually used, and not the third that behaved like the second", async () => {
+  // 合并参考 was never told apart from 参考胶囊 on the server (2026-09-19 plan §3.3 #4).
+  vi.mocked(api.activateCapsule).mockResolvedValue({});
+  render(<CapsulesPage />);
+  const select = await screen.findByLabelText("使用方式");
+  const options = [...(select as HTMLSelectElement).options].map((option) => [option.value, option.textContent]);
+  expect(options).toEqual([["own", "主要胶囊"], ["guest", "参考胶囊"]]);
+  await userEvent.selectOptions(select, "guest");
+  await userEvent.click(screen.getByRole("button", { name: "用于当前项目" }));
+  await waitFor(() => expect(api.activateCapsule).toHaveBeenCalledWith(capsule.id, "guest"));
+});

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { CAPSULE_ACTIVATION_MODES, CAPSULE_FACT_KINDS, CAPSULE_FACT_ORIGINS, CAPSULE_FACT_STATES, CAPSULE_LAYERS } from "@evimed/domain";
+import { CAPSULE_FACT_KINDS, CAPSULE_FACT_ORIGINS, CAPSULE_FACT_STATES, CAPSULE_LAYERS, capsuleActivationMode } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 
@@ -120,16 +120,25 @@ export class CapsuleService {
     return this.documents.put(userId, "fact", entryId, payload, { expectedRevision: input.expectedRevision });
   }
 
-  /** @param {string} userId @param {string|null} projectId */
+  /** The active capsules for a scope. A stored `blend` — the retired third
+   *  mode, never told apart from `guest` by anything — reads as `guest`, and
+   *  so does a mode this build does not know: a reference contributes methods
+   *  and standards, never an identity, which is the safe reading of an unknown.
+   *  @param {string} userId @param {string|null} projectId */
   async active(userId, projectId = null) {
     const record = await this.documents.get(userId, "preferences", activationKey(projectId));
-    return { record, items: record?.payload.items ?? [] };
+    const items = (record?.payload.items ?? []).map((/** @type {any} */ item) => ({
+      ...item, mode: capsuleActivationMode(item?.mode) ?? "guest",
+    }));
+    return { record, items };
   }
 
   /** @param {string} userId @param {string} capsuleId @param {{ mode?: string, projectId?: string|null }} options */
-  async activate(userId, capsuleId, { mode = "own", projectId = null } = {}) {
+  async activate(userId, capsuleId, { mode: requested = "own", projectId = null } = {}) {
     await this.get(userId, capsuleId);
-    member(mode, CAPSULE_ACTIVATION_MODES, "activation mode");
+    // `blend` is accepted and stored as what it always meant.
+    const mode = capsuleActivationMode(requested);
+    if (!mode) throw new HttpError(400, "capsule_payload_invalid", "Invalid activation mode.");
     for (let attempt = 0; attempt < 3; attempt++) {
       const current = await this.active(userId, projectId);
       const items = mode === "own" ? [{ capsuleId, mode }]
@@ -224,7 +233,7 @@ export class CapsuleService {
    * capsules — what the resident profile renders (`capsuleProfile.mjs`).
    *
    * "Own" is the predicate `note()` already uses: activated as `own` and not
-   * imported. A guest or blend activation carries someone else's methods and
+   * imported. A guest (reference) activation carries someone else's methods and
    * standards and, by design, never their identity, so its entries stay one
    * recall away instead of being presented as who this researcher is.
    *
