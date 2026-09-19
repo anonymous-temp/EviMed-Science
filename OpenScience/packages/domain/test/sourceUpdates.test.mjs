@@ -26,10 +26,10 @@ test('the notice itself is not flagged as retracted: it is what updates, not wha
 })
 
 test('a batch answer reads per work, and a work with no notices has none', () => {
-  const byDoi = new Map(recorded.batch.map((work) => [doiOf(work.DOI), sourceUpdatesFromCrossref(work)]))
+  const byDoi = new Map(recorded.batch.map((/** @type {any} */ work) => [doiOf(work.DOI), sourceUpdatesFromCrossref(work)]))
   assert.equal(byDoi.get('10.1016/s0140-6736(97)11096-0')[0].kind, 'retraction')
   assert.deepEqual(byDoi.get('10.1056/nejmoa2204233'), [])
-  assert.deepEqual(byDoi.get('10.1088/1361-6595/aaebdb').map((update) => [update.kind, update.source]), [['correction', 'publisher']])
+  assert.deepEqual(byDoi.get('10.1088/1361-6595/aaebdb').map((/** @type {any} */ update) => [update.kind, update.source]), [['correction', 'publisher']])
 })
 
 test('only the closed set of update types is shown, and one notice recorded twice is one notice', () => {
@@ -53,7 +53,7 @@ test('only the closed set of update types is shown, and one notice recorded twic
 })
 
 test('every kind has a Chinese label and a weight', () => {
-  for (const kind of SOURCE_UPDATE_KINDS) {
+  for (const kind of /** @type {ReadonlyArray<keyof typeof SOURCE_UPDATE_LABELS_ZH>} */ (SOURCE_UPDATE_KINDS)) {
     assert.ok(SOURCE_UPDATE_LABELS_ZH[kind], kind)
     assert.ok(['withdrawn', 'concern', 'corrected'].includes(SOURCE_UPDATE_WEIGHT[kind]), kind)
   }
