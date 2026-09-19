@@ -1324,6 +1324,9 @@ export function createWebApiApp(overrides = {}) {
     },
     // The researcher's own stop, relayed through the runtime proxy.
     onSessionAbort: (project, sessionId) => agentRuns?.cancelSession(project, sessionId, { by: "user" }),
+    // A runtime whose project still has a run in the ledger never yields its
+    // slot to another project: the stop would close that run as cancelled.
+    hasRunningRuns: async (project) => Boolean(agentRuns) && (await agentRuns.list(project)).some((run) => run.status === "running"),
     onRuntimeStart: (project, runtime) => {
       runtimeEventPump.attach(project, runtime);
       if (!runtimeManager.pluginOverrides.has(runtimeManager.key(project))) {

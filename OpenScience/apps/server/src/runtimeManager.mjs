@@ -2641,6 +2641,7 @@ export class RuntimeManager {
     onRuntimeStopping = async () => {},
     onSessionAbort = async () => {},
     onRuntimeStart = () => {},
+    hasRunningRuns = async () => false,
   } = {}) {
     this.config = config;
     /** @type {any} */ this.pluginService = null;
@@ -2702,6 +2703,15 @@ export class RuntimeManager {
     this.onSessionAbort = onSessionAbort;
     /** @type {(project: any, runtime: any) => any} */
     this.onRuntimeStart = onRuntimeStart;
+    /**
+     * Whether the run ledger still holds a `running` run of this project.
+     * Asked before a runtime yields its slot (`makeRoomFor`): a stop closes
+     * such a run as cancelled, and between the kernel going idle and the
+     * monitor finishing a run there is a window in which the kernel alone
+     * would call a run that just delivered fair game.
+     * @type {(project: Record<string, any>) => Promise<boolean>}
+     */
+    this.hasRunningRuns = hasRunningRuns;
     this.lastOrphanCleanup = null;
   }
 
@@ -4279,6 +4289,9 @@ export class RuntimeManager {
         continue;
       }
       if (busy || this.runtimes.get(key) !== runtime || (this.runtimeActivity.get(key)?.activeProxies ?? 0) > 0) continue;
+      // The ledger's view too: a run it still calls running is closed as
+      // cancelled by the stop, whatever the kernel says (see `hasRunningRuns`).
+      if (await this.hasRunningRuns(runtime.project).catch(() => true)) continue;
       await this.stopIdleRuntime(runtime.project, { event: "yielded" }).catch(() => {});
       if (!full()) return;
     }

@@ -1618,6 +1618,38 @@ test("RuntimeManager enforces per-user runtime capacity across projects", async 
   await manager.closeAll();
 });
 
+test("an idle runtime yields its slot to the same user's next project, unless the ledger still runs something there", async () => {
+  // A stop closes a ledger run that is still `running` as cancelled, and
+  // between the kernel going idle and the monitor finishing a run the kernel
+  // alone would call a run that just delivered idle.
+  for (const [ledgerRunning, yields] of [[false, true], [true, false]]) {
+    const manager = new RuntimeManager({
+      runtimeMode: "kernel",
+      runtimeSandboxMode: "docker",
+      maxRunningRuntimes: 10,
+      maxRunningRuntimesPerUser: 1,
+    }, { hasRunningRuns: async () => ledgerRunning });
+    manager.startKernel = async (currentProject) => ({ ...fakeRuntime(`${currentProject.userId}-${currentProject.id}`, currentProject.workspaceDir), project: currentProject });
+    manager.runtimeBusy = async () => false;
+    const stopped = [];
+    manager.stopIdleRuntime = async (stopping, options) => {
+      stopped.push({ id: stopping.id, event: options?.event });
+      manager.runtimes.delete(manager.key(stopping));
+    };
+    const projectB = { ...project, id: "paper2", workspaceDir: "/srv/open-science/users/alice/projects/paper2/workspace" };
+    await manager.start(project);
+    if (yields) {
+      const started = await manager.start(projectB);
+      assert.equal(started.url, "http://127.0.0.1/alice-paper2");
+      assert.deepEqual(stopped, [{ id: "paper1", event: "yielded" }]);
+    } else {
+      await assert.rejects(() => manager.start(projectB), (err) => err.code === "runtime_limit_exceeded");
+      assert.deepEqual(stopped, [], "a project with a running run keeps its runtime");
+    }
+    await manager.closeAll();
+  }
+});
+
 test("the kernel names the entrypoint, the socket and the authority — and nothing about the isolation", () => {
   // This used to build two plans, one per kernel, and assert that only the
   // entrypoint differed. There is one kernel, so the comparison has no second
