@@ -546,6 +546,26 @@ export function recordProvenance(row, evidence, revisions) {
   };
 }
 
+/**
+ * A record as the read-only views need it — the timeline, the change list,
+ * a conversation's background — and no more: every column but the texts,
+ * each text cut to its first thousand characters (the views show two hundred),
+ * each observation to its source and time, each revision without its full
+ * texts. A record may hold 100,000 characters of value, 64 observations and
+ * 32 revisions of that size, and these views read up to hundreds of records
+ * per request (security review 2026-09-20). `publicRecord` reads the result
+ * as it reads a whole row.
+ */
+const LIGHT_RECORD_COLUMNS = `user_id, id, scope, scope_id, kind, key, left(value, 1000) AS value, left(summary, 1000) AS summary,
+  origin, status, confidence, importance, sensitive, version, created_at, updated_at, last_confirmed_at, expires_at,
+  superseded_by, invalid_since,
+  (SELECT coalesce(jsonb_agg(jsonb_build_object('sourceRef', item->'sourceRef', 'observedAt', item->'observedAt') ORDER BY position), '[]'::jsonb)
+     FROM jsonb_array_elements(evidence) WITH ORDINALITY AS observed(item, position)) AS evidence,
+  (SELECT coalesce(jsonb_agg(jsonb_build_object('version', item->'version', 'status', item->'status', 'changedAt', item->'changedAt',
+     'reason', item->'reason', 'by', item->'by', 'runId', item->'runId',
+     'value', left(item->>'value', 1000), 'summary', left(item->>'summary', 1000)) ORDER BY position), '[]'::jsonb)
+     FROM jsonb_array_elements(revisions) WITH ORDINALITY AS revised(item, position)) AS revisions`;
+
 function publicRecord(row) {
   const evidence = Array.isArray(row.evidence) ? row.evidence : [];
   const revisions = Array.isArray(row.revisions) ? row.revisions : [];
@@ -830,6 +850,38 @@ export class ResearchMemoryStore {
   }
 
   /**
+   * The memories a conversation was handed, as light records, in one read:
+   * at most `limit` of the ids named, the rest left out. Ids that are not
+   * record ids, or no longer records, are simply absent.
+   * @param {string} userId @param {readonly unknown[]} ids @param {{ limit?: number }} [options]
+   */
+  async recordSummaries(userId, ids, { limit = 500 } = {}) {
+    const owner = assertUserId(userId);
+    const wanted = [...new Set(ids.map(String))].filter((id) => recordIdPattern.test(id)).slice(0, Math.max(1, Math.min(1000, Number(limit) || 500)));
+    if (wanted.length === 0) return [];
+    const result = await this.#query(`SELECT ${LIGHT_RECORD_COLUMNS} FROM evimed_memory.records WHERE user_id=$1 AND id=ANY($2::text[])`,
+      [owner, wanted]);
+    return result.rows.map(publicRecord);
+  }
+
+  /**
+   * What the timeline derives its memory events from: the account's records
+   * a project sees (its own and the account's), light, the most recently
+   * changed `limit` of them. Run summaries are the run's own events, so they
+   * do not spend the bound. The timeline used to read every record whole
+   * through `profile` — up to 100,000 of them — on every page.
+   * @param {string} userId @param {{ projectId?: string | null, limit?: number }} [options]
+   */
+  async timelineRecords(userId, { projectId = null, limit = 1000 } = {}) {
+    const owner = assertUserId(userId);
+    const bound = Math.max(1, Math.min(5000, Number(limit) || 1000));
+    const result = await this.#query(`SELECT ${LIGHT_RECORD_COLUMNS} FROM evimed_memory.records
+      WHERE user_id=$1 AND kind <> 'run_summary' AND (scope='user' OR (scope='project' AND scope_id=$2))
+      ORDER BY updated_at DESC, id DESC LIMIT $3`, [owner, String(projectId ?? ""), bound]);
+    return result.rows.map(publicRecord);
+  }
+
+  /**
    * Create or atomically update the memory that owns a canonical key.
    *
    * The canonical key — owner, scope, scope id, kind, key — is the identity, not
@@ -1079,7 +1131,7 @@ export class ResearchMemoryStore {
     if (!from) throw new HttpError(400, "memory_payload_invalid", "since is invalid.");
     const session = sessionId == null || sessionId === "" ? null : String(sessionId);
     if (session && !/^[A-Za-z0-9_-]{1,160}$/.test(session)) throw new HttpError(400, "memory_payload_invalid", "sessionId is invalid.");
-    const result = await this.#query(`SELECT * FROM evimed_memory.records
+    const result = await this.#query(`SELECT ${LIGHT_RECORD_COLUMNS} FROM evimed_memory.records
       WHERE user_id=$1 AND updated_at >= $2 AND kind <> 'run_summary'
       ORDER BY updated_at DESC, id DESC LIMIT 200`, [owner, from]);
     const rows = result.rows.map(publicRecord);

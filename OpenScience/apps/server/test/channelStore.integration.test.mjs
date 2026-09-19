@@ -80,6 +80,31 @@ test("a device's push token moves with the device, and the previous owner's copy
   await assert.rejects(app.bind(owner, { platform: "ios", token: "has space" }), { code: "push_token_invalid" });
 });
 
+test("removing a device takes an app binding only: another channel's binding named by its id stays", options, async () => {
+  // Security review 2026-09-20: DELETE /api/im/app/push-tokens/:id deleted
+  // whatever binding of the account the id named, then answered 404 when it
+  // was not a device — a Feishu bot went with it.
+  const { ImService } = await import("../src/imService.mjs");
+  const { binding: bot } = await store.replaceBinding(owner, "feishu", { externalId: "ou_keep", credentialRef: "channel.feishu",
+    metadata: { appId: `cli_${randomUUID().replaceAll("-", "").slice(0, 16)}`, tenantBrand: "feishu" } });
+  const app = createAppChannel({ store, credentials });
+  const device = await app.bind(owner, { platform: "android", token: `push-${randomUUID()}` });
+  const tablet = await app.bind(owner, { platform: "android", token: `push-${randomUUID()}` });
+  const service = new ImService({ config: { imEnabled: true, channelEnabled: { app: true } }, database, credentials, notifications: null,
+    users: {}, agentRuns: {}, runtimeManager: {}, dispatchRun: async () => {}, steerRun: async () => {},
+    store, classifier: { classify: async () => ({}) }, write: () => {} });
+  try {
+    await assert.rejects(service.removePushToken({ id: owner }, bot.id), { status: 404, code: "push_token_not_found" });
+    assert.equal((await store.bindingById(bot.id))?.channel, "feishu", "the bot is still bound");
+    await assert.rejects(service.removePushToken({ id: other }, device.id), { code: "push_token_not_found" }, "and never another account's device");
+    assert.deepEqual(await service.removePushToken({ id: owner }, device.id), { removed: true });
+    assert.equal(await store.bindingById(device.id), null);
+    assert.equal(await store.deleteBinding(owner, bot.id, { channel: "app" }), null);
+    assert.equal((await store.deleteBinding(owner, tablet.id, { channel: "app" }))?.id, tablet.id);
+    assert.equal((await store.bindingById(bot.id))?.channel, "feishu");
+  } finally { await service.close(); }
+});
+
 test("chats remember a project, lose it when the project goes, and keep one session per project", options, async () => {
   const [binding] = await store.bindingsFor(owner, "feishu");
   const chat = await store.ensureChat({ bindingId: binding.id, chatId: "oc_group", userId: owner, chatType: "group" });
@@ -131,6 +156,42 @@ test("an event whose attempts ran out is closed rather than claimed forever", op
   assert.deepEqual(await store.claimInbound({ owner: "worker-a", leaseMs: 60_000, maxAttempts: 2 }), []);
   const closed = await store.closeExhaustedInbound(2);
   assert.ok(closed.some((event) => event.eventKey === eventKey && event.status === "failed"));
+});
+
+test("claims are fair: one message per chat at a time, the chat served least recently first, each chat in arrival order", options, async () => {
+  // Security review 2026-09-20: the claim was first come across every account,
+  // so one chat's burst — each message an intent call of up to 30 s — was
+  // handled ahead of every other account's messages.
+  const [busy] = await store.bindingsFor(owner, "feishu");
+  const { binding: quiet } = await store.replaceBinding(other, "feishu", { externalId: "ou_quiet", credentialRef: "channel.feishu",
+    metadata: { appId: `cli_${randomUUID().replaceAll("-", "").slice(0, 16)}`, tenantBrand: "feishu" } });
+  // Apart by a few milliseconds: arrival order is `received_at`, kept to the millisecond.
+  const record = async (/** @type {any} */ binding, /** @type {string} */ userId, /** @type {string} */ label) => {
+    await new Promise((resolve) => setTimeout(resolve, 3));
+    return (await store.recordInbound({ channel: "feishu", eventKey: `ev_fair_${randomUUID()}`, bindingId: binding.id, userId, payload: { label } })).event;
+  };
+  const claim = async (/** @type {number} */ limit) => (await store.claimInbound({ owner: "worker-a", leaseMs: 60_000, limit }))
+    .map((event) => event.payload.label).sort();
+  const finish = async (/** @type {string} */ label) => {
+    const { rows } = await database.query("SELECT id FROM evimed_channels.inbound_events WHERE payload->>'label'=$1", [label]);
+    assert.equal(await store.finishInbound(rows[0].id, "worker-a", { status: "done" }), true);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  };
+  for (const label of ["a0", "a1", "a2", "a3"]) await record(busy, owner, label);
+  await record(quiet, other, "b0");
+  assert.deepEqual(await claim(5), ["a0", "b0"], "one of the burst, and the other chat's message beside it");
+  assert.deepEqual(await claim(5), [], "a chat with a message in hand gets no second");
+  await finish("a0");
+  await finish("b0");
+  await record(quiet, other, "b1");
+  assert.deepEqual(await claim(1), ["a1"], "the burst's chat was served longer ago");
+  await finish("a1");
+  assert.deepEqual(await claim(1), ["b1"], "now the other chat goes first, though a2 arrived before b1");
+  await finish("b1");
+  assert.deepEqual(await claim(5), ["a2"], "a chat's own messages in the order they came");
+  await finish("a2");
+  assert.deepEqual(await claim(5), ["a3"]);
+  await finish("a3");
 });
 
 test("a task is one per run, leased, checkpointed by its holder and settled", options, async () => {

@@ -112,6 +112,8 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_AUTH_RATE_LIMIT_MAX_REQUESTS: ["eq", "authRateLimitMaxRequests", "rate limit"],
   OPEN_SCIENCE_COMMAND_RATE_LIMIT_WINDOW_MS: ["eq", "commandRateLimitWindowMs", "rate limit"],
   OPEN_SCIENCE_COMMAND_RATE_LIMIT_MAX_REQUESTS: ["eq", "commandRateLimitMaxRequests", "rate limit"],
+  // sec2 (2026-09-20): IM inbound fairness.
+  OPEN_SCIENCE_IM_INBOUND_PER_MINUTE: ["eq", "imInboundPerMinute", "rate limit"],
   // Capacity on a host shared with other products: more for one tenant is
   // less for the rest, so neither direction is the safe one.
   OPEN_SCIENCE_RUNTIME_CPU_LIMIT: ["eq", "runtimeCpuLimit", "capacity"],

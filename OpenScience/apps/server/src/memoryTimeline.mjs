@@ -26,6 +26,10 @@ export const MEMORY_TIMELINE_DENSITY_DAYS = 365;
 
 const DEFAULT_TIME_ZONE = "Asia/Shanghai";
 const MAX_PAGE = 100;
+/** How many memories, the most recently changed, the timeline derives events
+ *  from. It read every memory of the account whole on every page — up to
+ *  100,000 rows of up to 100,000 characters each (security review 2026-09-20). */
+export const MEMORY_TIMELINE_RECORDS = 1000;
 
 /** @param {unknown} value @param {number} [max] */
 function excerpt(value, max = 200) {
@@ -179,9 +183,10 @@ function timeZoneOrDefault(value) {
 
 /**
  * One page of the timeline, newest first, and the density band over the last
- * year. Each source is read whole and bounded by its own store's limits; a
- * source that cannot be read leaves its events out and is named in `missing`
- * rather than failing the page.
+ * year. Each source is read bounded: the memories the account changed most
+ * recently (`MEMORY_TIMELINE_RECORDS`, read light), the project's runs, the
+ * newest methods and feedback. A source that cannot be read leaves its events
+ * out and is named in `missing` rather than failing the page.
  *
  * @param {{ researchMemory: any, agentRuns?: any, feedbackEvents?: any, learning?: any, now?: () => Date }} sources
  * @param {{ id: string }} user @param {any} project
@@ -199,7 +204,7 @@ export async function memoryTimeline({ researchMemory, agentRuns = null, feedbac
     try { return await operation(); } catch { missing.push(name); return fallback; }
   };
 
-  const records = await read("memory", async () => (await researchMemory.profile(user.id, { projectId: project.id })).records, []);
+  const records = await read("memory", () => researchMemory.timelineRecords(user.id, { projectId: project.id, limit: MEMORY_TIMELINE_RECORDS }), []);
   const byId = new Map(records.map((/** @type {any} */ record) => [record.id, record]));
   const runs = agentRuns ? await read("runs", () => agentRuns.list(project), []) : [];
   const methods = learning ? await read("methods", async () => (await learning.listMethods(user.id, { limit: 100 })).items ?? [], []) : [];

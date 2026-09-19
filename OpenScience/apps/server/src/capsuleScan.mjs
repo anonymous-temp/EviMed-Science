@@ -23,7 +23,11 @@
  *
  * Flagged entries are dropped and listed to the researcher; everything else
  * takes effect. A model that cannot be reached leaves the first two checks
- * standing and says so — the pack is not held for it.
+ * standing and says so — the pack is not held for it. What it could not judge
+ * is listed as `unchecked`: context the pack still brings, never a method
+ * mounted into a run until a later scan has judged it (`capsuleMethods.mjs`).
+ * A failed batch used to be kept like a judged one, so a model outage let an
+ * unjudged entry become a SKILL.md in every run (security review 2026-09-20).
  *
  * @module capsuleScan
  */
@@ -113,8 +117,8 @@ export class CapsuleScanner {
    * @param {{ userId: string, projectId: string }} owner the account the scan is metered to
    * @param {readonly { id: string, factKind: string, content: string }[]} entries
    * @param {{ useModel?: boolean }} [options] false when there is no project to meter it to
-   * @returns {Promise<{ kept: string[], dropped: { id: string, factKind: string, excerpt: string, source: "closed_set" | "model", code: string, reason: string }[],
-   *   model: "ok" | "unavailable" | "partial", checkedAt: string }>}
+   * @returns {Promise<{ kept: string[], unchecked: string[], dropped: { id: string, factKind: string, excerpt: string, source: "closed_set" | "model", code: string, reason: string }[],
+   *   model: "ok" | "unavailable" | "partial", checkedAt: string }>} `unchecked` is the part of `kept` no model verdict covers
    */
   async scan(owner, entries, { useModel = true } = {}) {
     /** @type {Map<string, { source: "closed_set" | "model", code: string, reason: string }>} */
@@ -124,21 +128,32 @@ export class CapsuleScanner {
       if (finding) flagged.set(entry.id, { source: "closed_set", code: finding.code, reason: finding.detail });
     }
     const judged = entries.filter((entry) => !flagged.has(entry.id));
+    /** Kept without a verdict: the model was not asked, or its batch failed. @type {Set<string>} */
+    const unchecked = new Set();
     let model = /** @type {"ok" | "unavailable" | "partial"} */ ("ok");
-    if (judged.length > 0 && (!this.modelAvailable || !useModel)) model = "unavailable";
-    else if (judged.length > 0) {
+    if (judged.length > 0 && (!this.modelAvailable || !useModel)) {
+      model = "unavailable";
+      for (const entry of judged) unchecked.add(entry.id);
+    } else if (judged.length > 0) {
       const batches = Math.ceil(judged.length / BATCH);
       let failures = 0;
       for (let start = 0; start < judged.length; start += BATCH) {
-        const verdicts = await this.#judge(owner, judged.slice(start, start + BATCH));
-        if (!verdicts) { failures += 1; continue; }
+        const batch = judged.slice(start, start + BATCH);
+        const verdicts = await this.#judge(owner, batch);
+        if (!verdicts) {
+          failures += 1;
+          for (const entry of batch) unchecked.add(entry.id);
+          continue;
+        }
         for (const [id, verdict] of verdicts) flagged.set(id, { source: "model", code: "instructs_agent", reason: verdict.reason });
       }
       if (failures > 0) model = failures === batches ? "unavailable" : "partial";
     }
     const byId = new Map(entries.map((entry) => [entry.id, entry]));
+    const kept = entries.filter((entry) => !flagged.has(entry.id)).map((entry) => entry.id);
     return {
-      kept: entries.filter((entry) => !flagged.has(entry.id)).map((entry) => entry.id),
+      kept,
+      unchecked: kept.filter((id) => unchecked.has(id)),
       dropped: [...flagged.entries()].map(([id, flag]) => ({
         id,
         factKind: String(byId.get(id)?.factKind ?? ""),

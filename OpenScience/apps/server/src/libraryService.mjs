@@ -258,6 +258,9 @@ export function libraryCapsuleEntries({ title, sourceId, understanding }) {
 }
 
 export class LibraryService {
+  /** The publication each account has running (`#exclusive`). @type {Map<string, Promise<unknown>>} */
+  #publishing = new Map();
+
   /**
    * @param {{ documents: any, sources: any, capsules?: any, libraryDir: (userId: string) => string,
    *   maxItems?: number, now?: () => Date, report?: (code: string) => void }} options
@@ -456,8 +459,14 @@ export class LibraryService {
    */
   async publishToCapsule(userId, sourceId) {
     if (!this.capsules) throw new HttpError(503, "library_unavailable", "The memory capsule is unavailable on this deployment.");
+    // Named, and the caller's, before anything is held: a well-formed id the
+    // library does not hold is refused here and never reaches the guard.
+    const named = await this.#requireEntry(userId, sourceId);
     return this.#exclusive(userId, async () => {
-      const record = await this.#requireEntry(userId, sourceId);
+      // Read again under the guard: a publication that finished since the
+      // lookup changed what this entry has published.
+      const record = await this.documents.get(userId, RECORD_KIND, named.id);
+      if (!record) throw new HttpError(404, "library_item_not_found", "This document is not in the personal library.");
       const sha256 = record.payload.sha256;
       const source = resolveSource((await this.#liveSources(userId, [sha256])).get(sha256) ?? [], record);
       if (!source) throw new HttpError(409, "library_source_removed", "No project holds this document any more, and its understanding went with the last one.");
@@ -535,14 +544,33 @@ export class LibraryService {
     return capsule;
   }
 
-  /** One publication per account at a time: two at once would create two
-   *  capsules or publish one understanding twice.
+  /**
+   * One publication per account at a time: two at once would publish one
+   * understanding twice. A second one while the first runs is refused at once
+   * (409 `library_publish_busy`), never queued.
+   *
+   * The guard holds no database connection. It was a PostgreSQL advisory lock
+   * taken inside a transaction that stayed open while the publication ran,
+   * and the publication's own reads and writes take pooled connections of
+   * their own: as many concurrent publishes as the pool has connections (ten),
+   * of any well-formed id, left every connection either waiting on the lock or
+   * holding it while waiting for a second one, and every other tenant's
+   * queries failed with "timeout exceeded when trying to connect" (security
+   * review 2026-09-20). It is this process's map because the API is one
+   * process (one `open-science-web` container); a second replica would need a
+   * lease row, not a lock held on a pooled connection.
    * @template T @param {string} userId @param {() => Promise<T>} work @returns {Promise<T>} */
   async #exclusive(userId, work) {
-    return this.database.transaction(async (/** @type {any} */ client) => {
-      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-library-publish:${userId}`]);
-      return work();
-    });
+    if (this.#publishing.has(userId)) {
+      throw new HttpError(409, "library_publish_busy", "A publication from this library is already running; try again when it finishes.");
+    }
+    const running = work();
+    this.#publishing.set(userId, running);
+    try {
+      return await running;
+    } finally {
+      this.#publishing.delete(userId);
+    }
   }
 
   /** @param {string} userId @param {unknown} sourceId */

@@ -99,6 +99,8 @@ CREATE TABLE IF NOT EXISTS evimed_channels.inbound_events (
 );
 CREATE INDEX IF NOT EXISTS channel_inbound_pending_idx ON evimed_channels.inbound_events(received_at) WHERE status='received';
 CREATE INDEX IF NOT EXISTS channel_inbound_received_idx ON evimed_channels.inbound_events(received_at);
+-- A binding's messages in hand and when it was last served, for the fair claim.
+CREATE INDEX IF NOT EXISTS channel_inbound_binding_idx ON evimed_channels.inbound_events(binding_id, processed_at);
 CREATE TABLE IF NOT EXISTS evimed_channels.tasks (
   id text PRIMARY KEY,
   binding_id text NOT NULL REFERENCES evimed_channels.bindings(id) ON DELETE CASCADE,
@@ -346,9 +348,16 @@ export class ChannelStore {
     });
   }
 
-  /** @param {string} userId @param {string} id */
-  async deleteBinding(userId, id) {
-    const { rows } = await this.query("DELETE FROM evimed_channels.bindings WHERE user_id=$1 AND id=$2 RETURNING *", [userId, id]);
+  /**
+   * One of the account's bindings, of the given channel when one is named:
+   * the channel is part of the delete, not a check after it — the app's
+   * device route once deleted a Feishu binding by id and then answered 404
+   * (security review 2026-09-20).
+   * @param {string} userId @param {string} id @param {{ channel?: string | null }} [options]
+   */
+  async deleteBinding(userId, id, { channel = null } = {}) {
+    const { rows } = await this.query(`DELETE FROM evimed_channels.bindings WHERE user_id=$1 AND id=$2
+      AND ($3::text IS NULL OR channel=$3) RETURNING *`, [userId, id, channel]);
     return bindingRecord(rows[0]);
   }
 
@@ -425,15 +434,41 @@ export class ChannelStore {
     return { inserted: rows.length === 1, event: inboundRecord(rows[0]) };
   }
 
-  /** @param {{ owner: string, leaseMs: number, limit?: number, maxAttempts?: number }} input */
+  /**
+   * Claim what is waiting, fairly: at most one message per binding, none for
+   * a binding that already has one in hand, and the binding served least
+   * recently first. The claim used to be first-come across every account, so
+   * one account's burst was handled ahead of everyone else's messages — each
+   * with a model call of up to 30 s for its intent — while theirs waited
+   * (security review 2026-09-20). Within a binding the order stays the order
+   * of arrival.
+   *
+   * Claims are serialised by a transaction lock so "one in hand per binding"
+   * holds across processes too; the claim is one statement on the lock's own
+   * connection, which waits for nothing else while holding it.
+   * @param {{ owner: string, leaseMs: number, limit?: number, maxAttempts?: number }} input
+   */
   async claimInbound({ owner, leaseMs, limit = 10, maxAttempts = 3 }) {
-    const { rows } = await this.query(`WITH due AS (
-        SELECT id FROM evimed_channels.inbound_events
-        WHERE status='received' AND attempts < $3 AND (lease_expires_at IS NULL OR lease_expires_at < clock_timestamp())
-        ORDER BY received_at, id FOR UPDATE SKIP LOCKED LIMIT $1
-      ) UPDATE evimed_channels.inbound_events e SET lease_owner=$2,
-        lease_expires_at=clock_timestamp() + ($4::integer * interval '1 millisecond'), attempts=e.attempts+1
-      FROM due WHERE e.id=due.id RETURNING e.*`, [limit, owner, maxAttempts, leaseMs]);
+    await migrateChannels(this.database);
+    const rows = await this.database.transaction(async (/** @type {any} */ client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-channels-inbound-claim'))");
+      return (await client.query(`WITH waiting AS (
+          SELECT DISTINCT ON (e.binding_id) e.id, e.binding_id, e.received_at
+          FROM evimed_channels.inbound_events e
+          WHERE e.status='received' AND e.attempts < $3 AND (e.lease_expires_at IS NULL OR e.lease_expires_at < clock_timestamp())
+            AND NOT EXISTS (SELECT 1 FROM evimed_channels.inbound_events held WHERE held.binding_id=e.binding_id
+              AND held.status='received' AND held.lease_expires_at >= clock_timestamp())
+          ORDER BY e.binding_id, e.received_at, e.id
+        ), due AS (
+          SELECT waiting.id FROM waiting
+          LEFT JOIN LATERAL (SELECT max(done.processed_at) AS served FROM evimed_channels.inbound_events done
+            WHERE done.binding_id=waiting.binding_id AND done.status<>'received') last ON true
+          ORDER BY last.served NULLS FIRST, waiting.received_at, waiting.id
+          LIMIT $1
+        ) UPDATE evimed_channels.inbound_events e SET lease_owner=$2,
+          lease_expires_at=clock_timestamp() + ($4::integer * interval '1 millisecond'), attempts=e.attempts+1
+        FROM due WHERE e.id=due.id RETURNING e.*`, [limit, owner, maxAttempts, leaseMs])).rows;
+    });
     return rows.map(inboundRecord);
   }
 

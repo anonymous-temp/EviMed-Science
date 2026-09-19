@@ -76,6 +76,35 @@ test("document pagination has bounded distinct pages and validates its vocabular
   await assert.rejects(documents.put(owner, "capsule", randomUUID(), { text: "x".repeat(300_000) }, { expectedRevision: 0 }), { code: "product_document_too_large" });
 });
 
+test("a list can read only the fields its caller shows: named keys, texts cut, the page and its cursor unchanged", options, async () => {
+  // Security review 2026-09-20: the received-capsule shelf read a hundred
+  // payloads of up to 20,000 characters per pack to show a count and a line.
+  const capsuleId = `cap_${randomUUID()}`;
+  const long = "方".repeat(5_000);
+  for (let index = 0; index < 3; index += 1) {
+    await documents.put(owner, "fact", `fields_${index}_${randomUUID()}`, { capsuleId, factKind: "method_preference", status: "approved",
+      content: `${index}${long}`, provenance: [{ type: "import", id: "x" }], transfer: { note: null } }, { expectedRevision: 0 });
+  }
+  const whole = await documents.list(owner, "fact", { limit: 2, filter: { capsuleId } });
+  const narrow = await documents.list(owner, "fact", { limit: 2, filter: { capsuleId },
+    fields: { status: true, factKind: true, content: 120, transfer: true, missing: true } });
+  assert.deepEqual(narrow.items.map((item) => [item.id, item.revision]), whole.items.map((item) => [item.id, item.revision]));
+  assert.equal(narrow.nextCursor, whole.nextCursor);
+  for (const [index, item] of narrow.items.entries()) {
+    assert.deepEqual(Object.keys(item.payload).sort(), ["content", "factKind", "missing", "status", "transfer"]);
+    assert.equal(item.payload.content, whole.items[index].payload.content.slice(0, 120));
+    assert.equal(item.payload.status, "approved");
+    assert.deepEqual(item.payload.transfer, { note: null }, "a whole field keeps what it holds");
+    assert.equal(item.payload.missing, null);
+  }
+  const next = await documents.list(owner, "fact", { limit: 2, filter: { capsuleId }, cursor: narrow.nextCursor, fields: { content: 1 } });
+  assert.equal(next.items.length, 1);
+  assert.equal(next.items[0].payload.content.length, 1);
+  for (const fields of [{}, { "bad key": true }, { content: 0 }, { content: "120" }, ["content"]]) {
+    await assert.rejects(documents.list(owner, "fact", { fields: /** @type {any} */ (fields) }), { code: "product_fields_invalid" });
+  }
+});
+
 test("job enqueue is idempotent and concurrent claims lease a job only once", options, async () => {
   const key = randomUUID();
   const a = await jobs.enqueue(owner, "ingest", { sourceId: "one" }, { idempotencyKey: key });

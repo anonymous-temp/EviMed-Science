@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 
-import { createMemoryTimelineRoutes, feedbackTimelineEvents, memoryTimeline, methodEvents, recordEvents, runEvents } from "../src/memoryTimeline.mjs";
+import { MEMORY_TIMELINE_RECORDS, createMemoryTimelineRoutes, feedbackTimelineEvents, memoryTimeline, methodEvents, recordEvents, runEvents } from "../src/memoryTimeline.mjs";
 import { sendError } from "../src/security.mjs";
 
 const user = { id: "usr_1" };
@@ -80,7 +80,7 @@ function sources({ failRuns = false } = {}) {
     record({ id: "rec_2", key: "k2", createdAt: "2026-09-10T16:30:00Z" }),
   ];
   return {
-    researchMemory: { configured: true, profile: async () => ({ records }) },
+    researchMemory: { configured: true, timelineRecords: async () => records },
     agentRuns: { list: async () => { if (failRuns) throw new Error("ledger"); return [{ id: "run_1", status: "succeeded", title: "t", finishedAt: "2026-09-05T00:00:00Z" }]; } },
     learning: { listMethods: async () => ({ items: [{ id: "mth_1", createdAt: "2026-09-08T00:00:00Z", payload: { status: "candidate", frontmatter: { name: "m" } } }] }) },
     feedbackEvents: { list: async () => ({ items: [] }) },
@@ -106,6 +106,20 @@ test("a page is newest first with a cursor, and the density band counts days in 
   const partial = await memoryTimeline(sources({ failRuns: true }), user, project, {});
   assert.deepEqual(partial.missing, ["runs"]);
   assert.equal(partial.items.length, 3);
+});
+
+test("the memory half of a page reads the most recently changed memories of the project's view, bounded", async () => {
+  // Security review 2026-09-20: every page read every memory of the account
+  // whole — up to 100,000 rows of up to 100,000 characters.
+  /** @type {any[]} */ const asked = [];
+  const source = sources();
+  source.researchMemory = { configured: true, timelineRecords: async (/** @type {string} */ userId, /** @type {any} */ options) => {
+    asked.push({ userId, ...options });
+    return [];
+  } };
+  await memoryTimeline(source, user, project, {});
+  assert.deepEqual(asked, [{ userId: "usr_1", projectId: "prj_1", limit: MEMORY_TIMELINE_RECORDS }]);
+  assert.ok(MEMORY_TIMELINE_RECORDS <= 5_000);
 });
 
 test("the route is read-only and answers only its own path", async (t) => {

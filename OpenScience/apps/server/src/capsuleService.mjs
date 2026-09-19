@@ -241,7 +241,11 @@ export class CapsuleService {
     ].map((item) => String(item.capsuleId)));
     const result = [];
     for (const capsule of packs) {
-      const page = await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: capsule.id } });
+      // Only what the shelf shows: a status and a kind to count, and the first
+      // words of a method. The whole entries were a hundred packs of a hundred
+      // entries of 20,000 characters each, per read (security review 2026-09-20).
+      const page = await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: capsule.id },
+        fields: { status: true, factKind: true, content: 120 } });
       /** @type {Record<string, number>} */
       const counts = {};
       const methods = [];
@@ -269,12 +273,18 @@ export class CapsuleService {
    * A received pack, scanned. A pack imported before whole-pack trust arrives
    * with candidates and no scan: it is scanned now, what passes is approved and
    * what is flagged retired, and the result is kept on the pack.
+   *
+   * So is a pack whose scan did not finish — the model was down, or had no
+   * project to be metered to. Its unjudged entries are in force as context but
+   * never mounted as methods (`unscanned`, `capsuleMethods.mjs`), and the next
+   * enable or trial judges them again: what passes loses the mark, what is
+   * flagged is retired, and what the model still cannot judge keeps it.
    * @param {string} userId @param {string} capsuleId @param {string | null} projectId
    */
   async #scannedPack(userId, capsuleId, projectId) {
     const capsule = await this.get(userId, capsuleId);
     if (capsule.payload.imported !== true) throw new HttpError(400, "capsule_not_received", "Only a capsule someone shared can be enabled this way.");
-    if (capsule.payload.scan) return capsule;
+    if (capsule.payload.scan && capsule.payload.scan.model === "ok") return capsule;
     const live = (await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId } })).items
       .filter((/** @type {any} */ entry) => entry.payload.status !== "retired");
     const scanner = this.scanner ?? new CapsuleScanner({});
@@ -282,12 +292,20 @@ export class CapsuleService {
       live.map((/** @type {any} */ entry) => ({ id: entry.id, factKind: entry.payload.factKind, content: entry.payload.content })),
       { useModel: Boolean(projectId) });
     const kept = new Set(result.kept);
+    const unchecked = new Set(result.unchecked ?? (result.model === "ok" ? [] : result.kept));
     for (const entry of live) {
       const status = kept.has(entry.id) ? "approved" : "retired";
-      if (entry.payload.status !== status) await this.documents.put(userId, "fact", entry.id, { ...entry.payload, status }, { expectedRevision: entry.revision });
+      const unscanned = status === "approved" && unchecked.has(entry.id);
+      if (entry.payload.status === status && (entry.payload.unscanned === true) === unscanned) continue;
+      const { unscanned: _mark, ...payload } = entry.payload;
+      await this.documents.put(userId, "fact", entry.id, { ...payload, status, ...(unscanned ? { unscanned: true } : {}) },
+        { expectedRevision: entry.revision });
     }
+    // What an earlier scan dropped at import was never written, so it stays
+    // on the pack's list beside what this one retired.
+    const dropped = [...(capsule.payload.scan?.dropped ?? []), ...result.dropped];
     return this.documents.put(userId, "capsule", capsuleId, {
-      ...capsule.payload, description: "别人分享的胶囊：整包生效，随时停用。", scan: result,
+      ...capsule.payload, description: "别人分享的胶囊：整包生效，随时停用。", scan: { ...result, dropped },
     }, { expectedRevision: capsule.revision });
   }
 

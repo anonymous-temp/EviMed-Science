@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { CAPSULE_FACT_ORIGINS } from "@evimed/domain";
 import { packCapsule, openCapsule, verifyCapsule } from "./capsuleContainer.mjs";
 import { capsuleAccountHash, protectedCapsuleDirectory, readProtectedCapsuleFile, writeProtectedCapsuleFile, unlinkCapsuleFile, syncCapsuleDirectory } from "./capsuleIdentityStore.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
@@ -115,7 +116,19 @@ export class CapsuleTransferService {
       await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const capsule = await client.query("SELECT revision FROM evimed_product.documents WHERE user_id=$1 AND kind='capsule' AND id=$2 AND deleted_at IS NULL", [productId(userId), productId(capsuleId)]);
       if (!capsule.rows[0]) throw new HttpError(404, "capsule_not_found", "The capsule is unavailable.");
-      const facts = await client.query("SELECT id,revision,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND deleted_at IS NULL AND payload @> $2::jsonb AND payload->>'factKind'=ANY($3::text[]) AND payload->>'layer'<>'sources' ORDER BY id LIMIT 101", [userId, JSON.stringify({ capsuleId, status: "approved" }), kinds]);
+      // A note a run wrote takes effect without anyone approving it, and the
+      // researcher who never acted on it has not adopted it: the export promises
+      // 「只分享已采用的研究方法与工作偏好 … 运行记录不会随包导出」. So an
+      // `inferred` entry leaves only once the researcher's own act is on it —
+      // they changed its status or corrected it, or it records their decision.
+      // Before this, a note a page had talked a run into writing left in the
+      // pack and was imported as the pack's own, mountable method (security
+      // review 2026-09-20). What does leave carries its origin (below).
+      const facts = await client.query(`SELECT id,revision,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='fact' AND deleted_at IS NULL
+        AND payload @> $2::jsonb AND payload->>'factKind'=ANY($3::text[]) AND payload->>'layer'<>'sources'
+        AND (payload->>'origin' IS DISTINCT FROM 'inferred' OR payload->>'curatedAt' IS NOT NULL OR payload->>'correctedAt' IS NOT NULL
+          OR payload->'provenance' @> '[{"type":"user"}]'::jsonb)
+        ORDER BY id LIMIT 101`, [userId, JSON.stringify({ capsuleId, status: "approved" }), kinds]);
       return { revision: capsule.rows[0].revision, facts: facts.rows };
     });
     if (!source.facts.length) throw new HttpError(400, "capsule_export_empty", "No approved entries are eligible for these share scopes.");
@@ -123,7 +136,8 @@ export class CapsuleTransferService {
     const snapshotId = randomUUID();
     const entries = source.facts.map(fact => {
       const id = randomUUID(); const place = location(fact.payload.factKind); const content = checkedText(fact.payload.content);
-      return { id, version: fact.revision, factKind: fact.payload.factKind, layer: place.layer, content, sha256: digest(content), path: place.path ?? `methods/${id}/SKILL.md` };
+      return { id, version: fact.revision, factKind: fact.payload.factKind, layer: place.layer, content, sha256: digest(content), path: place.path ?? `methods/${id}/SKILL.md`,
+        origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "inferred" };
     });
     const files = renderedFiles(snapshotId, entries);
     const identity = await this.withAccount(userId, accountCreatedAt, () => this.identities.forUser(userId, { accountCreatedAt }));
@@ -203,7 +217,9 @@ export class CapsuleTransferService {
       || !Array.isArray(metadata.entries) || !metadata.entries.length || metadata.entries.length > MAX_ENTRIES) throw invalid();
     const ids = new Set();
     for (const entry of metadata.entries) {
-      fields(entry, ["id", "version", "factKind", "layer", "content", "sha256", "path"]);
+      // `origin` since 2026-09-20; a pack exported before carries none.
+      fields(entry, ["id", "version", "factKind", "layer", "content", "sha256", "path", "origin"]);
+      if (entry.origin !== undefined && !CAPSULE_FACT_ORIGINS.includes(entry.origin)) throw invalid();
       if (!UUID.test(entry.id) || ids.has(entry.id) || !kindsFor(scopes).includes(entry.factKind)) throw invalid();
       ids.add(entry.id); productInteger(entry.version, 1, 2_147_483_647); checkedText(entry.content);
       const place = location(entry.factKind);
@@ -241,13 +257,24 @@ export class CapsuleTransferService {
     // enabled, and what it flagged is not written at all — it is listed on the
     // pack instead. Nothing is enabled by importing it.
     const kept = new Set(preview.scan.kept);
+    // What no model verdict covered is context, not a method, until a later
+    // scan judges it (`capsuleScan.mjs`, `CapsuleService.#scannedPack`). A
+    // scanner that does not list it is read by its model status: anything
+    // short of "ok" leaves every kept entry unjudged.
+    const unchecked = new Set(Array.isArray(preview.scan.unchecked) ? preview.scan.unchecked
+      : preview.scan.model === "ok" ? [] : preview.scan.kept);
     let records;
     try { records = await this.documents.createBatch(userId, [
       { kind: "capsule", id: capsuleId, payload: { title: checkedText(input.title ?? "收到的研究胶囊", 150), description: "别人分享的胶囊：整包生效，随时停用。", imported: true, activationMode: "guest",
         transfer: { snapshotId: preview.snapshotId, archiveSha256: preview.archiveSha256, issuerTrust: preview.issuerTrust, importedAt: new Date().toISOString() },
         scan: preview.scan } },
       ...preview.entries.filter(entry => kept.has(entry.id)).map(entry => ({ kind: "fact", id: randomUUID(), payload: {
-        capsuleId, factKind: entry.factKind, layer: entry.layer, content: entry.content, origin: "system", status: "approved", contextOnly: true,
+        // The sharer's runtime note stays the assistant's note here, and so is
+        // never mounted (`capsuleMethods.mjs`); only what a person wrote or a
+        // pack brought becomes this pack's own. A pack exported before origins
+        // travelled could hold only entries its sharer had approved by hand.
+        capsuleId, factKind: entry.factKind, layer: entry.layer, content: entry.content, origin: entry.origin === "inferred" ? "inferred" : "system",
+        status: "approved", contextOnly: true, ...(unchecked.has(entry.id) ? { unscanned: true } : {}),
         provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }],
         transfer: { version: entry.version, sha256: entry.sha256, path: entry.path, snapshotId: preview.snapshotId, issuerTrust: preview.issuerTrust },
       } })),

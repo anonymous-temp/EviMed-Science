@@ -26,6 +26,9 @@ import { HttpError, assertObject, readJson, sendJson } from "./security.mjs";
 
 /** A session id as the kernel writes one. */
 const SESSION_ID = /^[A-Za-z0-9_-]{1,160}$/;
+/** How many recalled memories the panel lists: the most recently recalled.
+ *  Each is a read, and a conversation that runs for weeks recalls without end. */
+export const MAX_BACKGROUND_MEMORIES = 200;
 
 /** @param {unknown} value @param {number} max */
 function excerpt(value, max = 200) {
@@ -105,10 +108,16 @@ export async function sessionDispatchNotes({ researchMemory, capsules = null }, 
 
 /**
  * The methods the project's runtime has in its skill directory, by the name
- * the run sees: a learned method by its own name (the list the runtime manager
- * kept at its last launch), a capsule method as `method-<directory>`
- * (`capsuleMethods.mjs`). Each carries what its 「不对」 needs — the method's
- * revision, or the capsule entry's.
+ * the run sees: a learned method by its own name, a capsule method as
+ * `method-<directory>` (`capsuleMethods.mjs`) — both as the runtime manager
+ * recorded them at the project's last launch. Each carries what its 「不对」
+ * needs — the method's revision, or the capsule entry's.
+ *
+ * The capsule half used to be selected again on every read of the panel: up
+ * to eight capsules of a thousand entries of 20,000 characters each, read
+ * whole per request (security review 2026-09-20). It is selected only when
+ * this process has not launched the project yet, which is also when there is
+ * no record of what is mounted.
  *
  * @param {{ runtimeManager: any, capsules?: any, learning?: any, select?: typeof selectCapsuleMethods }} services
  * @param {{ id: string, userId: string }} project
@@ -116,7 +125,8 @@ export async function sessionDispatchNotes({ researchMemory, capsules = null }, 
 export async function mountedMethodsFor({ runtimeManager, capsules = null, learning = null, select = selectCapsuleMethods }, project) {
   const userId = String(project.userId);
   const methods = [];
-  const learned = runtimeManager?.lastMountedLearnedMethods?.get?.(runtimeManager.key(project)) ?? [];
+  const key = runtimeManager?.key?.(project);
+  const learned = runtimeManager?.lastMountedLearnedMethods?.get?.(key) ?? [];
   for (const method of learned) {
     const document = learning ? await learning.getMethod(userId, method.id).catch(() => null) : null;
     methods.push({
@@ -126,9 +136,10 @@ export async function mountedMethodsFor({ runtimeManager, capsules = null, learn
       trial: method.trial === true, available: Boolean(document),
     });
   }
-  const fromCapsules = capsules
+  const recorded = runtimeManager?.lastMountedCapsuleMethods?.get?.(key);
+  const fromCapsules = recorded ?? (capsules
     ? await select(capsules, { userId, projectId: String(project.id) }).catch(() => [])
-    : [];
+    : []);
   for (const method of fromCapsules) {
     const entry = await capsules.documents.get(userId, "fact", method.id).catch(() => null);
     methods.push({
@@ -170,16 +181,23 @@ export async function sessionBackground({ researchMemory, agentRuns, capsules = 
     }
   }
 
+  const shown = [...recalled.values()].slice(-MAX_BACKGROUND_MEMORIES);
   // Notes have no single-record read; one page of them answers every note id
   // a recall can have handed out.
-  const notes = [...recalled.keys()].some((id) => !id.startsWith("record:") && !id.startsWith("capsule:"))
+  const notes = shown.some((entry) => !entry.id.startsWith("record:") && !entry.id.startsWith("capsule:"))
     ? new Map((await researchMemory.list(user.id, { pageSize: 200 }).catch(() => [])).map((/** @type {any} */ note) => [note.id, note]))
     : new Map();
+  // Every record the conversation recalled, in one light read: it was one
+  // whole-row read per memory (security review 2026-09-20).
+  const recordIds = shown.filter((entry) => entry.id.startsWith("record:")).map((entry) => entry.id.slice("record:".length));
+  const records = recordIds.length
+    ? new Map((await researchMemory.recordSummaries(user.id, recordIds).catch(() => [])).map((/** @type {any} */ record) => [record.id, record]))
+    : new Map();
   const memories = [];
-  for (const entry of recalled.values()) {
+  for (const entry of shown) {
     if (entry.id.startsWith("record:")) {
       const id = entry.id.slice("record:".length);
-      const record = await researchMemory.getRecord(user.id, id).catch(() => null);
+      const record = records.get(id) ?? null;
       memories.push({
         type: "memory", id, kind: record?.kind ?? entry.kind, scope: record?.scope ?? entry.scope,
         summary: record ? excerpt(record.summary || record.value) : "",
