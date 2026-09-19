@@ -580,6 +580,9 @@ export interface WebStructuredMemory {
     status: "active" | "pending" | "superseded" | "archived";
     changedAt: string | null;
     reason: string;
+    /** Who made the change and in which run (absent before 2026-09-20). */
+    by?: "extraction" | "user" | "system";
+    runId?: string;
   }>;
 }
 

@@ -44,6 +44,11 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       body.projectId = await project(body.projectId);
       return reply(await service.recall(user.id, { ...body, accountCreatedAt: user.accountCreatedAt }));
     }
+    // 「我的记忆胶囊」: read as one, and made on first use.
+    if (parts.length === 1 && parts[0] === "mine") {
+      if (method === "GET") return reply(await service.mine(user.id));
+      if (method === "POST") return reply(await service.ownCapsule(user.id, { create: true }));
+    }
     if (parts.length === 1 && parts[0] === "active" && method === "GET") {
       return reply(await service.active(user.id, await project(url.searchParams.get("projectId"))));
     }

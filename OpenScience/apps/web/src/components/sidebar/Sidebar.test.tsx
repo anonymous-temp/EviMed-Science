@@ -91,7 +91,7 @@ describe("Sidebar navigation", () => {
   it("lists the workbench destinations in order and navigates to each", async () => {
     renderSidebar();
 
-    const order = ["新任务", "运行记录", "知识库", "记忆", "主动科研", "科研能力"];
+    const order = ["新任务", "运行记录", "知识库", "记忆胶囊", "主动科研", "科研能力"];
     const buttons = order.map((label) => screen.getByRole("link", { name: label }));
     for (let i = 1; i < buttons.length; i += 1) {
       expect(

@@ -50,6 +50,7 @@ import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
 import { createMemorySessionRoutes, mountedMethodsFor, setAsideMethodNames, setAsideMethodsNotice } from "./memorySessions.mjs";
+import { createMemoryTimelineRoutes } from "./memoryTimeline.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
@@ -2178,6 +2179,8 @@ export function createWebApiApp(overrides = {}) {
   // 「本次用到的背景」, 「本次不用」 and the incognito switch, per conversation.
   const memorySessionRoutes = createMemorySessionRoutes({ config, researchMemory, agentRuns, capsules: capsuleService, context, audit,
     mountedMethods: (project) => mountedMethodsFor({ runtimeManager, capsules: capsuleService, learning: learningService }, project) });
+  // 「时间轴」, derived when read from the records, the ledger and the methods.
+  const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService, context });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
@@ -2698,6 +2701,7 @@ export function createWebApiApp(overrides = {}) {
 
       if (await memoryRoutes(req, res)) return;
       if (await memorySessionRoutes(req, res)) return;
+      if (await memoryTimelineRoutes(req, res)) return;
       if (await agentKeyRoutes(req, res)) return;
 
       if (pathname === "/api/feedback/events" && req.method === "GET") {

@@ -100,3 +100,36 @@ test("one click undoes an entry's last change, and undoing its creation removes 
   assert.equal(removed.undone, "removed");
   assert.equal(await documents.get(USER, "fact", fresh.id), null, "gone from use, and still in the trash to restore");
 });
+
+test("「我的记忆胶囊」 is one capsule per person: made once, in force account-wide, borrowed ones kept", async () => {
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  assert.equal(await service.ownCapsule(USER), null, "reading does not make one");
+  const theirs = await service.create(USER, { title: "李主任的工作方式" });
+  await documents.put(USER, "capsule", theirs.id, { ...theirs.payload, imported: true }, { expectedRevision: theirs.revision });
+  await service.activate(USER, theirs.id, { mode: "guest" });
+
+  const [first, second] = await Promise.all([service.ownCapsule(USER, { create: true }), service.ownCapsule(USER, { create: true })]);
+  assert.equal(first.id, second.id, "two first visits are one capsule");
+  assert.equal(first.payload.title, "我的记忆胶囊");
+  const active = await service.active(USER, null);
+  assert.deepEqual(active.items.map((item) => [item.capsuleId, item.mode]), [[first.id, "own"], [theirs.id, "guest"]]);
+
+  // In the trash, it comes back rather than being made twice.
+  await service.remove(USER, first.id, (await service.get(USER, first.id)).revision);
+  const back = await service.ownCapsule(USER, { create: true });
+  assert.equal(back.id, first.id);
+  assert.equal(back.deletedAt, null);
+
+  // Read as one: the account capsule and each project's notes, never the borrowed.
+  await service.addEntry(USER, first.id, { factKind: "method_preference", layer: "methods", content: "先查异质性再合并" });
+  const noted = await service.note(USER, "project_1", { factKind: "project_fact", content: "队列 500 人" });
+  const retired = await service.addEntry(USER, first.id, { factKind: "preference", content: "旧偏好" });
+  await service.updateEntry(USER, first.id, retired.id, { status: "retired", expectedRevision: retired.revision });
+  await service.addEntry(USER, theirs.id, { factKind: "preference", content: "别人的偏好" });
+  const mine = await service.mine(USER);
+  assert.equal(mine.capsule.id, first.id);
+  assert.deepEqual(mine.entries.map((entry) => entry.payload.content).sort(), ["先查异质性再合并", "队列 500 人"]);
+  assert.ok(mine.capsules.every((capsule) => capsule.id !== theirs.id));
+  assert.equal(mine.entries.find((entry) => entry.id === noted.id).projectId, "project_1");
+});

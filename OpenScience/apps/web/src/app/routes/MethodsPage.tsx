@@ -64,7 +64,7 @@ description: 一句话说明这个方法做什么
  * evidence in the nightly job. What a person can do is read, stop, undo, and
  * write one themselves, which takes effect at once.
  */
-export function MethodsPage() {
+export function MethodsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [methods, setMethods] = useState<WebMethod[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -138,12 +138,13 @@ export function MethodsPage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-bg">
-      <div className="mx-auto w-full max-w-content-full px-6 py-8 lg:px-10">
+    // Embedded in the capsule page's 「方法」 section, which owns the scrolling.
+    <div className={embedded ? undefined : "h-full overflow-y-auto bg-bg"}>
+      <div className={embedded ? undefined : "mx-auto w-full max-w-content-full px-6 py-8 lg:px-10"}>
         {/* What actually starts the loop, since 2026-09-20 (learningTriggers.mjs):
             no clicks. This paragraph used to describe a trigger that needed
             「采纳」 and 「我改过」 on the same deliverable. */}
-        <p className="max-w-2xl text-body text-muted">
+        <p className={embedded ? "max-w-2xl text-ui text-muted" : "max-w-2xl text-body text-muted"}>
           EviMed 会自己从你的任务里学方法：每次交付完成、你在对话里纠正它、或同一类任务成功重复三次，它都会在北京时间 22:00–09:00 的夜里提炼。学到的方法先在评测账号里和现有做法配对比较，比下来不差才对你生效，不需要你点确认。你自己写下的方法立即生效。任何方法都可以随时停用或回到上一版。
         </p>
 

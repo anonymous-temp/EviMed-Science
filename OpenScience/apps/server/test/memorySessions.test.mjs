@@ -207,6 +207,8 @@ test("the composition root feeds the conversation's state to every path that rea
   assert.match(gateway, /state: \(userId, projectId, sessionId\) => researchMemory\.sessionState\(userId, projectId, sessionId\)/);
   assert.match(gateway, /appendRecalledMemories:/);
   assert.match(server, /if \(await memorySessionRoutes\(req, res\)\) return;/);
+  assert.match(server, /if \(await memoryTimelineRoutes\(req, res\)\) return;/);
+  assert.match(server, /createMemoryTimelineRoutes\(\{ config, researchMemory, agentRuns, feedbackEvents, learning: learningService, context \}\)/);
   assert.match(server, /mountedMethods: \(project\) => mountedMethodsFor\(\{ runtimeManager, capsules: capsuleService, learning: learningService \}, project\)/);
   assert.match(server, /const setAsideMethods = await setAsideMethodNames\(researchMemory, ctx\.user\.id, ctx\.project\.id, session\.sessionId\);/);
   assert.match(server, /system: setAsideMethods\.length \? `\$\{prepared\.system\}\\n\\n\$\{setAsideMethodsNotice\(setAsideMethods\)\}` : prepared\.system,/);
