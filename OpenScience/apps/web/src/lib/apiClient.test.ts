@@ -517,6 +517,38 @@ describe("apiClient", () => {
     );
   });
 
+  // The sidebar lists other projects' tasks beside the current one's; naming
+  // the project on the request must not move the tab to it.
+  it("reads another project's runs under that project's header, leaving the tab's own", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => responseJson([]));
+    const client = await loadClient("/api");
+    client.setWebProjectId("default");
+
+    await client.listWebAgentRuns({ projectId: "paper1" });
+    await client.listWebAgentRuns();
+
+    expect(callHeaders(fetchMock, 0).get("X-Open-Science-Project")).toBe("paper1");
+    expect(callHeaders(fetchMock, 1).get("X-Open-Science-Project")).toBe("default");
+    expect(client.getWebProjectId()).toBe("default");
+  });
+
+  // A switch proves its target before the tab moves (`useProjectStore.select`).
+  it("asks /api/me about another project on that request only", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const project = new Headers((init as RequestInit | undefined)?.headers).get("X-Open-Science-Project") ?? "default";
+      return responseJson({ user: { id: "alice", name: "Alice" }, project: { id: project, name: project }, projects: [] });
+    });
+    const client = await loadClient("/api");
+    client.setWebProjectId("default");
+
+    expect((await client.fetchWebMe({ projectId: "paper1" }))?.project.id).toBe("paper1");
+    expect(callHeaders(fetchMock, 0).get("X-Open-Science-Project")).toBe("paper1");
+    expect(client.getWebProjectId()).toBe("default");
+    // The answer is shared per project, not per tab: the tab's own is asked fresh.
+    expect((await client.fetchWebMe())?.project.id).toBe("default");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("reports what the researcher did with a deliverable, in the four fields the route accepts", async () => {
     // The other half of the feedback ledger. The server records memory
     // decisions by itself, but an adoption and an edit are only visible to the
