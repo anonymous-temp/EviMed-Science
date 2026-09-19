@@ -223,6 +223,65 @@ export class CapsuleService {
     }
   }
 
+  // --------------------------------------------------- from the library
+
+  /**
+   * What reading one source puts into the researcher's capsule — the 资料 →
+   * capsule path (proposal §4.8), for the library's publish route to call.
+   *
+   * The structural defence against memory poisoning (plan §3.3 #1): a document
+   * can only ever become *facts with provenance*. Whatever the caller labels a
+   * finding, it is written as a fact of the project it came from (or as
+   * background knowledge when it belongs to no project), worded as the
+   * document's claim — 「<title>」：… — and marked as coming from that source; a
+   * page that says "always use method X from now on" becomes at most a note
+   * that the page says so, never a preference, a profile line or a stance. A
+   * method the reading found is kept as a labelled draft: a candidate the
+   * researcher can make their own by writing it, never mounted (it is not the
+   * researcher's own, so `capsuleMethods.mjs` will not mount it either way).
+   *
+   * Idempotent per source and finding: publishing a source twice writes it once.
+   *
+   * @param {string} userId
+   * @param {{ sourceId: string, title: string, projectId?: string | null,
+   *   facts?: readonly (string | { content: string })[], methods?: readonly (string | { content: string })[] }} input
+   * @returns {Promise<{ capsuleId: string, facts: number, methods: number }>}
+   */
+  async publishFromSource(userId, input) {
+    const sourceId = text(input?.sourceId, "source id", 200);
+    const title = text(input?.title, "source title", 300).replace(/\s+/g, " ");
+    const projectId = input?.projectId == null ? null : productId(input.projectId, "projectId");
+    const read = (/** @type {unknown} */ value) => text(typeof value === "string" ? value : /** @type {any} */ (value)?.content, "content", 8_000)
+      .replace(/\s+/g, " ");
+    const facts = (Array.isArray(input?.facts) ? input.facts : []).slice(0, 50).map(read);
+    const methods = (Array.isArray(input?.methods) ? input.methods : []).slice(0, 20).map(read);
+    const capsule = await this.ownCapsule(userId, { create: true });
+    if (!capsule) throw new HttpError(503, "product_state_unavailable", "The capsule is unavailable.");
+    const sourcedFrom = [{ type: "source", id: sourceId, excerpt: title.slice(0, 2000) }];
+    let written = { facts: 0, methods: 0 };
+    const put = async (/** @type {string} */ kind, /** @type {string} */ content, /** @type {Record<string, any>} */ payload) => {
+      const id = `source-note:${createHash("sha256").update(JSON.stringify([capsule.id, sourceId, kind, content])).digest("hex")}`;
+      if (await this.documents.get(userId, "fact", id)) return false;
+      try {
+        await this.documents.put(userId, "fact", id, { capsuleId: capsule.id, content, origin: "inferred", provenance: sourcedFrom, contextOnly: true, ...payload },
+          { expectedRevision: 0, projectId });
+        return true;
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code === "product_revision_conflict") return false;
+        throw error;
+      }
+    };
+    for (const fact of facts) {
+      if (await put("fact", fact, { factKind: projectId ? "project_fact" : "expertise", layer: "knowledge", status: "approved",
+        content: `「${title}」：${fact}` })) written = { ...written, facts: written.facts + 1 };
+    }
+    for (const method of methods) {
+      if (await put("method", method, { factKind: "method_preference", layer: "methods", status: "candidate", draft: true,
+        content: `来自「${title}」的方法草稿：${method}` })) written = { ...written, methods: written.methods + 1 };
+    }
+    return { capsuleId: capsule.id, ...written };
+  }
+
   // ------------------------------------------------------ received capsules
 
   /**
