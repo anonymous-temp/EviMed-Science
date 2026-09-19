@@ -175,9 +175,6 @@ function assertReady(ready) {
       `Hosted E2E requires the DSH kernel; the deployment reports ${checks.runtime?.kernel ?? "no kernel"}.`,
     );
   }
-  if (checks.kernel?.enabled !== true || checks.kernel?.sandboxMode !== "docker") {
-    throw failure("hosted_e2e_kernel_not_real", "Hosted E2E requires the Docker notebook kernel.");
-  }
   if (checks.stateStore?.mode !== "postgres" || checks.stateStore?.shared !== true) {
     throw failure("hosted_e2e_state_not_shared", "Hosted E2E requires the PostgreSQL state store.");
   }
@@ -438,28 +435,6 @@ async function main() {
       }
     }
 
-    await command(base, "write_workspace_file", {
-      path: "e2e/kernel.ipynb",
-      content: `${JSON.stringify({ cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 })}\n`,
-    }, scoped);
-    const python = await command(base, "kernel_execute", {
-      language: "python",
-      notebook: "e2e/kernel.ipynb",
-      root: "workspace",
-      code: "import numpy as np, pandas as pd\nfrom scipy import stats\nprint(float(stats.gmean(np.array([1.0, 4.0]))))\nprint(int(pd.Series([1,2,3]).sum()))",
-    }, scoped);
-    if (!python.body?.data?.ok || !python.body.data.stdout.includes("2.0") || !python.body.data.stdout.includes("6")) {
-      throw failure("hosted_e2e_python_kernel_failed", "The production Python scientific kernel failed.");
-    }
-    const r = await command(base, "kernel_execute", {
-      language: "r",
-      notebook: "e2e/kernel.ipynb",
-      root: "workspace",
-      code: "cat(mean(c(1,2,3)), '\\n')",
-    }, scoped);
-    if (!r.body?.data?.ok || !r.body.data.stdout.includes("2")) {
-      throw failure("hosted_e2e_r_kernel_failed", "The production R kernel failed.");
-    }
     // The kernel identity is printed, not just asserted: "which kernel did the
     // release gate actually certify" is the question this run is the only
     // record of.

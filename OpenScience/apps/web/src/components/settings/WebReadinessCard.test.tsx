@@ -57,7 +57,6 @@ describe("WebReadinessCard", () => {
           networkEgress: "explicitly_allowed",
           networkPolicy: "acknowledged",
         },
-        kernel: { ok: true, mode: "disabled" },
         saasProfile: {
           ok: true,
           profile: "individual-saas",
