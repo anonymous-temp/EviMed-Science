@@ -161,6 +161,22 @@ test("a page still unreadable after rendering, or a browser that lands inward, i
   await assert.rejects(inward.read(cde), (error) => error.code === "web_read_host_forbidden");
 });
 
+test("a rendered page is held to the size cap a fetched page is", async () => {
+  const ctgov = "https://clinicaltrials.gov/study/NCT03036124";
+  const { transport } = fakeTransport({ [ctgov]: html(fixture("ctgov-NCT03036124.direct.html")) });
+  const drawn = `<html><body><main><p>Start of the study record.</p>${`<p>${"x".repeat(1_000)}</p>`.repeat(6 * 1024)}<p>Past the cap.</p></main></body></html>`;
+  const renderer = fakeRenderer({ [ctgov]: { html: drawn, finalUrl: ctgov, status: 200 } });
+  const reader = createWebReader(config, { transport, renderer, resolveImpl: publicResolver });
+  const result = await reader.read(ctgov);
+  const cap = 5 * 1024 * 1024;
+  assert.equal(result.receipt.rendered, true);
+  assert.equal(result.receipt.bytes, cap);
+  assert.equal(result.receipt.truncated, true);
+  assert.equal(result.receipt.sha256, createHash("sha256").update(Buffer.from(drawn).subarray(0, cap)).digest("hex"), "the digest is of the bytes the text came from");
+  assert.match(result.text, /Start of the study record/);
+  assert.doesNotMatch(result.text, /Past the cap/);
+});
+
 test("without a browser: a challenge is a named error, a thin real page is kept and says so", async () => {
   const ctgov = "https://clinicaltrials.gov/study/NCT03036124";
   const thin = "https://thin.example.org/brief";
