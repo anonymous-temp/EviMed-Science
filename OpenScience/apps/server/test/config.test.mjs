@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
+import YAML from "yaml";
 import { loadConfig } from "../src/config.mjs";
+import { parseByteSize } from "../src/runtimeManager.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -47,20 +50,305 @@ test("memory extraction is given longer than one extraction actually takes", () 
   );
 });
 
-test("the deployment's own files do not hand the extraction a shorter budget than the code", async () => {
-  // The test above held config.mjs at 120 s while docker-compose.yml passed
-  // ${OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS:-30000} and .env.example said
-  // 30000, so production ran at 30 s and a deep run's extraction aborted with
-  // nothing remembered (2026-09-19). What the container gets is what counts.
-  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
-  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
-  const composeDefault = Number(/OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: \$\{OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS:-(\d+)\}/.exec(compose)?.[1]);
-  const exampleValue = Number(/^OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS=(\d+)$/m.exec(example)?.[1]);
-  const config = loadConfig({ rootDir: repoRoot });
-  for (const [where, value] of [["docker-compose.yml", composeDefault], [".env.example", exampleValue]]) {
-    assert.ok(Number.isFinite(value), `${where} no longer names the extraction budget; this test read nothing`);
-    assert.ok(value >= config.memoryExtractionTimeoutMs, `${where} gives the extraction ${value}ms, less than config.mjs's ${config.memoryExtractionTimeoutMs}ms`);
+// What the deployment's own files hand the process, held against the code.
+//
+// A `${VAR:-fallback}` in a compose file and a line in .env.example are second
+// copies of a default, and a default raised in config.mjs after an incident
+// reads as fixed while the container keeps the old number. Three were found on
+// production on one day (2026-09-19): the extraction timeout (30 s against
+// 120 s), the runtime pids limit (256 against 1024) and its memory (4g against
+// 8g) — each raised in code because runs died at the old value, each still in
+// force because the compose copy won.
+//
+// Every value is evaluated through loadConfig itself, in the environment a
+// hosted container has, so what is compared is what the process ends up with:
+// an empty `${KEY:-}`, a clamp and a derived default all included. A variable
+// with no row must leave the whole configuration exactly as the code's default
+// leaves it. A row relaxes that for one variable, one way, and says why:
+//   gte         a ceiling on legitimate work: less kills or refuses it, more only waits
+//   lte         a lifetime or a staleness bound: shorter is stricter, longer is laxer
+//   eq          policy the code owns, where neither direction is safer
+//   deployment  the value belongs to the deployment; the word says what it is
+const HOSTED_ENV = Object.freeze({ NODE_ENV: "production", OPEN_SCIENCE_AUTH_MODE: "local" });
+const UNDER_THE_TOOL_CALL_CEILING = "the kernel abandons an MCP call at 180 s; a longer deadline means the gateway's own error never arrives";
+const ON_THE_DISPATCH_PATH = "recall runs before a run starts; longer holds every dispatch while the index is down";
+const FALLBACK_RULES = {
+  OPEN_SCIENCE_RUNTIME_PIDS_LIMIT: ["gte", "runtimePidsLimit", "256 killed three runs with fork(): EAGAIN"],
+  OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT: ["gte", "runtimeMemoryLimit", "4g OOM-killed the kernel on 2026-08-26"],
+  OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: ["gte", "memoryExtractionTimeoutMs", "30 s aborted a deep run's extraction on 2026-09-19"],
+  OPEN_SCIENCE_MODEL_GATEWAY_TIMEOUT_MS: ["gte", "modelGatewayTimeoutMs", "an idle deadline per streamed chunk; shorter cut reasoning turns off mid-answer"],
+  OPEN_SCIENCE_COMMAND_TIMEOUT_MS: ["gte", "commandTimeoutMs", "a queued command's ceiling"],
+  OPEN_SCIENCE_RUNTIME_PROXY_CONNECT_TIMEOUT_MS: ["gte", "runtimeProxyConnectTimeoutMs", "compose waits 90 s: a slow container is waited for, not failed"],
+  OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS: ["gte", "runtimeProxyRequestTimeoutMs", "a proxied kernel request's ceiling"],
+  OPEN_SCIENCE_RUNTIME_CONTROLLER_TIMEOUT_MS: ["gte", "runtimeControllerTimeoutMs", "compose gives a container start 30 s"],
+  OPEN_SCIENCE_RUNTIME_PRE_STOP_TRANSCRIPT_TIMEOUT_MS: ["gte", "runtimePreStopTranscriptTimeoutMs", "shorter loses a stopping run's history"],
+  OPEN_SCIENCE_OIDC_TIMEOUT_MS: ["gte", "oidcTimeoutMs", "an identity provider's round trip"],
+  OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS: ["gte", "documentParserTimeoutMs", "a long document's parse"],
+  OPEN_SCIENCE_MODEL_GATEWAY_MAX_RESPONSE_BYTES: ["gte", "modelGatewayMaxResponseBytes", "a smaller cap refuses a finished answer"],
+  OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES: ["gte", "publicSourceGatewayMaxResponseBytes", "a smaller cap refuses a full text"],
+  OPEN_SCIENCE_OPENLIST_MAX_DOWNLOAD_BYTES: ["gte", "openListMaxDownloadBytes", "a smaller cap refuses a document import"],
+  OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS: ["eq", "publicSourceGatewayTimeoutMs", UNDER_THE_TOOL_CALL_CEILING],
+  OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS: ["eq", "webSearchTimeoutMs", UNDER_THE_TOOL_CALL_CEILING],
+  OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS: ["eq", "geoProbeTimeoutMs", "clamped under the tool-call ceiling; the 360000 compose said was never honoured"],
+  OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS: ["eq", "openVikingRequestTimeoutMs", ON_THE_DISPATCH_PATH],
+  OPEN_SCIENCE_MEMORY_RERANK_TIMEOUT_MS: ["eq", "memoryRerankTimeoutMs", ON_THE_DISPATCH_PATH],
+  // Quotas: what one account may store, send or read. Higher is laxer, lower
+  // refuses real use; the number is a product decision either way.
+  OPEN_SCIENCE_MAX_PROJECT_BYTES: ["eq", "maxProjectBytes", "quota"],
+  OPEN_SCIENCE_MAX_FILE_BYTES: ["eq", "maxFileBytes", "quota"],
+  OPEN_SCIENCE_MAX_JSON_BYTES: ["eq", "maxJsonBytes", "quota, and the controller must agree with the web API"],
+  OPEN_SCIENCE_MAX_ARCHIVE_BYTES: ["eq", "maxArchiveBytes", "quota"],
+  OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES: ["eq", "maxArchiveEntries", "quota"],
+  OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES: ["eq", "maxWorkspaceScanEntries", "scan bound"],
+  OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES: ["eq", "maxProjectUsageScanEntries", "scan bound"],
+  OPEN_SCIENCE_MAX_LOG_READ_BYTES: ["eq", "maxLogReadBytes", "read bound"],
+  OPEN_SCIENCE_MAX_LOG_FILE_BYTES: ["eq", "maxLogFileBytes", "rotation bound"],
+  OPEN_SCIENCE_MAX_PROJECTS_PER_USER: ["eq", "maxProjectsPerUser", "quota"],
+  OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: ["eq", "modelGatewayMaxBodyBytes", "the compaction guard is a share of it, in both containers"],
+  OPEN_SCIENCE_RATE_LIMIT_WINDOW_MS: ["eq", "rateLimitWindowMs", "rate limit"],
+  OPEN_SCIENCE_RATE_LIMIT_MAX_REQUESTS: ["eq", "rateLimitMaxRequests", "rate limit"],
+  OPEN_SCIENCE_AUTH_RATE_LIMIT_WINDOW_MS: ["eq", "authRateLimitWindowMs", "rate limit"],
+  OPEN_SCIENCE_AUTH_RATE_LIMIT_MAX_REQUESTS: ["eq", "authRateLimitMaxRequests", "rate limit"],
+  OPEN_SCIENCE_COMMAND_RATE_LIMIT_WINDOW_MS: ["eq", "commandRateLimitWindowMs", "rate limit"],
+  OPEN_SCIENCE_COMMAND_RATE_LIMIT_MAX_REQUESTS: ["eq", "commandRateLimitMaxRequests", "rate limit"],
+  // Capacity on a host shared with other products: more for one tenant is
+  // less for the rest, so neither direction is the safe one.
+  OPEN_SCIENCE_RUNTIME_CPU_LIMIT: ["eq", "runtimeCpuLimit", "capacity"],
+  OPEN_SCIENCE_RUNTIME_TMPFS: ["eq", "runtimeTmpfs", "mount options, compared whole"],
+  OPEN_SCIENCE_MAX_CONCURRENT_COMMANDS: ["eq", "maxConcurrentCommands", "capacity"],
+  OPEN_SCIENCE_MAX_CONCURRENT_TASKS: ["eq", "maxConcurrentTasks", "capacity"],
+  OPEN_SCIENCE_MAX_CONCURRENT_TASKS_PER_PROJECT: ["eq", "maxConcurrentTasksPerProject", "capacity"],
+  OPEN_SCIENCE_MAX_QUEUED_TASKS: ["eq", "maxQueuedTasks", "capacity"],
+  OPEN_SCIENCE_MAX_QUEUED_TASKS_PER_PROJECT: ["eq", "maxQueuedTasksPerProject", "capacity"],
+  OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS: ["eq", "maxRuntimeProxyConnections", "capacity"],
+  OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS_PER_PROJECT: ["eq", "maxRuntimeProxyConnectionsPerProject", "capacity"],
+  OPEN_SCIENCE_MAX_RUNNING_RUNTIMES: ["eq", "maxRunningRuntimes", "capacity; the web API and the controller compare it"],
+  OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER: ["eq", "maxRunningRuntimesPerUser", "capacity; the web API and the controller compare it"],
+  OPEN_SCIENCE_LEARNING_CONCURRENCY: ["eq", "learningConcurrency", "capacity"],
+  // Budgets: money and prompt space. A limit nobody chose fires at the worst moment.
+  OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT: ["eq", "userDailySpendLimit", "budget"],
+  OPEN_SCIENCE_USER_WEEKLY_SPEND_LIMIT: ["eq", "userWeeklySpendLimit", "budget"],
+  OPEN_SCIENCE_USER_RUN_SPEND_LIMIT: ["eq", "userRunSpendLimit", "budget"],
+  OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT: ["eq", "memoryContextLimit", "prompt budget"],
+  OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS: ["eq", "memoryContextMaxChars", "prompt budget"],
+  OPEN_SCIENCE_GATE_REPAIR_ROUNDS: ["eq", "gateRepairRounds", "0 since the 2026-09-17 ruling"],
+  OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD: ["eq", "llmRoutingConfidenceThreshold", "classifier policy"],
+  // Cadences: how often and how long a worker holds work.
+  OPEN_SCIENCE_AUTOPILOT_POLL_MS: ["eq", "autopilotPollMs", "cadence"],
+  OPEN_SCIENCE_AUTOPILOT_LEASE_MS: ["eq", "autopilotLeaseMs", "lease"],
+  OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS: ["eq", "runtimeControllerPollMs", "cadence"],
+  OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS: ["eq", "runtimeQuotaCheckIntervalMs", "cadence"],
+  OPEN_SCIENCE_RUNTIME_IDLE_TIMEOUT_MS: ["eq", "runtimeIdleTimeoutMs", "the idle reaper; thirty minutes is product policy"],
+  OPEN_SCIENCE_BACKUP_INTERVAL_SECONDS: ["eq", "backupIntervalSeconds", "cadence"],
+  OPEN_SCIENCE_BACKUP_HEALTH_GRACE_SECONDS: ["eq", "backupHealthGraceSeconds", "alert grace"],
+  OPEN_SCIENCE_SESSION_TTL_MS: ["lte", "sessionTtlMs", "a login's lifetime"],
+  OPEN_SCIENCE_OIDC_FLOW_TTL_MS: ["lte", "oidcFlowTtlMs", "a sign-in flow's lifetime"],
+  OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS: ["lte", "runtimeUiFrameTtlMs", "compose makes a frame ticket five minutes; the frame renews it"],
+  OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_MAX_AGE_MS: ["lte", "deepseekReleaseReceiptMaxAgeMs", "staleness bound"],
+  OPEN_SCIENCE_POSTGRES_BACKUP_MAX_AGE_SECONDS: ["lte", "postgresBackupMaxAgeSeconds", "staleness bound"],
+  OPEN_SCIENCE_PUBLIC_URL: ["deployment", "url"],
+  OPEN_SCIENCE_OPENVIKING_URL: ["deployment", "url"],
+  OPEN_SCIENCE_DOCUMENT_PARSER_URL: ["deployment", "url"],
+  EVIMED_PHARMACY_REFERENCE_SEARCH_URL: ["deployment", "url"],
+  EVIMED_ADR_CASE_QUERY_URL: ["deployment", "url"],
+  EVIMED_ADR_SIGNAL_ANALYSIS_URL: ["deployment", "url"],
+  EVIMED_OFFLABEL_EVIDENCE_PACKET_URL: ["deployment", "url"],
+  EVIMED_COMPREHENSIVE_DRUG_EVALUATION_URL: ["deployment", "url"],
+  EVIMED_DRUG_SELECTION_EVALUATION_URL: ["deployment", "url"],
+  EVIMED_META_ANALYSIS_URL: ["deployment", "url"],
+  EVIMED_MR_ANALYSIS_URL: ["deployment", "url"],
+  EVIMED_BIBLIOMETRIC_ANALYSIS_URL: ["deployment", "url"],
+  EVIMED_RESEARCH_TOPIC_SELECTION_URL: ["deployment", "url"],
+  EVIMED_PEER_REVIEW_URL: ["deployment", "url"],
+  EVIMED_DRUG_SAFETY_ANALYSIS_URL: ["deployment", "url"],
+  OPEN_SCIENCE_MEMORY_INDEX_PROVIDER: ["deployment", "provider"],
+  OPEN_SCIENCE_DEEPSEEK_PROVIDER_ENABLED: ["deployment", "provider"],
+  OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ["deployment", "sandbox"],
+  OPEN_SCIENCE_RUNTIME_DATA_VOLUME: ["deployment", "volume"],
+  OPEN_SCIENCE_RUNTIME_NETWORK_MODE: ["deployment", "network"],
+  OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME: ["deployment", "network"],
+  OPEN_SCIENCE_RUNTIME_UI_PORT: ["deployment", "port"],
+  OPEN_SCIENCE_TRUST_PROXY: ["deployment", "proxy"],
+  OPEN_SCIENCE_REQUIRE_ALL_SPECIALIST_ADAPTERS: ["deployment", "requirement"],
+  OPEN_SCIENCE_BACKUP_MODE: ["deployment", "mode"],
+  OPEN_SCIENCE_BACKUP_RETENTION_DAYS: ["deployment", "retention"],
+  OPEN_SCIENCE_BACKUP_DIR: ["deployment", "path"],
+  OPEN_SCIENCE_BACKUP_STATE_FILE: ["deployment", "path"],
+  OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_FILE: ["deployment", "path"],
+  OPEN_SCIENCE_BOOTSTRAP_USER: ["deployment", "identity"],
+  OPEN_SCIENCE_RELEASE_ID: ["deployment", "release"],
+  OPEN_SCIENCE_SOURCE_REVISION: ["deployment", "release"],
+  OPEN_SCIENCE_BUILD_CREATED: ["deployment", "release"],
+  OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_ID: ["deployment", "release"],
+  OPEN_SCIENCE_DEEPSEEK_CONFIG_REVISION: ["deployment", "release"],
+  OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND: ["deployment", "command"],
+  OPEN_SCIENCE_OPERATOR_METRICS_TOKEN: ["deployment", "credential"],
+  OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE: ["deployment", "credential"],
+  OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE: ["deployment", "credential"],
+  OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE: ["deployment", "credential"],
+  OPEN_SCIENCE_EVIMED_API_KEY_FILE: ["deployment", "credential"],
+  OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_FILE: ["deployment", "credential"],
+  OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE: ["deployment", "credential"],
+  OPEN_SCIENCE_DASHSCOPE_API_KEY_FILE: ["deployment", "credential"],
+};
+
+/** loadConfig under exactly `env` — nothing from the shell that runs the test. */
+function configUnder(env) {
+  const saved = process.env;
+  process.env = { ...env };
+  try {
+    return loadConfig({ rootDir: repoRoot });
+  } finally {
+    process.env = saved;
   }
+}
+
+/** Every variable loadConfig reads, observed rather than grepped: a name built
+ *  at run time (`${valueEnv}_FILE`, the specialist roots) is read all the same. */
+function variablesLoadConfigReads() {
+  const read = new Set();
+  const saved = process.env;
+  process.env = new Proxy({ ...HOSTED_ENV }, {
+    get(target, name) {
+      if (typeof name === "string") read.add(name);
+      return target[name];
+    },
+  });
+  try {
+    loadConfig({ rootDir: repoRoot });
+  } finally {
+    process.env = saved;
+  }
+  return read;
+}
+
+/** `${A:-${B:-x}}` resolves to `x` when neither is set; `${A:?msg}` has no fallback. */
+function composeFallback(value) {
+  let text = String(value);
+  let fallback = null;
+  for (let match; (match = /^\$\{[A-Za-z_][A-Za-z0-9_]*:?-(.*)\}$/s.exec(text));) fallback = text = match[1];
+  return fallback;
+}
+
+/** Every value a deployment's files hand a process when .env says nothing about
+ *  it: compose fallbacks per service (merge keys resolved, so the shared
+ *  `x-runtime-caps` block counts once per service that merges it), and every
+ *  uncommented line of .env.example, which is what an operator copies. */
+async function deploymentValues() {
+  const deployDir = path.join(repoRoot, "deploy/web");
+  const names = (await readdir(deployDir)).filter((name) => /^docker-compose.*\.yml$/.test(name)).sort();
+  const values = [];
+  for (const name of names) {
+    const document = YAML.parse(await readFile(path.join(deployDir, name), "utf8"), { merge: true });
+    for (const [service, definition] of Object.entries(document?.services ?? {})) {
+      const environment = Array.isArray(definition?.environment)
+        ? Object.fromEntries(definition.environment.map((entry) => String(entry).split(/=(.*)/s, 2)))
+        : definition?.environment ?? {};
+      const command = [definition?.command ?? []].flat().join(" ");
+      for (const [variable, value] of Object.entries(environment)) {
+        const fallback = value == null ? null : composeFallback(value);
+        if (fallback != null) values.push({ where: `${name} ${service}`, file: name, service, command, variable, value: fallback });
+      }
+    }
+  }
+  const example = await readFile(path.join(deployDir, ".env.example"), "utf8");
+  for (const [, variable, raw] of example.matchAll(/^([A-Z][A-Z0-9_]*)=(.*)$/gm)) {
+    // Compose's own .env reading strips one pair of matching quotes.
+    const value = /^(["']).*\1$/s.test(raw) ? raw.slice(1, -1) : raw;
+    values.push({ where: ".env.example", file: ".env.example", service: "", command: "", variable, value });
+  }
+  return { composeFiles: names, values };
+}
+
+/** Numbers, and docker sizes as bytes; anything else compares as text. */
+function magnitude(value) {
+  if (typeof value === "number") return value;
+  const text = String(value ?? "").trim();
+  return /^\d+(?:\.\d+)?\s*[kmgt]?b?$/i.test(text) ? (Number(text) || parseByteSize(text)) : text;
+}
+
+test("no deployment file hands the process a default the code does not have", async () => {
+  const read = variablesLoadConfigReads();
+  const { composeFiles, values } = await deploymentValues();
+  const configured = values.filter(({ variable }) => read.has(variable));
+
+  // The walk must prove it walked: a parse that silently finds nothing passes
+  // every rule below.
+  assert.ok(read.size >= 200, `loadConfig was seen reading ${read.size} variables; the observation is broken`);
+  assert.ok(composeFiles.length >= 8, `found ${composeFiles.length} compose files; the scan is wrong, not the directory`);
+  assert.ok(configured.length >= 250, `found ${configured.length} deployment values loadConfig reads; the parse is wrong`);
+  const carriers = (variable) => configured.filter((entry) => entry.variable === variable).map((entry) => entry.where);
+  for (const [variable, expected] of [
+    ["OPEN_SCIENCE_RUNTIME_PIDS_LIMIT", ["docker-compose.yml open-science-web", "docker-compose.yml open-science-runtime-controller", ".env.example"]],
+    ["OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT", ["docker-compose.yml open-science-web", "docker-compose.yml open-science-runtime-controller", ".env.example"]],
+    ["OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS", ["docker-compose.yml open-science-web", ".env.example"]],
+    // Only reachable through the `<<: *runtime-caps` merge.
+    ["OPEN_SCIENCE_MAX_RUNNING_RUNTIMES", ["docker-compose.yml open-science-web", "docker-compose.yml open-science-runtime-controller"]],
+  ]) {
+    for (const where of expected) {
+      assert.ok(carriers(variable).includes(where), `the walk did not find ${variable} in ${where}; it walked past the value this test exists for`);
+    }
+  }
+  const limitRows = Object.values(FALLBACK_RULES).filter(([rule]) => rule !== "deployment");
+  assert.ok(limitRows.length >= 60, `the table decides ${limitRows.length} limits; rows were lost`);
+
+  const defaults = configUnder(HOSTED_ENV);
+  const problems = [];
+  for (const { where, variable, value } of configured) {
+    const [rule, key, why] = FALLBACK_RULES[variable] ?? ["same"];
+    if (rule === "deployment") continue;
+    let config;
+    try {
+      config = configUnder({ ...HOSTED_ENV, [variable]: value });
+    } catch (error) {
+      problems.push(`${where}: ${variable}=${JSON.stringify(value)} makes loadConfig throw: ${error.message}`);
+      continue;
+    }
+    if (rule === "same") {
+      const changed = Object.keys(defaults).filter((name) => !isDeepStrictEqual(config[name], defaults[name]));
+      if (changed.length > 0) {
+        problems.push(`${where}: ${variable}=${JSON.stringify(value)} changes ${changed.map((name) => `${name} from ${JSON.stringify(defaults[name])} to ${JSON.stringify(config[name])}`).join(", ")}; use the code's default, or give it a row in FALLBACK_RULES`);
+      }
+      continue;
+    }
+    assert.ok(Object.hasOwn(defaults, key), `FALLBACK_RULES names ${key} for ${variable}, which loadConfig does not return`);
+    const code = magnitude(defaults[key]);
+    // Both the number as written and the number the process keeps: a clamp
+    // makes the second agree while the first tells the operator something false.
+    const failing = [magnitude(config[key]), ...(String(value).trim() === "" ? [] : [magnitude(value)])]
+      .find((given) => !(rule === "gte" ? given >= code : rule === "lte" ? given <= code : given === code));
+    if (failing !== undefined) {
+      problems.push(`${where}: ${variable}=${JSON.stringify(value)} gives ${key} ${JSON.stringify(failing)} against the code's ${JSON.stringify(code)} (${rule}: ${why})`);
+    }
+  }
+  assert.deepEqual(problems, []);
+
+  // A row for a variable no deployment file sets any more protects nothing.
+  const seen = new Set(configured.map(({ variable }) => variable));
+  assert.deepEqual(Object.keys(FALLBACK_RULES).filter((variable) => !seen.has(variable)), [], "rows for variables no deployment file sets; drop them");
+});
+
+test("the schedulers' own defaults agree with the compose files that start them", async () => {
+  // The backup and receipt schedulers read their knobs themselves, through
+  // `integerEnv(name, default, bounds)`, not through loadConfig. Same class,
+  // second copy: the service that runs the script must hand it the script's
+  // own number when .env is silent.
+  const { values } = await deploymentValues();
+  let compared = 0;
+  for (const script of ["scripts/ops/backup-scheduler.mjs", "scripts/ops/release-receipt-scheduler.mjs"]) {
+    const source = await readFile(path.join(repoRoot, script), "utf8");
+    const defaults = new Map([...source.matchAll(/integerEnv\("([A-Z0-9_]+)", ([\d_]+)/g)]
+      .map(([, variable, number]) => [variable, Number(number.replaceAll("_", ""))]));
+    assert.ok(defaults.size >= 4, `read ${defaults.size} integer defaults from ${script}; the parse is wrong`);
+    const services = new Set(values.filter(({ command }) => command.includes(script)).map(({ service }) => service));
+    assert.ok(services.size >= 1, `no compose service runs ${script}; the scan is wrong`);
+    for (const { where, service, variable, value } of values) {
+      if (!defaults.has(variable) || !(services.has(service) || where === ".env.example")) continue;
+      compared += 1;
+      assert.equal(Number(value), defaults.get(variable), `${where}: ${variable}=${value}, but ${script} defaults it to ${defaults.get(variable)}`);
+    }
+  }
+  assert.ok(compared >= 10, `compared ${compared} scheduler values; the walk found too few`);
 });
 
 test("the retired kernel's runtime mode is refused by name, not ignored", async () => {
