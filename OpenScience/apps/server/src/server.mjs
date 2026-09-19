@@ -89,6 +89,7 @@ import { AutopilotService, VERIFICATION_ARTIFACT, VERIFICATION_ROUTE_REASON, par
   verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
+import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
 import { MEMORY_WRITE_SKIPPED_SOURCES, MemoryIntelligence } from "./memoryIntelligence.mjs";
@@ -2160,6 +2161,15 @@ export function createWebApiApp(overrides = {}) {
       },
     });
   }
+  // IM: Feishu, the channel port and the own-app reservations (imService.mjs).
+  const im = createImModule({
+    config, database: productDatabase, credentials: connectorCredentials, notifications: notificationService,
+    users: store, agentRuns, runtimeManager, usageLedger, maxJsonBytes: config.maxJsonBytes,
+    audit: (event, status, details) => securityAudit(config, event, status, details),
+    dispatchRun: ({ user, project, sessionId, dispatchId, text }) => dispatchChannelRun(user, project, sessionId, dispatchId, text),
+    steerRun: ({ project, runId, text }) => steerChannelRun(project, runId, text),
+    loadSdk: overrides.loadFeishuSdk,
+  });
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
@@ -2304,6 +2314,101 @@ export function createWebApiApp(overrides = {}) {
     if (binding?.mode === "specialist") await assertPublicAgent(binding.agentId);
   }
 
+  /**
+   * A question that arrived through a messaging channel (imService), dispatched
+   * the way the page's own question is: the same provider and spend checks as
+   * `POST /api/agent-runs/dispatch`, the same routing an adopted conversation
+   * gets (`routeAdoptedInput`: named capability, classifier, net, answer line),
+   * the same recall, context and `session/prompt`. Wired here, like autopilot's
+   * episodes, because this is where the kernel wire lives; the module itself
+   * never reaches a kernel.
+   * @param {any} user @param {any} project @param {string} sessionId @param {string} dispatchId @param {string} text
+   */
+  async function dispatchChannelRun(user, project, sessionId, dispatchId, text) {
+    if (config.runtimeMode === "kernel" && !config.deepseekProviderEnabled) {
+      throw new HttpError(503, "model_provider_not_configured", "The research model provider is not configured on this EviMed server.");
+    }
+    if (usageLedger) await usageLedger.assertWithinLimits(user.id, {
+      dailyLimit: Number(config.userDailySpendLimit) || 0,
+      weeklyLimit: Number(config.userWeeklySpendLimit) || 0,
+    });
+    else await assertSpendWithinLimits(config, user.id);
+    if (!(await researchSessions.get(project, sessionId))) await researchSessions.put(project, sessionId, { mode: "open-domain" });
+    const registry = await agentRegistry;
+    const route = await routeAdoptedInput(project, sessionId, text);
+    const routed = route.effectiveAgentId && route.effectiveAgentId !== OPEN_DOMAIN_ANSWER_AGENT_ID
+      ? registry.get(route.effectiveAgentId) : null;
+    const answerAgent = routed ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
+    const answerPackage = answerAgent ? registry.getPackage(OPEN_DOMAIN_ANSWER_AGENT_ID) : null;
+    const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
+    const dispatch = () => agentRuns.dispatch(project, {
+      sessionId,
+      dispatchId,
+      ...(route.estimatedMinutes ? { estimatedMinutes: route.estimatedMinutes } : {}),
+      question: text,
+      effectiveAgentId: route.effectiveAgentId ?? null,
+      effectiveAgentVersion: route.effectiveAgentVersion ?? null,
+      effectiveRuntimeAgent: route.effectiveRuntimeAgent ?? null,
+      effectiveRouteReason: route.effectiveRouteReason ?? null,
+    }, async (session, dispatchedRun, repairText = null) => {
+      const promptText = typeof repairText === "string" && repairText.trim() ? repairText : text;
+      let memories = [];
+      try {
+        memories = await memorySubstrate.recall(user.id, text, { projectId: project.id, sessionId: session.sessionId });
+      } catch (error) {
+        throw memoryRecallRejection(error);
+      }
+      const prepared = await prepareResearchContext(project, session, config, {
+        query: text,
+        memories,
+        specialists: routableAgents,
+        mountableSkills: answerPackage?.skillText ? [{ name: answerPackage.manifest.skill, body: answerPackage.skillText }] : [],
+        routedSpecialist: routed
+          ? { agentId: routed.id, agentVersion: routed.version, runtimeAgent: routed.runtimeAgent,
+            skill: routed.skill, companionSkills: routed.companionSkills }
+          : null,
+      });
+      if (prepared.mountedSkills.length > 0 || prepared.memories.length > 0) {
+        await agentRuns.recordLearning(project, dispatchedRun.id, {
+          ...(prepared.mountedSkills.length > 0 ? { mountedSkills: prepared.mountedSkills } : {}),
+          ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
+        });
+      }
+      return runtimeManager.dispatchPrompt(project, session.sessionId, {
+        text: promptText,
+        system: prepared.system,
+        memoryContext: prepared.memoryContext,
+        residentProfile: true,
+        agent: routed?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
+        model: `deepseek/${config.deepseekModel}`,
+        runId: dispatchedRun.id,
+        requestId: dispatchedRun.kernelRequestIds?.at(-1),
+        strictContext: true,
+      });
+    });
+    return pluginService ? pluginService.withAdmission(project, dispatch) : dispatch();
+  }
+
+  /**
+   * A chat message the model judged to add to the task already running: the
+   * page's 「补充」 route, same run, same contract (`/api/agent-runs/:id/steer`).
+   * @param {any} project @param {string} runId @param {string} text
+   */
+  async function steerChannelRun(project, runId, text) {
+    const run = (await agentRuns.list(project)).find((item) => item.id === runId);
+    if (!run) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
+    const correctionRequestId = randomId("req_");
+    const updated = await agentRuns.recordCorrection(project, runId, correctionRequestId);
+    await runtimeManager.dispatchPrompt(project, run.sessionId, {
+      text: `<evimed-correction>${String(text).slice(0, 4000)}</evimed-correction>`,
+      runId,
+      requestId: correctionRequestId,
+      mode: "steer",
+      strictContext: true,
+    });
+    return { corrections: updated?.corrections ?? 0 };
+  }
+
   async function context(req, res) {
     const user = await store.ensureUser(req, res);
     const project = await store.selectedProject(req, user);
@@ -2413,6 +2518,9 @@ export function createWebApiApp(overrides = {}) {
       // "Authentication required" for want of a session it was never going to
       // have.
       if (await agentMemoryRoutes(req, res)) return;
+      // A device token (own-app reservation, off by default) is read here, so
+      // the store's session and CSRF checks below recognise the request.
+      await im.authenticateDevice(req, pathname);
       await store.assertCsrf(req, pathname);
       if (maintenanceService && requestStartsMutation(req, pathname)) {
         releaseMutation = await maintenanceService.admitMutation();
@@ -2423,6 +2531,7 @@ export function createWebApiApp(overrides = {}) {
       if (await learningRoutes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
+      if (await im.routes(req, res)) return;
 
       if (pathname === "/api/health") {
         sendJson(res, 200, {
@@ -2461,6 +2570,7 @@ export function createWebApiApp(overrides = {}) {
           productDatabase,
           operationalMetrics,
           activeCommands,
+          imMetrics: im.service ? () => im.service.metrics() : null,
         });
         return;
       }
@@ -3966,7 +4076,7 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker]) {
+    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -3997,6 +4107,7 @@ export function createWebApiApp(overrides = {}) {
       sourceWorker?.start();
       autopilotWorker?.start();
       learningWorker?.start();
+      im.worker?.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
       if (capsuleTransferService && !capsuleCleanupTimer) {
@@ -4077,6 +4188,7 @@ export function createWebApiApp(overrides = {}) {
     capsuleService,
     pluginService,
     pluginApplyWorker,
+    im,
     commands,
     taskManager,
     maintenanceService,
@@ -4114,6 +4226,7 @@ export function createWebApiApp(overrides = {}) {
       await sourceWorker?.close();
       await autopilotWorker?.close();
       await learningWorker?.close();
+      await im.worker?.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;
       if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
@@ -4881,7 +4994,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, imMetrics = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -5092,6 +5205,12 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       },
     },
   );
+  // The IM module's counters (inbound, dispatches, card updates, pushes,
+  // refusals), by kind. Absent when the module is not composed.
+  if (imMetrics) {
+    addMetric(lines, "open_science_im_events_total", "IM module events by kind (Feishu inbound, dispatches, card updates, pushes).",
+      "counter", imMetrics());
+  }
 
   return `${lines.join("\n")}\n`;
 }

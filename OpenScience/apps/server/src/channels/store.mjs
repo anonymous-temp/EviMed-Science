@@ -22,6 +22,11 @@
  * Secrets are never here: an app secret or a push token lives in the
  * per-user credential store and a binding holds only its reference.
  *
+ * Claims compare against the database's own clock, never the process's:
+ * `timestamptz(3)` rounds an insert half-up to the millisecond, and a claim
+ * reading the process clock in that same millisecond missed a row that was
+ * already due — the same skew, across two hosts, would delay every task.
+ *
  * @module channels/store
  */
 
@@ -422,14 +427,13 @@ export class ChannelStore {
 
   /** @param {{ owner: string, leaseMs: number, limit?: number, maxAttempts?: number }} input */
   async claimInbound({ owner, leaseMs, limit = 10, maxAttempts = 3 }) {
-    const at = this.now().toISOString();
     const { rows } = await this.query(`WITH due AS (
         SELECT id FROM evimed_channels.inbound_events
-        WHERE status='received' AND attempts < $4 AND (lease_expires_at IS NULL OR lease_expires_at < $1::timestamptz)
-        ORDER BY received_at, id FOR UPDATE SKIP LOCKED LIMIT $2
-      ) UPDATE evimed_channels.inbound_events e SET lease_owner=$3,
-        lease_expires_at=$1::timestamptz + ($5::integer * interval '1 millisecond'), attempts=e.attempts+1
-      FROM due WHERE e.id=due.id RETURNING e.*`, [at, limit, owner, maxAttempts, leaseMs]);
+        WHERE status='received' AND attempts < $3 AND (lease_expires_at IS NULL OR lease_expires_at < clock_timestamp())
+        ORDER BY received_at, id FOR UPDATE SKIP LOCKED LIMIT $1
+      ) UPDATE evimed_channels.inbound_events e SET lease_owner=$2,
+        lease_expires_at=clock_timestamp() + ($4::integer * interval '1 millisecond'), attempts=e.attempts+1
+      FROM due WHERE e.id=due.id RETURNING e.*`, [limit, owner, maxAttempts, leaseMs]);
     return rows.map(inboundRecord);
   }
 
@@ -499,15 +503,14 @@ export class ChannelStore {
 
   /** @param {{ owner: string, leaseMs: number, limit?: number }} input */
   async claimTasks({ owner, leaseMs, limit = 10 }) {
-    const at = this.now().toISOString();
     const { rows } = await this.query(`WITH due AS (
         SELECT id FROM evimed_channels.tasks
-        WHERE status IN ('running','delivering') AND next_check_at <= $1::timestamptz
-          AND (lease_expires_at IS NULL OR lease_expires_at < $1::timestamptz)
-        ORDER BY next_check_at, id FOR UPDATE SKIP LOCKED LIMIT $2
-      ) UPDATE evimed_channels.tasks t SET lease_owner=$3,
-        lease_expires_at=$1::timestamptz + ($4::integer * interval '1 millisecond')
-      FROM due WHERE t.id=due.id RETURNING t.*`, [at, limit, owner, leaseMs]);
+        WHERE status IN ('running','delivering') AND next_check_at <= clock_timestamp()
+          AND (lease_expires_at IS NULL OR lease_expires_at < clock_timestamp())
+        ORDER BY next_check_at, id FOR UPDATE SKIP LOCKED LIMIT $1
+      ) UPDATE evimed_channels.tasks t SET lease_owner=$2,
+        lease_expires_at=clock_timestamp() + ($3::integer * interval '1 millisecond')
+      FROM due WHERE t.id=due.id RETURNING t.*`, [limit, owner, leaseMs]);
     return rows.map(taskRecord);
   }
 
@@ -583,15 +586,14 @@ export class ChannelStore {
 
   /** @param {{ owner: string, leaseMs: number, limit?: number }} input */
   async claimDeliveries({ owner, leaseMs, limit = 20 }) {
-    const at = this.now().toISOString();
     const { rows } = await this.query(`WITH due AS (
         SELECT id FROM evimed_channels.deliveries
-        WHERE status='pending' AND not_before <= $1::timestamptz
-          AND (lease_expires_at IS NULL OR lease_expires_at < $1::timestamptz)
-        ORDER BY not_before, id FOR UPDATE SKIP LOCKED LIMIT $2
-      ) UPDATE evimed_channels.deliveries d SET lease_owner=$3,
-        lease_expires_at=$1::timestamptz + ($4::integer * interval '1 millisecond'), attempts=d.attempts+1
-      FROM due WHERE d.id=due.id RETURNING d.*`, [at, limit, owner, leaseMs]);
+        WHERE status='pending' AND not_before <= clock_timestamp()
+          AND (lease_expires_at IS NULL OR lease_expires_at < clock_timestamp())
+        ORDER BY not_before, id FOR UPDATE SKIP LOCKED LIMIT $1
+      ) UPDATE evimed_channels.deliveries d SET lease_owner=$2,
+        lease_expires_at=clock_timestamp() + ($3::integer * interval '1 millisecond'), attempts=d.attempts+1
+      FROM due WHERE d.id=due.id RETURNING d.*`, [limit, owner, leaseMs]);
     return rows.map(deliveryRecord);
   }
 
