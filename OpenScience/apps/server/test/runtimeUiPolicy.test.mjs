@@ -854,6 +854,22 @@ test("encoded or malformed native API paths cannot bypass the HTTP method and sp
   assert.equal(reached, 0);
 });
 
+test("the session-log ZIP route is refused, which is why the hosted profile does not mount /export", async (t) => {
+  // `/export` and the session header's 「下载 Session 日志」 both fetch this
+  // route, HEAD first and then the download. Its name has no `/`, so it is not
+  // a method, and the `/api/` rule above refuses it: hosted, both affordances
+  // ended in a failed-export dialog, and `session-log-download` is on the
+  // profile's disabled list instead (dshProfilePatch.mjs).
+  const f = await fixture(t);
+  let reached = 0;
+  f.manager.proxy = async (_req, res) => { reached++; res.end("zip"); };
+  for (const method of ["HEAD", "GET"]) {
+    const response = await fetch(`${f.base}/api/session.export?sessionId=session-1&includeDescendants=true`, { method, headers: { cookie: f.cookie, Origin: UI_ORIGIN } });
+    assert.equal(response.status, 400, method);
+  }
+  assert.equal(reached, 0);
+});
+
 test("the exact native host-event result endpoint remains available for user-question replies", async (t) => {
   const f = await fixture(t);
   const reached = [];

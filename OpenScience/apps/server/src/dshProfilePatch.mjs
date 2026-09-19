@@ -339,6 +339,31 @@ export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
   // in the console (2026-09-18 walk, F7). Not mounting it is the composition's
   // answer; the namespace ban stays as the one that holds.
   "cordis-client-runner",
+  // Not panels either: the owners of two slash commands a researcher could
+  // pick and that cannot work here. Asked of a live 0.1.5-rc.2 kernel booted
+  // with this patch (2026-09-19), `commands/list` for an `evimed-universal`
+  // session answered `export`, `feedback` and `permission` and nothing else --
+  // with our `/能力`, the whole `/` menu. `permission` is handled on its row
+  // below, because that row is the sandbox itself and cannot go.
+  //
+  // `command-feedback` owns `/feedback` and the `sessionFeedback` Remote. Its
+  // dialog is `ui-message-feedback`, disabled above, so a pick fell through to
+  // the text form: the remark became a log-only `feedback/record` event that
+  // nothing in this deployment reads, acknowledged in English with the session
+  // id and an anonymous user id the command mints into DSH_HOME. Upstream that
+  // event is what authorizes `session-telemetry-otel` to upload the session,
+  // and the hosted profile disables that row. Nothing injects `sessionFeedback`
+  // and `dsh-message-feedback` imports only the category list from the
+  // package, so the row goes whole.
+  "command-feedback",
+  // `session-log-download` owns `/export` and the session header's
+  // 「下载 Session 日志」 item. Both fetch the ZIP from `/api/session.export`,
+  // which is not a `<namespace>/<name>` method, and the runtime-UI proxy
+  // answers 400 to every `/api/` path that is not one -- so both ended in a
+  // 「Session 导出失败」 dialog. The archive is the whole session tree besides:
+  // the injected brief, the capsule profile and every raw tool call, which is
+  // what `ui-trajectory` is operator-only for.
+  "session-log-download",
 ]);
 
 /**
@@ -457,7 +482,27 @@ function presetRows(input) {
     "# item away from an unconfined sandbox, behind nothing but a checkbox.",
     "# The runtime-UI deny list never covered it, because it is not an API",
     "# method. With one row there is nothing to switch to.",
+    "#",
+    "# Hosted, the row also mounts without the command registry. `/permission`",
+    "# was still listed in the `/` menu as a command of its own, and with one row",
+    "# all it could do was answer, in English, which preset was current. A",
+    "# private `commands` that nothing provides means its registration never",
+    "# runs. The presets and the approval policy do not use the registry, and",
+    "# the composer's chip sends `/permission` only to switch to another row,",
+    "# of which there is none.",
     "- id: permission",
+    // `isolate` is the loader's own entry option: the named service resolves in
+    // a realm local to this row. The row's required services (`shell`,
+    // `approval`, `sessions`, `sessionProjections`) still come from the parent,
+    // so the row activates; `/permission` is registered inside an optional
+    // `ctx.inject(['commands'])`, whose sub-fiber just stays pending. The boot
+    // audit (`assertEntriesActivated`) walks loader entries, not sub-fibers,
+    // and a fiber's state follows its own inject list only. Measured on
+    // a live 0.1.5-rc.2 kernel booted with this patch: it boots, sessions
+    // create, and `commands/list` no longer names `permission`. The chip stays
+    // safe without the command: it returns before sending when the pick is
+    // the current preset, and one row is all it can offer.
+    ...(input.flags.hosted ? ["  isolate:", "    commands: true"] : []),
     "  config:",
     "    presets:",
     ...(input.flags.hosted
