@@ -26,8 +26,6 @@ const releaseEnv = {
   OPEN_SCIENCE_RUNTIME_IMAGE_ID: `sha256:${"2".repeat(64)}`,
   OPEN_SCIENCE_CADDY_VERSION: "2.11.4-alpine",
   OPEN_SCIENCE_CADDY_IMAGE_ID: `sha256:${"3".repeat(64)}`,
-  OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE: "evimed-document-parser:test-release",
-  OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE_ID: `sha256:${"4".repeat(64)}`,
   OPEN_SCIENCE_OPENLIST_IMAGE_ID: `sha256:${"7".repeat(64)}`,
   OPEN_SCIENCE_OPENVIKING_IMAGE_ID: `sha256:${"8".repeat(64)}`,
 };
@@ -87,7 +85,6 @@ test("release manifest generator records exact images, tools, skills, and source
       caddyVersion: "2.11.4-alpine",
     });
     assert.deepEqual(manifest.services, [
-      { name: "document-parser", image: releaseEnv.OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE, imageId: releaseEnv.OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE_ID },
       { name: "openlist", image: `${deps.openlist.image}:v${deps.openlist.version}@${deps.openlist.imageDigest}`, imageId: releaseEnv.OPEN_SCIENCE_OPENLIST_IMAGE_ID },
       // The recall index joined the base stack on 2026-09-11, so a release now
       // records which index image served it: the vectors are derived, but which
@@ -162,7 +159,6 @@ test("release manifest generator records exact images, tools, skills, and source
         "examples/climate-trends",
         "deploy/web/Dockerfile",
         "deploy/web/postgres-backup-status",
-        "deploy/document-parser",
         "deploy/openlist",
         "deploy/specialist-adapter",
         "deploy/host",
@@ -176,7 +172,6 @@ test("release manifest generator records exact images, tools, skills, and source
         "scripts/ops/configure-backup.mjs",
         "scripts/ops/configure-local-auth.mjs",
         "scripts/ops/configure-production-state.mjs",
-        "scripts/ops/parser-ingestion-smoke.mjs",
         "scripts/ops/object-backup.mjs",
         "scripts/ops/restore-data.sh",
         "scripts/ops/restore-drill.sh",

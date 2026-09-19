@@ -117,7 +117,8 @@ test("GitHub discovers the workflows at repository root with monorepo tools and 
 test("PostgreSQL auth and product tests execute against different disposable databases", async () => {
   const value = await workflow("web.yml");
   const job = value.jobs.web;
-  assert.match(job.services.postgres.image, /^postgres:16\./);
+  // The production image, so the knowledge-base vector leg is tested where it runs.
+  assert.match(job.services.postgres.image, /^pgvector\/pgvector:0\.8\.\d+-pg16-bookworm@sha256:[a-f0-9]{64}$/);
   const auth = job.steps.find((step) => step.name === "Test shared authentication state");
   const product = job.steps.find((step) => step.name === "Test durable product state");
   assert.ok(auth && product);

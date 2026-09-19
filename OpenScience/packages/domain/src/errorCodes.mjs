@@ -139,6 +139,19 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "web_search_response_too_large",
   "web_search_endpoint_invalid",
   "web_search_gateway_token_invalid",
+  // Knowledge-base search not answering — switched off, an outage, a slow
+  // index. The documents are still in the workspace to read and grep, which
+  // is what the tool's own failure tells the run to do.
+  "kb_search_disabled",
+  "kb_search_unconfigured",
+  "kb_search_unavailable",
+  "kb_search_timeout",
+  "kb_search_rate_limited",
+  "kb_search_upstream_error",
+  "kb_search_response_invalid",
+  "kb_search_response_too_large",
+  "kb_search_gateway_token_missing",
+  "kb_search_gateway_token_invalid",
   // Host configuration the run cannot do anything about.
   "public_source_gateway_unconfigured",
   "public_source_dataset_unconfigured",
@@ -366,6 +379,12 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "web_search_language_invalid",
   "web_search_limit_invalid",
   "web_search_time_range_invalid",
+  // The same for a knowledge-base search the gateway could not parse.
+  "kb_search_query_invalid",
+  "kb_search_limit_invalid",
+  "kb_search_source_ids_invalid",
+  "kb_search_request_invalid",
+  "kb_search_request_too_large",
   // Malformed calls into the specialist workers and the science connectors:
   // a bad action, an id that is not one, a path outside the workspace, an
   // argument the schema rejects. The run rewrites the call.
@@ -648,6 +667,50 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * Codes a knowledge-base intake records on a source, or answers an upload with.
+ *
+ * A researcher meets these on the source card and in the upload toast, never
+ * in a run's verdict; they are here so each one is held to having a Chinese
+ * sentence like every other code a person can read. Private: nothing outside
+ * this module needs the list, only the guarantee.
+ */
+const sourceIntakeErrorCodes = Object.freeze([
+  'source_format_unsupported',
+  'source_media_unsupported',
+  'source_parser_payload_too_large',
+  'source_parser_input_too_large',
+  'source_parser_checksum_failed',
+  'source_parser_auth_failed',
+  'source_parser_quota_exhausted',
+  'source_parser_rate_limited',
+  'source_parser_unavailable',
+  'source_parser_timeout',
+  'source_parser_internal_error',
+  'source_parser_upstream_error',
+  'source_parser_unconfigured',
+  'source_parser_rejected',
+  'source_parser_response_invalid',
+  'source_parser_response_too_large',
+  'source_changed',
+])
+
+/**
+ * Codes the personal library answers with (`libraryService.mjs`): shown where
+ * a document is added to the library, removed from it, or published from it
+ * into the capsule. Private for the same reason as the intake list.
+ */
+const libraryErrorCodes = Object.freeze([
+  'library_unavailable',
+  'library_payload_invalid',
+  'library_source_invalid',
+  'library_item_not_found',
+  'library_full',
+  'library_source_removed',
+  'library_understanding_missing',
+  'library_capsule_unavailable',
+])
+
+/**
  * Every code this build knows, so a mapping test can prove a new code was
  * classified rather than silently inheriting a default.
  *
@@ -666,6 +729,8 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...repairableEvidencePackageErrorCodes,
   ...recoverableEvidenceSourceErrorCodes,
   ...terminalEvidenceSourceErrorCodes,
+  ...sourceIntakeErrorCodes,
+  ...libraryErrorCodes,
 ])])
 
 /**
@@ -883,6 +948,37 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   verification_verdict_invalid: '独立复核给出的结论不在允许的取值范围内，这次不采信它。原结论未被推翻。',
   verification_verdict_missing: '独立复核没有给出结论。原结论未被推翻。',
 
+  // ——— Knowledge-base intake: what a source card and an upload refusal say ———
+  // The in-house parser's refusals reach a researcher on the source card, and
+  // three of them (413, 415, 422) are final on the first answer, so each says
+  // what to do instead of only that it failed.
+  source_format_unsupported:
+    '这种文件格式还不能解析。支持 PDF、Word、PPT、Excel、图片（jpg、png、bmp、gif）、EPUB、MOBI、HTML、RTF 和纯文本类文件（txt、md、csv、json 等）。',
+  source_media_unsupported: '音频和视频暂时不能入库：文档解析服务还不能转写录音和视频。可以上传讲稿或逐字稿。',
+  source_parser_payload_too_large: '文件超过文档解析服务 100 MB 的上限，拆分后再上传即可。',
+  source_parser_input_too_large: '文件超过可解析的大小上限，拆分后再上传即可。',
+  source_parser_checksum_failed: '文件在传给解析服务的途中发生了变化，校验没有通过；重新分析一次即可。',
+  source_parser_auth_failed: '文档解析服务没有接受本平台的密钥，需要管理员配置解析服务密钥；纯文本类资料不受影响。',
+  source_parser_quota_exhausted: '文档解析服务的可用额度已经用完，需要管理员补充额度后再重新分析。',
+  source_parser_rate_limited: '文档解析服务这会儿请求太多，稍后再重新分析。',
+  source_parser_unavailable: '文档解析服务暂时连不上，稍后再重新分析。',
+  source_parser_timeout: '文档解析超时了。文件很大时可以拆分后再上传。',
+  source_parser_internal_error: '文档解析服务这次内部出错，稍后再重新分析。',
+  source_parser_upstream_error: '文档解析服务依赖的识别服务这次没有给出结果，稍后再重新分析。',
+  source_parser_unconfigured: '这个部署还没有配置文档解析服务，目前只能解析纯文本类资料。',
+  source_parser_rejected: '文档解析服务拒绝了这份文件；请确认文件完整、扩展名与内容一致后重新上传。',
+  source_parser_response_invalid: '文档解析服务返回的结果无法使用，稍后再重新分析。',
+  source_parser_response_too_large: '这份文件解析出的正文超过了可保存的上限，拆分后再上传即可。',
+  source_changed: '文件在登记之后被改动过；刷新知识库后再分析。',
+  library_unavailable: '个人资料库暂时不可用，稍后再试。',
+  library_payload_invalid: '资料库请求的内容不完整，刷新页面后再试。',
+  library_source_invalid: '没有找到这份资料，刷新知识库后再试。',
+  library_item_not_found: '这份资料不在个人资料库里。',
+  library_full: '个人资料库已满。先移出不再需要的资料，再加入新的。',
+  library_source_removed: '这份资料在各个项目里都已删除，它的资料理解结果也随之删除，没有可以发布到记忆胶囊的内容；资料库里的正文副本仍然可以阅读和检索。',
+  library_understanding_missing: '这份资料还没有资料理解结果。分析深度为「结构化」或「深度」的资料理解完成后，才能发布到记忆胶囊。',
+  library_capsule_unavailable: '账户的主要胶囊是别人分享来的，资料只会写进你自己的胶囊。先把自己的胶囊设为主要胶囊，再发布。',
+
   // ——— Tool-boundary codes that have no family and would otherwise be bare ———
   tool_disabled: '这个部署没有开放这项工具，运行会绕开它继续。',
   unknown_tool: '调用了一个不存在的工具。',
@@ -938,6 +1034,10 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^(meta|specialist)_/, '专科引擎这次没能完成，稍后重试或缩小范围。'],
   [/^runtime_/, '运行时出现问题，稍后重试。'],
   [/^credits_/, '额度不足或已达上限。'],
+  // A parser code this build has no exact sentence for still says what failed
+  // and what the card's own button does about it.
+  [/^source_parser_/, '文档解析这次没有完成，稍后再重新分析。'],
+  [/^kb_search_/, '资料库检索这次没能完成；运行会直接读取知识库里的文件继续。'],
 ])
 
 /**
@@ -1095,6 +1195,14 @@ export function errorCodeOutcome(code) {
   if (recoverableEvidenceSourceErrorCodes.has(text) || terminalEvidenceSourceErrorCodes.has(text)) return 'upstream'
   if (repairableEvidencePackageErrorCodes.has(text)) return 'gated'
   if (ANALYSIS_ERROR_CODES.includes(text)) return 'upstream'
+  // A parse that failed or a format that was refused happened at the source
+  // boundary; nothing about it is a verdict on anyone's work.
+  if (sourceIntakeErrorCodes.includes(text)) return 'upstream'
+  // The library's refusals are about the library, never about a run: a full
+  // library is a ceiling, and everything else names a document that is not
+  // there to act on.
+  if (text === 'library_full') return 'capped'
+  if (libraryErrorCodes.includes(text)) return 'upstream'
   if (CREDIT_ERROR_CODES.includes(text) || /^credits_/.test(text) || /^usage_/.test(text)) return 'capped'
   if (/^verification_/.test(text)) return 'stopped'
   if (/^(specialist|meta)_/.test(text)) return 'gated'

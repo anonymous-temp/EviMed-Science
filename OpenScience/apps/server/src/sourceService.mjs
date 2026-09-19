@@ -4,7 +4,11 @@ import { HttpError } from "./security.mjs";
 import { migrateProductStore, productInteger, productPayload, productTime } from "./productPersistence.mjs";
 import { normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstanding, projectSourceUnderstandingOutput,
   sourceUnderstandingAuditSample, sourceUnderstandingOmissionNotice } from "@evimed/domain";
+// The knowledge base's format list and page arithmetic, shared with the
+// browser so the picker and this refusal cannot disagree (2026-09-20).
+import { normalizeSourcePageMap, renderSourcePageMarkers, sourceFormatRoute } from "@evimed/domain";
 import { openListSourceInput } from "./openListSourceConnector.mjs";
+import { estimateTokens } from "./kbChunker.mjs";
 
 function projectRun(run) { return run ? { id: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId } : null; }
 function projectUnit(unit) { return { id: unit.id, unitType: unit.unitType, start: unit.start, end: unit.end,
@@ -20,6 +24,7 @@ export function projectSourceManifestRecord(row) {
   const verdict = omissionAudit ? { status: omissionAudit.status, reason: omissionAudit.reason, omissionRate: omissionAudit.omissionRate ?? null } : null;
   return { ...row, payload: { ...payload, outputs: publicOutputs, ...(verdict ? { omissionAudit: verdict } : {}), ...(analysis ? { analysis: {
     generation: analysis.generation, phase: analysis.phase, schemaVersion: analysis.schemaVersion, unitCount: analysis.unitCount,
+    ...(Number.isSafeInteger(analysis.pageCount) ? { pageCount: analysis.pageCount } : {}),
     run: projectRun(analysis.run),
   } } : {}) } };
 }
@@ -103,6 +108,83 @@ const UNIT_TYPES = Object.freeze(["page", "slide", "segment", "column", "chunk",
 const UNIT_STATUSES = Object.freeze(["extracted", "indexed_only", "no_content", "failed"]);
 const shaPattern = /^[a-f0-9]{64}$/;
 const registrationLocks = new Map();
+
+/**
+ * Refuse a file the knowledge base cannot read, before it is written or
+ * registered: every connector registers through `register()`, so the upload
+ * route, the upload command, an OpenList import and a folder sync all get the
+ * same answer. Recordings are refused by name because the parser lists them
+ * and does not transcribe them; the sentence a researcher reads is the
+ * domain registry's for each code.
+ * @param {string} file
+ */
+export function assertKnowledgeBaseFormat(file) {
+  const route = sourceFormatRoute(file);
+  if (route === "media") throw new HttpError(415, "source_media_unsupported", "Audio and video cannot be added to the knowledge base yet.");
+  if (route === "unsupported") throw new HttpError(415, "source_format_unsupported", "This file format cannot be added to the knowledge base.");
+}
+
+/**
+ * The materialized `index.md` a run reads: a bibliographic header, then the
+ * captured text with a marker line where each page begins.
+ *
+ * The header carries only what the platform can stand behind. The title and
+ * authors are the parser's model reading of the document, and say so by being
+ * labelled as the document's metadata rather than asserted in prose; a DOI is
+ * shown when Crossref confirmed it, marked when it could not be checked, and
+ * absent when Crossref named a different work.
+ *
+ * @param {{ original: string, sha256: string, extractor: any, text: string,
+ *   pageMap?: any[] | null, metadata?: Record<string, any> | null }} input
+ */
+export function sourceIndexDocument({ original, sha256, extractor, text: body, pageMap = null, metadata = null }) {
+  const name = path.posix.basename(String(original));
+  const title = typeof metadata?.title === "string" && metadata.title.trim() ? metadata.title.trim() : "";
+  const authors = Array.isArray(metadata?.authors) ? metadata.authors.filter((item) => typeof item === "string" && item.trim()) : [];
+  const published = [metadata?.source, metadata?.publicationDate].filter((item) => typeof item === "string" && item.trim()).join(", ");
+  const doi = typeof metadata?.doi === "string" ? metadata.doi : "";
+  const doiLine = doi ? `DOI: ${doi}${metadata?.doiCheck?.status === "verified" ? "" : " (not confirmed by Crossref)"}` : "";
+  const pages = Array.isArray(pageMap) && pageMap.length ? pageMap : null;
+  return [
+    `# ${title || name}`,
+    "",
+    `Source: ${String(original)}`,
+    ...(title ? [`Title: ${title}`] : []),
+    ...(authors.length ? [`Authors: ${authors.slice(0, 20).join("; ")}${authors.length > 20 ? "; et al." : ""}`] : []),
+    ...(published ? [`Published: ${published}`] : []),
+    ...(doiLine ? [doiLine] : []),
+    `SHA-256: ${sha256}`,
+    `Extractor: ${extractor.name} ${extractor.version} (${extractor.parser})`,
+    ...(pages ? [`Pages: ${pages.length}, each beginning at a line <!-- page N --> in the text below`] : []),
+    "",
+    renderSourcePageMarkers(String(body ?? ""), pages),
+    "",
+  ].join("\n");
+}
+
+/**
+ * The key a source's text is indexed under, with its SHA-256 and text digest.
+ * The in-house parser's version is the configured revision label itself
+ * (`evimed-extract@0.5.0`); a local read or an older parser is `name@version`.
+ * @param {{ name?: string, version?: string, parser?: string } | null | undefined} extractor
+ */
+export function extractorRevision(extractor) {
+  return extractor?.parser === "api" ? String(extractor.version ?? "") : `${extractor?.name ?? "unknown"}@${extractor?.version ?? "0"}`;
+}
+
+/** The parser revision a source's stored analysis was cut under: the label
+ *  recorded at capture time, or — for a capture older than that field — the
+ *  one its extractor implies. The knowledge-base index and the personal
+ *  library key a document's text by it.
+ * @param {{ parserRevision?: unknown, extractor?: any } | null | undefined} analysis */
+export function sourceParserRevision(analysis) {
+  return typeof analysis?.parserRevision === "string" && analysis.parserRevision ? analysis.parserRevision : extractorRevision(analysis?.extractor);
+}
+
+/** Where a source generation's page map is kept: one knowledge record beside
+ *  its capture units, compact rows so a long scan still fits one record.
+ * @param {string} sourceId @param {number} generation */
+function pageMapRecordId(sourceId, generation) { return `page-map:${sourceId}:g${generation}`; }
 
 /** @param {unknown} value @param {string} field @param {number} max */
 function text(value, field, max = 512) {
@@ -325,6 +407,7 @@ export class SourceService {
     const projectId = text(input.projectId, "project id", 160);
     const sourceConnector = connector(input.connector);
     const file = sourcePath(input.path);
+    assertKnowledgeBaseFormat(file);
     const sha256 = text(input.sha256, "sha256", 64).toLowerCase();
     if (!shaPattern.test(sha256)) throw new HttpError(400, "source_digest_invalid", "Source SHA-256 is invalid.");
     const size = Number(input.size);
@@ -463,6 +546,11 @@ export class SourceService {
       if (source.payload.analysis?.generation === source.payload.generation) return this.loadCapture(job.userId, source, client);
       const input = normalizeSourceText({ sourceId: source.id, generation: source.payload.generation,
         docType: source.payload.docType, depth: source.payload.depth, text: parsed.text });
+      // The parser's page offsets are into its own text; the capture's text has
+      // a BOM and CRLF folded away, so the map is moved with it or it is not
+      // kept at all. A dropped map costs page numbers, never the document.
+      const pageMap = parsed.pageMap ? normalizeSourcePageMap(parsed.text, parsed.pageMap) : null;
+      const metadata = parsed.metadata && typeof parsed.metadata === "object" && !Array.isArray(parsed.metadata) ? parsed.metadata : null;
       const units = parsed.units ?? [];
       const failed = units.filter(unit => unit.status === "failed").length;
       const parserCoverage = { total: units.length, accounted: units.length, accountedPercent: 100,
@@ -473,12 +561,23 @@ export class SourceService {
         parserFailureRate: units.length ? failed / units.length : null, omissionRate: null, parsedAt: this.now().toISOString() };
       const analysis = { generation: input.generation, phase: "indexed", schemaVersion: 1, unitCount: input.units.length,
         textSha256: digest(input.text),
-        extractor: parsed.extractor, summary: String(parsed.summary).slice(0, 16000), parserCoverage };
-      await insertSourceRecords(client, job.userId, job.projectId, input.units.map(unit => ({ kind: "knowledge", id: `capture:${unit.id}`,
-        payload: { recordType: "source-capture", sourceId: source.id, generation: input.generation, status: "pending", unit } })));
-      await this.documents.put(job.userId, "source", source.id, { ...source.payload, analysis, coverage: parserCoverage },
+        extractor: parsed.extractor, summary: String(parsed.summary).slice(0, 16000), parserCoverage,
+        // What the knowledge-base index keys this text by, and how much of it
+        // there is: the search decides "read it whole" from the sum of these.
+        parserRevision: extractorRevision(parsed.extractor), charCount: input.text.length, tokenEstimate: estimateTokens(input.text),
+        ...(pageMap ? { pageCount: pageMap.length } : parsed.pageMap ? { pageMapDropped: "pages_inconsistent" } : {}) };
+      /** @type {{kind:string,id:string,payload:Record<string, any>}[]} */
+      const records = input.units.map(unit => ({ kind: "knowledge", id: `capture:${unit.id}`,
+        payload: { recordType: "source-capture", sourceId: source.id, generation: input.generation, status: "pending", unit } }));
+      if (pageMap) records.push({ kind: "knowledge", id: pageMapRecordId(source.id, input.generation), payload: {
+        recordType: "source-page-map", sourceId: source.id, generation: input.generation, textSha256: analysis.textSha256,
+        pages: pageMap.map(entry => [entry.page, entry.start, entry.end, entry.status]) } });
+      await insertSourceRecords(client, job.userId, job.projectId, records);
+      // Metadata belongs to the generation that parsed it: a re-parse that
+      // found none clears what an earlier one found rather than keeping it.
+      await this.documents.put(job.userId, "source", source.id, { ...source.payload, analysis, coverage: parserCoverage, metadata },
         { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
-      return { input, extractor: parsed.extractor, summary: parsed.summary, parserCoverage };
+      return { input, extractor: parsed.extractor, summary: parsed.summary, parserCoverage, pageMap, metadata };
     });
   }
 
@@ -501,7 +600,24 @@ export class SourceService {
     return { input: { schemaVersion: 1, sourceId: source.id, generation: source.payload.generation,
       docType: source.payload.docType, depth: source.payload.depth, schema: sourceUnderstandingSchema(source.payload.docType), units, text: units.map(unit => unit.text).join(""),
       auditSample: sourceUnderstandingAuditSample({ sourceId: source.id, generation: source.payload.generation, units }) },
-    extractor: analysis.extractor, summary: analysis.summary, parserCoverage: analysis.parserCoverage };
+    extractor: analysis.extractor, summary: analysis.summary, parserCoverage: analysis.parserCoverage,
+    pageMap: await this.loadPageMap(userId, source, client), metadata: source.payload.metadata ?? null };
+  }
+
+  /**
+   * A source generation's page map in capture offsets, or null when its parse
+   * returned none. A map whose text digest is not the capture's is not this
+   * generation's and is not returned.
+   * @param {string} userId @param {any} source @param {any} [client]
+   */
+  async loadPageMap(userId, source, client = this.documents.database) {
+    const analysis = source.payload.analysis;
+    if (!analysis?.pageCount || !client) return null;
+    const result = await client.query(`SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND project_id=$2 AND kind='knowledge'
+      AND id=$3 AND deleted_at IS NULL`, [userId, source.projectId, pageMapRecordId(source.id, analysis.generation)]);
+    const payload = result.rows[0]?.payload;
+    if (!payload || payload.textSha256 !== analysis.textSha256 || !Array.isArray(payload.pages)) return null;
+    return payload.pages.map(([page, start, end, status]) => ({ page, start, end, status }));
   }
 
   /** Waiting for a bounded runtime is not a failed parse or a retry attempt. */

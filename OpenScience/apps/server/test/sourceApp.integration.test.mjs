@@ -149,3 +149,121 @@ test("concurrent source registration preserves every path and assigns unique fam
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+/** A signed-in client of a fresh app, with the worker stopped so a test drives it. */
+async function signedIn(overrides = {}) {
+  const dataDir = await mkdtemp(path.join("/tmp", "evimed-source-app-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
+    bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl,
+    sourceIngestionEnabled: true, sourceIngestionPollMs: 100, sourceIngestionLeaseMs: 1000, ...overrides });
+  const username = `source${randomUUID().slice(0, 8)}`;
+  const user = await app.store.createUser(username, "test-only-source-password", "Source fixture");
+  const project = await app.store.defaultProject(await app.store.userById(user.id));
+  const address = await app.listen(0, "127.0.0.1");
+  await app.sourceWorker.close();
+  const base = `http://127.0.0.1:${address.port}`;
+  const login = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username, password: "test-only-source-password" }) });
+  const auth = await login.json();
+  const headers = { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0],
+    "x-open-science-csrf": auth.data.csrfToken, "x-open-science-project": project.id };
+  const close = async () => {
+    await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  };
+  return { app, user, project, base, headers, close };
+}
+
+/** Drive the stopped worker until the source reaches a settled state. */
+async function settle(app, userId, sourceId) {
+  let current;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await app.sourceWorker.tick();
+    current = await app.sourceService.get(userId, sourceId);
+    if (["complete", "needs_attention", "failed"].includes(current.payload.status)) return current;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return current;
+}
+
+test("the page's own upload command makes a source, and a format the knowledge base cannot read is never written", {
+  skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
+}, async () => {
+  const { user, project, base, headers, close } = await signedIn();
+  try {
+    // FilesPage uploads through /api/commands/upload_file. Until 2026-09-20 that
+    // command wrote the file and registered nothing, so no upload from the page
+    // ever became a source.
+    const command = (filename, data = "笔记内容") => fetch(`${base}/api/commands/upload_file`, { method: "POST", headers,
+      body: JSON.stringify({ root: "base", filename, data, encoding: "utf8" }) });
+    const note = await command("knowledge-base/房颤笔记.md");
+    assert.equal(note.status, 200);
+    const inventory = await (await fetch(`${base}/api/sources?projectId=${encodeURIComponent(project.id)}`, { headers })).json();
+    assert.deepEqual(inventory.data.items.map((item) => item.payload.paths), [["knowledge-base/房颤笔记.md"]]);
+
+    const recording = await command("knowledge-base/查房录音.mp3");
+    assert.equal(recording.status, 415);
+    assert.equal((await recording.json()).code, "source_media_unsupported");
+    await assert.rejects(stat(path.join(project.baseDir, "knowledge-base/查房录音.mp3")), { code: "ENOENT" });
+
+    const data = await fetch(`${base}/api/files/upload`, { method: "POST", headers,
+      body: JSON.stringify({ root: "base", path: "knowledge-base/cohort.sav", data: "x", encoding: "utf8" }) });
+    assert.equal(data.status, 415);
+    assert.equal((await data.json()).code, "source_format_unsupported");
+    await assert.rejects(stat(path.join(project.baseDir, "knowledge-base/cohort.sav")), { code: "ENOENT" });
+
+    // Outside the knowledge base the workspace takes any file, as before.
+    const elsewhere = await command("analysis/cohort.sav");
+    assert.equal(elsewhere.status, 200);
+    const after = await (await fetch(`${base}/api/sources?projectId=${encodeURIComponent(project.id)}`, { headers })).json();
+    assert.equal(after.data.items.length, 1);
+    assert.equal(user.id.length > 0, true);
+  } finally { await close(); }
+});
+
+test("a parsed document keeps its checked metadata, its page map and a paged index.md", {
+  skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
+}, async () => {
+  const content = "第一页：房颤患者的抗凝治疗。\r\n第二页：利伐沙班 15 mg 每日一次。";
+  const seen = [];
+  const documentParserFetch = async (url, init) => {
+    seen.push({ url: String(url), authorization: init.headers.authorization });
+    return new Response(JSON.stringify({ code: 200, message: "success", uuid: "U-1", timestamp: 1, elapsed_ms: 5, data: {
+      title: "房颤抗凝治疗专家共识", authors: ["王五"], abstract: "", doi: "10.1234/afib.2024.1", content,
+      pages: [{ index: 1, start: 0, end: 16, status: "ok" }, { index: 2, start: 16, end: content.length, status: "ok" }],
+    } }), { status: 200, headers: { "x-quota-cost": "1", "x-quota-remaining": "41" } });
+  };
+  const sourceMetadataFetch = async () => new Response(JSON.stringify({ message: { title: ["房颤抗凝治疗专家共识"] } }), { status: 200 });
+  const { app, user, project, base, headers, close } = await signedIn({
+    documentParserUrl: "http://parser.test", documentParserToken: "sk-test-only", documentParserFetch, sourceMetadataFetch,
+  });
+  try {
+    const bytes = Buffer.from("%PDF-1.4\nsynthetic\n");
+    const uploaded = await fetch(`${base}/api/files/upload`, { method: "POST", headers,
+      body: JSON.stringify({ root: "base", path: "knowledge-base/房颤共识.pdf", data: bytes.toString("base64"), encoding: "base64" }) });
+    assert.equal(uploaded.status, 200);
+    const registered = (await uploaded.json()).data.source;
+    const source = await app.sourceService.get(user.id, registered.id);
+    // Index only: this fixture is about the parse, not the understanding run.
+    await app.sourceService.override(user.id, source.id, { expectedRevision: source.revision, docType: source.payload.docType,
+      depth: "index_only", reason: "Parse and page-map fixture." });
+    const done = await settle(app, user.id, source.id);
+    assert.equal(done.payload.status, "complete");
+    assert.deepEqual(seen.map((request) => [new URL(request.url).pathname, request.authorization]),
+      [["/api/v1/extract/text/file", "Bearer sk-test-only"]]);
+    assert.equal(done.payload.metadata.title, "房颤抗凝治疗专家共识");
+    assert.equal(done.payload.metadata.doi, "10.1234/afib.2024.1");
+    assert.equal(done.payload.metadata.doiCheck.status, "verified");
+    assert.equal(done.payload.analysis.pageCount, 2);
+    assert.equal(done.payload.extractor.quota.remaining, 41);
+    const capture = await app.sourceService.loadCapture(user.id, done);
+    // The CRLF inside page one is folded by the capture, and the page map moved with it.
+    assert.deepEqual(capture.pageMap, [{ page: 1, start: 0, end: 15, status: "ok" }, { page: 2, start: 15, end: content.length - 1, status: "ok" }]);
+    assert.equal(capture.input.text.slice(15), "第二页：利伐沙班 15 mg 每日一次。");
+    const index = await readFile(path.join(project.baseDir, done.payload.outputs.artifactPath), "utf8");
+    assert.match(index, /^# 房颤抗凝治疗专家共识$/m);
+    assert.match(index, /^DOI: 10\.1234\/afib\.2024\.1$/m);
+    assert.match(index, /^<!-- page 1 -->\n第一页：房颤患者的抗凝治疗。\n<!-- page 2 -->\n第二页：利伐沙班 15 mg 每日一次。$/m);
+  } finally { await close(); }
+});

@@ -213,6 +213,12 @@ export function loadConfig(overrides = {}) {
     ["OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS", "set OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS instead"],
     ["OPEN_SCIENCE_MEMOS_ENGINE_URL", "the recall index is OpenViking; set OPEN_SCIENCE_OPENVIKING_URL instead"],
     ["OPEN_SCIENCE_REQUIRE_MEMORY_INDEX", "set OPEN_SCIENCE_MEMORY_INDEX_STRICT instead"],
+    // The MinerU container read its input from a shared staging directory
+    // under a shared group. The in-house parser receives the bytes in the
+    // request itself, so there is no directory, owner or group to configure.
+    ["OPEN_SCIENCE_DOCUMENT_PARSER_STAGING_DIR", "the parser receives the bytes over HTTP; remove this variable"],
+    ["OPEN_SCIENCE_DOCUMENT_PARSER_UID", "the parser receives the bytes over HTTP; remove this variable"],
+    ["OPEN_SCIENCE_DOCUMENT_PARSER_GID", "the parser receives the bytes over HTTP; remove this variable"],
   ]) {
     if (process.env[oldName]) throw new Error(`${oldName} is not read any more: ${remedy}.`);
   }
@@ -1163,14 +1169,29 @@ export function loadConfig(overrides = {}) {
     documentParserToken: documentParserSecret.value,
     documentParserTokenSource: documentParserSecret.source,
     documentParserTokenError: documentParserSecret.error,
+    // The whole parse — every attempt and the waits between them — not one
+    // request. 300 s (plan §2.2): the API waits on Alibaba DocMind inside a
+    // single request, which takes minutes on a long scanned document; past
+    // five minutes the job queue's own retry, with the source's backoff, is a
+    // better next step than holding the same connection open.
     documentParserTimeoutMs: Number(
-      overrides.documentParserTimeoutMs ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS ?? 900_000,
+      overrides.documentParserTimeoutMs ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS ?? 300_000,
     ),
-    documentParserStagingDir: String(
-      overrides.documentParserStagingDir ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_STAGING_DIR ?? "",
+    // The label the knowledge-base index is keyed by, with each file's SHA-256.
+    // The parser reports no version of its own, so this is the only way a
+    // parser upgrade can reach the index: move the label and every document
+    // parsed under the old one is re-indexed. Its default is the pin.
+    documentParserRevision: String(
+      overrides.documentParserRevision ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_REVISION
+      ?? depsVersions["evimed-extract"]?.revision ?? "",
+    ).trim(),
+    // One Crossref lookup per parsed document that names a DOI, made by the
+    // ingestion worker between parse and capture. 8 s is several times
+    // Crossref's usual answer and short enough that an outage costs a source
+    // its DOI check (left unconfirmed), never its ingestion.
+    sourceDoiCheckTimeoutMs: Number(
+      overrides.sourceDoiCheckTimeoutMs ?? process.env.OPEN_SCIENCE_SOURCE_DOI_CHECK_TIMEOUT_MS ?? 8_000,
     ),
-    documentParserUid: Number(overrides.documentParserUid ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_UID ?? 1000),
-    documentParserGid: Number(overrides.documentParserGid ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_GID ?? 1000),
     openListUrl: String(overrides.openListUrl ?? process.env.OPEN_SCIENCE_OPENLIST_URL ?? "").replace(/\/+$/, ""),
     openListToken: openListSecret.value,
     openListTokenSource: openListSecret.source,
@@ -1196,6 +1217,39 @@ export function loadConfig(overrides = {}) {
       ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_DAILY_LIMIT_CNY ?? 10),
     sourceUnderstandingWeeklyLimitCny: Number(overrides.sourceUnderstandingWeeklyLimitCny
       ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_WEEKLY_LIMIT_CNY ?? 50),
+    // Knowledge-base search (`kb_search`, 2026-09-20). One switch for the tool
+    // and the index behind it: off, the gateway answers `kb_search_disabled`,
+    // nothing is indexed or embedded, and a run reads the files as before.
+    kbSearchEnabled: overrides.kbSearchEnabled ?? boolEnv("OPEN_SCIENCE_KB_SEARCH_ENABLED", true),
+    kbSearchGatewayInternalUrl:
+      overrides.kbSearchGatewayInternalUrl ??
+      process.env.OPEN_SCIENCE_KB_SEARCH_GATEWAY_INTERNAL_URL ??
+      (production
+        ? "http://open-science-web:8787/internal/kb/v1/search"
+        : `http://127.0.0.1:${port}/internal/kb/v1/search`),
+    // One search: three SQL legs, one query embedding and one rerank call.
+    // 20 s is several times their sum on a large library; past it the run is
+    // told to read the files rather than kept waiting.
+    kbSearchTimeoutMs: Number(overrides.kbSearchTimeoutMs ?? process.env.OPEN_SCIENCE_KB_SEARCH_TIMEOUT_MS ?? 20_000),
+    // Below this many tokens across a project's documents and the library, the
+    // search answers with the files to read instead of fragments (plan §3.2:
+    // 150–200K; Anthropic's guidance is not to retrieve under ~200K).
+    kbSmallLibraryTokens: Number(overrides.kbSmallLibraryTokens ?? process.env.OPEN_SCIENCE_KB_SMALL_LIBRARY_TOKENS ?? 150_000),
+    // How often the index worker converges on the sources when nothing woke
+    // it. A finished source wakes it at once; this is the safety net.
+    kbIndexReconcileMs: Number(overrides.kbIndexReconcileMs ?? process.env.OPEN_SCIENCE_KB_INDEX_RECONCILE_MS ?? 60_000),
+    // One embedding request of ten chunks against DashScope.
+    kbEmbeddingTimeoutMs: Number(overrides.kbEmbeddingTimeoutMs ?? process.env.OPEN_SCIENCE_KB_EMBEDDING_TIMEOUT_MS ?? 30_000),
+    // The model and width are the memory index's pin, so one key and one price
+    // cover both and a change of either is one edit in deps-version.json.
+    kbEmbeddingModel: String(depsVersions.openviking?.embedding?.model ?? ""),
+    kbEmbeddingDimension: Number(depsVersions.openviking?.embedding?.dimension ?? 1024),
+    kbEmbeddingApiBase: String(depsVersions.openviking?.embedding?.apiBase ?? ""),
+    // How many documents one account's personal library holds. It bounds the
+    // library's directory (one Markdown copy per document, which every run of
+    // the account mounts), its listing and the search scope it adds to every
+    // project; past it the researcher is told to remove one first.
+    libraryMaxItems: Number(overrides.libraryMaxItems ?? process.env.OPEN_SCIENCE_LIBRARY_MAX_ITEMS ?? 1_000),
     autopilotEnabled: overrides.autopilotEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_ENABLED", production),
     autopilotPollMs: Number(overrides.autopilotPollMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_POLL_MS ?? 1_000),
     autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),
@@ -1369,24 +1423,6 @@ export function loadConfig(overrides = {}) {
     // extracted from those runs has no expiry.
     memoryRunSummaryTtlDays: Number(
       overrides.memoryRunSummaryTtlDays ?? process.env.OPEN_SCIENCE_MEMORY_RUN_SUMMARY_TTL_DAYS ?? 90,
-    ),
-    knowledgeChunkChars: Number(
-      overrides.knowledgeChunkChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_CHUNK_CHARS ?? 1_600,
-    ),
-    knowledgeChunkOverlapChars: Number(
-      overrides.knowledgeChunkOverlapChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_CHUNK_OVERLAP_CHARS ?? 240,
-    ),
-    knowledgeTopK: Number(
-      overrides.knowledgeTopK ?? process.env.OPEN_SCIENCE_KNOWLEDGE_TOP_K ?? 6,
-    ),
-    knowledgeContextMaxChars: Number(
-      overrides.knowledgeContextMaxChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_CONTEXT_MAX_CHARS ?? 12_000,
-    ),
-    knowledgeIndexMaxFileBytes: Number(
-      overrides.knowledgeIndexMaxFileBytes ?? process.env.OPEN_SCIENCE_KNOWLEDGE_INDEX_MAX_FILE_BYTES ?? 5 * 1024 * 1024,
-    ),
-    knowledgeIndexMaxChars: Number(
-      overrides.knowledgeIndexMaxChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_INDEX_MAX_CHARS ?? 5_000_000,
     ),
     allowRuntimeHostNetwork:
       overrides.allowRuntimeHostNetwork ?? boolEnv("OPEN_SCIENCE_ALLOW_RUNTIME_HOST_NETWORK", false),

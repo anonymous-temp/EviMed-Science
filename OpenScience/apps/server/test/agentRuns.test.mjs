@@ -4658,14 +4658,16 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
     for (const [, code] of text.matchAll(/\bfailure\(\s*\n?\s*"([a-z0-9_]+)"/g)) emitted.add(code);
     for (const [, code] of text.matchAll(/\b[A-Z][A-Za-z]*Error\(\s*\n?\s*"([a-z0-9_]+)"/g)) emitted.add(code);
   }
-  // The web-read gateway answers `web_read` with its own codes, which the
-  // tool passes through to the run unchanged (2026-09-20).
+  // The web-read gateway answers `web_read` with its own codes, and the
+  // knowledge-base gateway answers `kb_search` with its own; the tools pass
+  // them through to the run unchanged (2026-09-20).
   for (const relative of [
     "../src/publicSourceGateway.mjs", "../src/webSearchGateway.mjs", "../src/geoProbeGateway.mjs",
     "../src/webRead.mjs", "../src/webReadNetwork.mjs", "../src/webReadLimits.mjs", "../src/agentbay/browser.mjs",
+    "../src/kbSearchGateway.mjs",
   ]) {
     const text = await readFile(new URL(relative, import.meta.url), "utf8");
-    for (const [, code] of text.matchAll(/"((?:public_source|web_search|geo_probe|web_read|web_render)_[a-z0-9_]+)"/g)) emitted.add(code);
+    for (const [, code] of text.matchAll(/"((?:public_source|web_search|geo_probe|web_read|web_render|kb_search)_[a-z0-9_]+)"/g)) emitted.add(code);
   }
   assert.ok(emitted.size > 30, `expected the real code set, found ${emitted.size}`);
 
