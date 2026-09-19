@@ -24,6 +24,7 @@
   "dependencies": {
     "@evimed/domain": "workspace:*",
     "@evimed/harness-port": "workspace:*",
+    "@larksuiteoapi/node-sdk": "1.74.0",
     "openid-client": "6.8.4",
     "pg": "8.16.3",
     "ws": "8.21.3",
