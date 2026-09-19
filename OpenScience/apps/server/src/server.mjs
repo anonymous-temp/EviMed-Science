@@ -85,6 +85,7 @@ import { removeSourceCopies, sourceAttemptId, stageParserInput } from "./sourceF
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { createWebRenderer } from "./agentbay/browser.mjs";
 import { createWebReader, webReadMetricFamilies, webReadTransportFor } from "./webRead.mjs";
+import { pagesReadFromSessions } from "./webReadPages.mjs";
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
 import { AutopilotService, VERIFICATION_ARTIFACT, VERIFICATION_ROUTE_REASON, parseVerificationResult, verificationBrief,
@@ -1558,6 +1559,17 @@ export function createWebApiApp(overrides = {}) {
             ?? await collectRunTranscripts(runtimeManager, project, run, { children });
           const receipt = await persistRunTranscript({ project, run, sessions });
           await agentRuns.recordLearning(project, run.id, { transcript: receipt });
+          // The web pages the run read (contract X5), off the same transcript:
+          // each `web_read` result carries the gateway's receipt. A write of
+          // its own, so a ledger at its ceiling costs this list and never the
+          // transcript receipt above.
+          const reading = pagesReadFromSessions(sessions);
+          if (reading.pages.length) {
+            await agentRuns.recordLearning(project, run.id, { pagesRead: reading.pages, pagesReadTotal: reading.total }).catch((error) => securityAudit(config, "run.pages_read.record", "failed", {
+              userId: project.userId, projectId: project.id, runId: run.id,
+              code: typeof error?.code === "string" ? error.code : "pages_read_unrecorded",
+            }));
+          }
           if (receipt.completeness !== "complete") {
             await securityAudit(config, "run.transcript.persist", "partial", {
               userId: project.userId, projectId: project.id, runId: run.id,
