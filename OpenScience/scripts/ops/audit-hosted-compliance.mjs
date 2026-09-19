@@ -1176,43 +1176,6 @@ async function checkWorkspaceIoBoundary() {
   }
 }
 
-async function checkHostedNotebookKernel() {
-  const commands = await read("apps/server/src/commands.mjs");
-  const editor = await read("apps/web/src/components/notebook/NotebookEditor.tsx");
-  const notebooksPage = await read("apps/web/src/app/routes/NotebooksPage.tsx");
-  const serverTests = await read("apps/server/test/server.test.mjs");
-  const editorTests = await read("apps/web/src/components/notebook/NotebookEditor.web.test.tsx");
-  const pageTests = await read("apps/web/src/app/routes/NotebooksPage.web.test.tsx");
-  const deploymentSmoke = await read("scripts/ops/deployment-smoke.mjs");
-  const workflow = await read("../.github/workflows/web.yml");
-
-  if (
-    /resolveKernelTarget/.test(commands) &&
-    /activeKernelExecutions/.test(commands) &&
-    /AbortSignal\.any/.test(commands) &&
-    /Kernel execution was reset/.test(commands) &&
-    /const kernelActionsEnabled = hasWebApi/.test(editor) &&
-    !/hostedWeb && lang !== "python"/.test(editor) &&
-    !/!hostedWeb \|\| cell\.language === "python"/.test(editor) &&
-    /kernelReset\(runningLanguageRef\.current, path, root\)/.test(editor) &&
-    !/hostedWeb && language !== "python"/.test(notebooksPage) &&
-    /kernel_execute mounts the workspace selected by a base-scoped notebook/.test(serverTests) &&
-    /kernel_reset aborts an in-flight execution/.test(serverTests) &&
-    /runs Python cells through the hosted command backend/.test(editorTests) &&
-    /runs R cells through the hosted command backend/.test(editorTests) &&
-    /offers Python and R hosted notebook creation/.test(pageTests) &&
-    /async function smokeKernel/.test(deploymentSmoke) &&
-    /project-scoped Python\/R scientific kernels read\/write ok/.test(deploymentSmoke) &&
-    /OPEN_SCIENCE_ENABLE_KERNEL=true/.test(workflow) &&
-    /OPEN_SCIENCE_SMOKE_REQUIRE_DOCKER_KERNEL:\s+"true"/.test(workflow) &&
-    /docker ps -aq --filter label=open-science\.web\.kernel=true/.test(workflow)
-  ) {
-    pass("hosted_notebook_kernel", "Hosted Web exposes Python and R notebook creation with scoped, cancellable execution through the server kernel sandbox; Linux deployment smoke requires scientific imports, project-volume read/write, and container cleanup without enabling Jupyter provisioning.");
-  } else {
-    fail("hosted_notebook_kernel_missing", "Hosted Web notebook execution must use the scoped server kernel, expose cancellation, and keep unsupported hosted kernels hidden.");
-  }
-}
-
 async function checkHostedDesktopBoundary() {
   // This used to check that the hosted build took the "not desktop" branch at
   // a dozen call sites. There is no other branch now — the packaged shell, its
@@ -1891,7 +1854,6 @@ async function main() {
   await checkMonitoringBaseline();
   await checkObjectBackup();
   await checkWorkspaceIoBoundary();
-  await checkHostedNotebookKernel();
   await checkHostedDesktopBoundary();
   await checkTaskResourceControl();
   await checkHostedMetadataBoundary();

@@ -19,6 +19,9 @@ test("SaaS product alignment contract covers every module without overstating la
   assert.ok(contract.modules.some((module) => module.id === "curated-scientific-skills" && module.status === "adapted"));
   assert.ok(contract.modules.some((module) => module.id === "drug-evidence-decision-support" && module.status === "adapted"));
   assert.ok(contract.modules.some((module) => module.id === "organization-collaboration" && module.status === "out-of-scope"));
+  // The computational notebook was deleted from the hosted product on
+  // 2026-09-19; the module stays in the map, saying so.
+  assert.ok(contract.modules.some((module) => module.id === "hosted-notebooks" && module.status === "out-of-scope"));
 });
 
 test("SaaS product alignment audit is executable and release-gated", () => {
@@ -32,6 +35,6 @@ test("SaaS product alignment audit is executable and release-gated", () => {
   assert.equal(report.modules, 21);
   assert.equal(report.profile, "individual-saas");
   assert.equal(report.tenantModel, "individual-account");
-  assert.ok(report.adapted >= 15);
+  assert.ok(report.adapted >= 14);
   assert.ok(report.bounded >= 5);
 });

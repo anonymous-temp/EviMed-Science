@@ -104,7 +104,7 @@ export default {
       maxWidth: {
         "content-narrow": "640px", // settings, forms
         content: "680px", // conversation, report prose, the inbox
-        "content-wide": "1000px", // run ledger, notebooks
+        "content-wide": "1000px", // run ledger
         "content-full": "1120px", // catalogues, the evidence matrix
       },
       // Four radii, nothing else: 4 (`rounded`, Tailwind's own), controls 8,

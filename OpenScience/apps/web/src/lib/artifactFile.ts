@@ -118,19 +118,6 @@ export interface LargeFilePointer {
   [k: string]: unknown;
 }
 
-export interface NotebookEntry {
-  path: string;
-  /** Seconds since the epoch (newest first from the backend). */
-  modified: number;
-}
-
-/** All .ipynb files under the root, newest first. `root: "base"` spans every
- *  session folder. */
-export async function listNotebooks(root?: FileRoot): Promise<NotebookEntry[]> {
-  if (!hasWebApi) return [];
-  return invokeCommand<NotebookEntry[]>("list_notebooks", { root });
-}
-
 export interface DirEntry {
   path: string;
   name: string;
@@ -144,16 +131,6 @@ export interface DirEntry {
 export async function listDir(rel: string, root?: FileRoot): Promise<DirEntry[]> {
   if (!hasWebApi) return [];
   return invokeCommand<DirEntry[]>("list_dir", { rel, root });
-}
-
-/** Write text to a root-relative path through the configured backend. */
-export async function writeWorkspaceFile(
-  path: string,
-  content: string,
-  root?: FileRoot,
-): Promise<void> {
-  if (!hasWebApi) throw new Error("no desktop or web backend is configured");
-  await invokeCommand("write_workspace_file", { path, content, root });
 }
 
 /** Decode a base64 artifact into raw bytes for binary renderers (docx/xlsx/pptx). */

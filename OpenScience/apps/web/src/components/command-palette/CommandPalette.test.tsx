@@ -48,7 +48,6 @@ describe("CommandPalette", () => {
       "新任务",
       "运行记录",
       "知识库",
-      "计算笔记本",
       "记忆",
       "方法胶囊",
       "主动科研",
@@ -60,6 +59,8 @@ describe("CommandPalette", () => {
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+    // Deleted on 2026-09-19 with the page it opened.
+    expect(screen.queryByText("计算笔记本")).not.toBeInTheDocument();
   });
 
   // The palette used to offer two entries that started a conversation by

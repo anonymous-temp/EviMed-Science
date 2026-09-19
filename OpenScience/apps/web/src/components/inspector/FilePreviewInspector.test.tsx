@@ -139,6 +139,29 @@ describe("FilePreviewInspector — binary file behind a text preview", () => {
   });
 });
 
+describe("FilePreviewInspector — a notebook, after the notebook editor", () => {
+  it("reads a record that still names the deleted notebook kind as a file, with its JSON", async () => {
+    // `notebook` left the artifact kinds on 2026-09-19. A record written before
+    // that still says it, and must open as a generic file rather than fail.
+    const notebook = JSON.stringify({ cells: [{ cell_type: "code", source: "print(42)" }], nbformat: 4 });
+    vi.mocked(readArtifact).mockImplementationOnce(async (path: string) => ({
+      path, mime: "application/json", encoding: "utf8", data: notebook, size: notebook.length,
+    }));
+    const legacy = {
+      variant: "file",
+      path: "analysis/run.ipynb",
+      filename: "run.ipynb",
+      artifact: "notebook",
+      language: "json",
+    } as unknown as FilePreviewInspectorT;
+    render(<FilePreviewInspector data={legacy} onClose={() => {}} />);
+    expect(await screen.findByText(/print\(42\)/)).toBeInTheDocument();
+    expect(screen.getByText("文件")).toBeInTheDocument();
+    expect(screen.queryByText("笔记本")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下载文件" })).toBeInTheDocument();
+  });
+});
+
 describe("FilePreviewInspector — HTML sandbox", () => {
   it("previews uploaded HTML without granting script execution", async () => {
     const html: FilePreviewInspectorT = {
