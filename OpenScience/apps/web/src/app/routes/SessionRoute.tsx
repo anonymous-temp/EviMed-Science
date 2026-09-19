@@ -12,9 +12,9 @@ import { PageTitle } from "@/components/layout/PageTitle";
  * right, and the shell's navigation on the left, inside which the kernel drew
  * its own left column and its own right pane. Four columns, three of which
  * listed the same work under three names — 任务, 会话, 运行 (2026-09-15 walk,
- * A1/A6). The panel is gone rather than moved: the same twelve rows are in the
- * sidebar's 「最近任务」 list and on the run ledger, and a third copy beside
- * them was the surplus.
+ * A1/A6). The panel is gone rather than moved: the same rows are under each
+ * project in the sidebar and on the run ledger, and a third copy beside them
+ * was the surplus.
  *
  * The design spec chose the opposite arrangement (§18.1 option C: keep a
  * self-built session page, do not embed the kernel's client) and the

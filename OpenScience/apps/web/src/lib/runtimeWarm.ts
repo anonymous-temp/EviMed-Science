@@ -7,15 +7,10 @@
  * sidebar calls this when a pointer or the keyboard reaches another project's
  * group, and the project store calls it right after an in-place switch.
  *
- * A no-op here, on purpose: the implementation is the API client's
- * `warmWebRuntime`, and this module becomes a re-export of it when the two
- * branches meet. That implementation also owns the rate — at most one start
- * per project a minute — so callers call it on every hover and never keep a
- * throttle of their own; two throttles would disagree the day one changes.
- * Whatever sits behind this name keeps the contract the callers rely on: fire
- * and forget, never throws, safe to repeat (a running runtime is left alone),
- * quiet on failure — warming is a head start, never a precondition.
+ * The API client's implementation, under the name the sidebar and the store
+ * import. It owns the rate — at most one start per project a minute — so
+ * callers call it on every hover and keep no throttle of their own: fire and
+ * forget, never throws, safe to repeat, quiet on failure — warming is a head
+ * start, never a precondition.
  */
-export function warmWebRuntime(projectId?: string): void {
-  void projectId;
-}
+export { warmWebRuntime } from "@/lib/apiClient";
