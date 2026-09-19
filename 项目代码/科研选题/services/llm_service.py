@@ -16,6 +16,7 @@ import httpx
 from openai import AsyncOpenAI, AuthenticationError
 from tenacity import retry, stop_after_attempt, wait_exponential
 from config.settings import settings
+from services import llm_usage as provider_usage
 from utils import safe_parse_json
 
 logger = logging.getLogger(__name__)
@@ -354,6 +355,10 @@ class LLMService:
             kwargs["temperature"] = temperature
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+        if stream:
+            # Without it a stream carries no usage at all, and a streamed call
+            # would be spend nobody could count (evimed_runner reports usage).
+            kwargs["stream_options"] = {"include_usage": True}
         return selected_model, tier, timeout, kwargs
 
     @staticmethod
@@ -459,6 +464,9 @@ class LLMService:
             kwargs["max_tokens"] = budget
             async with self._request_semaphore:
                 response = await self._create_completion_with_refresh(kwargs, timeout)
+            # Billed whether or not the answer is usable, a truncated one
+            # included, so counted before it is judged.
+            provider_usage.record(getattr(response, "usage", None), selected_model)
             choice = response.choices[0]
             content = choice.message.content or ""
             finish_reason = getattr(choice, "finish_reason", None)
@@ -514,6 +522,7 @@ class LLMService:
         started = time.perf_counter()
         output_chars = 0
         finish_reason = None
+        final_usage = None
         async with self._request_semaphore:
             stream = await self._create_completion_with_refresh(kwargs, timeout)
             async for chunk in stream:
@@ -521,6 +530,7 @@ class LLMService:
                     raise asyncio.TimeoutError(
                         f"DeepSeek流式响应超时 (model={selected_model}, timeout={timeout}s)"
                     )
+                final_usage = getattr(chunk, "usage", None) or final_usage
                 if chunk.choices:
                     choice = chunk.choices[0]
                     finish_reason = getattr(choice, "finish_reason", None) or finish_reason
@@ -528,6 +538,9 @@ class LLMService:
                     if delta:
                         output_chars += len(delta)
                         yield delta
+        # The usage arrives in the stream's last chunk; a truncated or empty
+        # stream was billed all the same.
+        provider_usage.record(final_usage, selected_model)
         if finish_reason == "length":
             raise RuntimeError(
                 f"DeepSeek流式响应被截断 (model={selected_model})"

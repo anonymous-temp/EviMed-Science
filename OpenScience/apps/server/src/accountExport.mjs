@@ -34,7 +34,9 @@ const queries = [
     FROM evimed_inbox.notifications WHERE user_id=$1 ORDER BY created_at,id`],
   ["notificationPreferences", `SELECT quiet_start AS "quietStart",quiet_end AS "quietEnd",digest_time AS "digestTime",switches,channels,revision,updated_at AS "updatedAt"
     FROM evimed_inbox.preferences WHERE user_id=$1`],
-  ["usage", `SELECT id,project_id AS "projectId",run_id AS "runId",model,price_version AS "priceVersion",currency,status,
+  // `purpose` says what each call was for; an `engine` row is a specialist
+  // job's own model spend, which no cap counts and the job's price covers.
+  ["usage", `SELECT id,project_id AS "projectId",run_id AS "runId",purpose,model,price_version AS "priceVersion",currency,status,
     reserved_cost::text AS "reservedCost",actual_cost::text AS "actualCost",priced,cache_hit_tokens::text AS "cacheHitTokens",
     cache_miss_tokens::text AS "cacheMissTokens",output_tokens::text AS "outputTokens",error_code AS "errorCode",created_at AS "createdAt",settled_at AS "settledAt"
     FROM evimed_usage.model_requests WHERE user_id=$1 ORDER BY created_at,id`],

@@ -14,6 +14,8 @@ from functools import wraps
 import aiohttp
 
 from dotenv import load_dotenv
+
+from . import llm_usage as provider_usage
 load_dotenv()
 logger = logging.getLogger(__name__)
 
@@ -357,6 +359,10 @@ class LLMGateway:
                                     )
 
                                 data = await resp.json()
+                                # Billed whether or not the answer is usable, a
+                                # truncated one included, so counted first
+                                # (evimed_runner reports these totals).
+                                provider_usage.record(data.get("usage"), model)
                                 choice = data["choices"][0]
                                 content = choice["message"].get("content")
                                 finish_reason = choice.get("finish_reason")
@@ -441,6 +447,7 @@ class LLMGateway:
                 finish_reason = None
                 input_tokens = 0
                 output_tokens = 0
+                final_usage = None
                 # 检查熔断器（stream_text 不经过 call_with_retry，需在此检查）
                 if not _llm_circuit_breaker.is_allowed():
                     raise RuntimeError(
@@ -467,6 +474,7 @@ class LLMGateway:
                             try:
                                 chunk = json.loads(data_str)
                                 usage = chunk.get("usage") or {}
+                                final_usage = chunk.get("usage") or final_usage
                                 input_tokens = usage.get("prompt_tokens", input_tokens)
                                 output_tokens = usage.get("completion_tokens", output_tokens)
                                 if not chunk.get("choices"):
@@ -480,6 +488,9 @@ class LLMGateway:
                                     yield delta
                             except (json.JSONDecodeError, KeyError, IndexError):
                                 continue
+                # The usage arrives in the stream's last chunk; a truncated or
+                # empty stream was billed all the same.
+                provider_usage.record(final_usage, model)
                 if finish_reason == "length":
                     raise RuntimeError(
                         "DeepSeek stream was truncated "

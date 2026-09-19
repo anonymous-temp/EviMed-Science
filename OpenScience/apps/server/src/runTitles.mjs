@@ -108,6 +108,7 @@ export class RunTitler {
           userId,
           projectId,
           runId,
+          purpose: "title",
           signal: controller.signal,
           body: {
             model: this.config.deepseekModel,

@@ -218,3 +218,43 @@ async def test_gateway_flash_stream_reserves_reasoning_budget(monkeypatch):
     request = completions.calls[0]
     assert request["max_tokens"] == 6096
     assert request["reasoning_effort"] == "high"
+
+
+def test_every_billed_response_is_counted_for_the_evimed_usage_ledger():
+    """The runner reports these totals, and EviMed records them per job.
+
+    A truncated answer is retried with a larger budget, and both were billed:
+    both are counted. DeepSeek's cache split rides on the SDK's usage object.
+    """
+    from bibliometric.llm import usage as provider_usage
+
+    provider_usage.reset()
+    truncated = _response("partial", "length")
+    truncated.usage = SimpleNamespace(prompt_tokens=100, completion_tokens=10,
+                                      prompt_cache_hit_tokens=60, prompt_cache_miss_tokens=40)
+    client, _ = _sync_client([truncated, _response("complete")],
+                             pro_reasoning_reserve_tokens=100, max_output_tokens=1000)
+    assert client.complete([{"role": "user", "content": "x"}], tier="pro", max_tokens=10) == "complete"
+    assert provider_usage.snapshot() == {
+        "requests": 2, "cacheHitTokens": 60, "cacheMissTokens": 47, "outputTokens": 13, "model": "deepseek-flash",
+    }
+    provider_usage.reset()
+
+
+@pytest.mark.asyncio
+async def test_a_stream_is_counted_from_its_final_usage_chunk():
+    from bibliometric.llm import usage as provider_usage
+
+    provider_usage.reset()
+    client = DeepSeekClient(api_key="test-key")
+    client._async_client = SimpleNamespace(chat=SimpleNamespace(completions=_AsyncCompletions([
+        _chunk("答"),
+        _chunk(finish_reason="stop"),
+        SimpleNamespace(choices=[], usage=SimpleNamespace(prompt_tokens=20, completion_tokens=5,
+                                                          prompt_cache_hit_tokens=16, prompt_cache_miss_tokens=4)),
+    ])))
+    assert "".join([part async for part in client.astream([{"role": "user", "content": "x"}], tier="flash")]) == "答"
+    assert provider_usage.snapshot() == {
+        "requests": 1, "cacheHitTokens": 16, "cacheMissTokens": 4, "outputTokens": 5, "model": "deepseek-flash",
+    }
+    provider_usage.reset()

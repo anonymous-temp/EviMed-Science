@@ -11,6 +11,8 @@ from typing import Any, AsyncIterator
 
 from dotenv import load_dotenv
 
+from . import usage as provider_usage
+
 
 _ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(_ROOT / ".env", override=False)
@@ -208,6 +210,9 @@ class DeepSeekClient:
         for budget in budgets:
             kwargs["max_tokens"] = budget
             response = client.chat.completions.create(**kwargs)
+            # Billed whether or not the answer is usable, a truncated one
+            # included, so counted before it is judged (evimed_runner).
+            provider_usage.record(getattr(response, "usage", None), model)
             choice = response.choices[0]
             content = choice.message.content
             finish_reason = getattr(choice, "finish_reason", None)
@@ -258,6 +263,7 @@ class DeepSeekClient:
         for budget in budgets:
             kwargs["max_tokens"] = budget
             response = await client.chat.completions.create(**kwargs)
+            provider_usage.record(getattr(response, "usage", None), model)
             choice = response.choices[0]
             content = choice.message.content
             finish_reason = getattr(choice, "finish_reason", None)
@@ -303,9 +309,11 @@ class DeepSeekClient:
         finish_reason = None
         input_tokens = 0
         output_tokens = 0
+        final_usage = None
         async for chunk in stream:
             usage = getattr(chunk, "usage", None)
             if usage:
+                final_usage = usage
                 input_tokens = getattr(usage, "prompt_tokens", input_tokens)
                 output_tokens = getattr(usage, "completion_tokens", output_tokens)
             if not chunk.choices:
@@ -317,6 +325,9 @@ class DeepSeekClient:
             if content:
                 has_content = True
                 yield content
+        # The stream's usage arrives in its last chunk; a truncated or empty
+        # stream was billed all the same.
+        provider_usage.record(final_usage, model)
         if finish_reason == "length":
             raise RuntimeError(
                 "DeepSeek stream was truncated "

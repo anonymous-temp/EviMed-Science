@@ -255,3 +255,58 @@ def test_gateway_policy_reserves_flash_reasoning_and_retries_truncation(monkeypa
     assert tier == "flash"
     assert stream_request["max_tokens"] == 6096
     assert stream_request["reasoning_effort"] == "high"
+
+
+def test_every_billed_response_is_counted_for_the_evimed_usage_ledger(monkeypatch):
+    """The runner reports these totals, and EviMed records them per job.
+
+    A truncated answer is retried with a larger budget, and both were billed.
+    A stream carries usage only when asked for it, in its last chunk.
+    """
+    from types import SimpleNamespace
+
+    from services import llm_usage as provider_usage
+
+    provider_usage.reset()
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "high-thinking")
+    service = LLMService()
+    service.client = object()
+    calls = []
+
+    async def completion(kwargs, timeout):
+        calls.append(kwargs)
+        truncated = len(calls) == 1
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="partial" if truncated else "complete"),
+                                     finish_reason="length" if truncated else "stop")],
+            usage=SimpleNamespace(prompt_tokens=400, prompt_cache_hit_tokens=300, prompt_cache_miss_tokens=100,
+                                  completion_tokens=50),
+        )
+
+    monkeypatch.setattr(service, "_create_completion_with_refresh", completion)
+    assert asyncio.run(service.complete_messages(MESSAGES, model_tier="flash", max_tokens=2000)) == "complete"
+    assert provider_usage.snapshot() == {
+        "requests": 2, "cacheHitTokens": 600, "cacheMissTokens": 200, "outputTokens": 100, "model": "deepseek-flash",
+    }
+
+    async def stream_completion(kwargs, timeout):
+        assert kwargs["stream_options"] == {"include_usage": True}
+
+        async def chunks():
+            yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="答"), finish_reason=None)],
+                                  usage=None)
+            yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=""), finish_reason="stop")],
+                                  usage=None)
+            yield SimpleNamespace(choices=[], usage=SimpleNamespace(prompt_tokens=30, completion_tokens=7))
+
+        return chunks()
+
+    monkeypatch.setattr(service, "_create_completion_with_refresh", stream_completion)
+
+    async def drain():
+        return "".join([part async for part in service.stream_messages(MESSAGES, model_tier="flash")])
+
+    assert asyncio.run(drain()) == "答"
+    assert provider_usage.snapshot()["requests"] == 3
+    assert provider_usage.snapshot()["cacheMissTokens"] == 230, "a stream that does not split its prompt is all misses"
+    provider_usage.reset()

@@ -1,3 +1,4 @@
+import { USAGE_PURPOSES, usagePurpose } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 import { migrateUsageLedger } from "./usagePersistence.mjs";
@@ -13,6 +14,15 @@ export const openCostWindows = Object.freeze({ day: "24 hours", week: "7 days" }
 
 /** @type {Set<string>} */
 const openCostWindowValues = new Set(Object.values(openCostWindows));
+
+/** Purposes the ledger records for the operator and never counts against an
+ *  account's caps. An engine's row is our own view of what a specialist job
+ *  cost (plan §3.4 #6), not something the researcher settles: the job's price
+ *  is its flat per-job one. It also lands after the job has ended, on the run
+ *  its project was running at that moment — good enough for a report, and the
+ *  wrong input for a limit that refuses the next dispatch or stops a run
+ *  mid-way. Bound as a query parameter, never spliced. */
+export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine"]);
 const placeholderPattern = /^\$[1-9][0-9]*$/;
 
 /** Cost a new call must respect on top of settled spend: a reservation counts
@@ -80,6 +90,7 @@ function record(row) {
     userId: row.user_id,
     projectId: row.project_id,
     runId: row.run_id,
+    purpose: row.purpose ?? "other",
     model: row.model,
     priceVersion: row.price_version,
     currency: row.currency,
@@ -126,7 +137,7 @@ export class UsageLedger {
     };
   }
 
-  /** @param {{id:string,userId:string,projectId:string,runId?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,estimatedCost:number,dailyLimit?:number,weeklyLimit?:number,runLimit?:number,now?:Date,ttlMs?:number}} input */
+  /** @param {{id:string,userId:string,projectId:string,runId?:string|null,purpose?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,estimatedCost:number,dailyLimit?:number,weeklyLimit?:number,runLimit?:number,now?:Date,ttlMs?:number}} input */
   async reserveModel(input) {
     const now = input.now ?? new Date();
     const ttlMs = input.ttlMs ?? 30 * 60_000;
@@ -134,6 +145,7 @@ export class UsageLedger {
     const values = {
       id: productId(input.id), userId: productId(input.userId, "user"), projectId: productId(input.projectId, "project"),
       runId: input.runId == null ? null : productId(input.runId, "run"),
+      purpose: usagePurpose(input.purpose),
       model: text(input.model, "model"), priceVersion: text(input.priceVersion, "price version"), currency: text(input.currency, "currency", 12),
       requestFingerprint: text(input.requestFingerprint, "request fingerprint", 64), estimatedCost: money(input.estimatedCost, "estimated cost"),
       dailyLimit: money(input.dailyLimit ?? 0, "daily limit"), weeklyLimit: money(input.weeklyLimit ?? 0, "weekly limit"),
@@ -150,6 +162,7 @@ export class UsageLedger {
         const same = existing.rows[0].user_id === values.userId && existing.rows[0].project_id === values.projectId
           && existing.rows[0].model === values.model && existing.rows[0].request_fingerprint === values.requestFingerprint
           && existing.rows[0].run_id === values.runId
+          && existing.rows[0].purpose === values.purpose
           && existing.rows[0].price_version === values.priceVersion && existing.rows[0].currency === values.currency
           && Number(existing.rows[0].reserved_cost) === values.estimatedCost
           && existing.rows[0].status === "reserved"
@@ -165,7 +178,8 @@ export class UsageLedger {
         coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS week_open,
         coalesce(sum(CASE WHEN run_id=$3 AND status='settled' THEN actual_cost
           WHEN run_id=$3 AND ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS run_committed
-        FROM evimed_usage.model_requests WHERE user_id=$1`, [values.userId, values.now, values.runId]);
+        FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($4::text[])`,
+      [values.userId, values.now, values.runId, [...UNCAPPED_USAGE_PURPOSES]]);
       const day = Number(totals.rows[0].day_settled) + Number(totals.rows[0].day_open);
       const week = Number(totals.rows[0].week_settled) + Number(totals.rows[0].week_open);
       const overDay = values.dailyLimit > 0 && day + values.estimatedCost > values.dailyLimit;
@@ -181,10 +195,10 @@ export class UsageLedger {
         });
       }
       const inserted = await client.query(`INSERT INTO evimed_usage.model_requests
-        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,reservation_expires_at,created_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'reserved',$9,$10,$11) RETURNING *`,
+        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,reservation_expires_at,created_at,purpose)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'reserved',$9,$10,$11,$12) RETURNING *`,
       [values.id, values.userId, values.projectId, values.runId, values.model, values.priceVersion, values.currency,
-        values.requestFingerprint, values.estimatedCost, values.expiresAt, values.now]);
+        values.requestFingerprint, values.estimatedCost, values.expiresAt, values.now, values.purpose]);
       return record(inserted.rows[0]);
     });
   }
@@ -216,6 +230,58 @@ export class UsageLedger {
         error_code=NULL,settled_at=clock_timestamp() WHERE id=$1 RETURNING *`,
       [current.id, actualCost, input.priced, usage.cacheHitTokens, usage.cacheMissTokens, usage.completionTokens, providerRequestId]);
       return record(result.rows[0]);
+    });
+  }
+
+  /**
+   * A model spend that already happened elsewhere, recorded settled in one
+   * step: a specialist engine's job, which called the provider itself and
+   * reports its totals when it finishes (purpose `engine`).
+   *
+   * No reservation and no cap check, on purpose. The money is spent; refusing
+   * the record would not un-spend it, only make the ledger wrong. An `engine`
+   * row is not counted by later cap checks either (`UNCAPPED_USAGE_PURPOSES`);
+   * every summary and report includes it. Idempotent on `id` for the same
+   * fingerprint, so a report retried after a lost answer lands once; a
+   * different report under the same id is a conflict.
+   * @param {{id:string,userId:string,projectId:string,runId?:string|null,purpose?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,usage:{cacheHitTokens:number,cacheMissTokens:number,completionTokens:number},actualCost:number,priced:boolean,providerRequestId?:string|null,now?:Date}} input
+   */
+  async recordSettled(input) {
+    const values = {
+      id: productId(input.id), userId: productId(input.userId, "user"), projectId: productId(input.projectId, "project"),
+      runId: input.runId == null ? null : productId(input.runId, "run"),
+      purpose: usagePurpose(input.purpose),
+      model: text(input.model, "model"), priceVersion: text(input.priceVersion, "price version"), currency: text(input.currency, "currency", 12),
+      requestFingerprint: text(input.requestFingerprint, "request fingerprint", 64),
+      actualCost: money(input.actualCost, "actual cost"),
+      cacheHitTokens: tokenCount(input.usage?.cacheHitTokens),
+      cacheMissTokens: tokenCount(input.usage?.cacheMissTokens),
+      completionTokens: tokenCount(input.usage?.completionTokens),
+      providerRequestId: input.providerRequestId == null ? null : text(input.providerRequestId, "provider request id", 512),
+      now: instant(input.now ?? new Date(), "usage time"),
+    };
+    if (values.currency !== "CNY") throw new HttpError(400, "usage_payload_invalid", "Unsupported usage currency.");
+    if (!fingerprintPattern.test(values.requestFingerprint)) throw new HttpError(400, "usage_payload_invalid", "Invalid request fingerprint.");
+    if (typeof input.priced !== "boolean") throw new HttpError(400, "usage_payload_invalid", "Invalid price status.");
+    await migrateUsageLedger(this.database);
+    return this.database.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-usage:${values.userId}`]);
+      const existing = await client.query("SELECT * FROM evimed_usage.model_requests WHERE id=$1 FOR UPDATE", [values.id]);
+      if (existing.rowCount) {
+        const row = existing.rows[0];
+        if (row.user_id === values.userId && row.status === "settled" && row.request_fingerprint === values.requestFingerprint) return record(row);
+        throw new HttpError(409, "usage_settlement_conflict", "The request id already names another settlement.");
+      }
+      // Nothing was reserved, so the reservation columns say so: the reserved
+      // cost is the settled one and the reservation expired as it was made.
+      const inserted = await client.query(`INSERT INTO evimed_usage.model_requests
+        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,actual_cost,priced,
+          cache_hit_tokens,cache_miss_tokens,output_tokens,provider_request_id,reservation_expires_at,created_at,settled_at,purpose)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'settled',$9,$9,$10,$11,$12,$13,$14,$15,$15,clock_timestamp(),$16) RETURNING *`,
+      [values.id, values.userId, values.projectId, values.runId, values.model, values.priceVersion, values.currency,
+        values.requestFingerprint, values.actualCost, input.priced, values.cacheHitTokens, values.cacheMissTokens,
+        values.completionTokens, values.providerRequestId, values.now, values.purpose]);
+      return record(inserted.rows[0]);
     });
   }
 
@@ -414,6 +480,41 @@ export class UsageLedger {
     return summaries;
   }
 
+  /**
+   * What each purpose cost across every account since `since` — the operator's
+   * cost report (X1): requests made, and the settled tokens and money.
+   *
+   * Every purpose in the vocabulary gets a row, zero or not, so a purpose that
+   * disappears from the report is a caller that stopped calling, never a query
+   * that lost a group. `requests` counts every row, settled or not, because a
+   * released or uncertain call is still a call someone made; tokens and cost
+   * are the provider's settled counts only.
+   * @param {{ since: Date }} options
+   * @returns {Promise<Array<{ purpose: string, requests: number, cacheHitTokens: number, cacheMissTokens: number, outputTokens: number, costCny: number }>>}
+   */
+  async usageByPurpose({ since }) {
+    const at = instant(since, "report start");
+    await migrateUsageLedger(this.database);
+    const result = await this.database.query(`SELECT purpose, count(*)::integer AS requests,
+      coalesce(sum(cache_hit_tokens) FILTER (WHERE status='settled'),0) AS cache_hit_tokens,
+      coalesce(sum(cache_miss_tokens) FILTER (WHERE status='settled'),0) AS cache_miss_tokens,
+      coalesce(sum(output_tokens) FILTER (WHERE status='settled'),0) AS output_tokens,
+      coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0) AS cost
+      FROM evimed_usage.model_requests WHERE created_at >= $1::timestamptz GROUP BY purpose`, [at]);
+    const rows = new Map(result.rows.map((row) => [row.purpose, row]));
+    return USAGE_PURPOSES.map((purpose) => {
+      const row = rows.get(purpose);
+      return {
+        purpose,
+        requests: Number(row?.requests ?? 0),
+        cacheHitTokens: Number(row?.cache_hit_tokens ?? 0),
+        cacheMissTokens: Number(row?.cache_miss_tokens ?? 0),
+        outputTokens: Number(row?.output_tokens ?? 0),
+        costCny: Number(row?.cost ?? 0),
+      };
+    });
+  }
+
   /** Refuse a new interactive entry point that is already at its configured limit. */
   async assertWithinLimits(userId, { dailyLimit = 0, weeklyLimit = 0, now = new Date() } = {}) {
     const user = productId(userId, "user");
@@ -429,7 +530,8 @@ export class UsageLedger {
         coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
         coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN reserved_cost ELSE 0 END),0) AS day_open,
         coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS week_open
-        FROM evimed_usage.model_requests WHERE user_id=$1`, [user, at]);
+        FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($3::text[])`,
+      [user, at, [...UNCAPPED_USAGE_PURPOSES]]);
       const day = Number(result.rows[0].day_settled) + Number(result.rows[0].day_open);
       const week = Number(result.rows[0].week_settled) + Number(result.rows[0].week_open);
       const exceeded = dayLimit > 0 && day >= dayLimit ? { window: "day", limit: dayLimit, committed: day }

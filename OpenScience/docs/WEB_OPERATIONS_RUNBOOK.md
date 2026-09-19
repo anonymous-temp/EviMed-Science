@@ -398,6 +398,7 @@ backups, or external webhook delivery.
 | `OpenScienceRuntimeQuotaMonitorGap` | Runtime manager logs and quota-monitor interval | Stop uncovered runtimes immediately; restore monitoring before allowing restart. |
 | `OpenScienceCertificateExpiringSoon` | `systemctl status certbot.timer`, `certbot certificates`, the last renewal log | The certificate is short-lived and the timer normally renews it, so this alert means renewal has stopped, not that a renewal is due. Fix the timer or renew by hand before the remaining hours run out. |
 | `OpenScienceHostDiskLow` / `OpenScienceHostDiskCritical` | `df -h /`, `docker system df`, `ls /srv/evimed-science/releases` | Run `node scripts/ops/release-retention.mjs` (keeps the newest N and anything a container still bind-mounts), then prune images this deployment no longer references. On a host shared with other products, confirm what an image belongs to before removing it. |
+| `OpenScienceRunFailureRatioHigh` | The `EviMed Runs` dashboard: which error codes, and whether they concentrate in one capability; `/api/ready` runtime and kernel checks | One code across every capability is a shared dependency (model gateway, runtime, a source): fix it there. One capability failing alone is its own defect: keep the failed runs' records for the fix and tell researchers before routing more work to it. |
 
 For every critical alert, record start/end time, affected release, readiness
 codes, request IDs, containment action, data-access approvals, recovery evidence,

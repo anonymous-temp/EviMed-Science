@@ -28,6 +28,23 @@ import fs from "node:fs";
  *  that a single configured endpoint means the same thing on both sides. */
 const NATIVE_PATH_MARKER = "/api/v1/services/rerank";
 
+/**
+ * What the reranker is asked to judge, unless a caller says otherwise.
+ *
+ * Without one, qwen3-rerank scores relevance as question answering: which
+ * passage answers the query. A recall wants something else — which of the
+ * researcher's stored memories bear on what they are asking now, including a
+ * preference or a project fact that answers nothing. Another caller (knowledge
+ * base search) passes its own instruction through `order`'s option.
+ */
+export const MEMORY_RERANK_INSTRUCT =
+  "Given a researcher's current question, retrieve the memories they stored earlier that are relevant to it.";
+
+/** The rerank models that read `instruct`; DashScope documents it for these
+ *  only (https://help.aliyun.com/zh/model-studio/text-rerank-api), and a model
+ *  outside the list is not sent a field it would at best ignore. */
+const INSTRUCT_MODELS = new Set(["qwen3-rerank", "qwen3.7-text-rerank", "qwen3-vl-rerank"]);
+
 /** @param {string} file */
 function readKeyFile(file) {
   try {
@@ -93,9 +110,11 @@ export class MemoryRerank {
    *
    * @param {string} query
    * @param {string[]} documents
+   * @param {{ instruct?: string }} [options] what to judge the documents for;
+   *   `MEMORY_RERANK_INSTRUCT` unless given, none when given empty
    * @returns {Promise<number[]>}
    */
-  async order(query, documents) {
+  async order(query, documents, { instruct = MEMORY_RERANK_INSTRUCT } = {}) {
     const texts = Array.isArray(documents) ? documents : [];
     const identity = texts.map((_, index) => index);
     if (!this.configured || texts.length < 2) return identity;
@@ -116,7 +135,7 @@ export class MemoryRerank {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify(this.#body(String(query ?? "").slice(0, this.maxCharsPerDocument), head)),
+        body: JSON.stringify(this.#body(String(query ?? "").slice(0, this.maxCharsPerDocument), head, String(instruct ?? ""))),
         signal: controller.signal,
       });
     } catch (error) {
@@ -142,11 +161,14 @@ export class MemoryRerank {
     return [...ordered, ...tail];
   }
 
-  /** @param {string} query @param {string[]} documents */
-  #body(query, documents) {
+  /** The two paths put the instruction in different places: top level beside
+   *  `query` on the OpenAI-compatible one, under `parameters` on the native one.
+   *  @param {string} query @param {string[]} documents @param {string} instruct */
+  #body(query, documents, instruct) {
+    const instruction = instruct && INSTRUCT_MODELS.has(this.model) ? { instruct } : {};
     return this.apiBase.includes(NATIVE_PATH_MARKER)
-      ? { model: this.model, input: { query, documents }, parameters: { return_documents: false } }
-      : { model: this.model, query, documents, top_n: documents.length };
+      ? { model: this.model, input: { query, documents }, parameters: { return_documents: false, ...instruction } }
+      : { model: this.model, query, documents, top_n: documents.length, ...instruction };
   }
 
   /** Keep the order that arrived, and say once why it was not improved.

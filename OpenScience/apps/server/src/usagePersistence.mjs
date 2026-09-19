@@ -1,4 +1,17 @@
+import { createHash } from "node:crypto";
+import { USAGE_PURPOSES } from "@evimed/domain";
+
 const migrations = new WeakMap();
+
+// The purpose CHECK is spliced from the domain's closed vocabulary, so every
+// member is checked for shape rather than trusted, and the constraint is named
+// for the exact list it enforces: when the vocabulary grows, the old name no
+// longer matches, and the migration replaces the constraint instead of leaving
+// one that refuses the new purpose on insert.
+for (const purpose of USAGE_PURPOSES) {
+  if (!/^[a-z][a-z-]*$/.test(purpose)) throw new Error(`usage purpose ${JSON.stringify(purpose)} cannot be written into SQL`);
+}
+const purposeCheck = `usage_model_requests_purpose_${createHash("sha256").update(USAGE_PURPOSES.join(",")).digest("hex").slice(0, 12)}_check`;
 
 const sql = `
 CREATE SCHEMA IF NOT EXISTS evimed_usage;
@@ -80,7 +93,39 @@ DO $$ BEGIN
     ALTER TABLE evimed_usage.model_requests VALIDATE CONSTRAINT usage_model_requests_currency_check;
   END IF;
 END $$;
+-- What each request was for (contract X1, 2026-09-20). A constant default makes
+-- this a catalogue-only change on PostgreSQL 11+, not a table rewrite. There is
+-- no backfill: nothing recorded a request's origin before this column existed,
+-- so every older row stays 'other' — a guessed purpose would read in the report
+-- exactly like a recorded one.
+ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS purpose text NOT NULL DEFAULT 'other';
+DO $purpose$
+DECLARE stale record;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='evimed_usage.model_requests'::regclass AND conname='${purposeCheck}'
+  ) THEN
+    FOR stale IN SELECT conname FROM pg_constraint
+      WHERE conrelid='evimed_usage.model_requests'::regclass
+        AND conname ~ '^usage_model_requests_purpose_[0-9a-f]+_check$'
+    LOOP
+      EXECUTE format('ALTER TABLE evimed_usage.model_requests DROP CONSTRAINT %I', stale.conname);
+    END LOOP;
+    ALTER TABLE evimed_usage.model_requests ADD CONSTRAINT ${purposeCheck}
+      CHECK (purpose IN (${USAGE_PURPOSES.map((purpose) => `'${purpose}'`).join(",")})) NOT VALID;
+    ALTER TABLE evimed_usage.model_requests VALIDATE CONSTRAINT ${purposeCheck};
+  END IF;
+END $purpose$;
+-- The cost report reads one window across every account. The account-leading
+-- index above cannot seek on time alone, so without this the report reads the
+-- whole ledger, which grows by every model request the platform makes.
+CREATE INDEX IF NOT EXISTS usage_model_requests_time_purpose_idx
+  ON evimed_usage.model_requests(created_at,purpose);
 `;
+
+/** The purpose CHECK's current name, for the tests that pin the migration. */
+export const USAGE_PURPOSE_CHECK = purposeCheck;
 
 /** @param {any} database */
 export async function migrateUsageLedger(database) {
