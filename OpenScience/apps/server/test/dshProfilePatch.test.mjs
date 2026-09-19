@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
+import YAML from "yaml";
 
 import { EVIMED_PRESET, HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, OPERATOR_ONLY_BROWSER_PANELS, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
 
@@ -453,6 +454,37 @@ test("the hosted browser application ships without the panels that change the de
   for (const id of HOSTED_DISABLED_BROWSER_PANELS) {
     assert.doesNotMatch(local, new RegExp(`- id: ${id}`), `${id} must stay available off the hosted surface`);
   }
+});
+
+test("the hosted slash menu lists no command that cannot work there", () => {
+  // Measured, not inferred: a live 0.1.5-rc.2 kernel booted with this patch
+  // (2026-09-19) answered `commands/list` for an `evimed-universal` session
+  // with `export`, `feedback` and `permission` before this change and with
+  // nothing after it, while sessions still created and the composer chip's
+  // `permissions` projection still offered the one hosted preset. What the
+  // researcher's `/` menu keeps is the frame's own `/能力`.
+  const rowsOf = (/** @type {string} */ text) => /** @type {any[]} */ (YAML.parse(text)).filter((row) => row && row.id);
+  const row = (/** @type {any[]} */ rows, /** @type {string} */ id) => rows.find((entry) => entry.id === id);
+  for (const operator of [false, true]) {
+    const rows = rowsOf(renderProfilePatch({ ...input, flags: { ...input.flags, hosted: true, operator } }));
+    // `/feedback` and `/export` leave with the rows that own them.
+    assert.equal(row(rows, "command-feedback")?.disabled, true, "`/feedback` records into a log nothing here reads");
+    assert.equal(row(rows, "session-log-download")?.disabled, true, "`/export` downloads through a route the proxy refuses");
+    // `/permission`'s row is the sandbox itself, so it stays mounted and loses
+    // only the registry: the table and the default preset are untouched.
+    const permission = row(rows, "permission");
+    assert.deepEqual(permission.isolate, { commands: true });
+    assert.deepEqual(Object.keys(permission.config.presets), [HOSTED_PERMISSION_PRESET]);
+    assert.equal(permission.config.defaultPreset, HOSTED_PERMISSION_PRESET);
+    assert.equal(permission.disabled, undefined, "disabling the permission row would take the sandbox presets with it");
+  }
+  // A person on their own machine keeps all three: the feedback dialog, the
+  // preset picker and a download route nobody refuses are mounted there.
+  const local = rowsOf(renderProfilePatch({ ...input, flags: { ...input.flags, hosted: false } }));
+  assert.equal(row(local, "command-feedback"), undefined);
+  assert.equal(row(local, "session-log-download"), undefined);
+  assert.equal(row(local, "permission").isolate, undefined);
+  assert.deepEqual(Object.keys(row(local, "permission").config.presets), ["read-only", "workspace-write", "danger-full-access"]);
 });
 
 test("the container is given both halves of the web registry, or neither", async () => {
