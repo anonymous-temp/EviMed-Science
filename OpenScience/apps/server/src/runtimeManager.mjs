@@ -752,6 +752,23 @@ function runtimeStateFile(project) {
   return path.join(project.metaDir, "runtime-state.json");
 }
 
+/**
+ * The moments a runtime start goes through, in order, as the reader sees them
+ * while waiting (plan §3.1 #8): 准备环境 (a container or a cloud session, and
+ * room made for it), 同步文件 (the project's files carried into a remote
+ * session — a local container mounts them, so the Docker provider has no such
+ * moment and never reports it) and 启动内核 (the kernel composing its plugin
+ * tree until its first wire call answers). The shell drew one sentence for all
+ * of them, so a slow kernel, a slow copy and a slot the deployment had run out
+ * of all read as "a cold start is slow".
+ */
+export const RUNTIME_START_STAGES = Object.freeze(["environment", "sync", "kernel"]);
+
+/** How long a refused start stays on the status the shell polls. Long enough
+ *  for a frame that is still waiting to read it; short enough that a refusal
+ *  from an earlier visit is not reported against a later one. */
+const START_FAILURE_VISIBLE_MS = 60_000;
+
 function publicRuntimeStatus(runtime, fields = {}) {
   return {
     running: Boolean(runtime),
@@ -770,10 +787,13 @@ function publicRuntimeStatus(runtime, fields = {}) {
     agentsGenerated: Number.isSafeInteger(fields.agentsGenerated) ? fields.agentsGenerated : null,
     capsuleMethodsMounted: Number.isSafeInteger(fields.capsuleMethodsMounted) ? fields.capsuleMethodsMounted : null,
     error: fields.error ?? null,
+    provider: fields.provider ?? null,
+    startStage: fields.startStage ?? null,
+    startError: fields.startError ?? null,
   };
 }
 
-function publicRuntimeStatusFromState(state) {
+function publicRuntimeStatusFromState(state, fields = {}) {
   const wasRunning = state?.running === true || state?.event === "starting";
   return {
     running: false,
@@ -792,6 +812,9 @@ function publicRuntimeStatusFromState(state) {
     agentsGenerated: Number.isSafeInteger(state?.agentsGenerated) ? state.agentsGenerated : null,
     capsuleMethodsMounted: Number.isSafeInteger(state?.capsuleMethodsMounted) ? state.capsuleMethodsMounted : null,
     error: typeof state?.error === "string" ? state.error : wasRunning ? "runtime_not_attached" : null,
+    provider: fields.provider ?? null,
+    startStage: fields.startStage ?? null,
+    startError: fields.startError ?? null,
   };
 }
 
@@ -2713,6 +2736,21 @@ export class RuntimeManager {
      */
     this.hasRunningRuns = hasRunningRuns;
     this.lastOrphanCleanup = null;
+    /** Where each pending start is, by project key (`RUNTIME_START_STAGES`). */
+    this.startProgress = new Map();
+    /** The last start of each project that was refused, by project key, for
+     *  the status the waiting shell polls: `{ code, status, at }`. */
+    this.startFailures = new Map();
+  }
+
+  /** The runtime provider this deployment runs (`OPEN_SCIENCE_RUNTIME_PROVIDER`). */
+  providerName() {
+    return String(this.config.runtimeProvider ?? "docker");
+  }
+
+  /** @param {Record<string, any>} project @param {string} stage one of `RUNTIME_START_STAGES` */
+  noteStartStage(project, stage) {
+    this.startProgress.set(this.key(project), { stage, at: Date.now() });
   }
 
   usesRuntimeController() {
@@ -3030,6 +3068,7 @@ export class RuntimeManager {
     if (pending) return pending;
 
     const started = (async () => {
+      this.noteStartStage(project, "environment");
       // Measured, and room made, inside the pending start: registered before
       // the first wait, it is what a second caller arriving meanwhile joins
       // instead of beginning a second container. Its own entry in `starts` is
@@ -3055,6 +3094,7 @@ export class RuntimeManager {
       // The fake speaks the kernel's protocol. A fake that spoke any other
       // would make every test in the suite exercise a code path production
       // does not have.
+      this.noteStartStage(project, "kernel");
       const mock = await startMockDshRuntime();
       const runtime = {
         kind: "mock",
@@ -3100,6 +3140,7 @@ export class RuntimeManager {
     this.starts.set(key, started);
     try {
       const runtime = await started;
+      this.startFailures.delete(key);
       try {
         this.onRuntimeStart(project, runtime);
       } catch {
@@ -3108,8 +3149,22 @@ export class RuntimeManager {
         // calls never depend on it.
       }
       return runtime;
+    } catch (error) {
+      // Kept for the waiting shell. The start that failed is usually the one a
+      // frame document triggered, and a refusal served into a frame is a page
+      // the shell cannot read the status of: on 2026-09-15 a 429 for the one
+      // runtime slot this deployment had was shown as "cold starts sometimes
+      // take longer", and the retry looped forever. The status it polls says
+      // what happened instead.
+      this.startFailures.set(key, {
+        code: typeof error?.code === "string" ? error.code : "runtime_start_failed",
+        status: Number.isSafeInteger(error?.status) ? error.status : 502,
+        at: Date.now(),
+      });
+      throw error;
     } finally {
       this.starts.delete(key);
+      this.startProgress.delete(key);
     }
   }
 
@@ -3297,6 +3352,7 @@ export class RuntimeManager {
       mcpServersCopied: mcpSync.copied,
       mcpServersConfigured: mcpSync.configured,
     });
+    this.noteStartStage(project, "kernel");
     let child;
     if (plan.sandboxMode === "docker" && this.runtimeController) {
       await this.runtimeController.startRuntime(
@@ -3633,7 +3689,9 @@ export class RuntimeManager {
   }
 
   async status(project) {
-    const runtime = this.runtimes.get(this.key(project));
+    const key = this.key(project);
+    const runtime = this.runtimes.get(key);
+    const provider = this.providerName();
     if (runtime) {
       return publicRuntimeStatus(runtime, {
         stale: false,
@@ -3643,11 +3701,21 @@ export class RuntimeManager {
         agentSkillsCopied: runtime.agentSkillsCopied,
         agentsGenerated: runtime.agentsGenerated,
         capsuleMethodsMounted: runtime.capsuleMethodsMounted,
+        provider,
       });
     }
+    // Where a start is, or why the last one did not happen, for the shell that
+    // is waiting on it. A refusal is reported only while it is recent and no
+    // start is under way: a start that followed it is the newer answer.
+    const startStage = this.starts.has(key) ? this.startProgress.get(key)?.stage ?? "environment" : null;
+    const failure = startStage ? null : this.startFailures.get(key);
+    const startError = failure && Date.now() - failure.at < START_FAILURE_VISIBLE_MS
+      ? { code: failure.code, status: failure.status, at: new Date(failure.at).toISOString() }
+      : null;
+    const fields = { provider, startStage, startError };
     const state = await readRuntimeState(project);
-    if (state) return publicRuntimeStatusFromState(state);
-    return publicRuntimeStatus(null);
+    if (state) return publicRuntimeStatusFromState(state, fields);
+    return publicRuntimeStatus(null, fields);
   }
 
   runtimeWorkspaceRoot(project) {
@@ -4146,6 +4214,42 @@ export class RuntimeManager {
     try {
       await write();
     } catch { /* isolated: evimed_run_brief_index_write_failures_total */ }
+  }
+
+  /**
+   * Start, in the background of a sign-in, the runtime of the project this
+   * account used last (plan §3.1 #8), so the project the reader opens next is
+   * already running when they reach it.
+   *
+   * "Last" is read from each project's own runtime state file — the time its
+   * runtime last changed state — because nothing else in the control plane
+   * remembers which project an account used: the browser's remembered project
+   * is wiped on sign-out, which is exactly the moment before this runs. A
+   * project that never had a runtime is older than any that did, and among
+   * those `default` wins, which is where a first sign-in lands.
+   *
+   * Returns the id it started, or null. The caller does not wait on it: a warm
+   * start is a head start, never a precondition, and the start it triggers is
+   * the same admitted, capped start any request would make.
+   *
+   * @param {Record<string, any>[]} projects the account's open projects
+   * @returns {Promise<string | null>}
+   */
+  async warmMostRecent(projects) {
+    if (!this.config.runtimeWarmOnSignIn || !Array.isArray(projects) || projects.length === 0) return null;
+    let chosen = null;
+    let chosenAt = -1;
+    for (const project of projects) {
+      const state = await readRuntimeState(project).catch(() => null);
+      const at = Date.parse(String(state?.updatedAt ?? "")) || (project.id === "default" ? 0.5 : 0);
+      if (at > chosenAt) {
+        chosen = project;
+        chosenAt = at;
+      }
+    }
+    if (!chosen) return null;
+    await this.start(chosen);
+    return String(chosen.id);
   }
 
   /** Reserve a control-plane session id without starting it in DSH. The caller
@@ -4948,15 +5052,11 @@ export class RuntimeManager {
       if (Date.now() - Number(activity.lastUseAt ?? 0) < timeoutMs) continue;
       const project = runtime.project;
       if (!project) continue;
-      let busy = false;
-      try {
-        busy = await this.runtimeBusy(project);
-      } catch {
-        // Unreadable means unknown, and unknown is not idle. A runtime whose
-        // kernel cannot be asked stays up; the next sweep asks again.
-        continue;
-      }
-      if (busy) {
+      const verdict = await this.idleVerdict(project);
+      // Unreadable means unknown, and unknown is not idle. A runtime whose
+      // kernel cannot be asked stays up; the next sweep asks again.
+      if (verdict === "unknown") continue;
+      if (verdict === "working") {
         activity.lastUseAt = Date.now();
         continue;
       }
@@ -4964,6 +5064,34 @@ export class RuntimeManager {
       stopped++;
     }
     return stopped;
+  }
+
+  /**
+   * Whether this runtime is idle by both accounts that can tell: the kernel's
+   * (no session mid-turn) and the run ledger's (no run it still calls
+   * `running`).
+   *
+   * The ledger's half is the rule `makeRoomFor` already applied, and the idle
+   * reaper did not (plan §3.1 #8, spec G16): a nightly proactive-research run
+   * sits between two turns — the monitor finishing one delivery, the repair
+   * the next — with its kernel idle, and a stop in that window closes the run
+   * as cancelled at 03:00 with nobody watching. The ledger is asked second
+   * because it is the more expensive read.
+   *
+   * @param {Record<string, any>} project
+   * @returns {Promise<'idle'|'working'|'unknown'>}
+   */
+  async idleVerdict(project) {
+    try {
+      if (await this.runtimeBusy(project)) return "working";
+    } catch {
+      return "unknown";
+    }
+    try {
+      return (await this.hasRunningRuns(project)) ? "working" : "idle";
+    } catch {
+      return "unknown";
+    }
   }
 
   /**
@@ -5216,9 +5344,26 @@ export class RuntimeManager {
     if (activity.activeProxies > 0) return;
     this.clearIdleTimer(key);
     activity.idleTimer = setTimeout(() => {
-      void this.stopIdleRuntime(project);
+      void this.reapIdleRuntime(project).catch(() => {});
     }, timeoutMs);
     activity.idleTimer.unref?.();
+  }
+
+  /**
+   * The per-runtime idle timer's stop, held to the sweep's rule
+   * (`idleVerdict`): a runtime whose kernel or ledger is still working is
+   * asked again one idle period later instead of being stopped.
+   * @param {Record<string, any>} project
+   */
+  async reapIdleRuntime(project) {
+    const key = this.key(project);
+    if (this.runtimes.has(key) && (this.runtimeActivity.get(key)?.activeProxies ?? 0) === 0) {
+      if (await this.idleVerdict(project) !== "idle") {
+        if (this.runtimes.has(key)) this.scheduleIdleStop(project);
+        return;
+      }
+    }
+    await this.stopIdleRuntime(project);
   }
 
   /**

@@ -11,7 +11,7 @@ import { useUiStore } from "@/lib/store";
 import { useRuntimeSessionSearch } from "@/lib/runtimeUiBridge";
 import { renderHook } from "@testing-library/react";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources }));
 // The run's event stream, held by the test: the frame's run view follows it.
 vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/runEvents")>()), subscribeRunEvents: mocks.subscribe }));
@@ -25,6 +25,7 @@ vi.mock("@/lib/apiClient", async importOriginal => ({
   hasWebApi: true, fetchWebMe: () => mocks.me(), webRuntimeProfile: () => mocks.profile,
   getWebProjectId: () => mocks.projectId, createWebRuntimeUiFrame: mocks.create, releaseWebRuntimeUiFrame: mocks.release,
   renewWebRuntimeUiFrame: mocks.renew, listWebAgentRuns: mocks.listRuns, warmWebRuntime: mocks.warm,
+  startWebRuntime: mocks.start, fetchWebRuntimeStatus: mocks.status,
 }));
 const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
 function PathProbe() {
@@ -54,6 +55,9 @@ beforeEach(() => {
   mocks.me.mockReset(); mocks.me.mockResolvedValue({});
   mocks.renew.mockImplementation(async () => ({ ...binding, expiresAt: Date.now() + 300_000 }));
   mocks.profile.uiOrigin = "https://host.example:8443";
+  // A warm runtime unless a test says otherwise: the usual opening.
+  mocks.start.mockReset(); mocks.start.mockResolvedValue(undefined);
+  mocks.status.mockReset(); mocks.status.mockResolvedValue({ running: true, provider: "docker", startStage: null, startError: null });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -175,9 +179,9 @@ describe("native frame identity and readiness", () => {
     const frame = container.querySelector("iframe")!;
     expect(mocks.create).toHaveBeenCalledWith("default"); expect(frame.src).toBe(binding.frameUrl);
     act(() => frame.dispatchEvent(new Event("load")));
-    // The binding is here, the runtime prepared; the interface is loading.
-    expect(screen.getByText("正在载入界面…")).toBeInTheDocument();
-    expect(screen.getByText("✓ 准备运行时")).toBeInTheDocument();
+    // The binding is here and the runtime is up; the interface is loading.
+    await waitFor(() => expect(screen.getByText("正在载入界面…")).toBeInTheDocument());
+    expect(screen.getByText("✓ 启动内核")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ready" }, "https://evil.example");
     emit(frame, { type: "evimed.runtime-ui.ready" }, mocks.profile.uiOrigin, window);
     emit(frame, { type: "evimed.runtime-ui.ready", frameId: "frame-b" });
@@ -638,47 +642,105 @@ describe("opening a task", () => {
     vi.useFakeTimers();
     let resolveFrame!: (value: typeof binding) => void;
     mocks.create.mockImplementation(() => new Promise(resolve => { resolveFrame = resolve; }));
+    // A cold Docker runtime: the control plane reports the environment, then
+    // the kernel; a local container has no files to carry over.
+    let reported: Record<string, unknown> = { running: false, provider: "docker", startStage: "environment", startError: null };
+    mocks.status.mockImplementation(async () => reported);
     const view = mount(null, "/app/chat/session-a");
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     const status = screen.getByRole("status");
+    expect(status).toHaveAttribute("data-open-step", "environment");
     expect(status).toHaveAttribute("data-open-stage", "0");
     // The composer the reader is about to type into is drawn from the start.
     expect(status.querySelector('[aria-hidden="true"] .animate-pulse')).not.toBeNull();
-    expect(screen.getByText("正在准备运行时…")).toBeInTheDocument();
-    expect(screen.queryByText(/通常需要 10–30 秒/)).toBeNull();
+    expect(screen.getByText("正在准备环境…")).toBeInTheDocument();
+    expect(screen.queryByText("同步文件")).toBeNull();
+    expect(screen.queryByText(/正在为这个项目准备研究环境/)).toBeNull();
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-    expect(screen.getByText(/通常需要 10–30 秒/)).toBeInTheDocument();
+    expect(screen.getByText(/正在为这个项目准备研究环境/)).toBeInTheDocument();
+    reported = { running: false, provider: "docker", startStage: "kernel", startError: null };
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+    expect(screen.getByRole("status")).toHaveAttribute("data-open-step", "kernel");
+    expect(screen.getByText("✓ 准备环境")).toBeInTheDocument();
+    expect(screen.getByText("正在启动内核…")).toBeInTheDocument();
     await act(async () => { resolveFrame(binding); await vi.advanceTimersByTimeAsync(0); });
-    expect(screen.getByRole("status")).toHaveAttribute("data-open-stage", "1");
-    expect(screen.getByText("✓ 准备运行时")).toBeInTheDocument();
-    expect(screen.queryByText(/通常需要 10–30 秒/)).toBeNull();
     const frame = view.container.querySelector("iframe")!;
-    const post = vi.spyOn(frame.contentWindow!, "postMessage");
-    emit(frame, { type: "evimed.runtime-ui.ready" });
+    // The kernel's page booting inside the frame is the runtime being up.
+    emit(frame, { type: "evimed.runtime-ui.booted" });
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    expect(screen.getByRole("status")).toHaveAttribute("data-open-stage", "2");
+    expect(screen.getByRole("status")).toHaveAttribute("data-open-step", "interface");
+    expect(screen.getByText("✓ 启动内核")).toBeInTheDocument();
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready", seq: 2 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole("status")).toHaveAttribute("data-open-step", "task");
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
     expect(screen.getByText(/正在读取这个任务的完整记录/)).toBeInTheDocument();
-    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+    const navigateCommand = post.mock.calls.find(([data]) => data.type === "evimed.runtime-ui.navigate")![0];
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: navigateCommand.requestId, ok: true, sessionId: "session-a" });
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(screen.queryByRole("status")).toBeNull();
     view.unmount();
+  });
+
+  it("names the file sync a remote session goes through, and never a moment the provider does not have", async () => {
+    vi.useFakeTimers();
+    mocks.create.mockImplementation(() => new Promise(() => {}));
+    mocks.status.mockResolvedValue({ running: false, provider: "agentbay", startStage: "sync", startError: null });
+    const view = mount(null, "/app/chat/session-a");
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole("status")).toHaveAttribute("data-open-step", "sync");
+    expect(screen.getByText("✓ 准备环境")).toBeInTheDocument();
+    expect(screen.getByText("正在同步文件…")).toBeInTheDocument();
+    expect(screen.getByText("启动内核")).toBeInTheDocument();
+    view.unmount();
+  });
+
+  it("says a slot cap is a slot cap, with the action that frees one, never as a slow start", async () => {
+    mocks.create.mockImplementation(() => new Promise(() => {}));
+    mocks.status.mockResolvedValue({ running: false, provider: "docker", startStage: null, startError: null });
+    mocks.start.mockRejectedValue(new WebApiError("Too many running runtimes for this user; limit is 2.", { status: 429, code: "runtime_limit_exceeded" }));
+    mount(null, "/app/chat/session-a");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("同时运行的研究环境已达本部署上限");
+    expect(alert).not.toHaveTextContent(/冷启动|90 秒/);
+    expect(screen.getByRole("button", { name: "去运行记录" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+  });
+
+  it("does not fail a retry on a refusal an earlier attempt left on the status", async () => {
+    // The status still reports the earlier refusal; this attempt's own start
+    // is what answers, and it succeeded.
+    mocks.status.mockResolvedValue({ running: false, provider: "docker", startStage: null,
+      startError: { code: "runtime_limit_exceeded", status: 429, at: new Date().toISOString() } });
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("waits out a slow start that keeps moving, and gives up only on a moment that stalls", async () => {
     vi.useFakeTimers();
     let resolveFrame!: (value: typeof binding) => void;
     mocks.create.mockImplementation(() => new Promise(resolve => { resolveFrame = resolve; }));
+    let reported: Record<string, unknown> = { running: false, provider: "docker", startStage: "environment", startError: null };
+    mocks.status.mockImplementation(async () => reported);
     const view = mount(null, "/app/chat/session-a");
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     // A cold runtime past the old single 30 s deadline is still a start.
     await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
     expect(screen.queryByRole("alert")).toBeNull();
+    // A new moment restarts the count. (Each advance is its own act scope: a
+    // state update inside one lands only when the scope exits.)
+    reported = { running: false, provider: "docker", startStage: "kernel", startError: null };
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(80_000); });
+    expect(screen.queryByRole("alert")).toBeNull();
     await act(async () => { resolveFrame(binding); await vi.advanceTimersByTimeAsync(0); });
     const frame = view.container.querySelector("iframe")!;
     // The download: the bridge booting is progress and restarts the count.
-    await act(async () => { await vi.advanceTimersByTimeAsync(50_000); });
     emit(frame, { type: "evimed.runtime-ui.booted" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(50_000); });
+    emit(frame, { type: "evimed.runtime-ui.booted", seq: 2 });
     await act(async () => { await vi.advanceTimersByTimeAsync(50_000); });
     expect(screen.queryByRole("alert")).toBeNull();
     // Nothing more for a whole minute: that moment has stalled.
@@ -688,14 +750,17 @@ describe("opening a task", () => {
     view.unmount();
   });
 
-  it("gives up on a runtime that does not start within its own allowance", async () => {
+  it("gives up on a runtime that does not start within its own allowance, naming the moment that stalled", async () => {
     vi.useFakeTimers();
     mocks.create.mockImplementation(() => new Promise(() => {}));
+    mocks.start.mockImplementation(() => new Promise(() => {}));
+    mocks.status.mockResolvedValue({ running: false, provider: "docker", startStage: "kernel", startError: null });
     const view = mount(null, "/app/chat/session-a");
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     await act(async () => { await vi.advanceTimersByTimeAsync(89_000); });
     expect(screen.queryByRole("alert")).toBeNull();
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
-    expect(screen.getByRole("alert")).toHaveTextContent("研究运行时 90 秒内没有启动");
+    expect(screen.getByRole("alert")).toHaveTextContent("研究内核 90 秒内没有启动完成");
     view.unmount();
   });
 

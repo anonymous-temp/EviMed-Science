@@ -581,6 +581,9 @@ services:
       OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS: ${OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS:-30000}
       OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS: ${OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS:-64}
       OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS_PER_PROJECT: ${OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS_PER_PROJECT:-8}
+      # rt: runtime UX — warm the most recently used project's runtime at
+      # sign-in. Value-less: unset keeps config.mjs's default, on.
+      OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN:
     volumes:
       - open-science-data:/data
       - open-science-backups:/backups:ro
