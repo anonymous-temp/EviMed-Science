@@ -19,20 +19,23 @@ const other = `usage_${randomUUID()}`;
 // reconciliation tests assert exact open-cost totals, which the accumulated
 // reservations of the other tests would make unreadable.
 const stale = `usage_${randomUUID()}`;
+// Its own account again: the cap test below asserts what the caps count, which
+// any other test's spend would change.
+const capped = `usage_${randomUUID()}`;
 let database;
 let ledger;
 
 before(async () => {
   if (!databaseUrl) return;
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 8, databaseConnectionTimeoutMs: 2_000 });
-  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Usage owner','development'),($2,'Other owner','development'),($3,'Stale owner','development')", [owner, other, stale]);
-  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Usage',1048576),($2,'default','Other',1048576),($3,'default','Stale',1048576)", [owner, other, stale]);
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Usage owner','development'),($2,'Other owner','development'),($3,'Stale owner','development'),($4,'Capped owner','development')", [owner, other, stale, capped]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Usage',1048576),($2,'default','Other',1048576),($3,'default','Stale',1048576),($4,'default','Capped',1048576)", [owner, other, stale, capped]);
   ledger = new UsageLedger(database);
 });
 
 after(async () => {
   if (!database) return;
-  await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[owner, other, stale]]);
+  await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[owner, other, stale, capped]]);
   await database.close();
 });
 
@@ -420,7 +423,7 @@ test("a purpose CHECK written for an older vocabulary is replaced, not left refu
   }
 });
 
-test("a spend that already happened is recorded settled in one step, lands once, and counts like any settled row", options, async () => {
+test("a spend that already happened is recorded settled in one step and lands once", options, async () => {
   // A specialist engine reports what its job spent when the job ends: there is
   // nothing to reserve, and a cap check could only make the ledger wrong.
   const at = new Date("2033-04-04T00:00:00.000Z");
@@ -451,4 +454,35 @@ test("a spend that already happened is recorded settled in one step, lands once,
     ledger.recordSettled({ ...input, id: `engine_${randomUUID().replaceAll("-", "")}`, projectId: "no-such-project" }),
     (error) => error.code === "23503",
   );
+});
+
+test("an engine's spend is in every report and in no cap", options, async () => {
+  // An engine reports after its job ended, on the run its project was running
+  // then: the operator's view of cost (plan §3.4 #6), never an input to a
+  // limit that refuses the researcher's next call or stops a run mid-way.
+  const at = new Date("2034-05-05T00:00:00.000Z");
+  const now = new Date("2034-05-05T01:00:00.000Z");
+  const runId = `run_${randomUUID().replaceAll("-", "")}`;
+  await ledger.recordSettled({
+    id: `engine_${randomUUID().replaceAll("-", "")}`, userId: capped, projectId: "default", runId, purpose: "engine",
+    model: "deepseek-flash", priceVersion: "evimed-reference-2026-09-10", currency: "CNY",
+    requestFingerprint: createHash("sha256").update("engine-over-every-cap").digest("hex"),
+    usage: { cacheHitTokens: 0, cacheMissTokens: 1_000_000, completionTokens: 100_000 }, actualCost: 5, priced: true,
+    providerRequestId: "meta-analysis:meta-20340505-abcdef#1", now: at,
+  });
+  const limits = { dailyLimit: 1, weeklyLimit: 1, now };
+  assert.deepEqual(await ledger.assertWithinLimits(capped, limits), { allowed: true });
+  const kernel = await ledger.reserveModel(reservation(capped, { ...limits, runId, runLimit: 1, estimatedCost: 0.5, purpose: "kernel" }));
+  assert.equal(kernel.status, "reserved", "¥5 of engine spend on this run and account left every cap untouched");
+  // The caps are live all the same: the kernel's own spend still reaches them.
+  await ledger.settleModel(capped, kernel.id, {
+    usage: { cacheHitTokens: 0, cacheMissTokens: 10_000, completionTokens: 1_000 }, actualCost: 0.9, priced: true,
+  });
+  await assert.rejects(ledger.reserveModel(reservation(capped, { ...limits, runId, runLimit: 1, estimatedCost: 0.5 })),
+    (error) => error.code === "usage_budget_exceeded" && error.details?.window === "run");
+  await assert.rejects(ledger.assertWithinLimits(capped, { ...limits, dailyLimit: 0.9 }),
+    (error) => error.code === "usage_budget_exceeded" && error.details?.window === "day");
+  // And every report still carries every yuan of it.
+  assert.equal((await ledger.summaryRun(capped, runId)).actualCost, 5.9);
+  assert.equal((await ledger.summary(capped, { since: at })).actualCost, 5.9);
 });

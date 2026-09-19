@@ -59,6 +59,20 @@ export function parseArguments(argv) {
 }
 
 /**
+ * How many terminal cells `text` takes. A terminal draws a CJK character two
+ * cells wide, so padding the Chinese label column by string length left every
+ * number after it one cell short per character.
+ * @param {string} text
+ */
+export function displayWidth(text) {
+  let width = 0;
+  for (const char of text) {
+    width += /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/u.test(char) ? 2 : 1;
+  }
+  return width;
+}
+
+/**
  * The report as a fixed-width table: one row per purpose, then the total.
  * @param {Array<{ purpose: string, requests: number, cacheHitTokens: number, cacheMissTokens: number, outputTokens: number, costCny: number }>} rows
  * @param {{ days: number, since: string }} window
@@ -80,10 +94,11 @@ export function formatUsageReport(rows, { days, since }) {
     ["total", "合计", String(total.requests), String(total.cacheHitTokens), String(total.cacheMissTokens),
       String(total.outputTokens), total.costCny.toFixed(4), total.costCny > 0 ? "100.0%" : "-"],
   ];
-  // Width by code point: the labels are Chinese, and padding by UTF-16 length
-  // is what every terminal renders anyway for these characters.
-  const widths = header.map((title, column) => Math.max(title.length, ...lines.map((line) => line[column].length)));
-  const render = (cells) => cells.map((cell, column) => (column < 2 ? cell.padEnd(widths[column]) : cell.padStart(widths[column]))).join("  ");
+  const widths = header.map((title, column) => Math.max(displayWidth(title), ...lines.map((line) => displayWidth(line[column]))));
+  /** @param {string} cell @param {number} column */
+  const fill = (cell, column) => " ".repeat(widths[column] - displayWidth(cell));
+  /** @param {string[]} cells */
+  const render = (cells) => cells.map((cell, column) => (column < 2 ? cell + fill(cell, column) : fill(cell, column) + cell)).join("  ");
   return [
     `Model usage by purpose, last ${days} day${days === 1 ? "" : "s"} (since ${since})`,
     render(header),
