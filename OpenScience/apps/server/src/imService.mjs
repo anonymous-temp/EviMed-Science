@@ -578,7 +578,7 @@ export class ImService {
     for (const binding of bindings) {
       await this.connections.stop(binding.id);
       this.feishu.forget(binding.id);
-      await this.store.deleteBinding(userId, binding.id);
+      await this.store.deleteBinding(userId, binding.id, { channel: "feishu" });
     }
     await this.credentials?.removeChannelSecret(userId, FEISHU_CREDENTIAL);
     await this.notifications?.setPreferenceChannel(userId, "feishu", false).catch(() => null);
@@ -605,8 +605,8 @@ export class ImService {
   /** @param {any} user @param {string} id */
   async removePushToken(user, id) {
     if (!this.registry.isEnabled("app")) throw new HttpError(404, "channel_disabled", "The app channel is not enabled on this deployment.");
-    const removed = await this.store.deleteBinding(user.id, id);
-    if (!removed || removed.channel !== "app") throw new HttpError(404, "push_token_not_found", "No such device.");
+    const removed = await this.store.deleteBinding(user.id, id, { channel: "app" });
+    if (!removed) throw new HttpError(404, "push_token_not_found", "No such device.");
     if (removed.credentialRef) await this.credentials?.removeChannelSecret(user.id, removed.credentialRef).catch(() => false);
     return { removed: true };
   }
