@@ -370,17 +370,9 @@ temporarily switch the API to direct Docker control to clear the alert.
 
 If readiness reports `runtime_controller_limit_mismatch`, confirm that
 `OPEN_SCIENCE_MAX_RUNNING_RUNTIMES` and
-`OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER`, as well as
-`OPEN_SCIENCE_MAX_CONCURRENT_KERNELS` and
-`OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER`, have identical values in the
-API and Controller services. Do not raise only the Controller limit: both
+`OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER` have identical values in the API
+and Controller services. Do not raise only the Controller limit: both
 layers must enforce the reviewed deployment capacity.
-
-If Controller startup fails with `kernel_orphan_cleanup_failed`, keep the API
-out of service, inspect containers labelled `open-science.web.kernel=true`, and
-remove the identified kernels through the trusted Docker operator path. Do not
-delete the Controller socket or bypass startup cleanup while a labelled kernel
-remains.
 
 The `docker-hosted` GitHub job exercises Compose and a real DSH runtime container
 boundary on a Linux runner. It also starts Caddy with a temporary local CA,
@@ -398,7 +390,7 @@ backups, or external webhook delivery.
 | `OpenScienceApiMetricsUnavailable` | API container state, Prometheus target error, token-file mount | Restore the scrape secret or API; if API health also fails, remove traffic and restart only after logs are captured. |
 | `OpenScienceHealthProbeFailed` | Container process, host memory/disk, reverse proxy and Docker logs | Remove the instance from traffic, preserve error/runtime logs, and restart or roll back. |
 | `OpenScienceReadinessProbeFailed` | `/api/ready` check code | Correct the named readiness dependency; do not bypass the readiness gate. |
-| `OpenScienceReadinessCheckFailed` | `check` and `code` labels | Follow the corresponding auth, backup, security, resource, runtime, kernel, or observability configuration owner. |
+| `OpenScienceReadinessCheckFailed` | `check` and `code` labels | Follow the corresponding auth, backup, security, resource, runtime, or observability configuration owner. |
 | `OpenScienceApiServerErrors` / `OpenScienceApiHighErrorRatio` | Normalized route/status metrics and `.openscience/errors.jsonl` request IDs | Rate-limit or disable the affected feature, roll back a bad release, and preserve sanitized evidence. |
 | `OpenScienceRateLimitPressure` | Source gateway logs and normalized error codes | Confirm abuse versus legitimate load; tighten gateway limits or add controlled capacity without disabling isolation controls. |
 | `OpenScienceTaskQueueNearCapacity` | Queue depth, active tasks, task timeouts | Stop accepting new long tasks, cancel confirmed runaway work, and inspect task/runtime logs. |
