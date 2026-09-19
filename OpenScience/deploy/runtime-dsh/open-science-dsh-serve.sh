@@ -12,6 +12,15 @@ set -euo pipefail
 port="${OPEN_SCIENCE_RUNTIME_PORT:-4096}"
 socket="${OPEN_SCIENCE_RUNTIME_SOCKET:-/runtime/control/dsh.sock}"
 profile="${OPEN_SCIENCE_DSH_PROFILE:-evimed-runtime}"
+# Which bridge stands in front of the kernel: `socat` onto the unix socket the
+# control plane mounts (a Docker container), or `session` — the session bridge
+# an AgentBay session's link reaches (evimed-session-bridge.mjs, started by
+# `evimed-session start`). The kernel's own flags are the same either way.
+bridge="${OPEN_SCIENCE_RUNTIME_BRIDGE:-socat}"
+case "${bridge}" in
+  socat|session) ;;
+  *) echo "OPEN_SCIENCE_RUNTIME_BRIDGE must be socat or session, got ${bridge}" >&2; exit 64 ;;
+esac
 # The authority the control plane sends as `Host`. DSH's /api fence refuses any
 # request whose Host is neither loopback nor a declared trusted host, and it
 # applies that to every request rather than only to ones with browser markers —
@@ -19,8 +28,10 @@ profile="${OPEN_SCIENCE_DSH_PROFILE:-evimed-runtime}"
 # starts cleanly and then refuses every call. The control plane exports it.
 authority="${OPEN_SCIENCE_RUNTIME_AUTHORITY:-dsh.runtime}"
 
-mkdir -p "$(dirname "${socket}")"
-rm -f "${socket}"
+if [ "${bridge}" = socat ]; then
+  mkdir -p "$(dirname "${socket}")"
+  rm -f "${socket}"
+fi
 
 # A profile keeps user state on the runtime volume. Its image-managed package
 # roots point into the immutable seed and are reconciled by digest on every
@@ -88,13 +99,17 @@ for _ in $(seq 1 300); do
   sleep 1
 done
 
-socat "UNIX-LISTEN:${socket},fork,unlink-early,mode=0600" "TCP:127.0.0.1:${port}" &
+if [ "${bridge}" = session ]; then
+  node /usr/local/bin/evimed-session-bridge.mjs &
+else
+  socat "UNIX-LISTEN:${socket},fork,unlink-early,mode=0600" "TCP:127.0.0.1:${port}" &
+fi
 socat_pid=$!
 
 cleanup() {
   kill "${dsh_pid}" "${socat_pid}" 2>/dev/null || true
   wait "${dsh_pid}" "${socat_pid}" 2>/dev/null || true
-  rm -f "${socket}"
+  if [ "${bridge}" = socat ]; then rm -f "${socket}"; fi
 }
 
 trap cleanup EXIT INT TERM
