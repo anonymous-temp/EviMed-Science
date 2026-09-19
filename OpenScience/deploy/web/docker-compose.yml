@@ -709,6 +709,11 @@ services:
       EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
       EVIMED_DATA_ROOT: /data
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      # Where a finished job's model spend is reported (ops 0920): the runtime
+      # calls this engine directly, so the control plane hears a job end only
+      # from here, signed with the workload secret above. `-`, not `:-`: set
+      # empty in .env, it stays empty and no report is sent.
+      EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
@@ -775,6 +780,7 @@ services:
       PUBMED_EMAIL: ${OPEN_SCIENCE_UNPAYWALL_EMAIL:-}
       EVIMED_SPECIALIST_KIND: mendelian-randomization
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
@@ -926,6 +932,7 @@ services:
       OPENALEX_API_KEY: ${OPEN_SCIENCE_OPENALEX_API_KEY:-}
       EVIMED_SPECIALIST_KIND: bibliometric-analysis
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
@@ -972,6 +979,7 @@ services:
     environment:
       EVIMED_SPECIALIST_KIND: research-topic-selection
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
@@ -1018,6 +1026,7 @@ services:
     environment:
       EVIMED_SPECIALIST_KIND: peer-review
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
@@ -1064,6 +1073,7 @@ services:
     environment:
       EVIMED_SPECIALIST_KIND: drug-safety-analysis
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash

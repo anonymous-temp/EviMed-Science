@@ -14,6 +14,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from . import usage as provider_usage
+
 load_dotenv()
 logger = logging.getLogger(__name__)
 
@@ -239,6 +241,9 @@ class LLMClient:
             response = choice = None
             try:
                 response = client.chat.completions.create(**kwargs)
+                # Billed whether or not the answer is usable, a truncated one
+                # included, so counted first (evimed_runner reports totals).
+                provider_usage.record(getattr(response, "usage", None), model)
                 choice = response.choices[0]
                 content = choice.message.content
                 finish_reason = getattr(choice, "finish_reason", None)

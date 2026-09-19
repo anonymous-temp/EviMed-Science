@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import atexit
 import base64
 import json
 import math
@@ -3984,6 +3985,13 @@ def _prompt_cli_method_certainty(project: Project) -> None:
     )
 
 
+def _flush_llm_usage_manifest(project) -> None:
+    try:
+        write_llm_usage_manifest(project)
+    except Exception as exc:  # noqa: BLE001 — exit-time bookkeeping must never mask the run's own outcome
+        logging.getLogger("metaagent").warning("LLM usage manifest could not be written at exit: %s", exc)
+
+
 def main():
     parser = argparse.ArgumentParser(description="MetaAgent — Automated Meta-Analysis Manuscript Generator")
     parser.add_argument("--topic", type=str, required=True, help="Research question or topic")
@@ -4085,6 +4093,12 @@ def main():
     else:
         project = Project(args.topic, output_dir=output_dir)
         print(f"\nProject directory: {project.base_dir}\n")
+    # Whichever way this run ends — finished, refused, raised — what it spent
+    # at the provider stays in the project's usage manifest, which the EviMed
+    # adapter reads when the job ends. Only the finished paths wrote it before,
+    # so a failed job's tokens reached no ledger. The write merges by event, so
+    # a finished run's own write is not counted twice.
+    atexit.register(_flush_llm_usage_manifest, project)
 
     try:
         args.run_mode = configure_project_run_mode(project, args.run_mode)

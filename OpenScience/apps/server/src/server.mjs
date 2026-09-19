@@ -68,6 +68,7 @@ import { FeedbackEvents, deliverableSubjectId } from "./feedbackEvents.mjs";
 import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./accountExport.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONNECTOR_CREDENTIAL_GATEWAY_PATH, ConnectorCredentialStore, createConnectorCredentialGatewayHandler } from "./connectorCredentials.mjs";
+import { createEngineUsageHandler, ENGINE_USAGE_PATH } from "./engineUsage.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
 import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
@@ -448,7 +449,8 @@ function routePattern(pathname) {
     pathname === WEB_SEARCH_GATEWAY_PATH ||
     pathname === GEO_PROBE_GATEWAY_PATH ||
     pathname === REVISION_GATEWAY_PATH ||
-    pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH
+    pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH ||
+    pathname === ENGINE_USAGE_PATH
   ) return pathname;
   return pathname === "/" ? "/" : "/static";
 }
@@ -2192,6 +2194,10 @@ export function createWebApiApp(overrides = {}) {
     attributeRun,
     runPurpose,
   });
+  // A specialist engine's spend, reported by its adapter when a job ends (X1
+  // purpose `engine`): the runtime calls engines directly, so this is the one
+  // place the control plane hears that a job finished.
+  const engineUsageHandler = createEngineUsageHandler({ config, usageLedger, attributeRun });
   // The evaluation corpus needs both arms to see byte-identical upstream
   // answers, so the gateway's fetch is replaceable by a fixture reader. Neither
   // knob is set in production, and setting the replay one makes a miss a named
@@ -2379,6 +2385,8 @@ export function createWebApiApp(overrides = {}) {
         ? publicSourceGatewayHandler
       : pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH
         ? connectorCredentialGatewayHandler
+      : pathname === ENGINE_USAGE_PATH
+        ? engineUsageHandler
         : pathname === WEB_SEARCH_GATEWAY_PATH
           ? webSearchGatewayHandler
           : pathname === GEO_PROBE_GATEWAY_PATH

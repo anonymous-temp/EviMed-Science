@@ -223,6 +223,58 @@ export class UsageLedger {
     });
   }
 
+  /**
+   * A model spend that already happened elsewhere, recorded settled in one
+   * step: a specialist engine's job, which called the provider itself and
+   * reports its totals when it finishes (purpose `engine`).
+   *
+   * No reservation and no cap check, on purpose. The money is spent; refusing
+   * the record would not un-spend it, only make the ledger wrong. The row
+   * still counts toward the account's rolling caps from here on, like every
+   * settled row. Idempotent on `id` for the same fingerprint, so a report
+   * retried after a lost answer lands once; a different report under the same
+   * id is a conflict.
+   * @param {{id:string,userId:string,projectId:string,runId?:string|null,purpose?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,usage:{cacheHitTokens:number,cacheMissTokens:number,completionTokens:number},actualCost:number,priced:boolean,providerRequestId?:string|null,now?:Date}} input
+   */
+  async recordSettled(input) {
+    const values = {
+      id: productId(input.id), userId: productId(input.userId, "user"), projectId: productId(input.projectId, "project"),
+      runId: input.runId == null ? null : productId(input.runId, "run"),
+      purpose: usagePurpose(input.purpose),
+      model: text(input.model, "model"), priceVersion: text(input.priceVersion, "price version"), currency: text(input.currency, "currency", 12),
+      requestFingerprint: text(input.requestFingerprint, "request fingerprint", 64),
+      actualCost: money(input.actualCost, "actual cost"),
+      cacheHitTokens: tokenCount(input.usage?.cacheHitTokens),
+      cacheMissTokens: tokenCount(input.usage?.cacheMissTokens),
+      completionTokens: tokenCount(input.usage?.completionTokens),
+      providerRequestId: input.providerRequestId == null ? null : text(input.providerRequestId, "provider request id", 512),
+      now: instant(input.now ?? new Date(), "usage time"),
+    };
+    if (values.currency !== "CNY") throw new HttpError(400, "usage_payload_invalid", "Unsupported usage currency.");
+    if (!fingerprintPattern.test(values.requestFingerprint)) throw new HttpError(400, "usage_payload_invalid", "Invalid request fingerprint.");
+    if (typeof input.priced !== "boolean") throw new HttpError(400, "usage_payload_invalid", "Invalid price status.");
+    await migrateUsageLedger(this.database);
+    return this.database.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-usage:${values.userId}`]);
+      const existing = await client.query("SELECT * FROM evimed_usage.model_requests WHERE id=$1 FOR UPDATE", [values.id]);
+      if (existing.rowCount) {
+        const row = existing.rows[0];
+        if (row.user_id === values.userId && row.status === "settled" && row.request_fingerprint === values.requestFingerprint) return record(row);
+        throw new HttpError(409, "usage_settlement_conflict", "The request id already names another settlement.");
+      }
+      // Nothing was reserved, so the reservation columns say so: the reserved
+      // cost is the settled one and the reservation expired as it was made.
+      const inserted = await client.query(`INSERT INTO evimed_usage.model_requests
+        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,actual_cost,priced,
+          cache_hit_tokens,cache_miss_tokens,output_tokens,provider_request_id,reservation_expires_at,created_at,settled_at,purpose)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'settled',$9,$9,$10,$11,$12,$13,$14,$15,$15,clock_timestamp(),$16) RETURNING *`,
+      [values.id, values.userId, values.projectId, values.runId, values.model, values.priceVersion, values.currency,
+        values.requestFingerprint, values.actualCost, input.priced, values.cacheHitTokens, values.cacheMissTokens,
+        values.completionTokens, values.providerRequestId, values.now, values.purpose]);
+      return record(inserted.rows[0]);
+    });
+  }
+
   /** @param {string} userId @param {string} id @param {string} errorCode */
   async release(userId, id, errorCode) { return this.#terminal(userId, id, "released", errorCode, null); }
 

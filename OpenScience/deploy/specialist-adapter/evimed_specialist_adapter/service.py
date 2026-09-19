@@ -27,7 +27,7 @@ from fastapi import Body, FastAPI, HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .mr_job_store import MRJobStore
-from . import audit_receipt
+from . import audit_receipt, usage_report
 from .security import _authorized_claims, _read_secret, _signing_secret
 
 
@@ -488,7 +488,12 @@ def _job_credentials(workload_token: str | None) -> dict[str, str]:
     return resolved
 
 
-def _start(arguments: dict[str, Any], workspace: Path, job_credentials: dict[str, str] | None = None) -> dict[str, Any]:
+def _start(
+    arguments: dict[str, Any],
+    workspace: Path,
+    job_credentials: dict[str, str] | None = None,
+    owner: dict[str, str] | None = None,
+) -> dict[str, Any]:
     if not _model_ready():
         return _error(
             "specialist_model_config_unavailable",
@@ -571,6 +576,10 @@ def _start(arguments: dict[str, Any], workspace: Path, job_credentials: dict[str
         "workspace": str(workspace),
         "outputRoot": str(output_root),
         "sourceEvidence": _source_evidence(root),
+        # Whose spend this job is, from the token that admitted it: the usage
+        # report at the end names the account and project, and by then the
+        # token is long expired. MR carries the same in its queue context.
+        **({"owner": owner} if owner and queue_record is None else {}),
         "createdAt": _now(),
         "updatedAt": _now(),
         "artifacts": [],
@@ -756,7 +765,12 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     }
 
 
-def call(arguments: dict[str, Any], workspace: Path, job_credentials: dict[str, str] | None = None) -> dict[str, Any]:
+def call(
+    arguments: dict[str, Any],
+    workspace: Path,
+    job_credentials: dict[str, str] | None = None,
+    owner: dict[str, str] | None = None,
+) -> dict[str, Any]:
     action = arguments["action"]
     if action == "capabilities":
         if not _model_ready():
@@ -782,7 +796,7 @@ def call(arguments: dict[str, Any], workspace: Path, job_credentials: dict[str, 
             "sources": [_source("service")],
         }
     if action == "start":
-        return _start(arguments, workspace, job_credentials)
+        return _start(arguments, workspace, job_credentials, owner)
     deadline = time.monotonic() + int(arguments.get("waitSeconds", 0))
     while True:
         result = _status(arguments, workspace)
@@ -832,6 +846,45 @@ def _collect_artifacts(workspace: Path, output_root: Path) -> list[dict[str, str
     return artifacts[:100]
 
 
+def _report_usage(state: dict[str, Any], log_path: Path | None) -> None:
+    """Forward a finished job's model spend to the control plane, once.
+
+    After the terminal state is written, never before: the job's outcome is
+    settled whatever happens to the report. What happened to it goes to the
+    job log, where an operator reading a job finds it.
+    """
+    usage = state.get("usage")
+    context = state.get("queueContext") if _kind() == "mendelian-randomization" else state.get("owner")
+    if not isinstance(usage, dict) or not isinstance(context, dict):
+        return
+    try:
+        secret = _signing_secret()
+    except Exception:  # noqa: BLE001 — a missing secret is a report that cannot be signed, not a failed job
+        outcome = "unsigned (workload signing secret unavailable)"
+    else:
+        outcome = usage_report.report(
+            url=os.getenv("EVIMED_USAGE_REPORT_URL", "").strip(),
+            secret=secret,
+            kind=_kind(),
+            job_id=str(state.get("jobId") or ""),
+            user_id=str(context.get("userId") or ""),
+            project_id=str(context.get("projectId") or ""),
+            status=str(state.get("status") or ""),
+            finished_at=str(state.get("finishedAt") or _now()),
+            usage=usage,
+        )
+    if log_path is None:
+        return
+    try:
+        descriptor = os.open(
+            log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0), 0o600
+        )
+        with os.fdopen(descriptor, "ab", buffering=0) as log:
+            log.write(f"\nusage report: {outcome}\n".encode("utf-8"))
+    except OSError:
+        pass
+
+
 def _run_isolated_mr(
     state_path: Path, state: dict[str, Any], root: Path, data_root: Path
 ) -> int:
@@ -875,6 +928,7 @@ def _run_isolated_mr(
             )
         result = outcome["result"]
         success = outcome["returnCode"] == 0 and result.get("status") == "succeeded"
+        usage = usage_report.normalize(result.get("usage"))
         state.update(
             status="succeeded" if success else "failed",
             finishedAt=_now(),
@@ -882,6 +936,7 @@ def _run_isolated_mr(
             returnCode=outcome["returnCode"],
             artifacts=outcome["artifacts"] if success else [],
             retryable=outcome["returnCode"] in {75, 137, 143},
+            **({"usage": usage} if usage else {}),
         )
         if success:
             receipt = audit_receipt.produce(state, outcome, data_root)
@@ -903,6 +958,11 @@ def _run_isolated_mr(
             if outcome.get("failureDiagnosticReceipt"):
                 state["failureDiagnosticReceipt"] = outcome["failureDiagnosticReceipt"]
         _write_state(state_path, state)
+        try:
+            _, log_path = _mr_store().paths(Path(state["workspace"]), str(state["jobId"]))
+        except (OSError, ValueError):
+            log_path = None
+        _report_usage(state, log_path)
         return 0 if success else outcome["returnCode"] or 1
     except helper.MRInputError as error:
         if getattr(error, "cleanup_error", None):
@@ -1004,6 +1064,9 @@ def run_job(state_file: str) -> int:
         )
     result_path = output_root / "result.json"
     result = _read_json(result_path) if result_path.is_file() else {}
+    # What the engine spent at the provider, success or not: a failed job's
+    # tokens were paid for as well.
+    usage = usage_report.normalize(result.get("usage"))
     if completed.returncode != 0 or result.get("status") != "succeeded":
         state.update(
             {
@@ -1016,9 +1079,11 @@ def run_job(state_file: str) -> int:
                     result.get("error")
                     or f"{_spec()['label']} exited with code {completed.returncode}."
                 ),
+                **({"usage": usage} if usage else {}),
             }
         )
         _write_state(state_path, state)
+        _report_usage(state, log_path)
         return completed.returncode or 1
     if state.get("sourceEvidence") != _source_evidence(root):
         raise RuntimeError("specialist source changed while the job was running")
@@ -1054,9 +1119,11 @@ def run_job(state_file: str) -> int:
             "returnCode": 0,
             "artifacts": _collect_artifacts(workspace, output_root),
             **degradation,
+            **({"usage": usage} if usage else {}),
         }
     )
     _write_state(state_path, state)
+    _report_usage(state, log_path)
     return 0
 
 
@@ -1099,7 +1166,12 @@ def _create_app() -> FastAPI:
             if validated.get("action") == "start"
             else None
         )
-        return call(validated, workspace_for_claims(claims), job_credentials)
+        return call(
+            validated,
+            workspace_for_claims(claims),
+            job_credentials,
+            {"userId": claims["userId"], "projectId": claims["projectId"]},
+        )
 
     instance.add_api_route(spec["endpoint"], specialist_call, methods=["POST"])
     return instance
