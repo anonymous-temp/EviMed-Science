@@ -1,0 +1,30 @@
+{
+  "contractVersion": "0.5.0",
+  "docsCommit": "83f79c4",
+  "sourceRepo": "text_extraction (the parser team's repository; read-only clone of develop at 83f79c4, docs/api/API.md v0.5.0)",
+  "server": "http://123.57.56.88:9011",
+  "serverRole": "the parser team's test environment and the only address the owner gave; production per their env templates listens on 9021 on a host not yet named",
+  "observedAt": "2026-09-19T09:37:05Z",
+  "fixtureEvidence": "Every other file in this directory is the verbatim response body the server returned, byte for byte, captured with curl. The status and the headers the client reads are recorded here beside each one. Nothing was re-indented, added, renamed or invented: a hand-written fixture once certified a shape the wire never produced and defeated the audit that depended on it.",
+  "fixtures": {
+    "health.json": {
+      "request": "GET /health (no credential; the one route that takes none)",
+      "status": 200,
+      "headers": { "content-type": "application/json; charset=UTF-8" }
+    },
+    "extract-missing-file.json": {
+      "request": "POST /api/v1/extract/text/file, multipart with checksum only (no file part), no Authorization header",
+      "status": 400,
+      "headers": { "content-type": "application/json; charset=UTF-8" }
+    }
+  },
+  "notYetRecorded": "The authenticated samples need the service-issued sk- key, which this deployment does not hold yet. `node scripts/ops/record-parser-contract.mjs` records them the day it does (success from both endpoints, 415, 422 and 401) and adds each here; the contract test replays whatever this file lists.",
+  "observations": [
+    "The deployed test build is older than develop: /health answers data {status, environment} and none of develop's accepting_requests, active_requests or active_tasks, and elapsed_ms reads 1000 on a health check.",
+    "An error answer carries data: null on this build, with no data.error_code; develop's write_error adds {error_code}. The client therefore classifies by HTTP status first and reads error_code only to split 429 quota_exhausted from rate_limited.",
+    "Access-Control-Allow-Headers is Content-Type only and Access-Control-Allow-Methods is POST, OPTIONS: this build predates develop's API-key middleware, which adds Authorization.",
+    "The missing-file check ran with no credential at all and answered 400, not 401: on this build the handler validates fields before anything authenticates.",
+    "Reported the same day by the integrator and not re-run here (it would upload a file under no key): a request carrying a file and no Authorization header answered HTTP 500 with the message 'AttributeError' object has no attribute 'message'. The client retries a 500 once and then names it source_parser_internal_error.",
+    "develop HEAD 83f79c4, services/metadata.py: DocumentMetadataExtractor.__init__ takes g_client and assigns self.chat_client = chat_client or ..., an undefined name. Every /api/v1/extract/text/* call built from that commit raises inside work() and answers 502 upstream_error; /api/v1/parse/* does not construct the extractor. The client falls back once to /api/v1/parse/file on a 502 that survives its retries, so the text still arrives without metadata. Reported to the parser team through the integrator."
+  ]
+}

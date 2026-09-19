@@ -213,6 +213,12 @@ export function loadConfig(overrides = {}) {
     ["OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS", "set OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS instead"],
     ["OPEN_SCIENCE_MEMOS_ENGINE_URL", "the recall index is OpenViking; set OPEN_SCIENCE_OPENVIKING_URL instead"],
     ["OPEN_SCIENCE_REQUIRE_MEMORY_INDEX", "set OPEN_SCIENCE_MEMORY_INDEX_STRICT instead"],
+    // The MinerU container read its input from a shared staging directory
+    // under a shared group. The in-house parser receives the bytes in the
+    // request itself, so there is no directory, owner or group to configure.
+    ["OPEN_SCIENCE_DOCUMENT_PARSER_STAGING_DIR", "the parser receives the bytes over HTTP; remove this variable"],
+    ["OPEN_SCIENCE_DOCUMENT_PARSER_UID", "the parser receives the bytes over HTTP; remove this variable"],
+    ["OPEN_SCIENCE_DOCUMENT_PARSER_GID", "the parser receives the bytes over HTTP; remove this variable"],
   ]) {
     if (process.env[oldName]) throw new Error(`${oldName} is not read any more: ${remedy}.`);
   }
@@ -1163,14 +1169,22 @@ export function loadConfig(overrides = {}) {
     documentParserToken: documentParserSecret.value,
     documentParserTokenSource: documentParserSecret.source,
     documentParserTokenError: documentParserSecret.error,
+    // The whole parse — every attempt and the waits between them — not one
+    // request. 300 s (plan §2.2): the API waits on Alibaba DocMind inside a
+    // single request, which takes minutes on a long scanned document; past
+    // five minutes the job queue's own retry, with the source's backoff, is a
+    // better next step than holding the same connection open.
     documentParserTimeoutMs: Number(
-      overrides.documentParserTimeoutMs ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS ?? 900_000,
+      overrides.documentParserTimeoutMs ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS ?? 300_000,
     ),
-    documentParserStagingDir: String(
-      overrides.documentParserStagingDir ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_STAGING_DIR ?? "",
-    ),
-    documentParserUid: Number(overrides.documentParserUid ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_UID ?? 1000),
-    documentParserGid: Number(overrides.documentParserGid ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_GID ?? 1000),
+    // The label the knowledge-base index is keyed by, with each file's SHA-256.
+    // The parser reports no version of its own, so this is the only way a
+    // parser upgrade can reach the index: move the label and every document
+    // parsed under the old one is re-indexed. Its default is the pin.
+    documentParserRevision: String(
+      overrides.documentParserRevision ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_REVISION
+      ?? depsVersions["evimed-extract"]?.revision ?? "",
+    ).trim(),
     openListUrl: String(overrides.openListUrl ?? process.env.OPEN_SCIENCE_OPENLIST_URL ?? "").replace(/\/+$/, ""),
     openListToken: openListSecret.value,
     openListTokenSource: openListSecret.source,

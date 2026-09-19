@@ -69,7 +69,6 @@ const inputPaths = [
   "examples/climate-trends",
   "deploy/web/Dockerfile",
   "deploy/web/postgres-backup-status",
-  "deploy/document-parser",
   "deploy/openlist",
   "deploy/specialist-adapter",
   "deploy/host",
@@ -83,7 +82,6 @@ const inputPaths = [
   "scripts/ops/configure-backup.mjs",
   "scripts/ops/configure-local-auth.mjs",
   "scripts/ops/configure-production-state.mjs",
-  "scripts/ops/parser-ingestion-smoke.mjs",
   "scripts/ops/object-backup.mjs",
   "scripts/ops/restore-data.sh",
   "scripts/ops/restore-drill.sh",
@@ -241,11 +239,6 @@ async function currentVersions() {
 async function currentServiceImages() {
   const deps = JSON.parse(await read("deps-version.json"));
   return [
-    {
-      name: "document-parser",
-      image: process.env.OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE ?? `evimed-document-parser:${deps.mineru.version}`,
-      envName: "OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE_ID",
-    },
     {
       name: "openlist",
       image: `${deps.openlist.image}:v${deps.openlist.version}@${deps.openlist.imageDigest}`,

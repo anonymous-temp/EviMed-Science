@@ -118,11 +118,11 @@ export interface SourcePayload {
  * English "Source analysis failed." for every failure, so it is the same string
  * every time and it is not in the interface language.
  *
- * NOTE: the source pipeline's own codes (`source_parser_*`,
- * `source_understanding_*`, `source_ingestion_failed`, `document_parser_*`) are
- * in neither `ALL_ERROR_CODES` nor any family regex today, so most real
- * failures land on the fallback below. That is a registry gap, not a reason for
- * a fourth table here.
+ * NOTE: the parser's codes (`source_parser_*`, `source_format_unsupported`,
+ * `source_media_unsupported`, `source_changed`) have registry sentences since
+ * the in-house parser replaced MinerU; `source_understanding_*` and
+ * `source_ingestion_failed` still land on the fallback below. That is a
+ * registry gap, not a reason for a fourth table here.
  */
 export function sourceFailureMessage(error?: { code: string; message?: string } | null): string | null {
   if (!error?.code) return null;

@@ -593,6 +593,34 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * Codes a knowledge-base intake records on a source, or answers an upload with.
+ *
+ * A researcher meets these on the source card and in the upload toast, never
+ * in a run's verdict; they are here so each one is held to having a Chinese
+ * sentence like every other code a person can read. Private: nothing outside
+ * this module needs the list, only the guarantee.
+ */
+const sourceIntakeErrorCodes = Object.freeze([
+  'source_format_unsupported',
+  'source_media_unsupported',
+  'source_parser_payload_too_large',
+  'source_parser_input_too_large',
+  'source_parser_checksum_failed',
+  'source_parser_auth_failed',
+  'source_parser_quota_exhausted',
+  'source_parser_rate_limited',
+  'source_parser_unavailable',
+  'source_parser_timeout',
+  'source_parser_internal_error',
+  'source_parser_upstream_error',
+  'source_parser_unconfigured',
+  'source_parser_rejected',
+  'source_parser_response_invalid',
+  'source_parser_response_too_large',
+  'source_changed',
+])
+
+/**
  * Every code this build knows, so a mapping test can prove a new code was
  * classified rather than silently inheriting a default.
  *
@@ -611,6 +639,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...repairableEvidencePackageErrorCodes,
   ...recoverableEvidenceSourceErrorCodes,
   ...terminalEvidenceSourceErrorCodes,
+  ...sourceIntakeErrorCodes,
 ])])
 
 /**
@@ -828,6 +857,29 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   verification_verdict_invalid: '独立复核给出的结论不在允许的取值范围内，这次不采信它。原结论未被推翻。',
   verification_verdict_missing: '独立复核没有给出结论。原结论未被推翻。',
 
+  // ——— Knowledge-base intake: what a source card and an upload refusal say ———
+  // The in-house parser's refusals reach a researcher on the source card, and
+  // three of them (413, 415, 422) are final on the first answer, so each says
+  // what to do instead of only that it failed.
+  source_format_unsupported:
+    '这种文件格式还不能解析。支持 PDF、Word、PPT、Excel、图片（jpg、png、bmp、gif）、EPUB、MOBI、HTML、RTF 和纯文本类文件（txt、md、csv、json 等）。',
+  source_media_unsupported: '音频和视频暂时不能入库：文档解析服务还不能转写录音和视频。可以上传讲稿或逐字稿。',
+  source_parser_payload_too_large: '文件超过文档解析服务 100 MB 的上限，拆分后再上传即可。',
+  source_parser_input_too_large: '文件超过可解析的大小上限，拆分后再上传即可。',
+  source_parser_checksum_failed: '文件在传给解析服务的途中发生了变化，校验没有通过；重新分析一次即可。',
+  source_parser_auth_failed: '文档解析服务没有接受本平台的密钥，需要管理员配置解析服务密钥；纯文本类资料不受影响。',
+  source_parser_quota_exhausted: '文档解析服务的可用额度已经用完，需要管理员补充额度后再重新分析。',
+  source_parser_rate_limited: '文档解析服务这会儿请求太多，稍后再重新分析。',
+  source_parser_unavailable: '文档解析服务暂时连不上，稍后再重新分析。',
+  source_parser_timeout: '文档解析超时了。文件很大时可以拆分后再上传。',
+  source_parser_internal_error: '文档解析服务这次内部出错，稍后再重新分析。',
+  source_parser_upstream_error: '文档解析服务依赖的识别服务这次没有给出结果，稍后再重新分析。',
+  source_parser_unconfigured: '这个部署还没有配置文档解析服务，目前只能解析纯文本类资料。',
+  source_parser_rejected: '文档解析服务拒绝了这份文件；请确认文件完整、扩展名与内容一致后重新上传。',
+  source_parser_response_invalid: '文档解析服务返回的结果无法使用，稍后再重新分析。',
+  source_parser_response_too_large: '这份文件解析出的正文超过了可保存的上限，拆分后再上传即可。',
+  source_changed: '文件在登记之后被改动过；刷新知识库后再分析。',
+
   // ——— Tool-boundary codes that have no family and would otherwise be bare ———
   tool_disabled: '这个部署没有开放这项工具，运行会绕开它继续。',
   unknown_tool: '调用了一个不存在的工具。',
@@ -879,6 +931,9 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^(meta|specialist)_/, '专科引擎这次没能完成，稍后重试或缩小范围。'],
   [/^runtime_/, '运行时出现问题，稍后重试。'],
   [/^credits_/, '额度不足或已达上限。'],
+  // A parser code this build has no exact sentence for still says what failed
+  // and what the card's own button does about it.
+  [/^source_parser_/, '文档解析这次没有完成，稍后再重新分析。'],
 ])
 
 /**
@@ -1036,6 +1091,9 @@ export function errorCodeOutcome(code) {
   if (recoverableEvidenceSourceErrorCodes.has(text) || terminalEvidenceSourceErrorCodes.has(text)) return 'upstream'
   if (repairableEvidencePackageErrorCodes.has(text)) return 'gated'
   if (ANALYSIS_ERROR_CODES.includes(text)) return 'upstream'
+  // A parse that failed or a format that was refused happened at the source
+  // boundary; nothing about it is a verdict on anyone's work.
+  if (sourceIntakeErrorCodes.includes(text)) return 'upstream'
   if (CREDIT_ERROR_CODES.includes(text) || /^credits_/.test(text) || /^usage_/.test(text)) return 'capped'
   if (/^verification_/.test(text)) return 'stopped'
   if (/^(specialist|meta)_/.test(text)) return 'gated'

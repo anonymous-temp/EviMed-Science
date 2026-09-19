@@ -20,11 +20,13 @@
     "notes": "Self-hosted drive aggregator; v4.2.6 (2026-09-01), including access-control and authentication fixes from the current stable release. EviMed uses the pinned list, get and link contracts, then reads bytes through OpenList's same-origin proxy without following a provider-controlled redirect. The service runs with an isolated data volume and tenant-prefixed paths.",
     "githubRepo": "OpenListTeam/OpenList"
   },
-  "mineru": {
-    "version": "3.4.5",
-    "pipPackage": "mineru",
-    "contractDir": "packages/contracts/mineru",
-    "notes": "Document parsing for CJK layout, tables and formulas; PyPI 3.4.5. `pypdf` stays as the fast plain-text fallback."
+  "evimed-extract": {
+    "version": "0.5.0",
+    "docsCommit": "83f79c4",
+    "revision": "evimed-extract@0.5.0",
+    "contractDir": "packages/contracts/evimed-extract",
+    "testServer": "http://123.57.56.88:9011",
+    "notes": "The team's own document-parsing API (docs/api/API.md v0.5.0, read at commit 83f79c4), which replaced the self-hosted MinerU container outright on 2026-09-20: no fallback parser, no comparison run, MinerU deleted in the same change. It is reached over HTTP with a Bearer key its own admin console issues (OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE), text by Alibaba DocMind and bibliographic metadata by a model over the first and last 8,000 characters. `revision` is the label the knowledge-base index is keyed by, together with each file's SHA-256: the service reports no version of its own, so moving this label is what re-indexes every document parsed under the old one. `testServer` is the only address the owner gave and the compose default; production listens on 9021 per the service's env templates, on a host not yet named. The service is not polled by the nightly matrix (there is no release feed to poll); `contractAtPin` replays the fixtures recorded off the live server, and `scripts/ops/record-parser-contract.mjs` records the authenticated samples once the key exists."
   },
   "openviking": {
     "version": "0.4.19",

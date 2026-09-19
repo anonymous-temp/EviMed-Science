@@ -109,8 +109,8 @@ async function assertReleasesDir(dir) {
  * an empty set here would read as "nothing is in use" and delete the live
  * release, so the honest failure is to refuse.
  *
- * The compose labels count as well as the mounts (2026-09-17). PostgreSQL, the
- * six engines and the document parser mount nothing from a release, so by
+ * The compose labels count as well as the mounts (2026-09-17). PostgreSQL and
+ * the six engines mount nothing from a release, so by
  * mounts alone the directory whose compose files and `.env` created them read
  * as unused — and once it was gone they could be restarted but not recreated
  * as they were.

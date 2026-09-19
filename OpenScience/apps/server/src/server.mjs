@@ -81,7 +81,7 @@ import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
 import { createSourceUnderstandingRuntime } from "./sourceUnderstandingRuntime.mjs";
-import { removeSourceCopies, sourceAttemptId, stageParserInput } from "./sourceFiles.mjs";
+import { removeSourceCopies, sourceAttemptId } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
@@ -993,6 +993,7 @@ export function createWebApiApp(overrides = {}) {
   const documentParser = new DocumentParserClient({
     baseUrl: config.documentParserUrl,
     token: config.documentParserToken,
+    revision: config.documentParserRevision,
     timeoutMs: config.documentParserTimeoutMs,
     fetchImpl: overrides.documentParserFetch ?? globalThis.fetch,
   });
@@ -1052,33 +1053,16 @@ export function createWebApiApp(overrides = {}) {
         localPath = resolveScopedPath(project.baseDir, relative);
         await assertNoSymlinkPath(project.baseDir, localPath);
       }
-      if (!config.documentParserUrl) return localPath;
-      if (!config.documentParserStagingDir) throw new HttpError(503, "document_parser_staging_unconfigured", "Document parser staging is unavailable.");
-      const opened = await openScopedFileNoFollow(project.baseDir, localPath);
-      let bytes;
-      try {
-        if (opened.stat.size > config.openListMaxDownloadBytes) {
-          throw new HttpError(413, "source_parser_input_too_large", "Use the local analysis agent for files above the hosted parser limit.");
-        }
-        bytes = await opened.handle.readFile();
-      } finally { await opened.handle.close(); }
-      const actualHash = createHash("sha256").update(bytes).digest("hex");
-      if (actualHash !== source.payload.fingerprint?.sha256 || bytes.length !== Number(source.payload.fingerprint?.size)) {
-        throw new HttpError(409, "source_changed", "The source changed after it was registered; refresh it before analysis.");
-      }
-      const stagingRoot = path.resolve(config.documentParserStagingDir);
-      const stagingRelative = `${job.id}-${sourceAttemptId(job)}/${path.basename(localPath)}`;
-      const stagingPath = resolveScopedPath(stagingRoot, stagingRelative);
-      await sourceService.withIngestionLease(job, async () => {
-        await stageParserInput({ stagingRoot, relative: stagingRelative, bytes, parserGid: config.documentParserGid });
-      });
-      return { localPath, stagingPath, parserPath: `/data/${stagingRelative}` };
+      // The parser reads these bytes once, without following a link, and
+      // refuses them unless they hash to the digest the source was registered
+      // under — the check that used to sit here before a staging copy.
+      return localPath;
     },
     releaseResolved: async (job, source, _resolved) => {
       const project = job.sourceProject;
       if (!project) throw new HttpError(409, "source_scope_unavailable", "The source workspace was not resolved.");
       await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir, sourceId: source.id,
-        jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job), stagingOnly: true, parserStagingRoot: config.documentParserStagingDir }));
+        jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job), stagingOnly: true }));
     },
     materialize: async (job, source, result) => {
       const project = job.sourceProject ?? await sourceProject(job);
@@ -1106,12 +1090,12 @@ export function createWebApiApp(overrides = {}) {
     discardMaterialized: async (job, source, _artifactPath) => {
       const project = job.sourceProject ?? await sourceProject(job);
       await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir, sourceId: source.id,
-        jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job), parserStagingRoot: config.documentParserStagingDir }));
+        jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job) }));
     },
     prepareCleanup: sourceProject,
     cleanupSource: async (_job, source, jobIds, project) => {
       await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir, sourceId: source.id,
-        jobIds, parserStagingRoot: config.documentParserStagingDir }));
+        jobIds }));
     },
   }) : null;
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
@@ -5236,13 +5220,17 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
   };
 }
 
+/** The parser is an external metered service. Required means configured,
+ *  holding its key, and answering healthy; not required still reports what is
+ *  configured, because an ingestion that cannot parse anything but text is a
+ *  fact an operator should see on the readiness page, not in a source card. */
 async function readinessDocumentParser(config, parser) {
-  if (!config.requireDocumentParser) return { required: false, configured: Boolean(config.documentParserUrl) };
-  if (config.documentParserTokenError) throw readinessFailure(config.documentParserTokenError);
-  if (![config.documentParserUid, config.documentParserGid].every((value) => Number.isSafeInteger(value) && value > 0 && value <= 65_535)) {
-    throw readinessFailure("document_parser_identity_invalid");
+  if (!config.requireDocumentParser) {
+    return { required: false, configured: Boolean(config.documentParserUrl), authenticated: Boolean(config.documentParserToken) };
   }
-  if (!config.documentParserUrl || !config.documentParserToken || !config.documentParserStagingDir || !parser) throw readinessFailure("document_parser_unconfigured");
+  if (config.documentParserTokenError) throw readinessFailure(config.documentParserTokenError);
+  if (!config.documentParserUrl || !parser) throw readinessFailure("document_parser_unconfigured");
+  if (!config.documentParserToken) throw readinessFailure("document_parser_token_missing");
   return { required: true, ...(await parser.health()) };
 }
 
