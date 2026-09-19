@@ -10,7 +10,6 @@ import {
   Image as ImageIcon,
   Highlighter,
   Loader2,
-  NotebookPen,
   ServerCrash,
   Sheet,
   Upload,
@@ -22,7 +21,6 @@ import { addFilesToWorkspace, uploadFilesToWorkspace } from "@/lib/backend";
 import { webErrorMessage, getWebProjectId, hasWebApi } from "@/lib/apiClient";
 import { useFileDrop } from "@/lib/useFileDrop";
 import { baseName } from "@/lib/format";
-import { NotebookEditor } from "@/components/notebook/NotebookEditor";
 import { FilePreviewInspector } from "@/components/inspector/FilePreviewInspector";
 import { PaneTitlebarInset } from "@/components/inspector/RightPane";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -34,6 +32,11 @@ import { toast } from "@/lib/toast";
 
 const EXT_LANG: Record<string, string> = {
   py: "python", r: "r", jl: "julia", sh: "bash", tex: "latex", md: "markdown",
+  // A notebook is read as the JSON it is since the notebook editor was deleted
+  // (2026-09-19). Named rather than guessed: highlight.js's auto-detection runs
+  // every grammar it has over the text, and a notebook's image outputs are
+  // megabytes of base64.
+  ipynb: "json",
 };
 const KNOWLEDGE_ROOT = "knowledge-base";
 
@@ -41,7 +44,6 @@ function iconFor(entry: DirEntry) {
   if (entry.isDir) return <Folder size={15} className="text-accent" aria-hidden="true" />;
   const kind = previewKindForName(entry.name);
   const cls = "text-muted";
-  if (entry.name.endsWith(".ipynb")) return <NotebookPen size={15} className={cls} aria-hidden="true" />;
   if (kind === "image" || kind === "fits" || kind === "anomaly" || kind === "phase") return <ImageIcon size={15} className={cls} aria-hidden="true" />;
   if (kind === "video") return <Film size={15} className={cls} aria-hidden="true" />;
   if (kind === "table") return <Sheet size={15} className={cls} aria-hidden="true" />;
@@ -55,8 +57,8 @@ function iconFor(entry: DirEntry) {
  * GLOBAL file explorer: browses from the base folder (Settings → Workspace),
  * which holds every session's dated folder — not the active session only.
  * Directories are navigable via a breadcrumb; files open in the same viewers
- * used elsewhere (figures, tables, PDF, molecule, genome tracks, notebooks),
- * so all past work is reachable in one place.
+ * used elsewhere (figures, tables, PDF, molecule, genome tracks, code), so all
+ * past work is reachable in one place.
  */
 export function FilesPage() {
   const [dir, setDir] = useState(KNOWLEDGE_ROOT);
@@ -239,8 +241,6 @@ function FilePreview({
   controls?: React.ReactNode;
 }) {
   const ext = extOf(entry.name);
-  if (ext === "ipynb")
-    return <NotebookEditor path={entry.path} root={root} onClose={onClose} controls={controls} />;
   const kind: PreviewKind = previewKindForName(entry.name);
   return (
     <FilePreviewInspector

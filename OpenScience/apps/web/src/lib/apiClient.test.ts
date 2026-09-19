@@ -809,7 +809,7 @@ describe("apiClient", () => {
         new Response(JSON.stringify({
           data: {
             id: "task_1",
-            command: "kernel_execute",
+            command: "write_workspace_file",
             status: "canceled",
             userId: "alice",
             projectId: "default",

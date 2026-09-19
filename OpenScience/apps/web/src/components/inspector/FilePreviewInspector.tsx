@@ -65,9 +65,11 @@ import { labelFor } from "@/lib/statusLabel";
 
 const HTML_PREVIEW_SANDBOX = "";
 
-/** The kind of file, in the reader's words (every enum on screen goes through a Chinese table). */
+/** The kind of file, in the reader's words (every enum on screen goes through a Chinese table).
+ *  A kind missing here reads as 「文件」 — which is what a record written before
+ *  2026-09-19 as `notebook`, a kind deleted with the notebook, now is. */
 const ARTIFACT_KIND_LABEL: Record<string, string> = {
-  figure: "图表", script: "脚本", report: "报告", table: "表格", notebook: "笔记本", model: "模型", data: "数据",
+  figure: "图表", script: "脚本", report: "报告", table: "表格", model: "模型", data: "数据",
 };
 
 /**

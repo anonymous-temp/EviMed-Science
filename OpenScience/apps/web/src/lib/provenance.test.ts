@@ -37,13 +37,4 @@ describe("provenanceInputFromEvent", () => {
     expect(provenanceInputFromEvent(write({ tool: "bash" }))).toBeNull();
     expect(provenanceInputFromEvent(write({ input: {} }))).toBeNull();
   });
-
-  it("records mutating jupyter tools but not reads", () => {
-    const jupyter = (tool: string) =>
-      write({ tool, input: { notebook_path: "analysis.ipynb" } });
-    expect(provenanceInputFromEvent(jupyter("jupyter_insert_cell"))?.path).toBe("analysis.ipynb");
-    expect(provenanceInputFromEvent(jupyter("jupyter_execute_cell"))?.path).toBe("analysis.ipynb");
-    expect(provenanceInputFromEvent(jupyter("jupyter_read_cells"))).toBeNull();
-    expect(provenanceInputFromEvent(jupyter("jupyter_list_files"))).toBeNull();
-  });
 });

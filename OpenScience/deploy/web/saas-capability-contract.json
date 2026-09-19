@@ -81,8 +81,9 @@
     },
     {
       "id": "hosted-notebooks",
-      "status": "adapted",
-      "evidence": ["apps/web/src/components/notebook/NotebookEditor.tsx", "apps/server/src/runtimeManager.mjs"]
+      "status": "out-of-scope",
+      "evidence": ["apps/web/src/app/routes/KnowledgePage.tsx", "apps/web/src/app/router.tsx"],
+      "blockers": ["in-browser notebook editing", "server-side cell execution"]
     },
     {
       "id": "research-memory",

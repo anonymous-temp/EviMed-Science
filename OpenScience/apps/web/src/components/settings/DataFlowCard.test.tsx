@@ -21,7 +21,10 @@ describe("DataFlowCard", () => {
   it("names where the data lives without the deployment word", () => {
     render(<DataFlowCard model={null} workspace="/workspace/default" hosted />);
     expect(screen.getByText("存储在项目工作区")).toBeInTheDocument();
-    expect(screen.getByText(/服务端内核沙箱/)).toBeInTheDocument();
+    // There is no separate code sandbox to switch on since the notebook's went
+    // (2026-09-19): code runs where the project's runs do.
+    expect(screen.getByText(/本项目自己的隔离运行环境/)).toBeInTheDocument();
+    expect(screen.queryByText(/内核沙箱/)).not.toBeInTheDocument();
     expect(screen.getByText(/浏览器、工作区、日志与导出内容都不会收到它/)).toBeInTheDocument();
     expect(screen.getByText(/不会由浏览器直连模型提供方/)).toBeInTheDocument();
     expect(screen.getByText(/科学数据源只能通过服务端的固定来源网关/)).toBeInTheDocument();

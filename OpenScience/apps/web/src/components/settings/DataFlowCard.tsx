@@ -31,7 +31,7 @@ export function DataFlowCard({
             <li>你的工作区文件与原始数据。</li>
             <li>
               {hosted
-                ? "代码执行仅在服务端内核沙箱启用时运行。"
+                ? "EviMed 编写的分析代码在本项目自己的隔离运行环境中执行。"
                 : "代码执行 — Python 内核与 Jupyter 均在本地运行；数据集在本机处理，绝不批量上传。"}
             </li>
             <li>
