@@ -665,6 +665,40 @@ describe("opening a task", () => {
     view.unmount();
   });
 
+  it("waits out a slow start that keeps moving, and gives up only on a moment that stalls", async () => {
+    vi.useFakeTimers();
+    let resolveFrame!: (value: typeof binding) => void;
+    mocks.create.mockImplementation(() => new Promise(resolve => { resolveFrame = resolve; }));
+    const view = mount(null, "/app/chat/session-a");
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    // A cold runtime past the old single 30 s deadline is still a start.
+    await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
+    expect(screen.queryByRole("alert")).toBeNull();
+    await act(async () => { resolveFrame(binding); await vi.advanceTimersByTimeAsync(0); });
+    const frame = view.container.querySelector("iframe")!;
+    // The download: the bridge booting is progress and restarts the count.
+    await act(async () => { await vi.advanceTimersByTimeAsync(50_000); });
+    emit(frame, { type: "evimed.runtime-ui.booted" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(50_000); });
+    expect(screen.queryByRole("alert")).toBeNull();
+    // Nothing more for a whole minute: that moment has stalled.
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(screen.getByRole("alert")).toHaveTextContent("会话界面 60 秒内没有载入完成");
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+    view.unmount();
+  });
+
+  it("gives up on a runtime that does not start within its own allowance", async () => {
+    vi.useFakeTimers();
+    mocks.create.mockImplementation(() => new Promise(() => {}));
+    const view = mount(null, "/app/chat/session-a");
+    await act(async () => { await vi.advanceTimersByTimeAsync(89_000); });
+    expect(screen.queryByRole("alert")).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(screen.getByRole("alert")).toHaveTextContent("研究运行时 90 秒内没有启动");
+    view.unmount();
+  });
+
   it("resumes the conversation the account last had open, without walking the ledger", async () => {
     mocks.me.mockResolvedValue({ lastSessionId: "session-last" });
     mocks.listRuns.mockResolvedValue([{ sessionId: "session-from-ledger" }]);

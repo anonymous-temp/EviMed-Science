@@ -1834,6 +1834,35 @@ export async function startWebRuntime(): Promise<string> {
   return invokeWebCommand<string>("start_runtime");
 }
 
+/** When each project's runtime was last asked to warm, by project id. */
+const warmedAt = new Map<string, number>();
+
+/**
+ * Start a project's research runtime ahead of the moment it is needed, and
+ * forget about it.
+ *
+ * Opening a task waits for the project's runtime container before anything
+ * else can load, and a cold one is most of that wait. The shell knows earlier
+ * than the frame that a runtime will be wanted — when it loads, when a
+ * researcher points at another project, when they switch to one — so it asks
+ * then. At most once a minute per project; a refusal (a runtime ceiling, a
+ * held project) is not this call's to report: the frame that opens next
+ * meets the same answer and explains it.
+ */
+export function warmWebRuntime(projectId: string = getWebProjectId()): void {
+  if (!hasWebApi || !projectId) return;
+  const now = Date.now();
+  if (now - (warmedAt.get(projectId) ?? 0) < 60_000) return;
+  warmedAt.set(projectId, now);
+  void fetchWithWebAuth(commandUrl("start_runtime"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Open-Science-Project": projectId },
+    body: "{}",
+  }).then((res) => res.body?.cancel()).catch(() => {
+    // Best effort by design; see above.
+  });
+}
+
 export async function stopWebRuntime(): Promise<void> {
   if (!hasWebApi) throw new BackendUnavailableError("runtime.stop");
   await invokeWebCommand<null>("stop_runtime");

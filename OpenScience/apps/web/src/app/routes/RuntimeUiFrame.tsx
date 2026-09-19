@@ -92,6 +92,24 @@ function artifactPath(value: unknown): string | null {
 
 /** The three moments of opening a task, in the order they happen. */
 const OPEN_STAGES = ["准备运行时", "载入界面", "打开任务"] as const;
+
+/**
+ * How long each of the first two moments may take before this surface stops
+ * waiting, counted from the last sign of progress rather than from the click.
+ *
+ * One 30 s deadline used to cover everything, and on 2026-09-19 it fired on a
+ * start that was working: a cold runtime, then 4.5 MB of application over the
+ * researcher's link, then the kernel's first calls, each on time and together
+ * over 30 s (the owner's screenshot, 10:43). Preparing the runtime may include
+ * retiring an idle one of the same account first (`makeRoomFor`); loading the
+ * interface is the download, and the frame reporting that its bridge booted
+ * restarts the count. The third moment has its own 20 s deadline below.
+ */
+const OPEN_STAGE_DEADLINES_MS = [90_000, 60_000] as const;
+const OPEN_STAGE_TIMEOUTS = [
+  "研究运行时 90 秒内没有启动。服务器可能正忙；重试会重新建立连接。",
+  "会话界面 60 秒内没有载入完成，可能是网络较慢；重试会重新建立连接。",
+] as const;
 /** What each moment is doing, said once it has taken five seconds. */
 const OPEN_STAGE_NOTES = [
   "首次打开需要先启动一个研究运行时，通常需要 10–30 秒；已在运行的会更快。",
@@ -293,13 +311,17 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
     if (error) releaseBinding.current?.();
   }, [error, binding]);
 
+  // Which of the first two moments the opening is in; the third (a task
+  // request in flight) is timed by its own deadline further down.
+  const waitingStage: 0 | 1 | null = navigated || pending || ready ? null : binding ? 1 : 0;
   useEffect(() => {
-    if (navigated || error) return;
-    // A slow cold start is not a failure, and the old sentence
-    // (「研究会话暂时无法连接」) named a cause this timer cannot know.
-    const timeout = setTimeout(() => setError(frameFailure("研究运行时在 30 秒内没有就绪。冷启动有时需要更久；重试会重新建立连接。")), 30_000);
+    if (error || waitingStage === null) return;
+    // A slow start is not a failure while it is moving: each step — the
+    // binding, the frame's bridge booting — restarts the count (see
+    // OPEN_STAGE_DEADLINES_MS).
+    const timeout = setTimeout(() => setError(frameFailure(OPEN_STAGE_TIMEOUTS[waitingStage])), OPEN_STAGE_DEADLINES_MS[waitingStage]);
     return () => clearTimeout(timeout);
-  }, [navigated, error, attempt]);
+  }, [error, attempt, waitingStage, booted]);
 
   /** One message to the frame's bridge, in the envelope and sequence it checks. */
   const postToFrame = useCallback((type: string, fields: object) => {
