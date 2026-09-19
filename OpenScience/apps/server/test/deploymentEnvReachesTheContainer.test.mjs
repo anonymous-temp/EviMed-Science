@@ -127,6 +127,19 @@ const operatorLevers = {
   // The memory evaluation's control arm is this switch; an ablation whose
   // "off" arm silently recalled would measure nothing (2026-09-18).
   OPEN_SCIENCE_MEMORY_RECALL_ENABLED: ["open-science-web"],
+  // The IM module and its reservations (2026-09-20). The module switch is how a
+  // deployment turns Feishu on; each channel switch and device sign-in is a
+  // lever that must be able to stay off, and a lever that never arrives cannot.
+  OPEN_SCIENCE_IM_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_IM_PROGRESS_INTERVAL_MS: ["open-science-web"],
+  OPEN_SCIENCE_IM_CONVERSATION_IDLE_MINUTES: ["open-science-web"],
+  OPEN_SCIENCE_CHANNEL_WECHAT_SERVICE_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_CHANNEL_WECHAT_CLAWBOT_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_CHANNEL_EMAIL_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_CHANNEL_APP_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_CHANNEL_DINGTALK_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_CHANNEL_WECOM_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_APP_API_ENABLED: ["open-science-web"],
 };
 
 async function composeFiles() {

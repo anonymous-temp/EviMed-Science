@@ -342,12 +342,32 @@ export function runFinishedInboxItem(project, run, { peers = [], silent = false 
 
 export class NotificationService {
   /** @param {any} database */
-  constructor(database) { this.database = database; }
+  constructor(database) {
+    this.database = database;
+    // Set by the IM module when it is composed (X6): the channel registry the
+    // preferences are validated against, and the hook that tells it an item
+    // changed. Absent, the inbox is exactly what it was — in-app only.
+    /** @type {{ registry: any, onChange: (item: any) => void } | null} */
+    this.channels = null;
+  }
+
+  /**
+   * Attach the channel registry and the push hook. Other modules never import
+   * a channel adapter; they create inbox items, and this is where an item
+   * becomes a push.
+   * @param {{ registry: any, onChange: (item: any) => void }} channels
+   */
+  attachChannels(channels) {
+    this.channels = channels;
+  }
 
   async health() {
     await migrateNotifications(this.database);
     const result = await this.database.query("SELECT count(*)::integer AS unresolved FROM evimed_inbox.notifications WHERE resolved_at IS NULL");
-    return { connected: true, unresolved: Number(result.rows[0]?.unresolved ?? 0), channel: "in-app" };
+    return {
+      connected: true, unresolved: Number(result.rows[0]?.unresolved ?? 0), channel: "in-app",
+      channels: ["in-app", ...(this.channels?.registry?.enabledIds() ?? [])],
+    };
   }
 
   /** @param {string} userId @param {Record<string,any>} input @param {{now?:Date}} options */
@@ -382,7 +402,7 @@ export class NotificationService {
       dueAt: timestamp(input.dueAt, "due time"), defaultAction, createdAt, severity, silent,
     };
     await migrateNotifications(this.database);
-    return this.database.transaction(async (client) => {
+    const saved = await this.database.transaction(async (client) => {
       if (input.idempotencyKey != null) {
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-inbox-key:${values.id}`]);
         // An event already folded into a grouped item returns that item as it
@@ -451,6 +471,13 @@ export class NotificationService {
       if (item && item.userId === values.user && sameSemantics(item, values)) return item;
       throw new HttpError(409, "notification_idempotency_conflict", "The notification key already names different content.");
     });
+    // After the commit, never inside it: a push is a network call, and the
+    // channel's outbox is idempotent per (item, event), so announcing a
+    // replayed item costs nothing. The hook never fails the write.
+    if (this.channels && saved && !saved.silent) {
+      try { this.channels.onChange(saved); } catch { /* isolated: evimed_im_events_total{kind="notice_hook_failed"} */ }
+    }
+    return saved;
   }
 
   /** @param {string} userId @param {{limit?:number,cursor?:string|null,noticeType?:string|null,unreadOnly?:boolean,unresolvedOnly?:boolean,projectId?:string|null}} options */
@@ -613,17 +640,55 @@ export class NotificationService {
     if (!input.quietHours || Object.keys(input.quietHours).sort().join(",") !== "end,start") throw new HttpError(400, "notification_preferences_invalid", "Invalid quiet hours.");
     if (!input.switches || Object.keys(input.switches).sort().join(",") !== "notify,question,review"
       || Object.values(input.switches).some((value) => typeof value !== "boolean")) throw new HttpError(400, "notification_preferences_invalid", "Invalid switches.");
-    if (!Array.isArray(input.channels) || input.channels.length !== 1 || input.channels[0] !== "in-app") {
-      throw new HttpError(400, "notification_preferences_invalid", "This release supports in-app delivery.");
-    }
+    // In-app plus any enabled registered channel (plan §3.6). Without the IM
+    // module there is no registry, and the one list that validates is the one
+    // that always did.
+    const channels = this.channels?.registry
+      ? this.channels.registry.preferenceChannels(input.channels)
+      : Array.isArray(input.channels) && input.channels.length === 1 && input.channels[0] === "in-app" ? ["in-app"] : null;
+    if (!channels) throw new HttpError(400, "notification_preferences_invalid", "This deployment supports in-app delivery only.");
     await migrateNotifications(this.database);
     const result = await this.database.query(`UPDATE evimed_inbox.preferences SET quiet_start=$3,quiet_end=$4,digest_time=$5,
       switches=$6::jsonb,channels=$7::jsonb,revision=revision+1,updated_at=clock_timestamp()
       WHERE user_id=$1 AND revision=$2 RETURNING *`, [productId(userId, "user"), expectedRevision,
       validTime(input.quietHours.start, "quiet start"), validTime(input.quietHours.end, "quiet end"),
-      validTime(input.digestTime, "digest time"), JSON.stringify(input.switches), JSON.stringify(input.channels)]);
+      validTime(input.digestTime, "digest time"), JSON.stringify(input.switches), JSON.stringify(channels)]);
     if (!result.rowCount) throw new HttpError(409, "notification_revision_conflict", "Inbox preferences changed; reload before saving.");
     return this.#preferences(result.rows[0]);
+  }
+
+  /**
+   * Add or remove one push channel from an account's preferences without a
+   * round trip through the page: binding a bot is the researcher saying they
+   * want to hear from it, and unbinding it is saying they do not (the owner's
+   * rule — no confirmation step the system could decide for them). The inbox
+   * stays first; an unknown channel is refused by the registry's own rule.
+   * @param {string} userId @param {string} channel @param {boolean} enabled
+   */
+  async setPreferenceChannel(userId, channel, enabled) {
+    const current = await this.preferences(userId);
+    const without = (Array.isArray(current.channels) ? current.channels : ["in-app"]).filter((id) => id !== channel);
+    const next = enabled ? [...without, channel] : without;
+    if (!next.includes("in-app")) next.unshift("in-app");
+    if (enabled && this.channels?.registry) this.channels.registry.preferenceChannels(next);
+    const result = await this.database.query(`UPDATE evimed_inbox.preferences SET channels=$2::jsonb,
+      revision=revision+1,updated_at=clock_timestamp() WHERE user_id=$1 RETURNING *`,
+    [productId(userId, "user"), JSON.stringify(next)]);
+    return this.#preferences(result.rows[0]);
+  }
+
+  /**
+   * Record that a channel carried an item. Bookkeeping, not an edit: the
+   * revision a reader's next action is checked against does not move, so a
+   * push landing while the page is open never turns their "mark read" into
+   * a conflict.
+   * @param {string} userId @param {string} id @param {string} channel @param {Date} [at]
+   */
+  async recordChannelSent(userId, id, channel, at = new Date()) {
+    await migrateNotifications(this.database);
+    await this.database.query(`UPDATE evimed_inbox.notifications
+      SET channels_sent=channels_sent || jsonb_build_object($3::text, $4::text) WHERE user_id=$1 AND id=$2`,
+    [productId(userId, "user"), productId(id), channel, at.toISOString()]);
   }
 
   #preferences(row) {

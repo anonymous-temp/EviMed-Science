@@ -1420,5 +1420,54 @@ export function loadConfig(overrides = {}) {
       "OPEN_SCIENCE_MEMORY_RECALL_ENABLED",
       overrides.memoryEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_ENABLED", true),
     ),
+    // --- im: Feishu, the channel port and the own-app reservations (2026-09-20) ---
+    // The IM module (imService.mjs): scan-to-create Feishu bots, their long
+    // connections, progress cards, and inbox pushes to the phone. Off by
+    // default: it needs the PostgreSQL product store and a correct
+    // OPEN_SCIENCE_PUBLIC_URL for the links it sends. Off, the inbox accepts
+    // only in-app delivery, exactly as before the channel port existed.
+    imEnabled: overrides.imEnabled ?? boolEnv("OPEN_SCIENCE_IM_ENABLED", false),
+    // How often the IM worker looks for inbound messages, runs to report on and
+    // pushes to send. Two seconds keeps "收到" under the three seconds a person
+    // waits before re-sending, at one indexed query per table per tick.
+    imPollMs: Number(overrides.imPollMs ?? process.env.OPEN_SCIENCE_IM_POLL_MS ?? 2_000),
+    // A claimed inbound message, task or push is someone else's to retry after
+    // this long. Dispatching a question can take a cold runtime start plus a
+    // routing call, so five minutes, not seconds.
+    imLeaseMs: Number(overrides.imLeaseMs ?? process.env.OPEN_SCIENCE_IM_LEASE_MS ?? 300_000),
+    // The shortest gap between two updates of one task's progress card. Feishu
+    // allows ten card operations a second per card, but a phone that buzzes on
+    // every tool call is a phone that gets muted.
+    imProgressIntervalMs: Number(
+      overrides.imProgressIntervalMs ?? process.env.OPEN_SCIENCE_IM_PROGRESS_INTERVAL_MS ?? 15_000,
+    ),
+    // A chat keeps one conversation with the kernel while it keeps talking; a
+    // message after this many quiet minutes starts a fresh one. A Feishu chat is
+    // one endless thread, and carrying yesterday's 180k-token context into
+    // today's unrelated question costs money and confuses the model.
+    imConversationIdleMinutes: Number(
+      overrides.imConversationIdleMinutes ?? process.env.OPEN_SCIENCE_IM_CONVERSATION_IDLE_MINUTES ?? 360,
+    ),
+    // At most this many delivered files follow a finished task into the chat
+    // (each at most Feishu's 30 MB); the rest are one link away on the page.
+    imMaxResultFiles: Number(overrides.imMaxResultFiles ?? process.env.OPEN_SCIENCE_IM_MAX_RESULT_FILES ?? 5),
+    // The reserved channels (plan §3.6, 2026-09-19 ruling): each is an adapter
+    // file that reports not-configured, and each switch defaults off. On, a
+    // channel may be named in notification preferences and says by name that
+    // nothing is configured behind it yet.
+    channelEnabled: Object.freeze({
+      "wechat-service": overrides.channelEnabled?.["wechat-service"]
+        ?? boolEnv("OPEN_SCIENCE_CHANNEL_WECHAT_SERVICE_ENABLED", false),
+      "wechat-clawbot": overrides.channelEnabled?.["wechat-clawbot"]
+        ?? boolEnv("OPEN_SCIENCE_CHANNEL_WECHAT_CLAWBOT_ENABLED", false),
+      email: overrides.channelEnabled?.email ?? boolEnv("OPEN_SCIENCE_CHANNEL_EMAIL_ENABLED", false),
+      app: overrides.channelEnabled?.app ?? boolEnv("OPEN_SCIENCE_CHANNEL_APP_ENABLED", false),
+      dingtalk: overrides.channelEnabled?.dingtalk ?? boolEnv("OPEN_SCIENCE_CHANNEL_DINGTALK_ENABLED", false),
+      wecom: overrides.channelEnabled?.wecom ?? boolEnv("OPEN_SCIENCE_CHANNEL_WECOM_ENABLED", false),
+    }),
+    // Bearer device tokens for a non-browser client (the own app, reserved).
+    // Off: the API accepts only the browser session cookie, as it always has,
+    // and the Authorization header is never read.
+    appApiEnabled: overrides.appApiEnabled ?? boolEnv("OPEN_SCIENCE_APP_API_ENABLED", false),
   };
 }
