@@ -147,6 +147,9 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS: ["lte", "runtimeUiFrameTtlMs", "compose makes a frame ticket five minutes; the frame renews it"],
   OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_MAX_AGE_MS: ["lte", "deepseekReleaseReceiptMaxAgeMs", "staleness bound"],
   OPEN_SCIENCE_POSTGRES_BACKUP_MAX_AGE_SECONDS: ["lte", "postgresBackupMaxAgeSeconds", "staleness bound"],
+  // A feature module the hosted deployment turns on (the IM module, 2026-09-20):
+  // off is the code's default because it needs a public URL and PostgreSQL.
+  OPEN_SCIENCE_IM_ENABLED: ["deployment", "switch"],
   OPEN_SCIENCE_PUBLIC_URL: ["deployment", "url"],
   OPEN_SCIENCE_OPENVIKING_URL: ["deployment", "url"],
   OPEN_SCIENCE_DOCUMENT_PARSER_URL: ["deployment", "url"],

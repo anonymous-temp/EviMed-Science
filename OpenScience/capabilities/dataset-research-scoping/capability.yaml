@@ -24,6 +24,7 @@ skills:
 - research-topic-selection
 tools:
 - mcp__evimed__literature_search
+- mcp__evimed__kb_search
 - mcp__evimed__biomedical_source_search
 - mcp__evimed__open_access_full_text
 - mcp__evimed__data_source_catalog

@@ -17,6 +17,7 @@
     "mcp__evimed__guideline_search",
     "mcp__evimed__clinical_trial_search",
     "mcp__evimed__literature_search",
+    "mcp__evimed__kb_search",
     "mcp__evimed__pharmacy_reference_search"
   ],
   "produces": [

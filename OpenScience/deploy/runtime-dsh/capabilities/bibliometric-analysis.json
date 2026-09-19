@@ -13,6 +13,7 @@
     "mcp__evimed__bibliometric_analysis",
     "mcp__evimed__data_source_catalog",
     "mcp__evimed__literature_search",
+    "mcp__evimed__kb_search",
     "mcp__evimed__evidence_deduplicate"
   ],
   "produces": [

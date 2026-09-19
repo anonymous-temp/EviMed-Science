@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "evidence-appraisal",
-  "version": "sha256:825a09c55a150330b61adbf0418e6ecfad5ea082f75b9278d99289e69e2eecf1",
+  "version": "sha256:8bf638d4b90b7546ad15896be2cd680be9800a650efe2bb41b06ce639b8d3fdc",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 24,
+    "nodes": 25,
     "edges": 13,
     "byVia": {
       "schema": 13,
@@ -827,6 +827,48 @@
         "doi",
         "pmid"
       ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__kb_search",
+      "source": "mcp",
+      "description": "Search the researcher's own knowledge base (this project's uploaded documents and their personal library) for passages. Answers with quotable snippets, the document, page and character offsets; a small library is answered with the files to read instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "sourceIds": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "pattern": "^src_[a-f0-9]{32}$"
+            }
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
       "stateEffect": "none"
     },
     {
