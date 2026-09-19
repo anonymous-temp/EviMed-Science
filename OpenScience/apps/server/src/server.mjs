@@ -18,6 +18,7 @@ import { AgentRunStore, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
+import { LearningTriggers } from "./learningTriggers.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
 import { evaluateLearnedMethod } from "./learningEvaluation.mjs";
 import { freezeLearningBaseline } from "./learningBaseline.mjs";
@@ -976,6 +977,9 @@ export function createWebApiApp(overrides = {}) {
   let learningRuntime = null;
   /** @type {any} */
   let learningWorker = null;
+  /** What queues a lesson when a run finishes (learningTriggers.mjs). */
+  /** @type {LearningTriggers | null} */
+  let learningTriggers = null;
   // Strictness reaches the capsules too. An operator who asked for a failing
   // index to be visible must not be given the lexical fallback in silence on
   // one of the two recall paths.
@@ -1611,38 +1615,20 @@ export function createWebApiApp(overrides = {}) {
       // Evaluation receipts feed only the measured method. They must not
       // recursively distil benchmark answers or seed the researcher's memory.
       if (evaluationRun) return;
-      // Queue the run for distillation when it is worth learning from.
-      //
-      // Trigger (b) of the plan's three: a package that needed at least one
-      // repair round and was then accepted. That is the cheapest honest signal
-      // the system has — the run was wrong in a specific, recorded way and then
-      // became right — and unlike the other two triggers it needs no feedback
-      // event, so it works on the day this ships.
-      //
-      // A run with no repair rounds is not queued. A loop that learns from
-      // every success learns mostly that things usually work.
-      if (learningWorker && productJobs && run.status === "succeeded") {
-        const rounds = (run.repairRounds?.content ?? 0) + (run.repairRounds?.structural ?? 0);
-        if (rounds >= 1 && run.transcript?.completeness === "complete") {
-          await productJobs.enqueue(project.userId, "distill", {
-            runId: run.id,
-            trigger: "repair_accepted",
-            repairRounds: run.repairRounds,
-          }, {
-            idempotencyKey: `distill:${run.id}:repair_accepted`,
-            projectId: project.id,
-          }).catch(async (error) => {
-            await securityAudit(config, "learning.distill.enqueue", "failed", {
-              userId: project.userId, projectId: project.id, runId: run.id,
-              code: typeof error?.code === "string" ? error.code : "learning_enqueue_failed",
-            });
-          });
-        }
-      }
+      // Queue the lessons this run is evidence for — a finished delivery, a
+      // correction, a repeated routine (learningTriggers.mjs). After the
+      // memory write when there is one, because the extractor is what says the
+      // researcher corrected the assistant.
+      const queueLessons = (memoryResult) => (learningWorker && learningTriggers
+        ? learningTriggers.afterRun(project, run, memoryResult).catch(() => null)
+        : null);
       // A deployment with no control-plane database has no research memory, so
       // there is nothing to record the run into. It is still a deployment whose
       // runs are learnable, which is why the transcript above is written first.
-      if (!researchMemory.configured) return;
+      if (!researchMemory.configured) {
+        await queueLessons(null);
+        return;
+      }
       let messages = [];
       let historyError = null;
       try {
@@ -1764,6 +1750,7 @@ export function createWebApiApp(overrides = {}) {
         pendingReasons: memoryResult.pendingReasons ?? [],
         extractionError: memoryResult.extractionError,
       }).catch(() => {});
+      await queueLessons(memoryResult);
     },
     onRunFinishedError: async (error, project, run) => {
       await securityAudit(config, "memory.agent_run.record", "failed", {
@@ -1847,6 +1834,14 @@ export function createWebApiApp(overrides = {}) {
         code: typeof detail?.verdict === "string" ? detail.verdict : "unknown",
         detail: `method=${detail?.methodId ?? ""}`,
       }),
+    });
+    learningTriggers = new LearningTriggers({
+      jobs: productJobs, agentRuns, memory: researchMemory,
+      // The loop's own bounded runs and source understanding are internal
+      // capabilities: a lesson distilled from a distillation is the loop
+      // grading its own homework.
+      internalAgent: async (agentId) => (await agentRegistry)?.get?.(agentId)?.visibility === "internal",
+      audit: (event, detail) => securityAudit(config, event, "failed", detail),
     });
     learningWorker = new LearningWorker({
       jobs: productJobs, distillation, consolidation,
@@ -3910,7 +3905,9 @@ export function createWebApiApp(overrides = {}) {
         WHERE kind='method' AND deleted_at IS NULL AND project_id IS NOT NULL
           AND payload->>'status' IS DISTINCT FROM 'retired'
         ORDER BY user_id,project_id LIMIT 200`);
-      const date = new Date().toISOString().slice(0, 10);
+      // The night this pass belongs to, in the window's own zone — not the
+      // UTC date, which turns over at 08:00 Beijing, inside the window.
+      const date = learningWorker?.nightKey?.(new Date()) ?? new Date().toISOString().slice(0, 10);
       for (const row of result.rows) {
         try {
           await productJobs.enqueue(row.user_id, "consolidate", { action: "sleep", date }, {

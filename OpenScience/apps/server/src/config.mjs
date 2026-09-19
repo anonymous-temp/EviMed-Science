@@ -1232,11 +1232,14 @@ export function loadConfig(overrides = {}) {
     // It used to be whatever the process's clock said, and the web container
     // ships with no `TZ`: the operator wrote `22:00-09:00` meaning Beijing and
     // the loop evaluated it in UTC, arming itself for the Chinese working day
-    // (2026-09-15 walk, B3). Defaulting to `TZ` keeps a correctly configured
-    // container correct, and naming the zone separately lets a deployment
-    // whose containers run UTC still write the window in the operator's time.
+    // (2026-09-15 walk, B3). The variable existed and no compose file passed
+    // it, so it never reached the container either (plan 2026-09-19 §3.3 #2).
+    // Beijing by default, not `TZ`: the zone the window's numbers are written
+    // in is a property of how the operator wrote them, not of the clock the
+    // container happens to run — a container set to UTC would put the night
+    // back in the working day. An empty value reads the process clock.
     learningWindowTimeZone: String(overrides.learningWindowTimeZone
-      ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE ?? process.env.TZ ?? ""),
+      ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE ?? "Asia/Shanghai"),
     learningDailyLimitCny: Number(overrides.learningDailyLimitCny
       ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 5),
     learningWeeklyLimitCny: Number(overrides.learningWeeklyLimitCny

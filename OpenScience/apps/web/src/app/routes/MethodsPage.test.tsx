@@ -87,6 +87,21 @@ describe("MethodsPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("方法列表没有读到");
     api.listMethods.mockResolvedValue({ items: [], nextCursor: null });
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
-    expect(await screen.findByText("还没有方法")).toBeInTheDocument();
+    expect(await screen.findByText("还没有学到的方法")).toBeInTheDocument();
+  });
+
+  it("describes the triggers that actually start the loop, and asks for no click", async () => {
+    // It used to say a method needed a deliverable to be 采纳 (and edited),
+    // which under the 2026-09-19 ruling is no longer how anything is learned.
+    api.listMethods.mockResolvedValue({ items: [], nextCursor: null });
+    render(<MethodsPage />);
+    expect(await screen.findByText("还没有学到的方法")).toBeInTheDocument();
+    const copy = screen.getByText(/EviMed 会自己从你的任务里学方法/);
+    expect(copy).toHaveTextContent("每次交付完成");
+    expect(copy).toHaveTextContent("你在对话里纠正它");
+    expect(copy).toHaveTextContent("同一类任务成功重复三次");
+    expect(copy).toHaveTextContent("北京时间 22:00–09:00");
+    expect(copy).toHaveTextContent("不需要你点确认");
+    expect(screen.queryByText(/交付被采纳/)).not.toBeInTheDocument();
   });
 });

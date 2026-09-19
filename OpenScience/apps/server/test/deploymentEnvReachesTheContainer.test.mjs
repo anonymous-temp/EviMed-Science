@@ -75,6 +75,9 @@ const operatorLevers = {
   // are the other two knobs that bound what "on" costs.
   OPEN_SCIENCE_LEARNING_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_WINDOW: ["open-science-web"],
+  // The zone the window is written in. Read by config.mjs since 2026-09-15 and
+  // passed by no compose file until 2026-09-20, so the window ran on UTC.
+  OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_CONCURRENCY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY: ["open-science-web"],

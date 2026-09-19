@@ -65,6 +65,13 @@ export class LearningWorker {
     this.enabled = enabled;
     this.window = parseWindow(activeWindow);
     this.windowTimeZone = String(windowTimeZone ?? "");
+    // Whether this Node can resolve the zone at all. The web image is a slim
+    // Debian with no /usr/share/zoneinfo, and coreutils `date` there prints UTC
+    // whatever TZ says; what the window reads is Node's own ICU, which carries
+    // every IANA zone (memory: node reads TZ without tzdata). An unknown name
+    // still falls back to the process clock rather than stopping the loop, but
+    // it is no longer invisible: the status says so.
+    this.windowTimeZoneResolved = !this.windowTimeZone || resolvesTimeZone(this.windowTimeZone);
     this.pollMs = pollMs;
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
@@ -226,7 +233,20 @@ export class LearningWorker {
       lastCompletedAt: this.lastCompletedAt,
       lastSkippedReason: this.lastSkippedReason,
       window: this.window ? `${pad(this.window.startMinutes)}-${pad(this.window.endMinutes)}` : null,
+      // Which clock the window's numbers are read on: the zone, and whether
+      // this build could resolve it (see the constructor).
+      windowTimeZone: this.windowTimeZone || null,
+      windowTimeZoneResolved: this.windowTimeZoneResolved,
     };
+  }
+
+  /**
+   * Which night a moment belongs to, as the date the window opened on in the
+   * window's own zone — the identity of one nightly consolidation pass.
+   * @param {Date} now @returns {string}
+   */
+  nightKey(now = this.now()) {
+    return windowNightKey(this.window, now, this.windowTimeZone);
   }
 
   async close() {
@@ -318,6 +338,49 @@ function zonedMinutes(now, timeZone) {
     }
   }
   return now.getHours() * 60 + now.getMinutes();
+}
+
+/**
+ * Whether this Node resolves an IANA zone name.
+ * @param {string} timeZone @returns {boolean}
+ */
+export function resolvesTimeZone(timeZone) {
+  try {
+    return new Intl.DateTimeFormat("en-GB", { timeZone }).resolvedOptions().timeZone.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The date a window occurrence opened on, in the window's zone.
+ *
+ * The consolidation pass is once per night, and the night was keyed by the
+ * UTC date. Beijing's night 22:00–09:00 is 14:00–01:00 UTC, so the UTC date
+ * turned over at 08:00 Beijing, inside the window: the job for the "new day"
+ * was queued and claimed at 08:00, an hour before the window closed, instead
+ * of at 22:00 when it opens. Shifting the clock back by the window's end
+ * before reading the date gives every moment of one occurrence one key —
+ * 23:00 and 03:00 of the same night agree — and gives a daytime moment the
+ * key of the night that is about to open.
+ *
+ * @param {LearningWindow} window @param {Date} now @param {string} [timeZone]
+ * @returns {string} `YYYY-MM-DD`
+ */
+export function windowNightKey(window, now, timeZone = "") {
+  const shifted = new Date(now.getTime() - (window ? window.endMinutes : 0) * 60_000);
+  if (timeZone) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+      }).formatToParts(shifted);
+      const part = (/** @type {string} */ type) => parts.find((item) => item.type === type)?.value;
+      if (part("year") && part("month") && part("day")) return `${part("year")}-${part("month")}-${part("day")}`;
+    } catch {
+      // An unknown zone reads the process clock, as the window itself does.
+    }
+  }
+  return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, "0")}-${String(shifted.getDate()).padStart(2, "0")}`;
 }
 
 /** @param {number} minutes @returns {string} */
