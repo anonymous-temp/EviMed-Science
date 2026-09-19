@@ -769,7 +769,9 @@ The current production host is released as a delta on its own live release:
 `scripts/ops/host-delta-release.sh` seeds the new release directory from the
 live one, overlays the files that changed (and applies the deletions an overlay
 cannot), rewrites the release identity and builds both images — web in full,
-the runtime through `deploy/runtime-dsh/Dockerfile.delta`. The release manifest
+the runtime through `deploy/runtime-dsh/Dockerfile.delta`, or in full through
+the host's mirrors with `EVIMED_RUNTIME_BUILD=full` when the kernel profile's
+composition changed (a delta refuses that by design). The release manifest
 is then generated for the two image ids and copied into the release directory,
 and `scripts/ops/host-release-switch.sh <rev>` puts it in front.
 
