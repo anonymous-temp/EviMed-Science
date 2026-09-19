@@ -27,6 +27,25 @@ interface TocEntry {
 /** The report's own section on its limits, by the name the skill requires. */
 const LIMITATIONS_HEADINGS = new Set(["局限性", "局限"]);
 
+/** Tailwind's `lg`: from here the contents have a column beside the report. */
+const WIDE_MEDIA = "(min-width: 1024px)";
+
+/**
+ * Whether the page is wide enough for the contents column. A media query in
+ * script rather than a CSS toggle, so the page holds one table of contents —
+ * the column or the folded list above the report — and never both.
+ */
+function useWide(): boolean {
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia(WIDE_MEDIA).matches);
+  useEffect(() => {
+    const media = window.matchMedia(WIDE_MEDIA);
+    const onChange = () => setWide(media.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+  return wide;
+}
+
 /**
  * A delivered report, read (plan §5 act 4, §8.3; appendix D §10.6–§10.8).
  *
@@ -67,6 +86,7 @@ export function ReportReader({
   const [view, setView] = useState<"report" | "matrix">("report");
   const [toc, setToc] = useState<TocEntry[]>([]);
   const [active, setActive] = useState<string | null>(null);
+  const wide = useWide();
   const articleRef = useRef<HTMLDivElement>(null);
   // Heading ids are the reader's own, so two readers on one page (a drawer
   // over the runs page, say) never share one.
@@ -218,8 +238,11 @@ export function ReportReader({
     </div>
   );
 
+  // On a phone the page is the paper: edge to edge, 16 px sides (DESIGN.md,
+  // collapsing strategy), where a card inside the page's own padding left
+  // about eighteen characters a line.
   const reportPage = (
-    <div className="rounded-card border border-border bg-surface px-12 py-11 max-sm:px-6 max-sm:py-7">
+    <div className="rounded-card border border-border bg-surface px-12 py-11 max-sm:rounded-none max-sm:border-x-0 max-sm:px-4 max-sm:py-6">
       {highlight && quoteFound === true && (
         <p role="status" className="mb-6 rounded-input border border-border bg-warn-soft px-3 py-2 text-ui text-text">
           已在这份保存的原文里定位到引文，高亮处就是它。
@@ -259,15 +282,15 @@ export function ReportReader({
   );
 
   const body = view === "matrix" && matrix
-    ? <EvidenceMatrixTable claims={matrix.claims} verified={verified} runId={reading.runId} />
+    ? <EvidenceMatrixTable claims={matrix.claims} verified={verified} runId={reading.runId} className="max-sm:rounded-none max-sm:border-x-0" />
     : reportPage;
 
   return (
     <>
       {layout === "page" ? (
-        <div className="mx-auto flex w-full max-w-content-full gap-8 px-6 py-6">
-          {view === "report" && toc.length > 0 && (
-            <aside className="sticky top-4 hidden max-h-[calc(100vh-6rem)] w-56 shrink-0 self-start overflow-y-auto lg:block" data-print-hide="">
+        <div className="mx-auto flex w-full max-w-content-full gap-8 px-6 py-6 max-sm:px-0 max-sm:py-3">
+          {wide && view === "report" && toc.length > 0 && (
+            <aside className="sticky top-4 max-h-[calc(100vh-6rem)] w-56 shrink-0 self-start overflow-y-auto" data-print-hide="">
               <p className="mb-2 flex items-center gap-1.5 px-2 text-caption font-medium text-muted"><ListTree size={14} aria-hidden="true" />目录</p>
               {contents}
               {/* A 60 KB report needs a way back up (appendix D §4.5). */}
@@ -281,13 +304,22 @@ export function ReportReader({
             </aside>
           )}
           <div className={cn("min-w-0 flex-1 space-y-4", view === "report" && "max-w-content")}>
-            {toolbar}
+            <div className="space-y-3 max-sm:px-4">
+              {toolbar}
+              {/* No column for them on a narrower page: the contents fold
+                * above the report, as they do in the pane. */}
+              {!wide && view === "report" && toc.length > 0 && (
+                <Disclosure summary={<>目录 · {toc.length} 节</>} className="rounded-input border border-border bg-surface px-3 py-2">
+                  {contents}
+                </Disclosure>
+              )}
+            </div>
             {body}
           </div>
         </div>
       ) : (
-        <div className="min-h-full space-y-4 px-6 py-6">
-          <div className="mx-auto max-w-content space-y-3">
+        <div className="min-h-full space-y-4 px-6 py-6 max-sm:px-0 max-sm:py-3">
+          <div className="mx-auto max-w-content space-y-3 max-sm:px-4">
             {toolbar}
             {view === "report" && toc.length > 0 && (
               <Disclosure summary={<>目录 · {toc.length} 节</>} className="rounded-input border border-border bg-surface px-3 py-2">
@@ -310,9 +342,9 @@ function ReportFacts({ facts, onJump }: { facts: ReportFact[]; onJump: (id: stri
       {facts.map((fact) => (
         <div key={fact.label} className="contents">
           <dt className="text-muted">{fact.label}</dt>
-          <dd className={cn(fact.missing ? "text-muted" : "text-text")}>
+          <dd className={cn("min-w-0 break-words", fact.missing ? "text-muted" : "text-text")}>
             {fact.target ? (
-              <button type="button" onClick={() => onJump(fact.target!)} className="text-left text-link hover:underline">
+              <button type="button" onClick={() => onJump(fact.target!)} className="min-h-6 text-left text-link hover:underline">
                 {fact.value}
               </button>
             ) : fact.value}

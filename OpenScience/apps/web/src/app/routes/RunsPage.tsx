@@ -63,6 +63,7 @@ import {
   type LiveRunFold,
 } from "@/lib/runProgress";
 import { useRunEvents } from "@/lib/runEvents";
+import { openRunProject } from "@/lib/runLocation";
 import { capabilityTitle } from "@/lib/researchAgentUi";
 import { runCredentialNeed, runCredentialSentence } from "@/lib/runCredential";
 import { labelFor } from "@/lib/statusLabel";
@@ -161,8 +162,9 @@ function RunsFilterBar({
   return (
     // An opaque canvas: the 95 %-alpha canvas class it had generated no CSS at
     // all (an opacity modifier on a var() colour), so rows scrolled visibly
-    // under it.
-    <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 bg-bg px-1 py-2">
+    // under it. Not sticky on a phone, where it wraps to three rows and would
+    // hold a quarter of the screen.
+    <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 bg-bg px-1 py-2 max-sm:static">
       <label className="relative min-w-48 flex-1">
         <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
         <span className="sr-only">搜索运行记录</span>
@@ -185,7 +187,7 @@ function RunsFilterBar({
         options={SINCE_OPTIONS}
       />
       {anyFilter && (
-        <button type="button" className="text-ui text-link hover:underline" onClick={onClear}>
+        <button type="button" className="py-1 text-ui text-link hover:underline" onClick={onClear}>
           清除筛选
         </button>
       )}
@@ -197,7 +199,9 @@ function RunsFilterBar({
 function DaySection({ label, children }: { label: string; children: ReactNode }) {
   return (
     <section aria-label={label}>
-      <h2 className="sticky top-[3.25rem] z-10 bg-bg py-1 text-caption font-semibold text-muted">
+      {/* Under the one-row filter bar; at the top on a phone, where the bar
+        * does not stick. */}
+      <h2 className="sticky top-[3.25rem] z-10 bg-bg py-1 text-caption font-semibold text-muted max-sm:top-0">
         {label}
       </h2>
       <ul>{children}</ul>
@@ -286,7 +290,33 @@ function HostedRunsView() {
   // effect below ran first against the still-empty list and cleared it, so a
   // link from the sidebar or the inbox opened the newest run instead.
   const pendingDeepLink = useRef<string | null>(deepLinked);
+  // A linked run this project does not have is looked for in the account's
+  // other projects, once per link (lib/runLocation); found, the shell moves
+  // there and this page mounts again at the same address.
+  const searchedLink = useRef<string | null>(null);
+  const [linkSearch, setLinkSearch] = useState<"searching" | "missing" | null>(null);
   const navigate = useNavigate();
+
+  /** Opens the linked run if `list` has it; true when it did. */
+  const resolveLink = useCallback((list: WebAgentRun[]): boolean => {
+    const linked = pendingDeepLink.current;
+    if (!linked) return false;
+    if (list.some((run) => run.id === linked)) {
+      pendingDeepLink.current = null;
+      setLinkSearch(null);
+      setExpanded(linked);
+      return true;
+    }
+    if (searchedLink.current !== linked) {
+      searchedLink.current = linked;
+      setLinkSearch("searching");
+      void openRunProject(linked).then(
+        (moved) => { if (!moved) setLinkSearch("missing"); },
+        () => setLinkSearch("missing"),
+      );
+    }
+    return false;
+  }, []);
 
   // The ledger is a trust surface, so a failed read says so, and the rows
   // already on screen survive a failed refresh (2026-09-16 walk, U3).
@@ -305,20 +335,14 @@ function HostedRunsView() {
     try {
       const value = await listWebAgentRuns();
       setRuns(value);
-      const linked = pendingDeepLink.current;
-      if (linked && value.some((run) => run.id === linked)) {
-        pendingDeepLink.current = null;
-        setExpanded(linked);
-      } else {
-        setExpanded((current) => current ?? newestRun(value)?.id ?? null);
-      }
+      if (!resolveLink(value)) setExpanded((current) => current ?? newestRun(value)?.id ?? null);
       setLoadError(null);
       return true;
     } catch (error) {
       setLoadError(webErrorMessage(error, { fallback: "无法读取运行记录，请检查网络后重试。" }));
       return false;
     }
-  }, []);
+  }, [resolveLink]);
 
   useEffect(() => {
     void load();
@@ -467,22 +491,31 @@ function HostedRunsView() {
   useEffect(() => {
     if (!deepLinked) return;
     pendingDeepLink.current = deepLinked;
-    if (runsRef.current?.some((run) => run.id === deepLinked)) {
-      pendingDeepLink.current = null;
-      setExpanded(deepLinked);
-    }
-  }, [deepLinked]);
+    if (runsRef.current) resolveLink(runsRef.current);
+  }, [deepLinked, resolveLink]);
 
   return (
     <ConnectorsContext.Provider value={connectors}>
       <FilePreviewContext.Provider value={(path, run) => setPreview({ path, run })}>
         <div className="h-full overflow-y-auto">
-          <div className="mx-auto max-w-content-wide px-8 py-8">
+          {/* 16 px sides on a phone: a Feishu card opens this page there. */}
+          <div className="mx-auto max-w-content-wide px-4 py-6 sm:px-8 sm:py-8">
             <PageHeader
               title="运行记录"
               description="每次研究运行的进展、核验结果与产物。"
               className="mb-4"
             />
+
+            {linkSearch === "searching" && (
+              <p role="status" className="mb-3 flex items-center gap-2 text-ui text-muted">
+                <Loader2 size={14} className="animate-spin" aria-hidden="true" />正在你的其他项目里查找链接指向的运行…
+              </p>
+            )}
+            {linkSearch === "missing" && (
+              <p role="status" className="mb-3 rounded-card border border-border bg-surface px-4 py-3 text-ui text-text">
+                没有找到链接指向的运行：它不在你的任何项目里。下面是当前项目的运行记录。
+              </p>
+            )}
 
             {(rows.length > 0 || anyFilter) && (
               <RunsFilterBar
@@ -653,7 +686,9 @@ function WebRunRow({
             onClick={() => setEditing(true)}
             aria-label={`重命名「${title}」`}
             title="重命名"
-            className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-input text-muted opacity-0 hover:bg-surface hover:text-text focus-visible:opacity-100 group-hover/row:opacity-100"
+            // Shown where there is no hover to reveal it: on a touchscreen an
+            // invisible button is a tap target nobody can see.
+            className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-input text-muted opacity-0 hover:bg-surface hover:text-text focus-visible:opacity-100 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100"
           >
             <Pencil size={14} aria-hidden="true" />
           </button>
@@ -763,7 +798,7 @@ function RunDetail({
   };
 
   return (
-    <div className="mb-3 ml-6 max-w-content space-y-5 border-l border-faint pb-2 pl-5 pt-2 text-ui">
+    <div className="mb-3 ml-2 max-w-content space-y-5 border-l border-faint pb-2 pl-3 pt-2 text-ui sm:ml-6 sm:pl-5">
       {/* What happened, and what can be done about it. */}
       <div className="space-y-2">
         {running && <RunActivity run={run} live={live} />}
@@ -1027,7 +1062,8 @@ function RunDeliverableList({ runId, items }: { runId: string; items: WebRunDeli
       </h3>
       <ol aria-label="交付进度" className="space-y-1">
         {items.map((item) => (
-          <li key={item.id} className="flex items-center gap-2">
+          // Wraps on a phone: the verdict can be longer than the row is wide.
+          <li key={item.id} className="flex flex-wrap items-center gap-x-2">
             <span className="flex w-4 shrink-0 justify-center">{icon(item)}</span>
             <span className="min-w-0 truncate text-text">{item.title}</span>
             <span className="shrink-0 text-caption text-muted">

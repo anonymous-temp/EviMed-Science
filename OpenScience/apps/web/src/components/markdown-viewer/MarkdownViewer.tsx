@@ -41,8 +41,9 @@ const STYLES: Record<Variant, Record<string, string>> = {
   // top headings, links in the link colour so a citation never looks like
   // the primary button, and no colour for decoration at all — hierarchy is
   // type and space. The measure (≤ 680 px, ~42 characters) is the caller's.
+  // A long URL or identifier breaks rather than widening a phone's page.
   document: {
-    root: "text-body text-text [text-wrap:pretty] selection:bg-accent-soft",
+    root: "break-words text-body text-text [text-wrap:pretty] selection:bg-accent-soft",
     p: "my-4 first:mt-0 last:mb-0",
     a: "text-link underline decoration-1 underline-offset-2 hover:decoration-2",
     code: "rounded bg-surface-2 px-1 py-0.5 font-mono text-ui text-text",
@@ -55,7 +56,13 @@ const STYLES: Record<Variant, Record<string, string>> = {
     h4: "mb-2 mt-6 text-ui font-semibold text-muted first:mt-0",
     blockquote: "my-5 border-l-[3px] border-strong pl-4 text-muted [&_p]:my-1.5",
     hr: "my-10 border-border",
-    table: "border-collapse text-ui tabular-nums",
+    // Below `md` a table scrolls sideways in its own box with its first column
+    // frozen (DESIGN.md), so a row is never read without its label, and no
+    // column narrower than six characters — squeezed to fit, a hazard ratio
+    // and its interval stood one number to a line. Separate borders at zero
+    // spacing look the same as collapsed ones, and move with a frozen cell
+    // instead of staying behind.
+    table: "border-separate border-spacing-0 text-ui tabular-nums max-md:[&_td:first-child]:sticky max-md:[&_td:first-child]:left-0 max-md:[&_td:first-child]:bg-surface max-md:[&_th:first-child]:sticky max-md:[&_th:first-child]:left-0 max-md:[&_td]:min-w-24 max-md:[&_th]:min-w-24",
     th: "border-b border-strong bg-surface-2 px-3 py-2 text-left font-semibold",
     td: "border-b border-faint px-3 py-2 align-top",
     // A figure keeps white paper in both themes: a chart drawn for paper is
