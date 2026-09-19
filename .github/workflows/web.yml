@@ -319,8 +319,6 @@ jobs:
             echo "OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE=${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}"
             echo "OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE=${OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE}"
             echo "OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=true"
-            echo "OPEN_SCIENCE_ENABLE_KERNEL=true"
-            echo "OPEN_SCIENCE_KERNEL_SANDBOX_MODE=docker"
             echo "OPEN_SCIENCE_TRUST_PROXY=true"
             echo "OPEN_SCIENCE_MONITORING_SECRETS_DIR=./secrets"
           } > deploy/web/.env.ci
@@ -674,7 +672,7 @@ jobs:
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.RW}}{{end}}{{end}}' "$backup_id")" = "false"
           "${compose[@]}" exec -T open-science-web test -S /run/open-science-controller/controller.sock
 
-      - name: Smoke real hosted runtime and kernel boundaries
+      - name: Smoke real hosted runtime boundaries
         env:
           NODE_EXTRA_CA_CERTS: /tmp/open-science-caddy-root.crt
           OPEN_SCIENCE_SMOKE_BASE_URL: https://localhost
@@ -682,16 +680,13 @@ jobs:
           OPEN_SCIENCE_SMOKE_METRICS_TOKEN_FILE: deploy/web/secrets/operator-metrics-token.txt
           OPEN_SCIENCE_SMOKE_RUNTIME: "true"
           OPEN_SCIENCE_SMOKE_RUNTIME_PROMPT: "false"
-          OPEN_SCIENCE_SMOKE_KERNEL: "true"
-          OPEN_SCIENCE_SMOKE_REQUIRE_DOCKER_KERNEL: "true"
         run: |
           OPEN_SCIENCE_SMOKE_PASSWORD="$(tr -d '\r\n' < deploy/web/secrets/bootstrap-password.txt)" \
             pnpm smoke:deployment
 
-      - name: Verify runtime and kernel cleanup
+      - name: Verify runtime cleanup
         run: |
           test -z "$(docker ps -aq --filter label=open-science.web.runtime=true)"
-          test -z "$(docker ps -aq --filter label=open-science.web.kernel=true)"
 
       - name: Verify scheduled encrypted backup
         run: >-
@@ -800,7 +795,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test real deployed agent runtime, DeepSeek, specialist, research memory, RAG, and kernels
+      - name: Test real deployed agent runtime, DeepSeek, specialist, research memory, and RAG
         env:
           OPEN_SCIENCE_E2E_BASE_URL: ${{ secrets.OPEN_SCIENCE_E2E_BASE_URL }}
           OPEN_SCIENCE_E2E_USERNAME: ${{ secrets.OPEN_SCIENCE_E2E_USERNAME }}

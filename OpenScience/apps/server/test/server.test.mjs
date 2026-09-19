@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fsp, { chmod, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -8,8 +7,6 @@ import { gunzipSync } from "node:zlib";
 import { createWebApiApp } from "../src/server.mjs";
 import { dshProductionReleaseConfig, productionReleaseConfig, releaseManifestFixture } from "./releaseFixture.mjs";
 
-const hasPython3 = spawnSync("python3", ["--version"], { stdio: "ignore" }).status === 0;
-const hasR = spawnSync("Rscript", ["--version"], { stdio: "ignore" }).status === 0;
 const productionReadinessReady = {
   backupMode: "external",
   backupExternalAck: true,
@@ -22,16 +19,12 @@ const productionReadinessReady = {
   ...productionReleaseConfig,
 };
 
-async function fakeDockerBin(root, logPath) {
+async function fakeDockerBin(root) {
   const bin = path.join(root, "fake-docker.mjs");
   await writeFile(
     bin,
     `#!/usr/bin/env node
-import fs from "node:fs";
-import path from "node:path";
-
 const args = process.argv.slice(2);
-const logPath = ${JSON.stringify(logPath)};
 
 if (args[0] === "info") {
   process.stdout.write("26.0.0\\n");
@@ -62,19 +55,6 @@ if (args[0] === "image" && args[1] === "inspect") {
   process.exit(0);
 }
 if (args[0] === "rm") process.exit(0);
-
-if (args[0] === "run") {
-  const input = fs.readFileSync(0, "utf8");
-  fs.writeFileSync(logPath, JSON.stringify({ args, input }));
-  const mount = args.find((arg) => arg.startsWith("type=bind,src=") && arg.includes(",dst=/workspace"));
-  const workspace = mount?.slice("type=bind,src=".length, mount.indexOf(",dst=/workspace"));
-  if (workspace && input.includes("WRITE_QUOTA_FILE")) {
-    fs.writeFileSync(path.join(workspace, "quota.bin"), "x".repeat(32));
-  }
-  process.stdout.write("docker stdout\\n");
-  process.stderr.write("docker stderr\\n");
-  process.exit(input.includes("EXIT_1") ? 1 : 0);
-}
 
 process.stderr.write("unexpected fake docker invocation: " + args.join(" "));
 process.exit(2);
@@ -1548,9 +1528,9 @@ test("readiness rejects invalid production resource limits", async () => {
   const cases = [
     { overrides: { maxFileBytes: 0 }, code: "resource_limit_invalid", field: "maxFileBytes" },
     {
-      overrides: { maxConcurrentKernels: 0 },
+      overrides: { maxRunningRuntimes: 0 },
       code: "resource_limit_invalid",
-      field: "maxConcurrentKernels",
+      field: "maxRunningRuntimes",
     },
     {
       overrides: { runtimeQuotaCheckIntervalMs: 0 },
@@ -1570,10 +1550,10 @@ test("readiness rejects invalid production resource limits", async () => {
       maximum: "maxQueuedTasks",
     },
     {
-      overrides: { maxConcurrentKernels: 1, maxConcurrentKernelsPerUser: 2 },
+      overrides: { maxRunningRuntimes: 1, maxRunningRuntimesPerUser: 2 },
       code: "resource_limit_inconsistent",
-      field: "maxConcurrentKernelsPerUser",
-      maximum: "maxConcurrentKernels",
+      field: "maxRunningRuntimesPerUser",
+      maximum: "maxRunningRuntimes",
     },
     {
       overrides: {
@@ -2073,29 +2053,6 @@ test("readiness accepts exact HTTPS production CORS origins", async () => {
   );
 });
 
-test("readiness rejects host Python kernels in production mode", async () => {
-  await withApp(
-    async ({ base }) => {
-      const res = await fetch(`${base}/api/ready`);
-      assert.equal(res.status, 503);
-      const body = (await res.json()).data;
-      assert.equal(body.ok, false);
-      assert.equal(body.checks.auth.ok, true);
-      assert.equal(body.checks.kernel.ok, false);
-      assert.equal(body.checks.kernel.code, "kernel_sandbox_required");
-    },
-    {
-      production: true,
-      devAuth: false,
-      bootstrapUser: "alice",
-      bootstrapPassword: "correct horse battery staple",
-      publicUrl: "https://science.example.com",
-      enableKernel: true,
-      allowUnsandboxedKernel: true,
-    },
-  );
-});
-
 test("production readiness rejects direct Docker control without the isolated controller", async () => {
   await withApp(
     async ({ base }) => {
@@ -2121,21 +2078,24 @@ test("production readiness rejects direct Docker control without the isolated co
   );
 });
 
-test("readiness accepts a production Docker kernel sandbox with a local image", async () => {
+// Image provenance used to be proved through the notebook's kernel check, the
+// one readiness check that read the runtime image while the runtime itself was
+// mocked. That check went with the notebook (2026-09-19); the runtime's own
+// check reads the same image through the same function, so both directions of
+// the property are held there.
+test("readiness accepts a production Docker runtime whose local image matches the release manifest", async () => {
   const tmp = await mkdtemp(path.join(tmpdir(), "os-web-fake-docker-"));
   try {
-    const dockerBin = await fakeDockerBin(tmp, path.join(tmp, "docker-log.json"));
+    const dockerBin = await fakeDockerBin(tmp);
     await withApp(
       async ({ base }) => {
         const res = await fetch(`${base}/api/ready`);
-        assert.equal(res.status, 200);
-        const body = (await res.json()).data;
-        assert.equal(body.ok, true);
-        assert.equal(body.checks.kernel.ok, true);
-        assert.equal(body.checks.kernel.sandboxMode, "docker");
-        assert.equal(body.checks.kernel.networkMode, "none");
-        assert.equal(body.checks.kernel.imageLocal, true);
-        assert.equal(body.checks.kernel.imageVerified, true);
+        const check = (await res.json()).data.checks.runtime;
+        assert.equal(check.ok, true, JSON.stringify(check));
+        assert.equal(check.sandboxMode, "docker");
+        assert.equal(check.networkMode, "none");
+        assert.equal(check.imageLocal, true);
+        assert.equal(check.imageVerified, true);
       },
       {
         production: true,
@@ -2143,10 +2103,8 @@ test("readiness accepts a production Docker kernel sandbox with a local image", 
         bootstrapUser: "alice",
         bootstrapPassword: "correct horse battery staple",
         publicUrl: "https://science.example.com",
-        runtimeMode: "mock",
-        allowMockRuntime: true,
-        enableKernel: true,
-        kernelSandboxMode: "docker",
+        runtimeMode: "kernel",
+        runtimeSandboxMode: "docker",
         allowDirectDockerControl: true,
         runtimeContainerBin: dockerBin,
         runtimeRequireImageLocal: true,
@@ -2182,7 +2140,7 @@ test("readiness rejects Docker image metadata that disagrees with the release ma
       async ({ base }) => {
         const res = await fetch(`${base}/api/ready`);
         assert.equal(res.status, 503);
-        const check = (await res.json()).data.checks.kernel;
+        const check = (await res.json()).data.checks.runtime;
         assert.equal(check.ok, false);
         assert.equal(check.code, "runtime_image_provenance_mismatch");
         assert.equal(check.field, "imageId");
@@ -2194,10 +2152,8 @@ test("readiness rejects Docker image metadata that disagrees with the release ma
         bootstrapUser: "alice",
         bootstrapPassword: "correct horse battery staple",
         publicUrl: "https://science.example.com",
-        runtimeMode: "mock",
-        allowMockRuntime: true,
-        enableKernel: true,
-        kernelSandboxMode: "docker",
+        runtimeMode: "kernel",
+        runtimeSandboxMode: "docker",
         allowDirectDockerControl: true,
         runtimeContainerBin: dockerBin,
         runtimeRequireImageLocal: true,
@@ -4547,6 +4503,9 @@ test("unfinished persisted async tasks are marked failed after restart", async (
         tasks: [
           {
             id: "task_orphaned",
+            // A command this deployment no longer serves: the notebook's, deleted
+            // on 2026-09-19. State files written before the upgrade still name it,
+            // and recovery must not depend on the command existing.
             command: "kernel_execute",
             status: "running",
             userId: "dev",
@@ -5081,418 +5040,6 @@ test("async task API rejects work when the project queue is full", async () => {
   );
 });
 
-test("running async kernel tasks can be canceled", { skip: !hasPython3 }, async () => {
-  await withApp(
-    async ({ base }) => {
-      const created = await fetch(`${base}/api/tasks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          command: "kernel_execute",
-          args: {
-            language: "python",
-            code: "import time\nprint('started')\ntime.sleep(5)\nprint('finished')",
-          },
-        }),
-      });
-      assert.equal(created.status, 202);
-      const task = (await created.json()).data;
-
-      for (let i = 0; i < 30; i++) {
-        const status = await fetch(`${base}/api/tasks/${task.id}`);
-        assert.equal(status.status, 200);
-        if ((await status.json()).data.status === "running") break;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-
-      const canceled = await fetch(`${base}/api/tasks/${task.id}/cancel`, { method: "POST" });
-      assert.equal(canceled.status, 200);
-      assert.ok(["canceling", "canceled"].includes((await canceled.json()).data.status));
-
-      const finished = await waitForTask(base, task.id);
-      assert.equal(finished.status, "canceled");
-      assert.equal(finished.error.code, "task_canceled");
-    },
-    { enableKernel: true, commandTimeoutMs: 10_000 },
-  );
-});
-
-test("kernel_execute returns hosted stdout and stderr fields", { skip: !hasPython3 }, async () => {
-  await withApp(
-    async ({ base }) => {
-      const out = await command(base, "kernel_execute", {
-        language: "python",
-        code: "import sys\nprint('out')\nprint('err', file=sys.stderr)\nsys.exit(1)",
-      });
-      assert.equal(out.res.status, 200);
-      assert.equal(out.json.data.ok, false);
-      assert.match(out.json.data.stdout, /out/);
-      assert.match(out.json.data.stderr, /err/);
-      assert.deepEqual(out.json.data.artifacts, []);
-    },
-    { enableKernel: true, allowUnsandboxedKernel: true },
-  );
-});
-
-test("kernel_execute renders the final Python expression like a notebook display hook", { skip: !hasPython3 }, async () => {
-  await withApp(
-    async ({ base }) => {
-      const out = await command(base, "kernel_execute", {
-        language: "python",
-        code: "print('EviMed Notebook OK')\n6 * 7",
-      });
-      assert.equal(out.res.status, 200);
-      assert.equal(out.json.data.ok, true);
-      assert.equal(out.json.data.stdout.trim(), "EviMed Notebook OK\n42");
-    },
-    { enableKernel: true, allowUnsandboxedKernel: true },
-  );
-});
-
-test("kernel_execute runs R cells and preserves the notebook working directory", { skip: !hasR }, async () => {
-  await withApp(
-    async ({ base }) => {
-      await command(base, "write_workspace_file", {
-        path: "analysis/r-kernel.ipynb",
-        content: `${JSON.stringify({ cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 })}\n`,
-      });
-      const out = await command(base, "kernel_execute", {
-        language: "r",
-        notebook: "analysis/r-kernel.ipynb",
-        code: "writeLines(paste0('mean=', mean(c(1, 2, 3))), 'r-output.txt')\ncat(basename(getwd()))",
-      });
-      assert.equal(out.res.status, 200);
-      assert.equal(out.json.data.ok, true);
-      assert.match(out.json.data.stdout, /analysis/);
-      const artifact = await command(base, "read_artifact", { path: "analysis/r-output.txt" });
-      assert.equal(artifact.json.data.data.trim(), "mean=2");
-    },
-    { enableKernel: true, allowUnsandboxedKernel: true },
-  );
-});
-
-test("kernel_execute caps hosted stdout and stderr output", { skip: !hasPython3 }, async () => {
-  await withApp(
-    async ({ base }) => {
-      const out = await command(base, "kernel_execute", {
-        language: "python",
-        code: "import sys\nsys.stdout.write('o' * 100)\nsys.stderr.write('e' * 100)",
-      });
-      assert.equal(out.res.status, 200);
-      assert.equal(out.json.data.ok, true);
-      assert.match(out.json.data.stdout, /output truncated after 32 bytes/);
-      assert.match(out.json.data.stderr, /output truncated after 32 bytes/);
-      assert.ok(out.json.data.stdout.length < 100);
-      assert.ok(out.json.data.stderr.length < 100);
-    },
-    { enableKernel: true, allowUnsandboxedKernel: true, maxKernelOutputBytes: 32 },
-  );
-});
-
-test("kernel_execute enforces the configured child process timeout", { skip: !hasPython3 }, async () => {
-  await withApp(
-    async ({ base }) => {
-      const out = await command(base, "kernel_execute", {
-        language: "python",
-        code: "import time\nprint('started', flush=True)\ntime.sleep(5)\nprint('late', flush=True)",
-      });
-      assert.equal(out.res.status, 200);
-      assert.equal(out.json.data.ok, false);
-      assert.match(out.json.data.stdout, /started/);
-      assert.doesNotMatch(out.json.data.stdout, /late/);
-      assert.match(out.json.data.stderr, /Execution timed out after 100ms/);
-    },
-    { enableKernel: true, allowUnsandboxedKernel: true, kernelTimeoutMs: 100, commandTimeoutMs: 5_000 },
-  );
-});
-
-test("kernel_execute uses the notebook directory as its scoped working directory", { skip: !hasPython3 }, async () => {
-  await withApp(
-    async ({ base }) => {
-      const written = await command(base, "write_workspace_file", {
-        path: "nested/analysis.ipynb",
-        content: "{}",
-      });
-      assert.equal(written.res.status, 200);
-
-      const out = await command(base, "kernel_execute", {
-        code: "import os; print(os.path.basename(os.getcwd()))",
-        language: "python",
-        notebook: "nested/analysis.ipynb",
-        root: "workspace",
-      });
-      assert.equal(out.res.status, 200);
-      assert.equal(out.json.data.ok, true);
-      assert.equal(out.json.data.stdout.trim(), "nested");
-    },
-    {
-      enableKernel: true,
-      kernelSandboxMode: "host",
-      allowUnsandboxedKernel: true,
-    },
-  );
-});
-
-test("kernel_execute mounts the workspace selected by a base-scoped notebook", { skip: !hasPython3 }, async () => {
-  await withApp(
-    async ({ base }) => {
-      let out = await command(base, "new_dated_workspace", { name: "historical" });
-      assert.equal(out.res.status, 200);
-      out = await command(base, "write_workspace_file", {
-        path: "nested/analysis.ipynb",
-        content: "{}",
-      });
-      assert.equal(out.res.status, 200);
-      out = await command(base, "new_dated_workspace", { name: "current" });
-      assert.equal(out.res.status, 200);
-
-      out = await command(base, "kernel_execute", {
-        code: "import os; print(os.path.basename(os.path.dirname(os.getcwd())), os.path.basename(os.getcwd()))",
-        language: "python",
-        notebook: "historical/nested/analysis.ipynb",
-        root: "base",
-      });
-      assert.equal(out.res.status, 200);
-      assert.equal(out.json.data.ok, true);
-      assert.equal(out.json.data.stdout.trim(), "historical nested");
-
-      const workspace = await command(base, "workspace_path");
-      assert.equal(workspace.json.data, "/workspace/default/current");
-    },
-    {
-      enableKernel: true,
-      kernelSandboxMode: "host",
-      allowUnsandboxedKernel: true,
-    },
-  );
-});
-
-test("kernel_reset aborts an in-flight execution for the selected notebook", { skip: !hasPython3 }, async () => {
-  await withApp(
-    async ({ base }) => {
-      const written = await command(base, "write_workspace_file", {
-        path: "analysis.ipynb",
-        content: "{}",
-      });
-      assert.equal(written.res.status, 200);
-
-      const execution = command(base, "kernel_execute", {
-        code: "while True: pass",
-        language: "python",
-        notebook: "analysis.ipynb",
-        root: "workspace",
-      });
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const reset = await command(base, "kernel_reset", {
-        language: "python",
-        notebook: "analysis.ipynb",
-        root: "workspace",
-      });
-      assert.equal(reset.res.status, 200);
-
-      const finished = await execution;
-      assert.equal(finished.res.status, 200);
-      assert.equal(finished.json.data.ok, false);
-      assert.match(finished.json.data.stderr, /aborted/i);
-    },
-    {
-      enableKernel: true,
-      kernelSandboxMode: "host",
-      allowUnsandboxedKernel: true,
-      kernelTimeoutMs: 5_000,
-    },
-  );
-});
-
-test("kernel_execute runs through the Docker sandbox when configured", async () => {
-  const tmp = await mkdtemp(path.join(tmpdir(), "os-web-fake-docker-"));
-  try {
-    const logPath = path.join(tmp, "docker-log.json");
-    const dockerBin = await fakeDockerBin(tmp, logPath);
-    await withApp(
-      async ({ base }) => {
-        const out = await command(base, "kernel_execute", {
-          language: "python",
-          code: "print('inside docker kernel')",
-        });
-        assert.equal(out.res.status, 200);
-        assert.equal(out.json.data.ok, true);
-        assert.match(out.json.data.stdout, /docker stdout/);
-        assert.match(out.json.data.stderr, /docker stderr/);
-
-        const log = JSON.parse(await readFile(logPath, "utf8"));
-        assert.match(log.input, /__evimed_ast/);
-        assert.match(log.input, /print\\\\u0028|print\\\\u0027|inside docker kernel/);
-        assert.equal(log.args[0], "run");
-        assert.ok(log.args.includes("--interactive"));
-        assert.ok(log.args.includes("--rm"));
-        assert.ok(log.args.includes("--init"));
-        assert.deepEqual(log.args.slice(log.args.indexOf("--pull"), log.args.indexOf("--pull") + 2), ["--pull", "never"]);
-        assert.deepEqual(log.args.slice(log.args.indexOf("--network"), log.args.indexOf("--network") + 2), ["--network", "none"]);
-        assert.deepEqual(log.args.slice(log.args.indexOf("--cpus"), log.args.indexOf("--cpus") + 2), ["--cpus", "0.5"]);
-        assert.deepEqual(log.args.slice(log.args.indexOf("--memory"), log.args.indexOf("--memory") + 2), ["--memory", "128m"]);
-        assert.deepEqual(log.args.slice(log.args.indexOf("--pids-limit"), log.args.indexOf("--pids-limit") + 2), ["--pids-limit", "32"]);
-        assert.ok(log.args.includes("--read-only"));
-        assert.ok(log.args.includes("--tmpfs"));
-        assert.ok(
-          log.args.some((arg) =>
-            arg.startsWith("type=volume,src=open-science-data,dst=/workspace,volume-subpath=users/")
-          ),
-        );
-        assert.ok(log.args.includes("evimed-runtime-dsh:test"));
-        assert.deepEqual(log.args.slice(-2), ["python", "-"]);
-        assert.equal(log.args.includes("print('inside docker kernel')"), false);
-      },
-      {
-        enableKernel: true,
-        kernelSandboxMode: "docker",
-        runtimeContainerBin: dockerBin,
-        runtimeContainerImage: "evimed-runtime-dsh:test",
-        runtimeDataVolume: "open-science-data",
-        runtimeRequireImageLocal: true,
-        runtimeCpuLimit: "0.5",
-        runtimeMemoryLimit: "128m",
-        runtimePidsLimit: 32,
-      },
-    );
-  } finally {
-    await rm(tmp, { recursive: true, force: true });
-  }
-});
-
-test("kernel_execute selects the production R runtime inside the Docker sandbox", async () => {
-  const tmp = await mkdtemp(path.join(tmpdir(), "os-web-fake-docker-r-"));
-  try {
-    const logPath = path.join(tmp, "docker-log.json");
-    const dockerBin = await fakeDockerBin(tmp, logPath);
-    await withApp(
-      async ({ base }) => {
-        const out = await command(base, "kernel_execute", {
-          language: "r",
-          code: "cat(mean(c(1, 2, 3)))",
-        });
-        assert.equal(out.res.status, 200);
-        const log = JSON.parse(await readFile(logPath, "utf8"));
-        assert.deepEqual(log.args.slice(-2), ["Rscript", "-"]);
-        assert.match(log.input, /mean\(c\(1, 2, 3\)\)/);
-        assert.equal(log.args.includes("PYTHONUNBUFFERED=1"), false);
-      },
-      {
-        enableKernel: true,
-        kernelSandboxMode: "docker",
-        runtimeContainerBin: dockerBin,
-        runtimeContainerImage: "evimed-runtime-dsh:test",
-        runtimeDataVolume: "open-science-data",
-        runtimeRequireImageLocal: true,
-      },
-    );
-  } finally {
-    await rm(tmp, { recursive: true, force: true });
-  }
-});
-
-test("kernel_execute checks project quota after Docker sandbox writes", async () => {
-  const tmp = await mkdtemp(path.join(tmpdir(), "os-web-fake-docker-"));
-  try {
-    const dockerBin = await fakeDockerBin(tmp, path.join(tmp, "docker-log.json"));
-    await withApp(
-      async ({ base }) => {
-        const out = await command(base, "kernel_execute", {
-          language: "python",
-          code: "WRITE_QUOTA_FILE",
-        });
-        assert.equal(out.res.status, 413);
-        assert.equal(out.json.code, "project_quota_exceeded");
-      },
-      {
-        enableKernel: true,
-        kernelSandboxMode: "docker",
-        runtimeContainerBin: dockerBin,
-        runtimeContainerImage: "evimed-runtime-dsh:test",
-        maxProjectBytes: 8,
-      },
-    );
-  } finally {
-    await rm(tmp, { recursive: true, force: true });
-  }
-});
-
-test("kernel_execute refuses host Python execution in production mode", async () => {
-  await withAuthApp(
-    async ({ base }) => {
-      const loggedIn = await login(base);
-      const out = await commandWithHeaders(
-        base,
-        "kernel_execute",
-        {
-          language: "python",
-          code: "print('should not run')",
-        },
-        loggedIn.auth,
-      );
-      assert.equal(out.res.status, 403);
-      assert.equal(out.json.code, "kernel_sandbox_required");
-    },
-    {
-      production: true,
-      enableKernel: true,
-      allowUnsandboxedKernel: true,
-    },
-  );
-});
-
-test("production kernel execution rejects direct Docker control", async () => {
-  await withAuthApp(
-    async ({ base }) => {
-      const loggedIn = await login(base);
-      const out = await commandWithHeaders(
-        base,
-        "kernel_execute",
-        { language: "python", code: "print(1)" },
-        loggedIn.auth,
-      );
-      assert.equal(out.res.status, 503);
-      assert.equal(out.json.code, "runtime_controller_required");
-    },
-    {
-      production: true,
-      runtimeMode: "mock",
-      allowMockRuntime: true,
-      enableKernel: true,
-      kernelSandboxMode: "docker",
-      runtimeControllerMode: "direct",
-      allowDirectDockerControl: false,
-      ...productionReleaseConfig,
-    },
-  );
-});
-
-test("async kernel tasks time out and abort the child process", { skip: !hasPython3 }, async () => {
-  await withApp(
-    async ({ base }) => {
-      const created = await fetch(`${base}/api/tasks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          command: "kernel_execute",
-          args: {
-            language: "python",
-            code: "import time\ntime.sleep(5)\nprint('late')",
-          },
-        }),
-      });
-      assert.equal(created.status, 202);
-      const task = (await created.json()).data;
-
-      const finished = await waitForTask(base, task.id);
-      assert.equal(finished.status, "timed_out");
-      assert.equal(finished.error.code, "command_timeout");
-    },
-    { enableKernel: true, commandTimeoutMs: 100 },
-  );
-});
-
 test("users isolate projects with the same project id", async () => {
   await withAuthApp(async ({ app, base }) => {
     const alice = await login(base);
@@ -5621,10 +5168,10 @@ test("fresh projects provision an empty personal knowledge base", async () => {
 test("workspace file scans enforce an entry limit", async () => {
   await withApp(
     async ({ base }) => {
-      for (const name of ["a.txt", "b.txt", "c.ipynb"]) {
+      for (const name of ["a.txt", "b.txt", "c.txt"]) {
         const out = await command(base, "write_workspace_file", {
           path: name,
-          content: name.endsWith(".ipynb") ? "{\"cells\":[]}" : name,
+          content: name,
         });
         assert.equal(out.res.status, 200);
       }
@@ -5634,10 +5181,6 @@ test("workspace file scans enforce an entry limit", async () => {
       assert.equal(out.json.code, "directory_too_large");
 
       out = await command(base, "resolve_artifact", { path: "missing.md" });
-      assert.equal(out.res.status, 413);
-      assert.equal(out.json.code, "workspace_scan_too_large");
-
-      out = await command(base, "list_notebooks", {});
       assert.equal(out.res.status, 413);
       assert.equal(out.json.code, "workspace_scan_too_large");
     },
@@ -5652,9 +5195,6 @@ test("workspace file APIs reject symbolic links", async () => {
     const outside = path.join(app.config.dataDir, "outside.txt");
     await writeFile(outside, "outside secret", "utf8");
     await symlink(outside, path.join(project.workspaceDir, "escape.txt"));
-    const outsideNotebook = path.join(app.config.dataDir, "outside.ipynb");
-    await writeFile(outsideNotebook, "{\"cells\":[]}", "utf8");
-    await symlink(outsideNotebook, path.join(project.workspaceDir, "escape.ipynb"));
     await writeFile(path.join(project.workspaceDir, "visible.txt"), "visible", "utf8");
 
     let out = await command(base, "list_dir", {});
@@ -5691,14 +5231,6 @@ test("workspace file APIs reject symbolic links", async () => {
     out = await command(base, "resolve_artifact", { path: "escape.txt" });
     assert.equal(out.res.status, 200);
     assert.equal(out.json.data, null);
-
-    out = await command(base, "resolve_artifact", { path: "escape.ipynb" });
-    assert.equal(out.res.status, 200);
-    assert.equal(out.json.data, null);
-
-    out = await command(base, "list_notebooks", {});
-    assert.equal(out.res.status, 200);
-    assert.deepEqual(out.json.data, []);
   });
 });
 
@@ -6112,7 +5644,7 @@ test("server startup cleans stale docker runtime state before accepting traffic"
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-web-runtime-startup-cleanup-"));
   let app;
   try {
-    const docker = await fakeDockerBin(dataDir, path.join(dataDir, "docker-log.json"));
+    const docker = await fakeDockerBin(dataDir);
     const projectRoot = path.join(dataDir, "users", "dev", "projects", "default");
     const metaDir = path.join(projectRoot, ".openscience");
     await mkdir(path.join(projectRoot, "workspace"), { recursive: true });

@@ -605,16 +605,6 @@ export function loadConfig(overrides = {}) {
     databaseConnectionTimeoutMs: Number(
       overrides.databaseConnectionTimeoutMs ?? process.env.OPEN_SCIENCE_DATABASE_CONNECTION_TIMEOUT_MS ?? 10_000,
     ),
-    enableKernel: overrides.enableKernel ?? boolEnv("OPEN_SCIENCE_ENABLE_KERNEL", false),
-    kernelSandboxMode: overrides.kernelSandboxMode ?? process.env.OPEN_SCIENCE_KERNEL_SANDBOX_MODE ?? "host",
-    kernelPythonBin: overrides.kernelPythonBin ?? process.env.OPEN_SCIENCE_KERNEL_PYTHON_BIN ?? "python3",
-    kernelRBin: overrides.kernelRBin ?? process.env.OPEN_SCIENCE_KERNEL_R_BIN ?? "Rscript",
-    maxKernelOutputBytes: Number(
-      overrides.maxKernelOutputBytes ?? process.env.OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES ?? 1024 * 1024,
-    ),
-    kernelTimeoutMs: Number(overrides.kernelTimeoutMs ?? process.env.OPEN_SCIENCE_KERNEL_TIMEOUT_MS ?? 10_000),
-    allowUnsandboxedKernel:
-      overrides.allowUnsandboxedKernel ?? boolEnv("OPEN_SCIENCE_ALLOW_UNSANDBOXED_KERNEL", devAuth && !production),
     securityHeaders: overrides.securityHeaders ?? boolEnv("OPEN_SCIENCE_SECURITY_HEADERS", true),
     corsOrigins: overrides.corsOrigins ?? listEnv("OPEN_SCIENCE_CORS_ORIGINS"),
     maxJsonBytes: Number(overrides.maxJsonBytes ?? process.env.OPEN_SCIENCE_MAX_JSON_BYTES ?? 12 * 1024 * 1024),
@@ -653,12 +643,6 @@ export function loadConfig(overrides = {}) {
     ),
     trustProxy: overrides.trustProxy ?? boolEnv("OPEN_SCIENCE_TRUST_PROXY", false),
     maxConcurrentCommands: Number(overrides.maxConcurrentCommands ?? process.env.OPEN_SCIENCE_MAX_CONCURRENT_COMMANDS ?? 8),
-    maxConcurrentKernels: Number(
-      overrides.maxConcurrentKernels ?? process.env.OPEN_SCIENCE_MAX_CONCURRENT_KERNELS ?? 2,
-    ),
-    maxConcurrentKernelsPerUser: Number(
-      overrides.maxConcurrentKernelsPerUser ?? process.env.OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER ?? 1,
-    ),
     maxConcurrentTasks: Number(overrides.maxConcurrentTasks ?? process.env.OPEN_SCIENCE_MAX_CONCURRENT_TASKS ?? 2),
     maxConcurrentTasksPerProject: Number(
       overrides.maxConcurrentTasksPerProject ?? process.env.OPEN_SCIENCE_MAX_CONCURRENT_TASKS_PER_PROJECT ?? 1,

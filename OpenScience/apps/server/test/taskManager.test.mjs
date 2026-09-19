@@ -36,6 +36,7 @@ function controlledInvoker(records) {
         command,
         projectId: ctx.project.id,
         value: args.value,
+        signal: ctx.signal,
         resolve,
       };
       records.push(record);
@@ -194,6 +195,56 @@ test("task queue rejects work when the project queue is full", async () => {
     assert.equal((await manager.list(ctxA)).length, 1);
     assert.equal((await manager.list(ctxB)).length, 1);
   } finally {
+    await manager.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+// The server-level versions of the next two ran a real Python child through
+// the notebook's `kernel_execute`, the one command slow enough to cancel or
+// time out. It went with the notebook (2026-09-19). What they proved is the
+// queue's own contract — a cancel or a timeout ends the task and reaches the
+// running command as an abort — so it is held here, with a command that waits
+// until it is told to stop.
+test("a running task is canceled, and its command is told to stop", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-web-task-manager-"));
+  const config = { maxConcurrentTasks: 1, maxConcurrentTasksPerProject: 1, commandTimeoutMs: 0 };
+  const records = [];
+  const manager = new TaskManager(config, controlledInvoker(records));
+  try {
+    const project = await makeProject(dataDir, "alice", "paper-a");
+    const ctx = context(project, config);
+    const task = await manager.enqueue("hold", { value: "long" }, ctx);
+    assert.equal((await manager.get(ctx, task.id)).status, "running");
+    await waitForRecords(records, 1);
+    assert.equal(records[0].signal.aborted, false);
+
+    const canceling = await manager.cancel(ctx, task.id);
+    assert.ok(["canceling", "canceled"].includes(canceling.status));
+    const finished = await waitForStatus(manager, ctx, task.id, "canceled");
+    assert.equal(finished.error.code, "task_canceled");
+    assert.equal(records[0].signal.aborted, true);
+  } finally {
+    await Promise.allSettled([...manager.tasks.values()].map((task) => task.runPromise).filter(Boolean));
+    await manager.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("a task that outlives the command timeout times out, and its command is told to stop", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-web-task-manager-"));
+  const config = { maxConcurrentTasks: 1, maxConcurrentTasksPerProject: 1, commandTimeoutMs: 50 };
+  const records = [];
+  const manager = new TaskManager(config, controlledInvoker(records));
+  try {
+    const project = await makeProject(dataDir, "alice", "paper-a");
+    const ctx = context(project, config);
+    const task = await manager.enqueue("hold", { value: "slow" }, ctx);
+    const finished = await waitForStatus(manager, ctx, task.id, "timed_out");
+    assert.equal(finished.error.code, "command_timeout");
+    assert.equal(records[0].signal.aborted, true);
+  } finally {
+    await Promise.allSettled([...manager.tasks.values()].map((task) => task.runPromise).filter(Boolean));
     await manager.close();
     await rm(dataDir, { recursive: true, force: true });
   }

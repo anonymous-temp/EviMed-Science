@@ -5,17 +5,18 @@ import { HttpError } from "./security.mjs";
  * Proving a code skill runs before it is mounted into anyone's project.
  *
  * Hidden knowledge: the plan called for a new privileged controller operation,
- * `runtime.exec-verify`, behind a protocol-version bump. It is not needed. The
- * runtime controller already exposes `/v1/kernel/run`, which executes code in
- * the project's own container under the same sandbox, the same workspace
- * bound, and the same output cap — which is exactly what a code skill's self
- * test is. Adding a second way to execute code in a container would have meant
- * two privileged execution paths to keep in step, and the newer one would have
- * been the one nobody audited.
+ * `runtime.exec-verify`, behind a protocol-version bump. This was built to run
+ * through the controller's `/v1/kernel/run` instead — the computational
+ * notebook's cell executor, which already ran code under the project's
+ * sandbox, workspace bound and output cap, exactly what a code skill's self
+ * test needs. That route was deleted with the notebook on 2026-09-19, while
+ * nothing called this module yet. So the executor is the caller's to supply,
+ * and wiring verification in means adding the plan's own operation after all:
+ * one privileged execution path, audited for this use.
  *
  * So verification is a composition, not a capability: the static checks the
  * domain already decides, then the script's own `__main__` block and its test
- * file run through the path that already exists.
+ * file run through the executor the caller injects.
  *
  * The result is a verdict, never a mount. A script that passes here is still a
  * candidate; passing its own test says it runs, not that it helps.

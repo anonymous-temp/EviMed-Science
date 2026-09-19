@@ -687,14 +687,12 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   );
   // The controller's caps come from the `x-runtime-caps` anchor now, so they are
   // not text inside its own block. What matters is unchanged and is asserted
-  // where it is true: the anchor defines all four with these defaults, and the
+  // where it is true: the anchor defines both with these defaults, and the
   // controller merges it. Scanning its block for the literals would have made
   // sharing one definition look like deleting the check.
   assert.match(controllerService, /<<: \*runtime-caps/, "the controller must take the shared caps");
   assert.match(webService, /<<: \*runtime-caps/, "and so must the web service, or they can disagree again");
   const capAnchor = compose.slice(compose.indexOf("x-runtime-caps: &runtime-caps"), compose.indexOf("\nservices:"));
-  assert.match(capAnchor, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2\}/);
-  assert.match(capAnchor, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1\}/);
   assert.match(capAnchor, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8\}/);
   assert.match(capAnchor, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4\}/);
   assert.doesNotMatch(controllerService, /^\s+ports:/m);
@@ -717,9 +715,6 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(compose, /OPEN_SCIENCE_RUNTIME_SKILL_DIRS:\s+\$\{OPEN_SCIENCE_RUNTIME_SKILL_DIRS-runtime\/skills\/core,runtime\/skills\/external\/ai4s-skills,runtime\/skills\/curated-scientific,runtime\/skills\/office\}/);
   assert.match(compose, /OPEN_SCIENCE_ALLOW_UNSANDBOXED_RUNTIME:\s+\$\{OPEN_SCIENCE_ALLOW_UNSANDBOXED_RUNTIME:-false\}/);
   assert.match(compose, /OPEN_SCIENCE_ALLOW_DIRECT_SHELL:\s+\$\{OPEN_SCIENCE_ALLOW_DIRECT_SHELL:-false\}/);
-  assert.match(compose, /OPEN_SCIENCE_ENABLE_KERNEL:\s+\$\{OPEN_SCIENCE_ENABLE_KERNEL:-false\}/);
-  assert.match(compose, /OPEN_SCIENCE_KERNEL_SANDBOX_MODE:\s+\$\{OPEN_SCIENCE_KERNEL_SANDBOX_MODE:-docker\}/);
-  assert.match(compose, /OPEN_SCIENCE_ALLOW_UNSANDBOXED_KERNEL:\s+\$\{OPEN_SCIENCE_ALLOW_UNSANDBOXED_KERNEL:-false\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_JSON_BYTES:\s+\$\{OPEN_SCIENCE_MAX_JSON_BYTES:-12582912\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_FILE_BYTES:\s+\$\{OPEN_SCIENCE_MAX_FILE_BYTES:-52428800\}/);
   assert.match(compose, /OPEN_SCIENCE_PROXY_MAX_BODY_SIZE:\s+\$\{OPEN_SCIENCE_PROXY_MAX_BODY_SIZE:-73408512\}/);
@@ -729,8 +724,6 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(compose, /OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES:\s+\$\{OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES:-10000\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_LOG_READ_BYTES:\s+\$\{OPEN_SCIENCE_MAX_LOG_READ_BYTES:-1048576\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_LOG_FILE_BYTES:\s+\$\{OPEN_SCIENCE_MAX_LOG_FILE_BYTES:-10485760\}/);
-  assert.match(compose, /OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES:\s+\$\{OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES:-1048576\}/);
-  assert.match(compose, /OPEN_SCIENCE_KERNEL_TIMEOUT_MS:\s+\$\{OPEN_SCIENCE_KERNEL_TIMEOUT_MS:-10000\}/);
   assert.match(compose, /OPEN_SCIENCE_EXAMPLES_DIR:\s+\/app\/examples/);
   assert.match(compose, /OPEN_SCIENCE_MAX_QUEUED_TASKS:\s+\$\{OPEN_SCIENCE_MAX_QUEUED_TASKS:-100\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_QUEUED_TASKS_PER_PROJECT:\s+\$\{OPEN_SCIENCE_MAX_QUEUED_TASKS_PER_PROJECT:-25\}/);
@@ -739,8 +732,6 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(compose, /OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS:\s+\$\{OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS:-120000\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8\}/);
   assert.match(compose, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4\}/);
-  assert.match(compose, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2\}/);
-  assert.match(compose, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1\}/);
   assert.match(compose, /open-science-backups:\/backups/);
   assert.match(compose, /open-science-data:[\s\S]*name:\s+\$\{OPEN_SCIENCE_DATA_VOLUME:-open-science-data\}/);
   assert.match(compose, /source:\s+\$\{OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE:-\.\/release-manifest\.json\}/);
@@ -1084,17 +1075,12 @@ test("web deployment env example documents required hosted settings", async () =
   assert.match(env, /OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS=30000/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_SKILL_DIRS=runtime\/skills\/core,runtime\/skills\/external\/ai4s-skills,runtime\/skills\/curated-scientific/);
   assert.match(env, /OPEN_SCIENCE_ALLOW_DIRECT_SHELL=false/);
-  assert.match(env, /OPEN_SCIENCE_ENABLE_KERNEL=false/);
-  assert.match(env, /OPEN_SCIENCE_KERNEL_SANDBOX_MODE=docker/);
-  assert.match(env, /OPEN_SCIENCE_ALLOW_UNSANDBOXED_KERNEL=false/);
   assert.match(env, /OPEN_SCIENCE_PROXY_MAX_BODY_SIZE=73408512/);
   assert.match(env, /OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES=10000/);
   assert.match(env, /OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES=10000/);
   assert.match(env, /OPEN_SCIENCE_MAX_ARCHIVE_BYTES=1073741824/);
   assert.match(env, /OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES=10000/);
   assert.match(env, /OPEN_SCIENCE_MAX_LOG_FILE_BYTES=10485760/);
-  assert.match(env, /OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES=1048576/);
-  assert.match(env, /OPEN_SCIENCE_KERNEL_TIMEOUT_MS=10000/);
   assert.match(env, /OPEN_SCIENCE_MAX_CONCURRENT_TASKS_PER_PROJECT=1/);
   assert.match(env, /OPEN_SCIENCE_MAX_QUEUED_TASKS=100/);
   assert.match(env, /OPEN_SCIENCE_MAX_QUEUED_TASKS_PER_PROJECT=25/);
@@ -1103,8 +1089,6 @@ test("web deployment env example documents required hosted settings", async () =
   assert.match(env, /OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS=120000/);
   assert.match(env, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES=8/);
   assert.match(env, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER=4/);
-  assert.match(env, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS=2/);
-  assert.match(env, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER=1/);
   assert.match(env, /# NODE_ENV=development/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_MODE=mock/);
   assert.match(env, /OPEN_SCIENCE_ALLOW_MOCK_RUNTIME=true/);
@@ -1259,8 +1243,6 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
     'run.artifacts?.includes(requiredPath)',
     'item.kind === "preference"',
     'memoryRecord.evidenceCount < 1',
-    'language: "python"',
-    'language: "r"',
   ]) assert.equal(script.includes(proof), true, `Hosted E2E is missing proof: ${proof}`);
   assert.equal(script.includes("mock-agent-artifact.md"), false);
 });
@@ -1317,8 +1299,6 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   assert.match(workflow, /OPEN_SCIENCE_RUNTIME_TRANSPORT=unix/);
   assert.match(workflow, /OPEN_SCIENCE_RUNTIME_NETWORK_MODE=open-science-runtime-internal/);
   assert.match(workflow, /OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME=open-science-runtime-internal/);
-  assert.match(workflow, /OPEN_SCIENCE_ENABLE_KERNEL=true/);
-  assert.match(workflow, /OPEN_SCIENCE_KERNEL_SANDBOX_MODE=docker/);
   assert.match(workflow, /Verify Docker socket privilege boundary/);
   assert.match(workflow, /Web API container must not mount \/var\/run\/docker\.sock/);
   assert.match(workflow, /Web API controller mount must be read-only/);
@@ -1335,10 +1315,7 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   assert.equal(workflow.includes("OPEN_SCIENCE_SMOKE_ALLOW_HTTP"), false);
   assert.match(workflow, /OPEN_SCIENCE_SMOKE_RUNTIME:\s+"true"/);
   assert.match(workflow, /OPEN_SCIENCE_SMOKE_RUNTIME_PROMPT:\s+"false"/);
-  assert.match(workflow, /OPEN_SCIENCE_SMOKE_KERNEL:\s+"true"/);
-  assert.match(workflow, /OPEN_SCIENCE_SMOKE_REQUIRE_DOCKER_KERNEL:\s+"true"/);
   assert.match(workflow, /docker ps -aq --filter label=open-science\.web\.runtime=true/);
-  assert.match(workflow, /docker ps -aq --filter label=open-science\.web\.kernel=true/);
   assert.match(workflow, /--profile backup --profile monitoring --profile tls down -v --remove-orphans/);
   assert.equal(workflow.includes("open-science-opencode:latest"), false);
 });
@@ -2146,12 +2123,12 @@ test("the receipt scheduler declares the same runtime caps as the web service", 
     readFile(path.join(repoRoot, "deploy/web/docker-compose.receipt.yml"), "utf8"),
   ]);
   const caps = (text) => Object.fromEntries(
-    [...text.matchAll(/^\s*(OPEN_SCIENCE_MAX_(?:RUNNING_RUNTIMES|CONCURRENT_KERNELS)(?:_PER_USER)?):\s*(\S+)\s*$/gm)]
+    [...text.matchAll(/^\s*(OPEN_SCIENCE_MAX_RUNNING_RUNTIMES(?:_PER_USER)?):\s*(\S+)\s*$/gm)]
       .map((match) => [match[1], match[2]]),
   );
   const declared = caps(main);
   const scheduler = caps(receipt);
-  assert.equal(Object.keys(declared).length, 4, "the anchor must still define all four caps");
+  assert.equal(Object.keys(declared).length, 2, "the anchor must still define both caps");
   assert.deepEqual(scheduler, declared, "a cap the scheduler does not share is a mint refused a day later");
 });
 

@@ -1,19 +1,14 @@
-import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { TextDecoder } from "node:util";
 import { evidenceSourceTypeOf, isEvidenceSourceType } from "@evimed/domain";
 import { claimVerification } from "./clinicalEvidenceQuality.mjs";
-import { assertDockerDataVolumeSupport, dockerWorkspaceMount } from "./dockerMounts.mjs";
-import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
   HttpError,
   apiBaseFromRequest,
   appendJsonLineNoFollow,
   assertObject,
   assertProjectCapacity,
-  assertProjectUsageWithinQuota,
   assertString,
   encodeBase64,
   isTextFile,
@@ -289,108 +284,10 @@ function unsupported(message) {
   throw new HttpError(501, "unsupported_in_web", message);
 }
 
-function assertKernelExecutionAllowed(config) {
-  if (!config.enableKernel) {
-    throw new HttpError(501, "kernel_disabled", "Server-side kernels are disabled until sandboxing is configured.");
-  }
-  if (config.kernelSandboxMode === "docker") {
-    const releasePolicy = runtimeReleasePolicyError(config);
-    if (releasePolicy) {
-      throw new HttpError(503, releasePolicy.code, "Kernel image provenance is missing or does not match deployment configuration.");
-    }
-    return "docker";
-  }
-  if (config.kernelSandboxMode === "host") {
-    if (config.production || !config.allowUnsandboxedKernel) {
-      throw new HttpError(403, "kernel_sandbox_required", "Host Python kernels are not allowed for hosted production mode.");
-    }
-    return "host";
-  }
-  throw new HttpError(400, "invalid_kernel_sandbox", "Unsupported kernel sandbox mode.");
-}
-
-const workspaceNamePattern = /^[a-zA-Z0-9][a-zA-Z0-9_. -]{0,127}$/;
-
-async function resolveKernelTarget(args, ctx, { requireNotebook = true } = {}) {
-  const root = normalizeRoot(args.root);
-  const notebook = args.notebook == null || args.notebook === ""
-    ? ""
-    : normalizeWorkspaceRelativePath(args.notebook, "notebook");
-  let project = ctx.project;
-  let notebookWithinWorkspace = notebook;
-
-  if (notebook && requireNotebook) {
-    const base = rootDirFor(ctx.project, root);
-    const stat = await statExistingWorkspacePath(base, resolveScopedPath(base, notebook));
-    if (!stat.isFile()) throw new HttpError(400, "not_a_file", "notebook is not a file.");
-  }
-
-  if (notebook && root === "base") {
-    const parts = notebook.split("/");
-    const activeWorkspace = parts.length > 1 ? parts.shift() : "";
-    if (activeWorkspace && !workspaceNamePattern.test(activeWorkspace)) {
-      throw new HttpError(400, "invalid_workspace", "notebook workspace contains unsupported characters.");
-    }
-    project = {
-      ...ctx.project,
-      activeWorkspace,
-      workspaceDir: activeWorkspace ? path.join(ctx.project.baseDir, activeWorkspace) : ctx.project.baseDir,
-    };
-    notebookWithinWorkspace = parts.join("/");
-  }
-
-  const directory = notebookWithinWorkspace ? path.posix.dirname(notebookWithinWorkspace) : ".";
-  return {
-    project,
-    workingDirectory: directory === "." ? "" : directory,
-    key: `${ctx.project.userId}:${ctx.project.id}:${root}:${notebook}`,
-  };
-}
-
-function kernelCodeForWorkingDirectory(code, workingDirectory) {
-  if (!workingDirectory) return code;
-  return [
-    "import os as __open_science_os",
-    `__open_science_os.chdir(${JSON.stringify(workingDirectory)})`,
-    "del __open_science_os",
-    code,
-  ].join("\n");
-}
-
-function rCodeForWorkingDirectory(code, workingDirectory) {
-  if (!workingDirectory) return code;
-  return [`setwd(${JSON.stringify(workingDirectory)})`, code].join("\n");
-}
-
-// Hosted notebook cells run as short-lived, isolated Python processes. Mirror
-// Jupyter's most useful display-hook behavior by evaluating a final expression
-// and printing its repr, while leaving ordinary scripts and explicit stdout
-// untouched. The original cell is embedded as a JSON string, never interpolated
-// as wrapper syntax.
-function kernelCodeWithDisplayHook(code) {
-  return [
-    "import ast as __evimed_ast",
-    `__evimed_source = ${JSON.stringify(code)}`,
-    "__evimed_tree = __evimed_ast.parse(__evimed_source, '<cell>', 'exec')",
-    "if __evimed_tree.body and isinstance(__evimed_tree.body[-1], __evimed_ast.Expr):",
-    "    __evimed_prefix = __evimed_ast.Module(body=__evimed_tree.body[:-1], type_ignores=[])",
-    "    if __evimed_prefix.body:",
-    "        exec(compile(__evimed_ast.fix_missing_locations(__evimed_prefix), '<cell>', 'exec'), globals(), globals())",
-    "    __evimed_expression = __evimed_ast.Expression(__evimed_tree.body[-1].value)",
-    "    __evimed_value = eval(compile(__evimed_ast.fix_missing_locations(__evimed_expression), '<cell>', 'eval'), globals(), globals())",
-    "    if __evimed_value is not None:",
-    "        print(repr(__evimed_value))",
-    "else:",
-    "    exec(compile(__evimed_tree, '<cell>', 'exec'), globals(), globals())",
-  ].join("\n");
-}
-
 const TASK_COMMAND_ALLOWLIST = new Set([
   "add_text_to_workspace",
   "install_example",
-  "kernel_execute",
   "list_dir",
-  "list_notebooks",
   "list_provenance",
   "probe_large_file",
   "read_artifact",
@@ -402,18 +299,6 @@ const TASK_COMMAND_ALLOWLIST = new Set([
 ]);
 
 export function createCommandRegistry({ config, runtimeManager }) {
-  const activeKernelExecutions = new Map();
-
-  function trackKernelExecution(key, controller) {
-    const controllers = activeKernelExecutions.get(key) ?? new Set();
-    controllers.add(controller);
-    activeKernelExecutions.set(key, controllers);
-    return () => {
-      controllers.delete(controller);
-      if (controllers.size === 0) activeKernelExecutions.delete(key);
-    };
-  }
-
   const handlers = {
     // The value returned is the control plane's own surface, not a kernel's.
     // It used to be a pass-through base URL the browser then spoke a kernel's
@@ -704,19 +589,6 @@ export function createCommandRegistry({ config, runtimeManager }) {
       return null;
     },
 
-    async list_notebooks(args, ctx) {
-      const root = normalizeRoot(args.root);
-      const base = rootDirFor(ctx.project, root);
-      const notebooks = [];
-      await walk(base, async (rel, _full, stat) => {
-        if (!rel.endsWith(".ipynb")) return;
-        if (!stat.isFile()) return;
-        notebooks.push({ path: rel, modified: Math.floor(stat.mtimeMs / 1000) });
-      }, "", walkState(ctx.config)).catch(rethrowHttpError);
-      notebooks.sort((a, b) => b.modified - a.modified);
-      return notebooks;
-    },
-
     async probe_large_file(args, ctx) {
       const { base, full } = await resolveFile(ctx.project, args);
       const stat = await statExistingWorkspacePath(base, full, "file");
@@ -803,81 +675,6 @@ export function createCommandRegistry({ config, runtimeManager }) {
 
     async read_run_log() {
       return null;
-    },
-
-    async kernel_execute(args, ctx) {
-      const sandboxMode = assertKernelExecutionAllowed(config);
-      const language = (args.language == null ? "python" : assertString(args.language, "language", { max: 32 })).toLowerCase();
-      if (!["python", "r"].includes(language)) {
-        throw new HttpError(400, "unsupported_language", "Hosted kernels support python and r.");
-      }
-      const code = assertString(args.code, "code", { max: 64 * 1024 });
-      const target = await resolveKernelTarget(args, ctx);
-      const executableCode = language === "python"
-        ? kernelCodeWithDisplayHook(kernelCodeForWorkingDirectory(code, target.workingDirectory))
-        : rCodeForWorkingDirectory(code, target.workingDirectory);
-      if (executableCode.length > 64 * 1024) {
-        throw new HttpError(400, "invalid_payload", "code is too long after applying the notebook working directory.");
-      }
-      const controller = new AbortController();
-      const release = trackKernelExecution(target.key, controller);
-      const signal = ctx.signal ? AbortSignal.any([ctx.signal, controller.signal]) : controller.signal;
-      try {
-        if (sandboxMode === "docker") runtimeManager.assertDockerControlBoundary();
-        const result = sandboxMode === "docker"
-          ? runtimeManager.usesRuntimeController()
-            ? await runtimeManager.runControlledKernel(target.project, executableCode, signal, language)
-            : await runDockerKernel(executableCode, target.project, signal, config, language)
-          : await runHostKernel(
-              executableCode,
-              target.project.workspaceDir,
-              signal,
-              language === "python" ? config.kernelPythonBin : config.kernelRBin,
-              language,
-              config.maxKernelOutputBytes,
-              config.kernelTimeoutMs,
-            );
-        await assertProjectUsageWithinQuota(ctx.project, ctx.config);
-        return result;
-      } finally {
-        release();
-      }
-    },
-
-    async kernel_reset(args, ctx) {
-      const language = (args.language == null ? "python" : assertString(args.language, "language", { max: 32 })).toLowerCase();
-      if (!["python", "r"].includes(language)) throw new HttpError(400, "unsupported_language", "Hosted kernels support python and r.");
-      const notebook = args.notebook == null || args.notebook === ""
-        ? ""
-        : normalizeWorkspaceRelativePath(args.notebook, "notebook");
-      const targets = [];
-      if (notebook) {
-        const target = await resolveKernelTarget(args, ctx, { requireNotebook: false });
-        targets.push(activeKernelExecutions.get(target.key));
-      } else {
-        const prefix = `${ctx.project.userId}:${ctx.project.id}:`;
-        for (const [key, controllers] of activeKernelExecutions) {
-          if (key.startsWith(prefix)) targets.push(controllers);
-        }
-      }
-      for (const controllers of targets) {
-        for (const controller of controllers ?? []) {
-          controller.abort(new DOMException("Kernel execution was reset.", "AbortError"));
-        }
-      }
-      return null;
-    },
-
-    async jupyter_status() {
-      return { installed: false, running: false, url: null };
-    },
-
-    async setup_jupyter() {
-      unsupported("Jupyter provisioning is deferred for the hosted web MVP.");
-    },
-
-    async start_jupyter() {
-      unsupported("Jupyter provisioning is deferred for the hosted web MVP.");
     },
 
     async science_mcp_python() {
@@ -994,201 +791,4 @@ export function createCommandRegistry({ config, runtimeManager }) {
       return handlers[command](assertObject(args ?? {}, "args"), ctx);
     },
   };
-}
-
-function appendLimitedOutput(current, chunk, state, maxBytes) {
-  if (state.truncated) return current;
-  const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-  const remaining = maxBytes - state.bytes;
-  if (remaining <= 0) {
-    state.truncated = true;
-    return `${current}\n[evimed: output truncated after ${maxBytes} bytes]\n`;
-  }
-  const slice = buffer.subarray(0, remaining);
-  state.bytes += slice.length;
-  const next = `${current}${slice.toString("utf8")}`;
-  if (slice.length < buffer.length) {
-    state.truncated = true;
-    return `${next}\n[evimed: output truncated after ${maxBytes} bytes]\n`;
-  }
-  return next;
-}
-
-function dockerSecurityArgs(config) {
-  const args = [];
-  if (config.runtimeNoNewPrivileges !== false) {
-    args.push("--security-opt", "no-new-privileges");
-  }
-  if (config.runtimeCapDrop) {
-    args.push("--cap-drop", String(config.runtimeCapDrop));
-  }
-  if (Number.isFinite(config.runtimePidsLimit) && config.runtimePidsLimit > 0) {
-    args.push("--pids-limit", String(config.runtimePidsLimit));
-  }
-  if (config.runtimeReadOnlyRoot !== false) {
-    args.push("--read-only");
-  }
-  if (config.runtimeTmpfs) {
-    args.push("--tmpfs", String(config.runtimeTmpfs));
-  }
-  if (config.runtimeContainerUser) {
-    args.push("--user", String(config.runtimeContainerUser));
-  }
-  return args;
-}
-
-function safeContainerSegment(value) {
-  return String(value ?? "project").toLowerCase().replace(/[^a-z0-9_.-]/g, "-").slice(0, 36) || "project";
-}
-
-function kernelContainerName(project) {
-  const token = randomBytes(5).toString("hex");
-  return `open-science-kernel-${safeContainerSegment(project.userId)}-${safeContainerSegment(project.id)}-${token}`.slice(0, 120);
-}
-
-export function cleanupKernelContainer(config, containerName) {
-  if (!containerName) return;
-  const child = spawn(config.runtimeContainerBin, ["rm", "-f", containerName], {
-    stdio: "ignore",
-    env: process.env,
-  });
-  child.on("error", () => {});
-}
-
-export function buildDockerKernelLaunchPlan(project, config, language = "python") {
-  if (!["python", "r"].includes(language)) {
-    throw new HttpError(400, "unsupported_language", "Hosted kernels support python and r.");
-  }
-  const containerName = kernelContainerName(project);
-  const args = [
-    "run",
-    "--interactive",
-    "--rm",
-    "--init",
-    ...(config.runtimeRequireImageLocal ? ["--pull", "never"] : []),
-    "--name",
-    containerName,
-    "--label",
-    "open-science.web.kernel=true",
-    "--label",
-    `open-science.user=${project.userId}`,
-    "--label",
-    `open-science.project=${project.id}`,
-    ...dockerSecurityArgs(config),
-    "--network",
-    "none",
-    "--cpus",
-    String(config.runtimeCpuLimit),
-    "--memory",
-    String(config.runtimeMemoryLimit),
-    "--mount",
-    dockerWorkspaceMount(config, project),
-    "--workdir",
-    "/workspace",
-    ...(language === "python" ? ["--env", "PYTHONUNBUFFERED=1"] : []),
-    config.runtimeContainerImage,
-    language === "python" ? "python" : "Rscript",
-    "-",
-  ];
-  return {
-    containerName,
-    command: config.runtimeContainerBin,
-    args,
-    cwd: project.workspaceDir,
-  };
-}
-
-/** @param {any} code @param {any} project @param {any} signal
- *  @param {Record<string, any>} config @param {any} language */
-function runDockerKernel(code, project, signal, config, language) {
-  assertDockerDataVolumeSupport(config, "kernel_volume_subpath_unsupported");
-  const plan = buildDockerKernelLaunchPlan(project, config, language);
-  return runLimitedProcess({
-    command: plan.command,
-    args: plan.args,
-    cwd: plan.cwd,
-    stdin: code,
-    signal,
-    maxOutputBytes: config.maxKernelOutputBytes,
-    timeoutMs: config.kernelTimeoutMs,
-    onAbort: () => cleanupKernelContainer(config, plan.containerName),
-    onError: () => cleanupKernelContainer(config, plan.containerName),
-  });
-}
-
-function runHostKernel(code, cwd, signal, executable, language, maxOutputBytes, timeoutMs) {
-  return runLimitedProcess({
-    command: executable,
-    args: language === "python" ? ["-c", code] : ["-"],
-    cwd,
-    stdin: language === "r" ? code : undefined,
-    signal,
-    maxOutputBytes,
-    timeoutMs,
-  });
-}
-
-/** @param {Record<string, any>} options */
-export function runLimitedProcess({ command, args, cwd, stdin, signal, maxOutputBytes, timeoutMs, onAbort, onError, onSpawn }) {
-  return new Promise((resolve) => {
-    const outputLimit = Math.max(0, Math.floor(Number.isFinite(maxOutputBytes) ? maxOutputBytes : 1024 * 1024));
-    const processTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.floor(timeoutMs) : null;
-    const child = spawn(command, args, { cwd, stdio: [stdin == null ? "ignore" : "pipe", "pipe", "pipe"] });
-    onSpawn?.(child);
-    let stdout = "";
-    let stderr = "";
-    const stdoutState = { bytes: 0, truncated: false };
-    const stderrState = { bytes: 0, truncated: false };
-    let aborted = false;
-    let timedOut = false;
-    let settled = false;
-    const finish = (code, error = null) => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      signal?.removeEventListener("abort", abort);
-      const suffix = error
-        ? error.message
-        : timedOut
-          ? `Execution timed out after ${processTimeoutMs}ms.`
-          : aborted
-            ? "Execution was aborted."
-            : "";
-      resolve({
-        ok: code === 0 && !aborted && !timedOut && !error,
-        stdout,
-        stderr: suffix ? `${stderr}${stderr ? "\n" : ""}${suffix}` : stderr,
-        artifacts: [],
-      });
-    };
-    const abort = () => {
-      aborted = true;
-      onAbort?.();
-      child.kill("SIGKILL");
-    };
-    if (signal?.aborted) abort();
-    else signal?.addEventListener("abort", abort, { once: true });
-    const timer = processTimeoutMs == null
-      ? null
-      : setTimeout(() => {
-          timedOut = true;
-          onAbort?.();
-          child.kill("SIGKILL");
-        }, processTimeoutMs);
-    if (stdin != null && child.stdin) {
-      child.stdin.on("error", () => {});
-      child.stdin.end(stdin);
-    }
-    child.stdout.on("data", (chunk) => {
-      stdout = appendLimitedOutput(stdout, chunk, stdoutState, outputLimit);
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr = appendLimitedOutput(stderr, chunk, stderrState, outputLimit);
-    });
-    child.once("error", (err) => {
-      onError?.();
-      finish(1, err);
-    });
-    child.on("close", (code) => finish(code));
-  });
 }

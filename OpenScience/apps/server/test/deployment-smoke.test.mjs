@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFile, spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,15 +10,6 @@ import { productionReleaseConfig } from "./releaseFixture.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const smokeScript = path.join(repoRoot, "scripts/ops/deployment-smoke.mjs");
-const hasPython3 = spawnSync("python3", ["--version"], { stdio: "ignore" }).status === 0;
-// The kernel smoke path runs a Python kernel and then an R one, so it needs both
-// interpreters on the host. Declaring only Python meant a machine without R
-// failed here with "spawn Rscript ENOENT" — an error that names a missing binary
-// rather than an unmet test precondition, and one that no amount of reading the
-// test would predict. That made `pnpm test:web` and `pnpm ci:web` unpassable on
-// any host without R. Skipping is right only here: `smoke:deployment` run against
-// a real deployment still fails on a missing R, which is a genuine host defect.
-const hasRscript = spawnSync("Rscript", ["--version"], { stdio: "ignore" }).status === 0;
 
 function runSmoke(env) {
   return new Promise((resolve, reject) => {
@@ -121,43 +112,6 @@ test("deployment smoke accepts an operator-supplied OIDC session without passwor
     assert.match(smoke.stdout, /\[smoke\] file upload\/read\/preview\/download ok/);
     assert.match(smoke.stdout, /\[smoke\] deployment smoke passed/);
     assert.equal(smoke.stdout.includes(sessionCookie), false);
-  } finally {
-    await app.close();
-    await rm(dataDir, { recursive: true, force: true });
-  }
-});
-
-test("deployment smoke executes project-scoped hosted Python and R kernels", { skip: !hasPython3 || !hasRscript }, async () => {
-  const dataDir = await mkdtemp(path.join(tmpdir(), "os-web-smoke-kernel-"));
-  const app = createWebApiApp({
-    dataDir,
-    port: 0,
-    runtimeMode: "mock",
-    devAuth: false,
-    bootstrapUser: "alice",
-    bootstrapPassword: "correct horse battery staple",
-    enableKernel: true,
-    kernelSandboxMode: "host",
-    allowUnsandboxedKernel: true,
-    maxProjectBytes: 1024 * 1024,
-  });
-  const address = await app.listen(0, "127.0.0.1");
-  const base = `http://127.0.0.1:${address.port}`;
-  try {
-    const smoke = await runSmoke({
-      ...process.env,
-      OPEN_SCIENCE_SMOKE_BASE_URL: base,
-      OPEN_SCIENCE_SMOKE_USERNAME: "alice",
-      OPEN_SCIENCE_SMOKE_PASSWORD: "correct horse battery staple",
-      OPEN_SCIENCE_SMOKE_PROJECT_ID: "kernelsmoke",
-      OPEN_SCIENCE_SMOKE_KERNEL: "true",
-      OPEN_SCIENCE_SMOKE_REQUIRE_DOCKER_KERNEL: "false",
-      OPEN_SCIENCE_SMOKE_RUNTIME: "false",
-    });
-
-    assert.match(smoke.stdout, /\[smoke\] kernel readiness ok \(host\)/);
-    assert.match(smoke.stdout, /\[smoke\] project-scoped Python\/R scientific kernels read\/write ok/);
-    assert.match(smoke.stdout, /\[smoke\] deployment smoke passed/);
   } finally {
     await app.close();
     await rm(dataDir, { recursive: true, force: true });
