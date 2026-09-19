@@ -11,7 +11,7 @@ import { useUiStore } from "@/lib/store";
 import { useRuntimeSessionSearch } from "@/lib/runtimeUiBridge";
 import { renderHook } from "@testing-library/react";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources }));
 // The run's event stream, held by the test: the frame's run view follows it.
 vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/runEvents")>()), subscribeRunEvents: mocks.subscribe }));
@@ -24,7 +24,7 @@ vi.mock("@/lib/apiClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   hasWebApi: true, fetchWebMe: () => mocks.me(), webRuntimeProfile: () => mocks.profile,
   getWebProjectId: () => mocks.projectId, createWebRuntimeUiFrame: mocks.create, releaseWebRuntimeUiFrame: mocks.release,
-  renewWebRuntimeUiFrame: mocks.renew, listWebAgentRuns: mocks.listRuns,
+  renewWebRuntimeUiFrame: mocks.renew, listWebAgentRuns: mocks.listRuns, warmWebRuntime: mocks.warm,
 }));
 const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
 function PathProbe() {
@@ -702,7 +702,10 @@ describe("opening a task", () => {
   it("resumes the conversation the account last had open, without walking the ledger", async () => {
     mocks.me.mockResolvedValue({ lastSessionId: "session-last" });
     mocks.listRuns.mockResolvedValue([{ sessionId: "session-from-ledger" }]);
+    mocks.warm.mockReset();
     mount();
+    // The runtime starts while the lookup decides which task to open.
+    expect(mocks.warm).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-last"));
     expect(mocks.listRuns).not.toHaveBeenCalled();
   });
