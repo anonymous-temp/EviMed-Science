@@ -1,0 +1,18 @@
+{
+  "id": "/app/chat",
+  "name": "EviMed 循证医学科研智能体",
+  "short_name": "EviMed",
+  "description": "向 EviMed 提问、派发研究任务，在手机上查看运行记录与报告。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "/app/chat",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8f8f9",
+  "theme_color": "#f8f8f9",
+  "icons": [
+    { "src": "/icons/evimed-192.png?v=1", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/evimed-512.png?v=1", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/evimed-maskable-512.png?v=1", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

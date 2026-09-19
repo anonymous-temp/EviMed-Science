@@ -23,6 +23,10 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
   listWebDeliverableFeedback: async () => [],
 }));
 
+// Where a linked run lives when this project does not have it.
+const openRunProject = vi.fn();
+vi.mock("@/lib/runLocation", () => ({ openRunProject: (runId: string) => openRunProject(runId) }));
+
 const downloadArtifact = vi.fn();
 vi.mock("@/lib/artifactFile", () => ({
   openArtifactExternally: vi.fn(),
@@ -88,6 +92,8 @@ describe("RunsPage (hosted web)", () => {
     fetchWebMe.mockReset();
     fetchWebConnectors.mockReset();
     fetchWebConnectors.mockResolvedValue([]);
+    openRunProject.mockReset();
+    openRunProject.mockResolvedValue(false);
     fetchWebMe.mockResolvedValue({ user: { id: "u1", name: "研究者" }, operator: false, project: { id: "default", name: "我的研究" }, projects: [] });
     listWebAgentRuns.mockResolvedValue([
       webRun(),
@@ -177,6 +183,24 @@ describe("RunsPage (hosted web)", () => {
     // link won over the default.
     expect(await screen.findByTitle(`错误码：${TIMED_OUT}`)).toBeInTheDocument();
     expect(screen.queryByText("output/report.docx")).not.toBeInTheDocument();
+    expect(openRunProject).not.toHaveBeenCalled();
+  });
+
+  // A Feishu card or a notice names a run of any of the account's projects;
+  // the tab reads one. A miss here is a run somewhere else until every other
+  // project has said it is not theirs.
+  it("looks for a linked run in the account's other projects when this one does not have it", async () => {
+    openRunProject.mockReturnValue(new Promise(() => {}));
+    renderPage("/app/runs?run=run-elsewhere");
+    expect(await screen.findByText("正在你的其他项目里查找链接指向的运行…")).toBeInTheDocument();
+    expect(openRunProject).toHaveBeenCalledWith("run-elsewhere");
+  });
+
+  it("says so when no project has the linked run, once, and shows this project's ledger", async () => {
+    renderPage("/app/runs?run=run-gone");
+    expect(await screen.findByText(/没有找到链接指向的运行：它不在你的任何项目里。/)).toBeInTheDocument();
+    expect(screen.getByText("临床证据深度分析")).toBeInTheDocument();
+    expect(openRunProject).toHaveBeenCalledTimes(1);
   });
 
   it("filters by status via a facet chip", async () => {

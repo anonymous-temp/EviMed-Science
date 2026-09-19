@@ -7,7 +7,10 @@ const mocks = vi.hoisted(() => ({
   listWebAgentRuns: vi.fn(),
   readArtifact: vi.fn(),
   readClaimVerification: vi.fn(),
+  openRunProject: vi.fn(),
 }));
+
+vi.mock("@/lib/runLocation", () => ({ openRunProject: mocks.openRunProject }));
 
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
@@ -49,6 +52,7 @@ beforeEach(() => {
     return null;
   });
   mocks.readClaimVerification.mockResolvedValue(null);
+  mocks.openRunProject.mockResolvedValue(false);
 });
 
 describe("RunFilePage", () => {
@@ -70,6 +74,26 @@ describe("RunFilePage", () => {
     renderAt("/app/runs/run_1/files/..%2F..%2Fetc%2Fpasswd");
     expect(await screen.findByText("这个地址没有指向文件")).toBeInTheDocument();
     expect(mocks.readArtifact).not.toHaveBeenCalled();
+  });
+
+  // A Feishu card links a run's report; the run may be in another project,
+  // whose workspace holds the file. This project's "not here" is not shown
+  // while the shell finds and moves to it.
+  it("opens a run of another project in that project, without showing this one's miss", async () => {
+    mocks.openRunProject.mockReturnValue(new Promise(() => {}));
+    mocks.readArtifact.mockResolvedValue(null);
+    renderAt(`/app/runs/run_other/files/${REPORT}`);
+    expect(await screen.findByText("正在打开这次运行所在的项目…")).toBeInTheDocument();
+    expect(mocks.openRunProject).toHaveBeenCalledWith("run_other");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("still reads the file when no project has its run", async () => {
+    renderAt(`/app/runs/run_gone/files/${REPORT}`);
+    expect(await screen.findByRole("heading", { level: 1, name: "证据分析报告" })).toBeInTheDocument();
+    expect(await screen.findByText(/结论/)).toBeInTheDocument();
+    expect(mocks.openRunProject).toHaveBeenCalledWith("run_gone");
+    expect(screen.queryByText("正在打开这次运行所在的项目…")).toBeNull();
   });
 
   it("says a file that cannot be read cannot be read", async () => {
