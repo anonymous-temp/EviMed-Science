@@ -40,14 +40,19 @@ export function productDocumentsDouble() {
       const row = rows.get(keyOf(userId, kind, id));
       return row && (includeDeleted || !row.deletedAt) ? publicRow(row) : null;
     },
-    async list(userId, kind, { limit = 50, projectId = undefined, filter = {}, deleted = false } = {}) {
+    async list(userId, kind, { limit = 50, projectId = undefined, filter = {}, deleted = false, fields = null } = {}) {
       const items = [...rows.values()]
         .filter((row) => row.userId === userId && row.kind === kind && Boolean(row.deletedAt) === deleted)
         .filter((row) => projectId === undefined || (row.projectId ?? null) === (projectId ?? null))
         .filter((row) => contains(row.payload, filter))
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id))
         .slice(0, limit)
-        .map(publicRow);
+        .map(publicRow)
+        // `fields` as the real store reads it: the keys named, texts cut to their length, a missing key as null.
+        .map((row) => (fields ? { ...row, payload: Object.fromEntries(Object.entries(fields).map(([key, size]) => {
+          const value = row.payload?.[key] ?? null;
+          return [key, size === true || typeof value !== "string" ? value : value.slice(0, size)];
+        })) } : row));
       return { items, nextCursor: null };
     },
     async search(userId, kind, query, { limit = 20, filter = {}, any = { field: "", values: [] } } = {}) {

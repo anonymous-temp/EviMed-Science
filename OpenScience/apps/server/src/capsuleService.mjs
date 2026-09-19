@@ -241,7 +241,11 @@ export class CapsuleService {
     ].map((item) => String(item.capsuleId)));
     const result = [];
     for (const capsule of packs) {
-      const page = await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: capsule.id } });
+      // Only what the shelf shows: a status and a kind to count, and the first
+      // words of a method. The whole entries were a hundred packs of a hundred
+      // entries of 20,000 characters each, per read (security review 2026-09-20).
+      const page = await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: capsule.id },
+        fields: { status: true, factKind: true, content: 120 } });
       /** @type {Record<string, number>} */
       const counts = {};
       const methods = [];

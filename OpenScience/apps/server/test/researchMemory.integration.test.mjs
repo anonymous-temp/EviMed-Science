@@ -744,3 +744,46 @@ test("every note is searchable, not the newest hundred, by the recall tokenizer'
     await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
   }
 });
+
+test("the read-only views read a memory light: texts cut, observations to their source, the same provenance, bounded", options, async () => {
+  // Security review 2026-09-20: the timeline read every memory of the account
+  // whole on each page, and the change list and a conversation's background
+  // read whole rows — up to 100,000 characters of value, 64 observations and
+  // 32 revisions of that size each.
+  const long = "长".repeat(3_000);
+  const first = await store.upsertRecord(alpha, record({ key: "light.view", value: long, summary: "" }), {
+    sourceType: "conversation_message", sourceRef: "sessions/s-light/messages/m1", quote: "引".repeat(2_000),
+    observedAt: "2026-09-11T06:51:44Z", weight: 1,
+  }, { by: "extraction" });
+  await store.upsertRecord(alpha, record({ key: "light.view", id: first.id, value: `${long}改`, summary: "" }), {
+    sourceType: "tool_result", sourceRef: "sessions/s-light/tools/3", quote: "工具结果", observedAt: "2026-09-12T06:51:44Z", weight: 1,
+  }, { expectedVersion: first.version, reason: "extracted again", by: "extraction" });
+  const whole = await store.getRecord(alpha, first.id);
+  const [light, ...none] = await store.recordSummaries(alpha, [first.id, "not an id!", "rec_missing", first.id]);
+  assert.deepEqual(none, [], "an id that is not a record's is simply absent");
+  assert.equal(light.value.length, 1_000);
+  assert.deepEqual(light.provenance, whole.provenance);
+  assert.deepEqual(light.revisions.map((revision) => [revision.version, revision.status, revision.reason, revision.by]),
+    whole.revisions.map((revision) => [revision.version, revision.status, revision.reason, revision.by]));
+  assert.equal(light.revisions[0].value.length, 1_000);
+  assert.deepEqual(light.evidence.map((item) => item.sourceRef), whole.evidence.map((item) => item.sourceRef));
+  assert.ok(light.evidence.every((item) => item.quote === ""), "no quote is read");
+
+  // The change list answers exactly as it did from whole rows.
+  const [change] = (await store.recentChanges(alpha, { since: "2026-01-01T00:00:00Z", sessionId: "s-light" }))
+    .filter((item) => item.id === first.id);
+  assert.equal(change.summary, long.slice(0, 200));
+  assert.deepEqual(change.provenance, whole.provenance);
+  assert.equal(change.change, "updated");
+
+  // The timeline's read: the project's view, run summaries left to the runs, the newest first, bounded.
+  await store.upsertRecord(alpha, record({ key: "light.summary", kind: "run_summary", scope: "project", scopeId: "p-light", status: "active" }));
+  const own = await store.upsertRecord(alpha, record({ key: "light.project", kind: "project_fact", scope: "project", scopeId: "p-light" }));
+  await store.upsertRecord(alpha, record({ key: "light.elsewhere", kind: "project_fact", scope: "project", scopeId: "p-other" }));
+  await database.query("UPDATE evimed_memory.records SET updated_at=clock_timestamp() + interval '1 minute' WHERE user_id=$1 AND id=$2", [alpha, own.id]);
+  const timeline = await store.timelineRecords(alpha, { projectId: "p-light", limit: 5 });
+  assert.deepEqual(timeline.map((item) => item.key), ["light.project", "light.view"]);
+  assert.equal(timeline[1].value.length, 1_000);
+  assert.deepEqual((await store.timelineRecords(alpha, { projectId: "p-light", limit: 1 })).map((item) => item.key), ["light.project"]);
+  await store.purgeUserMemory(alpha);
+});

@@ -377,8 +377,13 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
  *   trialMethodIds?: readonly string[], frozenMethods?: {capsuleMethods: any[], learnedMethods: any[]} | null,
  *   writeFile?: typeof writeFileAtomicNoFollow }} options
+ * `capsule` is what the capsule half mounted, as the conversation panel shows
+ * it (`memorySessions.mjs`): recorded here so a read of the panel does not
+ * select the whole capsule again.
+ *
  * @returns {Promise<{ directory: string, count: number, bytes: number,
- *   learned: {id: string, name: string, digest: string, trial?: boolean}[] }>}
+ *   learned: {id: string, name: string, digest: string, trial?: boolean}[],
+ *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
  */
 export async function materializeCapsuleMethods({
   capsules,
@@ -417,7 +422,10 @@ export async function materializeCapsuleMethods({
     digest: method.digest,
     ...(method.trial ? { trial: true } : {}),
   }));
-  if (methods.length === 0) return { directory, count: 0, bytes: 0, learned };
+  // The panel shows at most 160 characters of a method; a prefix is all it keeps.
+  const capsule = capsuleMethods.map((method) => ({ id: method.id, directoryName: method.directoryName, capsuleId: method.capsuleId,
+    factKind: method.factKind, content: String(method.content).slice(0, 1000) }));
+  if (methods.length === 0) return { directory, count: 0, bytes: 0, learned, capsule };
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   await assertNoSymlinkPath(project.rootDir, directory);
   let bytes = 0;
@@ -444,5 +452,5 @@ export async function materializeCapsuleMethods({
     }
     bytes += method.bytes;
   }
-  return { directory, count: methods.length, bytes, learned };
+  return { directory, count: methods.length, bytes, learned, capsule };
 }
