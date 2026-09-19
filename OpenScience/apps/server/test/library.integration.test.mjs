@@ -200,6 +200,16 @@ test("publishing writes the document's facts and method drafts into the research
     assert.deepEqual({ added: repeated.added, kept: repeated.kept, retired: repeated.retired }, { added: 0, kept: 3, retired: 0 });
     assert.equal(repeated.capsuleId, result.capsuleId);
 
+    // More publishes at once than the pool has connections: each one runs or
+    // is refused as busy, none waits holding a connection, and nothing is
+    // published twice (security review 2026-09-20: this starved every tenant).
+    const burst = await Promise.all(Array.from({ length: 12 }, () => call(`/api/library/${source.id}/publish-to-capsule`, { method: "POST" })));
+    for (const response of burst) {
+      assert.ok(response.status === 200 || (response.status === 409 && response.body.code === "library_publish_busy"), JSON.stringify(response));
+    }
+    assert.equal((await app.capsuleService.entries(user.id, result.capsuleId)).items.length, 3);
+    assert.equal((await call("/api/library")).status, 200, "the account is served again at once");
+
     // The document read again says something else: that one fact is replaced,
     // the old one kept as retired.
     await giveUnderstanding(app, user, source, { statement: "达比加群酯剂量 150 mg，每日两次", quote: "剂量150 mg，每日两次" });
