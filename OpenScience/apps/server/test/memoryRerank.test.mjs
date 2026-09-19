@@ -187,7 +187,7 @@ test("a key file that anyone could read is refused rather than used", async (t) 
   assert.equal(missing.status().code, "memory_rerank_key_unavailable");
 });
 
-test("a task instruction rides both envelopes when one is set, and neither when it is not", async () => {
+test("an instance's own task instruction rides both envelopes; without one the memory instruction does", async () => {
   // The knowledge-base search ranks for a different task than memory recall;
   // qwen3-rerank takes that task as `instruct` (English, per its docs).
   const instruct = "Given a clinical question, rank passages that answer it";
@@ -198,7 +198,11 @@ test("a task instruction rides both envelopes when one is set, and neither when 
     [{ status: 200, body: { output: { results: [{ index: 0, relevance_score: 0.1 }, { index: 1, relevance_score: 0.9 }] } } }]);
   await native.rerank.order("q", ["a", "b"]);
   assert.deepEqual(native.fetchImpl.calls[0].body.parameters, { return_documents: false, instruct });
-  const plain = reranker({}, [{ status: 200, body: flatResults([0.2, 0.8]) }]);
+  // Built without one (memory recall's reranker), the memory instruction is
+  // sent; a caller can still override per call, or send none with "".
+  const plain = reranker({}, [{ status: 200, body: flatResults([0.2, 0.8]) }, { status: 200, body: flatResults([0.2, 0.8]) }]);
   await plain.rerank.order("q", ["a", "b"]);
-  assert.equal("instruct" in plain.fetchImpl.calls[0].body, false);
+  assert.equal(plain.fetchImpl.calls[0].body.instruct, MEMORY_RERANK_INSTRUCT);
+  await plain.rerank.order("q", ["a", "b"], { instruct: "" });
+  assert.equal("instruct" in plain.fetchImpl.calls[1].body, false);
 });

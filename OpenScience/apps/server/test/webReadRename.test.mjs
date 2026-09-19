@@ -5,6 +5,7 @@
 // may survive only in history: the changelog, recorded runs and wire captures,
 // and the one alias that keeps ledgers written before the rename readable.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -35,6 +36,31 @@ const HISTORY_FILES = new Map([
 const SKIPPED_DIRS = new Set(["node_modules", ".git", "dist", "build", ".venv", "venv", "__pycache__", ".pytest_cache", "coverage"]);
 const BINARY = /\.(?:png|jpe?g|gif|webp|ico|pdf|zip|gz|tgz|xlsx|docx|pptx|db|sqlite|woff2?|ttf|otf|wasm|parquet|pkl|npz|npy|bin)$/i;
 
+/**
+ * The files the repository tracks, when there is a repository: a checkout also
+ * holds git-ignored local state — a developer's `.openscience-web-data/` with
+ * July's OpenCode runtimes, captured tool probes — that no run, skill or build
+ * ever reads, and that named the old tool because it predates the rename. A
+ * source tree without `.git` (an image's copy) is walked instead.
+ */
+function trackedFiles() {
+  try {
+    const out = execFileSync("git", ["ls-files", "-z"], { cwd: openScience, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    return out.split("\0").filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+async function* tracked(list) {
+  for (const rel of list) {
+    const parts = rel.split("/");
+    if (parts.some((part) => SKIPPED_DIRS.has(part)) || BINARY.test(rel)) continue;
+    if ([...HISTORY_DIRS].some((dir) => rel === dir || rel.startsWith(`${dir}/`))) continue;
+    yield rel;
+  }
+}
+
 async function* files(dir, relative = "") {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const rel = relative ? `${relative}/${entry.name}` : entry.name;
@@ -50,7 +76,8 @@ async function* files(dir, relative = "") {
 test("the retired tool name survives only in history", async () => {
   const survivors = [];
   const seen = new Set();
-  for await (const rel of files(openScience)) {
+  const list = trackedFiles();
+  for await (const rel of list ? tracked(list) : files(openScience)) {
     seen.add(rel);
     const text = await readFile(path.join(openScience, rel), "utf8").catch(() => "");
     if (text.includes(RETIRED) && !HISTORY_FILES.has(rel)) survivors.push(rel);
