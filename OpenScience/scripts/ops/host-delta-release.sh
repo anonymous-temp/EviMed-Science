@@ -80,8 +80,17 @@ docker build -f deploy/web/Dockerfile \
   --build-arg RELEASE_ID="evimed-${NEW}-1" --build-arg SOURCE_REVISION="${REV}" --build-arg BUILD_CREATED="${CREATED}" \
   -t "open-science-web:${NEW}" . > "/tmp/build-web-${NEW}.log" 2>&1
 echo "web built"
+# A delta stacks about twenty layers on the live image, so the chain only
+# grows; at 422 layers the delta's first COPY failed with `mount options is too
+# long` (2026-09-19). Past 300 the base is flattened into one layer first, with
+# the same files and configuration (host-flatten-runtime-image.sh).
+BASE_IMAGE="open-science-runtime:${RUNTIME_TAG_PREFIX}-${OLD}"
+if [ "$(docker image inspect -f '{{len .RootFS.Layers}}' "$BASE_IMAGE")" -gt 300 ]; then
+  bash "$DST/OpenScience/scripts/ops/host-flatten-runtime-image.sh" "$BASE_IMAGE" "${BASE_IMAGE}-flat"
+  BASE_IMAGE="${BASE_IMAGE}-flat"
+fi
 docker build -f deploy/runtime-dsh/Dockerfile.delta \
-  --build-arg RUNTIME_BASE_IMAGE="open-science-runtime:${RUNTIME_TAG_PREFIX}-${OLD}" \
+  --build-arg RUNTIME_BASE_IMAGE="$BASE_IMAGE" \
   --build-arg RELEASE_ID="evimed-${NEW}-1" --build-arg SOURCE_REVISION="${REV}" --build-arg BUILD_CREATED="${CREATED}" \
   -t "open-science-runtime:${RUNTIME_TAG_PREFIX}-${NEW}" . > "/tmp/build-runtime-${NEW}.log" 2>&1
 echo "runtime built; smoke: $(grep -c 'booted with every entry applied' "/tmp/build-runtime-${NEW}.log")"
