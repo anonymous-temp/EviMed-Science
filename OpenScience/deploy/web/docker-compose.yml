@@ -272,7 +272,10 @@ services:
       OPEN_SCIENCE_DATABASE_URL_FILE: /run/secrets/database-url
       OPEN_SCIENCE_SESSION_TTL_MS: ${OPEN_SCIENCE_SESSION_TTL_MS:-604800000}
       OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED: ${OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED:-true}
-      OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: ${OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS:-30000}
+      # The code's budget, not a second one: a 30000 here overrode config.mjs's
+      # 120000 in production, and an extraction of a deep run's conversation
+      # (tens of seconds on its own) aborted with nothing remembered (2026-09-19).
+      OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: ${OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS:-120000}
       # Three memory switches the server read and no compose file passed, so
       # setting them in .env did nothing and said nothing (2026-09-16).
       # Value-less, so an unset one stays absent and config.mjs's own default
