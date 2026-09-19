@@ -1156,6 +1156,9 @@ export function createWebApiApp(overrides = {}) {
     fetchImpl: overrides.memoryExtractionFetch ?? globalThis.fetch,
     // Extraction is a model call on the user's behalf and is billed as one.
     usageLedger,
+    // What the researcher removed or undid, so an inference cannot write it
+    // straight back (memoryIntelligence.mjs #rejectedKeys).
+    feedbackEvents,
   });
   // Registered after `memoryIntelligence` because the episodes endpoint feeds
   // it: an external agent posts turns and the same extractor decides what is

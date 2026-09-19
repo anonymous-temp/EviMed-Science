@@ -753,7 +753,7 @@ test("refuting a finding the researcher already adopted raises a question, and o
   assert.equal(notice.idempotencyKey, `autopilot-refuted:${digest.id}:claim-0`);
 });
 
-test("an adopted finding becomes a capsule candidate, a rejected one becomes a lesson, and a refuted one becomes neither", async () => {
+test("an adopted finding becomes capsule knowledge, a rejected one becomes a lesson, and a refuted one becomes neither", async () => {
   const f = fixture();
   const { episode, digest } = await completedEpisode(f, { count: 2 });
 
@@ -761,7 +761,10 @@ test("an adopted finding becomes a capsule candidate, a rejected one becomes a l
   const memory = adopted.payload.decisions.at(-1).memory;
   assert.equal(memory.status, "candidate");
   const entry = await f.documents.get("user-one", "fact", memory.entryId);
-  assert.equal(entry.payload.status, "candidate", "a promotion the user never approved is never approved");
+  // The researcher's own adopt click, in force at once (owner ruling
+  // 2026-09-19: no confirmation step); still written as the platform's wording
+  // of it, and never a mounted method.
+  assert.equal(entry.payload.status, "approved");
   assert.equal(entry.payload.origin, "inferred");
   assert.equal(entry.payload.layer, "knowledge");
   assert.match(entry.payload.content, /已采纳/);
@@ -770,7 +773,7 @@ test("an adopted finding becomes a capsule candidate, a rejected one becomes a l
 
   const rejected = await f.service.decide("user-one", digest.id, { action: "reject", claimId: "claim-1", note: "不是我们的方向" });
   const lesson = await f.documents.get("user-one", "fact", rejected.payload.decisions.at(-1).memory.entryId);
-  assert.equal(lesson.payload.status, "candidate");
+  assert.equal(lesson.payload.status, "approved");
   assert.match(lesson.payload.content, /不再按这个方向/);
   assert.match(lesson.payload.content, /不是我们的方向/);
 
@@ -960,14 +963,14 @@ test("a verdict that arrives after the worker gave up is recorded, not dropped",
   assert.equal((await f.service.getEpisode("user-one", episode.id)).payload.claims[0].verification.status, "recorded");
 });
 
-test("a refutation that lands after the researcher adopted the claim takes the capsule candidate back", async () => {
+test("a refutation that lands after the researcher adopted the claim takes the capsule entry back", async () => {
   const f = fixture();
   const { episode, digest } = await completedEpisode(f, { count: 1 });
   // The ordering the whole question exists for: the digest is read and acted on
   // in the morning, and the independent re-check lands after it.
   const adopted = await f.service.decide("user-one", digest.id, { action: "adopt", claimId: "claim-0" });
   const entryId = adopted.payload.decisions.at(-1).memory.entryId;
-  assert.equal((await f.documents.get("user-one", "fact", entryId)).payload.status, "candidate");
+  assert.equal((await f.documents.get("user-one", "fact", entryId)).payload.status, "approved");
   f.notifications.created.length = 0;
 
   await f.service.recordVerification("user-one", { episodeId: episode.id, verificationId: verificationIdFor(episode.id, 0),
@@ -975,7 +978,7 @@ test("a refutation that lands after the researcher adopted the claim takes the c
 
   const entry = await f.documents.get("user-one", "fact", entryId);
   assert.equal(entry.payload.status, "retired",
-    "the researcher must not be asked to approve, as their own knowledge, something we could not reproduce");
+    "knowledge we could not reproduce does not stay in force because nobody took it out by hand");
   assert.match(entry.payload.retracted.reason, /独立复核/);
   assert.equal(f.notifications.created.length, 1, "and they are told, on the same event");
   assert.equal(f.notifications.created[0].input.noticeType, "question");

@@ -532,7 +532,7 @@ test("the one checkpoint: a lasting preference naming a high-alert medicine wait
  * a run-scoped `source` under a run-stable key passed its own test here and
  * would have thrown against the real service on every later observation.
  */
-function notificationsDouble() {
+function notificationsDouble({ keyPrefix = "memory-value-replaced:" } = {}) {
   /** Every call the module made, including the ones that were refused. */
   const attempts = [];
   /** What the inbox would actually hold. */
@@ -541,6 +541,10 @@ function notificationsDouble() {
     attempts,
     rows,
     async create(userId, input) {
+      // Each test watches one kind of notice; since 2026-09-20 every run that
+      // writes a memory also posts the quiet 「刚记住了」 item, which the
+      // contradiction tests are not about.
+      if (!String(input.idempotencyKey ?? "").startsWith(keyPrefix)) return { id: "other", ...input };
       attempts.push({ userId, ...input });
       const semantics = JSON.stringify([
         userId, input.projectId ?? null, input.noticeType, input.title, input.body,
@@ -791,7 +795,8 @@ test("an inbox that refuses the notice costs the run neither its memory nor its 
   const store = new MemoryStoreDouble();
   const audit = auditDouble();
   await seedConfirmed(store, { key: "behavior.reporting_style", value: "报告先给结论", kind: "behavior" });
-  const refusing = { create: async () => {
+  const refusing = { create: async (_userId, input) => {
+    if (!String(input.idempotencyKey).startsWith("memory-value-replaced:")) return { id: "other" };
     /** @type {any} */
     const error = new Error("inbox is down");
     error.code = "notification_unavailable";
@@ -1352,4 +1357,54 @@ test("a supersession the store cannot verify is dropped, and the new fact is sti
     assert.equal([...store.records.values()].find((record) => record.key === "project.language.report")?.status, "active");
     assert.equal(store.supersessions, undefined);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Reversible, and told (2026-09-20).
+// ---------------------------------------------------------------------------
+
+test("a memory the researcher removed is not inferred back; their own statement brings it back", async () => {
+  const feedbackEvents = {
+    async list(_userId, { trigger }) {
+      assert.equal(trigger, "memory-rejected");
+      return { items: [{ detail: { kind: "behavior", key: "behavior.late_night", reason: "undone" } }] };
+    },
+  };
+  const propose = (origin) => modelFetch((sources) => [{
+    scope: "user", kind: "behavior", key: "behavior.late_night", value: "常在深夜工作", summary: "深夜工作",
+    origin, importance: 0.3, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text,
+  }]);
+  const store = new MemoryStoreDouble();
+  const inferred = await new MemoryIntelligence(config, store, { feedbackEvents, fetchImpl: propose("inferred") })
+    .recordRun(project(), run("run_again"), [message("m1", "又忙到深夜了")]);
+  assert.equal([...store.records.values()].filter((record) => record.kind === "behavior").length, 0);
+  assert.ok(inferred.rejectionReasons.some((reason) => /removed by the researcher; only their own statement brings it back/.test(reason)));
+
+  const stated = await new MemoryIntelligence(config, store, { feedbackEvents, fetchImpl: propose("explicit") })
+    .recordRun(project(), run("run_said"), [message("m2", "记住，我习惯深夜工作")]);
+  assert.equal(stated.extracted, 1, "the researcher saying so is the one thing that brings it back");
+});
+
+test("what a run wrote is told in the inbox, quietly, once per run, with the way back", async () => {
+  const notifications = notificationsDouble({ keyPrefix: "memory-written:" });
+  const store = new MemoryStoreDouble();
+  const intelligence = new MemoryIntelligence(config, store, {
+    notifications,
+    fetchImpl: modelFetch((sources) => [
+      { scope: "user", kind: "preference", key: "preference.table_first", value: "证据先用表格", summary: "表格优先", origin: "explicit",
+        importance: 0.6, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text },
+      { scope: "project", kind: "project_fact", key: "project.cohort", value: "队列 500 人", summary: "队列规模", origin: "explicit",
+        importance: 0.6, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text },
+    ]),
+  });
+  await intelligence.recordRun(project(), run("run_told"), [message("m1", "证据先用表格，队列 500 人")]);
+  await intelligence.recordRun(project(), run("run_told"), [message("m1", "证据先用表格，队列 500 人")]);
+  const told = notifications.attempts.filter((attempt) => attempt.idempotencyKey === "memory-written:run_told");
+  assert.equal(told.length, 1, "a replay that wrote nothing new is not news");
+  assert.equal(told[0].title, "刚记住了 2 条");
+  assert.match(told[0].body, /「表格优先」「队列规模」/);
+  assert.match(told[0].body, /一键撤销/);
+  assert.equal(told[0].silent, true, "recorded without lighting the bell: it is neither done, nor needs them, nor a changed conclusion");
+  assert.equal(told[0].source.type, "memory");
+  assert.equal(told[0].projectId, "project_1");
 });

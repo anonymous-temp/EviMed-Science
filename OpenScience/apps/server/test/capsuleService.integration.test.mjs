@@ -93,14 +93,19 @@ test("project account has a different activation namespace from account-wide con
 });
 
 
-test("runtime notes are idempotent candidates until the account approves them", options, async () => {
+test("runtime notes are idempotent and take effect at once, and a retirement takes them out", options, async () => {
+  // Owner ruling 2026-09-19: no confirmation step anywhere. A note is in force
+  // the moment it is written, as the assistant's wording, and one click undoes
+  // it.
   const first = await service.note(other, "other", { factKind: "preference", content: "Retain analytic assumptions." });
   const again = await service.note(other, "other", { factKind: "preference", content: "Retain analytic assumptions." });
   assert.equal(first.id, again.id);
-  assert.equal(first.payload.status, "candidate");
-  assert.equal((await service.recall(other, { projectId: "other", query: "analytic" })).items.length, 0);
-  await service.updateEntry(other, first.payload.capsuleId, first.id, { status: "approved", expectedRevision: first.revision });
+  assert.equal(first.payload.status, "approved");
+  assert.equal(first.payload.origin, "inferred");
   assert.equal((await service.recall(other, { projectId: "other", query: "analytic" })).items.length, 1);
+  const undone = await service.undoEntry(other, first.payload.capsuleId, first.id, { expectedRevision: first.revision });
+  assert.equal(undone.undone, "removed");
+  assert.equal((await service.recall(other, { projectId: "other", query: "analytic" })).items.length, 0);
 });
 
 

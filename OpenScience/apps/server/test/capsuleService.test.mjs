@@ -44,3 +44,55 @@ test("a reference capsule's facts are recalled as a reference, and never render 
   assert.deepEqual(recalled.items.map((item) => item.mode), ["guest"]);
   assert.deepEqual(await service.profileFacts(USER, null, ["profile"]), [], "someone else's identity is never presented as yours");
 });
+
+test("a runtime note takes effect at once as the assistant's note, and is never mounted as a method", async () => {
+  const { selectCapsuleMethods } = await import("../src/capsuleMethods.mjs");
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  const note = await service.note(USER, "project_1", { factKind: "method_preference", content: "做 meta 分析先查异质性" });
+  assert.equal(note.payload.status, "approved", "no confirmation step");
+  assert.equal(note.payload.origin, "inferred", "labelled as what it is: the assistant's wording");
+  const recalled = await service.recall(USER, { query: "异质性", projectId: "project_1" });
+  assert.deepEqual(recalled.items.map((item) => item.id), [note.id], "in force as context at once");
+  // A page the run read can talk a model into writing a note; mounted, it would
+  // be an instruction in every later run.
+  assert.deepEqual(await selectCapsuleMethods(service, { userId: USER, projectId: "project_1" }), []);
+  // What the researcher wrote themselves does mount.
+  const own = (await service.active(USER, "project_1")).items[0].capsuleId;
+  await service.addEntry(USER, own, { factKind: "method_preference", layer: "methods", content: "先查异质性再合并" });
+  assert.deepEqual((await selectCapsuleMethods(service, { userId: USER, projectId: "project_1" })).map((method) => method.content),
+    ["先查异质性再合并"]);
+});
+
+test("a retraction retires what nobody touched, and only annotates what the researcher changed", async () => {
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  const untouched = await service.note(USER, "project_1", { factKind: "decision", content: "已采纳：A 结论" });
+  const retracted = await service.retractNote(USER, untouched.id, { reason: "独立复核未能复现" });
+  assert.equal(retracted.payload.status, "retired");
+
+  const curated = await service.note(USER, "project_1", { factKind: "decision", content: "已采纳：B 结论" });
+  const corrected = await service.updateEntry(USER, curated.payload.capsuleId, curated.id,
+    { content: "已采纳：B 结论（限老年人群）", expectedRevision: curated.revision });
+  const kept = await service.retractNote(USER, corrected.id, { reason: "独立复核未能复现" });
+  assert.equal(kept.payload.status, "approved", "an entry the researcher corrected is theirs");
+  assert.equal(kept.payload.retracted.reason, "独立复核未能复现");
+});
+
+test("one click undoes an entry's last change, and undoing its creation removes it", async () => {
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(/** @type {any} */ (documents));
+  const capsule = await service.create(USER, { title: "我的记忆胶囊" });
+  const entry = await service.addEntry(USER, capsule.id, { factKind: "preference", layer: "profile", content: "结论先行" });
+  const edited = await service.updateEntry(USER, capsule.id, entry.id, { content: "结论先行，再给证据表", expectedRevision: entry.revision });
+  const undone = await service.undoEntry(USER, capsule.id, entry.id, { expectedRevision: edited.revision });
+  assert.equal(undone.undone, "restored");
+  assert.equal(undone.entry.payload.content, "结论先行");
+  assert.equal(undone.entry.revision, edited.revision + 1, "saved forward: the undo is itself a revision");
+  await assert.rejects(service.undoEntry(USER, capsule.id, entry.id, { expectedRevision: edited.revision }), { code: "product_revision_conflict" });
+
+  const fresh = await service.addEntry(USER, capsule.id, { factKind: "preference", layer: "profile", content: "表格优先" });
+  const removed = await service.undoEntry(USER, capsule.id, fresh.id, { expectedRevision: fresh.revision });
+  assert.equal(removed.undone, "removed");
+  assert.equal(await documents.get(USER, "fact", fresh.id), null, "gone from use, and still in the trash to restore");
+});

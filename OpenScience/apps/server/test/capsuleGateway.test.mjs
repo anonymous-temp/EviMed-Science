@@ -64,9 +64,15 @@ test("capsule credentials stop working on expiry, rotation, runtime stop or acco
   await assert.rejects(f.manager.assertActiveEviMedWorkloadToken(rotated), { code: "evimed_workload_token_invalid" });
 });
 
-test("runtime notes are review candidates and reject authority fields and oversized input", async (t) => {
+test("a runtime note is the assistant's wording, takes effect at once, and rejects authority fields and oversized input", async (t) => {
   const f = await fixture(t);
-  assert.equal((await f.request("note", { factKind: "preference", content: "Remember methods", origin: "explicit" })).status, 200);
+  const noted = await f.request("note", { factKind: "preference", content: "Remember methods", origin: "explicit" });
+  assert.equal(noted.status, 200);
+  // No confirmation step (owner ruling 2026-09-19): the answer says the note
+  // is in force, and the model's own "explicit" is not the researcher's word.
+  const body = await noted.json();
+  assert.equal(body.reviewRequired, false);
+  assert.equal(body.takesEffect, true);
   assert.equal(f.calls[0].input.origin, "inferred");
   assert.equal((await f.request("note", { factKind: "preference", content: "x", status: "approved" })).status, 400);
   assert.equal((await f.request("note", { content: "x".repeat(70000) })).status, 413);

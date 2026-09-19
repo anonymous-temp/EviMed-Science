@@ -55,7 +55,11 @@ test("the actual app delivers a persisted capsule create, activate and recall wo
       const note = await fetch(`${base}/internal/capsules/v1/note`, { method: "POST", headers: runtimeHeaders,
         body: JSON.stringify({ factKind: "preference", content: "Preserve study assumptions.", origin: "explicit" }) });
       assert.equal(note.status, 200);
-      assert.equal((await note.json()).entry.payload.status, "candidate");
+      // In force at once, as the assistant's note (owner ruling 2026-09-19).
+      const noted = await note.json();
+      assert.equal(noted.entry.payload.status, "approved");
+      assert.equal(noted.entry.payload.origin, "inferred");
+      assert.equal(noted.reviewRequired, false);
     } finally { app.runtimeManager.runtimes.clear(); }
     assert.equal((await fetch(`${base}/api/capsules`)).status, 401);
   } finally {
