@@ -12,6 +12,7 @@ import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "
 
 export function AppShell() {
   const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
+  const currentProjectId = useProjectStore((state) => state.currentId);
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
 
   // Below `lg` the sidebar is a drawer over the content, not a column beside
@@ -107,7 +108,14 @@ export function AppShell() {
         )}
         <div className="min-h-0 flex-1">
           <Suspense fallback={<RouteFallback />}>
-            <Outlet />
+            {/* Keyed by the project: a switch remounts the page under the
+              * new one. Every page reads the project when it mounts — as a
+              * header, a workspace path, a frame binding — and none of them
+              * listens for a change; the reload this replaced relied on
+              * exactly that, and so does this. What sits outside it (the
+              * sidebar, the bell, the palette) is either account-wide or
+              * follows `currentId` itself. */}
+            <Outlet key={currentProjectId} />
           </Suspense>
         </div>
       </main>
