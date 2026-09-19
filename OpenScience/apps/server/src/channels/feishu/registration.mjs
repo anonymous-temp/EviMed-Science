@@ -34,6 +34,13 @@
  * terminal state; the App Secret goes straight to `onCredentials` and is never
  * part of any state a status call can return.
  *
+ * Saving is not a point of no return. `onCredentials` is handed the attempt:
+ * `current()` says whether it is still the one in force — not cancelled,
+ * superseded or expired — and `context` is what `start()` was given for it,
+ * so the saver can ask both again immediately before it writes anything.
+ * Cancelling used to stop only the state shown: a save already under way
+ * went on and bound the bot (security review 2026-09-20).
+ *
  * @module channels/feishu/registration
  */
 
@@ -105,7 +112,8 @@ export class RegistrationManager {
 
   /**
    * @param {{ registerApp: (options: Record<string, any>) => Promise<any>,
-   *   onCredentials: (result: { client_id: string, client_secret: string, user_info?: Record<string, any> }) => Promise<Record<string, any> | void>,
+   *   onCredentials: (result: { client_id: string, client_secret: string, user_info?: Record<string, any> },
+   *     attempt: { context: any, current: () => boolean }) => Promise<Record<string, any> | void>,
    *   now?: () => number, setTimeout?: typeof globalThis.setTimeout, clearTimeout?: typeof globalThis.clearTimeout }} input
    */
   constructor({ registerApp, onCredentials, now = Date.now, setTimeout: setTimer = globalThis.setTimeout,
@@ -120,8 +128,9 @@ export class RegistrationManager {
     this.#snapshot = this.#makeSnapshot(null, REGISTRATION_STATES.IDLE);
   }
 
-  /** @param {Record<string, any>} options what `registerApp` is asked for */
-  start(options = {}) {
+  /** @param {Record<string, any>} options what `registerApp` is asked for
+   *  @param {any} [context] the caller's own facts about this attempt, handed back with its credentials */
+  start(options = {}, context = null) {
     this.#supersedeActiveAttempt();
     const run = {
       id: ++this.#attempt,
@@ -131,6 +140,7 @@ export class RegistrationManager {
       pollIntervalSeconds: null,
       /** @type {any} */
       expiryTimer: null,
+      context,
     };
     this.#active = run;
     this.#snapshot = this.#makeSnapshot(run, REGISTRATION_STATES.STARTING);
@@ -215,6 +225,9 @@ export class RegistrationManager {
 
   /** @param {any} run @param {any} result */
   async #onSucceeded(run, result) {
+    // Credentials that arrive after the code's own expiry are refused like
+    // any other expired attempt, even if the expiry timer has not fired yet.
+    this.#expireIfNeeded();
     if (this.#active !== run) return;
     const clientId = result?.client_id;
     const clientSecret = result?.client_secret;
@@ -234,7 +247,7 @@ export class RegistrationManager {
         client_id: clientId,
         client_secret: clientSecret,
         user_info: result.user_info && typeof result.user_info === "object" ? { ...result.user_info } : undefined,
-      });
+      }, { context: run.context, current: () => this.#active === run });
     } catch (error) {
       const code = typeof (/** @type {any} */ (error)?.code) === "string" ? /** @type {any} */ (error).code : "credentials_callback_failed";
       const message = typeof (/** @type {any} */ (error)?.publicMessage) === "string"

@@ -301,3 +301,37 @@ test("a file too large for Feishu is linked instead, and unbinding takes the bot
   assert.equal(fake.wsClients[0].closed, true);
   assert.equal((await service.status(user)).feishu.bound, false);
 });
+
+test("a bind posts an inbox notice naming the Feishu identity, and its 「解除绑定」 unbinds that bot in one click", options, async () => {
+  // Security review 2026-09-20: the bot acts for whoever scanned the code,
+  // and a code can be scanned by someone other than the account holder. No
+  // step is added for the ordinary case; both sides are told, and the way
+  // back is one click. Composed the way createImModule composes it.
+  notifications.attachChannels({ registry: service.registry, onChange: (item) => { void service.notificationChanged(item); },
+    onAction: (item, actionId) => service.inboxAction(item, actionId) });
+  service.startRegistration(user, { signedIn: async () => true });
+  await eventually(() => fake.waitingForScan, "the QR code");
+  fake.scan();
+  await eventually(() => service.registration(user).state === "succeeded", "the bind");
+  const [binding] = await service.store.bindingsFor(userId, "feishu");
+  const notice = (await notifications.list(userId, { unresolvedOnly: true })).items
+    .find((item) => item.source?.id === `feishu-binding:${binding.id}`);
+  assert.ok(notice, "the account is told");
+  assert.equal(notice.severity, "attention");
+  assert.match(notice.body, /绑定的飞书身份：机器人「张三 的 EviMed 研究助手」的创建人，飞书用户 ou_owner/);
+  assert.deepEqual(notice.actions.map((action) => [action.id, action.label]), [["unbind-feishu", "解除绑定"]]);
+  const welcome = fake.callsTo("message.create").filter((call) => call.args.params.receive_id_type === "open_id").at(-1);
+  assert.match(JSON.parse(welcome.args.data.content).text, /这个机器人绑定的是 EviMed 账号「张三」/);
+  // Said to the bot in its welcome, so not pushed to it again; other news still is.
+  const other = await notifications.create(userId, { noticeType: "notify", title: "另一条消息", body: "照常推送。" });
+  await eventually(async () => service.store.hasDelivery(other.id, binding.id, 1), "the other notice's push");
+  assert.equal(await service.store.hasDelivery(notice.id, binding.id, 1), false);
+
+  const resolved = await notifications.resolve(userId, notice.id, { actionId: "unbind-feishu", expectedRevision: notice.revision });
+  assert.ok(resolved.resolvedAt);
+  assert.equal((await service.store.bindingsFor(userId, "feishu")).length, 0);
+  assert.equal(await service.credentials.resolveChannelSecret(userId, "channel.feishu"), null);
+  assert.equal((await notifications.preferences(userId)).channels.join(","), "in-app");
+  assert.equal(fake.wsClients.at(-1).closed, true);
+  assert.equal((await service.status(user)).feishu.bound, false);
+});

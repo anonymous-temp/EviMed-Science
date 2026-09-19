@@ -157,3 +157,68 @@ test("with the module off nothing channel-shaped runs, the inbox stays in-app, a
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("a scan completed after its sign-in ended binds nothing; a bind is told in the inbox and undone from there in one click", {
+  skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
+}, async () => {
+  // Security review 2026-09-20: the bot acts for whoever scanned the code.
+  // Through the real routes: the sign-in that started a scan must still hold
+  // when it completes, and every bind lands in the inbox with 「解除绑定」.
+  const dataDir = await mkdtemp(path.join("/tmp", "evimed-im-bind-"));
+  const fake = createFakeFeishuSdk();
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
+    bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl,
+    modelGatewaySigningSecret: "m".repeat(48), runTitlesEnabled: false,
+    imEnabled: true, imPollMs: 100, imProgressIntervalMs: 1_000,
+    publicUrl: "https://science.example.com", loadFeishuSdk: async () => fake.sdk });
+  const username = `imb${randomUUID().slice(0, 8)}`;
+  let user;
+  let listening = false;
+  try {
+    user = await app.store.createUser(username, "test-only-im-password", "IM bind fixture");
+    const address = await app.listen(0, "127.0.0.1");
+    listening = true;
+    const base = `http://127.0.0.1:${address.port}`;
+    const signIn = async () => {
+      const login = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username, password: "test-only-im-password" }) });
+      const auth = await login.json();
+      return { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0], "x-open-science-csrf": auth.data.csrfToken };
+    };
+
+    // Started, then signed out before the code was scanned.
+    const first = await signIn();
+    assert.equal((await fetch(`${base}/api/im/feishu/registration`, { method: "POST", headers: first, body: "{}" })).status, 200);
+    await eventually(() => fake.waitingForScan, "the QR code");
+    assert.equal((await fetch(`${base}/api/auth/logout`, { method: "POST", headers: first, body: "{}" })).status, 200);
+    fake.scan();
+    const headers = await signIn();
+    await eventually(async () => (await (await fetch(`${base}/api/im/feishu/registration`, { headers })).json()).data.state === "error",
+      "the refusal");
+    const refused = (await (await fetch(`${base}/api/im/feishu/registration`, { headers })).json()).data;
+    assert.equal(refused.error.code, "feishu_registration_signed_out");
+    assert.equal((await (await fetch(`${base}/api/im/channels`, { headers })).json()).data.feishu.bound, false);
+
+    // Scanned while signed in: bound at once, and the inbox says so.
+    assert.equal((await fetch(`${base}/api/im/feishu/registration`, { method: "POST", headers, body: "{}" })).status, 200);
+    await eventually(() => fake.waitingForScan, "the second QR code");
+    fake.scan();
+    await eventually(async () => (await (await fetch(`${base}/api/im/feishu/registration`, { headers })).json()).data.state === "succeeded",
+      "the bind");
+    assert.equal((await (await fetch(`${base}/api/im/channels`, { headers })).json()).data.feishu.bound, true);
+    const inbox = (await (await fetch(`${base}/api/inbox?unresolved=true`, { headers })).json()).data.items;
+    const notice = inbox.find((item) => item.title === "飞书机器人已绑定到你的账号");
+    assert.ok(notice, "the account is told");
+    assert.match(notice.body, /飞书用户 ou_owner/);
+    const resolved = await fetch(`${base}/api/inbox/${encodeURIComponent(notice.id)}/resolve`, { method: "POST", headers,
+      body: JSON.stringify({ actionId: "unbind-feishu", expectedRevision: notice.revision }) });
+    assert.equal(resolved.status, 200);
+    assert.equal((await (await fetch(`${base}/api/im/channels`, { headers })).json()).data.feishu.bound, false, "one click unbinds");
+    await eventually(() => fake.wsClients.every((client) => client.closed), "the connection to close");
+  } finally {
+    if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
+    if (listening) await app.close();
+    else await app.store.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
