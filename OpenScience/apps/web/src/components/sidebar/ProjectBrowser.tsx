@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { ChevronRight, Folder, FolderOpen, FolderPlus, Loader2, Pencil, Search, Settings2, SquarePen, X } from "lucide-react";
+import { ChevronRight, Folder, FolderOpen, FolderPlus, Loader2, Pencil, Plus, Search, Settings2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { webErrorMessage, type WebAgentRun, type WebProject } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
@@ -685,7 +685,9 @@ function ProjectGroup({
               onClick={onNewTask}
               className="grid h-6 w-6 place-items-center rounded-input text-muted hover:bg-surface hover:text-text"
             >
-              <SquarePen size={13} strokeWidth={1.75} aria-hidden="true" />
+              {/* A plus, as the kernel's list has it: the pen-in-a-square of
+                * 「新任务」 sat beside the rename pencil as its near twin. */}
+              <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
             </button>
             {!standIn && (
               <button
