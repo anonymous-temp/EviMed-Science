@@ -26,7 +26,9 @@ test("every route reason the router mints reads as one Chinese sentence, and an 
     ["autopilot:literature-sentinel", "clinical-evidence-synthesis", /^主动科研任务$/],
     ["adopted:runtime-ui", null, /^来自对话窗口$/],
     ["adopted:runtime-ui:llm:0.91", "clinical-evidence-synthesis", /^来自对话窗口，按问题内容交给「临床证据深度分析」$/],
-    ["adopted:runtime-ui:unrouted:open-domain", "open-domain-answer", /^来自对话窗口，直接回答：这个问题不需要交付报告$/],
+    // The conversation window's assistant decides whether to deliver; the
+    // note says where the task came from and claims nothing about reports.
+    ["adopted:runtime-ui:unrouted:open-domain", "open-domain-answer", /^来自对话窗口$/],
   ];
   for (const [reason, agent, expected] of cases) {
     const text = routeReasonText(reason, agent);

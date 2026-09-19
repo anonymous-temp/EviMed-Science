@@ -54,7 +54,11 @@ export function routeReasonText(reason, agentId) {
   if (rest === "choice:answer") sentence = "按你的选择：普通问答";
   else if (rest.startsWith("choice:")) sentence = `按你的选择：${capabilityTitle(agentId) ?? "对应的能力"}`;
   else if (rest === "session-binding") sentence = `按这个对话选定的能力${named(agentId)}运行`;
-  else if (rest === "unrouted:open-domain") sentence = "直接回答：这个问题不需要交付报告";
+  // Only a dispatch was routed. A question asked in the conversation window
+  // goes to the research assistant there, which plans deliverables whenever
+  // the question calls for them: on 2026-09-19 a task that delivered two
+  // reports was described as 「不需要交付报告」.
+  else if (rest === "unrouted:open-domain") sentence = adopted ? null : "直接回答：这个问题不需要交付报告";
   else if (/^llm:(?:0|1)(?:\.\d+)?$/.test(rest)) sentence = `按问题内容交给${named(agentId)}`;
   else if (rest.startsWith("matched:named:")) sentence = `你在问题里点名了${named(agentId)}`;
   else if (rest === "matched:clinical-evidence-synthesis:safety-medicine") sentence = `问题提到了需要核对用药安全的药品，交给${named(agentId)}`;
