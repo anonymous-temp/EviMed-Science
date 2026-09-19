@@ -1202,7 +1202,7 @@ test("no skill still tells a run to satisfy a checker that no longer exists", as
         assert.ok(!/preflight\.py/.test(body), `${root}/${entry.name}/SKILL.md still runs preflight.py`);
       }
       assert.ok(!/\$XDG_CONFIG_HOME\/opencode/.test(body), `${root}/${entry.name}/SKILL.md still hardcodes the old skill root`);
-      assert.ok(!/\bevimed_(literature_search|guideline_search|open_access_full_text|official_page_fetch)\b/.test(body),
+      assert.ok(!/\bevimed_(literature_search|guideline_search|open_access_full_text|web_read)\b/.test(body),
         `${root}/${entry.name}/SKILL.md still names a tool by its pre-migration spelling`);
     }
   }

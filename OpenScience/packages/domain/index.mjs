@@ -27,7 +27,7 @@
 export const DOMAIN_VERSION = '0.1.0'
 
 
-// toolNames — 20 exports
+// toolNames — 21 exports
 export {
   MCP_MANAGED_JOB_BASE_NAMES,
   MCP_SERVER_NAME,
@@ -38,6 +38,7 @@ export {
   OPENCODE_MCP_TOOL_PREFIX,
   KERNEL_MOUNTED_TOOL_NAMES,
   MOUNTED_TOOL_NAMES,
+  RETIRED_MCP_TOOL_NAMES,
   ROOT_VISIBLE_MCP_BASE_NAMES,
   RUNTIME_LEAKAGE_TOOL_TOKENS,
   SOCKET_TOOL_NAMES,
@@ -574,3 +575,11 @@ export {
   usagePurpose,
   usagePurposeOfRun,
 } from './src/usagePurpose.mjs'
+// sourceUpdates — 5 exports (retraction and correction notices on a cited work, 2026-09-20)
+export {
+  SOURCE_UPDATE_KINDS,
+  SOURCE_UPDATE_LABELS_ZH,
+  SOURCE_UPDATE_WEIGHT,
+  doiOf,
+  sourceUpdatesFromCrossref,
+} from './src/sourceUpdates.mjs'

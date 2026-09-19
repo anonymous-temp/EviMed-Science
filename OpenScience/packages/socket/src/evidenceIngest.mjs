@@ -24,7 +24,7 @@ export const EVIDENCE_TOOL_BASE_NAMES = Object.freeze([
   'patent_search',
   'biomedical_source_search',
   'open_access_full_text',
-  'official_page_fetch',
+  'web_read',
   'drug_label_search',
   'pharmacy_reference_search',
   'adr_case_query',
@@ -32,7 +32,7 @@ export const EVIDENCE_TOOL_BASE_NAMES = Object.freeze([
 ])
 
 /** Tools whose success means the full text or official page is on disk. */
-const PRESERVING_TOOL_BASE_NAMES = new Set(['open_access_full_text', 'official_page_fetch'])
+const PRESERVING_TOOL_BASE_NAMES = new Set(['open_access_full_text', 'web_read'])
 
 /**
  * @typedef {object} EvidenceRecord

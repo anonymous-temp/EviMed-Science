@@ -1,0 +1,57 @@
+{
+  "$comment": "The five pages the 2026-09-19 plan measured, recorded 2026-09-19T10:18Z from the dev box with the EviMedBot User-Agent. 'stripped' marks a file whose <script>, <style> and <svg> element bodies were removed (tags kept) to keep it small; extraction skips those elements, so what is read is unchanged. No rendered capture is recorded: from this box a local headless browser (no stealth fingerprint) got NMPA's and NHC's challenge again, CDE's 202, and ClinicalTrials.gov's own error route, so the render tier is tested against a fake browser and the live renders are the integrator's check with the AgentBay key.",
+  "recordedAt": "2026-09-19T10:18:00Z",
+  "userAgent": "EviMedBot/1.0 (+https://www.evimed.com; fixture recording)",
+  "files": [
+    {
+      "file": "nice-ng136.html",
+      "url": "https://www.nice.org.uk/guidance/ng136",
+      "how": "curl, direct GET",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "stripped": false,
+      "sha256": "2ff1a22d4cc69b182c1a62e141b9e312f88555a0337ac0c831c3a419d5a81340",
+      "bytes": 23980
+    },
+    {
+      "file": "ctgov-NCT03036124.direct.html",
+      "url": "https://clinicaltrials.gov/study/NCT03036124",
+      "how": "curl, direct GET",
+      "status": 200,
+      "contentType": "text/html",
+      "stripped": true,
+      "sha256": "d9fefc0c61b57eb0a93699e3e12aebf6697c27d6774087b4daf773301855cf75",
+      "bytes": 5038
+    },
+    {
+      "file": "nmpa-ggtg.412.html",
+      "url": "https://www.nmpa.gov.cn/xxgk/ggtg/index.html",
+      "how": "curl, direct GET",
+      "status": 412,
+      "contentType": "text/html; charset=utf-8",
+      "stripped": false,
+      "sha256": "66b83da34e91789a437f8495f69dca6bef66091b209c44ba85ca2f55e70fab4a",
+      "bytes": 2546
+    },
+    {
+      "file": "nhc-gfxwj.412.html",
+      "url": "http://www.nhc.gov.cn/wjw/gfxwj/list.shtml",
+      "how": "curl, direct GET",
+      "status": 412,
+      "contentType": "text/html; charset=utf-8",
+      "stripped": false,
+      "sha256": "49d37b30a9d3429beae68e2cbb25205099de2c7640dcca5d16322e9e94e257a9",
+      "bytes": 3486
+    },
+    {
+      "file": "cde-news.403.html",
+      "url": "https://www.cde.org.cn/main/news/listpage/545cf855a50574699b46b26bcb165f32",
+      "how": "curl, direct GET",
+      "status": 403,
+      "contentType": "text/html",
+      "stripped": false,
+      "sha256": "9d2bd191047a4c08698728225212f9f355535274158d26d3a18127589397277f",
+      "bytes": 1708
+    }
+  ]
+}

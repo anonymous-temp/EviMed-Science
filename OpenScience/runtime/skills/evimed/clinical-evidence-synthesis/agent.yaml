@@ -26,7 +26,7 @@ optionalInputs:
 requiredTools:
   - data_source_catalog
   - literature_search
-  - official_page_fetch
+  - web_read
   - open_access_full_text
   - evidence_deduplicate
 optionalTools:

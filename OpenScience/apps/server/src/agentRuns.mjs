@@ -78,6 +78,7 @@ import { clinicalSafetyCautionHits } from "@evimed/domain";
 // claim's structured GRADE certainty is read against (S6, 2026-09-18). A line
 // of its own for the same reason as the one above.
 import { sourceTypeOfSidecar, sourceTypeSidecarPath } from "@evimed/domain";
+import { normalizePagesRead } from "./webReadPages.mjs";
 
 export { repairableEvidencePackageErrorCodes, recoverableEvidenceSourceErrorCodes, terminalEvidenceSourceErrorCodes };
 
@@ -589,6 +590,10 @@ function foldEvents(events) {
         ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
         ...(event.mountedSkills ? { mountedSkills: normalizeMountedSkills(event.mountedSkills) } : {}),
         ...(event.recalledMemories ? { recalledMemories: normalizeRecalledMemories(event.recalledMemories) } : {}),
+        // The web pages the run read (contract X5), and how many in all when
+        // the list was capped (webReadPages.mjs).
+        ...(event.pagesRead ? { pagesRead: normalizePagesRead(event.pagesRead) } : {}),
+        ...(Number.isSafeInteger(event.pagesReadTotal) && event.pagesReadTotal > 0 ? { pagesReadTotal: event.pagesReadTotal } : {}),
         // `attempts` has been published to the browser since the repair loop
         // shipped and has always been 0, because nothing ever folded it. The
         // repair count is the number it was always meant to carry.
@@ -1298,7 +1303,7 @@ async function readDelegatedAssistantMessages(project, parentMessages, readSessi
 // this list, so one upstream returning 502 failed a run that had already found
 // its evidence elsewhere and written every deliverable.
 const evidenceSourceToolSuffixes = Object.freeze([
-  "official_page_fetch",
+  "web_read",
   "open_access_full_text",
   "literature_search",
   "guideline_search",
@@ -4302,7 +4307,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any}} patch
+   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
   async recordLearning(project, rawRunId, patch) {
     const runId = safeId(rawRunId, "agent run id");
@@ -4343,6 +4348,11 @@ export class AgentRunStore {
         ...(patch.repairRounds
           ? { repairRounds: { content: patch.repairRounds.content ?? 0, structural: patch.repairRounds.structural ?? 0 } }
           : current.repairRounds ? { repairRounds: current.repairRounds } : {}),
+        // Normalized and capped on the way in, like the recalled memories: the
+        // row is what reaches `runs.jsonl`, which has a ceiling (webReadPages.mjs).
+        ...(patch.pagesRead
+          ? { pagesRead: normalizePagesRead(patch.pagesRead) ?? [], ...(Number.isSafeInteger(patch.pagesReadTotal) ? { pagesReadTotal: patch.pagesReadTotal } : {}) }
+          : current.pagesRead ? { pagesRead: current.pagesRead, ...(current.pagesReadTotal ? { pagesReadTotal: current.pagesReadTotal } : {}) } : {}),
         ...(compaction ? { compaction } : {}),
       };
       // Nothing but the timestamp to write means nothing to write.

@@ -21,10 +21,18 @@
  *      the gateway, instead of having to be rewritten or refused.
  *
  * What it deliberately does not do is mount `tool-web`. The MCP already gives
- * the model `web_search` and `official_page_fetch` over the same two gateways;
- * a second pair of tools for one activity is two names for one thing, and the
+ * the model `web_search` and `web_read` over the same two gateways; a second
+ * pair of tools for one activity is two names for one thing, and the
  * composition's "deliberately absent" list names `web_fetch` as an SSRF surface
  * on purpose.
+ *
+ * The fetch half asks the gateway's web-read mode (2026-09-20), the same one
+ * `web_read` uses: any public page, robots.txt honoured, paced per site,
+ * rendered in AgentBay's browser when drawn in script, PDFs through the
+ * parser. It used to ask the API mode for raw HTML, which only ever reached
+ * the allowlisted APIs and stopped working the day that mode stopped serving
+ * HTML — a registry entry whose every call fails, with nobody calling it yet
+ * to notice.
  *
  * @module @evimed/dsh-socket/plugins/web
  */
@@ -119,15 +127,17 @@ export async function apply(ctx, config) {
       /** @param {any} request @param {AbortSignal} [signal] */
       async fetch(request, signal) {
         const url = String(request?.url ?? '').trim()
-        if (!/^https:\/\//i.test(url)) {
-          throw new WebError('web_fetch_forbidden', '这个部署只通过平台网关取内容，网关只接受 https 的已批准来源。')
+        if (!/^https?:\/\//i.test(url)) {
+          throw new WebError('web_fetch_forbidden', '这个部署只通过平台网关读取公开的 http(s) 网页。')
         }
-        // The allowlist is the gateway's, not this file's. A second copy here
-        // would be a second opinion about which hosts are approved, and the two
-        // would disagree the first time one of them was edited: a host the
-        // gateway refuses is refused with the gateway's own reason.
-        const payload = await call(ctx, config, fetchUrl, { url, accept: ['text/html', 'application/json', 'text/plain'] }, signal)
-        return { url, content: typeof payload === 'string' ? payload : JSON.stringify(payload) }
+        // What may be read is the gateway's rule, not this file's: a second
+        // copy here would be a second opinion, and a page the gateway refuses
+        // is refused with the gateway's own reason.
+        const payload = await call(ctx, config, fetchUrl, { webRead: { url } }, signal)
+        return {
+          url: String(payload?.receipt?.finalUrl ?? url),
+          content: typeof payload?.text === 'string' ? payload.text : '',
+        }
       },
     }))
   }
@@ -160,8 +170,10 @@ async function call(ctx, config, endpoint, body, signal) {
     // next moves.
     let code = 'web_gateway_failed'
     try {
+      // The gateways answer `{ error: { code, message } }`.
       const failure = /** @type {any} */ (await response.json())
-      if (typeof failure?.code === 'string') code = failure.code
+      const named = failure?.error?.code ?? failure?.code
+      if (typeof named === 'string') code = named
     } catch { /* a non-JSON failure keeps the generic code */ }
     throw new WebError(code, `平台网关返回 ${response.status}（${code}）。`)
   }

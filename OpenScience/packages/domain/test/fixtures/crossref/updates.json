@@ -1,0 +1,143 @@
+{
+  "$comment": "Recorded 2026-09-19 from api.crossref.org with plain curl (no credentials): works/{doi} for a retracted paper and its retraction notice, and works?filter=doi:A,doi:B,doi:C&select=DOI,updated-by. Only the fields the derivation reads are kept; their values are verbatim.",
+  "retracted": {
+    "DOI": "10.1016/s0140-6736(97)11096-0",
+    "type": "journal-article",
+    "title": [
+      "RETRACTED: Ileal-lymphoid-nodular hyperplasia, non-specific colitis, and pervasive developmental disorder in children"
+    ],
+    "updated-by": [
+      {
+        "DOI": "10.1016/s0140-6736(04)15715-2",
+        "type": "correction",
+        "label": "Correction",
+        "source": "retraction-watch",
+        "updated": {
+          "date-parts": [
+            [
+              2004,
+              3,
+              6
+            ]
+          ],
+          "date-time": "2004-03-06T00:00:00Z",
+          "timestamp": 1078531200000
+        },
+        "record-id": "17269"
+      },
+      {
+        "DOI": "10.1016/s0140-6736(10)60175-4",
+        "type": "retraction",
+        "label": "Retraction",
+        "source": "retraction-watch",
+        "updated": {
+          "date-parts": [
+            [
+              2010,
+              2,
+              6
+            ]
+          ],
+          "date-time": "2010-02-06T00:00:00Z",
+          "timestamp": 1265414400000
+        },
+        "record-id": "4036"
+      }
+    ]
+  },
+  "notice": {
+    "DOI": "10.1016/s0140-6736(10)60175-4",
+    "type": "journal-article",
+    "title": [
+      "Retraction—Ileal-lymphoid-nodular hyperplasia, non-specific colitis, and pervasive developmental disorder in children"
+    ],
+    "update-to": [
+      {
+        "DOI": "10.1016/s0140-6736(97)11096-0",
+        "type": "retraction",
+        "label": "Retraction",
+        "source": "retraction-watch",
+        "updated": {
+          "date-parts": [
+            [
+              2010,
+              2,
+              6
+            ]
+          ],
+          "date-time": "2010-02-06T00:00:00Z",
+          "timestamp": 1265414400000
+        },
+        "record-id": "4036"
+      }
+    ]
+  },
+  "batch": [
+    {
+      "DOI": "10.1088/1361-6595/aaebdb",
+      "updated-by": [
+        {
+          "DOI": "10.1088/1361-6595/ab245f",
+          "type": "correction",
+          "label": "Correction",
+          "source": "publisher",
+          "updated": {
+            "date-parts": [
+              [
+                2019,
+                7,
+                11
+              ]
+            ],
+            "date-time": "2019-07-11T00:00:00Z",
+            "timestamp": 1562803200000
+          }
+        }
+      ]
+    },
+    {
+      "DOI": "10.1056/nejmoa2204233"
+    },
+    {
+      "DOI": "10.1016/s0140-6736(97)11096-0",
+      "updated-by": [
+        {
+          "DOI": "10.1016/s0140-6736(04)15715-2",
+          "type": "correction",
+          "label": "Correction",
+          "source": "retraction-watch",
+          "updated": {
+            "date-parts": [
+              [
+                2004,
+                3,
+                6
+              ]
+            ],
+            "date-time": "2004-03-06T00:00:00Z",
+            "timestamp": 1078531200000
+          },
+          "record-id": "17269"
+        },
+        {
+          "DOI": "10.1016/s0140-6736(10)60175-4",
+          "type": "retraction",
+          "label": "Retraction",
+          "source": "retraction-watch",
+          "updated": {
+            "date-parts": [
+              [
+                2010,
+                2,
+                6
+              ]
+            ],
+            "date-time": "2010-02-06T00:00:00Z",
+            "timestamp": 1265414400000
+          },
+          "record-id": "4036"
+        }
+      ]
+    }
+  ]
+}

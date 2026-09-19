@@ -169,35 +169,32 @@ test("public-source gateway authenticates the runtime and forwards bounded offic
   }
 });
 
-test("public-source gateway permits bounded HTML only on approved official-document paths", async (t) => {
+test("the API mode reads APIs only: web pages are the web-read mode's", async (t) => {
+  // Until 2026-09-20 seventeen official hosts' HTML paths were fetched here as
+  // raw HTML — unpaced, robots.txt unread, never rendered. Pages now go
+  // through `{ webRead: { url } }` (webRead.test.mjs), and HTML is not a type
+  // this mode will ask any upstream for.
   let fetchCalls = 0;
   const server = createServer(createPublicSourceGatewayHandler({}, runtimeManager(), {
     fetchImpl: async () => {
       fetchCalls += 1;
-      return new Response("<main><h1>Guideline</h1><p>Verified official content.</p></main>", {
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
+      return new Response("<main><h1>Guideline</h1></main>", { headers: { "content-type": "text/html; charset=utf-8" } });
     },
   }));
   const base = await listen(server);
   t.after(() => close(server));
 
-  for (const url of [
-    "https://professional.heart.org/en/science-news/2024-aha-and-american-red-cross-guidelines-for-first-aid",
-    "https://www.nhs.uk/symptoms/chest-pain/",
+  for (const [url, accept, code] of [
+    ["https://professional.heart.org/en/science-news/2024-aha-and-american-red-cross-guidelines-for-first-aid", ["text/html"], "public_source_gateway_url_forbidden"],
+    ["https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json", ["text/html"], "public_source_gateway_accept_invalid"],
+    ["https://www.nhs.uk/symptoms/chest-pain/", ["application/json"], "public_source_gateway_url_forbidden"],
+    ["https://www.nice.org.uk/guidance/ng136", ["application/json"], "public_source_gateway_url_forbidden"],
   ]) {
-    const allowed = await gatewayRequest(base, { url, accept: ["text/html"] });
-    assert.equal(allowed.status, 200);
-    assert.match(await allowed.text(), /Verified official content/);
+    const response = await gatewayRequest(base, { url, accept });
+    assert.equal((await response.json()).error.code, code, url);
   }
-
-  const wrongPath = await gatewayRequest(base, {
-    url: "https://professional.heart.org/unreviewed/path",
-    accept: ["text/html"],
-  });
-  assert.equal(wrongPath.status, 403);
-  assert.equal((await wrongPath.json()).error.code, "public_source_document_path_forbidden");
-  assert.equal(fetchCalls, 2);
+  assert.equal(PUBLIC_SOURCE_ALLOWED_ACCEPT_TYPES.has("text/html"), false);
+  assert.equal(fetchCalls, 0);
 });
 
 test("public-source gateway permits only fixed read-only GraphQL operations", async (t) => {

@@ -164,6 +164,37 @@ describe("RunsPage (hosted web)", () => {
     expect(screen.getByText("ses-1")).toBeInTheDocument();
   });
 
+  it("lists the web pages a run read, with the authority's label, folded under its count", async () => {
+    // Contract X5: what the run read on the web, never a live browser.
+    listWebAgentRuns.mockResolvedValue([webRun({
+      pagesRead: [{
+        url: "https://www.nmpa.gov.cn/xxgk/ggtg/index.html",
+        finalUrl: "https://www.nmpa.gov.cn/xxgk/ggtg/index.html",
+        title: "国家药监局公告通告",
+        site: "www.nmpa.gov.cn",
+        fetchedAt: new Date().toISOString(),
+        official: true,
+        rendered: true,
+        snapshotPath: `.evimed-sources/web-pages/${"a".repeat(16)}/${"c".repeat(64)}/page.md`,
+        sha256: "a".repeat(64),
+      }],
+    })]);
+    renderPage();
+    const summary = await screen.findByText("已阅读的网页 1 个（官方来源 1 个）");
+    await userEvent.click(summary);
+    expect(screen.getByRole("link", { name: /国家药监局公告通告/ })).toHaveAttribute("href", "https://www.nmpa.gov.cn/xxgk/ggtg/index.html");
+    expect(screen.getByRole("link", { name: "查看保存的快照" })).toHaveAttribute(
+      "href",
+      `/app/runs/run-1/files/.evimed-sources/web-pages/${"a".repeat(16)}/${"c".repeat(64)}/page.md`,
+    );
+  });
+
+  it("a run that read no web page says nothing about web pages", async () => {
+    renderPage();
+    expect(await screen.findByText("技术标识（供排查使用）")).toBeInTheDocument();
+    expect(screen.queryByText(/已阅读的网页/)).toBeNull();
+  });
+
   // A ledger row from before the `question` column, with no capability either:
   // the last thing left is the id, and an id is the absence of a name.
   it("says a run recorded no brief instead of using its id as a title", async () => {

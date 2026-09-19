@@ -30,7 +30,7 @@ tools:
 - mcp__evimed__web_search
 - mcp__evimed__research_topic_selection
 - mcp__evimed__bibliometric_analysis
-- mcp__evimed__official_page_fetch
+- mcp__evimed__web_read
 - mcp__evimed__guideline_search
 - mcp__evimed__clinical_trial_search
 - mcp__evimed__term_normalize
