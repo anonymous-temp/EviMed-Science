@@ -135,6 +135,9 @@ function recordUri(userId, record) {
  *  would mean the state of the index depended on which path last touched it. */
 function publishableContent(record, now) {
   if (!record || record.status !== "active" || record.sensitive) return "";
+  // The timeline's, not recall's (see `ResearchMemoryStore.relevant`): an
+  // index copy of a run summary is a copy nothing may retrieve.
+  if (record.kind === "run_summary") return "";
   if (record.expiresAt && Date.parse(record.expiresAt) <= now) return "";
   return recallContent(record) || "";
 }
@@ -242,6 +245,7 @@ export class MemorySubstrate {
     ))
       .filter(Boolean)
       .filter(({ record }) => record.status === "active")
+      .filter(({ record }) => record.kind !== "run_summary")
       .filter(({ record }) => !record.sensitive)
       .filter(({ record }) => !record.expiresAt || Date.parse(record.expiresAt) > now)
       // The index is asked only for subtrees this caller may read, but the
@@ -260,6 +264,7 @@ export class MemorySubstrate {
         memoryType: "structured",
         kind: record.kind,
         scope: record.scope,
+        origin: record.origin,
         confidence: record.confidence,
         importance: record.importance,
       },

@@ -127,6 +127,10 @@ const operatorLevers = {
   // The memory evaluation's control arm is this switch; an ablation whose
   // "off" arm silently recalled would measure nothing (2026-09-18).
   OPEN_SCIENCE_MEMORY_RECALL_ENABLED: ["open-science-web"],
+  // mem stream (2026-09-20): with no confirmation step, how long an unrepeated
+  // inference stays in force is the lever that bounds what automatic memory
+  // keeps.
+  OPEN_SCIENCE_MEMORY_INFERRED_TTL_DAYS: ["open-science-web"],
 };
 
 async function composeFiles() {
