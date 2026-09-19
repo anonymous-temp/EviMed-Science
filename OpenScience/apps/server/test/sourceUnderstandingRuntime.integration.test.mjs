@@ -2,24 +2,28 @@ import { awaitBackgroundMonitor } from "./helpers/awaitBackgroundMonitor.mjs";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { once } from "node:events";
+import { createServer } from "node:http";
 import path from "node:path";
 import test from "node:test";
 import { sourceUnderstandingSchema, validateSourceUnderstanding } from "@evimed/domain";
 import { createWebApiApp } from "../src/server.mjs";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { sourceAttemptId } from "../src/sourceFiles.mjs";
+import { issueModelGatewayRuntimeToken } from "../src/runtimeManager.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) { const url = new URL(databaseUrl); assert.ok(["localhost", "127.0.0.1", "::1"].includes(url.hostname)); assert.match(url.pathname, /evimed_test/); }
 const options = { skip: !databaseUrl, timeout: 30_000 };
 
-async function fixture(t) {
+async function fixture(t, extraConfig = {}) {
   const dataDir = await mkdtemp("/tmp/source-runtime-app-");
   const app = createWebApiApp({ dataDir, stateStore: "postgres", databaseUrl, runtimeMode: "mock",
     devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
     memoryExtractionEnabled: false, autopilotEnabled: false,
     sourceIngestionEnabled: true, sourceIngestionPollMs: 60_000, sourceIngestionLeaseMs: 30_000,
-    documentParserUrl: "", modelGatewaySigningSecret: "fixture-source-signing-secret-at-least-32-characters" });
+    documentParserUrl: "", modelGatewaySigningSecret: "fixture-source-signing-secret-at-least-32-characters",
+    ...extraConfig });
   const userId = `source_runtime_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   await app.store.createUser(userId, "test-only-source-password", "Source runtime fixture");
   const user = await app.store.userById(userId);
@@ -135,6 +139,41 @@ test("the wired structured source worker uses one real run ledger dispatch and p
   assert.equal(result.current.usage.modelId, f.app.config.deepseekModel);
   assert.equal(result.current.usage.actualCost, 0.031);
   assert.equal(f.calls.reserve, 1);
+});
+
+test("the model gateway records a source understanding run's calls as source understanding, not research", options, async t => {
+  // Ingesting a document is a platform cost, not a researcher's run: folded
+  // into `kernel`, the price of the knowledge base would hide inside the price
+  // of research. The run's bounded token names its dispatch id, and the real
+  // gateway resolves that through the real run ledger.
+  const upstream = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ id: "provider-source", choices: [{ message: { role: "assistant", content: "ok" } }],
+      usage: { prompt_tokens: 12, completion_tokens: 2, prompt_cache_hit_tokens: 0, prompt_cache_miss_tokens: 12 } }));
+  });
+  upstream.listen(0, "127.0.0.1");
+  await once(upstream, "listening");
+  t.after(() => new Promise((resolve) => upstream.close(resolve)));
+  const f = await fixture(t, { deepseekProviderEnabled: true, deepseekApiKey: "test-provider-key",
+    deepseekBaseUrl: `http://127.0.0.1:${upstream.address().port}` });
+  await f.app.sourceWorker.tick();
+  assert.ok(f.state.scope?.runId, "the source run was dispatched under a bounded scope");
+  const jti = `fixture_${randomUUID()}`;
+  const token = issueModelGatewayRuntimeToken({ secret: f.app.config.modelGatewaySigningSecret,
+    userId: f.userId, projectId: f.project.id, jti, budgetScope: f.state.scope });
+  f.app.runtimeManager.activateModelGatewayRuntime(f.project, { modelGatewayToken: token, modelGatewayTokenJti: jti });
+  const response = await fetch(`http://127.0.0.1:${f.app.server.address().port}/internal/model/v1/chat/completions`, {
+    method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "Read the frozen input." }] }),
+  });
+  assert.equal(response.status, 200);
+  await response.json();
+  // Scoped to the bounded run: the run's own title is a separate, control-plane
+  // call recorded under `title`.
+  const rows = await f.app.store.database.query(
+    "SELECT purpose FROM evimed_usage.model_requests WHERE user_id=$1 AND run_id=$2", [f.userId, f.state.scope.runId]);
+  assert.deepEqual(rows.rows.map((row) => row.purpose), ["source-understanding"]);
 });
 
 test("wired source budget rejection happens before any runtime or paid request", options, async t => {

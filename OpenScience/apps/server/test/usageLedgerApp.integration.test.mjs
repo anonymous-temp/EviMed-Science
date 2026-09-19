@@ -11,6 +11,8 @@ import { issueModelGatewayRuntimeToken } from "../src/runtimeManager.mjs";
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
 
+const operatorToken = "usage-report-operator-token-0123456789abcdef";
+
 test("the real application wires every provider call into the durable usage ledger", options, async (t) => {
   const upstream = createServer(async (req, res) => {
     for await (const _chunk of req) { /* consume */ }
@@ -30,6 +32,7 @@ test("the real application wires every provider call into the durable usage ledg
     deepseekApiKey: "test-provider-key", deepseekBaseUrl: `http://127.0.0.1:${upstream.address().port}`,
     modelGatewaySigningSecret: secret,
     requireDurableUsageLedger: true, modelGatewayReservationMaxOutputTokens: 4096,
+    operatorMetricsToken: operatorToken,
   });
   const username = `usage${randomUUID().slice(0, 8)}`;
   let user;
@@ -66,6 +69,30 @@ test("the real application wires every provider call into the durable usage ledg
     assert.equal(summary.cacheHitTokens, 4);
     assert.equal(summary.cacheMissTokens, 5);
     assert.equal(summary.completionTokens, 3);
+    // A runtime's request is the kernel's: no run is going in the project.
+    const purposes = await app.store.database.query("SELECT purpose FROM evimed_usage.model_requests WHERE user_id=$1", [user.id]);
+    assert.deepEqual(purposes.rows.map((row) => row.purpose), ["kernel"]);
+
+    // The operator's cost report, behind the scrape token and nothing else.
+    const report = (query, headers = {}) => fetch(`http://127.0.0.1:${address.port}/api/ops/usage/by-purpose${query}`, { headers });
+    assert.equal((await report("")).status, 401, "no token, no report");
+    assert.equal((await report("", { authorization: "Bearer wrong-token-of-a-plausible-length-000000" })).status, 401);
+    const bearer = { authorization: `Bearer ${operatorToken}` };
+    for (const days of ["0", "367", "1.5", "week"]) {
+      const refused = await report(`?days=${days}`, bearer);
+      assert.equal(refused.status, 400, `days=${days}`);
+      assert.equal((await refused.json()).code, "usage_report_days_invalid");
+    }
+    const answered = await report("?days=7", bearer);
+    assert.equal(answered.status, 200);
+    const body = (await answered.json()).data;
+    assert.equal(body.days, 7);
+    assert.equal(body.currency, "CNY");
+    assert.ok(Date.parse(body.since) < Date.now());
+    assert.ok(body.rows.length >= 9, "every purpose has a row");
+    const kernel = body.rows.find((row) => row.purpose === "kernel");
+    assert.ok(kernel.requests >= 1 && kernel.cacheHitTokens >= 4 && kernel.outputTokens >= 3, "the call above is in the report");
+    assert.deepEqual(Object.keys(kernel).sort(), ["cacheHitTokens", "cacheMissTokens", "costCny", "outputTokens", "purpose", "requests"]);
   } finally {
     if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
     await app.close();

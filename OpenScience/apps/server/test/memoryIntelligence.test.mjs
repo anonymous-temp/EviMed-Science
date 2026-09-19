@@ -982,6 +982,7 @@ test("extraction is reserved and settled on the usage ledger, like every other m
   assert.equal(reserve.userId, project().userId);
   assert.equal(reserve.projectId, project().id);
   assert.equal(reserve.runId, "run_metered");
+  assert.equal(reserve.purpose, "memory-extraction", "the ledger can say what extraction costs");
   assert.ok(reserve.estimatedCost >= 0);
 
   const settle = ledgerCalls.find((entry) => entry[0] === "settle");

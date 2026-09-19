@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
+import { USAGE_PURPOSES } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { UsageLedger } from "../src/usageLedger.mjs";
+import { migrateUsageLedger, USAGE_PURPOSE_CHECK } from "../src/usagePersistence.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -358,4 +360,62 @@ test("an interactive run's attributed calls are capped by its own limit, and a l
   assert.deepEqual(withoutFirst(summaries.get(otherRun)), { requests: 1, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, costCny: 0 }, "a reserved call is counted, its tokens are not yet");
   assert.equal(summaries.has("run_never_used"), false);
   assert.equal((await ledger.summaryRuns(owner, [runId])).size, 0, "another account's runs are not read");
+});
+
+/* ------------------------------------------------------- purpose (X1) */
+
+test("every request records what it was for, and the report sums each purpose", options, async () => {
+  // A window no other test writes into: the report reads every account.
+  const at = new Date("2033-03-03T00:00:00.000Z");
+  const extraction = await ledger.reserveModel(reservation(owner, { now: at, purpose: "memory-extraction" }));
+  await ledger.settleModel(owner, extraction.id, {
+    usage: { cacheHitTokens: 100, cacheMissTokens: 20, completionTokens: 7 }, actualCost: 0.25, priced: true,
+  });
+  const routing = await ledger.reserveModel(reservation(other, { now: at, purpose: "routing" }));
+  await ledger.release(other, routing.id, "provider_not_accepted");
+  // Bookkeeping never refuses a model call: no purpose, or one outside the
+  // vocabulary, is recorded as `other`.
+  const unnamed = await ledger.reserveModel(reservation(owner, { now: at }));
+  const misspelled = await ledger.reserveModel(reservation(other, { now: at, purpose: "Routing" }));
+  assert.equal(extraction.purpose, "memory-extraction");
+  assert.equal(unnamed.purpose, "other");
+  assert.equal(misspelled.purpose, "other");
+
+  const report = await ledger.usageByPurpose({ since: at });
+  assert.deepEqual(report.map((row) => row.purpose), [...USAGE_PURPOSES], "every purpose has a row, zero or not");
+  const row = (purpose) => report.find((item) => item.purpose === purpose);
+  assert.deepEqual(row("memory-extraction"), {
+    purpose: "memory-extraction", requests: 1, cacheHitTokens: 100, cacheMissTokens: 20, outputTokens: 7, costCny: 0.25,
+  });
+  // A released call was still a call; it just cost nothing.
+  assert.deepEqual(row("routing"), { purpose: "routing", requests: 1, cacheHitTokens: 0, cacheMissTokens: 0, outputTokens: 0, costCny: 0 });
+  assert.equal(row("other").requests, 2);
+  assert.equal(row("kernel").requests, 0);
+  assert.equal((await ledger.usageByPurpose({ since: new Date("2033-03-04T00:00:00.000Z") })).every((item) => item.requests === 0), true);
+
+  // The database holds the vocabulary too, so a writer that bypasses the
+  // ledger cannot invent a purpose either.
+  await assert.rejects(
+    database.query("UPDATE evimed_usage.model_requests SET purpose='gossip' WHERE id=$1", [unnamed.id]),
+    (error) => error.code === "23514",
+  );
+});
+
+test("a purpose CHECK written for an older vocabulary is replaced, not left refusing the new purposes", options, async () => {
+  // Named for the exact list it enforces, so growing the vocabulary renames it
+  // and the migration swaps the old one out instead of skipping on IF NOT EXISTS.
+  await database.query(`ALTER TABLE evimed_usage.model_requests DROP CONSTRAINT ${USAGE_PURPOSE_CHECK}`);
+  await database.query(`ALTER TABLE evimed_usage.model_requests ADD CONSTRAINT usage_model_requests_purpose_000000000000_check
+    CHECK (purpose IN ('kernel','other')) NOT VALID`);
+  const fresh = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 2_000 });
+  try {
+    await migrateUsageLedger(fresh);
+    const names = (await fresh.query(`SELECT conname FROM pg_constraint
+      WHERE conrelid='evimed_usage.model_requests'::regclass AND conname LIKE 'usage_model_requests_purpose_%'`)).rows.map((row) => row.conname);
+    assert.deepEqual(names, [USAGE_PURPOSE_CHECK]);
+    const accepted = await new UsageLedger(fresh).reserveModel(reservation(owner, { now: new Date("2033-03-05T00:00:00.000Z"), purpose: "engine" }));
+    assert.equal(accepted.purpose, "engine");
+  } finally {
+    await fresh.close();
+  }
 });

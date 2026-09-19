@@ -929,6 +929,7 @@ export class MemoryIntelligence {
           userId: project.userId,
           projectId: project.id,
           runId: run.id ?? null,
+          purpose: "memory-extraction",
           signal: controller.signal,
           body: {
           model: this.model,

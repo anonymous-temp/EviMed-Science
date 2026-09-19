@@ -64,6 +64,7 @@ test("the titler makes one metered flash call attributed to the run, and fails s
   assert.equal(calls.length, 1);
   assert.equal(calls[0].call.runId, "run_1", "the call is charged to the run it names");
   assert.equal(calls[0].call.userId, "u1");
+  assert.equal(calls[0].call.purpose, "title", "the ledger can say what titles cost");
   assert.equal(calls[0].call.body.model, "deepseek-flash");
   // A title needs no reasoning: thinking off costs a thirtieth of the tokens.
   assert.deepEqual(calls[0].call.body.thinking, { type: "disabled" });

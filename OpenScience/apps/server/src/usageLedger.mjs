@@ -1,3 +1,4 @@
+import { USAGE_PURPOSES, usagePurpose } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 import { migrateUsageLedger } from "./usagePersistence.mjs";
@@ -80,6 +81,7 @@ function record(row) {
     userId: row.user_id,
     projectId: row.project_id,
     runId: row.run_id,
+    purpose: row.purpose ?? "other",
     model: row.model,
     priceVersion: row.price_version,
     currency: row.currency,
@@ -126,7 +128,7 @@ export class UsageLedger {
     };
   }
 
-  /** @param {{id:string,userId:string,projectId:string,runId?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,estimatedCost:number,dailyLimit?:number,weeklyLimit?:number,runLimit?:number,now?:Date,ttlMs?:number}} input */
+  /** @param {{id:string,userId:string,projectId:string,runId?:string|null,purpose?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,estimatedCost:number,dailyLimit?:number,weeklyLimit?:number,runLimit?:number,now?:Date,ttlMs?:number}} input */
   async reserveModel(input) {
     const now = input.now ?? new Date();
     const ttlMs = input.ttlMs ?? 30 * 60_000;
@@ -134,6 +136,7 @@ export class UsageLedger {
     const values = {
       id: productId(input.id), userId: productId(input.userId, "user"), projectId: productId(input.projectId, "project"),
       runId: input.runId == null ? null : productId(input.runId, "run"),
+      purpose: usagePurpose(input.purpose),
       model: text(input.model, "model"), priceVersion: text(input.priceVersion, "price version"), currency: text(input.currency, "currency", 12),
       requestFingerprint: text(input.requestFingerprint, "request fingerprint", 64), estimatedCost: money(input.estimatedCost, "estimated cost"),
       dailyLimit: money(input.dailyLimit ?? 0, "daily limit"), weeklyLimit: money(input.weeklyLimit ?? 0, "weekly limit"),
@@ -150,6 +153,7 @@ export class UsageLedger {
         const same = existing.rows[0].user_id === values.userId && existing.rows[0].project_id === values.projectId
           && existing.rows[0].model === values.model && existing.rows[0].request_fingerprint === values.requestFingerprint
           && existing.rows[0].run_id === values.runId
+          && existing.rows[0].purpose === values.purpose
           && existing.rows[0].price_version === values.priceVersion && existing.rows[0].currency === values.currency
           && Number(existing.rows[0].reserved_cost) === values.estimatedCost
           && existing.rows[0].status === "reserved"
@@ -181,10 +185,10 @@ export class UsageLedger {
         });
       }
       const inserted = await client.query(`INSERT INTO evimed_usage.model_requests
-        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,reservation_expires_at,created_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'reserved',$9,$10,$11) RETURNING *`,
+        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,reservation_expires_at,created_at,purpose)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'reserved',$9,$10,$11,$12) RETURNING *`,
       [values.id, values.userId, values.projectId, values.runId, values.model, values.priceVersion, values.currency,
-        values.requestFingerprint, values.estimatedCost, values.expiresAt, values.now]);
+        values.requestFingerprint, values.estimatedCost, values.expiresAt, values.now, values.purpose]);
       return record(inserted.rows[0]);
     });
   }
@@ -412,6 +416,41 @@ export class UsageLedger {
       });
     }
     return summaries;
+  }
+
+  /**
+   * What each purpose cost across every account since `since` — the operator's
+   * cost report (X1): requests made, and the settled tokens and money.
+   *
+   * Every purpose in the vocabulary gets a row, zero or not, so a purpose that
+   * disappears from the report is a caller that stopped calling, never a query
+   * that lost a group. `requests` counts every row, settled or not, because a
+   * released or uncertain call is still a call someone made; tokens and cost
+   * are the provider's settled counts only.
+   * @param {{ since: Date }} options
+   * @returns {Promise<Array<{ purpose: string, requests: number, cacheHitTokens: number, cacheMissTokens: number, outputTokens: number, costCny: number }>>}
+   */
+  async usageByPurpose({ since }) {
+    const at = instant(since, "report start");
+    await migrateUsageLedger(this.database);
+    const result = await this.database.query(`SELECT purpose, count(*)::integer AS requests,
+      coalesce(sum(cache_hit_tokens) FILTER (WHERE status='settled'),0) AS cache_hit_tokens,
+      coalesce(sum(cache_miss_tokens) FILTER (WHERE status='settled'),0) AS cache_miss_tokens,
+      coalesce(sum(output_tokens) FILTER (WHERE status='settled'),0) AS output_tokens,
+      coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0) AS cost
+      FROM evimed_usage.model_requests WHERE created_at >= $1::timestamptz GROUP BY purpose`, [at]);
+    const rows = new Map(result.rows.map((row) => [row.purpose, row]));
+    return USAGE_PURPOSES.map((purpose) => {
+      const row = rows.get(purpose);
+      return {
+        purpose,
+        requests: Number(row?.requests ?? 0),
+        cacheHitTokens: Number(row?.cache_hit_tokens ?? 0),
+        cacheMissTokens: Number(row?.cache_miss_tokens ?? 0),
+        outputTokens: Number(row?.output_tokens ?? 0),
+        costCny: Number(row?.cost ?? 0),
+      };
+    });
   }
 
   /** Refuse a new interactive entry point that is already at its configured limit. */

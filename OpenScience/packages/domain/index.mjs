@@ -565,3 +565,12 @@ export {
   gateIssueSeverity,
   summarizeGateNotices,
 } from './src/gateIssueText.mjs'
+
+// usagePurpose — 5 exports: what a metered model request was for (X1)
+export {
+  USAGE_PURPOSES,
+  USAGE_PURPOSE_LABELS_ZH,
+  isUsagePurpose,
+  usagePurpose,
+  usagePurposeOfRun,
+} from './src/usagePurpose.mjs'
