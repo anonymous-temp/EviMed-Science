@@ -305,5 +305,5 @@ test("a DOI is kept in its bare form only when it has a DOI's shape", () => {
 test("the revision label is required and bounded, so the index key is never empty", () => {
   assert.throws(() => new DocumentParserClient({ revision: "" }), /revision/);
   assert.throws(() => new DocumentParserClient({ revision: "has space" }), /revision/);
-  assert.throws(() => new DocumentParserClient({ baseUrl: "http://user:pass@parser.example" }), /URL/);
+  assert.throws(() => new DocumentParserClient({ baseUrl: "http://user:fake@parser.example" }), /URL/);
 });
