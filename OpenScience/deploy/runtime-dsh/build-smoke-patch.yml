@@ -139,7 +139,15 @@
 # holds ONE row: the browser's composer offers every row as an access mode,
 # switched by a `/permission <id>` command on the prompt path, so a second row
 # is a second sandbox a user can pick. With one row there is nothing to pick.
+#
+# Hosted, the row also mounts without the command registry, so `/permission`
+# is not listed in the `/` menu. The presets and the approval policy do not use
+# the registry, and the composer's chip sends `/permission` only to switch to
+# another row, of which there is none. This boot is what proves the row still
+# activates with a private `commands` nothing provides.
 - id: permission
+  isolate:
+    commands: true
   config:
     presets:
       evimed-hosted:
@@ -180,6 +188,10 @@
 - id: ui-sidebar-documentpreview
   disabled: true
 - id: cordis-client-runner
+  disabled: true
+- id: command-feedback
+  disabled: true
+- id: session-log-download
   disabled: true
 - id: ui-trajectory
   disabled: true
