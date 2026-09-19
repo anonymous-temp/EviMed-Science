@@ -25,7 +25,7 @@
 import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { decodePage, extractHtmlIsolated, HTML_EXTRACTOR, renderReason, SHELL_VISIBLE_CHARS } from "./webReadExtract.mjs";
-import { ConcurrencyGate, HostPacer } from "./webReadLimits.mjs";
+import { ConcurrencyGate, HostPacer, KeyedConcurrencyGate } from "./webReadLimits.mjs";
 import {
   assertPublicWebHost,
   fetchWebTransport,
@@ -194,6 +194,13 @@ export function createWebReader(config, {
   const pacer = new HostPacer({ intervalMs: Number(config.webReadHostIntervalMs ?? 1_000) });
   const gate = new ConcurrencyGate({ limit: Number(config.webReadConcurrency ?? 8), busyCode: "web_read_busy" });
   const parseGate = new ConcurrencyGate({ limit: HTML_PARSES_AT_ONCE, busyCode: "web_read_busy" });
+  // A whole read — fetch, render, parse — holds one of its runtime's slots.
+  const runtimeGates = new KeyedConcurrencyGate({
+    limit: Number(config.webReadRuntimeConcurrency ?? 3),
+    maxQueue: 16,
+    busyCode: "web_read_runtime_busy",
+    busyMessage: "This project already has as many web reads under way as it may queue; let them finish before reading more.",
+  });
   /** Parses refused: out of time, or nested past what the thread can walk. */
   let parsesRefused = 0;
   /** How each read ended, for the operator's metrics. */
@@ -424,13 +431,16 @@ export function createWebReader(config, {
 
   /**
    * @param {string | URL} rawUrl
-   * @param {{ signal?: AbortSignal }} [options]
+   * @param {{ signal?: AbortSignal, runtime?: { userId: string, projectId: string } }} [options]
+   *   `runtime`: the project runtime asking, whose reads share one limit
    * @returns {Promise<WebReadResult>}
    */
-  async function read(rawUrl, { signal } = {}) {
+  async function read(rawUrl, { signal, runtime } = {}) {
     try {
       const requested = validatedWebUrl(rawUrl);
-      return await interpret(requested, await fetchPage(requested, signal, WEB_READ_MAX_REDIRECTS), signal);
+      const whole = async () => interpret(requested, await fetchPage(requested, signal, WEB_READ_MAX_REDIRECTS), signal);
+      if (!runtime) return await whole();
+      return await runtimeGates.run(`${runtime.userId}\u0000${runtime.projectId}`, whole, { signal });
     } catch (error) {
       if (error instanceof WebReadError && error.status < 500) outcomes.refused += 1;
       else outcomes.failed += 1;
@@ -448,6 +458,7 @@ export function createWebReader(config, {
         pacing: { ...pacer.counts },
         concurrency: { ...gate.counts, active: gate.active },
         parsing: { ...parseGate.counts, active: parseGate.active, refusedPages: parsesRefused },
+        runtimeConcurrency: { ...runtimeGates.counts, runtimes: runtimeGates.gates.size },
         render: renderer?.stats?.() ?? null,
       };
     },
@@ -499,6 +510,8 @@ export function webReadMetricFamilies(stats) {
         { value: stats.parsing.queued, labels: { limit: "parse_concurrency", action: "queued" } },
         { value: stats.parsing.refused, labels: { limit: "parse_concurrency", action: "refused" } },
         { value: stats.parsing.refusedPages, labels: { limit: "parse", action: "refused" } },
+        { value: stats.runtimeConcurrency.queued, labels: { limit: "runtime_concurrency", action: "queued" } },
+        { value: stats.runtimeConcurrency.refused, labels: { limit: "runtime_concurrency", action: "refused" } },
       ],
     },
     {

@@ -352,7 +352,8 @@ const post = (base, body, token = "runtime-token") => fetch(`${base}/internal/so
 
 test("the gateway serves a web read to the runtime, and the switch refuses it by name", async (t) => {
   const reads = [];
-  const webReader = { async read(url) { reads.push(url); return { receipt: { url, finalUrl: url }, text: "page text", links: [] }; } };
+  const asked = [];
+  const webReader = { async read(url, options) { reads.push(url); asked.push(options.runtime); return { receipt: { url, finalUrl: url }, text: "page text", links: [] }; } };
   const server = createServer(createPublicSourceGatewayHandler({ webReadEnabled: true }, runtimeManager, { webReader }));
   const base = await listen(server);
   t.after(() => server.close());
@@ -364,6 +365,7 @@ test("the gateway serves a web read to the runtime, and the switch refuses it by
   assert.equal((await (await post(base, { webRead: { url: "https://x.example.org", accept: ["text/html"] } })).json()).error.code, "public_source_gateway_field_invalid");
   assert.equal((await (await post(base, { webRead: { url: "https://x.example.org" }, url: "https://x.example.org" })).json()).error.code, "public_source_gateway_field_invalid");
   assert.equal(reads.length, 1);
+  assert.deepEqual(asked, [{ userId: "alice", projectId: "paper-1" }], "the read is counted against the runtime that asked");
 
   const off = createServer(createPublicSourceGatewayHandler({ webReadEnabled: false }, runtimeManager, { webReader }));
   const offBase = await listen(off);
@@ -449,6 +451,83 @@ test("an open-access PDF can come back parsed, with the PDF beside the text", as
   const raw = await post(bareBase, { openAccessPdfDoi: "10.1234/oa.1" });
   assert.equal(raw.headers.get("content-type"), "application/pdf");
   assert.equal((await (await post(bareBase, { openAccessPdfDoi: "10.1234/oa.1", parse: "yes" })).json()).error.code, "public_source_gateway_field_invalid");
+});
+
+/** Resolves once `predicate` holds, polling every few milliseconds, or fails after `ms`. */
+async function until(predicate, ms = 5_000) {
+  const deadline = Date.now() + ms;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error("the condition never held");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+test("one project's runtime holds at most its share of reads, and another project's is not queued behind it", async () => {
+  // The 2026-09-20 release's security review: eight shared slots and reads of
+  // up to 150 s, so one run fanning out held every slot.
+  const releases = [];
+  const inFlight = { alice: 0, other: 0 };
+  let alicePeak = 0;
+  const transport = async ({ url }) => {
+    if (url.pathname === "/robots.txt") return noRobots();
+    const owner = url.hostname.startsWith("alice-") ? "alice" : "other";
+    inFlight[owner] += 1;
+    alicePeak = Math.max(alicePeak, inFlight.alice);
+    await new Promise((resolve) => releases.push(resolve));
+    inFlight[owner] -= 1;
+    return html(article("Guidance text. "));
+  };
+  const reader = createWebReader({ ...config, webReadConcurrency: 8, webReadRuntimeConcurrency: 3 }, { transport });
+  const alice = Array.from({ length: 5 }, (_, index) => reader.read(`https://alice-${index}.example.org/page`, { runtime: { userId: "alice", projectId: "paper-1" } }));
+  await until(() => inFlight.alice === 3);
+  const other = reader.read("https://other.example.org/page", { runtime: { userId: "alice", projectId: "paper-2" } });
+  await until(() => inFlight.other === 1);
+  assert.equal(inFlight.alice, 3, "the first project's other two reads wait their turn");
+  const families = Object.fromEntries(webReadMetricFamilies(reader.stats()).map((family) => [family.name, family]));
+  const queued = families.open_science_web_read_limits_total.series.find((item) => item.labels.limit === "runtime_concurrency" && item.labels.action === "queued");
+  assert.equal(queued?.value, 2);
+  let settled = false;
+  const all = Promise.all([...alice, other]).finally(() => { settled = true; });
+  await until(() => {
+    while (releases.length) releases.shift()();
+    return settled;
+  }, 30_000);
+  assert.equal((await all).length, 6);
+  assert.equal(alicePeak, 3);
+  assert.equal(reader.stats().runtimeConcurrency.runtimes, 0, "no runtime's gate outlives its reads");
+});
+
+test("a caller that hangs up ends its read, and its runtime's slot goes to the next read", async (t) => {
+  let slowSignal = null;
+  const transport = async ({ url, signal }) => {
+    if (url.pathname === "/robots.txt") return noRobots();
+    if (url.hostname === "slow.example.org") {
+      slowSignal = signal;
+      await new Promise((resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+    }
+    return html(article("Guidance text. "));
+  };
+  const gatewayConfig = { ...config, webReadEnabled: true, webReadRuntimeConcurrency: 1, webReadTimeoutMs: 20_000 };
+  const server = createServer(createPublicSourceGatewayHandler(gatewayConfig, runtimeManager, { webReader: createWebReader(gatewayConfig, { transport }) }));
+  const base = await listen(server);
+  t.after(() => server.close());
+  const request = (url, signal) => fetch(`${base}/internal/sources/v1/fetch`, {
+    method: "POST",
+    headers: { authorization: "Bearer runtime-token", "content-type": "application/json" },
+    body: JSON.stringify({ webRead: { url } }),
+    signal,
+  });
+
+  const caller = new AbortController();
+  const first = request("https://slow.example.org/page", caller.signal);
+  await until(() => slowSignal !== null);
+  caller.abort();
+  await assert.rejects(first);
+  await until(() => slowSignal.aborted, 2_000);
+  const started = Date.now();
+  const second = await request("https://fast.example.org/page");
+  assert.equal(second.status, 200);
+  assert.ok(Date.now() - started < 5_000, "the next read did not wait out the abandoned one's budget");
 });
 
 test("what reads came to and every limit that bit them reach the operator's metrics", async () => {
