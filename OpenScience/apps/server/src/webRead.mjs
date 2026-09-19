@@ -46,8 +46,9 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
  * HTML beyond this is cut before parsing. A parsed DOM costs ten to twenty
  * times its source in memory, and eight concurrent 16 MiB pages would ask a
  * shared 15.5 GB host for gigabytes; no document page is anywhere near this.
+ * The render tier holds a browser's HTML to it too (agentbay/browser.mjs).
  */
-const HTML_MAX_BYTES = 5 * 1024 * 1024;
+export const HTML_MAX_BYTES = 5 * 1024 * 1024;
 
 /**
  * One page's parse, in its own thread (webReadExtract.extractHtmlIsolated).
@@ -516,11 +517,12 @@ export function webReadMetricFamilies(stats) {
     },
     {
       name: "open_science_web_render_events_total",
-      help: "Cloud-browser renders and warm-session lifecycle events.",
+      help: "Cloud-browser renders, requests refused inside a rendered page, and warm-session lifecycle events.",
       type: "counter",
       series: [
         { value: Number(render.renders ?? 0), labels: { event: "render" } },
         { value: Number(render.failures ?? 0), labels: { event: "render_failed" } },
+        { value: Number(render.requestsRefused ?? 0), labels: { event: "request_refused" } },
         { value: Number(render.sessionsCreated ?? 0), labels: { event: "session_created" } },
         { value: Number(render.sessionsReleased ?? 0), labels: { event: "session_released" } },
         { value: Number(render.sessionFailures ?? 0), labels: { event: "session_failed" } },
