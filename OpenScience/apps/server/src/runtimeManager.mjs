@@ -3077,6 +3077,9 @@ export class RuntimeManager {
     // about approved methods and would record nothing for a candidate on trial
     // -- the exact gap that makes a candidate unpromotable forever.
     this.lastMountedLearnedMethods = new Map();
+    // And which capsule methods, by project key: what the conversation panel
+    // lists as mounted, instead of selecting every capsule again per read.
+    this.lastMountedCapsuleMethods = new Map();
     this.starts = new Map();
     this.runtimeActivity = new Map();
     this.runtimeQuotaMonitors = new Map();
@@ -3151,7 +3154,8 @@ export class RuntimeManager {
    *
    * @param {any} project
    * @returns {Promise<{ directory: string, count: number, bytes: number,
-   *   learned: {id: string, name: string, digest: string, trial?: boolean}[] }>}
+   *   learned: {id: string, name: string, digest: string, trial?: boolean}[],
+   *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
    */
   async syncCapsuleMethods(project) {
     let trialMethodIds = [];
@@ -3582,6 +3586,7 @@ export class RuntimeManager {
     // can say which revision of which method was in the room. A digest recorded
     // at mount time is the only record that survives the container.
     this.lastMountedLearnedMethods.set(this.key(project), mountedMethods.learned ?? []);
+    this.lastMountedCapsuleMethods.set(this.key(project), mountedMethods.capsule ?? []);
     // The provider's own preparation: a container's plan, directories and
     // orphan cleanup, or a cloud session with the project's files carried in.
     const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted });
