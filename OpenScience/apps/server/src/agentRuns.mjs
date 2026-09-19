@@ -3198,7 +3198,7 @@ const UNVERIFIED_DELIVERY_NOTICE = "这次运行没有通过交付前的质量�
   + "上面的退回理由说明了差在哪里；按它修好后重新提交，同一份成果就会变成已核验。";
 
 
-async function readRunStateProjection(project, workspaceRoot, run = null) {
+export async function readRunStateProjection(project, workspaceRoot, run = null) {
   let text;
   try {
     const relative = run && !run.nativeTurn ? runStateFileFor(run.id) : workspaceLayout.runStateFile;
