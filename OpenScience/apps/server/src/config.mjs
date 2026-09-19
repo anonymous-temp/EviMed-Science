@@ -1516,5 +1516,12 @@ export function loadConfig(overrides = {}) {
     // makes ~13 model calls a minute and bursts with up to 30 children; 600
     // leaves room for both and stops a runaway loop from starving the others.
     runtimeGatewayRateLimitPerMinute: Number(overrides.runtimeGatewayRateLimitPerMinute ?? process.env.OPEN_SCIENCE_RUNTIME_GATEWAY_RATE_LIMIT_PER_MINUTE ?? 600),
+    // --- rt: community client bundles in the runtime image (plan §3.9) ---
+    // Selection annotation (`@changfenhuang/dsh-annotation`) and fenced
+    // Mermaid rendering (`dsh-mermaid`) in the kernel's own conversation view.
+    // Each is on by default and switched off deployment-wide by its own key —
+    // the answer when an upgrade breaks one, rather than holding the upgrade.
+    runtimeAnnotationEnabled: overrides.runtimeAnnotationEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ANNOTATION_ENABLED", true),
+    runtimeMermaidEnabled: overrides.runtimeMermaidEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED", true),
   };
 }

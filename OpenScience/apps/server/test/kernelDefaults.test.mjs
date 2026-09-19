@@ -78,8 +78,11 @@ test("every setting the runtime depends on still holds in the composition the im
   // sidebar with its files and document-preview tabs) less the
   // tool-str-replace-editor row upstream dropped. 158 on 2026-09-15: the
   // `evimed-web` row, which registers the platform's provider for the kernel's
-  // web registry — ours, not upstream's.
-  assert.equal(report.counts.baselineRows, 158, "the recorded composition includes the native client, citation bundle and ECO03 plugin probe");
+  // web registry — ours, not upstream's. 160 on 2026-09-20: `dsh-annotation`
+  // and `ui-mermaid`, one row each for the two community client bundles the
+  // image installs (rt, plan §3.9).
+  assert.equal(report.counts.baselineRows, 160, "the recorded composition includes the native client, citation bundle, ECO03 plugin probe and the two community client bundles");
+  assert.equal(parseCordisDocument(await readFile(source("baseline"), "utf8")).rows.filter((row) => ["dsh-annotation", "ui-mermaid"].includes(row.id)).length, 2);
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.rows.filter(row => row.id === "evimed-plugin-probe").length, 1);
   assert.equal(baseline.byId.get("evimed-plugin-probe").name, "@evimed/dsh-socket/plugins/plugin-probe");

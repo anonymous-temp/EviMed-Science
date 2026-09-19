@@ -607,6 +607,10 @@ services:
       OPEN_SCIENCE_AGENTBAY_CONTEXT_PREFIX:
       OPEN_SCIENCE_RUNTIME_GATEWAY_PUBLIC_URL:
       OPEN_SCIENCE_RUNTIME_GATEWAY_RATE_LIMIT_PER_MINUTE:
+      # rt: the community client bundles in the runtime image, each with its
+      # own off switch. Value-less: unset keeps config.mjs's default, on.
+      OPEN_SCIENCE_RUNTIME_ANNOTATION_ENABLED:
+      OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED:
     volumes:
       - open-science-data:/data
       - open-science-backups:/backups:ro

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { seedProfileKernelPins, verifiedKernelPins } from "../../../deploy/runtime-dsh/profile-kernel-pins.mjs";
+import { peerPins, seedProfileKernelPins, verifiedKernelPins } from "../../../deploy/runtime-dsh/profile-kernel-pins.mjs";
 
 const dsh = JSON.parse(readFileSync(new URL("../../../deps-version.json", import.meta.url), "utf8")).dsh;
 const pin = dsh.version;
@@ -63,4 +63,19 @@ test("a missing closure or mismatched cordis cannot produce a successful pin sca
   assert.throws(() => verifiedKernelPins(f.cli, pin, cordis), /package is missing/);
   for (let i = 0; i < 100; i += 1) rmSync(path.join(f.scope, `dsh-fixture-${i}`), { recursive: true });
   assert.throws(() => verifiedKernelPins(f.cli, pin, cordis), /inventory is incomplete/);
+});
+
+test("a community bundle's own peer is pinned by override, never activated, and never a kernel package", (t) => {
+  const f = fixture(t);
+  const peers = peerPins(["cordis@4.0.0-rc.10"]);
+  assert.deepEqual(peers, { cordis: "4.0.0-rc.10" });
+  const pins = seedProfileKernelPins(f.cli, f.profileDir, policyUrl, pin, cordis, peers);
+  const manifest = JSON.parse(readFileSync(path.join(f.profileDir, "package.json"), "utf8"));
+  assert.equal(manifest.devDependencies.cordis, undefined, "a peer the profile itself does not use is not a devDependency");
+  assert.deepEqual(manifest.devDependencies, pins);
+  const yaml = readFileSync(path.join(f.profileDir, "pnpm-workspace.yaml"), "utf8");
+  assert.match(yaml, /^ {2}"cordis": "4\.0\.0-rc\.10"$/m);
+  assert.throws(() => peerPins(["cordis@^4.0.1"]), /exact-version/);
+  assert.throws(() => peerPins(["cordis"]), /exact-version/);
+  assert.throws(() => peerPins(["@deepseek-ai/cordis@4.0.2"]), /kernel closure/);
 });

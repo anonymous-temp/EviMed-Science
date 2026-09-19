@@ -99,16 +99,18 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.5-rc.2",
-  sha256: "5b3125e1ba913835124cd3e46295ffbf414e27eef0125fe7481253e03b88e8d0",
-  recordedBy: "dsh@0.1.5-rc.2 --profile evimed-runtime --dump-config inside the linux/amd64 runtime image, from deploy/runtime-dsh/Dockerfile.delta on base open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26-39111b6b4821",
-  // Re-captured on 2026-09-15, this time from the release image itself rather
-  // than from a hand-initialized profile: the `evimed-web` row and the two
-  // provider names on the `web` row moved the composition on purpose, and the
-  // delta build's own `diff -u` is what produced these bytes. The file was
-  // then read back out of the built image and compared byte for byte against
-  // the committed copy — the only evidence that makes this hash mean what it
-  // claims, since a hand-edited baseline that happens to match a hash is
-  // exactly the laundering path this attestation exists to close.
+  sha256: "50ccdc6eef6368443f87eae058df451cd92a7e30c7a612db12ba05ba0f7dd835",
+  recordedBy: "dsh@0.1.5-rc.2 --profile evimed-runtime --dump-config over a profile seeded on a host with no container runtime (npm --before=2026-09-10T15:57:10.790Z, the image's own pin and seed scripts, the same six `dsh plugin add` arguments deploy/runtime-dsh/install-runtime.sh uses)",
+  // Re-recorded on 2026-09-20 for the two community client bundles the
+  // AgentBay rebuild installs (`@changfenhuang/dsh-annotation@1.4.10` and
+  // `dsh-mermaid@0.4.0`): each adds one row, `dsh-annotation` and
+  // `ui-mermaid`, and nothing else moved. Not from the release image — this
+  // machine has no Docker — so the seeding was calibrated first: run with the
+  // previous four arguments it reproduced the 2026-09-15 image-recorded
+  // baseline (sha256 5b3125e1…e8d0) byte for byte, and a relocated copy of the
+  // new seed composes the same dump. The release image's own `diff -u` against
+  // this file is what would catch a platform-dependent row, and the next image
+  // build is where this hash is confirmed or replaced from the image.
 };
 
 /**

@@ -3,6 +3,9 @@ import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { expandInstallPhases } from "./runtime-install-phases.mjs";
+
+export { expandInstallPhases };
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const jsonOutput = process.argv.includes("--json");
@@ -30,6 +33,11 @@ function fail(code, message, details) {
 
 async function read(rel) {
   return fs.readFile(path.join(repoRoot, rel), "utf8");
+}
+
+/** The Docker runtime image's build definition, phases expanded in place. */
+async function readRuntimeBuild() {
+  return expandInstallPhases(await read("deploy/runtime-dsh/Dockerfile"), await read("deploy/runtime-dsh/install-runtime.sh"));
 }
 
 /**
@@ -161,7 +169,7 @@ async function checkRuntimePins() {
   // kernel's tree was kept out of here before it was deleted, for the reason
   // that outlives it: a source audit that pattern-matches a Dockerfile nothing
   // ships reports coverage it does not have, which is worse than no check.
-  const dockerfile = await read("deploy/runtime-dsh/Dockerfile");
+  const dockerfile = await readRuntimeBuild();
   const workflow = await read("../.github/workflows/web.yml");
   const compose = await read("deploy/web/docker-compose.yml");
 
@@ -201,7 +209,7 @@ async function checkRuntimePins() {
   // A bundle added without a version resolves whatever `latest` points at, and
   // most DSH sub-packages still tag 0.0.1-rc.1 as latest — so an unpinned add
   // installs the first release ever cut, under a Dockerfile that claims a pin.
-  const addLine = dockerfile.match(/dsh plugin --profile \S+ add ([^;\\]+)/)?.[1] ?? "";
+  const addLine = dockerfile.match(/dsh plugin --profile \S+ add ([^;\\\n]+)/)?.[1] ?? "";
   const unpinnedBundles = addLine
     .split(/\s+/)
     .filter((spec) => spec.startsWith('"@deepseek-ai/') || spec.startsWith("@deepseek-ai/"))
@@ -457,7 +465,7 @@ export function controllerLaunchPlanIsScoped(source) {
 }
 
 async function checkRuntimeContainerTopology() {
-  const dockerfile = await read("deploy/runtime-dsh/Dockerfile");
+  const dockerfile = await readRuntimeBuild();
   const compose = await read("deploy/web/docker-compose.yml");
   const workflow = await read("../.github/workflows/web.yml");
   const envExample = await read("deploy/web/.env.example");
@@ -642,7 +650,7 @@ async function checkScientificCapabilityDelivery() {
   const runtimeManager = await read("apps/server/src/runtimeManager.mjs");
   // The one runtime image must carry the scientific stack the curated skills
   // import, because it is the image every run executes in.
-  const runtimeDockerfile = await read("deploy/runtime-dsh/Dockerfile");
+  const runtimeDockerfile = await readRuntimeBuild();
   const inRuntimeImage = (probe) =>
     typeof probe === "string" ? runtimeDockerfile.includes(probe) : probe.test(runtimeDockerfile);
   const skillTests = await read("apps/server/test/skillPacks.test.mjs");
@@ -1296,7 +1304,7 @@ export function dshBuildSmokeIsInvoked(dockerfile) {
 }
 
 async function checkDshLoaderResolution() {
-  const dockerfile = await read("deploy/runtime-dsh/Dockerfile");
+  const dockerfile = await readRuntimeBuild();
   const launcher = await read("deploy/runtime-dsh/open-science-dsh-serve.sh");
   const smoke = await read("deploy/runtime-dsh/build-smoke.sh");
 
