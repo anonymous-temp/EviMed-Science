@@ -3728,6 +3728,8 @@ export function createWebApiApp(overrides = {}) {
           await assertProjectCapacity(ctx.project, full, buffer.length, config);
           await writeFileAtomicNoFollow(base, full, buffer, { mode: 0o600 });
         });
+        // rt: a running remote runtime sees the upload now (plan §3.1 #4).
+        await runtimeManager.mirrorWorkspaceUpload(ctx.project, full, buffer);
         await audit(ctx, "file.upload", "completed", {
           target: root === "base" ? `${root}:${rel}` : rel,
           bytes: buffer.length,

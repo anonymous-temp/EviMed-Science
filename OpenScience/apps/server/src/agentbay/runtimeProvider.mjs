@@ -770,6 +770,45 @@ export class AgentBayRuntimeProvider {
   }
 
   /**
+   * A file the researcher uploaded while the session runs, carried in so the
+   * kernel sees it now rather than at the next start (a data supplement
+   * continues the task in place). The bytes travel as base64 text through the
+   * file API into a root-only directory and are decoded in the session; the
+   * file then belongs to the runtime user, except inside the read-only
+   * knowledge-base view, which stays root's. A failure here leaves the next
+   * start's push to carry the file.
+   * @param {Record<string, any>} project @param {string} relative workspace-relative, forward slashes
+   * @param {Buffer} content
+   */
+  async mirrorUpload(project, relative, content) {
+    const live = this.live.get(this.manager.key(project));
+    if (!live) return false;
+    if (content.length > (Number(this.config.agentbaySyncMaxFileBytes) || 256 * 1024 * 1024)) return false;
+    const parts = String(relative).split("/");
+    if (!relative || parts.some((part) => !part || part === "." || part === "..")) {
+      throw new HttpError(400, "agentbay_sync_path_invalid", "A synced path must be a plain relative path.");
+    }
+    const quote = (text) => `'${String(text).replace(/'/g, "'\\''")}'`;
+    const target = `${SESSION_PATHS.workspace}/${relative}`;
+    const staged = `/run/evimed/uploads/${randomBytes(12).toString("hex")}.b64`;
+    const view = parts[0] === "knowledge-base" || parts[0] === "library";
+    const makeParent = view
+      ? `mkdir -p ${quote(path.posix.dirname(target))}`
+      : `runuser -u evimed -- mkdir -p ${quote(path.posix.dirname(target))}`;
+    const own = view ? "chmod 0444" : "chown evimed:evimed";
+    await this.command(live.session, "install -d -o root -g root -m 0700 /run/evimed/uploads");
+    await this.writeSessionFile(live.session, staged, content.toString("base64"));
+    const done = await this.command(live.session, [
+      makeParent,
+      `base64 -d ${quote(staged)} > ${quote(`${target}.part`)}`,
+      `${own} ${quote(`${target}.part`)}`,
+      `mv -f ${quote(`${target}.part`)} ${quote(target)}`,
+    ].join(" && ") + `; rc=$?; rm -f ${quote(staged)}; exit $rc`);
+    if (!done.ok) throw new HttpError(502, "agentbay_upload_mirror_failed", "The session did not take the uploaded file.");
+    return true;
+  }
+
+  /**
    * The workspace and the kernel's own state brought home in full, the
    * release-time pass (plan §3.1 #4). Returns, per uploading view, what the
    * session held at this pass — which is what its release uploads.
