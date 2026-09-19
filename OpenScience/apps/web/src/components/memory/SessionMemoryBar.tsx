@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { EyeOff, Layers } from "lucide-react";
+import { EyeOff, FlaskConical, Layers } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { fetchMemoryChanges, fetchSessionMemory, setSessionIncognito, type SessionMemoryState } from "@/lib/memoryClient";
@@ -84,15 +84,19 @@ export function SessionMemoryBar({ sessionId }: { sessionId: string }) {
   };
 
   const incognito = state?.incognito === true;
+  // A conversation trying someone else's capsule (「试用一次」) writes nothing
+  // into this researcher's memory; said as plainly as incognito is.
+  const trial = state?.trialCapsuleId ? `试用胶囊「${state.trialCapsule?.title ?? "别人分享的胶囊"}」：这段对话不会写入你的记忆` : "";
+  const marked = incognito || Boolean(trial);
   return (
     <div
       data-testid="session-memory-bar"
-      className={cn("flex h-10 shrink-0 items-center gap-2 border-b px-3", incognito ? "border-strong bg-surface-2" : "border-border bg-bg")}
+      className={cn("flex h-10 shrink-0 items-center gap-2 border-b px-3", marked ? "border-strong bg-surface-2" : "border-border bg-bg")}
     >
-      {incognito && (
+      {marked && (
         <p role="status" className="flex min-w-0 items-center gap-1.5 text-ui text-text">
-          <EyeOff size={14} aria-hidden="true" className="shrink-0" />
-          <span className="truncate">无痕对话：不会记住这段对话，也不调取记忆</span>
+          {incognito ? <EyeOff size={14} aria-hidden="true" className="shrink-0" /> : <FlaskConical size={14} aria-hidden="true" className="shrink-0" />}
+          <span className="truncate">{[incognito ? "无痕对话：不会记住这段对话，也不调取记忆" : "", trial].filter(Boolean).join(" · ")}</span>
         </p>
       )}
       <div className="ml-auto flex items-center gap-2">

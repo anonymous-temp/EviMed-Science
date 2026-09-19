@@ -68,6 +68,12 @@ describe("the conversation's memory bar", () => {
     expect(screen.getByRole("status")).toHaveTextContent("无痕对话：不会记住这段对话，也不调取记忆");
   });
 
+  it("says so plainly while the conversation is trying someone else's capsule", async () => {
+    client.fetchSessionMemory.mockResolvedValue({ incognito: false, excluded: [], trialCapsuleId: "pack-1", trialCapsule: { id: "pack-1", title: "李主任的工作方式" } });
+    render(<SessionMemoryBar sessionId="ses_1" />);
+    expect(await screen.findByRole("status")).toHaveTextContent("试用胶囊「李主任的工作方式」：这段对话不会写入你的记忆");
+  });
+
   it("is absent, not broken, when the conversation's memory cannot be read", async () => {
     client.fetchSessionMemory.mockRejectedValue(new Error("memory_disabled"));
     render(<SessionMemoryBar sessionId="ses_1" />);

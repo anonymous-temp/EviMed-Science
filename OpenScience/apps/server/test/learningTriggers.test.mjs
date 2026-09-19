@@ -128,6 +128,9 @@ test("the queue is fed with one job per lesson, and nothing when the researcher 
   const incognito = async () => ({ incognito: true });
   assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, sessionState: incognito }).afterRun(project, subject),
     { queued: [], skipped: "incognito" });
+  const trial = async () => ({ incognito: false, trialCapsuleId: "pack-1" });
+  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, sessionState: trial }).afterRun(project, subject),
+    { queued: [], skipped: "trial" }, "a conversation trying someone else's capsule teaches the loop nothing");
   assert.equal(enqueued.length, 0);
 
   // The internal-capability answer can arrive asynchronously, from the registry.

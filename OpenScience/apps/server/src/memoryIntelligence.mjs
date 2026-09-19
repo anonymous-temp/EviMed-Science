@@ -645,9 +645,9 @@ function skippedResult(source, excluded, runSummary = null) {
  * here, or it will do the same. `unconfigured` is a deployment with no model to
  * extract with — a setting, and one that would otherwise put the notice on
  * every run it makes. `incognito` is the researcher's own choice for one
- * conversation.
+ * conversation, and `trial` a conversation trying someone else's capsule.
  */
-export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "paused", "unconfigured", "incognito"]));
+export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "paused", "unconfigured", "incognito", "trial"]));
 
 export class MemoryIntelligence {
   /** @param {any} config @param {any} memoryStore
@@ -720,7 +720,7 @@ export class MemoryIntelligence {
     // written from it, not even the run summary the timeline would show. Read
     // per run rather than cached: "pause" has to hold from the next run on.
     const pause = await memoryPausedFor(this.memoryStore, project.userId, project.id, run.sessionId ?? null);
-    if (pause.learning) return skippedResult(pause.incognito ? "incognito" : "paused", excluded);
+    if (pause.learning) return skippedResult(pause.incognito ? "incognito" : pause.trial ? "trial" : "paused", excluded);
     const runSummary = await this.#recordRunSummary(project, run, sources);
     if (sources.length === 0) return skippedResult("none", excluded, runSummary);
     // No model, no extraction. There used to be a fallback here: a keyword wall

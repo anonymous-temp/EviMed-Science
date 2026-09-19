@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { capsuleEntryLabel } from "@/lib/capsuleText";
+import { CAPSULE_SCAN_MODEL_STATUS, CAPSULE_SCAN_REASONS, capsuleEntryLabel } from "@/lib/capsuleText";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { labelFor } from "@/lib/statusLabel";
 import {
@@ -17,7 +17,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
   const [profile, setProfile] = useState(false);
   const [knowledge, setKnowledge] = useState(false);
   const [archive, setArchive] = useState("");
-  const [importTitle, setImportTitle] = useState("导入的研究胶囊");
+  const [importTitle, setImportTitle] = useState("收到的研究胶囊");
   const [preview, setPreview] = useState<CapsuleTransferPreview | null>(null);
   const [history, setHistory] = useState<CapsuleExportSnapshot[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
@@ -106,13 +106,19 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
           <p className="text-ui text-text">{preview.issuerTrust === "verified" ? "来源身份已由本服务验证" : "作者身份未验证（外部自签名）"}</p>
           <p className="text-ui text-muted">在线状态：{preview.hostedStatus === "revoked" ? "已撤销，无法导入" : preview.hostedStatus === "active" ? "有效" : "未知，无法核验外部撤销状态"} · {preview.entries.length} 条内容</p>
           {preview.newerSnapshotId && <p className="text-ui text-warn">发布者已有更新快照，可向发布者索取新版本。</p>}
-          {preview.entries.map(entry => <details key={entry.id} className="text-ui"><summary>{capsuleEntryLabel(entry.factKind)} · 来源版本 {entry.version}</summary><p className="mt-2 whitespace-pre-wrap text-text">{entry.content}</p></details>)}
-          <Input label="导入后的胶囊名称" value={importTitle} disabled={busy} maxLength={150} onChange={event => setImportTitle(event.target.value)} />
-          <p className="text-caption text-muted">将新建胶囊；条目全部待确认，不自动启用，也不会执行包内方法。</p>
+          {/* Whole-pack trust (plan §3.3 #4): the automatic scan, and what it
+              would drop, are part of what is previewed. */}
+          {preview.scan && <p className="text-ui text-text">自动检查：{CAPSULE_SCAN_MODEL_STATUS[preview.scan.model] ?? "已完成"}{preview.scan.dropped.length ? `，会剔除 ${preview.scan.dropped.length} 条` : "，没有需要剔除的内容"}。</p>}
+          {preview.entries.map(entry => {
+            const dropped = preview.scan?.dropped.find(item => item.id === entry.id);
+            return <details key={entry.id} className="text-ui"><summary>{capsuleEntryLabel(entry.factKind)} · 来源版本 {entry.version}{dropped ? ` · 会被剔除：${CAPSULE_SCAN_REASONS[dropped.code] ?? "没有通过自动检查"}` : ""}</summary><p className="mt-2 whitespace-pre-wrap text-text">{entry.content}</p>{dropped?.source === "model" && dropped.reason && <p className="mt-1 text-caption text-muted">{dropped.reason}</p>}</details>;
+          })}
+          <Input label="收下后的胶囊名称" value={importTitle} disabled={busy} maxLength={150} onChange={event => setImportTitle(event.target.value)} />
+          <p className="text-caption text-muted">整包收下：检查通过的内容在你启用后才生效，被剔除的不会写入；收下后可以先试用一次。</p>
           <Button disabled={busy || !preview.canImport || !importTitle.trim()} onClick={() => void perform(async () => {
             const result = await importCapsule({ archive, password: importPassword, expectedDigest: preview.archiveSha256, confirmed: true, title: importTitle.trim() });
-            if (mounted.current) { setPreview(null); setArchive(""); setImportPassword(""); setNotice("胶囊已导入，请逐条确认后使用。"); onImported(result); }
-          })}>确认导入为待确认条目</Button>
+            if (mounted.current) { setPreview(null); setArchive(""); setImportPassword(""); setNotice(`已收下「${result.payload.title}」。在「收到的胶囊」里试用或启用。`); onImported(result); }
+          })}>收下这个胶囊</Button>
         </div>}
       </section>
       {capsuleId && <section className="space-y-2 border-t border-border pt-4" aria-label="导出历史"><h3 className="text-ui font-medium text-text">导出历史</h3>

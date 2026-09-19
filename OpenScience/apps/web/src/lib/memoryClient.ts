@@ -7,7 +7,7 @@
  * `{ data }` envelope, the CSRF header and the error dictionary.
  */
 import type { WebMemoryProvenance, WebStructuredMemory } from "./apiClient";
-import { productRequest, type CapsuleEntry, type CapsuleRecord } from "./productClient";
+import { productRequest, type CapsuleEntry, type CapsuleRecord, type CapsuleScanResult } from "./productClient";
 
 /** One memory that changed by itself — a line of the write prompt 「刚记住了…」. */
 export interface MemoryChange {
@@ -71,6 +71,9 @@ export interface SessionExclusion {
 export interface SessionMemoryState {
   incognito: boolean;
   excluded: SessionExclusion[];
+  /** The shared capsule this conversation is trying (「试用一次」), if any. */
+  trialCapsuleId?: string | null;
+  trialCapsule?: { id: string; title: string | null };
   updatedAt?: string | null;
 }
 
@@ -248,4 +251,43 @@ export function fetchMemoryTimeline({ before = null, limit = 50 }: { before?: st
     // The server's default zone answers instead.
   }
   return productRequest<MemoryTimelinePage>(`/memory/timeline?${query.toString()}`);
+}
+
+/** A pack someone shared, as the received shelf shows it. */
+export interface ReceivedCapsule {
+  id: string;
+  revision: number;
+  title: string;
+  description: string;
+  issuerTrust: "verified" | "unverified" | string;
+  importedAt: string | null;
+  /** In force account-wide or for this project. */
+  enabled: boolean;
+  /** Approved entries by kind. */
+  counts: Record<string, number>;
+  /** The first few methods, in their own words. */
+  methods: string[];
+  /** A pack imported before whole-pack trust is scanned the first time it is enabled or tried. */
+  scanned: boolean;
+  waiting: number;
+  scan: Pick<CapsuleScanResult, "model" | "checkedAt" | "dropped"> | null;
+}
+
+export function fetchReceivedCapsules() {
+  return productRequest<ReceivedCapsule[]>("/capsules/received");
+}
+
+/** One click in: account-wide, as a reference. */
+export function enableReceivedCapsule(id: string) {
+  return productRequest<ReceivedCapsule | null>(`/capsules/${encodeURIComponent(id)}/enable`, "POST", {});
+}
+
+/** One click out: the pack stops contributing anything. */
+export function disableCapsule(id: string) {
+  return productRequest<{ disabled: true; lists: number }>(`/capsules/${encodeURIComponent(id)}/disable`, "POST", {});
+}
+
+/** Mark a new conversation as a trial of the pack; the conversation then opens under that id. */
+export function startCapsuleTrial(id: string, sessionId: string) {
+  return productRequest<{ capsuleId: string; sessionId: string }>(`/capsules/${encodeURIComponent(id)}/trial`, "POST", { sessionId });
 }

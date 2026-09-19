@@ -16,3 +16,19 @@ export const CAPSULE_ENTRY_TYPES = [
 export function capsuleEntryLabel(factKind: string): string {
   return CAPSULE_ENTRY_TYPES.find((item) => item.value === factKind)?.label ?? "研究记录";
 }
+
+/** Why the automatic scan dropped an entry of a shared pack, in the reader's words. */
+export const CAPSULE_SCAN_REASONS: Record<string, string> = {
+  names_platform_tool: "提到了平台自己的工具或路径",
+  unsafe_link_scheme: "含有会自己执行的链接",
+  auto_loading_image: "含有一打开就会加载的图片链接",
+  credential_in_link: "链接里带着账号和口令",
+  instructs_agent: "在指挥助手做研究方法以外的事",
+};
+
+/** How far the language half of the scan got. */
+export const CAPSULE_SCAN_MODEL_STATUS: Record<string, string> = {
+  ok: "签名、格式和内容检查都已完成",
+  partial: "签名和格式检查已完成；内容检查只完成了一部分",
+  unavailable: "签名和格式检查已完成；内容检查暂时不可用",
+};

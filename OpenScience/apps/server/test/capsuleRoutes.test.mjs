@@ -78,6 +78,50 @@ test("transfer routes bind export/import to the live user and require explicit b
   const options={method:"POST",headers:{"content-type":"application/json"}};
   assert.equal((await fetch(`${base}/api/capsules/transfers/preview`,{...options,body:JSON.stringify({archive:"fixture",password:"test-only-transfer"})})).status,200);
   assert.equal(calls[0].user,"transfer-owner");
-  assert.deepEqual(calls[0].context,{accountCreatedAt:"test-only-account-epoch"});
+  // The project the scan is metered to rides along; this store has none selected.
+  assert.deepEqual(calls[0].context,{accountCreatedAt:"test-only-account-epoch",projectId:null});
   assert.equal((await fetch(`${base}/api/capsules/cap-one/exports`,{...options,body:JSON.stringify({password:"test-only-transfer",userId:"other"})})).status,400);
+});
+
+test("a received pack: shelf, one-click enable and disable, and a trial marked on the conversation in the current project", async (t) => {
+  const calls = [];
+  const service = {
+    received: async (user, options) => { calls.push(["received", user, options]); return []; },
+    enableReceived: async (user, id, options) => { calls.push(["enable", user, id, options]); return { id, enabled: true }; },
+    disable: async (user, id) => { calls.push(["disable", user, id]); return { disabled: true, lists: 1 }; },
+    prepareTrial: async (user, id, options) => { calls.push(["prepare", user, id, options]); return { id }; },
+  };
+  const marked = [];
+  const store = {
+    ensureSessionUser: async () => ({ user: { id: "owner" } }),
+    assertCsrf: async () => {},
+    selectedProject: async () => ({ id: "current-project" }),
+  };
+  const handle = createCapsuleRoutes({ store, service, maxJsonBytes: 262144,
+    trials: { mark: async (...args) => { marked.push(args); } } });
+  const server = createServer((req, res) => { handle(req, res).catch((error) => sendError(res, error)); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  const base = `http://127.0.0.1:${server.address().port}/api/capsules`;
+  const post = (path, body = {}) => fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  assert.equal((await fetch(`${base}/received`)).status, 200);
+  assert.equal((await post("/pack-1/enable")).status, 200);
+  assert.equal((await post("/pack-1/disable")).status, 200);
+  assert.equal((await post("/pack-1/enable", { mode: "own" })).status, 400, "a received pack is a reference; nothing else can be asked for");
+  const trial = await post("/pack-1/trial", { sessionId: "ses-new-1" });
+  assert.equal(trial.status, 200);
+  assert.deepEqual((await trial.json()).data, { capsuleId: "pack-1", sessionId: "ses-new-1" });
+  assert.deepEqual(marked, [["owner", "current-project", "ses-new-1", "pack-1"]]);
+  assert.equal((await post("/pack-1/trial", { sessionId: "bad id" })).status, 400);
+  assert.deepEqual(calls.map((call) => call[0]), ["received", "enable", "disable", "prepare"]);
+  assert.deepEqual(calls[1][3], { projectId: "current-project" }, "the scan an old pack needs is metered to the project the researcher is in");
+
+  const noTrials = createCapsuleRoutes({ store, service, maxJsonBytes: 262144 });
+  const other = createServer((req, res) => { noTrials(req, res).catch((error) => sendError(res, error)); });
+  await new Promise((resolve) => other.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => { other.closeAllConnections(); other.close(resolve); }));
+  const unavailable = await fetch(`http://127.0.0.1:${other.address().port}/api/capsules/pack-1/trial`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionId: "ses-new-2" }) });
+  assert.equal(unavailable.status, 503);
 });

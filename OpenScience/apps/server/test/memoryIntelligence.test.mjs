@@ -405,6 +405,13 @@ test("an incognito conversation leaves nothing behind, and the rest of the proje
   assert.equal(store.records.size, 0);
   assert.equal(modelCalls, 0);
 
+  // A conversation trying someone else's capsule writes nothing either.
+  store.sessionState = async (_userId, _projectId, sessionId) => ({ incognito: false, excluded: [], trialCapsuleId: sessionId === "session_1" ? "pack-1" : null });
+  const trial = await intelligence.recordRun(project(), run("run_trial"), [message("user_1", "请记住：我偏好先看一手研究。")]);
+  assert.equal(trial.source, "trial");
+  assert.ok(MEMORY_WRITE_SKIPPED_SOURCES.has(trial.source));
+  assert.equal(store.records.size, 0);
+
   const elsewhere = await intelligence.recordRun(project(), { ...run("run_2"), sessionId: "session_2" },
     [message("user_2", "SGLT2 抑制剂 对 CKD 的长期获益？")]);
   assert.notEqual(elsewhere.source, "incognito");

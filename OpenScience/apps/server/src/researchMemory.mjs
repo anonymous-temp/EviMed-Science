@@ -439,15 +439,16 @@ function pausedProjectList(value) {
  * Both read as "nothing paused", which is the behaviour before the switches.
  *
  * An incognito conversation (2026-09-20) is paused both ways for itself only:
- * nothing is extracted from it and nothing is recalled into it. `excluded` is
- * what the researcher set aside in that conversation with 「本次不用」.
+ * nothing is extracted from it and nothing is recalled into it. A conversation
+ * trying someone else's capsule (`trial`) writes nothing and still reads.
+ * `excluded` is what the researcher set aside in that conversation with 「本次不用」.
  *
  * @param {any} store @param {string} userId @param {string | null} projectId @param {string | null} [sessionId]
- * @returns {Promise<{ learning: boolean, recall: boolean, incognito: boolean, excluded: { type: string, id: string, label?: string }[] }>} true = paused
+ * @returns {Promise<{ learning: boolean, recall: boolean, incognito: boolean, trial: boolean, excluded: { type: string, id: string, label?: string }[] }>} true = paused
  */
 export async function memoryPausedFor(store, userId, projectId, sessionId = null) {
   if (typeof store?.settings !== "function" || store.configured === false) {
-    return { learning: false, recall: false, incognito: false, excluded: [] };
+    return { learning: false, recall: false, incognito: false, trial: false, excluded: [] };
   }
   const settings = await store.settings(userId);
   const projectPaused = Boolean(projectId) && settings.pausedProjects.includes(String(projectId));
@@ -459,10 +460,14 @@ export async function memoryPausedFor(store, userId, projectId, sessionId = null
       throw error;
     })
     : { incognito: false, excluded: [] };
+  // A conversation trying someone else's capsule writes nothing into this
+  // researcher's memory (「试用一次」); it still reads it.
+  const trial = Boolean(session.trialCapsuleId);
   return {
-    learning: settings.learningPaused || projectPaused || session.incognito,
+    learning: settings.learningPaused || projectPaused || session.incognito || trial,
     recall: settings.recallPaused || projectPaused || session.incognito,
     incognito: session.incognito,
+    trial,
     excluded: session.excluded,
   };
 }
@@ -504,6 +509,7 @@ function publicSessionState(row) {
     excluded: Array.isArray(row?.excluded) ? row.excluded.map((item) => {
       try { return sessionExclusion(item); } catch { return null; }
     }).filter(Boolean) : [],
+    trialCapsuleId: typeof row?.trial_capsule_id === "string" ? row.trial_capsule_id : null,
     updatedAt: row?.updated_at ? memoryInstant(row.updated_at) : null,
   };
 }
@@ -1192,7 +1198,8 @@ export class ResearchMemoryStore {
    * Two tabs changing different things at once must both win, which is why
    * this is an upsert over the stored array rather than a read and a write.
    * @param {string} userId @param {string} projectId @param {string} sessionId
-   * @param {{ incognito?: unknown, exclude?: unknown, include?: unknown }} patch
+   * @param {{ incognito?: unknown, exclude?: unknown, include?: unknown, trialCapsuleId?: unknown }} patch
+   *   `trialCapsuleId` marks the conversation as a trial of a shared capsule (null ends it).
    */
   async updateSessionState(userId, projectId, sessionId, patch) {
     const owner = assertUserId(userId);
@@ -1201,12 +1208,19 @@ export class ResearchMemoryStore {
     if (patch?.incognito !== undefined && typeof patch.incognito !== "boolean") {
       throw new HttpError(400, "memory_session_invalid", "incognito must be true or false.");
     }
+    const trialGiven = patch?.trialCapsuleId !== undefined;
+    if (trialGiven && patch.trialCapsuleId !== null
+      && (typeof patch.trialCapsuleId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9:_-]{0,199}$/.test(patch.trialCapsuleId))) {
+      throw new HttpError(400, "memory_session_invalid", "The trial capsule id is invalid.");
+    }
     const exclude = patch?.exclude === undefined ? null : sessionExclusion(patch.exclude);
     const include = patch?.include === undefined ? null : sessionExclusion({ label: "", ...(/** @type {any} */ (patch.include)) });
-    const result = await this.#query(`INSERT INTO evimed_memory.sessions AS s (user_id, project_id, session_id, incognito, excluded)
-      VALUES ($1, $2, $3, COALESCE($4::boolean, false), CASE WHEN $5::jsonb IS NULL THEN '[]'::jsonb ELSE jsonb_build_array($5::jsonb) END)
+    const result = await this.#query(`INSERT INTO evimed_memory.sessions AS s (user_id, project_id, session_id, incognito, excluded, trial_capsule_id)
+      VALUES ($1, $2, $3, COALESCE($4::boolean, false), CASE WHEN $5::jsonb IS NULL THEN '[]'::jsonb ELSE jsonb_build_array($5::jsonb) END,
+        CASE WHEN $7::boolean THEN $8::text ELSE NULL END)
       ON CONFLICT (user_id, project_id, session_id) DO UPDATE SET
         incognito = COALESCE($4::boolean, s.incognito),
+        trial_capsule_id = CASE WHEN $7::boolean THEN $8::text ELSE s.trial_capsule_id END,
         excluded = (
           SELECT COALESCE(jsonb_agg(item ORDER BY ordinal), '[]'::jsonb) FROM (
             SELECT item, ordinal FROM jsonb_array_elements(s.excluded) WITH ORDINALITY AS kept(item, ordinal)
@@ -1219,7 +1233,7 @@ export class ResearchMemoryStore {
         updated_at = date_trunc('second', clock_timestamp())
       RETURNING *`,
     [owner, project, session, patch?.incognito ?? null, exclude ? JSON.stringify(exclude) : null,
-      include ? JSON.stringify({ type: include.type, id: include.id }) : null]);
+      include ? JSON.stringify({ type: include.type, id: include.id }) : null, trialGiven, trialGiven ? patch.trialCapsuleId : null]);
     // The table's CHECK bounds the list at MEMORY_SESSION_EXCLUSION_LIMIT; a
     // write past it is refused there, as a payload error.
     return publicSessionState(result.rows[0]);

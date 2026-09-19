@@ -97,3 +97,15 @@ it("offers the two ways a capsule is actually used, and not the third that behav
   await userEvent.click(screen.getByRole("button", { name: "用于当前项目" }));
   await waitFor(() => expect(api.activateCapsule).toHaveBeenCalledWith(capsule.id, "guest"));
 });
+
+it("shows someone else's pack read-only: it is enabled whole on the received shelf, never adopted entry by entry", async () => {
+  const pack = { ...capsule, id: "pack-1", payload: { title: "李主任的工作方式", description: "", imported: true } };
+  vi.mocked(api.listCapsules).mockResolvedValue({ items: [pack], nextCursor: null });
+  vi.mocked(api.listCapsuleEntries).mockResolvedValue({ items: [{ ...candidate, payload: { ...candidate.payload, capsuleId: "pack-1", origin: "system" } }], nextCursor: null });
+  render(<CapsulesPage embedded />);
+  expect(await screen.findByText(/整包启用或停用，在「方法 › 收到的胶囊」里操作/)).toBeInTheDocument();
+  expect(await screen.findByText("保留分析方案和原始结果")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "采用" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "用于当前项目" })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("使用方式")).not.toBeInTheDocument();
+});

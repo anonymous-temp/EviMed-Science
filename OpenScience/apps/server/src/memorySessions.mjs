@@ -76,6 +76,34 @@ export async function setAsideMethodNames(researchMemory, userId, projectId, ses
 }
 
 /**
+ * What one conversation's own state adds to its dispatch context: the methods
+ * it set aside (「本次不用」), and — for a conversation trying a capsule someone
+ * shared (「试用一次」) — that capsule's methods and standards. Best effort: a
+ * state that cannot be read adds nothing rather than failing the turn.
+ *
+ * @param {{ researchMemory: any, capsules?: any }} services
+ * @param {string} userId @param {string} projectId @param {string} sessionId
+ * @returns {Promise<string[]>}
+ */
+export async function sessionDispatchNotes({ researchMemory, capsules = null }, userId, projectId, sessionId) {
+  if (!researchMemory?.configured) return [];
+  let state;
+  try {
+    state = await researchMemory.sessionState(userId, projectId, sessionId);
+  } catch {
+    return [];
+  }
+  const notes = [];
+  const methods = (state?.excluded ?? []).filter((/** @type {any} */ item) => item.type === "method").map(setAsideMethodName);
+  if (methods.length) notes.push(setAsideMethodsNotice(methods));
+  if (state?.trialCapsuleId && capsules) {
+    const trial = await capsules.trialContext(userId, state.trialCapsuleId).catch(() => "");
+    if (trial) notes.push(trial);
+  }
+  return notes;
+}
+
+/**
  * The methods the project's runtime has in its skill directory, by the name
  * the run sees: a learned method by its own name (the list the runtime manager
  * kept at its last launch), a capsule method as `method-<directory>`
@@ -230,9 +258,15 @@ export function createMemorySessionRoutes({ config, researchMemory, agentRuns, c
     if (!researchMemory?.configured) throw new HttpError(503, "memory_unconfigured", "The research memory store is not configured.");
     const ctx = await context(req, res);
     const tail = match[2] ?? "";
+    // The capsule a 「试用一次」 conversation is trying, by name, for the bar.
+    const named = async (/** @type {any} */ state) => {
+      if (!state?.trialCapsuleId || !capsules) return state;
+      const capsule = await capsules.documents.get(ctx.user.id, "capsule", state.trialCapsuleId).catch(() => null);
+      return { ...state, trialCapsule: { id: state.trialCapsuleId, title: capsule?.payload?.title ?? null } };
+    };
 
     if (tail === "" && req.method === "GET") {
-      sendJson(res, 200, { data: await researchMemory.sessionState(ctx.user.id, ctx.project.id, sessionId) });
+      sendJson(res, 200, { data: await named(await researchMemory.sessionState(ctx.user.id, ctx.project.id, sessionId)) });
       return true;
     }
     // The incognito switch: from the next turn on, nothing of this
@@ -244,7 +278,7 @@ export function createMemorySessionRoutes({ config, researchMemory, agentRuns, c
       }
       const state = await researchMemory.updateSessionState(ctx.user.id, ctx.project.id, sessionId, { incognito: body.incognito });
       await audit(ctx, "memory.session.incognito", "completed", { target: sessionId, incognito: state.incognito });
-      sendJson(res, 200, { data: state });
+      sendJson(res, 200, { data: await named(state) });
       return true;
     }
     // 「本次不用」 and its way back.
