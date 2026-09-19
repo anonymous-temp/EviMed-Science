@@ -70,6 +70,7 @@
     "migrate:research-memory": "node scripts/ops/migrate-research-memory.mjs",
     "rebuild:memory-index": "node scripts/ops/rebuild-memory-index.mjs",
     "usage:by-purpose": "node scripts/ops/usage-by-purpose.mjs",
+    "rebuild:kb-index": "node scripts/ops/rebuild-kb-index.mjs",
     "typecheck": "pnpm --filter @ai4s/web typecheck",
     "ci:web": "pnpm test:web && pnpm audit:source-secrets && pnpm audit:hosted-compliance && pnpm check:community-skills && pnpm check:capabilities && pnpm check:skill-digests && pnpm check:skill-vocabulary && pnpm audit:saas-alignment && pnpm audit:capabilities && pnpm audit:dependencies && pnpm build:web",
     "lint": "pnpm --filter @ai4s/web lint && pnpm lint:server && pnpm lint:domain && pnpm lint:port && pnpm lint:socket",

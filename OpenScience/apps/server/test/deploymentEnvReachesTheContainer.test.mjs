@@ -140,6 +140,9 @@ const operatorLevers = {
   OPEN_SCIENCE_CHANNEL_DINGTALK_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_CHANNEL_WECOM_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_APP_API_ENABLED: ["open-science-web"],
+  // Knowledge-base search's off switch, which also stops indexing and
+  // embedding spend; one that never arrived would keep paying (2026-09-20).
+  OPEN_SCIENCE_KB_SEARCH_ENABLED: ["open-science-web"],
 };
 
 async function composeFiles() {

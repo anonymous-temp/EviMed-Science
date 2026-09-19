@@ -1,0 +1,118 @@
+{
+  "$comment": "A regression check for kb_search, not an evaluation: a fixed synthetic corpus and the question kinds the knowledge base must keep answering — a drug name, a dose, an abbreviation, a Latin drug name, a misspelling (trigram leg) and a paraphrase that shares no term with its answer (vector leg). Each question names the document and page its answer is on. Change the corpus or the questions only with the code that made them fail.",
+  "documents": [
+    {
+      "name": "房颤抗凝指南.pdf",
+      "title": "非瓣膜性房颤患者抗凝治疗指南",
+      "pages": [
+        "第一章 总则\n非瓣膜性房颤患者的卒中预防以口服抗凝为基础，治疗前应评估卒中与血栓栓塞风险。\n",
+        "第二章 药物选择\n利伐沙班用于非瓣膜性房颤患者的卒中预防，推荐剂量为20 mg，每日一次，随餐服用。达比加群酯为另一选择，剂量150 mg，每日两次。\n",
+        "第三章 随访\n抗凝治疗期间每三个月复查血常规与肝肾功能，记录不良事件。\n"
+      ]
+    },
+    {
+      "name": "肾功能与抗凝.pdf",
+      "title": "慢性肾病患者直接口服抗凝药的剂量调整",
+      "pages": [
+        "肾功能评估\n直接口服抗凝药（NOAC）在肾功能不全患者中需要按肌酐清除率调整。\n",
+        "剂量调整\n当 eGFR 在15至29之间时，利伐沙班减量为15 mg，每日一次；eGFR 低于15时不建议使用。\n"
+      ]
+    },
+    {
+      "name": "糖尿病用药要点.pdf",
+      "title": "2型糖尿病降糖药物使用要点",
+      "pages": [
+        "SGLT2抑制剂\nEmpagliflozin 10 mg once daily lowers glucose and reduces heart failure hospitalisation in type 2 diabetes.\n",
+        "二甲双胍\n二甲双胍为一线降糖药物，起始剂量500 mg，逐渐加量以减少胃肠道反应。\n"
+      ]
+    },
+    {
+      "name": "出血处理共识.pdf",
+      "title": "抗凝治疗相关大出血的处理共识",
+      "pages": [
+        "紧急处理\n发生大出血时应立即停用抗凝药物，评估血流动力学，必要时输注凝血因子或使用特异性逆转剂。\n"
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "drug-name",
+      "query": "达比加群",
+      "expect": {
+        "document": "房颤抗凝指南.pdf",
+        "page": 2
+      }
+    },
+    {
+      "id": "dose",
+      "query": "推荐剂量 20 mg 每日一次",
+      "expect": {
+        "document": "房颤抗凝指南.pdf",
+        "page": 2
+      }
+    },
+    {
+      "id": "abbreviation",
+      "query": "eGFR 低于 15 时 NOAC 能不能用",
+      "expect": {
+        "document": "肾功能与抗凝.pdf",
+        "page": 2
+      }
+    },
+    {
+      "id": "latin-drug-name",
+      "query": "empagliflozin",
+      "expect": {
+        "document": "糖尿病用药要点.pdf",
+        "page": 1
+      }
+    },
+    {
+      "id": "misspelling",
+      "query": "empaglyflozin",
+      "needs": "trigram",
+      "expect": {
+        "document": "糖尿病用药要点.pdf",
+        "page": 1
+      }
+    },
+    {
+      "id": "paraphrase",
+      "query": "服药期间流血不止要怎么办",
+      "needs": "vector",
+      "expect": {
+        "document": "出血处理共识.pdf",
+        "page": 1
+      }
+    }
+  ],
+  "concepts": [
+    [
+      "出血",
+      "流血",
+      "止血",
+      "凝血",
+      "bleeding"
+    ],
+    [
+      "肾",
+      "egfr",
+      "肌酐"
+    ],
+    [
+      "糖尿病",
+      "降糖",
+      "血糖",
+      "glucose",
+      "diabetes"
+    ],
+    [
+      "房颤",
+      "卒中"
+    ],
+    [
+      "剂量",
+      "mg"
+    ]
+  ]
+}

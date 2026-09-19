@@ -28,7 +28,6 @@ export const releaseManifestFixture = Object.freeze({
     caddyVersion: "2.11.4-alpine",
   },
   services: [
-    { name: "document-parser", image: "evimed-document-parser:3.4.5", imageId: `sha256:${"1".repeat(64)}` },
     { name: "openlist", image: `openlistteam/openlist:v4.2.6@sha256:${"5".repeat(64)}`, imageId: `sha256:${"6".repeat(64)}` },
     {
       name: "openviking",

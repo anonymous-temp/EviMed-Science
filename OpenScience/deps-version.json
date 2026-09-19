@@ -20,11 +20,13 @@
     "notes": "Self-hosted drive aggregator; v4.2.6 (2026-09-01), including access-control and authentication fixes from the current stable release. EviMed uses the pinned list, get and link contracts, then reads bytes through OpenList's same-origin proxy without following a provider-controlled redirect. The service runs with an isolated data volume and tenant-prefixed paths.",
     "githubRepo": "OpenListTeam/OpenList"
   },
-  "mineru": {
-    "version": "3.4.5",
-    "pipPackage": "mineru",
-    "contractDir": "packages/contracts/mineru",
-    "notes": "Document parsing for CJK layout, tables and formulas; PyPI 3.4.5. `pypdf` stays as the fast plain-text fallback."
+  "evimed-extract": {
+    "version": "0.5.0",
+    "docsCommit": "83f79c4",
+    "revision": "evimed-extract@0.5.0",
+    "contractDir": "packages/contracts/evimed-extract",
+    "testServer": "http://123.57.56.88:9011",
+    "notes": "The team's own document-parsing API (docs/api/API.md v0.5.0, read at commit 83f79c4), which replaced the self-hosted MinerU container outright on 2026-09-20: no fallback parser, no comparison run, MinerU deleted in the same change. It is reached over HTTP with a Bearer key its own admin console issues (OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE), text by Alibaba DocMind and bibliographic metadata by a model over the first and last 8,000 characters. `revision` is the label the knowledge-base index is keyed by, together with each file's SHA-256: the service reports no version of its own, so moving this label is what re-indexes every document parsed under the old one. `testServer` is the only address the owner gave and the compose default; production listens on 9021 per the service's env templates, on a host not yet named. The service is not polled by the nightly matrix (there is no release feed to poll); `contractAtPin` replays the fixtures recorded off the live server, and `scripts/ops/record-parser-contract.mjs` records the authenticated samples once the key exists."
   },
   "openviking": {
     "version": "0.4.19",
@@ -46,5 +48,16 @@
       "timeoutMs": 3000
     },
     "notes": "The one recall index of the base stack: it ranks both the research-memory records and the capsule facts, whose authoritative rows stay in the control-plane PostgreSQL. Never a record store — its `write` offers replace/append/create and no compare-and-swap, so the `expectedVersion` the record store enforces has no equivalent and two concurrent edits of one record would silently lose one. `embedding` is what `scripts/ops/configure-production-state.mjs` renders into the server's ov.conf (provider `dashscope` with `input: \"text\"`, which appends `/compatible-mode/v1` to `apiBase` itself and is the only provider that sends `dimensions`); changing the model or the dimension invalidates every stored vector, so it takes a `pnpm rebuild:memory-index --all`. `rerank` is read by the control plane, not by the server: `/search/find` never reranks and `/search/search`, which does, navigates by directory abstracts no VLM generates here and returns nothing for this layout, so the reranker runs where the hydrated text already is and the ov.conf carries no rerank section. Both model ids were probed live on 2026-09-14 with a real key: `qwen3.7-text-embedding` answers at dimension 1024 with and without an explicit `dimensions` parameter, and `qwen3-rerank` answers on both the OpenAI-compatible reranks path pinned here and the native one, with identical scores. A server rendered from these values started healthy as uid 10001 and embedded 300 records; recall@5 over the twelve eval questions went 0.667 (term matcher) to 0.933 (this embedder) to 1.000 (with the rerank), which is what `evals/memory-recall/README.md` records. The server is AGPL-3.0 and runs unmodified as its own service; the CLI, plugins and examples are Apache-2.0. The container tag carries a `v` prefix (`ghcr.io/volcengine/openviking:v0.4.19`) while the PyPI version does not; the unprefixed tag simply does not exist and a compose file that names it fails at pull. Releases land every few days and have moved data layouts before (0.3.x needed a staged migration through 0.4.5; 0.4.18 changed ACL fields from boolean to string), so the pin moves only through the matrix. `@openviking/dsh-memory-plugin` is listed for the local `evimed-web` profile only: it spawns an MCP proxy that talks to the server directly, which the hosted runtime may not do."
+  },
+  "pgvector": {
+    "version": "0.8.6",
+    "postgres": "16.15",
+    "image": "pgvector/pgvector",
+    "imageTag": "0.8.6-pg16-bookworm",
+    "imageDigest": "sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b",
+    "linuxAmd64Digest": "sha256:eac621400b7b7ff52493883e41e930e3d104695fea5b68cc0c42370cf7880067",
+    "contractDir": "packages/contracts/pgvector",
+    "githubRepo": "pgvector/pgvector",
+    "notes": "The control plane's PostgreSQL image since 2026-09-20: the official postgres:16 bookworm image with the pgvector extension added, so the data directory (/var/lib/postgresql/data) carries over from postgres:16.14-bookworm unchanged. Needed by the knowledge-base index's vector leg; without the extension that leg is skipped and kb_search answers mode \"keyword\", nothing fails. 0.8.x rather than earlier because 0.8 added iterative index scans, which keep a filtered nearest-neighbour search (one account's documents out of everyone's) from returning fewer rows than asked for. Read off Docker Hub on 2026-09-19: 0.8.6-pg16-bookworm is the newest 0.8.x tag, its image config says PG_VERSION=16.15-1.pgdg12+2 (not below production's 16.14), and the digests are the index and the linux/amd64 manifest. The extension is not marked trusted, which is fine here: the image entrypoint creates POSTGRES_USER as a superuser, so the application's migration creates it on first start and the backup restore drill can recreate it; pg_trgm (trusted, part of every postgres image) is created the same way. Moving this pin is a host step as well as a PR: back up, swap the image, and let the migration or the operator run CREATE EXTENSION."
   }
 }

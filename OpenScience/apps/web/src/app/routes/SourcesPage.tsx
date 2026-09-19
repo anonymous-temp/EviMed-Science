@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Cloud, Copy, Database, FilePlus2, FileSearch, Folder, FolderSync, GitBranch, Link2, Pause, Play, RefreshCw, RotateCcw, SlidersHorizontal, Trash2, XCircle } from "lucide-react";
+import { AlertCircle, BookmarkMinus, BookmarkPlus, Cloud, Copy, Database, FilePlus2, FileSearch, Folder, FolderSync, GitBranch, Link2, Pause, Play, RefreshCw, RotateCcw, SlidersHorizontal, Trash2, XCircle } from "lucide-react";
 import { getWebProjectId } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
-import { browseOpenList, cancelSource, decideDuplicateGroup, getSourceFamily, importOpenListSource, listDuplicateCandidates,
-  listSourceFolders, listSources, overrideSource, registerSourceFolder, removeSource, retrySource, setSourceFolderStatus,
-  sourceFailureMessage, syncSourceFolder, type DuplicateGroup, type OpenListEntry, type SourceFamily,
-  type SourceFolderRecord, type SourceOmissionNotice, type SourceRecord } from "@/lib/sourceClient";
+import { addToLibrary, browseOpenList, cancelSource, decideDuplicateGroup, getSourceFamily, importOpenListSource, listDuplicateCandidates,
+  listLibrary, listSourceFolders, listSources, overrideSource, registerSourceFolder, removeFromLibrary, removeSource, retrySource,
+  setSourceFolderStatus, sourceFailureMessage, syncSourceFolder, type DuplicateGroup, type OpenListEntry, type SourceFamily,
+  type SourceFolderRecord, type SourceMetadata, type SourceOmissionNotice, type SourceRecord } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { baseName } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
@@ -109,6 +109,26 @@ function ProjectSourcesPage({ projectId, embedded }: { projectId: string; embedd
     finally { if (getWebProjectId() === projectId) setBusy(false); }
   };
   const selectedSource = sources?.find(source => source.id === understandingId);
+  // Which of this project's sources hold a document the personal library has.
+  // Null while unknown or when the library is unavailable: the card then offers
+  // nothing rather than a button that cannot work.
+  const [librarySources, setLibrarySources] = useState<Set<string> | null>(null);
+  const loadLibrary = useCallback(async () => {
+    try { setLibrarySources(new Set((await listLibrary()).items.flatMap(item => item.sourceIds))); }
+    catch { setLibrarySources(null); }
+  }, []);
+  useEffect(() => { void loadLibrary(); }, [loadLibrary]);
+  const toggleLibrary = async (source: SourceRecord) => {
+    if (getWebProjectId() !== projectId) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      if (librarySources?.has(source.id)) await removeFromLibrary(source.id);
+      else await addToLibrary(source.id);
+      await loadLibrary();
+    } catch (operationError) { if (getWebProjectId() === projectId) setActionError(productErrorMessage(operationError)); }
+    finally { if (getWebProjectId() === projectId) setBusy(false); }
+  };
 
   return (
     <div className="h-full overflow-y-auto px-5 py-6">
@@ -136,6 +156,7 @@ function ProjectSourcesPage({ projectId, embedded }: { projectId: string; embedd
         {sources === null ? <MemorySkeleton /> : sources.length === 0 && !error ? <EmptyState icon={Database} title="还没有进入分析流程的资料"
           description="从知识库上传资料后，系统会先建立索引，再按价值进行结构化或深度分析。" /> : (
           <div className="space-y-4">{sources.map((source) => <SourceCard key={source.id} source={source} busy={busy}
+            inLibrary={librarySources ? librarySources.has(source.id) : null} onLibrary={() => void toggleLibrary(source)}
             onUnderstanding={() => setUnderstandingId(source.id)}
             onEdit={() => setEditing(source)} onRaiseDepth={() => setEditing(source)} onRetry={() => void mutate(() => retrySource(source.id, source.revision))}
             onCancel={() => void mutate(() => cancelSource(source.id, source.revision))} onDelete={() => setDeleting(source)} />)}</div>
@@ -217,6 +238,8 @@ const SKIP_REASONS: Record<string, string> = {
   source_digest_invalid: "网盘给出的内容指纹不合规",
   source_size_invalid: "文件大小超出可入库范围",
   source_connector_invalid: "网盘条目无法映射成资料",
+  source_format_unsupported: "知识库不支持这种文件格式",
+  source_media_unsupported: "音视频暂不支持解析",
 };
 
 /** A researcher reads Chinese. An unmapped code is a sentence here, not a token
@@ -400,8 +423,35 @@ function OmissionNotice({ notice, onRaiseDepth }: { notice?: SourceOmissionNotic
 
 const AUDIT_STATUS: Record<string, string> = { not_run: "理解遗漏尚未审计", audited: "理解遗漏已审计" };
 
-function SourceCard({ source, busy, onEdit, onRaiseDepth, onRetry, onCancel, onDelete, onUnderstanding }: {
-  source: SourceRecord; busy: boolean; onEdit: () => void; onRaiseDepth: () => void; onRetry: () => void; onCancel: () => void; onDelete: () => void; onUnderstanding: () => void;
+/** What the parser read about the document, with the DOI said as checked as it
+ *  is: confirmed against Crossref's registered title, not confirmed, or
+ *  dropped because Crossref registered it for another work. Nothing when the
+ *  parse brought no metadata and the document has no page count. */
+export function SourceMetadataLine({ metadata, pageCount, fileName }: { metadata?: SourceMetadata | null; pageCount?: number; fileName: string }) {
+  const title = metadata?.title?.trim();
+  const authors = metadata?.authors?.filter(Boolean) ?? [];
+  const published = [metadata?.source, metadata?.publicationDate].filter(Boolean).join("，");
+  const check = metadata?.doiCheck;
+  const parts = [
+    title && title !== fileName ? `《${title}》` : null,
+    authors.length ? `${authors.slice(0, 3).join("、")}${authors.length > 3 ? " 等" : ""}` : null,
+    published || null,
+    pageCount ? `共 ${pageCount} 页` : null,
+  ].filter((part): part is string => Boolean(part));
+  const doi = metadata?.doi
+    ? `DOI ${metadata.doi}（${check?.status === "verified" ? "已与 Crossref 登记的题名核对" : "未经 Crossref 确认"}）`
+    : check?.status === "mismatch" && check.droppedDoi
+      ? `解析出的 DOI ${check.droppedDoi} 在 Crossref 登记的是另一篇文献，已不采用`
+      : null;
+  if (!parts.length && !doi) return null;
+  return <div className="space-y-1 text-ui text-muted">
+    {parts.length > 0 && <p>{parts.join(" · ")}</p>}
+    {doi && <p>{doi}</p>}
+  </div>;
+}
+
+function SourceCard({ source, busy, inLibrary, onLibrary, onEdit, onRaiseDepth, onRetry, onCancel, onDelete, onUnderstanding }: {
+  source: SourceRecord; busy: boolean; inLibrary: boolean | null; onLibrary: () => void; onEdit: () => void; onRaiseDepth: () => void; onRetry: () => void; onCancel: () => void; onDelete: () => void; onUnderstanding: () => void;
 }) {
   const operator = useOperator();
   const [showChain, setShowChain] = useState(false);
@@ -420,6 +470,8 @@ function SourceCard({ source, busy, onEdit, onRaiseDepth, onRetry, onCancel, onD
   const generationNote = operator && source.payload.generation != null ? ` · 处理第 ${source.payload.generation} 代` : "";
   return <Card title={baseName(source.payload.paths[0] ?? source.id)} hint={`第 ${source.payload.version} 版${generationNote} · ${status}`}>
     <div className="space-y-3 text-ui text-text">
+      <SourceMetadataLine metadata={source.payload.metadata} pageCount={source.payload.analysis?.pageCount}
+        fileName={baseName(source.payload.paths[0] ?? source.id)} />
       {source.payload.outputs.summary && <p>{source.payload.outputs.summary}</p>}
       <div className="flex flex-wrap gap-2 text-ui text-muted">
         <span>{labelFor(TYPE_LABEL, source.payload.docType, "其他资料")}</span><span>·</span>
@@ -442,6 +494,11 @@ function SourceCard({ source, busy, onEdit, onRaiseDepth, onRetry, onCancel, onD
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="ghost" onClick={onUnderstanding}><FileSearch size={13} aria-hidden="true" />查看理解</Button>
         <Button size="sm" variant="ghost" onClick={() => setShowChain((value) => !value)}><GitBranch size={13} aria-hidden="true" />查看版本链</Button>
+        {/* The personal library: every project of this account reads it, read-only. */}
+        {inLibrary === true && <Button size="sm" variant="ghost" disabled={busy} onClick={onLibrary}
+          title="从个人资料库移出；这个项目里的资料不受影响"><BookmarkMinus size={13} aria-hidden="true" />移出资料库</Button>}
+        {inLibrary === false && ["complete", "needs_attention"].includes(source.payload.status) && <Button size="sm" variant="ghost" disabled={busy}
+          onClick={onLibrary} title="加入个人资料库：你的每个项目都能读取和检索它"><BookmarkPlus size={13} aria-hidden="true" />加入资料库</Button>}
         <Button size="sm" variant="ghost" disabled={busy} onClick={onEdit}><SlidersHorizontal size={13} aria-hidden="true" />调整分析</Button>
         {["failed", "needs_attention", "complete", "canceled"].includes(source.payload.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={onRetry}><RotateCcw size={13} aria-hidden="true" />重新分析</Button>}
         {["queued", "parsing"].includes(source.payload.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}><XCircle size={13} aria-hidden="true" />取消</Button>}

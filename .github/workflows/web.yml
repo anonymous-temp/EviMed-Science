@@ -23,7 +23,9 @@ jobs:
     timeout-minutes: 45
     services:
       postgres:
-        image: postgres:16.14-bookworm
+        # The production image (deps-version.json `pgvector`), so the
+        # knowledge-base index's vector leg is tested where it will run.
+        image: pgvector/pgvector:0.8.6-pg16-bookworm@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
         env:
           POSTGRES_USER: postgres
           POSTGRES_DB: evimed_test_auth
@@ -231,7 +233,6 @@ jobs:
           echo "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/postgres-password.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/database-url.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/document-parser.token" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/document-parser-web.token" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/openlist-admin-password.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/evimed-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/dashscope.api-key" >> "$GITHUB_ENV"
@@ -289,7 +290,10 @@ jobs:
             echo "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE=${OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE}"
             echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${OPEN_SCIENCE_DATABASE_URL_HOST_FILE}"
             echo "OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE=${OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE}"
-            echo "OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE=${OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE}"
+            # The parser is the parser team's external, metered API and CI holds
+            # no key for it, so readiness must not require it here. Production
+            # keeps the requirement (the overlay's default is true).
+            echo "OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER=false"
             echo "OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE=${OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE}"
             echo "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE=${OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE}"
             echo "OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE=${OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE}"
@@ -337,20 +341,17 @@ jobs:
       - name: Prepare private ingestion credentials
         run: |
           python3 - <<'PY'
-          import os, pathlib, secrets
-          parser_file = pathlib.Path(os.environ["OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE"])
-          web_file = pathlib.Path(os.environ["OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE"])
-          token = secrets.token_urlsafe(36)
-          for file in (parser_file, web_file):
-              fd = os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
-              with os.fdopen(fd, "w") as stream:
-                  stream.write(token + "\n")
-          # The parser enforces UID 1000 ownership. The capability-free root
-          # web process needs its own owner-only copy, not wider file access.
-          os.chown(parser_file, 1000, 1000)
-          os.chmod(parser_file, 0o400)
-          assert parser_file.read_bytes() == web_file.read_bytes()
-          assert web_file.stat().st_uid == 0 and web_file.stat().st_gid == 0
+          import os, pathlib
+          # No parser key exists in CI: the parsing API is an external service
+          # whose own console issues keys. An empty owner-only file is exactly
+          # what a deployment has before its key arrives — text formats parse
+          # locally and every other format is refused with a stated reason.
+          token_file = pathlib.Path(os.environ["OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE"])
+          fd = os.open(token_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+          os.close(fd)
+          info = token_file.stat()
+          assert info.st_size == 0 and info.st_mode & 0o777 == 0o400
+          assert info.st_uid == 0 and info.st_gid == 0
           PY
 
       - name: Reserve space on the disposable CI builder
@@ -400,19 +401,6 @@ jobs:
           timeout 300 docker volume rm buildx_buildkit_evimed-ci0_state
           remaining_cache_volume="$(docker volume ls -q --filter name='^buildx_buildkit_evimed-ci0_state$')"
           test -z "$remaining_cache_volume"
-
-      - name: Test parser admission inside the built image
-        run: |
-          parser_image="$(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.ingestion.yml config --format json | node -e 'let text="";process.stdin.on("data",chunk=>text+=chunk);process.stdin.on("end",()=>console.log(JSON.parse(text).services["evimed-document-parser"].image))')"
-          # Mount tests only: imports must resolve to the service baked into /app.
-          docker run --rm --network none --user 1000:1000 --read-only \
-            --cap-drop ALL --security-opt no-new-privileges:true \
-            --memory 512m --cpus 1 --pids-limit 128 \
-            --tmpfs /tmp:rw,nosuid,nodev,size=64m,mode=1777 \
-            --workdir /app -e PYTHONPATH=/app --entrypoint python \
-            -v "$GITHUB_WORKSPACE/OpenScience/deploy/document-parser/test_parser_service.py:/parser-tests/test_parser_service.py:ro" \
-            -v "$GITHUB_WORKSPACE/OpenScience/deploy/document-parser/Dockerfile:/parser-tests/Dockerfile:ro" \
-            "$parser_image" -m unittest discover -s /parser-tests -v
 
       # The kernel is installed as an npm global, not as a fetched binary, so
       # what is checked is that the launcher resolves, that its version is the
@@ -528,25 +516,6 @@ jobs:
             "$OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE" \
             -ec 'test ! -e /data/pharmacy-reference.sqlite; mkdir -p /data/users; chmod 700 /data/users; cp /ci-fixture.sqlite /data/pharmacy-reference.sqlite; chmod 444 /data/pharmacy-reference.sqlite'
 
-      - name: Check ingestion startup capacity
-        run: |
-          python3 - <<'PY'
-          import json, os, pathlib
-          memory = dict(line.split(":", 1) for line in pathlib.Path("/proc/meminfo").read_text().splitlines())
-          available = int(memory["MemAvailable"].split()[0]) * 1024
-          cpus = len(os.sched_getaffinity(0))
-          print(json.dumps({"availableMemoryBytes": available, "availableCpus": cpus,
-                            "parserMemoryLimitBytes": 6 * 1024 * 1024 * 1024}))
-          # Keep the parser's production cap and at least 2 GiB for the other
-          # services; do not weaken production limits to fit a smaller runner.
-          if available < 8 * 1024 * 1024 * 1024 or cpus < 4:
-              raise SystemExit("CI ingestion startup requires 8 GiB available memory and 4 CPUs")
-          PY
-          test "$(df -B1 --output=avail / | tail -1)" -ge 10737418240
-
-      - name: Verify capability-free parser file handoff on Linux
-        run: unshare --net node --test apps/server/test/sourceFiles.test.mjs
-
       - name: Start production Compose stack
         run: >-
           docker compose --env-file deploy/web/.env.ci
@@ -571,16 +540,6 @@ jobs:
           EVIMED_POSTGRES_BACKUP_DIR="$RUNNER_TEMP/evimed-postgres-backup" \
           EVIMED_POSTGRES_PASSPHRASE_FILE="$OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE" \
             python3 -B scripts/ops/postgres-backup.py
-
-      - name: Verify authenticated real PDF ingestion
-        run: |
-          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml -f deploy/web/docker-compose.ingestion.yml --profile backup --profile monitoring --profile tls)
-          # The parser is internal-only and uses the pipeline models baked into
-          # its image. The smoke has no model download or provider fallback.
-          "${compose[@]}" exec -T evimed-document-parser python -c 'import json,os,pathlib; c=pathlib.Path.home()/"mineru.json"; p=pathlib.Path(json.loads(c.read_text())["models-dir"]["pipeline"]); assert os.environ["MINERU_MODEL_SOURCE"]=="local" and p.is_dir() and os.access(p,os.R_OK|os.X_OK)'
-          # The inner deadline owns the container process; the outer guard is
-          # only a transport/teardown margin, not extra time for the parser.
-          timeout 190 "${compose[@]}" exec -T open-science-web timeout -s TERM -k 5 180 node scripts/ops/parser-ingestion-smoke.mjs
 
       - name: Wait for API and monitoring readiness
         run: |

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { lstat, readdir, readFile } from "node:fs/promises";
-import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
@@ -23,92 +22,40 @@ test("hosted CI starts and retains the required ingestion services through teard
     "Start production Compose stack", "Wait for API and monitoring readiness",
     "Trust CI Caddy root and verify public HTTPS preflight", "Verify Docker socket privilege boundary",
     "Verify scheduled encrypted backup", "Print Compose logs on failure", "Stop Compose stack",
-    "Verify authenticated real PDF ingestion",
   ]) {
     const step = workflowStep(workflow, name);
     assert.match(step, /-f deploy\/web\/docker-compose\.ingestion\.yml/, name);
   }
   assert.doesNotMatch(workflow, /CI_INGESTION_OVERRIDE/);
-  assert.doesNotMatch(workflow, /OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER[=:]false/);
   assert.doesNotMatch(workflow, /ci-unused-(?:parser-token|openlist-password)/);
+  // The parser is the parser team's external, metered API: nothing of it is
+  // built, started or smoke-tested here, and CI holds no key for it. What CI
+  // does hold is the file a keyless deployment has — empty and owner-only —
+  // and a readiness requirement switched off with the reason next to it.
+  for (const retired of [/evimed-document-parser/, /deploy\/document-parser/, /parser-ingestion-smoke/, /MINERU/i, /DOCUMENT_PARSER_WEB_TOKEN/]) {
+    assert.doesNotMatch(workflow, retired, `the workflow still names ${retired}`);
+  }
   const prepare = workflowStep(workflow, "Prepare private ingestion credentials");
-  assert.match(prepare, /os\.chown\(parser_file, 1000, 1000\)/);
-  assert.match(prepare, /os\.chmod\(parser_file, 0o400\)/);
-  assert.match(prepare, /0o400/);
-  assert.match(prepare, /secrets\.token_urlsafe\(36\)/);
-  const capacity = workflowStep(workflow, "Check ingestion startup capacity");
-  assert.match(capacity, /MemAvailable/);
-  assert.match(capacity, /8 \* 1024 \* 1024 \* 1024/);
-  assert.match(capacity, /10737418240/);
+  assert.match(prepare, /os\.O_EXCL \| os\.O_NOFOLLOW, 0o400/);
+  assert.match(prepare, /assert info\.st_size == 0 and info\.st_mode & 0o777 == 0o400/);
+  const environment = workflowStep(workflow, "Write CI Compose environment");
+  assert.match(environment, /# The parser is the parser team's external, metered API[\s\S]*?echo "OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER=false"/);
 });
 
-test("ingestion gives the capability-free Web and parser their own private token files", async () => {
+test("ingestion mounts the parser key read-only into the web service and runs no parser of its own", async () => {
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.ingestion.yml"), "utf8");
   const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
-  const web = compose.split("  open-science-web:\n")[1].split("  evimed-document-parser:\n")[0];
-  const parser = compose.split("\n  evimed-document-parser:\n")[1].split("\n  evimed-openlist-init:\n")[0];
-  assert.match(web, /source: \$\{OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE:\?[^}]+\}/);
-  assert.doesNotMatch(web, /source: \$\{OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE/);
-  assert.match(parser, /user: "1000:1000"/);
-  assert.match(parser, /source: \$\{OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE:\?[^}]+\}/);
-  for (const service of [web, parser]) {
-    assert.match(service, /target: \/run\/secrets\/document-parser-token\n\s+read_only: true\n\s+bind:\n\s+create_host_path: false/);
+  const web = compose.split("  open-science-web:\n")[1].split("\n  evimed-openlist-init:\n")[0];
+  assert.match(web, /source: \$\{OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE:\?[^}]+\}\n\s+target: \/run\/secrets\/document-parser-token\n\s+read_only: true\n\s+bind:\n\s+create_host_path: false/);
+  assert.match(web, /OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE: \/run\/secrets\/document-parser-token/);
+  assert.match(web, /OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER: \$\{OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER:-true\}/);
+  // What the MinerU container needed and nothing needs now: a shared staging
+  // volume, a shared input group, and a service to wait on.
+  for (const retired of [/evimed-document-parser/, /evimed-parser-staging/, /group_add/, /MINERU/, /DOCUMENT_PARSER_(?:STAGING_DIR|UID|GID|IMAGE|MEMORY_LIMIT|CPU_LIMIT|WEB_TOKEN_HOST_FILE)/]) {
+    assert.doesNotMatch(compose, retired, `the ingestion overlay still names ${retired}`);
+    assert.doesNotMatch(example, retired, `.env.example still names ${retired}`);
   }
-  assert.match(example, /OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE=\.\/secrets\/document-parser-web\.token/);
-  assert.match(example, /SAME retained token/);
-  const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
-  const prepare = workflowStep(workflow, "Prepare private ingestion credentials");
-  assert.match(prepare, /for file in \(parser_file, web_file\)/);
-  assert.match(prepare, /os\.O_EXCL \| os\.O_NOFOLLOW, 0o400/);
-  assert.match(prepare, /assert parser_file\.read_bytes\(\) == web_file\.read_bytes\(\)/);
-  assert.match(prepare, /assert web_file\.stat\(\)\.st_uid == 0 and web_file\.stat\(\)\.st_gid == 0/);
-  assert.match(web, /group_add:\n\s+- "1000"/);
-  assert.match(parser, /MINERU_MODEL_SOURCE: local/);
-});
-
-test("the release exercises real PDF parsing and Linux handoff with hard deadlines", async () => {
-  const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
-  const linux = workflowStep(workflow, "Verify capability-free parser file handoff on Linux");
-  assert.match(linux, /unshare --net node --test apps\/server\/test\/sourceFiles\.test\.mjs/);
-  const smoke = workflowStep(workflow, "Verify authenticated real PDF ingestion");
-  assert.match(smoke, /timeout 190 "\$\{compose\[@\]\}" exec -T open-science-web timeout -s TERM -k 5 180 node scripts\/ops\/parser-ingestion-smoke\.mjs/);
-  const smokeSource = await readFile(path.join(repoRoot, "scripts/ops/parser-ingestion-smoke.mjs"), "utf8");
-  assert.match(smokeSource, /setTimeout\(\(\) => deadline\.abort\(\), 175000\)/);
-  assert.match(smokeSource, /parserSmokeFetch\(deadline\.signal\)/);
-  assert.match(smokeSource, /process\.once\("SIGTERM", terminate\)/);
-  assert.match(smokeSource, /fetchImpl: boundedFetch/);
-  assert.ok(workflow.indexOf("Verify actual PostgreSQL backup and restore before readiness")
-    < workflow.indexOf("Verify authenticated real PDF ingestion"));
-  assert.ok(workflow.indexOf("Verify authenticated real PDF ingestion") < workflow.indexOf("Wait for API and monitoring readiness"));
-  const { parserSmokePdf, PARSER_SMOKE_TEXT } = await import("../../../scripts/ops/parser-ingestion-smoke.mjs");
-  const pdf = parserSmokePdf();
-  assert.ok(pdf.length < 2048);
-  assert.deepEqual(pdf, parserSmokePdf());
-  const source = pdf.toString("ascii");
-  assert.match(source, /^%PDF-1\.4/);
-  assert.ok(source.includes(`(${PARSER_SMOKE_TEXT}) Tj`));
-  const start = Number(source.match(/startxref\n(\d+)/)[1]);
-  assert.ok(source.slice(start).startsWith("xref\n0 6\n"));
-  const entries = source.slice(start).split("\n").slice(3, 8);
-  entries.forEach((entry, index) => assert.ok(source.slice(Number(entry.slice(0, 10))).startsWith(`${index + 1} 0 obj\n`)));
-});
-
-test("parser smoke deadline aborts a response body even after successful HTTP headers", async t => {
-  const { parserSmokeFetch } = await import("../../../scripts/ops/parser-ingestion-smoke.mjs");
-  const server = createServer((_request, response) => {
-    response.writeHead(200, { "content-type": "application/json" });
-    response.write('{"partial":');
-  });
-  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
-  const deadline = new AbortController();
-  const caller = new AbortController();
-  const response = await parserSmokeFetch(deadline.signal)(`http://127.0.0.1:${server.address().port}/parse`, { signal: caller.signal });
-  assert.equal(response.status, 200);
-  const body = response.text();
-  deadline.abort();
-  await assert.rejects(body, { name: "AbortError" });
-  assert.equal(caller.signal.aborted, false);
+  assert.match(example, /^OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE=\.\/secrets\/document-parser\.token$/m);
 });
 
 test("hosted CI readiness diagnostics reveal check codes without response secrets", async () => {
@@ -525,7 +472,8 @@ test("production compose isolates runtimes behind the internal model gateway net
 test("production compose holds every memory in PostgreSQL and ranks it with the bundled index", async () => {
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const envExample = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
-  assert.match(compose, /evimed-postgres:\n\s+image: postgres:16\.14-bookworm/);
+  // pgvector's build of postgres:16, pinned by digest (packages/contracts/pgvector).
+  assert.match(compose, /evimed-postgres:\n(?:\s+#.*\n)*\s+image: pgvector\/pgvector:0\.8\.\d+-pg16-bookworm@sha256:[a-f0-9]{64}\n/);
   assert.match(compose, /POSTGRES_PASSWORD_FILE: \/run\/secrets\/postgres-password/);
   assert.match(compose, /OPEN_SCIENCE_STATE_STORE: postgres/);
   assert.match(compose, /OPEN_SCIENCE_REQUIRE_SHARED_STATE_STORE: "true"/);
@@ -2198,27 +2146,16 @@ test("the hosted e2e accepts any certified model, not one written into it", asyn
   );
 });
 
-test("document ingestion isolates parser bytes and OpenList state from the SaaS data volume", async () => {
-  const [compose, parserDockerfile] = await Promise.all([
-    readFile(path.join(repoRoot, "deploy/web/docker-compose.ingestion.yml"), "utf8"),
-    readFile(path.join(repoRoot, "deploy/document-parser/Dockerfile"), "utf8"),
-  ]);
-  const parser = compose.match(/\n  evimed-document-parser:\n([\s\S]*?)\n  evimed-openlist:/)?.[1] ?? "";
+test("document ingestion keeps OpenList state off the SaaS data volume", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.ingestion.yml"), "utf8");
   const openList = compose.match(/\n  evimed-openlist:\n([\s\S]*?)\nvolumes:/)?.[1] ?? "";
-  assert.match(parser, /evimed-parser-staging:\/data:ro/);
-  assert.doesNotMatch(parser, /open-science-data/);
-  assert.match(parser, /networks:\n\s+- ingestion-internal/);
+  assert.ok(openList, "the OpenList service block was not found; the read is wrong, not the overlay");
   assert.match(compose, /ingestion-internal:\n\s+internal: true/);
   assert.doesNotMatch(openList, /open-science-data/);
   assert.match(compose, /evimed-openlist-init:[\s\S]*?chown -R 1001:1001 \/opt\/openlist\/data/);
   assert.match(compose, /evimed-openlist-bootstrap:[\s\S]*?network_mode: none/);
   assert.match(compose, /OPEN_SCIENCE_OPENLIST_TOKEN_FILE: \/run\/openlist-secrets\/openlist\.token/);
   assert.match(openList, /user: "1001:1001"/);
-  assert.match(parserDockerfile, /mineru-models-download -s modelscope -m pipeline/);
-  assert.match(parserDockerfile, /torch==2\.8\.0 torchvision==0\.23\.0 --index-url/);
-  assert.match(parserDockerfile, /assert torch\.version\.cuda is None/);
-  assert.match(parserDockerfile, /docker\.m\.daocloud\.io\/library\/python:3\.12\.11-slim-bookworm@sha256:[a-f0-9]{64}/);
-  assert.match(parserDockerfile, /^USER evimed$/m);
 });
 
 test("every optional-channel lever the server reads is forwarded by compose", async () => {

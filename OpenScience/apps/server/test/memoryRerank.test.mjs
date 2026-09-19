@@ -186,3 +186,19 @@ test("a key file that anyone could read is refused rather than used", async (t) 
   const missing = new MemoryRerank({ apiKeyFile: path.join(directory, "absent"), model: "qwen3-rerank", apiBase: flatBase });
   assert.equal(missing.status().code, "memory_rerank_key_unavailable");
 });
+
+test("a task instruction rides both envelopes when one is set, and neither when it is not", async () => {
+  // The knowledge-base search ranks for a different task than memory recall;
+  // qwen3-rerank takes that task as `instruct` (English, per its docs).
+  const instruct = "Given a clinical question, rank passages that answer it";
+  const flat = reranker({ instruct }, [{ status: 200, body: flatResults([0.2, 0.8]) }]);
+  await flat.rerank.order("q", ["a", "b"]);
+  assert.equal(flat.fetchImpl.calls[0].body.instruct, instruct);
+  const native = reranker({ apiBase: nativeBase, instruct },
+    [{ status: 200, body: { output: { results: [{ index: 0, relevance_score: 0.1 }, { index: 1, relevance_score: 0.9 }] } } }]);
+  await native.rerank.order("q", ["a", "b"]);
+  assert.deepEqual(native.fetchImpl.calls[0].body.parameters, { return_documents: false, instruct });
+  const plain = reranker({}, [{ status: 200, body: flatResults([0.2, 0.8]) }]);
+  await plain.rerank.order("q", ["a", "b"]);
+  assert.equal("instruct" in plain.fetchImpl.calls[0].body, false);
+});

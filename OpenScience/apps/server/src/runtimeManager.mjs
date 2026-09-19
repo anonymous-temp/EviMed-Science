@@ -24,6 +24,8 @@ import { renderCredentialsFile, renderProfilePatch, runtimeEnvironment } from ".
 import { PLUGIN_ID, pluginEntry } from "./pluginService.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
+// Knowledge-base search reaches the MCP server by this one variable (2026-09-20).
+import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
 import {
   isAllowedWireMethod,
   mapWireError,
@@ -1496,6 +1498,10 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
       }
       environment.EVIMED_GEO_PROBE_GATEWAY_URL = geoProbeGatewayUrl;
     }
+    // Knowledge-base search rides the same runtime token. Absent when the
+    // switch is off, so the tool says "disabled" without asking.
+    const kbSearchGatewayUrl = kbSearchGatewayProviderUrl(config);
+    if (kbSearchGatewayUrl) environment.EVIMED_KB_SEARCH_GATEWAY_URL = kbSearchGatewayUrl;
   }
   // Keyless-public Unpaywall tier: when the operator configured an email, the
   // runtime MCP may query Unpaywall anonymously (email param) even without a

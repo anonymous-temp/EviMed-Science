@@ -583,3 +583,20 @@ export {
   doiOf,
   sourceUpdatesFromCrossref,
 } from './src/sourceUpdates.mjs'
+// sourceDocuments — 12 exports: what the knowledge base accepts, where each
+// format is read, where its pages begin, how a quotation's offset becomes a
+// page number, and what a personal-library document's state reads as.
+export {
+  KNOWLEDGE_BASE_FORMATS,
+  LIBRARY_ITEM_STATUSES,
+  SOURCE_API_FORMATS,
+  SOURCE_LOCAL_TEXT_FORMATS,
+  SOURCE_MEDIA_FORMATS,
+  SOURCE_PAGE_MAP_MAX_PAGES,
+  SOURCE_PAGE_STATUSES,
+  normalizeSourcePageMap,
+  renderSourcePageMarkers,
+  sourceFileFormat,
+  sourceFormatRoute,
+  sourcePageForOffset,
+} from './src/sourceDocuments.mjs'

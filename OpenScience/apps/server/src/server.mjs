@@ -78,12 +78,18 @@ import { CapsuleService } from "./capsuleService.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
-import { SourceService, projectSourceManifestRecord } from "./sourceService.mjs";
+import { SourceService, assertKnowledgeBaseFormat, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
+import { verifySourceMetadata } from "./sourceMetadata.mjs";
+// Knowledge-base search (2026-09-20): the index, its embedder and its gateway.
+import { KB_RERANK_INSTRUCT, KnowledgeBaseIndex } from "./kbIndex.mjs";
+import { createLibrary } from "./libraryService.mjs";
+import { KbEmbedder } from "./kbEmbedding.mjs";
+import { KB_SEARCH_GATEWAY_PATH, createKbSearchGatewayHandler } from "./kbSearchGateway.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
 import { createSourceUnderstandingRuntime } from "./sourceUnderstandingRuntime.mjs";
-import { removeSourceCopies, sourceAttemptId, stageParserInput } from "./sourceFiles.mjs";
+import { removeSourceCopies, sourceAttemptId } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { createWebRenderer } from "./agentbay/browser.mjs";
 import { createWebReader, webReadMetricFamilies, webReadTransportFor, webReadUserAgent } from "./webRead.mjs";
@@ -456,7 +462,8 @@ function routePattern(pathname) {
     pathname === GEO_PROBE_GATEWAY_PATH ||
     pathname === REVISION_GATEWAY_PATH ||
     pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH ||
-    pathname === ENGINE_USAGE_PATH
+    pathname === ENGINE_USAGE_PATH ||
+    pathname === KB_SEARCH_GATEWAY_PATH
   ) return pathname;
   return pathname === "/" ? "/" : "/static";
 }
@@ -1002,6 +1009,7 @@ export function createWebApiApp(overrides = {}) {
   const documentParser = new DocumentParserClient({
     baseUrl: config.documentParserUrl,
     token: config.documentParserToken,
+    revision: config.documentParserRevision,
     timeoutMs: config.documentParserTimeoutMs,
     fetchImpl: overrides.documentParserFetch ?? globalThis.fetch,
   });
@@ -1013,12 +1021,43 @@ export function createWebApiApp(overrides = {}) {
   const openListConnector = openListClient
     ? new OpenListSourceConnector(openListClient, { tenantRoot: config.openListTenantRoot }) : null;
   const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, maxJsonBytes: config.maxJsonBytes });
+  // One admission for every way a file reaches `knowledge-base/`: the upload
+  // route and the upload command both refuse a format the knowledge base
+  // cannot read before a byte is written, and both register what they wrote.
+  // The web page uploads through the command, which until 2026-09-20 wrote
+  // the file and registered nothing — a researcher's upload never became a
+  // source, and the knowledge base stayed empty however much was uploaded.
+  const knowledgeBaseUploads = {
+    /** @param {string} root @param {string} rel */
+    covers: (root, rel) => root === "base" && (rel === "knowledge-base" || rel.startsWith("knowledge-base/")),
+    /** @param {string} rel */
+    admit: (rel) => assertKnowledgeBaseFormat(rel),
+    /** @param {any} ctx @param {string} rel @param {Buffer} buffer */
+    register: async (ctx, rel, buffer) => {
+      if (!sourceService) return null;
+      const registered = await sourceService.register(ctx.user.id, {
+        projectId: ctx.project.id,
+        connector: { type: "upload", id: `${ctx.project.id}-library` },
+        path: rel,
+        size: buffer.length,
+        mtime: new Date().toISOString(),
+        mimeType: mimeFor(rel),
+        sha256: createHash("sha256").update(buffer).digest("hex"),
+      });
+      await audit(ctx, "source.register", "completed", { target: registered.source.id, duplicate: registered.duplicate });
+      return registered;
+    },
+  };
   const sourceProject = async (job) => {
     const user = await store.userById(job.userId);
     if (!user) throw new HttpError(404, "source_account_unavailable", "Source account is unavailable.");
     return store.requireProject(user, job.projectId);
   };
   let sourceUnderstandingRuntime = null;
+  /** @type {KnowledgeBaseIndex | null} */
+  let kbIndex = null;
+  /** @type {import("./libraryService.mjs").LibraryService | null} */
+  let libraryService = null;
   const sourceWorker = sourceService && config.sourceIngestionEnabled ? new SourceIngestionWorker({
     jobs: productJobs,
     sources: sourceService,
@@ -1030,6 +1069,13 @@ export function createWebApiApp(overrides = {}) {
       readResult: identity => sourceUnderstandingRuntime.readResult(identity),
     }),
     cancelUnderstanding: identity => sourceUnderstandingRuntime.cancel(identity),
+    verifyMetadata: (metadata) => verifySourceMetadata(metadata, {
+      fetchImpl: overrides.sourceMetadataFetch ?? globalThis.fetch, timeoutMs: config.sourceDoiCheckTimeoutMs,
+    }),
+    onPublished: (job) => {
+      kbIndex?.wake();
+      void libraryService?.refreshSource(job.userId, job.payload?.sourceId);
+    },
     resolveSource: async (job, source) => {
       const connectorType = source.payload.connector?.type;
       if (!["upload", "internal", "openlist"].includes(connectorType)) {
@@ -1061,33 +1107,16 @@ export function createWebApiApp(overrides = {}) {
         localPath = resolveScopedPath(project.baseDir, relative);
         await assertNoSymlinkPath(project.baseDir, localPath);
       }
-      if (!config.documentParserUrl) return localPath;
-      if (!config.documentParserStagingDir) throw new HttpError(503, "document_parser_staging_unconfigured", "Document parser staging is unavailable.");
-      const opened = await openScopedFileNoFollow(project.baseDir, localPath);
-      let bytes;
-      try {
-        if (opened.stat.size > config.openListMaxDownloadBytes) {
-          throw new HttpError(413, "source_parser_input_too_large", "Use the local analysis agent for files above the hosted parser limit.");
-        }
-        bytes = await opened.handle.readFile();
-      } finally { await opened.handle.close(); }
-      const actualHash = createHash("sha256").update(bytes).digest("hex");
-      if (actualHash !== source.payload.fingerprint?.sha256 || bytes.length !== Number(source.payload.fingerprint?.size)) {
-        throw new HttpError(409, "source_changed", "The source changed after it was registered; refresh it before analysis.");
-      }
-      const stagingRoot = path.resolve(config.documentParserStagingDir);
-      const stagingRelative = `${job.id}-${sourceAttemptId(job)}/${path.basename(localPath)}`;
-      const stagingPath = resolveScopedPath(stagingRoot, stagingRelative);
-      await sourceService.withIngestionLease(job, async () => {
-        await stageParserInput({ stagingRoot, relative: stagingRelative, bytes, parserGid: config.documentParserGid });
-      });
-      return { localPath, stagingPath, parserPath: `/data/${stagingRelative}` };
+      // The parser reads these bytes once, without following a link, and
+      // refuses them unless they hash to the digest the source was registered
+      // under — the check that used to sit here before a staging copy.
+      return localPath;
     },
     releaseResolved: async (job, source, _resolved) => {
       const project = job.sourceProject;
       if (!project) throw new HttpError(409, "source_scope_unavailable", "The source workspace was not resolved.");
       await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir, sourceId: source.id,
-        jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job), stagingOnly: true, parserStagingRoot: config.documentParserStagingDir }));
+        jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job), stagingOnly: true }));
     },
     materialize: async (job, source, result) => {
       const project = job.sourceProject ?? await sourceProject(job);
@@ -1095,17 +1124,8 @@ export function createWebApiApp(overrides = {}) {
       if (!Number.isSafeInteger(generation) || generation < 1) throw new HttpError(409, "source_generation_stale", "Source generation is invalid.");
       const relative = `knowledge-base/.evimed-derived/${source.id}/generation-${generation}-${job.id}-${sourceAttemptId(job)}/index.md`;
       const full = resolveScopedPath(project.baseDir, relative);
-      const original = source.payload.paths?.[0] ?? source.id;
-      const value = [
-        `# ${path.posix.basename(String(original))}`,
-        "",
-        `Source: ${String(original)}`,
-        `SHA-256: ${source.payload.fingerprint.sha256}`,
-        `Extractor: ${result.extractor.name} ${result.extractor.version} (${result.extractor.parser})`,
-        "",
-        result.text,
-        "",
-      ].join("\n");
+      const value = sourceIndexDocument({ original: source.payload.paths?.[0] ?? source.id, sha256: source.payload.fingerprint.sha256,
+        extractor: result.extractor, text: result.text, pageMap: result.pageMap, metadata: result.metadata });
       await withProjectStorageMutation(project, async () => {
         await assertProjectCapacity(project, full, Buffer.byteLength(value), config);
         await writeFileAtomicNoFollow(project.baseDir, full, value, { encoding: "utf8", mode: 0o600 });
@@ -1115,14 +1135,38 @@ export function createWebApiApp(overrides = {}) {
     discardMaterialized: async (job, source, _artifactPath) => {
       const project = job.sourceProject ?? await sourceProject(job);
       await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir, sourceId: source.id,
-        jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job), parserStagingRoot: config.documentParserStagingDir }));
+        jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job) }));
     },
     prepareCleanup: sourceProject,
     cleanupSource: async (_job, source, jobIds, project) => {
       await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir, sourceId: source.id,
-        jobIds, parserStagingRoot: config.documentParserStagingDir }));
+        jobIds }));
     },
   }) : null;
+  // The knowledge-base index: derived from the sources, switched with
+  // `kb_search`. Built only where there is a product database to derive from.
+  kbIndex = productDatabase && sourceService && config.kbSearchEnabled ? new KnowledgeBaseIndex({
+    database: productDatabase,
+    sources: sourceService,
+    embedder: overrides.kbEmbedder ?? new KbEmbedder({
+      apiKey: config.dashscopeApiKey, model: config.kbEmbeddingModel, dimension: config.kbEmbeddingDimension,
+      apiBase: config.kbEmbeddingApiBase, timeoutMs: config.kbEmbeddingTimeoutMs,
+    }, { fetchImpl: overrides.kbEmbeddingFetch ?? globalThis.fetch }),
+    rerank: overrides.kbRerank ?? new MemoryRerank({
+      apiKey: config.dashscopeApiKey, model: config.memoryRerankModel, apiBase: config.memoryRerankApiBase,
+      timeoutMs: config.memoryRerankTimeoutMs, instruct: KB_RERANK_INSTRUCT,
+    }, { fetchImpl: overrides.memoryRerankFetch ?? globalThis.fetch }),
+    dimension: config.kbEmbeddingDimension,
+    smallLibraryTokens: config.kbSmallLibraryTokens,
+    reconcileMs: config.kbIndexReconcileMs,
+    canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
+    report: (code) => process.stderr.write(`knowledge-base index: ${code}\n`),
+  }) : null;
+  // The personal library: an account's documents across projects, read-only
+  // in every run, searched beside the project's own (plan §3.2 #4–5).
+  const library = createLibrary({ config, store, documents: productDocuments, sources: sourceService, capsules: capsuleService,
+    kbIndex, report: (code) => process.stderr.write(`personal library: ${code}\n`) });
+  libraryService = library.service;
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
     documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
     capsules: capsuleService,
@@ -2286,7 +2330,8 @@ export function createWebApiApp(overrides = {}) {
     timeoutMs: config.sourceUpdatesTimeoutMs,
     fetchImpl: overrides.sourceUpdatesFetch ?? globalThis.fetch,
   });
-  const commands = createCommandRegistry({ config, runtimeManager, sourceUpdates });
+  const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex });
+  const commands = createCommandRegistry({ config, runtimeManager, sourceUpdates, knowledgeBaseUploads });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx), {
     claimAllowed: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
   });
@@ -2558,7 +2603,9 @@ export function createWebApiApp(overrides = {}) {
           ? webSearchGatewayHandler
           : pathname === GEO_PROBE_GATEWAY_PATH
             ? geoProbeGatewayHandler
-            : null;
+            : pathname === KB_SEARCH_GATEWAY_PATH
+              ? kbSearchGatewayHandler
+              : null;
     if (gateway) {
       try {
         await gateway(req, res, recordGatewayFailure);
@@ -2626,6 +2673,7 @@ export function createWebApiApp(overrides = {}) {
       if (await notificationRoutes(req, res)) return;
       if (await learningRoutes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
+      if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
       if (await im.routes(req, res)) return;
 
@@ -3925,6 +3973,8 @@ export function createWebApiApp(overrides = {}) {
         if (buffer.length > config.maxFileBytes) throw new HttpError(413, "file_too_large", "file is too large.");
         const base = root === "base" ? ctx.project.baseDir : ctx.project.workspaceDir;
         const full = resolveScopedPath(base, rel);
+        const knowledge = knowledgeBaseUploads.covers(root, rel);
+        if (knowledge) knowledgeBaseUploads.admit(rel);
         await withProjectStorageMutation(ctx.project, async () => {
           await assertProjectCapacity(ctx.project, full, buffer.length, config);
           await writeFileAtomicNoFollow(base, full, buffer, { mode: 0o600 });
@@ -3933,22 +3983,7 @@ export function createWebApiApp(overrides = {}) {
           target: root === "base" ? `${root}:${rel}` : rel,
           bytes: buffer.length,
         });
-        let registered = null;
-        if (sourceService && root === "base" && (rel === "knowledge-base" || rel.startsWith("knowledge-base/"))) {
-          registered = await sourceService.register(ctx.user.id, {
-            projectId: ctx.project.id,
-            connector: { type: "upload", id: `${ctx.project.id}-library` },
-            path: rel,
-            size: buffer.length,
-            mtime: new Date().toISOString(),
-            mimeType: mimeFor(rel),
-            sha256: createHash("sha256").update(buffer).digest("hex"),
-          });
-          await audit(ctx, "source.register", "completed", {
-            target: registered.source.id,
-            duplicate: registered.duplicate,
-          });
-        }
+        const registered = knowledge ? await knowledgeBaseUploads.register(ctx, rel, buffer) : null;
         sendJson(res, 200, { data: { path: rel, ...(registered
           ? { ...registered, source: projectSourceManifestRecord(registered.source) } : {}) } });
         return;
@@ -4195,7 +4230,7 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker]) {
+    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -4224,6 +4259,7 @@ export function createWebApiApp(overrides = {}) {
       pluginApplyWorker?.start();
       memoryIndexWorker?.start();
       sourceWorker?.start();
+      kbIndex?.start();
       autopilotWorker?.start();
       learningWorker?.start();
       im.worker?.start();
@@ -4288,6 +4324,8 @@ export function createWebApiApp(overrides = {}) {
     memoryIndexWorker,
     sourceService,
     sourceWorker,
+    kbIndex,
+    libraryService,
     sourceUnderstandingRuntime,
     autopilotService,
     autopilotWorker,
@@ -4343,6 +4381,7 @@ export function createWebApiApp(overrides = {}) {
       await pluginApplyWorker?.close();
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
+      await kbIndex?.close();
       await autopilotWorker?.close();
       await learningWorker?.close();
       await im.worker?.close();
@@ -5480,13 +5519,17 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
   };
 }
 
+/** The parser is an external metered service. Required means configured,
+ *  holding its key, and answering healthy; not required still reports what is
+ *  configured, because an ingestion that cannot parse anything but text is a
+ *  fact an operator should see on the readiness page, not in a source card. */
 async function readinessDocumentParser(config, parser) {
-  if (!config.requireDocumentParser) return { required: false, configured: Boolean(config.documentParserUrl) };
-  if (config.documentParserTokenError) throw readinessFailure(config.documentParserTokenError);
-  if (![config.documentParserUid, config.documentParserGid].every((value) => Number.isSafeInteger(value) && value > 0 && value <= 65_535)) {
-    throw readinessFailure("document_parser_identity_invalid");
+  if (!config.requireDocumentParser) {
+    return { required: false, configured: Boolean(config.documentParserUrl), authenticated: Boolean(config.documentParserToken) };
   }
-  if (!config.documentParserUrl || !config.documentParserToken || !config.documentParserStagingDir || !parser) throw readinessFailure("document_parser_unconfigured");
+  if (config.documentParserTokenError) throw readinessFailure(config.documentParserTokenError);
+  if (!config.documentParserUrl || !parser) throw readinessFailure("document_parser_unconfigured");
+  if (!config.documentParserToken) throw readinessFailure("document_parser_token_missing");
   return { required: true, ...(await parser.health()) };
 }
 

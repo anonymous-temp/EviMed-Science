@@ -75,6 +75,26 @@ export interface SourceOmissionNotice {
   planned: number;
   disagreements: string[];
 }
+/** What the parsing API read about a document, checked where it can be: the
+ *  DOI against Crossref's title (`verified`; `unconfirmed` when Crossref could
+ *  not say; `mismatch` when it named another work — the DOI is then dropped and
+ *  only `droppedDoi` keeps it). Absent for a document no metadata came with. */
+export interface SourceMetadata {
+  title?: string;
+  authors?: string[];
+  keywords?: string[];
+  publicationDate?: string;
+  source?: string;
+  doi?: string;
+  doiCheck?: {
+    status: "verified" | "unconfirmed" | "mismatch";
+    reason?: string;
+    droppedDoi?: string;
+    crossrefTitle?: string;
+    similarity?: number;
+    at?: string;
+  };
+}
 export interface SourcePayload {
   paths: string[];
   status: SourceStatus;
@@ -83,7 +103,8 @@ export interface SourcePayload {
   version: number;
   familyId?: string;
   generation?: number;
-  analysis?: { phase?: string };
+  analysis?: { phase?: string; pageCount?: number };
+  metadata?: SourceMetadata | null;
   omissionAudit?: { status: string; reason?: string; omissionRate: number | null };
   omissionNotice?: SourceOmissionNotice | null;
   reasons: string[];
@@ -118,11 +139,11 @@ export interface SourcePayload {
  * English "Source analysis failed." for every failure, so it is the same string
  * every time and it is not in the interface language.
  *
- * NOTE: the source pipeline's own codes (`source_parser_*`,
- * `source_understanding_*`, `source_ingestion_failed`, `document_parser_*`) are
- * in neither `ALL_ERROR_CODES` nor any family regex today, so most real
- * failures land on the fallback below. That is a registry gap, not a reason for
- * a fourth table here.
+ * NOTE: the parser's codes (`source_parser_*`, `source_format_unsupported`,
+ * `source_media_unsupported`, `source_changed`) have registry sentences since
+ * the in-house parser replaced MinerU; `source_understanding_*` and
+ * `source_ingestion_failed` still land on the fallback below. That is a
+ * registry gap, not a reason for a fourth table here.
  */
 export function sourceFailureMessage(error?: { code: string; message?: string } | null): string | null {
   if (!error?.code) return null;
@@ -262,4 +283,50 @@ export function browseOpenList(projectId: string, path: string) {
 }
 export function importOpenListSource(projectId: string, path: string) {
   return productRequest<{ source: SourceRecord; duplicate: boolean }>("/sources/openlist/import", "POST", { projectId, path });
+}
+
+/** A document in the personal library (`GET /api/library`): one entry per
+ *  document however many projects hold it — `projects` are those projects and
+ *  `sourceIds` their sources, which is how a project's source card knows its
+ *  document is in the library. `detached` means no project holds it any more
+ *  and the library keeps the last copy it made. */
+export type LibraryItemStatus = "ready" | "processing" | "failed" | "detached";
+export interface LibraryItem {
+  sourceId: string;
+  title: string;
+  authors?: string[];
+  doi?: string;
+  doiStatus?: "verified" | "unconfirmed";
+  kind: string;
+  format?: string;
+  addedAt: string;
+  projects: string[];
+  sourceIds: string[];
+  pageCount?: number;
+  status: LibraryItemStatus;
+  published?: { at: string; capsuleId: string; facts: number; methods: number };
+}
+export interface LibraryPublication {
+  sourceId: string;
+  capsuleId: string;
+  capsuleTitle: string;
+  generation: number;
+  facts: number;
+  methods: number;
+  added: number;
+  kept: number;
+  retired: number;
+}
+
+export function listLibrary() {
+  return productRequest<{ items: LibraryItem[]; maxItems: number }>("/library");
+}
+export function addToLibrary(sourceId: string) {
+  return productRequest<LibraryItem>("/library", "POST", { sourceId });
+}
+export function removeFromLibrary(sourceId: string) {
+  return productRequest<{ sourceId: string; removed: true }>(`/library/${encodeURIComponent(sourceId)}`, "DELETE");
+}
+export function publishLibraryItem(sourceId: string) {
+  return productRequest<LibraryPublication>(`/library/${encodeURIComponent(sourceId)}/publish-to-capsule`, "POST");
 }

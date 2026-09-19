@@ -67,7 +67,7 @@ function readKeyFile(file) {
 export class MemoryRerank {
   /**
    * @param {{apiKey?:string,apiKeyFile?:string,model?:string,apiBase?:string,timeoutMs?:number,
-   *   maxDocuments?:number,maxCharsPerDocument?:number}} options
+   *   maxDocuments?:number,maxCharsPerDocument?:number,instruct?:string}} options
    * @param {{fetchImpl?:any,report?:(code:string)=>void}} [dependencies]
    */
   constructor({
@@ -78,6 +78,7 @@ export class MemoryRerank {
     timeoutMs = 3_000,
     maxDocuments = 32,
     maxCharsPerDocument = 2_000,
+    instruct = "",
   } = {}, { fetchImpl = globalThis.fetch, report = defaultReport } = {}) {
     const key = apiKeyFile ? readKeyFile(apiKeyFile) : { value: String(apiKey ?? ""), error: null };
     this.apiKey = key.value;
@@ -87,6 +88,10 @@ export class MemoryRerank {
     this.timeoutMs = Math.max(100, Math.min(30_000, Number(timeoutMs) || 3_000));
     this.maxDocuments = Math.max(2, Math.min(100, Number(maxDocuments) || 32));
     this.maxCharsPerDocument = Math.max(100, Math.min(20_000, Number(maxCharsPerDocument) || 2_000));
+    // This instance's task instruction (English, per qwen3-rerank's
+    // documentation): the knowledge-base search builds its own reranker with one.
+    // Unset, `order` asks for MEMORY_RERANK_INSTRUCT; a call may still override.
+    this.instruct = String(instruct ?? "").trim();
     this.fetchImpl = fetchImpl;
     this.report = report;
     this.lastError = this.keyError;
@@ -111,10 +116,11 @@ export class MemoryRerank {
    * @param {string} query
    * @param {string[]} documents
    * @param {{ instruct?: string }} [options] what to judge the documents for;
-   *   `MEMORY_RERANK_INSTRUCT` unless given, none when given empty
+   *   the instance's own instruction, else `MEMORY_RERANK_INSTRUCT`, unless
+   *   given; none when given empty
    * @returns {Promise<number[]>}
    */
-  async order(query, documents, { instruct = MEMORY_RERANK_INSTRUCT } = {}) {
+  async order(query, documents, { instruct = this.instruct || MEMORY_RERANK_INSTRUCT } = {}) {
     const texts = Array.isArray(documents) ? documents : [];
     const identity = texts.map((_, index) => index);
     if (!this.configured || texts.length < 2) return identity;

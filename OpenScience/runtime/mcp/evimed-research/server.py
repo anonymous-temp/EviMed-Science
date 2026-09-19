@@ -35,6 +35,7 @@ import specialist_jobs
 import source_catalog
 import geo_probe
 import web_search
+import kb_search
 
 
 SERVER_NAME = "evimed-research"
@@ -829,6 +830,7 @@ TOOL_DEFINITIONS = [
 # `public_sources._open_remote` sends every URL through the server gateway when
 # one is configured, and all eight hosts are on its allowlist.
 TOOL_DEFINITIONS.extend(science_connectors.tool_definitions())
+TOOL_DEFINITIONS.extend(kb_search.tool_definitions())
 
 
 TOOLS = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
@@ -1846,6 +1848,22 @@ def _dispatch(name, arguments):
                 [
                     "Retry once the backend recovers." if error.retryable
                     else "Continue with the bibliographic channels; do not read an unavailable web search as an empty field.",
+                ],
+            )
+        result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
+        return result
+    if name == "kb_search":
+        try:
+            result = kb_search.search(arguments)
+        except kb_search.KbSearchError as error:
+            return failure(
+                error.code,
+                str(error),
+                error.retryable,
+                "retry" if error.retryable else "unsupported",
+                [
+                    "Retry once the search recovers." if error.retryable
+                    else "Read or grep the knowledge-base files under .evimed-knowledge/ instead.",
                 ],
             )
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
