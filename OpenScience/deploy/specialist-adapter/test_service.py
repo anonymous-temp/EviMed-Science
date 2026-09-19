@@ -324,6 +324,106 @@ def test_an_engine_that_reports_no_modules_is_not_recorded_as_undegraded(tmp_pat
     assert "modules" not in state
 
 
+def _usage_receiver():
+    """A stand-in for the control plane's usage endpoint that keeps what it got."""
+    import http.server
+    import threading
+
+    received: list[tuple[dict, bytes]] = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802 — the stdlib's name
+            body = self.rfile.read(int(self.headers["content-length"]))
+            received.append((dict(self.headers), body))
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"data":{"recorded":true}}')
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, received
+
+
+@pytest.mark.parametrize("outcome", ["succeeded", "failed"])
+def test_a_finished_job_reports_what_it_spent_to_the_control_plane(tmp_path, monkeypatch, outcome) -> None:
+    """The engine's tokens reach the usage ledger, success or not.
+
+    The runtime calls this adapter directly, so the control plane never sees a
+    job end: the worker forwards the runner's usage block once the terminal
+    state is written, signed with the workload secret, naming the account and
+    project from the token that admitted the job.
+    """
+    module, client, secret, workspace = _load_service(tmp_path, monkeypatch)
+    usage = {"requests": 4, "cacheHitTokens": 30000, "cacheMissTokens": 2500, "outputTokens": 900, "model": "deepseek-flash"}
+    agent_root = Path(os.environ["EVIMED_AGENT_ROOT"])
+    (agent_root / "evimed_runner.py").write_text(
+        "import argparse,json,sys\n"
+        "from pathlib import Path\n"
+        "p=argparse.ArgumentParser();p.add_argument('--request');p.add_argument('--output-dir');a=p.parse_args()\n"
+        "out=Path(a.output_dir);(out/'report.md').write_text('# Report',encoding='utf-8')\n"
+        f"(out/'result.json').write_text(json.dumps({{'status':'{outcome}','usage':{usage!r}}}),encoding='utf-8')\n"
+        f"sys.exit({0 if outcome == 'succeeded' else 1})\n",
+        encoding="utf-8",
+    )
+    server, received = _usage_receiver()
+    monkeypatch.setenv("EVIMED_USAGE_REPORT_URL", f"http://127.0.0.1:{server.server_address[1]}/internal/usage/v1/engine")
+    try:
+        original_popen = module.subprocess.Popen
+        monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _NeverStarts())
+        job_id = client.post(
+            "/api/v1/evimed/bibliometric-analysis",
+            json={"action": "start", "topic": "spend"},
+            headers={"Authorization": f"Bearer {_token(secret)}"},
+        ).json()["data"]["jobId"]
+        monkeypatch.setattr(module.subprocess, "Popen", original_popen)
+        state_path = workspace / "bibliometric-analysis-runs" / ".jobs" / f"{job_id}.json"
+        assert module.run_job(str(state_path)) == (0 if outcome == "succeeded" else 1)
+    finally:
+        server.shutdown()
+
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["status"] == outcome
+    assert state["usage"] == usage
+    assert len(received) == 1, "one report per job"
+    headers, body = received[0]
+    key = hmac.new(secret.encode(), b"evimed/engine-usage/key/v1", hashlib.sha256).digest()
+    signature = {name.lower(): value for name, value in headers.items()}["x-evimed-engine-usage-signature"]
+    assert signature == "v1=" + hmac.new(key, body, hashlib.sha256).hexdigest()
+    report = json.loads(body)
+    assert report["kind"] == "bibliometric-analysis"
+    assert report["jobId"] == job_id
+    assert (report["userId"], report["projectId"]) == ("user1", "project1"), "the owner comes from the admitting token"
+    assert report["status"] == outcome
+    assert report["usage"] == usage
+    log = (workspace / "bibliometric-analysis-runs" / ".jobs" / f"{job_id}.log").read_text(encoding="utf-8")
+    assert "usage report: recorded (HTTP 200)" in log
+
+
+def test_a_job_whose_runner_reported_no_usage_sends_no_report(tmp_path, monkeypatch) -> None:
+    module, client, secret, workspace = _load_service(tmp_path, monkeypatch)
+    server, received = _usage_receiver()
+    monkeypatch.setenv("EVIMED_USAGE_REPORT_URL", f"http://127.0.0.1:{server.server_address[1]}/internal/usage/v1/engine")
+    try:
+        original_popen = module.subprocess.Popen
+        monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _NeverStarts())
+        job_id = client.post(
+            "/api/v1/evimed/bibliometric-analysis",
+            json={"action": "start", "topic": "silent spend"},
+            headers={"Authorization": f"Bearer {_token(secret)}"},
+        ).json()["data"]["jobId"]
+        monkeypatch.setattr(module.subprocess, "Popen", original_popen)
+        state_path = workspace / "bibliometric-analysis-runs" / ".jobs" / f"{job_id}.json"
+        assert module.run_job(str(state_path)) == 0
+    finally:
+        server.shutdown()
+    assert received == []
+    assert "usage" not in json.loads(state_path.read_text(encoding="utf-8"))
+
+
 class _NeverStarts:
     """A Popen stand-in for tests that run the worker themselves."""
 

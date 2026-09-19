@@ -29,6 +29,7 @@ from pathlib import Path
 
 from safety_agent.analysis.runner import run_to_files
 from safety_agent.core.logging import configure_logging, get_logger
+from safety_agent.llm import usage as provider_usage
 
 logger = get_logger(__name__)
 
@@ -56,6 +57,10 @@ def _optional_date(request: dict, name: str) -> str | None:
 
 
 def _write_result(output_dir: Path, value: dict) -> None:
+    # What the job spent at the provider travels with every outcome: a failed
+    # job's tokens were paid for too. The adapter forwards it to EviMed's
+    # usage ledger.
+    value = {**value, "usage": provider_usage.snapshot()}
     (output_dir / "result.json").write_text(
         json.dumps(value, ensure_ascii=False, indent=2),
         encoding="utf-8",

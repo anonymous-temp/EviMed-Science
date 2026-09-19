@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
+import { USAGE_PURPOSES } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { UsageLedger } from "../src/usageLedger.mjs";
+import { migrateUsageLedger, USAGE_PURPOSE_CHECK } from "../src/usagePersistence.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -17,20 +19,23 @@ const other = `usage_${randomUUID()}`;
 // reconciliation tests assert exact open-cost totals, which the accumulated
 // reservations of the other tests would make unreadable.
 const stale = `usage_${randomUUID()}`;
+// Its own account again: the cap test below asserts what the caps count, which
+// any other test's spend would change.
+const capped = `usage_${randomUUID()}`;
 let database;
 let ledger;
 
 before(async () => {
   if (!databaseUrl) return;
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 8, databaseConnectionTimeoutMs: 2_000 });
-  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Usage owner','development'),($2,'Other owner','development'),($3,'Stale owner','development')", [owner, other, stale]);
-  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Usage',1048576),($2,'default','Other',1048576),($3,'default','Stale',1048576)", [owner, other, stale]);
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Usage owner','development'),($2,'Other owner','development'),($3,'Stale owner','development'),($4,'Capped owner','development')", [owner, other, stale, capped]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Usage',1048576),($2,'default','Other',1048576),($3,'default','Stale',1048576),($4,'default','Capped',1048576)", [owner, other, stale, capped]);
   ledger = new UsageLedger(database);
 });
 
 after(async () => {
   if (!database) return;
-  await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[owner, other, stale]]);
+  await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[owner, other, stale, capped]]);
   await database.close();
 });
 
@@ -358,4 +363,126 @@ test("an interactive run's attributed calls are capped by its own limit, and a l
   assert.deepEqual(withoutFirst(summaries.get(otherRun)), { requests: 1, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, costCny: 0 }, "a reserved call is counted, its tokens are not yet");
   assert.equal(summaries.has("run_never_used"), false);
   assert.equal((await ledger.summaryRuns(owner, [runId])).size, 0, "another account's runs are not read");
+});
+
+/* ------------------------------------------------------- purpose (X1) */
+
+test("every request records what it was for, and the report sums each purpose", options, async () => {
+  // A window no other test writes into: the report reads every account.
+  const at = new Date("2033-03-03T00:00:00.000Z");
+  const extraction = await ledger.reserveModel(reservation(owner, { now: at, purpose: "memory-extraction" }));
+  await ledger.settleModel(owner, extraction.id, {
+    usage: { cacheHitTokens: 100, cacheMissTokens: 20, completionTokens: 7 }, actualCost: 0.25, priced: true,
+  });
+  const routing = await ledger.reserveModel(reservation(other, { now: at, purpose: "routing" }));
+  await ledger.release(other, routing.id, "provider_not_accepted");
+  // Bookkeeping never refuses a model call: no purpose, or one outside the
+  // vocabulary, is recorded as `other`.
+  const unnamed = await ledger.reserveModel(reservation(owner, { now: at }));
+  const misspelled = await ledger.reserveModel(reservation(other, { now: at, purpose: "Routing" }));
+  assert.equal(extraction.purpose, "memory-extraction");
+  assert.equal(unnamed.purpose, "other");
+  assert.equal(misspelled.purpose, "other");
+
+  const report = await ledger.usageByPurpose({ since: at });
+  assert.deepEqual(report.map((row) => row.purpose), [...USAGE_PURPOSES], "every purpose has a row, zero or not");
+  const row = (purpose) => report.find((item) => item.purpose === purpose);
+  assert.deepEqual(row("memory-extraction"), {
+    purpose: "memory-extraction", requests: 1, cacheHitTokens: 100, cacheMissTokens: 20, outputTokens: 7, costCny: 0.25,
+  });
+  // A released call was still a call; it just cost nothing.
+  assert.deepEqual(row("routing"), { purpose: "routing", requests: 1, cacheHitTokens: 0, cacheMissTokens: 0, outputTokens: 0, costCny: 0 });
+  assert.equal(row("other").requests, 2);
+  assert.equal(row("kernel").requests, 0);
+  assert.equal((await ledger.usageByPurpose({ since: new Date("2033-03-04T00:00:00.000Z") })).every((item) => item.requests === 0), true);
+
+  // The database holds the vocabulary too, so a writer that bypasses the
+  // ledger cannot invent a purpose either.
+  await assert.rejects(
+    database.query("UPDATE evimed_usage.model_requests SET purpose='gossip' WHERE id=$1", [unnamed.id]),
+    (error) => error.code === "23514",
+  );
+});
+
+test("a purpose CHECK written for an older vocabulary is replaced, not left refusing the new purposes", options, async () => {
+  // Named for the exact list it enforces, so growing the vocabulary renames it
+  // and the migration swaps the old one out instead of skipping on IF NOT EXISTS.
+  await database.query(`ALTER TABLE evimed_usage.model_requests DROP CONSTRAINT ${USAGE_PURPOSE_CHECK}`);
+  await database.query(`ALTER TABLE evimed_usage.model_requests ADD CONSTRAINT usage_model_requests_purpose_000000000000_check
+    CHECK (purpose IN ('kernel','other')) NOT VALID`);
+  const fresh = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 2_000 });
+  try {
+    await migrateUsageLedger(fresh);
+    const names = (await fresh.query(`SELECT conname FROM pg_constraint
+      WHERE conrelid='evimed_usage.model_requests'::regclass AND conname LIKE 'usage_model_requests_purpose_%'`)).rows.map((row) => row.conname);
+    assert.deepEqual(names, [USAGE_PURPOSE_CHECK]);
+    const accepted = await new UsageLedger(fresh).reserveModel(reservation(owner, { now: new Date("2033-03-05T00:00:00.000Z"), purpose: "engine" }));
+    assert.equal(accepted.purpose, "engine");
+  } finally {
+    await fresh.close();
+  }
+});
+
+test("a spend that already happened is recorded settled in one step and lands once", options, async () => {
+  // A specialist engine reports what its job spent when the job ends: there is
+  // nothing to reserve, and a cap check could only make the ledger wrong.
+  const at = new Date("2033-04-04T00:00:00.000Z");
+  const input = {
+    id: `engine_${randomUUID().replaceAll("-", "")}`, userId: owner, projectId: "default", runId: null, purpose: "engine",
+    model: "deepseek-flash", priceVersion: "evimed-reference-2026-09-10", currency: "CNY",
+    requestFingerprint: createHash("sha256").update("engine-report-1").digest("hex"),
+    usage: { cacheHitTokens: 5_000, cacheMissTokens: 700, completionTokens: 90 }, actualCost: 0.0021, priced: true,
+    providerRequestId: "peer-review:review-20330404-abcdef#1", now: at,
+  };
+  const first = await ledger.recordSettled({ ...input, dailyLimit: 0.000001 });
+  assert.equal(first.status, "settled");
+  assert.equal(first.purpose, "engine");
+  assert.equal(first.createdAt, at.toISOString(), "the row sits at the job's end");
+  assert.deepEqual(first.usage, { cacheHitTokens: 5_000, cacheMissTokens: 700, completionTokens: 90 });
+  assert.equal(first.actualCost, 0.0021);
+  const again = await ledger.recordSettled(input);
+  assert.equal(again.id, first.id);
+  assert.equal(again.revision, first.revision, "a retried report is the same row, not a second one");
+  await assert.rejects(
+    ledger.recordSettled({ ...input, requestFingerprint: createHash("sha256").update("engine-report-2").digest("hex") }),
+    (error) => error.code === "usage_settlement_conflict",
+  );
+  const engine = (await ledger.usageByPurpose({ since: at })).find((row) => row.purpose === "engine");
+  assert.deepEqual(engine, { purpose: "engine", requests: 1, cacheHitTokens: 5_000, cacheMissTokens: 700, outputTokens: 90, costCny: 0.0021 });
+  // A project the account does not hold cannot receive a row.
+  await assert.rejects(
+    ledger.recordSettled({ ...input, id: `engine_${randomUUID().replaceAll("-", "")}`, projectId: "no-such-project" }),
+    (error) => error.code === "23503",
+  );
+});
+
+test("an engine's spend is in every report and in no cap", options, async () => {
+  // An engine reports after its job ended, on the run its project was running
+  // then: the operator's view of cost (plan §3.4 #6), never an input to a
+  // limit that refuses the researcher's next call or stops a run mid-way.
+  const at = new Date("2034-05-05T00:00:00.000Z");
+  const now = new Date("2034-05-05T01:00:00.000Z");
+  const runId = `run_${randomUUID().replaceAll("-", "")}`;
+  await ledger.recordSettled({
+    id: `engine_${randomUUID().replaceAll("-", "")}`, userId: capped, projectId: "default", runId, purpose: "engine",
+    model: "deepseek-flash", priceVersion: "evimed-reference-2026-09-10", currency: "CNY",
+    requestFingerprint: createHash("sha256").update("engine-over-every-cap").digest("hex"),
+    usage: { cacheHitTokens: 0, cacheMissTokens: 1_000_000, completionTokens: 100_000 }, actualCost: 5, priced: true,
+    providerRequestId: "meta-analysis:meta-20340505-abcdef#1", now: at,
+  });
+  const limits = { dailyLimit: 1, weeklyLimit: 1, now };
+  assert.deepEqual(await ledger.assertWithinLimits(capped, limits), { allowed: true });
+  const kernel = await ledger.reserveModel(reservation(capped, { ...limits, runId, runLimit: 1, estimatedCost: 0.5, purpose: "kernel" }));
+  assert.equal(kernel.status, "reserved", "¥5 of engine spend on this run and account left every cap untouched");
+  // The caps are live all the same: the kernel's own spend still reaches them.
+  await ledger.settleModel(capped, kernel.id, {
+    usage: { cacheHitTokens: 0, cacheMissTokens: 10_000, completionTokens: 1_000 }, actualCost: 0.9, priced: true,
+  });
+  await assert.rejects(ledger.reserveModel(reservation(capped, { ...limits, runId, runLimit: 1, estimatedCost: 0.5 })),
+    (error) => error.code === "usage_budget_exceeded" && error.details?.window === "run");
+  await assert.rejects(ledger.assertWithinLimits(capped, { ...limits, dailyLimit: 0.9 }),
+    (error) => error.code === "usage_budget_exceeded" && error.details?.window === "day");
+  // And every report still carries every yuan of it.
+  assert.equal((await ledger.summaryRun(capped, runId)).actualCost, 5.9);
+  assert.equal((await ledger.summary(capped, { since: at })).actualCost, 5.9);
 });

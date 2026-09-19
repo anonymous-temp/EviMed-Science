@@ -259,3 +259,31 @@ async def test_gateway_flash_returns_complete_answer_after_expansion(monkeypatch
     async with _client() as llm:
         assert await llm.complete([{"role": "user", "content": "ping"}], tier="flash", max_tokens=2000) == "complete"
     assert [json.loads(call.request.content)["max_tokens"] for call in route.calls] == [6096, 12192]
+
+
+@respx.mock
+async def test_every_answered_request_is_counted_for_the_evimed_usage_ledger():
+    """The runner reports these totals, and EviMed records them per job.
+
+    The engine calls DeepSeek itself, so none of its tokens reached EviMed's
+    usage ledger; a retried request is billed once, when it is answered.
+    """
+    from safety_agent.llm import usage as provider_usage
+
+    provider_usage.reset()
+    respx.post(f"{BASE}/chat/completions").mock(side_effect=[
+        httpx.Response(429, json={"error": "slow down"}),
+        httpx.Response(200, json={**_payload("ONE"), "usage": {
+            "prompt_tokens": 1000, "prompt_cache_hit_tokens": 800, "prompt_cache_miss_tokens": 200,
+            "completion_tokens": 40,
+        }}),
+        httpx.Response(200, json=_payload("TWO")),
+    ])
+    async with _client() as llm:
+        await llm.complete([{"role": "user", "content": "one"}], tier="flash")
+        await llm.complete([{"role": "user", "content": "two"}], tier="flash")
+    # The second response did not split its prompt: all of it is a miss.
+    assert provider_usage.snapshot() == {
+        "requests": 2, "cacheHitTokens": 800, "cacheMissTokens": 203, "outputTokens": 42, "model": "deepseek-flash",
+    }
+    provider_usage.reset()

@@ -347,3 +347,43 @@ async def test_gateway_fast_request_reserves_reasoning_and_preserves_logical_tie
         assert request["json"]["thinking"] == {"type": "enabled"}
         assert request["json"]["reasoning_effort"] == "high"
         assert "temperature" not in request["json"]
+
+
+@pytest.mark.asyncio
+async def test_every_billed_response_is_counted_for_the_evimed_usage_ledger(monkeypatch):
+    """The runner reports these totals, and EviMed records them per job: a
+    truncated answer and its retry were both billed, and a stream's usage
+    arrives in its last chunk."""
+    from src.services import llm_usage as provider_usage
+
+    provider_usage.reset()
+    requests = []
+
+    def response_factory(request):
+        truncated = len(requests) == 1
+        return _FakeResponse(request, content="partial" if truncated else "complete",
+                             finish_reason="length" if truncated else "stop")
+
+    monkeypatch.setattr(gateway_module, "_make_session",
+                        lambda timeout: _FakeSession(requests, response_factory=response_factory))
+    gateway = _gateway(monkeypatch)
+    result = await gateway._call_llm(messages=[{"role": "user", "content": "test"}],
+                                     model=gateway.model_mapping[ModelTier.ADVANCED], temperature=0, max_tokens=10)
+    assert result["content"] == "complete"
+    assert provider_usage.snapshot() == {
+        "requests": 2, "cacheHitTokens": 0, "cacheMissTokens": 2, "outputTokens": 2, "model": "deepseek-flash",
+    }
+
+    lines = [
+        b'data: {"choices":[{"delta":{"content":"hello"},"finish_reason":"stop"}]}\n',
+        b'data: {"choices":[],"usage":{"prompt_tokens":50,"prompt_cache_hit_tokens":40,'
+        b'"prompt_cache_miss_tokens":10,"completion_tokens":3}}\n',
+        b"data: [DONE]\n",
+    ]
+    monkeypatch.setattr(gateway_module, "_make_session", lambda timeout: _FakeSession(
+        [], response_factory=lambda request: _FakeResponse(request, stream_lines=lines)))
+    assert [chunk async for chunk in gateway.stream_text([{"role": "user", "content": "x"}], max_tokens=10)] == ["hello"]
+    assert provider_usage.snapshot() == {
+        "requests": 3, "cacheHitTokens": 40, "cacheMissTokens": 12, "outputTokens": 5, "model": "deepseek-flash",
+    }
+    provider_usage.reset()

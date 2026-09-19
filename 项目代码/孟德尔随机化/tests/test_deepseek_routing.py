@@ -188,3 +188,48 @@ def test_gateway_policy_reserves_reasoning_for_flash_without_changing_tier(monke
     assert ("temperature" in request) is not managed
     assert "tier=flash" in caplog.text
     assert client.expanded_max_tokens("flash", request["max_tokens"]) == (12192 if managed else 2000)
+
+
+def test_every_billed_response_is_counted_for_the_evimed_usage_ledger(monkeypatch):
+    """The runner reports these totals, and EviMed records them per job: a
+    truncated answer and its retry were both billed."""
+    from mr_agent.llm import usage as provider_usage
+
+    provider_usage.reset()
+    client, completions = _client(monkeypatch)
+    replies = iter([("partial", "length"), ('{"ok": true}', "stop")])
+
+    def create(**kwargs):
+        completions.requests.append(dict(kwargs))
+        content, finish_reason = next(replies)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=content), finish_reason=finish_reason)],
+            usage=SimpleNamespace(prompt_tokens=300, prompt_cache_hit_tokens=250, prompt_cache_miss_tokens=50,
+                                  completion_tokens=20),
+        )
+
+    completions.create = create
+    client.chat([{"role": "user", "content": "analyze"}], model_tier="pro")
+    assert len(completions.requests) == 2
+    assert provider_usage.snapshot() == {
+        "requests": 2, "cacheHitTokens": 500, "cacheMissTokens": 100, "outputTokens": 40, "model": "deepseek-flash",
+    }
+    provider_usage.reset()
+
+
+def test_every_result_the_runner_writes_carries_the_jobs_spend(tmp_path):
+    """Every outcome goes through one writer, so a failed job's tokens reach
+    EviMed's usage ledger as surely as a finished one's."""
+    import json
+
+    import evimed_runner
+    from mr_agent.llm import usage as provider_usage
+
+    provider_usage.reset()
+    provider_usage.record({"prompt_tokens": 90, "completion_tokens": 9}, "deepseek-flash")
+    evimed_runner._write_result(tmp_path, {"status": "failed", "error": "stopped"})
+    result = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
+    assert result["status"] == "failed"
+    assert result["usage"] == {"requests": 1, "cacheHitTokens": 0, "cacheMissTokens": 90, "outputTokens": 9,
+                               "model": "deepseek-flash"}
+    provider_usage.reset()

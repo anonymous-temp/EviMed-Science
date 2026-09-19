@@ -9,26 +9,13 @@
 // It is also fully fail-safe: any disabled flag, missing key, timeout, bad
 // response, low confidence, or unknown agent id resolves to null (open-domain),
 // never an exception and never a blocked dispatch.
-
-function classifierUrl(baseUrl, production = false) {
-  const url = new URL(baseUrl);
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-    throw new Error("Specialist classifier provider URL is invalid.");
-  }
-  if (production && (url.origin !== "https://api.deepseek.com" || url.pathname !== "/")) {
-    throw new Error("Production specialist classification must use the official DeepSeek API origin.");
-  }
-  url.pathname = `${url.pathname.replace(/\/$/, "")}/chat/completions`;
-  return url;
-}
-
-async function boundedJsonResponse(response, maximumBytes = 64 * 1024) {
-  const declared = Number(response.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > maximumBytes) throw new Error("Specialist classifier response is too large.");
-  const text = await response.text();
-  if (text.length > maximumBytes) throw new Error("Specialist classifier response is too large.");
-  return JSON.parse(text);
-}
+//
+// It reaches the provider through `callModelForControlPlane`, metered as
+// `routing`. It used to call api.deepseek.com with its own fetch, so every
+// classification — one per unrouted question, on the dispatch path — was spent
+// outside the usage ledger and outside the account's caps: the same second way
+// out that memory extraction had until it was moved onto the gateway.
+import { callModelForControlPlane } from "./modelGateway.mjs";
 
 function parseClassifierJson(content) {
   if (typeof content !== "string") return null;
@@ -81,13 +68,21 @@ const classifierInstructions = [
 ].join(" ");
 
 export class SpecialistClassifier {
-  constructor(config, { fetchImpl = globalThis.fetch } = {}) {
+  /**
+   * @param {Record<string, any>} config
+   * @param {{ fetchImpl?: typeof fetch, usageLedger?: any }} [options]
+   */
+  constructor(config, { fetchImpl = globalThis.fetch, usageLedger = null } = {}) {
     this.config = config;
     this.fetchImpl = fetchImpl;
+    this.usageLedger = usageLedger;
     this.enabled = config?.llmRoutingEnabled === true;
     const threshold = Number(config?.llmRoutingConfidenceThreshold);
     this.threshold = Number.isFinite(threshold) ? Math.max(0, Math.min(1, threshold)) : 0.75;
-    this.timeoutMs = Math.max(1_000, Math.min(120_000, Number(config?.modelGatewayTimeoutMs ?? 30_000)));
+    // Its own total deadline (config.mjs `llmRoutingTimeoutMs`). It borrowed
+    // the model gateway's streaming idle time, clamped to 120 s, so a provider
+    // that hung held a dispatch for two minutes before the net took over.
+    this.timeoutMs = Math.max(1_000, Math.min(120_000, Number(config?.llmRoutingTimeoutMs ?? 20_000) || 20_000));
   }
 
   get available() {
@@ -116,8 +111,12 @@ export class SpecialistClassifier {
     return null;
   }
 
-  /** @param {{ failure?: string, verdict?: string }} [trace] */
-  async classify(query, agents, trace) {
+  /**
+   * @param {{ failure?: string, verdict?: string }} [trace]
+   * @param {{ userId: string, projectId: string } | null} [owner] the account and
+   *   project the question belongs to, which the classification is charged to
+   */
+  async classify(query, agents, trace, owner = null) {
     if (!this.available) return null;
     if (typeof query !== "string" || !query.trim()) return null;
     if (!Array.isArray(agents) || agents.length === 0) return null;
@@ -136,46 +135,39 @@ export class SpecialistClassifier {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await this.fetchImpl(classifierUrl(this.config.deepseekBaseUrl, this.config.production), {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${this.config.deepseekApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const body = await callModelForControlPlane({
+        config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl,
+      }, {
+        userId: owner?.userId ?? "",
+        projectId: owner?.projectId ?? "",
+        purpose: "routing",
+        signal: controller.signal,
+        body: {
           model: this.config.deepseekModel,
-          stream: false,
+          // Thinking off, as for run titles (runTitles.mjs). A closed-set
+          // choice is not a reasoning task, and it sits on the dispatch path,
+          // where every second is the researcher waiting for the run to start.
+          // With thinking on, `temperature` was ignored and the budget was a
+          // race against the reasoning: at 200 tokens six of six live
+          // classifications came back with empty content, and the pro tier
+          // emptied 2,000 too, so it grew to 8,000. Both V4 tiers honour the
+          // switch and then write no reasoning at all, so the budget holds the
+          // verdict alone: about twenty tokens of JSON, with room for a fence
+          // or a stray sentence around it.
+          thinking: { type: "disabled" },
           temperature: 0,
-          // A reasoning model spends its budget thinking before it writes.
-          // At 200 it spent all of it: measured against the live API, six of
-          // six classifications came back with an empty content and 900–1000
-          // characters of reasoning_content — the verdict never got written.
-          // The fallback that exists to catch what the regex misses was
-          // therefore dead, and every miss fell to the answer line looking
-          // exactly like "no specialist fits". At 2000 the same six returned a
-          // verdict every time — on the flash model. Certifying the pro model
-          // put the deployment back where it started: production logged
-          // "produced no verdict: empty_content" and every route fell through
-          // to the regex net, which is the arrangement this was moved away
-          // from. A budget tuned against one model is not a budget; the ceiling
-          // has to leave room for the reasoning the model actually does, and a
-          // classification is a few dozen tokens of output whatever precedes it.
-          max_tokens: 8_000,
+          max_tokens: 512,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: classifierInstructions },
             { role: "user", content: JSON.stringify({ query: query.slice(0, 4_000), specialists: catalog }) },
           ],
-        }),
-        signal: controller.signal,
+        },
       });
-      if (!response.ok) return this.declined(`http_${response.status}`, trace);
-      const body = await boundedJsonResponse(response);
-      // Read the verdict wherever the model put it. A reasoning model that
-      // runs its budget close still often carries the JSON in
-      // reasoning_content, and a classification we already paid for should not
-      // be discarded over which field it arrived in.
+      // Read the verdict wherever the model put it. With thinking off it
+      // belongs in content; a model that reasons anyway may still carry the
+      // JSON in reasoning_content, and a classification we already paid for
+      // should not be discarded over which field it arrived in.
       const message = body?.choices?.[0]?.message;
       const parsed = parseClassifierJson(message?.content) ?? parseClassifierJson(message?.reasoning_content);
       // No verdict at all is a broken classifier; "none" and a low-confidence
@@ -202,7 +194,9 @@ export class SpecialistClassifier {
         confidence: parsed.confidence,
       });
     } catch (error) {
-      return this.declined(error?.name === "AbortError" ? "timeout" : `error_${error?.code ?? "unknown"}`, trace);
+      return this.declined(error?.name === "AbortError" ? "timeout"
+        : error?.code === "model_gateway_upstream_error" ? `http_${error.upstreamStatus ?? error.status}`
+          : `error_${error?.code ?? "unknown"}`, trace);
     } finally {
       clearTimeout(timeout);
     }

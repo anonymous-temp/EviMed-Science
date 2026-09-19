@@ -99,6 +99,7 @@ test("account export includes the owner's PostgreSQL customer state and revision
   assert.equal(state.inbox.notifications[0].body, "owner inbox body");
   assert.deepEqual(state.inbox.preferences.channels, ["in-app"]);
   assert.equal(state.usage[0].actualCost, "0.25000000");
+  assert.equal(state.usage[0].purpose, "other", "a row written before the ledger knew purposes reads `other`");
   assert.equal(entries.get("projects/default/workspace/customer.md").toString(), "owner workspace content");
   const serialized = [...entries.values()].map(value => value.toString()).join("\n");
   for (const forbidden of [f.other, "other original fact", "excluded-operator-provider-secret", "excluded-provider-request-id", "excluded-job-credential", "excluded-lease", "excluded-worker", f.cookie, f.csrf,

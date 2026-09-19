@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MemoryRerank } from "../src/memoryRerank.mjs";
+import { MEMORY_RERANK_INSTRUCT, MemoryRerank } from "../src/memoryRerank.mjs";
 
 const key = `not-a-real-${"credential"}`;
 const flatBase = "https://dashscope.aliyuncs.com/compatible-api/v1/reranks";
@@ -60,6 +60,7 @@ test("the endpoint decides the envelope, because the two DashScope paths take di
   await flat.rerank.order("kidney outcomes", ["first", "second"]);
   assert.deepEqual(flat.fetchImpl.calls[0].body, {
     model: "qwen3-rerank", query: "kidney outcomes", documents: ["first", "second"], top_n: 2,
+    instruct: MEMORY_RERANK_INSTRUCT,
   });
   assert.equal(flat.fetchImpl.calls[0].url, flatBase);
 
@@ -69,9 +70,34 @@ test("the endpoint decides the envelope, because the two DashScope paths take di
   assert.deepEqual(native.fetchImpl.calls[0].body, {
     model: "qwen3.7-text-rerank",
     input: { query: "kidney outcomes", documents: ["first", "second"] },
-    parameters: { return_documents: false },
+    parameters: { return_documents: false, instruct: MEMORY_RERANK_INSTRUCT },
   });
   assert.deepEqual(order, [1, 0], "the native answer arrives under output.results");
+});
+
+test("a recall is judged as a memory search, and another caller can ask for its own judgement", async () => {
+  // Unasked, qwen3-rerank judges question answering: which passage answers the
+  // query. A recall wants the memories that bear on the question, including a
+  // preference that answers nothing, so that is the default instruction.
+  assert.match(MEMORY_RERANK_INSTRUCT, /^Given a researcher's current question, retrieve the memories/);
+  const ranked = { status: 200, body: flatResults([0.2, 0.8]) };
+  const own = "Given a clinical question, retrieve passages of the researcher's own documents that answer it.";
+  const flat = reranker({}, [ranked, ranked, ranked]);
+  await flat.rerank.order("q", ["a", "b"]);
+  await flat.rerank.order("q", ["a", "b"], { instruct: own });
+  await flat.rerank.order("q", ["a", "b"], { instruct: "" });
+  assert.deepEqual(flat.fetchImpl.calls.map((call) => call.body.instruct), [MEMORY_RERANK_INSTRUCT, own, undefined],
+    "the default, the caller's own, and none when the caller asks for none");
+
+  const native = reranker({ apiBase: nativeBase }, [{ status: 200, body: { output: { results: [{ index: 0, relevance_score: 1 }, { index: 1, relevance_score: 0 }] } } }]);
+  await native.rerank.order("q", ["a", "b"], { instruct: own });
+  assert.equal(native.fetchImpl.calls[0].body.parameters.instruct, own, "the native path carries it under parameters");
+  assert.equal(native.fetchImpl.calls[0].body.instruct, undefined);
+
+  // A model DashScope does not document it for is not sent it.
+  const older = reranker({ model: "gte-rerank-v2" }, [ranked]);
+  await older.rerank.order("q", ["a", "b"]);
+  assert.equal(Object.hasOwn(older.fetchImpl.calls[0].body, "instruct"), false);
 });
 
 test("the returned order is the scored one, and equal scores keep the order they arrived in", async () => {

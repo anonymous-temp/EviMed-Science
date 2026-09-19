@@ -39,6 +39,7 @@ from safety_agent.core.exceptions import (
     LLMUnavailable,
 )
 from safety_agent.core.logging import get_logger
+from safety_agent.llm import usage as provider_usage
 
 logger = get_logger(__name__)
 
@@ -247,6 +248,9 @@ class DeepSeekClient:
                     raise LLMResponseError("DeepSeek returned invalid JSON") from exc
                 if not isinstance(body, dict):
                     raise LLMResponseError("DeepSeek returned a non-object JSON payload")
+                # Every answered request is billed, a truncated one included,
+                # so this is where the job's spend is counted (evimed_runner).
+                provider_usage.record(body.get("usage"), payload.get("model"))
                 return body
             if response.status_code in (401, 403):
                 raise LLMAuthError(

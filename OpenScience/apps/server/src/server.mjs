@@ -14,7 +14,7 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
-import { AgentRunStore, runNotice } from "./agentRuns.mjs";
+import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
@@ -26,7 +26,7 @@ import { MethodConsolidation } from "./methodConsolidation.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
 import { runMethodObservations } from "./methodObservations.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { CONNECTOR_CREDENTIAL_IDS, mountedMethodDigest } from "@evimed/domain";
+import { CONNECTOR_CREDENTIAL_IDS, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -68,6 +68,8 @@ import { FeedbackEvents, deliverableSubjectId } from "./feedbackEvents.mjs";
 import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./accountExport.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONNECTOR_CREDENTIAL_GATEWAY_PATH, ConnectorCredentialStore, createConnectorCredentialGatewayHandler } from "./connectorCredentials.mjs";
+import { createEngineUsageHandler, ENGINE_USAGE_PATH } from "./engineUsage.mjs";
+import { RunMetrics, runCapabilityLabel } from "./runMetrics.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
 import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
@@ -404,6 +406,7 @@ function routePattern(pathname) {
   if (pathname === "/api/connectors") return pathname;
   if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
+  if (pathname === "/api/ops/usage/by-purpose") return pathname;
   if (pathname.startsWith("/api/auth/oidc/")) return "/api/auth/oidc/:action";
   if (
     pathname === "/api/auth/login" ||
@@ -447,7 +450,8 @@ function routePattern(pathname) {
     pathname === WEB_SEARCH_GATEWAY_PATH ||
     pathname === GEO_PROBE_GATEWAY_PATH ||
     pathname === REVISION_GATEWAY_PATH ||
-    pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH
+    pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH ||
+    pathname === ENGINE_USAGE_PATH
   ) return pathname;
   return pathname === "/" ? "/" : "/static";
 }
@@ -1162,6 +1166,7 @@ export function createWebApiApp(overrides = {}) {
   });
   const specialistClassifier = new SpecialistClassifier(config, {
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
+    usageLedger,
   });
   // Which run an interactive runtime's model request belongs to (E §9.4):
   // the one running in its project, when exactly one is. Remembered for a
@@ -1180,6 +1185,57 @@ export function createWebApiApp(overrides = {}) {
     runAttribution.set(key, { at: Date.now(), runId });
     if (runAttribution.size > 5_000) runAttribution.delete(runAttribution.keys().next().value);
     return runId;
+  };
+  // Run outcomes for /api/ops/metrics (plan §3.8): counted in memory as each
+  // run ends, never read back from a project's run ledger, which can be wiped.
+  const runMetrics = new RunMetrics();
+  const observeRunMetrics = async (project, run) => {
+    try {
+      const registry = await agentRegistry;
+      // Settled spend at the moment the run ended, under both of its ids: a
+      // bounded runtime's calls carry its dispatch id, everything else the run's.
+      const spent = usageLedger
+        ? await usageLedger.summaryRuns(project.userId, [run.id, run.dispatchId].filter(Boolean))
+        : null;
+      const read = await readRunStateProjection(project, project.workspaceDir, run);
+      const evidence = read.state === "read" ? read.projection?.evidence?.byStatus ?? {} : {};
+      runMetrics.observe({
+        capability: runCapabilityLabel(run.effectiveAgentId, (id) => Boolean(registry?.get?.(id))),
+        status: run.status,
+        errorCode: run.errorCode ?? null,
+        durationMs: run.durationMs ?? null,
+        costCny: spent ? [...spent.values()].reduce((sum, row) => sum + row.costCny, 0) : null,
+        claims: run.claimSummary ?? null,
+        // `ready` and `verified` are the evidence records with a preserved,
+        // readable artifact; a `queued` or `stale` one is a lead never read.
+        sources: { resolved: Number(evidence.ready ?? 0) + Number(evidence.verified ?? 0) },
+      });
+    } catch {
+      // Counted, not thrown: a metric must never hold up a run that has ended.
+      runMetrics.failed();
+    }
+  };
+  // What a runtime's model request is for in the usage ledger (X1): the
+  // kernel's, unless its run is source understanding. A bounded runtime's
+  // token names its dispatch id, an interactive one's attribution the run id,
+  // so either matches. A run's capability never changes, so the answer is kept
+  // for the process's life; a run not found yet is asked about again.
+  /** @type {Map<string, string>} */
+  const runPurposes = new Map();
+  const runPurpose = async ({ userId, projectId, runId }) => {
+    if (!runId) return "kernel";
+    const key = `${userId}\u0000${projectId}\u0000${runId}`;
+    const known = runPurposes.get(key);
+    if (known) return known;
+    const user = await store.userById(userId);
+    if (!user) return "kernel";
+    const run = (await agentRuns.list(await store.requireProject(user, projectId)))
+      .find((item) => item.id === runId || item.dispatchId === runId);
+    if (!run) return "kernel";
+    const purpose = usagePurposeOfRun(run);
+    runPurposes.set(key, purpose);
+    if (runPurposes.size > 5_000) runPurposes.delete(runPurposes.keys().next().value);
+    return purpose;
   };
   // What a run is called (C3): one metered flash call per new run, off the
   // critical path, never over a title the researcher gave it.
@@ -1435,6 +1491,7 @@ export function createWebApiApp(overrides = {}) {
         attempts: run.attempts ?? 0,
       });
       runtimeEventPump.noteRun(project, run);
+      await observeRunMetrics(project, run);
       if (sourceUnderstandingRuntime) {
         await sourceUnderstandingRuntime.complete(project, run).catch(async error => {
           await securityAudit(config, "source.runtime.release", "failed", {
@@ -2166,7 +2223,12 @@ export function createWebApiApp(overrides = {}) {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     usageLedger,
     attributeRun,
+    runPurpose,
   });
+  // A specialist engine's spend, reported by its adapter when a job ends (X1
+  // purpose `engine`): the runtime calls engines directly, so this is the one
+  // place the control plane hears that a job finished.
+  const engineUsageHandler = createEngineUsageHandler({ config, usageLedger, attributeRun });
   // The evaluation corpus needs both arms to see byte-identical upstream
   // answers, so the gateway's fetch is replaceable by a fixture reader. Neither
   // knob is set in production, and setting the replay one makes a miss a named
@@ -2272,7 +2334,8 @@ export function createWebApiApp(overrides = {}) {
     const named = routeNamedSpecialist(text, routableAgents);
     /** @type {{ failure?: string, verdict?: string }} */
     const trace = {};
-    const specialist = named ?? await specialistClassifier.classify(text, routableAgents, trace)
+    const specialist = named ?? await specialistClassifier.classify(text, routableAgents, trace,
+      { userId: project.userId, projectId: project.id })
       ?? routeOpenDomainSpecialist(text, routableAgents, { afterCleanNone: trace.verdict === "none" });
     const answerAgent = specialist ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
     const effective = specialist ?? (answerAgent
@@ -2353,6 +2416,8 @@ export function createWebApiApp(overrides = {}) {
         ? publicSourceGatewayHandler
       : pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH
         ? connectorCredentialGatewayHandler
+      : pathname === ENGINE_USAGE_PATH
+        ? engineUsageHandler
         : pathname === WEB_SEARCH_GATEWAY_PATH
           ? webSearchGatewayHandler
           : pathname === GEO_PROBE_GATEWAY_PATH
@@ -2461,7 +2526,27 @@ export function createWebApiApp(overrides = {}) {
           productDatabase,
           operationalMetrics,
           activeCommands,
+          runMetrics,
         });
+        return;
+      }
+
+      // What each purpose cost across every account (X1): the operator's cost
+      // report, behind the scrape token the metrics above use. Money is read
+      // from the ledger here rather than exported as a metric, because a price
+      // summed in Prometheus would be summed again on every scrape window.
+      if (pathname === "/api/ops/usage/by-purpose" && req.method === "GET") {
+        assertOperatorMetricsAccess(req, config);
+        if (!usageLedger) throw new HttpError(503, "usage_ledger_unavailable", "Durable usage accounting is unavailable.");
+        const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
+        const days = Number(url.searchParams.get("days") ?? 7);
+        if (!Number.isSafeInteger(days) || days < 1 || days > 366) {
+          throw new HttpError(400, "usage_report_days_invalid", "days must be a whole number from 1 to 366.");
+        }
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        sendJson(res, 200, { data: {
+          days, since: since.toISOString(), currency: "CNY", rows: await usageLedger.usageByPurpose({ since }),
+        } });
         return;
       }
 
@@ -2921,7 +3006,8 @@ export function createWebApiApp(overrides = {}) {
         if (boundSession?.mode === "open-domain" && !chosenLine) {
           const named = routeNamedSpecialist(text, routableAgents);
           // Naming the package is an instruction, not a guess at intent.
-          routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace);
+          routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace,
+            { userId: ctx.project.userId, projectId: ctx.project.id });
           if (!routedSpecialist) {
             const net = routeOpenDomainSpecialist(text, routableAgents, {
               afterCleanNone: classifierTrace.verdict === "none",
@@ -4881,7 +4967,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -5092,6 +5178,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       },
     },
   );
+  if (runMetrics) lines.push(...runMetrics.lines());
 
   return `${lines.join("\n")}\n`;
 }

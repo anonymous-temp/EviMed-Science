@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from core.research_context import CONTEXT_FIELDS, render_research_context, validate_research_context
 from core.research_portfolio import build_research_portfolio
+from services import llm_usage as provider_usage
 
 ROOT = Path(__file__).resolve().parent
 # Marks the managed path so services/llm_service.py refuses its development stub.
@@ -19,6 +20,10 @@ os.environ["EVIMED_MANAGED_RUN"] = "1"
 
 
 def _write_result(output_dir: Path, value: dict) -> None:
+    # What the job spent at the provider travels with every outcome: a failed
+    # job's tokens were paid for too. The adapter forwards it to EviMed's
+    # usage ledger.
+    value = {**value, "usage": provider_usage.snapshot()}
     (output_dir / "result.json").write_text(
         json.dumps(value, ensure_ascii=False, indent=2),
         encoding="utf-8",

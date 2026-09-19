@@ -17,7 +17,25 @@ FAILURE_MARKERS = (
 )
 
 
+def _provider_usage() -> dict | None:
+    """What the job spent at the provider, for EviMed's usage ledger.
+
+    Imported here, like the orchestrator, so that an engine that cannot even be
+    imported still writes the failure result it exists to write.
+    """
+    try:
+        from src.services import llm_usage as provider_usage
+    except Exception:  # noqa: BLE001 — the run's own failure is already the result
+        return None
+    return provider_usage.snapshot()
+
+
 def _write_result(output_dir: Path, value: dict) -> None:
+    # Travels with every outcome: a failed job's tokens were paid for too. The
+    # adapter forwards it to EviMed's usage ledger.
+    usage = _provider_usage()
+    if usage is not None:
+        value = {**value, "usage": usage}
     (output_dir / "result.json").write_text(
         json.dumps(value, ensure_ascii=False, indent=2),
         encoding="utf-8",

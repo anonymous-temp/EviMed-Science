@@ -180,6 +180,33 @@ def test_the_runner_reports_the_module_failure_code(tmp_path, monkeypatch):
     assert result["errorCode"] == "insufficient_grounded_opportunities"
 
 
+def test_the_runner_reports_what_the_job_spent_on_either_outcome(tmp_path, monkeypatch):
+    """result.json carries the job's provider usage for EviMed's usage ledger;
+    a failed job's tokens were paid for too."""
+    import evimed_runner
+    from services import llm_usage as provider_usage
+
+    async def _spend_then(outcome):
+        provider_usage.record({"prompt_tokens": 2000, "prompt_cache_hit_tokens": 1500,
+                               "prompt_cache_miss_tokens": 500, "completion_tokens": 120}, "deepseek-flash")
+        if outcome == "failed":
+            raise RuntimeError("pipeline exploded")
+        return {"status": "succeeded"}
+
+    for outcome, code in (("succeeded", 0), ("failed", 1)):
+        provider_usage.reset()
+        monkeypatch.setattr(evimed_runner, "_analyze", lambda request, output_dir, outcome=outcome: _spend_then(outcome))
+        out = tmp_path / outcome
+        request = tmp_path / "request.json"
+        request.write_text(json.dumps({"direction": "sepsis"}), encoding="utf-8")
+        assert evimed_runner.run(request, out) == code
+        result = json.loads((out / "result.json").read_text(encoding="utf-8"))
+        assert result["status"] == outcome
+        assert result["usage"] == {"requests": 1, "cacheHitTokens": 1500, "cacheMissTokens": 500,
+                                   "outputTokens": 120, "model": "deepseek-flash"}
+    provider_usage.reset()
+
+
 # --------------------------------------------------------------------- R043
 
 def _service():

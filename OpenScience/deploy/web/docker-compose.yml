@@ -405,8 +405,13 @@ services:
       OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS: ${OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS:-false}
       OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK: ${OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK:-false}
       OPEN_SCIENCE_RUNTIME_CPU_LIMIT: ${OPEN_SCIENCE_RUNTIME_CPU_LIMIT:-2}
-      OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT: ${OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT:-4g}
-      OPEN_SCIENCE_RUNTIME_PIDS_LIMIT: ${OPEN_SCIENCE_RUNTIME_PIDS_LIMIT:-256}
+      # The code's numbers (config.mjs), here and in the runtime controller
+      # below. This file said 4g and 256 after both were raised in code for
+      # production deaths (an OOM kill at 4g, three `fork(): EAGAIN` exits at
+      # 256), so production kept running at the numbers that killed those runs.
+      # config.test.mjs now holds every fallback here against the code default.
+      OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT: ${OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT:-8g}
+      OPEN_SCIENCE_RUNTIME_PIDS_LIMIT: ${OPEN_SCIENCE_RUNTIME_PIDS_LIMIT:-1024}
       OPEN_SCIENCE_RUNTIME_NO_NEW_PRIVILEGES: ${OPEN_SCIENCE_RUNTIME_NO_NEW_PRIVILEGES:-true}
       OPEN_SCIENCE_RUNTIME_CAP_DROP: ${OPEN_SCIENCE_RUNTIME_CAP_DROP:-ALL}
       OPEN_SCIENCE_RUNTIME_READ_ONLY_ROOT: ${OPEN_SCIENCE_RUNTIME_READ_ONLY_ROOT:-true}
@@ -427,6 +432,8 @@ services:
       OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT:
       OPEN_SCIENCE_LLM_ROUTING_ENABLED:
       OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD:
+      # ops 0920: the routing classifier's own deadline (unset: 20 s).
+      OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS:
       # Automatic run titles (one metered flash call per new run). Value-less:
       # unset keeps config.mjs's default, on.
       OPEN_SCIENCE_RUN_TITLES_ENABLED:
@@ -511,7 +518,10 @@ services:
       OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF: ${OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF:-}
       OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/geo-probe/v1}
       OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT: ${OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT:-}
-      OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS: ${OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS:-360000}
+      # Clamped in config.mjs under the kernel's 180 s tool-call ceiling, so the
+      # 360000 this used to say was never honoured: it read as a budget the
+      # deployment did not have.
+      OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS: ${OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS:-150000}
       OPEN_SCIENCE_GEO_PROBE_SIGNING_SECRET_FILE: ${OPEN_SCIENCE_GEO_PROBE_SIGNING_SECRET_FILE:-}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS:-60000}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES:-16777216}
@@ -699,6 +709,11 @@ services:
       EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
       EVIMED_DATA_ROOT: /data
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      # Where a finished job's model spend is reported (ops 0920): the runtime
+      # calls this engine directly, so the control plane hears a job end only
+      # from here, signed with the workload secret above. `-`, not `:-`: set
+      # empty in .env, it stays empty and no report is sent.
+      EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
@@ -765,6 +780,7 @@ services:
       PUBMED_EMAIL: ${OPEN_SCIENCE_UNPAYWALL_EMAIL:-}
       EVIMED_SPECIALIST_KIND: mendelian-randomization
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
@@ -916,6 +932,7 @@ services:
       OPENALEX_API_KEY: ${OPEN_SCIENCE_OPENALEX_API_KEY:-}
       EVIMED_SPECIALIST_KIND: bibliometric-analysis
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
@@ -962,6 +979,7 @@ services:
     environment:
       EVIMED_SPECIALIST_KIND: research-topic-selection
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
@@ -1008,6 +1026,7 @@ services:
     environment:
       EVIMED_SPECIALIST_KIND: peer-review
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
@@ -1054,6 +1073,7 @@ services:
     environment:
       EVIMED_SPECIALIST_KIND: drug-safety-analysis
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
@@ -1164,8 +1184,11 @@ services:
       OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS: ${OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS:-false}
       OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK: ${OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK:-false}
       OPEN_SCIENCE_RUNTIME_CPU_LIMIT: ${OPEN_SCIENCE_RUNTIME_CPU_LIMIT:-2}
-      OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT: ${OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT:-4g}
-      OPEN_SCIENCE_RUNTIME_PIDS_LIMIT: ${OPEN_SCIENCE_RUNTIME_PIDS_LIMIT:-256}
+      # This copy is the one a runtime container gets: the controller builds
+      # the launch arguments from its own environment, and the web API's copy
+      # only feeds the pressure sampler. Changing either means recreating both.
+      OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT: ${OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT:-8g}
+      OPEN_SCIENCE_RUNTIME_PIDS_LIMIT: ${OPEN_SCIENCE_RUNTIME_PIDS_LIMIT:-1024}
       OPEN_SCIENCE_RUNTIME_NO_NEW_PRIVILEGES: ${OPEN_SCIENCE_RUNTIME_NO_NEW_PRIVILEGES:-true}
       OPEN_SCIENCE_RUNTIME_CAP_DROP: ${OPEN_SCIENCE_RUNTIME_CAP_DROP:-ALL}
       OPEN_SCIENCE_RUNTIME_READ_ONLY_ROOT: ${OPEN_SCIENCE_RUNTIME_READ_ONLY_ROOT:-true}
