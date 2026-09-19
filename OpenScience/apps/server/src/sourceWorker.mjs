@@ -4,6 +4,12 @@ const TERMINAL_ERRORS = new Set([
   "source_job_invalid", "source_path_invalid", "source_digest_invalid", "source_format_unsupported",
   "source_generation_stale", "source_state_conflict", "source_changed", "openlist_source_changed",
   "source_parser_input_too_large", "source_understanding_invalid", "source_understanding_run_failed", "source_understanding_usage_invalid", "source_understanding_input_too_large",
+  // The parser's answers that the same bytes would get again: a format it does
+  // not read, a file over its limit, a refused request, and the two that wait
+  // on an operator (a key, a quota). Retrying them only spends the backoff; the
+  // card says what to do and 「重新分析」 starts over once it is done.
+  "source_media_unsupported", "source_parser_payload_too_large", "source_parser_checksum_failed", "source_parser_rejected",
+  "source_parser_auth_failed", "source_parser_quota_exhausted", "source_parser_unconfigured",
   "source_not_found", "source_account_changed", "source_cleanup_unconfigured", "source_cleanup_platform_unsupported", "source_cleanup_path_invalid",
   "source_folder_not_found", "source_folder_invalid", "source_folder_conflict",
 ]);
@@ -11,7 +17,7 @@ const TERMINAL_ERRORS = new Set([
 /** Leased ingestion worker. ProductJobs owns retries; source generations make
  * an old lease unable to overwrite a newer user correction. */
 export class SourceIngestionWorker {
-  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string,parserPath:string,stagingPath?:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
+  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
   constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000 }) {
     if (![jobs, sources, parser, resolveSource, materialize].every(Boolean)) throw new TypeError("SourceIngestionWorker dependencies are required.");
     if (!Number.isSafeInteger(pollMs) || pollMs < 100 || pollMs > 86_400_000
@@ -130,7 +136,7 @@ export class SourceIngestionWorker {
       if (!parsed) {
         const resolved = await this.resolveSource(job, processing);
         resolvedFile = resolved;
-        const file = typeof resolved === "string" ? resolved : resolved.parserPath;
+        const file = typeof resolved === "string" ? resolved : resolved.localPath;
         const result = await this.parser.parse({
           path: file,
           mimeType: processing.payload.fingerprint.mimeType,

@@ -20,8 +20,8 @@
  * one — so a green row says nothing about whether the newest release would
  * pass. A real test-latest tier has to install the candidate into a scratch
  * tree and re-run the contracts there, and the tracked dependencies do not
- * install alike (`dsh` is npm, `mineru` is PyPI, `openlist` and `openviking`
- * are container images), so it is its own piece of work rather than a flag on
+ * install alike (`dsh` is npm, `openlist` and `openviking` are container
+ * images, `evimed-extract` is a service reached over HTTP), so it is its own piece of work rather than a flag on
  * this one. Until it exists, an upgrade PR still has to run the contracts by
  * hand after moving the pin.
  *

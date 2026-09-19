@@ -198,7 +198,7 @@ test("parser coverage is separate from the unperformed understanding omission au
   }));
   const reviewed = await service.recordExtraction("user-one", source.id, {
     expectedRevision: processing.revision,
-    extractor: { name: "mineru", version: "3.4.5", parser: "mineru" },
+    extractor: { name: "evimed-extract", version: "evimed-extract@0.5.0", parser: "api" },
     units,
     summary: "A protocol about a randomized clinical study.",
     facts: 9,
@@ -217,7 +217,7 @@ test("parser coverage is separate from the unperformed understanding omission au
   const reprocessing = await service.beginIngestion("user-one", source.id, { generation: queued.payload.generation });
   const incomplete = await service.recordExtraction("user-one", source.id, {
     expectedRevision: reprocessing.revision,
-    extractor: { name: "mineru", version: "3.4.5", parser: "mineru" },
+    extractor: { name: "evimed-extract", version: "evimed-extract@0.5.0", parser: "api" },
     units: units.map((unit, index) => index < 2 ? { ...unit, status: "failed", itemIds: [] } : unit),
     summary: "A protocol about a randomized clinical study.",
     facts: 8,
@@ -251,7 +251,7 @@ test("a disappeared upstream source retains its derived understanding", async ()
   const processing = await service.beginIngestion("user-one", source.id, { generation: source.payload.generation });
   const complete = await service.recordExtraction("user-one", source.id, {
     expectedRevision: processing.revision,
-    extractor: { name: "plain-text", version: "1.0.0", parser: "fallback" },
+    extractor: { name: "plain-text", version: "1.0.0", parser: "local" },
     units: [{ id: "chunk-1", unitType: "chunk", status: "extracted", itemIds: ["fact-1"] }],
     summary: "Preserved derived summary.", facts: 1, methods: 0,
   });
@@ -931,7 +931,7 @@ test("a run recovered from a stored capture is handed the same sample plan as a 
   const fresh = auditCapture("src_recovered", 2);
   const source = { id: "src_recovered", projectId: "project-one", revision: 4, payload: {
     docType: fresh.docType, depth: fresh.depth, generation: 2,
-    analysis: { generation: 2, unitCount: fresh.units.length, extractor: { name: "mineru", version: "3.4.5", parser: "mineru" },
+    analysis: { generation: 2, unitCount: fresh.units.length, extractor: { name: "evimed-extract", version: "evimed-extract@0.5.0", parser: "api" },
       summary: "A fixture source.", parserCoverage: null,
       textSha256: createHash("sha256").update(fresh.text).digest("hex") } } };
   const client = { query: async () => ({ rows: fresh.units.map((unit) => ({ payload: { unit } })) }) };
