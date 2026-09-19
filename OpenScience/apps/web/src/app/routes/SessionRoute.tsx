@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { fetchWebMe, listWebAgentRuns, webRuntimeProfile } from "@/lib/apiClient";
+import { fetchWebMe, listWebAgentRuns, warmWebRuntime, webRuntimeProfile } from "@/lib/apiClient";
 import { FrameWaiting, RuntimeUiFrame } from "./RuntimeUiFrame";
 import { Button } from "@/components/ui/Button";
 import { PageTitle } from "@/components/layout/PageTitle";
@@ -52,6 +52,10 @@ export function SessionRoute() {
     if (sessionId || wantsNewTask) { setResolving(false); return; }
     let active = true;
     setResolving(true);
+    // The lookup below decides which task the frame opens, not whether it
+    // needs a runtime; starting that now overlaps the two waits instead of
+    // queueing the runtime behind the lookup.
+    warmWebRuntime();
     // A ledger that cannot be read, or does not answer, falls through to
     // creating a session, which is the behaviour this replaced: never a
     // blocked session page.
