@@ -650,8 +650,8 @@ export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "
 
 export class MemoryIntelligence {
   /** @param {any} config @param {any} memoryStore
-   *  @param {{fetchImpl?:any,notifications?:any,audit?:any,usageLedger?:any}} dependencies */
-  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, notifications = null, audit = null, usageLedger = null } = {}) {
+   *  @param {{fetchImpl?:any,notifications?:any,audit?:any,usageLedger?:any,feedbackEvents?:any}} dependencies */
+  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, notifications = null, audit = null, usageLedger = null, feedbackEvents = null } = {}) {
     this.config = config;
     this.memoryStore = memoryStore;
     this.fetchImpl = fetchImpl;
@@ -666,6 +666,10 @@ export class MemoryIntelligence {
     // contradiction is still recorded on the record and still reported on the
     // run.
     this.notifications = notifications;
+    // What the researcher removed or undid (the feedback ledger's
+    // `memory-rejected`): an inference does not bring it back. Optional: a
+    // deployment without a product database has no ledger to read.
+    this.feedbackEvents = feedbackEvents;
     // `securityAudit` lives in the composition root, so it arrives as a
     // dependency, the way `autopilotRunCompletion` takes it. A failure that
     // must not reach the researcher still has to reach the ledger.
@@ -761,6 +765,7 @@ export class MemoryIntelligence {
     for (const candidate of candidates) {
       if (candidate.origin === "inferred") candidate.expiresAt = inferredExpiry;
     }
+    const rejectedKeys = await this.#rejectedKeys(project.userId);
     let extracted = 0;
     let activated = 0;
     let sensitive = 0;
@@ -774,6 +779,17 @@ export class MemoryIntelligence {
     const written = [];
     for (const candidate of candidates.slice(0, 12)) {
       const previous = known.get(canonicalKey(candidate));
+      // The researcher took this memory out — deleted it, archived it or
+      // undid the write that made it. Undo would mean nothing if the next
+      // run's inference simply wrote it back, so only their own statement
+      // brings it back (principle 18: an inference never overrides the
+      // researcher). A record they put back in force themselves is theirs
+      // again, and observes normally.
+      if (candidate.origin !== "explicit" && previous?.status !== "active"
+        && rejectedKeys.has(`${candidate.kind}\u0000${candidate.key}`)) {
+        rejections.push(`"${candidate.key}" was removed by the researcher; only their own statement brings it back`);
+        continue;
+      }
       // Detected before the write and reported after it. The write itself is
       // untouched by the detection: see contradictedValue.
       const contradiction = contradictedValue(previous, candidate);
@@ -788,10 +804,11 @@ export class MemoryIntelligence {
       if (replacing && "record" in replacing && typeof this.memoryStore.supersede === "function") {
         ({ record: stored, superseded } = await this.memoryStore.supersede(project.userId, replacing.record.id, next, candidate.evidence, {
           reason: writeReason("conversation evidence replaced an earlier fact", null, next.statusReason),
+          by: "extraction", runId: run.id ?? null,
         }));
         known.set(canonicalKey(superseded), superseded);
       } else {
-        ({ stored, next } = await this.#upsertCandidate(project, candidate, previous, next, contradiction));
+        ({ stored, next } = await this.#upsertCandidate(project, run, candidate, previous, next, contradiction));
       }
       extracted += 1;
       if (previous?.status === "pending" && stored.status === "active") activated += 1;
@@ -802,6 +819,7 @@ export class MemoryIntelligence {
       written.push({
         id: stored.id, key: stored.key, kind: stored.kind, scope: stored.scope, version: stored.version,
         change: writeChange(previous, stored),
+        summary: excerpt(stored.summary || stored.value),
         ...(superseded ? { supersedes: superseded.id } : {}),
       });
       known.set(canonicalKey(stored), stored);
@@ -814,6 +832,7 @@ export class MemoryIntelligence {
         await this.#reportReplacedValue(project, conflict);
       }
     }
+    await this.#reportWrites(project, run, written);
     return {
       runSummary, extracted, activated, source: "model", proposed,
       rejected: proposed - candidates.length,
@@ -843,12 +862,65 @@ export class MemoryIntelligence {
   }
 
   /**
+   * The memories the researcher took out, as `kind NUL key`: deleted,
+   * archived, or undone (`memory-rejected` in the feedback ledger). Best
+   * effort — an unreadable ledger must not cost the run its memory.
+   * @param {string} userId @returns {Promise<Set<string>>}
+   */
+  async #rejectedKeys(userId) {
+    if (!this.feedbackEvents) return new Set();
+    try {
+      const page = await this.feedbackEvents.list(userId, { trigger: "memory-rejected", limit: 200 });
+      return new Set((page?.items ?? [])
+        .filter((event) => typeof event?.detail?.key === "string" && typeof event?.detail?.kind === "string")
+        .map((event) => `${event.detail.kind}\u0000${event.detail.key}`));
+    } catch (error) {
+      await this.audit("memory.extraction.rejected_keys", error);
+      return new Set();
+    }
+  }
+
+  /**
+   * 「刚记住了 …」 — the write prompt, in the inbox.
+   *
+   * Owner ruling 2026-09-19: a memory takes effect without asking, so the
+   * researcher has to be told where they will see it, with the way back one
+   * click away. Recorded silently — it is neither a finished task, nor
+   * something that needs them, nor a changed conclusion (the three moments the
+   * inbox notifies at, C1), and the conversation panel and the capsule page
+   * carry the same prompt where the researcher is. One item per run, keyed by
+   * the run, so a replay is the same item.
+   *
+   * @param {any} project @param {any} run @param {any[]} written
+   */
+  async #reportWrites(project, run, written) {
+    const news = written.filter((entry) => entry.change === "created" || entry.change === "updated");
+    if (!this.notifications || news.length === 0 || !run?.id) return;
+    const named = news.slice(0, 3).map((entry) => `「${entry.summary}」`).join("");
+    try {
+      await this.notifications.create(project.userId, {
+        noticeType: "notify",
+        title: `刚记住了 ${news.length} 条`,
+        body: `${named}${news.length > 3 ? ` 等 ${news.length} 条` : ""}。已经生效；不对的话，在记忆胶囊里一键撤销。`,
+        projectId: project.id,
+        source: { type: "memory", id: news[0].id },
+        actions: [{ id: "open", label: "查看或撤销", style: "primary" }],
+        idempotencyKey: `memory-written:${run.id}`,
+        severity: "info",
+        silent: true,
+      });
+    } catch (error) {
+      await this.audit("notification.memory_written.create", error);
+    }
+  }
+
+  /**
    * Write one candidate onto the record it lands on, retrying once on a
    * concurrent update with the record as it now stands.
-   * @param {any} project @param {any} candidate @param {any} previous @param {any} next @param {any} contradiction
+   * @param {any} project @param {any} run @param {any} candidate @param {any} previous @param {any} next @param {any} contradiction
    * @returns {Promise<{ stored: any, next: any }>}
    */
-  async #upsertCandidate(project, candidate, previous, next, contradiction) {
+  async #upsertCandidate(project, run, candidate, previous, next, contradiction) {
     try {
       const stored = await this.memoryStore.upsertRecord(project.userId, {
         ...next,
@@ -860,6 +932,7 @@ export class MemoryIntelligence {
         // hands back on `revisions[].reason`.
         reason: writeReason(previous ? "conversation evidence updated the current memory" : "conversation evidence created the memory",
           contradiction, next.statusReason),
+        by: "extraction", runId: run.id ?? null,
       });
       return { stored, next };
     } catch (error) {
@@ -872,6 +945,7 @@ export class MemoryIntelligence {
         expectedVersion: current.version,
         // The retry writes the same record, so it carries the same reason.
         reason: writeReason("conversation evidence retried after a concurrent memory update", contradiction, retried.statusReason),
+        by: "extraction", runId: run.id ?? null,
       });
       return { stored, next: retried };
     }

@@ -304,15 +304,19 @@ export class FeedbackEvents {
 
   /**
    * Deleting a memory is rejecting it. The version is the one that was deleted,
-   * so deleting the same record twice is one event.
-   * @param {string} userId @param {{record:any,projectId?:string|null}} input
+   * so deleting the same record twice is one event. Undoing the write that
+   * created a memory is the same rejection, said as `undone`.
+   * @param {string} userId @param {{record:any,projectId?:string|null,reason?:"deleted"|"undone"}} input
    */
-  async recordMemoryDeletion(userId, { record, projectId = null }) {
+  async recordMemoryDeletion(userId, { record, projectId = null, reason = "deleted" }) {
     return this.record(userId, {
       trigger: "memory-rejected",
       subject: { type: "memory-record", id: String(record?.id ?? "") },
       identity: [String(record?.version ?? 0)],
-      detail: { key: boundedText(record?.key, 255), kind: record?.kind ?? null, version: record?.version ?? null, reason: "deleted" },
+      detail: {
+        key: boundedText(record?.key, 255), kind: record?.kind ?? null, version: record?.version ?? null,
+        reason: reason === "undone" ? "undone" : "deleted",
+      },
       projectId,
     });
   }

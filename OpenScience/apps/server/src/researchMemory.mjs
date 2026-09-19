@@ -58,6 +58,13 @@ export const MEMORY_EXPORT_LIMIT = 100_000;
 
 export { MEMORY_EVIDENCE_LIMIT, MEMORY_KINDS, MEMORY_ORIGINS, MEMORY_REVISION_LIMIT, MEMORY_SCOPES, MEMORY_STATUSES };
 
+/**
+ * Who changed a record: the extractor after a run, the researcher on the
+ * page, or the platform (an undo, a supersession it resolved). A closed list,
+ * so a revision cannot claim an actor nothing writes.
+ */
+export const REVISION_ACTORS = Object.freeze(["extraction", "user", "system"]);
+
 /** @param {string} field */
 function invalid(field) {
   return new HttpError(400, "memory_payload_invalid", `${field} is invalid.`);
@@ -180,6 +187,18 @@ export function mergeEvidence(existing, evidence) {
   if (kept.some((item) => item.fingerprint === evidence.fingerprint)) return { evidence: kept, added: false };
   kept.push(evidence);
   return { evidence: kept.slice(-MEMORY_EVIDENCE_LIMIT), added: true };
+}
+
+/**
+ * The actor fields a revision carries, from a caller's options — nothing when
+ * the caller named no known actor.
+ * @param {unknown} by @param {unknown} runId @returns {Record<string, string>}
+ */
+function revisionActor(by, runId) {
+  const actor = String(by ?? "");
+  if (!REVISION_ACTORS.includes(actor)) return {};
+  const run = typeof runId === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(runId) ? runId : "";
+  return { by: actor, ...(run ? { runId: run } : {}) };
 }
 
 /** Append one revision, keeping the newest 32.
@@ -497,6 +516,11 @@ function publicRecord(row) {
       status: MEMORY_STATUSES.includes(String(item?.status)) ? String(item?.status) : "archived",
       changedAt: item?.changedAt ?? null,
       reason: String(item?.reason ?? ""),
+      // Who made the change and in which run: the provenance of a revision,
+      // so the timeline can say 「因：你在任务里纠正」 and the undo knows what
+      // it is undoing. Absent on revisions written before 2026-09-20.
+      ...(REVISION_ACTORS.includes(String(item?.by)) ? { by: String(item.by) } : {}),
+      ...(typeof item?.runId === "string" && item.runId ? { runId: item.runId } : {}),
     })),
   };
 }
@@ -743,21 +767,22 @@ export class ResearchMemoryStore {
    *
    * @param {string} userId @param {Record<string, any>} input
    * @param {Record<string, any>|null} evidence
-   * @param {{ expectedVersion?: number, reason?: string }} options
+   * @param {{ expectedVersion?: number, reason?: string, by?: string, runId?: string | null }} options
    */
-  async upsertRecord(userId, input, evidence = null, { expectedVersion = 0, reason = "" } = {}) {
+  async upsertRecord(userId, input, evidence = null, { expectedVersion = 0, reason = "", by = "", runId = null } = {}) {
     const owner = assertUserId(userId);
     const next = validateRecordInput(input);
     const proof = boundedEvidence(evidence);
     // Truncated, never refused. This is audit text that rides along with a
     // write; a long contradiction notice must not cost the memory it explains.
     const auditReason = boundedText(reason, MEMORY_REASON_LIMIT);
+    const actor = revisionActor(by, runId);
     const expected = Math.max(0, Number(expectedVersion) || 0);
     const providedId = input?.id == null || input.id === "" ? null : assertRecordId(input.id);
 
     return this.#transaction(async (client) => {
       await this.#lockOwnerForOutbox(client, owner);
-      return this.#writeRecord(client, owner, next, proof, { expected, providedId, auditReason });
+      return this.#writeRecord(client, owner, next, proof, { expected, providedId, auditReason, actor });
     });
   }
 
@@ -767,9 +792,9 @@ export class ResearchMemoryStore {
    * shares one commit.
    * @param {any} client @param {string} owner @param {Record<string, any>} next
    * @param {Record<string, any>|null} proof
-   * @param {{ expected: number, providedId: string|null, auditReason: string }} options
+   * @param {{ expected: number, providedId: string|null, auditReason: string, actor?: Record<string, string> }} options
    */
-  async #writeRecord(client, owner, next, proof, { expected, providedId, auditReason }) {
+  async #writeRecord(client, owner, next, proof, { expected, providedId, auditReason, actor = {} }) {
     // Two writers extracting from two runs of the same conversation reach
     // this line at the same instant. The lock is on the canonical key rather
     // than the table, so unrelated memories still write in parallel, and it
@@ -817,6 +842,10 @@ export class ResearchMemoryStore {
         status: stored.status,
         changedAt: now,
         reason: auditReason,
+        ...actor,
+        // The pointers a restore needs: undoing a change to a superseded
+        // record must be able to put them back exactly.
+        ...(stored.supersededBy ? { supersededBy: stored.supersededBy, invalidSince: stored.invalidSince } : {}),
       })
       : stored.revisions;
     if (!added && !stateChanged && currentStateEqual(stored, next)) return stored;
@@ -846,14 +875,15 @@ export class ResearchMemoryStore {
    * `active` rows, so the replaced fact leaves every prompt at once.
    *
    * @param {string} userId @param {string} previousId @param {Record<string, any>} input
-   * @param {Record<string, any>|null} evidence @param {{ reason?: string }} options
+   * @param {Record<string, any>|null} evidence @param {{ reason?: string, by?: string, runId?: string | null }} options
    * @returns {Promise<{ record: any, superseded: any }>}
    */
-  async supersede(userId, previousId, input, evidence = null, { reason = "" } = {}) {
+  async supersede(userId, previousId, input, evidence = null, { reason = "", by = "", runId = null } = {}) {
     const owner = assertUserId(userId);
     const next = validateRecordInput(input);
     const proof = boundedEvidence(evidence);
     const auditReason = boundedText(reason, MEMORY_REASON_LIMIT);
+    const actor = revisionActor(by, runId);
     const replacedId = assertRecordId(previousId);
     return this.#transaction(async (client) => {
       await this.#lockOwnerForOutbox(client, owner);
@@ -867,7 +897,7 @@ export class ResearchMemoryStore {
         // the record it is about to write.
         throw new HttpError(400, "memory_supersede_invalid", "A memory cannot supersede itself.");
       }
-      const record = await this.#writeRecord(client, owner, next, proof, { expected: 0, providedId: null, auditReason });
+      const record = await this.#writeRecord(client, owner, next, proof, { expected: 0, providedId: null, auditReason, actor });
       const now = await transactionInstant(client);
       const retired = await client.query(`UPDATE evimed_memory.records SET status='superseded',superseded_by=$3,
         invalid_since=COALESCE(invalid_since,$4),revisions=$5::jsonb,version=version+1,updated_at=$4
@@ -875,11 +905,135 @@ export class ResearchMemoryStore {
       [owner, replaced.id, record.id, now, JSON.stringify(appendRevision(replaced.revisions, {
         version: replaced.version, value: replaced.value, summary: replaced.summary, status: replaced.status,
         changedAt: now, reason: boundedText(`superseded by ${record.key}${auditReason ? `: ${auditReason}` : ""}`, MEMORY_REASON_LIMIT),
+        ...actor,
       }))]);
       const superseded = publicRecord(retired.rows[0]);
       await this.#enqueueRecordIndex(client, owner, superseded);
       return { record, superseded };
     });
+  }
+
+  /**
+   * Undo the last change to one record — the one click the write prompt and
+   * the timeline offer. Owner ruling 2026-09-19: memory changes by itself and
+   * asks nobody first, so every change has to be reversible in one step.
+   *
+   * A record with history goes back to the state its last revision kept —
+   * value, summary, status and, for one that had been superseded, its
+   * pointers — and the state it leaves is kept as a revision in turn, so an
+   * undo is as reversible as what it undid. A record with no history was
+   * created by the change being undone, so undoing it removes the record, and
+   * a fact it had replaced goes back into force: the state before the change
+   * is exactly that.
+   *
+   * @param {string} userId @param {string} id @param {{ expectedVersion?: number }} options
+   * @returns {Promise<{ undone: "restored" | "removed", record: any | null, previous: any, restored: any[] }>}
+   */
+  async undo(userId, id, { expectedVersion = 0 } = {}) {
+    const owner = assertUserId(userId);
+    const recordId = assertRecordId(id);
+    const expected = Math.max(0, Number(expectedVersion) || 0);
+    return this.#transaction(async (client) => {
+      await this.#lockOwnerForOutbox(client, owner);
+      const found = await client.query("SELECT * FROM evimed_memory.records WHERE user_id=$1 AND id=$2 FOR UPDATE",
+        [owner, recordId]);
+      if (found.rowCount !== 1) throw new HttpError(404, "memory_not_found", "Memory not found.");
+      const current = publicRecord(found.rows[0]);
+      if (expected > 0 && expected !== current.version) {
+        throw new HttpError(409, "memory_conflict", "This memory changed since it was read.");
+      }
+      const now = await transactionInstant(client);
+      const actor = revisionActor("user", null);
+      if (current.revisions.length === 0) {
+        const replaced = await client.query(`SELECT * FROM evimed_memory.records
+          WHERE user_id=$1 AND superseded_by=$2 FOR UPDATE`, [owner, current.id]);
+        await client.query("DELETE FROM evimed_memory.records WHERE user_id=$1 AND id=$2", [owner, current.id]);
+        await this.#enqueueRecordIndex(client, owner, current);
+        const restored = [];
+        for (const row of replaced.rows) {
+          const earlier = publicRecord(row);
+          const before = earlier.revisions.at(-1);
+          const back = await client.query(`UPDATE evimed_memory.records SET status=$3,superseded_by=NULL,invalid_since=NULL,
+            revisions=$4::jsonb,version=version+1,updated_at=$5 WHERE user_id=$1 AND id=$2 RETURNING *`,
+          [owner, earlier.id, before?.status && before.status !== "superseded" ? before.status : "active",
+            JSON.stringify(appendRevision(earlier.revisions, {
+              version: earlier.version, value: earlier.value, summary: earlier.summary, status: earlier.status,
+              changedAt: now, reason: `back in force: ${current.key}, which had replaced it, was undone`,
+              ...revisionActor("system", null),
+              supersededBy: earlier.supersededBy, invalidSince: earlier.invalidSince,
+            })), now]);
+          const record = publicRecord(back.rows[0]);
+          await this.#enqueueRecordIndex(client, owner, record);
+          restored.push(record);
+        }
+        return { undone: "removed", record: null, previous: current, restored };
+      }
+      const before = /** @type {any} */ (current.revisions.at(-1));
+      const raw = Array.isArray(found.rows[0].revisions) ? found.rows[0].revisions.at(-1) : null;
+      const updated = await client.query(`UPDATE evimed_memory.records SET value=$3,summary=$4,status=$5,
+        superseded_by=$6,invalid_since=$7,revisions=$8::jsonb,version=version+1,updated_at=$9
+        WHERE user_id=$1 AND id=$2 RETURNING *`,
+      [owner, current.id, before.value || current.value, before.summary, before.status,
+        typeof raw?.supersededBy === "string" ? raw.supersededBy : null,
+        typeof raw?.supersededBy === "string" ? memoryInstant(raw.invalidSince) : null,
+        JSON.stringify(appendRevision(current.revisions, {
+          version: current.version, value: current.value, summary: current.summary, status: current.status,
+          changedAt: now, reason: boundedText(`undone: ${before.reason || "the last change"}`, MEMORY_REASON_LIMIT),
+          ...actor,
+          ...(current.supersededBy ? { supersededBy: current.supersededBy, invalidSince: current.invalidSince } : {}),
+        })), now]);
+      const record = publicRecord(updated.rows[0]);
+      await this.#enqueueRecordIndex(client, owner, record);
+      return { undone: "restored", record, previous: current, restored: [] };
+    });
+  }
+
+  /**
+   * What changed by itself since a moment — the write prompt 「刚记住了…」, on
+   * the capsule page after a visit and in the conversation it came from.
+   *
+   * "By itself" is decided by the record's own history: created by the
+   * extractor (anything but a hand-written record), or last changed by it.
+   * A fact that was replaced is not listed on its own; its replacement is,
+   * naming it. A run summary is the timeline's, never a prompt.
+   *
+   * @param {string} userId
+   * @param {{ since: string, sessionId?: string | null, limit?: number }} options
+   */
+  async recentChanges(userId, { since, sessionId = null, limit = 20 }) {
+    const owner = assertUserId(userId);
+    const from = memoryInstant(since);
+    if (!from) throw new HttpError(400, "memory_payload_invalid", "since is invalid.");
+    const session = sessionId == null || sessionId === "" ? null : String(sessionId);
+    if (session && !/^[A-Za-z0-9_-]{1,160}$/.test(session)) throw new HttpError(400, "memory_payload_invalid", "sessionId is invalid.");
+    const result = await this.#query(`SELECT * FROM evimed_memory.records
+      WHERE user_id=$1 AND updated_at >= $2 AND kind <> 'run_summary'
+      ORDER BY updated_at DESC, id DESC LIMIT 200`, [owner, from]);
+    const rows = result.rows.map(publicRecord);
+    const replacedBy = new Map();
+    for (const record of rows) {
+      if (record.status === "superseded" && record.supersededBy) replacedBy.set(record.supersededBy, record);
+    }
+    const automatic = (/** @type {any} */ record) => {
+      const last = record.revisions.at(-1);
+      if (!last) return record.origin !== "manual";
+      return last.by ? last.by === "extraction" : !String(last.reason).startsWith("user ");
+    };
+    return rows
+      .filter((record) => record.status !== "superseded")
+      .filter(automatic)
+      .filter((record) => !session || record.evidence.some((item) => item.sourceRef.startsWith(`sessions/${session}/`)))
+      .slice(0, Math.max(1, Math.min(50, Number(limit) || 20)))
+      .map((record) => {
+        const replaced = replacedBy.get(record.id);
+        return {
+          id: record.id, key: record.key, kind: record.kind, scope: record.scope, scopeId: record.scopeId,
+          summary: boundedText(record.summary || record.value, 200), status: record.status,
+          change: record.revisions.length === 0 ? "created" : "updated",
+          changedAt: record.updatedAt, version: record.version, provenance: record.provenance,
+          ...(replaced ? { replaced: { id: replaced.id, summary: boundedText(replaced.summary || replaced.value, 200) } } : {}),
+        };
+      });
   }
 
   /** @param {string} userId @param {string} id */

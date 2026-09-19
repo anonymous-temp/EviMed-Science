@@ -1,4 +1,5 @@
 import { WorkbenchTabs, type WorkbenchTab } from "@/components/layout/WorkbenchTabs";
+import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
 import { MemoryPage } from "./MemoryPage";
 import { CapsulesPage } from "./CapsulesPage";
 import { MethodsPage } from "./MethodsPage";
@@ -21,6 +22,8 @@ const TABS: readonly WorkbenchTab[] = [
 ];
 
 export function MemoryHubPage() {
+  // 「刚记住了 … 撤销」 for what changed by itself since the last visit.
+  useMemoryWritePrompt();
   return (
     <WorkbenchTabs
       title="记忆"

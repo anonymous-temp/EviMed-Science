@@ -56,9 +56,13 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
           ...body, projectId: identity.projectId,
         }));
       } else {
-        // A model's claim that its input was explicit is not a user's approval.
+        // A model's claim that its input was explicit is not the researcher's
+        // own statement: the note is written as the assistant's, takes effect
+        // at once as context (owner ruling 2026-09-19) and is never mounted as
+        // a method (capsuleMethods.mjs). `reviewRequired` stays in the answer
+        // as false, for a runtime that still reads it.
         const entry = await service.note(user.id, identity.projectId, { factKind: body.factKind, content: body.content, origin: "inferred" });
-        sendJson(res, 200, { entry, reviewRequired: true, contextOnly: true });
+        sendJson(res, 200, { entry, reviewRequired: false, takesEffect: true, contextOnly: true });
       }
     } catch (error) {
       const safe = error instanceof HttpError ? error : new HttpError(503, "capsule_unavailable", "Research memory is unavailable.");

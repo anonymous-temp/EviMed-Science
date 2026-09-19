@@ -12,12 +12,14 @@ import {
   Search,
   ServerCrash,
   Trash2,
+  Undo2,
   X,
 } from "lucide-react";
 import { webErrorMessage, createResearchMemory, deleteResearchMemory, deleteStructuredMemory, fetchMemoryProfile, fetchMemoryStatus, hasWebApi, listResearchMemories, updateResearchMemory, updateStructuredMemory, type WebMemoryProfile, type WebMemoryStatus, type WebResearchMemory, type WebStructuredMemory } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { formatDateTime } from "@/lib/format";
 import { MEMORY_BASIS_LABELS, evidenceSourceLabel, looksInjected, memoryExcerpt, memoryStrength } from "@/lib/memoryText";
+import { MEMORY_CHANGED_EVENT, announceMemoryChanged, undoMemoryRecord } from "@/lib/memoryClient";
 import { toast } from "@/lib/toast";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -135,6 +137,12 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
   useEffect(() => {
     void load(state);
   }, [load, state]);
+  // An undo from the write prompt changes what this page shows.
+  useEffect(() => {
+    const reload = () => void load(state);
+    window.addEventListener(MEMORY_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(MEMORY_CHANGED_EVENT, reload);
+  }, [load, state]);
 
   // Deferred, and each card's Markdown memoized below: every keystroke in the
   // search box or the draft used to re-parse every card's Markdown on the page
@@ -230,6 +238,21 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
     }
   };
 
+  // One click takes back the last change to a memory (owner ruling
+  // 2026-09-19): nothing asked first, so everything can be undone.
+  const undoStructured = async (record: WebStructuredMemory) => {
+    setStructuredBusyId(record.id);
+    try {
+      const result = await undoMemoryRecord(record.id, record.version);
+      toast.success(result.undone === "removed" ? "已撤销这条记忆" : "已撤销上次改动");
+      announceMemoryChanged();
+    } catch (error) {
+      toast.error(`撤销失败：${actionError(error)}`);
+    } finally {
+      setStructuredBusyId(null);
+    }
+  };
+
   const removeStructured = async () => {
     const record = pendingStructuredDelete;
     setPendingStructuredDelete(null);
@@ -286,6 +309,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
                 busyId={structuredBusyId}
                 highlightId={highlightId}
                 onUpdate={(record, update) => void mutateStructured(record, update)}
+                onUndo={(record) => void undoStructured(record)}
                 onDelete={setPendingStructuredDelete}
               />
             )}
@@ -448,7 +472,7 @@ export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
       {pendingStructuredDelete && (
         <ConfirmDialog
           title="删除这条结构化记忆？"
-          body="删除这条记忆及其依据与修订记录，用户画像和后续科研问答都不会再使用它，检索索引中的副本随后移除。不会删除产生它的对话与运行记录；同样的内容以后若再次出现，可能会被重新学到。"
+          body="删除这条记忆及其依据与修订记录，用户画像和后续科研问答都不会再使用它，检索索引中的副本随后移除。不会删除产生它的对话与运行记录；EviMed 不会再凭推断把它记回来，只有你以后亲口再说时才会重新记下。"
           confirmLabel="删除"
           onConfirm={() => void removeStructured()}
           onCancel={() => setPendingStructuredDelete(null)}
@@ -471,6 +495,7 @@ function MemoryProfileOverview({
   busyId,
   highlightId,
   onUpdate,
+  onUndo,
   onDelete,
 }: {
   profile: WebMemoryProfile;
@@ -481,6 +506,7 @@ function MemoryProfileOverview({
     record: WebStructuredMemory,
     update: Partial<Pick<WebStructuredMemory, "value" | "summary" | "status">>,
   ) => void;
+  onUndo: (record: WebStructuredMemory) => void;
   onDelete: (record: WebStructuredMemory) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -638,6 +664,11 @@ function MemoryProfileOverview({
                             }}
                           >
                             <Check size={13} aria-hidden="true" /> 确认
+                          </Button>
+                        )}
+                        {record.revisions.length > 0 && (
+                          <Button size="sm" variant="ghost" disabled={busyId === record.id} onClick={() => onUndo(record)}>
+                            <Undo2 size={13} aria-hidden="true" /> 撤销上次改动
                           </Button>
                         )}
                         <Button size="sm" variant="ghost" disabled={busyId === record.id} onClick={() => onDelete(record)}>

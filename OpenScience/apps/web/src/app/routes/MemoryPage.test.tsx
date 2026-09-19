@@ -42,6 +42,13 @@ vi.mock("@/lib/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+const memoryClient = vi.hoisted(() => ({
+  undoMemoryRecord: vi.fn(),
+  announceMemoryChanged: vi.fn(),
+  MEMORY_CHANGED_EVENT: "evimed.memory.changed",
+}));
+vi.mock("@/lib/memoryClient", () => memoryClient);
+
 const existing = {
   id: "memo_1",
   content: "长期关注利妥昔单抗的感染风险。 #药物安全",
@@ -288,5 +295,33 @@ describe("a stored brief is not a preference, and a sensitive record is not acce
       expect.objectContaining({ id: "mem_sensitive" }),
       expect.objectContaining({ status: "active" }),
     ));
+  });
+});
+
+describe("every change can be taken back in one click", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.hasWebApi = true;
+    api.fetchMemoryStatus.mockResolvedValue({ configured: true, connected: true, code: null, structured: true });
+    api.listResearchMemories.mockResolvedValue([]);
+  });
+
+  it("offers to undo the last change of a memory that has one, and asks nothing first", async () => {
+    // Owner ruling 2026-09-19: memory changes by itself, so the way back is one
+    // click — no dialog.
+    api.fetchMemoryProfile.mockResolvedValue(profile({
+      preference: [
+        structured({ id: "mem_changed", summary: "证据先用文字叙述", version: 3,
+          revisions: [{ version: 2, value: "证据先用表格", summary: "表格优先", status: "active", changedAt: null, reason: "x" }] }),
+        structured({ id: "mem_new", summary: "回答用中文", version: 1, revisions: [] }),
+      ],
+    }));
+    memoryClient.undoMemoryRecord.mockResolvedValue({ undone: "restored", record: null, restored: [] });
+    render(<MemoryRouter><MemoryPage /></MemoryRouter>);
+    const buttons = await screen.findAllByRole("button", { name: "撤销上次改动" });
+    expect(buttons).toHaveLength(1);
+    await userEvent.click(buttons[0]);
+    await waitFor(() => expect(memoryClient.undoMemoryRecord).toHaveBeenCalledWith("mem_changed", 3));
+    expect(memoryClient.announceMemoryChanged).toHaveBeenCalled();
   });
 });

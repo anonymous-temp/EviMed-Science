@@ -112,6 +112,12 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       return reply(await service.updateEntry(user.id, capsuleId, entryId,
         await bodyOf(req, maxJsonBytes, ["content", "status", "expectedRevision"])));
     }
+    // One click takes back the last change to an entry (owner ruling
+    // 2026-09-19): nothing asks first, so everything can be undone.
+    if (action === "entries" && parts.length === 4 && entryAction === "undo" && method === "POST") {
+      const body = await bodyOf(req, maxJsonBytes, ["expectedRevision"]);
+      return reply(await service.undoEntry(user.id, capsuleId, entryId, { expectedRevision: body.expectedRevision }));
+    }
     if (action === "entries" && parts.length === 4 && entryAction === "history" && method === "GET") {
       await service.get(user.id, capsuleId);
       const entry = await service.documents.get(user.id, "fact", entryId);

@@ -151,7 +151,18 @@ export class CapsuleService {
     }
   }
 
-  /** Model suggestions remain candidates, including when the model labels them explicit.
+  /**
+   * Something the assistant wrote down because the researcher asked it to
+   * (「记住…」), or a decision the researcher made on an autopilot digest.
+   *
+   * It takes effect at once (owner ruling 2026-09-19: no confirmation step
+   * anywhere). What replaces the confirmation is what it is labelled as — an
+   * `inferred` entry, the assistant's wording of what it was asked, never the
+   * researcher's own statement, however the model labelled it — its revision
+   * history and a one-click undo (`undoEntry`). And one structural line: an
+   * inferred entry is context, never a mounted method (`capsuleMethods.mjs`),
+   * so text a model was talked into writing down cannot become an instruction
+   * in every later run.
    * @param {string} userId @param {string} projectId @param {Record<string,any>} input */
   async note(userId, projectId, input) {
     productId(projectId, "projectId");
@@ -191,7 +202,7 @@ export class CapsuleService {
     if (existing) return existing;
     try {
       return await this.documents.put(userId, "fact", id, { capsuleId: capsule.id, factKind,
-        layer: factKind === "method_preference" ? "methods" : "knowledge", content, origin: "inferred", status: "candidate",
+        layer: factKind === "method_preference" ? "methods" : "knowledge", content, origin: "inferred", status: "approved",
         provenance: origin, contextOnly: true }, { expectedRevision: 0, projectId });
     } catch (error) {
       if (error.code !== "product_revision_conflict") throw error;
@@ -202,11 +213,14 @@ export class CapsuleService {
   /**
    * Take back a suggestion this system made and has since learned was wrong.
    *
-   * Only what the system itself suggested and the user has not yet acted on: a
-   * `candidate` is retired, because asking someone to approve knowledge we know
-   * we could not reproduce is worse than never having suggested it. An entry the
-   * user approved is theirs — it keeps its status and only carries the note, so
-   * the retraction informs their decision instead of overruling it.
+   * Only what the system itself wrote and the user has not acted on since: such
+   * an entry is retired, because keeping in force knowledge we know we could
+   * not reproduce is worse than never having written it. Notes take effect
+   * without an approval now (see `note`), so "the user has acted on it" is read
+   * from the entry itself — a status they changed (`curatedAt`) or text they
+   * corrected (`correctedAt`). Such an entry is theirs: it keeps its status and
+   * only carries the note, so the retraction informs their decision instead of
+   * overruling it.
    *
    * Idempotent, and never throws for an entry that is already gone: it is called
    * from a fold that replays.
@@ -218,14 +232,40 @@ export class CapsuleService {
     if (!entry) return null;
     const retracted = { reason: text(reason, "retraction reason", 2000, false), at: new Date().toISOString() };
     if (entry.payload.retracted?.reason === retracted.reason) return entry;
+    const untouched = !entry.payload.curatedAt && !entry.payload.correctedAt;
     const payload = { ...entry.payload, retracted,
-      ...(entry.payload.status === "candidate" ? { status: "retired", curatedAt: retracted.at } : {}) };
+      ...(untouched && entry.payload.status !== "retired" ? { status: "retired", retiredBySystemAt: retracted.at } : {}) };
     try {
       return await this.documents.put(userId, "fact", entry.id, payload, { expectedRevision: entry.revision });
     } catch (error) {
       if (error.code !== "product_revision_conflict") throw error;
       return this.documents.get(userId, "fact", entry.id);
     }
+  }
+
+  /**
+   * Undo the last change to one entry: its previous revision saved forward, or
+   * — for an entry whose only revision is its creation — its removal, which
+   * the capsule's trash can still restore. The same one click research memory
+   * offers (`ResearchMemoryStore.undo`), for the same reason: nothing asks
+   * first, so everything can be taken back.
+   * @param {string} userId @param {string} capsuleId @param {string} entryId @param {{ expectedRevision: number }} input
+   * @returns {Promise<{ undone: "restored" | "removed", entry: any }>}
+   */
+  async undoEntry(userId, capsuleId, entryId, { expectedRevision }) {
+    await this.get(userId, capsuleId);
+    const entry = await this.documents.get(userId, "fact", entryId);
+    if (!entry || entry.payload.capsuleId !== capsuleId) throw new HttpError(404, "capsule_entry_not_found", "The capsule entry is unavailable.");
+    if (entry.revision !== expectedRevision) throw new HttpError(409, "product_revision_conflict", "The record changed; reload before saving.");
+    const history = await this.documents.history(userId, "fact", entryId, { limit: 2 });
+    const previous = (history.items ?? history).find((item) => item.revision === entry.revision - 1);
+    if (!previous || previous.deletedAt) {
+      return { undone: "removed", entry: await this.documents.remove(userId, "fact", entryId, entry.revision) };
+    }
+    // The previous payload, saved forward: never a rewrite of history, so the
+    // undo is itself a revision and can be undone in turn.
+    const payload = { ...previous.payload, capsuleId, undoneAt: new Date().toISOString() };
+    return { undone: "restored", entry: await this.documents.put(userId, "fact", entryId, payload, { expectedRevision: entry.revision }) };
   }
 
   /**

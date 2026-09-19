@@ -206,9 +206,50 @@ export function createMemoryRoutes({
       return true;
     }
 
+    // 「刚记住了 …」: what changed by itself since a moment, for the capsule
+    // page after a visit and for the conversation it came from. Each item
+    // carries the version its one-click undo needs.
+    if (pathname === "/api/memory/changes" && req.method === "GET") {
+      const ctx = await context(req, res);
+      const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
+      sendJson(res, 200, { data: await researchMemory.recentChanges(ctx.user.id, {
+        since: url.searchParams.get("since") ?? "",
+        sessionId: url.searchParams.get("sessionId"),
+        limit: Number(url.searchParams.get("limit") ?? 20),
+      }) });
+      return true;
+    }
+
     if (pathname === "/api/memory/profile" && req.method === "GET") {
       const ctx = await context(req, res);
       sendJson(res, 200, { data: await researchMemory.profile(ctx.user.id, { projectId: ctx.project.id }) });
+      return true;
+    }
+
+    // One click undoes the last change to a memory (owner ruling 2026-09-19:
+    // nothing asks first, so everything can be taken back). A write that
+    // created the memory is undone by removing it; that removal is recorded
+    // as the researcher rejecting it, which is what keeps the next run's
+    // inference from writing it straight back.
+    if (pathname.startsWith("/api/memory/records/") && pathname.endsWith("/undo") && req.method === "POST") {
+      const rawRecordId = pathname.slice("/api/memory/records/".length, -"/undo".length);
+      if (!rawRecordId || rawRecordId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
+      const recordId = decodeRouteComponent(rawRecordId, "structured memory id");
+      const ctx = await context(req, res);
+      const body = assertObject(await readJson(req, config.maxJsonBytes), "memory undo");
+      if (Object.keys(body).some((field) => field !== "expectedVersion")) {
+        throw new HttpError(400, "memory_payload_invalid", "Only expectedVersion is accepted.");
+      }
+      const expectedVersion = Number(body.expectedVersion);
+      if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+        throw new HttpError(400, "memory_version_invalid", "expectedVersion must be a positive integer.");
+      }
+      const result = await researchMemory.undo(ctx.user.id, recordId, { expectedVersion });
+      await audit(ctx, "memory.record.undo", "completed", { target: recordId, undone: result.undone });
+      await recordFeedback(ctx, () => (result.undone === "removed"
+        ? feedbackEvents?.recordMemoryDeletion(ctx.user.id, { record: result.previous, projectId: ctx.project.id, reason: "undone" })
+        : feedbackEvents?.recordMemoryUpdate(ctx.user.id, { before: result.previous, after: result.record, projectId: ctx.project.id })));
+      sendJson(res, 200, { data: { undone: result.undone, record: result.record, restored: result.restored } });
       return true;
     }
 
