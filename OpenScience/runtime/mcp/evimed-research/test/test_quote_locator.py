@@ -175,14 +175,20 @@ class LocateInWorkspaceTests(unittest.TestCase):
                 self.assertTrue(data["found"])
                 self.assertEqual(data["artifactPaths"], [self.path])
 
-    def test_doi_official_page_and_guideline_ids_resolve_to_their_captures(self):
+    def test_doi_web_page_and_guideline_ids_resolve_to_their_captures(self):
         doi_path = immutable_capture.preserve(
             self.workspace, pathlib.Path(".evimed-sources") / quote_locator._doi_slug("10.1056/nejmoa1805819"),
             {"fulltext.md": b"Aspirin use in older adults did not reduce cardiovascular disease."},
         )["fulltext.md"]
         page_path = immutable_capture.preserve(
-            self.workspace, pathlib.Path(".evimed-sources") / "official-pages" / "0123456789abcdef",
+            self.workspace, pathlib.Path(".evimed-sources") / "web-pages" / "fedcba9876543210",
             {"page.md": b"Take aspirin only if your doctor advises it."},
+        )["page.md"]
+        # Preserved by the official-page tool before it became `web_read`:
+        # still in workspaces, still citable.
+        old_page_path = immutable_capture.preserve(
+            self.workspace, pathlib.Path(".evimed-sources") / "official-pages" / "0123456789abcdef",
+            {"page.md": b"Chest pain that spreads to the arm needs an ambulance."},
         )["page.md"]
         guide_digest = __import__("hashlib").sha256(b"evimed-guide:G-42").hexdigest()[:16]
         guide_path = immutable_capture.preserve(
@@ -191,7 +197,8 @@ class LocateInWorkspaceTests(unittest.TestCase):
         )["guideline.md"]
         for source_id, path, quote in (
             ("https://doi.org/10.1056/NEJMoa1805819", doi_path, "did not reduce cardiovascular disease"),
-            ("official-page:0123456789abcdef", page_path, "only if your doctor advises it"),
+            ("web-page:fedcba9876543210", page_path, "only if your doctor advises it"),
+            ("official-page:0123456789abcdef", old_page_path, "needs an ambulance"),
             ("EVIMED-GUIDE:G-42", guide_path, "not recommended for routine primary prevention"),
         ):
             with self.subTest(source_id=source_id):

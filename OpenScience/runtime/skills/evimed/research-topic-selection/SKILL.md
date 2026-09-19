@@ -72,7 +72,7 @@ questions; use those relevant to the candidate rather than a fixed channel quota
 | Preprints | `mcp__evimed__biomedical_source_search` with `sourceId: europe-pmc` and `SRC:PPR` in the query | What is being done right now and is not yet published. `sourceId: biorxiv`/`medrxiv` resolves a DOI you already have — it is a lookup, not a search |
 | Full text | `mcp__evimed__open_access_full_text` | The actual Methods and Limitations paragraphs |
 | Ongoing studies | `mcp__evimed__clinical_trial_search` | Registered questions, recruitment state and planned outcomes; a registration is not a completed finding |
-| Guidelines | `mcp__evimed__guideline_search`, `mcp__evimed__official_page_fetch` | What practice already recommends, and on what evidence grade |
+| Guidelines | `mcp__evimed__guideline_search`, `mcp__evimed__web_read` | What practice already recommends, and on what evidence grade |
 | Drug and gene facts | `sourceId: dailymed` / `openfda` / `rxnorm` / `clinpgx-pharmgkb` | Label text, adverse-event counts, pharmacogenomic annotation |
 | Trend analysis | `mcp__evimed__bibliometric_analysis` | Publication-volume curve, author and institution clusters, emergent terms |
 | Open web | `mcp__evimed__web_search` | Everything the indexes do not carry — funding calls, conference programmes, society pages, registries, a method a group describes only on its own site |

@@ -9,10 +9,15 @@ import {
   type ClaimEvidence,
   type ClaimSource,
   type ClaimVerification,
+  type SourceUpdate,
 } from "@/lib/claimCitations";
 import { claimAppraisalDisplay } from "@/lib/claimAppraisal";
 import { cn } from "@/lib/cn";
+import type { WebReadPage } from "@/lib/apiClient";
+import { pageForSource } from "@/lib/readPages";
+import { ReadPageCard } from "@/components/runs/ReadPages";
 import { ClaimAppraisalSummary } from "./ClaimAppraisal";
+import { SourceUpdateBadges } from "./SourceUpdateBadges";
 
 const TYPE_LABEL: Record<string, string> = { direct: "直接证据", synthesized: "综合结论", derived: "推导结果" };
 const ACCESS_LABEL: Record<string, string> = {
@@ -34,6 +39,8 @@ export interface ClaimReading {
   safety?: Set<string>;
   /** Rendering for paper: a plain mark, no control. */
   print?: boolean;
+  /** The web pages the run read (contract X5): a source read from one shows its card. */
+  pagesRead?: readonly WebReadPage[];
 }
 
 /** A source link only for an http(s) address: the matrix is model-written text. */
@@ -57,14 +64,18 @@ function SourceBadge({ source }: { source: ClaimSource }) {
   );
 }
 
-function Source({ source, index, count, status, runId }: {
+function Source({ source, index, count, status, runId, pagesRead, updates }: {
   source: ClaimSource;
   index: number;
   count: number;
   status?: string;
   runId?: string | null;
+  pagesRead?: readonly WebReadPage[];
+  /** The cited work's retraction and correction notices, when Crossref answered. */
+  updates?: readonly SourceUpdate[];
 }) {
   const href = safeHref(source.sourceUrl);
+  const page = pageForSource(pagesRead, source);
   const statusText = status ? CLAIM_STATUS_TEXT[status] : undefined;
   return (
     <div className="mt-2 space-y-1">
@@ -72,6 +83,7 @@ function Source({ source, index, count, status, runId }: {
         {count > 1 && <span>第 {index + 1} 段引文</span>}
         <SourceBadge source={source} />
         {statusText && count > 1 && <span className={TONE_CLASS[statusText.tone]}>{statusText.tone === "ok" ? "✓ 已核对" : "⚠ 未核对上"}</span>}
+        <SourceUpdateBadges updates={updates} />
       </p>
       {source.supportQuote && (
         <blockquote className="border-l-2 border-strong pl-2 text-ui text-text">“{source.supportQuote}”</blockquote>
@@ -88,6 +100,9 @@ function Source({ source, index, count, status, runId }: {
         {source.identifier && source.sourceTitle ? ` · ${source.identifier}` : ""}
         {source.accessLevel ? ` · ${ACCESS_LABEL[source.accessLevel] ?? "获取程度未注明"}` : ""}
       </p>
+      {/* The page this quotation was read from, when the run read it on the
+        * web: where, when, whether it is an authority's, and its snapshot. */}
+      {page && <ReadPageCard page={page} runId={runId} compact showSnapshot={!source.artifactPath} />}
       {runId && source.artifactPath && (
         <Link
           to={preservedSourceHref(runId, source.artifactPath, source.supportQuote)}
@@ -142,6 +157,8 @@ export function ClaimEvidenceList({ ids, claims, statuses, reading }: {
                 count={sources.length}
                 status={verified?.sources[index]?.status}
                 runId={reading?.runId}
+                pagesRead={reading?.pagesRead}
+                updates={verified?.sources[index]?.updates}
               />
             ))}
             {claim.claimType === "derived" && (

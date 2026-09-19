@@ -919,9 +919,17 @@ volume or a volume-backed runtime configured with the TCP transport.
 The runtime's named `internal: true` network can reach the Web service but has
 no public route. Model calls and approved public research-source GET requests
 therefore use separate authenticated Web gateways. The public-source gateway
-accepts only HTTPS URLs on its exact official-host allowlist, rejects redirects
-and caller-supplied headers, bounds time and response bytes, and reuses the
-active runtime gateway token. Keep
+reuses the active runtime gateway token and has two modes. A source request
+accepts only HTTPS URLs on its exact API allowlist, rejects redirects and
+caller-supplied headers, and bounds time and response bytes. A web-read request
+(`web_read`) names any public http(s) page: every hop, redirects included,
+must resolve to a public address and is connected to exactly the address that
+was checked; robots.txt is honoured, the user agent names the product, each
+site is paced and all reads share one concurrency cap
+(`OPEN_SCIENCE_WEB_READ_*`; `OPEN_SCIENCE_WEB_READ_ENABLED=false` turns the
+mode off). A page that needs a browser is rendered by the AgentBay cloud
+browser only when `OPEN_SCIENCE_WEB_RENDER_ENABLED=true` and
+`OPEN_SCIENCE_AGENTBAY_API_KEY_FILE` are both set. Keep
 `OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS=false`; adding a source to the
 catalog or mapping it to a Skill does not connect it through this gateway.
 The repository includes a runtime image definition (`deploy/runtime-dsh/`) that

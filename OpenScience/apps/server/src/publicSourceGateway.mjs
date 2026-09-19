@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
+import { privateIpv4Address, privateIpv6Address, WebReadError } from "./webReadNetwork.mjs";
 
 const gatewayPath = "/internal/sources/v1/fetch";
 
@@ -30,7 +32,6 @@ const allowedHosts = new Set([
   "bindingdb.org",
   "civicdb.org",
   "clinicaltrials.gov",
-  "cpr.heart.org",
   "dailymed.nlm.nih.gov",
   "data.rcsb.org",
   "dgidb.org",
@@ -43,12 +44,10 @@ const allowedHosts = new Set([
   "gwas.mrcieu.ac.uk",
   "jaspar.elixir.no",
   "maayanlab.cloud",
-  "mpa.hunan.gov.cn",
   "mygene.info",
   "myvariant.info",
   "openneuro.org",
   "pmc.ncbi.nlm.nih.gov",
-  "professional.heart.org",
   "pubchem.ncbi.nlm.nih.gov",
   "pubmed.ncbi.nlm.nih.gov",
   "r12.finngen.fi",
@@ -66,75 +65,33 @@ const allowedHosts = new Set([
   "uts-ws.nlm.nih.gov",
   "waterservices.usgs.gov",
   "webservice.thebiogrid.org",
-  "www.acc.org",
-  "www.accessdata.fda.gov",
   "www.cbioportal.org",
-  "www.ccfdie.org",
-  "www.cochrane.org",
   "www.deciphergenomics.org",
   "www.ebi.ac.uk",
-  "www.ema.europa.eu",
   "www.encodeproject.org",
   "www.eqtlgen.org",
-  "www.escardio.org",
   "www.evimed.com",
-  "www.fda.gov",
-  "www.gov.cn",
   "www.guidetopharmacology.org",
   "www.isrctn.com",
   "www.metabolomicsworkbench.org",
   "www.ncbi.nlm.nih.gov",
-  "www.nhs.uk",
-  "www.nice.org.uk",
   "www.proteinatlas.org",
-  "www.sign.ac.uk",
-  "www.uspreventiveservicestaskforce.org",
-  "www.who.int",
   "wwwn.cdc.gov",
 ]);
 
-// The official pages `official_page_fetch` may preserve, path for path the
-// runtime's own `OFFICIAL_PATHS` (official_pages.py); `officialPages.test.mjs`
-// holds the two equal. Measured 2026-09-18 (review P2-22): each added host
-// answers one plain GET with the document's text in server-rendered HTML.
-// NMPA, NHC and CDE are absent because they answer a JavaScript challenge
-// instead, not because they were overlooked.
-const officialDocumentPaths = new Map([
-  ["www.cochrane.org", ["/evidence/", "/zh-hans/evidence/"]],
-  ["www.acc.org", ["/latest-in-cardiology/"]],
-  ["professional.heart.org", ["/en/science-news/"]],
-  ["cpr.heart.org", ["/en/resuscitation-science/"]],
-  ["www.nhs.uk", ["/symptoms/chest-pain/"]],
-  ["www.ccfdie.org", ["/zryyxxw/"]],
-  ["mpa.hunan.gov.cn", ["/mpa/"]],
-  ["www.nice.org.uk", ["/guidance/"]],
-  ["www.uspreventiveservicestaskforce.org", ["/uspstf/recommendation/"]],
-  ["www.sign.ac.uk", ["/guidelines/"]],
-  ["www.who.int", ["/publications/i/item/"]],
-  ["www.ema.europa.eu", [
-    "/en/medicines/human/EPAR/",
-    "/en/medicines/human/referrals/",
-    "/en/medicines/dhpc/",
-    "/en/news/meeting-highlights-pharmacovigilance-risk-assessment-committee-prac-",
-  ]],
-  ["www.fda.gov", ["/drugs/drug-safety-communications/", "/drugs/drug-safety-and-availability/"]],
-  ["www.accessdata.fda.gov", ["/scripts/cder/daf/"]],
-  ["www.gov.cn", ["/zhengce/zhengceku/"]],
-  ["dailymed.nlm.nih.gov", ["/dailymed/drugInfo.cfm", "/dailymed/lookup.cfm"]],
-]);
-
+// Tier 1 is APIs only. Web pages — an authority's guideline, a regulator's
+// notice, any page a search found — are read by the web-read mode below
+// (`webRead.mjs`): paced per site, robots.txt honoured, rendered when the page
+// is drawn in script. Until 2026-09-20 this list also carried the HTML paths of
+// seventeen official hosts, fetched here as raw HTML with none of that; those
+// hosts left the allowlist with the official-page tool, and "official" is now a
+// label on what `web_read` returns (`webReadOfficial.mjs`), not an admission.
+//
 // Hosts approved for one API surface rather than for themselves.
 // `www.ncbi.nlm.nih.gov` serves the whole of NCBI's web estate — every database
 // front end, every download path, every redirect into the rest of the NIH —
-// and the only thing approved on it is PubTator3. `officialDocumentPaths`
-// cannot express that: it also forces `text/html`, and PubTator3 answers JSON.
-//
-// A host may carry both: DailyMed serves the JSON API the connector searches
-// (`/dailymed/services/v2/`) and the label pages `official_page_fetch`
-// preserves. There an HTML GET is held to the document paths and every other
-// request to the API paths — before this, listing a document path on a host
-// forbade everything else on it, so adding DailyMed's label pages would have
-// broken its search.
+// and the only thing approved on it is PubTator3. DailyMed serves the JSON API
+// the connector searches; its label pages are read through `web_read`.
 const apiPathPrefixes = new Map([
   ["www.ncbi.nlm.nih.gov", ["/research/pubtator3-api/"]],
   ["dailymed.nlm.nih.gov", ["/dailymed/services/v2/"]],
@@ -202,7 +159,6 @@ const allowedAcceptTypes = new Set([
   "text/json",
   "text/plain",
   "text/csv",
-  "text/html",
   "text/xml",
 ]);
 
@@ -382,47 +338,18 @@ const doiPattern = /^10\.\d{4,9}\/[\x21-\x7e]{1,180}$/;
 // Unpaywall vouches for. Arbitrary egress stays impossible because the runtime
 // cannot choose the destination.
 function validatedOpenAccessPdfRequest(value) {
-  if (Object.keys(value).some((key) => key !== "openAccessPdfDoi")) {
+  if (Object.keys(value).some((key) => key !== "openAccessPdfDoi" && key !== "parse") || (value.parse !== undefined && typeof value.parse !== "boolean")) {
     throw gatewayError(
       400,
       "public_source_gateway_field_invalid",
-      "An open-access PDF request carries only a DOI.",
+      "An open-access PDF request carries only a DOI and, optionally, parse: true.",
     );
   }
   const doi = String(value.openAccessPdfDoi ?? "").trim().replace(/^(?:https?:\/\/(?:dx\.)?doi\.org\/|doi:)/i, "");
   if (!doiPattern.test(doi)) {
     throw gatewayError(400, "public_source_gateway_doi_invalid", "The open-access DOI is invalid.");
   }
-  return { mode: "open-access-pdf", doi };
-}
-
-/** True when a literal IPv4 address is one this server must never be sent to. */
-function privateIpv4Address(host) {
-  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (!ipv4) return false;
-  const octets = ipv4.slice(1, 5).map(Number);
-  return octets.some((part) => !Number.isInteger(part) || part > 255)
-    || octets[0] === 0 || octets[0] === 10 || octets[0] === 127
-    || (octets[0] === 169 && octets[1] === 254)
-    || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
-    || (octets[0] === 192 && octets[1] === 168)
-    || (octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127)
-    || octets[0] >= 224;
-}
-
-/** The same question for IPv6, including the forms that smuggle IPv4 through. */
-function privateIpv6Address(host) {
-  const address = host.replace(/^\[|\]$/g, "").split("%")[0].toLowerCase();
-  const mapped = /^(?:::ffff:|::)((?:\d{1,3}\.){3}\d{1,3})$/.exec(address);
-  if (mapped) return privateIpv4Address(mapped[1]);
-  if (address === "::" || address === "::1") return true;
-  const head = address.split(":", 1)[0];
-  if (!head) return false;
-  const group = Number.parseInt(head.padStart(4, "0"), 16);
-  if (!Number.isInteger(group)) return true;
-  return (group & 0xfe00) === 0xfc00        // fc00::/7  unique local
-    || (group & 0xffc0) === 0xfe80          // fe80::/10 link local
-    || (group & 0xff00) === 0xff00;         // ff00::/8  multicast
+  return { mode: "open-access-pdf", doi, parse: value.parse === true };
 }
 
 /** Reject anything that is not a routable public name before we fetch it.
@@ -480,11 +407,31 @@ async function assertPublicAddresses(hostname, resolveImpl) {
   }
 }
 
+/**
+ * A web read: one public page, any site. Nothing but the address crosses the
+ * boundary; how it is fetched — robots, pacing, redirects, rendering, the
+ * parser — is the gateway's (`webRead.mjs`).
+ * @param {Record<string, unknown>} value
+ */
+function validatedWebReadRequest(value) {
+  const read = /** @type {Record<string, unknown>} */ (value.webRead);
+  if (
+    Object.keys(value).some((key) => key !== "webRead")
+    || read == null || typeof read !== "object" || Array.isArray(read)
+    || Object.keys(read).some((key) => key !== "url")
+    || typeof read.url !== "string"
+  ) {
+    throw gatewayError(400, "public_source_gateway_field_invalid", "A web-read request carries only { webRead: { url } }.");
+  }
+  return { mode: "web-read", url: read.url };
+}
+
 function validatedRequest(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     throw gatewayError(400, "public_source_gateway_body_invalid", "The public-source request must be an object.");
   }
   if (value.openAccessPdfDoi !== undefined) return validatedOpenAccessPdfRequest(value);
+  if (value.webRead !== undefined) return validatedWebReadRequest(value);
   if (Object.keys(value).some((key) => !["url", "accept", "method", "body", "credentialProfile"].includes(key))) {
     throw gatewayError(400, "public_source_gateway_field_invalid", "The public-source request contains an unsupported field.");
   }
@@ -522,17 +469,8 @@ function validatedRequest(value) {
     throw gatewayError(400, "public_source_gateway_credential_profile_invalid", "The credential profile is invalid.");
   }
   const hostname = url.hostname.toLowerCase();
-  const documentPrefixes = officialDocumentPaths.get(hostname);
   const apiPrefixes = apiPathPrefixes.get(hostname);
-  const documentRequest = method === "GET" && value.accept.length === 1 && value.accept[0] === "text/html";
-  if (documentPrefixes && (documentRequest || !apiPrefixes)) {
-    if (!documentPrefixes.some((prefix) => url.pathname.startsWith(prefix))) {
-      throw gatewayError(403, "public_source_document_path_forbidden", "The official-document path is not approved.");
-    }
-    if (!documentRequest) {
-      throw gatewayError(403, "public_source_document_request_forbidden", "Official-document sources permit only HTML GET requests.");
-    }
-  } else if (apiPrefixes) {
+  if (apiPrefixes) {
     if (!apiPrefixes.some((prefix) => url.pathname.startsWith(prefix))) {
       throw gatewayError(403, "public_source_api_path_forbidden", "The API path is not approved on this host.");
     }
@@ -744,7 +682,7 @@ async function readBoundedBody(body, maxBytes) {
  * kept ending with more eligible records than readable ones. Unpaywall knows
  * where the rest are, but on the publisher's own domain, so the resolution has
  * to happen here rather than in the runtime. */
-async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, signal }) {
+async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, signal, documentParser }) {
   const email = String(config.publicSourceCredentials?.unpaywall ?? "").trim();
   if (!email || email.length > 8 * 1024 || /[\r\n\0]/.test(email)) {
     throw gatewayError(503, "public_source_unpaywall_credential_missing", "The server-managed unpaywall credential is unavailable.");
@@ -831,6 +769,15 @@ async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl
       continue;
     }
     const buffer = await readBoundedBody(upstream.body, maxBytes);
+    if (request.parse) {
+      await sendParsedPdf(res, buffer, {
+        doi: request.doi,
+        origin: target.origin,
+        version: String(candidate.version ?? ""),
+        license: String(candidate.license ?? ""),
+      }, documentParser);
+      return;
+    }
     res.writeHead(200, {
       "content-type": "application/pdf",
       "content-length": String(buffer.length),
@@ -853,7 +800,69 @@ async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl
   );
 }
 
-export function createPublicSourceGatewayHandler(config, runtimeManager, { fetchImpl = fetch, resolveImpl = dnsLookup, connectorCredentials = null } = {}) {
+/**
+ * The "via parse" mode for an open-access PDF (plan §2.3): the bytes the
+ * gateway just fetched go to the document parser, and the runtime receives the
+ * text with the PDF beside it — so the runtime still holds no parser key and
+ * names no host, and its pypdf text layer becomes the fallback for a
+ * deployment (or a moment) without a parser rather than the only reader.
+ *
+ * A parser failure is not a gateway failure: the PDF was retrieved, and the
+ * caller gets it with the parser's named reason so it can read the text layer
+ * itself (principle 19).
+ *
+ * @param {import("node:http").ServerResponse} res @param {Buffer} buffer
+ * @param {{ doi: string, origin: string, version: string, license: string }} provenance
+ * @param {any} documentParser
+ */
+async function sendParsedPdf(res, buffer, provenance, documentParser) {
+  const sha256 = createHash("sha256").update(buffer).digest("hex");
+  let parsed = null;
+  let parseError = null;
+  if (typeof documentParser?.parseBytes === "function") {
+    try {
+      const result = await documentParser.parseBytes({
+        bytes: buffer,
+        filename: `${provenance.doi.replace(/[^A-Za-z0-9._-]+/g, "-").slice(0, 96) || "open-access-article"}.pdf`,
+        mediaType: "application/pdf",
+        sha256,
+      });
+      parsed = {
+        text: String(result?.text ?? ""),
+        extractor: result?.extractor ?? null,
+        ...(Array.isArray(result?.pageMap) ? { pageMap: result.pageMap } : {}),
+        ...(result?.metadata && typeof result.metadata === "object" ? { metadata: result.metadata } : {}),
+      };
+    } catch (error) {
+      const code = typeof error?.code === "string" && /^source_[a-z_]+$/.test(error.code) ? error.code : "source_parser_failed";
+      parseError = { code, message: code === "source_parser_failed" ? "The document parser failed on this PDF." : String(error.message ?? code) };
+    }
+  } else {
+    parseError = { code: "source_parser_unavailable", message: "This deployment has no document parser configured." };
+  }
+  const body = Buffer.from(JSON.stringify({
+    pdf: { base64: buffer.toString("base64"), sha256, bytes: buffer.length, ...provenance },
+    parsed,
+    parseError,
+  }));
+  res.writeHead(200, {
+    "content-type": "application/json; charset=utf-8",
+    "content-length": String(body.length),
+    "cache-control": "no-store",
+  });
+  res.end(body);
+}
+
+/**
+ * @param {any} config
+ * @param {any} runtimeManager
+ * @param {{ fetchImpl?: typeof fetch, resolveImpl?: any, connectorCredentials?: any,
+ *   webReader?: { read: (url: string, options: { signal?: AbortSignal }) => Promise<any> } | null,
+ *   documentParser?: any }} [options]
+ */
+export function createPublicSourceGatewayHandler(config, runtimeManager, {
+  fetchImpl = fetch, resolveImpl = dnsLookup, connectorCredentials = null, webReader = null, documentParser = null,
+} = {}) {
   return async function publicSourceGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
@@ -861,11 +870,15 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, { fetch
     }
     const controller = new AbortController();
     const timeoutMs = Math.max(1_000, Number(config.publicSourceGatewayTimeoutMs) || 60_000);
-    const timeout = setTimeout(
-      () => controller.abort(new DOMException("Public-source gateway timed out.", "TimeoutError")),
-      timeoutMs,
-    );
-    timeout.unref?.();
+    const arm = (/** @type {number} */ ms) => {
+      const timer = setTimeout(
+        () => controller.abort(new DOMException("Public-source gateway timed out.", "TimeoutError")),
+        ms,
+      );
+      timer.unref?.();
+      return timer;
+    };
+    let timeout = arm(timeoutMs);
     try {
       const token = bearerToken(req);
       let identity;
@@ -876,7 +889,35 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, { fetch
       }
       const request = validatedRequest(await readJsonBody(req, 16 * 1024));
       if (request.mode === "open-access-pdf") {
-        await serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, signal: controller.signal });
+        await serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, signal: controller.signal, documentParser });
+        return;
+      }
+      if (request.mode === "web-read") {
+        if (config.webReadEnabled === false) {
+          throw gatewayError(403, "web_read_disabled", "Web reading is switched off in this deployment.");
+        }
+        if (!webReader) throw gatewayError(503, "web_read_unavailable", "Web reading is not available in this deployment.");
+        // A read may render a page and parse a PDF, so it gets its own budget —
+        // one that still ends before the MCP tool call does (config.mjs).
+        clearTimeout(timeout);
+        timeout = arm(Math.max(1_000, Number(config.webReadTimeoutMs) || 150_000));
+        let result;
+        try {
+          result = await webReader.read(request.url, { signal: controller.signal });
+        } catch (error) {
+          if (controller.signal.reason?.name === "TimeoutError") {
+            throw gatewayError(504, "web_read_timeout", "The web page could not be read in time; try another source or retry later.");
+          }
+          if (error instanceof WebReadError) throw gatewayError(error.status === 499 ? 504 : error.status, error.code, error.message);
+          throw gatewayError(502, "web_read_failed", "The web page could not be read.");
+        }
+        const body = Buffer.from(JSON.stringify(result));
+        res.writeHead(200, {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": String(body.length),
+          "cache-control": "no-store",
+        });
+        res.end(body);
         return;
       }
       let upstream;
@@ -1010,7 +1051,6 @@ export function publicSourceCredentialReadiness(config) {
 
 export const PUBLIC_SOURCE_GATEWAY_PATH = gatewayPath;
 export const PUBLIC_SOURCE_ALLOWED_HOSTS = allowedHosts;
-export const PUBLIC_SOURCE_OFFICIAL_DOCUMENT_PATHS = officialDocumentPaths;
 export const PUBLIC_SOURCE_ALLOWED_POST_ENDPOINTS = allowedPostEndpoints;
 export const PUBLIC_SOURCE_CREDENTIAL_PROFILES = credentialProfiles;
 export const PUBLIC_SOURCE_ALLOWED_ACCEPT_TYPES = allowedAcceptTypes;

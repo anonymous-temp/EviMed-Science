@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "clinical-evidence-synthesis",
-  "version": "sha256:bb643aa3cc9bb817355bdc0d810faeddf7fd3c9ce8af4e2a6fac7565e83a404e",
+  "version": "sha256:d1d1b5085104b44968530f8235e497058ff0b5a748c4c22365ef70e005fba1ff",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 26,
@@ -1014,7 +1014,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512,
-            "description": "The .evimed-sources/... path a preserving tool returned, or the id it reported (PMCID, DOI, official-page:<hash>, EVIMED-GUIDE:<id>, label:<approval number>#<section>)."
+            "description": "The .evimed-sources/... path a preserving tool returned, or the id it reported (PMCID, DOI, web-page:<hash>, EVIMED-GUIDE:<id>, label:<approval number>#<section>)."
           },
           "quote": {
             "type": "string",
@@ -1047,42 +1047,6 @@
       ],
       "outputTypeTags": [],
       "stateEffect": "none"
-    },
-    {
-      "name": "mcp__evimed__official_page_fetch",
-      "source": "mcp",
-      "description": "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. Allowed (https, host then path prefixes): www.cochrane.org /evidence/ /zh-hans/evidence/; www.acc.org /latest-in-cardiology/; professional.heart.org /en/science-news/; cpr.heart.org /en/resuscitation-science/; www.nhs.uk /symptoms/chest-pain/; www.ccfdie.org /zryyxxw/; mpa.hunan.gov.cn /mpa/; www.nice.org.uk /guidance/; www.uspreventiveservicestaskforce.org /uspstf/recommendation/; www.sign.ac.uk /guidelines/; www.who.int /publications/i/item/; www.ema.europa.eu /en/medicines/human/EPAR/ /en/medicines/human/referrals/ /en/medicines/dhpc/ /en/news/meeting-highlights-pharmacovigilance-risk-assessment-committee-prac-; www.fda.gov /drugs/drug-safety-communications/ /drugs/drug-safety-and-availability/; www.accessdata.fda.gov /scripts/cder/daf/; www.gov.cn /zhengce/zhengceku/; dailymed.nlm.nih.gov /dailymed/drugInfo.cfm /dailymed/lookup.cfm",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2048
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "url"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
-        "fields": [
-          {
-            "path": "artifact.path",
-            "type": "file_path"
-          }
-        ]
-      },
-      "typeTags": [],
-      "requiredTypeTags": [],
-      "outputTypeTags": [
-        "file_path"
-      ],
-      "stateEffect": "writes_workspace"
     },
     {
       "name": "mcp__evimed__open_access_full_text",
@@ -1176,6 +1140,47 @@
         "drug_name"
       ],
       "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__web_read",
+      "source": "mcp",
+      "description": "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and preserve it in the workspace as a citable snapshot with a sha256 receipt. Long text comes in pages: pass page=N for the next one (nextPage says whether there is one). Pages from regulators, guideline bodies and trial registries are marked official.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "url"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "data.markdownPath",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
     },
     {
       "name": "read",
@@ -1416,42 +1421,6 @@
       ]
     },
     {
-      "from": "mcp__evimed__official_page_fetch",
-      "to": "edit",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "file_path"
-      ]
-    },
-    {
-      "from": "mcp__evimed__official_page_fetch",
-      "to": "read",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "file_path"
-      ]
-    },
-    {
-      "from": "mcp__evimed__official_page_fetch",
-      "to": "write",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "file_path"
-      ]
-    },
-    {
       "from": "mcp__evimed__open_access_full_text",
       "to": "edit",
       "type": "parameter",
@@ -1490,6 +1459,42 @@
     },
     {
       "from": "mcp__evimed__open_access_full_text",
+      "to": "write",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__web_read",
+      "to": "edit",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__web_read",
+      "to": "read",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__web_read",
       "to": "write",
       "type": "parameter",
       "via": "schema",

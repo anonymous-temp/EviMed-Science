@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
 import re
+import urllib.error
 import urllib.parse
+import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +20,11 @@ from immutable_capture import ImmutableCaptureError, managed_workspace, preserve
 
 
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+# The parse mode's answer: the PDF base64-encoded beside the parser's text.
+MAX_PARSED_RESPONSE_BYTES = 48 * 1024 * 1024
+# The parser reads a long or scanned PDF in minutes; the kernel abandons a tool
+# call at 180 s, and past this the PDF's own text layer is read instead.
+PARSE_TIMEOUT_SECONDS = 150
 # Below this, a PDF has effectively no text layer and is a scan.
 MIN_PDF_TEXT_CHARS = 2_000
 EUROPE_PMC_API = "https://www.ebi.ac.uk/europepmc/webservices/rest"
@@ -132,6 +140,104 @@ def _with_sidecar(artifacts: dict, record: dict) -> dict:
     return {**artifacts, sidecar[0]: sidecar[1]} if sidecar else artifacts
 
 
+def _open_access_pdf(doi: str) -> tuple[bytes, dict, dict | None, dict | None]:
+    """The PDF Unpaywall vouches for, fetched by the server gateway, with the
+    document parser's reading of it (the gateway's "via parse" mode, plan §2.3).
+
+    Only the DOI crosses the boundary, as before: the gateway picks the host,
+    holds the parser's key and returns the text with the PDF beside it. Returns
+    (pdf bytes, provenance, parsed or None, the parser's refusal or None).
+    """
+    try:
+        gateway = public_sources._gateway_settings()  # noqa: SLF001 - one token, one owner
+    except public_sources.PublicSourceError as error:
+        raise FullTextError(getattr(error, "code", "full_text_not_available"), str(error)) from error
+    if gateway is None:
+        raise FullTextError(
+            "public_source_managed_gateway_required",
+            "Open-access PDF retrieval requires the EviMed server gateway.",
+        )
+    gateway_url, token = gateway
+    request = urllib.request.Request(
+        gateway_url,
+        data=json.dumps({"openAccessPdfDoi": doi, "parse": True}).encode("utf-8"),
+        headers={
+            "accept": "application/json",
+            "authorization": "Bearer %s" % token,
+            "content-type": "application/json",
+            "user-agent": USER_AGENT,
+        },
+        method="POST",
+    )
+    try:
+        with public_sources._OPENER.open(request, timeout=PARSE_TIMEOUT_SECONDS) as response:  # noqa: SLF001
+            body = response.read(MAX_PARSED_RESPONSE_BYTES + 1)
+    except urllib.error.HTTPError as error:
+        # The gateway names every location it tried; passing that through is
+        # the difference between "no full text" and "no full text, and why".
+        code, detail = "public_source_pdf_unavailable", ""
+        try:
+            failure = json.loads(error.read(64 * 1024).decode("utf-8")).get("error") or {}
+            code = str(failure.get("code") or code)
+            detail = str(failure.get("message") or "")
+        except Exception:  # noqa: BLE001 - the status is the finding
+            pass
+        raise FullTextError(code, detail or "No open-access PDF could be retrieved.") from error
+    except (urllib.error.URLError, TimeoutError, OSError) as error:
+        raise FullTextError("full_text_upstream_unavailable", "Open-access PDF retrieval failed.", True) from error
+    if len(body) > MAX_PARSED_RESPONSE_BYTES:
+        raise FullTextError("full_text_too_large", "The open-access full text exceeds the managed size limit.")
+    try:
+        payload = json.loads(body.decode("utf-8"))
+        pdf = payload["pdf"]
+        pdf_bytes = base64.b64decode(pdf["base64"], validate=True)
+    except (UnicodeDecodeError, ValueError, KeyError, TypeError) as error:
+        raise FullTextError("full_text_upstream_invalid", "The gateway returned an unreadable open-access answer.", True) from error
+    if len(pdf_bytes) > MAX_RESPONSE_BYTES:
+        raise FullTextError("full_text_too_large", "The open-access full text exceeds the managed size limit.")
+    if hashlib.sha256(pdf_bytes).hexdigest() != str(pdf.get("sha256") or ""):
+        raise FullTextError("full_text_upstream_invalid", "The open-access PDF does not match the digest the gateway reported.", True)
+    provenance = {
+        "origin": str(pdf.get("origin") or ""),
+        "version": str(pdf.get("version") or ""),
+        "license": str(pdf.get("license") or ""),
+    }
+    parsed = payload.get("parsed")
+    if not (isinstance(parsed, dict) and isinstance(parsed.get("text"), str) and parsed["text"].strip()):
+        parsed = None
+    parse_error = payload.get("parseError") if isinstance(payload.get("parseError"), dict) else None
+    return pdf_bytes, provenance, parsed, parse_error
+
+
+def _parsed_markdown(parsed: dict, metadata: dict) -> tuple[str, dict]:
+    """The document parser's text, in the same markdown shape as the other
+    routes. The heading is not the parser's metadata: its title is read by a
+    model and may differ between two readings of the same bytes, and a capture
+    has to be the same file every time the same PDF is read."""
+    doi = str(metadata.get("doi") or "")
+    extractor = parsed.get("extractor") if isinstance(parsed.get("extractor"), dict) else {}
+    page_map = parsed.get("pageMap") if isinstance(parsed.get("pageMap"), list) else []
+    body = parsed["text"].strip()
+    header = [
+        "# Open-access article",
+        "",
+        "- DOI: " + doi.casefold(),
+        "- Read by the document parser (%s %s)" % (extractor.get("name") or "parser", extractor.get("version") or ""),
+        "",
+        "> Text below is the document parser's reading of the PDF, tables and scanned pages included; "
+        "verify any number against the page it came from in the PDF beside it.",
+        "",
+    ]
+    return "\n".join(header) + "\n" + body, {
+        "title": str(metadata.get("title") or "").strip() or doi or "Open-access article",
+        "doi": doi,
+        "pmcid": "",
+        "pages": len(page_map) or None,
+        "references": 0,
+        "extractedBy": "document-parser",
+    }
+
+
 def _pdf_markdown(payload: bytes, metadata: dict, provenance: dict) -> tuple[str, dict]:
     """Extract the text layer of an open-access PDF into the same markdown shape
     the Europe PMC XML path produces, so downstream consumers see one format."""
@@ -180,6 +286,7 @@ def _pdf_markdown(payload: bytes, metadata: dict, provenance: dict) -> tuple[str
         "pmcid": "",
         "pages": len(pages),
         "references": 0,
+        "extractedBy": "pdf-text-layer",
     }
 
 
@@ -354,14 +461,32 @@ def _fetch_open_access_pdf(metadata: dict, workspace: Path) -> dict:
             "full_text_not_available",
             "The record has no PMC full text and no DOI to resolve an open-access copy.",
         )
+    parse_error = None
     try:
-        payload, provenance = public_sources.open_access_pdf_bytes(doi, MAX_RESPONSE_BYTES)
-    except public_sources.PublicSourceError as error:
-        raise FullTextError(getattr(error, "code", "full_text_not_available"), str(error)) from error
-    except Exception as error:
-        raise FullTextError("full_text_upstream_unavailable", "Open-access PDF retrieval failed.", True) from error
+        payload, provenance, parsed, parse_error = _open_access_pdf(doi)
+    except FullTextError as error:
+        if not error.retryable:
+            raise
+        # The parse mode ran out of time or could not be reached: the PDF
+        # itself, read by its own text layer here, is still the paper.
+        parsed, parse_error = None, {"code": error.code, "message": str(error)}
+        try:
+            payload, provenance = public_sources.open_access_pdf_bytes(doi, MAX_RESPONSE_BYTES)
+        except public_sources.PublicSourceError as fallback:
+            raise FullTextError(getattr(fallback, "code", "full_text_not_available"), str(fallback)) from fallback
+        except Exception as fallback:
+            raise FullTextError("full_text_upstream_unavailable", "Open-access PDF retrieval failed.", True) from fallback
 
-    markdown, details = _pdf_markdown(payload, metadata, provenance)
+    # The parser when the deployment has one — it reads tables and scanned
+    # pages the text layer cannot. The text layer (pypdf, in the image) when it
+    # does not, or when the parser failed on this PDF: a parser outage must not
+    # make an open-access paper unreadable, and a text layer is verbatim.
+    if parsed is not None:
+        markdown, details = _parsed_markdown(parsed, metadata)
+    else:
+        markdown, details = _pdf_markdown(payload, metadata, provenance)
+        if parse_error:
+            details["parserUnavailable"] = str(parse_error.get("code") or "source_parser_failed")
     relative_root = Path(".evimed-sources") / _doi_slug(doi.casefold())
     markdown_payload = markdown.encode("utf-8")
     artifacts = _with_sidecar({"fulltext.md": markdown_payload, "fulltext.pdf": payload}, {

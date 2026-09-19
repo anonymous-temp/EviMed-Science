@@ -47,6 +47,11 @@ export const repairableEvidencePackageErrorCodes = new Set([
 export const recoverableEvidenceSourceErrorCodes = new Set([
   "full_text_not_available",
   "full_text_upstream_unavailable",
+  // `official_page_*` is what `web_read` answered under its old name, until
+  // 2026-09-20. Nothing built since emits it, and every entry stays: a
+  // runtime started from an image built before the rename speaks it until that
+  // runtime is replaced, and a failed tool call with a code this registry does
+  // not know fails the whole run (`agentRuns.mjs`).
   "official_page_upstream_unavailable",
   // The deployment simply has no Unpaywall address configured, or no gateway to
   // reach it through. That is host configuration, and failing the run for it
@@ -165,8 +170,6 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "specialist_execution_failed",
   "meta_agent_execution_failed",
   "upstream_failed",
-  "public_source_document_path_forbidden",
-  "public_source_document_request_forbidden",
   "public_source_api_path_forbidden",
   "public_source_api_request_forbidden",
   "public_source_gateway_credential_profile_forbidden",
@@ -213,6 +216,50 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // the other label connectors are still there to ask.
   "drug_label_index_unconfigured",
   "drug_label_not_found",
+  // `web_read` (2026-09-20) reads any public page, so most answers it can get
+  // are facts about the page: the site's robots.txt says no, the site needs a
+  // browser this deployment does not have, the page is still unreadable after
+  // rendering, gone, behind a login, too slow, or a type nothing reads. Each
+  // is a limitation to report and another source to try — a run that read
+  // eight regulator pages and hit one challenge page has not failed.
+  "web_read_robots_disallowed",
+  "web_read_host_forbidden",
+  "web_read_host_unresolved",
+  "web_read_url_forbidden",
+  "web_read_needs_browser",
+  "web_read_unreadable",
+  "web_read_not_found",
+  "web_read_login_required",
+  "web_read_upstream_error",
+  "web_read_upstream_unavailable",
+  "web_read_too_many_redirects",
+  "web_read_content_type_unsupported",
+  "web_read_document_parser_unavailable",
+  "web_read_response_too_large",
+  "web_read_timeout",
+  "web_read_aborted",
+  "web_read_busy",
+  "web_read_host_busy",
+  "web_read_page_out_of_range",
+  // The deployment's own switches and the gateway being unreachable: host
+  // facts, like an unconfigured web search.
+  "web_read_disabled",
+  "web_read_unavailable",
+  "web_read_unconfigured",
+  "web_read_failed",
+  "web_render_unavailable",
+  "web_render_disabled",
+  "web_render_failed",
+  "web_render_timeout",
+  "web_render_busy",
+  // The document parser behind a web read of a PDF: the source was reached and
+  // could not be turned into text this time.
+  "source_parser_unavailable",
+  "source_parser_failed",
+  "source_parser_timeout",
+  "source_parser_response_invalid",
+  "source_parser_response_too_large",
+  "source_format_unsupported",
 ]);
 
 
@@ -287,6 +334,14 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "full_text_xml_invalid",
   "official_page_too_large",
   "official_page_response_invalid",
+  // `web_read` asked with no usable URL or page number, or could not write
+  // the snapshot it read (so nothing downstream can quote it), or got an
+  // answer from its own gateway it could not parse.
+  "web_read_url_invalid",
+  "web_read_page_invalid",
+  "web_read_workspace_invalid",
+  "web_read_output_invalid",
+  "web_read_response_invalid",
   // The adapter was reached and the request or the answer was wrong. A
   // malformed call is the run's to correct; a response without provenance
   // cannot be quoted, whatever it contains.
@@ -854,6 +909,10 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
 export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^full_text_/, '这篇文献的全文取不到。报告会把它记为限制，而不是当作读过。'],
   [/^official_page_/, '这个官方页面取不到。报告会把它记为限制。'],
+  [/^web_read_/, '这个网页这次读不到。报告会把它记为限制，运行会改用其他来源。'],
+  [/^web_render_/, '这个网页需要浏览器打开，云端浏览器这次没能打开它；运行会改用其他来源。'],
+  [/^source_parser_/, '文档解析服务这次没能把这份文件转成文字。'],
+  [/^source_format_/, '这种文件格式无法转成文字。'],
   [/^public_source_/, '公共数据源这次没能给出结果。'],
   [/^pubtator_/, '关系式检索的概念标识或关系类型不对，用 term_normalize 的 annotate 取一次标识再试。'],
   [/^web_search_/, '网页检索这次没能完成。'],

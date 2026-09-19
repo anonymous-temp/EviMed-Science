@@ -119,7 +119,7 @@ test("loads the final package contract and derives runtime identity", async () =
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("data_source_catalog"));
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("biomedical_source_search"));
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("open_access_full_text"));
-    assert.ok(EVIMED_AGENT_TOOL_IDS.has("official_page_fetch"));
+    assert.ok(EVIMED_AGENT_TOOL_IDS.has("web_read"));
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("patent_search"));
     assert.ok(EVIMED_AGENT_TOOL_IDS.has("pharmacy_reference_search"));
     assert.ok(EVIMED_AGENT_DATA_SOURCES.has("faers"));

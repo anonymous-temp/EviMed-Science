@@ -85,6 +85,10 @@ import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
 import { createSourceUnderstandingRuntime } from "./sourceUnderstandingRuntime.mjs";
 import { removeSourceCopies, sourceAttemptId, stageParserInput } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
+import { createWebRenderer } from "./agentbay/browser.mjs";
+import { createWebReader, webReadMetricFamilies, webReadTransportFor, webReadUserAgent } from "./webRead.mjs";
+import { pagesReadFromSessions } from "./webReadPages.mjs";
+import { createSourceUpdateLookup, sourceUpdateMetricFamilies } from "./sourceUpdates.mjs";
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
 import { AutopilotService, VERIFICATION_ARTIFACT, VERIFICATION_ROUTE_REASON, parseVerificationResult, verificationBrief,
@@ -1614,6 +1618,17 @@ export function createWebApiApp(overrides = {}) {
             ?? await collectRunTranscripts(runtimeManager, project, run, { children });
           const receipt = await persistRunTranscript({ project, run, sessions });
           await agentRuns.recordLearning(project, run.id, { transcript: receipt });
+          // The web pages the run read (contract X5), off the same transcript:
+          // each `web_read` result carries the gateway's receipt. A write of
+          // its own, so a ledger at its ceiling costs this list and never the
+          // transcript receipt above.
+          const reading = pagesReadFromSessions(sessions);
+          if (reading.pages.length) {
+            await agentRuns.recordLearning(project, run.id, { pagesRead: reading.pages, pagesReadTotal: reading.total }).catch((error) => securityAudit(config, "run.pages_read.record", "failed", {
+              userId: project.userId, projectId: project.id, runId: run.id,
+              code: typeof error?.code === "string" ? error.code : "pages_read_unrecorded",
+            }));
+          }
           if (receipt.completeness !== "complete") {
             await securityAudit(config, "run.transcript.persist", "partial", {
               userId: project.userId, projectId: project.id, runId: run.id,
@@ -2244,9 +2259,18 @@ export function createWebApiApp(overrides = {}) {
   // knob is set in production, and setting the replay one makes a miss a named
   // failure rather than a live request.
   const gatewayFetch = resolveGatewayFetch(process.env, overrides.publicSourceFetch ?? globalThis.fetch);
+  // Web reading (plan §3.5): the gateway's web-read mode, AgentBay's browser
+  // behind it for pages drawn in script, the parser for PDFs.
+  const webReader = createWebReader(config, {
+    transport: overrides.webReadTransport ?? webReadTransportFor(process.env, gatewayFetch),
+    renderer: overrides.webRenderer ?? createWebRenderer(config),
+    documentParser,
+  });
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
     fetchImpl: gatewayFetch,
     connectorCredentials,
+    webReader,
+    documentParser,
   });
   const connectorCredentialGatewayHandler = createConnectorCredentialGatewayHandler({ runtimeManager, store: connectorCredentials });
   const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, {
@@ -2255,7 +2279,14 @@ export function createWebApiApp(overrides = {}) {
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
   });
-  const commands = createCommandRegistry({ config, runtimeManager });
+  // Retraction and correction notices on cited sources (plan §3.9), for the
+  // 「依据」 popover; off leaves the source cards without them.
+  const sourceUpdates = config.sourceUpdatesEnabled === false ? null : createSourceUpdateLookup({
+    userAgent: webReadUserAgent(config),
+    timeoutMs: config.sourceUpdatesTimeoutMs,
+    fetchImpl: overrides.sourceUpdatesFetch ?? globalThis.fetch,
+  });
+  const commands = createCommandRegistry({ config, runtimeManager, sourceUpdates });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx), {
     claimAllowed: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
   });
@@ -2637,6 +2668,8 @@ export function createWebApiApp(overrides = {}) {
           activeCommands,
           runMetrics,
           imMetrics: im.service ? () => im.service.metrics() : null,
+          webReader,
+          sourceUpdates,
         });
         return;
       }
@@ -4348,6 +4381,8 @@ export function createWebApiApp(overrides = {}) {
       }
       await runtimeManager.closeAll();
       await maintenanceService?.close();
+      // Releases the warm AgentBay browser session, if one is held.
+      await webReader.close();
       await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       });
@@ -5080,7 +5115,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -5193,6 +5228,9 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   addMetric(lines, "open_science_command_active", "Synchronous command requests currently running.", "gauge", {
     value: activeCommands,
   });
+  // Web reading's outcomes and limits (webRead.mjs).
+  for (const family of webReadMetricFamilies(webReader?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of sourceUpdateMetricFamilies(sourceUpdates?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
   addMetric(lines, "open_science_task_total", "Known task records in the current process.", "gauge", {
     value: taskStats.total,
   });

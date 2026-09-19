@@ -45,7 +45,7 @@ const SEARCH_TOOLS = new Set([
 /** @type {ReadonlySet<string>} */
 const SCREEN_TOOLS = new Set([SOCKET_TOOL_NAMES.screenBatch, 'evidence_deduplicate'])
 /** @type {ReadonlySet<string>} */
-const FULLTEXT_TOOLS = new Set(['open_access_full_text', 'official_page_fetch'])
+const FULLTEXT_TOOLS = new Set(['open_access_full_text', 'web_read'])
 // Claim-level work. The socket names are listed literally rather than read
 // from SOCKET_TOOL_NAMES so this table does not break while a tool is being
 // introduced; an unknown name here simply never matches.

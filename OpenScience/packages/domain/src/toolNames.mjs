@@ -51,7 +51,7 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'biomedical_source_search',
   // full text and pages
   'open_access_full_text',
-  'official_page_fetch',
+  'web_read',
   'web_search',
   // claim work over preserved sources (the gate's own quotation check)
   'locate_quote',
@@ -91,6 +91,19 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
 
 /** Model-visible MCP tool names. */
 export const MCP_TOOL_NAMES = Object.freeze(MCP_TOOL_BASE_NAMES.map((name) => `${MCP_TOOL_PREFIX}${name}`))
+
+/**
+ * Names a research tool had before it was renamed, and the name it has now.
+ * Resolved by `mcpToolBaseName` and nothing else, so a run ledger, a
+ * transcript or an eval trace written before a rename still reads as the tool
+ * it recorded — never offered, never advertised.
+ *
+ * `official_page_fetch` became `web_read` on 2026-09-20 when it stopped being
+ * limited to allowlisted official pages (plan §3.5).
+ */
+export const RETIRED_MCP_TOOL_NAMES = Object.freeze({
+  official_page_fetch: 'web_read',
+})
 
 /**
  * The six managed-job tools. They start a specialist engine and then need
@@ -169,7 +182,7 @@ export const ROOT_VISIBLE_MCP_BASE_NAMES = Object.freeze([
   'clinical_trial_search',
   // the answer persona's declared tools (open-domain-answer/agent.yaml)
   'biomedical_source_search',
-  'official_page_fetch',
+  'web_read',
   'drug_term_normalize',
   'evidence_deduplicate',
   'drug_label_search',
@@ -222,15 +235,14 @@ export function mcpToolBaseName(name) {
   if (text.startsWith(OPENCODE_MCP_TOOL_PREFIX)) {
     text = text.slice(OPENCODE_MCP_TOOL_PREFIX.length)
   }
-  if (text.startsWith(MCP_TOOL_PREFIX)) {
-    const base = text.slice(MCP_TOOL_PREFIX.length)
-    return MCP_TOOL_BASE_NAMES.includes(base) ? base : null
+  /** @param {string} base */
+  const known = (base) => {
+    const current = Object.hasOwn(RETIRED_MCP_TOOL_NAMES, base) ? RETIRED_MCP_TOOL_NAMES[/** @type {keyof typeof RETIRED_MCP_TOOL_NAMES} */ (base)] : base
+    return MCP_TOOL_BASE_NAMES.includes(current) ? current : null
   }
-  if (text.startsWith('evimed_')) {
-    const base = text.slice('evimed_'.length)
-    return MCP_TOOL_BASE_NAMES.includes(base) ? base : null
-  }
-  return MCP_TOOL_BASE_NAMES.includes(text) ? text : null
+  if (text.startsWith(MCP_TOOL_PREFIX)) return known(text.slice(MCP_TOOL_PREFIX.length))
+  if (text.startsWith('evimed_')) return known(text.slice('evimed_'.length))
+  return known(text)
 }
 
 /** @param {string} name @returns {boolean} */

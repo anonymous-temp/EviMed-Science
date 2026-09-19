@@ -2949,7 +2949,7 @@ function validateSynthesizedClaim(
       issues.push(`${sourceLabel}.supportQuote must contain a direct supporting passage.`);
     }
     if (!validSourceArtifactPath(source.artifactPath)) {
-      issues.push(`${sourceLabel}.artifactPath is ${JSON.stringify(source.artifactPath)}, which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.`);
+      issues.push(`${sourceLabel}.artifactPath is ${JSON.stringify(source.artifactPath)}, which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_web_read by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.`);
     } else {
       if (seenArtifacts.has(source.artifactPath)) {
         issues.push(`${sourceLabel}.artifactPath duplicates another supporting source. One document supports one source, however many times it is listed — drop the repeat and restate any count that assumed independent studies.`);
@@ -3191,7 +3191,7 @@ function auditClaimEvidence(value, label, context) {
   }
   issues.region("claim-artifact-path");
   if (!validSourceArtifactPath(value.artifactPath)) {
-    issues.push(`${label}.artifactPath is ${JSON.stringify(value.artifactPath)}, which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.`);
+    issues.push(`${label}.artifactPath is ${JSON.stringify(value.artifactPath)}, which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_web_read by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.`);
   } else if (!successfulArtifacts.has(value.artifactPath)) {
     issues.push(`${label}.artifactPath is not listed as a successful source artifact for this run: no evidence tool in this run reported preserving that file, or its text could not be read back. Cite the exact .evimed-sources/ path a preserving tool returned, or preserve the source first.`);
   } else {

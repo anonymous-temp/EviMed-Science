@@ -6,6 +6,7 @@ import { claimAppraisalDisplay } from "@/lib/claimAppraisal";
 import { cn } from "@/lib/cn";
 import { preservedSourceHref, type VerifiedClaim } from "@/components/markdown-viewer/ClaimCitation";
 import { ClaimAppraisalSummary } from "@/components/markdown-viewer/ClaimAppraisal";
+import { SourceUpdateBadges } from "@/components/markdown-viewer/SourceUpdateBadges";
 
 const TYPE_LABEL: Record<string, string> = { direct: "直接证据", synthesized: "综合结论", derived: "推导结果" };
 const ACCESS_LABEL: Record<string, string> = {
@@ -94,6 +95,7 @@ export function EvidenceMatrixTable({
                             </span>
                           )}
                           {source.accessLevel && <span className="text-caption text-muted">{ACCESS_LABEL[source.accessLevel] ?? "获取程度未注明"}</span>}
+                          <SourceUpdateBadges updates={check?.sources[index]?.updates} />
                         </span>
                         <span className="mt-0.5 block text-caption text-text">{source.sourceTitle ?? source.identifier ?? "来源未记录"}</span>
                         {source.identifier && source.sourceTitle && <span className="block text-caption text-muted">{source.identifier}</span>}

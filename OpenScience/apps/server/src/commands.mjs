@@ -24,6 +24,7 @@ import {
   writeFileAtomicNoFollow,
   writeFileExclusiveNoFollow,
 } from "./security.mjs";
+import { attachSourceUpdates } from "./sourceUpdates.mjs";
 
 export const BUNDLED_EXAMPLES = Object.freeze({
   "climate-trends": Object.freeze([
@@ -298,7 +299,11 @@ const TASK_COMMAND_ALLOWLIST = new Set([
   "write_workspace_file",
 ]);
 
-export function createCommandRegistry({ config, runtimeManager }) {
+/**
+ * @param {{ config: any, runtimeManager: any, sourceUpdates?: { lookup: (dois: readonly string[], options?: { signal?: AbortSignal }) => Promise<Map<string, any[]>> } | null }} dependencies
+ *   `sourceUpdates`: the Crossref notice lookup (sourceUpdates.mjs); null when switched off.
+ */
+export function createCommandRegistry({ config, runtimeManager, sourceUpdates = null }) {
   const handlers = {
     // The value returned is the control plane's own surface, not a kernel's.
     // It used to be a pass-through base URL the browser then spoke a kernel's
@@ -493,6 +498,10 @@ export function createCommandRegistry({ config, runtimeManager }) {
             || evidenceSourceTypeOf({ url: origin?.sourceUrl });
         });
       }
+      // Retraction and correction notices on each cited work, for the badge
+      // beside it (plan §3.9): read from Crossref, bounded, and never a
+      // verdict — a lookup that fails leaves the verification as it was.
+      if (sourceUpdates) await attachSourceUpdates(verdict, { matrix, sourceArtifacts, lookup: sourceUpdates.lookup });
       return verdict;
     },
 

@@ -90,7 +90,7 @@ export async function apply(ctx, config) {
         prompt: reviewPrompt(args.focus ?? '', config.maxClaims),
         // Grounding tools the original reasoner did not use: a verifier that can
         // only re-read the same artifacts can only re-derive the same mistakes.
-        tools: ['read', 'glob', 'grep', 'mcp__evimed__literature_search', 'mcp__evimed__open_access_full_text', 'mcp__evimed__official_page_fetch'],
+        tools: ['read', 'glob', 'grep', 'mcp__evimed__literature_search', 'mcp__evimed__open_access_full_text', 'mcp__evimed__web_read'],
         persona: '你是独立审查者。你没有看过产出这些结论的推理过程，也不要去猜它。你的任务是评价，不是续写。',
         outputSchema: REVIEW_VERDICT_SCHEMA,
         maxDepth: 1,

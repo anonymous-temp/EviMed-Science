@@ -36,10 +36,11 @@ CAPTURE_MANIFEST_SCHEMA = 1
 def managed_workspace() -> Path:
     """The managed project workspace every capture is published into.
 
-    One resolver for every preserving tool. Guideline preservation borrowed
-    `official_pages._workspace`, and `official_pages` imports `public_sources`:
-    the cycle resolved only when `public_sources` happened to load first, and a
-    preservation that could not import its resolver returned no artifact at all.
+    One resolver for every preserving tool. Guideline preservation once
+    borrowed the official-page tool's own resolver, and that module imported
+    `public_sources`: the cycle resolved only when `public_sources` happened to
+    load first, and a preservation that could not import its resolver returned
+    no artifact at all.
     """
     raw = os.environ.get("OPEN_SCIENCE_WORKSPACE_DIR", "").strip()
     if not raw or not os.path.isabs(raw) or "\0" in raw:
