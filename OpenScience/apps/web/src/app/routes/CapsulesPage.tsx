@@ -110,8 +110,10 @@ export function CapsulesPage({ embedded = false }: { embedded?: boolean } = {}) 
   });
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-content-full space-y-5 px-6 py-8">
+    // Embedded, it is folded inside the capsule page's 「方法」 section, which
+    // owns the scrolling.
+    <div className={embedded ? undefined : "h-full overflow-y-auto"}>
+      <div className={embedded ? "space-y-5 pt-3" : "mx-auto w-full max-w-content-full space-y-5 px-6 py-8"}>
         <header className="flex flex-wrap items-start justify-between gap-3">
           {embedded
             ? <p className="max-w-2xl text-ui text-muted">保存研究方法、偏好与经验，在后续研究中继续使用。</p>

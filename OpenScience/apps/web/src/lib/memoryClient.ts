@@ -7,7 +7,7 @@
  * `{ data }` envelope, the CSRF header and the error dictionary.
  */
 import type { WebMemoryProvenance, WebStructuredMemory } from "./apiClient";
-import { productRequest, type CapsuleEntry } from "./productClient";
+import { productRequest, type CapsuleEntry, type CapsuleRecord } from "./productClient";
 
 /** One memory that changed by itself — a line of the write prompt 「刚记住了…」. */
 export interface MemoryChange {
@@ -172,4 +172,80 @@ export function restoreLearnedMethod(methodId: string, expectedRevision: number,
 export function retireCapsuleEntry(capsuleId: string, entryId: string, expectedRevision: number) {
   return productRequest<CapsuleEntry>(`/capsules/${encodeURIComponent(capsuleId)}/entries/${encodeURIComponent(entryId)}`, "PATCH",
     { expectedRevision, status: "retired" });
+}
+
+/** A capsule entry as the combined read returns it: with the project it was noted in. */
+export type OwnCapsuleEntry = CapsuleEntry & { projectId?: string | null };
+
+/** 「我的记忆胶囊」, read as one: the account capsule and every capsule of the researcher's own. */
+export interface MyCapsule {
+  capsule: CapsuleRecord | null;
+  capsules: { id: string; title: string; projectId: string | null; revision: number }[];
+  entries: OwnCapsuleEntry[];
+}
+
+export function fetchMyCapsule() {
+  return productRequest<MyCapsule>("/capsules/mine");
+}
+
+/** The account capsule, made on first use; where an entry written on the capsule page goes. */
+export function ensureMyCapsule() {
+  return productRequest<CapsuleRecord>("/capsules/mine", "POST");
+}
+
+/** One event of 「时间轴」, as codes and the stored words; the page says it in Chinese. */
+export interface TimelineEvent {
+  id: string;
+  at: string;
+  /** The calendar day in the researcher's zone. */
+  day: string;
+  type: "memory" | "run" | "method" | "feedback";
+  change: string;
+  before?: string;
+  after?: string;
+  by?: string;
+  runId?: string | null;
+  recordId?: string;
+  kind?: string | null;
+  scope?: string;
+  origin?: string | null;
+  basis?: WebMemoryProvenance["basis"] | null;
+  /** 「曾经如此」: a fact that held until another replaced it. */
+  wasTrue?: boolean;
+  replacedBy?: string;
+  title?: string;
+  recalled?: number;
+  methods?: number;
+  methodId?: string;
+  name?: string;
+  reason?: string;
+}
+
+export interface TimelineDensity {
+  day: string;
+  memory: number;
+  run: number;
+  method: number;
+  feedback: number;
+}
+
+export interface MemoryTimelinePage {
+  items: TimelineEvent[];
+  nextBefore: string | null;
+  density: TimelineDensity[];
+  timeZone: string;
+  /** Sources that could not be read for this page. */
+  missing: string[];
+}
+
+export function fetchMemoryTimeline({ before = null, limit = 50 }: { before?: string | null; limit?: number } = {}) {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (before) query.set("before", before);
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (zone) query.set("timeZone", zone);
+  } catch {
+    // The server's default zone answers instead.
+  }
+  return productRequest<MemoryTimelinePage>(`/memory/timeline?${query.toString()}`);
 }

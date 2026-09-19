@@ -61,6 +61,75 @@ export class CapsuleService {
   /** @param {string} userId @param {Record<string,any>} options */
   async list(userId, options = {}) { return this.documents.list(userId, "capsule", options); }
 
+  /**
+   * 「我的记忆胶囊」 — the one capsule a person has (owner ruling 2026-09-19:
+   * one per person, 「新建」 folded away).
+   *
+   * The account-wide own capsule when there is one; otherwise, with `create`,
+   * one made under a fixed id and put in force account-wide ahead of whatever
+   * was borrowed, which stays. A fixed id makes two first visits one capsule,
+   * and a capsule of that id sitting in the trash is restored rather than
+   * duplicated: there is only the one.
+   * @param {string} userId @param {{ create?: boolean }} [options]
+   */
+  async ownCapsule(userId, { create = false } = {}) {
+    const current = await this.active(userId, null);
+    for (const item of current.items) {
+      if (item.mode !== "own") continue;
+      const found = await this.documents.get(userId, "capsule", String(item.capsuleId));
+      if (found && !found.payload.imported) return found;
+    }
+    if (!create) return null;
+    const id = `account-capsule:${createHash("sha256").update(String(userId)).digest("hex").slice(0, 32)}`;
+    let capsule = await this.documents.get(userId, "capsule", id, { includeDeleted: true });
+    if (capsule?.deletedAt) capsule = await this.documents.restore(userId, "capsule", id, capsule.revision);
+    if (!capsule) {
+      try {
+        capsule = await this.documents.put(userId, "capsule", id, {
+          title: "我的记忆胶囊", description: "EviMed 对你的理解、你的项目档案与方法。", activationMode: "own", imported: false,
+        }, { expectedRevision: 0 });
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "product_revision_conflict") throw error;
+        capsule = await this.get(userId, id);
+      }
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const latest = await this.active(userId, null);
+      if (latest.items.some((item) => item.capsuleId === id && item.mode === "own")) break;
+      const items = [{ capsuleId: id, mode: "own" }, ...latest.items.filter((item) => item.capsuleId !== id && item.mode !== "own")].slice(0, 8);
+      try {
+        await this.documents.put(userId, "preferences", activationKey(null), { items }, { expectedRevision: latest.record?.revision ?? 0 });
+        break;
+      } catch (error) { if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 2) throw error; }
+    }
+    return capsule;
+  }
+
+  /**
+   * Everything in the researcher's own capsules, as one: the account capsule,
+   * the notes each project's runs wrote, and any capsule made by hand before
+   * there was only one. Borrowed capsules are not in it — they are the
+   * received shelf. Entries in force only; a retired one is on the timeline.
+   * @param {string} userId @param {{ limit?: number }} [options]
+   */
+  async mine(userId, { limit = 300 } = {}) {
+    const own = (await this.documents.list(userId, "capsule", { limit: 100 })).items
+      .filter((/** @type {any} */ capsule) => !capsule.payload.imported);
+    const capsule = await this.ownCapsule(userId);
+    /** @type {any[]} */
+    const entries = [];
+    for (const item of own) {
+      if (entries.length >= limit) break;
+      const page = await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: item.id, status: "approved" } });
+      entries.push(...page.items);
+    }
+    return {
+      capsule,
+      capsules: own.map((/** @type {any} */ item) => ({ id: item.id, title: item.payload.title, projectId: item.projectId ?? null, revision: item.revision })),
+      entries: entries.slice(0, limit),
+    };
+  }
+
   /** @param {string} userId @param {string} capsuleId */
   async get(userId, capsuleId) {
     const value = await this.documents.get(userId, "capsule", capsuleId);
@@ -182,7 +251,7 @@ export class CapsuleService {
       if (capsule?.deletedAt) throw new HttpError(409, "capsule_notes_paused", "Restore the project notes capsule before recording new suggestions.");
       if (!capsule) {
         try { capsule = await this.documents.put(userId, "capsule", id,
-          { title: "Research memory", description: "Suggestions from this project's research runs.", imported: false, activationMode: "own" },
+          { title: "项目笔记", description: "这个项目的研究运行记下的内容。", imported: false, activationMode: "own" },
           { expectedRevision: 0, projectId }); }
         catch (error) { if (error.code !== "product_revision_conflict") throw error; capsule = await this.get(userId, id); }
       }
