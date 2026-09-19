@@ -71,7 +71,11 @@ export function releaseImageTags(tags, release) {
     if (split <= 0) return false;
     const repository = entry.slice(0, split);
     const tag = entry.slice(split + 1);
-    return IMAGE_REPOS.includes(repository) && (tag === release || tag.endsWith(`-${release}`));
+    // `-<release>-flat` is the one-layer copy host-flatten-runtime-image.sh
+    // made of that release's runtime image to build the next delta on; it
+    // leaves with the release it was made from.
+    return IMAGE_REPOS.includes(repository)
+      && (tag === release || tag.endsWith(`-${release}`) || tag.endsWith(`-${release}-flat`));
   });
 }
 

@@ -160,4 +160,11 @@ test("a release's images are found under the names this deployment actually tags
     "open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26-526261d6a154",
   ]);
   assert.deepEqual(releaseImageTags(tags, "6a154"), [], "a suffix of a revision is not that revision");
+  // The flattened copy a later delta was built on leaves with its release.
+  const flat = [...tags, "open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26-526261d6a154-flat"];
+  assert.deepEqual(releaseImageTags(flat, "526261d6a154"), [
+    "open-science-web:526261d6a154",
+    "open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26-526261d6a154",
+    "open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26-526261d6a154-flat",
+  ]);
 });
