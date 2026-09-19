@@ -245,6 +245,110 @@ test("memory extraction rejects a plausible but unsupported model claim", async 
   assert.equal([...store.records.values()].filter((record) => record.kind === "run_summary").length, 1);
 });
 
+test("memories are written in the researcher's language, and what has to stay exact is copied, not translated", async () => {
+  // Seen on the live site 2026-09-19: Chinese conversations produced English
+  // memories. Which language a conversation is in is the model's judgement, so
+  // the rule lives in its instructions. What code holds is that the
+  // instructions say so, and that nothing between the model and the store bends
+  // what it wrote — including the one new way to fail the rule opens: a quote
+  // translated along with the value is no longer in its source.
+  const store = new MemoryStoreDouble();
+  const statement = "以后请用表格对比证据强度，并标注 GRADE 等级。";
+  const fact = "本项目只评价利伐沙班 20 mg qd 在 NCT00403767（ROCKET AF）中的结局。";
+  const toolPart = {
+    type: "tool",
+    tool: "clinical_trial_search",
+    state: {
+      status: "completed",
+      input: { query: "rivaroxaban ROCKET AF stroke" },
+      output: JSON.stringify({ status: "success", summary: "1 trial found.", data: { trial: "NCT00403767", hr: 0.88, ci: "0.75-1.03" } }),
+    },
+  };
+  const messages = [
+    { info: { id: "u1", role: "user" }, parts: [{ type: "text", text: `${statement}${fact}` }] },
+    { info: { id: "a1", role: "assistant" }, parts: [toolPart, { type: "text", text: "已检索到 ROCKET AF 的主要结局。" }] },
+  ];
+  let system = "";
+  const intelligence = new MemoryIntelligence(config, store, {
+    fetchImpl: async (_input, init) => {
+      const request = JSON.parse(String(init.body));
+      system = request.messages[0].content;
+      const { sources } = JSON.parse(request.messages[1].content);
+      const user = sources.find((source) => source.role === "user");
+      const tool = sources.find((source) => source.role === "tool");
+      const candidate = (fields) => ({ confidence: 1, importance: 0.7, sensitive: false, ...fields });
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [
+        candidate({
+          scope: "user", kind: "preference", key: "preference.evidence_table", origin: "explicit",
+          value: "用表格对比证据强度，并标注 GRADE 等级。", summary: "证据用表格对比，并标注 GRADE 等级",
+          sourceRef: user.sourceRef, evidenceQuote: statement,
+        }),
+        candidate({
+          scope: "project", kind: "project_fact", key: "project.scope.index_trial", origin: "explicit",
+          value: "只评价利伐沙班 20 mg qd 在 NCT00403767（ROCKET AF）中的结局", summary: "评价范围：ROCKET AF 中的利伐沙班 20 mg qd",
+          sourceRef: user.sourceRef, evidenceQuote: "利伐沙班 20 mg qd 在 NCT00403767",
+        }),
+        // Chinese value, English quote: the quote belongs to its source.
+        candidate({
+          scope: "project", kind: "analysis", key: "project.analysis.rocket_af.primary", origin: "system",
+          value: "ROCKET AF 主要终点 HR 0.88（0.75-1.03）", summary: "ROCKET AF 主要终点效应量",
+          sourceRef: tool.sourceRef, evidenceQuote: '"hr":0.88',
+        }),
+        // The same source with its quote translated along with the value.
+        candidate({
+          scope: "project", kind: "analysis", key: "project.analysis.rocket_af.count", origin: "system",
+          value: "检索到 1 项试验", summary: "试验数",
+          sourceRef: tool.sourceRef, evidenceQuote: "检索到 1 项试验",
+        }),
+      ] }) } }] });
+    },
+  });
+  const result = await intelligence.recordRun(project(), run("run_zh"), messages);
+
+  // The rule, its exceptions, and the two fields that never follow the language.
+  assert.match(system, /Write value and summary in the researcher's own language: the language of the user messages among the sources/);
+  assert.match(system, /A conversation held in Chinese gets Chinese values and summaries, even where existingMemories or tool results are written in English\./);
+  assert.match(system, /identifiers \(PMID, DOI, NCT and dataset ids, file names\), drug, gene and protein names, numbers, units, statistical notation and anything quoted keep the exact form the source gives them/);
+  assert.match(system, /Keys are identifiers, not text: always English, whatever language the conversation is in/);
+  assert.match(system, /evidenceQuote must be a short exact substring of the referenced source, copied character for character in the source's own language, never translated/);
+
+  // What the model wrote is what is stored, byte for byte.
+  assert.equal(result.extracted, 3);
+  assert.equal(result.rejected, 1);
+  assert.ok(result.rejectionReasons.some((reason) => /^evidence quote for "project\.analysis\.rocket_af\.count" is not verbatim/.test(reason)),
+    result.rejectionReasons.join("; "));
+  const byKey = (/** @type {string} */ key) => [...store.records.values()].find((record) => record.key === key);
+  assert.equal(byKey("preference.evidence_table").value, "用表格对比证据强度，并标注 GRADE 等级。");
+  assert.equal(byKey("preference.evidence_table").summary, "证据用表格对比，并标注 GRADE 等级");
+  assert.equal(byKey("project.scope.index_trial").value, "只评价利伐沙班 20 mg qd 在 NCT00403767（ROCKET AF）中的结局");
+  assert.equal(byKey("project.analysis.rocket_af.primary").value, "ROCKET AF 主要终点 HR 0.88（0.75-1.03）");
+  assert.equal(byKey("project.analysis.rocket_af.primary").evidence[0].quote, '"hr":0.88');
+  // The episode's summary is the question as it was asked, with no English
+  // label in front of it.
+  const episode = [...store.records.values()].find((record) => record.kind === "run_summary");
+  assert.equal(episode.summary, `${statement}${fact}`);
+});
+
+test("a stored value is the fact itself, not a note that it was reinforced", async () => {
+  // Production, 2026-09-19: many records began "Reinforced:" or "Refined:".
+  // A label is open language, so it is ruled out in the instructions rather
+  // than stripped by a pattern afterwards (principle 5); what code can hold is
+  // that the instructions say so. It is not cosmetic: a labelled restatement of
+  // a confirmed memory is a different value, and the replaced-value notice
+  // then tells the researcher their memory was rewritten.
+  let system = "";
+  const intelligence = new MemoryIntelligence(config, new MemoryStoreDouble(), {
+    fetchImpl: async (_input, init) => {
+      system = JSON.parse(String(init.body)).messages[0].content;
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] });
+    },
+  });
+  await intelligence.recordRun(project(), run("run_labels"), [message("m1", "证据请用表格呈现。")]);
+  assert.match(system, /value and summary state the fact itself, as it now stands, never the act of recording it/);
+  assert.match(system, /no label such as "Reinforced:", "Refined:", "Updated:" or "Confirmed:" in front of it, in any language/);
+  assert.match(system, /A reused key gets the complete current value/);
+});
+
 test("a researcher who paused learning, for the account or for this project, gets nothing written", async () => {
   // 2026-09-16 review, M4④. No run summary and no model call: paused means no
   // memory is written, and the notice path reads "paused" as a setting.
