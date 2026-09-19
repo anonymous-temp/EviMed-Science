@@ -47,6 +47,11 @@ export const repairableEvidencePackageErrorCodes = new Set([
 export const recoverableEvidenceSourceErrorCodes = new Set([
   "full_text_not_available",
   "full_text_upstream_unavailable",
+  // `official_page_*` is what `web_read` answered as `official_page_fetch`
+  // until 2026-09-20. Nothing built since emits it, and every entry stays: a
+  // runtime started from an image built before the rename speaks it until that
+  // runtime is replaced, and a failed tool call with a code this registry does
+  // not know fails the whole run (`agentRuns.mjs`).
   "official_page_upstream_unavailable",
   // The deployment simply has no Unpaywall address configured, or no gateway to
   // reach it through. That is host configuration, and failing the run for it
@@ -165,8 +170,6 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "specialist_execution_failed",
   "meta_agent_execution_failed",
   "upstream_failed",
-  "public_source_document_path_forbidden",
-  "public_source_document_request_forbidden",
   "public_source_api_path_forbidden",
   "public_source_api_request_forbidden",
   "public_source_gateway_credential_profile_forbidden",
