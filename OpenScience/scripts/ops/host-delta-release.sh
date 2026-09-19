@@ -11,7 +11,7 @@
 # The delta archive is made on the developer's box, rooted at `src/`:
 #
 #   git archive --format=tar --prefix=src/ HEAD -- \
-#     $(git diff --name-only --diff-filter=d <OLD>..HEAD | grep '^OpenScience/')
+#     $(git diff --name-only --diff-filter=d <OLD>..HEAD | grep -E '^(OpenScience|项目代码)/')
 #   git diff --name-only --diff-filter=D <OLD>..HEAD | grep '^OpenScience/' \
 #     | sed 's|^OpenScience/||' > src/DELETED
 #
@@ -40,6 +40,10 @@ echo "=== seed from the live release ==="
 cp -a "${ROOT}/releases/${OLD}" "$DST"
 mkdir -p "$BUILD" && tar -xzf "$DELTA" -C "$BUILD"
 cp -a "$BUILD/src/OpenScience/." "$DST/OpenScience/"
+# The specialist engines' sources live beside OpenScience (项目代码/), in the
+# same build context their images are built from; a release that changed one
+# carries it under src/项目代码 (host-engine-delta.sh rebuilds those images).
+if [ -d "$BUILD/src/项目代码" ]; then cp -a "$BUILD/src/项目代码/." "$DST/项目代码/"; fi
 if [ -f "$BUILD/src/DELETED" ]; then
   while IFS= read -r rel; do
     case "$rel" in ''|/*|*..*) echo "refusing deletion path: '$rel'"; exit 1 ;; esac
