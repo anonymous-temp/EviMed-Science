@@ -44,6 +44,20 @@ class MemoryStoreDouble {
     this.records.set(key, record);
     return record;
   }
+
+  /** The store's one-transaction replacement: write the new, retire the old. */
+  async supersede(userId, previousId, input, evidence, options = {}) {
+    const previous = [...this.records.values()].find((record) => record.id === previousId);
+    const record = await this.upsertRecord(userId, input, evidence, options);
+    const key = [previous.scope, previous.scopeId ?? "", previous.kind, previous.key].join("\u0000");
+    const superseded = {
+      ...previous, status: "superseded", supersededBy: record.id,
+      invalidSince: "2026-09-20T00:00:00Z", version: previous.version + 1,
+    };
+    this.records.set(key, superseded);
+    (this.supersessions ??= []).push({ previousId, recordId: record.id, reason: String(options.reason ?? "") });
+    return { record, superseded };
+  }
 }
 
 const config = {
@@ -1273,4 +1287,69 @@ test("what a run wrote is reported write by write, for the prompt that tells the
   assert.deepEqual(same.written.map((entry) => entry.change), ["observed"], "the same fact seen again is evidence, not news");
   assert.deepEqual(changed.written.map((entry) => entry.change), ["updated"]);
   assert.equal(changed.written[0].key, "project.cohort.size");
+});
+
+// ---------------------------------------------------------------------------
+// A fact that changes is replaced, not duplicated (2026-09-20). The judgement
+// that one fact replaces another is the model's; code checks the key it names.
+// ---------------------------------------------------------------------------
+
+test("a changed dose replaces the fact it changes instead of standing beside it", async () => {
+  const store = new MemoryStoreDouble();
+  await store.upsertRecord("user_1", {
+    scope: "project", scopeId: "project_1", kind: "project_fact", key: "project.regimen.rivaroxaban_20mg",
+    value: "受试者使用利伐沙班 20 mg qd", summary: "利伐沙班 20 mg qd", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.7, sensitive: false,
+  }, null, {});
+  let system = "";
+  const result = await new MemoryIntelligence(config, store, {
+    fetchImpl: async (_input, init) => {
+      const request = JSON.parse(String(init.body));
+      system = request.messages[0].content;
+      const { sources } = JSON.parse(request.messages[1].content);
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [{
+        scope: "project", kind: "project_fact", key: "project.regimen.rivaroxaban_15mg",
+        value: "肾功能下降后改为利伐沙班 15 mg qd", summary: "利伐沙班 15 mg qd", origin: "explicit",
+        importance: 0.7, sensitive: false, sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text,
+        supersedes: "project.regimen.rivaroxaban_20mg",
+      }] }) } }] });
+    },
+  }).recordRun(project(), run("run_dose"), [message("m1", "肾功能下降后改为利伐沙班 15 mg qd")]);
+
+  assert.match(system, /give that key as supersedes/);
+  const byKey = (key) => [...store.records.values()].find((record) => record.key === key);
+  assert.equal(byKey("project.regimen.rivaroxaban_15mg").status, "active");
+  assert.equal(byKey("project.regimen.rivaroxaban_20mg").status, "superseded", "the old dose leaves recall");
+  assert.equal(byKey("project.regimen.rivaroxaban_20mg").supersededBy, byKey("project.regimen.rivaroxaban_15mg").id);
+  assert.deepEqual(result.written.map((entry) => [entry.key, entry.change, entry.supersedes]),
+    [["project.regimen.rivaroxaban_15mg", "created", byKey("project.regimen.rivaroxaban_20mg").id]]);
+  assert.match(store.supersessions[0].reason, /replaced an earlier fact/);
+});
+
+test("a supersession the store cannot verify is dropped, and the new fact is still kept", async () => {
+  for (const [supersedes, scope, why] of [
+    ["project.regimen.unknown", "project", /no memory in force in its scope/],
+    // Another scope is another memory, whatever the key says.
+    ["preference.output_language", "project", /no memory in force in its scope/],
+    // Same scope, but a fact about the work cannot retire how the researcher wants it done.
+    ["preference.output_language", "user", /cannot supersede "preference\.output_language" \(preference\)/],
+  ]) {
+    const store = new MemoryStoreDouble();
+    await store.upsertRecord("user_1", {
+      scope: "user", scopeId: "", kind: "preference", key: "preference.output_language", value: "回答请用中文",
+      summary: "中文", origin: "explicit", status: "active", confidence: 1, importance: 0.8, sensitive: false,
+    }, null, {});
+    const result = await new MemoryIntelligence(config, store, {
+      fetchImpl: modelFetch((sources) => [{
+        scope, kind: "project_fact", key: "project.language.report", value: "本项目报告用英文",
+        summary: "报告英文", origin: "explicit", importance: 0.6, sensitive: false,
+        sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text, supersedes,
+      }]),
+    }).recordRun(project(), run(`run_${supersedes}_${scope}`), [message("m1", "本项目报告用英文")]);
+    assert.ok(result.rejectionReasons.some((reason) => why.test(reason)), result.rejectionReasons.join("; "));
+    assert.equal([...store.records.values()].find((record) => record.key === "preference.output_language").status, "active",
+      "a project fact cannot retire the researcher's own preference");
+    assert.equal([...store.records.values()].find((record) => record.key === "project.language.report")?.status, "active");
+    assert.equal(store.supersessions, undefined);
+  }
 });

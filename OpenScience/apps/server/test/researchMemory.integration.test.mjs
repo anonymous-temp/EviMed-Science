@@ -580,3 +580,39 @@ test("a deployment on the term matcher queues nothing for a worker it never comp
   assert.deepEqual(await indexJobs(owner), []);
   await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
 });
+
+test("a superseded fact leaves recall in the same commit that writes its replacement, and keeps its history", options, async () => {
+  const projectId = "project-supersede";
+  const fact = (key, value) => ({
+    scope: "project", scopeId: projectId, kind: "project_fact", key, value, summary: value,
+    origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false,
+  });
+  const old = await store.upsertRecord(alpha, fact("project.regimen.rivaroxaban_20mg", "利伐沙班 20 mg qd"));
+  assert.equal(old.supersededBy, null);
+  assert.equal(old.invalidSince, null);
+
+  const { record, superseded } = await store.supersede(alpha, old.id, fact("project.regimen.rivaroxaban_15mg", "利伐沙班 15 mg qd"),
+    { sourceType: "conversation_message", sourceRef: "sessions/s1/messages/m9", quote: "改为 15 mg", observedAt: "2026-09-20T01:00:00Z", weight: 1 },
+    { reason: "conversation evidence replaced an earlier fact" });
+  assert.equal(record.status, "active");
+  assert.equal(superseded.status, "superseded");
+  assert.equal(superseded.supersededBy, record.id);
+  assert.match(superseded.invalidSince, instant);
+  assert.equal(superseded.value, "利伐沙班 20 mg qd", "the old fact is kept as it was, not edited");
+  assert.match(superseded.revisions.at(-1).reason, /^superseded by project\.regimen\.rivaroxaban_15mg: conversation evidence replaced/);
+
+  const recalled = await store.relevant(alpha, "利伐沙班的剂量", { projectId });
+  assert.deepEqual(recalled.map((memo) => memo.id), [`record:${record.id}`], "only the fact in force is recalled");
+
+  // An edit of the replaced fact's wording does not put it back in force.
+  const edited = await store.upsertRecord(alpha, { ...superseded, summary: "（旧方案）利伐沙班 20 mg qd" }, null,
+    { expectedVersion: superseded.version, reason: "user updated structured memory" });
+  assert.equal(edited.status, "superseded");
+  assert.equal(edited.supersededBy, record.id);
+
+  await assert.rejects(store.supersede(alpha, record.id, fact("project.regimen.rivaroxaban_15mg", "利伐沙班 15 mg bid")),
+    (error) => error?.status === 400 && error?.code === "memory_supersede_invalid");
+  await assert.rejects(store.supersede(beta, record.id, fact("project.regimen.other", "x")),
+    (error) => error?.status === 404, "another account's record cannot be superseded");
+  await store.purgeUserMemory(alpha);
+});

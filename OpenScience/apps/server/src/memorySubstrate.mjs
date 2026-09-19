@@ -139,6 +139,7 @@ function publishableContent(record, now) {
   // index copy of a run summary is a copy nothing may retrieve.
   if (record.kind === "run_summary") return "";
   if (record.expiresAt && Date.parse(record.expiresAt) <= now) return "";
+  if (record.invalidSince && Date.parse(record.invalidSince) <= now) return "";
   return recallContent(record) || "";
 }
 
@@ -248,6 +249,7 @@ export class MemorySubstrate {
       .filter(({ record }) => record.kind !== "run_summary")
       .filter(({ record }) => !record.sensitive)
       .filter(({ record }) => !record.expiresAt || Date.parse(record.expiresAt) > now)
+      .filter(({ record }) => !record.invalidSince || Date.parse(record.invalidSince) > now)
       // The index is asked only for subtrees this caller may read, but the
       // check is repeated against the record itself: a scope is a permission,
       // and a permission proved by the thing being read beats one proved by
