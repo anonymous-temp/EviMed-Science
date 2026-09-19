@@ -1072,7 +1072,7 @@ def _preserve_guideline_text(identifier, title, record):
 
     The gate binds a claim to a *preserved artifact* and checks the quote is in
     it verbatim. Until now nothing in the EviMed connectors wrote one: only
-    `official_pages` and `open_access_fulltext` did. So every guideline this
+    the official-page tool (now `web_read`) and `open_access_fulltext` did. So every guideline this
     deployment retrieved -- including its full text, which the upstream returns
     -- could be cited by number and never carry a verified claim.
 

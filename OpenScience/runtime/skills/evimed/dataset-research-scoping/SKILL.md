@@ -277,7 +277,7 @@ Verified against the deployed host:
 | Crossref | `sourceId: crossref` | Very recent DOIs, ahead of MEDLINE indexing |
 | Preprints | `biomedical_source_search` with `sourceId: europe-pmc` and `SRC:PPR` in the query | What is being done right now and is not yet published. `sourceId: biorxiv`/`medrxiv` resolves a DOI you already have — it is a lookup, not a search |
 | Full text | `open_access_full_text` | The actual Methods paragraph rather than its abstract |
-| Guidelines | `guideline_search`, `official_page_fetch` | The standard this institution's data has to be judged against |
+| Guidelines | `guideline_search`, `web_read` | The standard this institution's data has to be judged against |
 | Drug and gene facts | `sourceId: dailymed` / `openfda` / `rxnorm` / `clinpgx-pharmgkb` / `mesh` | Label text, adverse-event counts, ingredient normalization, pharmacogenomic annotation |
 | Trend analysis | `bibliometric_analysis` | Publication-volume curve, author and institution clusters, emergent terms |
 | Direction analysis | `research_topic_selection` | Contradictions and breakthrough points across a whole direction |

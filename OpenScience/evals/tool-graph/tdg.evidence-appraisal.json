@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "evidence-appraisal",
-  "version": "sha256:0ed3fdb111f6fd9ef858c7a5a87ae2b5aab8bc84b531c9935eb6ba46f5bfc14f",
+  "version": "sha256:825a09c55a150330b61adbf0418e6ecfad5ea082f75b9278d99289e69e2eecf1",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 24,
@@ -981,42 +981,6 @@
       "stateEffect": "none"
     },
     {
-      "name": "mcp__evimed__official_page_fetch",
-      "source": "mcp",
-      "description": "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. Allowed (https, host then path prefixes): www.cochrane.org /evidence/ /zh-hans/evidence/; www.acc.org /latest-in-cardiology/; professional.heart.org /en/science-news/; cpr.heart.org /en/resuscitation-science/; www.nhs.uk /symptoms/chest-pain/; www.ccfdie.org /zryyxxw/; mpa.hunan.gov.cn /mpa/; www.nice.org.uk /guidance/; www.uspreventiveservicestaskforce.org /uspstf/recommendation/; www.sign.ac.uk /guidelines/; www.who.int /publications/i/item/; www.ema.europa.eu /en/medicines/human/EPAR/ /en/medicines/human/referrals/ /en/medicines/dhpc/ /en/news/meeting-highlights-pharmacovigilance-risk-assessment-committee-prac-; www.fda.gov /drugs/drug-safety-communications/ /drugs/drug-safety-and-availability/; www.accessdata.fda.gov /scripts/cder/daf/; www.gov.cn /zhengce/zhengceku/; dailymed.nlm.nih.gov /dailymed/drugInfo.cfm /dailymed/lookup.cfm",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2048
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "url"
-        ]
-      },
-      "outputSchema": {
-        "type": "object",
-        "declaredBy": "scripts/dev/build-tool-graph.mjs",
-        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
-        "fields": [
-          {
-            "path": "artifact.path",
-            "type": "file_path"
-          }
-        ]
-      },
-      "typeTags": [],
-      "requiredTypeTags": [],
-      "outputTypeTags": [
-        "file_path"
-      ],
-      "stateEffect": "writes_workspace"
-    },
-    {
       "name": "mcp__evimed__open_access_full_text",
       "source": "mcp",
       "description": "Resolve a PMCID, PMID, or DOI through Europe PMC, retrieve the complete open-access JATS XML, and write bounded Markdown and XML artifacts into the current workspace for direct, paginated reading.",
@@ -1123,6 +1087,47 @@
         "mesh_term"
       ],
       "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__web_read",
+      "source": "mcp",
+      "description": "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and preserve it in the workspace as a citable snapshot with a sha256 receipt. Long text comes in pages: pass page=N for the next one (nextPage says whether there is one). Pages from regulators, guideline bodies and trial registries are marked official.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "url"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "data.markdownPath",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
     },
     {
       "name": "read",
@@ -1339,42 +1344,6 @@
       ]
     },
     {
-      "from": "mcp__evimed__official_page_fetch",
-      "to": "edit",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "file_path"
-      ]
-    },
-    {
-      "from": "mcp__evimed__official_page_fetch",
-      "to": "read",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "file_path"
-      ]
-    },
-    {
-      "from": "mcp__evimed__official_page_fetch",
-      "to": "write",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "file_path"
-      ]
-    },
-    {
       "from": "mcp__evimed__open_access_full_text",
       "to": "edit",
       "type": "parameter",
@@ -1413,6 +1382,42 @@
     },
     {
       "from": "mcp__evimed__open_access_full_text",
+      "to": "write",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__web_read",
+      "to": "edit",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__web_read",
+      "to": "read",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__web_read",
       "to": "write",
       "type": "parameter",
       "via": "schema",

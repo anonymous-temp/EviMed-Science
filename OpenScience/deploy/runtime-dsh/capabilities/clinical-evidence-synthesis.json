@@ -16,7 +16,7 @@
   "tools": [
     "mcp__evimed__data_source_catalog",
     "mcp__evimed__literature_search",
-    "mcp__evimed__official_page_fetch",
+    "mcp__evimed__web_read",
     "mcp__evimed__open_access_full_text",
     "mcp__evimed__locate_quote",
     "mcp__evimed__evidence_deduplicate",

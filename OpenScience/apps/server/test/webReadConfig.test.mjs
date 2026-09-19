@@ -5,12 +5,14 @@
 // be forwarded, its fallback must equal config.mjs's default, and
 // `.env.example` must name it.
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { loadConfig } from "../src/config.mjs";
+import { buildRuntimeLaunchPlan, dshProfileInput } from "../src/runtimeManager.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -62,4 +64,29 @@ test("rendering is off until a key exists, and a read's budget ends before the t
   assert.equal(config.agentbayRegion, "cn-hangzhou");
   const clamped = loadConfig({ rootDir: repoRoot, webReadTimeoutMs: 600_000 });
   assert.ok(clamped.webReadTimeoutMs <= 150_000, `a ${clamped.webReadTimeoutMs} ms read would outlive the kernel's 180 s tool call`);
+});
+
+test("switching web reading off also stops offering the tool to the runtime", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "web-read-switch-"));
+  try {
+    const project = { id: "paper1", userId: "alice", rootDir: tmp, workspaceDir: path.join(tmp, "workspace"), runtimeDir: path.join(tmp, "runtime") };
+    const base = {
+      runtimeSandboxMode: "docker", runtimeContainerBin: "docker", runtimeContainerImage: "evimed-runtime-dsh:test",
+      runtimeTransport: "unix", runtimeNetworkMode: "none", runtimeCpuLimit: "1", runtimeMemoryLimit: "1g", runtimePidsLimit: 64,
+      allowRuntimeHostNetwork: false, deepseekProviderEnabled: true, deepseekModel: "deepseek-v4-pro",
+      modelGatewayInternalUrl: "http://127.0.0.1:8787/internal/model/v1",
+      modelGatewaySigningSecret: "model-gateway-signing-secret-with-at-least-32-bytes",
+      runtimeSandboxEnforcement: "full",
+      evimedDisabledTools: "patent_search",
+    };
+    const disabledTools = (config) => {
+      const plan = buildRuntimeLaunchPlan(config, project, 49152);
+      return dshProfileInput(config, project, plan, "deepseek-v4-pro", null).mcpEnvironment.EVIMED_DISABLED_TOOLS;
+    };
+    assert.equal(disabledTools({ ...base, webReadEnabled: true }), "patent_search");
+    assert.equal(disabledTools({ ...base, webReadEnabled: false }), "patent_search,web_read");
+    assert.equal(disabledTools({ ...base, evimedDisabledTools: "", webReadEnabled: false }), "web_read");
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
 });

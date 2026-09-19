@@ -150,7 +150,7 @@ const DESCRIPTION_TYPE_TOKENS = Object.freeze([
  *
  * Declared, not derived. MCP has no `outputSchema` on these tools and the
  * return shape is assembled across `public_sources.py`, `open_access_fulltext.py`,
- * `official_pages.py`, `specialist_jobs.py`, `drug_assessment.py` and five more;
+ * `web_read.py`, `specialist_jobs.py`, `drug_assessment.py` and five more;
  * scraping that would be a static analysis whose failure mode is a silently
  * missing edge. A field this table does not list is a field no edge depends on.
  * Keys are MCP base names and kernel tool names.
@@ -167,7 +167,7 @@ const TOOL_OUTPUT_FIELDS = Object.freeze({
     { path: "metadata.doi", type: "doi" },
     { path: "metadata.pmcid", type: "pmid" },
   ],
-  official_page_fetch: [{ path: "artifact.path", type: "file_path" }],
+  web_read: [{ path: "data.markdownPath", type: "file_path" }],
   web_search: [],
   geo_visibility_probe: [],
   drug_label_search: [{ path: "items[].drug", type: "drug_name" }],
@@ -257,7 +257,7 @@ for (const [tool, fields] of Object.entries(TOOL_OUTPUT_FIELDS)) {
 /** Tools whose execution leaves a file behind, so a fixture must be reset after them. */
 const WORKSPACE_WRITERS = new Set([
   "write", "edit", "fs_write", "fs_edit", "bash", "job_run",
-  mcpToolName("open_access_full_text"), mcpToolName("official_page_fetch"),
+  mcpToolName("open_access_full_text"), mcpToolName("web_read"),
 ]);
 
 /** Tools whose execution spends budget through the usage ledger. */

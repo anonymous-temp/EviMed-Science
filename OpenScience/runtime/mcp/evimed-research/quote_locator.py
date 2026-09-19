@@ -764,8 +764,10 @@ def _capture_roots(source_id: str) -> list[tuple[str, tuple[str, ...]]]:
 
     The preserving tools file each capture under a path derived from the id
     they report, so the id is enough to find it again: PMCID, DOI,
-    `official-page:<digest>`, `label:<approval number>#<section>`, and the
-    guideline ids `guideline_search` reports."""
+    `web-page:<digest>`, `label:<approval number>#<section>`, and the
+    guideline ids `guideline_search` reports. `official-page:<digest>` is the
+    id `web_read` had before it read any public page (2026-09-20); captures
+    preserved under it are still in workspaces and still resolve."""
     value = source_id.strip()
     pmcid = re.fullmatch(r"(?:PMCID\s*:\s*)?(PMC)?(\d{3,12})", value, re.I)
     if pmcid and pmcid.group(1):
@@ -773,6 +775,9 @@ def _capture_roots(source_id: str) -> list[tuple[str, tuple[str, ...]]]:
     doi = re.sub(r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)", "", value, flags=re.I)
     if doi.startswith("10.") and not any(character.isspace() for character in doi):
         return [("%s/%s" % (SOURCES_DIR, _doi_slug(doi.casefold())), ("fulltext.md",))]
+    page = re.fullmatch(r"web-page:([0-9a-f]{16})", value)
+    if page:
+        return [("%s/web-pages/%s" % (SOURCES_DIR, page.group(1)), ("page.md",))]
     page = re.fullmatch(r"official-page:([0-9a-f]{16})", value)
     if page:
         return [("%s/official-pages/%s" % (SOURCES_DIR, page.group(1)), ("page.md",))]

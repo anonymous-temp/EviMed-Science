@@ -25,7 +25,7 @@ import public_sources
 import science_connectors
 import drug_assessment
 import open_access_fulltext
-import official_pages
+import web_read
 import quote_locator
 import source_types
 import drug_label_index
@@ -315,20 +315,18 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
-        "name": "official_page_fetch",
+        "name": "web_read",
         "description": (
-            "Retrieve an allowlisted official medical, guideline, evidence-review, or regulatory HTML document "
-            "through the managed gateway and preserve a content-hashed Markdown receipt in the workspace. "
-            # Host, then its path prefixes: the list is in every request that
-            # mounts this tool, so it is written once per host, not per route.
-            "Allowed (https, host then path prefixes): "
-            + "; ".join(
-                "%s %s" % (host, " ".join(prefixes))
-                for host, prefixes in official_pages.OFFICIAL_PATHS.items()
-            )
+            "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and "
+            "preserve it in the workspace as a citable snapshot with a sha256 receipt. Long text comes in pages: pass "
+            "page=N for the next one (nextPage says whether there is one). Pages from regulators, guideline bodies and "
+            "trial registries are marked official."
         ),
         "inputSchema": object_schema(
-            {"url": {"type": "string", "minLength": 1, "maxLength": 2048}},
+            {
+                "url": {"type": "string", "minLength": 1, "maxLength": 2048},
+                "page": {"type": "integer", "minimum": 1, "maximum": 1000},
+            },
             ("url",),
         ),
     },
@@ -398,7 +396,7 @@ TOOL_DEFINITIONS = [
                 "sourceId": {
                     "type": "string", "minLength": 1, "maxLength": 512,
                     "description": "The .evimed-sources/... path a preserving tool returned, or the id it reported "
-                                   "(PMCID, DOI, official-page:<hash>, EVIMED-GUIDE:<id>, label:<approval number>#<section>).",
+                                   "(PMCID, DOI, web-page:<hash>, EVIMED-GUIDE:<id>, label:<approval number>#<section>).",
                 },
                 "quote": {"type": "string", "minLength": 1, "maxLength": quote_locator.MAX_QUOTE_CHARS},
                 "maxResults": {"type": "integer", "minimum": 1, "maximum": quote_locator.MAX_RESULTS},
@@ -900,7 +898,10 @@ def disabled_tools():
 # `notOffered` set that is not a subset of it.
 #
 # patent_search: the EviMed ecosystem does not use patent evidence (2026-09-03).
-OPTIONAL_TOOLS = frozenset({"patent_search"})
+# web_read: reading arbitrary public pages has one switch of its own,
+# `OPEN_SCIENCE_WEB_READ_ENABLED` (plan §3.5); a deployment that turns it off
+# still answers from the bibliographic and regulatory APIs (2026-09-20).
+OPTIONAL_TOOLS = frozenset({"patent_search", "web_read"})
 
 
 def list_tools():
@@ -1871,8 +1872,8 @@ def _dispatch(name, arguments):
         if result["status"] == "success":
             result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
-    if name == "official_page_fetch":
-        return _normalize_tool_result(name, official_pages.fetch(arguments), arguments, _scope())
+    if name == "web_read":
+        return _normalize_tool_result(name, web_read.read(arguments), arguments, _scope())
     if name == "locate_quote":
         return _locate_quote(arguments)
     if name in ("term_normalize", "drug_term_normalize"):

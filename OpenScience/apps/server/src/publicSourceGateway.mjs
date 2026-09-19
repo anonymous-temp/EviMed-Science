@@ -84,7 +84,7 @@ const allowedHosts = new Set([
 // (`webRead.mjs`): paced per site, robots.txt honoured, rendered when the page
 // is drawn in script. Until 2026-09-20 this list also carried the HTML paths of
 // seventeen official hosts, fetched here as raw HTML with none of that; those
-// hosts left the allowlist with `official_page_fetch`, and "official" is now a
+// hosts left the allowlist with the official-page tool, and "official" is now a
 // label on what `web_read` returns (`webReadOfficial.mjs`), not an admission.
 //
 // Hosts approved for one API surface rather than for themselves.

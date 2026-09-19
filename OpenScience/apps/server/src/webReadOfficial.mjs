@@ -3,7 +3,7 @@
  *
  * Until 2026-09-20 this list (host plus path prefixes, then called the
  * official-document allowlist) decided whether a page could be read at all:
- * `official_page_fetch` refused everything else, which is why search hits
+ * the official-page tool refused everything else, which is why search hits
  * outside twenty-odd hosts could never be read. `web_read` reads any public
  * page; the list now only says whether the page comes from an authority —
  * a regulator, a government health body, a guideline or evidence-review body,

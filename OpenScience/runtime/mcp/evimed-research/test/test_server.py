@@ -69,7 +69,7 @@ class ToolContractTests(unittest.TestCase):
             "health",
             "data_source_catalog",
             "biomedical_source_search",
-            "official_page_fetch",
+            "web_read",
             "open_access_full_text",
             "web_search",
             "locate_quote",

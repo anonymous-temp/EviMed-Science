@@ -28,7 +28,7 @@ Select only relevant tools from the agent's declared contract:
 - `mcp__evimed__biomedical_source_search`
 - `mcp__evimed__literature_search`
 - `mcp__evimed__guideline_search`
-- `mcp__evimed__official_page_fetch`
+- `mcp__evimed__web_read`
 - `mcp__evimed__open_access_full_text`
 - `mcp__evimed__evidence_deduplicate`
 

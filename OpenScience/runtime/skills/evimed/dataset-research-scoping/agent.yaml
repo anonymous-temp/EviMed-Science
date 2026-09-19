@@ -27,7 +27,7 @@ optionalTools:
   - web_search
   - research_topic_selection
   - bibliometric_analysis
-  - official_page_fetch
+  - web_read
   - guideline_search
   - clinical_trial_search
   - term_normalize

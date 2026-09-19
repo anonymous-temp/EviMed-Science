@@ -16,7 +16,7 @@ requiredTools:
   - biomedical_source_search
 optionalTools:
   - data_source_catalog
-  - official_page_fetch
+  - web_read
   - open_access_full_text
   - term_normalize
   - drug_term_normalize

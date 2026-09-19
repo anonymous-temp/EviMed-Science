@@ -46,7 +46,7 @@ const MCP_NARRATION = Object.freeze({
   biomedical_source_search: (args, result) => withCount(`检索生物医学来源：「${excerpt(args.query)}」`, result),
   web_search: (args, result) => withCount(`检索网页：「${excerpt(args.query ?? args.queries)}」`, result),
   open_access_full_text: (args) => `取全文：${excerpt(args.identifier ?? args.doi ?? args.url, 48)}`,
-  official_page_fetch: (args) => `读官方页面：${excerpt(args.url, 48)}`,
+  web_read: (args) => `读网页：${excerpt(args.url, 48)}${Number(args.page) > 1 ? `（第 ${Number(args.page)} 页）` : ''}`,
   locate_quote: (args, result) => `核对引文：「${excerpt(args.quote, 24)}」${quoteVerdict(result)}`,
   drug_label_search: (args, result) => (args.labelId
     ? `读说明书：${labelName(args.labelId, result)}`
