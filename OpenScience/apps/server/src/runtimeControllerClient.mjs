@@ -73,8 +73,6 @@ export class RuntimeControllerClient {
     this.socketPath = String(config.runtimeControllerSocket ?? "").trim();
     this.timeoutMs = Number(config.runtimeControllerTimeoutMs) || 10_000;
     this.maxJsonBytes = Number(config.maxJsonBytes) || 12 * 1024 * 1024;
-    this.maxKernelOutputBytes = Number(config.maxKernelOutputBytes) || 1024 * 1024;
-    this.kernelTimeoutMs = Number(config.kernelTimeoutMs) || 10_000;
   }
 
   async request(method, requestPath, payload = null, options = {}) {
@@ -200,18 +198,5 @@ export class RuntimeControllerClient {
   runtimeStatus(project) {
     const query = new URLSearchParams(projectReference(project));
     return this.request("GET", `/v1/runtime/status?${query}`);
-  }
-
-  runKernel(project, code, signal, language = "python") {
-    return this.request(
-      "POST",
-      "/v1/kernel/run",
-      { ...projectReference(project), language, code },
-      {
-        signal,
-        timeoutMs: this.kernelTimeoutMs + this.timeoutMs,
-        maxResponseBytes: this.maxKernelOutputBytes * 2 + 64 * 1024,
-      },
-    );
   }
 }

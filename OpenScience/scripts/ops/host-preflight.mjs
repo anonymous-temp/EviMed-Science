@@ -545,7 +545,6 @@ export function validateDeploymentConfig(values, envFile) {
     "OPEN_SCIENCE_ALLOW_DIRECT_SHELL",
     "OPEN_SCIENCE_ALLOW_PERSISTENT_APPROVALS",
     "OPEN_SCIENCE_ALLOW_FULL_APPROVAL",
-    "OPEN_SCIENCE_ALLOW_UNSANDBOXED_KERNEL",
   ]) {
     if (boolValue(values[name])) throw failure("preflight_escape_hatch", `${name} must remain false.`);
   }
@@ -588,9 +587,6 @@ export function validateDeploymentConfig(values, envFile) {
   ).replace(/\r?\n$/, "");
   if (!evimedApiKey || /[\r\n\0]/.test(evimedApiKey)) {
     throw failure("preflight_evimed_api_key", "The EviMed API key file must contain one non-empty credential.");
-  }
-  if (boolValue(values.OPEN_SCIENCE_ENABLE_KERNEL) && values.OPEN_SCIENCE_KERNEL_SANDBOX_MODE !== "docker") {
-    throw failure("preflight_kernel_boundary", "Enabled production kernels must use the Docker sandbox.");
   }
 
   const minFreeBytes = positiveInteger(

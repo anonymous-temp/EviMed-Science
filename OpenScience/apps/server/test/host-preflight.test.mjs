@@ -52,7 +52,6 @@ function deploymentValues(overrides = {}) {
     OPEN_SCIENCE_RUNTIME_NETWORK_MODE: "none",
     OPEN_SCIENCE_DEEPSEEK_PROVIDER_ENABLED: "false",
     OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE: "./secrets/evimed-api-key.txt",
-    OPEN_SCIENCE_ENABLE_KERNEL: "false",
     OPEN_SCIENCE_TRUST_PROXY: "true",
     OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES: String(5 * 1024 * 1024 * 1024),
     ...overrides,

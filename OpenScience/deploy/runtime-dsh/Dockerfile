@@ -170,9 +170,12 @@ RUN set -eux; \
   test "${installed}" = "${PNPM_VERSION}" || { echo "installed pnpm ${installed} != pinned ${PNPM_VERSION}" >&2; exit 1; }; \
   env -u COREPACK_NPM_REGISTRY npm_config_registry=http://127.0.0.1:1 pnpm --version > /dev/null
 
-# The hosted notebook kernel and the agent runtime intentionally share one
-# reviewed image. Keep the scientific stack pinned so a green image build is
+# The scientific stack every run executes in, pinned so a green image build is
 # evidence that production has the same Python/R capabilities tested in CI.
+# ipykernel and jupyterlab serve the runs, not a notebook page: the curated
+# skills have a run execute its analysis as a notebook and deliver the .ipynb.
+# (The computational notebook page that also executed cells in this image was
+# deleted on 2026-09-19.)
 ENV VIRTUAL_ENV=/opt/evimed/venv
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 RUN uv venv "${VIRTUAL_ENV}" --python /usr/bin/python3 \

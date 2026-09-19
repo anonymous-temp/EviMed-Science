@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { lstat, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
@@ -143,11 +142,7 @@ if (args[0] === "ps") {
   for (const file of fs.readdirSync(stateRoot)) {
     if (!file.endsWith(".json")) continue;
     const state = readState(decodeURIComponent(file.slice(0, -5)));
-    const selected = filter === "label=open-science.web.runtime=true"
-      ? state?.runtime
-      : filter === "label=open-science.web.kernel=true"
-        ? state?.kernel
-        : false;
+    const selected = filter === "label=open-science.web.runtime=true" ? state?.runtime : false;
     if (!selected || !state.pid || !state.containerName || !state.userId) continue;
     try {
       process.kill(state.pid, 0);
@@ -160,10 +155,6 @@ if (args[0] === "rm" && args[1] === "-f") {
   const delayMs = Number(process.env.FAKE_DOCKER_RM_DELAY_MS) || 0;
   if (delayMs > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
   const containerName = args[2];
-  if (process.env.FAKE_DOCKER_RM_FAIL_NAME === containerName) {
-    process.stderr.write("Error: forced container cleanup failure\\n");
-    process.exit(3);
-  }
   const state = readState(containerName);
   if (!state?.pid) {
     process.stderr.write("Error: No such container: " + containerName + "\\n");
@@ -191,24 +182,6 @@ if (args[0] === "container" && args[1] === "inspect") {
   }
 }
 if (args[0] !== "run" || !name) process.exit(2);
-
-if (args.includes("open-science.web.kernel=true")) {
-  let code = "";
-  process.stdin.setEncoding("utf8");
-  process.stdin.on("data", (chunk) => { code += chunk; });
-  process.stdin.on("end", () => {
-    writeState(name, { pid: process.pid, state: "running", kernel: true, containerName: name, userId: owner });
-    if (code.startsWith("SLEEP")) {
-      setTimeout(() => process.stdout.write("late\\n"), 30_000);
-      return;
-    }
-    process.stdout.write("kernel:" + code.trim() + "\\n");
-  });
-  const stop = () => process.exit(137);
-  process.on("SIGTERM", stop);
-  process.on("SIGINT", stop);
-  return;
-}
 
 const mount = args.find((arg) => arg.includes(",dst=/runtime-control"));
 if (!mount) process.exit(3);
@@ -301,7 +274,7 @@ async function projectTree(dataDir, userId = "alice", projectId = "paper1") {
   };
 }
 
-function controllerConfig({ dataDir, socketPath, dockerBin, enableKernel = true }) {
+function controllerConfig({ dataDir, socketPath, dockerBin }) {
   return {
     ...runtimeReleaseConfig,
     production: true,
@@ -334,13 +307,7 @@ function controllerConfig({ dataDir, socketPath, dockerBin, enableKernel = true 
     allowRuntimeHostNetwork: false,
     allowRuntimeNetworkEgress: false,
     runtimeNetworkEgressPolicyAck: false,
-    enableKernel,
-    kernelSandboxMode: "docker",
     maxJsonBytes: 1024 * 1024,
-    maxKernelOutputBytes: 64 * 1024,
-    kernelTimeoutMs: 1_000,
-    maxConcurrentKernels: 2,
-    maxConcurrentKernelsPerUser: 1,
     maxRunningRuntimes: 8,
     maxRunningRuntimesPerUser: 4,
   };
@@ -966,206 +933,6 @@ test("runtime controller counts Docker-discovered runtimes left by an earlier co
   }
 });
 
-test("runtime controller executes and cancels a bounded Docker kernel", async () => {
-  const tmp = await shortTempDir("oskc-");
-  const dataDir = path.join(tmp, "data");
-  const socketPath = path.join(tmp, "control", "controller.sock");
-  const dockerBin = await fakeDocker(tmp);
-  const project = await projectTree(dataDir);
-  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
-  process.env.FAKE_VOLUME_ROOT = dataDir;
-  const controller = createRuntimeController(controllerConfig({ dataDir, socketPath, dockerBin }));
-  /** @type {any} */
-  let manager = null;
-  try {
-    await controller.listen();
-    manager = new RuntimeManager({
-      ...controllerConfig({ dataDir, socketPath, dockerBin }),
-      runtimeControllerMode: "socket",
-      runtimeControllerTimeoutMs: 2_000,
-      allowDirectDockerControl: false,
-    });
-    const result = await manager.runControlledKernel(project, "print(42)");
-    assert.equal(result.ok, true);
-    assert.match(result.stdout, /kernel:print\(42\)/);
-
-    const rResult = await manager.runControlledKernel(project, "cat(mean(c(1, 2, 3)))", undefined, "r");
-    assert.equal(rResult.ok, true);
-    assert.match(rResult.stdout, /kernel:cat\(mean\(c\(1, 2, 3\)\)\)/);
-
-    const abort = new AbortController();
-    const pending = manager.runControlledKernel(project, "SLEEP", abort.signal);
-    setTimeout(() => abort.abort(), 50);
-    await assert.rejects(pending, (error) => error?.name === "AbortError");
-  } finally {
-    await manager?.closeAll().catch(() => {});
-    await controller.close().catch(() => {});
-    delete process.env.FAKE_DOCKER_STATE;
-    delete process.env.FAKE_VOLUME_ROOT;
-    await removeTree(tmp);
-  }
-});
-
-test("runtime controller independently enforces global and per-user kernel limits", async () => {
-  const tmp = await shortTempDir("oskl-");
-  const dataDir = path.join(tmp, "data");
-  const socketPath = path.join(tmp, "control", "controller.sock");
-  const dockerLog = path.join(tmp, "docker.log");
-  const dockerBin = await fakeDocker(tmp);
-  const aliceOne = await projectTree(dataDir, "alice", "paper1");
-  const aliceTwo = await projectTree(dataDir, "alice", "paper2");
-  const bobOne = await projectTree(dataDir, "bob", "paper1");
-  const carolOne = await projectTree(dataDir, "carol", "paper1");
-  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
-  process.env.FAKE_VOLUME_ROOT = dataDir;
-  process.env.FAKE_DOCKER_LOG = dockerLog;
-  const controller = createRuntimeController({
-    ...controllerConfig({ dataDir, socketPath, dockerBin }),
-    kernelTimeoutMs: 5_000,
-    maxConcurrentKernels: 2,
-    maxConcurrentKernelsPerUser: 1,
-  });
-  try {
-    await controller.listen();
-    const client = new RuntimeControllerClient({
-      runtimeControllerSocket: socketPath,
-      runtimeControllerTimeoutMs: 3_000,
-      kernelTimeoutMs: 5_000,
-    });
-    const health = await client.health();
-    assert.equal(health.maxConcurrentKernels, 2);
-    assert.equal(health.maxConcurrentKernelsPerUser, 1);
-
-    const aliceAbort = new AbortController();
-    const aliceKernel = client.runKernel(aliceOne, "SLEEP alice", aliceAbort.signal);
-    await waitFor(async () => {
-      const log = await readFile(dockerLog, "utf8").catch(() => "");
-      return log.includes("open-science.web.kernel=true");
-    });
-    await assert.rejects(
-      client.runKernel(aliceTwo, "print('second')"),
-      (error) => error?.status === 429 && error?.code === "kernel_limit_exceeded",
-    );
-
-    const bobAbort = new AbortController();
-    const bobKernel = client.runKernel(bobOne, "SLEEP bob", bobAbort.signal);
-    await waitFor(async () => {
-      const log = await readFile(dockerLog, "utf8").catch(() => "");
-      return log.split("\n").filter((line) => line.includes("open-science.web.kernel=true")).length >= 2;
-    });
-    await assert.rejects(
-      client.runKernel(carolOne, "print('third')"),
-      (error) => error?.status === 429 && error?.code === "kernel_limit_exceeded",
-    );
-
-    aliceAbort.abort();
-    bobAbort.abort();
-    await assert.rejects(aliceKernel, (error) => error?.name === "AbortError");
-    await assert.rejects(bobKernel, (error) => error?.name === "AbortError");
-  } finally {
-    await controller.close().catch(() => {});
-    delete process.env.FAKE_DOCKER_STATE;
-    delete process.env.FAKE_VOLUME_ROOT;
-    delete process.env.FAKE_DOCKER_LOG;
-    await removeTree(tmp);
-  }
-});
-
-test("runtime controller removes orphaned kernel containers before listening", async () => {
-  const tmp = await shortTempDir("osko-");
-  const dataDir = path.join(tmp, "data");
-  const stateRoot = path.join(tmp, "docker-state");
-  const socketPath = path.join(tmp, "control", "controller.sock");
-  const dockerBin = await fakeDocker(tmp);
-  const containerName = "open-science-kernel-alice-orphan";
-  await mkdir(dataDir, { recursive: true });
-  await mkdir(stateRoot, { recursive: true });
-  const sleeper = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
-  const exited = new Promise((resolve) => sleeper.once("exit", resolve));
-  await new Promise((resolve, reject) => {
-    sleeper.once("spawn", resolve);
-    sleeper.once("error", reject);
-  });
-  await writeFile(
-    path.join(stateRoot, `${encodeURIComponent(containerName)}.json`),
-    JSON.stringify({
-      pid: sleeper.pid,
-      state: "running",
-      kernel: true,
-      containerName,
-      userId: "alice",
-    }),
-  );
-  process.env.FAKE_DOCKER_STATE = stateRoot;
-  process.env.FAKE_VOLUME_ROOT = dataDir;
-  const controller = createRuntimeController(controllerConfig({ dataDir, socketPath, dockerBin }));
-  try {
-    await controller.listen();
-    await exited;
-    const state = JSON.parse(await readFile(path.join(stateRoot, `${encodeURIComponent(containerName)}.json`), "utf8"));
-    assert.equal(state.state, "missing");
-    const client = new RuntimeControllerClient({
-      runtimeControllerSocket: socketPath,
-      runtimeControllerTimeoutMs: 2_000,
-    });
-    await client.health();
-  } finally {
-    sleeper.kill("SIGKILL");
-    await controller.close().catch(() => {});
-    delete process.env.FAKE_DOCKER_STATE;
-    delete process.env.FAKE_VOLUME_ROOT;
-    await removeTree(tmp);
-  }
-});
-
-test("runtime controller fails closed when orphaned kernel cleanup fails", async () => {
-  const tmp = await shortTempDir("oskf-");
-  const dataDir = path.join(tmp, "data");
-  const stateRoot = path.join(tmp, "docker-state");
-  const socketPath = path.join(tmp, "control", "controller.sock");
-  const dockerBin = await fakeDocker(tmp);
-  const containerName = "open-science-kernel-alice-stuck";
-  await mkdir(dataDir, { recursive: true });
-  await mkdir(stateRoot, { recursive: true });
-  const sleeper = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
-  await new Promise((resolve, reject) => {
-    sleeper.once("spawn", resolve);
-    sleeper.once("error", reject);
-  });
-  await writeFile(
-    path.join(stateRoot, `${encodeURIComponent(containerName)}.json`),
-    JSON.stringify({
-      pid: sleeper.pid,
-      state: "running",
-      kernel: true,
-      containerName,
-      userId: "alice",
-    }),
-  );
-  process.env.FAKE_DOCKER_STATE = stateRoot;
-  process.env.FAKE_VOLUME_ROOT = dataDir;
-  process.env.FAKE_DOCKER_RM_FAIL_NAME = containerName;
-  const controller = createRuntimeController(controllerConfig({ dataDir, socketPath, dockerBin }));
-  try {
-    await assert.rejects(
-      controller.listen(),
-      (error) => error?.status === 503 && error?.code === "kernel_orphan_cleanup_failed",
-    );
-    const socketStat = await lstat(socketPath).catch((error) => {
-      if (error?.code === "ENOENT") return null;
-      throw error;
-    });
-    assert.equal(socketStat, null);
-  } finally {
-    sleeper.kill("SIGKILL");
-    await controller.close().catch(() => {});
-    delete process.env.FAKE_DOCKER_STATE;
-    delete process.env.FAKE_VOLUME_ROOT;
-    delete process.env.FAKE_DOCKER_RM_FAIL_NAME;
-    await removeTree(tmp);
-  }
-});
-
 test("runtime controller rejects arbitrary routes and non-canonical project identifiers", async () => {
   const tmp = await shortTempDir("oscp-");
   const dataDir = path.join(tmp, "data");
@@ -1205,6 +972,18 @@ test("runtime controller rejects arbitrary routes and non-canonical project iden
     );
     await assert.rejects(
       client.request("POST", "/v1/docker/raw", {}),
+      (error) => error?.status === 404 && error?.code === "runtime_controller_route_not_found",
+    );
+    // The notebook's cell executor, deleted with it on 2026-09-19. The
+    // privileged side executes no caller-supplied code at all now.
+    await assert.rejects(
+      client.request("POST", "/v1/kernel/run", {
+        userId: "alice",
+        projectId: "paper1",
+        activeWorkspace: "",
+        language: "python",
+        code: "print(1)",
+      }),
       (error) => error?.status === 404 && error?.code === "runtime_controller_route_not_found",
     );
     await assert.rejects(
@@ -1277,8 +1056,6 @@ test("production readiness verifies the isolated controller and runtime image pr
     assert.equal(readiness.checks.runtime.ok, true);
     assert.equal(readiness.checks.runtime.controlPlane, "controller_socket");
     assert.equal(readiness.checks.runtime.imageVerified, true);
-    assert.equal(readiness.checks.kernel.ok, true);
-    assert.equal(readiness.checks.kernel.controlPlane, "controller_socket");
   } finally {
     await app?.close().catch(() => {});
     await controller.close().catch(() => {});
@@ -1359,8 +1136,6 @@ test("a controller that mounts the control socket somewhere else is refused by n
     dockerMajor: 26,
     maxRunningRuntimes: 8,
     maxRunningRuntimesPerUser: 4,
-    maxConcurrentKernels: 2,
-    maxConcurrentKernelsPerUser: 1,
     runtimeDataVolume: "evimed-science-data",
   };
   const base = {
@@ -1368,8 +1143,6 @@ test("a controller that mounts the control socket somewhere else is refused by n
     releaseId: "rel-1",
     maxRunningRuntimes: 8,
     maxRunningRuntimesPerUser: 4,
-    maxConcurrentKernels: 2,
-    maxConcurrentKernelsPerUser: 1,
   };
 
   const agreeing = new RuntimeManager({ ...base, runtimeDataVolume: "evimed-science-data" });

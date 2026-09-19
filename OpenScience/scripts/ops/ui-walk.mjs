@@ -39,7 +39,7 @@ import path from "node:path";
 
 const ROUTES = [
   ["runs", "/app/runs"], ["files", "/app/files"], ["files-sources", "/app/files?tab=sources"],
-  ["files-notebooks", "/app/files?tab=notebooks"], ["memory", "/app/memory"], ["memory-capsules", "/app/memory?tab=capsules"],
+  ["memory", "/app/memory"], ["memory-capsules", "/app/memory?tab=capsules"],
   ["memory-methods", "/app/memory?tab=methods"], ["autopilot", "/app/autopilot"], ["inbox", "/app/inbox"],
   ["capabilities", "/app/capabilities"], ["account", "/app/account"], ["account-settings", "/app/account?tab=settings"],
   ["account-connectors", "/app/account?tab=connectors"], ["not-found", "/app/does-not-exist"],

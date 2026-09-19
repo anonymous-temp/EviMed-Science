@@ -28,7 +28,9 @@ describe("extToKind", () => {
     expect(extToKind("png")).toBe("figure");
     expect(extToKind("PY")).toBe("script");
     expect(extToKind("csv")).toBe("table");
-    expect(extToKind("ipynb")).toBe("notebook");
+    // Classed like any other JSON document since the notebook editor was
+    // deleted (2026-09-19).
+    expect(extToKind("ipynb")).toBe("data");
     expect(extToKind("pdf")).toBe("report");
     expect(extToKind("xyz")).toBe("data");
   });
@@ -201,32 +203,15 @@ describe("artifactBlockToInspector", () => {
     expect(insp.language).toBe("python");
   });
 
-  it("surfaces the notebook a jupyter MCP tool works on as a live artifact", () => {
-    const a = deriveArtifact(
-      write(
-        { notebook_name: "scatter-demo", notebook_path: "scatter-demo.ipynb", mode: "create" },
-        { tool: "jupyter_use_notebook" },
-      ),
-    );
-    expect(a).toMatchObject({
-      kind: "artifact",
-      path: "scatter-demo.ipynb",
-      artifact: "notebook",
-      tool: "jupyter_use_notebook",
-    });
-    // Cell-level tools carry no path — no artifact, no crash.
-    expect(deriveArtifact(write({ cell_index: 0 }, { tool: "jupyter_execute_cell" }))).toBeNull();
-  });
-
-  it("routes .ipynb artifacts to the runnable notebook editor, others to file preview", () => {
+  it("routes every artifact, a notebook included, to the file preview", () => {
     const nb = fileInspectorFromBlock({
       kind: "artifact",
       path: "analysis/run.ipynb",
       filename: "run.ipynb",
-      artifact: "notebook",
+      artifact: "data",
       tool: "write",
     });
-    expect(nb).toEqual({ variant: "notebook-file", path: "analysis/run.ipynb" });
+    expect(nb).toMatchObject({ variant: "file", path: "analysis/run.ipynb", filename: "run.ipynb" });
 
     const file = fileInspectorFromBlock({
       kind: "artifact",

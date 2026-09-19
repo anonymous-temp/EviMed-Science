@@ -35,7 +35,7 @@ modes can still contain:
 - Server-level API error logs under `.openscience/errors.jsonl`, including
   request ids, HTTP method, sanitized route pattern, status, error code, and
   optional project id.
-- Runtime workspace mounts used by OpenCode or kernel execution when enabled.
+- Runtime workspace mounts used by the project's agent runtime.
 
 Operators must treat this directory as sensitive research data. The MVP includes
 project-level and current-account self-service export and deletion, but does
@@ -165,7 +165,7 @@ In hosted Web mode, the Settings page hides browser-visible provider key,
 OAuth, custom endpoint, and provider-removal controls. Treat real provider
 credentials as operator-managed server runtime configuration until encrypted
 server-side key storage exists. The hosted Settings page also disables
-browser-side MCP/Jupyter provisioning and removal controls; existing MCP
+browser-side MCP provisioning and removal controls; existing MCP
 entries are shown as server-managed status only, without local command strings
 or deployment secrets. The hosted Skills page is similarly read-only: it shows
 the server runtime's reported agents and skills, but does not expose browser
@@ -237,19 +237,12 @@ Before enabling real hosted model use, add server-side key management with:
   `OPEN_SCIENCE_RUNTIME_SKILL_DIRS` only after their hosted-use licenses,
   notices, network behavior, and credential handling have been reviewed. The
   hosted browser UI does not provide a custom skill installation path.
-- Server kernels are disabled by default. If command API kernel execution is
-  enabled for a controlled deployment, use
-  `OPEN_SCIENCE_KERNEL_SANDBOX_MODE=docker`; the host Python kernel path is
-  rejected by production readiness and `kernel_execute`. Docker kernels reuse
-  the reviewed runtime image/resource controls, force `--network none`, cap
-  stdout/stderr, kill child processes after `OPEN_SCIENCE_KERNEL_TIMEOUT_MS`,
-  and recheck project usage after execution. Non-streaming OpenCode proxy
-  responses are separately capped by
+- Code runs only inside a project's own runtime container. The command API's
+  separate kernel execution, which served the computational notebook, was
+  removed with it on 2026-09-19; a notebook a run delivers is an ordinary file.
+- Non-streaming runtime proxy responses are capped by
   `OPEN_SCIENCE_MAX_JSON_BYTES` and
-  `OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS`. Hosted Web notebook pages
-  can create Python notebooks and submit cells or expressions to this scoped
-  server kernel; users can abort matching in-flight executions. Jupyter
-  provisioning and R kernels remain unavailable in hosted Web.
+  `OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS`.
 
 ## Third-Party Components and Licenses
 

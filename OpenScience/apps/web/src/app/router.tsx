@@ -55,12 +55,15 @@ export const routes: RouteObject[] = [
       { path: "inbox", element: <InboxPage /> },
       { path: "capabilities", element: <CapabilitiesPage /> },
       { path: "account", element: <AccountPage /> },
-      // Seven destinations, six of them above (2026-09-15 walk, C8). The four
-      // below were top-level rows until then; each is now a view of one of the
+      // Seven destinations, six of them above (2026-09-15 walk, C8). The rows
+      // below were top-level pages until then; each is now a view of one of the
       // six, and each keeps its address, because these are in people's
       // bookmarks, in notification links and in this shell's own history.
+      // `notebooks` is the exception: the computational notebook was deleted on
+      // 2026-09-19, and its address lands on the files it used to sit beside,
+      // which is where a run's `.ipynb` deliverables still are.
       { path: "sources", element: <Navigate to="/app/files?tab=sources" replace /> },
-      { path: "notebooks", element: <Navigate to="/app/files?tab=notebooks" replace /> },
+      { path: "notebooks", element: <Navigate to="/app/files" replace /> },
       { path: "capsules", element: <Navigate to="/app/memory?tab=capsules" replace /> },
       { path: "settings", element: <Navigate to="/app/account?tab=settings" replace /> },
       { path: "ops", element: <Navigate to="/app/account?tab=ops" replace /> },
@@ -77,7 +80,7 @@ export const routes: RouteObject[] = [
   { path: "/runs", element: <Navigate to="/app/runs" replace /> },
   { path: "/files", element: <Navigate to="/app/files" replace /> },
   { path: "/sources", element: <Navigate to="/app/files?tab=sources" replace /> },
-  { path: "/notebooks", element: <Navigate to="/app/files?tab=notebooks" replace /> },
+  { path: "/notebooks", element: <Navigate to="/app/files" replace /> },
   { path: "/memory", element: <Navigate to="/app/memory" replace /> },
   { path: "/agents", element: <Navigate to="/app/capabilities" replace /> },
   { path: "/settings", element: <Navigate to="/app/account?tab=settings" replace /> },

@@ -296,7 +296,6 @@ S23 关停时 `app.close()` 抛异常照样 `exit(0)`，编排层看到干净退
 | `oidcTimeoutMs` | 10000 | 10000 (`:91`) | 单次请求 | `config.mjs:451` |
 | `oidcFlowTtlMs` | 600000 | 600000 (`:92`) | 总时限 | `config.mjs:452` |
 | `databaseConnectionTimeoutMs` | 10000 | 未设 | 建连 | `config.mjs:468-470` |
-| `kernelTimeoutMs` | 10000 | 10000 (`:278`) | 总时限 | `config.mjs:478` |
 | `commandTimeoutMs` | 120000 | 120000 (`:286`) | 总时限 | `config.mjs:526`、`server.mjs:1277-1297` |
 | `runtimeProxyConnectTimeoutMs` | 30000 | **90000** (`:287`) | 连接 **+** 容器就绪总预算（两种语义） | `config.mjs:527-529` |
 | `runtimeProxyRequestTimeoutMs` | 120000 | 120000 (`:288`) | 总时限（非流式） | `config.mjs:530-532` |

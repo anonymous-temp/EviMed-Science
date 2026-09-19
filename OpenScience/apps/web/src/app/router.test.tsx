@@ -48,12 +48,14 @@ describe("every address people already have still arrives", () => {
     ["/runs", "/app/runs"],
     ["/files", "/app/files"],
     ["/sources", "/app/files?tab=sources"],
-    ["/notebooks", "/app/files?tab=notebooks"],
+    // The computational notebook was deleted on 2026-09-19; its addresses
+    // land on the files it sat beside.
+    ["/notebooks", "/app/files"],
     ["/memory", "/app/memory"],
     ["/agents", "/app/capabilities"],
     ["/settings", "/app/account?tab=settings"],
     ["/app/sources", "/app/files?tab=sources"],
-    ["/app/notebooks", "/app/files?tab=notebooks"],
+    ["/app/notebooks", "/app/files"],
     ["/app/capsules", "/app/memory?tab=capsules"],
     ["/app/settings", "/app/account?tab=settings"],
     ["/app/ops", "/app/account?tab=ops"],
