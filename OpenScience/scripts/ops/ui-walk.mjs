@@ -39,8 +39,11 @@ import path from "node:path";
 
 const ROUTES = [
   ["runs", "/app/runs"], ["files", "/app/files"], ["files-sources", "/app/files?tab=sources"],
-  ["memory", "/app/memory"], ["memory-capsules", "/app/memory?tab=capsules"],
-  ["memory-methods", "/app/memory?tab=methods"], ["autopilot", "/app/autopilot"], ["inbox", "/app/inbox"],
+  // The memory page became one capsule in six sections on 2026-09-20; its tab
+  // keys are what the page itself declares (MemoryHubPage's TABS).
+  ["memory", "/app/memory"], ["memory-understanding", "/app/memory?tab=understanding"],
+  ["memory-project", "/app/memory?tab=project"], ["memory-methods", "/app/memory?tab=methods"],
+  ["memory-library", "/app/memory?tab=library"], ["memory-timeline", "/app/memory?tab=timeline"], ["autopilot", "/app/autopilot"], ["inbox", "/app/inbox"],
   ["capabilities", "/app/capabilities"], ["account", "/app/account"], ["account-settings", "/app/account?tab=settings"],
   ["account-connectors", "/app/account?tab=connectors"], ["not-found", "/app/does-not-exist"],
 ];
@@ -89,7 +92,12 @@ function measure(leakSources) {
   const unnamed = controls.filter((el) => {
     const name = (el.getAttribute("aria-label") || el.getAttribute("title") || el.textContent || el.getAttribute("placeholder") || "").trim();
     const labelled = el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
-    return !name && !labelled && !el.getAttribute("aria-labelledby");
+    // A control wrapped in its label is named by it — `<label>分享个人背景<input
+    // type="checkbox"></label>` is how this codebase writes checkboxes and file
+    // inputs, and reading only `for=` called three named controls unnamed
+    // (2026-09-20 walk).
+    const wrapped = el.closest("label")?.textContent?.trim();
+    return !name && !labelled && !wrapped && !el.getAttribute("aria-labelledby");
   });
   return {
     title: document.title,
