@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { KB_CHUNK_TARGET_TOKENS, chunkDocument, documentTerms, estimateTokens, trigramTerms, tsqueryLiteral, tsvectorLiteral } from "../src/kbChunker.mjs";
+import { sourcePageForOffset } from "@evimed/domain";
 import { searchTokens } from "../src/memoryRecallPolicy.mjs";
 
 test("a page map cuts the document page by page, and every chunk is an exact slice", () => {
@@ -20,6 +21,22 @@ test("a page map cuts the document page by page, and every chunk is an exact sli
   ], "an empty page has nothing to index");
   assert.equal(chunks[0].prefix, "房颤指南");
   assert.deepEqual(chunks.map((chunk) => chunk.ordinal), [0, 1, 2]);
+});
+
+test("text no page claims is still indexed: a gap belongs to the page after it, a tail to no page", () => {
+  const text = "前言，不在任何一页。\n\n第一页正文。\n\n第二页正文。\n\n附录：解析器没有分页的结尾。";
+  const page = (body) => ({ start: text.indexOf(body), end: text.indexOf(body) + body.length });
+  const pageMap = [{ page: 1, ...page("第一页正文。"), status: "ok" }, { page: 2, ...page("第二页正文。"), status: "ok" }];
+  const chunks = chunkDocument({ text, pageMap, title: "t" });
+  assert.deepEqual(chunks.map((chunk) => [chunk.page, text.slice(chunk.start, chunk.end)]), [
+    [1, "前言，不在任何一页。\n\n第一页正文。"],
+    [2, "第二页正文。"],
+    [null, "附录：解析器没有分页的结尾。"],
+  ]);
+  // A chunk's page is what the citation function says for every offset in it.
+  for (const chunk of chunks) {
+    for (const offset of [chunk.start, chunk.end - 1]) assert.equal(sourcePageForOffset(pageMap, offset), chunk.page, `${offset}`);
+  }
 });
 
 test("without pages, headings start chunks and carry their path into the prefix", () => {

@@ -24,6 +24,7 @@ export function projectSourceManifestRecord(row) {
   const verdict = omissionAudit ? { status: omissionAudit.status, reason: omissionAudit.reason, omissionRate: omissionAudit.omissionRate ?? null } : null;
   return { ...row, payload: { ...payload, outputs: publicOutputs, ...(verdict ? { omissionAudit: verdict } : {}), ...(analysis ? { analysis: {
     generation: analysis.generation, phase: analysis.phase, schemaVersion: analysis.schemaVersion, unitCount: analysis.unitCount,
+    ...(Number.isSafeInteger(analysis.pageCount) ? { pageCount: analysis.pageCount } : {}),
     run: projectRun(analysis.run),
   } } : {}) } };
 }
@@ -169,6 +170,15 @@ export function sourceIndexDocument({ original, sha256, extractor, text: body, p
  */
 export function extractorRevision(extractor) {
   return extractor?.parser === "api" ? String(extractor.version ?? "") : `${extractor?.name ?? "unknown"}@${extractor?.version ?? "0"}`;
+}
+
+/** The parser revision a source's stored analysis was cut under: the label
+ *  recorded at capture time, or — for a capture older than that field — the
+ *  one its extractor implies. The knowledge-base index and the personal
+ *  library key a document's text by it.
+ * @param {{ parserRevision?: unknown, extractor?: any } | null | undefined} analysis */
+export function sourceParserRevision(analysis) {
+  return typeof analysis?.parserRevision === "string" && analysis.parserRevision ? analysis.parserRevision : extractorRevision(analysis?.extractor);
 }
 
 /** Where a source generation's page map is kept: one knowledge record beside

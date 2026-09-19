@@ -186,6 +186,21 @@ test("the knowledge base is named with the way to search it, and nothing of it i
   });
 });
 
+test("the personal library is named beside the knowledge base once it holds a document", async () => {
+  await withProject(async (project) => {
+    const dataDir = path.join(project.rootDir, "data");
+    const withLibrary = { ...config, dataDir, kbSearchEnabled: true };
+    const empty = await prepareResearchContext(project, { mode: "open-domain" }, withLibrary);
+    assert.doesNotMatch(empty.system, /library\//, "no library, no pointer");
+    assert.match(empty.system, /当前个人知识库为空/);
+    await mkdir(path.join(dataDir, "users", "alice", "library", `src_${"c".repeat(32)}`), { recursive: true });
+    const prepared = await prepareResearchContext(project, { mode: "open-domain" }, withLibrary);
+    assert.match(prepared.system, /个人资料库有 1 份文档，只读，在工作区的 library\/\*\/index\.md/);
+    assert.match(prepared.system, /mcp__evimed__kb_search/);
+    assert.doesNotMatch(prepared.system, /当前个人知识库为空/);
+  });
+});
+
 // The answer line is the one product path where `skillsLoaded` could never be
 // true by construction: it does not delegate, so nothing injects its persona,
 // and the check fell back to scanning for a `skill` tool call the brief merely

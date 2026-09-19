@@ -80,6 +80,7 @@ import { SourceService, assertKnowledgeBaseFormat, projectSourceManifestRecord, 
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
 // Knowledge-base search (2026-09-20): the index, its embedder and its gateway.
 import { KB_RERANK_INSTRUCT, KnowledgeBaseIndex } from "./kbIndex.mjs";
+import { createLibrary } from "./libraryService.mjs";
 import { KbEmbedder } from "./kbEmbedding.mjs";
 import { KB_SEARCH_GATEWAY_PATH, createKbSearchGatewayHandler } from "./kbSearchGateway.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
@@ -1046,6 +1047,8 @@ export function createWebApiApp(overrides = {}) {
   let sourceUnderstandingRuntime = null;
   /** @type {KnowledgeBaseIndex | null} */
   let kbIndex = null;
+  /** @type {import("./libraryService.mjs").LibraryService | null} */
+  let libraryService = null;
   const sourceWorker = sourceService && config.sourceIngestionEnabled ? new SourceIngestionWorker({
     jobs: productJobs,
     sources: sourceService,
@@ -1060,7 +1063,10 @@ export function createWebApiApp(overrides = {}) {
     verifyMetadata: (metadata) => verifySourceMetadata(metadata, {
       fetchImpl: overrides.sourceMetadataFetch ?? globalThis.fetch, timeoutMs: config.sourceDoiCheckTimeoutMs,
     }),
-    onPublished: () => kbIndex?.wake(),
+    onPublished: (job) => {
+      kbIndex?.wake();
+      void libraryService?.refreshSource(job.userId, job.payload?.sourceId);
+    },
     resolveSource: async (job, source) => {
       const connectorType = source.payload.connector?.type;
       if (!["upload", "internal", "openlist"].includes(connectorType)) {
@@ -1147,6 +1153,11 @@ export function createWebApiApp(overrides = {}) {
     canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
     report: (code) => process.stderr.write(`knowledge-base index: ${code}\n`),
   }) : null;
+  // The personal library: an account's documents across projects, read-only
+  // in every run, searched beside the project's own (plan §3.2 #4–5).
+  const library = createLibrary({ config, store, documents: productDocuments, sources: sourceService, capsules: capsuleService,
+    kbIndex, report: (code) => process.stderr.write(`personal library: ${code}\n`) });
+  libraryService = library.service;
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
     documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
     capsules: capsuleService,
@@ -2458,6 +2469,7 @@ export function createWebApiApp(overrides = {}) {
       if (await notificationRoutes(req, res)) return;
       if (await learningRoutes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
+      if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
 
       if (pathname === "/api/health") {
@@ -4083,6 +4095,7 @@ export function createWebApiApp(overrides = {}) {
     sourceService,
     sourceWorker,
     kbIndex,
+    libraryService,
     sourceUnderstandingRuntime,
     autopilotService,
     autopilotWorker,
