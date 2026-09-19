@@ -88,6 +88,7 @@ test("a note is always inferred and always pending, and there is no field that s
   assert.equal(await routes(request(`${AGENT_MEMORY_PATH}/note`, { factKind: "preference", content: "用中文" }), res), true);
   const note = calls.find((entry) => entry[0] === "note");
   assert.equal(note[3].origin, "inferred");
+  assert.equal(note[3].review, true, "a third party's note waits for the owner; the platform's own take effect");
   assert.equal(res.captured.body.data.reviewRequired, true);
 });
 

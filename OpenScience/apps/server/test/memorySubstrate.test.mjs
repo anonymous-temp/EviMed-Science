@@ -140,6 +140,51 @@ test("a researcher who paused recall, for the account or for this project, is ha
     "pausing learning is not pausing recall");
 });
 
+test("an incognito conversation is handed no memories, and another conversation of the project still is", async () => {
+  // 2026-09-20: the conversation's own switch, read before either path.
+  const states = { [SESSION]: { incognito: true, excluded: [] } };
+  const store = {
+    ...fakeStore([]), configured: true,
+    settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [] }),
+    sessionState: async (_userId, _projectId, sessionId) => states[sessionId] ?? { incognito: false, excluded: [] },
+  };
+  const substrate = new MemorySubstrate({}, { store });
+  assert.deepEqual(await substrate.recall(USER, "kidney outcomes", { projectId: PROJECT, sessionId: SESSION }), []);
+  assert.equal(store.calls.relevant, 0, "an incognito recall must not reach the store's matcher");
+  assert.equal((await substrate.recall(USER, "kidney outcomes", { projectId: PROJECT, sessionId: "ses_two" })).length, 1);
+  // A conversation id the store cannot hold is a conversation with no state, not a failed recall.
+  const odd = { ...store, sessionState: async () => { throw Object.assign(new Error("bad id"), { code: "memory_session_invalid" }); } };
+  assert.equal((await new MemorySubstrate({}, { store: odd }).recall(USER, "kidney outcomes", { projectId: PROJECT, sessionId: "x" })).length, 1);
+});
+
+test("what a conversation set aside stays out of its recall on both paths, and frees its slot", async () => {
+  const records = [
+    record({ id: "rec1", key: "a", value: "Prefers tables over prose." }),
+    record({ id: "rec2", key: "b", kind: "analysis", value: "Empagliflozin slowed eGFR decline.", summary: "" }),
+  ];
+  const notes = [{ id: "note1", content: "kidney note", pinned: false, updatedAt: "2026-09-01T00:00:00Z" }];
+  const sessionStore = (base) => ({
+    ...base, configured: true,
+    settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [] }),
+    sessionState: async () => ({ incognito: false, excluded: [{ type: "memory", id: "rec2", label: "" }] }),
+  });
+  const index = fakeIndex(records.map((row, n) => hit(
+    memoryUri(USER, { scope: "user", scopeId: "", kind: row.kind, recordId: row.id }), 0.9 - n / 10)));
+  const ranked = new MemorySubstrate(openVikingConfig, { store: sessionStore(fakeStore(records, { memos: notes })), openViking: index });
+  const recalled = await ranked.recall(USER, "kidney", { projectId: PROJECT, sessionId: SESSION,
+    excluded: [{ type: "note", id: "note1" }] });
+  assert.equal(index.calls.find.length, 1, "the index path was taken");
+  assert.deepEqual(recalled.map((row) => row.id), ["record:rec1"],
+    "the session's own set-aside record and the caller's set-aside note are both gone");
+
+  // The term matcher is handed the same union.
+  let handed = null;
+  const builtin = sessionStore({ ...fakeStore([]), relevant: async (_u, _q, options) => { handed = options.excluded; return []; } });
+  await new MemorySubstrate({}, { store: builtin }).recall(USER, "kidney", { projectId: PROJECT, sessionId: SESSION,
+    excluded: [{ type: "note", id: "note1" }] });
+  assert.deepEqual(handed.map((item) => `${item.type}:${item.id}`), ["memory:rec2", "note:note1"]);
+});
+
 test("an unknown provider name falls back rather than composing a broken deployment", () => {
   const substrate = new MemorySubstrate({ memoryIndexProvider: "not-a-provider" }, { store: fakeStore([]) });
   assert.equal(substrate.provider, "builtin");

@@ -166,6 +166,9 @@ export function createAgentMemoryRoutes({ config, apiKeys, store, researchMemory
         content: boundedString(input.content, "content", 8_000),
         // Not a parameter. See rule 1 in the module header.
         origin: "inferred",
+        // Neither is this: a third party's note waits for the account owner,
+        // where the platform's own notes take effect (capsuleService.note).
+        review: true,
       });
       sendJson(res, 200, { data: { entry, reviewRequired: true, contextOnly: true } });
       return true;

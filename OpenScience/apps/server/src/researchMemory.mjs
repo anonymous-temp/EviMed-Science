@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { DURABLE_RECALL_KINDS, recallContent, searchTokens, selectWithinBudget } from "./memoryRecallPolicy.mjs";
+import { DURABLE_RECALL_KINDS, recallContent, searchTokens, selectWithinBudget, setAsideIn } from "./memoryRecallPolicy.mjs";
 import { HttpError } from "./security.mjs";
 import {
   MEMORY_EVIDENCE_LIMIT,
@@ -8,6 +8,7 @@ import {
   MEMORY_PAUSED_PROJECT_LIMIT,
   MEMORY_REVISION_LIMIT,
   MEMORY_SCOPES,
+  MEMORY_SESSION_EXCLUSION_TYPES,
   MEMORY_STATUSES,
   migrateResearchMemory,
 } from "./researchMemoryPersistence.mjs";
@@ -427,21 +428,82 @@ function pausedProjectList(value) {
 }
 
 /**
- * Whether memory may be written, and read, for one account in one project.
+ * Whether memory may be written, and read, for one account in one project —
+ * and, given a session, in one conversation.
  *
  * Read through a function rather than off the store directly because not every
  * store has the switches: a deployment without the control-plane database has
  * no memory to pause, and the doubles the extraction tests use predate them.
  * Both read as "nothing paused", which is the behaviour before the switches.
  *
- * @param {any} store @param {string} userId @param {string | null} projectId
- * @returns {Promise<{ learning: boolean, recall: boolean }>} true = paused
+ * An incognito conversation (2026-09-20) is paused both ways for itself only:
+ * nothing is extracted from it and nothing is recalled into it. `excluded` is
+ * what the researcher set aside in that conversation with 「本次不用」.
+ *
+ * @param {any} store @param {string} userId @param {string | null} projectId @param {string | null} [sessionId]
+ * @returns {Promise<{ learning: boolean, recall: boolean, incognito: boolean, excluded: { type: string, id: string, label?: string }[] }>} true = paused
  */
-export async function memoryPausedFor(store, userId, projectId) {
-  if (typeof store?.settings !== "function" || store.configured === false) return { learning: false, recall: false };
+export async function memoryPausedFor(store, userId, projectId, sessionId = null) {
+  if (typeof store?.settings !== "function" || store.configured === false) {
+    return { learning: false, recall: false, incognito: false, excluded: [] };
+  }
   const settings = await store.settings(userId);
   const projectPaused = Boolean(projectId) && settings.pausedProjects.includes(String(projectId));
-  return { learning: settings.learningPaused || projectPaused, recall: settings.recallPaused || projectPaused };
+  // A conversation id this store cannot hold has no state: nothing set aside,
+  // not incognito. Any other failure is the store's, and propagates.
+  const session = sessionId && projectId && typeof store.sessionState === "function"
+    ? await store.sessionState(userId, projectId, sessionId).catch((/** @type {any} */ error) => {
+      if (error?.code === "memory_session_invalid") return { incognito: false, excluded: [] };
+      throw error;
+    })
+    : { incognito: false, excluded: [] };
+  return {
+    learning: settings.learningPaused || projectPaused || session.incognito,
+    recall: settings.recallPaused || projectPaused || session.incognito,
+    incognito: session.incognito,
+    excluded: session.excluded,
+  };
+}
+
+/** A session id as the kernel writes one. @param {unknown} value */
+function assertSessionId(value) {
+  const id = String(value ?? "");
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(id)) throw new HttpError(400, "memory_session_invalid", "The session id is invalid.");
+  return id;
+}
+
+/** @param {unknown} value */
+function assertProjectId(value) {
+  const id = String(value ?? "").trim();
+  if (!projectIdPattern.test(id)) throw new HttpError(400, "memory_session_invalid", "The project id is invalid.");
+  return id;
+}
+
+/**
+ * One 「本次不用」 item, bounded: what kind of thing it is, its id as recall
+ * names it, and a label so the panel can still say what was set aside after
+ * the thing itself is gone.
+ * @param {unknown} value
+ */
+export function sessionExclusion(value) {
+  const item = /** @type {Record<string, unknown>} */ (value && typeof value === "object" ? value : {});
+  const type = String(item.type ?? "");
+  if (!MEMORY_SESSION_EXCLUSION_TYPES.includes(type)) throw new HttpError(400, "memory_session_invalid", "Unknown exclusion type.");
+  const id = String(item.id ?? "").trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9:_./-]{0,299}$/.test(id)) throw new HttpError(400, "memory_session_invalid", "The excluded item's id is invalid.");
+  const label = boundedText(item.label, 200);
+  return { type, id, ...(label ? { label } : {}) };
+}
+
+/** @param {any} row */
+function publicSessionState(row) {
+  return {
+    incognito: row?.incognito === true,
+    excluded: Array.isArray(row?.excluded) ? row.excluded.map((item) => {
+      try { return sessionExclusion(item); } catch { return null; }
+    }).filter(Boolean) : [],
+    updatedAt: row?.updated_at ? memoryInstant(row.updated_at) : null,
+  };
 }
 
 /**
@@ -1106,6 +1168,58 @@ export class ResearchMemoryStore {
     return publicSettings(result.rows[0]);
   }
 
+  // --------------------------------------------------------------- sessions
+
+  /**
+   * One conversation's memory state; every switch off when it has none.
+   * @param {string} userId @param {string} projectId @param {string} sessionId
+   */
+  async sessionState(userId, projectId, sessionId) {
+    const result = await this.#query(`SELECT * FROM evimed_memory.sessions
+      WHERE user_id=$1 AND project_id=$2 AND session_id=$3`,
+    [assertUserId(userId), assertProjectId(projectId), assertSessionId(sessionId)]);
+    return publicSessionState(result.rows[0] ?? null);
+  }
+
+  /**
+   * Change one conversation's memory state in one statement: the incognito
+   * switch, and one item set aside (`exclude`) or brought back (`include`).
+   * Two tabs changing different things at once must both win, which is why
+   * this is an upsert over the stored array rather than a read and a write.
+   * @param {string} userId @param {string} projectId @param {string} sessionId
+   * @param {{ incognito?: unknown, exclude?: unknown, include?: unknown }} patch
+   */
+  async updateSessionState(userId, projectId, sessionId, patch) {
+    const owner = assertUserId(userId);
+    const project = assertProjectId(projectId);
+    const session = assertSessionId(sessionId);
+    if (patch?.incognito !== undefined && typeof patch.incognito !== "boolean") {
+      throw new HttpError(400, "memory_session_invalid", "incognito must be true or false.");
+    }
+    const exclude = patch?.exclude === undefined ? null : sessionExclusion(patch.exclude);
+    const include = patch?.include === undefined ? null : sessionExclusion({ label: "", ...(/** @type {any} */ (patch.include)) });
+    const result = await this.#query(`INSERT INTO evimed_memory.sessions AS s (user_id, project_id, session_id, incognito, excluded)
+      VALUES ($1, $2, $3, COALESCE($4::boolean, false), CASE WHEN $5::jsonb IS NULL THEN '[]'::jsonb ELSE jsonb_build_array($5::jsonb) END)
+      ON CONFLICT (user_id, project_id, session_id) DO UPDATE SET
+        incognito = COALESCE($4::boolean, s.incognito),
+        excluded = (
+          SELECT COALESCE(jsonb_agg(item ORDER BY ordinal), '[]'::jsonb) FROM (
+            SELECT item, ordinal FROM jsonb_array_elements(s.excluded) WITH ORDINALITY AS kept(item, ordinal)
+            WHERE NOT ($5::jsonb IS NOT NULL AND item->>'type' = $5::jsonb->>'type' AND item->>'id' = $5::jsonb->>'id')
+              AND NOT ($6::jsonb IS NOT NULL AND item->>'type' = $6::jsonb->>'type' AND item->>'id' = $6::jsonb->>'id')
+            UNION ALL
+            SELECT $5::jsonb, 1000000 WHERE $5::jsonb IS NOT NULL
+          ) AS merged
+        ),
+        updated_at = date_trunc('second', clock_timestamp())
+      RETURNING *`,
+    [owner, project, session, patch?.incognito ?? null, exclude ? JSON.stringify(exclude) : null,
+      include ? JSON.stringify({ type: include.type, id: include.id }) : null]);
+    // The table's CHECK bounds the list at MEMORY_SESSION_EXCLUSION_LIMIT; a
+    // write past it is refused there, as a payload error.
+    return publicSessionState(result.rows[0]);
+  }
+
   // ------------------------------------------------------------------ notes
 
   /** @param {string} userId @param {{ state?: string, pageSize?: number }} options */
@@ -1189,10 +1303,11 @@ export class ResearchMemoryStore {
    * exactly as it was.
    *
    * @param {string} userId @param {string} query
-   * @param {{ projectId?: string|null, sessionId?: string|null }} scope
+   * @param {{ projectId?: string|null, sessionId?: string|null, excluded?: readonly { type: string, id: string }[] }} scope
    */
-  async relevant(userId, query, { projectId = null, sessionId = null } = {}) {
+  async relevant(userId, query, { projectId = null, sessionId = null, excluded = [] } = {}) {
     if (!this.configured || this.contextLimit === 0 || this.contextMaxChars === 0) return [];
+    const setAside = setAsideIn(excluded);
     const terms = searchTokens(query);
     // Durable memories are fetched in their own query. A single page ordered by
     // importance cannot hold both: run summaries arrive one per run and a failed
@@ -1253,14 +1368,16 @@ export class ResearchMemoryStore {
           score,
         };
       })
-      .filter((row) => row.recallable);
+      .filter((row) => row.recallable)
+      .filter((row) => !setAside(row.memo));
     const legacy = memos
       .map((memo) => {
         const haystack = memo.content.toLowerCase();
         const matches = terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
         return { memo: { ...memo, memoryType: "manual" }, score: matches + (memo.pinned ? 0.25 : 0) };
       })
-      .filter((row) => row.score > 0);
+      .filter((row) => row.score > 0)
+      .filter((row) => !setAside(row.memo));
     const byScore = (left, right) =>
       right.score - left.score || String(right.memo.updatedAt).localeCompare(String(left.memo.updatedAt));
     const ranked = [...structured, ...legacy].sort(byScore);
@@ -1305,6 +1422,8 @@ export class ResearchMemoryStore {
     if (!scopeId) throw new HttpError(400, "memory_payload_invalid", "projectId is required.");
     const records = await this.#query(
       "DELETE FROM evimed_memory.records WHERE user_id=$1 AND scope='project' AND scope_id=$2", [owner, scopeId]);
+    // The project's conversations' own state goes with it.
+    await this.#query("DELETE FROM evimed_memory.sessions WHERE user_id=$1 AND project_id=$2", [owner, scopeId]);
     const notes = await this.#query(`DELETE FROM evimed_memory.notes
       WHERE user_id=$1 AND 'evimed-agent-run'=ANY(tags) AND $2=ANY(string_to_array(content,chr(10)))`,
     [owner, `- Project: ${scopeId}`]);

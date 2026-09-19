@@ -118,6 +118,25 @@ export function recallContent(record) {
     .join("\n");
 }
 
+/**
+ * A predicate over recall candidates: true for one the researcher set aside in
+ * this conversation with 「本次不用」. Applied before the budget, so a set-aside
+ * memory frees its slot for the next one instead of leaving a hole.
+ *
+ * Ids are matched in the form recall hands them out: a structured record as
+ * `record:<id>` (set aside as `memory`), a note by its own id (`note`).
+ * @param {readonly { type: string, id: string }[]} excluded
+ * @returns {(memo: { id?: string }) => boolean}
+ */
+export function setAsideIn(excluded) {
+  const keys = new Set((excluded ?? []).map((item) => `${item.type}\u0000${item.id}`));
+  if (keys.size === 0) return () => false;
+  return (memo) => {
+    const id = String(memo?.id ?? "");
+    return id.startsWith("record:") ? keys.has(`memory\u0000${id.slice("record:".length)}`) : keys.has(`note\u0000${id}`);
+  };
+}
+
 /** Query terms, including CJK bigrams: a two-character Chinese term is a
  *  word, and splitting on whitespace alone would find none of them. */
 export function searchTokens(value) {

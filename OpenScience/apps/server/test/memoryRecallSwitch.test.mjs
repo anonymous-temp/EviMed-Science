@@ -313,6 +313,31 @@ test("a dispatch recalls memories with the switch on and asks nothing with it of
   }, { researchMemory: offMemory, memoryRecallEnabled: false });
 });
 
+test("an incognito conversation's dispatch recalls nothing, and a method set aside is named in that conversation's context", async () => {
+  // 2026-09-20. Both read from the conversation's own state, per dispatch.
+  const memory = {
+    ...recordingMemory(),
+    async sessionState(_userId, _projectId, sessionId) {
+      return sessionId === "ses_incognito"
+        ? { incognito: true, excluded: [] }
+        : { incognito: false, excluded: [{ type: "method", id: "method-fact_1", label: "肾功能剂量核对" }] };
+    },
+  };
+  await withApp(async ({ base, dataDir }) => {
+    await dispatchOnce(base, "ses_incognito");
+    assert.deepEqual(memory.asked, [], "an incognito conversation is handed no memory");
+    const [incognitoMemory] = (await findFiles(dataDir, "memory.md")).filter((file) => file.includes("ses_incognito"));
+    assert.equal(await readFile(incognitoMemory, "utf8"), "");
+    const [incognitoContext] = (await findFiles(dataDir, "context.md")).filter((file) => file.includes("ses_incognito"));
+    assert.doesNotMatch(await readFile(incognitoContext, "utf8"), /本次不用这些方法/);
+
+    await dispatchOnce(base, "ses_aside");
+    assert.equal(memory.asked.length, 1, "the other conversation is recalled as before");
+    const [asideContext] = (await findFiles(dataDir, "context.md")).filter((file) => file.includes("ses_aside"));
+    assert.match(await readFile(asideContext, "utf8"), /用户在本对话中选择本次不用这些方法：method-fact_1（肾功能剂量核对）/);
+  }, { researchMemory: memory });
+});
+
 test("readiness names a builtin pin on a deployment whose index is configured", async () => {
   const keyDir = await mkdtemp(path.join(tmpdir(), "os-recall-key-"));
   try {

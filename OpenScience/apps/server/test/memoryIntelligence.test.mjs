@@ -388,6 +388,29 @@ test("a researcher who paused learning, for the account or for this project, get
   }
 });
 
+test("an incognito conversation leaves nothing behind, and the rest of the project still learns", async () => {
+  // 2026-09-20: the conversation's own switch. Not even the run summary the
+  // timeline would show, and no model call.
+  const store = new MemoryStoreDouble();
+  store.configured = true;
+  store.settings = async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [] });
+  store.sessionState = async (_userId, _projectId, sessionId) => ({ incognito: sessionId === "session_1", excluded: [] });
+  let modelCalls = 0;
+  const intelligence = new MemoryIntelligence(config, store, {
+    fetchImpl: async () => { modelCalls += 1; return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] }); },
+  });
+  const result = await intelligence.recordRun(project(), run(), [message("user_1", "请记住：我偏好先看一手研究。")]);
+  assert.equal(result.source, "incognito");
+  assert.ok(MEMORY_WRITE_SKIPPED_SOURCES.has(result.source), "an incognito conversation is a choice, not an extraction that found nothing");
+  assert.equal(store.records.size, 0);
+  assert.equal(modelCalls, 0);
+
+  const elsewhere = await intelligence.recordRun(project(), { ...run("run_2"), sessionId: "session_2" },
+    [message("user_2", "SGLT2 抑制剂 对 CKD 的长期获益？")]);
+  assert.notEqual(elsewhere.source, "incognito");
+  assert.ok(store.records.size > 0, "another conversation of the same project is recorded as before");
+});
+
 test("a question asked again updates its one run summary instead of adding another", async () => {
   // 2026-09-16 review, M3: summaries were keyed by run, so every attempt at a
   // question stayed a record of its own and all of them were recalled into the

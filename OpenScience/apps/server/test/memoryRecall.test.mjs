@@ -47,7 +47,7 @@ test("scope all searches both stores, records first, and tags every item with it
   assert.equal(s.calls[0][2].scope, "capsule");
   assert.equal(s.calls[0][2].projectId, "p1");
   assert.equal(s.calls[0][2].accountCreatedAt, user.accountCreatedAt);
-  assert.deepEqual(s.calls[1].slice(1), ["u1", "简短", { projectId: "p1", sessionId: null }]);
+  assert.deepEqual(s.calls[1].slice(1), ["u1", "简短", { projectId: "p1", sessionId: null, excluded: [] }]);
 });
 
 test("conversation leaves the capsule alone and capsule leaves the records alone", async () => {
