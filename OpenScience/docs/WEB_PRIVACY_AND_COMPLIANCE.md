@@ -194,10 +194,14 @@ Before enabling real hosted model use, add server-side key management with:
   named-volume subpaths and carries OpenCode HTTP/SSE over a project-scoped Unix
   socket, with no published runtime port. It defaults to the named Docker
   `internal: true` network `open-science-runtime-internal`, which can reach the
-  authenticated Web Model Gateway and the separate official-host public-source
-  gateway but has no public route. Public-source requests are HTTPS GET-only,
-  redirect-disabled, response-bounded, and authenticated with the active
-  runtime token; the gateway does not accept arbitrary hosts or caller headers.
+  authenticated Web Model Gateway and the separate public-source gateway but
+  has no public route. Every public-source request is authenticated with the
+  active runtime token and carries no caller headers. A source request is HTTPS
+  GET-only to an exact API allowlist, redirect-disabled and response-bounded; a
+  web-read request (`web_read`) may name any public page, and the gateway —
+  not the runtime — fetches it, refusing any hop (redirects included) that
+  resolves to a private, loopback or link-local address, and honouring
+  robots.txt.
   A catalog entry or Skill mapping is not a connected source. In production,
   any other Docker
   runtime network mode
