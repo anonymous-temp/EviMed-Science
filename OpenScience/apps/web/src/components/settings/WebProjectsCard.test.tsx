@@ -126,7 +126,7 @@ describe("WebProjectsCard", () => {
     await waitFor(() => expect(mocks.create).toHaveBeenCalledWith("心衰 GDMT 综述"));
     await waitFor(() => expect(mocks.projectId).toBe("p-1a2b3c4d"));
     expect(await screen.findByText("心衰 GDMT 综述")).toBeInTheDocument();
-    // The sidebar's switcher reads the shared store, which is refreshed too.
+    // The sidebar's project list reads the shared store, which is refreshed too.
     expect(mocks.load).toHaveBeenCalled();
   });
 
@@ -181,6 +181,39 @@ describe("WebProjectsCard", () => {
     await waitFor(() => expect(mocks.deleteWebProject).toHaveBeenCalledWith("paper1"));
     await waitFor(() => expect(screen.queryByText("Paper 1")).not.toBeInTheDocument());
     expect(mocks.toastSuccess).toHaveBeenCalledWith("已删除「Paper 1」。");
+    expect(mocks.load).toHaveBeenCalled();
+  });
+
+  // Setting the header alone, as this did, left the sidebar and the page on a
+  // project that no longer exists; the move goes through the store they are
+  // keyed on.
+  it("moves the shell to 「我的研究」 through the project store when the project it is in is deleted", async () => {
+    mocks.projectId = "paper1";
+    render(<WebProjectsCard />);
+
+    await screen.findByText("Paper 1");
+    fireEvent.click(screen.getByRole("button", { name: "删除「Paper 1」" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "删除项目" }));
+
+    await waitFor(() => expect(mocks.select).toHaveBeenCalledWith("default"));
+    expect(mocks.projectId).toBe("default");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("已删除「Paper 1」。");
+    expect(mocks.load).toHaveBeenCalled();
+  });
+
+  // The project is gone either way; a refused move is not a failed deletion,
+  // and the list refresh falls back to 「我的研究」 by itself.
+  it("still reports the deletion when the move afterwards is refused", async () => {
+    mocks.projectId = "paper1";
+    mocks.select.mockRejectedValue(new Error("该项目当前不可用。"));
+    render(<WebProjectsCard />);
+
+    await screen.findByText("Paper 1");
+    fireEvent.click(screen.getByRole("button", { name: "删除「Paper 1」" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "删除项目" }));
+
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith("已删除「Paper 1」。"));
+    expect(mocks.toastError).not.toHaveBeenCalled();
     expect(mocks.load).toHaveBeenCalled();
   });
 

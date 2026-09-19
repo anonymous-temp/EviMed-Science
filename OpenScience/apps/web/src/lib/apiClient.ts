@@ -1251,10 +1251,14 @@ export function invalidateWebMe(): void {
  * project store each on their own. Callers asking for the same project within
  * two seconds share one request (and one in-flight promise); a failure is never
  * shared, and a login, logout or project change forgets the answer at once.
+ *
+ * `projectId` asks about another project than the tab's own, on this request
+ * only: a project switch proves its target resolves before the tab moves, so
+ * the page still on screen never sends the new project's header meanwhile.
  */
-export async function fetchWebMe(): Promise<WebMe | null> {
+export async function fetchWebMe({ projectId: requested }: { projectId?: string } = {}): Promise<WebMe | null> {
   if (!hasWebApi) return null;
-  const projectId = getWebProjectId();
+  const projectId = requested ?? getWebProjectId();
   const now = Date.now();
   if (webMeShared && webMeShared.projectId === projectId && now - webMeShared.at < WEB_ME_REUSE_MS) {
     return webMeShared.value;
@@ -1533,9 +1537,15 @@ export async function putWebResearchSession(
   return parseApiResponse<WebResearchSession>(res);
 }
 
-export async function listWebAgentRuns(): Promise<WebAgentRun[]> {
+/**
+ * A project's run ledger: the tab's own project, or `projectId`'s. The sidebar
+ * lists other projects' tasks beside the current one's, and the header is how
+ * the control plane picks a project — so the override names it on this one
+ * request and leaves the tab's selection where it is.
+ */
+export async function listWebAgentRuns({ projectId }: { projectId?: string } = {}): Promise<WebAgentRun[]> {
   if (!hasWebApi) throw new BackendUnavailableError("agentRuns.list");
-  const res = await fetchWithWebAuth(apiUrl("/agent-runs"));
+  const res = await fetchWithWebAuth(apiUrl("/agent-runs"), projectId ? { headers: { "X-Open-Science-Project": projectId } } : {});
   return parseApiResponse<WebAgentRun[]>(res);
 }
 
