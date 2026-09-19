@@ -250,3 +250,43 @@ test("every bind is said on both sides, and a notice's 「解除绑定」 takes 
     assert.deepEqual(rig.preferenceChanges.at(-1), ["alice", "feishu", false]);
   } finally { await rig.service.close(); }
 });
+
+// --- inbound fairness ----------------------------------------------------------------
+
+test("a chat past its inbound limit is told once to slow down, and the rest of its burst is dropped before anything is stored", async () => {
+  // Security review 2026-09-20: no per-chat limit, and every handled message
+  // is an intent call of up to 30 s in the worker every account shares.
+  const { createFakeFeishuSdk } = await import("./fakeFeishuSdk.mjs");
+  const fake = createFakeFeishuSdk();
+  let clock = Date.parse("2026-09-20T08:00:00.000Z");
+  /** @type {any[]} */ const recorded = [];
+  const service = new ImService({
+    config: { imEnabled: true, imInboundPerMinute: 3 }, database: null,
+    credentials: { resolveChannelSecret: async () => "s".repeat(32) }, notifications: null,
+    users: {}, agentRuns: {}, runtimeManager: {}, dispatchRun: async () => {}, steerRun: async () => {},
+    loadSdk: async () => fake.sdk, classifier: { classify: async () => ({}) }, write: () => {}, now: () => clock,
+    store: /** @type {any} */ ({ recordInbound: async (/** @type {any} */ row) => { recorded.push(row); return { inserted: true, event: row }; } }),
+  });
+  const flood = { id: "chb_flood", userId: "u1", channel: "feishu", externalId: "ou_owner", credentialRef: "channel.feishu",
+    metadata: { appId: "cli_a1b2c3d4e5f60718", tenantBrand: "feishu" }, status: "active" };
+  const quiet = { ...flood, id: "chb_quiet", userId: "u2", metadata: { ...flood.metadata, appId: "cli_b1b2c3d4e5f60718" } };
+  const send = (/** @type {any} */ binding, /** @type {number} */ n) => service.acceptInbound({ channel: "feishu", binding,
+    message: { eventId: `ev_${binding.id}_${n}`, messageId: `om_${binding.id}_${n}`, chatId: "oc_1", chatType: "p2p", text: `第 ${n} 条` } });
+  const told = () => fake.callsTo("message.reply").map((call) => JSON.parse(call.args.data.content).text);
+  try {
+    for (let n = 0; n < 6; n += 1) await send(flood, n);
+    await send(quiet, 0);
+    assert.deepEqual(recorded.map((row) => row.eventKey), ["ev_chb_flood_0", "ev_chb_flood_1", "ev_chb_flood_2", "ev_chb_quiet_0"],
+      "the flood stops at its limit; another chat is not touched by it");
+    await tick(20);
+    assert.deepEqual(told(), ["消息太快了，请稍后再发"], "told once, not once per dropped message");
+    assert.equal(fake.callsTo("message.reply")[0].args.path.message_id, "om_chb_flood_3");
+    assert.equal(service.counters.get("inbound_rate_limited"), 3);
+    // A minute on the chat is heard again; a new flood is told again.
+    clock += 60_000;
+    for (let n = 6; n < 10; n += 1) await send(flood, n);
+    await tick(20);
+    assert.equal(recorded.filter((row) => row.bindingId === "chb_flood").length, 6);
+    assert.equal(told().length, 2);
+  } finally { await service.close(); }
+});

@@ -51,6 +51,10 @@ import { createImRoutes } from "./imRoutes.mjs";
 /** How many times an inbound message is tried before the chat is told it
  *  could not be handled. */
 const INBOUND_MAX_ATTEMPTS = 3;
+/** The window a binding's inbound rate is counted over. */
+const INBOUND_RATE_WINDOW_MS = 60_000;
+/** What the chat is told, once, when its messages come faster than the limit. */
+const INBOUND_TOO_FAST = "消息太快了，请稍后再发";
 /** Handled inbound rows are kept this long, for dedupe: Feishu re-pushes an
  *  unacknowledged event for up to a few hours. */
 const INBOUND_RETENTION_MS = 48 * 3_600_000;
@@ -312,6 +316,10 @@ export class ImService {
     });
     /** @type {Map<string, { manager: RegistrationManager, touchedAt: number }>} */
     this.registrations = new Map();
+    /** Messages each binding had accepted in the last minute (`#admitInbound`).
+     *  @type {Map<string, { times: number[], warned: boolean }>} */
+    this.inboundWindows = new Map();
+    this.inboundPerMinute = Math.max(1, Math.floor(Number(config?.imInboundPerMinute)) || 20);
     /** Counted, exported with the operator metrics (principle 15). */
     this.counters = new Map();
     /** Called when there is work for the worker sooner than its next tick. */
@@ -626,14 +634,57 @@ export class ImService {
   /**
    * The durable inbox for inbound messages: one insert, deduplicated on the
    * platform's event id; the worker takes it from here.
+   *
+   * A binding past `imInboundPerMinute` in the last minute is told once
+   * (「消息太快了，请稍后再发」) and the rest of its burst is dropped before
+   * anything is stored. Every handled message costs an intent call and may
+   * start a run, in a worker every account shares; with no limit one chat's
+   * flood queued ahead of everyone (security review 2026-09-20).
    * @param {{ channel: string, binding: any, message: Record<string, any> }} input
    */
   async acceptInbound({ channel, binding, message }) {
+    const admitted = this.#admitInbound(binding.id);
+    if (admitted !== "accept") {
+      this.count("inbound_rate_limited");
+      // Not awaited: Feishu waits three seconds for its acknowledgement.
+      if (admitted === "warn") void this.#tellTooFast(channel, binding, message);
+      return;
+    }
     const { inserted } = await this.store.recordInbound({
       channel, eventKey: String(message.eventId), bindingId: binding.id, userId: binding.userId, payload: message,
     });
     this.count(inserted ? "inbound_received" : "inbound_duplicate");
     if (inserted) this.wake();
+  }
+
+  /**
+   * Whether one more message from this binding is taken now: "accept", "warn"
+   * for the first past the limit in the window, "drop" for the rest.
+   * @param {string} bindingId @returns {"accept" | "warn" | "drop"}
+   */
+  #admitInbound(bindingId) {
+    const now = this.now();
+    const window = this.inboundWindows.get(bindingId) ?? { times: [], warned: false };
+    window.times = window.times.filter((time) => now - time < INBOUND_RATE_WINDOW_MS);
+    this.inboundWindows.set(bindingId, window);
+    if (window.times.length < this.inboundPerMinute) {
+      window.times.push(now);
+      window.warned = false;
+      return "accept";
+    }
+    if (window.warned) return "drop";
+    window.warned = true;
+    return "warn";
+  }
+
+  /** @param {string} channel @param {any} binding @param {Record<string, any>} message */
+  async #tellTooFast(channel, binding, message) {
+    try {
+      await this.registry.get(channel)?.conversation?.sendText({ binding, chatId: message.chatId ?? null,
+        replyTo: message.messageId ?? null, text: INBOUND_TOO_FAST, key: `too-fast:${message.eventId}` });
+    } catch (error) {
+      this.write(`im rate notice for ${binding.id} not sent: ${describeError(error, this.scrubber)}\n`);
+    }
   }
 
   /** Claim and handle what has arrived. @param {number} [limit] */
@@ -1221,6 +1272,9 @@ export class ImService {
     await this.store.pruneDeliveries(new Date(now - DELIVERY_RETENTION_MS));
     for (const [userId, entry] of this.registrations) {
       if (!entry.manager.active && now - entry.touchedAt > 15 * 60_000) this.registrations.delete(userId);
+    }
+    for (const [bindingId, window] of this.inboundWindows) {
+      if (window.times.every((time) => now - time >= INBOUND_RATE_WINDOW_MS)) this.inboundWindows.delete(bindingId);
     }
   }
 

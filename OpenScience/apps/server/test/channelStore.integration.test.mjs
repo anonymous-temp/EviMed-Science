@@ -158,6 +158,42 @@ test("an event whose attempts ran out is closed rather than claimed forever", op
   assert.ok(closed.some((event) => event.eventKey === eventKey && event.status === "failed"));
 });
 
+test("claims are fair: one message per chat at a time, the chat served least recently first, each chat in arrival order", options, async () => {
+  // Security review 2026-09-20: the claim was first come across every account,
+  // so one chat's burst — each message an intent call of up to 30 s — was
+  // handled ahead of every other account's messages.
+  const [busy] = await store.bindingsFor(owner, "feishu");
+  const { binding: quiet } = await store.replaceBinding(other, "feishu", { externalId: "ou_quiet", credentialRef: "channel.feishu",
+    metadata: { appId: `cli_${randomUUID().replaceAll("-", "").slice(0, 16)}`, tenantBrand: "feishu" } });
+  // Apart by a few milliseconds: arrival order is `received_at`, kept to the millisecond.
+  const record = async (/** @type {any} */ binding, /** @type {string} */ userId, /** @type {string} */ label) => {
+    await new Promise((resolve) => setTimeout(resolve, 3));
+    return (await store.recordInbound({ channel: "feishu", eventKey: `ev_fair_${randomUUID()}`, bindingId: binding.id, userId, payload: { label } })).event;
+  };
+  const claim = async (/** @type {number} */ limit) => (await store.claimInbound({ owner: "worker-a", leaseMs: 60_000, limit }))
+    .map((event) => event.payload.label).sort();
+  const finish = async (/** @type {string} */ label) => {
+    const { rows } = await database.query("SELECT id FROM evimed_channels.inbound_events WHERE payload->>'label'=$1", [label]);
+    assert.equal(await store.finishInbound(rows[0].id, "worker-a", { status: "done" }), true);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  };
+  for (const label of ["a0", "a1", "a2", "a3"]) await record(busy, owner, label);
+  await record(quiet, other, "b0");
+  assert.deepEqual(await claim(5), ["a0", "b0"], "one of the burst, and the other chat's message beside it");
+  assert.deepEqual(await claim(5), [], "a chat with a message in hand gets no second");
+  await finish("a0");
+  await finish("b0");
+  await record(quiet, other, "b1");
+  assert.deepEqual(await claim(1), ["a1"], "the burst's chat was served longer ago");
+  await finish("a1");
+  assert.deepEqual(await claim(1), ["b1"], "now the other chat goes first, though a2 arrived before b1");
+  await finish("b1");
+  assert.deepEqual(await claim(5), ["a2"], "a chat's own messages in the order they came");
+  await finish("a2");
+  assert.deepEqual(await claim(5), ["a3"]);
+  await finish("a3");
+});
+
 test("a task is one per run, leased, checkpointed by its holder and settled", options, async () => {
   const [binding] = await store.bindingsFor(owner, "feishu");
   const runId = `run_${randomUUID()}`;

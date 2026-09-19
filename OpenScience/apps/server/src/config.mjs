@@ -1531,6 +1531,13 @@ export function loadConfig(overrides = {}) {
     // At most this many delivered files follow a finished task into the chat
     // (each at most Feishu's 30 MB); the rest are one link away on the page.
     imMaxResultFiles: Number(overrides.imMaxResultFiles ?? process.env.OPEN_SCIENCE_IM_MAX_RESULT_FILES ?? 5),
+    // --- sec2 (security review 2026-09-20): IM inbound fairness ---
+    // Messages one bound chat may have handled per minute. A person types a
+    // few; past this it is a flood, and each handled message is an intent call
+    // (up to 30 s) and possibly a run in the worker every account shares. The
+    // first message past it is answered 「消息太快了，请稍后再发」, the rest of
+    // the minute dropped; counted as `inbound_rate_limited`.
+    imInboundPerMinute: Number(overrides.imInboundPerMinute ?? process.env.OPEN_SCIENCE_IM_INBOUND_PER_MINUTE ?? 20),
     // The reserved channels (plan §3.6, 2026-09-19 ruling): each is an adapter
     // file that reports not-configured, and each switch defaults off. On, a
     // channel may be named in notification preferences and says by name that
