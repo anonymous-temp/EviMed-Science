@@ -497,11 +497,11 @@ function presetRows(input) {
     // so the row activates; `/permission` is registered inside an optional
     // `ctx.inject(['commands'])`, whose sub-fiber just stays pending. The boot
     // audit (`assertEntriesActivated`) walks loader entries, not sub-fibers,
-    // and a fiber's state follows its own inject list only -- measured on a
-    // live 0.1.5-rc.2 kernel booted with this patch: it boots, sessions create,
-    // and `commands/list` no longer names `permission`. The chip stays safe
-    // without the command: it returns before sending when the pick is the
-    // current preset, and one row is all it can offer.
+    // and a fiber's state follows its own inject list only. Measured on
+    // a live 0.1.5-rc.2 kernel booted with this patch: it boots, sessions
+    // create, and `commands/list` no longer names `permission`. The chip stays
+    // safe without the command: it returns before sending when the pick is
+    // the current preset, and one row is all it can offer.
     ...(input.flags.hosted ? ["  isolate:", "    commands: true"] : []),
     "  config:",
     "    presets:",
