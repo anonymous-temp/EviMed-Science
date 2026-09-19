@@ -30,6 +30,7 @@ function fetchReturning(content, { ok = true, reasoningContent = undefined } = {
       : { content, reasoning_content: reasoningContent };
     return {
       ok,
+      status: ok ? 200 : 503,
       headers: { get: () => null },
       text: async () => JSON.stringify({ choices: [{ message }] }),
     };
@@ -160,9 +161,52 @@ test("a decline says why, and a real verdict says nothing", async () => {
   assert.equal(await saysNone.classify("今天天气怎么样", agents, clean), null);
   assert.equal(clean.failure, undefined);
 
-  // An HTTP failure is a decline too, and names its status.
+  // An HTTP failure is a decline too, and names the provider's own status.
   const broken = {};
   await new SpecialistClassifier(baseConfig(), { fetchImpl: fetchReturning("", { ok: false }) })
     .classify("请开展一项荟萃分析", agents, broken);
-  assert.match(String(broken.failure), /^http_/);
+  assert.equal(broken.failure, "http_503");
+});
+
+// Every classification is a model call on the dispatch path, one per unrouted
+// question. It used to reach the provider with its own fetch, outside the usage
+// ledger and the account's caps; now it is reserved and settled like every other
+// control-plane call, and the ledger can say what routing costs.
+test("a classification is charged to the question's account, as routing", async () => {
+  const ledgerCalls = [];
+  const usageLedger = {
+    async reserveModel(input) { ledgerCalls.push(["reserve", input]); return { id: "res_route" }; },
+    async settleModel(...args) { ledgerCalls.push(["settle", ...args]); },
+    async markUncertain(...args) { ledgerCalls.push(["uncertain", ...args]); },
+    async release(...args) { ledgerCalls.push(["release", ...args]); },
+  };
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(String(url));
+    return Response.json({
+      id: "provider-route",
+      choices: [{ message: { content: JSON.stringify({ agentId: "meta-analysis", confidence: 0.9 }) } }],
+      usage: { prompt_tokens: 900, prompt_cache_hit_tokens: 800, prompt_cache_miss_tokens: 100, completion_tokens: 20 },
+    });
+  };
+  const classifier = new SpecialistClassifier(baseConfig(), { fetchImpl, usageLedger });
+  const routed = await classifier.classify("请开展一项荟萃分析", agents, {}, { userId: "user-1", projectId: "project-1" });
+  assert.equal(routed?.agentId, "meta-analysis");
+  assert.equal(calls.length, 1);
+  const reserve = ledgerCalls.find(([kind]) => kind === "reserve")?.[1];
+  assert.equal(reserve?.purpose, "routing");
+  assert.equal(reserve?.userId, "user-1");
+  assert.equal(reserve?.projectId, "project-1");
+  const settle = ledgerCalls.find(([kind]) => kind === "settle");
+  assert.deepEqual(settle?.[3].usage, { cacheHitTokens: 800, cacheMissTokens: 100, completionTokens: 20 });
+
+  // With a ledger and no owner there is no account to charge: the classifier
+  // declines rather than spending off the books, and the dispatch goes on.
+  const trace = {};
+  const unowned = new SpecialistClassifier(baseConfig(), { fetchImpl, usageLedger: {
+    ...usageLedger, async reserveModel() { throw Object.assign(new Error("Invalid user."), { code: "usage_payload_invalid" }); },
+  } });
+  assert.equal(await unowned.classify("请开展一项荟萃分析", agents, trace), null);
+  assert.equal(trace.failure, "error_usage_payload_invalid");
+  assert.equal(calls.length, 1, "no provider call without an account to charge it to");
 });

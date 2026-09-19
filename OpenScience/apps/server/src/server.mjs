@@ -26,7 +26,7 @@ import { MethodConsolidation } from "./methodConsolidation.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
 import { runMethodObservations } from "./methodObservations.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { CONNECTOR_CREDENTIAL_IDS, mountedMethodDigest } from "@evimed/domain";
+import { CONNECTOR_CREDENTIAL_IDS, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -404,6 +404,7 @@ function routePattern(pathname) {
   if (pathname === "/api/connectors") return pathname;
   if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
+  if (pathname === "/api/ops/usage/by-purpose") return pathname;
   if (pathname.startsWith("/api/auth/oidc/")) return "/api/auth/oidc/:action";
   if (
     pathname === "/api/auth/login" ||
@@ -1162,6 +1163,7 @@ export function createWebApiApp(overrides = {}) {
   });
   const specialistClassifier = new SpecialistClassifier(config, {
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
+    usageLedger,
   });
   // Which run an interactive runtime's model request belongs to (E §9.4):
   // the one running in its project, when exactly one is. Remembered for a
@@ -1180,6 +1182,28 @@ export function createWebApiApp(overrides = {}) {
     runAttribution.set(key, { at: Date.now(), runId });
     if (runAttribution.size > 5_000) runAttribution.delete(runAttribution.keys().next().value);
     return runId;
+  };
+  // What a runtime's model request is for in the usage ledger (X1): the
+  // kernel's, unless its run is source understanding. A bounded runtime's
+  // token names its dispatch id, an interactive one's attribution the run id,
+  // so either matches. A run's capability never changes, so the answer is kept
+  // for the process's life; a run not found yet is asked about again.
+  /** @type {Map<string, string>} */
+  const runPurposes = new Map();
+  const runPurpose = async ({ userId, projectId, runId }) => {
+    if (!runId) return "kernel";
+    const key = `${userId}\u0000${projectId}\u0000${runId}`;
+    const known = runPurposes.get(key);
+    if (known) return known;
+    const user = await store.userById(userId);
+    if (!user) return "kernel";
+    const run = (await agentRuns.list(await store.requireProject(user, projectId)))
+      .find((item) => item.id === runId || item.dispatchId === runId);
+    if (!run) return "kernel";
+    const purpose = usagePurposeOfRun(run);
+    runPurposes.set(key, purpose);
+    if (runPurposes.size > 5_000) runPurposes.delete(runPurposes.keys().next().value);
+    return purpose;
   };
   // What a run is called (C3): one metered flash call per new run, off the
   // critical path, never over a title the researcher gave it.
@@ -2166,6 +2190,7 @@ export function createWebApiApp(overrides = {}) {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     usageLedger,
     attributeRun,
+    runPurpose,
   });
   // The evaluation corpus needs both arms to see byte-identical upstream
   // answers, so the gateway's fetch is replaceable by a fixture reader. Neither
@@ -2272,7 +2297,8 @@ export function createWebApiApp(overrides = {}) {
     const named = routeNamedSpecialist(text, routableAgents);
     /** @type {{ failure?: string, verdict?: string }} */
     const trace = {};
-    const specialist = named ?? await specialistClassifier.classify(text, routableAgents, trace)
+    const specialist = named ?? await specialistClassifier.classify(text, routableAgents, trace,
+      { userId: project.userId, projectId: project.id })
       ?? routeOpenDomainSpecialist(text, routableAgents, { afterCleanNone: trace.verdict === "none" });
     const answerAgent = specialist ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
     const effective = specialist ?? (answerAgent
@@ -2462,6 +2488,25 @@ export function createWebApiApp(overrides = {}) {
           operationalMetrics,
           activeCommands,
         });
+        return;
+      }
+
+      // What each purpose cost across every account (X1): the operator's cost
+      // report, behind the scrape token the metrics above use. Money is read
+      // from the ledger here rather than exported as a metric, because a price
+      // summed in Prometheus would be summed again on every scrape window.
+      if (pathname === "/api/ops/usage/by-purpose" && req.method === "GET") {
+        assertOperatorMetricsAccess(req, config);
+        if (!usageLedger) throw new HttpError(503, "usage_ledger_unavailable", "Durable usage accounting is unavailable.");
+        const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
+        const days = Number(url.searchParams.get("days") ?? 7);
+        if (!Number.isSafeInteger(days) || days < 1 || days > 366) {
+          throw new HttpError(400, "usage_report_days_invalid", "days must be a whole number from 1 to 366.");
+        }
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        sendJson(res, 200, { data: {
+          days, since: since.toISOString(), currency: "CNY", rows: await usageLedger.usageByPurpose({ since }),
+        } });
         return;
       }
 
@@ -2921,7 +2966,8 @@ export function createWebApiApp(overrides = {}) {
         if (boundSession?.mode === "open-domain" && !chosenLine) {
           const named = routeNamedSpecialist(text, routableAgents);
           // Naming the package is an instruction, not a guess at intent.
-          routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace);
+          routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace,
+            { userId: ctx.project.userId, projectId: ctx.project.id });
           if (!routedSpecialist) {
             const net = routeOpenDomainSpecialist(text, routableAgents, {
               afterCleanNone: classifierTrace.verdict === "none",

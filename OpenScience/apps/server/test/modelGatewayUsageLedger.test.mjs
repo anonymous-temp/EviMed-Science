@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import test from "node:test";
-import { createModelGatewayHandler, issueModelGatewayBudgetMarker } from "../src/modelGateway.mjs";
+import { callModelForControlPlane, createModelGatewayHandler, issueModelGatewayBudgetMarker } from "../src/modelGateway.mjs";
 
 const signingSecret = "test-only-model-gateway-signing-secret-32-bytes";
 
@@ -203,7 +203,7 @@ test("a bounded runtime token retains episode attribution after markers compact 
 
 /* --------------------------------------------- run attribution (E §9.4, C3) */
 
-async function callWith(t, { attributeRun = null, caller = { userId: "usage-owner", projectId: "default" }, extraConfig = {} } = {}, requestBody) {
+async function callWith(t, { attributeRun = null, runPurpose = null, caller = { userId: "usage-owner", projectId: "default" }, extraConfig = {} } = {}, requestBody) {
   const events = [];
   const upstream = createServer(async (req, res) => {
     for await (const _chunk of req) { /* consume */ }
@@ -213,7 +213,9 @@ async function callWith(t, { attributeRun = null, caller = { userId: "usage-owne
   const upstreamBase = await listen(upstream);
   t.after(() => new Promise((resolve) => upstream.close(resolve)));
   const gateway = createServer(createModelGatewayHandler({ ...config(upstreamBase), ...extraConfig },
-    { assertActiveModelGatewayToken: () => caller }, { usageLedger: ledger(events), ...(attributeRun ? { attributeRun } : {}) }));
+    { assertActiveModelGatewayToken: () => caller }, {
+      usageLedger: ledger(events), ...(attributeRun ? { attributeRun } : {}), ...(runPurpose ? { runPurpose } : {}),
+    }));
   const gatewayBase = await listen(gateway);
   t.after(() => new Promise((resolve) => gateway.close(resolve)));
   const post = () => fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
@@ -250,4 +252,70 @@ test("a bounded runtime keeps the run its token names, and an unattributable cal
   const broken = await callWith(t, { attributeRun: async () => { throw new Error("ledger unreadable"); } }, { messages: [{ role: "user", content: "x" }] });
   assert.equal((await broken.post()).length > 0, true, "an attribution failure never costs the call");
   assert.equal(broken.events[0].input.runId, null);
+});
+
+/* ------------------------------------------------------- purpose (X1) */
+
+test("a runtime's request is the kernel's unless its run says otherwise, and asking never costs the call", async (t) => {
+  // Nothing wired: every runtime request is the kernel working.
+  const plain = await callWith(t, {}, { messages: [{ role: "user", content: "Plain." }] });
+  await plain.post();
+  assert.equal(plain.events[0].input.purpose, "kernel");
+
+  // A bounded runtime is asked about by the run its token names — the dispatch
+  // id a source understanding run is launched under.
+  const asked = [];
+  const bounded = await callWith(t, {
+    caller: { userId: "usage-owner", projectId: "default", runId: "dispatch-source-1", runLimit: 3, dailyLimit: 10, weeklyLimit: 50 },
+    runPurpose: async (request) => { asked.push(request); return "source-understanding"; },
+  }, { messages: [{ role: "user", content: "Understand this source." }] });
+  await bounded.post();
+  assert.deepEqual(asked, [{ userId: "usage-owner", projectId: "default", runId: "dispatch-source-1" }]);
+  assert.equal(bounded.events[0].input.purpose, "source-understanding");
+
+  // An interactive runtime is asked about by the run it was attributed to.
+  const interactiveAsked = [];
+  const interactive = await callWith(t, {
+    attributeRun: async () => "run_interactive",
+    runPurpose: async (request) => { interactiveAsked.push(request.runId); return "kernel"; },
+  }, { messages: [{ role: "user", content: "Interactive." }] });
+  await interactive.post();
+  assert.deepEqual(interactiveAsked, ["run_interactive"]);
+  assert.equal(interactive.events[0].input.purpose, "kernel");
+
+  const broken = await callWith(t, { runPurpose: async () => { throw new Error("run ledger unreadable"); } },
+    { messages: [{ role: "user", content: "x" }] });
+  assert.ok((await broken.post()).length > 0, "a purpose lookup failure never costs the call");
+  assert.equal(broken.events[0].input.purpose, "kernel");
+});
+
+test("a control-plane call reserves under the purpose its caller names, and an unnamed one is left to the ledger", async () => {
+  const usage = { prompt_tokens: 20, completion_tokens: 4, prompt_cache_hit_tokens: 0, prompt_cache_miss_tokens: 20 };
+  const fetchImpl = async () => Response.json({ id: "provider-cp", choices: [{ message: { content: "{}" } }], usage });
+  for (const [purpose, expected] of [["routing", "routing"], ["memory-extraction", "memory-extraction"], [undefined, undefined]]) {
+    const events = [];
+    await callModelForControlPlane({ config: config("https://api.deepseek.com"), usageLedger: ledger(events), fetchImpl }, {
+      userId: "usage-owner", projectId: "default", ...(purpose ? { purpose } : {}),
+      body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "Classify." }] },
+    });
+    // The ledger turns a missing purpose into `other` (usagePurpose); the
+    // gateway passes through what it was given rather than inventing one.
+    assert.equal(events[0].input.purpose, expected);
+    assert.deepEqual(events.map((event) => event.type), ["reserve", "settle"]);
+  }
+});
+
+test("a refused control-plane call carries the provider's own status, not only the mapped one", async () => {
+  const events = [];
+  await assert.rejects(
+    callModelForControlPlane({
+      config: config("https://api.deepseek.com"), usageLedger: ledger(events),
+      fetchImpl: async () => new Response("unavailable", { status: 503 }),
+    }, { userId: "usage-owner", projectId: "default", purpose: "routing",
+      body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "x" }] } }),
+    (error) => error.code === "model_gateway_upstream_error" && error.status === 502 && error.upstreamStatus === 503,
+  );
+  // Reached the provider, so uncertain rather than released (the extraction
+  // test "a provider that refuses ..." holds the reason).
+  assert.deepEqual(events.map((event) => event.type), ["reserve", "uncertain"]);
 });

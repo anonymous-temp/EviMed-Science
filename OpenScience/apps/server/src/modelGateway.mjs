@@ -510,11 +510,16 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
 /**
  * @param {Record<string, any>} config @param {any} runtimeManager
  * @param {{ fetchImpl?: typeof fetch, usageLedger?: any,
- *           attributeRun?: (caller: { userId: string, projectId: string }) => Promise<string | null> }} [options]
+ *           attributeRun?: (caller: { userId: string, projectId: string }) => Promise<string | null>,
+ *           runPurpose?: (request: { userId: string, projectId: string, runId: string | null }) => Promise<string> }} [options]
  *   `attributeRun` names the ledger run an interactive runtime's request
  *   belongs to (see below); a bounded runtime's token already carries one.
+ *   `runPurpose` says what that run's requests are for in the usage ledger:
+ *   `kernel`, unless the run is source understanding (`usagePurposeOfRun`).
  */
-export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = fetch, usageLedger = null, attributeRun = null } = {}) {
+export function createModelGatewayHandler(config, runtimeManager, {
+  fetchImpl = fetch, usageLedger = null, attributeRun = null, runPurpose = null,
+} = {}) {
   const prefixes = new PromptPrefixMemo();
   return async function modelGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
@@ -592,9 +597,15 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
           ? await attributeRun({ userId: caller.userId, projectId: caller.projectId }).catch(() => null)
           : null;
         const runId = caller.runId ?? attributed ?? null;
+        // A runtime's request is the kernel's unless its run says otherwise.
+        // Asking can fail (the run ledger is a file); the answer is a report
+        // column, so a failure records `kernel` rather than costing the call.
+        const purpose = runPurpose
+          ? await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }).catch(() => "kernel")
+          : "kernel";
         reservation = await usageLedger.reserveModel({
           id: randomUUID(), userId: caller.userId, projectId: caller.projectId, model: normalized.model,
-          runId,
+          runId, purpose,
           priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency, requestFingerprint: fingerprint,
           estimatedCost: estimate.cost,
           dailyLimit: minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
@@ -756,8 +767,12 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
  * Non-streaming only. Every control-plane use is a single JSON answer, and a
  * streaming variant with no reader is a way to lose the usage tail.
  *
+ * `call.purpose` is what the call is for, one of `@evimed/domain`'s
+ * `USAGE_PURPOSES`; the ledger records one it does not know, or none, as
+ * `other`, because a missing label must never cost the call it labels.
+ *
  * @param {{ config: any, usageLedger: any, fetchImpl?: typeof fetch }} deps
- * @param {{ userId: string, projectId: string, runId?: string | null, body: any,
+ * @param {{ userId: string, projectId: string, runId?: string | null, purpose?: string, body: any,
  *           signal?: AbortSignal, at?: Date }} call
  * @returns {Promise<any>} the provider's parsed JSON response
  */
@@ -775,7 +790,7 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
     const estimate = estimateModelReservation(body, config, at);
     reservation = await usageLedger.reserveModel({
       id: randomUUID(), userId: call.userId, projectId: call.projectId, model: body.model,
-      runId: call.runId ?? null,
+      runId: call.runId ?? null, purpose: call.purpose,
       priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency,
       requestFingerprint: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
       estimatedCost: estimate.cost,
@@ -800,10 +815,13 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
     });
     dispatched = true;
     if (!response.ok) {
-      throw gatewayError(mappedUpstreamStatus(response.status), "model_gateway_upstream_error",
-        `The model provider returned HTTP ${response.status}.`);
+      // The provider's own status rides along: the mapped one folds every
+      // server error into 502, and a caller that reports why it got no answer
+      // (the routing classifier's `http_<status>`) needs the one that happened.
+      throw Object.assign(gatewayError(mappedUpstreamStatus(response.status), "model_gateway_upstream_error",
+        `The model provider returned HTTP ${response.status}.`), { upstreamStatus: response.status });
     }
-    const payload = /** @type {any} */ (await response.json());
+    const payload = /** @type {any} */ (JSON.parse(await response.text()));
     if (usageLedger && reservation) {
       // The provider's own count, or nothing. A reservation settled against an
       // estimate would read in the ledger exactly like one settled against a
