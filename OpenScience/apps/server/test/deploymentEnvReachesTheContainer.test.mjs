@@ -130,6 +130,14 @@ const operatorLevers = {
   // rt (2026-09-20): the sign-in warm start's off switch. It starts a runtime
   // per sign-in, which is exactly why a deployment must be able to stop it.
   OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ["open-science-web"],
+  // rt (2026-09-20): the runtime provider switch and what an AgentBay
+  // deployment cannot run without. A provider that does not arrive leaves the
+  // deployment on Docker while the operator believes it moved.
+  OPEN_SCIENCE_RUNTIME_PROVIDER: ["open-science-web"],
+  OPEN_SCIENCE_AGENTBAY_IMAGE_ID: ["open-science-web"],
+  OPEN_SCIENCE_AGENTBAY_SANDBOX_ENFORCEMENT: ["open-science-web"],
+  OPEN_SCIENCE_AGENTBAY_BRIDGE_SECRET_MODE: ["open-science-web"],
+  OPEN_SCIENCE_RUNTIME_GATEWAY_PUBLIC_URL: ["open-science-web"],
 };
 
 async function composeFiles() {

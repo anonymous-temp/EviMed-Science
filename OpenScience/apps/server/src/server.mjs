@@ -1376,7 +1376,9 @@ export function createWebApiApp(overrides = {}) {
     readRunUsage: async (project, run) => (usageLedger
       ? runUsageFrom(await usageLedger.summaryRuns(project.userId, [run.id, run.dispatchId].filter(Boolean)), run)
       : null),
-    runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
+    // rt: asked right before the delivery gate reads a run's files, so a
+    // remote runtime's host copy is brought up to date first (plan §3.1 #4).
+    runtimeWorkspaceRoot: (project) => runtimeManager.workspaceRootForDelivery(project),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     // Which workspace a run belongs to, re-derived rather than remembered. It
     // is asked on recovery, so a verification in flight when the control plane
@@ -6131,6 +6133,15 @@ async function readinessRuntime(config, runtimeManager) {
   }
   if (config.runtimeMode !== "kernel") {
     throw readinessFailure("runtime_mode_invalid");
+  }
+  // rt: an AgentBay deployment has no container on this host and no runtime
+  // controller to ask; its provider states what it needs (plan §3.1 #1).
+  if (config.runtimeProvider === "agentbay") {
+    try {
+      return { mode: "kernel", ...(await runtimeManager.provider.readiness()), ...kernel };
+    } catch (error) {
+      throw readinessFailure(error?.code ?? "agentbay_unconfigured");
+    }
   }
   if (config.runtimeSandboxMode === "docker") {
     if (!config.runtimeContainerBin) throw readinessFailure("runtime_container_bin_missing");
