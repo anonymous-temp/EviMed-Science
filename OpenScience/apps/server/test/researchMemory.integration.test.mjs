@@ -111,20 +111,24 @@ test("one account's memory is invisible to another, whatever its text claims", o
   await store.purgeUserMemory(beta);
 });
 
-test("run summaries are recalled only when they match the question", options, async () => {
+test("run summaries belong to the timeline and are never recalled; the project's facts are, when they match", options, async () => {
+  // A run summary held the platform's own earlier answer and was recalled as
+  // if it were memory about the researcher (2026-09-19 proposal §4.1). The
+  // project dossier — facts, analyses, decisions — is what a later question in
+  // the same project draws on, and only when it matches.
   const projectId = "project-recall";
   const summary = (key, question) => store.upsertRecord(alpha, {
     scope: "project", scopeId: projectId, kind: "run_summary", key,
     value: JSON.stringify({ runId: key, question, answer: `关于${question}的长篇回答` }),
-    summary: `Conversation about: ${question}`, origin: "system", status: "active",
-    // A finished run is stored with full confidence and a failed one as more
-    // important than a successful one. Those two numbers alone put the
-    // relevance score above zero, which is what used to make every summary
-    // unconditionally recallable.
-    confidence: 1, importance: 0.7, sensitive: false,
+    summary: question, origin: "system", status: "active", confidence: 1, importance: 0.7, sensitive: false,
   });
   await summary("run.metformin", "二甲双胍的作用机制是什么");
   await summary("run.rituximab", "利妥昔单抗的感染风险");
+  await store.upsertRecord(alpha, {
+    scope: "project", scopeId: projectId, kind: "project_fact", key: "project.metformin.cohort",
+    value: "二甲双胍队列纳入 500 人", summary: "二甲双胍队列规模", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.6, sensitive: false,
+  });
   await store.upsertRecord(alpha, record({
     kind: "preference", key: "pref.language", value: "回答请用中文", summary: "回答请用中文",
     origin: "explicit", status: "active", confidence: 1, importance: 0.6,
@@ -133,19 +137,15 @@ test("run summaries are recalled only when they match the question", options, as
   const greeting = await store.relevant(alpha, "hello", { projectId });
   assert.deepEqual(greeting.map((memo) => memo.kind), ["preference"]);
   const onTopic = await store.relevant(alpha, "二甲双胍还有哪些副作用", { projectId });
-  assert.deepEqual(onTopic.map((memo) => memo.kind).sort(), ["preference", "run_summary"],
-    "a question that names the drug should still reach the earlier run");
-
-  // The projection, not the record: a run summary stores run ids, the model and
-  // timings, and none of those belong in a prompt.
-  const [recalled] = onTopic.filter((memo) => memo.kind === "run_summary");
-  assert.match(recalled.content, /二甲双胍的作用机制是什么/);
-  for (const internal of ["run.metformin", "runId"]) {
-    assert.ok(!recalled.content.includes(internal), `${internal} must not reach the prompt`);
-  }
+  assert.deepEqual(onTopic.map((memo) => memo.kind).sort(), ["preference", "project_fact"],
+    "a question that names the drug reaches the project's fact about it, and never an earlier answer");
   // Scope is a permission: another project never sees these.
   assert.deepEqual((await store.relevant(alpha, "二甲双胍还有哪些副作用", { projectId: "other-project" }))
     .map((memo) => memo.kind), ["preference"]);
+  // And a run summary is not counted as memory in force.
+  const profile = await store.profile(alpha, { projectId });
+  assert.equal(profile.activeCount, 2);
+  assert.equal(profile.episodeCount, 2);
   await store.purgeUserMemory(alpha);
 });
 

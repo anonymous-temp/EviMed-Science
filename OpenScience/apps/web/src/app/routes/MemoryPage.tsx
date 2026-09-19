@@ -17,7 +17,7 @@ import {
 import { webErrorMessage, createResearchMemory, deleteResearchMemory, deleteStructuredMemory, fetchMemoryProfile, fetchMemoryStatus, hasWebApi, listResearchMemories, updateResearchMemory, updateStructuredMemory, type WebMemoryProfile, type WebMemoryStatus, type WebResearchMemory, type WebStructuredMemory } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { formatDateTime } from "@/lib/format";
-import { evidenceSourceLabel, looksInjected, memoryExcerpt } from "@/lib/memoryText";
+import { MEMORY_BASIS_LABELS, evidenceSourceLabel, looksInjected, memoryExcerpt, memoryStrength } from "@/lib/memoryText";
 import { toast } from "@/lib/toast";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -506,8 +506,12 @@ function MemoryProfileOverview({
       {confirming && (
         <ConfirmDialog
           title="确认这条敏感记忆？"
-          body={`生效后，它会在后续研究中被读取并影响回答：${memoryExcerpt(confirming.update.summary || confirming.record.summary || confirming.record.value, 120)}`}
-          confirmLabel="确认生效"
+          // The truth, not a promise the code does not keep: both recall paths
+          // drop a sensitive record whatever its status (memorySubstrate.mjs),
+          // so confirming one never puts it in front of a later run. This used
+          // to say it would be read and would shape answers.
+          body={`确认后它保留为已生效，你可以随时查看、修改或删除；但出于隐私保护，敏感记忆不会被自动调取到后续研究中：${memoryExcerpt(confirming.update.summary || confirming.record.summary || confirming.record.value, 120)}`}
+          confirmLabel="确认保留"
           onConfirm={() => { onUpdate(confirming.record, confirming.update); setConfirming(null); }}
           onCancel={() => setConfirming(null)}
         />
@@ -515,7 +519,9 @@ function MemoryProfileOverview({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-serif text-title font-semibold text-text">EviMed 对你的持续理解</h2>
-          <p className="mt-1 text-ui text-muted">{profile.activeCount} 条已生效 · {profile.pendingCount} 条待确认；每条都有来源证据与版本记录。</p>
+          <p className="mt-1 text-ui text-muted">
+            {profile.activeCount} 条在用{profile.pendingCount > 0 ? ` · ${profile.pendingCount} 条涉及用药安全、等你看过` : ""}；每条都有来源证据与版本记录。
+          </p>
         </div>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
@@ -555,10 +561,10 @@ function MemoryProfileOverview({
                         <p className="text-ui text-text">{memoryExcerpt(record.summary || record.value)}</p>
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-muted">
-                        <span>{record.evidenceCount} 条证据</span>
-                        <span>置信度 {Math.round(record.confidence * 100)}%</span>
-                        {record.sensitive && <span className="text-error">敏感</span>}
-                        {record.status === "pending" && <span className="text-accent">待确认</span>}
+                        {record.provenance && <span className="text-text">{MEMORY_BASIS_LABELS[record.provenance.basis]}</span>}
+                        <span>{memoryStrength(record.provenance, record.evidenceCount)}</span>
+                        {record.sensitive && <span className="text-error">敏感 · 不会被自动调取</span>}
+                        {record.status === "pending" && <span className="text-warn">涉及用药安全，等你看过</span>}
                         {/* A record whose text carries a machine marker was not
                             something this person said. The extractor no longer
                             creates these, and the eleven that existed are

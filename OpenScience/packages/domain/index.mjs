@@ -565,3 +565,14 @@ export {
   gateIssueSeverity,
   summarizeGateNotices,
 } from './src/gateIssueText.mjs'
+
+// memoryVocabulary — 5 exports: the tags the platform writes into a
+// conversation and the identifiers it calls its own machinery by, which a
+// memory write is checked against in code.
+export {
+  PLATFORM_CONTEXT_TAGS,
+  carriesPlatformContext,
+  platformIdentifiersIn,
+  stripPlatformTags,
+  unwrapUserWrappers,
+} from './src/memoryVocabulary.mjs'

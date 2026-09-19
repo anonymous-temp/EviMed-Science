@@ -418,6 +418,38 @@ export async function memoryPausedFor(store, userId, projectId) {
   return { learning: settings.learningPaused || projectPaused, recall: settings.recallPaused || projectPaused };
 }
 
+/**
+ * How a record came to be known and how established it is, counted from its
+ * own evidence — what the memory page shows in place of a percentage.
+ *
+ * The page used to print 「置信度 85%」, a number the extractor typed, over
+ * records that held exactly one piece of evidence (49 of 52 on the acceptance
+ * account, 2026-09-19). What a reader can rely on is countable: who it came
+ * from, how many times it was seen, in how many separate runs and
+ * conversations. `basis` is the provenance label that stays with the record
+ * for good (principle 18): an inference is `inferred` however often it is
+ * observed, and becomes `confirmed` only by its owner's own act.
+ *
+ * @param {any} row @param {any[]} evidence @param {any[]} revisions
+ */
+export function recordProvenance(row, evidence, revisions) {
+  const refs = evidence.map((item) => String(item?.sourceRef ?? ""));
+  // Our own audit vocabulary (the memory routes write this reason), not prose.
+  const confirmed = revisions.some((item) => String(item?.reason ?? "").startsWith("user confirmed"));
+  const basis = row.origin === "manual" ? "edited"
+    : row.origin === "explicit" ? (confirmed ? "confirmed" : "stated")
+      : row.origin === "inferred" ? "inferred"
+        : refs.some((ref) => /\/tools\/\d+$/.test(ref)) ? "tool" : "assistant";
+  return {
+    basis,
+    observations: evidence.length,
+    // One stamp per run by construction (the extractor stamps an observation
+    // with its run's terminal time), so distinct stamps are distinct runs.
+    runs: new Set(evidence.map((item) => item?.observedAt).filter(Boolean)).size,
+    conversations: new Set(refs.map((ref) => /^sessions\/([^/]+)\//.exec(ref)?.[1]).filter(Boolean)).size,
+  };
+}
+
 function publicRecord(row) {
   const evidence = Array.isArray(row.evidence) ? row.evidence : [];
   const revisions = Array.isArray(row.revisions) ? row.revisions : [];
@@ -440,6 +472,7 @@ function publicRecord(row) {
     updatedAt: memoryInstant(row.updated_at),
     lastConfirmedAt: memoryInstant(row.last_confirmed_at),
     expiresAt: memoryInstant(row.expires_at),
+    provenance: recordProvenance(row, evidence, revisions),
     evidence: evidence.map((item) => ({
       sourceType: String(item?.sourceType ?? ""),
       sourceRef: String(item?.sourceRef ?? ""),
@@ -509,6 +542,17 @@ async function transactionInstant(client) {
   return memoryInstant(result.rows[0]?.now);
 }
 
+/**
+ * How much of its weight an inference still carries: 1 when just observed,
+ * falling linearly to 0 at its expiry. Unknown times and no TTL keep it whole.
+ * @param {string | null} updatedAt @param {number} now @param {number} ttlMs
+ */
+export function inferenceFreshness(updatedAt, now, ttlMs) {
+  const at = Date.parse(String(updatedAt ?? ""));
+  if (!ttlMs || !Number.isFinite(at)) return 1;
+  return Math.max(0, Math.min(1, 1 - (now - at) / ttlMs));
+}
+
 const recordColumns = "user_id,id,scope,scope_id,kind,key,value,summary,origin,status,confidence,importance,"
   + "sensitive,evidence,revisions,version,created_at,updated_at,last_confirmed_at,expires_at";
 
@@ -527,6 +571,7 @@ export class ResearchMemoryStore {
     this.jobs = jobs ?? null;
     this.contextLimit = Math.max(0, Math.min(20, Number(config?.memoryContextLimit ?? 8)));
     this.contextMaxChars = Math.max(0, Math.min(100_000, Number(config?.memoryContextMaxChars ?? 20_000)));
+    this.inferredTtlMs = Math.max(0, Number(config?.memoryInferredTtlDays ?? 90)) * 24 * 60 * 60 * 1_000;
   }
 
   /** The store exists exactly when the control-plane database does. There is no
@@ -946,6 +991,10 @@ export class ResearchMemoryStore {
     });
     const now = Date.now();
     const structured = records
+      // A run summary is the timeline's, not memory the next prompt is handed
+      // (2026-09-19 proposal §4.1): it held the platform's own earlier answer,
+      // and recalled it as if it were something known about the researcher.
+      .filter((record) => record.kind !== "run_summary")
       .filter((record) => !record.sensitive)
       .filter((record) => !record.expiresAt || Date.parse(record.expiresAt) > now)
       .filter((record) => record.scope === "user"
@@ -956,7 +1005,11 @@ export class ResearchMemoryStore {
         const haystack = `${record.key} ${content}`.toLowerCase();
         const matches = terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
         const durable = DURABLE_RECALL_KINDS.has(record.kind);
-        const score = matches + (durable ? 0.75 : 0) + record.importance + record.confidence * 0.5;
+        // An inference weighs less the longer it goes unobserved, on its way
+        // to its expiry: a pattern from one week months ago should not outrank
+        // one seen yesterday. A statement the researcher made does not fade.
+        const freshness = record.origin === "inferred" ? inferenceFreshness(record.updatedAt, now, this.inferredTtlMs) : 1;
+        const score = matches + (durable ? 0.75 * freshness : 0) + record.importance + record.confidence * 0.5;
         return {
           // Only durable identity memories apply to every question. Everything
           // else has to earn recall with a query-term match: importance and
@@ -970,6 +1023,7 @@ export class ResearchMemoryStore {
             memoryType: "structured",
             kind: record.kind,
             scope: record.scope,
+            origin: record.origin,
             confidence: record.confidence,
             importance: record.importance,
           },
@@ -1000,11 +1054,16 @@ export class ResearchMemoryStore {
       || (record.scope === "project" && record.scopeId === projectId));
     const groups = Object.fromEntries(MEMORY_KINDS.map((kind) => [kind, []]));
     for (const record of visible) groups[record.kind].push(record);
+    // A run summary is an entry on the timeline, not something in force about
+    // the researcher: 22 of the acceptance account's "52 已生效" were run
+    // summaries the page never showed (2026-09-19). They are counted apart.
+    const memories = visible.filter((record) => record.kind !== "run_summary");
     return {
       records: visible,
       groups,
-      activeCount: visible.filter((record) => record.status === "active").length,
-      pendingCount: visible.filter((record) => record.status === "pending").length,
+      activeCount: memories.filter((record) => record.status === "active").length,
+      pendingCount: memories.filter((record) => record.status === "pending").length,
+      episodeCount: visible.length - memories.length,
     };
   }
 

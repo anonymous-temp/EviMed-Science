@@ -1692,16 +1692,16 @@ export function createWebApiApp(overrides = {}) {
         // and not unchecked".
         ]).catch(() => {});
       }
-      // A record that was stored and then parked as `pending` looks, from the
-      // outside, exactly like memory that is not learning: it is not recalled,
-      // and nothing anywhere said why. The demotion is unchanged — see
-      // demotionReason in memoryIntelligence.mjs for why it stays — this only
-      // makes it legible. No `unchecked` flag: parking a memory says nothing
+      // The one kind of record held for its owner (checkpointReason in
+      // memoryIntelligence.mjs): a lasting memory naming a clinical-safety
+      // medicine. Everything else takes effect at once, labelled. Said on the
+      // run because a held record is not recalled, and silence would read as
+      // memory not learning. No `unchecked` flag: holding a memory says nothing
       // about whether the run's own deliverables were checked.
       if (memoryResult.pending > 0) {
-        const sentence = `记忆已记录但暂缓生效 ${memoryResult.pending} 条：`
-          + memoryResult.pendingReasons.map((item) => `${item.count} 条因${item.text}`).join("；")
-          + "。记录与证据都已保存，可在记忆管理中确认后启用。";
+        const sentence = `有 ${memoryResult.pending} 条长期记忆等你看过再用：`
+          + memoryResult.pendingReasons.map((item) => `${item.count} 条${item.text}`).join("；")
+          + "。记录与证据都已保存，可在记忆胶囊中确认或删除。";
         await agentRuns.appendQualityNotices(project, run.id, [
           runNotice("memory_pending", sentence, { detail: sentence }),
         ]).catch(() => {});

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { evidenceSourceLabel, looksInjected, memoryExcerpt, readableMemory } from "./memoryText";
+import { PLATFORM_CONTEXT_TAGS } from "@evimed/domain";
+import { evidenceSourceLabel, looksInjected, memoryExcerpt, memoryStrength, readableMemory } from "./memoryText";
 
 describe("a stored memory that is really a machine's own text", () => {
   // Eleven of these were active on the operator's account on 2026-09-16, each
@@ -27,6 +28,34 @@ describe("a stored memory that is really a machine's own text", () => {
   it("is case-insensitive and survives a repeated marker", () => {
     expect(looksInjected("<EVIMED-BRIEF>x</EVIMED-BRIEF>")).toBe(true);
     expect(readableMemory("<system-reminder>a</system-reminder> b <system-reminder>c</system-reminder>")).toBe("a b c");
+  });
+
+  it("knows every tag the platform writes, not the four it used to", () => {
+    // The page's list is the domain's list; a tag the platform adds is
+    // recognised here the day the domain names it.
+    for (const entry of PLATFORM_CONTEXT_TAGS.filter((item) => item.role === "injected")) {
+      expect(looksInjected(`<${entry.tag} index="1">x</${entry.tag}>`)).toBe(true);
+    }
+    expect(looksInjected("<evimed-autopilot-episode>ep_1</evimed-autopilot-episode>")).toBe(true);
+  });
+
+  it("treats a correction the reader typed as theirs, and still drops the envelope", () => {
+    const correction = "<evimed-correction>剂量按肾功能调整</evimed-correction>";
+    expect(looksInjected(correction)).toBe(false);
+    expect(readableMemory(correction)).toBe("剂量按肾功能调整");
+  });
+});
+
+describe("how established a memory is", () => {
+  it("is counted from its evidence, never a percentage", () => {
+    expect(memoryStrength({ basis: "stated", observations: 3, runs: 2, conversations: 2 })).toBe("你说过 3 次 · 2 次对话");
+    expect(memoryStrength({ basis: "inferred", observations: 5, runs: 4, conversations: 3 })).toBe("在 4 次任务中观察到");
+    expect(memoryStrength({ basis: "confirmed", observations: 1, runs: 1, conversations: 1 })).toBe("你确认过 · 观察到 1 次");
+    expect(memoryStrength({ basis: "tool", observations: 2, runs: 1, conversations: 1 })).toBe("来自工具结果 · 2 处依据");
+    for (const line of [
+      memoryStrength({ basis: "stated", observations: 1, runs: 1, conversations: 1 }),
+      memoryStrength(undefined, 2),
+    ]) expect(line).not.toMatch(/%|置信/);
   });
 });
 

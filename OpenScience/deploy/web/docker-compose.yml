@@ -291,6 +291,10 @@ services:
       # Comma-separated project id prefixes extraction never writes for, e.g.
       # `eval-memory-ablation` so a paired evaluation's arms hold still.
       OPEN_SCIENCE_MEMORY_EXTRACTION_EXCLUDED_PROJECT_PREFIXES:
+      # mem stream: how long an inferred memory lives after it was last
+      # observed (config.mjs `memoryInferredTtlDays`). Value-less: unset keeps
+      # the code's default.
+      OPEN_SCIENCE_MEMORY_INFERRED_TTL_DAYS:
       # How many times the control plane sends a finished package back to the
       # run after its own gate has read it. Unset is 0: findings are attached to
       # the delivery instead (config.mjs `gateRepairRounds`).

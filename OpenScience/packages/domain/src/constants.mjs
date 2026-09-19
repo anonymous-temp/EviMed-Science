@@ -28,7 +28,14 @@ export const MEMORY_STRENGTH_TAU_DAYS = 30
 /** Reflection fires when accumulated importance passes this (event-driven, not timed). */
 export const MEMORY_REFLECTION_IMPORTANCE_THRESHOLD = 150
 
-/** A fact is promoted from session memory to capsule after this many occurrences across runs. */
+/**
+ * A fact is promoted from session memory to capsule after this many occurrences across runs.
+ *
+ * No consumer since 2026-09-20: research memory no longer holds an inference
+ * back until it has been observed this often (owner ruling 2026-09-19 — it
+ * takes effect at once, labelled as an inference, and fades unless seen again).
+ * Kept as the spec's number for the capsule promotion it was written for.
+ */
 export const MEMORY_PROMOTION_MIN_OCCURRENCES = 3
 
 /** Distinct runs a fact must appear in before promotion. */

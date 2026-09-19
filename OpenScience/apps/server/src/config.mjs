@@ -1370,6 +1370,15 @@ export function loadConfig(overrides = {}) {
     memoryRunSummaryTtlDays: Number(
       overrides.memoryRunSummaryTtlDays ?? process.env.OPEN_SCIENCE_MEMORY_RUN_SUMMARY_TTL_DAYS ?? 90,
     ),
+    // mem stream (2026-09-20): how long an inferred memory lives after it was
+    // last observed. With no confirmation step (owner ruling 2026-09-19) an
+    // inference takes effect at once, so what keeps "one stressful week" from
+    // hardening into the profile is that a pattern not seen again fades; each
+    // re-observation extends it, and a statement the researcher made does not
+    // fade at all. 0 = never.
+    memoryInferredTtlDays: Number(
+      overrides.memoryInferredTtlDays ?? process.env.OPEN_SCIENCE_MEMORY_INFERRED_TTL_DAYS ?? 90,
+    ),
     knowledgeChunkChars: Number(
       overrides.knowledgeChunkChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_CHUNK_CHARS ?? 1_600,
     ),

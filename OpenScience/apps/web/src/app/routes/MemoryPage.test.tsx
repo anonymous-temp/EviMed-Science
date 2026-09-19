@@ -276,9 +276,14 @@ describe("a stored brief is not a preference, and a sensitive record is not acce
     render(<MemoryRouter><MemoryPage /></MemoryRouter>);
     await userEvent.click(await screen.findByRole("button", { name: /确认/ }));
     expect(await screen.findByText("确认这条敏感记忆？")).toBeInTheDocument();
+    // The dialog tells the truth: both recall paths drop a sensitive record
+    // whatever its status, so confirming it never puts it in front of a run.
+    // It used to promise that the record "will be read and shape answers".
+    expect(screen.getByText(/敏感记忆不会被自动调取到后续研究中/)).toBeInTheDocument();
+    expect(screen.queryByText(/会在后续研究中被读取/)).not.toBeInTheDocument();
     expect(mocks.updateStructuredMemory).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getByRole("button", { name: "确认生效" }));
+    await userEvent.click(screen.getByRole("button", { name: "确认保留" }));
     await waitFor(() => expect(mocks.updateStructuredMemory).toHaveBeenCalledWith(
       expect.objectContaining({ id: "mem_sensitive" }),
       expect.objectContaining({ status: "active" }),

@@ -586,3 +586,25 @@ test("one user's identity never collides with another's, and never leaks the id"
   assert.match(openVikingUserId(USER), /^u-[a-f0-9]{24}$/);
   assert.match(openVikingPeerId(PROJECT), /^p-[a-f0-9]{24}$/);
 });
+
+test("a run summary belongs to the timeline: never published to the index, never recalled from it", async () => {
+  // It held the platform's own earlier answer, and recall served it as if it
+  // were something known about the researcher (2026-09-19 proposal §4.1).
+  const summary = record({
+    id: "run1", scope: "project", scopeId: PROJECT, kind: "run_summary", key: "run.question.abc",
+    value: JSON.stringify({ question: "SGLT2 在 CKD 中的获益", answer: "之前的长篇回答" }), origin: "system",
+  });
+  const fact = record({ id: "fact1", scope: "project", scopeId: PROJECT, kind: "project_fact", key: "cohort", value: "队列 500 人" });
+  const index = fakeIndex([
+    hit(memoryUri(USER, { scope: "project", scopeId: PROJECT, kind: "run_summary", recordId: "run1" }), 0.9),
+    hit(memoryUri(USER, { scope: "project", scopeId: PROJECT, kind: "project_fact", recordId: "fact1" }), 0.8),
+  ]);
+  const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore([summary, fact]), openViking: index });
+
+  const recalled = await substrate.recall(USER, "SGLT2 CKD", { projectId: PROJECT });
+  assert.deepEqual(recalled.map((row) => row.id), ["record:fact1"], "an index that still nominates one gets nothing for it");
+
+  const rebuilt = await substrate.rebuild(USER);
+  assert.equal(rebuilt.written, 1);
+  assert.ok(index.calls.write.every((call) => !call.uri.endsWith("/run1.md")), "and a rebuild publishes no copy of one");
+});
