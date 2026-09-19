@@ -80,6 +80,31 @@ test("a device's push token moves with the device, and the previous owner's copy
   await assert.rejects(app.bind(owner, { platform: "ios", token: "has space" }), { code: "push_token_invalid" });
 });
 
+test("removing a device takes an app binding only: another channel's binding named by its id stays", options, async () => {
+  // Security review 2026-09-20: DELETE /api/im/app/push-tokens/:id deleted
+  // whatever binding of the account the id named, then answered 404 when it
+  // was not a device — a Feishu bot went with it.
+  const { ImService } = await import("../src/imService.mjs");
+  const { binding: bot } = await store.replaceBinding(owner, "feishu", { externalId: "ou_keep", credentialRef: "channel.feishu",
+    metadata: { appId: `cli_${randomUUID().replaceAll("-", "").slice(0, 16)}`, tenantBrand: "feishu" } });
+  const app = createAppChannel({ store, credentials });
+  const device = await app.bind(owner, { platform: "android", token: `push-${randomUUID()}` });
+  const tablet = await app.bind(owner, { platform: "android", token: `push-${randomUUID()}` });
+  const service = new ImService({ config: { imEnabled: true, channelEnabled: { app: true } }, database, credentials, notifications: null,
+    users: {}, agentRuns: {}, runtimeManager: {}, dispatchRun: async () => {}, steerRun: async () => {},
+    store, classifier: { classify: async () => ({}) }, write: () => {} });
+  try {
+    await assert.rejects(service.removePushToken({ id: owner }, bot.id), { status: 404, code: "push_token_not_found" });
+    assert.equal((await store.bindingById(bot.id))?.channel, "feishu", "the bot is still bound");
+    await assert.rejects(service.removePushToken({ id: other }, device.id), { code: "push_token_not_found" }, "and never another account's device");
+    assert.deepEqual(await service.removePushToken({ id: owner }, device.id), { removed: true });
+    assert.equal(await store.bindingById(device.id), null);
+    assert.equal(await store.deleteBinding(owner, bot.id, { channel: "app" }), null);
+    assert.equal((await store.deleteBinding(owner, tablet.id, { channel: "app" }))?.id, tablet.id);
+    assert.equal((await store.bindingById(bot.id))?.channel, "feishu");
+  } finally { await service.close(); }
+});
+
 test("chats remember a project, lose it when the project goes, and keep one session per project", options, async () => {
   const [binding] = await store.bindingsFor(owner, "feishu");
   const chat = await store.ensureChat({ bindingId: binding.id, chatId: "oc_group", userId: owner, chatType: "group" });

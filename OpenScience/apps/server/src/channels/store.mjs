@@ -346,9 +346,16 @@ export class ChannelStore {
     });
   }
 
-  /** @param {string} userId @param {string} id */
-  async deleteBinding(userId, id) {
-    const { rows } = await this.query("DELETE FROM evimed_channels.bindings WHERE user_id=$1 AND id=$2 RETURNING *", [userId, id]);
+  /**
+   * One of the account's bindings, of the given channel when one is named:
+   * the channel is part of the delete, not a check after it — the app's
+   * device route once deleted a Feishu binding by id and then answered 404
+   * (security review 2026-09-20).
+   * @param {string} userId @param {string} id @param {{ channel?: string | null }} [options]
+   */
+  async deleteBinding(userId, id, { channel = null } = {}) {
+    const { rows } = await this.query(`DELETE FROM evimed_channels.bindings WHERE user_id=$1 AND id=$2
+      AND ($3::text IS NULL OR channel=$3) RETURNING *`, [userId, id, channel]);
     return bindingRecord(rows[0]);
   }
 
