@@ -9,8 +9,8 @@ import { createServer } from "node:http";
 import test from "node:test";
 
 import {
-  createMemorySessionRoutes, mountedMethodsFor, sessionBackground, sessionDispatchNotes, setAsideMethodName, setAsideMethodNames,
-  setAsideMethodsNotice,
+  MAX_BACKGROUND_MEMORIES, createMemorySessionRoutes, mountedMethodsFor, sessionBackground, sessionDispatchNotes, setAsideMethodName,
+  setAsideMethodNames, setAsideMethodsNotice,
 } from "../src/memorySessions.mjs";
 import { sendError } from "../src/security.mjs";
 
@@ -36,10 +36,11 @@ function memoryDouble() {
       states.set(sessionId, next);
       return structuredClone(next);
     },
-    async getRecord(_userId, id) {
-      if (id !== "rec_1") throw Object.assign(new Error("gone"), { code: "memory_not_found" });
-      return { id, kind: "preference", scope: "user", summary: "证据用表格呈现", value: "", status: "active", version: 3,
-        provenance: { basis: "stated", observations: 2, runs: 2, conversations: 1 } };
+    recordSummariesCalls: /** @type {any[]} */ ([]),
+    async recordSummaries(_userId, ids) {
+      this.recordSummariesCalls.push(ids);
+      return ids.filter((id) => id === "rec_1").map((id) => ({ id, kind: "preference", scope: "user", summary: "证据用表格呈现", value: "",
+        status: "active", version: 3, provenance: { basis: "stated", observations: 2, runs: 2, conversations: 1 } }));
     },
     async list() { return [{ id: "note_1", content: "肾病随访笔记" }]; },
     recentChangesCalls: /** @type {any[]} */ ([]),
@@ -117,6 +118,40 @@ test("a conversation with no run yet has nothing to list and asks nothing of the
   const background = await sessionBackground({ researchMemory, agentRuns, capsules, mountedMethods: null }, user, project, "ses_new");
   assert.deepEqual([background.runs, background.memories, background.methods, background.written], [[], [], [], []]);
   assert.equal(researchMemory.recentChangesCalls.length, 0);
+});
+
+test("the panel lists the capsule methods recorded at the last launch and selects none again; only an unlaunched project is selected", async () => {
+  // Security review 2026-09-20: the panel selected every capsule again on each
+  // read — up to eight capsules of a thousand entries of 20,000 characters.
+  let selections = 0;
+  const select = async () => {
+    selections += 1;
+    return [{ id: "fact_live", directoryName: "fact_live", capsuleId: "cap_1", factKind: "workflow", content: "现在会选到的方法" }];
+  };
+  const runtimeManager = {
+    key: (/** @type {any} */ subject) => `${subject.userId}:${subject.id}`,
+    lastMountedLearnedMethods: new Map(),
+    lastMountedCapsuleMethods: new Map([["usr_1:prj_1", [{ id: "fact_1", directoryName: "fact_1", capsuleId: "cap_1", factKind: "workflow",
+      content: "先查肾功能再给剂量" }]]]),
+  };
+  const recorded = await mountedMethodsFor({ runtimeManager, capsules, select }, project);
+  assert.equal(selections, 0, "what the launch recorded is what is mounted");
+  assert.deepEqual(recorded.map((method) => [method.name, method.label, method.revision]), [["method-fact_1", "先查肾功能再给剂量", 4]]);
+  const unlaunched = await mountedMethodsFor({ runtimeManager: { ...runtimeManager, lastMountedCapsuleMethods: new Map() }, capsules, select }, project);
+  assert.equal(selections, 1);
+  assert.deepEqual(unlaunched.map((method) => method.name), ["method-fact_live"]);
+});
+
+test("a long conversation lists its most recent recalls, their records read in one light query", async () => {
+  const researchMemory = memoryDouble();
+  const recalled = Array.from({ length: MAX_BACKGROUND_MEMORIES + 50 }, (_, index) => ({ id: `record:rec_${index}`, kind: "preference", scope: "user" }));
+  const long = [{ id: "run_long", sessionId: "ses_long", status: "succeeded", startedAt: "2026-09-20T03:00:00.000Z", recalledMemories: recalled }];
+  const background = await sessionBackground({ researchMemory, agentRuns: { list: async () => structuredClone(long) }, capsules, mountedMethods: null },
+    user, project, "ses_long");
+  assert.equal(background.memories.length, MAX_BACKGROUND_MEMORIES);
+  assert.equal(background.memories[0].id, "rec_50", "the earliest recalls give way");
+  assert.equal(researchMemory.recordSummariesCalls.length, 1);
+  assert.equal(researchMemory.recordSummariesCalls[0].length, MAX_BACKGROUND_MEMORIES);
 });
 
 test("mounted methods name what the run sees, with the revision each retire needs", async () => {

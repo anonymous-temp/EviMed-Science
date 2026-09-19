@@ -201,11 +201,14 @@ export function createFeishuChannel({ loadSdk, store, credentials, scrubber = ne
     /**
      * Turn a completed scan into the account's binding. The credentials are
      * checked against Feishu before anything is stored: a secret that cannot
-     * fetch the bot's own identity is not worth keeping.
+     * fetch the bot's own identity is not worth keeping. `proceed` runs after
+     * that check and before the first write, and may refuse by throwing: the
+     * caller's last word on whether the scan still stands.
      * @param {string} userId
      * @param {{ appId: string, appSecret: string, ownerOpenId: string, tenantBrand?: 'feishu' | 'lark' }} grant
+     * @param {{ proceed?: () => Promise<void> | void }} [options]
      */
-    async bind(userId, grant) {
+    async bind(userId, grant, { proceed } = {}) {
       if (!store || !credentials) throw new HttpError(503, "channel_store_unavailable", "Channel storage is unavailable.");
       const appId = String(grant?.appId ?? "");
       const appSecret = String(grant?.appSecret ?? "");
@@ -217,6 +220,7 @@ export function createFeishuChannel({ loadSdk, store, credentials, scrubber = ne
       scrubber.add(appSecret);
       const probe = new FeishuClient({ sdk: await loadSdk(), appId, appSecret, domain: tenantBrand, scrubber });
       const bot = await probe.botInfo();
+      await proceed?.();
       await credentials.setChannelSecret(userId, FEISHU_CREDENTIAL, appSecret);
       const { binding, replaced } = await store.replaceBinding(userId, "feishu", {
         externalId: ownerOpenId,

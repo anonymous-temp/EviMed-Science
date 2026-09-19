@@ -136,6 +136,8 @@ const operatorLevers = {
   OPEN_SCIENCE_IM_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_IM_PROGRESS_INTERVAL_MS: ["open-science-web"],
   OPEN_SCIENCE_IM_CONVERSATION_IDLE_MINUTES: ["open-science-web"],
+  // sec2 (2026-09-20): the per-chat inbound limit is a lever a deployment tunes.
+  OPEN_SCIENCE_IM_INBOUND_PER_MINUTE: ["open-science-web"],
   OPEN_SCIENCE_CHANNEL_WECHAT_SERVICE_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_CHANNEL_WECHAT_CLAWBOT_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_CHANNEL_EMAIL_ENABLED: ["open-science-web"],

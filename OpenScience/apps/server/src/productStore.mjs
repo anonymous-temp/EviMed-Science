@@ -11,6 +11,33 @@ function record(row) {
   } : null;
 }
 
+/**
+ * The payload column, or the part of it a caller named (`ProductDocuments.list`
+ * `fields`). Keys and lengths travel as parameters from `$first` on.
+ * @param {Record<string, true | number> | null} fields @param {number} first
+ * @returns {{ sql: string, values: unknown[] }}
+ */
+function payloadProjection(fields, first) {
+  if (fields == null) return { sql: "payload", values: [] };
+  const entries = typeof fields === "object" && !Array.isArray(fields) ? Object.entries(fields) : [];
+  if (entries.length < 1 || entries.length > 20 || entries.some(([key, size]) => !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key)
+    || !(size === true || (Number.isSafeInteger(size) && Number(size) >= 1 && Number(size) <= 100_000)))) {
+    throw new HttpError(400, "product_fields_invalid", "Invalid record fields.");
+  }
+  /** @type {unknown[]} */
+  const values = [];
+  const pairs = entries.map(([key, size]) => {
+    values.push(key);
+    const name = `$${first + values.length - 1}::text`;
+    if (size === true) return `${name},payload->${name}`;
+    values.push(size);
+    const length = `$${first + values.length - 1}::integer`;
+    return `${name},CASE WHEN jsonb_typeof(payload->${name})='string' THEN to_jsonb(left(payload->>${name},${length})) ELSE payload->${name} END`;
+  });
+  // A key the payload lacks comes back as null.
+  return { sql: `jsonb_build_object(${pairs.join(",")})`, values };
+}
+
 /** @param {any} client @param {any} row */
 async function saveRevision(client, row) {
   await client.query(`INSERT INTO evimed_product.revisions(user_id,kind,id,revision,payload,deleted_at)
@@ -85,11 +112,18 @@ export class ProductDocuments {
     return record(result.rows[0]);
   }
 
-  /** @param {string} userId @param {string} kind
-   * @param {{ limit?: number, cursor?: string|null, projectId?: string|null, filter?: Record<string,any>, deleted?: boolean }} options */
-  async list(userId, kind, { limit = 50, cursor = null, projectId = undefined, filter = {}, deleted = false } = {}) {
+  /**
+   * `fields` narrows each payload to what a caller reads: a key with `true`
+   * comes whole, a key with a number comes as that many characters of its
+   * text. A list of facts is otherwise up to a hundred payloads of 20,000
+   * characters each (security review 2026-09-20).
+   * @param {string} userId @param {string} kind
+   * @param {{ limit?: number, cursor?: string|null, projectId?: string|null, filter?: Record<string,any>, deleted?: boolean,
+   *   fields?: Record<string, true | number> | null }} options */
+  async list(userId, kind, { limit = 50, cursor = null, projectId = undefined, filter = {}, deleted = false, fields = null } = {}) {
     productInteger(limit, 1, 100);
     if (typeof deleted !== "boolean") throw new HttpError(400, "product_filter_invalid", "Invalid deletion filter.");
+    const projection = payloadProjection(fields, 10);
     const filterJson = productPayload(filter);
     if (Buffer.byteLength(filterJson) > 8192) throw new HttpError(400, "product_filter_invalid", "The record filter is too large.");
     let after = null;
@@ -103,12 +137,14 @@ export class ProductDocuments {
     }
     if (projectId != null) productId(projectId, "project");
     await migrateProductStore(this.database);
-    const result = await this.database.query(`SELECT * FROM evimed_product.documents
+    const columns = fields == null ? "*" : `user_id,kind,id,project_id,${projection.sql} AS payload,revision,created_at,updated_at,deleted_at`;
+    const result = await this.database.query(`SELECT ${columns} FROM evimed_product.documents
       WHERE user_id=$1 AND kind=$2 AND (deleted_at IS NOT NULL)=$9::boolean
       AND (NOT $3::boolean OR project_id IS NOT DISTINCT FROM $4::text)
       AND ($5::timestamptz IS NULL OR (created_at,id)<($5::timestamptz,$6::text)) AND payload @> $8::jsonb
       ORDER BY created_at DESC,id DESC LIMIT $7`,
-    [productId(userId, "user"), productKind(kind), projectId !== undefined, projectId ?? null, after?.[0] ?? null, after?.[1] ?? null, limit + 1, filterJson, deleted]);
+    [productId(userId, "user"), productKind(kind), projectId !== undefined, projectId ?? null, after?.[0] ?? null, after?.[1] ?? null, limit + 1, filterJson, deleted,
+      ...projection.values]);
     const items = result.rows.slice(0, limit).map(record);
     const last = items.at(-1);
     return { items, nextCursor: result.rows.length > limit && last

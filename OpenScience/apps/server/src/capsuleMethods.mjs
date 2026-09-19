@@ -186,7 +186,14 @@ export function renderCapsuleMethod(method) {
  * against memory poisoning rules out. It stays recallable context, labelled
  * as the assistant's note. What mounts is what the researcher wrote
  * (`explicit`) and what a received pack brought once it was scanned and
- * enabled (`system`).
+ * enabled (`system`) — an entry a pack's sharer had as a runtime note stays
+ * `inferred` across the transfer (`capsuleTransferService.mjs`), so a share
+ * cannot turn one into a method either.
+ *
+ * And an entry of a received pack that no model verdict has covered
+ * (`unscanned`: the scan's model call failed or never ran) is context until a
+ * later scan judges it: the pack is still in force, it just cannot put an
+ * unjudged SKILL.md into runs (security review 2026-09-20).
  *
  * @param {any} entry
  * @returns {boolean}
@@ -195,6 +202,7 @@ function isMountableEntry(entry) {
   const payload = entry?.payload;
   return payload?.status === MOUNTABLE_STATUS
     && payload.origin !== "inferred"
+    && payload.unscanned !== true
     && CAPSULE_WORK_STYLE_FACT_KINDS.includes(String(payload.factKind))
     && !UNMOUNTABLE_LAYERS.includes(String(payload.layer ?? ""))
     && typeof payload.content === "string"
@@ -369,8 +377,13 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
  *   trialMethodIds?: readonly string[], frozenMethods?: {capsuleMethods: any[], learnedMethods: any[]} | null,
  *   writeFile?: typeof writeFileAtomicNoFollow }} options
+ * `capsule` is what the capsule half mounted, as the conversation panel shows
+ * it (`memorySessions.mjs`): recorded here so a read of the panel does not
+ * select the whole capsule again.
+ *
  * @returns {Promise<{ directory: string, count: number, bytes: number,
- *   learned: {id: string, name: string, digest: string, trial?: boolean}[] }>}
+ *   learned: {id: string, name: string, digest: string, trial?: boolean}[],
+ *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
  */
 export async function materializeCapsuleMethods({
   capsules,
@@ -409,7 +422,10 @@ export async function materializeCapsuleMethods({
     digest: method.digest,
     ...(method.trial ? { trial: true } : {}),
   }));
-  if (methods.length === 0) return { directory, count: 0, bytes: 0, learned };
+  // The panel shows at most 160 characters of a method; a prefix is all it keeps.
+  const capsule = capsuleMethods.map((method) => ({ id: method.id, directoryName: method.directoryName, capsuleId: method.capsuleId,
+    factKind: method.factKind, content: String(method.content).slice(0, 1000) }));
+  if (methods.length === 0) return { directory, count: 0, bytes: 0, learned, capsule };
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   await assertNoSymlinkPath(project.rootDir, directory);
   let bytes = 0;
@@ -436,5 +452,5 @@ export async function materializeCapsuleMethods({
     }
     bytes += method.bytes;
   }
-  return { directory, count: methods.length, bytes, learned };
+  return { directory, count: methods.length, bytes, learned, capsule };
 }

@@ -345,9 +345,10 @@ export class NotificationService {
   constructor(database) {
     this.database = database;
     // Set by the IM module when it is composed (X6): the channel registry the
-    // preferences are validated against, and the hook that tells it an item
-    // changed. Absent, the inbox is exactly what it was — in-app only.
-    /** @type {{ registry: any, onChange: (item: any) => void } | null} */
+    // preferences are validated against, the hook that tells it an item
+    // changed, and the one that carries out an action it put on its own
+    // notice. Absent, the inbox is exactly what it was — in-app only.
+    /** @type {{ registry: any, onChange: (item: any) => void, onAction?: (item: any, actionId: string) => Promise<void> } | null} */
     this.channels = null;
   }
 
@@ -355,7 +356,7 @@ export class NotificationService {
    * Attach the channel registry and the push hook. Other modules never import
    * a channel adapter; they create inbox items, and this is where an item
    * becomes a push.
-   * @param {{ registry: any, onChange: (item: any) => void }} channels
+   * @param {{ registry: any, onChange: (item: any) => void, onAction?: (item: any, actionId: string) => Promise<void> }} channels
    */
   attachChannels(channels) {
     this.channels = channels;
@@ -590,6 +591,12 @@ export class NotificationService {
     const item = await this.get(userId, id);
     const action = productId(actionId, "action");
     if (!item.actions.some((candidate) => candidate.id === action)) throw new HttpError(400, "notification_action_invalid", "Inbox action is unavailable.");
+    // An action the IM module put on its own notice (「解除绑定」) is carried
+    // out before the item resolves, so a failure leaves it open to try again;
+    // an item already resolved, or read at another revision, is not acted on.
+    if (this.channels?.onAction && !item.resolvedAt && item.revision === expectedRevision) {
+      await this.channels.onAction(item, action);
+    }
     return this.#update(userId, id, expectedRevision,
       `read_at=coalesce(read_at,clock_timestamp()),resolved_at=clock_timestamp(),resolution=jsonb_build_object('actionId',$4::text,'source','user')`, action, true);
   }
