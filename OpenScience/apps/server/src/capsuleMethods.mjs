@@ -186,7 +186,14 @@ export function renderCapsuleMethod(method) {
  * against memory poisoning rules out. It stays recallable context, labelled
  * as the assistant's note. What mounts is what the researcher wrote
  * (`explicit`) and what a received pack brought once it was scanned and
- * enabled (`system`).
+ * enabled (`system`) — an entry a pack's sharer had as a runtime note stays
+ * `inferred` across the transfer (`capsuleTransferService.mjs`), so a share
+ * cannot turn one into a method either.
+ *
+ * And an entry of a received pack that no model verdict has covered
+ * (`unscanned`: the scan's model call failed or never ran) is context until a
+ * later scan judges it: the pack is still in force, it just cannot put an
+ * unjudged SKILL.md into runs (security review 2026-09-20).
  *
  * @param {any} entry
  * @returns {boolean}
@@ -195,6 +202,7 @@ function isMountableEntry(entry) {
   const payload = entry?.payload;
   return payload?.status === MOUNTABLE_STATUS
     && payload.origin !== "inferred"
+    && payload.unscanned !== true
     && CAPSULE_WORK_STYLE_FACT_KINDS.includes(String(payload.factKind))
     && !UNMOUNTABLE_LAYERS.includes(String(payload.layer ?? ""))
     && typeof payload.content === "string"

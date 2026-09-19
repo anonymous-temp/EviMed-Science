@@ -26,9 +26,11 @@ export const CAPSULE_SCAN_REASONS: Record<string, string> = {
   instructs_agent: "在指挥助手做研究方法以外的事",
 };
 
-/** How far the language half of the scan got. */
+/** How far the language half of the scan got. What it did not judge stays in
+ *  force as context but is never loaded into a run as a method until a later
+ *  scan (the next trial or enable) has judged it. */
 export const CAPSULE_SCAN_MODEL_STATUS: Record<string, string> = {
   ok: "签名、格式和内容检查都已完成",
-  partial: "签名和格式检查已完成；内容检查只完成了一部分",
-  unavailable: "签名和格式检查已完成；内容检查暂时不可用",
+  partial: "签名和格式检查已完成；内容检查只完成了一部分（没检查到的方法先只作参考、不载入运行，下次试用或启用时再检查）",
+  unavailable: "签名和格式检查已完成；内容检查暂时不可用（其中的方法先只作参考、不载入运行，下次试用或启用时再检查）",
 };
