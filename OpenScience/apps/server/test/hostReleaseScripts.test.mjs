@@ -14,7 +14,7 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 const opsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../scripts/ops");
-const scripts = ["host-delta-release.sh", "host-release-switch.sh"];
+const scripts = ["host-delta-release.sh", "host-release-switch.sh", "host-engine-delta.sh"];
 
 /** The script without its comments, so a sentence ABOUT `rm -rf` is not read as one. */
 async function code(name) {
@@ -22,7 +22,7 @@ async function code(name) {
   return text.split("\n").filter((line) => !line.trim().startsWith("#")).join("\n");
 }
 
-test("both host release scripts parse", async () => {
+test("every host release script parses", async () => {
   for (const name of scripts) await run("bash", ["-n", path.join(opsDir, name)]);
 });
 
