@@ -685,3 +685,48 @@ test("a conversation's memory state: incognito, set aside and brought back, in o
     await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
   }
 });
+
+test("every note is searchable, not the newest hundred, by the recall tokenizer's words", options, async () => {
+  const owner = `memory_notes_${randomUUID()}`;
+  await createUsers([owner]);
+  try {
+    const oldest = await store.create(owner, "利妥昔单抗的感染风险要单独评估，尤其合并乙肝时。");
+    // Written long ago: the listing orders by time, and notes made in one
+    // second would otherwise tie and be told apart by their random ids.
+    await database.query(`UPDATE evimed_memory.notes SET created_at=created_at - interval '30 days',
+      updated_at=updated_at - interval '30 days' WHERE user_id=$1 AND id=$2`, [owner, oldest.id]);
+    for (let index = 0; index < 120; index += 1) await store.create(owner, `第 ${index} 条日常笔记 routine`);
+    const pinned = await store.update(owner, (await store.create(owner, "总是先报告结论")).id, { pinned: true });
+    const archived = await store.create(owner, "利妥昔单抗 旧的看法");
+    await store.update(owner, archived.id, { state: "archived" });
+
+    // The newest hundred no longer hold the oldest note; the search still finds it.
+    assert.ok(!(await store.list(owner, { pageSize: 100 })).some((note) => note.id === oldest.id));
+    const found = await store.searchNotes(owner, "利妥昔单抗 感染");
+    assert.equal(found[0].id, oldest.id, "the note that matches most comes first");
+    assert.ok(found.some((note) => note.id === pinned.id), "a pinned note is always let through, as the matcher always did");
+    assert.ok(!found.some((note) => note.id === archived.id), "an archived note is not searched");
+    // A two-character Chinese term inside a longer run is a word.
+    const bigram = await store.create(owner, "患者肾功能不全时需要减量");
+    assert.ok((await store.searchNotes(owner, "肾功")).some((note) => note.id === bigram.id));
+    // An edit re-tokenizes.
+    await store.update(owner, bigram.id, { content: "透析患者另行处理" });
+    assert.ok(!(await store.searchNotes(owner, "肾功")).some((note) => note.id === bigram.id));
+    assert.ok((await store.searchNotes(owner, "透析")).some((note) => note.id === bigram.id));
+
+    // The recall reaches it too.
+    const recalled = await store.relevant(owner, "利妥昔单抗的感染风险");
+    assert.ok(recalled.some((memo) => memo.id === oldest.id), "the builtin recall reads the search, not the newest page");
+
+    // A note written before the column existed gets its tokens the first time it is searched.
+    await database.query(`INSERT INTO evimed_memory.notes(user_id,id,content) VALUES ($1,'legacy-note','华法林与胺碘酮合用要监测 INR')`, [owner]);
+    const fresh = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
+    assert.ok((await fresh.searchNotes(owner, "胺碘酮")).some((note) => note.id === "legacy-note"));
+    assert.equal((await database.query(`SELECT count(*)::integer AS count FROM evimed_memory.notes
+      WHERE user_id=$1 AND search_vector IS NULL`, [owner])).rows[0].count, 0);
+    // A question with nothing to match still sees the pinned notes, and only them.
+    assert.deepEqual((await store.searchNotes(owner, "?!")).map((note) => note.id), [pinned.id]);
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
+  }
+});

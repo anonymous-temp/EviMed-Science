@@ -81,3 +81,18 @@ test("a run summary reaches the prompt as the exchange it describes, not as its 
   assert.match(projected, /Earlier question: X/);
   assert.doesNotMatch(projected, /run_1/, "internal identifiers are not content");
 });
+
+test("a note is tokenized by the question's rules, without the question's 64-token cap, and a question becomes an any-token tsquery", async () => {
+  const { noteSearchQuery, noteSearchTokens, searchTokens, NOTE_SEARCH_TOKEN_LIMIT } = await import("../src/memoryRecallPolicy.mjs");
+  const long = Array.from({ length: 200 }, (_, index) => `term${index}`).join(" ");
+  assert.equal(searchTokens(long).length, 64, "a question keeps its first 64 terms");
+  assert.equal(noteSearchTokens(long).length, 200, "a note is searched on everything it says");
+  assert.ok(NOTE_SEARCH_TOKEN_LIMIT >= 4096);
+  // The same CJK bigrams on both sides, so a two-character term inside a longer run matches.
+  assert.ok(noteSearchTokens("患者肾功能不全时需要减量").includes("肾功"));
+  assert.ok(searchTokens("肾功能").includes("肾功"));
+  // A lexeme PostgreSQL would refuse is left out rather than failing the write.
+  assert.deepEqual(noteSearchTokens(`${"a".repeat(300)} 肾病`), ["肾病"]);
+  assert.equal(noteSearchQuery("肾功能 eGFR"), "'肾功能' | 'egfr' | '肾功' | '功能'");
+  assert.equal(noteSearchQuery("?!"), null, "nothing to match is no query at all");
+});

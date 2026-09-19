@@ -415,6 +415,23 @@ test("a note that shares a word with the question cannot crowd out every memory 
   assert.ok(kinds.includes("manual"), "and a matching note must still be able to reach the prompt");
 });
 
+test("the indexed recall searches every note through the store, not the newest page", async () => {
+  // plan §3.4 #8: the notes half read the newest hundred and matched in code.
+  const asked = [];
+  const store = {
+    ...fakeStore([record({ id: "rec1" })]),
+    async list() { throw new Error("the newest page must not be the source any more"); },
+    async searchNotes(userId, query) {
+      asked.push([userId, query]);
+      return [{ id: "note_old", content: "利妥昔单抗的感染风险", pinned: false, updatedAt: "2025-01-01T00:00:00Z" }];
+    },
+  };
+  const index = fakeIndex([hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.5)]);
+  const recalled = await new MemorySubstrate(openVikingConfig, { store, openViking: index }).recall(USER, "利妥昔单抗 感染", {});
+  assert.deepEqual(asked, [[USER, "利妥昔单抗 感染"]]);
+  assert.ok(recalled.some((row) => row.id === "note_old"));
+});
+
 // Ten attempts spread over about five minutes of backoff, which an ordinary
 // restart of the index outruns. Without a reconcile, the job that lost that
 // race stays failed for ever — and for a deleted record that means the index

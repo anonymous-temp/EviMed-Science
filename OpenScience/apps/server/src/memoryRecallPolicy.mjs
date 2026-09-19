@@ -137,13 +137,45 @@ export function setAsideIn(excluded) {
   };
 }
 
-/** Query terms, including CJK bigrams: a two-character Chinese term is a
- *  word, and splitting on whitespace alone would find none of them. */
-export function searchTokens(value) {
+/** The one tokenizer, for a question and for a note alike: Latin words and
+ *  CJK runs, plus every CJK bigram of a run of three or more — a two-character
+ *  Chinese term is a word, and splitting on whitespace alone would find none.
+ *  @param {unknown} value @param {number} limit */
+function tokensOf(value, limit) {
   const normalized = String(value ?? "").toLowerCase();
   const tokens = new Set(normalized.match(/[a-z0-9][a-z0-9._-]{1,}|[\u3400-\u9fff]{2,}/g) ?? []);
   for (const run of normalized.match(/[\u3400-\u9fff]{3,}/g) ?? []) {
     for (let index = 0; index < run.length - 1; index += 1) tokens.add(run.slice(index, index + 2));
   }
-  return [...tokens].filter((token) => token.length >= 2).slice(0, 64);
+  return [...tokens].filter((token) => token.length >= 2).slice(0, limit);
+}
+
+/** Query terms: the first 64 of a question's tokens. */
+export function searchTokens(value) {
+  return tokensOf(value, 64);
+}
+
+/** How many distinct tokens a note keeps for search. Not 64: a note is
+ *  searched on everything it says, and this bounds only the row. */
+export const NOTE_SEARCH_TOKEN_LIMIT = 8192;
+
+/** A lexeme PostgreSQL will hold: well under its 2047-byte ceiling, which a
+ *  pasted URL or a long identifier would otherwise reach. */
+const MAX_LEXEME_CHARACTERS = 200;
+
+/** A note's search tokens, by the same rules as a question's. @param {unknown} value */
+export function noteSearchTokens(value) {
+  return tokensOf(value, NOTE_SEARCH_TOKEN_LIMIT).filter((token) => token.length <= MAX_LEXEME_CHARACTERS);
+}
+
+/**
+ * A question as a `tsquery` over note tokens: any one of its tokens, each a
+ * quoted lexeme taken as written (the cast applies no dictionary, so the CJK
+ * bigrams stay what the tokenizer made them). Null when there is nothing to
+ * match. The tokenizer admits no quote or backslash, so quoting is enough.
+ * @param {unknown} query
+ */
+export function noteSearchQuery(query) {
+  const tokens = searchTokens(query).filter((token) => token.length <= MAX_LEXEME_CHARACTERS);
+  return tokens.length ? tokens.map((token) => `'${token.replaceAll("'", "''")}'`).join(" | ") : null;
 }
