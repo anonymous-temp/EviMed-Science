@@ -25,6 +25,8 @@ from fastapi import APIRouter, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
+from new_meta import evimed_usage_report
+
 
 _BEARER = HTTPBearer(auto_error=False, scheme_name="EviMedWorkloadBearer")
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -317,7 +319,7 @@ def _load_api_key_file() -> None:
     os.environ["LLM_API_KEY"] = value
 
 
-def call(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
+def call(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | None = None) -> dict[str, Any]:
     action = arguments.get("action")
     if action == "capabilities":
         if not _model_ready():
@@ -329,13 +331,13 @@ def call(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             "sources": [{"id": "metaagent:service", "source": "MetaAgent", "retrievedAt": _now()}],
         }
     if action == "start":
-        return _start(arguments, workspace)
+        return _start(arguments, workspace, owner)
     if action == "status":
         return _status(arguments, workspace)
     return _error("meta_action_invalid", "Unsupported MetaAgent action.")
 
 
-def _start(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
+def _start(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | None = None) -> dict[str, Any]:
     topic = str(arguments.get("topic") or "").strip()
     if not topic:
         return _error("meta_topic_required", "A concrete meta-analysis topic is required.")
@@ -367,6 +369,10 @@ def _start(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         "ipdData": str(ipd) if ipd else None,
         "workspace": str(workspace),
         "outputRoot": str(output_root),
+        # Whose spend this job is, from the token that admitted it: the usage
+        # report at the end names the account and project, and by then the
+        # token is long expired.
+        **({"owner": owner} if owner else {}),
         "createdAt": _now(),
         "updatedAt": _now(),
         "artifacts": [],
@@ -605,6 +611,56 @@ def _resumable_project(output_root: Path) -> Path | None:
     return None
 
 
+def _report_usage(state_path: Path, state: dict[str, Any], project: Path | None, log_path: Path) -> None:
+    """Forward what this attempt spent at the provider to EviMed, once.
+
+    Called after the terminal state is written, never before: the job's
+    outcome is settled whatever happens to the report. The project's usage
+    manifest carries every attempt of a resumed job, so only the share not yet
+    reported is sent, and the outcome goes to the job log.
+    """
+    owner = state.get("owner")
+    manifest_path = project / "llm_usage_manifest.json" if project is not None else None
+    if not isinstance(owner, dict) or manifest_path is None or not manifest_path.is_file():
+        return
+    try:
+        total = evimed_usage_report.usage_from_manifest(json.loads(manifest_path.read_text(encoding="utf-8")))
+    except (OSError, UnicodeDecodeError, ValueError):
+        total = None
+    if total is None:
+        return
+    state["usage"] = total
+    share = evimed_usage_report.delta(total, state.get("usageReported"))
+    if share["requests"] == 0:
+        _atomic_json(state_path, state)
+        return
+    try:
+        secret = _read_signing_secret()
+    except (RuntimeError, OSError):
+        outcome = "unsigned (workload signing secret unavailable)"
+    else:
+        outcome = evimed_usage_report.report(
+            url=os.getenv("EVIMED_USAGE_REPORT_URL", "").strip(),
+            secret=secret,
+            job_id=str(state.get("jobId") or ""),
+            user_id=str(owner.get("userId") or ""),
+            project_id=str(owner.get("projectId") or ""),
+            status=str(state.get("status") or ""),
+            finished_at=str(state.get("finishedAt") or _now()),
+            usage=share,
+            attempt=int(state.get("attempts") or 0) + 1,
+        )
+    if outcome.startswith("recorded"):
+        state["usageReported"] = total
+    _atomic_json(state_path, state)
+    try:
+        descriptor = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(descriptor, "ab", buffering=0) as log:
+            log.write(f"\nusage report: {outcome}\n".encode("utf-8"))
+    except OSError:
+        pass
+
+
 def run_job(state_file: str) -> int:
     _load_api_key_file()
     state_path = Path(state_file).resolve()
@@ -670,6 +726,10 @@ def run_job(state_file: str) -> int:
             "error": f"MetaAgent exited with code {completed.returncode}.",
         })
         _atomic_json(state_path, state)
+        # A failed attempt's tokens were paid for too. Only a project inside
+        # this job's output counts, as for a finished one below.
+        latest = projects[0].resolve() if projects else None
+        _report_usage(state_path, state, latest if latest is not None and output_root in latest.parents else None, log_path)
         return completed.returncode or 1
     project = projects[0].resolve()
     if output_root not in project.parents:
@@ -697,6 +757,7 @@ def run_job(state_file: str) -> int:
         "artifacts": _artifact_list(workspace, project),
     })
     _atomic_json(state_path, state)
+    _report_usage(state_path, state, project, log_path)
     return 0
 
 
@@ -709,7 +770,8 @@ def create_evimed_adapter_router(data_root: str | Path | None = None) -> APIRout
         claims: dict[str, Any] = Security(_authorized_claims),
     ) -> dict[str, Any]:
         workspace = workspace_for_claims(claims, data_root)
-        return call(request.model_dump(exclude_none=True), workspace)
+        return call(request.model_dump(exclude_none=True), workspace,
+                    {"userId": claims["userId"], "projectId": claims["projectId"]})
 
     return router
 

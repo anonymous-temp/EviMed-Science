@@ -25,6 +25,7 @@ from evimed_local_inputs import (
     verify_published_inputs,
 )
 from mr_agent.tools.mr_replay import copy_replay_package
+from mr_agent.llm import usage as provider_usage
 from mr_agent.analysis.delivery import MRDeliveryError, diagnostic_artifact_name, diagnostic_plot_checks, interpretation_diagnostics, require_interpretations, require_report_ready
 
 # Load environment from .env and deploy.env for API tokens
@@ -48,6 +49,10 @@ _SOURCE_FAILURE_CODES = frozenset({
 
 
 def _write_result(output_dir: Path, value: dict) -> None:
+    # What the job spent at the provider travels with every outcome: a failed
+    # job's tokens were paid for too. The adapter forwards it to EviMed's
+    # usage ledger.
+    value = {**value, "usage": provider_usage.snapshot()}
     (output_dir / "result.json").write_text(
         json.dumps(value, ensure_ascii=False, indent=2),
         encoding="utf-8",

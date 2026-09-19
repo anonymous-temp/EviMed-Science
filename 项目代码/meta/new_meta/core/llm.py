@@ -264,6 +264,8 @@ def _build_llm_usage_manifest(events: list[dict], *, project_dir: str = "") -> d
         events = [dict(event) for event in events]
     prompt_tokens = sum(int(event.get("prompt_tokens") or 0) for event in events)
     completion_tokens = sum(int(event.get("completion_tokens") or 0) for event in events)
+    cache_hit_tokens = sum(int(event.get("prompt_cache_hit_tokens") or 0) for event in events)
+    cache_miss_tokens = sum(_event_cache_miss_tokens(event) for event in events)
     total_tokens = sum(int(event.get("total_tokens") or 0) for event in events)
     estimated_cost = sum(float(event.get("estimated_cost_usd") or 0) for event in events)
     retryable_output_issues = sum(1 for event in events if str(event.get("retryable_output_issue") or "").strip())
@@ -293,6 +295,8 @@ def _build_llm_usage_manifest(events: list[dict], *, project_dir: str = "") -> d
             "total_calls": len(events),
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
+            "prompt_cache_hit_tokens": cache_hit_tokens,
+            "prompt_cache_miss_tokens": cache_miss_tokens,
             "total_tokens": total_tokens,
             "estimated_cost_usd": round(estimated_cost, 6),
             "cost_is_estimate": True,
@@ -307,6 +311,14 @@ def _build_llm_usage_manifest(events: list[dict], *, project_dir: str = "") -> d
         "by_model": by_model,
         "events": events,
     }
+
+
+def _event_cache_miss_tokens(event: dict) -> int:
+    """A usage event's cache misses; events recorded before the split was kept
+    count their whole prompt as missed."""
+    if event.get("prompt_cache_miss_tokens") is not None:
+        return int(event.get("prompt_cache_miss_tokens") or 0)
+    return max(0, int(event.get("prompt_tokens") or 0) - int(event.get("prompt_cache_hit_tokens") or 0))
 
 
 def get_llm_usage_manifest(scope: str | None = None) -> dict:
@@ -412,6 +424,8 @@ def _usage_dict_from_usage(usage, fallback_total: int | None = None) -> dict[str
         prompt = usage.get("prompt_tokens", usage.get("input_tokens"))
         completion = usage.get("completion_tokens", usage.get("output_tokens"))
         total = usage.get("total_tokens")
+        cache_hit = usage.get("prompt_cache_hit_tokens")
+        cache_miss = usage.get("prompt_cache_miss_tokens")
     else:
         prompt = getattr(usage, "prompt_tokens", None)
         if prompt is None:
@@ -420,6 +434,8 @@ def _usage_dict_from_usage(usage, fallback_total: int | None = None) -> dict[str
         if completion is None:
             completion = getattr(usage, "output_tokens", None)
         total = getattr(usage, "total_tokens", None)
+        cache_hit = getattr(usage, "prompt_cache_hit_tokens", None)
+        cache_miss = getattr(usage, "prompt_cache_miss_tokens", None)
 
     prompt_i = int(prompt or 0)
     completion_i = int(completion or 0)
@@ -427,10 +443,18 @@ def _usage_dict_from_usage(usage, fallback_total: int | None = None) -> dict[str
         total_i = prompt_i + completion_i if prompt_i or completion_i else int(fallback_total or 0)
     else:
         total_i = int(total or 0)
+    # DeepSeek bills a cached prompt prefix at a small fraction of a miss, so
+    # the split is what the job cost, and EviMed's usage ledger prices by it.
+    # A provider that does not split is recorded all-miss, the rate that
+    # cannot flatter the cost.
+    cache_hit_i = int(cache_hit or 0)
+    cache_miss_i = int(cache_miss) if cache_miss is not None else max(0, prompt_i - cache_hit_i)
     return {
         "prompt_tokens": prompt_i,
         "completion_tokens": completion_i,
         "total_tokens": total_i,
+        "prompt_cache_hit_tokens": cache_hit_i,
+        "prompt_cache_miss_tokens": cache_miss_i,
     }
 
 
@@ -497,6 +521,8 @@ class LLMClient:
             "prompt_tokens": usage_data["prompt_tokens"],
             "completion_tokens": usage_data["completion_tokens"],
             "total_tokens": usage_data["total_tokens"],
+            "prompt_cache_hit_tokens": usage_data["prompt_cache_hit_tokens"],
+            "prompt_cache_miss_tokens": usage_data["prompt_cache_miss_tokens"],
             "max_tokens": max_tokens,
             "finish_reason": finish_reason or "",
             "retryable_output_issue": retryable_output_issue,

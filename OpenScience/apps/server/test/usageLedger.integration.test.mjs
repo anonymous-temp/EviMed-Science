@@ -419,3 +419,36 @@ test("a purpose CHECK written for an older vocabulary is replaced, not left refu
     await fresh.close();
   }
 });
+
+test("a spend that already happened is recorded settled in one step, lands once, and counts like any settled row", options, async () => {
+  // A specialist engine reports what its job spent when the job ends: there is
+  // nothing to reserve, and a cap check could only make the ledger wrong.
+  const at = new Date("2033-04-04T00:00:00.000Z");
+  const input = {
+    id: `engine_${randomUUID().replaceAll("-", "")}`, userId: owner, projectId: "default", runId: null, purpose: "engine",
+    model: "deepseek-flash", priceVersion: "evimed-reference-2026-09-10", currency: "CNY",
+    requestFingerprint: createHash("sha256").update("engine-report-1").digest("hex"),
+    usage: { cacheHitTokens: 5_000, cacheMissTokens: 700, completionTokens: 90 }, actualCost: 0.0021, priced: true,
+    providerRequestId: "peer-review:review-20330404-abcdef#1", now: at,
+  };
+  const first = await ledger.recordSettled({ ...input, dailyLimit: 0.000001 });
+  assert.equal(first.status, "settled");
+  assert.equal(first.purpose, "engine");
+  assert.equal(first.createdAt, at.toISOString(), "the row sits at the job's end");
+  assert.deepEqual(first.usage, { cacheHitTokens: 5_000, cacheMissTokens: 700, completionTokens: 90 });
+  assert.equal(first.actualCost, 0.0021);
+  const again = await ledger.recordSettled(input);
+  assert.equal(again.id, first.id);
+  assert.equal(again.revision, first.revision, "a retried report is the same row, not a second one");
+  await assert.rejects(
+    ledger.recordSettled({ ...input, requestFingerprint: createHash("sha256").update("engine-report-2").digest("hex") }),
+    (error) => error.code === "usage_settlement_conflict",
+  );
+  const engine = (await ledger.usageByPurpose({ since: at })).find((row) => row.purpose === "engine");
+  assert.deepEqual(engine, { purpose: "engine", requests: 1, cacheHitTokens: 5_000, cacheMissTokens: 700, outputTokens: 90, costCny: 0.0021 });
+  // A project the account does not hold cannot receive a row.
+  await assert.rejects(
+    ledger.recordSettled({ ...input, id: `engine_${randomUUID().replaceAll("-", "")}`, projectId: "no-such-project" }),
+    (error) => error.code === "23503",
+  );
+});
