@@ -17,8 +17,8 @@ const TERMINAL_ERRORS = new Set([
 /** Leased ingestion worker. ProductJobs owns retries; source generations make
  * an old lease unable to overwrite a newer user correction. */
 export class SourceIngestionWorker {
-  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,verifyMetadata?:(metadata:any)=>Promise<any>,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
-  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, verifyMetadata = async (metadata) => metadata, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000 }) {
+  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,verifyMetadata?:(metadata:any)=>Promise<any>,onPublished?:(job:any)=>void,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
+  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, verifyMetadata = async (metadata) => metadata, onPublished = () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000 }) {
     if (![jobs, sources, parser, resolveSource, materialize].every(Boolean)) throw new TypeError("SourceIngestionWorker dependencies are required.");
     if (!Number.isSafeInteger(pollMs) || pollMs < 100 || pollMs > 86_400_000
       || !Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 3_600_000
@@ -31,6 +31,7 @@ export class SourceIngestionWorker {
     this.resolveSource = resolveSource;
     this.releaseResolved = releaseResolved;
     this.verifyMetadata = verifyMetadata;
+    this.onPublished = onPublished;
     this.materialize = materialize;
     this.discardMaterialized = discardMaterialized;
     this.cleanupSource = cleanupSource;
@@ -129,6 +130,7 @@ export class SourceIngestionWorker {
       processing = await this.sources.beginIngestion(job.userId, source.id, { generation: actualGeneration, job });
       if (processing.payload.depth === "skip") {
         const finished = await this.sources.publishUnderstanding(job, null);
+        this.#published(job);
         this.lastError = null;
         this.lastCompletedAt = new Date().toISOString();
         return finished;
@@ -173,6 +175,7 @@ export class SourceIngestionWorker {
       await this.#assertCurrent(job.userId, processing.id, actualGeneration);
       const finished = await this.sources.publishUnderstanding(job, parsed, completed, artifactPath);
       extractionRecorded = true;
+      this.#published(job);
       this.lastError = null;
       this.lastCompletedAt = new Date().toISOString();
       return finished;
@@ -210,6 +213,12 @@ export class SourceIngestionWorker {
       clearInterval(renewal);
       if (resolvedFile && processing) await this.sources.withAttemptCleanup(job, () => this.releaseResolved(job, processing, resolvedFile)).catch(() => {});
     }
+  }
+
+  /** A source became readable: tell whoever keeps a derivation of it (the
+   *  knowledge-base index) without letting its failure touch this job. @param {any} job */
+  #published(job) {
+    try { this.onPublished(job); } catch { /* the index converges on its own timer */ }
   }
 
   async #assertCurrent(userId, sourceId, generation) {

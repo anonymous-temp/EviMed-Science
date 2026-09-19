@@ -8,6 +8,7 @@ import { normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstan
 // browser so the picker and this refusal cannot disagree (2026-09-20).
 import { normalizeSourcePageMap, renderSourcePageMarkers, sourceFormatRoute } from "@evimed/domain";
 import { openListSourceInput } from "./openListSourceConnector.mjs";
+import { estimateTokens } from "./kbChunker.mjs";
 
 function projectRun(run) { return run ? { id: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId } : null; }
 function projectUnit(unit) { return { id: unit.id, unitType: unit.unitType, start: unit.start, end: unit.end,
@@ -158,6 +159,16 @@ export function sourceIndexDocument({ original, sha256, extractor, text: body, p
     renderSourcePageMarkers(String(body ?? ""), pages),
     "",
   ].join("\n");
+}
+
+/**
+ * The key a source's text is indexed under, with its SHA-256 and text digest.
+ * The in-house parser's version is the configured revision label itself
+ * (`evimed-extract@0.5.0`); a local read or an older parser is `name@version`.
+ * @param {{ name?: string, version?: string, parser?: string } | null | undefined} extractor
+ */
+export function extractorRevision(extractor) {
+  return extractor?.parser === "api" ? String(extractor.version ?? "") : `${extractor?.name ?? "unknown"}@${extractor?.version ?? "0"}`;
 }
 
 /** Where a source generation's page map is kept: one knowledge record beside
@@ -541,6 +552,9 @@ export class SourceService {
       const analysis = { generation: input.generation, phase: "indexed", schemaVersion: 1, unitCount: input.units.length,
         textSha256: digest(input.text),
         extractor: parsed.extractor, summary: String(parsed.summary).slice(0, 16000), parserCoverage,
+        // What the knowledge-base index keys this text by, and how much of it
+        // there is: the search decides "read it whole" from the sum of these.
+        parserRevision: extractorRevision(parsed.extractor), charCount: input.text.length, tokenEstimate: estimateTokens(input.text),
         ...(pageMap ? { pageCount: pageMap.length } : parsed.pageMap ? { pageMapDropped: "pages_inconsistent" } : {}) };
       /** @type {{kind:string,id:string,payload:Record<string, any>}[]} */
       const records = input.units.map(unit => ({ kind: "knowledge", id: `capture:${unit.id}`,

@@ -134,6 +134,19 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "web_search_response_too_large",
   "web_search_endpoint_invalid",
   "web_search_gateway_token_invalid",
+  // Knowledge-base search not answering — switched off, an outage, a slow
+  // index. The documents are still in the workspace to read and grep, which
+  // is what the tool's own failure tells the run to do.
+  "kb_search_disabled",
+  "kb_search_unconfigured",
+  "kb_search_unavailable",
+  "kb_search_timeout",
+  "kb_search_rate_limited",
+  "kb_search_upstream_error",
+  "kb_search_response_invalid",
+  "kb_search_response_too_large",
+  "kb_search_gateway_token_missing",
+  "kb_search_gateway_token_invalid",
   // Host configuration the run cannot do anything about.
   "public_source_gateway_unconfigured",
   "public_source_dataset_unconfigured",
@@ -311,6 +324,12 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "web_search_language_invalid",
   "web_search_limit_invalid",
   "web_search_time_range_invalid",
+  // The same for a knowledge-base search the gateway could not parse.
+  "kb_search_query_invalid",
+  "kb_search_limit_invalid",
+  "kb_search_source_ids_invalid",
+  "kb_search_request_invalid",
+  "kb_search_request_too_large",
   // Malformed calls into the specialist workers and the science connectors:
   // a bad action, an id that is not one, a path outside the workspace, an
   // argument the schema rejects. The run rewrites the call.
@@ -934,6 +953,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   // A parser code this build has no exact sentence for still says what failed
   // and what the card's own button does about it.
   [/^source_parser_/, '文档解析这次没有完成，稍后再重新分析。'],
+  [/^kb_search_/, '资料库检索这次没能完成；运行会直接读取知识库里的文件继续。'],
 ])
 
 /**

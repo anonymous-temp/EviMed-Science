@@ -78,6 +78,10 @@ import { CapsuleTransferService } from "./capsuleTransferService.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { SourceService, assertKnowledgeBaseFormat, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
+// Knowledge-base search (2026-09-20): the index, its embedder and its gateway.
+import { KB_RERANK_INSTRUCT, KnowledgeBaseIndex } from "./kbIndex.mjs";
+import { KbEmbedder } from "./kbEmbedding.mjs";
+import { KB_SEARCH_GATEWAY_PATH, createKbSearchGatewayHandler } from "./kbSearchGateway.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
@@ -448,7 +452,8 @@ function routePattern(pathname) {
     pathname === WEB_SEARCH_GATEWAY_PATH ||
     pathname === GEO_PROBE_GATEWAY_PATH ||
     pathname === REVISION_GATEWAY_PATH ||
-    pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH
+    pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH ||
+    pathname === KB_SEARCH_GATEWAY_PATH
   ) return pathname;
   return pathname === "/" ? "/" : "/static";
 }
@@ -1039,6 +1044,8 @@ export function createWebApiApp(overrides = {}) {
     return store.requireProject(user, job.projectId);
   };
   let sourceUnderstandingRuntime = null;
+  /** @type {KnowledgeBaseIndex | null} */
+  let kbIndex = null;
   const sourceWorker = sourceService && config.sourceIngestionEnabled ? new SourceIngestionWorker({
     jobs: productJobs,
     sources: sourceService,
@@ -1053,6 +1060,7 @@ export function createWebApiApp(overrides = {}) {
     verifyMetadata: (metadata) => verifySourceMetadata(metadata, {
       fetchImpl: overrides.sourceMetadataFetch ?? globalThis.fetch, timeoutMs: config.sourceDoiCheckTimeoutMs,
     }),
+    onPublished: () => kbIndex?.wake(),
     resolveSource: async (job, source) => {
       const connectorType = source.payload.connector?.type;
       if (!["upload", "internal", "openlist"].includes(connectorType)) {
@@ -1119,6 +1127,25 @@ export function createWebApiApp(overrides = {}) {
       await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir, sourceId: source.id,
         jobIds }));
     },
+  }) : null;
+  // The knowledge-base index: derived from the sources, switched with
+  // `kb_search`. Built only where there is a product database to derive from.
+  kbIndex = productDatabase && sourceService && config.kbSearchEnabled ? new KnowledgeBaseIndex({
+    database: productDatabase,
+    sources: sourceService,
+    embedder: overrides.kbEmbedder ?? new KbEmbedder({
+      apiKey: config.dashscopeApiKey, model: config.kbEmbeddingModel, dimension: config.kbEmbeddingDimension,
+      apiBase: config.kbEmbeddingApiBase, timeoutMs: config.kbEmbeddingTimeoutMs,
+    }, { fetchImpl: overrides.kbEmbeddingFetch ?? globalThis.fetch }),
+    rerank: overrides.kbRerank ?? new MemoryRerank({
+      apiKey: config.dashscopeApiKey, model: config.memoryRerankModel, apiBase: config.memoryRerankApiBase,
+      timeoutMs: config.memoryRerankTimeoutMs, instruct: KB_RERANK_INSTRUCT,
+    }, { fetchImpl: overrides.memoryRerankFetch ?? globalThis.fetch }),
+    dimension: config.kbEmbeddingDimension,
+    smallLibraryTokens: config.kbSmallLibraryTokens,
+    reconcileMs: config.kbIndexReconcileMs,
+    canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
+    report: (code) => process.stderr.write(`knowledge-base index: ${code}\n`),
   }) : null;
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
     documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
@@ -2189,6 +2216,7 @@ export function createWebApiApp(overrides = {}) {
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
   });
+  const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex });
   const commands = createCommandRegistry({ config, runtimeManager, knowledgeBaseUploads });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx), {
     claimAllowed: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
@@ -2363,7 +2391,9 @@ export function createWebApiApp(overrides = {}) {
           ? webSearchGatewayHandler
           : pathname === GEO_PROBE_GATEWAY_PATH
             ? geoProbeGatewayHandler
-            : null;
+            : pathname === KB_SEARCH_GATEWAY_PATH
+              ? kbSearchGatewayHandler
+              : null;
     if (gateway) {
       try {
         await gateway(req, res, recordGatewayFailure);
@@ -3959,7 +3989,7 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker]) {
+    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, kbIndex]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -3988,6 +4018,7 @@ export function createWebApiApp(overrides = {}) {
       pluginApplyWorker?.start();
       memoryIndexWorker?.start();
       sourceWorker?.start();
+      kbIndex?.start();
       autopilotWorker?.start();
       learningWorker?.start();
       await retryCapsuleCleanup();
@@ -4051,6 +4082,7 @@ export function createWebApiApp(overrides = {}) {
     memoryIndexWorker,
     sourceService,
     sourceWorker,
+    kbIndex,
     sourceUnderstandingRuntime,
     autopilotService,
     autopilotWorker,
@@ -4105,6 +4137,7 @@ export function createWebApiApp(overrides = {}) {
       await pluginApplyWorker?.close();
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
+      await kbIndex?.close();
       await autopilotWorker?.close();
       await learningWorker?.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);

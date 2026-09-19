@@ -87,6 +87,9 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'evidence_deduplicate',
   'term_normalize',
   'health',
+  // the researcher's own knowledge base, through the server's index
+  // (kb_search.py, 2026-09-20)
+  'kb_search',
 ])
 
 /** Model-visible MCP tool names. */
@@ -174,6 +177,9 @@ export const ROOT_VISIBLE_MCP_BASE_NAMES = Object.freeze([
   'evidence_deduplicate',
   'drug_label_search',
   'pharmacy_reference_search',
+  // A question about the researcher's own documents is a plain question, and
+  // the answer line must be able to look (plan §3.2; model-chosen, never forced).
+  'kb_search',
 ])
 
 /** @param {string} baseName @returns {string} */

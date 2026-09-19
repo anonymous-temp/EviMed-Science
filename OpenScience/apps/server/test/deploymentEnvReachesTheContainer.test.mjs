@@ -127,6 +127,9 @@ const operatorLevers = {
   // The memory evaluation's control arm is this switch; an ablation whose
   // "off" arm silently recalled would measure nothing (2026-09-18).
   OPEN_SCIENCE_MEMORY_RECALL_ENABLED: ["open-science-web"],
+  // Knowledge-base search's off switch, which also stops indexing and
+  // embedding spend; one that never arrived would keep paying (2026-09-20).
+  OPEN_SCIENCE_KB_SEARCH_ENABLED: ["open-science-web"],
 };
 
 async function composeFiles() {
