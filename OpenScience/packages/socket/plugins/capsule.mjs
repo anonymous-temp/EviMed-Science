@@ -107,7 +107,11 @@ export async function apply(ctx, config) {
 
   const noteTool = await defineTool({
     name: 'evimed_capsule_note',
-    description: '当用户说「记住…」时，将内容提交到他的胶囊待确认列表。说明这条建议需要用户在记忆胶囊中采用，采用前不会用于后续回答。只记用户明确要求记住的内容。',
+    // Truthful to what the control plane now does (2026-09-20): a note takes
+    // effect at once, labelled as the assistant's, and the researcher can undo
+    // it in one click. It used to say the note waited for the researcher's
+    // approval, and the model repeated that to them.
+    description: '当用户说「记住…」时，把这条内容记进他的记忆胶囊：立即生效，标注为你代为记下，用户可随时一键撤销。只记用户明确要求记住的内容，用用户自己的说法。',
     parameters: {
       factKind: { type: 'string', required: true, description: '事实种类，例如 preference、stance、project_fact、method_preference。' },
       content: { type: 'string', required: true, description: '要记住的内容，用用户自己的说法。' },

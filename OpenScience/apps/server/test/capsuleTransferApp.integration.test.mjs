@@ -26,7 +26,14 @@ test("actual hosted APIs download, preview, import and revoke a portable snapsho
     const preview=await request("/transfers/preview",recipient,{archive:result.archive,password});assert.equal(preview.status,200);const inspection=(await preview.json()).data;
     assert.equal(inspection.issuerTrust,"verified");assert.equal(inspection.entries.length,1);
     const imported=await request("/transfers/import",recipient,{archive:result.archive,password,confirmed:true,expectedDigest:inspection.archiveSha256});assert.equal(imported.status,201);
-    const importedCapsule=(await imported.json()).data;const entries=await request(`/${importedCapsule.id}/entries`,recipient,undefined,"GET");assert.equal((await entries.json()).data.items[0].payload.status,"candidate");
+    const importedCapsule=(await imported.json()).data;const entries=await request(`/${importedCapsule.id}/entries`,recipient,undefined,"GET");assert.equal((await entries.json()).data.items[0].payload.status,"approved");
+    // Imported whole, in force only once enabled; one click each way.
+    const shelf=async()=>(await (await request("/received",recipient,undefined,"GET")).json()).data;
+    assert.equal((await shelf()).find(item=>item.id===importedCapsule.id).enabled,false);
+    assert.equal((await request(`/${importedCapsule.id}/enable`,recipient,{})).status,200);
+    assert.equal((await shelf()).find(item=>item.id===importedCapsule.id).enabled,true);
+    assert.equal((await request(`/${importedCapsule.id}/disable`,recipient,{})).status,200);
+    assert.equal((await shelf()).find(item=>item.id===importedCapsule.id).enabled,false);
     assert.equal((await request(`/${capsule.id}/exports/${result.snapshot.id}`,owner,{expectedRevision:result.snapshot.revision},"DELETE")).status,200);
     assert.equal((await request(`/${capsule.id}/exports/${result.snapshot.id}`,owner,undefined,"GET")).status,409);
     const revoked=await request("/transfers/preview",recipient,{archive:result.archive,password});assert.equal((await revoked.json()).data.hostedStatus,"revoked");

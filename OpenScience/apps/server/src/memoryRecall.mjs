@@ -37,7 +37,10 @@ export const MEMORY_RECALL_MAX_LIMIT = 50;
 /**
  * @param {{ capsules?: { recall: Function } | null, memorySubstrate?: { recall: Function, recallEnabled?: boolean } | null }} services
  * @param {{ id: string, accountCreatedAt?: string }} user
- * @param {{ query: string, projectId?: string | null, sessionId?: string | null, limit?: number, factKinds?: readonly string[], since?: string | null, scope?: string }} input
+ * @param {{ query: string, projectId?: string | null, sessionId?: string | null, limit?: number, factKinds?: readonly string[], since?: string | null, scope?: string,
+ *   excluded?: readonly { type: string, id: string }[] }} input
+ *   `excluded` is what the researcher set aside with 「本次不用」: memories and
+ *   notes go to the substrate, capsule facts are dropped here, before the limit.
  * @returns {Promise<{ items: Record<string, any>[], mode: string, contextOnly: true, sources: { memory: number, capsule: number } }>}
  */
 export async function recallAcrossMemory({ capsules = null, memorySubstrate = null }, user, input) {
@@ -57,13 +60,15 @@ export async function recallAcrossMemory({ capsules = null, memorySubstrate = nu
   const since = input.since ?? null;
   const sinceMs = since ? Date.parse(since) : Number.NaN;
   const projectId = input.projectId ?? null;
+  const excluded = Array.isArray(input.excluded) ? input.excluded : [];
+  const setAsideFacts = new Set(excluded.filter((item) => item.type === "capsule").map((item) => item.id));
 
   const [capsule, memory] = await Promise.all([
     scope !== "conversation" && capsules
       ? capsules.recall(user.id, { query: input.query, projectId, limit, factKinds, since, scope: "capsule", accountCreatedAt: user.accountCreatedAt })
       : { items: [], mode: "none" },
     scope !== "capsule" && memorySubstrate
-      ? memorySubstrate.recall(user.id, input.query, { projectId, sessionId: input.sessionId ?? null })
+      ? memorySubstrate.recall(user.id, input.query, { projectId, sessionId: input.sessionId ?? null, excluded })
       : [],
   ]);
 
@@ -85,7 +90,9 @@ export async function recallAcrossMemory({ capsules = null, memorySubstrate = nu
       importance: memo.importance ?? null,
       contextOnly: true,
     }));
-  const capsuleItems = (Array.isArray(capsule?.items) ? capsule.items : []).map((item) => ({ ...item, source: "capsule", contextOnly: true }));
+  const capsuleItems = (Array.isArray(capsule?.items) ? capsule.items : [])
+    .filter((item) => !setAsideFacts.has(String(item.id)))
+    .map((item) => ({ ...item, source: "capsule", contextOnly: true }));
   return {
     items: [...memoryItems, ...capsuleItems].slice(0, limit),
     mode: typeof capsule?.mode === "string" ? capsule.mode : "none",

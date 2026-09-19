@@ -102,10 +102,19 @@ export interface CapsuleExportSnapshot {
   capsuleRevision: number; entryCount: number; archiveSha256: string; supersedes: string | null;
   entryVersions: Array<{version: number; sha256: string}>;
 }
+/** The automatic scan a shared pack passes before it can take effect (capsuleScan.mjs). */
+export interface CapsuleScanResult {
+  kept: string[];
+  dropped: Array<{ id: string; factKind: string; excerpt: string; source: "closed_set" | "model"; code: string; reason: string }>;
+  model: "ok" | "unavailable" | "partial";
+  checkedAt: string;
+}
 export interface CapsuleTransferPreview {
   archiveSha256: string; snapshotId: string; scopes: string[]; issuerTrust: string; issuerId: string;
   hostedStatus: string; canImport: boolean; offlineRevocable: boolean; newerSnapshotId: string | null;
   entries: Array<{ id: string; version: number; factKind: string; layer: string; content: string; path: string; sha256: string }>;
+  /** Absent from a control plane older than whole-pack trust. */
+  scan?: CapsuleScanResult;
 }
 export function listCapsuleExports(id: string, cursor?: string | null) {
   return productRequest<ProductPage<CapsuleExportSnapshot>>(`/capsules/${encodeURIComponent(id)}/exports${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);

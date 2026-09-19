@@ -48,7 +48,7 @@ const NAV: NavItem[] = [
   { to: "/app/chat", label: "新任务", icon: <SquarePen size={16} aria-hidden="true" /> },
   { to: "/app/runs", label: "运行记录", icon: <FlaskConical size={16} aria-hidden="true" /> },
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
-  { to: "/app/memory", label: "记忆", icon: <Brain size={16} aria-hidden="true" /> },
+  { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
   { to: "/app/autopilot", label: "主动科研", icon: <Orbit size={16} aria-hidden="true" /> },
   { to: "/app/capabilities", label: "科研能力", icon: <Bot size={16} aria-hidden="true" /> },
 ];

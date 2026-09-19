@@ -44,6 +44,12 @@ export const MEMORY_REVISION_LIMIT = 32;
 /** How many projects one account may pause memory for. A project id list, so
  *  bounded like every other array this schema stores. */
 export const MEMORY_PAUSED_PROJECT_LIMIT = 100;
+/** How many items one conversation may set aside with 「本次不用」. A recall
+ *  hands back at most a few dozen, so this bounds a list, not a choice. */
+export const MEMORY_SESSION_EXCLUSION_LIMIT = 200;
+/** What 「本次不用」 can set aside: a structured memory, a note, a capsule fact
+ *  or a mounted method — the four things a conversation is handed. */
+export const MEMORY_SESSION_EXCLUSION_TYPES = Object.freeze(["memory", "note", "capsule", "method"]);
 
 /** @param {readonly string[]} values */
 function vocabulary(values) {
@@ -86,6 +92,14 @@ CREATE TABLE IF NOT EXISTS evimed_memory.records (
   PRIMARY KEY (user_id, id),
   UNIQUE (user_id, scope, scope_id, kind, key)
 );
+-- What a fact was replaced by, and from when it stopped holding (2026-09-20).
+-- A dose, a drug, a population or a decision changes; the old fact is not
+-- deleted and not left in force beside the new one — it is kept, pointing at
+-- what replaced it, and the timeline shows it as 「曾经如此」. Added in place,
+-- so an existing deployment gains them on its next start.
+ALTER TABLE evimed_memory.records ADD COLUMN IF NOT EXISTS superseded_by text
+  CHECK (superseded_by IS NULL OR superseded_by ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$');
+ALTER TABLE evimed_memory.records ADD COLUMN IF NOT EXISTS invalid_since timestamptz(3);
 CREATE INDEX IF NOT EXISTS memory_records_rank_idx ON evimed_memory.records
   (user_id, status, importance DESC, confidence DESC, updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS memory_records_scope_idx ON evimed_memory.records (user_id, scope, scope_id, kind);
@@ -102,6 +116,12 @@ CREATE TABLE IF NOT EXISTS evimed_memory.notes (
 );
 CREATE INDEX IF NOT EXISTS memory_notes_order_idx ON evimed_memory.notes
   (user_id, state, pinned DESC, updated_at DESC, id DESC);
+-- Every note searchable, not the newest hundred (plan §3.4 #8): the note's
+-- tokens by the recall tokenizer (CJK bigrams included), written by
+-- researchMemory on every write; NULL on a row written before this column,
+-- filled lazily the first time that account's notes are searched.
+ALTER TABLE evimed_memory.notes ADD COLUMN IF NOT EXISTS search_vector tsvector;
+CREATE INDEX IF NOT EXISTS memory_notes_search_idx ON evimed_memory.notes USING GIN (search_vector);
 -- The researcher's own switches over their memory. No row means every switch
 -- is off, which is how the platform behaved before the switches existed.
 CREATE TABLE IF NOT EXISTS evimed_memory.settings (
@@ -111,6 +131,26 @@ CREATE TABLE IF NOT EXISTS evimed_memory.settings (
   paused_projects text[] NOT NULL DEFAULT '{}' CHECK (cardinality(paused_projects) <= ${MEMORY_PAUSED_PROJECT_LIMIT}),
   updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
 );
+-- One conversation's own memory state (2026-09-20): whether it is incognito —
+-- nothing extracted from it, nothing recalled into it — and what the
+-- researcher said 「本次不用」 to in its 「本次用到的背景」 panel. Keyed by the
+-- kernel's session id inside a project; deleted with the account, and with the
+-- project by deleteProjectMemory.
+CREATE TABLE IF NOT EXISTS evimed_memory.sessions (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  project_id text NOT NULL CHECK (project_id ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$'),
+  session_id text NOT NULL CHECK (session_id ~ '^[A-Za-z0-9_-]{1,160}$'),
+  incognito boolean NOT NULL DEFAULT false,
+  excluded jsonb NOT NULL DEFAULT '[]'::jsonb
+    CHECK (jsonb_typeof(excluded) = 'array' AND jsonb_array_length(excluded) <= ${MEMORY_SESSION_EXCLUSION_LIMIT}),
+  updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp()),
+  PRIMARY KEY (user_id, project_id, session_id)
+);
+-- A conversation that tries a capsule someone shared (「试用一次」): the pack
+-- it is handed as context. It writes nothing into the researcher's own
+-- memory (memoryPausedFor), whatever its incognito switch says.
+ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS trial_capsule_id text
+  CHECK (trial_capsule_id IS NULL OR trial_capsule_id ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,199}$');
 DO $foreign_keys$
 BEGIN
   IF NOT EXISTS (

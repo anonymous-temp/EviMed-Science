@@ -140,6 +140,51 @@ test("a researcher who paused recall, for the account or for this project, is ha
     "pausing learning is not pausing recall");
 });
 
+test("an incognito conversation is handed no memories, and another conversation of the project still is", async () => {
+  // 2026-09-20: the conversation's own switch, read before either path.
+  const states = { [SESSION]: { incognito: true, excluded: [] } };
+  const store = {
+    ...fakeStore([]), configured: true,
+    settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [] }),
+    sessionState: async (_userId, _projectId, sessionId) => states[sessionId] ?? { incognito: false, excluded: [] },
+  };
+  const substrate = new MemorySubstrate({}, { store });
+  assert.deepEqual(await substrate.recall(USER, "kidney outcomes", { projectId: PROJECT, sessionId: SESSION }), []);
+  assert.equal(store.calls.relevant, 0, "an incognito recall must not reach the store's matcher");
+  assert.equal((await substrate.recall(USER, "kidney outcomes", { projectId: PROJECT, sessionId: "ses_two" })).length, 1);
+  // A conversation id the store cannot hold is a conversation with no state, not a failed recall.
+  const odd = { ...store, sessionState: async () => { throw Object.assign(new Error("bad id"), { code: "memory_session_invalid" }); } };
+  assert.equal((await new MemorySubstrate({}, { store: odd }).recall(USER, "kidney outcomes", { projectId: PROJECT, sessionId: "x" })).length, 1);
+});
+
+test("what a conversation set aside stays out of its recall on both paths, and frees its slot", async () => {
+  const records = [
+    record({ id: "rec1", key: "a", value: "Prefers tables over prose." }),
+    record({ id: "rec2", key: "b", kind: "analysis", value: "Empagliflozin slowed eGFR decline.", summary: "" }),
+  ];
+  const notes = [{ id: "note1", content: "kidney note", pinned: false, updatedAt: "2026-09-01T00:00:00Z" }];
+  const sessionStore = (base) => ({
+    ...base, configured: true,
+    settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [] }),
+    sessionState: async () => ({ incognito: false, excluded: [{ type: "memory", id: "rec2", label: "" }] }),
+  });
+  const index = fakeIndex(records.map((row, n) => hit(
+    memoryUri(USER, { scope: "user", scopeId: "", kind: row.kind, recordId: row.id }), 0.9 - n / 10)));
+  const ranked = new MemorySubstrate(openVikingConfig, { store: sessionStore(fakeStore(records, { memos: notes })), openViking: index });
+  const recalled = await ranked.recall(USER, "kidney", { projectId: PROJECT, sessionId: SESSION,
+    excluded: [{ type: "note", id: "note1" }] });
+  assert.equal(index.calls.find.length, 1, "the index path was taken");
+  assert.deepEqual(recalled.map((row) => row.id), ["record:rec1"],
+    "the session's own set-aside record and the caller's set-aside note are both gone");
+
+  // The term matcher is handed the same union.
+  let handed = null;
+  const builtin = sessionStore({ ...fakeStore([]), relevant: async (_u, _q, options) => { handed = options.excluded; return []; } });
+  await new MemorySubstrate({}, { store: builtin }).recall(USER, "kidney", { projectId: PROJECT, sessionId: SESSION,
+    excluded: [{ type: "note", id: "note1" }] });
+  assert.deepEqual(handed.map((item) => `${item.type}:${item.id}`), ["memory:rec2", "note:note1"]);
+});
+
 test("an unknown provider name falls back rather than composing a broken deployment", () => {
   const substrate = new MemorySubstrate({ memoryIndexProvider: "not-a-provider" }, { store: fakeStore([]) });
   assert.equal(substrate.provider, "builtin");
@@ -370,6 +415,23 @@ test("a note that shares a word with the question cannot crowd out every memory 
   assert.ok(kinds.includes("manual"), "and a matching note must still be able to reach the prompt");
 });
 
+test("the indexed recall searches every note through the store, not the newest page", async () => {
+  // plan §3.4 #8: the notes half read the newest hundred and matched in code.
+  const asked = [];
+  const store = {
+    ...fakeStore([record({ id: "rec1" })]),
+    async list() { throw new Error("the newest page must not be the source any more"); },
+    async searchNotes(userId, query) {
+      asked.push([userId, query]);
+      return [{ id: "note_old", content: "利妥昔单抗的感染风险", pinned: false, updatedAt: "2025-01-01T00:00:00Z" }];
+    },
+  };
+  const index = fakeIndex([hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.5)]);
+  const recalled = await new MemorySubstrate(openVikingConfig, { store, openViking: index }).recall(USER, "利妥昔单抗 感染", {});
+  assert.deepEqual(asked, [[USER, "利妥昔单抗 感染"]]);
+  assert.ok(recalled.some((row) => row.id === "note_old"));
+});
+
 // Ten attempts spread over about five minutes of backoff, which an ordinary
 // restart of the index outruns. Without a reconcile, the job that lost that
 // race stays failed for ever — and for a deleted record that means the index
@@ -585,4 +647,26 @@ test("one user's identity never collides with another's, and never leaks the id"
   assert.ok(!openVikingUserId(USER).includes(USER));
   assert.match(openVikingUserId(USER), /^u-[a-f0-9]{24}$/);
   assert.match(openVikingPeerId(PROJECT), /^p-[a-f0-9]{24}$/);
+});
+
+test("a run summary belongs to the timeline: never published to the index, never recalled from it", async () => {
+  // It held the platform's own earlier answer, and recall served it as if it
+  // were something known about the researcher (2026-09-19 proposal §4.1).
+  const summary = record({
+    id: "run1", scope: "project", scopeId: PROJECT, kind: "run_summary", key: "run.question.abc",
+    value: JSON.stringify({ question: "SGLT2 在 CKD 中的获益", answer: "之前的长篇回答" }), origin: "system",
+  });
+  const fact = record({ id: "fact1", scope: "project", scopeId: PROJECT, kind: "project_fact", key: "cohort", value: "队列 500 人" });
+  const index = fakeIndex([
+    hit(memoryUri(USER, { scope: "project", scopeId: PROJECT, kind: "run_summary", recordId: "run1" }), 0.9),
+    hit(memoryUri(USER, { scope: "project", scopeId: PROJECT, kind: "project_fact", recordId: "fact1" }), 0.8),
+  ]);
+  const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore([summary, fact]), openViking: index });
+
+  const recalled = await substrate.recall(USER, "SGLT2 CKD", { projectId: PROJECT });
+  assert.deepEqual(recalled.map((row) => row.id), ["record:fact1"], "an index that still nominates one gets nothing for it");
+
+  const rebuilt = await substrate.rebuild(USER);
+  assert.equal(rebuilt.written, 1);
+  assert.ok(index.calls.write.every((call) => !call.uri.endsWith("/run1.md")), "and a rebuild publishes no copy of one");
 });

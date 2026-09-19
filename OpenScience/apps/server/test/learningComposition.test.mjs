@@ -41,6 +41,7 @@ test("every learning module the loop needs is imported by the composition root",
     "./methodDistillationRuns.mjs",
     "./methodConsolidation.mjs",
     "./learningWorker.mjs",
+    "./learningTriggers.mjs",
     "./recordedGateway.mjs",
   ]) {
     assert.match(serverSource, new RegExp(`from "${module.replace(".", "\\.")}"`), `${module} is never imported`);
@@ -69,29 +70,40 @@ test("the transcript is captured before anything can decide not to", () => {
   const hook = /onRunFinished: async \(project, run\) => \{[\s\S]*?\n    \},/.exec(serverSource);
   assert.ok(hook, "onRunFinished is gone; this test now checks nothing");
   const capture = hook[0].indexOf("persistRunTranscript");
-  const memoryGuard = hook[0].indexOf("if (!researchMemory.configured) return;");
+  const memoryGuard = hook[0].indexOf("if (!researchMemory.configured) {");
   assert.ok(capture > 0, "the terminal hook no longer persists the transcript");
   assert.ok(memoryGuard > 0, "the memory early-return is gone");
   assert.ok(capture < memoryGuard,
     "the transcript capture moved below the memory early-return; a deployment without a memory store would stop recording runs");
 });
 
-test("the transcript capture and the distill enqueue each report their own failure", () => {
+test("the transcript capture and the distill enqueue each report their own failure", async () => {
   const hook = /onRunFinished: async \(project, run\) => \{[\s\S]*?\n    \},/.exec(serverSource)[0];
   // A throw inside this callback is caught by finishInternal and then caught
   // again, so a step that does not audit for itself fails invisibly.
   assert.match(hook, /securityAudit\(config, "run\.transcript\.persist", "failed"/);
-  assert.match(hook, /securityAudit\(config, "learning\.distill\.enqueue", "failed"/);
+  // The enqueue moved into learningTriggers.mjs, which audits through the
+  // function the composition root hands it.
+  const triggers = await readFile(new URL("../src/learningTriggers.mjs", import.meta.url), "utf8");
+  assert.match(triggers, /this\.audit\("learning\.distill\.enqueue"/);
+  assert.match(serverSource, /learningTriggers = new LearningTriggers\(\{[\s\S]*?audit: \(event, detail\) => securityAudit\(config, event, "failed", detail\)/);
 });
 
-test("only a run worth learning from is queued, and only a complete record of it", () => {
+test("the lessons are queued from the terminal hook by themselves, after the memory write that names a correction", () => {
+  // The loop never started under defaults: one producer needed two clicks on
+  // one deliverable, the other a server-side repair round that defaults to 0
+  // (2026-09-19 proposal §2, fact 3). The rules live in learningTriggersFor
+  // and are tested there; this asserts the hook actually calls them — wired is
+  // not fed.
   const hook = /onRunFinished: async \(project, run\) => \{[\s\S]*?\n    \},/.exec(serverSource)[0];
-  const enqueue = /if \(learningWorker && productJobs && run\.status === "succeeded"\) \{[\s\S]*?\n      \}/.exec(hook);
-  assert.ok(enqueue, "the distill producer is gone");
-  assert.match(enqueue[0], /rounds >= 1/, "a run that needed no repair is not evidence of anything");
-  assert.match(enqueue[0], /run\.transcript\?\.completeness === "complete"/,
-    "a partial transcript would teach a lesson drawn from evidence the loop cannot see");
-  assert.match(enqueue[0], /idempotencyKey: `distill:\$\{run\.id\}:repair_accepted`/);
+  assert.match(hook, /learningTriggers\.afterRun\(project, run, memoryResult\)/);
+  const extraction = hook.indexOf("memoryIntelligence.recordRun(project, run, messages)");
+  const afterMemory = hook.indexOf("await queueLessons(memoryResult);");
+  assert.ok(extraction > 0 && afterMemory > extraction, "the lessons must be queued after the extractor reports corrections");
+  const noMemory = hook.indexOf("if (!researchMemory.configured) {");
+  assert.ok(hook.indexOf("await queueLessons(null);", noMemory) > noMemory,
+    "a deployment without a memory store still learns from its runs");
+  assert.ok(hook.indexOf("if (evaluationRun) return;") < noMemory, "an evaluation cell never queues a lesson");
 });
 
 test("the counters have a producer, which is the whole difference between wired and working", () => {
@@ -214,8 +226,15 @@ test("the learning loop is on by default, and every spend it can reach is still 
   assert.match(config, /learningConcurrency: Number\(overrides\.learningConcurrency \?\? process\.env\.OPEN_SCIENCE_LEARNING_CONCURRENCY \?\? 2\)/,
     "an unbounded concurrency would start a container per claimed job");
   assert.match(config, /learningWindow/, "without an off-peak window the loop pays peak price");
-  assert.match(serverSource, /if \(rounds >= 1 && run\.transcript\?\.completeness === "complete"\)/,
-    "queueing every successful run would learn mostly that things usually work, at full price");
+  // Every delivery is a lesson since 2026-09-20 (owner ruling: the loop starts
+  // by itself, no clicks). What bounds that is the budget the learning runs
+  // are charged against, and that nothing is queued from a transcript the
+  // promotion rule would refuse.
+  assert.match(config, /learningDailyLimitCny: Number\(overrides\.learningDailyLimitCny/, "a lesson per delivery needs a daily ceiling");
+  assert.match(config, /learningWeeklyLimitCny: Number\(overrides\.learningWeeklyLimitCny/);
+  const triggers = await readFile(new URL("../src/learningTriggers.mjs", import.meta.url), "utf8");
+  assert.match(triggers, /if \(ledgerRun\.transcript\?\.completeness !== "complete"\) return \[\];/,
+    "a lesson from a partial transcript would be paid for and then refused by the promotion rule");
 });
 
 test("a terminal write in flight is waited for before the store it writes into goes away", () => {

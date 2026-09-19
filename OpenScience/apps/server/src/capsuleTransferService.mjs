@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { packCapsule, openCapsule, verifyCapsule } from "./capsuleContainer.mjs";
 import { capsuleAccountHash, protectedCapsuleDirectory, readProtectedCapsuleFile, writeProtectedCapsuleFile, unlinkCapsuleFile, syncCapsuleDirectory } from "./capsuleIdentityStore.mjs";
+import { CapsuleScanner } from "./capsuleScan.mjs";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 
@@ -76,9 +77,32 @@ function snapshotView(record) {
 
 /** Portable snapshots are immutable ciphertext; online state can be revoked, offline copies cannot. */
 export class CapsuleTransferService {
-  /** @param {{documents: import('./productStore.mjs').ProductDocuments, capsules: import('./capsuleService.mjs').CapsuleService, identities: import('./capsuleIdentityStore.mjs').CapsuleIdentityStore, dataDir: string}} options */
-  constructor({ documents, capsules, identities, dataDir }) {
+  /** @param {{documents: import('./productStore.mjs').ProductDocuments, capsules: import('./capsuleService.mjs').CapsuleService, identities: import('./capsuleIdentityStore.mjs').CapsuleIdentityStore, dataDir: string,
+   *   scanner?: import('./capsuleScan.mjs').CapsuleScanner | null}} options */
+  constructor({ documents, capsules, identities, dataDir, scanner = null }) {
     this.documents = documents; this.capsules = capsules; this.identities = identities; this.dataDir = dataDir;
+    this.scanner = scanner;
+    /** One scan per pack and account while a preview turns into an import. @type {Map<string, { at: number, result: any }>} */
+    this.scans = new Map();
+  }
+
+  /**
+   * The automatic scan of a pack's entries (`capsuleScan.mjs`), remembered for
+   * half an hour so the preview the researcher read is the import they get,
+   * without paying the model twice. A deployment without a scanner runs the
+   * closed-set half only.
+   * @param {string} userId @param {string | null} projectId @param {string} archiveSha256
+   * @param {readonly { id: string, factKind: string, content: string }[]} entries
+   */
+  async scanned(userId, projectId, archiveSha256, entries) {
+    const key = `${userId}\u0000${archiveSha256}`;
+    const cached = this.scans.get(key);
+    if (cached && Date.now() - cached.at < 30 * 60_000) return cached.result;
+    // No project, no ledger row to meter the language check against.
+    const result = await (this.scanner ?? new CapsuleScanner({})).scan({ userId, projectId: projectId ?? "" }, entries, { useModel: Boolean(projectId) });
+    if (this.scans.size >= 500) this.scans.delete(this.scans.keys().next().value);
+    this.scans.set(key, { at: Date.now(), result });
+    return result;
   }
 
   async export(userId, capsuleId, input, options = {}) {
@@ -192,7 +216,10 @@ export class CapsuleTransferService {
     const sourceAccountPresent = known && !known.revoked ? (await this.documents.database.query("SELECT 1 FROM evimed_control.users WHERE id=$1", [known.ownerId])).rowCount === 1 : false;
     if (hosted && (hosted.payload.recordType !== "capsule-snapshot" || hosted.payload.archiveSha256 !== archiveSha256)) throw invalid();
     const replacements = hosted ? await this.documents.list(known.ownerId, "preferences", { limit: 1, filter: { recordType: "capsule-snapshot", supersedes: metadata.snapshotId } }) : { items: [] };
-    const preview = { archiveSha256, snapshotId: metadata.snapshotId, scopes, entries: metadata.entries, newerSnapshotId: replacements.items[0]?.id ?? null,
+    // Whole-pack trust with an automatic scan (plan §3.3 #4): what would be
+    // dropped is part of what the researcher previews.
+    const scan = await this.scanned(userId, options.projectId ?? null, archiveSha256, metadata.entries);
+    const preview = { archiveSha256, snapshotId: metadata.snapshotId, scopes, entries: metadata.entries, newerSnapshotId: replacements.items[0]?.id ?? null, scan,
       issuerTrust: known ? "verified" : "unverified", issuerId: manifest.issuer.userId,
       hostedStatus: known && (known.revoked || !sourceAccountPresent) ? "revoked" : hosted?.payload.status ?? (known ? "unavailable" : "unknown"),
       canImport: !known || Boolean(currentIssuer && !currentIssuer.revoked && sourceAccountPresent && hosted?.payload.status === "active"), offlineRevocable: false };
@@ -209,13 +236,18 @@ export class CapsuleTransferService {
     if (!preview.canImport) throw new HttpError(409, "capsule_snapshot_revoked", "This hosted snapshot has been revoked.");
     const capsuleId = randomUUID();
     // The only transaction starts after KDF and parsing have finished. All rows
-    // are new, owned by this account, candidates and context-only.
+    // are new, owned by this account and context-only. The pack is trusted as
+    // a whole: what the scan let through is in force the moment the pack is
+    // enabled, and what it flagged is not written at all — it is listed on the
+    // pack instead. Nothing is enabled by importing it.
+    const kept = new Set(preview.scan.kept);
     let records;
     try { records = await this.documents.createBatch(userId, [
-      { kind: "capsule", id: capsuleId, payload: { title: checkedText(input.title ?? "Imported research capsule", 150), description: "Imported entries require explicit approval.", imported: true, activationMode: "guest",
-        transfer: { snapshotId: preview.snapshotId, archiveSha256: preview.archiveSha256, issuerTrust: preview.issuerTrust } } },
-      ...preview.entries.map(entry => ({ kind: "fact", id: randomUUID(), payload: {
-        capsuleId, factKind: entry.factKind, layer: entry.layer, content: entry.content, origin: "system", status: "candidate", contextOnly: true,
+      { kind: "capsule", id: capsuleId, payload: { title: checkedText(input.title ?? "收到的研究胶囊", 150), description: "别人分享的胶囊：整包生效，随时停用。", imported: true, activationMode: "guest",
+        transfer: { snapshotId: preview.snapshotId, archiveSha256: preview.archiveSha256, issuerTrust: preview.issuerTrust, importedAt: new Date().toISOString() },
+        scan: preview.scan } },
+      ...preview.entries.filter(entry => kept.has(entry.id)).map(entry => ({ kind: "fact", id: randomUUID(), payload: {
+        capsuleId, factKind: entry.factKind, layer: entry.layer, content: entry.content, origin: "system", status: "approved", contextOnly: true,
         provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }],
         transfer: { version: entry.version, sha256: entry.sha256, path: entry.path, snapshotId: preview.snapshotId, issuerTrust: preview.issuerTrust },
       } })),

@@ -111,20 +111,24 @@ test("one account's memory is invisible to another, whatever its text claims", o
   await store.purgeUserMemory(beta);
 });
 
-test("run summaries are recalled only when they match the question", options, async () => {
+test("run summaries belong to the timeline and are never recalled; the project's facts are, when they match", options, async () => {
+  // A run summary held the platform's own earlier answer and was recalled as
+  // if it were memory about the researcher (2026-09-19 proposal §4.1). The
+  // project dossier — facts, analyses, decisions — is what a later question in
+  // the same project draws on, and only when it matches.
   const projectId = "project-recall";
   const summary = (key, question) => store.upsertRecord(alpha, {
     scope: "project", scopeId: projectId, kind: "run_summary", key,
     value: JSON.stringify({ runId: key, question, answer: `关于${question}的长篇回答` }),
-    summary: `Conversation about: ${question}`, origin: "system", status: "active",
-    // A finished run is stored with full confidence and a failed one as more
-    // important than a successful one. Those two numbers alone put the
-    // relevance score above zero, which is what used to make every summary
-    // unconditionally recallable.
-    confidence: 1, importance: 0.7, sensitive: false,
+    summary: question, origin: "system", status: "active", confidence: 1, importance: 0.7, sensitive: false,
   });
   await summary("run.metformin", "二甲双胍的作用机制是什么");
   await summary("run.rituximab", "利妥昔单抗的感染风险");
+  await store.upsertRecord(alpha, {
+    scope: "project", scopeId: projectId, kind: "project_fact", key: "project.metformin.cohort",
+    value: "二甲双胍队列纳入 500 人", summary: "二甲双胍队列规模", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.6, sensitive: false,
+  });
   await store.upsertRecord(alpha, record({
     kind: "preference", key: "pref.language", value: "回答请用中文", summary: "回答请用中文",
     origin: "explicit", status: "active", confidence: 1, importance: 0.6,
@@ -133,19 +137,15 @@ test("run summaries are recalled only when they match the question", options, as
   const greeting = await store.relevant(alpha, "hello", { projectId });
   assert.deepEqual(greeting.map((memo) => memo.kind), ["preference"]);
   const onTopic = await store.relevant(alpha, "二甲双胍还有哪些副作用", { projectId });
-  assert.deepEqual(onTopic.map((memo) => memo.kind).sort(), ["preference", "run_summary"],
-    "a question that names the drug should still reach the earlier run");
-
-  // The projection, not the record: a run summary stores run ids, the model and
-  // timings, and none of those belong in a prompt.
-  const [recalled] = onTopic.filter((memo) => memo.kind === "run_summary");
-  assert.match(recalled.content, /二甲双胍的作用机制是什么/);
-  for (const internal of ["run.metformin", "runId"]) {
-    assert.ok(!recalled.content.includes(internal), `${internal} must not reach the prompt`);
-  }
+  assert.deepEqual(onTopic.map((memo) => memo.kind).sort(), ["preference", "project_fact"],
+    "a question that names the drug reaches the project's fact about it, and never an earlier answer");
   // Scope is a permission: another project never sees these.
   assert.deepEqual((await store.relevant(alpha, "二甲双胍还有哪些副作用", { projectId: "other-project" }))
     .map((memo) => memo.kind), ["preference"]);
+  // And a run summary is not counted as memory in force.
+  const profile = await store.profile(alpha, { projectId });
+  assert.equal(profile.activeCount, 2);
+  assert.equal(profile.episodeCount, 2);
   await store.purgeUserMemory(alpha);
 });
 
@@ -434,6 +434,7 @@ test("deleting an account deletes its memory, and the integrity audit knows the 
   await createUsers([doomed]);
   await store.create(doomed, "a note that must not outlive its account");
   await store.upsertRecord(doomed, record({ key: "profile.role", kind: "profile", status: "active" }));
+  await store.updateSessionState(doomed, "study-one", "ses_doomed", { incognito: true });
   assert.equal((await store.listAllRecords(doomed)).length, 1);
 
   await database.query("DELETE FROM evimed_control.users WHERE id=$1", [doomed]);
@@ -441,9 +442,11 @@ test("deleting an account deletes its memory, and the integrity audit knows the 
     [doomed])).rows[0].count, 0);
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.notes WHERE user_id=$1",
     [doomed])).rows[0].count, 0);
+  assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.sessions WHERE user_id=$1",
+    [doomed])).rows[0].count, 0);
 
   const audit = await relationalIntegrity(database);
-  for (const name of ["memory_records_user", "memory_notes_user", "memory_settings_user"]) {
+  for (const name of ["memory_records_user", "memory_notes_user", "memory_settings_user", "memory_sessions_user"]) {
     assert.ok(!audit.missing.includes(name), `${name} must be a declared foreign key`);
     assert.equal(audit.counts[name], 0, `${name} must hold no orphans`);
   }
@@ -579,4 +582,165 @@ test("a deployment on the term matcher queues nothing for a worker it never comp
   });
   assert.deepEqual(await indexJobs(owner), []);
   await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
+});
+
+test("a superseded fact leaves recall in the same commit that writes its replacement, and keeps its history", options, async () => {
+  const projectId = "project-supersede";
+  const fact = (key, value) => ({
+    scope: "project", scopeId: projectId, kind: "project_fact", key, value, summary: value,
+    origin: "explicit", status: "active", confidence: 1, importance: 0.7, sensitive: false,
+  });
+  const old = await store.upsertRecord(alpha, fact("project.regimen.rivaroxaban_20mg", "利伐沙班 20 mg qd"));
+  assert.equal(old.supersededBy, null);
+  assert.equal(old.invalidSince, null);
+
+  const { record, superseded } = await store.supersede(alpha, old.id, fact("project.regimen.rivaroxaban_15mg", "利伐沙班 15 mg qd"),
+    { sourceType: "conversation_message", sourceRef: "sessions/s1/messages/m9", quote: "改为 15 mg", observedAt: "2026-09-20T01:00:00Z", weight: 1 },
+    { reason: "conversation evidence replaced an earlier fact" });
+  assert.equal(record.status, "active");
+  assert.equal(superseded.status, "superseded");
+  assert.equal(superseded.supersededBy, record.id);
+  assert.match(superseded.invalidSince, instant);
+  assert.equal(superseded.value, "利伐沙班 20 mg qd", "the old fact is kept as it was, not edited");
+  assert.match(superseded.revisions.at(-1).reason, /^superseded by project\.regimen\.rivaroxaban_15mg: conversation evidence replaced/);
+
+  const recalled = await store.relevant(alpha, "利伐沙班的剂量", { projectId });
+  assert.deepEqual(recalled.map((memo) => memo.id), [`record:${record.id}`], "only the fact in force is recalled");
+
+  // An edit of the replaced fact's wording does not put it back in force.
+  const edited = await store.upsertRecord(alpha, { ...superseded, summary: "（旧方案）利伐沙班 20 mg qd" }, null,
+    { expectedVersion: superseded.version, reason: "user updated structured memory" });
+  assert.equal(edited.status, "superseded");
+  assert.equal(edited.supersededBy, record.id);
+
+  await assert.rejects(store.supersede(alpha, record.id, fact("project.regimen.rivaroxaban_15mg", "利伐沙班 15 mg bid")),
+    (error) => error?.status === 400 && error?.code === "memory_supersede_invalid");
+  await assert.rejects(store.supersede(beta, record.id, fact("project.regimen.other", "x")),
+    (error) => error?.status === 404, "another account's record cannot be superseded");
+  await store.purgeUserMemory(alpha);
+});
+
+test("a conversation's memory state: incognito, set aside and brought back, in one statement each", options, async () => {
+  const owner = `memory_session_${randomUUID()}`;
+  await createUsers([owner]);
+  /** @param {any} state */
+  const plain = (state) => ({ incognito: state.incognito, excluded: state.excluded });
+  try {
+    // Every switch off for a conversation that never touched one.
+    assert.deepEqual(plain(await store.sessionState(owner, "study-one", "ses_a")), { incognito: false, excluded: [] });
+
+    const on = await store.updateSessionState(owner, "study-one", "ses_a", { incognito: true });
+    assert.equal(on.incognito, true);
+    const aside = await store.updateSessionState(owner, "study-one", "ses_a", {
+      exclude: { type: "memory", id: "rec_1", label: "偏好表格" },
+    });
+    assert.equal(aside.incognito, true, "setting an item aside leaves the switch where it was");
+    await store.updateSessionState(owner, "study-one", "ses_a", { exclude: { type: "method", id: "method-abc", label: "剂量核对" } });
+    // The same item twice is one item, moved to the end with its newest label.
+    const again = await store.updateSessionState(owner, "study-one", "ses_a", { exclude: { type: "memory", id: "rec_1", label: "表格" } });
+    assert.deepEqual(again.excluded.map((item) => [item.type, item.id, item.label]),
+      [["method", "method-abc", "剂量核对"], ["memory", "rec_1", "表格"]]);
+    const back = await store.updateSessionState(owner, "study-one", "ses_a", { include: { type: "memory", id: "rec_1" } });
+    assert.deepEqual(back.excluded.map((item) => item.id), ["method-abc"]);
+
+    // Another conversation, and the same conversation id in another project, are their own.
+    assert.deepEqual(plain(await store.sessionState(owner, "study-one", "ses_b")), { incognito: false, excluded: [] });
+    assert.deepEqual(plain(await store.sessionState(owner, "study-two", "ses_a")), { incognito: false, excluded: [] });
+
+    // Two tabs at once both win: one sets an item aside while the other turns incognito off.
+    await Promise.all([
+      store.updateSessionState(owner, "study-one", "ses_a", { exclude: { type: "note", id: "note_1", label: "" } }),
+      store.updateSessionState(owner, "study-one", "ses_a", { incognito: false }),
+    ]);
+    const both = await store.sessionState(owner, "study-one", "ses_a");
+    assert.equal(both.incognito, false);
+    assert.deepEqual(both.excluded.map((item) => item.id).sort(), ["method-abc", "note_1"]);
+
+    // Refused as payload errors, by name.
+    for (const patch of [{ incognito: "yes" }, { exclude: { type: "tool", id: "x" } }, { exclude: { type: "memory", id: "../x" } }]) {
+      await assert.rejects(() => store.updateSessionState(owner, "study-one", "ses_a", patch),
+        (error) => error?.status === 400, JSON.stringify(patch));
+    }
+    await assert.rejects(() => store.sessionState(owner, "study-one", "ses a"), (error) => error?.code === "memory_session_invalid");
+
+    // Recall leaves out what the conversation set aside, and frees the slot.
+    await store.upsertRecord(owner, record({ key: "response.format", kind: "preference", value: "Tables for kidney outcomes.",
+      summary: "Tables", origin: "explicit", status: "active", confidence: 1 }));
+    const kept = await store.upsertRecord(owner, record({ key: "response.language", kind: "preference",
+      value: "Answer kidney questions in Chinese.", summary: "Chinese", origin: "explicit", status: "active", confidence: 1 }));
+    const all = await store.relevant(owner, "kidney", { projectId: "study-one" });
+    assert.equal(all.length, 2);
+    const [first] = all;
+    const filtered = await store.relevant(owner, "kidney", { projectId: "study-one",
+      excluded: [{ type: "memory", id: first.id.slice("record:".length) }] });
+    assert.deepEqual(filtered.map((memo) => memo.id), all.slice(1).map((memo) => memo.id));
+    assert.ok(all.some((memo) => memo.id === `record:${kept.id}`));
+
+    // A conversation trying someone else's capsule: marked, kept through other
+    // changes, cleared by name; it writes nothing and still reads.
+    const trying = await store.updateSessionState(owner, "study-one", "ses_trial", { trialCapsuleId: "pack-1" });
+    assert.equal(trying.trialCapsuleId, "pack-1");
+    assert.equal(trying.incognito, false);
+    await store.updateSessionState(owner, "study-one", "ses_trial", { exclude: { type: "note", id: "note_1", label: "" } });
+    assert.equal((await store.sessionState(owner, "study-one", "ses_trial")).trialCapsuleId, "pack-1");
+    const { memoryPausedFor } = await import("../src/researchMemory.mjs");
+    const paused = await memoryPausedFor(store, owner, "study-one", "ses_trial");
+    assert.deepEqual([paused.learning, paused.recall, paused.trial], [true, false, true]);
+    assert.equal((await store.updateSessionState(owner, "study-one", "ses_trial", { trialCapsuleId: null })).trialCapsuleId, null);
+    await assert.rejects(() => store.updateSessionState(owner, "study-one", "ses_trial", { trialCapsuleId: "../x" }),
+      (error) => error?.status === 400);
+
+    // Forgetting the project forgets its conversations' state, and only its.
+    await store.updateSessionState(owner, "study-two", "ses_c", { incognito: true });
+    await store.deleteProjectMemory(owner, "study-one");
+    assert.deepEqual(plain(await store.sessionState(owner, "study-one", "ses_a")), { incognito: false, excluded: [] });
+    assert.equal((await store.sessionState(owner, "study-two", "ses_c")).incognito, true);
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
+  }
+});
+
+test("every note is searchable, not the newest hundred, by the recall tokenizer's words", options, async () => {
+  const owner = `memory_notes_${randomUUID()}`;
+  await createUsers([owner]);
+  try {
+    const oldest = await store.create(owner, "利妥昔单抗的感染风险要单独评估，尤其合并乙肝时。");
+    // Written long ago: the listing orders by time, and notes made in one
+    // second would otherwise tie and be told apart by their random ids.
+    await database.query(`UPDATE evimed_memory.notes SET created_at=created_at - interval '30 days',
+      updated_at=updated_at - interval '30 days' WHERE user_id=$1 AND id=$2`, [owner, oldest.id]);
+    for (let index = 0; index < 120; index += 1) await store.create(owner, `第 ${index} 条日常笔记 routine`);
+    const pinned = await store.update(owner, (await store.create(owner, "总是先报告结论")).id, { pinned: true });
+    const archived = await store.create(owner, "利妥昔单抗 旧的看法");
+    await store.update(owner, archived.id, { state: "archived" });
+
+    // The newest hundred no longer hold the oldest note; the search still finds it.
+    assert.ok(!(await store.list(owner, { pageSize: 100 })).some((note) => note.id === oldest.id));
+    const found = await store.searchNotes(owner, "利妥昔单抗 感染");
+    assert.equal(found[0].id, oldest.id, "the note that matches most comes first");
+    assert.ok(found.some((note) => note.id === pinned.id), "a pinned note is always let through, as the matcher always did");
+    assert.ok(!found.some((note) => note.id === archived.id), "an archived note is not searched");
+    // A two-character Chinese term inside a longer run is a word.
+    const bigram = await store.create(owner, "患者肾功能不全时需要减量");
+    assert.ok((await store.searchNotes(owner, "肾功")).some((note) => note.id === bigram.id));
+    // An edit re-tokenizes.
+    await store.update(owner, bigram.id, { content: "透析患者另行处理" });
+    assert.ok(!(await store.searchNotes(owner, "肾功")).some((note) => note.id === bigram.id));
+    assert.ok((await store.searchNotes(owner, "透析")).some((note) => note.id === bigram.id));
+
+    // The recall reaches it too.
+    const recalled = await store.relevant(owner, "利妥昔单抗的感染风险");
+    assert.ok(recalled.some((memo) => memo.id === oldest.id), "the builtin recall reads the search, not the newest page");
+
+    // A note written before the column existed gets its tokens the first time it is searched.
+    await database.query(`INSERT INTO evimed_memory.notes(user_id,id,content) VALUES ($1,'legacy-note','华法林与胺碘酮合用要监测 INR')`, [owner]);
+    const fresh = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
+    assert.ok((await fresh.searchNotes(owner, "胺碘酮")).some((note) => note.id === "legacy-note"));
+    assert.equal((await database.query(`SELECT count(*)::integer AS count FROM evimed_memory.notes
+      WHERE user_id=$1 AND search_vector IS NULL`, [owner])).rows[0].count, 0);
+    // A question with nothing to match still sees the pinned notes, and only them.
+    assert.deepEqual((await store.searchNotes(owner, "?!")).map((note) => note.id), [pinned.id]);
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
+  }
 });

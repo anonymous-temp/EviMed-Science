@@ -749,7 +749,10 @@ function normalizeRecalledMemories(value) {
       scope: typeof item.scope === "string" ? item.scope.trim().slice(0, 16) : "user",
     }));
   }
-  return rows.length > 0 ? rows.slice(0, 16) : undefined;
+  // 40, not the 16 a dispatch's recall alone fits in: the recall tool adds to
+  // it over a conversation, and the panel that lists them must list them all.
+  // Still bounded — the row is rewritten on every learning write.
+  return rows.length > 0 ? rows.slice(0, 40) : undefined;
 }
 
 function normalizeMethodDigests(value) {
@@ -3830,6 +3833,18 @@ export class AgentRunStore {
   }
 
   /**
+   * The runs of a project that are still going, with the conversation each is
+   * in — what the capsule gateway asks to know whose recall it is answering
+   * (an incognito conversation, a 「本次不用」). The same fold as
+   * `activeRunIds`, asked per recall.
+   * @param {any} project @returns {Promise<{ id: string, sessionId: string }[]>}
+   */
+  async activeRuns(project) {
+    const runs = foldEvents(parseEvents(await readLedgerText(project, this.maxBytes)));
+    return [...runs.values()].filter((run) => run.status === "running").map((run) => ({ id: run.id, sessionId: run.sessionId }));
+  }
+
+  /**
    * How much a project has been used, for its list row (C4): how many runs it
    * holds and when anything last happened in one. Cheaper than `list` — no
    * phase walk — because the project list reads it for every project.
@@ -4307,7 +4322,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
   async recordLearning(project, rawRunId, patch) {
     const runId = safeId(rawRunId, "agent run id");
@@ -4318,6 +4333,14 @@ export class AgentRunStore {
       const compaction = patch.appendCompaction
         ? [...(current.compaction ?? []), patch.appendCompaction]
         : patch.compaction;
+      // What the run pulled in through the recall tool, added to what its
+      // dispatch recalled: the 「本次用到的背景」 panel lists both, and a
+      // conversation typed in the kernel's own window has only the first.
+      // Merged inside the ledger's mutation, so two recalls at once both land.
+      const recalled = patch.appendRecalledMemories
+        ? [...(current.recalledMemories ?? []), ...patch.appendRecalledMemories]
+          .filter((item, index, all) => all.findIndex((other) => other?.id === item?.id) === index)
+        : patch.recalledMemories;
       const event = {
         event: "learning",
         id: runId,
@@ -4342,8 +4365,8 @@ export class AgentRunStore {
         // written to `runs.jsonl` — so a caller handing over whole memory rows
         // would put their values in a file in the project workspace, where
         // deleting the memory would not delete them.
-        ...(patch.recalledMemories
-          ? { recalledMemories: normalizeRecalledMemories(patch.recalledMemories) ?? [] }
+        ...(recalled
+          ? { recalledMemories: normalizeRecalledMemories(recalled) ?? [] }
           : current.recalledMemories ? { recalledMemories: current.recalledMemories } : {}),
         ...(patch.repairRounds
           ? { repairRounds: { content: patch.repairRounds.content ?? 0, structural: patch.repairRounds.structural ?? 0 } }

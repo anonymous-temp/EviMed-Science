@@ -175,7 +175,18 @@ export function renderCapsuleMethod(method) {
 }
 
 /**
- * Whether one capsule entry may be mounted: the export predicate, in code.
+ * Whether one capsule entry may be mounted: the export predicate, in code —
+ * plus one line of its own.
+ *
+ * An `inferred` entry is never a mounted method. Runtime notes take effect
+ * without an approval now (owner ruling 2026-09-19) and they are a model's
+ * wording of what it was asked to remember; a page the run read can talk a
+ * model into writing one. Mounted, such an entry would be an instruction in
+ * every later run of the project — the one outcome the owner's defence
+ * against memory poisoning rules out. It stays recallable context, labelled
+ * as the assistant's note. What mounts is what the researcher wrote
+ * (`explicit`) and what a received pack brought once it was scanned and
+ * enabled (`system`).
  *
  * @param {any} entry
  * @returns {boolean}
@@ -183,6 +194,7 @@ export function renderCapsuleMethod(method) {
 function isMountableEntry(entry) {
   const payload = entry?.payload;
   return payload?.status === MOUNTABLE_STATUS
+    && payload.origin !== "inferred"
     && CAPSULE_WORK_STYLE_FACT_KINDS.includes(String(payload.factKind))
     && !UNMOUNTABLE_LAYERS.includes(String(payload.layer ?? ""))
     && typeof payload.content === "string"

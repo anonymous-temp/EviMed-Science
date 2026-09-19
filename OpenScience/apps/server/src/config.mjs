@@ -1286,11 +1286,14 @@ export function loadConfig(overrides = {}) {
     // It used to be whatever the process's clock said, and the web container
     // ships with no `TZ`: the operator wrote `22:00-09:00` meaning Beijing and
     // the loop evaluated it in UTC, arming itself for the Chinese working day
-    // (2026-09-15 walk, B3). Defaulting to `TZ` keeps a correctly configured
-    // container correct, and naming the zone separately lets a deployment
-    // whose containers run UTC still write the window in the operator's time.
+    // (2026-09-15 walk, B3). The variable existed and no compose file passed
+    // it, so it never reached the container either (plan 2026-09-19 §3.3 #2).
+    // Beijing by default, not `TZ`: the zone the window's numbers are written
+    // in is a property of how the operator wrote them, not of the clock the
+    // container happens to run — a container set to UTC would put the night
+    // back in the working day. An empty value reads the process clock.
     learningWindowTimeZone: String(overrides.learningWindowTimeZone
-      ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE ?? process.env.TZ ?? ""),
+      ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE ?? "Asia/Shanghai"),
     learningDailyLimitCny: Number(overrides.learningDailyLimitCny
       ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 5),
     learningWeeklyLimitCny: Number(overrides.learningWeeklyLimitCny
@@ -1423,6 +1426,15 @@ export function loadConfig(overrides = {}) {
     // extracted from those runs has no expiry.
     memoryRunSummaryTtlDays: Number(
       overrides.memoryRunSummaryTtlDays ?? process.env.OPEN_SCIENCE_MEMORY_RUN_SUMMARY_TTL_DAYS ?? 90,
+    ),
+    // mem stream (2026-09-20): how long an inferred memory lives after it was
+    // last observed. With no confirmation step (owner ruling 2026-09-19) an
+    // inference takes effect at once, so what keeps "one stressful week" from
+    // hardening into the profile is that a pattern not seen again fades; each
+    // re-observation extends it, and a statement the researcher made does not
+    // fade at all. 0 = never.
+    memoryInferredTtlDays: Number(
+      overrides.memoryInferredTtlDays ?? process.env.OPEN_SCIENCE_MEMORY_INFERRED_TTL_DAYS ?? 90,
     ),
     allowRuntimeHostNetwork:
       overrides.allowRuntimeHostNetwork ?? boolEnv("OPEN_SCIENCE_ALLOW_RUNTIME_HOST_NETWORK", false),

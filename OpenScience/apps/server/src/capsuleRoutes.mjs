@@ -16,8 +16,9 @@ function pageOptions(url) {
 }
 
 /** Typed user endpoints; no generic product document write API is exposed.
- * @param {{ store: any, service: any, transferService?: any, maxJsonBytes: number }} dependencies */
-export function createCapsuleRoutes({ store, service, transferService = null, maxJsonBytes }) {
+ * @param {{ store: any, service: any, transferService?: any, maxJsonBytes: number,
+ *   trials?: { mark: (userId: string, projectId: string, sessionId: string, capsuleId: string) => Promise<unknown> } | null }} dependencies */
+export function createCapsuleRoutes({ store, service, transferService = null, maxJsonBytes, trials = null }) {
   /** @param {any} req @param {any} res @returns {Promise<boolean>} */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -34,6 +35,9 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       if (id != null) await store.requireProject(user, id);
       return id ?? null;
     };
+    // The project the researcher is in: what a model call made on their
+    // behalf here (the capsule scan) is metered to.
+    const current = async () => (typeof store.selectedProject === "function" ? (await store.selectedProject(req, user))?.id ?? null : null);
 
     if (parts.length === 0) {
       if (method === "GET") return reply(await service.list(user.id, pageOptions(url)));
@@ -44,12 +48,21 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       body.projectId = await project(body.projectId);
       return reply(await service.recall(user.id, { ...body, accountCreatedAt: user.accountCreatedAt }));
     }
+    // 「收到的胶囊」: every pack someone shared, trusted whole (plan §3.3 #4).
+    if (parts.length === 1 && parts[0] === "received" && method === "GET") {
+      return reply(await service.received(user.id, { projectId: await current() }));
+    }
+    // 「我的记忆胶囊」: read as one, and made on first use.
+    if (parts.length === 1 && parts[0] === "mine") {
+      if (method === "GET") return reply(await service.mine(user.id));
+      if (method === "POST") return reply(await service.ownCapsule(user.id, { create: true }));
+    }
     if (parts.length === 1 && parts[0] === "active" && method === "GET") {
       return reply(await service.active(user.id, await project(url.searchParams.get("projectId"))));
     }
     if ((parts[0] === "transfers" && parts.length === 2) || parts[1] === "exports") {
       if (!transferService) throw new HttpError(503, "product_state_unavailable", "Capsule transfer is temporarily unavailable.");
-      const accountContext = { accountCreatedAt: user.accountCreatedAt };
+      const accountContext = { accountCreatedAt: user.accountCreatedAt, projectId: await current() };
       if (parts[0] === "transfers" && method === "POST") {
         if (parts[1] === "preview") return reply(await transferService.preview(user.id,
           await bodyOf(req, CAPSULE_TRANSFER_MAX_BYTES * 2 + 4096, ["archive", "password"]), accountContext));
@@ -90,6 +103,27 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       body.projectId = await project(body.projectId);
       return reply(await service.activate(user.id, capsuleId, body));
     }
+    // A received pack: one click in force, one click out, or tried once in a
+    // conversation of its own that writes nothing into the researcher's memory.
+    if (parts.length === 2 && action === "enable" && method === "POST") {
+      await bodyOf(req, maxJsonBytes, []);
+      return reply(await service.enableReceived(user.id, capsuleId, { projectId: await current() }));
+    }
+    if (parts.length === 2 && action === "disable" && method === "POST") {
+      await bodyOf(req, maxJsonBytes, []);
+      return reply(await service.disable(user.id, capsuleId));
+    }
+    if (parts.length === 2 && action === "trial" && method === "POST") {
+      const body = await bodyOf(req, maxJsonBytes, ["sessionId"]);
+      const projectId = await current();
+      if (!trials || !projectId) throw new HttpError(503, "capsule_trial_unavailable", "Trying a capsule needs the research memory store and a project.");
+      if (typeof body.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(body.sessionId)) {
+        throw new HttpError(400, "capsule_payload_invalid", "Invalid session id.");
+      }
+      await service.prepareTrial(user.id, capsuleId, { projectId });
+      await trials.mark(user.id, projectId, body.sessionId, capsuleId);
+      return reply({ capsuleId, sessionId: body.sessionId });
+    }
     if (parts.length === 2 && action === "restore" && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["expectedRevision"]);
       return reply(await service.restore(user.id, capsuleId, body.expectedRevision));
@@ -111,6 +145,12 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     if (action === "entries" && parts.length === 3 && method === "PATCH") {
       return reply(await service.updateEntry(user.id, capsuleId, entryId,
         await bodyOf(req, maxJsonBytes, ["content", "status", "expectedRevision"])));
+    }
+    // One click takes back the last change to an entry (owner ruling
+    // 2026-09-19): nothing asks first, so everything can be undone.
+    if (action === "entries" && parts.length === 4 && entryAction === "undo" && method === "POST") {
+      const body = await bodyOf(req, maxJsonBytes, ["expectedRevision"]);
+      return reply(await service.undoEntry(user.id, capsuleId, entryId, { expectedRevision: body.expectedRevision }));
     }
     if (action === "entries" && parts.length === 4 && entryAction === "history" && method === "GET") {
       await service.get(user.id, capsuleId);
