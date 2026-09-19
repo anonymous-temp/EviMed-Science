@@ -383,6 +383,9 @@
   name: '@deepseek-ai/dsh-fs-sandbox'
 - id: llm-deepseek
   name: '@deepseek-ai/dsh-llm-deepseek'
+# == @changfenhuang/dsh-annotation
+- id: dsh-annotation
+  name: '@changfenhuang/dsh-annotation'
 # == @deepseek-ai/dsh-web-app
 - id: subagent-model-selection-settings
   name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
@@ -572,3 +575,6 @@
   name: dsh-cite
   config:
     timeoutMs: 15000
+# == dsh-mermaid
+- id: ui-mermaid
+  name: dsh-mermaid

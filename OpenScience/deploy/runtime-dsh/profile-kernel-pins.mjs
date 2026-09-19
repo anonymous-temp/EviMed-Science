@@ -43,7 +43,28 @@ export function verifiedKernelPins(cliManifestPath, version, cordisVersion) {
   return Object.fromEntries([...pins].sort(([a], [b]) => a.localeCompare(b)));
 }
 
-export function seedProfileKernelPins(cliManifestPath, profileDir, policyPath, version, cordisVersion) {
+/**
+ * Exact versions for the peers a community bundle declares outside the
+ * kernel's namespace (`@changfenhuang/dsh-annotation` asks for the bare
+ * `cordis`). pnpm installs a missing peer on its own, at whatever the range
+ * resolves to on the day of the build; an override makes it the version the
+ * bundle was booted against, and a kernel package can never be one of them.
+ * @param {string[]} specs `name@version`, exact
+ * @returns {Record<string, string>}
+ */
+export function peerPins(specs = []) {
+  /** @type {Record<string, string>} */
+  const pins = {};
+  for (const spec of specs) {
+    const match = /^((?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*)@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/.exec(String(spec));
+    if (!match) throw new Error(`A peer pin is name@exact-version: ${JSON.stringify(spec)}`);
+    if (match[1].startsWith("@deepseek-ai/")) throw new Error(`The kernel closure pins ${match[1]}; a community peer pin cannot`);
+    pins[match[1]] = match[2];
+  }
+  return pins;
+}
+
+export function seedProfileKernelPins(cliManifestPath, profileDir, policyPath, version, cordisVersion, communityPeers = {}) {
   const pins = verifiedKernelPins(cliManifestPath, version, cordisVersion);
   const file = path.join(profileDir, "package.json");
   const manifest = readManifest(file);
@@ -53,19 +74,23 @@ export function seedProfileKernelPins(cliManifestPath, profileDir, policyPath, v
   // rc.1's plugin manager reconciles only dependencies into active bundle
   // layers. devDependencies satisfy pnpm 11.7's prerelease peer resolution
   // without activating every bundle shipped by the CLI. The final plugin add
-  // uses --save-prod to promote only the four intended runtime bundles.
+  // uses --save-prod to promote only the intended runtime bundles.
   manifest.devDependencies = { ...manifest.devDependencies, ...pins };
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
-  const overrides = Object.entries(pins).map(([name, pin]) => `  ${JSON.stringify(name)}: ${JSON.stringify(pin)}`).join("\n");
+  // Community peers are overrides only: pnpm installs them for the bundle that
+  // asks, and a devDependency would make the profile hold one no bundle does.
+  const overrides = Object.entries({ ...pins, ...communityPeers }).map(([name, pin]) => `  ${JSON.stringify(name)}: ${JSON.stringify(pin)}`).join("\n");
   writeFileSync(path.join(profileDir, "pnpm-workspace.yaml"), `${policy.trimEnd()}\n\noverrides:\n${overrides}\n`);
   return pins;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const [cliManifestPath, profileDir, policyPath, version, cordisVersion] = process.argv.slice(2);
+  const [cliManifestPath, profileDir, policyPath, version, cordisVersion, ...peers] = process.argv.slice(2);
   if (!cliManifestPath || !profileDir || !policyPath || !version || !cordisVersion) {
-    throw new Error("Usage: profile-kernel-pins.mjs CLI_PACKAGE_JSON PROFILE_DIR POLICY_YAML DSH_VERSION CORDIS_VERSION");
+    throw new Error("Usage: profile-kernel-pins.mjs CLI_PACKAGE_JSON PROFILE_DIR POLICY_YAML DSH_VERSION CORDIS_VERSION [PEER@EXACT_VERSION ...]");
   }
-  const pins = seedProfileKernelPins(cliManifestPath, profileDir, policyPath, version, cordisVersion);
-  console.log(`Pinned ${Object.keys(pins).length} profile namespace packages to the verified CLI closure`);
+  const community = peerPins(peers);
+  const pins = seedProfileKernelPins(cliManifestPath, profileDir, policyPath, version, cordisVersion, community);
+  console.log(`Pinned ${Object.keys(pins).length} profile namespace packages to the verified CLI closure`
+    + (Object.keys(community).length ? ` and ${Object.keys(community).length} community peer(s): ${Object.entries(community).map(([n, v]) => `${n}@${v}`).join(", ")}` : ""));
 }

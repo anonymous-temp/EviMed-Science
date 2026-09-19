@@ -137,7 +137,12 @@ test("all 38 curated scientific skills have an executable, dependency-pinned, sm
   // build-time smoke is a property of whichever image ships, not of the kernel
   // that happened to host it first.
   const sharedExecutor = await readFile(path.join(curatedRoot, "_runtime/execute_skill.py"), "utf8");
-  const runtimeDockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  // The build as the Dockerfile runs it: its install phases read in place.
+  const { expandInstallPhases } = await import("../../../scripts/ops/runtime-install-phases.mjs");
+  const runtimeDockerfile = expandInstallPhases(
+    await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8"),
+    await readFile(path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh"), "utf8"),
+  );
   assert.match(sharedExecutor, /No deterministic baseline is registered for this skill/);
   assert.match(runtimeDockerfile, /Smoke every shared curated-skill implementation in the production dependency image/);
   assert.match(runtimeDockerfile, /len\(shared\) != 36/);

@@ -292,7 +292,7 @@ export function pluginAvailabilityRecord(rows, at) {
 
 /**
  * @param {Record<string, any>} args @param {boolean} offline
- * @returns {Promise<{rows: Record<string, any>[], unread: string | null}>}
+ * @returns {Promise<{rows: Record<string, any>[], clientRows: Record<string, any>[], unread: string | null}>}
  */
 async function pluginLane(args, offline) {
   let support;
@@ -304,7 +304,7 @@ async function pluginLane(args, offline) {
     // exactly where the control plane reads it is the host where its input is
     // missing. That must not take the dependency lane down with it, and it must
     // not overwrite a real observation with an empty one either.
-    return { rows: [], unread: `plugin support record unreadable at runtime/skills/community/plugin-support.json: ${error?.message ?? error}` };
+    return { rows: [], clientRows: [], unread: `plugin support record unreadable at runtime/skills/community/plugin-support.json: ${error?.message ?? error}` };
   }
   const bundles = Array.isArray(support.communityToolBundles) ? support.communityToolBundles : [];
   const command = String(args["plugin-probe"] ?? process.env.EVIMED_PLUGIN_PROBE ?? "");
@@ -320,7 +320,20 @@ async function pluginLane(args, offline) {
     const probe = bundle.status === "installed" ? await probePluginLoad(bundle, command) : null;
     rows.push(pluginCompatibilityRow(bundle, { kernel: String(support.kernel ?? ""), probe, latest: upstream.latest, latestSource: upstream.latest ? upstream.reason : null }));
   }
-  return { rows, unread: null };
+  // The client bundles the image installs beside them (rt, 2026-09-20): the
+  // same upgrade and load questions, asked of their npm coordinate. Reported,
+  // never written into the availability record — the control plane registers
+  // none of them as a plugin, and each has its own off switch when a new
+  // kernel breaks it.
+  const clients = Array.isArray(support.communityClientBundles) ? support.communityClientBundles : [];
+  const clientRows = [];
+  for (const bundle of clients) {
+    const pin = { npmPackage: bundle.npmPackage };
+    const upstream = pin.npmPackage ? await latestVersion(String(bundle.name), pin, offline) : { latest: null, reason: "no npm coordinate recorded" };
+    const probe = bundle.status === "installed" ? await probePluginLoad({ name: bundle.npmPackage, version: bundle.version }, command) : null;
+    clientRows.push(pluginCompatibilityRow(bundle, { kernel: String(support.kernel ?? ""), probe, latest: upstream.latest, latestSource: upstream.latest ? upstream.reason : null }));
+  }
+  return { rows, clientRows, unread: null };
 }
 
 async function main() {
@@ -372,12 +385,13 @@ async function main() {
       .map((row) => `${row.dependency} ${row.pinned} → tag ${row.upstreamTag} (npm still ${row.latest})`),
   };
 
-  const { rows: pluginRows, unread } = await pluginLane(args, offline);
+  const { rows: pluginRows, clientRows, unread } = await pluginLane(args, offline);
   matrix.plugins = pluginRows;
+  matrix.clientBundles = clientRows;
   // Not probed is not a failure — it is the absence of evidence, and it is
   // listed separately so nobody reads the plugin lane as a green one.
-  matrix.pluginsNotProbed = pluginRows.filter((row) => row.loadsAgainstPin === "not-probed").map((row) => `${row.plugin}: ${row.probeReason}`);
-  matrix.pluginsFailingToLoad = pluginRows.filter((row) => row.loadsAgainstPin === "fail").map((row) => `${row.plugin}: ${row.probeReason}`);
+  matrix.pluginsNotProbed = [...pluginRows, ...clientRows].filter((row) => row.loadsAgainstPin === "not-probed").map((row) => `${row.plugin}: ${row.probeReason}`);
+  matrix.pluginsFailingToLoad = [...pluginRows, ...clientRows].filter((row) => row.loadsAgainstPin === "fail").map((row) => `${row.plugin}: ${row.probeReason}`);
   if (unread) matrix.pluginsUnread = unread;
 
   const out = String(args.out ?? "");

@@ -1911,6 +1911,11 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
         ? config.agentbaySandboxEnforcement ?? "full"
         : config.runtimeSandboxEnforcement),
     },
+    // The community client bundles a deployment switched off (rt, plan §3.9).
+    disabledClientBundles: [
+      ...(config.runtimeAnnotationEnabled === false ? ["annotation"] : []),
+      ...(config.runtimeMermaidEnabled === false ? ["mermaid"] : []),
+    ],
   };
 }
 

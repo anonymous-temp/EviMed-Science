@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "kernel": "@deepseek-ai/dsh@0.1.2-rc.1",
+  "kernel": "@deepseek-ai/dsh@0.1.5-rc.2",
   "management": "immutable-release",
   "nativePlugins": [
     "evimed-seam-probe",
@@ -54,6 +54,35 @@
       "reason": "Dependency build scripts require an unreviewed pnpm approval."
     }
   ],
+  "communityClientBundles": [
+    {
+      "name": "dsh-annotation",
+      "npmPackage": "@changfenhuang/dsh-annotation",
+      "version": "1.4.10",
+      "status": "installed",
+      "row": "dsh-annotation",
+      "switch": "OPEN_SCIENCE_RUNTIME_ANNOTATION_ENABLED",
+      "peerPins": {
+        "cordis": "4.0.0-rc.10"
+      },
+      "testedOn": "2026-09-20",
+      "what": "Select a passage in a reply, annotate it, and the annotations travel with the next message as plain text prepended to the user turn. Client-side only: it registers no tools and reaches no network.",
+      "evidence": "Booted against dsh@0.1.5-rc.2 in the production runtime image on 2026-09-15 (try-install.json), and again on 2026-09-20 from a seeded host profile, where its client was served in the kernel's plugin bundle. Its peer is the bare `cordis` package, pinned exactly because pnpm would otherwise install whatever the range resolves to on the build day. The image build smoke boots it on every full build."
+    },
+    {
+      "name": "dsh-mermaid",
+      "npmPackage": "dsh-mermaid",
+      "version": "0.4.0",
+      "status": "installed",
+      "row": "ui-mermaid",
+      "switch": "OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED",
+      "peerPins": {},
+      "testedOn": "2026-09-20",
+      "what": "Renders fenced Mermaid diagrams in replies (PRISMA flow, study-selection trees) with a diagram/code toggle. Client-side only; the counts in a diagram still have to come from the screening ledger.",
+      "evidence": "Booted against dsh@0.1.5-rc.2 in the production runtime image on 2026-09-15, and again on 2026-09-20 from a seeded host profile, where its client was served in the kernel's plugin bundle. The 2026-09-15 source scan's net/proc/fsWrite hits were read one by one: coincidental substrings in the browser-side Mermaid+KaTeX build and the package's own CLI, not the plugin (docs/superpowers/plans/2026-08-24-dsh-ecosystem-adoption-shortlist.md)."
+    }
+  ],
   "updatePolicy": "Exact pins are upgraded only through the upstream matrix, dump-config review, image boot smoke and immutable release rollback.",
-  "registryContract": "Bundles marked installed here are the plugin registry the control plane serves, capped by APPLY_PATH_PLUGIN_IDS in apps/server/src/pluginService.mjs to the ids its apply path can carry; anything else is unconfigurable by name, and marking a bundle installed before that path carries it is refused rather than served. npmPackage is the coordinate the runtime image installs from, and is what the nightly matrix polls for availability; a bundle without one is never looked up, so its availability stays unknown rather than guessed."
+  "registryContract": "Bundles marked installed here are the plugin registry the control plane serves, capped by APPLY_PATH_PLUGIN_IDS in apps/server/src/pluginService.mjs to the ids its apply path can carry; anything else is unconfigurable by name, and marking a bundle installed before that path carries it is refused rather than served. npmPackage is the coordinate the runtime image installs from, and is what the nightly matrix polls for availability; a bundle without one is never looked up, so its availability stays unknown rather than guessed.",
+  "clientBundleContract": "communityClientBundles are client-side bundles with no tools and no settings. The runtime image installs each at the recorded version (deps-version.json and the Dockerfiles carry the same value; a test holds them equal), and each is turned off deployment-wide by its own switch, which the control plane's profile patch renders as `disabled: true` on the bundle's row. They are not per-project plugins: the plugin registry reads communityToolBundles only."
 }

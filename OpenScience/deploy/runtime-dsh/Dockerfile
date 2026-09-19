@@ -61,114 +61,22 @@ LABEL io.open-science.uv.version="${UV_VERSION}"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN sed -ri "s|https?://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g; s|https?://deb.debian.org/debian|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
-  && apt-get update \
-  && apt-get install -y --no-install-recommends \
-    bash \
-    ca-certificates \
-    chromium \
-    curl \
-    fonts-noto-cjk \
-    git \
-    gzip \
-    python-is-python3 \
-    python3 \
-    python3-venv \
-    r-base-core \
-    r-recommended \
-    ripgrep \
-    socat \
-    tar \
-    util-linux \
-    xz-utils \
-  && rm -rf /var/lib/apt/lists/*
+# Every install step is a phase of one script, which Dockerfile.agentbay runs
+# too (in the same order — deploy.test.mjs holds the two lists equal), so the
+# Docker and AgentBay runtimes install the same things the same way. Each phase
+# is still its own RUN, and so its own cached layer, exactly as before.
+COPY deploy/runtime-dsh/install-runtime.sh /usr/local/lib/evimed/install-runtime.sh
+RUN bash /usr/local/lib/evimed/install-runtime.sh system
 
-# Node and uv. Node is here because DSH is a Node program; the sandbox backend
-# it will actually use inside a container is Landlock, which needs no package.
-RUN set -eux; \
-  case "${TARGETARCH}" in \
-    amd64) NODE_ARCH="x64"; NODE_SHA256="${NODE_SHA256_AMD64}"; UV_TRIPLE="x86_64-unknown-linux-gnu"; UV_SHA256="${UV_SHA256_AMD64}" ;; \
-    arm64) NODE_ARCH="arm64"; NODE_SHA256="${NODE_SHA256_ARM64}"; UV_TRIPLE="aarch64-unknown-linux-gnu"; UV_SHA256="${UV_SHA256_ARM64}" ;; \
-    *) echo "Unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
-  esac; \
-  tmp="$(mktemp -d)"; \
-  curl_args=(--http1.1 --fail --show-error --location --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 20 --max-time 600 --speed-limit 1024 --speed-time 60 --continue-at -); \
-  curl "${curl_args[@]}" "${NODE_DIST_BASE}/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" -o "${tmp}/node.tar.xz"; \
-  if [ -z "${NODE_SHA256}" ]; then echo "No Node sha256 pinned for TARGETARCH=${TARGETARCH}; refusing to install an unverified runtime." >&2; exit 1; fi; \
-  printf '%s  %s\n' "${NODE_SHA256}" "${tmp}/node.tar.xz" | sha256sum -c -; \
-  tar -xJf "${tmp}/node.tar.xz" -C /usr/local --strip-components=1 \
-    --exclude=CHANGELOG.md --exclude=README.md; \
-  curl "${curl_args[@]}" "${GITHUB_DOWNLOAD_PREFIX}https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_TRIPLE}.tar.gz" -o "${tmp}/uv.tar.gz"; \
-  printf '%s  %s\n' "${UV_SHA256}" "${tmp}/uv.tar.gz" | sha256sum -c -; \
-  tar -xzf "${tmp}/uv.tar.gz" -C "${tmp}"; \
-  install -m 0755 "$(find "${tmp}" -type f -name uv | head -n 1)" /usr/local/bin/uv; \
-  curl "${curl_args[@]}" "${GITHUB_DOWNLOAD_PREFIX}https://raw.githubusercontent.com/astral-sh/uv/${UV_VERSION}/LICENSE-MIT" -o "${tmp}/uv-LICENSE-MIT"; \
-  printf '%s  %s\n' "${UV_LICENSE_MIT_SHA256}" "${tmp}/uv-LICENSE-MIT" | sha256sum -c -; \
-  install -d -m 0755 /usr/share/licenses/uv; \
-  install -m 0644 "${tmp}/uv-LICENSE-MIT" /usr/share/licenses/uv/LICENSE-MIT; \
-  rm -rf "${tmp}"; \
-  node --version; \
-  uv --version
+# Node and uv, each fetched and verified against the pins above.
+RUN bash /usr/local/lib/evimed/install-runtime.sh toolchain
 
-# The kernel, and its whole subpackage tree, at one version.
-#
-# The CLI declares prerelease ranges for its own subpackages. An exact root
-# version can otherwise resolve a mixed tree after a later release appears.
-#
-# So the resolution is fixed by `--before` and then *verified across the whole
-# tree*, because a date filter is a request and the assertion is the guarantee.
-# The scan fails when it finds implausibly few packages, so a broken readdir
-# reports a broken scan rather than a clean tree. It did, on the alpha.5 build:
-# npm placed all 223 subpackages under the pin's own `node_modules` instead of
-# hoisting them beside it, and a scan that knew only the hoisted layout found
-# one package and said so. Both layouts are searched now, and the one in use is
-# printed — a layout change should be visible in the log rather than inferred
-# from a count. (The cordis check below already looked nested first; the two
-# halves of this RUN had disagreed about the tree shape since it was written.)
-RUN set -eux; \
-  npm config set registry "${NPM_REGISTRY}"; \
-  npm install -g --no-fund --no-audit --before="${DSH_PUBLISHED_BEFORE}" "@deepseek-ai/dsh@${DSH_VERSION}"; \
-  dsh --version; \
-  installed="$(node -p "require('/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json').version")"; \
-  test "${installed}" = "${DSH_VERSION}" || { echo "installed dsh ${installed} != pinned ${DSH_VERSION}" >&2; exit 1; }; \
-  node -e '\
-    const fs = require("fs"), path = require("path"); \
-    const [pin] = process.argv.slice(1); \
-    const roots = ["/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai", "/usr/local/lib/node_modules/@deepseek-ai"]; \
-    const dir = roots.find((candidate) => { try { return fs.readdirSync(candidate).filter((n) => n.startsWith("dsh")).length >= 50; } catch { return false; } }); \
-    if (!dir) { console.error("no @deepseek-ai directory holds 50+ dsh* packages; looked in " + roots.join(" and ") + " — the scan, not the tree, is wrong"); process.exit(2); } \
-    console.log("scanning " + dir); \
-    const names = fs.readdirSync(dir).filter((n) => n.startsWith("dsh")); \
-    const drifted = names.map((n) => [n, JSON.parse(fs.readFileSync(path.join(dir, n, "package.json"), "utf8")).version]).filter(([, v]) => v !== pin); \
-    if (drifted.length) { console.error(drifted.length + " of " + names.length + " @deepseek-ai/dsh* packages are not " + pin + "; the registry resolved newer subpackages, which usually means NPM_REGISTRY is a mirror that does not honour --before (its packuments carry no publish times). Point NPM_REGISTRY at a registry that does, or vendor the tree."); for (const [n, v] of drifted.slice(0, 8)) console.error("  " + n + " = " + v); process.exit(1); } \
-    console.log("all " + names.length + " @deepseek-ai/dsh* packages are " + pin); \
-  ' "${DSH_VERSION}"; \
-  cordis="$(node -p "require('/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/package.json').version" 2>/dev/null || node -p "require('@deepseek-ai/cordis/package.json').version")"; \
-  test "${cordis}" = "${DSH_CORDIS_VERSION}" || { echo "resolved cordis ${cordis} != pinned ${DSH_CORDIS_VERSION}" >&2; exit 1; }
+# The kernel, and its whole subpackage tree, at one version: resolved with
+# `--before` and then verified package by package.
+RUN bash /usr/local/lib/evimed/install-runtime.sh kernel
 
-# `dsh plugin add` manages a profile's plugin set with pnpm, so the image has to
-# carry it before a profile can be pre-initialised — without it the command
-# prints "pnpm not found on PATH" and exits 127, which is what a build that had
-# never been run could not have told anyone.
-#
-# It is installed as a real global package rather than through Corepack. A
-# Corepack shim resolves its version at every invocation and reaches the
-# registry to do it, so in the runtime container — which has no route off the
-# host by design — `pnpm` fails with EAI_AGAIN instead of running. The web image
-# may use Corepack because it only ever runs during a build with a network.
-#
-# The version tracks DSH's own packageManager, not the workspace's. This pnpm
-# exists to manage a DSH profile, and `dsh plugin` writes a pnpm-workspace.yaml
-# there listing the profile directory as its own package; pnpm 9 refuses to add
-# a dependency into a workspace root without -w, so the workspace pin fails here
-# with ERR_PNPM_ADDING_TO_ROOT. Two tools, two requirements — deps-version.json
-# keeps this one next to the DSH pin that decides it.
-RUN set -eux; \
-  npm install -g --no-fund --no-audit "pnpm@${PNPM_VERSION}"; \
-  pnpm config set registry "${NPM_REGISTRY}"; \
-  installed="$(pnpm --version)"; \
-  test "${installed}" = "${PNPM_VERSION}" || { echo "installed pnpm ${installed} != pinned ${PNPM_VERSION}" >&2; exit 1; }; \
-  env -u COREPACK_NPM_REGISTRY npm_config_registry=http://127.0.0.1:1 pnpm --version > /dev/null
+# The pnpm `dsh plugin` manages a profile with, as a real global package.
+RUN bash /usr/local/lib/evimed/install-runtime.sh pnpm
 
 # The scientific stack every run executes in, pinned so a green image build is
 # evidence that production has the same Python/R capabilities tested in CI.
@@ -178,91 +86,18 @@ RUN set -eux; \
 # deleted on 2026-09-19.)
 ENV VIRTUAL_ENV=/opt/evimed/venv
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
-RUN uv venv "${VIRTUAL_ENV}" --python /usr/bin/python3 \
-  && uv pip install --python "${VIRTUAL_ENV}/bin/python" --index-url "${PIP_INDEX_URL}" --no-cache \
-    ipykernel==6.29.5 \
-    jupyterlab==4.4.3 \
-    matplotlib==3.10.3 \
-    numpy==2.2.6 \
-    openpyxl==3.1.5 \
-    pandas==2.2.3 \
-    Pillow==10.4.0 \
-    playwright==1.58.0 \
-    pypdf==6.7.0 \
-    scikit-learn==1.6.1 \
-    scipy==1.15.3 \
-    statsmodels==0.14.6 \
-  && python - <<'PY'
-import importlib
-
-for package in ("ipykernel", "jupyterlab", "matplotlib", "numpy", "openpyxl", "pandas", "PIL", "playwright", "pypdf", "sklearn", "scipy", "statsmodels"):
-    importlib.import_module(package)
-PY
-RUN test -x /usr/bin/chromium && rg --version && python -m playwright --version
-RUN Rscript -e 'stopifnot(getRversion() >= "4.0.0", abs(mean(c(1, 2, 3)) - 2) < 1e-12)'
+RUN bash /usr/local/lib/evimed/install-runtime.sh python
+RUN bash /usr/local/lib/evimed/install-runtime.sh browser
+RUN bash /usr/local/lib/evimed/install-runtime.sh verify-tools
 
 COPY runtime/skills/curated-scientific /usr/local/share/evimed/skills/curated-scientific
 COPY runtime/skills/office /usr/local/share/evimed/skills/office
 
 # Smoke every shared curated-skill implementation in the production dependency image.
-# The two dedicated matplotlib/statistical-power chains are exercised below.
-RUN python3 - <<'PY'
-import importlib.util
-import json
-import pathlib
-import tempfile
-
-root = pathlib.Path("/usr/local/share/evimed/skills/curated-scientific")
-inventory = json.loads((root / "inventory.json").read_text(encoding="utf-8"))
-contracts = inventory["policy"]["delivery"]["executable"]
-shared = {
-    name: contract
-    for name, contract in contracts.items()
-    if "../_runtime/execute_skill.py" in contract["entrypoints"]
-}
-if len(contracts) != 38 or len(shared) != 36:
-    raise SystemExit("curated delivery inventory is incomplete")
-
-spec = importlib.util.spec_from_file_location("evimed_curated_executor", root / "_runtime/execute_skill.py")
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-with tempfile.TemporaryDirectory() as temporary:
-    output_root = pathlib.Path(temporary)
-    for name, contract in sorted(shared.items()):
-        output_dir = output_root / name
-        output_dir.mkdir()
-        receipt = module.execute(name, module.smoke_request(name), output_dir, None)
-        (output_dir / "execution-receipt.json").write_text(
-            json.dumps(receipt, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        if receipt["skill"] != name or receipt["status"] not in {"success", "warning"}:
-            raise SystemExit(f"curated smoke failed: {name}")
-        for artifact in contract["artifacts"]:
-            path = output_dir / artifact
-            if not path.is_file() or path.stat().st_size == 0:
-                raise SystemExit(f"curated smoke artifact missing: {name}/{artifact}")
-print(f"smoked {len(shared)} shared curated skill implementations")
-PY
-
-RUN set -eux; \
-  export MPLBACKEND=Agg; \
-  tmp="$(mktemp -d)"; \
-  python3 /usr/local/share/evimed/skills/curated-scientific/matplotlib/scripts/plot_template.py --plot-type line --output "${tmp}/figure.png"; \
-  python3 /usr/local/share/evimed/skills/curated-scientific/matplotlib/scripts/plot_template.py --plot-type line --output "${tmp}/figure.svg"; \
-  test -s "${tmp}/figure.png"; \
-  test -s "${tmp}/figure.svg"; \
-  python3 /usr/local/share/evimed/skills/curated-scientific/statistical-power/scripts/export_power_analysis.py --output-dir "${tmp}/power"; \
-  test -s "${tmp}/power/power-analysis.md"; \
-  test -s "${tmp}/power/power-curve.csv"; \
-  test -s "${tmp}/power/power-curve.png"; \
-  python3 /usr/local/share/evimed/skills/office/docx/scripts/create_docx.py --text "EviMed" --output "${tmp}/document.docx"; \
-  python3 /usr/local/share/evimed/skills/office/pdf/scripts/create_pdf.py --text "EviMed" --output "${tmp}/document.pdf"; \
-  python3 /usr/local/share/evimed/skills/office/pptx/scripts/create_pptx.py --title "EviMed" --body "Evidence" --output "${tmp}/presentation.pptx"; \
-  printf 'name,value\ncontrol,1\n' > "${tmp}/input.csv"; \
-  python3 /usr/local/share/evimed/skills/office/xlsx/scripts/create_xlsx.py --input "${tmp}/input.csv" --output "${tmp}/workbook.xlsx"; \
-  python3 -c 'import pathlib,sys,zipfile; files=[pathlib.Path(sys.argv[1])/name for name in ("document.docx","presentation.pptx","workbook.xlsx")]; [zipfile.ZipFile(file).testzip() for file in files]' "${tmp}"; \
-  rm -rf "${tmp}"
+# The two dedicated matplotlib/statistical-power chains and the office
+# generators are exercised in the phase after it.
+RUN bash /usr/local/lib/evimed/install-runtime.sh curated-smoke
+RUN bash /usr/local/lib/evimed/install-runtime.sh office-smoke
 
 # The socket bundle, the capability manifests, the general skills and the MCP
 # server. All four are read-only at run time: a capability a user could write
@@ -294,7 +129,7 @@ COPY runtime/skills/evimed/open-domain-answer /opt/evimed/skills/evimed/open-dom
 COPY runtime/mcp/evimed-research /opt/evimed/mcp/evimed-research
 # Generated assets are absent from a clean Git context. Verify pinned upstream
 # bytes and execute offline queries before sealing the runtime filesystem.
-RUN python3 /opt/evimed/mcp/evimed-research/build_sider_cache.py
+RUN bash /usr/local/lib/evimed/install-runtime.sh sider-cache
 COPY packages/socket /opt/evimed/socket
 COPY deploy/runtime-dsh/capabilities /opt/evimed/capabilities
 COPY capability-skills /opt/evimed/capability-skills
@@ -321,20 +156,12 @@ COPY capability-skills /opt/evimed/capability-skills
 # on `domain` in turn and resolves it by walking up to this same directory.
 COPY packages/domain /opt/evimed/socket/node_modules/@evimed/domain
 COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
-RUN node /opt/evimed/socket/scripts/build-client.mjs \
-  && test -s /opt/evimed/socket/dist/client.js
+RUN bash /usr/local/lib/evimed/install-runtime.sh socket-client
 
 # The preset ships inside the bundle as a *system*-trusted root, so a copy a
 # user made into their own root cannot shadow it: the first root wins on a name
 # collision, and system roots come first.
-RUN set -eux; \
-  install -d -m 0755 /opt/evimed/socket/presets/evimed-universal/skills; \
-  cp -a /opt/evimed/skills/core /opt/evimed/socket/presets/evimed-universal/skills/core; \
-  cp -a /opt/evimed/skills/evimed /opt/evimed/socket/presets/evimed-universal/skills/evimed; \
-  cp -a /usr/local/share/evimed/skills/curated-scientific /opt/evimed/socket/presets/evimed-universal/skills/curated-scientific; \
-  cp -a /usr/local/share/evimed/skills/office /opt/evimed/socket/presets/evimed-universal/skills/office; \
-  cp -a /opt/evimed/skills/community /opt/evimed/socket/presets/evimed-universal/skills/community; \
-  chmod -R a-w /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills /opt/evimed/mcp
+RUN bash /usr/local/lib/evimed/install-runtime.sh preset-skills
 
 # The preset also goes into the kernel's OWN preset root, because that is the
 # only root the kernel reads.
@@ -352,11 +179,10 @@ RUN set -eux; \
 # configuration target that DSH silently overrides. The answer is the same —
 # put the thing where the kernel actually looks, rather than configuring a
 # location it will discard.
-# The two assertions below check the name on both sides: the control plane asks
-# for this exact string, and a rename on either side would otherwise show up
-# only as a failed session in production. (No comments inside the RUN: a
-# backslash-continued line and a `#` comment do not mix, and the silent result
-# is the rest of the command disappearing.)
+# The phase checks the name on both sides: the control plane asks for this
+# exact string, and a rename on either side would otherwise show up only as a
+# failed session in production.
+#
 # A root this image owns, named by the profile patch's `agent-presets.roots`.
 #
 # It used to be copied into the kernel's own preset directory, because at
@@ -368,12 +194,7 @@ RUN set -eux; \
 # works and is documented. Which returns this image to the rule it should never
 # have bent: a container does not write into its own installation.
 ARG DSH_PRESET_ROOT=/opt/evimed/dsh/presets
-RUN set -eux; \
-  mkdir -p "${DSH_PRESET_ROOT}"; \
-  cp -a /opt/evimed/socket/presets/evimed-universal "${DSH_PRESET_ROOT}/evimed-universal"; \
-  chmod -R a-w "${DSH_PRESET_ROOT}/evimed-universal"; \
-  grep -q "^name: evimed-universal$" "${DSH_PRESET_ROOT}/evimed-universal/preset.yml"; \
-  test -f "${DSH_PRESET_ROOT}/evimed-universal/agent.cordis.yml"
+RUN bash /usr/local/lib/evimed/install-runtime.sh preset-root
 
 # Pre-initialize the profile at build time so a container never has to install
 # its own plugins over the network while serving — built at a path outside
@@ -411,48 +232,20 @@ COPY deploy/runtime-dsh/profile-kernel-pins.mjs /usr/local/bin/evimed-profile-ke
 # rows moved.
 COPY deploy/runtime-dsh/dump-config.baseline.json /opt/evimed/committed-dump-config.baseline.json
 
-# The socket is added as `file:` rather than as a bare path, and the difference
-# decides whether the image works at all. A bare path makes pnpm link the source
-# directory, and the link it writes is relative to the profile — so the moment
-# the boot script copies this seed onto a project volume, `../../../socket`
-# resolves under /runtime and the profile cannot compose. `file:` copies the
-# package into the profile's own store, which is what makes the seed relocatable.
-#
-# The seed then proves itself four ways: a loadable native binding shows the
-# build permission took effect (node-pty ships prebuilds and never creates
-# build/, so asserting that directory would fail on a working image); a
-# non-empty --dump-config shows the composition resolves; composing again from
-# a copy at a different path shows it will still resolve after the boot script
-# relocates it, which is the one thing a test in place cannot show; and
-# `build-smoke.sh` BOOTS the relocated copy, which is the only one of the four
-# that imports a plugin. The first three all passed on an image whose bundle
-# could not be imported at all — see that script's header.
-#
-# Initialize through DSH before seeding exact peer providers from the verified
-# CLI closure. pnpm resolves this profile independently of npm's --before; an
-# exact top-level bundle alone does not pin transitive prereleases. Keeping the
-# peer providers in devDependencies avoids activating extra bundle layers.
-# --save-prod then promotes only the intended bundles into runtime dependencies.
-RUN set -eux; \
-  install -d -m 0755 "${DSH_HOME_SEED}/profiles/evimed-runtime"; \
-  cp /opt/evimed/profile-pnpm-workspace.yaml "${DSH_HOME_SEED}/profiles/evimed-runtime/pnpm-workspace.yaml"; \
-  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime list --depth 0; \
-  node /usr/local/bin/evimed-profile-kernel-pins.mjs /usr/local/lib/node_modules/@deepseek-ai/dsh/package.json "${DSH_HOME_SEED}/profiles/evimed-runtime" /opt/evimed/profile-pnpm-workspace.yaml "${DSH_VERSION}" "${DSH_CORDIS_VERSION}"; \
-  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --save-prod --save-exact "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "dsh-cite@0.3.2" file:/opt/evimed/socket; \
-  node -e 'const fs=require("node:fs"),path=require("node:path"); const [root,want]=process.argv.slice(1),seen=new Set(); for(const entry of fs.readdirSync(root,{recursive:true})){const match=entry.match(/(?:^|\/)@deepseek-ai\/(dsh(?:-[^/]+)?)\/package\.json$/); if(!match)continue; const pkg=JSON.parse(fs.readFileSync(path.join(root,entry),"utf8")); if(pkg.name!=="@deepseek-ai/"+match[1]||pkg.version!==want)throw Error("Profile kernel package differs from the pinned CLI: "+pkg.name); seen.add(pkg.name);} if(seen.size<100)throw Error("Profile kernel inventory is incomplete"); console.log("Verified profile kernel packages:",seen.size,want);' "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" "${DSH_VERSION}"; \
-  pty_platform="$(node -p 'process.platform + "-" + process.arch')"; \
-  pty_binding="$(find "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" -path "*/node-pty/prebuilds/${pty_platform}/pty.node" -print -quit)"; \
-  test -n "${pty_binding}"; \
-  node -e 'require(process.argv[1])' "${pty_binding}"; \
-  DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json; \
-  test -s /opt/evimed/dump-config.baseline.json; \
-  diff -u /opt/evimed/committed-dump-config.baseline.json /opt/evimed/dump-config.baseline.json; \
-  relocated="$(mktemp -d)"; \
-  cp -a "${DSH_HOME_SEED}/." "${relocated}/"; \
-  DSH_HOME="${relocated}" dsh --profile evimed-runtime --dump-config > /dev/null; \
-  rm -rf "${relocated}"; \
-  node /usr/local/bin/evimed-profile-seed.mjs seal "${DSH_HOME_SEED}" evimed-runtime; \
-  chmod -R a-w "${DSH_HOME_SEED}"
+# The profile seed: the harness bundles at the kernel pin, the community bundles
+# at the versions runtime/skills/community/plugin-support.json records they
+# booted at (dsh-cite; the selection-annotation and Mermaid client bundles),
+# and the socket as `file:` so the seed stays relocatable. Each community
+# bundle's own peer outside the kernel closure is pinned too. A test holds
+# these values, that record and deps-version.json equal. The phase then proves
+# the seed four ways — a loadable native binding, a --dump-config equal to the
+# committed baseline, a relocated copy that still composes, and (the `smoke`
+# phase below) a boot.
+ARG DSH_CITE_BUNDLE="dsh-cite@0.3.2"
+ARG DSH_ANNOTATION_BUNDLE="@changfenhuang/dsh-annotation@1.4.10"
+ARG DSH_MERMAID_BUNDLE="dsh-mermaid@0.4.0"
+ARG DSH_COMMUNITY_PEER_PINS="cordis@4.0.0-rc.10"
+RUN bash /usr/local/lib/evimed/install-runtime.sh profile-seed
 
 # Load the loader's native binding from the package it is installed in, rather
 # than from a copy the addon makes under /tmp.
@@ -478,9 +271,7 @@ ENV NARB_DISABLE_NATIVE_CACHE=1
 # closure while profile/session state stays on its writable runtime volume.
 COPY deploy/runtime-dsh/build-smoke.sh /usr/local/bin/evimed-build-smoke
 COPY deploy/runtime-dsh/build-smoke-patch.yml /usr/local/share/evimed/build-smoke-patch.yml
-RUN set -eux; \
-  chmod 0755 /usr/local/bin/evimed-build-smoke; \
-  SOCKET_VERSION="${SOCKET_VERSION}" /usr/local/bin/evimed-build-smoke
+RUN bash /usr/local/lib/evimed/install-runtime.sh smoke
 
 
 ENV DSH_HOME=/runtime/dsh-home
@@ -498,7 +289,7 @@ ENV DSH_TELEMETRY_DISABLED=1
 ENV DSH_PERMISSION_MODE=workspace-write
 
 COPY deploy/runtime-dsh/open-science-dsh-serve.sh /usr/local/bin/open-science-dsh-serve
-RUN chmod 0755 /usr/local/bin/open-science-dsh-serve
+RUN bash /usr/local/lib/evimed/install-runtime.sh serve
 
 WORKDIR /workspace
 VOLUME ["/workspace", "/runtime"]

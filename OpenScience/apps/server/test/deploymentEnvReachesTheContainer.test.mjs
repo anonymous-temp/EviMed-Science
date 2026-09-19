@@ -138,6 +138,10 @@ const operatorLevers = {
   OPEN_SCIENCE_AGENTBAY_SANDBOX_ENFORCEMENT: ["open-science-web"],
   OPEN_SCIENCE_AGENTBAY_BRIDGE_SECRET_MODE: ["open-science-web"],
   OPEN_SCIENCE_RUNTIME_GATEWAY_PUBLIC_URL: ["open-science-web"],
+  // rt (2026-09-20): the two community client bundles' off switches. A switch
+  // that does not arrive leaves a broken bundle in every runtime.
+  OPEN_SCIENCE_RUNTIME_ANNOTATION_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED: ["open-science-web"],
 };
 
 async function composeFiles() {
