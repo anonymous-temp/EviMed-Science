@@ -1185,6 +1185,13 @@ export function loadConfig(overrides = {}) {
       overrides.documentParserRevision ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_REVISION
       ?? depsVersions["evimed-extract"]?.revision ?? "",
     ).trim(),
+    // One Crossref lookup per parsed document that names a DOI, made by the
+    // ingestion worker between parse and capture. 8 s is several times
+    // Crossref's usual answer and short enough that an outage costs a source
+    // its DOI check (left unconfirmed), never its ingestion.
+    sourceDoiCheckTimeoutMs: Number(
+      overrides.sourceDoiCheckTimeoutMs ?? process.env.OPEN_SCIENCE_SOURCE_DOI_CHECK_TIMEOUT_MS ?? 8_000,
+    ),
     openListUrl: String(overrides.openListUrl ?? process.env.OPEN_SCIENCE_OPENLIST_URL ?? "").replace(/\/+$/, ""),
     openListToken: openListSecret.value,
     openListTokenSource: openListSecret.source,

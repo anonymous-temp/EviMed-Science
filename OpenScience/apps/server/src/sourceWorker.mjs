@@ -17,8 +17,8 @@ const TERMINAL_ERRORS = new Set([
 /** Leased ingestion worker. ProductJobs owns retries; source generations make
  * an old lease unable to overwrite a newer user correction. */
 export class SourceIngestionWorker {
-  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
-  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000 }) {
+  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,verifyMetadata?:(metadata:any)=>Promise<any>,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
+  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, verifyMetadata = async (metadata) => metadata, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000 }) {
     if (![jobs, sources, parser, resolveSource, materialize].every(Boolean)) throw new TypeError("SourceIngestionWorker dependencies are required.");
     if (!Number.isSafeInteger(pollMs) || pollMs < 100 || pollMs > 86_400_000
       || !Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 3_600_000
@@ -30,6 +30,7 @@ export class SourceIngestionWorker {
     this.parser = parser;
     this.resolveSource = resolveSource;
     this.releaseResolved = releaseResolved;
+    this.verifyMetadata = verifyMetadata;
     this.materialize = materialize;
     this.discardMaterialized = discardMaterialized;
     this.cleanupSource = cleanupSource;
@@ -143,7 +144,12 @@ export class SourceIngestionWorker {
           sha256: processing.payload.fingerprint.sha256,
           sourceId: processing.id,
         });
-        parsed = await this.sources.freezeCapture(job, result);
+        // A model wrote the parser's metadata; the DOI is checked against
+        // Crossref here, outside the capture's transaction, so a slow lookup
+        // never holds a row lock. It cannot fail the parse: an unreachable
+        // Crossref leaves the DOI unconfirmed.
+        const metadata = result.metadata ? await this.verifyMetadata(result.metadata).catch(() => null) : null;
+        parsed = await this.sources.freezeCapture(job, { ...result, metadata });
       }
       let completed = null;
       if (["structured", "deep"].includes(processing.payload.depth)) {

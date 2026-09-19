@@ -4,7 +4,7 @@ import test from "node:test";
 import { HttpError } from "../src/security.mjs";
 import { normalizeSourceText, projectSourceUnderstandingOutput, sourceUnderstandingAuditSample, sourceUnderstandingSchema,
   validateSourceUnderstanding } from "@evimed/domain";
-import { projectSourceManifestRecord, sourceOmissionRecord, SOURCE_DEPTHS, SOURCE_TYPES, SourceService } from "../src/sourceService.mjs";
+import { projectSourceManifestRecord, sourceIndexDocument, sourceOmissionRecord, SOURCE_DEPTHS, SOURCE_TYPES, SourceService } from "../src/sourceService.mjs";
 
 // The lease, replay and account-generation fences need a real database, so they
 // live in `sourceFolderSync.integration.test.mjs` — the only shape the durable
@@ -280,6 +280,58 @@ test("the connector vocabulary no longer names a local agent that does not ship"
     { code: "source_connector_invalid" }, "a connector nothing can read must not be registrable");
   const accepted = await service.register("user-one", upload({ connector: { type: "openlist", id: "/papers/a.pdf" } }));
   assert.equal(accepted.source.payload.connector.type, "openlist");
+});
+
+test("the knowledge base refuses what it cannot read at registration, recordings by name", async () => {
+  const { service, jobs } = fixture();
+  await assert.rejects(service.register("user-one", upload({ path: "knowledge-base/查房录音.m4a" })),
+    (error) => error.code === "source_media_unsupported" && error.status === 415);
+  await assert.rejects(service.register("user-one", upload({ path: "knowledge-base/cohort.sav" })),
+    (error) => error.code === "source_format_unsupported" && error.status === 415);
+  assert.equal(jobs.enqueued.length, 0, "nothing refused is queued for parsing");
+  // Every format on the parser's table and every local text format is taken.
+  for (const [index, name] of ["指南.pdf", "说明书.docx", "讲课.pptx", "数据.xlsx", "扫描.jpg", "书.epub", "页面.html", "笔记.md", "剂量.csv"].entries()) {
+    const registered = await service.register("user-one", upload({ path: `knowledge-base/${name}`, sha256: String(index).repeat(64) }));
+    assert.equal(registered.source.payload.status, "queued", name);
+  }
+});
+
+test("index.md carries the document's own bibliographic header and a marker where each page begins", () => {
+  const text = "第一页正文。\n第二页正文。";
+  const document = sourceIndexDocument({
+    original: "knowledge-base/指南/房颤指南.pdf",
+    sha256: "a".repeat(64),
+    extractor: { name: "evimed-extract", version: "evimed-extract@0.5.0", parser: "api" },
+    text,
+    pageMap: [{ page: 1, start: 0, end: 7, status: "ok" }, { page: 2, start: 7, end: text.length, status: "ok" }],
+    metadata: { title: "2023 房颤管理指南", authors: ["张三", "李四"], source: "中华心血管病杂志", publicationDate: "2023-06",
+      doi: "10.3760/cma.j.cn112148-20230101-00001", doiCheck: { status: "unconfirmed", reason: "not_registered_with_crossref" } },
+  });
+  assert.equal(document, [
+    "# 2023 房颤管理指南",
+    "",
+    "Source: knowledge-base/指南/房颤指南.pdf",
+    "Title: 2023 房颤管理指南",
+    "Authors: 张三; 李四",
+    "Published: 中华心血管病杂志, 2023-06",
+    "DOI: 10.3760/cma.j.cn112148-20230101-00001 (not confirmed by Crossref)",
+    `SHA-256: ${"a".repeat(64)}`,
+    "Extractor: evimed-extract evimed-extract@0.5.0 (api)",
+    "Pages: 2, each beginning at a line <!-- page N --> in the text below",
+    "",
+    "<!-- page 1 -->",
+    "第一页正文。",
+    "<!-- page 2 -->",
+    "第二页正文。",
+    "",
+  ].join("\n"));
+  // A confirmed DOI is stated plainly; with no metadata and no pages the file
+  // is the header it always was, around the untouched text.
+  const verified = sourceIndexDocument({ original: "a.pdf", sha256: "b".repeat(64), extractor: { name: "x", version: "1", parser: "api" },
+    text: "t", metadata: { doi: "10.1/x", doiCheck: { status: "verified" } } });
+  assert.match(verified, /^DOI: 10\.1\/x$/m);
+  const plain = sourceIndexDocument({ original: "notes/b.txt", sha256: "c".repeat(64), extractor: { name: "plain-text", version: "1.0.0", parser: "local" }, text: "原文\r\n" });
+  assert.equal(plain, `# b.txt\n\nSource: notes/b.txt\nSHA-256: ${"c".repeat(64)}\nExtractor: plain-text 1.0.0 (local)\n\n原文\r\n\n`);
 });
 
 test("a registered folder syncs incrementally: new, changed and unchanged entries are told apart", async () => {

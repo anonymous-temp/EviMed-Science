@@ -83,3 +83,30 @@ test("a quotation's offset names the page its first character is on", () => {
   assert.equal(sourcePageForOffset(null, 5), null);
   assert.equal(sourcePageForOffset(pageMap, -1), null);
 });
+
+test("page markers get lines of their own and leave every page's characters as they were", async () => {
+  const { renderSourcePageMarkers } = await import("../index.mjs");
+  const text = "第一页的正文，跨页的句子开始于此处而第二页继续。第三页";
+  const pageMap = [
+    { page: 1, start: 0, end: 16, status: "ok" },
+    { page: 2, start: 16, end: 24, status: "ok" },
+    { page: 3, start: 24, end: 24, status: "ocr_failed" },
+    { page: 4, start: 24, end: text.length, status: "ok" },
+  ];
+  const rendered = renderSourcePageMarkers(text, pageMap);
+  assert.equal(rendered, [
+    "<!-- page 1 -->",
+    text.slice(0, 16),
+    "<!-- page 2 -->",
+    text.slice(16, 24),
+    "<!-- page 3: ocr_failed -->",
+    "<!-- page 4 -->",
+    text.slice(24),
+  ].join("\n"));
+  // Every page's own characters appear verbatim, so a quotation taken from
+  // inside any one page is found in the rendered file and in the capture alike.
+  for (const entry of pageMap) assert.ok(rendered.includes(text.slice(entry.start, entry.end)), `page ${entry.page}`);
+  assert.equal(renderSourcePageMarkers(text, null), text);
+  assert.equal(renderSourcePageMarkers("a\nb", [{ page: 1, start: 0, end: 2, status: "ok" }, { page: 2, start: 2, end: 3, status: "ok" }]),
+    "<!-- page 1 -->\na\n<!-- page 2 -->\nb", "a page that begins after a newline needs no second one");
+});
