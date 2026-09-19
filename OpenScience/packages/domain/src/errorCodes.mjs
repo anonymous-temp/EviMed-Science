@@ -47,8 +47,8 @@ export const repairableEvidencePackageErrorCodes = new Set([
 export const recoverableEvidenceSourceErrorCodes = new Set([
   "full_text_not_available",
   "full_text_upstream_unavailable",
-  // `official_page_*` is what `web_read` answered as `official_page_fetch`
-  // until 2026-09-20. Nothing built since emits it, and every entry stays: a
+  // `official_page_*` is what `web_read` answered under its old name, until
+  // 2026-09-20. Nothing built since emits it, and every entry stays: a
   // runtime started from an image built before the rename speaks it until that
   // runtime is replaced, and a failed tool call with a code this registry does
   // not know fails the whole run (`agentRuns.mjs`).
