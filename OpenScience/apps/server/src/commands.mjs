@@ -298,7 +298,8 @@ const TASK_COMMAND_ALLOWLIST = new Set([
   "write_workspace_file",
 ]);
 
-export function createCommandRegistry({ config, runtimeManager }) {
+/** @param {{config:any,runtimeManager:any,knowledgeBaseUploads?:{covers:(root:string,rel:string)=>boolean,admit:(rel:string)=>void,register:(ctx:any,rel:string,buffer:Buffer)=>Promise<any>}|null}} dependencies */
+export function createCommandRegistry({ config, runtimeManager, knowledgeBaseUploads = null }) {
   const handlers = {
     // The value returned is the control plane's own surface, not a kernel's.
     // It used to be a pass-through base URL the browser then spoke a kernel's
@@ -380,10 +381,15 @@ export function createCommandRegistry({ config, runtimeManager }) {
       if (buffer.length > ctx.config.maxFileBytes) throw new HttpError(413, "file_too_large", "file is too large.");
       const base = rootDirFor(ctx.project, root);
       const full = resolveScopedPath(base, rel);
+      // The knowledge base's own admission: refused formats are never written,
+      // and what is written becomes a source (see `knowledgeBaseUploads`).
+      const knowledge = Boolean(knowledgeBaseUploads?.covers(root, rel));
+      if (knowledge) knowledgeBaseUploads.admit(rel);
       await withProjectStorageMutation(ctx.project, async () => {
         await assertProjectCapacity(ctx.project, full, buffer.length, ctx.config);
         await writeFileAtomicNoFollow(base, full, buffer, { mode: 0o600 });
       });
+      if (knowledge) await knowledgeBaseUploads.register(ctx, rel, buffer);
       return relFromFull(base, full);
     },
 

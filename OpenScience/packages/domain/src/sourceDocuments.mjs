@@ -129,6 +129,37 @@ export function normalizeSourcePageMap(rawText, pageMap) {
 }
 
 /**
+ * A document's text with a marker line where each page begins:
+ * `<!-- page N -->`, or `<!-- page N: empty -->` / `<!-- page N: ocr_failed -->`
+ * for a page the parser read nothing from.
+ *
+ * An HTML comment because the materialized `index.md` is Markdown: it renders
+ * as nothing, and the model reading the file still sees where each page starts.
+ * A marker gets a line of its own and never replaces a character, so the text
+ * between two markers is exactly that page's text and a quotation taken from
+ * inside one page matches the stored capture verbatim.
+ *
+ * @param {string} text the captured text
+ * @param {readonly { page: number, start: number, end: number, status?: string }[] | null | undefined} pageMap
+ * @returns {string}
+ */
+export function renderSourcePageMarkers(text, pageMap) {
+  const value = String(text ?? '')
+  if (!Array.isArray(pageMap) || pageMap.length === 0) return value
+  let rendered = ''
+  let cursor = 0
+  for (const entry of pageMap) {
+    const at = Math.min(Math.max(entry.start, cursor), value.length)
+    rendered += value.slice(cursor, at)
+    cursor = at
+    const status = entry.status && entry.status !== 'ok' ? `: ${entry.status}` : ''
+    const before = rendered === '' || rendered.endsWith('\n') ? '' : '\n'
+    rendered += `${before}<!-- page ${entry.page}${status} -->\n`
+  }
+  return rendered + value.slice(cursor)
+}
+
+/**
  * The page a character offset falls on — how a quotation becomes 「第 N 页」.
  *
  * An offset inside a page's span is on that page. An offset in the gap between

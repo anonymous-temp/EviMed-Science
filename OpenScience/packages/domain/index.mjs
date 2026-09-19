@@ -566,8 +566,9 @@ export {
   summarizeGateNotices,
 } from './src/gateIssueText.mjs'
 
-// sourceDocuments — 10 exports: what the knowledge base accepts, where each
-// format is read, and how a quotation's offset becomes a page number.
+// sourceDocuments — 11 exports: what the knowledge base accepts, where each
+// format is read, where its pages begin, and how a quotation's offset becomes
+// a page number.
 export {
   KNOWLEDGE_BASE_FORMATS,
   SOURCE_API_FORMATS,
@@ -576,6 +577,7 @@ export {
   SOURCE_PAGE_MAP_MAX_PAGES,
   SOURCE_PAGE_STATUSES,
   normalizeSourcePageMap,
+  renderSourcePageMarkers,
   sourceFileFormat,
   sourceFormatRoute,
   sourcePageForOffset,

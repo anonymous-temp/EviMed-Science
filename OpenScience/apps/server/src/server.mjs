@@ -76,7 +76,8 @@ import { CapsuleService } from "./capsuleService.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
-import { SourceService, projectSourceManifestRecord } from "./sourceService.mjs";
+import { SourceService, assertKnowledgeBaseFormat, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
+import { verifySourceMetadata } from "./sourceMetadata.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
@@ -1005,6 +1006,33 @@ export function createWebApiApp(overrides = {}) {
   const openListConnector = openListClient
     ? new OpenListSourceConnector(openListClient, { tenantRoot: config.openListTenantRoot }) : null;
   const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, maxJsonBytes: config.maxJsonBytes });
+  // One admission for every way a file reaches `knowledge-base/`: the upload
+  // route and the upload command both refuse a format the knowledge base
+  // cannot read before a byte is written, and both register what they wrote.
+  // The web page uploads through the command, which until 2026-09-20 wrote
+  // the file and registered nothing — a researcher's upload never became a
+  // source, and the knowledge base stayed empty however much was uploaded.
+  const knowledgeBaseUploads = {
+    /** @param {string} root @param {string} rel */
+    covers: (root, rel) => root === "base" && (rel === "knowledge-base" || rel.startsWith("knowledge-base/")),
+    /** @param {string} rel */
+    admit: (rel) => assertKnowledgeBaseFormat(rel),
+    /** @param {any} ctx @param {string} rel @param {Buffer} buffer */
+    register: async (ctx, rel, buffer) => {
+      if (!sourceService) return null;
+      const registered = await sourceService.register(ctx.user.id, {
+        projectId: ctx.project.id,
+        connector: { type: "upload", id: `${ctx.project.id}-library` },
+        path: rel,
+        size: buffer.length,
+        mtime: new Date().toISOString(),
+        mimeType: mimeFor(rel),
+        sha256: createHash("sha256").update(buffer).digest("hex"),
+      });
+      await audit(ctx, "source.register", "completed", { target: registered.source.id, duplicate: registered.duplicate });
+      return registered;
+    },
+  };
   const sourceProject = async (job) => {
     const user = await store.userById(job.userId);
     if (!user) throw new HttpError(404, "source_account_unavailable", "Source account is unavailable.");
@@ -1022,6 +1050,9 @@ export function createWebApiApp(overrides = {}) {
       readResult: identity => sourceUnderstandingRuntime.readResult(identity),
     }),
     cancelUnderstanding: identity => sourceUnderstandingRuntime.cancel(identity),
+    verifyMetadata: (metadata) => verifySourceMetadata(metadata, {
+      fetchImpl: overrides.sourceMetadataFetch ?? globalThis.fetch, timeoutMs: config.sourceDoiCheckTimeoutMs,
+    }),
     resolveSource: async (job, source) => {
       const connectorType = source.payload.connector?.type;
       if (!["upload", "internal", "openlist"].includes(connectorType)) {
@@ -1070,17 +1101,8 @@ export function createWebApiApp(overrides = {}) {
       if (!Number.isSafeInteger(generation) || generation < 1) throw new HttpError(409, "source_generation_stale", "Source generation is invalid.");
       const relative = `knowledge-base/.evimed-derived/${source.id}/generation-${generation}-${job.id}-${sourceAttemptId(job)}/index.md`;
       const full = resolveScopedPath(project.baseDir, relative);
-      const original = source.payload.paths?.[0] ?? source.id;
-      const value = [
-        `# ${path.posix.basename(String(original))}`,
-        "",
-        `Source: ${String(original)}`,
-        `SHA-256: ${source.payload.fingerprint.sha256}`,
-        `Extractor: ${result.extractor.name} ${result.extractor.version} (${result.extractor.parser})`,
-        "",
-        result.text,
-        "",
-      ].join("\n");
+      const value = sourceIndexDocument({ original: source.payload.paths?.[0] ?? source.id, sha256: source.payload.fingerprint.sha256,
+        extractor: result.extractor, text: result.text, pageMap: result.pageMap, metadata: result.metadata });
       await withProjectStorageMutation(project, async () => {
         await assertProjectCapacity(project, full, Buffer.byteLength(value), config);
         await writeFileAtomicNoFollow(project.baseDir, full, value, { encoding: "utf8", mode: 0o600 });
@@ -2167,7 +2189,7 @@ export function createWebApiApp(overrides = {}) {
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
   });
-  const commands = createCommandRegistry({ config, runtimeManager });
+  const commands = createCommandRegistry({ config, runtimeManager, knowledgeBaseUploads });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx), {
     claimAllowed: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
   });
@@ -3680,6 +3702,8 @@ export function createWebApiApp(overrides = {}) {
         if (buffer.length > config.maxFileBytes) throw new HttpError(413, "file_too_large", "file is too large.");
         const base = root === "base" ? ctx.project.baseDir : ctx.project.workspaceDir;
         const full = resolveScopedPath(base, rel);
+        const knowledge = knowledgeBaseUploads.covers(root, rel);
+        if (knowledge) knowledgeBaseUploads.admit(rel);
         await withProjectStorageMutation(ctx.project, async () => {
           await assertProjectCapacity(ctx.project, full, buffer.length, config);
           await writeFileAtomicNoFollow(base, full, buffer, { mode: 0o600 });
@@ -3688,22 +3712,7 @@ export function createWebApiApp(overrides = {}) {
           target: root === "base" ? `${root}:${rel}` : rel,
           bytes: buffer.length,
         });
-        let registered = null;
-        if (sourceService && root === "base" && (rel === "knowledge-base" || rel.startsWith("knowledge-base/"))) {
-          registered = await sourceService.register(ctx.user.id, {
-            projectId: ctx.project.id,
-            connector: { type: "upload", id: `${ctx.project.id}-library` },
-            path: rel,
-            size: buffer.length,
-            mtime: new Date().toISOString(),
-            mimeType: mimeFor(rel),
-            sha256: createHash("sha256").update(buffer).digest("hex"),
-          });
-          await audit(ctx, "source.register", "completed", {
-            target: registered.source.id,
-            duplicate: registered.duplicate,
-          });
-        }
+        const registered = knowledge ? await knowledgeBaseUploads.register(ctx, rel, buffer) : null;
         sendJson(res, 200, { data: { path: rel, ...(registered
           ? { ...registered, source: projectSourceManifestRecord(registered.source) } : {}) } });
         return;
