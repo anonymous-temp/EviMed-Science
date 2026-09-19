@@ -643,11 +643,36 @@ services:
       OPEN_SCIENCE_WEB_RENDER_IDLE_RELEASE_MS: ${OPEN_SCIENCE_WEB_RENDER_IDLE_RELEASE_MS:-300000}
       OPEN_SCIENCE_SOURCE_UPDATES_ENABLED: ${OPEN_SCIENCE_SOURCE_UPDATES_ENABLED:-true}
       OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS: ${OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS:-3000}
-      # AgentBay (contract X3; the runtime-provider stream passes the same
-      # three). The key file is a path inside this container.
-      OPEN_SCIENCE_AGENTBAY_API_KEY_FILE: ${OPEN_SCIENCE_AGENTBAY_API_KEY_FILE:-}
-      OPEN_SCIENCE_AGENTBAY_REGION: ${OPEN_SCIENCE_AGENTBAY_REGION:-cn-hangzhou}
-      OPEN_SCIENCE_AGENTBAY_ENDPOINT: ${OPEN_SCIENCE_AGENTBAY_ENDPOINT:-}
+      # rt: runtime UX — warm the most recently used project's runtime at
+      # sign-in. Value-less: unset keeps config.mjs's default, on.
+      OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN:
+      # rt: the AgentBay runtime provider (plan §3.1). Web only — the
+      # controller and the receipt scheduler keep running Docker runtimes.
+      # Value-less: unset keeps config.mjs's defaults, and `docker` stays the
+      # provider. The API key file arrives with docker-compose.agentbay.yml.
+      OPEN_SCIENCE_RUNTIME_PROVIDER:
+      OPEN_SCIENCE_AGENTBAY_REGION:
+      OPEN_SCIENCE_AGENTBAY_ENDPOINT:
+      OPEN_SCIENCE_AGENTBAY_IMAGE_ID:
+      OPEN_SCIENCE_AGENTBAY_IDLE_RELEASE_MINUTES:
+      OPEN_SCIENCE_AGENTBAY_MAX_RUNTIME_MINUTES:
+      OPEN_SCIENCE_AGENTBAY_HEARTBEAT_MS:
+      OPEN_SCIENCE_AGENTBAY_POLICY_ID:
+      OPEN_SCIENCE_AGENTBAY_BRIDGE_PORT:
+      OPEN_SCIENCE_AGENTBAY_BRIDGE_SECRET_MODE:
+      OPEN_SCIENCE_AGENTBAY_WORKLOAD_TOKEN_TTL_SECONDS:
+      OPEN_SCIENCE_AGENTBAY_WORKLOAD_TOKEN_REFRESH_SECONDS:
+      OPEN_SCIENCE_AGENTBAY_SANDBOX_ENFORCEMENT:
+      OPEN_SCIENCE_AGENTBAY_FIREWALL_REQUIRED:
+      OPEN_SCIENCE_AGENTBAY_SYNC_INTERVAL_MS:
+      OPEN_SCIENCE_AGENTBAY_SYNC_MAX_FILE_BYTES:
+      OPEN_SCIENCE_AGENTBAY_CONTEXT_PREFIX:
+      OPEN_SCIENCE_RUNTIME_GATEWAY_PUBLIC_URL:
+      OPEN_SCIENCE_RUNTIME_GATEWAY_RATE_LIMIT_PER_MINUTE:
+      # rt: the community client bundles in the runtime image, each with its
+      # own off switch. Value-less: unset keeps config.mjs's default, on.
+      OPEN_SCIENCE_RUNTIME_ANNOTATION_ENABLED:
+      OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED:
     volumes:
       - open-science-data:/data
       - open-science-backups:/backups:ro

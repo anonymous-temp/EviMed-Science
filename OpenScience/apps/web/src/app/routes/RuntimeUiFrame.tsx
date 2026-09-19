@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
-import { createWebRuntimeUiFrame, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, getWebProjectId, webErrorMessage, WebApiError, webRuntimeProfile, type WebRuntimeUiFrame } from "@/lib/apiClient";
+import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, getWebProjectId, startWebRuntime, webErrorMessage, WebApiError, webRuntimeProfile, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { provideFrameSessionSearch, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
 import { Button } from "@/components/ui/Button";
@@ -70,10 +70,29 @@ function refusedFrame(error: unknown): FrameFailure {
  * because the deployment is already at its runtime limit is waited out or
  * freed, and pointing at the run ledger is the only action that helps.
  */
+/** The slot cap, said as what it is. On 2026-09-15 the only runtime slot of
+ *  the deployment was taken and the shell told the second reader that "cold
+ *  starts sometimes take longer" — a retry loop against a limit that no wait
+ *  could lift. What helps is a running session ending, or stopping one. */
+const RUNTIME_SLOT_CAP_TEXT = "同时运行的研究环境已达本部署上限，这次没有为你新开一个。等已在运行的任务结束，或去「运行记录」停掉一个，再重试。";
+
 function noticedFrame(code: string, detail: string): FrameFailure {
-  const text = detail || errorCodeMessage(code);
+  const text = detail || (code === "runtime_limit_exceeded" ? RUNTIME_SLOT_CAP_TEXT : errorCodeMessage(code));
   const capped = errorCodeOutcome(code) === "capped";
   return { text, retryable: true, capped, ledger: capped };
+}
+
+/**
+ * The refusal of this opening's own start, when it is one a wait will not lift.
+ *
+ * Read from the start call the opening makes itself rather than from a status
+ * snapshot: a refusal recorded by an earlier attempt must not fail the retry
+ * the reader pressed after freeing a slot.
+ */
+function refusedStart(error: unknown): FrameFailure | null {
+  if (!(error instanceof WebApiError) || errorCodeOutcome(error.code ?? "") !== "capped") return null;
+  if (error.code === "runtime_limit_exceeded") return { text: RUNTIME_SLOT_CAP_TEXT, retryable: true, capped: true, ledger: true };
+  return refusedFrame(error);
 }
 
 const SESSION_ID = /^[A-Za-z0-9_-]{1,160}$/;
@@ -90,66 +109,90 @@ function artifactPath(value: unknown): string | null {
   return segments.every((segment) => segment && segment !== "." && segment !== "..") ? value : null;
 }
 
-/** The three moments of opening a task, in the order they happen. */
-const OPEN_STAGES = ["准备运行时", "载入界面", "打开任务"] as const;
+/**
+ * The moments of opening a task, in the order they happen. The first three are
+ * the runtime's own start as the control plane reports it (plan §3.1 #8):
+ * 准备环境, 同步文件 and 启动内核. A local container mounts the project's
+ * files, so only a remote session has the second one, and the Docker provider
+ * never shows it.
+ */
+export type OpenStep = "environment" | "sync" | "kernel" | "interface" | "task";
+const OPEN_STEP_LABELS: Record<OpenStep, string> = {
+  environment: "准备环境", sync: "同步文件", kernel: "启动内核", interface: "载入界面", task: "打开任务",
+};
+/** What each moment is doing, said once it has taken five seconds. */
+const OPEN_STEP_NOTES: Record<OpenStep, string> = {
+  environment: "正在为这个项目准备研究环境；已在运行的环境会直接复用。",
+  sync: "正在把项目文件同步到研究环境；文件较多时会久一些。",
+  kernel: "研究环境已就绪，正在启动研究内核。",
+  interface: "研究内核已启动，正在载入会话界面；网络较慢时会多等一会儿。",
+  task: "正在读取这个任务的完整记录；运行了很久的任务，记录会大一些。",
+};
+/** The steps a provider goes through. */
+export function openSteps(provider: string | null): OpenStep[] {
+  return provider === "agentbay"
+    ? ["environment", "sync", "kernel", "interface", "task"]
+    : ["environment", "kernel", "interface", "task"];
+}
 
 /**
- * How long each of the first two moments may take before this surface stops
- * waiting, counted from the last sign of progress rather than from the click.
+ * How long a moment may take before this surface stops waiting, counted from
+ * the last sign of progress rather than from the click.
  *
  * One 30 s deadline used to cover everything, and on 2026-09-19 it fired on a
  * start that was working: a cold runtime, then 4.5 MB of application over the
  * researcher's link, then the kernel's first calls, each on time and together
- * over 30 s (the owner's screenshot, 10:43). Preparing the runtime may include
- * retiring an idle one of the same account first (`makeRoomFor`); loading the
+ * over 30 s (the owner's screenshot, 10:43). The runtime's three moments share
+ * one allowance that each new moment restarts (preparing may include retiring
+ * an idle runtime of the same account first, `makeRoomFor`); loading the
  * interface is the download, and the frame reporting that its bridge booted
- * restarts the count. The third moment has its own 20 s deadline below.
+ * restarts the count. Opening the task has its own 20 s deadline below.
  */
-const OPEN_STAGE_DEADLINES_MS = [90_000, 60_000] as const;
-const OPEN_STAGE_TIMEOUTS = [
-  "研究运行时 90 秒内没有启动。服务器可能正忙；重试会重新建立连接。",
-  "会话界面 60 秒内没有载入完成，可能是网络较慢；重试会重新建立连接。",
-] as const;
-/** What each moment is doing, said once it has taken five seconds. */
-const OPEN_STAGE_NOTES = [
-  "首次打开需要先启动一个研究运行时，通常需要 10–30 秒；已在运行的会更快。",
-  "运行时已就绪，正在载入会话界面；网络较慢时会多等一会儿。",
-  "正在读取这个任务的完整记录；运行了很久的任务，记录会大一些。",
-] as const;
+const OPEN_STEP_DEADLINES_MS: Record<Exclude<OpenStep, "task">, number> = {
+  environment: 90_000, sync: 90_000, kernel: 90_000, interface: 60_000,
+};
+const OPEN_STEP_TIMEOUTS: Record<Exclude<OpenStep, "task">, string> = {
+  environment: "研究环境 90 秒内没有准备好；重试会重新建立连接。",
+  sync: "项目文件 90 秒内没有同步完成；重试会重新建立连接。",
+  kernel: "研究内核 90 秒内没有启动完成；重试会重新建立连接。",
+  interface: "会话界面 60 秒内没有载入完成，可能是网络较慢；重试会重新建立连接。",
+};
 
 /**
  * The wait before a task is on screen, drawn as what it is: the composer the
- * reader is about to type into, and the three moments the opening goes
- * through, each advanced by the event that ends it — the control plane's
- * frame binding (the runtime is prepared), the kernel's page reporting ready
- * (the interface is loaded), the task's acknowledgement (it is open). A
- * single sentence used to stand for all three, so a slow cold start and a
- * slow task read looked the same, and neither said which it was. After five
- * seconds in one moment a line says what that moment is doing.
+ * reader is about to type into, and the moments the opening goes through, each
+ * advanced by the event that ends it — the control plane's account of the
+ * runtime start, the kernel's page booting and reporting ready, the task's
+ * acknowledgement. A single sentence used to stand for all of them, so a slow
+ * kernel, a slot the deployment had run out of and a slow task read looked the
+ * same, and none said which it was. After five seconds in one moment a line
+ * says what that moment is doing.
  */
-export function FrameWaiting({ stage, line }: { stage: 0 | 1 | 2; line?: string }) {
+export function FrameWaiting({ step, provider = null, line }: { step: OpenStep; provider?: string | null; line?: string }) {
   const [slow, setSlow] = useState(false);
   useEffect(() => {
     setSlow(false);
     const timer = setTimeout(() => setSlow(true), 5_000);
     return () => clearTimeout(timer);
-  }, [stage]);
+  }, [step]);
+  const steps = openSteps(provider);
+  const current = Math.max(0, steps.indexOf(step));
   return (
-    <div role="status" aria-live="polite" data-open-stage={stage} className="absolute inset-0 z-10 flex flex-col bg-bg">
+    <div role="status" aria-live="polite" data-open-stage={current} data-open-step={step} className="absolute inset-0 z-10 flex flex-col bg-bg">
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
         <ol aria-label="打开进度" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-ui-sm">
-          {OPEN_STAGES.map((label, index) => (
+          {steps.map((key, index) => (
             <li
-              key={label}
-              aria-current={index === stage ? "step" : undefined}
-              className={index < stage ? "text-ok" : index === stage ? "font-medium text-text" : "text-muted"}
+              key={key}
+              aria-current={index === current ? "step" : undefined}
+              className={index < current ? "text-ok" : index === current ? "font-medium text-text" : "text-muted"}
             >
-              {index < stage ? `✓ ${label}` : label}
+              {index < current ? `✓ ${OPEN_STEP_LABELS[key]}` : OPEN_STEP_LABELS[key]}
             </li>
           ))}
         </ol>
-        <p className="text-ui-sm text-muted">{line ?? `正在${OPEN_STAGES[stage]}…`}</p>
-        {slow && <p className="max-w-content-narrow text-caption text-muted">{OPEN_STAGE_NOTES[stage]}</p>}
+        <p className="text-ui-sm text-muted">{line ?? `正在${OPEN_STEP_LABELS[step]}…`}</p>
+        {slow && <p className="max-w-content-narrow text-caption text-muted">{OPEN_STEP_NOTES[step]}</p>}
       </div>
       <div aria-hidden="true" className="mx-auto mb-6 w-full max-w-content px-4">
         <div className="h-24 animate-pulse rounded-card border border-border bg-surface" />
@@ -191,6 +234,8 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   const [leaseError, setLeaseError] = useState<string | null>(null);
   const [renewing, setRenewing] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // The control plane's account of the runtime start this opening waits on.
+  const [startStatus, setStartStatus] = useState<WebRuntimeStartStatus | null>(null);
   const incoming = useRef(0);
   const outgoing = useRef(0);
   // Conversation searches waiting for the frame's answer, by request id.
@@ -236,7 +281,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         // Cookie cleanup is best effort; login expiry and revocation remain authoritative.
       });
     };
-    setBinding(null); setReady(false); setBooted(0); setFrameTask(null); setPending(false); setNavigated(false); setError(null); setLeaseError(null); setRenewing(false);
+    setBinding(null); setReady(false); setBooted(0); setFrameTask(null); setPending(false); setNavigated(false); setError(null); setLeaseError(null); setRenewing(false); setStartStatus(null);
     recoveryAttempted.current = false;
     nativeReady.current = false;
     incoming.current = 0; outgoing.current = 0; lastSent.current = ""; currentRequest.current = null;
@@ -311,17 +356,53 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
     if (error) releaseBinding.current?.();
   }, [error, binding]);
 
-  // Which of the first two moments the opening is in; the third (a task
+  // The runtime is up once the control plane says so or the kernel's own page
+  // has booted inside the frame, whichever is heard first.
+  const runtimeUp = navigated || ready || booted > 0 || startStatus?.running === true;
+  const runtimeStep: OpenStep = startStatus?.startStage ?? "environment";
+  // Which moment the opening is in, for its deadline; opening the task (a
   // request in flight) is timed by its own deadline further down.
-  const waitingStage: 0 | 1 | null = navigated || pending || ready ? null : binding ? 1 : 0;
+  const deadlineStep: Exclude<OpenStep, "task"> | null = navigated || pending || ready ? null
+    : runtimeUp && binding ? "interface" : runtimeStep === "sync" || runtimeStep === "kernel" ? runtimeStep : "environment";
+  const displayStep: OpenStep = pending || ready ? "task" : runtimeUp ? "interface" : runtimeStep;
   useEffect(() => {
-    if (error || waitingStage === null) return;
-    // A slow start is not a failure while it is moving: each step — the
-    // binding, the frame's bridge booting — restarts the count (see
-    // OPEN_STAGE_DEADLINES_MS).
-    const timeout = setTimeout(() => setError(frameFailure(OPEN_STAGE_TIMEOUTS[waitingStage])), OPEN_STAGE_DEADLINES_MS[waitingStage]);
+    if (error || deadlineStep === null) return;
+    // A slow start is not a failure while it is moving: each moment the
+    // control plane reports, and the frame's bridge booting, restarts the
+    // count (see OPEN_STEP_DEADLINES_MS).
+    const timeout = setTimeout(() => setError(frameFailure(OPEN_STEP_TIMEOUTS[deadlineStep])), OPEN_STEP_DEADLINES_MS[deadlineStep]);
     return () => clearTimeout(timeout);
-  }, [error, attempt, waitingStage, booted]);
+  }, [error, attempt, deadlineStep, booted]);
+
+  // This opening's own start. The frame document starts the runtime too, and
+  // the two join one start on the server; this call is made because its answer
+  // can be read — a start refused into a frame is a page this shell cannot see
+  // the status of — and because it belongs to this attempt, a refusal from an
+  // earlier one cannot fail the retry.
+  useEffect(() => {
+    let active = true;
+    void startWebRuntime().catch((cause: unknown) => {
+      const refusal = active ? refusedStart(cause) : null;
+      if (refusal) setError(refusal);
+    });
+    return () => { active = false; };
+  }, [projectId, attempt]);
+
+  // The moment the start is in, asked while the runtime is not up yet. A
+  // status read that fails changes nothing: the deadline stays in charge.
+  useEffect(() => {
+    if (error || runtimeUp) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = () => {
+      void fetchWebRuntimeStatus()
+        .then((status) => { if (active) setStartStatus(status); })
+        .catch(() => {})
+        .finally(() => { if (active) timer = setTimeout(poll, 1_500); });
+    };
+    poll();
+    return () => { active = false; clearTimeout(timer); };
+  }, [error, runtimeUp, attempt, projectId]);
 
   /** One message to the frame's bridge, in the envelope and sequence it checks. */
   const postToFrame = useCallback((type: string, fields: object) => {
@@ -587,7 +668,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
               {leaseError && <Button variant="ghost" onClick={() => renewBinding.current?.()} disabled={renewing}>重新连接</Button>}
             </div>
           )}
-          {(!navigated || pending) && <FrameWaiting stage={!binding ? 0 : !ready && !pending ? 1 : 2} />}
+          {(!navigated || pending) && <FrameWaiting step={displayStep} provider={startStatus?.provider ?? null} />}
           {binding && <iframe
             key={binding.frameId} ref={iframe} src={binding.frameUrl} title="研究会话"
             className="h-full w-full border-0"

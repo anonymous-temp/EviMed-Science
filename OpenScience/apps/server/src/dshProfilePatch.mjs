@@ -100,7 +100,24 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  *   `maxParallelChildren` is the retired single limit, read only as the
  *   fallback for the two that replaced it.
  * @property {{ hosted: boolean, askUser: boolean, review: boolean, capsule: boolean, operator?: boolean, requiredEnforcement: 'full'|'partial' }} flags
+ * @property {readonly string[]} [disabledClientBundles] ids of `COMMUNITY_CLIENT_BUNDLE_ROWS`
+ *   the deployment switched off; each becomes a `disabled: true` row
  */
+
+/**
+ * The community client bundles the runtime image installs, by the switch
+ * that turns each off, and the composition row each one inserts (recorded
+ * from the kernel's own --dump-config, deploy/runtime-dsh/dump-config.baseline.json).
+ * Client-side only: no tools, no settings, nothing on the network. Off is a
+ * `disabled: true` on the row, the same mechanism the telemetry and
+ * open-in-app rows use, so the kernel neither loads nor serves the bundle.
+ * `runtime/skills/community/plugin-support.json` records the same rows and
+ * switches, and a test holds the three equal.
+ */
+export const COMMUNITY_CLIENT_BUNDLE_ROWS = Object.freeze({
+  annotation: "dsh-annotation",
+  mermaid: "ui-mermaid",
+});
 
 /**
  * Renders the patch.
@@ -228,8 +245,29 @@ export function renderProfilePatch(input) {
     ...toolUniverseRows(input),
     ...presetRows(input),
     ...hostedBrowserPanelRows(input),
+    ...clientBundleRows(input),
   ];
   return `${rows.join("\n")}\n`;
+}
+
+/**
+ * The community client bundles this deployment switched off. Nothing is
+ * written for one that is on: the image's composition already carries its row.
+ * @param {ProfilePatchInput} input
+ * @returns {string[]}
+ */
+function clientBundleRows(input) {
+  const off = [...new Set(input.disabledClientBundles ?? [])];
+  for (const id of off) {
+    if (!Object.hasOwn(COMMUNITY_CLIENT_BUNDLE_ROWS, id)) throw new Error(`Unknown community client bundle: ${id}`);
+  }
+  if (!off.length) return [];
+  return [
+    "",
+    "# Community client bundles this deployment switched off",
+    "# (OPEN_SCIENCE_RUNTIME_<NAME>_ENABLED=false).",
+    ...off.flatMap((id) => [`- id: ${COMMUNITY_CLIENT_BUNDLE_ROWS[/** @type {keyof typeof COMMUNITY_CLIENT_BUNDLE_ROWS} */ (id)]}`, "  disabled: true"]),
+  ];
 }
 
 /**

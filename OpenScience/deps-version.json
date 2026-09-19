@@ -9,7 +9,12 @@
     "pnpm": "11.7.0",
     "githubRepo": "deepseek-ai/deepseek-harness",
     "releaseTagPattern": "^dsh-v\\d+\\.\\d+",
-    "citeVersion": "0.3.2"
+    "citeVersion": "0.3.2",
+    "annotationVersion": "1.4.10",
+    "mermaidVersion": "0.4.0",
+    "communityPeerPins": {
+      "cordis": "4.0.0-rc.10"
+    }
   },
   "openlist": {
     "version": "4.2.6",

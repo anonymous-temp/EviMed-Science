@@ -32,6 +32,13 @@ test('the packaged native client registers a browser-safe synchronous plugin', a
     assert.ok(pkg.dsh.client.inject.includes(provider), `${provider} must be listed under dsh.client.inject`);
   }
   assert.doesNotMatch(source, /(?:import|require)\s*\(?['"](?:node:|@deepseek-ai\/)/);
-  const docker = await readFile(new URL('../../../deploy/runtime-dsh/Dockerfile', import.meta.url), 'utf8');
-  assert.ok(docker.indexOf('RUN node /opt/evimed/socket/scripts/build-client.mjs') < docker.indexOf('chmod -R a-w /opt/evimed/socket'));
+  // The build as the Dockerfile runs it: its install phases read in place.
+  const { expandInstallPhases } = await import('../../../scripts/ops/runtime-install-phases.mjs');
+  const docker = expandInstallPhases(
+    await readFile(new URL('../../../deploy/runtime-dsh/Dockerfile', import.meta.url), 'utf8'),
+    await readFile(new URL('../../../deploy/runtime-dsh/install-runtime.sh', import.meta.url), 'utf8'),
+  );
+  const built = docker.indexOf('node /opt/evimed/socket/scripts/build-client.mjs');
+  assert.ok(built >= 0, 'the build writes the client bundle');
+  assert.ok(built < docker.indexOf('chmod -R a-w /opt/evimed/socket'));
 });

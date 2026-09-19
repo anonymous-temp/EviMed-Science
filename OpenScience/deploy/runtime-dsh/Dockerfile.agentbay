@@ -1,0 +1,150 @@
+# The EviMed agent runtime as an Alibaba AgentBay CodeSpace image (plan §3.1 #2).
+#
+# The same runtime as `Dockerfile` — the same install script, run phase by
+# phase in the same order (deploy.test.mjs holds the two lists and every pin
+# equal) — on AgentBay's CodeSpace system image instead of debian:bookworm-slim,
+# plus what only a session needs: the session launcher, the session bridge,
+# the egress firewall's tools and the unprivileged user the kernel runs as.
+#
+# AgentBay's rules for a custom image, from its CLI documentation: the first
+# lines of the Dockerfile are the vendor's and may not be changed; no CMD; the
+# file ends with `USER root` or never sets a user; x86 only; COPY and ADD take
+# paths relative to the build context. So everything above the marker below is
+# a stand-in: scripts/ops/agentbay-image-build.sh downloads the template with
+# `agentbay image init -i <system image>` and puts its system-defined lines in
+# place of those two lines, verbatim. They are here so this file also builds on
+# its own, on a plain Debian or Ubuntu base, as a check of the install phases.
+ARG AGENTBAY_LOCAL_BASE=docker.m.daocloud.io/library/debian:bookworm-slim
+FROM ${AGENTBAY_LOCAL_BASE}
+# ---- end of the AgentBay template header (replaced by agentbay-image-build.sh) ----
+
+USER root
+
+ARG TARGETARCH
+# Every version below is derived from OpenScience/deps-version.json, as in
+# `Dockerfile`; the same test holds them equal.
+ARG DSH_VERSION=0.1.5-rc.2
+ARG DSH_CORDIS_VERSION=4.0.2
+ARG DSH_PUBLISHED_BEFORE=2026-09-10T15:57:10.790Z
+ARG SOCKET_VERSION=0.1.0
+ARG NODE_VERSION=22.22.0
+ARG NODE_DIST_BASE=https://nodejs.org/dist
+ARG PNPM_VERSION=11.7.0
+ARG UV_VERSION=0.11.26
+ARG NODE_SHA256_AMD64=9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37
+ARG NODE_SHA256_ARM64=1bf1eb9ee63ffc4e5d324c0b9b62cf4a289f44332dfef9607cea1a0d9596ba6f
+ARG UV_SHA256_AMD64=6426a73c3837e6e2483ee344cbc00f36394d179afcba6183cb77437e67db4af0
+ARG UV_SHA256_ARM64=befa1a59c91e96eb601b0fd9a97c03dd666f17baba644b2b4db9c59a767e387e
+ARG UV_LICENSE_MIT_SHA256=860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c
+ARG GITHUB_DOWNLOAD_PREFIX=
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG APP_VERSION=0.1.3
+ARG APT_MIRROR=http://deb.debian.org/debian
+ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
+ARG PIP_INDEX_URL=https://pypi.org/simple
+# Ubuntu 24.04 only: an apt mirror for archive/security.ubuntu.com (empty keeps
+# the image's own sources), and a Playwright download mirror for the non-snap
+# Chromium the `browser` phase installs there.
+ARG UBUNTU_APT_MIRROR=
+ARG PLAYWRIGHT_DOWNLOAD_HOST=
+# What makes the install script build the AgentBay variant, and the user the
+# kernel runs as. The launcher (evimed-session.sh) names the same user.
+ARG EVIMED_RUNTIME_TARGET=agentbay
+ARG EVIMED_RUNTIME_USER=evimed
+ARG EVIMED_RUNTIME_UID=10001
+
+LABEL org.opencontainers.image.title="EviMed agent runtime (AgentBay)"
+LABEL org.opencontainers.image.description="Server-managed DeepSeek Harness runtime image for hosted EviMed workspaces, as an AgentBay CodeSpace session image."
+LABEL org.opencontainers.image.source="https://github.com/ai4s-research/open-science"
+LABEL io.open-science.app.version="${APP_VERSION}"
+LABEL io.open-science.dsh.version="${DSH_VERSION}"
+LABEL io.open-science.runtime.kernel="dsh"
+LABEL io.open-science.runtime.version="${DSH_VERSION}"
+LABEL io.open-science.runtime.provider="agentbay"
+LABEL io.open-science.socket.version="${SOCKET_VERSION}"
+LABEL io.open-science.uv.version="${UV_VERSION}"
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+COPY deploy/runtime-dsh/install-runtime.sh /usr/local/lib/evimed/install-runtime.sh
+RUN bash /usr/local/lib/evimed/install-runtime.sh system
+RUN bash /usr/local/lib/evimed/install-runtime.sh toolchain
+RUN bash /usr/local/lib/evimed/install-runtime.sh kernel
+RUN bash /usr/local/lib/evimed/install-runtime.sh pnpm
+
+ENV VIRTUAL_ENV=/opt/evimed/venv
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+RUN bash /usr/local/lib/evimed/install-runtime.sh python
+RUN bash /usr/local/lib/evimed/install-runtime.sh browser
+RUN bash /usr/local/lib/evimed/install-runtime.sh verify-tools
+
+COPY runtime/skills/curated-scientific /usr/local/share/evimed/skills/curated-scientific
+COPY runtime/skills/office /usr/local/share/evimed/skills/office
+RUN bash /usr/local/lib/evimed/install-runtime.sh curated-smoke
+RUN bash /usr/local/lib/evimed/install-runtime.sh office-smoke
+
+COPY runtime/skills/core /opt/evimed/skills/core
+COPY runtime/skills/community /opt/evimed/skills/community
+COPY runtime/skills/evimed/open-domain-answer /opt/evimed/skills/evimed/open-domain-answer
+COPY runtime/mcp/evimed-research /opt/evimed/mcp/evimed-research
+RUN bash /usr/local/lib/evimed/install-runtime.sh sider-cache
+COPY packages/socket /opt/evimed/socket
+COPY deploy/runtime-dsh/capabilities /opt/evimed/capabilities
+COPY capability-skills /opt/evimed/capability-skills
+COPY packages/domain /opt/evimed/socket/node_modules/@evimed/domain
+COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
+RUN bash /usr/local/lib/evimed/install-runtime.sh socket-client
+RUN bash /usr/local/lib/evimed/install-runtime.sh preset-skills
+
+ARG DSH_PRESET_ROOT=/opt/evimed/dsh/presets
+RUN bash /usr/local/lib/evimed/install-runtime.sh preset-root
+
+ENV DSH_HOME_SEED=/opt/evimed/dsh-home-seed
+COPY deploy/runtime-dsh/profile-pnpm-workspace.yaml /opt/evimed/profile-pnpm-workspace.yaml
+COPY deploy/runtime-dsh/profile-seed.mjs /usr/local/bin/evimed-profile-seed.mjs
+COPY deploy/runtime-dsh/profile-kernel-pins.mjs /usr/local/bin/evimed-profile-kernel-pins.mjs
+COPY deploy/runtime-dsh/dump-config.baseline.json /opt/evimed/committed-dump-config.baseline.json
+ARG DSH_CITE_BUNDLE="dsh-cite@0.3.2"
+ARG DSH_ANNOTATION_BUNDLE="@changfenhuang/dsh-annotation@1.4.10"
+ARG DSH_MERMAID_BUNDLE="dsh-mermaid@0.4.0"
+ARG DSH_COMMUNITY_PEER_PINS="cordis@4.0.0-rc.10"
+RUN bash /usr/local/lib/evimed/install-runtime.sh profile-seed
+
+ENV NARB_DISABLE_NATIVE_CACHE=1
+COPY deploy/runtime-dsh/build-smoke.sh /usr/local/bin/evimed-build-smoke
+COPY deploy/runtime-dsh/build-smoke-patch.yml /usr/local/share/evimed/build-smoke-patch.yml
+RUN bash /usr/local/lib/evimed/install-runtime.sh smoke
+
+ENV DSH_HOME=/runtime/dsh-home
+ENV PYTHONUNBUFFERED=1
+ENV XDG_CONFIG_HOME=/runtime/xdg-config
+ENV XDG_DATA_HOME=/runtime/xdg-data
+ENV XDG_CACHE_HOME=/runtime/xdg-cache
+ENV XDG_STATE_HOME=/runtime/xdg-state
+ENV HOME=/runtime/home
+# Telemetry off in the image, in the profile patch and in the launcher's
+# environment: either alone is one mistake away from being undone.
+ENV DSH_TELEMETRY_DISABLED=1
+ENV DSH_PERMISSION_MODE=workspace-write
+
+COPY deploy/runtime-dsh/open-science-dsh-serve.sh /usr/local/bin/open-science-dsh-serve
+RUN bash /usr/local/lib/evimed/install-runtime.sh serve
+
+# The session's own entry points: the launcher the control plane runs through
+# the command API (it starts the kernel as the runtime user, behind the bridge
+# and the egress firewall), and the bridge itself. There is no CMD and no
+# supervisor program: the kernel starts only once the control plane has
+# written its credentials into the session.
+COPY deploy/runtime-dsh/evimed-session.sh /usr/local/bin/evimed-session
+COPY deploy/runtime-dsh/evimed-session-bridge.mjs /usr/local/bin/evimed-session-bridge.mjs
+RUN bash /usr/local/lib/evimed/install-runtime.sh session
+
+# Release identity, last on purpose (see `Dockerfile`).
+ARG RELEASE_ID=untracked
+ARG SOURCE_REVISION=unknown
+ARG BUILD_CREATED=1970-01-01T00:00:00.000Z
+LABEL org.opencontainers.image.version="${RELEASE_ID}"
+LABEL org.opencontainers.image.revision="${SOURCE_REVISION}"
+LABEL org.opencontainers.image.created="${BUILD_CREATED}"
+
+USER root

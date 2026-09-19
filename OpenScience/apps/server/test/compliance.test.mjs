@@ -193,7 +193,7 @@ test("the boot-proof check tells running the proof apart from mentioning it", as
   // CI run — and a crash between the write and the restore would have left the
   // repository broken. The predicate is exported instead, so the same property
   // is provable against synthetic text and cannot drift from the audit.
-  const { dshBuildSmokeIsInvoked } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
+  const { dshBuildSmokeIsInvoked, expandInstallPhases } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
 
   // Tabulated rather than described, which is how the surviving half of the
   // original defect was found: `\b#` only matches when a word character
@@ -215,10 +215,17 @@ test("the boot-proof check tells running the proof apart from mentioning it", as
     assert.equal(dshBuildSmokeIsInvoked(line), expected, `${JSON.stringify(line)} should be ${expected ? "an invocation" : "only a mention"}`);
   }
 
-  // And the real Dockerfile must still read as running it, or the audit that
-  // passes today is passing for the wrong reason.
-  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  // And the real build must still read as running it, or the audit that
+  // passes today is passing for the wrong reason. The build is the Dockerfile
+  // with each install phase it RUNs read in place (install-runtime.sh).
+  const script = await readFile(path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh"), "utf8");
+  const rawDockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const dockerfile = expandInstallPhases(rawDockerfile, script);
   assert.equal(dshBuildSmokeIsInvoked(dockerfile), true);
+  // A phase the script defines and no RUN calls is not part of the build.
+  const neverRun = rawDockerfile.split("\n").filter((line) => !/install-runtime\.sh smoke\s*$/.test(line)).join("\n");
+  assert.equal(dshBuildSmokeIsInvoked(expandInstallPhases(neverRun, script)), false, "a smoke phase nobody runs must not read as run");
+  assert.throws(() => expandInstallPhases("RUN bash /usr/local/lib/evimed/install-runtime.sh no-such-phase", script), /does not define/);
   // The negative control on the whole file: strip the invoking command and it
   // must read as not run. Done on a copy in memory, not on the file.
   const shipOnly = dockerfile

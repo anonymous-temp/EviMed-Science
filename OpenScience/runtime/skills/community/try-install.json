@@ -70,18 +70,30 @@
     }
   ],
   "lastCompatibilityTest": {
-    "testedAt": "2026-09-06",
-    "kernel": "@deepseek-ai/dsh@0.1.2-rc.1",
-    "image": "evimed-runtime-dsh:evimed-20260904-93d15caf",
+    "testedAt": "2026-09-15",
+    "kernel": "@deepseek-ai/dsh@0.1.5-rc.2",
+    "image": "open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26-39111b6b4821",
     "results": {
       "dsh-cite@0.3.2": "booted",
-      "dsh-plugin-academic-writing@0.2.0": "rejected: peer dependency does not admit the current DSH packages",
-      "dsh-plugin-translation@0.2.0": "rejected: peer dependency does not admit the current DSH packages",
+      "@changfenhuang/dsh-annotation@1.4.10": "booted",
+      "dsh-mermaid@0.4.0": "booted",
+      "dsh-data-quality@0.3.10": "booted",
+      "dsh-plugin-academic-writing@0.2.0": "rejected: the @deepseek-ai/dsh-fs version is outside its peer range",
+      "dsh-plugin-translation@0.2.0": "rejected: the @deepseek-ai/dsh-fs version is outside its peer range",
       "dsh-plugin-writing-guard@2.0.1": "rejected: dependency build scripts require an unreviewed pnpm approval"
-    }
+    },
+    "scan": {
+      "dsh-cite@0.3.2": "10 files, no fetch, MIT, no dependencies or peers",
+      "@changfenhuang/dsh-annotation@1.4.10": "4 files, no network, MIT, peers=cordis",
+      "dsh-mermaid@0.4.0": "4 files; net=1 proc=1 fsWrite=1 httpRoute=2 read one by one as the browser-side Mermaid+KaTeX build and the package CLI; installScripts=prepare never runs from the registry tarball",
+      "dsh-data-quality@0.3.10": "67 files, no network, Apache-2.0, peers list @deepseek-ai/*"
+    },
+    "recordedFrom": "docs/superpowers/plans/2026-08-24-dsh-ecosystem-adoption-shortlist.md, execution results of 2026-09-15"
   },
   "installed": [
-    "dsh-cite@0.3.2"
+    "dsh-cite@0.3.2",
+    "@changfenhuang/dsh-annotation@1.4.10",
+    "dsh-mermaid@0.4.0"
   ],
-  "notInstalledYet": "The three rejected bundles remain outside the runtime image. dsh-cite is pinned whole; its public tool builder uses the managed source gateway. Boot compatibility does not certify runtime connectivity, which requires cite_health and a successful DOI lookup with the current model token."
+  "notInstalledYet": "dsh-data-quality booted and is not installed: its value is `data_verify`, which needs a real run to measure. academic-writing, translation and writing-guard remain outside the runtime image. dsh-cite is pinned whole; its public tool builder uses the managed source gateway. Boot compatibility does not certify runtime connectivity, which requires cite_health and a successful DOI lookup with the current model token. The two client bundles are installed with a deployment switch each (plugin-support.json communityClientBundles)."
 }
