@@ -71,6 +71,8 @@ import { toast } from "@/lib/toast";
 import { QualityNotices } from "@/components/runs/QualityNotices";
 import { RunStatusDot } from "@/components/runs/RunStatusDot";
 import { RouteLine } from "@/components/runs/RouteLine";
+import { ReadPagesList } from "@/components/runs/ReadPages";
+import { readPagesSummary } from "@/lib/readPages";
 import { ReportRunContext } from "@/components/report/ReportRunContext";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -883,6 +885,15 @@ function RunDetail({
               ))}
             </ul>
           </div>
+        </Disclosure>
+      )}
+
+      {/* 已阅读的网页 — the pages the run read through the gateway (X5): what
+        * it read, from where, when, and the snapshot a quotation was checked
+        * against. Never a live browser. */}
+      {(run.pagesRead?.length ?? 0) > 0 && (
+        <Disclosure summary={readPagesSummary(run.pagesRead ?? [], run.pagesReadTotal)}>
+          <ReadPagesList pages={run.pagesRead ?? []} total={run.pagesReadTotal} runId={run.id} />
         </Disclosure>
       )}
 

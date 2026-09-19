@@ -760,6 +760,14 @@ export interface WebAgentRun {
    */
   recalledMemories?: { id: string; kind: string; scope: string }[];
   /**
+   * The web pages the run read through `web_read`, from its transcripts at the
+   * end of the run (contract X5). Absent on a run that read none and on every
+   * row written before the field existed. Capped at 24; `pagesReadTotal` says
+   * how many it read in all when the list is shorter.
+   */
+  pagesRead?: WebReadPage[];
+  pagesReadTotal?: number;
+  /**
    * The phase projection's own diagnostics, attached by `AgentRuns.list()`
    * (agentRuns.mjs:2593). Typed here because the server already sends them and
    * an untyped field is invisible to `tsc` — a later reader would otherwise
@@ -780,6 +788,24 @@ export interface WebAgentRun {
    * artifacts.
    */
   planItems?: WebRunPlanItem[];
+}
+
+/**
+ * One web page a run read: where it asked, where the bytes came from, when,
+ * whether a browser drew it, the preserved snapshot and its receipt. `official`
+ * is the control plane's label for an authority's page (regulator, guideline
+ * body, registry), decided from the page's own address.
+ */
+export interface WebReadPage {
+  url: string;
+  finalUrl: string;
+  title: string;
+  site: string;
+  fetchedAt: string;
+  official: boolean;
+  rendered: boolean;
+  snapshotPath?: string;
+  sha256: string;
 }
 
 export type WebRunPlanItemStatus = "planned" | "queued" | "delegated" | "submitted" | "accepted" | "rejected" | "failed";
