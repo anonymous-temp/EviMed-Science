@@ -799,6 +799,9 @@ function publicRuntimeStatus(runtime, fields = {}) {
     provider: fields.provider ?? null,
     startStage: fields.startStage ?? null,
     startError: fields.startError ?? null,
+    // What a remote runtime's guest reported at start: its kernel release and
+    // the Landlock level the kernel's write fence got there (plan §3.1 #9).
+    sandbox: runtime?.sandbox ?? null,
   };
 }
 
@@ -824,6 +827,7 @@ function publicRuntimeStatusFromState(state, fields = {}) {
     provider: fields.provider ?? null,
     startStage: fields.startStage ?? null,
     startError: fields.startError ?? null,
+    sandbox: state?.sandbox && typeof state.sandbox === "object" ? state.sandbox : null,
   };
 }
 

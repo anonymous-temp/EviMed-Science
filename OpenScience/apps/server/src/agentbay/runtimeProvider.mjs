@@ -99,6 +99,22 @@ export function renderKernelEnvironment(values) {
     .join("\n")}\n`;
 }
 
+/**
+ * `NAME='value' …` for the front of a command line. The command API's own
+ * environment parameter is not relied on: what the launcher needs is a port,
+ * a word and a host name, none of them secret, and a prefix the shell reads
+ * cannot be dropped on the way.
+ * @param {Record<string, string>} values
+ */
+export function inlineEnvironment(values) {
+  return Object.entries(values).map(([key, value]) => {
+    if (!/^[A-Z][A-Z0-9_]*$/.test(key)) throw new HttpError(500, "agentbay_environment_invalid", `Invalid environment name ${key}.`);
+    const text = String(value);
+    if (/[\r\n\0]/.test(text)) throw new HttpError(500, "agentbay_environment_invalid", `${key} must be one line.`);
+    return `${key}='${text.replace(/'/g, "'\\''")}'`;
+  }).join(" ");
+}
+
 /** One JSON object from a command's output: the launcher prints exactly one. */
 function launcherReport(output) {
   const line = String(output ?? "").trim().split("\n").reverse().find((candidate) => candidate.startsWith("{"));
@@ -652,13 +668,13 @@ export class AgentBayRuntimeProvider {
         // per request (the credentials and tokens) are renewed.
         await this.command(ab.session, `${SESSION_PATHS.launcher} install`);
       } else {
-        const started = await this.command(ab.session, `${SESSION_PATHS.launcher} start`, {
+        const started = await this.command(ab.session, `${inlineEnvironment({
           OPEN_SCIENCE_RUNTIME_PORT: String(SESSION_KERNEL_PORT),
           OPEN_SCIENCE_SESSION_BRIDGE_PORT: String(this.config.agentbayBridgePort),
           EVIMED_REQUIRED_ENFORCEMENT: String(this.config.agentbaySandboxEnforcement),
           EVIMED_GATEWAY_HOST: this.gatewayOrigin()?.hostname ?? "",
           EVIMED_FIREWALL_REQUIRED: this.config.agentbayFirewallRequired === false ? "0" : "1",
-        });
+        })} ${SESSION_PATHS.launcher} start`);
         report = launcherReport(started.stdout);
         if (!report?.ok) {
           const code = typeof report?.code === "string" ? report.code : "agentbay_session_start_failed";
