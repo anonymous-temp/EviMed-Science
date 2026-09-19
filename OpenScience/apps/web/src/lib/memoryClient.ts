@@ -56,3 +56,120 @@ export const MEMORY_CHANGED_EVENT = "evimed.memory.changed";
 export function announceMemoryChanged() {
   window.dispatchEvent(new Event(MEMORY_CHANGED_EVENT));
 }
+
+/** What 「本次不用」 can set aside in one conversation. */
+export type SessionExclusionType = "memory" | "note" | "capsule" | "method";
+
+export interface SessionExclusion {
+  type: SessionExclusionType;
+  /** A memory's id, a note's id, a capsule entry's id, or a method's skill name. */
+  id: string;
+  label: string;
+}
+
+/** One conversation's memory state: its incognito switch and what it set aside. */
+export interface SessionMemoryState {
+  incognito: boolean;
+  excluded: SessionExclusion[];
+  updatedAt?: string | null;
+}
+
+/** A memory one run of the conversation was handed, hydrated from its store. */
+export interface SessionBackgroundMemory {
+  type: "memory" | "note" | "capsule";
+  id: string;
+  kind: string;
+  scope: string;
+  summary: string;
+  /** Gone since the run used it: still listed, and said to be gone. */
+  available: boolean;
+  runIds: string[];
+  setAside: boolean;
+  basis?: WebMemoryProvenance["basis"] | null;
+  provenance?: WebMemoryProvenance | null;
+  status?: string | null;
+  /** A structured memory's version, for its 「不对」. */
+  version?: number | null;
+  /** A capsule entry's capsule and revision, for its 「不对」. */
+  capsuleId?: string | null;
+  revision?: number | null;
+  origin?: string | null;
+}
+
+/** A method the runtime has mounted, or one an earlier run loaded. */
+export interface SessionBackgroundMethod {
+  /** The skill name the run sees. */
+  name: string;
+  label: string;
+  source: "learned" | "capsule" | "earlier";
+  description?: string;
+  methodId?: string;
+  entryId?: string;
+  capsuleId?: string;
+  revision?: number | null;
+  status?: string | null;
+  trial?: boolean;
+  available?: boolean;
+  /** Loaded by a run of this conversation, per the run ledger. */
+  used: boolean;
+  runIds: string[];
+  setAside: boolean;
+}
+
+export interface SessionBackground {
+  sessionId: string;
+  incognito: boolean;
+  excluded: SessionExclusion[];
+  runs: { id: string; status: string; startedAt: string | null }[];
+  memories: SessionBackgroundMemory[];
+  methods: SessionBackgroundMethod[];
+  /** 「本次新记下」: what this conversation wrote by itself. */
+  written: MemoryChange[];
+}
+
+const sessionPath = (sessionId: string) => `/memory/sessions/${encodeURIComponent(sessionId)}`;
+
+export function fetchSessionMemory(sessionId: string) {
+  return productRequest<SessionMemoryState>(sessionPath(sessionId));
+}
+
+/** The incognito switch: nothing of this conversation is written, nothing recalled into it. */
+export function setSessionIncognito(sessionId: string, incognito: boolean) {
+  return productRequest<SessionMemoryState>(sessionPath(sessionId), "PUT", { incognito });
+}
+
+/** 「本次不用」: leave one item out of the rest of this conversation. */
+export function setAsideForSession(sessionId: string, item: SessionExclusion) {
+  return productRequest<SessionMemoryState>(`${sessionPath(sessionId)}/exclusions`, "POST", item);
+}
+
+/** Bring a set-aside item back into this conversation. */
+export function bringBackForSession(sessionId: string, item: Pick<SessionExclusion, "type" | "id">) {
+  return productRequest<SessionMemoryState>(`${sessionPath(sessionId)}/exclusions`, "DELETE", { type: item.type, id: item.id });
+}
+
+export function fetchSessionBackground(sessionId: string) {
+  return productRequest<SessionBackground>(`${sessionPath(sessionId)}/background`);
+}
+
+/** 「不对」 on a structured memory: archived, as a revision the undo can take back. */
+export function archiveMemoryRecord(id: string, expectedVersion: number) {
+  return productRequest<WebStructuredMemory>(`/memory/records/${encodeURIComponent(id)}`, "PATCH", { status: "archived", expectedVersion });
+}
+
+/** 「不对」 on a learned method: retired, and restorable by rolling back to the revision before. */
+export function retireLearnedMethod(methodId: string, expectedRevision: number) {
+  return productRequest<{ id: string; revision: number }>(`/methods/${encodeURIComponent(methodId)}/retire`, "POST",
+    { expectedRevision, reason: "在对话中被标为不对" });
+}
+
+export function restoreLearnedMethod(methodId: string, expectedRevision: number, targetRevision: number) {
+  return productRequest<{ id: string; revision: number }>(`/methods/${encodeURIComponent(methodId)}/rollback`, "POST",
+    { expectedRevision, targetRevision });
+}
+
+/** 「不对」 on a capsule entry: retired, as a revision the entry's undo can take back. */
+export function retireCapsuleEntry(capsuleId: string, entryId: string, expectedRevision: number) {
+  return productRequest<CapsuleEntry>(`/capsules/${encodeURIComponent(capsuleId)}/entries/${encodeURIComponent(entryId)}`, "PATCH",
+    { expectedRevision, status: "retired" });
+}

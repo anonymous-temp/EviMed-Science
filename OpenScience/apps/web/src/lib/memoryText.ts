@@ -103,3 +103,21 @@ export function memoryStrength(provenance: WebMemoryProvenance | undefined, evid
     case "assistant": return `来自对话中的分析 · ${times} 处依据`;
   }
 }
+
+/** The memory kinds, in the researcher's words. */
+export const MEMORY_KIND_LABELS: Record<string, string> = {
+  profile: "画像",
+  preference: "偏好",
+  behavior: "工作习惯",
+  correction: "你做过的纠正",
+  project_fact: "项目事实",
+  analysis: "分析口径",
+  decision: "已定的决策",
+  follow_up: "待跟进",
+  run_summary: "过往运行摘要",
+  note: "笔记",
+};
+
+export function memoryKindLabel(kind: string): string {
+  return MEMORY_KIND_LABELS[kind] ?? "记忆";
+}

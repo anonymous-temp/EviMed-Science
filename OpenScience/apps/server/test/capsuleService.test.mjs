@@ -62,6 +62,10 @@ test("a runtime note takes effect at once as the assistant's note, and is never 
   await service.addEntry(USER, own, { factKind: "method_preference", layer: "methods", content: "先查异质性再合并" });
   assert.deepEqual((await selectCapsuleMethods(service, { userId: USER, projectId: "project_1" })).map((method) => method.content),
     ["先查异质性再合并"]);
+  // A writer that is not the platform — an external agent — waits for the owner.
+  const external = await service.note(USER, "project_1", { factKind: "preference", content: "回答用英文", review: true });
+  assert.equal(external.payload.status, "candidate");
+  assert.equal(external.payload.origin, "inferred");
 });
 
 test("a retraction retires what nobody touched, and only annotates what the researcher changed", async () => {

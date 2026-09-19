@@ -434,6 +434,7 @@ test("deleting an account deletes its memory, and the integrity audit knows the 
   await createUsers([doomed]);
   await store.create(doomed, "a note that must not outlive its account");
   await store.upsertRecord(doomed, record({ key: "profile.role", kind: "profile", status: "active" }));
+  await store.updateSessionState(doomed, "study-one", "ses_doomed", { incognito: true });
   assert.equal((await store.listAllRecords(doomed)).length, 1);
 
   await database.query("DELETE FROM evimed_control.users WHERE id=$1", [doomed]);
@@ -441,9 +442,11 @@ test("deleting an account deletes its memory, and the integrity audit knows the 
     [doomed])).rows[0].count, 0);
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.notes WHERE user_id=$1",
     [doomed])).rows[0].count, 0);
+  assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.sessions WHERE user_id=$1",
+    [doomed])).rows[0].count, 0);
 
   const audit = await relationalIntegrity(database);
-  for (const name of ["memory_records_user", "memory_notes_user", "memory_settings_user"]) {
+  for (const name of ["memory_records_user", "memory_notes_user", "memory_settings_user", "memory_sessions_user"]) {
     assert.ok(!audit.missing.includes(name), `${name} must be a declared foreign key`);
     assert.equal(audit.counts[name], 0, `${name} must hold no orphans`);
   }
@@ -615,4 +618,70 @@ test("a superseded fact leaves recall in the same commit that writes its replace
   await assert.rejects(store.supersede(beta, record.id, fact("project.regimen.other", "x")),
     (error) => error?.status === 404, "another account's record cannot be superseded");
   await store.purgeUserMemory(alpha);
+});
+
+test("a conversation's memory state: incognito, set aside and brought back, in one statement each", options, async () => {
+  const owner = `memory_session_${randomUUID()}`;
+  await createUsers([owner]);
+  /** @param {any} state */
+  const plain = (state) => ({ incognito: state.incognito, excluded: state.excluded });
+  try {
+    // Every switch off for a conversation that never touched one.
+    assert.deepEqual(plain(await store.sessionState(owner, "study-one", "ses_a")), { incognito: false, excluded: [] });
+
+    const on = await store.updateSessionState(owner, "study-one", "ses_a", { incognito: true });
+    assert.equal(on.incognito, true);
+    const aside = await store.updateSessionState(owner, "study-one", "ses_a", {
+      exclude: { type: "memory", id: "rec_1", label: "偏好表格" },
+    });
+    assert.equal(aside.incognito, true, "setting an item aside leaves the switch where it was");
+    await store.updateSessionState(owner, "study-one", "ses_a", { exclude: { type: "method", id: "method-abc", label: "剂量核对" } });
+    // The same item twice is one item, moved to the end with its newest label.
+    const again = await store.updateSessionState(owner, "study-one", "ses_a", { exclude: { type: "memory", id: "rec_1", label: "表格" } });
+    assert.deepEqual(again.excluded.map((item) => [item.type, item.id, item.label]),
+      [["method", "method-abc", "剂量核对"], ["memory", "rec_1", "表格"]]);
+    const back = await store.updateSessionState(owner, "study-one", "ses_a", { include: { type: "memory", id: "rec_1" } });
+    assert.deepEqual(back.excluded.map((item) => item.id), ["method-abc"]);
+
+    // Another conversation, and the same conversation id in another project, are their own.
+    assert.deepEqual(plain(await store.sessionState(owner, "study-one", "ses_b")), { incognito: false, excluded: [] });
+    assert.deepEqual(plain(await store.sessionState(owner, "study-two", "ses_a")), { incognito: false, excluded: [] });
+
+    // Two tabs at once both win: one sets an item aside while the other turns incognito off.
+    await Promise.all([
+      store.updateSessionState(owner, "study-one", "ses_a", { exclude: { type: "note", id: "note_1", label: "" } }),
+      store.updateSessionState(owner, "study-one", "ses_a", { incognito: false }),
+    ]);
+    const both = await store.sessionState(owner, "study-one", "ses_a");
+    assert.equal(both.incognito, false);
+    assert.deepEqual(both.excluded.map((item) => item.id).sort(), ["method-abc", "note_1"]);
+
+    // Refused as payload errors, by name.
+    for (const patch of [{ incognito: "yes" }, { exclude: { type: "tool", id: "x" } }, { exclude: { type: "memory", id: "../x" } }]) {
+      await assert.rejects(() => store.updateSessionState(owner, "study-one", "ses_a", patch),
+        (error) => error?.status === 400, JSON.stringify(patch));
+    }
+    await assert.rejects(() => store.sessionState(owner, "study-one", "ses a"), (error) => error?.code === "memory_session_invalid");
+
+    // Recall leaves out what the conversation set aside, and frees the slot.
+    await store.upsertRecord(owner, record({ key: "response.format", kind: "preference", value: "Tables for kidney outcomes.",
+      summary: "Tables", origin: "explicit", status: "active", confidence: 1 }));
+    const kept = await store.upsertRecord(owner, record({ key: "response.language", kind: "preference",
+      value: "Answer kidney questions in Chinese.", summary: "Chinese", origin: "explicit", status: "active", confidence: 1 }));
+    const all = await store.relevant(owner, "kidney", { projectId: "study-one" });
+    assert.equal(all.length, 2);
+    const [first] = all;
+    const filtered = await store.relevant(owner, "kidney", { projectId: "study-one",
+      excluded: [{ type: "memory", id: first.id.slice("record:".length) }] });
+    assert.deepEqual(filtered.map((memo) => memo.id), all.slice(1).map((memo) => memo.id));
+    assert.ok(all.some((memo) => memo.id === `record:${kept.id}`));
+
+    // Forgetting the project forgets its conversations' state, and only its.
+    await store.updateSessionState(owner, "study-two", "ses_c", { incognito: true });
+    await store.deleteProjectMemory(owner, "study-one");
+    assert.deepEqual(plain(await store.sessionState(owner, "study-one", "ses_a")), { incognito: false, excluded: [] });
+    assert.equal((await store.sessionState(owner, "study-two", "ses_c")).incognito, true);
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
+  }
 });

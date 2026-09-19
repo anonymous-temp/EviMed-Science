@@ -644,9 +644,10 @@ function skippedResult(source, excluded, runSummary = null) {
  * was flattening that dimension to 0.0 in both arms. A new skip source goes
  * here, or it will do the same. `unconfigured` is a deployment with no model to
  * extract with — a setting, and one that would otherwise put the notice on
- * every run it makes.
+ * every run it makes. `incognito` is the researcher's own choice for one
+ * conversation.
  */
-export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "paused", "unconfigured"]));
+export const MEMORY_WRITE_SKIPPED_SOURCES = Object.freeze(new Set(["disabled", "project_excluded", "paused", "unconfigured", "incognito"]));
 
 export class MemoryIntelligence {
   /** @param {any} config @param {any} memoryStore
@@ -714,11 +715,12 @@ export class MemoryIntelligence {
     if (!this.enabled || this.#excludedProject(project)) {
       return skippedResult(this.enabled ? "project_excluded" : "disabled", excluded);
     }
-    // The researcher's own switch, for the account or for this project. Read
+    // The researcher's own switch, for the account or for this project — and
+    // for this one conversation, when it is incognito (2026-09-20): nothing is
+    // written from it, not even the run summary the timeline would show. Read
     // per run rather than cached: "pause" has to hold from the next run on.
-    if ((await memoryPausedFor(this.memoryStore, project.userId, project.id)).learning) {
-      return skippedResult("paused", excluded);
-    }
+    const pause = await memoryPausedFor(this.memoryStore, project.userId, project.id, run.sessionId ?? null);
+    if (pause.learning) return skippedResult(pause.incognito ? "incognito" : "paused", excluded);
     const runSummary = await this.#recordRunSummary(project, run, sources);
     if (sources.length === 0) return skippedResult("none", excluded, runSummary);
     // No model, no extraction. There used to be a fallback here: a keyword wall

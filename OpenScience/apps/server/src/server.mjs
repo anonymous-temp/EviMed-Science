@@ -49,6 +49,7 @@ import { NotificationService, runFinishedInboxItem, runFinishedNotifies } from "
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
+import { createMemorySessionRoutes, mountedMethodsFor, setAsideMethodNames, setAsideMethodsNotice } from "./memorySessions.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
@@ -1840,6 +1841,9 @@ export function createWebApiApp(overrides = {}) {
     });
     learningTriggers = new LearningTriggers({
       jobs: productJobs, agentRuns, memory: researchMemory,
+      // An incognito conversation teaches the loop nothing either.
+      sessionState: researchMemory.configured
+        ? (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId) : null,
       // The loop's own bounded runs and source understanding are internal
       // capabilities: a lesson distilled from a distillation is the loop
       // grading its own homework.
@@ -2158,7 +2162,22 @@ export function createWebApiApp(overrides = {}) {
       },
     });
   }
-  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate });
+  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate,
+    // Whose conversation a runtime's recall is (capsuleGateway.mjs): the
+    // project's running runs, each conversation's memory state, and the run
+    // ledger line the 「本次用到的背景」 panel reads.
+    sessions: researchMemory.configured ? {
+      running: (_user, project) => agentRuns.activeRuns(project),
+      state: (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId),
+      recordRecall: (project, runId, items) => agentRuns.recordLearning(project, runId, {
+        appendRecalledMemories: items.map((item) => (item.source === "capsule"
+          ? { id: `capsule:${item.id}`, kind: item.factKind ?? "capsule", scope: "capsule" }
+          : { id: item.id, kind: item.kind ?? "note", scope: item.scope ?? "user" })),
+      }),
+    } : null });
+  // 「本次用到的背景」, 「本次不用」 and the incognito switch, per conversation.
+  const memorySessionRoutes = createMemorySessionRoutes({ config, researchMemory, agentRuns, capsules: capsuleService, context, audit,
+    mountedMethods: (project) => mountedMethodsFor({ runtimeManager, capsules: capsuleService, learning: learningService }, project) });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
@@ -2678,6 +2697,7 @@ export function createWebApiApp(overrides = {}) {
       }
 
       if (await memoryRoutes(req, res)) return;
+      if (await memorySessionRoutes(req, res)) return;
       if (await agentKeyRoutes(req, res)) return;
 
       if (pathname === "/api/feedback/events" && req.method === "GET") {
@@ -3020,6 +3040,9 @@ export function createWebApiApp(overrides = {}) {
                 }
               : routedSpecialist,
           });
+          // 「本次不用」 on a method: recall cannot withhold a method mounted for
+          // the whole project, so this conversation's context says it instead.
+          const setAsideMethods = await setAsideMethodNames(researchMemory, ctx.user.id, ctx.project.id, session.sessionId);
           // Before the prompt goes out, like the brief: a mount the ledger has
           // not recorded cannot be told apart from one that never happened.
           // The same rule for what was recalled: a memory this dispatch used
@@ -3032,7 +3055,7 @@ export function createWebApiApp(overrides = {}) {
           }
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             text: promptText,
-            system: prepared.system,
+            system: setAsideMethods.length ? `${prepared.system}\n\n${setAsideMethodsNotice(setAsideMethods)}` : prepared.system,
             memoryContext: prepared.memoryContext,
             residentProfile: true,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,

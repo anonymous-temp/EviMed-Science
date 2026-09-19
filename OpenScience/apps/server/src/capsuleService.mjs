@@ -162,7 +162,8 @@ export class CapsuleService {
    * history and a one-click undo (`undoEntry`). And one structural line: an
    * inferred entry is context, never a mounted method (`capsuleMethods.mjs`),
    * so text a model was talked into writing down cannot become an instruction
-   * in every later run.
+   * in every later run. `review: true` is for a writer that is not the
+   * platform — an external agent — whose note stays a candidate.
    * @param {string} userId @param {string} projectId @param {Record<string,any>} input */
   async note(userId, projectId, input) {
     productId(projectId, "projectId");
@@ -202,7 +203,11 @@ export class CapsuleService {
     if (existing) return existing;
     try {
       return await this.documents.put(userId, "fact", id, { capsuleId: capsule.id, factKind,
-        layer: factKind === "method_preference" ? "methods" : "knowledge", content, origin: "inferred", status: "approved",
+        layer: factKind === "method_preference" ? "methods" : "knowledge", content, origin: "inferred",
+        // The platform's own notes take effect (owner ruling 2026-09-19); a
+        // third party's wait for the owner, as the agent-memory API promises
+        // its integrators (agentMemoryOpenApi.mjs, rule 1).
+        status: input.review === true ? "candidate" : "approved",
         provenance: origin, contextOnly: true }, { expectedRevision: 0, projectId });
     } catch (error) {
       if (error.code !== "product_revision_conflict") throw error;

@@ -44,6 +44,12 @@ export const MEMORY_REVISION_LIMIT = 32;
 /** How many projects one account may pause memory for. A project id list, so
  *  bounded like every other array this schema stores. */
 export const MEMORY_PAUSED_PROJECT_LIMIT = 100;
+/** How many items one conversation may set aside with 「本次不用」. A recall
+ *  hands back at most a few dozen, so this bounds a list, not a choice. */
+export const MEMORY_SESSION_EXCLUSION_LIMIT = 200;
+/** What 「本次不用」 can set aside: a structured memory, a note, a capsule fact
+ *  or a mounted method — the four things a conversation is handed. */
+export const MEMORY_SESSION_EXCLUSION_TYPES = Object.freeze(["memory", "note", "capsule", "method"]);
 
 /** @param {readonly string[]} values */
 function vocabulary(values) {
@@ -118,6 +124,21 @@ CREATE TABLE IF NOT EXISTS evimed_memory.settings (
   recall_paused boolean NOT NULL DEFAULT false,
   paused_projects text[] NOT NULL DEFAULT '{}' CHECK (cardinality(paused_projects) <= ${MEMORY_PAUSED_PROJECT_LIMIT}),
   updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
+);
+-- One conversation's own memory state (2026-09-20): whether it is incognito —
+-- nothing extracted from it, nothing recalled into it — and what the
+-- researcher said 「本次不用」 to in its 「本次用到的背景」 panel. Keyed by the
+-- kernel's session id inside a project; deleted with the account, and with the
+-- project by deleteProjectMemory.
+CREATE TABLE IF NOT EXISTS evimed_memory.sessions (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  project_id text NOT NULL CHECK (project_id ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$'),
+  session_id text NOT NULL CHECK (session_id ~ '^[A-Za-z0-9_-]{1,160}$'),
+  incognito boolean NOT NULL DEFAULT false,
+  excluded jsonb NOT NULL DEFAULT '[]'::jsonb
+    CHECK (jsonb_typeof(excluded) = 'array' AND jsonb_array_length(excluded) <= ${MEMORY_SESSION_EXCLUSION_LIMIT}),
+  updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp()),
+  PRIMARY KEY (user_id, project_id, session_id)
 );
 DO $foreign_keys$
 BEGIN
