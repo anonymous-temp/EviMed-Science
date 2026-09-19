@@ -3176,7 +3176,7 @@ test("a kernel file whose URL names its content is kept a year with its validato
     const documentResponse = await fetch(`${f.uiBase}/`, { headers: { cookie: f.cookie } });
     assert.equal(documentResponse.headers.get("cache-control"), "private, no-store", "the document binds a frame and is never kept");
     const html = await documentResponse.text();
-    assert.ok(html.includes('src="/__evimed/a/default/assets/index-Df-65__b.js"'), `the document names the project's stable asset path: ${html}`);
+    assert.ok(html.includes('src="/__evimed/k/assets/index-Df-65__b.js"'), `the document names the shared asset path: ${html}`);
   } finally {
     upstream.closeAllConnections();
     await new Promise((resolve) => upstream.close(resolve));
@@ -3215,6 +3215,74 @@ test("the project's stable asset path serves build files to its owner, with no f
     const anonymous = await fetch(`${origin}/__evimed/a/default/assets/vendor-CCJJTK99.js`);
     assert.equal(anonymous.status, 401);
   } finally {
+    upstream.closeAllConnections();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test("every project's frames load the kernel application from one shared address, fetched once", async (t) => {
+  // 2026-09-19: opening a conversation downloaded 4.5 MB, uncompressed, every
+  // time — a 3.1 MB plugin bundle under the frame's own path — and a project
+  // switch downloaded it again under the next project's. One address for every
+  // frame, answered from memory after the first fetch and gzipped, is what
+  // lets the browser keep a single copy.
+  const f = await uiSurfaceFixture(t);
+  const script = `window.app = "${"x".repeat(4096)}";`;
+  const seen = [];
+  const upstream = createServer((req, res) => {
+    seen.push(req.url);
+    res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+    res.end(req.url.startsWith("/plugins/") ? "window.plugins = true;" : script);
+  });
+  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+  const manager = f.app.runtimeManager;
+  const user = await f.app.store.devUser();
+  const key = `${user.id}:default`;
+  try {
+    manager.runtimes.set(key, { url: `http://127.0.0.1:${upstream.address().port}`, cookie: "native=internal", project: { id: "default", userId: user.id }, close: async () => {} });
+    const origin = new URL(f.uiBase).origin;
+    const headers = { cookie: f.loginCookie, "accept-encoding": "gzip" };
+    const first = await fetch(`${origin}/__evimed/k/assets/index-Df-65__b.js`, { headers });
+    assert.equal(first.status, 200);
+    assert.equal(first.headers.get("content-encoding"), "gzip", "text crosses the network compressed");
+    assert.equal(first.headers.get("cache-control"), "private, max-age=31536000, immutable");
+    assert.equal(await first.text(), script);
+    const again = await fetch(`${origin}/__evimed/k/assets/index-Df-65__b.js`, { headers: { cookie: f.loginCookie, "accept-encoding": "identity" } });
+    assert.equal(again.headers.get("content-encoding"), null, "a browser that does not accept gzip gets the bytes as they are");
+    assert.equal(await again.text(), script);
+    const combo = "/plugins/??@deepseek-ai/dsh-client-ui-chat/client.js,@evimed/dsh-socket/client.js&rev=0123456789ab";
+    const plugin = await fetch(`${origin}/__evimed/k${combo}`, { headers });
+    assert.equal(plugin.status, 200);
+    assert.equal(plugin.headers.get("cache-control"), "private, max-age=31536000, immutable");
+    assert.deepEqual(seen, ["/assets/index-Df-65__b.js", combo], "each file reached the kernel once; the second read came from memory");
+
+    const unhashed = await fetch(`${origin}/__evimed/k/assets/logo.svg`, { headers });
+    assert.equal(unhashed.headers.get("cache-control"), "private, no-store", "a file whose name is not its content is neither kept nor cached");
+    await fetch(`${origin}/__evimed/k/assets/logo.svg`, { headers });
+    assert.equal(seen.filter((url) => url === "/assets/logo.svg").length, 2);
+
+    for (const [label, route, init] of [
+      ["a method", "/__evimed/k/api/session/list", {}],
+      ["a traversal", "/__evimed/k/assets/../index.html", {}],
+      ["a plugin without a revision", "/__evimed/k/plugins/??@evimed/dsh-socket/client.js", {}],
+      ["the document", "/__evimed/k/", {}],
+      ["a write", "/__evimed/k/assets/index-Df-65__b.js", { method: "POST" }],
+    ]) {
+      const response = await fetch(`${origin}${route}`, { ...init, headers: { cookie: f.loginCookie, Origin: "https://science.example:8443" } });
+      assert.equal(response.status, 404, label);
+    }
+    const anonymous = await fetch(`${origin}/__evimed/k/assets/index-Df-65__b.js`);
+    assert.equal(anonymous.status, 401);
+
+    // A miss with no runtime of this account running has nowhere to come from.
+    manager.runtimes.delete(key);
+    const orphan = await fetch(`${origin}/__evimed/k/assets/vendor-CCJJTK99.js`, { headers });
+    assert.equal(orphan.status, 503);
+    const kept = await fetch(`${origin}/__evimed/k/assets/index-Df-65__b.js`, { headers });
+    assert.equal(kept.status, 200, "what is already in memory needs no runtime");
+    assert.equal(seen.length, 4, "no refused request reached the kernel");
+  } finally {
+    manager.runtimes.delete(key);
     upstream.closeAllConnections();
     await new Promise((resolve) => upstream.close(resolve));
   }

@@ -2,12 +2,17 @@
  * Browser-only official transport hooks. Keep the installer self-contained:
  * the control plane serializes it into the parser-blocking frame bootstrap.
  * No module import, browser fetch replacement, or Host-ownership claim is used.
- * @param {{version:number, frameId:string, projectId:string, prefix:string, shellOrigin:string}} frame
+ * @param {{version:number, frameId:string, projectId:string, prefix:string, shellOrigin:string, assets?:string}} frame
+ *   `assets`, when present, is the path every frame shares for the kernel
+ *   application's content-addressed files (`/__evimed/k/`): a plugin bundle
+ *   named by revision loads from there, so the browser keeps one copy for
+ *   every session and project instead of one per frame.
  * @param {any} target Browser global, injectable for the transport contract tests.
  */
 export function installRuntimeUiTransport(frame, target = globalThis) {
   if (frame?.version !== 1 || !/^\/__evimed\/f\/[A-Za-z0-9_-]+\/$/.test(frame.prefix)
     || frame.prefix !== `/__evimed/f/${frame.frameId}/`) throw new Error('Invalid runtime frame');
+  if (frame.assets !== undefined && frame.assets !== '/__evimed/k/') throw new Error('Invalid runtime frame');
   if (target.__DSH_TRANSPORT__) throw new Error('Runtime transport already installed');
   const origin = target.location.origin;
   const nativeFetch = target.fetch.bind(target);
@@ -140,7 +145,16 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     /** @param {string} input */
     async loadBundle(input) {
       if (disposed) throw failure('Runtime frame disposed');
-      const src = scopedUrl(input, '/plugins/');
+      let src = scopedUrl(input, '/plugins/');
+      // The document's preload of the same bundle was rewritten the same way
+      // (`rebaseRuntimeUiDocument`); the two must agree or it downloads twice.
+      if (frame.assets) {
+        const url = new URL(src);
+        if (/(?:^|[?&])rev=[A-Za-z0-9._-]{6,}(?:&|$)/.test(url.search)) {
+          url.pathname = `${frame.assets}${url.pathname.slice(frame.prefix.length)}`;
+          src = url.href;
+        }
+      }
       await new Promise((resolve, reject) => {
         const script = target.document.createElement('script');
         const timer = target.setTimeout(() => finish(failure('Runtime bundle timeout')), 15_000);

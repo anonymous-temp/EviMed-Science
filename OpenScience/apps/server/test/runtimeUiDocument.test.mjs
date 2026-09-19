@@ -47,3 +47,21 @@ test("with the project's stable asset path, the document's own build files are r
   const refused = rebaseRuntimeUiDocument(Buffer.from(publishedHtml), { "content-type": "text/html" }, prefix, "/elsewhere/").toString();
   assert.ok(refused.includes('src="./assets/index-Df-65__b.js"'));
 });
+
+test("with the shared asset path, revisioned plugin bundles move there too, and a bundle without a revision stays with the frame", async () => {
+  const { rebaseRuntimeUiDocument } = await import("../src/runtimeUiDocument.mjs");
+  // A preload the frame's transport will request again by the same URL
+  // (`loadBundle`): both sides move a revisioned bundle to `/__evimed/k/`, or
+  // the browser fetches 3 MB twice. The HTML spelling `&amp;` is the same URL.
+  const hostRows = '<link rel="preload" as="script" href="/plugins/??app,@evimed/dsh-socket/client.js&amp;rev=0123456789ab">'
+    + '<script src="/plugins/??bootstrap&rev=abcdef012345"></script><script src="/plugins/??unversioned"></script>';
+  const source = publishedHtml.replace("<head>", `<head>${hostRows}`);
+  const rendered = rebaseRuntimeUiDocument(Buffer.from(source), { "content-type": "text/html" }, prefix, "/__evimed/k/").toString();
+  assert.ok(rendered.includes('href="/__evimed/k/plugins/??app,@evimed/dsh-socket/client.js&amp;rev=0123456789ab"'), rendered);
+  assert.ok(rendered.includes('src="/__evimed/k/plugins/??bootstrap&rev=abcdef012345"'));
+  assert.ok(rendered.includes(`src="${prefix}plugins/??unversioned"`), "no revision, no promise the bytes are the same next time");
+  assert.ok(rendered.includes('src="/__evimed/k/assets/index-Df-65__b.js"'));
+  // The per-project path serves build assets only; plugins stay with the frame there.
+  const perProject = rebaseRuntimeUiDocument(Buffer.from(source), { "content-type": "text/html" }, prefix, "/__evimed/a/default/").toString();
+  assert.ok(perProject.includes(`src="${prefix}plugins/??bootstrap&rev=abcdef012345"`));
+});
