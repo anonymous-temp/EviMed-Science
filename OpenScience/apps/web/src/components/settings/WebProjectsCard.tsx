@@ -4,10 +4,8 @@ import {
   webErrorMessage,
   deleteWebProject,
   exportWebProject,
-  fetchWebMe,
   getWebProjectId,
   listWebProjects,
-  setWebProjectId,
   type WebProject,
 } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
@@ -79,9 +77,9 @@ export function WebProjectsCard({
     void refresh();
   }, [refresh]);
 
-  // The sidebar's switcher reads the shared store; without this it kept the
-  // list from before a change made here (2026-09-16 review, D2).
-  const refreshSwitcher = () => {
+  // The sidebar's project list reads the shared store; without this it kept
+  // the list from before a change made here (2026-09-16 review, D2).
+  const refreshSidebar = () => {
     void useProjectStore.getState().load();
   };
 
@@ -111,7 +109,7 @@ export function WebProjectsCard({
     try {
       const project = await useProjectStore.getState().create(newName);
       setProjects(await listWebProjects());
-      refreshSwitcher();
+      refreshSidebar();
       setNewName("");
       await switchProject(project);
     } catch (e) {
@@ -172,19 +170,19 @@ export function WebProjectsCard({
       await deleteWebProject(project.id);
       const items = await listWebProjects();
       setProjects(items);
-      refreshSwitcher();
       if (currentId === project.id) {
+        // The shell was in the project that is gone, so it moves — in place,
+        // through the store the sidebar and every page are keyed on. This used
+        // to set the request header alone, which left the sidebar and the page
+        // on a project that no longer exists. A refused move is not a failed
+        // deletion: the list refresh below falls back to 「我的研究」 by itself.
         const nextProject = items.find((item) => item.id === DEFAULT_PROJECT_ID) ?? items[0];
-        if (nextProject) {
-          setWebProjectId(nextProject.id);
+        if (nextProject && await useProjectStore.getState().select(nextProject.id).then(() => true, () => false)) {
           setCurrentId(nextProject.id);
-          const me = await fetchWebMe();
-          if (!me || me.project.id !== nextProject.id) {
-            throw new Error("回退项目不可用。");
-          }
           onProjectChange?.(nextProject);
         }
       }
+      refreshSidebar();
       toast.success(`已删除「${project.name}」。`);
     } catch (e) {
       toast.error(`没能删除「${project.name}」：${webErrorMessage(e, { codes: DELETE_ERRORS })}`);
