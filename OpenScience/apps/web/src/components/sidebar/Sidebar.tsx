@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, NavLink, useLocation, useNavigate } from "react-router";
+import { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import {
   Bot,
   Brain,
@@ -8,18 +8,13 @@ import {
   FolderTree,
   Orbit,
   PanelLeft,
-  Search,
   SquarePen,
   UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
-import { RUNS_CHANGED_EVENT, runMetaLine, runState, runTitle } from "@/lib/runPresentation";
 import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
-import { ProjectSwitcher } from "@/components/sidebar/ProjectSwitcher";
 import { InboxBell } from "@/components/sidebar/InboxBell";
-import { ConversationMatches } from "@/components/sidebar/ConversationMatches";
-import { RunStatusDot } from "@/components/runs/RunStatusDot";
+import { ProjectBrowser } from "@/components/sidebar/ProjectBrowser";
 import { useConnectorAttention } from "@/lib/connectorAttention";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EviMedMark } from "@/components/brand/EviMedMark";
@@ -28,9 +23,6 @@ import { isMacPlatform } from "@/lib/platform";
 /** Dragging the divider below this pointer x collapses the sidebar; dragging
  *  back past it re-expands. Sits below SIDEBAR_MIN so there is a clear "snap". */
 const COLLAPSE_BELOW = 140;
-
-/** How many recent tasks the sidebar lists before sending people to the ledger. */
-const RECENT_RUNS = 12;
 
 interface NavItem {
   to: string;
@@ -69,44 +61,7 @@ export function Sidebar() {
   // are only written on pointer-up.
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const dragging = dragWidth !== null;
-  const [query, setQuery] = useState("");
-  const [runs, setRuns] = useState<WebAgentRun[] | null>(null);
   const connectorAttention = useConnectorAttention();
-
-  // The recent-runs list, refreshed while the shell is open. This used to be a
-  // list of the kernel's own sessions, mirrored into the browser; the kernel's
-  // application owns that list now, and what the shell can say that the frame
-  // cannot is how each run came out — whether it delivered, and whether the
-  // gate had anything to say about it.
-  useEffect(() => {
-    let active = true;
-    const load = () =>
-      listWebAgentRuns()
-        .then((value) => {
-          if (active) setRuns(value);
-        })
-        .catch(() => {
-          // isolated: a ledger that cannot be read leaves the list as it was.
-          // A sidebar is not where someone should first learn the API is down.
-          if (active) setRuns((current) => current ?? []);
-        });
-    void load();
-    const timer = setInterval(() => { if (document.visibilityState === "visible") void load(); }, 20_000);
-    // And a catch-up when the tab comes back, so returning to it does not show
-    // a list frozen at whatever it said when the reader left.
-    const onVisible = () => { if (document.visibilityState === "visible") void load(); };
-    document.addEventListener("visibilitychange", onVisible);
-    // A rename or a cancel on the runs page shows here at once, not on the
-    // next tick of this list's own timer.
-    const onChanged = () => { void load(); };
-    window.addEventListener(RUNS_CHANGED_EVENT, onChanged);
-    return () => {
-      active = false;
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener(RUNS_CHANGED_EVENT, onChanged);
-    };
-  }, []);
 
   const onDividerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -131,15 +86,6 @@ export function Sidebar() {
     setSidebarWidth(dragWidth);
     setDragWidth(null);
   };
-
-  const needle = query.trim().toLowerCase();
-  // Local filtering over the recent runs' titles. The kernel's own full-text
-  // matches for the same query follow the rows (ConversationMatches), beside
-  // them rather than instead of them: a title says what a run was for, the
-  // conversation says what was found.
-  const rows = (runs ?? [])
-    .filter((run) => !needle || runTitle(run).toLowerCase().includes(needle))
-    .slice(0, RECENT_RUNS);
 
   const width = dragWidth ?? sidebarWidth;
 
@@ -179,8 +125,6 @@ export function Sidebar() {
           </div>
         </div>
 
-        <ProjectSwitcher running={(runs ?? []).some((run) => runState(run).key === "running")} />
-
         {/* ⌘K made visible (appendix D §4): the palette reaches every view by
           * name, and a shortcut nobody can see is a shortcut nobody uses. */}
         <div className="px-3 pb-2">
@@ -209,58 +153,11 @@ export function Sidebar() {
           ))}
         </nav>
 
-        <div className="mt-4 flex-1 overflow-y-auto px-3 pb-2">
-          <h2 className="px-2 py-1 text-caption font-semibold text-muted">最近任务</h2>
-          {(runs?.length ?? 0) > 0 && (
-            <label className="relative mb-1 block">
-              <Search size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
-              <span className="sr-only">搜索运行记录</span>
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="搜索任务"
-                className="h-7 w-full rounded-input border border-strong bg-bg pl-7 pr-2 text-caption text-text outline-none placeholder:text-muted focus:border-focus"
-              />
-            </label>
-          )}
-          {runs === null && <div className="px-2 py-2 text-caption text-muted">正在读取…</div>}
-          {runs !== null && runs.length === 0 && (
-            <div className="px-2 py-2 text-caption text-muted">还没有任务</div>
-          )}
-          {runs !== null && runs.length > 0 && rows.length === 0 && (
-            <div className="px-2 py-2 text-caption text-muted">没有匹配的任务</div>
-          )}
-          {/* Back into the conversation, not into the ledger row about it.
-            * This list is the only session list the product has now that the
-            * kernel's own left column is occupied by nothing, so it has to open
-            * the thing itself; a run with no addressable session still has its
-            * ledger entry, which is where those go. */}
-          {rows.map((run) => {
-            const state = runState(run);
-            return (
-              <NavLink
-                key={run.id}
-                to={/^[A-Za-z0-9_-]{1,160}$/.test(run.sessionId)
-                  ? `/app/chat/${encodeURIComponent(run.sessionId)}`
-                  : `/app/runs?run=${encodeURIComponent(run.id)}`}
-                className="group flex items-start gap-2 rounded-input py-1.5 pl-2 pr-2 hover:bg-surface-2 aria-[current=page]:bg-accent-soft"
-              >
-                {/* Two lines, not one longer one (appendix D §10.3). Twelve
-                  * runs of one capability share a first line whenever their
-                  * question was not recorded; the second — when, and how it
-                  * came out — is what tells them apart, and it says the
-                  * state in words beside the dot's shape. */}
-                <RunStatusDot state={state.key} labelled className="mt-1.5" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-ui text-text">{runTitle(run)}</span>
-                  <span className="block truncate text-caption text-muted">{runMetaLine(run)}</span>
-                </span>
-              </NavLink>
-            );
-          })}
-          <ConversationMatches query={query} shownSessionIds={new Set(rows.map((run) => run.sessionId))} />
-        </div>
+        {/* The projects and their tasks, in the kernel's own shape: every
+          * project a group, its tasks inside, any of them one click away and
+          * opened in place. It replaced a project dropdown here and a
+          * 「最近任务」 list of the current project below the rows above. */}
+        <ProjectBrowser />
 
         <div className="flex flex-col border-t border-border px-3 py-3">
           {/* One footer row. 「设置」 was the second, and it was the deployment
