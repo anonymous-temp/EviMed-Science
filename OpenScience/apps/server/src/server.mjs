@@ -14,7 +14,7 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
-import { AgentRunStore, runNotice } from "./agentRuns.mjs";
+import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
@@ -69,6 +69,7 @@ import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./acc
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONNECTOR_CREDENTIAL_GATEWAY_PATH, ConnectorCredentialStore, createConnectorCredentialGatewayHandler } from "./connectorCredentials.mjs";
 import { createEngineUsageHandler, ENGINE_USAGE_PATH } from "./engineUsage.mjs";
+import { RunMetrics, runCapabilityLabel } from "./runMetrics.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
 import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
@@ -1185,6 +1186,35 @@ export function createWebApiApp(overrides = {}) {
     if (runAttribution.size > 5_000) runAttribution.delete(runAttribution.keys().next().value);
     return runId;
   };
+  // Run outcomes for /api/ops/metrics (plan §3.8): counted in memory as each
+  // run ends, never read back from a project's run ledger, which can be wiped.
+  const runMetrics = new RunMetrics();
+  const observeRunMetrics = async (project, run) => {
+    try {
+      const registry = await agentRegistry;
+      // Settled spend at the moment the run ended, under both of its ids: a
+      // bounded runtime's calls carry its dispatch id, everything else the run's.
+      const spent = usageLedger
+        ? await usageLedger.summaryRuns(project.userId, [run.id, run.dispatchId].filter(Boolean))
+        : null;
+      const read = await readRunStateProjection(project, project.workspaceDir, run);
+      const evidence = read.state === "read" ? read.projection?.evidence?.byStatus ?? {} : {};
+      runMetrics.observe({
+        capability: runCapabilityLabel(run.effectiveAgentId, (id) => Boolean(registry?.get?.(id))),
+        status: run.status,
+        errorCode: run.errorCode ?? null,
+        durationMs: run.durationMs ?? null,
+        costCny: spent ? [...spent.values()].reduce((sum, row) => sum + row.costCny, 0) : null,
+        claims: run.claimSummary ?? null,
+        // `ready` and `verified` are the evidence records with a preserved,
+        // readable artifact; a `queued` or `stale` one is a lead never read.
+        sources: { resolved: Number(evidence.ready ?? 0) + Number(evidence.verified ?? 0) },
+      });
+    } catch {
+      // Counted, not thrown: a metric must never hold up a run that has ended.
+      runMetrics.failed();
+    }
+  };
   // What a runtime's model request is for in the usage ledger (X1): the
   // kernel's, unless its run is source understanding. A bounded runtime's
   // token names its dispatch id, an interactive one's attribution the run id,
@@ -1461,6 +1491,7 @@ export function createWebApiApp(overrides = {}) {
         attempts: run.attempts ?? 0,
       });
       runtimeEventPump.noteRun(project, run);
+      await observeRunMetrics(project, run);
       if (sourceUnderstandingRuntime) {
         await sourceUnderstandingRuntime.complete(project, run).catch(async error => {
           await securityAudit(config, "source.runtime.release", "failed", {
@@ -2495,6 +2526,7 @@ export function createWebApiApp(overrides = {}) {
           productDatabase,
           operationalMetrics,
           activeCommands,
+          runMetrics,
         });
         return;
       }
@@ -4935,7 +4967,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -5146,6 +5178,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       },
     },
   );
+  if (runMetrics) lines.push(...runMetrics.lines());
 
   return `${lines.join("\n")}\n`;
 }

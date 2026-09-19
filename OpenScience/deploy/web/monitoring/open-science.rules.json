@@ -199,6 +199,23 @@
           }
         }
       ]
+    },
+    {
+      "name": "open-science-runs",
+      "rules": [
+        {
+          "alert": "OpenScienceRunFailureRatioHigh",
+          "expr": "(sum(increase(evimed_runs_finished_total{status=\"failed\"}[1h])) / clamp_min(sum(increase(evimed_runs_finished_total[1h])), 1) > 0.5) and (sum(increase(evimed_runs_finished_total[1h])) >= 4)",
+          "for": "30m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "More than half of EviMed runs are failing",
+            "description": "Over the last hour more than half of at least four finished runs ended failed. The EviMed Runs dashboard breaks them down by capability and error code."
+          }
+        }
+      ]
     }
   ]
 }

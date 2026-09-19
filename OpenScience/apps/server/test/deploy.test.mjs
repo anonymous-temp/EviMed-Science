@@ -1162,6 +1162,17 @@ test("monitoring configs scrape protected metrics, probe health/readiness, alert
   assert.equal(expressions.some((expr) => expr.includes("open_science_http_requests_total")), true);
   assert.equal(expressions.some((expr) => expr.includes("open_science_http_request_duration_seconds_bucket")), true);
   assert.equal(expressions.some((expr) => expr.includes("open_science_readiness_check")), true);
+
+  // Run outcomes (plan §3.8): a second provisioned dashboard over the series
+  // the control plane counts as runs end, and an alert on the failure ratio.
+  const runs = JSON.parse(await readFile(path.join(monitoringDir, "grafana/dashboards/evimed-runs.json"), "utf8"));
+  assert.equal(runs.uid, "evimed-runs");
+  const runExpressions = runs.panels.flatMap((panel) => panel.targets ?? []).map((target) => target.expr);
+  for (const series of ["evimed_runs_finished_total", "evimed_run_duration_seconds_bucket", "evimed_run_cost_cny_total",
+    "evimed_run_claims_total", "evimed_run_sources_total"]) {
+    assert.equal(runExpressions.some((expr) => expr.includes(series)), true, `the runs dashboard reads no ${series}`);
+  }
+  assert.equal(names.includes("OpenScienceRunFailureRatioHigh"), true);
 });
 
 test("root package exposes the deployment smoke test script", async () => {
