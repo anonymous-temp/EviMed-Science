@@ -442,6 +442,10 @@ services:
       # they are how a deployment bounds what "on" costs.
       OPEN_SCIENCE_LEARNING_ENABLED:
       OPEN_SCIENCE_LEARNING_WINDOW:
+      # mem stream: the zone the window above is written in. Absent from every
+      # compose file until 2026-09-20, so 22:00-09:00 ran on the container's UTC
+      # clock — Beijing daytime. Value-less: unset is config.mjs's Asia/Shanghai.
+      OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE:
       OPEN_SCIENCE_LEARNING_CONCURRENCY:
       OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND:
       # Who may put a method on trial, and who sees the operations page. Both
