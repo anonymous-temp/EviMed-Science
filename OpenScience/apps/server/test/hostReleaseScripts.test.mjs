@@ -49,3 +49,12 @@ test("the delta build applies the deletions an overlay cannot", async () => {
   assert.match(text, /src\/DELETED/);
   assert.match(text, /''\|\/\*\|\*\.\.\*\) echo "refusing deletion path/, "an absolute or traversing deletion path is refused");
 });
+
+test("a release whose kernel profile changed builds the runtime in full, through the host's mirrors", async () => {
+  const text = await code("host-delta-release.sh");
+  const full = text.slice(text.indexOf('if [ "${EVIMED_RUNTIME_BUILD:-delta}" = "full" ]'), text.indexOf("Dockerfile.delta \\"));
+  assert.match(full, /-f deploy\/runtime-dsh\/Dockerfile \\/, "the full build uses the full Dockerfile");
+  for (const arg of ["APT_MIRROR", "DEBIAN_SECURITY_MIRROR", "NODE_DIST_BASE", "NPM_REGISTRY", "GITHUB_DOWNLOAD_PREFIX", "PIP_INDEX_URL", "RELEASE_ID", "SOURCE_REVISION", "BUILD_CREATED"]) {
+    assert.match(full, new RegExp(`--build-arg ${arg}=`), `the full build passes ${arg}`);
+  }
+});

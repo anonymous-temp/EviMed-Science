@@ -2,7 +2,8 @@
 # Build one release on the serving host as a delta on the live one: seed the
 # tree from the live release, overlay the changed files, rewrite the identity,
 # build both images (web in full, runtime as the dependency-preserving delta of
-# deploy/runtime-dsh/Dockerfile.delta), and stop. Putting it in front is a
+# deploy/runtime-dsh/Dockerfile.delta, or in full with EVIMED_RUNTIME_BUILD=full
+# when the kernel profile's composition changed), and stop. Putting it in front is a
 # separate step, host-release-switch.sh, so the images can be inspected first.
 #
 #   host-delta-release.sh <OLD_SHORT> <NEW_SHORT> <NEW_FULL_REV> <BUILD_CREATED> <DELTA_TGZ>
@@ -80,19 +81,37 @@ docker build -f deploy/web/Dockerfile \
   --build-arg RELEASE_ID="evimed-${NEW}-1" --build-arg SOURCE_REVISION="${REV}" --build-arg BUILD_CREATED="${CREATED}" \
   -t "open-science-web:${NEW}" . > "/tmp/build-web-${NEW}.log" 2>&1
 echo "web built"
-# A delta stacks about twenty layers on the live image, so the chain only
-# grows; at 422 layers the delta's first COPY failed with `mount options is too
-# long` (2026-09-19). Past 300 the base is flattened into one layer first, with
-# the same files and configuration (host-flatten-runtime-image.sh).
-BASE_IMAGE="open-science-runtime:${RUNTIME_TAG_PREFIX}-${OLD}"
-if [ "$(docker image inspect -f '{{len .RootFS.Layers}}' "$BASE_IMAGE")" -gt 300 ]; then
-  bash "$DST/OpenScience/scripts/ops/host-flatten-runtime-image.sh" "$BASE_IMAGE" "${BASE_IMAGE}-flat"
-  BASE_IMAGE="${BASE_IMAGE}-flat"
+if [ "${EVIMED_RUNTIME_BUILD:-delta}" = "full" ]; then
+  # A release that changes what the kernel profile is made of — a community
+  # bundle added (dsh-annotation and dsh-mermaid, 2026-09-20), a dependency, the
+  # install steps themselves — cannot be a delta: the delta re-dumps the
+  # composition and refuses any difference from the committed baseline, by
+  # design. The full build fetches everything again, so every fetch goes to a
+  # mirror this host can reach (the direct routes stall for hours).
+  docker build -f deploy/runtime-dsh/Dockerfile \
+    --build-arg APT_MIRROR="${EVIMED_APT_MIRROR:-http://mirrors.cloud.tencent.com/debian}" \
+    --build-arg DEBIAN_SECURITY_MIRROR="${EVIMED_DEBIAN_SECURITY_MIRROR:-http://mirrors.cloud.tencent.com/debian-security}" \
+    --build-arg NODE_DIST_BASE="${EVIMED_NODE_DIST_BASE:-https://cdn.npmmirror.com/binaries/node}" \
+    --build-arg NPM_REGISTRY="${EVIMED_NPM_REGISTRY:-https://registry.npmmirror.com}" \
+    --build-arg GITHUB_DOWNLOAD_PREFIX="${EVIMED_GITHUB_DOWNLOAD_PREFIX:-https://ghfast.top/}" \
+    --build-arg PIP_INDEX_URL="${EVIMED_PIP_INDEX_URL:-https://mirrors.cloud.tencent.com/pypi/simple}" \
+    --build-arg RELEASE_ID="evimed-${NEW}-1" --build-arg SOURCE_REVISION="${REV}" --build-arg BUILD_CREATED="${CREATED}" \
+    -t "open-science-runtime:${RUNTIME_TAG_PREFIX}-${NEW}" . > "/tmp/build-runtime-${NEW}.log" 2>&1
+else
+  # A delta stacks about twenty layers on the live image, so the chain only
+  # grows; at 422 layers the delta's first COPY failed with `mount options is too
+  # long` (2026-09-19). Past 300 the base is flattened into one layer first, with
+  # the same files and configuration (host-flatten-runtime-image.sh).
+  BASE_IMAGE="open-science-runtime:${RUNTIME_TAG_PREFIX}-${OLD}"
+  if [ "$(docker image inspect -f '{{len .RootFS.Layers}}' "$BASE_IMAGE")" -gt 300 ]; then
+    bash "$DST/OpenScience/scripts/ops/host-flatten-runtime-image.sh" "$BASE_IMAGE" "${BASE_IMAGE}-flat"
+    BASE_IMAGE="${BASE_IMAGE}-flat"
+  fi
+  docker build -f deploy/runtime-dsh/Dockerfile.delta \
+    --build-arg RUNTIME_BASE_IMAGE="$BASE_IMAGE" \
+    --build-arg RELEASE_ID="evimed-${NEW}-1" --build-arg SOURCE_REVISION="${REV}" --build-arg BUILD_CREATED="${CREATED}" \
+    -t "open-science-runtime:${RUNTIME_TAG_PREFIX}-${NEW}" . > "/tmp/build-runtime-${NEW}.log" 2>&1
 fi
-docker build -f deploy/runtime-dsh/Dockerfile.delta \
-  --build-arg RUNTIME_BASE_IMAGE="$BASE_IMAGE" \
-  --build-arg RELEASE_ID="evimed-${NEW}-1" --build-arg SOURCE_REVISION="${REV}" --build-arg BUILD_CREATED="${CREATED}" \
-  -t "open-science-runtime:${RUNTIME_TAG_PREFIX}-${NEW}" . > "/tmp/build-runtime-${NEW}.log" 2>&1
 echo "runtime built; smoke: $(grep -c 'booted with every entry applied' "/tmp/build-runtime-${NEW}.log")"
 
 for img in "open-science-web:${NEW}" "open-science-runtime:${RUNTIME_TAG_PREFIX}-${NEW}"; do
