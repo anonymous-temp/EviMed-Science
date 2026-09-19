@@ -86,6 +86,14 @@ CREATE TABLE IF NOT EXISTS evimed_memory.records (
   PRIMARY KEY (user_id, id),
   UNIQUE (user_id, scope, scope_id, kind, key)
 );
+-- What a fact was replaced by, and from when it stopped holding (2026-09-20).
+-- A dose, a drug, a population or a decision changes; the old fact is not
+-- deleted and not left in force beside the new one — it is kept, pointing at
+-- what replaced it, and the timeline shows it as 「曾经如此」. Added in place,
+-- so an existing deployment gains them on its next start.
+ALTER TABLE evimed_memory.records ADD COLUMN IF NOT EXISTS superseded_by text
+  CHECK (superseded_by IS NULL OR superseded_by ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$');
+ALTER TABLE evimed_memory.records ADD COLUMN IF NOT EXISTS invalid_since timestamptz(3);
 CREATE INDEX IF NOT EXISTS memory_records_rank_idx ON evimed_memory.records
   (user_id, status, importance DESC, confidence DESC, updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS memory_records_scope_idx ON evimed_memory.records (user_id, scope, scope_id, kind);

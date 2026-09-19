@@ -330,6 +330,7 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
   const summary = boundedText(candidate.summary, 2_000);
   const sourceRef = boundedText(candidate.sourceRef, 500);
   const quote = boundedText(candidate.evidenceQuote, 4_000);
+  const supersedesKey = boundedText(candidate.supersedes, 255).toLowerCase();
   const source = sourceMap.get(sourceRef);
   if (!candidateKinds.has(kind)) return reject(`unknown kind "${kind}"`);
   if (!candidateScopes.has(scope)) return reject(`unknown scope "${scope}"`);
@@ -386,6 +387,9 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
     // fixed record schema and would drop it. It travels to the audit
     // ledger as the upsert reason, and to the user as a run notice.
     statusReason: checkpoint,
+    // The key of a stored fact this one replaces — the model's judgement,
+    // resolved and checked against what is stored in recordRun.
+    supersedesKey: memoryKeyPattern.test(supersedesKey) ? supersedesKey : "",
     confidence: ORIGIN_CONFIDENCE[origin],
     importance: boundedScore(candidate.importance, 0.6),
     sensitive,
@@ -556,7 +560,37 @@ function continuedFrom(previous, candidate) {
     // Still an inference: seeing it again extends its life. Stated by the
     // user, on either observation: it does not fade.
     expiresAt: origin === "inferred" ? candidate.expiresAt ?? previous.expiresAt ?? null : null,
+    // A replaced fact seen again is still replaced, and still says by what.
+    supersededBy: previous.supersededBy ?? null,
+    invalidSince: previous.invalidSince ?? null,
   };
+}
+
+/**
+ * The stored record a candidate says it replaces, or why it names none.
+ *
+ * Whether the new fact replaces an old one is the extraction model's
+ * judgement — a new dose, a switched drug, a revised population — and is
+ * given as `supersedes`, a key from `existingMemories`. What code checks is
+ * the closed half: that the key names a record this account holds in force,
+ * in the same scope, and of a kind that can be replaced by this one (a
+ * person's statement by a person's statement, a project fact by a project
+ * fact) — never a preference by a tool result.
+ *
+ * @param {any} candidate @param {Iterable<any>} known
+ * @returns {{ record: any } | { rejection: string } | null}
+ */
+function supersededRecord(candidate, known) {
+  const key = candidate.supersedesKey;
+  if (!key || key === candidate.key) return null;
+  const family = (kind) => (DURABLE_PERSON_KINDS.has(kind) ? "person" : "project");
+  const record = [...known].find((item) => item.key === key && item.scope === candidate.scope
+    && (item.scopeId ?? "") === (candidate.scopeId ?? "") && item.status === "active");
+  if (!record) return { rejection: `"${candidate.key}" supersedes "${key}", which is no memory in force in its scope` };
+  if (family(record.kind) !== family(candidate.kind)) {
+    return { rejection: `"${candidate.key}" (${candidate.kind}) cannot supersede "${key}" (${record.kind})` };
+  }
+  return { record };
 }
 
 /**
@@ -745,29 +779,19 @@ export class MemoryIntelligence {
       const contradiction = contradictedValue(previous, candidate);
       let next = continuedFrom(previous, candidate);
       let stored;
-      try {
-        stored = await this.memoryStore.upsertRecord(project.userId, {
-          ...next,
-          ...(previous ? { id: previous.id } : {}),
-        }, candidate.evidence, {
-          expectedVersion: previous?.version ?? 0,
-          // The checkpoint reason rides the revision reason, which is what the
-          // store keeps as this record's audit trail and what `publicRecord`
-          // hands back on `revisions[].reason`.
-          reason: writeReason(previous ? "conversation evidence updated the current memory" : "conversation evidence created the memory",
-            contradiction, next.statusReason),
-        });
-      } catch (error) {
-        if (!(error instanceof HttpError) || error.code !== "memory_conflict") throw error;
-        const refreshed = await this.memoryStore.listRecords(project.userId, { query: candidate.key, pageSize: 100 });
-        const current = refreshed.find((record) => canonicalKey(record) === canonicalKey(candidate));
-        if (!current) throw error;
-        next = continuedFrom(current, candidate);
-        stored = await this.memoryStore.upsertRecord(project.userId, { ...next, id: current.id }, candidate.evidence, {
-          expectedVersion: current.version,
-          // The retry writes the same record, so it carries the same reason.
-          reason: writeReason("conversation evidence retried after a concurrent memory update", contradiction, next.statusReason),
-        });
+      /** The record this write retired, when the candidate replaces one. */
+      let superseded = null;
+      // Only a new key can replace another: a candidate that reuses its own
+      // key is an update, and the store keeps the old value as a revision.
+      const replacing = previous ? null : supersededRecord(candidate, known.values());
+      if (replacing && "rejection" in replacing) rejections.push(replacing.rejection);
+      if (replacing && "record" in replacing && typeof this.memoryStore.supersede === "function") {
+        ({ record: stored, superseded } = await this.memoryStore.supersede(project.userId, replacing.record.id, next, candidate.evidence, {
+          reason: writeReason("conversation evidence replaced an earlier fact", null, next.statusReason),
+        }));
+        known.set(canonicalKey(superseded), superseded);
+      } else {
+        ({ stored, next } = await this.#upsertCandidate(project, candidate, previous, next, contradiction));
       }
       extracted += 1;
       if (previous?.status === "pending" && stored.status === "active") activated += 1;
@@ -778,6 +802,7 @@ export class MemoryIntelligence {
       written.push({
         id: stored.id, key: stored.key, kind: stored.kind, scope: stored.scope, version: stored.version,
         change: writeChange(previous, stored),
+        ...(superseded ? { supersedes: superseded.id } : {}),
       });
       known.set(canonicalKey(stored), stored);
       if (contradiction) {
@@ -815,6 +840,41 @@ export class MemoryIntelligence {
       // carry.
       excluded,
     };
+  }
+
+  /**
+   * Write one candidate onto the record it lands on, retrying once on a
+   * concurrent update with the record as it now stands.
+   * @param {any} project @param {any} candidate @param {any} previous @param {any} next @param {any} contradiction
+   * @returns {Promise<{ stored: any, next: any }>}
+   */
+  async #upsertCandidate(project, candidate, previous, next, contradiction) {
+    try {
+      const stored = await this.memoryStore.upsertRecord(project.userId, {
+        ...next,
+        ...(previous ? { id: previous.id } : {}),
+      }, candidate.evidence, {
+        expectedVersion: previous?.version ?? 0,
+        // The checkpoint reason rides the revision reason, which is what the
+        // store keeps as this record's audit trail and what `publicRecord`
+        // hands back on `revisions[].reason`.
+        reason: writeReason(previous ? "conversation evidence updated the current memory" : "conversation evidence created the memory",
+          contradiction, next.statusReason),
+      });
+      return { stored, next };
+    } catch (error) {
+      if (!(error instanceof HttpError) || error.code !== "memory_conflict") throw error;
+      const refreshed = await this.memoryStore.listRecords(project.userId, { query: candidate.key, pageSize: 100 });
+      const current = refreshed.find((record) => canonicalKey(record) === canonicalKey(candidate));
+      if (!current) throw error;
+      const retried = continuedFrom(current, candidate);
+      const stored = await this.memoryStore.upsertRecord(project.userId, { ...retried, id: current.id }, candidate.evidence, {
+        expectedVersion: current.version,
+        // The retry writes the same record, so it carries the same reason.
+        reason: writeReason("conversation evidence retried after a concurrent memory update", contradiction, retried.statusReason),
+      });
+      return { stored, next: retried };
+    }
   }
 
   /**
@@ -1041,6 +1101,10 @@ export class MemoryIntelligence {
                 // forbids (2026-09-19).
                 "Keys are identifiers, not text: always English, whatever language the conversation is in, and stable lowercase dotted paths that a later session would choose again for the same fact, so that a repeat observation lands on the same memory instead of a near-duplicate beside it: prefer preference.output_language over preference.user_wants_chinese.",
                 "existingMemories lists the keys already stored. When this conversation restates or refines one of them, reuse its exact scope, kind and key so it counts as another observation of that memory; only mint a new key for a fact none of them covers.",
+                // The judgement is the model's; that the named key exists, is
+                // in force and is in the same scope is checked in code
+                // (supersededRecord), and an unchecked claim is dropped.
+                "When this conversation changes a stored fact — a dose, a drug, a population, a threshold, a decision — reuse its key with the new value; the store keeps the old value as history. If the new fact replaces one stored under a different key, give that key as supersedes (it must be in existingMemories, in the same scope), so the old one stops being used instead of standing beside the new one.",
                 // Production, 2026-09-19: many of the acceptance account's 54
                 // records began "Reinforced:" or "Refined:" -- the words of the
                 // line above, the likeliest source, turned into labels on the

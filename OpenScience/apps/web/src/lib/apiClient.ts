@@ -561,6 +561,10 @@ export interface WebStructuredMemory {
    *  (`recordProvenance` in researchMemory.mjs). Absent from a control plane
    *  older than it. */
   provenance?: WebMemoryProvenance;
+  /** The record that replaced this one, and since when it stopped holding —
+   *  the timeline's 「曾经如此」. */
+  supersededBy?: string | null;
+  invalidSince?: string | null;
   evidence: Array<{
     sourceType: string;
     sourceRef: string;

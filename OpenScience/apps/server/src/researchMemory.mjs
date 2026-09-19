@@ -207,7 +207,9 @@ export function currentStateEqual(stored, next) {
     && Number(stored.importance) === Number(next.importance)
     && Boolean(stored.sensitive) === Boolean(next.sensitive)
     && (stored.lastConfirmedAt ?? null) === (next.lastConfirmedAt ?? null)
-    && (stored.expiresAt ?? null) === (next.expiresAt ?? null);
+    && (stored.expiresAt ?? null) === (next.expiresAt ?? null)
+    && (stored.supersededBy ?? null) === (next.supersededBy ?? null)
+    && (stored.invalidSince ?? null) === (next.invalidSince ?? null);
 }
 
 /** A URL the GFM autolink extension consumes whole: a bare `https://…`,
@@ -365,6 +367,11 @@ export function validateRecordInput(input) {
     sensitive: Boolean(input.sensitive),
     lastConfirmedAt: timestampInput(input.lastConfirmedAt, "lastConfirmedAt"),
     expiresAt: timestampInput(input.expiresAt, "expiresAt"),
+    // What replaced this fact and since when it stopped holding. Written by
+    // `supersede`; carried through an ordinary upsert so that editing a
+    // superseded record's text does not quietly put it back in force.
+    supersededBy: input.supersededBy == null || input.supersededBy === "" ? null : assertRecordId(input.supersededBy),
+    invalidSince: timestampInput(input.invalidSince, "invalidSince"),
   };
 }
 
@@ -472,6 +479,8 @@ function publicRecord(row) {
     updatedAt: memoryInstant(row.updated_at),
     lastConfirmedAt: memoryInstant(row.last_confirmed_at),
     expiresAt: memoryInstant(row.expires_at),
+    supersededBy: row.superseded_by ?? null,
+    invalidSince: memoryInstant(row.invalid_since),
     provenance: recordProvenance(row, evidence, revisions),
     evidence: evidence.map((item) => ({
       sourceType: String(item?.sourceType ?? ""),
@@ -554,7 +563,7 @@ export function inferenceFreshness(updatedAt, now, ttlMs) {
 }
 
 const recordColumns = "user_id,id,scope,scope_id,kind,key,value,summary,origin,status,confidence,importance,"
-  + "sensitive,evidence,revisions,version,created_at,updated_at,last_confirmed_at,expires_at";
+  + "sensitive,evidence,revisions,version,created_at,updated_at,last_confirmed_at,expires_at,superseded_by,invalid_since";
 
 export class ResearchMemoryStore {
   /**
@@ -748,70 +757,128 @@ export class ResearchMemoryStore {
 
     return this.#transaction(async (client) => {
       await this.#lockOwnerForOutbox(client, owner);
-      // Two writers extracting from two runs of the same conversation reach
-      // this line at the same instant. The lock is on the canonical key rather
-      // than the table, so unrelated memories still write in parallel, and it
-      // is what the retired service's process-wide mutex gave a single process
-      // and could not give a web tier of several.
-      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [canonicalKeyLock(owner, next)]);
-      const found = await client.query(`SELECT * FROM evimed_memory.records
-        WHERE user_id=$1 AND scope=$2 AND scope_id=$3 AND kind=$4 AND key=$5 FOR UPDATE`,
-      [owner, next.scope, next.scopeId, next.kind, next.key]);
-      // Read after both waits above, so the stamp is the moment of the write
-      // and not the moment this writer joined the queue.
-      const now = await transactionInstant(client);
+      return this.#writeRecord(client, owner, next, proof, { expected, providedId, auditReason });
+    });
+  }
 
-      if (found.rowCount === 0) {
-        const { evidence: created } = mergeEvidence([], proof);
-        const inserted = await client.query(`INSERT INTO evimed_memory.records (${recordColumns})
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,'[]'::jsonb,1,$15,$15,$16,$17)
-          ON CONFLICT DO NOTHING RETURNING *`,
-        [owner, providedId ?? randomUUID(), next.scope, next.scopeId, next.kind, next.key, next.value, next.summary,
-          next.origin, next.status, next.confidence, next.importance, next.sensitive, JSON.stringify(created),
-          now, next.lastConfirmedAt, next.expiresAt]);
-        // The only way to get here is a provided id that already names another
-        // of this user's memories: the canonical key was free a statement ago
-        // and the lock is still held. Resurrecting the wrong row would be
-        // worse than refusing the write.
-        if (inserted.rowCount !== 1) {
-          throw new HttpError(409, "memory_conflict", "That memory id already names another memory.");
-        }
-        const record = publicRecord(inserted.rows[0]);
-        await this.#enqueueRecordIndex(client, owner, record);
-        return record;
-      }
+  /**
+   * The upsert itself, inside a transaction the caller holds — so a write
+   * that must land together with another (a fact and the one it supersedes)
+   * shares one commit.
+   * @param {any} client @param {string} owner @param {Record<string, any>} next
+   * @param {Record<string, any>|null} proof
+   * @param {{ expected: number, providedId: string|null, auditReason: string }} options
+   */
+  async #writeRecord(client, owner, next, proof, { expected, providedId, auditReason }) {
+    // Two writers extracting from two runs of the same conversation reach
+    // this line at the same instant. The lock is on the canonical key rather
+    // than the table, so unrelated memories still write in parallel, and it
+    // is what the retired service's process-wide mutex gave a single process
+    // and could not give a web tier of several.
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [canonicalKeyLock(owner, next)]);
+    const found = await client.query(`SELECT * FROM evimed_memory.records
+      WHERE user_id=$1 AND scope=$2 AND scope_id=$3 AND kind=$4 AND key=$5 FOR UPDATE`,
+    [owner, next.scope, next.scopeId, next.kind, next.key]);
+    // Read after both waits above, so the stamp is the moment of the write
+    // and not the moment this writer joined the queue.
+    const now = await transactionInstant(client);
 
-      const stored = publicRecord(found.rows[0]);
-      if (expected > 0 && expected !== stored.version) {
-        throw new HttpError(409, "memory_conflict", "This memory changed since it was read.");
+    if (found.rowCount === 0) {
+      const { evidence: created } = mergeEvidence([], proof);
+      const inserted = await client.query(`INSERT INTO evimed_memory.records (${recordColumns})
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,'[]'::jsonb,1,$15,$15,$16,$17,$18,$19)
+        ON CONFLICT DO NOTHING RETURNING *`,
+      [owner, providedId ?? randomUUID(), next.scope, next.scopeId, next.kind, next.key, next.value, next.summary,
+        next.origin, next.status, next.confidence, next.importance, next.sensitive, JSON.stringify(created),
+        now, next.lastConfirmedAt, next.expiresAt, next.supersededBy ?? null, next.invalidSince ?? null]);
+      // The only way to get here is a provided id that already names another
+      // of this user's memories: the canonical key was free a statement ago
+      // and the lock is still held. Resurrecting the wrong row would be
+      // worse than refusing the write.
+      if (inserted.rowCount !== 1) {
+        throw new HttpError(409, "memory_conflict", "That memory id already names another memory.");
       }
-      const { evidence: merged, added } = mergeEvidence(stored.evidence, proof);
-      const stateChanged = stored.value !== next.value || stored.summary !== next.summary || stored.status !== next.status;
-      const revisions = stateChanged
-        ? appendRevision(stored.revisions, {
-          version: stored.version,
-          value: stored.value,
-          summary: stored.summary,
-          status: stored.status,
-          changedAt: now,
-          reason: auditReason,
-        })
-        : stored.revisions;
-      if (!added && !stateChanged && currentStateEqual(stored, next)) return stored;
-
-      const updated = await client.query(`UPDATE evimed_memory.records SET value=$3,summary=$4,origin=$5,status=$6,
-        confidence=$7,importance=$8,sensitive=$9,evidence=$10::jsonb,revisions=$11::jsonb,version=version+1,
-        updated_at=$12,last_confirmed_at=$13,expires_at=$14
-        WHERE user_id=$1 AND id=$2 AND version=$15 RETURNING *`,
-      [owner, stored.id, next.value, next.summary, next.origin, next.status, next.confidence, next.importance,
-        next.sensitive, JSON.stringify(merged), JSON.stringify(revisions), now, next.lastConfirmedAt,
-        next.expiresAt, stored.version]);
-      if (updated.rowCount !== 1) {
-        throw new HttpError(409, "memory_conflict", "This memory changed while it was being written.");
-      }
-      const record = publicRecord(updated.rows[0]);
+      const record = publicRecord(inserted.rows[0]);
       await this.#enqueueRecordIndex(client, owner, record);
       return record;
+    }
+
+    const stored = publicRecord(found.rows[0]);
+    if (expected > 0 && expected !== stored.version) {
+      throw new HttpError(409, "memory_conflict", "This memory changed since it was read.");
+    }
+    const { evidence: merged, added } = mergeEvidence(stored.evidence, proof);
+    const stateChanged = stored.value !== next.value || stored.summary !== next.summary || stored.status !== next.status;
+    const revisions = stateChanged
+      ? appendRevision(stored.revisions, {
+        version: stored.version,
+        value: stored.value,
+        summary: stored.summary,
+        status: stored.status,
+        changedAt: now,
+        reason: auditReason,
+      })
+      : stored.revisions;
+    if (!added && !stateChanged && currentStateEqual(stored, next)) return stored;
+
+    const updated = await client.query(`UPDATE evimed_memory.records SET value=$3,summary=$4,origin=$5,status=$6,
+      confidence=$7,importance=$8,sensitive=$9,evidence=$10::jsonb,revisions=$11::jsonb,version=version+1,
+      updated_at=$12,last_confirmed_at=$13,expires_at=$14,superseded_by=$16,invalid_since=$17
+      WHERE user_id=$1 AND id=$2 AND version=$15 RETURNING *`,
+    [owner, stored.id, next.value, next.summary, next.origin, next.status, next.confidence, next.importance,
+      next.sensitive, JSON.stringify(merged), JSON.stringify(revisions), now, next.lastConfirmedAt,
+      next.expiresAt, stored.version, next.supersededBy ?? null, next.invalidSince ?? null]);
+    if (updated.rowCount !== 1) {
+      throw new HttpError(409, "memory_conflict", "This memory changed while it was being written.");
+    }
+    const record = publicRecord(updated.rows[0]);
+    await this.#enqueueRecordIndex(client, owner, record);
+    return record;
+  }
+
+  /**
+   * Write a fact that replaces another, and retire the one it replaces.
+   *
+   * One transaction, so no reader ever sees both in force or neither. The old
+   * record is not deleted and not edited: it keeps its value and evidence,
+   * becomes `superseded`, points at what replaced it and says from when it
+   * stopped holding — the 「曾经如此」 the timeline shows. Recall reads only
+   * `active` rows, so the replaced fact leaves every prompt at once.
+   *
+   * @param {string} userId @param {string} previousId @param {Record<string, any>} input
+   * @param {Record<string, any>|null} evidence @param {{ reason?: string }} options
+   * @returns {Promise<{ record: any, superseded: any }>}
+   */
+  async supersede(userId, previousId, input, evidence = null, { reason = "" } = {}) {
+    const owner = assertUserId(userId);
+    const next = validateRecordInput(input);
+    const proof = boundedEvidence(evidence);
+    const auditReason = boundedText(reason, MEMORY_REASON_LIMIT);
+    const replacedId = assertRecordId(previousId);
+    return this.#transaction(async (client) => {
+      await this.#lockOwnerForOutbox(client, owner);
+      const found = await client.query("SELECT * FROM evimed_memory.records WHERE user_id=$1 AND id=$2 FOR UPDATE",
+        [owner, replacedId]);
+      if (found.rowCount !== 1) throw new HttpError(404, "memory_not_found", "Memory not found.");
+      const replaced = publicRecord(found.rows[0]);
+      if (canonicalKeyLock(owner, replaced) === canonicalKeyLock(owner, next)) {
+        // The same fact under the same key is an update, and its old value is
+        // already kept as a revision; calling it a supersession would retire
+        // the record it is about to write.
+        throw new HttpError(400, "memory_supersede_invalid", "A memory cannot supersede itself.");
+      }
+      const record = await this.#writeRecord(client, owner, next, proof, { expected: 0, providedId: null, auditReason });
+      const now = await transactionInstant(client);
+      const retired = await client.query(`UPDATE evimed_memory.records SET status='superseded',superseded_by=$3,
+        invalid_since=COALESCE(invalid_since,$4),revisions=$5::jsonb,version=version+1,updated_at=$4
+        WHERE user_id=$1 AND id=$2 RETURNING *`,
+      [owner, replaced.id, record.id, now, JSON.stringify(appendRevision(replaced.revisions, {
+        version: replaced.version, value: replaced.value, summary: replaced.summary, status: replaced.status,
+        changedAt: now, reason: boundedText(`superseded by ${record.key}${auditReason ? `: ${auditReason}` : ""}`, MEMORY_REASON_LIMIT),
+      }))]);
+      const superseded = publicRecord(retired.rows[0]);
+      await this.#enqueueRecordIndex(client, owner, superseded);
+      return { record, superseded };
     });
   }
 
@@ -997,6 +1064,8 @@ export class ResearchMemoryStore {
       .filter((record) => record.kind !== "run_summary")
       .filter((record) => !record.sensitive)
       .filter((record) => !record.expiresAt || Date.parse(record.expiresAt) > now)
+      // A fact that stopped holding: what replaced it is the one to recall.
+      .filter((record) => !record.invalidSince || Date.parse(record.invalidSince) > now)
       .filter((record) => record.scope === "user"
         || (record.scope === "project" && record.scopeId === projectId)
         || (record.scope === "session" && record.scopeId === sessionId))
