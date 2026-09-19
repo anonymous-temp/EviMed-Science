@@ -1,4 +1,4 @@
-import { HttpError, readJson, sendJson } from "./security.mjs";
+import { HttpError, parseCookies, readJson, sendJson } from "./security.mjs";
 import { DEVICE_REQUEST } from "./channels/deviceTokens.mjs";
 
 /**
@@ -66,7 +66,17 @@ export function createImRoutes({ config, store, service, deviceTokens, maxJsonBy
       if (parts.length === 2 && parts[1] === "registration") {
         if (method === "POST") {
           await bodyOf(req, maxJsonBytes, []);
-          const state = im.startRegistration(user);
+          // The scan binds only while this sign-in holds: a code left on a
+          // screen after signing out binds nothing. Only the session cookie is
+          // kept, to ask the store again when the scan completes.
+          const session = parseCookies(String(req.headers.cookie ?? "")).get(config.sessionCookieName) ?? "";
+          const signedIn = async () => {
+            if (!session) return false;
+            const cookie = `${config.sessionCookieName}=${encodeURIComponent(session)}`;
+            return store.ensureSessionUser({ headers: { cookie } }, null, { allowDevAuth: false })
+              .then((/** @type {any} */ again) => again.user.id === user.id, () => false);
+          };
+          const state = im.startRegistration(user, { signedIn });
           await audit("im.feishu.registration", "started", { userId: user.id });
           return reply(state);
         }

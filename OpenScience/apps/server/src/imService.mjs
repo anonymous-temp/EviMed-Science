@@ -221,6 +221,42 @@ function isRefusal(error) {
   return error instanceof HttpError && error.status >= 400 && error.status < 500;
 }
 
+/** The inbox action on a binding's own notice that takes that binding away. */
+export const FEISHU_UNBIND_ACTION = "unbind-feishu";
+/** The inbox source naming one binding: `feishu-binding:<binding id>`. */
+const FEISHU_BINDING_SOURCE = "feishu-binding:";
+
+/** A scan that no longer stands: said to the page, never retried.
+ *  @param {string} code @param {string} publicMessage */
+function registrationRefused(code, publicMessage) {
+  return Object.assign(new Error(code), { code, publicMessage, refused: true });
+}
+
+/**
+ * The Feishu identity a binding acts for, as a person can recognise it: the
+ * bot is created as 「{user} 的 EviMed 研究助手」, so its name carries the
+ * scanner's own, and the open id tells two people of one name apart.
+ * @param {any} binding
+ */
+export function feishuIdentity(binding) {
+  const openId = String(binding?.externalId ?? "");
+  const shown = openId.length > 12 ? `${openId.slice(0, 7)}…${openId.slice(-4)}` : openId;
+  const brand = binding?.metadata?.tenantBrand === "lark" ? "Lark" : "飞书";
+  const bot = binding?.metadata?.botName ? `机器人「${binding.metadata.botName}」的创建人，` : "";
+  return `${bot}${brand}用户 ${shown}`;
+}
+
+/**
+ * What the bot tells the person who scanned: the EviMed account it now works
+ * for, and where that binding is undone.
+ * @param {Record<string, any>} config @param {any} user
+ */
+function boundAccountLine(config, user) {
+  const link = appLink(config, "/app/account?tab=phone");
+  return `这个机器人绑定的是 EviMed 账号「${String(user?.name || user?.id || "")}」：你在这里发的消息会在这个账号里开始研究，`
+    + `这个账号的通知也会发到这里。如果这不是你的账号，请在 EviMed 网页「账户 → 手机与飞书」里解除绑定${link ? `：${link}` : "。"}`;
+}
+
 export class ImService {
   /**
    * @param {{ config: Record<string, any>, database: any, credentials: any, notifications: any,
@@ -344,15 +380,19 @@ export class ImService {
   /**
    * Start (or restart) one account's scan-to-create. The SDK builds the link;
    * the page shows it as a QR code and polls `registration(user)`.
-   * @param {any} user
+   *
+   * `signedIn` answers whether the sign-in that started this attempt still
+   * holds (the route passes it). The scan binds only while it does, so a
+   * code left on a screen after signing out binds nothing.
+   * @param {any} user @param {{ signedIn?: (() => Promise<boolean>) | null }} [attempt]
    */
-  startRegistration(user) {
+  startRegistration(user, { signedIn = null } = {}) {
     this.#requireEnabled();
     let entry = this.registrations.get(user.id);
     if (!entry) {
       const manager = new RegistrationManager({
         registerApp: async (options) => (await this.loadSdk()).registerApp(options),
-        onCredentials: (result) => this.#completeRegistration(user, result),
+        onCredentials: (result, attempt) => this.#completeRegistration(user, result, attempt),
         now: this.now,
       });
       entry = { manager, touchedAt: this.now() };
@@ -380,7 +420,7 @@ export class ImService {
         scopes: { tenant: [...FEISHU_TENANT_SCOPES] },
         events: { items: { tenant: [...FEISHU_EVENTS] } },
       },
-    });
+    }, { signedIn });
   }
 
   /** @param {any} user */
@@ -401,9 +441,17 @@ export class ImService {
    * A completed scan: verify, store, connect, say hello. Any failure here is
    * reported through the registration state with a sentence for the person
    * (`publicMessage`); the secret itself is never in it.
+   *
+   * The bot acts for whoever scanned the code, and a code can be scanned by
+   * someone other than the account holder. So the attempt is asked again
+   * immediately before anything is kept — still the one in force, and its
+   * sign-in still valid — and every bind is said on both sides
+   * (`#announceBinding`). The review that found this (2026-09-20) cancelled a
+   * save under way and got a bound bot anyway.
    * @param {any} user @param {{ client_id: string, client_secret: string, user_info?: Record<string, any> }} result
+   * @param {{ context: any, current: () => boolean } | undefined} attempt
    */
-  async #completeRegistration(user, result) {
+  async #completeRegistration(user, result, attempt) {
     const ownerOpenId = typeof result.user_info?.open_id === "string" ? result.user_info.open_id : "";
     if (!ownerOpenId) {
       throw Object.assign(new Error("owner missing"), {
@@ -415,8 +463,26 @@ export class ImService {
       binding = await this.feishu.bind(user.id, {
         appId: result.client_id, appSecret: result.client_secret, ownerOpenId,
         tenantBrand: result.user_info?.tenant_brand === "lark" ? "lark" : "feishu",
+      }, {
+        // After the bot was verified, before its secret or binding is kept.
+        // The sign-in is asked first because it is a query; whether the
+        // attempt is still in force is the last thing read.
+        proceed: async () => {
+          const signedIn = attempt?.context?.signedIn;
+          if (typeof signedIn === "function" && !(await signedIn())) {
+            throw registrationRefused("feishu_registration_signed_out", "发起这次扫码的登录已经退出，没有绑定。请重新登录后再扫码。");
+          }
+          if (attempt && !attempt.current()) {
+            throw registrationRefused("feishu_registration_ended", "这次扫码已取消或已过期，没有绑定。需要时请重新扫码。");
+          }
+        },
       });
     } catch (error) {
+      if (/** @type {any} */ (error)?.refused) {
+        this.count("feishu_bind_refused");
+        await this.audit("im.feishu.bind", "refused", { userId: user.id, code: errorCode(error) });
+        throw error;
+      }
       this.write(`im feishu bind failed for ${user.id}: ${describeError(error, this.scrubber)}\n`);
       throw Object.assign(new Error("bind failed"), {
         code: errorCode(error),
@@ -435,14 +501,60 @@ export class ImService {
     await this.notifications?.setPreferenceChannel(user.id, "feishu", true).catch((/** @type {any} */ error) =>
       this.audit("im.preferences.feishu", "failed", { userId: user.id, code: errorCode(error) }));
     await this.connections.sync(await this.store.activeBindings("feishu"));
+    await this.#announceBinding(user, binding);
     const pending = FEISHU_PENDING_ACTIVATION.includes(Number(binding.metadata.activateStatus));
     if (!pending) {
       await this.feishu.conversation.sendText({
         binding, chatId: null, replyTo: null, key: `welcome:${binding.id}`,
-        text: "你好，我是你的 EviMed 研究助手。直接把问题发给我就行：简单的问题当场回答，深度任务会在这里显示进度，完成后把结果和报告文件发给你。说一句「换到某某项目」就能切换项目。",
+        text: "你好，我是你的 EviMed 研究助手。直接把问题发给我就行：简单的问题当场回答，深度任务会在这里显示进度，完成后把结果和报告文件发给你。说一句「换到某某项目」就能切换项目。"
+          + `\n\n${boundAccountLine(this.config, user)}`,
       }).catch((/** @type {any} */ error) => this.write(`im welcome failed: ${describeError(error, this.scrubber)}\n`));
     }
     return { botName: binding.metadata.botName ?? null, pendingApproval: pending, tenantBrand: binding.metadata.tenantBrand };
+  }
+
+  /**
+   * Say a new binding on the account's side: an inbox notice naming the
+   * Feishu identity now bound, with 「解除绑定」 on it, one click. The bot's
+   * side is its welcome (`boundAccountLine`). No step is added for the
+   * ordinary case — the binding is in force already — and a notice that
+   * cannot be posted does not undo it.
+   * @param {any} user @param {any} binding
+   */
+  async #announceBinding(user, binding) {
+    if (!this.notifications) return;
+    try {
+      await this.notifications.create(user.id, {
+        noticeType: "notify", severity: "attention",
+        title: "飞书机器人已绑定到你的账号",
+        body: `绑定的飞书身份：${feishuIdentity(binding)}。从现在起，这个飞书用户发给机器人的消息会在你的账号里开始研究，`
+          + "你的通知也会推送给它。如果不是你本人扫的码，点「解除绑定」。",
+        actions: [{ id: FEISHU_UNBIND_ACTION, label: "解除绑定", style: "danger" }],
+        source: { type: "system", id: `${FEISHU_BINDING_SOURCE}${binding.id}` },
+        idempotencyKey: `feishu-bound:${binding.id}`,
+      });
+    } catch (error) {
+      this.count("feishu_bind_notice_failed");
+      this.write(`im bind notice for ${user.id} not posted: ${describeError(error, this.scrubber)}\n`);
+    }
+  }
+
+  /**
+   * An inbox action this module put on its own notice, carried out before
+   * the item resolves (`NotificationService.resolve`): 「解除绑定」 takes away
+   * the binding the notice names — and only that one, so a notice from an
+   * earlier scan never removes the binding a later scan made.
+   * @param {any} item @param {string} actionId
+   */
+  async inboxAction(item, actionId) {
+    if (actionId !== FEISHU_UNBIND_ACTION || item?.source?.type !== "system") return;
+    const source = String(item.source.id ?? "");
+    if (!source.startsWith(FEISHU_BINDING_SOURCE)) return;
+    const bindingId = source.slice(FEISHU_BINDING_SOURCE.length);
+    const [binding] = (await this.store.bindingsFor(item.userId, "feishu")).filter((candidate) => candidate.id === bindingId);
+    if (!binding) return;
+    await this.#removeFeishuBindings(item.userId, [binding]);
+    await this.audit("im.feishu.unbind", "completed", { userId: item.userId, code: "inbox" });
   }
 
   /**
@@ -455,15 +567,21 @@ export class ImService {
     this.#requireEnabled();
     this.registrations.get(user.id)?.manager.cancel();
     const bindings = await this.store.bindingsFor(user.id, "feishu");
+    await this.#removeFeishuBindings(user.id, bindings);
+    await this.audit("im.feishu.unbind", "completed", { userId: user.id, code: `bindings:${bindings.length}` });
+    return { removed: bindings.length };
+  }
+
+  /** Stop, forget and delete these Feishu bindings, then the account's one
+   *  Feishu secret and its pushes. @param {string} userId @param {any[]} bindings */
+  async #removeFeishuBindings(userId, bindings) {
     for (const binding of bindings) {
       await this.connections.stop(binding.id);
       this.feishu.forget(binding.id);
-      await this.store.deleteBinding(user.id, binding.id);
+      await this.store.deleteBinding(userId, binding.id);
     }
-    await this.credentials?.removeChannelSecret(user.id, FEISHU_CREDENTIAL);
-    await this.notifications?.setPreferenceChannel(user.id, "feishu", false).catch(() => null);
-    await this.audit("im.feishu.unbind", "completed", { userId: user.id, code: `bindings:${bindings.length}` });
-    return { removed: bindings.length };
+    await this.credentials?.removeChannelSecret(userId, FEISHU_CREDENTIAL);
+    await this.notifications?.setPreferenceChannel(userId, "feishu", false).catch(() => null);
   }
 
   // --- the own app's push tokens ---------------------------------------------------
@@ -972,6 +1090,8 @@ export class ImService {
         if (binding.status !== "active") continue;
         // News from before the binding existed is on the page, not a buzz.
         if (Date.parse(item.updatedAt ?? item.createdAt ?? "") < Date.parse(binding.createdAt ?? "")) continue;
+        // A binding's own notice was said to its bot in the welcome already.
+        if (item.source?.type === "system" && item.source.id === `${FEISHU_BINDING_SOURCE}${binding.id}`) continue;
         const row = await this.store.enqueueDelivery({ userId: item.userId, channel, bindingId: binding.id,
           notificationId: item.id, eventCount: Number(item.count) || 1, notBefore });
         if (row) queued += 1;
@@ -1080,9 +1200,10 @@ export class ImService {
         const bot = await this.feishu.refresh(binding);
         await this.store.patchBindingMetadata(binding.id, { activateStatus: bot.activateStatus, botName: bot.name, botOpenId: bot.openId });
         if (!FEISHU_PENDING_ACTIVATION.includes(Number(bot.activateStatus)) && !FEISHU_DISABLED_ACTIVATION.includes(Number(bot.activateStatus))) {
+          const owner = await this.users.userById(binding.userId).catch(() => null);
           await this.feishu.conversation.sendText({
             binding, chatId: null, replyTo: null, key: `welcome:${binding.id}`,
-            text: "你的 EviMed 研究助手已经启用。直接把问题发给我就行。",
+            text: `你的 EviMed 研究助手已经启用。直接把问题发给我就行。\n\n${boundAccountLine(this.config, owner ?? { id: binding.userId })}`,
           }).catch(() => null);
         }
       } catch (error) {
@@ -1138,7 +1259,8 @@ export function createImModule({ config, database, credentials, notifications, u
   // The inbox learns about channels only when the module is on: off, it
   // validates and delivers exactly what it did before (X6).
   if (service && config.imEnabled === true && notifications) {
-    notifications.attachChannels({ registry: service.registry, onChange: (item) => { void service.notificationChanged(item); } });
+    notifications.attachChannels({ registry: service.registry, onChange: (item) => { void service.notificationChanged(item); },
+      onAction: (item, actionId) => service.inboxAction(item, actionId) });
   }
   const worker = service && config.imEnabled === true ? new ImWorker({ service, pollMs: config.imPollMs }) : null;
   const routes = createImRoutes({ config, store: users, service, deviceTokens, maxJsonBytes, audit });
