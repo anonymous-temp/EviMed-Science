@@ -37,8 +37,10 @@ TASK_FIXTURES = {
     "biomedical_source_search": {
         "source": "pubmed", "query": "aspirin cardiovascular prevention randomized trial", "limit": 2,
     },
-    "official_page_fetch": {
-        "url": "https://www.nhs.uk/symptoms/chest-pain/",
+    # The official-page tool's probe until 2026-09-20, when it became
+    # `web_read`: NICE answers a plain client with the guideline's own text.
+    "web_read": {
+        "url": "https://www.nice.org.uk/guidance/ng136",
     },
     "open_access_full_text": {"identifier": "PMC8010506"},
     # Added 2026-09-18 with the tool. It reads the capture the fixture above has

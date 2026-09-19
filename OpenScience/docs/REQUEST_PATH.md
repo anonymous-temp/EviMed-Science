@@ -74,7 +74,7 @@
   │  └─ 浏览器→容器：无直通。`/api/opencode/*` 退役返回 410
   ▼
 [H] MCP 工具 evimed-research   runtime/mcp/evimed-research/server.py（stdio JSON-RPC）
-  │  public_sources.py / web_search.py / official_pages.py / open_access_fulltext.py
+  │  public_sources.py / web_search.py / web_read.py / open_access_fulltext.py
   │  meta_agent.py / specialist_jobs.py / science_connectors.py / drug_assessment.py
   ▼
 [I] 外部边界（服务端持钥，运行时永不指定主机）
@@ -184,8 +184,9 @@
 | 项 | 值 | 依据 |
 |---|---|---|
 | 公共源读超时 | `EVIMED_PUBLIC_SOURCE_TIMEOUT_SECONDS` 默认 20s，钳制 [1,60] | `public_sources.py:94-96`、`:206` |
-| 全文/官方页读超时 | 显式 60s | `open_access_fulltext.py:36`、`official_pages.py:166` |
-| OA PDF 读超时 | 60s，钳制 [1,120] | `public_sources.py:210`、`:236` |
+| 全文读超时 | 显式 60s | `open_access_fulltext.py:36` |
+| 网页读取（`web_read`） | 170s（网关自身总时限 `webReadTimeoutMs` 150s，低于内核工具调用上限 180s） | `web_read.py` `TIMEOUT_SECONDS`、`config.mjs` `webReadTimeoutMs` |
+| OA PDF 读超时 | 经解析模式 150s（`open_access_fulltext.py` `PARSE_TIMEOUT_SECONDS`）；超时后回退到只取 PDF 的原模式 60s，钳制 [1,120] | `public_sources.py:210`、`:236` |
 | 联网检索读超时 | 60s | `web_search.py:102` |
 | 专科作业 | **无任何墙钟限制**：`subprocess.run` 不带 `timeout=` | `specialist_jobs.py:540` |
 | 重试 | 文献检索有 EviMed → legacy → PubMed 三级降级 | `public_sources.py:1075-1092` |
@@ -316,8 +317,9 @@ S23 关停时 `app.close()` 抛异常照样 `exit(0)`，编排层看到干净退
 | 分类器超时 | `clamp(modelGatewayTimeoutMs,1e3,1.2e5)` | 实际 120000 | 总时限 | `specialistClassifier.mjs:90` |
 | `memoryExtractionTimeoutMs` | 120000 | **30000** (`:75`) | 总时限 | `config.mjs:794-796` |
 | MCP 公共源读超时 | 20s（`EVIMED_PUBLIC_SOURCE_TIMEOUT_SECONDS`） | 未设 | socket 读 | `public_sources.py:94-96` |
-| MCP 全文/官方页读超时 | 60s（硬编码） | 不可配 | socket 读 | `open_access_fulltext.py:36`、`official_pages.py:166` |
-| MCP OA PDF 读超时 | 60s（硬编码） | 不可配 | socket 读 | `public_sources.py:210` |
+| MCP 全文读超时 | 60s（硬编码） | 不可配 | socket 读 | `open_access_fulltext.py:36` |
+| `webReadTimeoutMs` | 150000 | 150000 | **总时限**（含 robots、重定向、渲染、文档解析；钳制在工具调用上限减余量之下） | `config.mjs` |
+| MCP OA PDF 读超时 | 经解析模式 150s；回退的原模式 60s（硬编码） | 不可配 | socket 读 | `open_access_fulltext.py`、`public_sources.py:210` |
 | MCP 联网检索读超时 | 60s（硬编码） | 不可配 | socket 读 | `web_search.py:102` |
 | `deepseekReleaseReceiptMaxAgeMs` | 86400000 | 86400000 (`:221`) | 总时限 | `config.mjs:755-759` |
 | `backupIntervalSeconds` | 86400 | 86400 (`:129`) | 周期 | `config.mjs:412-414` |

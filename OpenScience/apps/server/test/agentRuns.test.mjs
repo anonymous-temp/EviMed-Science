@@ -1343,7 +1343,7 @@ for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused",
         "guideline-warning": { tool: "mcp__evimed__guideline_search", status: "warning", digests: true },
         // What guideline preservation reported until then: a path, no digest.
         undigested: { tool: "mcp__evimed__guideline_search", status: "warning", digests: false },
-      }[scenario] ?? { tool: "evimed-research_evimed_official_page_fetch", status: "success", digests: true };
+      }[scenario] ?? { tool: "mcp__evimed__web_read", status: "success", digests: true };
       const retrievalParts = !["missing", "old-missing"].includes(scenario)
         ? [sourceA, sourceB].map((source) => ({
             type: "tool",
@@ -2280,19 +2280,21 @@ test("deep research tolerates documented source misses but requires invalid EviM
       // outside the approved official-document set, the gateway said no, and
       // the agent obeyed and went elsewhere — then the run was failed for
       // having asked. A guardrail the agent respected is the guardrail working.
-      name: "official page the gateway refused to fetch",
+      // Since `web_read` reads any public page, the refusals left are the
+      // site's own: its robots.txt, or a page no browser could open.
+      name: "a web page the gateway refused to read",
       expectedStatus: "succeeded",
       expectedErrorCode: null,
       parts: [
         {
           type: "tool",
-          tool: "evimed-research_evimed_official_page_fetch",
+          tool: "mcp__evimed__web_read",
           state: {
             status: "error",
             error: JSON.stringify({
               status: "error",
-              summary: "The URL is not an approved official document.",
-              error: { code: "official_page_url_forbidden" },
+              summary: "closed.example.org's robots.txt does not allow reading this page; use another source for it.",
+              error: { code: "web_read_robots_disallowed" },
             }),
           },
         },
@@ -4656,9 +4658,14 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
     for (const [, code] of text.matchAll(/\bfailure\(\s*\n?\s*"([a-z0-9_]+)"/g)) emitted.add(code);
     for (const [, code] of text.matchAll(/\b[A-Z][A-Za-z]*Error\(\s*\n?\s*"([a-z0-9_]+)"/g)) emitted.add(code);
   }
-  for (const relative of ["../src/publicSourceGateway.mjs", "../src/webSearchGateway.mjs", "../src/geoProbeGateway.mjs"]) {
+  // The web-read gateway answers `web_read` with its own codes, which the
+  // tool passes through to the run unchanged (2026-09-20).
+  for (const relative of [
+    "../src/publicSourceGateway.mjs", "../src/webSearchGateway.mjs", "../src/geoProbeGateway.mjs",
+    "../src/webRead.mjs", "../src/webReadNetwork.mjs", "../src/webReadLimits.mjs", "../src/agentbay/browser.mjs",
+  ]) {
     const text = await readFile(new URL(relative, import.meta.url), "utf8");
-    for (const [, code] of text.matchAll(/"((?:public_source|web_search|geo_probe)_[a-z0-9_]+)"/g)) emitted.add(code);
+    for (const [, code] of text.matchAll(/"((?:public_source|web_search|geo_probe|web_read|web_render)_[a-z0-9_]+)"/g)) emitted.add(code);
   }
   assert.ok(emitted.size > 30, `expected the real code set, found ${emitted.size}`);
 
@@ -4682,6 +4689,11 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
   // could not even parse is the run's own defect.
   assert.ok(recoverableEvidenceSourceErrorCodes.has("official_page_url_forbidden"));
   assert.ok(terminalEvidenceSourceErrorCodes.has("official_page_url_invalid"));
+  // And for the tool that replaced it: a site saying no, or needing a browser
+  // this deployment lacks, is a fact about the source.
+  assert.ok(recoverableEvidenceSourceErrorCodes.has("web_read_robots_disallowed"));
+  assert.ok(recoverableEvidenceSourceErrorCodes.has("web_read_needs_browser"));
+  assert.ok(terminalEvidenceSourceErrorCodes.has("web_read_url_invalid"));
   // The same distinction at the specialist-adapter boundary, which the earlier
   // version of this test could not see at all.
   assert.ok(recoverableEvidenceSourceErrorCodes.has("adapter_http_error"));

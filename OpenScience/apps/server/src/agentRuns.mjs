@@ -1298,7 +1298,7 @@ async function readDelegatedAssistantMessages(project, parentMessages, readSessi
 // this list, so one upstream returning 502 failed a run that had already found
 // its evidence elsewhere and written every deliverable.
 const evidenceSourceToolSuffixes = Object.freeze([
-  "official_page_fetch",
+  "web_read",
   "open_access_full_text",
   "literature_search",
   "guideline_search",

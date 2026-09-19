@@ -2,7 +2,7 @@
 
 The delivery gate binds a claim to a preserved artifact and checks the quote
 appears in it verbatim. Nothing in the EviMed connectors wrote one: only
-`official_pages` and `open_access_fulltext` did. So every guideline this
+the official-page tool (now `web_read`) and `open_access_fulltext` did. So every guideline this
 deployment retrieved -- full text included, which the upstream returns -- could
 be cited by number and never carry a verified claim.
 

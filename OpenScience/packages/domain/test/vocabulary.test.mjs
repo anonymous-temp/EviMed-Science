@@ -74,8 +74,18 @@ test("every spelling of an MCP tool resolves to the same base name", () => {
   assert.equal(mcpToolBaseName("evimed_plan"), null);
 });
 
+test("a renamed research tool keeps resolving under the name history recorded", () => {
+  // `official_page_fetch` became `web_read` (2026-09-20). A run ledger or an
+  // eval trace written before that must still read as that tool; nothing may
+  // offer the old name again.
+  assert.equal(mcpToolBaseName("official_page_fetch"), "web_read");
+  assert.equal(mcpToolBaseName("mcp__evimed__official_page_fetch"), "web_read");
+  assert.equal(mcpToolBaseName("evimed-research_evimed_official_page_fetch"), "web_read");
+  assert.ok(!MCP_TOOL_BASE_NAMES.includes("official_page_fetch"));
+});
+
 test("EviMed tool names cover both worlds", () => {
-  assert.ok(isEviMedToolName("mcp__evimed__official_page_fetch"));
+  assert.ok(isEviMedToolName("mcp__evimed__web_read"));
   assert.ok(isEviMedToolName("evimed_submit_deliverable"));
   assert.ok(!isEviMedToolName("bash"));
   // Ten since `evimed_compact_request` joined them: a tool the manager calls to

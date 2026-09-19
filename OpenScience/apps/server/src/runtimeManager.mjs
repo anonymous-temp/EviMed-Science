@@ -1612,6 +1612,11 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   // is the shape of "the lever was moved and nothing happened"; an explicit
   // empty string is the deployment saying "everything is offered".
   environment.EVIMED_DISABLED_TOOLS = String(config.evimedDisabledTools ?? "");
+  // `OPEN_SCIENCE_WEB_READ_ENABLED=false` is the one switch for web reading
+  // (plan §3.5): the gateway refuses the mode, and the tool is not offered.
+  if (config.webReadEnabled === false) {
+    environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), "web_read"])].join(",");
+  }
   for (const [key, envName] of Object.entries(evimedAdapterEnvironment)) {
     const value = String(configured[key] ?? "").trim();
     if (!value) continue;

@@ -21,7 +21,10 @@ function fakeContext() {
   return { ctx, registered }
 }
 
-/** @param {(url: string, init: any) => Response} answer */
+/**
+ * @param {(url: string, init: any) => Response} answer
+ * @param {(calls: any[]) => Promise<void>} run
+ */
 async function withGateway(answer, run) {
   const original = globalThis.fetch
   /** @type {any[]} */
@@ -48,7 +51,7 @@ test('a ctx.web fetch is a web read: the page text, from where the bytes came', 
     receipt: { url: 'http://www.nhc.gov.cn/wjw/gfxwj/list.shtml', finalUrl: 'https://www.nhc.gov.cn/wjw/gfxwj/list.shtml' },
     text: '- 关于印发某规范的通知 2026-09-12',
     links: [],
-  }), async (calls) => {
+  }), async (/** @type {any[]} */ calls) => {
     const page = await registered.fetch.fetch({ url: 'http://www.nhc.gov.cn/wjw/gfxwj/list.shtml' })
     assert.deepEqual(page, { url: 'https://www.nhc.gov.cn/wjw/gfxwj/list.shtml', content: '- 关于印发某规范的通知 2026-09-12' })
     assert.equal(calls[0].url, config.fetchUrl)

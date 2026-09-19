@@ -1,6 +1,9 @@
-import importlib.util
+import base64
 import hashlib
+import http.server
+import importlib.util
 import json
+import threading
 import os
 import pathlib
 import sys
@@ -196,14 +199,17 @@ class OpenAccessFullTextTests(unittest.TestCase):
             text = ("First PDF evidence. " if stream.getvalue() == first_pdf else "Second PDF evidence. ") * 200
             return SimpleNamespace(is_encrypted=False, pages=[SimpleNamespace(extract_text=lambda: text)], metadata=SimpleNamespace(title="Stable PDF title"))
 
+        # A deployment without a parser: the gateway returns the PDF and says
+        # why there is no parsed text, and the text layer is read here.
+        unparsed = {"code": "source_parser_unavailable", "message": "no parser"}
         records = [
-            (first_pdf, {"origin": "publisher", "version": "publishedVersion", "license": "cc-by"}),
-            (first_pdf, {"origin": "repository", "version": "acceptedVersion", "license": "unspecified"}),
-            (second_pdf, {"origin": "publisher", "version": "publishedVersion", "license": "cc-by"}),
+            (first_pdf, {"origin": "publisher", "version": "publishedVersion", "license": "cc-by"}, None, unparsed),
+            (first_pdf, {"origin": "repository", "version": "acceptedVersion", "license": "unspecified"}, None, unparsed),
+            (second_pdf, {"origin": "publisher", "version": "publishedVersion", "license": "cc-by"}, None, unparsed),
         ]
         with mock.patch.dict(sys.modules, {"pypdf": SimpleNamespace(PdfReader=reader)}), \
                 mock.patch.object(self.module, "_resolve", return_value={"doi": "10.1/test", "title": "Lookup title"}), \
-                mock.patch.object(self.module.public_sources, "open_access_pdf_bytes", side_effect=records):
+                mock.patch.object(self.module, "_open_access_pdf", side_effect=records):
             first = self.module.fetch({"identifier": "10.1/test"})
             original = {name: (self.workspace / name).read_bytes() for name in first["artifacts"]}
             repeated = self.module.fetch({"identifier": "10.1/test"})
@@ -212,9 +218,99 @@ class OpenAccessFullTextTests(unittest.TestCase):
         self.assertEqual(first["artifacts"], repeated["artifacts"])
         self.assertEqual(first["data"]["artifactSha256s"], repeated["data"]["artifactSha256s"])
         self.assertEqual(repeated["data"]["openAccessOrigin"], "repository")
+        self.assertEqual(first["data"]["extractedBy"], "pdf-text-layer")
+        self.assertEqual(first["data"]["parserUnavailable"], "source_parser_unavailable")
         self.assertTrue(set(first["artifacts"]).isdisjoint(changed["artifacts"]))
         for name, payload in original.items():
             self.assertEqual((self.workspace / name).read_bytes(), payload)
+
+    def test_the_parser_reads_the_pdf_when_the_deployment_has_one(self):
+        pdf = b"%PDF-1.7 scanned trial report"
+        parsed = {"text": "Table 2. Hazard ratio 0.74 (95% CI 0.65-0.85).\n\nResults were consistent across subgroups.",
+                  "extractor": {"name": "evimed-extract", "version": "evimed-extract@0.5.0", "parser": "api"},
+                  "pageMap": [{"page": 1, "start": 0, "end": 40, "status": "ok"}, {"page": 2, "start": 40, "end": 85, "status": "ok"}]}
+        provenance = {"origin": "https://repo.example.org", "version": "publishedVersion", "license": "cc-by"}
+        with mock.patch.object(self.module, "_resolve", return_value={"doi": "10.1/Scan", "title": "Lookup title"}), \
+                mock.patch.object(self.module, "_open_access_pdf", return_value=(pdf, provenance, parsed, None)) as parse_mode, \
+                mock.patch.object(self.module.public_sources, "open_access_pdf_bytes") as raw_mode:
+            result = self.module.fetch({"identifier": "10.1/Scan"})
+        self.assertEqual(result["status"], "success", result)
+        parse_mode.assert_called_once_with("10.1/Scan")
+        raw_mode.assert_not_called()
+        data = result["data"]
+        self.assertEqual((data["extractedBy"], data["pages"], data["license"]), ("document-parser", 2, "cc-by"))
+        markdown = (self.workspace / data["markdownPath"]).read_text(encoding="utf-8")
+        self.assertIn("- Read by the document parser (evimed-extract evimed-extract@0.5.0)", markdown)
+        self.assertIn("Hazard ratio 0.74 (95% CI 0.65-0.85)", markdown)
+        self.assertNotIn("Lookup title", markdown, "a capture's bytes do not depend on a lookup that may change")
+        self.assertEqual((self.workspace / data["pdfPath"]).read_bytes(), pdf, "the PDF itself is kept beside the text")
+
+    def test_a_parse_mode_that_times_out_falls_back_to_the_text_layer_and_a_refusal_does_not(self):
+        pdf = b"%PDF synthetic"
+
+        def reader(_stream):
+            return SimpleNamespace(is_encrypted=False, pages=[SimpleNamespace(extract_text=lambda: "Text layer evidence. " * 200)], metadata=None)
+
+        timeout = self.module.FullTextError("full_text_upstream_unavailable", "Open-access PDF retrieval failed.", True)
+        with mock.patch.dict(sys.modules, {"pypdf": SimpleNamespace(PdfReader=reader)}), \
+                mock.patch.object(self.module, "_resolve", return_value={"doi": "10.1/slow"}), \
+                mock.patch.object(self.module, "_open_access_pdf", side_effect=timeout), \
+                mock.patch.object(self.module.public_sources, "open_access_pdf_bytes", return_value=(pdf, {"origin": "o"})) as raw_mode:
+            result = self.module.fetch({"identifier": "10.1/slow"})
+        self.assertEqual(result["status"], "success", result)
+        raw_mode.assert_called_once()
+        self.assertEqual((result["data"]["extractedBy"], result["data"]["parserUnavailable"]), ("pdf-text-layer", "full_text_upstream_unavailable"))
+
+        refusal = self.module.FullTextError("public_source_pdf_not_open_access", "No open-access PDF could be retrieved. Tried: x: HTTP 403.")
+        with mock.patch.object(self.module, "_resolve", return_value={"doi": "10.1/closed"}), \
+                mock.patch.object(self.module, "_open_access_pdf", side_effect=refusal), \
+                mock.patch.object(self.module.public_sources, "open_access_pdf_bytes") as raw_mode:
+            refused = self.module.fetch({"identifier": "10.1/closed"})
+        raw_mode.assert_not_called()
+        self.assertEqual(refused["error"]["code"], "public_source_pdf_not_open_access")
+        self.assertIn("Tried: x: HTTP 403", refused["error"]["message"])
+
+    def test_the_parse_mode_request_carries_only_the_doi_and_checks_the_pdf_digest(self):
+        pdf = b"%PDF-1.7 open access"
+        answers = []
+
+        class Gateway(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):  # noqa: N802 - the stdlib's name
+                answers.append(json.loads(self.rfile.read(int(self.headers["content-length"]))))
+                digest = hashlib.sha256(pdf).hexdigest() if len(answers) == 1 else "0" * 64
+                body = json.dumps({
+                    "pdf": {"base64": base64.b64encode(pdf).decode(), "sha256": digest, "bytes": len(pdf), "origin": "https://repo.example.org", "version": "publishedVersion", "license": "cc-by"},
+                    "parsed": {"text": "Parsed text.", "extractor": {"name": "evimed-extract", "version": "1"}},
+                    "parseError": None,
+                }).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                return
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Gateway)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        token = pathlib.Path(self.temp.name) / "gateway.token"
+        token.write_text("runtime-token\n")
+        os.chmod(token, 0o600)
+        environment = {
+            "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": "http://127.0.0.1:%d/internal/sources/v1/fetch" % server.server_address[1],
+            "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(token),
+        }
+        with mock.patch.dict(os.environ, environment):
+            os.environ.pop("EVIMED_MODEL_CONFIG_FILE", None)
+            payload, provenance, parsed, parse_error = self.module._open_access_pdf("10.1/oa")
+            self.assertEqual((payload, provenance["license"], parsed["text"], parse_error), (pdf, "cc-by", "Parsed text.", None))
+            with self.assertRaises(self.module.FullTextError) as mismatch:
+                self.module._open_access_pdf("10.1/oa")
+        self.assertEqual(mismatch.exception.code, "full_text_upstream_invalid")
+        self.assertEqual(answers, [{"openAccessPdfDoi": "10.1/oa", "parse": True}] * 2)
 
     def test_parallel_identical_fetches_publish_one_complete_capture(self):
         with mock.patch.object(self.module, "_resolve", return_value={"pmcid": "PMC123456"}), \

@@ -16,7 +16,7 @@ CASES = OPENSCIENCE / "packages" / "domain" / "test" / "fixtures" / "source-type
 sys.path.insert(0, str(ROOT))
 
 import immutable_capture  # noqa: E402
-import official_pages  # noqa: E402
+import web_read  # noqa: E402
 import public_sources  # noqa: E402
 import source_types  # noqa: E402
 
@@ -142,25 +142,17 @@ class SidecarTests(unittest.TestCase):
         path = self.workspace / relative
         return json.loads((path.parent / "source.json").read_text(encoding="utf-8"))
 
-    def test_an_official_page_carries_its_authority_type_beside_it(self):
-        html = ("<html><head><title>Hypertension in adults</title></head><body><main><h1>Recommendations</h1>"
-                + "<p>" + "Offer lifestyle advice to people with hypertension. " * 10 + "</p></main></body></html>")
-
-        class Response:
-            headers = type("H", (), {"get_content_type": lambda self: "text/html", "get": lambda self, key, default=None: None})()
-
-            def read(self, size):
-                return html.encode("utf-8")
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                return False
-
-        with mock.patch.dict(official_pages.OFFICIAL_PATHS, {"www.nice.org.uk": ("/guidance/",)}), \
-             mock.patch.object(public_sources, "_open_remote", return_value=Response()):
-            result = official_pages.fetch({"url": "https://www.nice.org.uk/guidance/ng136"})
+    def test_a_web_page_carries_its_authority_type_beside_it(self):
+        receipt = {
+            "url": "https://www.nice.org.uk/guidance/ng136", "finalUrl": "https://www.nice.org.uk/guidance/ng136",
+            "title": "Hypertension in adults", "site": "www.nice.org.uk", "fetchedAt": "2026-09-20T00:00:00.000Z",
+            "official": True, "rendered": False, "contentType": "html", "mediaType": "text/html",
+            "sha256": "a" * 64, "extractor": {"name": "evimed-html", "version": "1.0.0"},
+        }
+        payload = {"receipt": receipt, "text": "Offer lifestyle advice to people with hypertension. " * 10, "links": []}
+        web_read._SNAPSHOTS.clear()
+        with mock.patch.object(web_read, "_fetch", return_value=payload):
+            result = web_read.read({"url": "https://www.nice.org.uk/guidance/ng136"})
         self.assertEqual(result["status"], "success", result)
         sidecar = self.sidecar_beside(result["data"]["markdownPath"])
         self.assertEqual(sidecar["sourceType"], "guideline")
