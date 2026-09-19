@@ -14,10 +14,19 @@
  * 4xx means "no rules" exactly as the RFC says. Unreachable outcomes are cached
  * briefly so a failing robots.txt is not re-asked on every page.
  *
+ * A robots.txt is written by whoever owns the site a run was steered to, so
+ * its patterns are hostile input evaluated on the event loop. They used to be
+ * compiled into backtracking RegExps (`*` → `.*`): `Disallow: /*a*a*a*a*b`
+ * against a 220-character path held the loop for 16 s, and a few more
+ * wildcards never finished (the 2026-09-20 release's security review).
+ * Patterns are now matched in time linear in the path plus the pattern
+ * whatever they contain, and the caps below bound how many of them one
+ * verdict weighs.
+ *
  * @module webReadRobots
  */
 
-import { headerValue, validatedWebUrl, WebReadError } from "./webReadNetwork.mjs";
+import { headerValue, validatedWebUrl, WEB_READ_MAX_URL_LENGTH, WebReadError } from "./webReadNetwork.mjs";
 
 /** The product token robots.txt groups are matched against (RFC 9309 §2.2.1). */
 export const WEB_READ_PRODUCT_TOKEN = "EviMedBot";
@@ -28,8 +37,21 @@ const ROBOTS_TTL_MS = 60 * 60 * 1000;
 const ROBOTS_ERROR_TTL_MS = 10 * 60 * 1000;
 /** Origins remembered at once; bounds the cache's memory, oldest evicted first. */
 const ROBOTS_MAX_ENTRIES = 2_000;
-/** RFC 9309 §2.5 asks a parser to read at least 500 KiB. */
+/** RFC 9309 §2.5 asks a parser to read at least 500 KiB; the parser reads no more. */
 const ROBOTS_MAX_BYTES = 512 * 1024;
+/**
+ * Rules one group keeps, and the most one verdict weighs once the groups that
+ * name us are combined (RFC 9309 §2.2.1) — so repeating `User-agent: *` does
+ * not multiply the work either. Real files stay well below it: among the
+ * longest in use, eBay's holds 953 rules for all its groups together, WHO's
+ * 527, Wikipedia's 464 (fetched 2026-09-19). Rules past it are ignored, as the
+ * RFC lets a parser ignore content past its size limit.
+ */
+const ROBOTS_MAX_RULES = 2_000;
+/** A rule longer than any URL web reading accepts could match one only by
+ *  padding itself with wildcards — the shape of an attack on the matcher, not
+ *  of a site's rules — so it is ignored. */
+const ROBOTS_MAX_PATTERN_LENGTH = WEB_READ_MAX_URL_LENGTH;
 /** One robots.txt answer; it is small and on the page's own host. */
 const ROBOTS_TIMEOUT_MS = 5_000;
 /** RFC 9309 §2.3.1.2: follow at least five redirects. */
@@ -70,7 +92,7 @@ export function parseRobotsTxt(text) {
   /** @type {RobotsGroup | null} */
   let current = null;
   let lastWasAgent = false;
-  for (const rawLine of String(text ?? "").split(/\r\n|\r|\n/)) {
+  for (const rawLine of String(text ?? "").slice(0, ROBOTS_MAX_BYTES).split(/\r\n|\r|\n/)) {
     const line = rawLine.replace(/#.*$/, "").trim();
     if (!line) continue;
     const colon = line.indexOf(":");
@@ -91,7 +113,10 @@ export function parseRobotsTxt(text) {
     if (key === "allow" || key === "disallow") {
       // An empty Disallow is the conventional "everything is allowed", which
       // is what having no rule means.
-      if (value) current.rules.push({ allow: key === "allow", pattern: normalizedPath(value) });
+      const pattern = value ? normalizedPath(value) : "";
+      if (pattern && pattern.length <= ROBOTS_MAX_PATTERN_LENGTH && current.rules.length < ROBOTS_MAX_RULES) {
+        current.rules.push({ allow: key === "allow", pattern });
+      }
     } else if (key === "crawl-delay") {
       const seconds = Number(value);
       if (Number.isFinite(seconds) && seconds >= 0) current.crawlDelaySeconds = seconds;
@@ -100,12 +125,52 @@ export function parseRobotsTxt(text) {
   return { groups };
 }
 
-/** @param {string} pattern @param {string} path */
+/**
+ * Where `piece` first occurs in `text` at or after `from`, or -1, by
+ * Knuth–Morris–Pratt: linear in both lengths whatever characters they hold.
+ * @param {string} text @param {string} piece @param {number} from
+ */
+function indexOfPiece(text, piece, from) {
+  if (!piece) return from;
+  const fallback = new Int32Array(piece.length);
+  for (let index = 1, matched = 0; index < piece.length; index += 1) {
+    while (matched > 0 && piece[index] !== piece[matched]) matched = fallback[matched - 1];
+    if (piece[index] === piece[matched]) matched += 1;
+    fallback[index] = matched;
+  }
+  for (let index = from, matched = 0; index < text.length; index += 1) {
+    while (matched > 0 && text[index] !== piece[matched]) matched = fallback[matched - 1];
+    if (text[index] === piece[matched]) matched += 1;
+    if (matched === piece.length) return index - matched + 1;
+  }
+  return -1;
+}
+
+/**
+ * RFC 9309 §2.2.3 matching: `*` is any run of characters, a final `$` anchors
+ * the end, and otherwise a pattern matches as a prefix. The literal pieces
+ * between wildcards are found left to right, each at its first place after the
+ * one before — the earliest placement leaves the most room for the rest, so
+ * this finds a match whenever one exists — and each search resumes where the
+ * last one stopped, so the whole match costs O(path + pattern).
+ * @param {string} pattern @param {string} path
+ */
 function patternMatches(pattern, path) {
   const anchored = pattern.endsWith("$");
-  const body = anchored ? pattern.slice(0, -1) : pattern;
-  const expression = body.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*");
-  return new RegExp(`^${expression}${anchored ? "$" : ""}`).test(path);
+  const pieces = (anchored ? pattern.slice(0, -1) : pattern).split("*");
+  const first = pieces[0];
+  if (pieces.length === 1) return anchored ? path === first : path.startsWith(first);
+  if (!path.startsWith(first)) return false;
+  let position = first.length;
+  for (let index = 1; index < pieces.length - 1; index += 1) {
+    const found = indexOfPiece(path, pieces[index], position);
+    if (found < 0) return false;
+    position = found + pieces[index].length;
+  }
+  const last = pieces[pieces.length - 1];
+  return anchored
+    ? path.length - last.length >= position && path.endsWith(last)
+    : indexOfPiece(path, last, position) >= 0;
 }
 
 /**
@@ -127,7 +192,7 @@ export function robotsVerdict(parsed, { path, productToken = WEB_READ_PRODUCT_TO
   if (target === "/robots.txt") return { allowed: true, crawlDelayMs };
   /** @type {{ allow: boolean, length: number } | null} */
   let best = null;
-  for (const rule of groups.flatMap((group) => group.rules)) {
+  for (const rule of groups.flatMap((group) => group.rules).slice(0, ROBOTS_MAX_RULES)) {
     if (!patternMatches(rule.pattern, target)) continue;
     const length = rule.pattern.length;
     if (!best || length > best.length || (length === best.length && rule.allow && !best.allow)) {
