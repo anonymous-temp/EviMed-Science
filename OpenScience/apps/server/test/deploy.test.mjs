@@ -1233,7 +1233,7 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
   // The runtime proof used to be a single negative -- "not the retired kernel"
   // -- which a deployment running no kernel at all would also satisfy. The
   // script now names what it requires instead, as two separate claims: a
-  // sandboxed Docker runtime, and that the runtime is DSH. Both are listed
+  // sandboxed runtime (Docker or AgentBay), and that the runtime is DSH. Both are listed
   // because a deployment can satisfy one without the other.
   for (const proof of [
     'checks.runtime?.mode !== "kernel"',
@@ -1246,7 +1246,9 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
     // serve a certified model, and the ledger must show the run went through
     // DeepSeek — stated against that value instead of one of its members.
     'supportedDeepSeekModels.has(String(checks.modelGateway?.model ?? ""))',
-    'checks.runtime?.sandboxMode !== "docker"',
+    // A container on the host or an AgentBay session (rt, 2026-09-20): the
+    // proof names both real runtimes, and so still refuses the mock.
+    '!["docker", "agentbay"].includes(checks.runtime?.sandboxMode)',
     'run.runtimeAgent !== "evimed-adr-analysis"',
     'run.model !== `deepseek/${certifiedModel}`',
     'agent.requiredInputs?.includes("drug")',

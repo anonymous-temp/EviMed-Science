@@ -239,7 +239,9 @@ test("a project's session: its labels, lifecycle and Contexts, credentials only 
   const claims = await manager.assertActiveEviMedWorkloadToken(workloadToken);
   assert.equal(claims.exp - claims.iat, 900, "a remote runtime's workload token lives 900 s");
   assert.equal(runtime.workloadTokenRefreshMs, 300_000, "and is renewed every 300 s");
-  assert.equal((await manager.status(project)).provider, "agentbay");
+  const status = await manager.status(project);
+  assert.equal(status.provider, "agentbay");
+  assert.deepEqual(status.sandbox, runtime.sandbox, "the waiting shell and the bring-up read the guest's report from the status");
 });
 
 test("a stop brings the run's work home, releases the session with its Context upload, and records what the Context holds", async (t) => {

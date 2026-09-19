@@ -225,9 +225,18 @@ export function fakeAgentBay({ root, oss, report = null }) {
     return {
       sessionId: state.sessionId,
       command: {
-        async executeCommand(line, timeoutMs, _cwd, envs = {}) {
+        async executeCommand(commandLine, timeoutMs, _cwd, passedEnvs = {}) {
+          // A leading `NAME='value' …` is the shell's environment for the
+          // command, which is how the provider hands the launcher its settings.
+          /** @type {Record<string, string>} */
+          const envs = { ...passedEnvs };
+          let line = String(commandLine);
+          for (let match = /^([A-Z][A-Z0-9_]*)='((?:[^']|'\\'')*)' /.exec(line); match; match = /^([A-Z][A-Z0-9_]*)='((?:[^']|'\\'')*)' /.exec(line)) {
+            envs[match[1]] = match[2].replace(/'\\''/g, "'");
+            line = line.slice(match[0].length);
+          }
           calls.commands.push({ sessionId: state.sessionId, line, envs, timeoutMs });
-          const args = String(line).split(" ");
+          const args = line.split(" ");
           if (args[0] === "mkdir") {
             const dir = /mkdir -p '?([^' ]+)'?/.exec(line)?.[1] ?? "";
             await fs.mkdir(underRoot(state.dir, dir), { recursive: true });

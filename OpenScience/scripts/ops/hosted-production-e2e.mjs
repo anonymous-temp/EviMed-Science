@@ -166,8 +166,10 @@ function assertReady(ready) {
   // first request — in the same hour the kernel is switched and it is most
   // needed. Both halves stay: "sandboxed Docker runtime" and "the DSH kernel"
   // are separate claims, and a deployment can satisfy one without the other.
-  if (checks.runtime?.mode !== "kernel" || checks.runtime?.sandboxMode !== "docker") {
-    throw failure("hosted_e2e_runtime_not_real", "Hosted E2E requires the Docker kernel runtime.");
+  // A container on the host or an AgentBay session (rt, plan §3.1): both are a
+  // real, sandboxed kernel runtime; the mock is neither.
+  if (checks.runtime?.mode !== "kernel" || !["docker", "agentbay"].includes(checks.runtime?.sandboxMode)) {
+    throw failure("hosted_e2e_runtime_not_real", "Hosted E2E requires a real kernel runtime: a Docker container or an AgentBay session.");
   }
   if (checks.runtime?.kernel !== "dsh") {
     throw failure(
