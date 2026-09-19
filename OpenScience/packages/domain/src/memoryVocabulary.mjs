@@ -57,7 +57,10 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   { tag: 'evimed-orchestration', role: 'injected', emitters: ['packages/socket/src/guidanceText.mjs'] },
   { tag: 'evimed-delegated', role: 'injected', emitters: ['packages/socket/src/guidanceText.mjs'] },
   { tag: 'evimed-memory', role: 'injected', emitters: ['apps/server/src/researchContext.mjs'] },
-  { tag: 'evimed-knowledge', role: 'injected', emitters: ['apps/server/src/researchContext.mjs'] },
+  {
+    tag: 'evimed-knowledge', role: 'injected', emitters: [],
+    legacy: 'the knowledge-base excerpts every dispatch used to carry, retired 2026-09-20 when kb_search became a tool the model chooses; transcripts from before still carry it',
+  },
   { tag: 'evimed-specialist', role: 'injected', emitters: ['apps/server/src/researchContext.mjs'] },
   { tag: 'evimed-autopilot-episode', role: 'injected', emitters: ['apps/server/src/server.mjs'] },
   { tag: 'evimed-autopilot-verification', role: 'injected', emitters: ['apps/server/src/server.mjs'] },
