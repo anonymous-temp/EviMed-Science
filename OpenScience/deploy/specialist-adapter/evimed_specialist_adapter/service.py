@@ -862,17 +862,20 @@ def _report_usage(state: dict[str, Any], log_path: Path | None) -> None:
     except Exception:  # noqa: BLE001 — a missing secret is a report that cannot be signed, not a failed job
         outcome = "unsigned (workload signing secret unavailable)"
     else:
-        outcome = usage_report.report(
-            url=os.getenv("EVIMED_USAGE_REPORT_URL", "").strip(),
-            secret=secret,
-            kind=_kind(),
-            job_id=str(state.get("jobId") or ""),
-            user_id=str(context.get("userId") or ""),
-            project_id=str(context.get("projectId") or ""),
-            status=str(state.get("status") or ""),
-            finished_at=str(state.get("finishedAt") or _now()),
-            usage=usage,
-        )
+        try:
+            outcome = usage_report.report(
+                url=os.getenv("EVIMED_USAGE_REPORT_URL", "").strip(),
+                secret=secret,
+                kind=_kind(),
+                job_id=str(state.get("jobId") or ""),
+                user_id=str(context.get("userId") or ""),
+                project_id=str(context.get("projectId") or ""),
+                status=str(state.get("status") or ""),
+                finished_at=str(state.get("finishedAt") or _now()),
+                usage=usage,
+            )
+        except Exception as error:  # noqa: BLE001 — the job has ended; its log says why no report went
+            outcome = f"failed ({type(error).__name__})"
     if log_path is None:
         return
     try:
@@ -958,9 +961,11 @@ def _run_isolated_mr(
             if outcome.get("failureDiagnosticReceipt"):
                 state["failureDiagnosticReceipt"] = outcome["failureDiagnosticReceipt"]
         _write_state(state_path, state)
+        # The terminal state is written: nothing past this line may turn into
+        # the job's failure. Without a log path the report still goes, unlogged.
         try:
             _, log_path = _mr_store().paths(Path(state["workspace"]), str(state["jobId"]))
-        except (OSError, ValueError):
+        except Exception:  # noqa: BLE001
             log_path = None
         _report_usage(state, log_path)
         return 0 if success else outcome["returnCode"] or 1

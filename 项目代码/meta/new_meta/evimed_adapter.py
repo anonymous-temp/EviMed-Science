@@ -625,7 +625,7 @@ def _report_usage(state_path: Path, state: dict[str, Any], project: Path | None,
         return
     try:
         total = evimed_usage_report.usage_from_manifest(json.loads(manifest_path.read_text(encoding="utf-8")))
-    except (OSError, UnicodeDecodeError, ValueError):
+    except (OSError, UnicodeDecodeError, ValueError, TypeError):
         total = None
     if total is None:
         return
@@ -639,17 +639,20 @@ def _report_usage(state_path: Path, state: dict[str, Any], project: Path | None,
     except (RuntimeError, OSError):
         outcome = "unsigned (workload signing secret unavailable)"
     else:
-        outcome = evimed_usage_report.report(
-            url=os.getenv("EVIMED_USAGE_REPORT_URL", "").strip(),
-            secret=secret,
-            job_id=str(state.get("jobId") or ""),
-            user_id=str(owner.get("userId") or ""),
-            project_id=str(owner.get("projectId") or ""),
-            status=str(state.get("status") or ""),
-            finished_at=str(state.get("finishedAt") or _now()),
-            usage=share,
-            attempt=int(state.get("attempts") or 0) + 1,
-        )
+        try:
+            outcome = evimed_usage_report.report(
+                url=os.getenv("EVIMED_USAGE_REPORT_URL", "").strip(),
+                secret=secret,
+                job_id=str(state.get("jobId") or ""),
+                user_id=str(owner.get("userId") or ""),
+                project_id=str(owner.get("projectId") or ""),
+                status=str(state.get("status") or ""),
+                finished_at=str(state.get("finishedAt") or _now()),
+                usage=share,
+                attempt=int(state.get("attempts") or 0) + 1,
+            )
+        except Exception as error:  # noqa: BLE001 — the job has ended; its log says why no report went
+            outcome = f"failed ({type(error).__name__})"
     if outcome.startswith("recorded"):
         state["usageReported"] = total
     _atomic_json(state_path, state)

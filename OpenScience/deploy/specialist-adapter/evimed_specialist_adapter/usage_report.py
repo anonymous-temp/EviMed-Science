@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import http.client
 import json
 import time
 import urllib.error
@@ -100,15 +101,21 @@ def report(
         separators=(",", ":"),
         ensure_ascii=False,
     ).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=body,
-        method="POST",
-        headers={
-            "content-type": "application/json",
-            SIGNATURE_HEADER: f"v1={signature(secret, body)}",
-        },
-    )
+    try:
+        request = urllib.request.Request(
+            url,
+            data=body,
+            method="POST",
+            headers={
+                "content-type": "application/json",
+                SIGNATURE_HEADER: f"v1={signature(secret, body)}",
+            },
+        )
+    except ValueError:
+        # An address urllib cannot send to (no scheme, say): a deployment
+        # mistake for the job log to name, never an exception out of a job
+        # that has already ended.
+        return "not sent (invalid report URL)"
     last = ""
     for index in range(max(1, attempts)):
         try:
@@ -118,7 +125,7 @@ def report(
             last = f"HTTP {error.code}"
             if error.code < 500 and error.code != 429:
                 return f"refused ({last})"
-        except (urllib.error.URLError, OSError, TimeoutError) as error:
+        except (urllib.error.URLError, OSError, TimeoutError, http.client.HTTPException, ValueError) as error:
             last = type(error).__name__
         if index + 1 < attempts:
             sleep(2**index)
