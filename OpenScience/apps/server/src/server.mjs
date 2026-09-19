@@ -2304,6 +2304,21 @@ export function createWebApiApp(overrides = {}) {
     if (binding?.mode === "specialist") await assertPublicAgent(binding.agentId);
   }
 
+  // rt: warm the most recently used project's runtime at sign-in (plan §3.1 #8).
+  // Kernel mode only: the mock runtime is the suite's fake, and a fake started
+  // on every sign-in would be a runtime no test asked for.
+  function warmAfterSignIn(userId) {
+    if (!config.runtimeWarmOnSignIn || config.runtimeMode !== "kernel") return;
+    void (async () => {
+      const user = await store.userById(String(userId));
+      if (!user) return;
+      const listed = (await store.listProjects(user)).filter((entry) => !entry.archivedAt);
+      await runtimeManager.warmMostRecent(await Promise.all(listed.map((entry) => store.requireProject(user, entry.id))));
+    })().catch(() => {
+      // isolated: a warm start is a head start, never a precondition.
+    });
+  }
+
   async function context(req, res) {
     const user = await store.ensureUser(req, res);
     const project = await store.selectedProject(req, user);
@@ -2487,6 +2502,7 @@ export function createWebApiApp(overrides = {}) {
         try {
           const user = await oidcService.callback(req, res);
           await securityAudit(config, "auth.oidc.callback", "completed", { userId: user.id });
+          warmAfterSignIn(user.id);
         } catch (err) {
           await securityAudit(config, "auth.oidc.callback", "failed", {
             code: err instanceof HttpError ? err.code : "internal_error",
@@ -2508,6 +2524,7 @@ export function createWebApiApp(overrides = {}) {
           const login = await store.login(username, password, req, res);
           await securityAudit(config, "auth.login", "completed", { username });
           sendJson(res, 200, { data: login });
+          warmAfterSignIn(login.user.id);
         } catch (err) {
           await securityAudit(config, "auth.login", "failed", {
             username,
@@ -2542,6 +2559,7 @@ export function createWebApiApp(overrides = {}) {
           const login = await store.login(username, password, req, res);
           await securityAudit(config, "auth.register", "completed", { username });
           sendJson(res, 201, { data: login });
+          warmAfterSignIn(login.user.id);
         } catch (err) {
           await securityAudit(config, "auth.register", "failed", {
             username,
@@ -2567,6 +2585,7 @@ export function createWebApiApp(overrides = {}) {
         }
         const ctx = await context(req, res);
         sendJson(res, 200, { data: { user: { id: ctx.user.id, name: ctx.user.name } } });
+        warmAfterSignIn(ctx.user.id);
         return;
       }
 

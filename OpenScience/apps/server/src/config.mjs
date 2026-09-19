@@ -1420,5 +1420,11 @@ export function loadConfig(overrides = {}) {
       "OPEN_SCIENCE_MEMORY_RECALL_ENABLED",
       overrides.memoryEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_ENABLED", true),
     ),
+    // --- rt: runtime UX (plan §3.1 #8, 2026-09-20) ---
+    // Start the runtime of the account's most recently used project in the
+    // background of a sign-in, so it is up by the time the project is opened.
+    // Off costs the reader the cold start on first open and nothing else; the
+    // idle reaper stops a warmed runtime nobody used, like any other.
+    runtimeWarmOnSignIn: overrides.runtimeWarmOnSignIn ?? boolEnv("OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN", true),
   };
 }

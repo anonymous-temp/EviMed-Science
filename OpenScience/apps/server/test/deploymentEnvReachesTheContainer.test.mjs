@@ -127,6 +127,9 @@ const operatorLevers = {
   // The memory evaluation's control arm is this switch; an ablation whose
   // "off" arm silently recalled would measure nothing (2026-09-18).
   OPEN_SCIENCE_MEMORY_RECALL_ENABLED: ["open-science-web"],
+  // rt (2026-09-20): the sign-in warm start's off switch. It starts a runtime
+  // per sign-in, which is exactly why a deployment must be able to stop it.
+  OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ["open-science-web"],
 };
 
 async function composeFiles() {
