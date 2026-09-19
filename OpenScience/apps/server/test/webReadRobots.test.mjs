@@ -55,6 +55,80 @@ test("non-ASCII paths are compared percent-encoded", () => {
   assert.equal(verdict(text, "/%e9%80%9a%e7%9f%a5/1.html").allowed, false, "escapes compare case-insensitively");
 });
 
+const elapsedMs = (run) => {
+  const started = process.hrtime.bigint();
+  const result = run();
+  return { result, ms: Number(process.hrtime.bigint() - started) / 1e6 };
+};
+
+test("a hostile pattern costs a verdict milliseconds, not the event loop", () => {
+  // The 2026-09-20 release's security review reproduced it: these patterns were
+  // compiled to backtracking RegExps, and four wildcards against a
+  // 200-character path took 10 s, five against 120 took 16 s — eight against
+  // 220 never finished, which is why the cases here are ones the old code
+  // does finish: a regression fails this test instead of hanging the suite.
+  for (const [stars, length] of [[4, 200], [5, 120]]) {
+    const text = `User-agent: *\nDisallow: /${"*a".repeat(stars)}*b\n`;
+    const { result, ms } = elapsedMs(() => verdict(text, `/${"a".repeat(length)}`));
+    assert.equal(result.allowed, true, "no b, no match");
+    assert.ok(ms < 1_000, `${stars} wildcards against ${length} characters took ${ms.toFixed(0)} ms`);
+  }
+  // The most work the caps allow: the longest path, as many rules as one
+  // verdict weighs, each scanning all of it, spread over repeated groups.
+  const repeated = ("User-agent: *\n" + "Disallow: /*b\n".repeat(1_000)).repeat(36);
+  const { ms } = elapsedMs(() => verdict(repeated, `/${"a".repeat(2_040)}`));
+  assert.ok(ms < 1_000, `a capped verdict took ${ms.toFixed(0)} ms`);
+});
+
+test("wildcards and the end anchor mean what the old expressions meant", () => {
+  // The expressions this matcher replaced, as the oracle: safe on inputs this
+  // small, and the reading the rest of this file's cases were written against.
+  const oracle = (pattern, path) => {
+    const anchored = pattern.endsWith("$");
+    const body = anchored ? pattern.slice(0, -1) : pattern;
+    const expression = body.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+    return new RegExp(`^${expression}${anchored ? "$" : ""}`).test(path);
+  };
+  // A 32-bit generator read from its high bits: the first draft multiplied
+  // past 2^53, its low bits collapsed to zero, and every case was "/" against
+  // "/" — which is why the outcomes are counted below.
+  let seed = 20260920;
+  const next = (limit) => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return Math.floor((seed / 4294967296) * limit);
+  };
+  const word = (alphabet, length) => Array.from({ length }, () => alphabet[next(alphabet.length)]).join("");
+  const outcomes = { matched: 0, unmatched: 0 };
+  for (let round = 0; round < 10_000; round += 1) {
+    // Every other round puts a literal `$` inside patterns and paths.
+    const literalDollar = round % 2 === 1;
+    const pattern = `/${word(literalDollar ? "ab*$" : "ab*", next(8))}${next(2) ? "$" : ""}`;
+    const path = `/${word(literalDollar ? "ab$" : "ab", next(10))}`;
+    const expected = oracle(pattern, path);
+    outcomes[expected ? "matched" : "unmatched"] += 1;
+    const text = `User-agent: *\nDisallow: ${pattern}\n`;
+    assert.equal(verdict(text, path).allowed, !expected, `pattern ${pattern} against ${path}`);
+  }
+  assert.ok(outcomes.matched > 1_000 && outcomes.unmatched > 1_000, `the cases did not vary: ${JSON.stringify(outcomes)}`);
+});
+
+test("rules are capped in length, in number per verdict, and past the file's size limit", () => {
+  // A rule longer than any URL web reading accepts is ignored, however much
+  // it would match.
+  assert.equal(verdict(`User-agent: *\nDisallow: /${"*".repeat(2_048)}\n`, "/any").allowed, true);
+  assert.equal(verdict(`User-agent: *\nDisallow: /${"*".repeat(2_046)}\n`, "/any").allowed, false, "one at the limit is read");
+  // Two thousand rules are weighed, the groups naming us combined first;
+  // what comes after is ignored.
+  const filler = (count) => Array.from({ length: count }, (_, index) => `Disallow: /filler-${index}/`).join("\n");
+  assert.equal(verdict(`User-agent: *\n${filler(1_999)}\nDisallow: /private\n`, "/private/a").allowed, false);
+  assert.equal(verdict(`User-agent: *\n${filler(2_000)}\nDisallow: /private\n`, "/private/a").allowed, true);
+  assert.equal(verdict(`User-agent: *\n${filler(1_500)}\n\nUser-agent: *\n${filler(500)}\nDisallow: /private\n`, "/private/a").allowed, true);
+  // Content past the first 512 KiB is not read.
+  const padded = (size) => `User-agent: *\n#${"x".repeat(size)}\nDisallow: /\n`;
+  assert.equal(verdict(padded(400 * 1024), "/any").allowed, false);
+  assert.equal(verdict(padded(512 * 1024), "/any").allowed, true);
+});
+
 function policy(responder) {
   const requests = [];
   const transport = async ({ url }) => {
