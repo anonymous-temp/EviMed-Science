@@ -1118,7 +1118,13 @@ function scopeNativeProjection(projection, run, { receiptAccepted = null } = {})
     const raw = rawItems.find((item) => item.id === definition.id);
     const submission = proof.submissions.find((item) => item.id === definition.id);
     const witnessed = submission?.accepted ? "accepted" : submission?.rejected ? "submitted" : proof.delegates.includes(definition.id) ? "delegated" : "planned";
-    if (!live) return { ...raw, status: witnessed, attempts: submission?.attempts ?? 0 };
+    if (!live) {
+      // A delegated item its child got accepted: the receipt's evidence, as
+      // while the run was going (see `scopeNativeReceipt`).
+      const received = witnessed === "delegated" && receiptAccepted?.has(definition.id) === true;
+      const attempts = Math.max(submission?.attempts ?? 0, received && Number.isSafeInteger(raw?.attempts) ? raw.attempts : 0);
+      return { ...raw, status: received ? "accepted" : witnessed, attempts };
+    }
     const reported = String(raw?.status ?? "planned");
     const accepted = witnessed === "accepted" || (reported === "accepted" && receiptAccepted?.has(definition.id) === true);
     const status = accepted ? "accepted"
@@ -1143,14 +1149,33 @@ function scopeNativeProjection(projection, run, { receiptAccepted = null } = {})
 function scopeNativeReceipt(receipt, run) {
   const proof = run.nativeWorkflow;
   if (!proof || (proof.kernelRunId && proof.kernelRunId !== receipt.runId)) return null;
-  const entries = receipt.entries.filter((entry) => proof.submissions.some((submission) => {
-    const accepted = submission.accepted;
+  const end = typeof proof.endTime === "number" ? proof.endTime : Date.parse(String(proof.endTime ?? ""));
+  const entries = receipt.entries.filter((entry) => {
     const definition = proof.plan?.items?.find((item) => item.id === entry.deliverableId);
     const at = Date.parse(entry.acceptedAt);
-    return accepted && submission.id === entry.deliverableId && accepted.contractKind === entry.contractKind
-      && (!definition?.capability || definition.capability === entry.capability)
-      && at >= accepted.start && at <= accepted.end;
-  }));
+    const witnessed = proof.submissions.some((submission) => {
+      const accepted = submission.accepted;
+      return accepted && submission.id === entry.deliverableId && accepted.contractKind === entry.contractKind
+        && (!definition?.capability || definition.capability === entry.capability)
+        && at >= accepted.start && at <= accepted.end;
+    });
+    if (witnessed) return true;
+    // A delegated deliverable is submitted by its child, and the child's
+    // `evimed_submit_deliverable` never reaches the parent's transcript. So an
+    // accepted package of a task asked in the conversation window read as
+    // 「已交付，但有核验没有通过」 with no finding to show (2026-09-19 live
+    // walk: both deliverables accepted at their first submission). The live
+    // projection already admits such an entry on the receipt's own evidence
+    // (`receiptAcceptedDeliverables`); this is the same rule once the run has
+    // ended: this turn's kernel run, a deliverable this turn planned and
+    // delegated, accepted after the plan and before the turn ended. The
+    // caller re-hashes every file the entry names (`verifiedReceiptArtifacts`).
+    return Boolean(proof.kernelRunId) && proof.kernelRunId === receipt.runId
+      && (proof.delegates ?? []).includes(entry.deliverableId)
+      && Boolean(definition) && definition.contractKind === entry.contractKind
+      && (!definition.capability || definition.capability === entry.capability)
+      && Number.isFinite(at) && at >= Number(proof.plan?.start) && (!Number.isFinite(end) || at <= end);
+  });
   return entries.length ? { ...receipt, entries } : null;
 }
 
@@ -3167,8 +3192,12 @@ async function readRunStateProjection(project, workspaceRoot, run = null) {
     // Only read when the plan index claims an acceptance the parent cannot
     // have witnessed: the receipt check hashes every accepted file, and this
     // function runs on every monitor poll.
-    const claimsAcceptance = run.status === "running" && Array.isArray(projection.plan?.items)
-      && projection.plan.items.some((/** @type {any} */ item) => item?.status === "accepted");
+    // Once the run has ended, also for a delegated item: only the receipt can
+    // say its child's submission was accepted.
+    const claimsAcceptance = Array.isArray(projection.plan?.items)
+      && (run.status === "running"
+        ? projection.plan.items.some((/** @type {any} */ item) => item?.status === "accepted")
+        : (run.nativeWorkflow?.delegates ?? []).length > 0);
     const receiptAccepted = claimsAcceptance ? await receiptAcceptedDeliverables(project, String(projection.runId ?? "")) : null;
     const scoped = scopeNativeProjection(projection, run, { receiptAccepted });
     return scoped ? { state: "read", projection: scoped } : { state: "unattributed" };
@@ -6458,10 +6487,17 @@ export function loadedOrInjectedSkillsForTest(project, assistantMessages, run = 
   return loadedOrInjectedSkills(project, assistantMessages, run);
 }
 
+/** Test seam: which receipt entries belong to one native run.
+ * @param {Record<string, any>} receipt @param {Record<string, any>} run */
+export function scopeNativeReceiptForTest(receipt, run) {
+  return scopeNativeReceipt(receipt, run);
+}
+
 /** Test seam: the authenticated tool transcript binds one projection to one native run.
- * @param {Record<string, any>} projection @param {Record<string, any>} run */
-export function scopeNativeProjectionForTest(projection, run) {
-  return scopeNativeProjection(projection, run);
+ * @param {Record<string, any>} projection @param {Record<string, any>} run
+ * @param {{ receiptAccepted?: ReadonlySet<string> | null }} [options] */
+export function scopeNativeProjectionForTest(projection, run, options) {
+  return scopeNativeProjection(projection, run, options);
 }
 
 /** Test seam: child histories are the source-provenance boundary, not workspace projection JSON.

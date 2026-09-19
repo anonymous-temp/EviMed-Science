@@ -19,7 +19,7 @@ import {
   loadedOrInjectedSkillsForTest,
   readDelegatedAssistantMessagesForTest,
   MAX_RUN_CORRECTIONS,
-  scopeNativeProjectionForTest,
+  scopeNativeProjectionForTest, scopeNativeReceiptForTest,
   snapshotAcceptedPackageForRepairForTest,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
@@ -6858,6 +6858,43 @@ test("a delegated child is read under its parent's address, and one that cannot 
   ], "a nested child is addressed under the child that delegated it, not under the root");
   assert.ok(assistants.includes(fetched), "the child's own preserving tool call reaches the gate");
   assert.deepEqual(unreadable, ["child-gone"], "a child that cannot be read is named, not skipped in silence");
+});
+
+test("a finished conversation-window task counts what its children got accepted, on the receipt's evidence", () => {
+  // 2026-09-19 live walk: both deliverables of an aspirin task asked in the
+  // conversation window were accepted at their first submission, and the task
+  // still read 「已交付，但有核验没有通过」 with nothing to show — the children
+  // submitted, and a child's submission never reaches the parent's transcript.
+  const clinical = { id: "review", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis" };
+  const safety = { id: "safety", contractKind: "drug-safety-report", capability: "adr-analysis" };
+  const run = {
+    sessionId: "root",
+    status: "succeeded",
+    nativeWorkflow: {
+      kernelRunId: "native_1",
+      plan: { revision: 1, written: true, items: [clinical, safety], start: 1_000, end: 1_100 },
+      submissions: [],
+      delegates: ["review", "safety"],
+      endTime: 9_000,
+    },
+  };
+  const entry = (item, acceptedAt) => ({ deliverableId: item.id, contractKind: item.contractKind, capability: item.capability, acceptedAt: new Date(acceptedAt).toISOString() });
+  const receipt = { runId: "native_1", entries: [entry(clinical, 5_000), entry(safety, 6_000)] };
+  assert.deepEqual(scopeNativeReceiptForTest(receipt, run)?.entries.map((item) => item.deliverableId), ["review", "safety"]);
+
+  // Not another run's receipt, not an item this turn did not delegate, not an
+  // acceptance after the turn ended.
+  assert.equal(scopeNativeReceiptForTest({ ...receipt, runId: "native_0" }, run), null);
+  assert.equal(scopeNativeReceiptForTest(receipt, { ...run, nativeWorkflow: { ...run.nativeWorkflow, delegates: [] } }), null);
+  assert.deepEqual(scopeNativeReceiptForTest({ runId: "native_1", entries: [entry(clinical, 10_000)] }, run), null);
+
+  // The finished projection reads those items as accepted only on the
+  // receipt's word; without it they stay delegated.
+  const projection = { sessionId: "root", runId: "native_1", plan: { revision: 1, items: [{ ...clinical, status: "accepted", attempts: 1 }, { ...safety, status: "accepted", attempts: 1 }] } };
+  const received = scopeNativeProjectionForTest(projection, run, { receiptAccepted: new Set(["review", "safety"]) });
+  assert.deepEqual(received?.plan.items.map((item) => `${item.id}:${item.status}:${item.attempts}`), ["review:accepted:1", "safety:accepted:1"]);
+  const unproven = scopeNativeProjectionForTest(projection, run, { receiptAccepted: new Set() });
+  assert.deepEqual(unproven?.plan.items.map((item) => item.status), ["delegated", "delegated"]);
 });
 
 test("a prior run projection in the same session cannot prove current-run sources", () => {
