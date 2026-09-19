@@ -42,6 +42,7 @@ import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
 import { createModelGatewayHandler, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
+import { createRuntimeGatewayEntry } from "./runtimeGatewayEntry.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger } from "./usageLedger.mjs";
 import { NotificationService, runFinishedInboxItem, runFinishedNotifies } from "./notificationService.mjs";
@@ -2183,6 +2184,9 @@ export function createWebApiApp(overrides = {}) {
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
   });
+  // rt: the same gateways at https://<domain>/runtime-gateway/… for a runtime
+  // outside this host (plan §3.1 #5).
+  const runtimeGatewayEntry = createRuntimeGatewayEntry({ config, runtimeManager });
   const commands = createCommandRegistry({ config, runtimeManager });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx), {
     claimAllowed: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
@@ -2327,6 +2331,9 @@ export function createWebApiApp(overrides = {}) {
   }
 
   async function handle(req, res) {
+    // rt: a public gateway request is answered here or rewritten to the
+    // internal gateway path the dispatch below knows (plan §3.1 #5).
+    if (runtimeGatewayEntry.matches(req) && await runtimeGatewayEntry.handle(req, res)) return;
     const requestId = requestIdFor(req);
     const pathname = routePath(req);
     const operation = operationalMetrics.start(req, pathname);
