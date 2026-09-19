@@ -146,6 +146,11 @@ CREATE TABLE IF NOT EXISTS evimed_memory.sessions (
   updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp()),
   PRIMARY KEY (user_id, project_id, session_id)
 );
+-- A conversation that tries a capsule someone shared (「试用一次」): the pack
+-- it is handed as context. It writes nothing into the researcher's own
+-- memory (memoryPausedFor), whatever its incognito switch says.
+ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS trial_capsule_id text
+  CHECK (trial_capsule_id IS NULL OR trial_capsule_id ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,199}$');
 DO $foreign_keys$
 BEGIN
   IF NOT EXISTS (

@@ -219,3 +219,18 @@ test("with several conversations running the gateway only ever takes memory away
   const h = await fixture(t, { memorySubstrate, sessions: broken, recallItems: [{ id: "fact_c", content: "c" }] });
   assert.deepEqual((await (await h.request("recall", { query: "x" })).json()).items.map((item) => item.id), ["fact_c"]);
 });
+
+test("a conversation trying someone else's capsule still reads memory but notes nothing", async (t) => {
+  const recalledFrom = [];
+  const memorySubstrate = { async recall(_userId, _query, scope) { recalledFrom.push(scope.sessionId); return []; } };
+  const sessions = sessionsDouble([{ id: "run_1", sessionId: "ses_trial" }], { ses_trial: { trialCapsuleId: "pack-1" } });
+  const f = await fixture(t, { memorySubstrate, sessions, recallItems: [{ id: "fact_1", content: "x" }] });
+  const recall = await (await f.request("recall", { query: "x" })).json();
+  assert.deepEqual(recall.items.map((item) => item.id), ["fact_1"]);
+  assert.deepEqual(recalledFrom, ["ses_trial"]);
+  const note = await (await f.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
+  assert.equal(note.entry, null);
+  assert.equal(note.incognito, false);
+  assert.match(note.notice, /试用别人胶囊/);
+  assert.equal(f.calls.filter((call) => call.action === "note").length, 0);
+});

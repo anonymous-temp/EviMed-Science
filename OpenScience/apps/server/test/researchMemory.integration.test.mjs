@@ -676,6 +676,20 @@ test("a conversation's memory state: incognito, set aside and brought back, in o
     assert.deepEqual(filtered.map((memo) => memo.id), all.slice(1).map((memo) => memo.id));
     assert.ok(all.some((memo) => memo.id === `record:${kept.id}`));
 
+    // A conversation trying someone else's capsule: marked, kept through other
+    // changes, cleared by name; it writes nothing and still reads.
+    const trying = await store.updateSessionState(owner, "study-one", "ses_trial", { trialCapsuleId: "pack-1" });
+    assert.equal(trying.trialCapsuleId, "pack-1");
+    assert.equal(trying.incognito, false);
+    await store.updateSessionState(owner, "study-one", "ses_trial", { exclude: { type: "note", id: "note_1", label: "" } });
+    assert.equal((await store.sessionState(owner, "study-one", "ses_trial")).trialCapsuleId, "pack-1");
+    const { memoryPausedFor } = await import("../src/researchMemory.mjs");
+    const paused = await memoryPausedFor(store, owner, "study-one", "ses_trial");
+    assert.deepEqual([paused.learning, paused.recall, paused.trial], [true, false, true]);
+    assert.equal((await store.updateSessionState(owner, "study-one", "ses_trial", { trialCapsuleId: null })).trialCapsuleId, null);
+    await assert.rejects(() => store.updateSessionState(owner, "study-one", "ses_trial", { trialCapsuleId: "../x" }),
+      (error) => error?.status === 400);
+
     // Forgetting the project forgets its conversations' state, and only its.
     await store.updateSessionState(owner, "study-two", "ses_c", { incognito: true });
     await store.deleteProjectMemory(owner, "study-one");

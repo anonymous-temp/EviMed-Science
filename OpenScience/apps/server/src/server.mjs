@@ -49,7 +49,7 @@ import { NotificationService, runFinishedInboxItem, runFinishedNotifies } from "
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
-import { createMemorySessionRoutes, mountedMethodsFor, setAsideMethodNames, setAsideMethodsNotice } from "./memorySessions.mjs";
+import { createMemorySessionRoutes, mountedMethodsFor, sessionDispatchNotes } from "./memorySessions.mjs";
 import { createMemoryTimelineRoutes } from "./memoryTimeline.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
@@ -79,6 +79,7 @@ import { CapsuleService } from "./capsuleService.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
+import { CapsuleScanner } from "./capsuleScan.mjs";
 import { SourceService, projectSourceManifestRecord } from "./sourceService.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
@@ -985,11 +986,17 @@ export function createWebApiApp(overrides = {}) {
   // Strictness reaches the capsules too. An operator who asked for a failing
   // index to be visible must not be given the lexical fallback in silence on
   // one of the two recall paths.
+  // The automatic scan a shared capsule passes (capsuleScan.mjs), metered like
+  // every control-plane model call.
+  const capsuleScanner = new CapsuleScanner(config, { usageLedger, fetchImpl: overrides.capsuleScanFetch ?? globalThis.fetch });
   const capsuleService = productDocuments
-    ? new CapsuleService(productDocuments, { indexing: memoryIndexing, strictIndex: config.memoryIndexStrict })
+    ? new CapsuleService(productDocuments, { indexing: memoryIndexing, strictIndex: config.memoryIndexStrict, scanner: capsuleScanner })
     : null;
-  const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir }) : null;
-  const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
+  const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner }) : null;
+  const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes,
+    // A 「试用一次」 conversation is marked in its own memory state.
+    trials: researchMemory.configured ? { mark: (userId, projectId, sessionId, capsuleId) => researchMemory.updateSessionState(userId, projectId, sessionId,
+      { trialCapsuleId: capsuleId }) } : null });
   const memoryRoutes = createMemoryRoutes({
     config, researchMemory, memorySubstrate, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
   });
@@ -3044,9 +3051,10 @@ export function createWebApiApp(overrides = {}) {
                 }
               : routedSpecialist,
           });
-          // 「本次不用」 on a method: recall cannot withhold a method mounted for
-          // the whole project, so this conversation's context says it instead.
-          const setAsideMethods = await setAsideMethodNames(researchMemory, ctx.user.id, ctx.project.id, session.sessionId);
+          // What this conversation's own memory state adds (memorySessions.mjs):
+          // a method set aside with 「本次不用」, which recall cannot withhold,
+          // and the capsule a 「试用一次」 conversation is trying.
+          const sessionNotes = await sessionDispatchNotes({ researchMemory, capsules: capsuleService }, ctx.user.id, ctx.project.id, session.sessionId);
           // Before the prompt goes out, like the brief: a mount the ledger has
           // not recorded cannot be told apart from one that never happened.
           // The same rule for what was recalled: a memory this dispatch used
@@ -3059,7 +3067,7 @@ export function createWebApiApp(overrides = {}) {
           }
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             text: promptText,
-            system: setAsideMethods.length ? `${prepared.system}\n\n${setAsideMethodsNotice(setAsideMethods)}` : prepared.system,
+            system: sessionNotes.length ? `${prepared.system}\n\n${sessionNotes.join("\n\n")}` : prepared.system,
             memoryContext: prepared.memoryContext,
             residentProfile: true,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,

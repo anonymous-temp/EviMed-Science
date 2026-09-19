@@ -22,7 +22,7 @@ export const CAPSULE_GATEWAY_PATH = "/internal/capsules/v1";
  * set aside stays aside — both only ever take memory away.
  * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any,
  *   sessions?: { running: (user: any, project: any) => Promise<{ id: string, sessionId: string }[]>,
- *     state: (userId: string, projectId: string, sessionId: string) => Promise<{ incognito: boolean, excluded: any[] }>,
+ *     state: (userId: string, projectId: string, sessionId: string) => Promise<{ incognito: boolean, excluded: any[], trialCapsuleId?: string | null }>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null }} dependencies */
 export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null }) {
   const windows = new Map();
@@ -63,9 +63,11 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       const running = sessions ? await sessions.running(currentUser, project).catch(() => []) : [];
       const states = sessions
         ? await Promise.all(running.map((run) => sessions.state(currentUser.id, identity.projectId, run.sessionId)
-          .catch(() => ({ incognito: false, excluded: [] }))))
+          .catch(() => ({ incognito: false, excluded: [], trialCapsuleId: null }))))
         : [];
       const incognito = states.some((state) => state.incognito);
+      // A trial of someone else's capsule reads memory but writes none.
+      const writesNothing = incognito || states.some((state) => Boolean(state.trialCapsuleId));
       if (action === "recall") {
         if (body.factKinds !== undefined && (!Array.isArray(body.factKinds) || body.factKinds.length > CAPSULE_FACT_KINDS.length || body.factKinds.some((kind) => !CAPSULE_FACT_KINDS.includes(kind)))) {
           throw new HttpError(400, "capsule_payload_invalid", "Invalid memory kinds.");
@@ -103,11 +105,14 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
           await sessions.recordRecall(project, running[0].id, recalled.items).catch(() => null);
         }
         sendJson(res, 200, answer);
-      } else if (incognito) {
-        // An incognito conversation leaves nothing behind, a note included.
+      } else if (writesNothing) {
+        // An incognito conversation leaves nothing behind, a note included;
+        // nor does one trying someone else's capsule.
         sendJson(res, 200, {
-          entry: null, reviewRequired: false, takesEffect: false, incognito: true, contextOnly: true,
-          notice: "这是一段无痕对话：这条没有记下。需要记住的话，请用户在普通对话里再说一次。",
+          entry: null, reviewRequired: false, takesEffect: false, incognito, contextOnly: true,
+          notice: incognito
+            ? "这是一段无痕对话：这条没有记下。需要记住的话，请用户在普通对话里再说一次。"
+            : "这是一段试用别人胶囊的对话：这条没有记下。需要记住的话，请用户在普通对话里再说一次。",
         });
       } else {
         // A model's claim that its input was explicit is not the researcher's

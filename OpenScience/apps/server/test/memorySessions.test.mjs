@@ -9,7 +9,8 @@ import { createServer } from "node:http";
 import test from "node:test";
 
 import {
-  createMemorySessionRoutes, mountedMethodsFor, sessionBackground, setAsideMethodName, setAsideMethodNames, setAsideMethodsNotice,
+  createMemorySessionRoutes, mountedMethodsFor, sessionBackground, sessionDispatchNotes, setAsideMethodName, setAsideMethodNames,
+  setAsideMethodsNotice,
 } from "../src/memorySessions.mjs";
 import { sendError } from "../src/security.mjs";
 
@@ -210,8 +211,21 @@ test("the composition root feeds the conversation's state to every path that rea
   assert.match(server, /if \(await memoryTimelineRoutes\(req, res\)\) return;/);
   assert.match(server, /createMemoryTimelineRoutes\(\{ config, researchMemory, agentRuns, feedbackEvents, learning: learningService, context \}\)/);
   assert.match(server, /mountedMethods: \(project\) => mountedMethodsFor\(\{ runtimeManager, capsules: capsuleService, learning: learningService \}, project\)/);
-  assert.match(server, /const setAsideMethods = await setAsideMethodNames\(researchMemory, ctx\.user\.id, ctx\.project\.id, session\.sessionId\);/);
-  assert.match(server, /system: setAsideMethods\.length \? `\$\{prepared\.system\}\\n\\n\$\{setAsideMethodsNotice\(setAsideMethods\)\}` : prepared\.system,/);
+  assert.match(server, /const sessionNotes = await sessionDispatchNotes\(\{ researchMemory, capsules: capsuleService \}, ctx\.user\.id, ctx\.project\.id, session\.sessionId\);/);
+  assert.match(server, /system: sessionNotes\.length \? `\$\{prepared\.system\}\\n\\n\$\{sessionNotes\.join\("\\n\\n"\)\}` : prepared\.system,/);
   const triggers = server.slice(server.indexOf("new LearningTriggers({"), server.indexOf("new LearningTriggers({") + 600);
   assert.match(triggers, /sessionState:/);
+});
+
+test("a dispatch is told what its conversation set aside and which shared capsule it is trying", async () => {
+  const researchMemory = memoryDouble();
+  researchMemory.states.set("ses_1", { incognito: false, excluded: [{ type: "method", id: "method-x", label: "剂量核对" }], trialCapsuleId: "pack-1" });
+  const capsules = { trialContext: async (_userId, id) => (id === "pack-1" ? "<evimed-capsule-trial>李主任的方法</evimed-capsule-trial>" : "") };
+  const notes = await sessionDispatchNotes({ researchMemory, capsules }, "usr_1", "prj_1", "ses_1");
+  assert.equal(notes.length, 2);
+  assert.match(notes[0], /本次不用这些方法：method-x（剂量核对）/);
+  assert.match(notes[1], /李主任的方法/);
+  assert.deepEqual(await sessionDispatchNotes({ researchMemory, capsules }, "usr_1", "prj_1", "ses_other"), []);
+  assert.deepEqual(await sessionDispatchNotes({ researchMemory: { configured: true, sessionState: async () => { throw new Error("down"); } }, capsules }, "u", "p", "s"), [],
+    "a state that cannot be read adds nothing rather than failing the turn");
 });
