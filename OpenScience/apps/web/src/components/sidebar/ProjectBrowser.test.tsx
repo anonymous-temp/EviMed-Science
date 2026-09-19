@@ -131,7 +131,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     const section = await screen.findByRole("region", { name: "项目" });
     expect(section).toHaveAccessibleDescription(PROJECT_EXPLAINER);
     expect(within(section).getByRole("heading", { name: "项目" })).toHaveAttribute("title", PROJECT_EXPLAINER);
-    expect(PROJECT_EXPLAINER).toContain("切换会重启研究运行时");
+    expect(PROJECT_EXPLAINER).toContain("各有自己的研究运行时");
   });
 
   it("opens another project's group and reads its tasks under that project", async () => {

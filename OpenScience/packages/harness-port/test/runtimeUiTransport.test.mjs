@@ -56,6 +56,14 @@ test('a revisioned bundle loads from the path every frame shares; anything else 
   assert.throws(() => installRuntimeUiTransport({ ...frame, assets: '/elsewhere/' }, browser().target), /Invalid runtime frame/);
 });
 
+test('a stream asked of a disposed frame says the frame is gone, not that capacity ran out', async () => {
+  const { target } = browser();
+  const hooks = installRuntimeUiTransport(frame, target);
+  hooks.dispose();
+  const stream = hooks.openStream('session/follow', { args: {} }, new AbortController().signal)[Symbol.asyncIterator]();
+  await assert.rejects(stream.next(), /Runtime frame disposed/);
+});
+
 test('the synchronous bootstrap is self-contained after function serialization', () => {
   const { target } = browser();
   const install = vm.runInNewContext(`(${installRuntimeUiTransport.toString()})`, { URL, Error, Map, Set, Promise, Object, JSON });

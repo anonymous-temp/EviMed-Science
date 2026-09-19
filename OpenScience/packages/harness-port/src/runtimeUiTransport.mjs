@@ -171,7 +171,11 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     /** @param {string} endpoint @param {any} payload @param {AbortSignal} signal */
     async *openStream(endpoint, payload, signal) {
       if (signal.aborted) throw signal.reason;
-      if (disposed || streams.size >= MAX_STREAMS) throw failure('Runtime stream capacity');
+      // Two causes, two names: a frame being torn down (leaving the session
+      // page) used to report its last stream request as a capacity limit, and
+      // the console line read like an exhausted connection.
+      if (disposed) throw failure('Runtime frame disposed');
+      if (streams.size >= MAX_STREAMS) throw failure('Runtime stream capacity');
       if (!/^(?:\$events|[A-Za-z][A-Za-z0-9-]*\/[A-Za-z][A-Za-z0-9_-]*)$/.test(endpoint)) throw failure('Invalid runtime endpoint');
       const id = target.crypto.randomUUID();
       /** @type {any[]} */ const queue = [];

@@ -5,9 +5,11 @@ import { relativeTime } from "@/lib/runPresentation";
  * What a project is, said once, where the choice is made. A project scopes a
  * container, a workspace, a run ledger and part of memory — the heaviest
  * concept in the product — and until 2026-09-18 nothing anywhere said so
- * (review B §2e).
+ * (review B §2e). It said 「切换会重启研究运行时」 until switching stopped
+ * reloading the page (2026-09-19): a switch starts the other project's runtime
+ * if it is not running and leaves this one alone.
  */
-export const PROJECT_EXPLAINER = "一个项目 = 独立的工作区、运行记录与记忆范围；切换会重启研究运行时。";
+export const PROJECT_EXPLAINER = "一个项目 = 独立的工作区、运行记录与记忆范围，各有自己的研究运行时。";
 
 /** The longest name the control plane accepts (contract C4). */
 export const PROJECT_NAME_MAX = 40;
