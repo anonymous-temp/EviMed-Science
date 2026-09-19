@@ -2,7 +2,7 @@
 
 EviMed is a traceable medical research agent platform. It combines an open-domain
 research workbench with specialist medical-research agents on one shared runtime,
-artifact, provenance, notebook, tool, and data-source foundation.
+artifact, provenance, tool, and data-source foundation.
 
 [中文说明](./README.zh.md)
 
@@ -26,7 +26,7 @@ must be checked against the original evidence.
 EviMed is a hosted SaaS product and nothing else: the React/TypeScript frontend
 connects through the EviMed server to isolated DeepSeek Harness (DSH) runtimes,
 the DeepSeek model gateway, append-only run records, artifact provenance,
-Jupyter kernels, curated scientific skills, and EviMed data/tool adapters. The
+curated scientific skills, and EviMed data/tool adapters. The
 optional Tauri desktop shell was removed on 2026-09-04.
 
 Specialist adapters are registered through `EVIMED_*_URL` environment variables.

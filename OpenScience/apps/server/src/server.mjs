@@ -5228,7 +5228,6 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     resources: await readinessCheck(() => readinessResources(config)),
     backup: await readinessCheck(async () => readinessBackup(config, productDatabase)),
     runtime: await readinessCheck(async () => readinessRuntime(config, runtimeManager)),
-    kernel: await readinessCheck(async () => readinessKernel(config, runtimeManager)),
   };
   checks.saasProfile = await readinessCheck(() => readinessSaasProfile(config, checks));
   return {
@@ -5824,8 +5823,6 @@ function readinessResources(config) {
     "maxProjectUsageScanEntries",
     "maxLogReadBytes",
     "maxLogFileBytes",
-    "maxKernelOutputBytes",
-    "kernelTimeoutMs",
     "rateLimitWindowMs",
     "rateLimitMaxRequests",
     "authRateLimitWindowMs",
@@ -5833,8 +5830,6 @@ function readinessResources(config) {
     "commandRateLimitWindowMs",
     "commandRateLimitMaxRequests",
     "maxConcurrentCommands",
-    "maxConcurrentKernels",
-    "maxConcurrentKernelsPerUser",
     "maxConcurrentTasks",
     "maxConcurrentTasksPerProject",
     "maxQueuedTasks",
@@ -5859,12 +5854,6 @@ function readinessResources(config) {
   if (values.maxQueuedTasksPerProject > values.maxQueuedTasks) {
     throw readinessFailure("resource_limit_inconsistent", { field: "maxQueuedTasksPerProject", maximum: "maxQueuedTasks" });
   }
-  if (values.maxConcurrentKernelsPerUser > values.maxConcurrentKernels) {
-    throw readinessFailure("resource_limit_inconsistent", {
-      field: "maxConcurrentKernelsPerUser",
-      maximum: "maxConcurrentKernels",
-    });
-  }
   if (values.maxRuntimeProxyConnectionsPerProject > values.maxRuntimeProxyConnections) {
     throw readinessFailure("resource_limit_inconsistent", {
       field: "maxRuntimeProxyConnectionsPerProject",
@@ -5876,8 +5865,7 @@ function readinessResources(config) {
   }
 
   const usesDockerRuntime = config.runtimeMode === "kernel" && config.runtimeSandboxMode === "docker";
-  const usesDockerKernel = config.enableKernel && config.kernelSandboxMode === "docker";
-  if (usesDockerRuntime || usesDockerKernel) {
+  if (usesDockerRuntime) {
     assertPositiveIntegerLimit(config, "runtimePidsLimit");
     assertPositiveDockerCpuLimit(config, "runtimeCpuLimit");
     assertDockerMemoryLimit(config, "runtimeMemoryLimit");
@@ -6029,7 +6017,7 @@ export async function readinessBackup(config, database = null) {
   };
 }
 
-async function inspectRuntimeImage(config, unavailableCode, runtimeManager) {
+async function inspectRuntimeImage(config, runtimeManager) {
   let imageId;
   let kernelVersion;
   let uvVersion;
@@ -6038,7 +6026,7 @@ async function inspectRuntimeImage(config, unavailableCode, runtimeManager) {
     try {
       image = await runtimeManager.inspectRuntimeImage();
     } catch (error) {
-      throw readinessFailure(error?.code ?? unavailableCode);
+      throw readinessFailure(error?.code ?? "runtime_image_unavailable");
     }
     ({ imageId, kernelVersion, uvVersion } = image);
   } else {
@@ -6057,7 +6045,7 @@ async function inspectRuntimeImage(config, unavailableCode, runtimeManager) {
       ["image", "inspect", "--format", format, config.runtimeContainerImage],
       { encoding: "utf8", timeout: 5_000 },
     );
-    if (image.status !== 0) throw readinessFailure(unavailableCode);
+    if (image.status !== 0) throw readinessFailure("runtime_image_unavailable");
     const [id, neutralVersion, uv] = image.stdout.trim().split("|");
     imageId = id;
     kernelVersion = neutralVersion;
@@ -6169,7 +6157,7 @@ async function readinessRuntime(config, runtimeManager) {
     }
     const controlPlane = runtimeManager.usesRuntimeController() ? "controller_socket" : "direct_override";
     if (config.runtimeRequireImageLocal) {
-      const image = await inspectRuntimeImage(config, "runtime_image_unavailable", runtimeManager);
+      const image = await inspectRuntimeImage(config, runtimeManager);
       return {
         mode: "kernel",
         sandboxMode: "docker",
@@ -6198,50 +6186,6 @@ async function readinessRuntime(config, runtimeManager) {
   // `buildRuntimeLaunchPlan`). Readiness says so rather than passing a
   // deployment that would refuse at the first run.
   throw readinessFailure("runtime_sandbox_invalid");
-}
-
-async function readinessKernel(config, runtimeManager) {
-  if (!config.enableKernel) {
-    return { enabled: false, sandboxMode: "disabled" };
-  }
-  if (config.kernelSandboxMode === "docker") {
-    try {
-      runtimeManager.assertDockerControlBoundary();
-      await runtimeManager.assertDockerSupport("kernel_volume_subpath_unsupported");
-    } catch (error) {
-      throw readinessFailure(error?.code ?? "kernel_volume_subpath_unsupported");
-    }
-    if (config.runtimeRequireImageLocal) {
-      const image = await inspectRuntimeImage(config, "kernel_image_unavailable", runtimeManager);
-      return {
-        enabled: true,
-        sandboxMode: "docker",
-        controlPlane: runtimeManager.usesRuntimeController() ? "controller_socket" : "direct_override",
-        networkMode: "none",
-        ...image,
-      };
-    }
-    return {
-      enabled: true,
-      sandboxMode: "docker",
-      controlPlane: runtimeManager.usesRuntimeController() ? "controller_socket" : "direct_override",
-      networkMode: "none",
-      imageLocal: false,
-      imageCheck: "skipped",
-    };
-  }
-  if (config.kernelSandboxMode === "host") {
-    if (config.production || !config.allowUnsandboxedKernel) {
-      throw readinessFailure("kernel_sandbox_required");
-    }
-    const python = spawnSync(config.kernelPythonBin, ["--version"], {
-      stdio: "ignore",
-      timeout: 5_000,
-    });
-    if (python.status !== 0) throw readinessFailure("kernel_python_unavailable");
-    return { enabled: true, sandboxMode: "host" };
-  }
-  throw readinessFailure("kernel_sandbox_invalid");
 }
 
 async function serveStatic(req, res, config, pathname) {

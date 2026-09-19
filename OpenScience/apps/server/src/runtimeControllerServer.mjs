@@ -4,14 +4,8 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import net from "node:net";
 import path from "node:path";
-import {
-  buildDockerKernelLaunchPlan,
-  cleanupKernelContainer,
-  runLimitedProcess,
-} from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerDataVolumeSupport } from "./dockerMounts.mjs";
-import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
   RUNTIME_EXIT_OUTPUT_BYTES,
   appendTailOutput,
@@ -155,27 +149,11 @@ function runtimeCapacityLimits(config) {
   return { maxGlobal, maxPerUser };
 }
 
-function kernelCapacityLimits(config) {
-  const maxGlobal = Number(config.maxConcurrentKernels);
-  const maxPerUser = Number(config.maxConcurrentKernelsPerUser);
-  if (
-    !Number.isSafeInteger(maxGlobal) ||
-    maxGlobal <= 0 ||
-    !Number.isSafeInteger(maxPerUser) ||
-    maxPerUser <= 0 ||
-    maxPerUser > maxGlobal
-  ) {
-    throw controllerFailure(503, "runtime_controller_limits_invalid", "Runtime controller kernel limits are invalid.");
-  }
-  return { maxGlobal, maxPerUser };
-}
-
-function dockerManagedInventory(config, label, { all = false } = {}) {
+function dockerManagedInventory(config, label) {
   const result = spawnSync(
     config.runtimeContainerBin,
     [
       "ps",
-      ...(all ? ["--all"] : []),
       "--filter",
       `label=${label}`,
       "--format",
@@ -206,30 +184,11 @@ function dockerRuntimeInventory(config) {
   return dockerManagedInventory(config, "open-science.web.runtime=true");
 }
 
-function dockerKernelInventory(config) {
-  return dockerManagedInventory(config, "open-science.web.kernel=true", { all: true });
-}
-
-function cleanupStaleKernelContainers(config) {
-  const inventory = dockerKernelInventory(config);
-  for (const containerName of inventory.keys()) {
-    const result = spawnSync(
-      config.runtimeContainerBin,
-      ["rm", "-f", containerName],
-      { encoding: "utf8", timeout: 5_000 },
-    );
-    if (result.status !== 0 && !missingContainerPattern.test(compactError(result.stderr))) {
-      throw controllerFailure(503, "kernel_orphan_cleanup_failed", "Runtime controller could not remove an orphaned kernel container.");
-    }
-  }
-  return inventory.size;
-}
-
 /** How long a shutdown waits for requests that are still in flight before it
  *  cuts their connections.
  *
- *  `close` has already force-removed every tracked runtime and kernel
- *  container by the time it drains, so a request still running is answering
+ *  `close` has already force-removed every tracked runtime container by the
+ *  time it drains, so a request still running is answering
  *  about something that no longer exists. Matches `waitForChildExit`'s
  *  allowance: both are the same judgement about how long a stop may take. */
 const CONTROLLER_DRAIN_GRACE_MS = 2_000;
@@ -375,8 +334,6 @@ export function createRuntimeController(overrides = {}) {
   // container gave for dying was written to a pipe pointed at /dev/null.
   // Bounded per container and dropped when the next start replaces it.
   const runtimeExitOutput = new Map();
-  const kernelChildren = new Map();
-  const kernelOwners = new Map();
   const projectOperations = new Map();
   const socketPath = config.runtimeControllerSocket;
   let ownedSocket = null;
@@ -415,30 +372,6 @@ export function createRuntimeController(overrides = {}) {
       );
     }
     runtimeOwners.set(runtimeContainerName(project), project.userId);
-  }
-
-  function reserveKernelCapacity(project, containerName) {
-    const limits = kernelCapacityLimits(config);
-    const inventory = dockerKernelInventory(config);
-    for (const [name, userId] of kernelOwners) inventory.set(name, userId);
-    if (inventory.size >= limits.maxGlobal) {
-      throw controllerFailure(
-        429,
-        "kernel_limit_exceeded",
-        `Too many kernels are running for the server; limit is ${limits.maxGlobal}.`,
-        { retryAfterSeconds: 5 },
-      );
-    }
-    const userCount = [...inventory.values()].filter((userId) => userId === project.userId).length;
-    if (userCount >= limits.maxPerUser) {
-      throw controllerFailure(
-        429,
-        "kernel_limit_exceeded",
-        `Too many kernels are running for this user; limit is ${limits.maxPerUser}.`,
-        { retryAfterSeconds: 5 },
-      );
-    }
-    kernelOwners.set(containerName, project.userId);
   }
 
   async function cleanupRuntime(project) {
@@ -599,61 +532,12 @@ export function createRuntimeController(overrides = {}) {
     };
   }
 
-  async function runKernel(project, language, code, req, res) {
-    if (!config.enableKernel || config.kernelSandboxMode !== "docker") {
-      throw controllerFailure(403, "kernel_disabled", "Runtime controller kernel execution is disabled.");
-    }
-    const releaseError = runtimeReleasePolicyError(config);
-    if (releaseError) {
-      throw controllerFailure(503, releaseError.code, "Runtime release provenance does not match the controller configuration.");
-    }
-    assertDockerDataVolumeSupport(config, "kernel_volume_subpath_unsupported");
-    if (typeof code !== "string" || code.length > 64 * 1024) {
-      throw controllerFailure(400, "kernel_code_invalid", "Kernel code is missing or too large.");
-    }
-    if (!["python", "r"].includes(language)) {
-      throw controllerFailure(400, "unsupported_language", "Hosted kernels support python and r.");
-    }
-    const plan = buildDockerKernelLaunchPlan(project, config, language);
-    reserveKernelCapacity(project, plan.containerName);
-    const abortController = new AbortController();
-    const abort = () => abortController.abort(new DOMException("Kernel controller client disconnected.", "AbortError"));
-    const close = () => {
-      if (!res.writableEnded) abort();
-    };
-    req.once("aborted", abort);
-    res.once("close", close);
-    try {
-      return await runLimitedProcess({
-        command: plan.command,
-        args: plan.args,
-        cwd: plan.cwd,
-        stdin: code,
-        signal: abortController.signal,
-        maxOutputBytes: config.maxKernelOutputBytes,
-        timeoutMs: config.kernelTimeoutMs,
-        onSpawn: (child) => {
-          kernelChildren.set(plan.containerName, child);
-          child.once("exit", () => kernelChildren.delete(plan.containerName));
-        },
-        onAbort: () => cleanupKernelContainer(config, plan.containerName),
-        onError: () => cleanupKernelContainer(config, plan.containerName),
-      });
-    } finally {
-      kernelChildren.delete(plan.containerName);
-      kernelOwners.delete(plan.containerName);
-      req.removeListener("aborted", abort);
-      res.removeListener("close", close);
-    }
-  }
-
   async function handle(req, res) {
     const url = new URL(req.url ?? "/", "http://runtime.controller");
     try {
       if (req.method === "GET" && url.pathname === "/v1/health") {
         const docker = dockerInfo(config);
         const limits = runtimeCapacityLimits(config);
-        const kernelLimits = kernelCapacityLimits(config);
         if (config.releaseManifestError) {
           throw controllerFailure(503, config.releaseManifestError, "Runtime controller release manifest is invalid.");
         }
@@ -667,8 +551,6 @@ export function createRuntimeController(overrides = {}) {
             dockerMajor: docker.major,
             maxRunningRuntimes: limits.maxGlobal,
             maxRunningRuntimesPerUser: limits.maxPerUser,
-            maxConcurrentKernels: kernelLimits.maxGlobal,
-            maxConcurrentKernelsPerUser: kernelLimits.maxPerUser,
             // Reported because both sides build the launch plan, and this
             // setting decides where the control socket lives: with a data
             // volume the plan mounts an isolated subpath, without one it binds
@@ -700,16 +582,14 @@ export function createRuntimeController(overrides = {}) {
         sendJson(res, 200, { data: runtimeStatus(project) });
         return;
       }
-      if (req.method === "POST" && ["/v1/runtime/start", "/v1/runtime/cleanup", "/v1/kernel/run"].includes(url.pathname)) {
+      if (req.method === "POST" && ["/v1/runtime/start", "/v1/runtime/cleanup"].includes(url.pathname)) {
         if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
           throw controllerFailure(415, "runtime_controller_content_type_invalid", "Runtime controller requires JSON requests.");
         }
         const payload = await readJson(req, config.maxJsonBytes);
         const allowed = url.pathname === "/v1/runtime/start"
           ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig"]
-          : url.pathname === "/v1/kernel/run"
-            ? ["userId", "projectId", "activeWorkspace", "language", "code"]
-            : ["userId", "projectId", "activeWorkspace"];
+          : ["userId", "projectId", "activeWorkspace"];
         assertExactKeys(payload, allowed);
         const project = await projectFromReference(config, payload);
         if (url.pathname === "/v1/runtime/start") {
@@ -738,11 +618,7 @@ export function createRuntimeController(overrides = {}) {
             res.removeListener("close", disconnect);
           }
         }
-        if (url.pathname === "/v1/runtime/cleanup") {
-          sendJson(res, 200, { data: await withProjectOperation(project, () => cleanupRuntime(project)) });
-          return;
-        }
-        sendJson(res, 200, { data: await runKernel(project, payload.language ?? "python", payload.code, req, res) });
+        sendJson(res, 200, { data: await withProjectOperation(project, () => cleanupRuntime(project)) });
         return;
       }
       throw controllerFailure(404, "runtime_controller_route_not_found", "Runtime controller route not found.");
@@ -776,17 +652,6 @@ export function createRuntimeController(overrides = {}) {
       const socketStat = await fs.lstat(socketPath);
       ownedSocket = { dev: socketStat.dev, ino: socketStat.ino };
       await fs.chmod(socketPath, 0o600);
-      try {
-        cleanupStaleKernelContainers(config);
-      } catch (error) {
-        await new Promise((resolve) => server.close(() => resolve()));
-        const current = await fs.lstat(socketPath).catch(() => null);
-        if (current?.isSocket() && current.dev === ownedSocket.dev && current.ino === ownedSocket.ino) {
-          await fs.rm(socketPath, { force: true });
-        }
-        ownedSocket = null;
-        throw error;
-      }
       return socketPath;
     },
     async close() {
@@ -798,17 +663,8 @@ export function createRuntimeController(overrides = {}) {
           return result.status;
         }),
       );
-      await Promise.allSettled(
-        [...kernelChildren.entries()].map(async ([containerName, child]) => {
-          spawnSync(config.runtimeContainerBin, ["rm", "-f", containerName], { stdio: "ignore", timeout: 5_000 });
-          await waitForChildExit(child);
-        }),
-      );
-      await Promise.resolve().then(() => cleanupStaleKernelContainers(config)).catch(() => {});
       runtimeChildren.clear();
       runtimeOwners.clear();
-      kernelChildren.clear();
-      kernelOwners.clear();
       if (server.listening) {
         // `server.close` resolves only once every open connection has ended,
         // and a connection that has never sent a request will not end on its

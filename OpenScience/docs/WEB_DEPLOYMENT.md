@@ -126,7 +126,7 @@ For a stricter readiness assessment of the current Web adaptation, see
   guard. Mutating command, task, and direct upload routes validate the
   authenticated user/project context before reading upload-sized request
   bodies. File APIs reject symbolic links inside hosted workspaces, skip them
-  during directory listing/artifact resolution/notebook listing, and missing
+  during directory listing and artifact resolution, and missing
   files/directories return stable JSON 404 errors. Direct directory listings
   and recursive workspace scans are capped by
   `OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES`. On the production Linux host,
@@ -163,20 +163,14 @@ For a stricter readiness assessment of the current Web adaptation, see
 - `apps/server` also exposes `/api/tasks` for async command tasks, status
   polling, cancellation, command timeouts, and per-project task JSONL events.
   Running task cancellation and timeouts propagate an `AbortSignal` to command
-  handlers that support interruption, including the current hosted kernel
-  execution slice. That development-only kernel slice returns `{ ok, stdout,
-  stderr, artifacts }` for Python when explicitly enabled outside production.
-  Hosted Web UI surfaces notebook files as project artifacts, but it disables
-  notebook creation and cell/expression execution controls until a server-side
-  kernel sandbox is enabled.
+  handlers that support interruption.
   The execution queue is still in-process and enforces global concurrency,
   per-project concurrency, global queue depth, and per-project queue depth so
   one project cannot occupy every async task slot or accumulate unbounded
   waiting work. `/api/tasks` uses an explicit queue allowlist for file/artifact,
-  provenance, example-install, notebook-listing, and kernel execution commands;
-  runtime lifecycle, settings, auth import, MCP/Jupyter provisioning, HPC, and
-  Modal control commands must stay on their synchronous API surfaces. Task
-  metadata is also persisted per project in
+  provenance, and example-install commands; runtime lifecycle, settings, auth
+  import, MCP provisioning, HPC, and Modal control commands must stay on their
+  synchronous API surfaces. Task metadata is also persisted per project in
   `.openscience/tasks-state.json`; completed records survive server restarts,
   and unfinished records are marked failed with `server_restarted` rather than
   silently disappearing or being re-executed. Task APIs, task events, and task
@@ -193,16 +187,17 @@ For a stricter readiness assessment of the current Web adaptation, see
   launch plan. Production Compose does not mount the Docker socket into the Web
   API. A separate, unexposed Runtime Controller owns that socket and listens on
   a mode-`0600` Unix socket shared only with the API. Its versioned protocol
-  accepts fixed health/image, project-runtime lifecycle, and bounded kernel
-  operations; it reconstructs canonical `/data/users/<user>/projects/<project>`
-  paths and Docker arguments from validated identifiers and never accepts an
-  arbitrary image, mount, network, command, or Docker argument list. Controller
+  accepts fixed health/image and project-runtime lifecycle operations and
+  executes no caller-supplied code; it reconstructs canonical
+  `/data/users/<user>/projects/<project>` paths and Docker arguments from
+  validated identifiers and never accepts an arbitrary image, mount, network,
+  command, or Docker argument list. Controller
   protocol v2 also reports the global and per-user runtime limits;
   the API rejects a Controller whose limits differ from its own configuration.
   The Controller serializes start/cleanup operations per project and enforces
   those limits itself using Docker label discovery plus in-flight reservations,
   so capacity policy does not depend only on API process memory. Production
-  readiness and runtime/kernel execution fail with `runtime_controller_required`
+  readiness and runtime launch fail with `runtime_controller_required`
   when Docker control remains direct unless an explicit nondefault test escape
   is enabled. Docker runtimes get deterministic per-project container names
   and labels. Server startup scans stored project runtime state and removes
@@ -487,10 +482,6 @@ OPEN_SCIENCE_MAX_ARCHIVE_BYTES=1073741824
 OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES=10000
 OPEN_SCIENCE_MAX_LOG_READ_BYTES=1048576
 OPEN_SCIENCE_MAX_LOG_FILE_BYTES=10485760
-OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES=1048576
-OPEN_SCIENCE_KERNEL_TIMEOUT_MS=10000
-OPEN_SCIENCE_MAX_CONCURRENT_KERNELS=2
-OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER=1
 OPEN_SCIENCE_CORS_ORIGINS=
 OPEN_SCIENCE_RATE_LIMIT_WINDOW_MS=60000
 OPEN_SCIENCE_RATE_LIMIT_MAX_REQUESTS=600
@@ -506,10 +497,6 @@ OPEN_SCIENCE_BUILD_CREATED=replace-with-rfc3339-build-time
 OPEN_SCIENCE_WEB_CONTAINER_IMAGE=open-science-web:0.1.3
 OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE=./release-manifest.json
 OPEN_SCIENCE_DATA_VOLUME=open-science-data
-OPEN_SCIENCE_ENABLE_KERNEL=false
-OPEN_SCIENCE_KERNEL_SANDBOX_MODE=docker
-OPEN_SCIENCE_KERNEL_PYTHON_BIN=python3
-OPEN_SCIENCE_ALLOW_UNSANDBOXED_KERNEL=false
 OPEN_SCIENCE_DSH_VERSION=0.1.5-rc.2
 OPEN_SCIENCE_DSH_CORDIS_VERSION=4.0.2
 OPEN_SCIENCE_SOCKET_VERSION=0.1.0
@@ -741,30 +728,6 @@ deployment — a check that could not survive the kernel it was gating. Set
 deliberately relies on Docker lazy-pulling the image at runtime. Production
 readiness rejects `OPEN_SCIENCE_RUNTIME_MODE=mock` unless
 `OPEN_SCIENCE_ALLOW_MOCK_RUNTIME=true` is set for an explicit smoke test.
-Readiness also fails in production when `OPEN_SCIENCE_ENABLE_KERNEL=true` would
-execute Python through the host `OPEN_SCIENCE_KERNEL_SANDBOX_MODE=host` path.
-The host kernel path is for local development only. Production kernel execution
-is supported only with `OPEN_SCIENCE_KERNEL_SANDBOX_MODE=docker`: the server
-runs Python in the reviewed runtime image, mounts only the selected project
-workspace at `/workspace`, applies the same CPU, memory, PID, read-only root,
-tmpfs, capability-drop, no-new-privileges, and optional container-user controls
-as the agent runtime, and forces `--network none`. Readiness checks Docker
-availability and, when `OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=true`, the
-configured runtime image; kernel `docker run` also uses `--pull never` in that
-mode. The hosted frontend exposes Python-only notebook creation, cell execution,
-and Stop controls through this server sandbox. It does not provision Jupyter or
-expose R execution. `kernel_execute` validates the selected notebook inside the
-project, mounts its selected workspace, runs from the notebook directory, and
-`kernel_reset` aborts matching in-flight work. Stdout and stderr are independently
-capped by `OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES` before they are returned or
-stored in task output handling, and the child process is killed after
-`OPEN_SCIENCE_KERNEL_TIMEOUT_MS` even when the outer command timeout is longer.
-The Runtime Controller independently enforces
-`OPEN_SCIENCE_MAX_CONCURRENT_KERNELS` and
-`OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER`, including in-flight launches.
-Before its Unix socket becomes available, it discovers all containers labelled
-`open-science.web.kernel=true` and removes them; a cleanup failure prevents the
-Controller from listening instead of leaving an unbounded kernel attached.
 
 ## Docker
 
@@ -890,7 +853,7 @@ all invalidate the manifest; symbolic links are rejected.
 re-inspects both images. The generated file is intentionally ignored by version
 control and mounted read-only at `/run/open-science/release-manifest.json`.
 Production readiness fails if it is missing, invalid, or inconsistent with
-service configuration; runtime/kernel launch policy also rejects missing or
+service configuration; runtime launch policy also rejects missing or
 mismatched provenance when readiness is bypassed.
 
 The Docker image builds the hosted frontend with
@@ -923,21 +886,21 @@ API mounts a read-only view of a separate control volume and calls the controlle
 read-only, publishes no port, drops Linux capabilities, and joins only the
 numeric Docker-socket group verified by host preflight. This preserves access
 to the explicitly mounted socket without restoring broad filesystem
-capabilities. The controller creates all runtime and kernel launch arguments
-from its own deployment configuration. Treat the
+capabilities. The controller creates all runtime launch arguments from its own
+deployment configuration. Treat the
 controller and Docker host as trusted infrastructure, and do not expose or
 proxy the controller socket. By default, production readiness requires the
 controller protocol/release identity and runtime capacity limits to match the
 API, and requires the runtime image to already exist on the Docker host.
 The named-volume isolation requires Docker Engine 26 or newer because that is
 when [`volume-subpath`](https://docs.docker.com/engine/release-notes/26.0/) was
-added to `docker run --mount`; readiness and runtime/kernel launch both reject
+added to `docker run --mount`; readiness and runtime launch both reject
 older or unparseable daemon versions when `OPEN_SCIENCE_RUNTIME_DATA_VOLUME` is
 configured.
 Compose gives the application data volume the stable
 `OPEN_SCIENCE_DATA_VOLUME` name and passes it as
-`OPEN_SCIENCE_RUNTIME_DATA_VOLUME`. Runtime and optional kernel containers mount
-only the selected project's existing `volume-subpath`; they do not pass the API
+`OPEN_SCIENCE_RUNTIME_DATA_VOLUME`. Runtime containers mount only the selected
+project's existing `volume-subpath`; they do not pass the API
 container's `/data/...` path to the host daemon and do not mount another user's
 project subtree.
 For an existing Compose installation, set `OPEN_SCIENCE_DATA_VOLUME` to its
@@ -989,9 +952,8 @@ local HTTP origin, `OPEN_SCIENCE_RUNTIME_MODE=mock`, and
 After the service is running, execute the deployment smoke test from a trusted
 operator machine. It validates `/api/health`, `/api/ready`, the readiness
 security and observability sub-checks, protected `/api/ops/metrics`, login, CSRF,
-project creation, file upload/read/preview/download, and can optionally exercise
-the project-scoped Python kernel or start the runtime, verify proxied SSE, and
-stop the runtime cleanly:
+project creation, file upload/read/preview/download, and can optionally start
+the runtime, verify proxied SSE, and stop the runtime cleanly:
 
 ```bash
 OPEN_SCIENCE_SMOKE_BASE_URL=https://science.example.com \
@@ -1007,16 +969,9 @@ the DSH runtime image has been built or pulled on the Docker host and the
 runtime is using the intended transport and network policy. The default smoke
 does not send a model prompt and therefore runs with `--network none`.
 
-To verify the hosted Notebook path, set `OPEN_SCIENCE_SMOKE_KERNEL=true`. The
-smoke creates a notebook below `smoke/`, executes Python from that notebook
-directory, reads the uploaded input, writes a result back to the project volume,
-and checks the persisted result. Set
-`OPEN_SCIENCE_SMOKE_REQUIRE_DOCKER_KERNEL=true` for production acceptance so a
-host-kernel configuration cannot pass. The Linux `docker-hosted` CI job sets
-both flags and verifies that no labelled kernel container remains afterward.
-The smoke script requires
-HTTPS for non-local targets unless `OPEN_SCIENCE_SMOKE_ALLOW_HTTP=true` is set
-for a controlled development endpoint.
+The smoke script requires HTTPS for non-local targets unless
+`OPEN_SCIENCE_SMOKE_ALLOW_HTTP=true` is set for a controlled development
+endpoint.
 
 The runtime manager names containers as `open-science-...`, labels them with
 `open-science.web.runtime=true`, removes previously attached stale containers
@@ -1293,24 +1248,14 @@ base64 envelope.
   use them. `OPEN_SCIENCE_DATA_DIR`, user roots, per-user project containers,
   project roots, project metadata files, project JSONL logs, task/runtime state
   files, active workspace directories, and hosted file APIs do not follow
-  symbolic links, including during artifact auto-resolution and notebook
-  discovery.
+  symbolic links, including during artifact auto-resolution.
 - Container runtime launch is implemented as a Docker sandbox plan with a
   repository runtime-image Dockerfile, but it still requires building or pulling
-  the runtime image on a Docker-capable deployment host. Server
-  kernels are disabled by default with `OPEN_SCIENCE_ENABLE_KERNEL=false`.
-  Host Python kernels are blocked by `/api/ready` and `kernel_execute` in
-  production. If kernels are enabled for a controlled deployment, use
-  `OPEN_SCIENCE_KERNEL_SANDBOX_MODE=docker`; Docker kernels reuse the runtime
-  image/resource controls, run with `--network none`, and cap stdout/stderr with
-  `OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES`; each kernel child is also killed after
-  `OPEN_SCIENCE_KERNEL_TIMEOUT_MS`. Keep the Controller kernel concurrency
-  limits within reviewed host capacity; Controller startup removes labelled
-  kernel orphans and fails closed if removal does not succeed.
+  the runtime image on a Docker-capable deployment host.
 - Real model use requires configuring a server-managed kernel profile and key
   storage. The hosted Settings UI hides provider key, OAuth, custom endpoint,
   and provider-removal controls until encrypted server-side key management is
-  implemented. In hosted mode it also treats MCP/Jupyter tooling as
+  implemented. In hosted mode it also treats MCP tooling as
   deployment-managed: users can see sanitized server-managed MCP status, but
   browser-side provisioning/removal controls and local command strings are not
   exposed. The hosted Skills page likewise treats skills as deployment-managed:
@@ -1351,8 +1296,8 @@ base64 envelope.
   `upload_file` tasks and uploads targeting either `workspace` or `base` roots.
   These write routes resolve the authenticated user/project context before
   reading upload-sized request bodies. Uploads are then checked again against
-  the decoded file size and project quota. Workspace directory listings,
-  artifact auto-resolution, and notebook discovery are bounded by
+  the decoded file size and project quota. Workspace directory listings and
+  artifact auto-resolution are bounded by
   `OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES` to prevent unbounded file-count
   scans. Project and account archive exports are bounded by
   `OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES` and `OPEN_SCIENCE_MAX_ARCHIVE_BYTES`;
@@ -1376,9 +1321,7 @@ base64 envelope.
   connection limits, and the runtime idle timer.
 - `OPEN_SCIENCE_MAX_PROJECT_BYTES` is enforced for browser/API writes and as a
   runtime quota guard before startup, after proxied runtime requests, and on a
-  periodic timer while each runtime remains attached.
-  `kernel_execute` also rechecks project usage after host or Docker execution
-  before returning success. These quota scans are capped by
+  periodic timer while each runtime remains attached. These quota scans are capped by
   `OPEN_SCIENCE_MAX_PROJECT_USAGE_SCAN_ENTRIES` to keep high-file-count project
   trees from tying up the API process. Periodic runtime scans fail closed when
   this bound is exceeded, but this is still not a kernel-level filesystem quota
@@ -1540,7 +1483,7 @@ pull requests, pushes to `main`/`master`, and manual dispatch. Its dependent
 `docker-hosted` job also builds both release-labelled images on Linux, generates
 and verifies the deployment manifest from actual image IDs, starts the API and
 monitoring Compose profiles, exercises the real hosted DSH connection
-boundary and project-scoped Docker Python kernel with deployment smoke, verifies
-runtime and kernel cleanup, and tears down the stack. This complements but does
+boundary with deployment smoke, verifies runtime cleanup, and tears down the
+stack. This complements but does
 not replace target-host TLS, storage, network, backup, and external
 alert-delivery verification.

@@ -11,8 +11,6 @@
 import type { FileRoot } from "@ai4s/shared";
 import { hasWebApi, invokeCommand } from "./apiClient";
 
-const NO_BACKEND = "no backend is configured";
-
 /**
  * Pick local files through the browser and upload them into the workspace.
  * Returns the workspace file names; [] on cancel.
@@ -51,15 +49,6 @@ async function uploadBrowserFiles(files: File[], targetDir: string, root: FileRo
     );
   }
   return uploaded;
-}
-
-/**
- * Write text into the workspace as a file, deduplicating the name on
- * collision. Returns the actual file name written.
- */
-export async function addTextToWorkspace(filename: string, content: string): Promise<string> {
-  if (!hasWebApi) throw new Error(NO_BACKEND);
-  return invokeCommand<string>("add_text_to_workspace", { filename, content });
 }
 
 function pickBrowserFiles(): Promise<File[]> {

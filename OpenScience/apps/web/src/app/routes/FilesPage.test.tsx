@@ -27,12 +27,9 @@ vi.mock("@/lib/toast", () => ({
   toast: { success: mocks.toastSuccess, error: mocks.toastError },
 }));
 vi.mock("@/components/inspector/FilePreviewInspector", () => ({
-  FilePreviewInspector: ({ data }: { data: { filename: string } }) => (
-    <div data-testid="preview">preview:{data.filename}</div>
+  FilePreviewInspector: ({ data }: { data: { filename: string; language?: string } }) => (
+    <div data-testid="preview" data-language={data.language}>preview:{data.filename}</div>
   ),
-}));
-vi.mock("@/components/notebook/NotebookEditor", () => ({
-  NotebookEditor: ({ path }: { path: string }) => <div data-testid="nb">nb:{path}</div>,
 }));
 
 const knowledgeRoot: DirEntry[] = [
@@ -91,10 +88,13 @@ describe("FilesPage", () => {
     expect(screen.queryByText("正在加载…")).not.toBeInTheDocument();
   });
 
-  it("opens notebooks in the runnable editor", async () => {
+  // The runnable notebook editor was deleted on 2026-09-19. A notebook a run
+  // delivered is still a file: listed, readable, downloadable from the preview.
+  it("opens a notebook read-only in the file preview, as JSON", async () => {
     render(<FilesPage />);
     await userEvent.click(await screen.findByText("run.ipynb"));
-    expect(screen.getByTestId("nb")).toHaveTextContent("nb:knowledge-base/run.ipynb");
+    expect(screen.getByTestId("preview")).toHaveTextContent("preview:run.ipynb");
+    expect(screen.getByTestId("preview")).toHaveAttribute("data-language", "json");
   });
 
   it("navigates into a folder and back via the breadcrumb", async () => {

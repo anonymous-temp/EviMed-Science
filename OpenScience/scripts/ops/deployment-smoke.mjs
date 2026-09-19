@@ -231,64 +231,10 @@ async function smokeRuntime(baseUrl, headers) {
   assert(stopped.json?.data?.running === false, "Runtime did not stop cleanly.");
 }
 
-async function smokeKernels(baseUrl, headers, sample) {
-  const notebook = "smoke/kernel-smoke.ipynb";
-  await command(baseUrl, "write_workspace_file", {
-    path: notebook,
-    content: `${JSON.stringify({ cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 })}\n`,
-  }, headers);
-
-  const execution = await command(baseUrl, "kernel_execute", {
-    language: "python",
-    notebook,
-    root: "workspace",
-    code: [
-      "from pathlib import Path",
-      "import numpy as np",
-      "import pandas as pd",
-      "from scipy import stats",
-      "source = Path('input.txt').read_text(encoding='utf-8')",
-      "Path('kernel-output.txt').write_text('kernel:' + source, encoding='utf-8')",
-      "print(source, end='')",
-      "print('[kernel] science=' + str(float(stats.gmean(np.array([1.0, 4.0])))))",
-      "print('[kernel] pandas=' + pd.Series([1, 2, 3]).sum().__str__())",
-      "print('[kernel] cwd=' + Path.cwd().name)",
-    ].join("\n"),
-  }, headers);
-  const result = execution.json?.data;
-  assert(result?.ok === true, `Hosted kernel failed: ${String(result?.stderr ?? "unknown error").slice(0, 512)}`);
-  assert(result.stdout?.includes(sample.trim()), "Hosted kernel could not read the project-scoped input file.");
-  assert(result.stdout?.includes("[kernel] science=2.0"), "Hosted Python kernel is missing the reviewed scientific stack.");
-  assert(result.stdout?.includes("[kernel] pandas=6"), "Hosted Python kernel could not execute pandas.");
-  assert(result.stdout?.includes("[kernel] cwd=smoke"), "Hosted kernel did not use the notebook directory.");
-
-  const output = await command(baseUrl, "read_artifact", { path: "smoke/kernel-output.txt" }, headers);
-  assert(output.json?.data?.data === `kernel:${sample}`, "Hosted kernel output did not persist in the project workspace.");
-
-  const rExecution = await command(baseUrl, "kernel_execute", {
-    language: "r",
-    notebook,
-    root: "workspace",
-    code: [
-      "source <- readLines('input.txt', warn = FALSE)",
-      "writeLines(paste0('r-kernel:', source), 'r-kernel-output.txt')",
-      "cat(paste0('[r-kernel] mean=', mean(c(1, 2, 3)), '\\n'))",
-      "cat(paste0('[r-kernel] cwd=', basename(getwd()), '\\n'))",
-    ].join("\n"),
-  }, headers);
-  const rResult = rExecution.json?.data;
-  assert(rResult?.ok === true, `Hosted R kernel failed: ${String(rResult?.stderr ?? "unknown error").slice(0, 512)}`);
-  assert(rResult.stdout?.includes("[r-kernel] mean=2"), "Hosted R kernel did not execute base statistics.");
-  assert(rResult.stdout?.includes("[r-kernel] cwd=smoke"), "Hosted R kernel did not use the notebook directory.");
-  const rOutput = await command(baseUrl, "read_artifact", { path: "smoke/r-kernel-output.txt" }, headers);
-  assert(rOutput.json?.data?.data === `r-kernel:${sample.trim()}\n`, "Hosted R kernel output did not persist in the project workspace.");
-}
-
 async function main() {
   const baseUrl = normalizeBaseUrl(process.env.OPEN_SCIENCE_SMOKE_BASE_URL ?? process.argv[2]);
   const projectId = smokeProjectId();
   const sample = `deployment smoke ${new Date().toISOString()}\n`;
-  const shouldSmokeKernel = boolEnv("OPEN_SCIENCE_SMOKE_KERNEL");
 
   log(`target ${baseUrl}`);
   const health = await jsonFetch(`${baseUrl}/api/health`);
@@ -306,14 +252,6 @@ async function main() {
     assert(typeof ready.json.data.checks.release.releaseId === "string", "Production release id is missing.");
   }
   assert(ready.json?.data?.checks?.backup?.ok === true, "/api/ready backup check did not report ok.");
-  if (shouldSmokeKernel) {
-    const kernel = ready.json?.data?.checks?.kernel;
-    assert(kernel?.ok === true && kernel?.enabled === true, "/api/ready did not report an enabled kernel.");
-    if (boolEnv("OPEN_SCIENCE_SMOKE_REQUIRE_DOCKER_KERNEL")) {
-      assert(kernel.sandboxMode === "docker", "Deployment smoke requires the Docker kernel sandbox.");
-    }
-    log(`kernel readiness ok (${kernel.sandboxMode})`);
-  }
   log("readiness ok");
   log("example bundle readiness ok");
   log("security readiness ok");
@@ -402,11 +340,6 @@ async function main() {
     "Download endpoint did not return an attachment filename.",
   );
   log("file upload/read/preview/download ok");
-
-  if (shouldSmokeKernel) {
-    await smokeKernels(baseUrl, scoped, sample);
-    log("project-scoped Python/R scientific kernels read/write ok");
-  }
 
   if (boolEnv("OPEN_SCIENCE_SMOKE_RUNTIME")) {
     await smokeRuntime(baseUrl, scoped);

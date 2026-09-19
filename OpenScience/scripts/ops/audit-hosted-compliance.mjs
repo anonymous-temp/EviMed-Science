@@ -463,7 +463,6 @@ async function checkRuntimeContainerTopology() {
   const envExample = await read("deploy/web/.env.example");
   const hostPreflight = await read("scripts/ops/host-preflight.mjs");
   const mounts = await read("apps/server/src/dockerMounts.mjs");
-  const commands = await read("apps/server/src/commands.mjs");
   const manager = await read("apps/server/src/runtimeManager.mjs");
   const controller = await read("apps/server/src/runtimeControllerServer.mjs");
   const launcher = await read("deploy/runtime-dsh/open-science-dsh-serve.sh");
@@ -521,31 +520,12 @@ async function checkRuntimeContainerTopology() {
   }
 
   if (
-    // Same shared anchor as the runtime caps above; see the note there.
-    /<<: \*runtime-caps/.test(controllerService) &&
-    /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2\}/.test(compose) &&
-    /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1\}/.test(compose) &&
-    /kernelCapacityLimits\(config\)/.test(controller) &&
-    /dockerKernelInventory\(config\)/.test(controller) &&
-    /cleanupStaleKernelContainers\(config\)/.test(controller) &&
-    /"--interactive"/.test(commands) &&
-    /language === "python" \? "python" : "Rscript",\s*\n\s*"-"/.test(commands) &&
-    /reserveKernelCapacity\(project, plan\.containerName\)/.test(controller) &&
-    /kernel_orphan_cleanup_failed/.test(controller) &&
-    /health\.maxConcurrentKernels/.test(manager)
-  ) {
-    pass("runtime_controller_kernel_admission", "The Docker control plane independently limits kernel concurrency, removes labelled orphan kernels before becoming available, and keeps stdin attached for bounded Python execution.");
-  } else {
-    fail("runtime_controller_kernel_admission_missing", "Kernel concurrency and orphan cleanup must be enforced inside the Docker control plane.");
-  }
-
-  if (
     /OPEN_SCIENCE_RUNTIME_DATA_VOLUME:\s+\$\{OPEN_SCIENCE_DATA_VOLUME:-open-science-data\}/.test(compose) &&
     /name:\s+\$\{OPEN_SCIENCE_DATA_VOLUME:-open-science-data\}/.test(compose) &&
     /volume-subpath=/.test(mounts) &&
     /dockerWorkspaceMount\(config, project\)/.test(manager)
   ) {
-    pass("runtime_project_volume_subpaths", "Runtime and kernel mounts use scoped subpaths of the API data volume.");
+    pass("runtime_project_volume_subpaths", "Runtime mounts use scoped subpaths of the API data volume.");
   } else {
     fail("runtime_project_volume_subpaths_missing", "Hosted sibling containers must share scoped named-volume subpaths, not container-local bind paths.");
   }
@@ -1176,43 +1156,6 @@ async function checkWorkspaceIoBoundary() {
   }
 }
 
-async function checkHostedNotebookKernel() {
-  const commands = await read("apps/server/src/commands.mjs");
-  const editor = await read("apps/web/src/components/notebook/NotebookEditor.tsx");
-  const notebooksPage = await read("apps/web/src/app/routes/NotebooksPage.tsx");
-  const serverTests = await read("apps/server/test/server.test.mjs");
-  const editorTests = await read("apps/web/src/components/notebook/NotebookEditor.web.test.tsx");
-  const pageTests = await read("apps/web/src/app/routes/NotebooksPage.web.test.tsx");
-  const deploymentSmoke = await read("scripts/ops/deployment-smoke.mjs");
-  const workflow = await read("../.github/workflows/web.yml");
-
-  if (
-    /resolveKernelTarget/.test(commands) &&
-    /activeKernelExecutions/.test(commands) &&
-    /AbortSignal\.any/.test(commands) &&
-    /Kernel execution was reset/.test(commands) &&
-    /const kernelActionsEnabled = hasWebApi/.test(editor) &&
-    !/hostedWeb && lang !== "python"/.test(editor) &&
-    !/!hostedWeb \|\| cell\.language === "python"/.test(editor) &&
-    /kernelReset\(runningLanguageRef\.current, path, root\)/.test(editor) &&
-    !/hostedWeb && language !== "python"/.test(notebooksPage) &&
-    /kernel_execute mounts the workspace selected by a base-scoped notebook/.test(serverTests) &&
-    /kernel_reset aborts an in-flight execution/.test(serverTests) &&
-    /runs Python cells through the hosted command backend/.test(editorTests) &&
-    /runs R cells through the hosted command backend/.test(editorTests) &&
-    /offers Python and R hosted notebook creation/.test(pageTests) &&
-    /async function smokeKernel/.test(deploymentSmoke) &&
-    /project-scoped Python\/R scientific kernels read\/write ok/.test(deploymentSmoke) &&
-    /OPEN_SCIENCE_ENABLE_KERNEL=true/.test(workflow) &&
-    /OPEN_SCIENCE_SMOKE_REQUIRE_DOCKER_KERNEL:\s+"true"/.test(workflow) &&
-    /docker ps -aq --filter label=open-science\.web\.kernel=true/.test(workflow)
-  ) {
-    pass("hosted_notebook_kernel", "Hosted Web exposes Python and R notebook creation with scoped, cancellable execution through the server kernel sandbox; Linux deployment smoke requires scientific imports, project-volume read/write, and container cleanup without enabling Jupyter provisioning.");
-  } else {
-    fail("hosted_notebook_kernel_missing", "Hosted Web notebook execution must use the scoped server kernel, expose cancellation, and keep unsupported hosted kernels hidden.");
-  }
-}
-
 async function checkHostedDesktopBoundary() {
   // This used to check that the hosted build took the "not desktop" branch at
   // a dozen call sites. There is no other branch now — the packaged shell, its
@@ -1253,6 +1196,7 @@ async function checkHostedDesktopBoundary() {
 async function checkTaskResourceControl() {
   const taskManager = await read("apps/server/src/taskManager.mjs");
   const serverTests = await read("apps/server/test/server.test.mjs");
+  const taskManagerTests = await read("apps/server/test/taskManager.test.mjs");
   const controllerTests = await read("apps/server/test/runtimeController.test.mjs");
   const compose = await read("deploy/web/docker-compose.yml");
   const taskUi = await read("apps/web/src/components/settings/WebTasksCard.tsx");
@@ -1266,16 +1210,18 @@ async function checkTaskResourceControl() {
     /server_restarted/.test(taskManager) &&
     /concurrent task state writes retain terminal status across restart/.test(serverTests) &&
     /queued async tasks can be canceled before execution/.test(serverTests) &&
-    /running async kernel tasks can be canceled/.test(serverTests) &&
-    /async kernel tasks time out and abort the child process/.test(serverTests) &&
+    // Running-task cancellation and timeouts were proved through the notebook's
+    // kernel_execute until it was deleted (2026-09-19); the queue's own tests
+    // hold them now, with a command that waits until it is told to stop.
+    /a running task is canceled, and its command is told to stop/.test(taskManagerTests) &&
+    /a task that outlives the command timeout times out, and its command is told to stop/.test(taskManagerTests) &&
     /independently enforces global and per-user runtime limits/.test(controllerTests) &&
-    /independently enforces global and per-user kernel limits/.test(controllerTests) &&
     /OPEN_SCIENCE_RUNTIME_CPU_LIMIT/.test(compose) &&
     /OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT/.test(compose) &&
     /OPEN_SCIENCE_RUNTIME_PIDS_LIMIT/.test(compose) &&
     /cancelWebTask/.test(taskUi)
   ) {
-    pass("task_resource_control", "Hosted tasks persist terminal state in project-serialized order, recover interrupted work explicitly, expose cancellation, and share tested queue, timeout, container, runtime, and kernel resource limits.");
+    pass("task_resource_control", "Hosted tasks persist terminal state in project-serialized order, recover interrupted work explicitly, expose cancellation, and share tested queue, timeout, container, and runtime resource limits.");
   } else {
     fail("task_resource_control_missing", "Hosted long-running work must have durable ordered state, explicit restart recovery, cancellation/timeouts, queue admission, and independently enforced runtime resource controls.");
   }
@@ -1891,7 +1837,6 @@ async function main() {
   await checkMonitoringBaseline();
   await checkObjectBackup();
   await checkWorkspaceIoBoundary();
-  await checkHostedNotebookKernel();
   await checkHostedDesktopBoundary();
   await checkTaskResourceControl();
   await checkHostedMetadataBoundary();

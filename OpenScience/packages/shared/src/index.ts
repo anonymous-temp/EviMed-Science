@@ -162,7 +162,6 @@ export type ArtifactKind =
   | "script"
   | "report"
   | "table"
-  | "notebook"
   | "model"
   | "data";
 
@@ -203,23 +202,12 @@ export interface StatusLineBlock {
 
 export type Inspector =
   | ArtifactInspector
-  | NotebookInspector
   | PdfInspector
-  | FilePreviewInspector
-  | NotebookFileInspector;
+  | FilePreviewInspector;
 
 /** Folder tree a root-relative file path resolves in: the active session
  *  workspace (default) or the base folder all session workspaces live under. */
 export type FileRoot = "workspace" | "base";
-
-/** A real .ipynb in the workspace, opened in the runnable notebook editor. */
-export interface NotebookFileInspector {
-  variant: "notebook-file";
-  /** Root-relative path of the notebook. */
-  path: string;
-  /** Folder tree `path` resolves in (default "workspace"). */
-  root?: FileRoot;
-}
 
 /** A workspace file surfaced for preview — the agent wrote it OR code produced it.
  *  Rendered by type: HTML → live iframe, PDF → pdf.js, image → <img>, text → code. */
@@ -257,7 +245,6 @@ export type ArtifactType =
   | "report"
   | "table"
   | "script"
-  | "notebook"
   | "pdf";
 
 export interface ArtifactInspector {
@@ -277,24 +264,6 @@ export interface ArtifactInspector {
   executionLog?: string;
   environment?: string;
   messages?: string[];
-}
-
-export interface NotebookCell {
-  index: number;
-  language: string;
-  code: string;
-  output?: string;
-  /** Base64 PNG from a display_data/execute_result output (e.g. a matplotlib figure). */
-  image?: string;
-}
-
-export interface NotebookInspector {
-  variant: "notebook";
-  name: string;
-  live: boolean;
-  kernelLabel: string;
-  kernelNote: string;
-  cells: NotebookCell[];
 }
 
 export interface PdfInspector {

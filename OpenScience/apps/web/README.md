@@ -13,10 +13,10 @@ client (`packages/sdk`) were deleted on 2026-09-04, so this is the whole client.
   `routes/` (one file per page), `providers/`.
 - `src/components/` — `sidebar/` (nav, project switcher, recent tasks),
   `layout/` (page titles), `memory/` (the memory switches), `sources/` (the
-  knowledge base's understanding panel), `notebook/`, `inspector/` (scientific
-  file previews), `settings/` (the cards the settings and account pages
-  compose), `cards/`, `command-palette/`, `code-viewer/`, `markdown-viewer/`,
-  `ui/` (the primitives).
+  knowledge base's understanding panel), `inspector/` (scientific file
+  previews), `settings/` (the cards the settings and account pages compose),
+  `cards/`, `command-palette/`, `code-viewer/`, `markdown-viewer/`, `ui/` (the
+  primitives).
 - `src/lib/` — `apiClient.ts` (the only place an HTTP call to the control plane
   is made), `projects.ts` (which project the shell is looking at), `backend.ts`
   (the command endpoint), `store.ts` (UI preferences), plus the scientific

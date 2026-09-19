@@ -8,7 +8,6 @@ import type {
   ArtifactKind,
   ArtifactVersion,
   FilePreviewInspector,
-  NotebookFileInspector,
 } from "@ai4s/shared";
 
 const EXT_KIND: Record<string, ArtifactKind> = {
@@ -16,7 +15,6 @@ const EXT_KIND: Record<string, ArtifactKind> = {
   fits: "figure", fit: "figure", fts: "figure",
   mp4: "figure", webm: "figure", mov: "figure", m4v: "figure", ogv: "figure",
   py: "script", r: "script", jl: "script", sh: "script",
-  ipynb: "notebook",
   pdf: "report", tex: "report", md: "report", docx: "report", pptx: "report",
   csv: "table", tsv: "table", parquet: "table", xlsx: "table",
   mol: "data", sdf: "data", smi: "data", smiles: "data",
@@ -149,15 +147,13 @@ export function previewKindForName(filename: string): PreviewKind {
 export function fileInspectorFromBlock(
   a: ArtifactBlock,
   { hostedRuntime = false }: { hostedRuntime?: boolean } = {},
-): FilePreviewInspector | NotebookFileInspector {
+): FilePreviewInspector {
   // The runtime reports paths from inside its own container. The
   // hosted command boundary deliberately accepts only workspace-relative
   // paths, so remove only that known mount prefix before preview/download.
   const path = hostedRuntime && a.path.startsWith("/workspace/")
     ? a.path.slice("/workspace/".length)
     : a.path;
-  // Notebooks open in the runnable editor, not the raw-JSON preview.
-  if (extOf(a.filename) === "ipynb") return { variant: "notebook-file", path };
   return {
     variant: "file",
     path,
@@ -197,14 +193,6 @@ export function deriveArtifact(event: ToolUpdatedEvent): ArtifactBlock | null {
   if (event.status !== "success") return null;
   const tool = (event.tool ?? "").toLowerCase();
   const input = event.input ?? {};
-
-  // Jupyter MCP tools name the notebook they operate on — surface it live.
-  if (tool.includes("jupyter")) {
-    const nb = firstString(input, ["notebook_path", "path", "document_id"]);
-    if (!nb || !nb.endsWith(".ipynb")) return null;
-    const filename = nb.split(/[\\/]/).pop() || nb;
-    return { kind: "artifact", path: nb, filename, artifact: "notebook", tool: event.tool };
-  }
 
   if (!WRITE_TOOLS.has(tool)) return null;
 

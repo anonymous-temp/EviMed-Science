@@ -16,9 +16,6 @@ export interface ProvenanceInput {
   log: string;
 }
 
-/** Jupyter tools that change a notebook; reads/lists are not new versions. */
-const JUPYTER_MUTATING = /insert|overwrite|delete|execute|write|edit|append|run/;
-
 /**
  * Derive a provenance record from a completed tool call, or `null` when the
  * event is not a version-worthy write (failures, reads, non-file tools).
@@ -27,8 +24,6 @@ export function provenanceInputFromEvent(event: ToolUpdatedEvent): ProvenanceInp
   if (event.status !== "success") return null;
   const artifact = deriveArtifact(event);
   if (!artifact) return null;
-  const tool = (event.tool ?? "").toLowerCase();
-  if (tool.includes("jupyter") && !JUPYTER_MUTATING.test(tool)) return null;
   // Write-tool titles are usually just the file path — redundant next to the
   // record's own path field, so keep only titles that say something more.
   const title = event.title?.trim();

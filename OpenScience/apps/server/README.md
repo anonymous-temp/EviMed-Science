@@ -59,8 +59,8 @@ Implemented in this slice:
 - Path traversal protection for all workspace file commands.
 - Current-project `root=base` scoping, so one project cannot use the base tree
   to read or write a sibling project.
-- File upload, preview, download, directory listing, notebook listing, and
-  provenance JSONL storage, with per-project storage quota checks. Uploads
+- File upload, preview, download, directory listing, and provenance JSONL
+  storage, with per-project storage quota checks. Uploads
   accept nested project-relative paths such as `inputs/raw.csv`, but reject
   absolute paths, `..` traversal, empty segments, and oversized payloads.
   Provenance records are versioned per workspace-relative artifact path; large
@@ -73,7 +73,7 @@ Implemented in this slice:
   `OPEN_SCIENCE_MAX_ARCHIVE_ENTRIES` and `OPEN_SCIENCE_MAX_ARCHIVE_BYTES` before
   tarball streaming starts.
   Hosted file APIs also reject symbolic links inside workspaces, skip symbolic
-  links during directory listing/artifact resolution/notebook listing, and
+  links during directory listing and artifact resolution, and
   return stable JSON 404 errors for missing files or directories instead of
   surfacing filesystem exceptions. Linux workspace I/O pins each directory and
   file with `O_NOFOLLOW` descriptors, uses descriptor-relative atomic writes,
@@ -109,7 +109,7 @@ Implemented in this slice:
   match; the Controller independently discovers labelled Docker runtimes,
   reserves in-flight starts, enforces global/per-user limits, and serializes
   lifecycle operations for each project. Production readiness plus
-  runtime/kernel launch reject direct Docker control by default. Docker
+  runtime launch reject direct Docker control by default. Docker
   runtimes use deterministic per-project container names and labels. Server startup scans
   stored project runtime state and removes previously attached Docker containers
   before accepting traffic; per-project runtime launches also clean matching
@@ -123,8 +123,8 @@ Implemented in this slice:
   `OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS=true` and the separate
   `OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK=true` operator confirmation.
   The supplied Compose profile uses a stable `OPEN_SCIENCE_DATA_VOLUME`, mounts
-  only the active project's `volume-subpath` into sibling runtime/kernel
-  containers, and defaults to `OPEN_SCIENCE_RUNTIME_TRANSPORT=unix` plus
+  only the active project's `volume-subpath` into sibling runtime containers,
+  and defaults to `OPEN_SCIENCE_RUNTIME_TRANSPORT=unix` plus
   `OPEN_SCIENCE_RUNTIME_NETWORK_MODE=none`. OpenCode listens on container
   loopback and HTTP/SSE is relayed through a project-scoped Unix socket, so no
   runtime port or API-container localhost assumption is required.
@@ -154,15 +154,6 @@ Implemented in this slice:
   On restart, completed task records remain visible and unfinished records are
   marked failed with `server_restarted` instead of being re-executed. Task
   state and task-event files reject symbolic links.
-- Optional hosted `kernel_execute` returns `{ ok, stdout, stderr, artifacts }`
-  for Python. Host execution remains development-only; production requires the
-  Runtime Controller Docker sandbox, which mounts only the selected project,
-  forces network isolation, applies runtime CPU/memory/PID controls, caps
-  output and lifetime, independently limits global/per-user kernel concurrency,
-  and removes labelled orphan kernels before the Controller starts listening.
-  Hosted Python notebooks preserve the selected historical workspace and
-  notebook directory; `kernel_reset` aborts matching in-flight executions.
-  Jupyter provisioning and R kernels remain deferred.
 - Scoped observability endpoints under `/api/logs/audit`, `/api/logs/tasks`,
   `/api/logs/runtime`, `/api/logs/errors`, and `/api/metrics`. The metrics
   endpoint reports the current project's storage/quota, task status counts, runtime status, and
@@ -241,13 +232,12 @@ Implemented in this slice:
   release manifest, and the selected OpenCode
   runtime sandbox configuration, and rejects mock runtime mode in production unless
   `OPEN_SCIENCE_ALLOW_MOCK_RUNTIME=true` is set for an explicit smoke test.
-  Docker runtime and kernel checks also verify the Runtime Controller protocol,
+  The Docker runtime check also verifies the Runtime Controller protocol,
   release identity, Docker Engine version, and runtime image metadata through
   the controller rather than granting the API direct daemon access.
   It also rejects disabled production security headers, wildcard/invalid/
   non-HTTPS/local production CORS origins, dangerous hosted shell escape hatches,
-  persistent approvals, full approval mode, and host Python kernel execution for
-  production deployments. In production Docker runtime mode it requires the
+  persistent approvals, and full approval mode for production deployments. In production Docker runtime mode it requires the
   configured runtime image to be locally inspectable unless
   `OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=false` is set for a lazy-pull
   deployment. A local production image must have the exact image ID and
@@ -320,7 +310,5 @@ pnpm --filter @ai4s/server test:e2e
 OPEN_SCIENCE_SMOKE_BASE_URL=https://science.example.com \
 OPEN_SCIENCE_SMOKE_USERNAME=admin \
 OPEN_SCIENCE_SMOKE_PASSWORD=... \
-OPEN_SCIENCE_SMOKE_KERNEL=true \
-OPEN_SCIENCE_SMOKE_REQUIRE_DOCKER_KERNEL=true \
 pnpm smoke:deployment
 ```

@@ -87,10 +87,8 @@ services:
       # `runtime_controller_limit_mismatch`. They cannot be merged from the
       # `x-runtime-caps` anchor in `docker-compose.yml`: compose parses each
       # file on its own, so an anchor does not cross one. `deploy.test.mjs`
-      # asserts these four equal the web service's, which is the guarantee an
+      # asserts these two equal the web service's, which is the guarantee an
       # anchor would have given and one an anchor could not give across files.
-      OPEN_SCIENCE_MAX_CONCURRENT_KERNELS: ${OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2}
-      OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER: ${OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1}
       OPEN_SCIENCE_MAX_RUNNING_RUNTIMES: ${OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8}
       OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER: ${OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4}
     volumes:

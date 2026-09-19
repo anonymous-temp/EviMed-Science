@@ -15,9 +15,6 @@ process.env.OPEN_SCIENCE_BOOTSTRAP_USER ??= "evimed";
 // This wrapper is intentionally local-only. Production deployments keep the
 // container runtime boundary and never inherit this host-runtime opt-in.
 process.env.OPEN_SCIENCE_ALLOW_UNSANDBOXED_RUNTIME ??= "true";
-process.env.OPEN_SCIENCE_ENABLE_KERNEL ??= "true";
-process.env.OPEN_SCIENCE_KERNEL_SANDBOX_MODE ??= "host";
-process.env.OPEN_SCIENCE_ALLOW_UNSANDBOXED_KERNEL ??= "true";
 if (existsSync(staticDir)) process.env.OPEN_SCIENCE_STATIC_DIR ??= staticDir;
 
 const deepseekKey = path.join(secretsDir, "deepseek.api-key");

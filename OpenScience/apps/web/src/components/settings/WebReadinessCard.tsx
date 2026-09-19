@@ -22,7 +22,6 @@ const CHECK_LABELS: Record<string, string> = {
   resources: "资源限额",
   backup: "备份",
   runtime: "运行时沙箱",
-  kernel: "内核策略",
   saasProfile: "SaaS 配置档",
   // Six checks the deployment grew after this table was written, each of which
   // therefore fell through to `?? key` and printed its own camelCase name in
@@ -184,7 +183,6 @@ function readinessDetail(key: string, check: WebReadinessCheck): string {
       .filter(Boolean)
       .join(" · ");
   }
-  if (key === "kernel") return String(check.mode ?? "disabled");
   return "可用";
 }
 

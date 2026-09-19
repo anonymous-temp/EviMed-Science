@@ -2842,10 +2842,7 @@ export class RuntimeManager {
     }
     if (
       this.config.production &&
-      (
-        this.config.runtimeSandboxMode === "docker" ||
-        (this.config.enableKernel && this.config.kernelSandboxMode === "docker")
-      ) &&
+      this.config.runtimeSandboxMode === "docker" &&
       mode !== "socket" &&
       !this.config.allowDirectDockerControl
     ) {
@@ -2881,13 +2878,9 @@ export class RuntimeManager {
     }
     const expectedGlobal = positiveLimit(this.config.maxRunningRuntimes);
     const expectedPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
-    const expectedKernels = positiveLimit(this.config.maxConcurrentKernels);
-    const expectedKernelsPerUser = positiveLimit(this.config.maxConcurrentKernelsPerUser);
     if (
       health.maxRunningRuntimes !== expectedGlobal ||
-      health.maxRunningRuntimesPerUser !== expectedPerUser ||
-      health.maxConcurrentKernels !== expectedKernels ||
-      health.maxConcurrentKernelsPerUser !== expectedKernelsPerUser
+      health.maxRunningRuntimesPerUser !== expectedPerUser
     ) {
       throw new HttpError(
         503,
@@ -2898,12 +2891,12 @@ export class RuntimeManager {
     return health;
   }
 
-  async assertDockerSupport(code = "runtime_volume_subpath_unsupported") {
+  async assertDockerSupport() {
     this.assertDockerControlBoundary();
     if (!this.runtimeController && !this.config.runtimeDataVolume) return null;
     const info = await this.dockerInfo();
     if (this.config.runtimeDataVolume && (!Number.isSafeInteger(info.major) || info.major < 26)) {
-      throw new HttpError(503, code, "Docker Engine 26 or newer is required for project volume subpath mounts.");
+      throw new HttpError(503, "runtime_volume_subpath_unsupported", "Docker Engine 26 or newer is required for project volume subpath mounts.");
     }
     return info;
   }
@@ -2932,14 +2925,6 @@ export class RuntimeManager {
   async inspectRuntimeImage() {
     if (!this.runtimeController) return null;
     return this.runtimeController.inspectRuntimeImage();
-  }
-
-  async runControlledKernel(project, code, signal, language = "python") {
-    if (!this.runtimeController) {
-      throw new HttpError(503, "runtime_controller_required", "Docker kernel execution requires the runtime controller.");
-    }
-    await this.assertDockerSupport("kernel_volume_subpath_unsupported");
-    return this.runtimeController.runKernel(project, code, signal, language);
   }
 
   async cleanupDocker(plan, project) {
