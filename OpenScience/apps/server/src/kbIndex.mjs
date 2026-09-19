@@ -1,10 +1,10 @@
 import path from "node:path";
-import { sourcePageForOffset, workspaceLayout } from "@evimed/domain";
+import { workspaceLayout } from "@evimed/domain";
 import { chunkDocument, embeddingText, estimateTokens, trigramTerms, tsqueryLiteral, tsvectorLiteral } from "./kbChunker.mjs";
 import { migrateKnowledgeBaseIndex } from "./kbPersistence.mjs";
 import { searchTokens } from "./memoryRecallPolicy.mjs";
 import { HttpError } from "./security.mjs";
-import { extractorRevision } from "./sourceService.mjs";
+import { sourceParserRevision } from "./sourceService.mjs";
 
 /**
  * Knowledge-base search: the index a run's `kb_search` reads, and the worker
@@ -52,15 +52,20 @@ const SEARCHABLE_STATUSES = Object.freeze(["complete", "needs_attention"]);
 /** What the reranker is asked to rank for (English, per qwen3-rerank's docs). */
 export const KB_RERANK_INSTRUCT = "Given a question from a clinical pharmacist or medical researcher, rank passages from their own documents by how directly each answers it; exact drug names, doses and abbreviations matter";
 
-/** The SQL twin of `extractorRevision`: the key a source's text is indexed
+/** The SQL twin of `sourceParserRevision`: the key a source's text is indexed
  *  under, read from its stored analysis. */
 const REVISION_SQL = `coalesce(d.payload->'analysis'->>'parserRevision',
   (d.payload->'analysis'->'extractor'->>'name') || '@' || (d.payload->'analysis'->'extractor'->>'version'))`;
 
-/** @param {any} analysis */
-function revisionOf(analysis) {
-  return typeof analysis?.parserRevision === "string" && analysis.parserRevision ? analysis.parserRevision : extractorRevision(analysis?.extractor);
-}
+/** An index document some live source can re-derive. */
+const DERIVABLE_SQL = `EXISTS (SELECT 1 FROM evimed_product.documents d WHERE d.user_id=k.user_id AND d.kind='source' AND d.deleted_at IS NULL
+  AND d.payload->'fingerprint'->>'sha256'=k.sha256 AND d.payload->'analysis'->>'textSha256'=k.text_sha256
+  AND ${REVISION_SQL}=k.parser_revision)`;
+
+/** An index document the personal library's copy of a document is searched
+ *  through; $2–$5 are the held keys' user, sha256, revision and text digest. */
+const HELD_SQL = `EXISTS (SELECT 1 FROM unnest($2::text[], $3::text[], $4::text[], $5::text[]) AS h(user_id, sha256, parser_revision, text_sha256)
+  WHERE h.user_id=k.user_id AND h.sha256=k.sha256 AND h.parser_revision=k.parser_revision AND h.text_sha256=k.text_sha256)`;
 
 /** One index document's identity, the same whichever side names it.
  * @param {{ sha256: string, parser_revision?: string, parserRevision?: string, text_sha256?: string, textSha256?: string }} row */
@@ -118,7 +123,14 @@ export class KnowledgeBaseIndex {
     this.counters = { indexedDocuments: 0, indexFailures: 0, embeddedChunks: 0, searches: 0, searchFailures: 0, smallLibraryAnswers: 0 };
   }
 
-  /** The personal library joins the search scope once it exists (plan §3.2 #4). @param {any} library */
+  /**
+   * The personal library joins the search scope (plan §3.2 #4). It answers
+   * three questions, and the index asks it nothing else: which of its copies a
+   * run may search (`searchScope`), which index documents those copies are
+   * searched through (`heldIndexKeys` — kept when no project names them any
+   * more), and a convergence pass over its copies (`syncCopies`).
+   * @param {{ searchScope: (userId: string) => Promise<any[]>, heldIndexKeys: (userId: string | null) => Promise<{ userId: string, sha256: string, parserRevision: string, textSha256: string }[]>, syncCopies: (options: { userId?: string | null }) => Promise<any> } | null} library
+   */
   useLibrary(library) { this.library = library; return this; }
 
   async ready() {
@@ -200,7 +212,7 @@ export class KnowledgeBaseIndex {
     const seen = new Set();
     for (const row of pending.rows) {
       if (indexed + failed >= limit) break;
-      const key = keyOf({ sha256: row.payload.fingerprint?.sha256, parserRevision: revisionOf(row.payload.analysis), textSha256: row.payload.analysis?.textSha256 });
+      const key = keyOf({ sha256: row.payload.fingerprint?.sha256, parserRevision: sourceParserRevision(row.payload.analysis), textSha256: row.payload.analysis?.textSha256 });
       const backoffKey = `${row.user_id}\u0000${key}`;
       if (seen.has(backoffKey) || (this.backoff.get(backoffKey) ?? 0) > Date.now()) continue;
       seen.add(backoffKey);
@@ -237,7 +249,7 @@ export class KnowledgeBaseIndex {
       const content = text.slice(chunk.start, chunk.end);
       return { ...chunk, content, lexemes: tsvectorLiteral(`${chunk.prefix}\n${content}`) };
     });
-    const key = { sha256: row.payload.fingerprint.sha256, revision: revisionOf(row.payload.analysis), textSha256: row.payload.analysis.textSha256 };
+    const key = { sha256: row.payload.fingerprint.sha256, revision: sourceParserRevision(row.payload.analysis), textSha256: row.payload.analysis.textSha256 };
     await this.database.transaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`kb:${row.user_id}:${key.sha256}:${key.revision}:${key.textSha256}`]);
       await client.query("DELETE FROM evimed_kb.documents WHERE user_id=$1 AND sha256=$2 AND parser_revision=$3 AND text_sha256=$4",
@@ -288,21 +300,35 @@ export class KnowledgeBaseIndex {
     return rows.length;
   }
 
-  /** Drop index documents no live source names any more. @param {string | null} userId */
+  /** Drop index documents no live source names any more, except those the
+   *  personal library still searches its copy of a document through.
+   *  @param {string | null} userId */
   async #collect(userId) {
+    const held = await this.#heldKeys(userId);
     const result = await this.database.query(`DELETE FROM evimed_kb.documents k WHERE ($1::text IS NULL OR k.user_id=$1)
-      AND NOT EXISTS (SELECT 1 FROM evimed_product.documents d WHERE d.user_id=k.user_id AND d.kind='source' AND d.deleted_at IS NULL
-        AND d.payload->'fingerprint'->>'sha256'=k.sha256 AND d.payload->'analysis'->>'textSha256'=k.text_sha256
-        AND ${REVISION_SQL}=k.parser_revision)`, [userId]);
+      AND NOT ${DERIVABLE_SQL} AND NOT ${HELD_SQL}`, [userId, ...held]);
     return result.rowCount ?? 0;
   }
 
+  /** The library's held index keys, as the four parallel arrays `HELD_SQL`
+   *  reads. @param {string | null} userId */
+  async #heldKeys(userId) {
+    const keys = this.library ? await this.library.heldIndexKeys(userId) : [];
+    return [keys.map((key) => key.userId), keys.map((key) => key.sha256), keys.map((key) => key.parserRevision), keys.map((key) => key.textSha256)];
+  }
+
   /** Empty the index for these accounts (all when none are named) and refill
-   *  it until nothing is pending. @param {{ userIds?: string[] | null }} [options] */
+   *  it until nothing is pending. What no source can re-derive — the library's
+   *  copy of a document whose every project copy is gone — is kept: emptying
+   *  it would lose that document's search for good.
+   *  @param {{ userIds?: string[] | null }} [options] */
   async rebuild({ userIds = null } = {}) {
     await this.ready();
-    if (userIds) for (const userId of userIds) await this.database.query("DELETE FROM evimed_kb.documents WHERE user_id=$1", [userId]);
-    else await this.database.query("DELETE FROM evimed_kb.documents");
+    for (const scope of userIds ?? [null]) {
+      const held = await this.#heldKeys(scope);
+      await this.database.query(`DELETE FROM evimed_kb.documents k WHERE ($1::text IS NULL OR k.user_id=$1)
+        AND (${DERIVABLE_SQL} OR NOT ${HELD_SQL})`, [scope, ...held]);
+    }
     this.backoff.clear();
     const totals = { indexed: 0, failed: 0, embedded: 0 };
     for (const scope of userIds ?? [null]) {
@@ -319,34 +345,45 @@ export class KnowledgeBaseIndex {
 
   /**
    * The documents a run may search: its project's sources and the user's
-   * library, each with the path a run reads it at.
+   * library, each with the path a run reads it at. The library answers for its
+   * own entries — a copy it holds is searchable even once no project does.
    * @param {string} userId @param {string} projectId @param {string[] | null} sourceIds
    */
   async #scope(userId, projectId, sourceIds) {
-    const library = this.library ? await this.library.sourceIds(userId) : [];
     const rows = (await this.database.query(`SELECT id, project_id, payload FROM evimed_product.documents
-      WHERE user_id=$1 AND kind='source' AND deleted_at IS NULL AND (project_id=$2 OR id=ANY($3::text[]))
-      ORDER BY created_at, id`, [userId, projectId, library])).rows;
-    const wanted = sourceIds?.length ? new Set(sourceIds) : null;
-    return rows.filter((row) => !wanted || wanted.has(row.id)).map((row) => {
+      WHERE user_id=$1 AND project_id=$2 AND kind='source' AND deleted_at IS NULL
+      ORDER BY created_at, id`, [userId, projectId])).rows;
+    const project = rows.map((row) => {
       const payload = row.payload;
-      const inProject = row.project_id === projectId;
       const artifact = typeof payload.outputs?.artifactPath === "string" ? payload.outputs.artifactPath : "";
-      const readPath = inProject
-        ? (artifact.startsWith("knowledge-base/") ? `${workspaceLayout.knowledgeDir}/${artifact.slice("knowledge-base/".length)}` : null)
-        : `library/${row.id}/index.md`;
+      const readPath = artifact.startsWith("knowledge-base/") ? `${workspaceLayout.knowledgeDir}/${artifact.slice("knowledge-base/".length)}` : null;
       const analysis = payload.analysis ?? {};
       return {
-        sourceId: row.id, projectId: row.project_id, origin: inProject ? "project" : "library",
+        sourceId: row.id, origin: "project",
         title: String(payload.metadata?.title || path.posix.basename(String(payload.paths?.[0] ?? row.id))),
         status: payload.status, path: readPath,
         searchable: SEARCHABLE_STATUSES.includes(payload.status) && typeof analysis.textSha256 === "string" && Boolean(readPath),
-        sha256: payload.fingerprint?.sha256, parserRevision: revisionOf(analysis), textSha256: analysis.textSha256,
+        sha256: payload.fingerprint?.sha256, parserRevision: sourceParserRevision(analysis), textSha256: analysis.textSha256,
         tokens: Number.isSafeInteger(analysis.tokenEstimate) ? analysis.tokenEstimate : Math.round((Number(analysis.unitCount) || 0) * 8000 / 2),
         pages: analysis.pageCount ?? null,
-        record: { id: row.id, projectId: row.project_id, payload },
       };
     });
+    /** @type {any[]} */
+    const library = this.library ? (await this.library.searchScope(userId)).map((/** @type {any} */ entry) => ({ ...entry, origin: "library" })) : [];
+    const wanted = sourceIds?.length ? new Set(sourceIds) : null;
+    /** @param {{ sourceId: string }} entry */
+    const named = (entry) => !wanted || wanted.has(entry.sourceId);
+    // One document, one entry: a document the project holds is read from the
+    // project's own copy and the library's copy of it is left out — unless the
+    // library's is the only one ready to read.
+    /** @type {any[]} */
+    const scope = project.filter(named);
+    for (const entry of library.filter(named)) {
+      const at = scope.findIndex((other) => other.origin === "project" && other.sha256 === entry.sha256);
+      if (at === -1) scope.push(entry);
+      else if (!scope[at].searchable && entry.searchable) scope[at] = entry;
+    }
+    return scope;
   }
 
   /**
@@ -447,7 +484,7 @@ export class KnowledgeBaseIndex {
         note: "Nothing in the searched documents matched; this is not evidence the documents are silent on it — read them if the question needs certainty." };
     }
     const keys = ordered.map(([candidate]) => candidate.split("\u0000"));
-    const rows = (await this.database.query(`SELECT c.sha256, c.parser_revision, c.text_sha256, c.ordinal, c.start_offset, c.end_offset, c.context_prefix, c.content
+    const rows = (await this.database.query(`SELECT c.sha256, c.parser_revision, c.text_sha256, c.ordinal, c.start_offset, c.end_offset, c.page, c.context_prefix, c.content
       FROM evimed_kb.chunks c JOIN unnest($2::text[], $3::text[], $4::text[], $5::integer[]) AS k(sha256, parser_revision, text_sha256, ordinal)
         USING (sha256, parser_revision, text_sha256, ordinal) WHERE c.user_id=$1`,
     [userId, keys.map((key) => key[0]), keys.map((key) => key[1]), keys.map((key) => key[2]), keys.map((key) => Number(key[3]))])).rows;
@@ -468,8 +505,6 @@ export class KnowledgeBaseIndex {
       if (!existing || (existing.origin !== "project" && entry.origin === "project")) owners.set(keyOf(entry), entry);
     }
     const terms = searchTokens(query);
-    /** @type {Map<string, any>} */
-    const pageMaps = new Map();
     const hits = [];
     for (const index of order) {
       if (hits.length >= limit) break;
@@ -477,10 +512,10 @@ export class KnowledgeBaseIndex {
       const owner = owners.get(keyOf(row));
       if (!owner) continue;
       const window = snippetWindow(row.content, row.start_offset, terms);
-      if (owner.pages && !pageMaps.has(owner.sourceId)) {
-        pageMaps.set(owner.sourceId, await this.sources.loadPageMap(userId, owner.record).catch(() => null));
-      }
-      const page = sourcePageForOffset(pageMaps.get(owner.sourceId), window.start);
+      // A chunk never crosses a page (`chunkDocument`), so its page is the
+      // page of every offset in it — the same answer `sourcePageForOffset`
+      // gives for the snippet's start, without reading the page map again.
+      const page = Number.isSafeInteger(row.page) ? row.page : null;
       hits.push({ sourceId: owner.sourceId, title: owner.title, ...(page ? { page } : {}), start: window.start, end: window.end,
         snippet: window.snippet, score: Math.round(score * 10_000) / 10_000, path: owner.path, origin: owner.origin,
         ...(row.context_prefix ? { section: row.context_prefix } : {}) });

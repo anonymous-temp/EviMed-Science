@@ -1245,6 +1245,11 @@ export function loadConfig(overrides = {}) {
     kbEmbeddingModel: String(depsVersions.openviking?.embedding?.model ?? ""),
     kbEmbeddingDimension: Number(depsVersions.openviking?.embedding?.dimension ?? 1024),
     kbEmbeddingApiBase: String(depsVersions.openviking?.embedding?.apiBase ?? ""),
+    // How many documents one account's personal library holds. It bounds the
+    // library's directory (one Markdown copy per document, which every run of
+    // the account mounts), its listing and the search scope it adds to every
+    // project; past it the researcher is told to remove one first.
+    libraryMaxItems: Number(overrides.libraryMaxItems ?? process.env.OPEN_SCIENCE_LIBRARY_MAX_ITEMS ?? 1_000),
     autopilotEnabled: overrides.autopilotEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_ENABLED", production),
     autopilotPollMs: Number(overrides.autopilotPollMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_POLL_MS ?? 1_000),
     autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),

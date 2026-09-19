@@ -184,3 +184,17 @@ export function sourcePageForOffset(pageMap, offset) {
   }
   return low < pages.length ? pages[low].page : null
 }
+
+/**
+ * What a document in the personal library is to its reader, whatever state
+ * the project source behind it is in.
+ *
+ * `ready` — its read-only copy is current and in the search scope.
+ * `processing` — the source is still being parsed, or its copy is being written.
+ * `failed` — the source could not be parsed (or its analysis was canceled).
+ * `detached` — no project holds the document any more (its source, or its
+ * project, was deleted, or the file went missing): the library keeps the last
+ * copy it made, readable and searchable, but nothing re-parses it and there is
+ * no understanding left to publish from it.
+ */
+export const LIBRARY_ITEM_STATUSES = Object.freeze(['ready', 'processing', 'failed', 'detached'])

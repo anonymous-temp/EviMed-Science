@@ -640,6 +640,22 @@ const sourceIntakeErrorCodes = Object.freeze([
 ])
 
 /**
+ * Codes the personal library answers with (`libraryService.mjs`): shown where
+ * a document is added to the library, removed from it, or published from it
+ * into the capsule. Private for the same reason as the intake list.
+ */
+const libraryErrorCodes = Object.freeze([
+  'library_unavailable',
+  'library_payload_invalid',
+  'library_source_invalid',
+  'library_item_not_found',
+  'library_full',
+  'library_source_removed',
+  'library_understanding_missing',
+  'library_capsule_unavailable',
+])
+
+/**
  * Every code this build knows, so a mapping test can prove a new code was
  * classified rather than silently inheriting a default.
  *
@@ -659,6 +675,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...recoverableEvidenceSourceErrorCodes,
   ...terminalEvidenceSourceErrorCodes,
   ...sourceIntakeErrorCodes,
+  ...libraryErrorCodes,
 ])])
 
 /**
@@ -898,6 +915,14 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   source_parser_response_invalid: '文档解析服务返回的结果无法使用，稍后再重新分析。',
   source_parser_response_too_large: '这份文件解析出的正文超过了可保存的上限，拆分后再上传即可。',
   source_changed: '文件在登记之后被改动过；刷新知识库后再分析。',
+  library_unavailable: '个人资料库暂时不可用，稍后再试。',
+  library_payload_invalid: '资料库请求的内容不完整，刷新页面后再试。',
+  library_source_invalid: '没有找到这份资料，刷新知识库后再试。',
+  library_item_not_found: '这份资料不在个人资料库里。',
+  library_full: '个人资料库已满。先移出不再需要的资料，再加入新的。',
+  library_source_removed: '这份资料在各个项目里都已删除，它的资料理解结果也随之删除，没有可以发布到记忆胶囊的内容；资料库里的正文副本仍然可以阅读和检索。',
+  library_understanding_missing: '这份资料还没有资料理解结果。分析深度为「结构化」或「深度」的资料理解完成后，才能发布到记忆胶囊。',
+  library_capsule_unavailable: '账户的主要胶囊是别人分享来的，资料只会写进你自己的胶囊。先把自己的胶囊设为主要胶囊，再发布。',
 
   // ——— Tool-boundary codes that have no family and would otherwise be bare ———
   tool_disabled: '这个部署没有开放这项工具，运行会绕开它继续。',
@@ -1114,6 +1139,11 @@ export function errorCodeOutcome(code) {
   // A parse that failed or a format that was refused happened at the source
   // boundary; nothing about it is a verdict on anyone's work.
   if (sourceIntakeErrorCodes.includes(text)) return 'upstream'
+  // The library's refusals are about the library, never about a run: a full
+  // library is a ceiling, and everything else names a document that is not
+  // there to act on.
+  if (text === 'library_full') return 'capped'
+  if (libraryErrorCodes.includes(text)) return 'upstream'
   if (CREDIT_ERROR_CODES.includes(text) || /^credits_/.test(text) || /^usage_/.test(text)) return 'capped'
   if (/^verification_/.test(text)) return 'stopped'
   if (/^(specialist|meta)_/.test(text)) return 'gated'

@@ -137,9 +137,24 @@ function splitLong(text, start, end) {
  */
 export function chunkDocument({ text, pageMap = null, title }) {
   const value = String(text ?? "");
-  const segments = Array.isArray(pageMap) && pageMap.length
-    ? pageMap.filter((entry) => entry.end > entry.start).map((entry) => ({ start: entry.start, end: entry.end, page: entry.page }))
-    : [{ start: 0, end: value.length, page: null }];
+  // Every character lands in exactly one segment, so nothing a page map fails
+  // to claim drops out of the index. A page's segment begins where the one
+  // before it ended: the whitespace a parser leaves between pages belongs to
+  // the page that follows — the same answer `sourcePageForOffset` gives, so a
+  // chunk's page is the page of every offset inside it — and text past the
+  // last page is a segment of its own, with no page.
+  /** @type {{ start: number, end: number, page: number | null }[]} */
+  const segments = [];
+  if (Array.isArray(pageMap) && pageMap.length) {
+    let cursor = 0;
+    for (const entry of pageMap) {
+      const end = Math.min(entry.end, value.length);
+      if (!(entry.end > entry.start) || end <= cursor) continue;
+      segments.push({ start: cursor, end, page: entry.page });
+      cursor = end;
+    }
+    if (cursor < value.length) segments.push({ start: cursor, end: value.length, page: null });
+  } else segments.push({ start: 0, end: value.length, page: null });
   /** @type {string[]} */
   const headings = [];
   /** @type {{ start: number, end: number, page: number | null, headingPath: string }[]} */
