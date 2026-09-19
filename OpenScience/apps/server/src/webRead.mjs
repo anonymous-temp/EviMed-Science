@@ -284,7 +284,11 @@ export function createWebReader(config, {
     const rendered = await /** @type {WebRenderer} */ (renderer).render({ url: finalUrl, signal });
     const renderedUrl = validatedWebUrl(rendered.finalUrl || finalUrl.href);
     await assertPublicWebHost(renderedUrl.hostname, resolveImpl);
-    const html = String(rendered.html ?? "");
+    // Held to the fetched page's cap: after a browser, the page's own script
+    // decided how large its document grew.
+    const drawn = Buffer.from(String(rendered.html ?? ""), "utf8");
+    const bytes = drawn.length > HTML_MAX_BYTES ? drawn.subarray(0, HTML_MAX_BYTES) : drawn;
+    const html = bytes.toString("utf8");
     const page = await extract(html, renderedUrl, signal);
     const status = Number(rendered.status) || 200;
     const still = renderReason({ status, html, visibleChars: page.visibleChars });
@@ -296,9 +300,9 @@ export function createWebReader(config, {
     }
     outcomes.rendered += 1;
     return {
-      receipt: receipt(requested, renderedUrl, Buffer.from(html, "utf8"), {
+      receipt: receipt(requested, renderedUrl, bytes, {
         title: page.title, rendered: true, contentType: "html", mediaType: "text/html", status,
-        extractor: HTML_EXTRACTOR, truncated: page.truncated,
+        extractor: HTML_EXTRACTOR, truncated: page.truncated || bytes.length < drawn.length,
       }),
       text: page.text,
       links: page.links,
