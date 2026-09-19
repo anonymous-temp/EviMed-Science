@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getSourceUnderstanding: vi.fn(), listSourceUnderstandingHistory: vi.fn(),
   getSourceFamily: vi.fn(), listSourceFolders: vi.fn(), registerSourceFolder: vi.fn(), syncSourceFolder: vi.fn(),
   setSourceFolderStatus: vi.fn(), listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(),
+  listLibrary: vi.fn(), addToLibrary: vi.fn(), removeFromLibrary: vi.fn(),
 }));
 const context = vi.hoisted(() => ({ projectId: "project-one", operator: false }));
 
@@ -58,6 +59,9 @@ describe("SourcesPage", () => {
     mocks.listDuplicateCandidates.mockResolvedValue({ items: [], scanned: 0, truncated: false });
     mocks.decideDuplicateGroup.mockResolvedValue({ id: "srcdup_one" });
     mocks.browseOpenList.mockResolvedValue({ entries: [], nextCursor: null });
+    mocks.listLibrary.mockResolvedValue({ items: [], maxItems: 1000 });
+    mocks.addToLibrary.mockResolvedValue({});
+    mocks.removeFromLibrary.mockResolvedValue({ sourceId: "source-one", removed: true });
   });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -379,6 +383,59 @@ describe("SourcesPage", () => {
     await userEvent.click(await screen.findByRole("button", { name: "连接网盘资料" }));
     expect(await screen.findByText("尚未完成第一次同步。")).toBeInTheDocument();
     expect(screen.queryByText(/上次同步失败/)).not.toBeInTheDocument();
+  });
+
+  it("shows what the parser read about the document, with the DOI said as checked as it is", async () => {
+    const withMetadata = (doiCheck: Record<string, unknown>, doi?: string) => ({ ...source, payload: { ...source.payload,
+      analysis: { pageCount: 12 },
+      metadata: { title: "房颤抗凝治疗指南", authors: ["张三", "李四", "王五", "赵六"], source: "中华心血管病杂志", publicationDate: "2024-03",
+        ...(doi ? { doi } : {}), doiCheck } } });
+    mocks.listSources.mockResolvedValueOnce({ items: [withMetadata({ status: "verified", similarity: 0.97 }, "10.1000/afib.2024")], nextCursor: null });
+    const view = render(<SourcesPage />);
+    expect(await screen.findByText("《房颤抗凝治疗指南》 · 张三、李四、王五 等 · 中华心血管病杂志，2024-03 · 共 12 页")).toBeInTheDocument();
+    expect(screen.getByText("DOI 10.1000/afib.2024（已与 Crossref 登记的题名核对）")).toBeInTheDocument();
+    view.unmount();
+
+    mocks.listSources.mockResolvedValueOnce({ items: [withMetadata({ status: "unconfirmed", reason: "crossref_unreachable" }, "10.1000/afib.2024")], nextCursor: null });
+    const unconfirmed = render(<SourcesPage />);
+    expect(await screen.findByText("DOI 10.1000/afib.2024（未经 Crossref 确认）")).toBeInTheDocument();
+    unconfirmed.unmount();
+
+    // Crossref registered the parsed DOI for another work: it is dropped, and said so.
+    mocks.listSources.mockResolvedValueOnce({ items: [withMetadata({ status: "mismatch", droppedDoi: "10.9999/other", crossrefTitle: "Another paper" })], nextCursor: null });
+    render(<SourcesPage />);
+    expect(await screen.findByText("解析出的 DOI 10.9999/other 在 Crossref 登记的是另一篇文献，已不采用")).toBeInTheDocument();
+    expect(screen.queryByText(/已与 Crossref/)).not.toBeInTheDocument();
+  });
+
+  it("puts a parsed document into the personal library and takes it out again", async () => {
+    // The library names a document by every source holding it, so an entry
+    // added from another project is still this card's document.
+    const held = { items: [{ sourceId: "source-zero", title: "研究方案", kind: "research-protocol", addedAt: "2026-09-19T00:00:00Z",
+      projects: ["project-one", "project-zero"], sourceIds: ["source-one", "source-zero"], status: "ready" }], maxItems: 1000 };
+    mocks.listLibrary.mockResolvedValueOnce({ items: [], maxItems: 1000 }).mockResolvedValue(held);
+    render(<SourcesPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "加入资料库" }));
+    await waitFor(() => expect(mocks.addToLibrary).toHaveBeenCalledWith("source-one"));
+    await userEvent.click(await screen.findByRole("button", { name: "移出资料库" }));
+    await waitFor(() => expect(mocks.removeFromLibrary).toHaveBeenCalledWith("source-one"));
+    expect(mocks.addToLibrary).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers no library action when the library cannot be read, and none for a document that did not parse", async () => {
+    mocks.listLibrary.mockRejectedValue(new Error("library_unavailable"));
+    const view = render(<SourcesPage />);
+    expect(await screen.findByText("研究方案.docx")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.listLibrary).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "加入资料库" })).not.toBeInTheDocument();
+    view.unmount();
+
+    mocks.listLibrary.mockResolvedValue({ items: [], maxItems: 1000 });
+    mocks.listSources.mockResolvedValue({ items: [{ ...source, payload: { ...source.payload, status: "failed" } }], nextCursor: null });
+    render(<SourcesPage />);
+    expect(await screen.findByText("研究方案.docx")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.listLibrary).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: "加入资料库" })).not.toBeInTheDocument();
   });
 
   it("discards a previous project's late inventory response", async () => {

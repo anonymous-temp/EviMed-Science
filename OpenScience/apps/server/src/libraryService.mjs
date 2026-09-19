@@ -157,10 +157,13 @@ function entryStatus(record, source) {
   return "failed";
 }
 
-/** The browser's view of one entry (`GET /api/library`).
- * @param {any} record @param {any} source @param {string[]} projects */
-function entryView(record, source, projects) {
+/** The browser's view of one entry (`GET /api/library`): `projects` are the
+ * projects holding the document and `sourceIds` their sources, so a project's
+ * source card can tell whether its document is in the library.
+ * @param {any} record @param {any[]} candidates the live sources holding the document */
+function entryView(record, candidates) {
   const payload = record.payload;
+  const source = resolveSource(candidates, record);
   const described = source ? describeLibrarySource(source) : payload.snapshot ?? {};
   return {
     sourceId: payload.sourceId,
@@ -170,7 +173,8 @@ function entryView(record, source, projects) {
     kind: String(described.kind ?? "other"),
     ...(described.format ? { format: described.format } : {}),
     addedAt: payload.addedAt,
-    projects,
+    projects: [...new Set(candidates.map((candidate) => String(candidate.projectId)))].sort(),
+    sourceIds: candidates.map((candidate) => String(candidate.id)).sort(),
     ...(described.pageCount ? { pageCount: described.pageCount } : {}),
     status: entryStatus(record, source),
     ...(payload.published ? { published: { at: payload.published.at, capsuleId: payload.published.capsuleId,
@@ -279,10 +283,8 @@ export class LibraryService {
   async list(userId) {
     const records = await this.#records(userId);
     const live = await this.#liveSources(userId, records.map((record) => record.payload.sha256));
-    const items = records.map((record) => {
-      const candidates = live.get(record.payload.sha256) ?? [];
-      return entryView(record, resolveSource(candidates, record), [...new Set(candidates.map((candidate) => candidate.projectId))].sort());
-    }).sort((left, right) => String(right.addedAt).localeCompare(String(left.addedAt)));
+    const items = records.map((record) => entryView(record, live.get(record.payload.sha256) ?? []))
+      .sort((left, right) => String(right.addedAt).localeCompare(String(left.addedAt)));
     return { items, maxItems: this.maxItems };
   }
 
@@ -331,7 +333,7 @@ export class LibraryService {
     // project leaves the entry reading the copy it already reads.
     const candidates = (await this.#liveSources(userId, [sha256])).get(sha256) ?? [source];
     record = await this.#refresh(userId, record, candidates);
-    return { item: entryView(record, resolveSource(candidates, record), [...new Set(candidates.map((candidate) => candidate.projectId))].sort()), created };
+    return { item: entryView(record, candidates), created };
   }
 
   /** Take a document out of the library. The record is kept as a restorable

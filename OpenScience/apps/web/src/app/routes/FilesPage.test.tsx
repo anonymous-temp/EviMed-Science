@@ -2,11 +2,13 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DirEntry } from "@/lib/artifactFile";
-import { FilesPage, SessionFilesPane } from "./FilesPage";
+import { KNOWLEDGE_BASE_FORMATS } from "@evimed/domain";
+import { FilesPage, KNOWLEDGE_BASE_FORMAT_FAMILIES, SessionFilesPane, partitionKnowledgeBaseFiles } from "./FilesPage";
 
 const listDir = vi.fn();
 const mocks = vi.hoisted(() => ({
   addFilesToWorkspace: vi.fn(),
+  pickFiles: vi.fn(),
   uploadFilesToWorkspace: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
@@ -21,6 +23,7 @@ vi.mock("@/lib/apiClient", () => ({
 }));
 vi.mock("@/lib/backend", () => ({
   addFilesToWorkspace: mocks.addFilesToWorkspace,
+  pickFiles: mocks.pickFiles,
   uploadFilesToWorkspace: mocks.uploadFilesToWorkspace,
 }));
 vi.mock("@/lib/toast", () => ({
@@ -52,6 +55,8 @@ describe("FilesPage", () => {
     });
     mocks.addFilesToWorkspace.mockReset();
     mocks.addFilesToWorkspace.mockResolvedValue(["data/uploaded.csv"]);
+    mocks.pickFiles.mockReset();
+    mocks.pickFiles.mockResolvedValue([new File(["a,b"], "uploaded.csv")]);
     mocks.uploadFilesToWorkspace.mockReset();
     mocks.uploadFilesToWorkspace.mockResolvedValue(["knowledge-base/dropped.csv"]);
     mocks.toastSuccess.mockReset();
@@ -115,9 +120,38 @@ describe("FilesPage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "上传资料" }));
 
-    await waitFor(() => expect(mocks.addFilesToWorkspace).toHaveBeenCalledWith("knowledge-base/data", "base"));
+    // The picker opens filtered to what the knowledge base accepts.
+    await waitFor(() => expect(mocks.pickFiles).toHaveBeenCalledTimes(1));
+    const accept = String(mocks.pickFiles.mock.calls[0][0]).split(",");
+    expect(accept).toEqual(expect.arrayContaining([".pdf", ".docx", ".pptx", ".xlsx", ".png", ".epub", ".html", ".md"]));
+    expect(accept).not.toContain(".mp4");
+    await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith(
+      [expect.objectContaining({ name: "uploaded.csv" })], "knowledge-base/data", "base"));
     await waitFor(() => expect(listDir).toHaveBeenCalledWith("knowledge-base/data", "base"));
     expect(mocks.toastSuccess).toHaveBeenCalledWith("已上传 1 个文件。");
+  });
+
+  it("refuses a recording or an unlisted format by name before uploading, and still uploads the rest", async () => {
+    const { container } = render(<FilesPage />);
+    await screen.findByText("figure.png");
+    const zone = container.firstElementChild!;
+    const files = [new File(["v"], "clip.mp4"), new File(["x"], "tool.exe"), new File(["%PDF"], "guideline.pdf")];
+    fireEvent.dragEnter(zone, { dataTransfer: { types: ["Files"], files: [] } });
+    fireEvent.drop(zone, { dataTransfer: { types: ["Files"], files } });
+
+    await waitFor(() => expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith([files[2]], "knowledge-base", "base"));
+    expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("clip.mp4（音视频暂不支持）"));
+    expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("tool.exe（格式不在支持范围内）"));
+    expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining("音视频暂不支持。"));
+  });
+
+  it("names the accepted formats as families that are exactly what the upload check accepts", () => {
+    const named = KNOWLEDGE_BASE_FORMAT_FAMILIES.flatMap(([, formats]) => formats);
+    expect(new Set(named).size).toBe(named.length);
+    expect([...named].sort()).toEqual([...KNOWLEDGE_BASE_FORMATS].sort());
+    const { accepted, refused } = partitionKnowledgeBaseFiles([new File([""], "a.PDF"), new File([""], "b.wav"), new File([""], "noext")]);
+    expect(accepted.map((file) => file.name)).toEqual(["a.PDF"]);
+    expect(refused).toEqual([{ name: "b.wav", reason: "音视频暂不支持" }, { name: "noext", reason: "格式不在支持范围内" }]);
   });
 
   it("uploads dropped files into the current folder, same as the upload button", async () => {
