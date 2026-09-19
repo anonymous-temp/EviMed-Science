@@ -27,9 +27,9 @@ const LEVERS = [
   ["OPEN_SCIENCE_WEB_RENDER_IDLE_RELEASE_MS", "webRenderIdleReleaseMs"],
   ["OPEN_SCIENCE_SOURCE_UPDATES_ENABLED", "sourceUpdatesEnabled"],
   ["OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS", "sourceUpdatesTimeoutMs"],
-  ["OPEN_SCIENCE_AGENTBAY_API_KEY_FILE", "agentbayApiKeyFile"],
-  ["OPEN_SCIENCE_AGENTBAY_REGION", "agentbayRegion"],
-  ["OPEN_SCIENCE_AGENTBAY_ENDPOINT", "agentbayEndpoint"],
+  // The AgentBay keys the render tier shares with the runtime provider are the
+  // provider's (value-less in compose, the key file through
+  // docker-compose.agentbay.yml) and are held by its own lever tests.
 ];
 
 async function withoutLevers(run) {

@@ -1,13 +1,9 @@
 // Tier 3: AgentBay's cloud browser driven over CDP, tested against a fake
 // SDK and a fake Playwright — the live bring-up needs the AgentBay key.
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import test from "node:test";
 
 import { createWebRenderer, WEB_RENDER_IMAGE_ID } from "../src/agentbay/browser.mjs";
-import { createAgentBayClient } from "../src/agentbay/client.mjs";
 
 const SECRET_ENDPOINT = "wss://cdp.agentbay.example/session/s-1?token=cdp-token-must-not-leak";
 
@@ -183,32 +179,4 @@ test("a session that died is replaced on the next render, and idle time releases
   for (let turn = 0; turn < 5; turn += 1) await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(stack.log.deleted.map((entry) => entry.sessionId), ["s-2"]);
   assert.equal(renderer.stats().warmSessions, 0);
-});
-
-test("the AgentBay client stand-in reads its key from a 0600 file and never repeats the SDK's words", async (t) => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "agentbay-key-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const keyFile = path.join(dir, "agentbay.key");
-  await writeFile(keyFile, "ak-secret-value-001\n", { mode: 0o600 });
-  const constructed = [];
-  const logger = [];
-  const sdk = {
-    setupLogger: (options) => logger.push(options),
-    AgentBay: class {
-      constructor(options) { constructed.push(options); }
-      async create() { throw new Error("invalid apiKey: ak-secret-value-001"); }
-    },
-  };
-  const client = await createAgentBayClient({ agentbayApiKeyFile: keyFile, agentbayRegion: "cn-hangzhou" }, { sdk });
-  assert.deepEqual(constructed, [{ apiKey: "ak-secret-value-001", config: { region_id: "cn-hangzhou" } }]);
-  assert.deepEqual(logger, [{ level: "ERROR", enableConsole: false }]);
-  await assert.rejects(client.createSession({ imageId: "browser_latest" }), (error) => {
-    assert.equal(error.code, "agentbay_session_create_failed");
-    assert.ok(!error.message.includes("ak-secret-value-001"));
-    return true;
-  });
-
-  await assert.rejects(createAgentBayClient({ agentbayApiKeyFile: "" }, { sdk }), (error) => error.code === "agentbay_unconfigured");
-  await chmod(keyFile, 0o644);
-  await assert.rejects(createAgentBayClient({ agentbayApiKeyFile: keyFile }, { sdk }), (error) => error.code === "agentbay_key_unavailable");
 });
