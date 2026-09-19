@@ -137,7 +137,7 @@
 | 项 | 值 | 依据 |
 |---|---|---|
 | 触发条件 | 仅 `boundSession.mode === "open-domain"` | `server.mjs:825` |
-| 分类器超时 | `clamp(modelGatewayTimeoutMs, 1000, 120000)` = **120000 ms** | `specialistClassifier.mjs:90` |
+| 分类器超时 | `llmRoutingTimeoutMs`（`OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS`）= **20000 ms**，单次总时限；关闭思考后一次分类约一两秒 | `config.mjs` `llmRoutingTimeoutMs`、`specialistClassifier.mjs` 构造函数 |
 | 分类器重试 | 无 | `specialistClassifier.mjs:126` |
 | 置信度阈值 | 0.75，低于阈值 → null（开放域） | `config.mjs:668-672`、`specialistClassifier.mjs:175` |
 | 错误码 | 无对外错误码；一律 fail-safe 到开放域 | `specialistClassifier.mjs:183-185` |
@@ -313,7 +313,7 @@ S23 关停时 `app.close()` 抛异常照样 `exit(0)`，编排层看到干净退
 | `publicSourceGatewayTimeoutMs` | 60000 | 60000 (`:212`) | **总时限** | `config.mjs:702-706` |
 | `webSearchTimeoutMs` | 30000 | 30000（`docker-compose.yml:249`） | **总时限**，含重试 | `config.mjs:722-724` |
 | `modelGatewayTimeoutMs` | 300000 | 300000 (`:214`) | **空闲** | `config.mjs:732-734` |
-| 分类器超时 | `clamp(modelGatewayTimeoutMs,1e3,1.2e5)` | 实际 120000 | 总时限 | `specialistClassifier.mjs:90` |
+| `llmRoutingTimeoutMs`（分类器） | 20000 | 未设 | 总时限 | `config.mjs` `llmRoutingTimeoutMs` |
 | `memoryExtractionTimeoutMs` | 120000 | **30000** (`:75`) | 总时限 | `config.mjs:794-796` |
 | MCP 公共源读超时 | 20s（`EVIMED_PUBLIC_SOURCE_TIMEOUT_SECONDS`） | 未设 | socket 读 | `public_sources.py:94-96` |
 | MCP 全文/官方页读超时 | 60s（硬编码） | 不可配 | socket 读 | `open_access_fulltext.py:36`、`official_pages.py:166` |
@@ -337,7 +337,7 @@ S23 关停时 `app.close()` 抛异常照样 `exit(0)`，编排层看到干净退
 | C4 | **内层客户端超时 = 外层服务端总时限** | 服务端 `publicSourceGatewayTimeoutMs` 60000（`publicSourceGateway.mjs:648`）是包含 Unpaywall 解析与最多 4 个 PDF 候选的**总**预算；MCP 客户端读超时同样是 60s（`open_access_fulltext.py:36`、`public_sources.py:210`）。服务端精心构造的 504 `public_source_gateway_timeout` 与客户端 socket 超时同时到达，运行时通常拿到的是泛化的 `public_source_unavailable` |
 | C5 | **"重试一次"在超时耗尽时不存在** | `webSearchGateway.mjs:198-245` 两次尝试共用同一个 `AbortController` 与同一个 30s 定时器。第一次尝试若耗尽预算，第二次从不发生；注释声称的「a single retry recovers the common case」只对快速失败成立 |
 | C6 | **"15 分钟""4 小时"都不是时间** | `server.mjs:366-370` 把两者除以 500ms 换成轮次；而每轮除 500ms 外还包含一次账本读与最多 3 次**无超时**的运行时 HTTP（`agentRuns.mjs:1889-1912`）。真实墙钟阈值 ≥15min / ≥4h，上界不存在——因为下层调用根本没有超时（S2） |
-| C7 | **空闲超时与总超时用同一个数** | `specialistClassifier.mjs:90` 复用 `modelGatewayTimeoutMs`，但后者在 `config.mjs:725-734` 明确定义为**流式空闲**时间，分类器用作**非流式单次总时限**；且 clamp 把生产的 300000 悄悄变成 120000，配置值从未是生效值 |
+| C7 | **空闲超时与总超时用同一个数**（2026-09-20 已解决） | 分类器曾复用 `modelGatewayTimeoutMs`（**流式空闲**时间）作**非流式单次总时限**，clamp 又把生产的 300000 悄悄变成 120000。现在它有自己的 `llmRoutingTimeoutMs`（默认 20000），并关闭了思考 |
 | C8 | **内外层量的不是同一件事** | 模型网关的 300s 空闲由每个 chunk 重置（`modelGateway.mjs:289`、`:323-331`）；其外层唯一的界是 `agentRunMonitorStallMs`，而后者的"进展"定义是**消息数与工具调用数**（`agentRuns.mjs:1866-1871`），不是字节。一次持续 >15 分钟、不产生新消息也不调工具的推理流：网关一直续命，run monitor 判 `runtime_monitor_stalled` |
 | C9 | **模型网关之上没有任何总时限** | 无论单轮跑多久，`/internal/model/v1` 上层无墙钟（Caddy 屏蔽 `/internal/*`，Node 未设 `requestTimeout` 覆盖，`agentRuns` 只数消息）。一个每 4 分钟吐一个 chunk 的模型可以无限期占用连接 |
 | C10 | **运维可调的值管不到真正会卡的地方** | `runtimeControllerTimeoutMs` 生产提到 30000，但控制器内部 `waitForSpawn` 与全部 `spawnSync` docker 调用是硬编码 5000（`runtimeControllerServer.mjs:233-251/98/120/173/208/489`）。docker 二进制慢于 5s 时，运维设置多少都无效 |

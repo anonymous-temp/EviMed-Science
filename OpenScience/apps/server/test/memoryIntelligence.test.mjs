@@ -959,10 +959,12 @@ test("extraction is reserved and settled on the usage ledger, like every other m
     async markUncertain(userId, id, code) { ledgerCalls.push(["uncertain", userId, id, code]); },
     async release(userId, id, code) { ledgerCalls.push(["release", userId, id, code]); },
   };
+  /** @type {any} */ let requestBody = null;
   const intelligence = new MemoryIntelligence(config, store, {
     usageLedger,
     fetchImpl: async (_input, init) => {
-      const payload = JSON.parse(JSON.parse(String(init.body)).messages[1].content);
+      requestBody = JSON.parse(String(init.body));
+      const payload = JSON.parse(requestBody.messages[1].content);
       const source = payload.sources[0];
       return Response.json({
         id: "chatcmpl-abc",
@@ -983,6 +985,9 @@ test("extraction is reserved and settled on the usage ledger, like every other m
   assert.equal(reserve.projectId, project().id);
   assert.equal(reserve.runId, "run_metered");
   assert.equal(reserve.purpose, "memory-extraction", "the ledger can say what extraction costs");
+  // Structured extraction, not reasoning: thinking off, so temperature 0 holds.
+  assert.deepEqual(requestBody.thinking, { type: "disabled" });
+  assert.equal(requestBody.temperature, 0);
   assert.ok(reserve.estimatedCost >= 0);
 
   const settle = ledgerCalls.find((entry) => entry[0] === "settle");

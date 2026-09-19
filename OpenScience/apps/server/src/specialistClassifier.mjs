@@ -79,7 +79,10 @@ export class SpecialistClassifier {
     this.enabled = config?.llmRoutingEnabled === true;
     const threshold = Number(config?.llmRoutingConfidenceThreshold);
     this.threshold = Number.isFinite(threshold) ? Math.max(0, Math.min(1, threshold)) : 0.75;
-    this.timeoutMs = Math.max(1_000, Math.min(120_000, Number(config?.modelGatewayTimeoutMs ?? 30_000)));
+    // Its own total deadline (config.mjs `llmRoutingTimeoutMs`). It borrowed
+    // the model gateway's streaming idle time, clamped to 120 s, so a provider
+    // that hung held a dispatch for two minutes before the net took over.
+    this.timeoutMs = Math.max(1_000, Math.min(120_000, Number(config?.llmRoutingTimeoutMs ?? 20_000) || 20_000));
   }
 
   get available() {
@@ -141,22 +144,19 @@ export class SpecialistClassifier {
         signal: controller.signal,
         body: {
           model: this.config.deepseekModel,
+          // Thinking off, as for run titles (runTitles.mjs). A closed-set
+          // choice is not a reasoning task, and it sits on the dispatch path,
+          // where every second is the researcher waiting for the run to start.
+          // With thinking on, `temperature` was ignored and the budget was a
+          // race against the reasoning: at 200 tokens six of six live
+          // classifications came back with empty content, and the pro tier
+          // emptied 2,000 too, so it grew to 8,000. Both V4 tiers honour the
+          // switch and then write no reasoning at all, so the budget holds the
+          // verdict alone: about twenty tokens of JSON, with room for a fence
+          // or a stray sentence around it.
+          thinking: { type: "disabled" },
           temperature: 0,
-          // A reasoning model spends its budget thinking before it writes.
-          // At 200 it spent all of it: measured against the live API, six of
-          // six classifications came back with an empty content and 900–1000
-          // characters of reasoning_content — the verdict never got written.
-          // The fallback that exists to catch what the regex misses was
-          // therefore dead, and every miss fell to the answer line looking
-          // exactly like "no specialist fits". At 2000 the same six returned a
-          // verdict every time — on the flash model. Certifying the pro model
-          // put the deployment back where it started: production logged
-          // "produced no verdict: empty_content" and every route fell through
-          // to the regex net, which is the arrangement this was moved away
-          // from. A budget tuned against one model is not a budget; the ceiling
-          // has to leave room for the reasoning the model actually does, and a
-          // classification is a few dozen tokens of output whatever precedes it.
-          max_tokens: 8_000,
+          max_tokens: 512,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: classifierInstructions },
@@ -164,10 +164,10 @@ export class SpecialistClassifier {
           ],
         },
       });
-      // Read the verdict wherever the model put it. A reasoning model that
-      // runs its budget close still often carries the JSON in
-      // reasoning_content, and a classification we already paid for should not
-      // be discarded over which field it arrived in.
+      // Read the verdict wherever the model put it. With thinking off it
+      // belongs in content; a model that reasons anyway may still carry the
+      // JSON in reasoning_content, and a classification we already paid for
+      // should not be discarded over which field it arrived in.
       const message = body?.choices?.[0]?.message;
       const parsed = parseClassifierJson(message?.content) ?? parseClassifierJson(message?.reasoning_content);
       // No verdict at all is a broken classifier; "none" and a low-confidence

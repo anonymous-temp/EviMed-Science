@@ -117,12 +117,36 @@ test("recovers the verdict a reasoning model left in reasoning_content", async (
   assert.equal(routed?.agentId, "meta-analysis");
 });
 
-test("gives the model room to answer after it finishes reasoning", async () => {
+test("asks for a verdict without reasoning, deterministically, with room for the verdict", async () => {
+  // Thinking was on (the provider's default), so temperature 0 did nothing and
+  // the budget raced the reasoning: at 200 tokens six of six classifications
+  // came back empty. Thinking off, both V4 tiers write the verdict and nothing
+  // else, and the dispatch waits a second or two instead of the reasoning.
   const fetchImpl = fetchReturning(JSON.stringify({ agentId: "meta-analysis", confidence: 0.9 }));
   const classifier = new SpecialistClassifier(baseConfig(), { fetchImpl });
   await classifier.classify("请开展一项荟萃分析", agents);
   const body = JSON.parse(fetchImpl.calls[0].init.body);
-  assert.ok(body.max_tokens >= 1_000, `max_tokens was ${body.max_tokens}; a reasoning model needs room to answer`);
+  assert.deepEqual(body.thinking, { type: "disabled" });
+  assert.equal(body.temperature, 0);
+  assert.equal(body.stream, false);
+  assert.ok(body.max_tokens >= 256, `max_tokens was ${body.max_tokens}; the verdict needs room for a fence around it`);
+  assert.equal(body.response_format.type, "json_object");
+});
+
+test("a classification has its own deadline, not the gateway's streaming idle time", async () => {
+  assert.equal(new SpecialistClassifier(baseConfig()).timeoutMs, 20_000, "unset, twenty seconds");
+  assert.equal(new SpecialistClassifier(baseConfig({ llmRoutingTimeoutMs: 7_000, modelGatewayTimeoutMs: 300_000 })).timeoutMs, 7_000);
+  // A deadline that fires is a decline named `timeout`, and the dispatch goes on.
+  const hanging = async (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+  });
+  const trace = {};
+  const started = Date.now();
+  const verdict = await new SpecialistClassifier(baseConfig({ llmRoutingTimeoutMs: 1_000 }), { fetchImpl: hanging })
+    .classify("请开展一项荟萃分析", agents, trace);
+  assert.equal(verdict, null);
+  assert.equal(trace.failure, "timeout");
+  assert.ok(Date.now() - started < 5_000, "the classifier gave up at its own deadline");
 });
 
 test("a classifier that produced no verdict is distinguishable from one that said none", async () => {

@@ -1420,5 +1420,15 @@ export function loadConfig(overrides = {}) {
       "OPEN_SCIENCE_MEMORY_RECALL_ENABLED",
       overrides.memoryEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_ENABLED", true),
     ),
+    // --- ops 0920: the routing classifier's own deadline ---
+    // One classification, start to finish, on the dispatch path: every second
+    // of it is the researcher waiting for a run to start. It borrowed
+    // `modelGatewayTimeoutMs` — the gateway's streaming IDLE time — clamped to
+    // 120 s (docs/REQUEST_PATH.md C7), so a hung provider held a dispatch for
+    // two minutes. With thinking off a verdict takes a second or two; a missed
+    // deadline declines with reason `timeout` and the regex net routes instead.
+    llmRoutingTimeoutMs: Number(
+      overrides.llmRoutingTimeoutMs ?? process.env.OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS ?? 20_000,
+    ),
   };
 }

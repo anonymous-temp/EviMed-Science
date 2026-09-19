@@ -432,6 +432,8 @@ services:
       OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT:
       OPEN_SCIENCE_LLM_ROUTING_ENABLED:
       OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD:
+      # ops 0920: the routing classifier's own deadline (unset: 20 s).
+      OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS:
       # Automatic run titles (one metered flash call per new run). Value-less:
       # unset keeps config.mjs's default, on.
       OPEN_SCIENCE_RUN_TITLES_ENABLED:
