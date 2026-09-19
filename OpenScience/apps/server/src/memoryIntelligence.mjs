@@ -933,11 +933,21 @@ export class MemoryIntelligence {
           signal: controller.signal,
           body: {
           model: this.model,
+          // Thinking off, as for run titles and routing: this is structured
+          // extraction, not reasoning. With thinking on (the provider's
+          // default) `temperature` was ignored and reasoning tokens billed as
+          // output on every finished run.
+          thinking: { type: "disabled" },
           temperature: 0,
-          // Twelve candidates carrying a value, a summary and an evidence quote
-          // do not fit in 2,400 tokens. The reply then stops mid-object and the
-          // whole batch is lost to a parse error rather than a partial result.
-          max_tokens: 8_000,
+          // What the JSON needs: twelve candidates, the heaviest about 400
+          // tokens each by the reservation estimator's upper bound (a value,
+          // a summary and an evidence quote), so 4,700 for a full batch. The
+          // 8,000 this was held room for reasoning that no longer happens; the
+          // margin stays because a reply cut off mid-object loses every
+          // candidate in it, not only the last. The timeout
+          // (`memoryExtractionTimeoutMs`, 120 s) stays too: extraction runs
+          // after the reply is delivered, so a margin costs nobody a wait.
+          max_tokens: 6_000,
           response_format: { type: "json_object" },
           messages: [
             {

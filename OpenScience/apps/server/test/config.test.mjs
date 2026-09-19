@@ -92,6 +92,7 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS: ["eq", "geoProbeTimeoutMs", "clamped under the tool-call ceiling; the 360000 compose said was never honoured"],
   OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS: ["eq", "openVikingRequestTimeoutMs", ON_THE_DISPATCH_PATH],
   OPEN_SCIENCE_MEMORY_RERANK_TIMEOUT_MS: ["eq", "memoryRerankTimeoutMs", ON_THE_DISPATCH_PATH],
+  OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS: ["eq", "llmRoutingTimeoutMs", "classification runs before a run starts; longer holds the dispatch while the provider hangs"],
   // Quotas: what one account may store, send or read. Higher is laxer, lower
   // refuses real use; the number is a product decision either way.
   OPEN_SCIENCE_MAX_PROJECT_BYTES: ["eq", "maxProjectBytes", "quota"],
@@ -349,6 +350,22 @@ test("the schedulers' own defaults agree with the compose files that start them"
     }
   }
   assert.ok(compared >= 10, `compared ${compared} scheduler values; the walk found too few`);
+});
+
+test("the routing classifier has its own total deadline, not the gateway's streaming idle time", () => {
+  // It borrowed modelGatewayTimeoutMs (300 s of streaming idle, clamped to
+  // 120 s), so a hung provider held a dispatch for two minutes.
+  const saved = process.env.OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS;
+  delete process.env.OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS;
+  try {
+    assert.equal(loadConfig({ rootDir: repoRoot }).llmRoutingTimeoutMs, 20_000);
+    assert.equal(loadConfig({ rootDir: repoRoot, llmRoutingTimeoutMs: 5_000 }).llmRoutingTimeoutMs, 5_000);
+    process.env.OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS = "8000";
+    assert.equal(loadConfig({ rootDir: repoRoot }).llmRoutingTimeoutMs, 8_000);
+  } finally {
+    if (saved == null) delete process.env.OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS;
+    else process.env.OPEN_SCIENCE_LLM_ROUTING_TIMEOUT_MS = saved;
+  }
 });
 
 test("the retired kernel's runtime mode is refused by name, not ignored", async () => {
