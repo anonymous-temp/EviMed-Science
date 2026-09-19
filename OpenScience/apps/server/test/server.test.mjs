@@ -5849,22 +5849,67 @@ test("start_runtime returns the control plane's own surface, never a kernel's", 
   });
 });
 
-test("start_runtime enforces per-user runtime capacity across projects", async () => {
+test("start_runtime makes room from the same user's idle runtime, and refuses when that one is in use", async () => {
+  // A researcher moving between projects met the per-user ceiling on the next
+  // one while the last sat idle behind a tab they had left. The idle one
+  // yields; one still in use — an open connection, here — never does, and
+  // then the ceiling refuses as it always has.
   await withApp(
     async ({ app, base }) => {
       const user = await app.store.devUser();
       await app.store.createProject(user, "paper2", "Paper 2");
+      const defaultProject = await app.store.defaultProject(user);
 
       let out = await command(base, "start_runtime");
       assert.equal(out.res.status, 200);
 
       out = await commandWithHeaders(base, "start_runtime", {}, { "X-Open-Science-Project": "paper2" });
-      assert.equal(out.res.status, 429);
-      assert.equal(out.json.code, "runtime_limit_exceeded");
-      assert.match(out.json.error, /user/);
-      assert.equal(out.res.headers.get("retry-after"), "5");
+      assert.equal(out.res.status, 200, "the idle runtime of the other project made room");
+      const yielded = await app.runtimeManager.status(defaultProject);
+      assert.equal(yielded.running, false);
+      assert.equal(yielded.lastEvent, "yielded");
+
+      const paper2 = await app.store.requireProject(user, "paper2");
+      app.runtimeManager.beginProxy(paper2);
+      try {
+        out = await command(base, "start_runtime");
+        assert.equal(out.res.status, 429);
+        assert.equal(out.json.code, "runtime_limit_exceeded");
+        assert.match(out.json.error, /user/);
+        assert.equal(out.res.headers.get("retry-after"), "5");
+        assert.equal((await app.runtimeManager.status(paper2)).running, true, "a runtime with an open connection is never taken");
+      } finally {
+        app.runtimeManager.endProxy(paper2);
+      }
     },
     { maxRunningRuntimesPerUser: 1, maxRunningRuntimes: 10 },
+  );
+});
+
+test("a read through a running runtime never measures the project; a write is measured after its answer", async () => {
+  // Opening a conversation is about thirty requests through the proxy, and each
+  // used to walk the whole project twice — before it started and before it
+  // answered — inside a database transaction (2026-09-19: 4–6 s per call on
+  // 3,552 entries, with the runtime already warm). The quota is still held:
+  // by the monitor, by the start of a runtime, and by a write through here.
+  await withApp(
+    async ({ app }) => {
+      const user = await app.store.devUser();
+      const project = await app.store.defaultProject(user);
+      await app.runtimeManager.start(project);
+      await writeFile(path.join(project.workspaceDir, "grew-while-running.bin"), "x".repeat(64 * 1024));
+      const again = await app.runtimeManager.start(project);
+      assert.ok(again, "a running runtime is handed back without a walk that would refuse it");
+      assert.equal((await app.runtimeManager.status(project)).running, true);
+      app.runtimeManager.checkQuotaInBackground(project);
+      app.runtimeManager.checkQuotaInBackground(project);
+      assert.equal(app.runtimeManager.backgroundQuotaChecks.size, 1, "one measurement at a time per project");
+      await app.runtimeManager.backgroundQuotaChecks.get(app.runtimeManager.key(project));
+      const status = await app.runtimeManager.status(project);
+      assert.equal(status.running, false);
+      assert.equal(status.lastEvent, "quota_exceeded");
+    },
+    { maxProjectBytes: 32 * 1024 },
   );
 });
 

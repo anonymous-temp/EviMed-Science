@@ -8,7 +8,7 @@ import { assertSpendWithinLimits } from "./usageMetering.mjs";
 import { HttpError, readBody } from "./security.mjs";
 import { RUNTIME_UI_FRAME_COOKIE, parseRuntimeUiFramePath, runtimeUiCookie, runtimeUiOrigins, validateRuntimeUiFrame } from "./runtimeUiFrames.mjs";
 import { runtimeUiBootstrapSource } from "./runtimeUiDocument.mjs";
-import { isImmutableRuntimeUiAsset } from "./runtimeManager.mjs";
+import { IMMUTABLE_UI_CACHE, SHARED_UI_ASSET_PREFIX, isImmutableRuntimeUiAsset } from "./runtimeManager.mjs";
 
 /**
  * The methods that make the deployment spend money.
@@ -285,6 +285,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
    */
   async function serveProjectAsset(req, res) {
     const target = String(req.url ?? "");
+    if (target.startsWith(SHARED_UI_ASSET_PREFIX)) {
+      await serveSharedAsset(req, res, target.slice(SHARED_UI_ASSET_PREFIX.length - 1));
+      return true;
+    }
     const match = /^\/__evimed\/a\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})\/(assets\/[A-Za-z0-9._-]+)$/.exec(target.split("?")[0]);
     if (!target.startsWith("/__evimed/a/")) return false;
     if (!match || !["GET", "HEAD"].includes(String(req.method).toUpperCase())) {
@@ -300,6 +304,39 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       rebaseDocument: false,
     });
     return true;
+  }
+
+  /**
+   * The kernel application's files at the one address every frame shares
+   * (`SHARED_UI_ASSET_PREFIX`): build assets by hashed name, plugin bundles
+   * by revision. Authorized by the login alone, like the per-project route
+   * above, and read-only; served from the control plane's memory after the
+   * first fetch, gzipped when the browser accepts it, so neither a reverse
+   * proxy's configuration nor a runtime round trip decides how fast a
+   * session opens.
+   * @param {any} req @param {any} res @param {string} suffix what follows the prefix, with its leading `/`
+   */
+  async function serveSharedAsset(req, res, suffix) {
+    const asset = /^\/assets\/[A-Za-z0-9._-]+$/.test(suffix)
+      || /^\/plugins\/\?\?[A-Za-z0-9@/._,-]{1,8192}&rev=[A-Za-z0-9._-]{6,64}$/.test(suffix);
+    if (!asset || suffix.includes("..") || !["GET", "HEAD"].includes(String(req.method).toUpperCase())) {
+      throw new HttpError(404, "runtime_ui_asset_not_found", "No such application file.");
+    }
+    const { user } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
+    const file = await runtimeManager.sharedUiAsset(String(user.id), suffix);
+    const gzip = file.gzip && /\bgzip\b/i.test(String(req.headers["accept-encoding"] ?? "")) ? file.gzip : null;
+    const body = gzip ?? file.body;
+    /** @type {Record<string, string>} */
+    const headers = {
+      "Content-Type": file.contentType,
+      "Content-Length": String(body.length),
+      "Cache-Control": file.immutable ? IMMUTABLE_UI_CACHE : "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+      Vary: "Accept-Encoding",
+    };
+    if (gzip) headers["Content-Encoding"] = "gzip";
+    res.writeHead(file.status, headers);
+    res.end(String(req.method).toUpperCase() === "HEAD" ? undefined : body);
   }
 
   async function handle(req, res) {
@@ -375,7 +412,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // same id allowlist the operations page reads. `off` names the frame
       // bodies this deployment switched off.
       const source = runtimeUiBootstrapSource({
-        version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix,
+        version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix, assets: SHARED_UI_ASSET_PREFIX,
         shellOrigin: runtimeUiOrigins(config).shellOrigin, cwd: runtimeManager.runtimeWorkspaceRoot(project),
         capabilities: await heroCapabilities(),
         operator: Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(user?.id ?? "")),
@@ -404,9 +441,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       surface: "ui",
       uiBasePath: frame.prefix,
       revalidate,
-      // Build assets the document names are served from the project's stable
-      // path; a file whose URL names its content is kept by the browser.
-      uiAssetPrefix: `/__evimed/a/${project.id}/`,
+      // Build assets and revisioned bundles the document names are served
+      // from the path every project shares; a file whose URL names its
+      // content is kept by the browser, across sessions and projects.
+      uiAssetPrefix: SHARED_UI_ASSET_PREFIX,
       immutable: isImmutableRuntimeUiAsset(frame.suffix),
     });
     const forwardPrompt = async () => {

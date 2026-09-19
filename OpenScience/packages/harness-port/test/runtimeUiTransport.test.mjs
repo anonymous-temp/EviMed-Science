@@ -42,6 +42,20 @@ test('official hooks rebase only the owned frame without replacing browser fetch
   await assert.rejects(hooks.loadBundle('/__evimed/f/frame-b/plugins/one.js'));
 });
 
+test('a revisioned bundle loads from the path every frame shares; anything else stays with the frame', async () => {
+  // The document's preload of the same bundle is rewritten the same way
+  // (rebaseRuntimeUiDocument); if the two disagree the browser downloads it twice.
+  const { target, calls } = browser();
+  const hooks = installRuntimeUiTransport({ ...frame, assets: '/__evimed/k/' }, target);
+  await hooks.loadBundle('/plugins/??one/client.js,two/client.js&rev=0123456789ab');
+  assert.equal(calls[0].src, 'https://app.example:8443/__evimed/k/plugins/??one/client.js,two/client.js&rev=0123456789ab');
+  await hooks.loadBundle('/plugins/??one/client.js');
+  assert.equal(calls[1].src, 'https://app.example:8443/__evimed/f/frame-a/plugins/??one/client.js', 'no revision, no shared copy');
+  await hooks.fetch(new URL('https://app.example:8443/api/session/list'), {});
+  assert.equal(calls[2][0], 'https://app.example:8443/__evimed/f/frame-a/api/session/list', 'methods never leave the frame');
+  assert.throws(() => installRuntimeUiTransport({ ...frame, assets: '/elsewhere/' }, browser().target), /Invalid runtime frame/);
+});
+
 test('the synchronous bootstrap is self-contained after function serialization', () => {
   const { target } = browser();
   const install = vm.runInNewContext(`(${installRuntimeUiTransport.toString()})`, { URL, Error, Map, Set, Promise, Object, JSON });

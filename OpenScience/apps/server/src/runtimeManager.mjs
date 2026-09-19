@@ -6,6 +6,7 @@ import { constants as fsConstants, lstatSync, readdirSync } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 import { workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv } from "@evimed/harness-port";
 import {
@@ -357,7 +358,29 @@ export function isImmutableRuntimeUiAsset(suffix) {
 }
 
 /** What a browser may keep of an immutable kernel file: this account's copy, for a year. */
-const IMMUTABLE_UI_CACHE = "private, max-age=31536000, immutable";
+export const IMMUTABLE_UI_CACHE = "private, max-age=31536000, immutable";
+
+/**
+ * Where every frame, of every project, loads the kernel application's files.
+ *
+ * One address for all of them, because the files are one application: the
+ * runtime image is the same for every project, a build asset's name carries
+ * its hash and a combo bundle's `rev` is a hash of its bytes
+ * (`dsh-client-modules`: `framedHash("combo", …)`), so a URL names exactly one
+ * content wherever it is fetched. The previous address carried the project id
+ * and the one before it the frame id, and each new address is a download: on
+ * 2026-09-19 opening a conversation fetched 4.5 MB again — a 3.1 MB plugin
+ * bundle under the frame's path — and switching project fetched it all once
+ * more. Not a valid project id (`k` is one character short of none, and the
+ * project routes live under `/__evimed/a/`), so it cannot collide with one.
+ */
+export const SHARED_UI_ASSET_PREFIX = "/__evimed/k/";
+
+/** Bytes of kernel application files the control plane keeps in memory: the
+ *  whole application is about 5 MB; this leaves room for a release overlap. */
+const SHARED_UI_ASSET_CACHE_BYTES = 64 * 1024 * 1024;
+/** The largest single file taken into that cache. */
+const SHARED_UI_ASSET_MAX_BYTES = 16 * 1024 * 1024;
 
 function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, options = {}) {
   const surface = options.surface ?? "runtime";
@@ -2660,6 +2683,11 @@ export class RuntimeManager {
     this.runtimeActivity = new Map();
     this.runtimeQuotaMonitors = new Map();
     this.runtimeQuotaStops = new Map();
+    /** Background quota measurements in flight, by project key. */
+    this.backgroundQuotaChecks = new Map();
+    /** Kernel application files by request suffix, oldest first (see `sharedUiAsset`). */
+    this.sharedUiAssets = new Map();
+    this.sharedUiAssetBytes = 0;
     this.evimedWorkloadRefreshTimers = new Map();
     this.activeModelGatewayTokens = new Map();
     this.pendingModelGatewayScopes = new Map();
@@ -2982,7 +3010,6 @@ export class RuntimeManager {
   async startAdmitted(project) {
     const key = this.key(project);
     await this.runtimeQuotaStops.get(key);
-    await this.enforceProjectQuota(project);
     let existing = this.runtimes.get(key);
     if (existing && existing.workspaceDir !== project.workspaceDir) {
       // Opening the interactive workspace is not permission to interrupt a
@@ -2991,15 +3018,30 @@ export class RuntimeManager {
       await this.stop(project);
       existing = null;
     }
+    // A running runtime is returned without measuring the project. Every
+    // proxied request of the session page comes through here, and the walk
+    // below used to run on each of them, inside the plugin admission's
+    // database transaction: opening one conversation is about thirty requests,
+    // and on a project of 3,552 entries they queued behind one another's walks
+    // and pool connections until each took 4–6 s (2026-09-19, live, runtime
+    // already warm: 29 s to a usable composer). A running runtime is watched by
+    // its quota monitor (`runtimeQuotaCheckIntervalMs`), which is what stops it
+    // when the project goes over, whoever wrote the bytes.
     if (existing) {
       this.scheduleIdleStop(project);
       return existing;
     }
     const pending = this.starts.get(key);
     if (pending) return pending;
-    this.enforceRuntimeCapacity(project);
 
     const started = (async () => {
+      // Measured, and room made, inside the pending start: registered before
+      // the first wait, it is what a second caller arriving meanwhile joins
+      // instead of beginning a second container. Its own entry in `starts` is
+      // not counted against the ceilings it checks.
+      await this.enforceProjectQuota(project);
+      await this.makeRoomFor(project);
+      this.enforceRuntimeCapacity(project, { starting: true });
       const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
         const runtime = await this.startKernel(project, modelGatewayScope);
@@ -4178,18 +4220,67 @@ export class RuntimeManager {
     };
   }
 
-  enforceRuntimeCapacity(project) {
+  /**
+   * @param {Record<string, any>} project
+   * @param {{ starting?: boolean }} [options] `starting`: this project's own
+   *   start is already registered in `starts` and is not one of the others
+   */
+  enforceRuntimeCapacity(project, { starting = false } = {}) {
+    const own = starting && this.starts.has(this.key(project)) ? 1 : 0;
     const maxGlobal = positiveLimit(this.config.maxRunningRuntimes);
-    if (maxGlobal != null && this.runtimeCount() >= maxGlobal) {
+    if (maxGlobal != null && this.runtimeCount() - own >= maxGlobal) {
       throw new HttpError(429, "runtime_limit_exceeded", `Too many running runtimes for the server; limit is ${maxGlobal}.`, {
         retryAfterSeconds: 5,
       });
     }
     const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
-    if (maxPerUser != null && this.runtimeCountForUser(project.userId) >= maxPerUser) {
+    if (maxPerUser != null && this.runtimeCountForUser(project.userId) - own >= maxPerUser) {
       throw new HttpError(429, "runtime_limit_exceeded", `Too many running runtimes for this user; limit is ${maxPerUser}.`, {
         retryAfterSeconds: 5,
       });
+    }
+  }
+
+  /**
+   * Room for this project's runtime, made from the same user's own idle ones.
+   *
+   * A project is a container, so a researcher who moves between three
+   * projects meets the per-user ceiling on the third and used to be refused
+   * with 「已达本部署上限」 — while the first project's runtime sat idle behind
+   * a tab they had already left. DSH's own client moves between workspaces
+   * freely because one kernel serves them all; the equivalent here is to
+   * retire the least recently used runtime of the same user that nothing
+   * needs: no open connection (a tab still showing it), no session mid-turn
+   * (the kernel is asked, as the idle sweep does), no bounded run holding it.
+   * Another user's runtime is never touched, and when nothing qualifies the
+   * ceiling refuses exactly as before.
+   * @param {Record<string, any>} project
+   */
+  async makeRoomFor(project) {
+    const maxGlobal = positiveLimit(this.config.maxRunningRuntimes);
+    const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
+    const own = this.key(project);
+    // This project's own pending start is not one of the others.
+    const self = () => (this.starts.has(own) ? 1 : 0);
+    const full = () => (maxGlobal != null && this.runtimeCount() - self() >= maxGlobal)
+      || (maxPerUser != null && this.runtimeCountForUser(project.userId) - self() >= maxPerUser);
+    if (!full()) return;
+    const prefix = `${project.userId}:`;
+    const candidates = [...this.runtimes.entries()]
+      .filter(([key, runtime]) => key !== own && key.startsWith(prefix) && runtime.project && !runtime.modelGatewayScope)
+      .sort(([a], [b]) => Number(this.runtimeActivity.get(a)?.lastUseAt ?? 0) - Number(this.runtimeActivity.get(b)?.lastUseAt ?? 0));
+    for (const [key, runtime] of candidates) {
+      if ((this.runtimeActivity.get(key)?.activeProxies ?? 0) > 0) continue;
+      let busy;
+      try {
+        busy = await this.runtimeBusy(runtime.project);
+      } catch {
+        // Unknown is not idle — the idle sweep's rule.
+        continue;
+      }
+      if (busy || this.runtimes.get(key) !== runtime || (this.runtimeActivity.get(key)?.activeProxies ?? 0) > 0) continue;
+      await this.stopIdleRuntime(runtime.project, { event: "yielded" }).catch(() => {});
+      if (!full()) return;
     }
   }
 
@@ -4467,6 +4558,74 @@ export class RuntimeManager {
   }
 
   /**
+   * One file of the kernel's published browser application, for any frame of
+   * this user's, whichever project it shows (`SHARED_UI_ASSET_PREFIX`).
+   *
+   * A file whose URL names its content (`isImmutableRuntimeUiAsset`) is kept in
+   * memory after its first fetch, with its gzip form, so the next frame — any
+   * project, any account — is answered without a runtime round trip and in a
+   * quarter of the bytes. Anything else is fetched each time and never kept.
+   * A miss is fetched from one of THIS user's running runtimes, never another
+   * tenant's container: the files are the same, the boundary is not ours to
+   * blur. The frame that asks has just been served by one of them, so there
+   * is one; when there is not, the frame's own retry starts it.
+   *
+   * @param {string} userId
+   * @param {string} suffix `/assets/<file>` or `/plugins/??<list>&rev=<rev>`, validated by the caller
+   * @returns {Promise<{ status: number, contentType: string, body: Buffer, gzip: Buffer | null, immutable: boolean }>}
+   */
+  async sharedUiAsset(userId, suffix) {
+    const immutable = isImmutableRuntimeUiAsset(suffix);
+    const cached = immutable ? this.sharedUiAssets.get(suffix) : null;
+    if (cached) {
+      // Most recently used moves to the end; eviction takes from the front.
+      this.sharedUiAssets.delete(suffix);
+      this.sharedUiAssets.set(suffix, cached);
+      return cached;
+    }
+    const prefix = `${userId}:`;
+    let runtime = null;
+    let latestUse = -1;
+    for (const [key, candidate] of this.runtimes) {
+      const lastUseAt = Number(this.runtimeActivity.get(key)?.lastUseAt ?? 0);
+      if (!key.startsWith(prefix) || lastUseAt < latestUse) continue;
+      runtime = candidate;
+      latestUse = lastUseAt;
+    }
+    if (!runtime) throw new HttpError(503, "runtime_not_running", "No research runtime of this account is running.");
+    const timeoutMs = positiveLimit(this.config.runtimeProxyRequestTimeoutMs) ?? 60_000;
+    const response = await requestRuntime(runtime, new URL(`${runtime.url}${suffix}`), {
+      method: "GET",
+      headers: { ...(runtime.cookie ? { cookie: runtime.cookie } : {}), "accept-encoding": "identity" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const body = response.body
+      ? await readRuntimeResponseBody(response.body, SHARED_UI_ASSET_MAX_BYTES)
+      : Buffer.alloc(0);
+    const contentType = response.headers.get("content-type") ?? "application/octet-stream";
+    const asset = {
+      status: response.status,
+      contentType,
+      body,
+      gzip: null,
+      immutable: immutable && response.status === 200,
+    };
+    if (!asset.immutable) return asset;
+    // Text compresses to about a quarter; fonts and images are already packed.
+    if (body.length > 1024 && /^(?:text\/|application\/(?:javascript|json|wasm)|image\/svg)/i.test(contentType)) {
+      asset.gzip = gzipSync(body, { level: 6 });
+    }
+    this.sharedUiAssets.set(suffix, asset);
+    this.sharedUiAssetBytes += body.length + (asset.gzip?.length ?? 0);
+    for (const [key, entry] of this.sharedUiAssets) {
+      if (this.sharedUiAssetBytes <= SHARED_UI_ASSET_CACHE_BYTES || key === suffix) break;
+      this.sharedUiAssets.delete(key);
+      this.sharedUiAssetBytes -= entry.body.length + (entry.gzip?.length ?? 0);
+    }
+    return asset;
+  }
+
+  /**
    * One unary call into the DSH kernel over the project's control socket.
    * The allow-list is checked by the adapter that owns it; this is the carrier.
    * @param {Record<string, any>} runtime @param {Record<string, any>} project
@@ -4544,7 +4703,6 @@ export class RuntimeManager {
     let proxyActive = false;
     let requestBytes = requestContentLength(req) ?? 0;
     let responseBytes = 0;
-    let postResponseQuotaChecked = false;
     const abortedSessionId = abortedRuntimeSession(method, suffix);
     try {
       this.beginProxy(project);
@@ -4638,10 +4796,6 @@ export class RuntimeManager {
         immutable,
       });
       if (!upstreamRes.body) {
-        try {
-          await this.stopRuntimeIfProjectQuotaExceeded(project);
-          postResponseQuotaChecked = true;
-        } catch { /* a quota probe must not break a response already in flight */ }
         res.writeHead(upstreamRes.status, responseHeaders);
         responseEnded = true;
         res.end();
@@ -4664,10 +4818,6 @@ export class RuntimeManager {
             responseBytes += bytes;
           });
           if (!responseClosed && !res.destroyed && !res.writableEnded) {
-            try {
-              await this.stopRuntimeIfProjectQuotaExceeded(project);
-              postResponseQuotaChecked = true;
-            } catch { /* a quota probe must not break a response already in flight */ }
             const served = surface === "ui" && rebaseDocument
               ? rebaseRuntimeUiDocument(payload, responseHeaders, uiBasePath, uiAssetPrefix)
               : payload;
@@ -4733,8 +4883,13 @@ export class RuntimeManager {
       throw err;
     } finally {
       if (proxyActive) this.endProxy(project);
-      if (error !== "project_quota_exceeded" && !postResponseQuotaChecked) {
-        await this.stopRuntimeIfProjectQuotaExceeded(project).catch(() => {});
+      // A request that could have written to the workspace — an upload, a
+      // mutation — is followed by one measurement, in the background and never
+      // two at once. It used to run after EVERY response and before it was
+      // sent, reads included: each asset and list call of the session page
+      // waited for a walk of the whole project (see `startAdmitted`).
+      if (error !== "project_quota_exceeded" && !["GET", "HEAD", "OPTIONS"].includes(String(method).toUpperCase())) {
+        this.checkQuotaInBackground(project);
       }
       await appendRuntimeEvent(project, "proxy", {
         method,
@@ -5068,7 +5223,13 @@ export class RuntimeManager {
     activity.idleTimer.unref?.();
   }
 
-  async stopIdleRuntime(project) {
+  /**
+   * @param {Record<string, any>} project
+   * @param {{ event?: string }} [options] what the ledger calls this stop:
+   *   `idle_timeout` from the idle sweep, `yielded` when the same user's next
+   *   project needed the slot (`makeRoomFor`)
+   */
+  async stopIdleRuntime(project, { event = "idle_timeout" } = {}) {
     const key = this.key(project);
     const activity = this.runtimeActivity.get(key);
     if (activity?.activeProxies > 0) {
@@ -5094,7 +5255,7 @@ export class RuntimeManager {
     } finally {
       await this.notifyRuntimeStop(project, runtime, "canceled");
     }
-    await appendRuntimeEvent(project, "idle_timeout", {
+    await appendRuntimeEvent(project, event, {
       kind: runtime.kind,
       sandboxMode: runtime.sandboxMode ?? "mock",
       networkMode: runtime.networkMode ?? null,
@@ -5102,7 +5263,7 @@ export class RuntimeManager {
       containerName: runtime.containerName ?? null,
       idleTimeoutMs: Number(this.config.runtimeIdleTimeoutMs),
     }, this.config);
-    await recordRuntimeState(project, "idle_timeout", {
+    await recordRuntimeState(project, event, {
       running: false,
       kind: runtime.kind,
       startedAt: runtime.startedAt,
@@ -5217,6 +5378,22 @@ export class RuntimeManager {
       }
       throw err;
     }
+  }
+
+  /**
+   * One quota measurement for this project, started now unless one is already
+   * running, and not awaited: the caller's response has been sent or is
+   * streaming. A failed measurement is left to the quota monitor, which
+   * distinguishes "over the limit" from "could not measure".
+   * @param {any} project
+   */
+  checkQuotaInBackground(project) {
+    const key = this.key(project);
+    if (this.backgroundQuotaChecks.has(key)) return;
+    const check = this.stopRuntimeIfProjectQuotaExceeded(project)
+      .catch(() => {})
+      .finally(() => this.backgroundQuotaChecks.delete(key));
+    this.backgroundQuotaChecks.set(key, check);
   }
 
   async stopRuntimeIfProjectQuotaExceeded(project) {
