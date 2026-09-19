@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { USAGE_PURPOSES } from "@evimed/domain";
-import { formatUsageReport, parseArguments } from "../../../scripts/ops/usage-by-purpose.mjs";
+import { displayWidth, formatUsageReport, parseArguments } from "../../../scripts/ops/usage-by-purpose.mjs";
 
 function rows(overrides = {}) {
   return USAGE_PURPOSES.map((purpose) => ({
@@ -31,6 +31,10 @@ test("the host report prints every purpose, its share of the money, and the tota
   assert.match(line("memory-extraction"), /记忆提取\s+4\s+0\s+90000\s+6000\s+0\.8000\s+20\.0%$/);
   assert.match(line("routing"), /路由分类\s+0\s+0\s+0\s+0\s+0\.0000\s+0\.0%$/);
   assert.match(lines.at(-1), /^total\s+合计\s+350\s+63000000\s+1190000\s+336000\s+4\.0000\s+100\.0%$/);
+  // The columns line up as a terminal draws them, Chinese labels two cells a
+  // character: every row of the table is exactly as wide as its header.
+  assert.equal(displayWidth("记忆提取"), 8);
+  assert.deepEqual(new Set(lines.slice(1).map(displayWidth)), new Set([displayWidth(lines[1])]));
   // Nothing spent is a report of nothing, not a division by zero.
   assert.match(formatUsageReport(rows(), { days: 1, since: "x" }).split("\n").at(-1), /0\.0000\s+-$/);
 });

@@ -14,6 +14,15 @@ export const openCostWindows = Object.freeze({ day: "24 hours", week: "7 days" }
 
 /** @type {Set<string>} */
 const openCostWindowValues = new Set(Object.values(openCostWindows));
+
+/** Purposes the ledger records for the operator and never counts against an
+ *  account's caps. An engine's row is our own view of what a specialist job
+ *  cost (plan §3.4 #6), not something the researcher settles: the job's price
+ *  is its flat per-job one. It also lands after the job has ended, on the run
+ *  its project was running at that moment — good enough for a report, and the
+ *  wrong input for a limit that refuses the next dispatch or stops a run
+ *  mid-way. Bound as a query parameter, never spliced. */
+export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine"]);
 const placeholderPattern = /^\$[1-9][0-9]*$/;
 
 /** Cost a new call must respect on top of settled spend: a reservation counts
@@ -169,7 +178,8 @@ export class UsageLedger {
         coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS week_open,
         coalesce(sum(CASE WHEN run_id=$3 AND status='settled' THEN actual_cost
           WHEN run_id=$3 AND ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS run_committed
-        FROM evimed_usage.model_requests WHERE user_id=$1`, [values.userId, values.now, values.runId]);
+        FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($4::text[])`,
+      [values.userId, values.now, values.runId, [...UNCAPPED_USAGE_PURPOSES]]);
       const day = Number(totals.rows[0].day_settled) + Number(totals.rows[0].day_open);
       const week = Number(totals.rows[0].week_settled) + Number(totals.rows[0].week_open);
       const overDay = values.dailyLimit > 0 && day + values.estimatedCost > values.dailyLimit;
@@ -229,11 +239,11 @@ export class UsageLedger {
    * reports its totals when it finishes (purpose `engine`).
    *
    * No reservation and no cap check, on purpose. The money is spent; refusing
-   * the record would not un-spend it, only make the ledger wrong. The row
-   * still counts toward the account's rolling caps from here on, like every
-   * settled row. Idempotent on `id` for the same fingerprint, so a report
-   * retried after a lost answer lands once; a different report under the same
-   * id is a conflict.
+   * the record would not un-spend it, only make the ledger wrong. An `engine`
+   * row is not counted by later cap checks either (`UNCAPPED_USAGE_PURPOSES`);
+   * every summary and report includes it. Idempotent on `id` for the same
+   * fingerprint, so a report retried after a lost answer lands once; a
+   * different report under the same id is a conflict.
    * @param {{id:string,userId:string,projectId:string,runId?:string|null,purpose?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,usage:{cacheHitTokens:number,cacheMissTokens:number,completionTokens:number},actualCost:number,priced:boolean,providerRequestId?:string|null,now?:Date}} input
    */
   async recordSettled(input) {
@@ -520,7 +530,8 @@ export class UsageLedger {
         coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
         coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN reserved_cost ELSE 0 END),0) AS day_open,
         coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS week_open
-        FROM evimed_usage.model_requests WHERE user_id=$1`, [user, at]);
+        FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($3::text[])`,
+      [user, at, [...UNCAPPED_USAGE_PURPOSES]]);
       const day = Number(result.rows[0].day_settled) + Number(result.rows[0].day_open);
       const week = Number(result.rows[0].week_settled) + Number(result.rows[0].week_open);
       const exceeded = dayLimit > 0 && day >= dayLimit ? { window: "day", limit: dayLimit, committed: day }
