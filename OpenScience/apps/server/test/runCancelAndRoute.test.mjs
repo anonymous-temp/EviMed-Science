@@ -111,6 +111,16 @@ test("cancelling records who stopped the run, is idempotent, and names the child
     assert.equal(runFinishedNotifies({ status: "canceled" }), false, "a stop the kernel reported alone counts as the person's");
     assert.equal(runFinishedNotifies({ status: "failed", dispatchStatus: "rejected" }), false);
     assert.equal(runFinishedNotifies({ status: "succeeded" }), true);
+    // A short conversational answer is already on screen; the inbox would
+    // repeat it with nothing to open. Longer work, files and safety still say so.
+    assert.equal(runFinishedNotifies({ status: "succeeded", durationMs: 3_000, artifacts: [] }), false);
+    assert.equal(runFinishedNotifies({ status: "succeeded", durationMs: 600_000, artifacts: [] }), true, "left to work");
+    assert.equal(runFinishedNotifies({ status: "succeeded", durationMs: 30_000, artifacts: ["deliverables/a/report.md"] }), true, "a file to open");
+    assert.equal(runFinishedNotifies({ status: "failed", durationMs: 3_000, errorCode: "runtime_exited" }), true, "a failure is news");
+    assert.equal(runFinishedNotifies({
+      status: "succeeded", durationMs: 3_000, verification: "unverified",
+      qualityNotices: [{ code: "clinical_safety_caution", severity: "safety", title: "临床安全", text: "SAFETY — x" }],
+    }), true, "safety interrupts");
   });
 });
 
