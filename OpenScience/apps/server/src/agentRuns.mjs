@@ -2075,6 +2075,23 @@ function assistantProse(messages) {
  * package is rejected with the same words, only the round is billed elsewhere.
  */
 
+/** What a capability's contract says about a turn that produced nothing of it. */
+const NATIVE_ANSWER_WHEN_NOTHING_STARTED = new Set([
+  "specialist_required_output_missing",
+  "specialist_required_output_stale",
+  "specialist_required_skill_missing",
+]);
+
+/**
+ * Whether a native turn began delivering: it wrote or read a plan, delegated a
+ * deliverable, or submitted one (the parent's own tool calls, `nativeWorkflow`).
+ * @param {Record<string, any>} run
+ */
+function nativeTurnStartedDelivery(run) {
+  const proof = run.nativeWorkflow;
+  return Boolean(proof && (proof.plan || (proof.delegates ?? []).length > 0 || (proof.submissions ?? []).length > 0));
+}
+
 /** TypeScript infers a destructured parameter as exactly the shape its
  *  defaults name, which rejects every other property a caller passes.
  *  @param {any} project
@@ -2112,6 +2129,21 @@ async function requiredSpecialistArtifacts(
     briefText,
     skippedChecks,
   );
+  // A turn asked in the conversation window that started no delivery — no
+  // plan, no delegation, no submission — and left none of the capability's
+  // outputs is an answer, whatever the classifier guessed the question was.
+  // There the research assistant decides whether to deliver files; the route
+  // is a guess about the question, not a contract the turn took on. On
+  // 2026-09-19 a follow-up in a finished aspirin conversation was routed to
+  // clinical-evidence-synthesis (llm 0.76), answered in two sentences that
+  // pointed at the report already delivered, and recorded as 「失败：运行时未载入
+  // 能力方法」. A turn that did produce the capability's files, or that planned,
+  // delegated or submitted, is judged by the contract exactly as before, and a
+  // dispatched run always is.
+  if (run.nativeTurn && (outcome.artifacts ?? []).length === 0 && NATIVE_ANSWER_WHEN_NOTHING_STARTED.has(String(outcome.errorCode))
+    && !nativeTurnStartedDelivery(run)) {
+    return { artifacts: [], errorCode: null };
+  }
   const unchecked = skippedChecks.length > 0 ? { qualityUnchecked: true } : {};
   // The structured twin of `qualityIssues`, for the reader. The strings stay
   // exactly what they were, because the repair loop hands them back to the run
