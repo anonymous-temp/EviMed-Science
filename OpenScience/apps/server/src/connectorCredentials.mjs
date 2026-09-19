@@ -130,20 +130,7 @@ export class ConnectorCredentialStore {
     assertSafeId(userId, "user id");
     const checked = validateConnectorCredentialValue(connector, value);
     if (checked.ok !== true) throw new HttpError(400, "connector_credential_invalid", `The credential was not accepted: ${checked.reason}.`);
-    const plaintext = Buffer.from(String(value).trim(), "utf8");
-    const nonce = randomBytes(12);
-    const cipher = createCipheriv("aes-256-gcm", this.key, nonce);
-    cipher.setAAD(aad(userId, connector));
-    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    await this.database.query(
-      `INSERT INTO ${SCHEMA}.user_connector_credentials (user_id, connector, ciphertext, nonce, tag, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (user_id, connector) DO UPDATE
-           SET ciphertext = EXCLUDED.ciphertext, nonce = EXCLUDED.nonce, tag = EXCLUDED.tag,
-               expires_at = EXCLUDED.expires_at, updated_at = clock_timestamp()`,
-      [userId, connector, ciphertext, nonce, tag, checked.expiresAt],
-    );
+    await this.#store(userId, connector, String(value).trim(), checked.expiresAt);
     return { connector, expiresAt: checked.expiresAt };
   }
 
@@ -166,6 +153,72 @@ export class ConnectorCredentialStore {
   async resolveOwn(userId, connector) {
     assertSafeId(userId, "user id");
     assertSafeId(connector, "connector");
+    return this.#open(userId, connector);
+  }
+
+  /**
+   * A secret the control plane holds for a messaging channel: a Feishu bot's
+   * App Secret, a device's push token.
+   *
+   * Same table, same cipher, same AAD rule as a data-source credential: the
+   * plan puts channel credentials in the existing per-user encrypted store
+   * (§3.6), and a second store would be a second key to rotate. What keeps it
+   * apart is the connector id: every
+   * one starts `channel.`, which no `CONNECTOR_CREDENTIALS` entry does, so
+   * `status()` never lists it, the connectors route refuses it by name, and the
+   * workload gateway — the one path a runtime has into this store — answers
+   * `connector_unknown`, because `connectorDeploymentSource` knows no such id.
+   * A runtime can never read a bot's secret.
+   * @param {string} userId @param {string} connector `channel.<id>` or `channel.<id>.<suffix>`
+   * @param {unknown} value
+   */
+  async setChannelSecret(userId, connector, value) {
+    assertSafeId(userId, "user id");
+    assertChannelConnector(connector);
+    const secret = typeof value === "string" ? value.trim() : "";
+    if (!secret || secret.length > 4096 || [...secret].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
+      throw new HttpError(400, "channel_secret_invalid", "The channel credential is not a usable value.");
+    }
+    await this.#store(userId, connector, secret, null);
+  }
+
+  /** @param {string} userId @param {string} connector @returns {Promise<string | null>} */
+  async resolveChannelSecret(userId, connector) {
+    assertSafeId(userId, "user id");
+    assertChannelConnector(connector);
+    return this.#open(userId, connector);
+  }
+
+  /** @param {string} userId @param {string} connector @returns {Promise<boolean>} */
+  async removeChannelSecret(userId, connector) {
+    assertSafeId(userId, "user id");
+    assertChannelConnector(connector);
+    const result = await this.database.query(
+      `DELETE FROM ${SCHEMA}.user_connector_credentials WHERE user_id = $1 AND connector = $2`,
+      [userId, connector],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /** @param {string} userId @param {string} connector @param {string} value @param {string | null} expiresAt */
+  async #store(userId, connector, value, expiresAt) {
+    const nonce = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", this.key, nonce);
+    cipher.setAAD(aad(userId, connector));
+    const ciphertext = Buffer.concat([cipher.update(Buffer.from(value, "utf8")), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    await this.database.query(
+      `INSERT INTO ${SCHEMA}.user_connector_credentials (user_id, connector, ciphertext, nonce, tag, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (user_id, connector) DO UPDATE
+           SET ciphertext = EXCLUDED.ciphertext, nonce = EXCLUDED.nonce, tag = EXCLUDED.tag,
+               expires_at = EXCLUDED.expires_at, updated_at = clock_timestamp()`,
+      [userId, connector, ciphertext, nonce, tag, expiresAt],
+    );
+  }
+
+  /** @param {string} userId @param {string} connector @returns {Promise<string | null>} */
+  async #open(userId, connector) {
     const { rows } = await this.database.query(
       `SELECT ciphertext, nonce, tag, expires_at FROM ${SCHEMA}.user_connector_credentials WHERE user_id = $1 AND connector = $2`,
       [userId, connector],
@@ -206,6 +259,21 @@ export class ConnectorCredentialStore {
 /** @param {string} userId @param {string} connector */
 function aad(userId, connector) {
   return Buffer.from(`${HKDF_INFO}\0${userId}\0${connector}`, "utf8");
+}
+
+/** The id a channel secret is held under: `channel.<channel id>` plus an
+ *  optional per-binding suffix (one push token per device). Bounded so the
+ *  whole id fits the table's 64-character connector column.
+ *  @param {string} channel @param {string} [suffix] */
+export function channelCredentialConnector(channel, suffix = "") {
+  return suffix ? `channel.${channel}.${suffix}` : `channel.${channel}`;
+}
+
+/** @param {unknown} connector */
+function assertChannelConnector(connector) {
+  if (typeof connector !== "string" || !/^channel\.[a-z][a-z-]{0,15}(?:\.[A-Za-z0-9_-]{1,32})?$/.test(connector)) {
+    throw new HttpError(400, "channel_connector_invalid", "The channel credential reference is invalid.");
+  }
 }
 
 /** Where an adapter asks for the credential a job should run with. */
