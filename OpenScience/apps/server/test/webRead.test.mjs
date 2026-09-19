@@ -233,6 +233,73 @@ test("PDFs and office documents go to the parser; other downloads are refused by
   await assert.rejects(failing.read("https://www.escardio.org/Guidelines/hf.pdf"), (error) => error.code === "source_format_unsupported" && error.status === 415);
 });
 
+// The 2026-09-20 release's security review used this page: nested <div>s
+// then stray </p>s make parse5 quadratic, and these 360 KB held the event
+// loop for 16 s, every other request on the server waiting behind one read.
+const stallingPage = () => `<html><body>${"<div>".repeat(40_000)}${"</p>".repeat(40_000)}</body></html>`;
+
+/** Runs `work` beside a 10 ms interval: how it ended, and the loop's longest silence meanwhile. */
+async function besideA10msInterval(work) {
+  let ticks = 0;
+  let last = Date.now();
+  let longestGapMs = 0;
+  const timer = setInterval(() => {
+    const now = Date.now();
+    longestGapMs = Math.max(longestGapMs, now - last);
+    last = now;
+    ticks += 1;
+  }, 10);
+  let error = null;
+  try {
+    await work();
+  } catch (caught) {
+    error = caught;
+  } finally {
+    clearInterval(timer);
+  }
+  return { error, ticks, longestGapMs: Math.max(longestGapMs, Date.now() - last) };
+}
+
+test("a page built to stall the parser is refused by name while the event loop keeps ticking", async () => {
+  const { transport } = fakeTransport({ "https://hostile.example.org/page": html(stallingPage()) });
+  const reader = createWebReader(config, { transport, parseTimeoutMs: 500 });
+  const watched = await besideA10msInterval(() => reader.read("https://hostile.example.org/page"));
+  assert.equal(watched.error?.code, "web_read_page_too_complex");
+  assert.equal(watched.error?.status, 422);
+  assert.match(watched.error.message, /hostile\.example\.org's page did not parse within 1 s/);
+  assert.ok(watched.ticks >= 10, `the interval ticked ${watched.ticks} times`);
+  assert.ok(watched.longestGapMs < 1_000, `the event loop went ${watched.longestGapMs} ms without ticking`);
+  const families = Object.fromEntries(webReadMetricFamilies(reader.stats()).map((family) => [family.name, family]));
+  const limit = families.open_science_web_read_limits_total.series.find((item) => item.labels.limit === "parse" && item.labels.action === "refused");
+  assert.equal(limit?.value, 1);
+  assert.equal(families.open_science_web_read_in_flight.series.find((item) => item.labels.tier === "parse")?.value, 0);
+});
+
+test("the read's deadline, or its caller hanging up, ends the parse thread", async () => {
+  const { transport } = fakeTransport({ "https://hostile.example.org/page": html(stallingPage()) });
+  const reader = createWebReader(config, { transport });
+  const started = Date.now();
+  await assert.rejects(
+    reader.read("https://hostile.example.org/page", { signal: AbortSignal.timeout(300) }),
+    (error) => error.code === "web_read_timeout",
+  );
+  assert.ok(Date.now() - started < 5_000, "the read's deadline ended it, not the ten-second parse budget");
+  const caller = new AbortController();
+  setTimeout(() => caller.abort(), 200);
+  await assert.rejects(reader.read("https://hostile.example.org/page", { signal: caller.signal }), (error) => error.code === "web_read_aborted");
+  // Ended, not abandoned: a thread still parsing would burn a core for 16 s.
+  const before = process.cpuUsage();
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  const used = process.cpuUsage(before);
+  assert.ok((used.user + used.system) / 1_000 < 400, `the process used ${((used.user + used.system) / 1_000).toFixed(0)} ms of CPU after both reads ended`);
+});
+
+test("a page nested past what the parse thread can walk is refused by name", async () => {
+  const { transport } = fakeTransport({ "https://deep.example.org/page": html(`<html><body>${"<span>".repeat(50_000)}deep text</body></html>`) });
+  const reader = createWebReader(config, { transport });
+  await assert.rejects(reader.read("https://deep.example.org/page"), (error) => error.code === "web_read_page_too_complex" && /nested too deeply/.test(error.message));
+});
+
 test("the authorities of the plan's five pages are labelled official, a blog is not", () => {
   for (const url of [
     "https://www.nmpa.gov.cn/xxgk/ggtg/index.html",

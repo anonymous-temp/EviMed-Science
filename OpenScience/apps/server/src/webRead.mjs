@@ -24,7 +24,7 @@
 
 import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
-import { decodePage, extractHtml, HTML_EXTRACTOR, renderReason, SHELL_VISIBLE_CHARS } from "./webReadExtract.mjs";
+import { decodePage, extractHtmlIsolated, HTML_EXTRACTOR, renderReason, SHELL_VISIBLE_CHARS } from "./webReadExtract.mjs";
 import { ConcurrencyGate, HostPacer } from "./webReadLimits.mjs";
 import {
   assertPublicWebHost,
@@ -48,6 +48,27 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
  * shared 15.5 GB host for gigabytes; no document page is anywhere near this.
  */
 const HTML_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * One page's parse, in its own thread (webReadExtract.extractHtmlIsolated).
+ * The most HTML a read parses, 5 MiB, takes 0.4–0.7 s here (measured
+ * 2026-09-19: a 5 MiB table of notices 0.44 s, 5 MiB of prose 0.64 s); the
+ * security review's 360 KB of nested tags took 16 s. Ten seconds is over ten
+ * times the real worst case, and stops a hostile page holding a parse slot
+ * and a core for the read's whole budget. Counted, with pages nested past
+ * what the thread's stack can walk, in
+ * open_science_web_read_limits_total{limit="parse"}.
+ */
+const HTML_PARSE_TIMEOUT_MS = 10_000;
+
+/**
+ * Parses at once, each a thread with its own heap — about 150 MB for 5 MiB of
+ * real HTML, 300 MB for 5 MiB of bare tags (measured) — and a core. On the
+ * event loop they ran one at a time; two keep the worst case near that, and a
+ * parse is short enough that a queue behind two is brief. Counted in
+ * open_science_web_read_limits_total{limit="parse_concurrency"}.
+ */
+const HTML_PARSES_AT_ONCE = 2;
 
 /**
  * Media types handed to the document parser: PDFs — society guidelines,
@@ -156,6 +177,7 @@ function documentFilename(url, extension) {
  *   renderer?: WebRenderer | null,
  *   documentParser?: any,
  *   now?: () => Date,
+ *   parseTimeoutMs?: number,
  * }} [dependencies]
  */
 export function createWebReader(config, {
@@ -164,14 +186,31 @@ export function createWebReader(config, {
   renderer = null,
   documentParser = null,
   now = () => new Date(),
+  parseTimeoutMs = HTML_PARSE_TIMEOUT_MS,
 } = {}) {
   const userAgent = webReadUserAgent(config);
   const maxBytes = Math.max(1024, Number(config.publicSourceGatewayMaxResponseBytes) || 16 * 1024 * 1024);
   const robots = new RobotsPolicy({ transport, userAgent });
   const pacer = new HostPacer({ intervalMs: Number(config.webReadHostIntervalMs ?? 1_000) });
   const gate = new ConcurrencyGate({ limit: Number(config.webReadConcurrency ?? 8), busyCode: "web_read_busy" });
+  const parseGate = new ConcurrencyGate({ limit: HTML_PARSES_AT_ONCE, busyCode: "web_read_busy" });
+  /** Parses refused: out of time, or nested past what the thread can walk. */
+  let parsesRefused = 0;
   /** How each read ended, for the operator's metrics. */
   const outcomes = { html: 0, rendered: 0, document: 0, text: 0, thin: 0, refused: 0, failed: 0 };
+
+  /**
+   * An HTML page's text, parsed off the event loop.
+   * @param {string} html @param {URL} baseUrl @param {AbortSignal | undefined} signal
+   */
+  async function extract(html, baseUrl, signal) {
+    try {
+      return await parseGate.run(() => extractHtmlIsolated(html, { baseUrl, timeoutMs: parseTimeoutMs, signal }), { signal });
+    } catch (error) {
+      if (error?.code === "web_read_page_too_complex") parsesRefused += 1;
+      throw error;
+    }
+  }
 
   /**
    * Fetch, following redirects by hand so every hop is validated, robots
@@ -246,7 +285,7 @@ export function createWebReader(config, {
     const renderedUrl = validatedWebUrl(rendered.finalUrl || finalUrl.href);
     await assertPublicWebHost(renderedUrl.hostname, resolveImpl);
     const html = String(rendered.html ?? "");
-    const page = extractHtml(html, { baseUrl: renderedUrl });
+    const page = await extract(html, renderedUrl, signal);
     const status = Number(rendered.status) || 200;
     const still = renderReason({ status, html, visibleChars: page.visibleChars });
     // After a browser, a short page that is a real 2xx document with no
@@ -286,7 +325,7 @@ export function createWebReader(config, {
     if (HTML_MEDIA_TYPES.has(mediaType)) {
       const bytes = response.body.length > HTML_MAX_BYTES ? response.body.subarray(0, HTML_MAX_BYTES) : response.body;
       const html = decodePage(bytes, contentTypeHeader);
-      const page = extractHtml(html, { baseUrl: finalUrl });
+      const page = await extract(html, finalUrl, signal);
       // An empty page that says where the document is: one more hop, the
       // same way a 3xx is followed.
       if (ok && page.visibleChars < SHELL_VISIBLE_CHARS && page.refreshUrl && fetched.hopsLeft > 0) {
@@ -404,6 +443,7 @@ export function createWebReader(config, {
         robots: { ...robots.counts },
         pacing: { ...pacer.counts },
         concurrency: { ...gate.counts, active: gate.active },
+        parsing: { ...parseGate.counts, active: parseGate.active, refusedPages: parsesRefused },
         render: renderer?.stats?.() ?? null,
       };
     },
@@ -452,6 +492,9 @@ export function webReadMetricFamilies(stats) {
         { value: stats.concurrency.refused, labels: { limit: "concurrency", action: "refused" } },
         { value: stats.robots.disallowed, labels: { limit: "robots", action: "refused" } },
         { value: stats.robots.unreachable, labels: { limit: "robots", action: "unreachable_allowed" } },
+        { value: stats.parsing.queued, labels: { limit: "parse_concurrency", action: "queued" } },
+        { value: stats.parsing.refused, labels: { limit: "parse_concurrency", action: "refused" } },
+        { value: stats.parsing.refusedPages, labels: { limit: "parse", action: "refused" } },
       ],
     },
     {
@@ -468,10 +511,11 @@ export function webReadMetricFamilies(stats) {
     },
     {
       name: "open_science_web_read_in_flight",
-      help: "Web reads and renders in progress right now.",
+      help: "Web reads, HTML parses and renders in progress right now.",
       type: "gauge",
       series: [
         { value: stats.concurrency.active, labels: { tier: "read" } },
+        { value: stats.parsing.active, labels: { tier: "parse" } },
         { value: Number(render.inFlight ?? 0), labels: { tier: "render" } },
       ],
     },

@@ -22,7 +22,11 @@
  * @module webReadExtract
  */
 
+import { Worker } from "node:worker_threads";
+
 import { parse } from "parse5";
+
+import { webReadError } from "./webReadNetwork.mjs";
 
 /** Written into every receipt, so a snapshot says which rules produced it. */
 export const HTML_EXTRACTOR = Object.freeze({ name: "evimed-html", version: "1.0.0" });
@@ -362,6 +366,71 @@ export function extractHtml(html, { baseUrl }) {
     truncated,
     refreshUrl,
   };
+}
+
+/** The thread `extractHtmlIsolated` parses in. */
+const EXTRACT_WORKER = new URL("./webReadExtractWorker.mjs", import.meta.url);
+
+/**
+ * `extractHtml` in a worker thread, so a hostile page cannot hold the event
+ * loop while it is parsed. parse5 is quadratic on deep nesting followed by
+ * stray end tags: 360 KB of nested `<div>`s then `</p>`s held the loop for
+ * 16 s in the 2026-09-20 release's security review, every other request
+ * waiting behind it. The thread is terminated when `signal` aborts — the read's
+ * deadline, or its caller hanging up — or after `timeoutMs`, and either way
+ * the read fails by name.
+ *
+ * The thread's heap is deliberately not capped with `resourceLimits`: a
+ * worker that reaches such a cap can abort the whole process instead of
+ * failing alone (measured: 5 MiB of bare `<a>` tags under a 192 MB cap took
+ * the process down with it). The HTML size cap bounds the heap instead.
+ *
+ * @param {string} html
+ * @param {{ baseUrl: string | URL, timeoutMs: number, signal?: AbortSignal }} options
+ * @returns {Promise<ExtractedPage>}
+ */
+export function extractHtmlIsolated(html, { baseUrl, timeoutMs, signal }) {
+  let host = "The site";
+  try {
+    host = new URL(String(baseUrl)).hostname;
+  } catch { /* a base the extractor itself falls back from */ }
+  const abandoned = () => (signal?.reason?.name === "TimeoutError"
+    ? webReadError(504, "web_read_timeout", "The web page did not answer in time.", { retryable: true })
+    : webReadError(499, "web_read_aborted", "The web read was abandoned."));
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abandoned());
+      return;
+    }
+    const worker = new Worker(EXTRACT_WORKER, {
+      name: "web-read-extract",
+      workerData: { html: String(html ?? ""), baseUrl: String(baseUrl) },
+    });
+    let settled = false;
+    /** @param {Error | null} error @param {ExtractedPage} [page] */
+    const finish = (error, page) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      void worker.terminate();
+      if (error) reject(error);
+      else resolve(/** @type {ExtractedPage} */ (page));
+    };
+    /** @param {string} why */
+    const refused = (why) => webReadError(422, "web_read_page_too_complex", `${host}'s page ${why}; use another source for it.`);
+    const onAbort = () => finish(abandoned());
+    const timer = setTimeout(() => finish(refused(`did not parse within ${Math.round(timeoutMs / 1000)} s`)), timeoutMs);
+    timer.unref?.();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    worker.once("message", (message) => finish(
+      message?.page ? null : refused(message?.failed === "RangeError" ? "is nested too deeply to read" : "could not be parsed"),
+      message?.page,
+    ));
+    // Out of memory is the page; any other thread failure is this server's.
+    worker.once("error", (/** @type {any} */ error) => finish(error?.code === "ERR_WORKER_OUT_OF_MEMORY" ? refused("is too large to parse") : error));
+    worker.once("exit", () => finish(new Error("The HTML extraction thread ended without an answer.")));
+  });
 }
 
 /** @param {string} html @returns {string | null} the vendor, when a challenge marker is present */
