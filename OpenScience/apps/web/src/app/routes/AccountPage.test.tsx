@@ -7,6 +7,7 @@ import { AccountPage } from "./AccountPage";
 const mocks = vi.hoisted(() => ({
   fetchWebMe: vi.fn(),
   lastWebUsageBudgetRefusal: vi.fn(),
+  fetchImStatus: vi.fn(),
 }));
 
 // The refusal source is mocked; the sentence the page prints is the real one,
@@ -36,6 +37,9 @@ vi.mock("@/components/settings/ConnectorsCard", () => ({
 // The other two tabs are whole pages with their own tests. Mocked so this file
 // tests the account destination, not everything reachable from it.
 vi.mock("./SettingsPage", () => ({ SettingsPage: () => <div>项目与插件设置</div> }));
+// The Feishu card has its own test; here only whether its tab exists.
+vi.mock("@/components/settings/FeishuCard", () => ({ FeishuCard: () => <div>飞书机器人</div> }));
+vi.mock("@/lib/imClient", () => ({ fetchImStatus: mocks.fetchImStatus }));
 vi.mock("./OpsPage", () => ({ OpsPage: () => <div>部署运维台</div> }));
 
 describe("AccountPage", () => {
@@ -44,6 +48,7 @@ describe("AccountPage", () => {
     window.localStorage.clear();
     useUiStore.setState({ theme: "system" });
     mocks.lastWebUsageBudgetRefusal.mockReturnValue(null);
+    mocks.fetchImStatus.mockResolvedValue({ enabled: false, available: true, channels: [], feishu: null, registration: null });
     mocks.fetchWebMe.mockResolvedValue({
       user: { id: "alice", name: "Alice", tenantId: "alice" },
       tenant: { id: "alice", model: "individual-account", role: "owner" },
@@ -82,6 +87,27 @@ describe("AccountPage", () => {
     expect(screen.getByText("数据源凭据")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "设置" }));
     expect(screen.getByText("项目与插件设置")).toBeInTheDocument();
+  });
+
+  // A page for a switched-off subsystem would offer a scan that cannot work.
+  it("offers the phone tab only where the deployment runs the IM module", async () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <AccountPage />
+      </MemoryRouter>,
+    );
+    await screen.findByText("Alice");
+    expect(screen.queryByRole("tab", { name: "手机与飞书" })).not.toBeInTheDocument();
+    unmount();
+
+    mocks.fetchImStatus.mockResolvedValue({ enabled: true, available: true, channels: [], feishu: { bound: false }, registration: null });
+    render(
+      <MemoryRouter>
+        <AccountPage />
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: "手机与飞书" }));
+    expect(screen.getByText("飞书机器人")).toBeInTheDocument();
   });
 
   // Presentation only — every route the page calls authorizes itself — but an
@@ -194,6 +220,7 @@ describe("AccountPage budget ceilings", () => {
 
   it("says nothing about ceilings when no request has been refused", async () => {
     mocks.lastWebUsageBudgetRefusal.mockReturnValue(null);
+    mocks.fetchImStatus.mockResolvedValue({ enabled: false, available: true, channels: [], feishu: null, registration: null });
     render(
       <MemoryRouter>
         <AccountPage />

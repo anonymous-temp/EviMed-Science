@@ -100,7 +100,9 @@ export function AppShell() {
               onClick={() => setSidebarCollapsed(false)}
               aria-label="展开侧边栏"
               title={`展开侧边栏 (${isMac ? "⌘B" : "Ctrl+B"})`}
-              className="fade-in rounded p-1 text-text hover:bg-surface-2"
+              // 32 px, the chrome's icon target: below `lg` this is the only
+              // way off a page a phone was sent to.
+              className="fade-in grid h-8 w-8 place-items-center rounded-input text-text hover:bg-surface-2"
             >
               <PanelLeft size={14} strokeWidth={1.5} aria-hidden="true" />
             </button>

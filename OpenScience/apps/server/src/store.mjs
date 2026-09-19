@@ -2,6 +2,7 @@ import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import { ControlPlaneDatabase, CONTROL_PLANE_SCHEMA, CONTROL_PLANE_SCHEMA_VERSION } from "./controlPlaneDatabase.mjs";
+import { DEVICE_REQUEST } from "./channels/deviceTokens.mjs";
 import {
   assertNoSymlinkPath,
   HttpError,
@@ -76,6 +77,18 @@ function serializeStateWrite(file, operation) {
   return current.finally(() => {
     if (stateWriteQueues.get(key) === current) stateWriteQueues.delete(key);
   });
+}
+
+/**
+ * A request the device-token step already authenticated (the own-app
+ * reservation, channels/deviceTokens.mjs; off unless OPEN_SCIENCE_APP_API_ENABLED).
+ * Its session has no CSRF token because it has no cookie: nothing attaches a
+ * bearer token to a request another site makes.
+ * @param {any} req
+ */
+function deviceSessionOf(req) {
+  const device = req?.[DEVICE_REQUEST];
+  return device?.user ? { user: device.user, session: { userId: device.user.id, csrfToken: null, device: true } } : null;
 }
 
 function sessionKey(sessionId) {
@@ -191,6 +204,8 @@ export class InMemoryStore {
   }
 
   async ensureSessionUser(req, res, { allowDevAuth = true } = {}) {
+    const device = deviceSessionOf(req);
+    if (device) return device;
     await this.loadSessions();
     const cookies = parseCookies(req.headers.cookie ?? "");
     const sessionId = cookies.get(this.config.sessionCookieName);
@@ -260,6 +275,7 @@ export class InMemoryStore {
 
   async assertCsrf(req, pathname) {
     if (this.config.devAuth) return;
+    if (deviceSessionOf(req)) return;
     const method = (req.method ?? "GET").toUpperCase();
     if (["GET", "HEAD", "OPTIONS"].includes(method)) return;
     // The three routes a caller reaches before it has a session. A CSRF token
@@ -884,6 +900,8 @@ export class PostgresStore extends InMemoryStore {
   async saveSessions() {}
 
   async ensureSessionUser(req, res, { allowDevAuth = true } = {}) {
+    const device = deviceSessionOf(req);
+    if (device) return device;
     const cookies = parseCookies(req.headers.cookie ?? "");
     const sessionId = cookies.get(this.config.sessionCookieName);
     const key = sessionId ? sessionKey(sessionId) : null;
@@ -960,6 +978,7 @@ export class PostgresStore extends InMemoryStore {
 
   async assertCsrf(req, pathname) {
     if (this.config.devAuth) return;
+    if (deviceSessionOf(req)) return;
     const method = (req.method ?? "GET").toUpperCase();
     if (["GET", "HEAD", "OPTIONS"].includes(method)) return;
     // The three routes a caller reaches before it has a session. A CSRF token

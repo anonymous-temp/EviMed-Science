@@ -7,6 +7,11 @@
     <meta name="application-name" content="EviMed" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f8f8f9" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#14181a" />
+    <!-- Add to a phone's home screen (public/manifest.json; no service worker).
+         Unhashed, so cached for a year like theme-init.js: bump ?v= on a change. -->
+    <link rel="manifest" href="/manifest.json?v=1" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=1" />
+    <meta name="apple-mobile-web-app-title" content="EviMed" />
     <title>EviMed</title>
     <!-- Before first paint (public/theme-init.js). Not hashed by the build, and
          the server caches unhashed files for a year: bump ?v= when it changes. -->

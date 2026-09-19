@@ -5,6 +5,8 @@ import { describeWebUsageBudget, fetchWebMe, lastWebUsageBudgetRefusal } from "@
 import { WebAccountCard } from "@/components/settings/WebAccountCard";
 import { UsageCard } from "@/components/settings/UsageCard";
 import { ConnectorsCard } from "@/components/settings/ConnectorsCard";
+import { FeishuCard } from "@/components/settings/FeishuCard";
+import { fetchImStatus } from "@/lib/imClient";
 import { Card } from "@/components/ui/Card";
 import { WorkbenchTabs, type WorkbenchTab } from "@/components/layout/WorkbenchTabs";
 import { SettingsPage } from "./SettingsPage";
@@ -31,6 +33,15 @@ export function AccountPage() {
   // Read once on entry. The refusal happened on whatever page tried to spend;
   // nothing on this page spends, so there is nothing to keep watching for.
   const [budgetRefusal] = useState(lastWebUsageBudgetRefusal);
+  // The phone tab exists only where the deployment runs the IM module: a page
+  // for a switched-off subsystem would offer a scan that cannot work.
+  const [phoneTab, setPhoneTab] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void fetchImStatus().then((status) => { if (active) setPhoneTab(status.enabled); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     void fetchWebMe().then((me) => {
@@ -108,6 +119,11 @@ export function AccountPage() {
         <div className="mx-auto max-w-content px-8 py-8" id="connectors"><ConnectorsCard /></div>
       </div>
     ) },
+    ...(phoneTab ? [{ key: "phone", label: "手机与飞书", render: () => (
+      <div className="h-full overflow-y-auto bg-bg">
+        <div className="mx-auto max-w-content px-4 py-6 sm:px-8 sm:py-8"><FeishuCard /></div>
+      </div>
+    ) }] : []),
     { key: "settings", label: "设置", render: () => <SettingsPage embedded /> },
     ...(identity.operator ? [{ key: "ops", label: "运维台", render: () => <OpsPage embedded /> }] : []),
   ];
