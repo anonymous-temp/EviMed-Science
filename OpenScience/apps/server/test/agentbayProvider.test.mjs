@@ -293,6 +293,36 @@ test("the delivery gate reads the session's files, and the control plane's run f
   assert.equal(await readFile(path.join(project.workspaceDir, ".evimed-brief", "sessions", "ses_abc", "context.md"), "utf8"), "the research context");
 });
 
+test("an upload made while the session runs reaches the kernel now, as the runtime user's file", async (t) => {
+  const { fake, project, managerFor } = await fixture(t);
+  const manager = managerFor();
+  await manager.start(project);
+  const table = Buffer.from([0x68, 0x62, 0x61, 0x31, 0x63, 0x0a, 0x00, 0xff, 0x37]);
+  const hostFile = path.join(project.workspaceDir, "data", "cohort.csv");
+  await mkdir(path.dirname(hostFile), { recursive: true });
+  await writeFile(hostFile, table);
+  assert.equal(await manager.mirrorWorkspaceUpload(project, hostFile, table), true);
+  assert.deepEqual(await readFile(fake.sessionFile("s-1", "/workspace/data/cohort.csv")), table, "binary bytes arrive unchanged");
+  const [decoded] = fake.calls.decoded;
+  assert.match(decoded.line, /^runuser -u evimed -- mkdir -p '\/workspace\/data' && .* && chown evimed:evimed .* && mv -f /);
+  assert.match(decoded.line, /; rc=\$\?; rm -f '\/run\/evimed\/uploads\/[0-9a-f]{24}\.b64'; exit \$rc$/, "the staged copy is removed whatever happened");
+  assert.ok(fake.calls.writes.some((write) => write.file.startsWith("/run/evimed/uploads/")), "the bytes travel outside the incoming directory the launcher installs from");
+  assert.ok(!fake.calls.writes.some((write) => write.file.startsWith("/run/evimed/incoming/") && write.content.includes(table.toString("base64"))));
+
+  // A new source into the read-only knowledge-base view stays root's.
+  const source = path.join(project.baseDir, "knowledge-base", "trial.txt");
+  await mkdir(path.dirname(source), { recursive: true });
+  await writeFile(source, "results");
+  assert.equal(await manager.mirrorWorkspaceUpload(project, source, Buffer.from("results")), true);
+  assert.equal(await readFile(fake.sessionFile("s-1", "/workspace/knowledge-base/trial.txt"), "utf8"), "results");
+  assert.match(fake.calls.decoded[1].line, /^mkdir -p '\/workspace\/knowledge-base' && .* && chmod 0444 /);
+
+  // Outside the workspace, or with no session, nothing is carried.
+  assert.equal(await manager.mirrorWorkspaceUpload(project, path.join(project.rootDir, "elsewhere.txt"), Buffer.from("x")), false);
+  await manager.stop(project);
+  assert.equal(await manager.mirrorWorkspaceUpload(project, hostFile, table), false);
+});
+
 test("a control plane that restarted takes its session back: the same session, the same kernel, the same credentials", async (t) => {
   const { fake, project, managerFor } = await fixture(t);
   const before = managerFor();

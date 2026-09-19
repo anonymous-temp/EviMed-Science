@@ -168,8 +168,8 @@ function excludedNames(policy) {
  *   Landlock ABI 6 and the firewall applied
  */
 export function fakeAgentBay({ root, oss, report = null }) {
-  /** @type {{ create: any[], delete: { sessionId: string, syncContext: boolean }[], commands: any[], writes: any[], keepAlive: number, list: any[] }} */
-  const calls = { create: [], delete: [], commands: [], writes: [], keepAlive: 0, list: [] };
+  /** @type {{ create: any[], delete: { sessionId: string, syncContext: boolean }[], commands: any[], writes: any[], keepAlive: number, list: any[], decoded: any[] }} */
+  const calls = { create: [], delete: [], commands: [], writes: [], keepAlive: 0, list: [], decoded: [] };
   /** @type {Map<string, any>} */
   const sessions = new Map();
   let counter = 0;
@@ -237,9 +237,25 @@ export function fakeAgentBay({ root, oss, report = null }) {
           }
           calls.commands.push({ sessionId: state.sessionId, line, envs, timeoutMs });
           const args = line.split(" ");
+          // An upload carried in: base64 text staged through the file API,
+          // decoded next to its target and moved over it.
+          const decode = /base64 -d '([^']+)' > '([^']+)\.part'/.exec(line);
+          if (decode) {
+            const [, staged, target] = decode;
+            const text = await fs.readFile(underRoot(state.dir, staged), "utf8");
+            await fs.mkdir(path.dirname(underRoot(state.dir, target)), { recursive: true });
+            await fs.writeFile(underRoot(state.dir, target), Buffer.from(text, "base64"));
+            await fs.rm(underRoot(state.dir, staged), { force: true });
+            calls.decoded.push({ sessionId: state.sessionId, target, line });
+            return { success: true, exitCode: 0, stdout: "" };
+          }
           if (args[0] === "mkdir") {
             const dir = /mkdir -p '?([^' ]+)'?/.exec(line)?.[1] ?? "";
             await fs.mkdir(underRoot(state.dir, dir), { recursive: true });
+            return { success: true, exitCode: 0, stdout: "" };
+          }
+          if (args[0] === "install" && args[1] === "-d") {
+            await fs.mkdir(underRoot(state.dir, args.at(-1)), { recursive: true });
             return { success: true, exitCode: 0, stdout: "" };
           }
           if (args[0] !== "/usr/local/bin/evimed-session") return { success: false, exitCode: 127, stdout: "", stderr: "unknown" };
