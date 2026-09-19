@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import http.client
 import http.server
 import json
 import threading
@@ -62,6 +63,32 @@ def test_a_resumed_job_reports_only_what_it_added() -> None:
         "requests": 2, "cacheHitTokens": 600, "cacheMissTokens": 0, "outputTokens": 29, "model": "deepseek-flash",
     }
     assert evimed_usage_report.delta(first, None) == first
+
+
+def test_a_job_that_ended_never_gets_an_exception_from_its_report() -> None:
+    # The report runs after the terminal state is written, in the job's own
+    # worker: whatever goes wrong comes back as a sentence for the job log.
+    arguments = {
+        "secret": SECRET, "job_id": "meta-20260920010203-abcdef012345", "user_id": "user-1", "project_id": "project-1",
+        "status": "succeeded", "finished_at": "2026-09-20T01:02:03Z",
+        "usage": {"requests": 1, "cacheHitTokens": 0, "cacheMissTokens": 10, "outputTokens": 1, "model": "deepseek-flash"},
+    }
+
+    def never(request, timeout):
+        raise AssertionError("an unsendable address is not sent to")
+
+    assert evimed_usage_report.report(
+        url="open-science-web/internal/usage/v1/engine", opener=never, **arguments,
+    ) == "not sent (invalid report URL)"
+
+    def garbled(request, timeout):
+        raise http.client.BadStatusLine("garbage")
+
+    sleeps = []
+    assert evimed_usage_report.report(
+        url="http://control-plane.test/internal/usage/v1/engine", opener=garbled, sleep=sleeps.append, **arguments,
+    ) == "undelivered (BadStatusLine)"
+    assert sleeps == [1, 2]
 
 
 def test_the_provider_cache_split_is_kept_on_every_usage_event() -> None:

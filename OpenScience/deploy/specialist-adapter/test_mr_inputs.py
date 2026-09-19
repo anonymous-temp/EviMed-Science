@@ -370,6 +370,10 @@ def test_analysis_scratch_is_cleaned_and_never_published(tmp_path, monkeypatch, 
     (agent / "mr_agent/tools/gwas.py").write_text(
         "# No remote sources in this fixture.\n"
     )
+    # The runner reports the provider usage its LLM client counted.
+    (agent / "mr_agent/llm").mkdir()
+    (agent / "mr_agent/llm/__init__.py").write_text("")
+    (agent / "mr_agent/llm/usage.py").write_bytes((source / "mr_agent/llm/usage.py").read_bytes())
     (agent / "mr_agent/core/engine.py").write_text(
         "import json,tempfile\nfrom pathlib import Path\n"
         "from types import SimpleNamespace\n"

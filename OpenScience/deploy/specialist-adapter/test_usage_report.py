@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import http.client
 import importlib
 import io
 import json
@@ -136,6 +137,22 @@ def test_no_address_means_no_report() -> None:
         raise AssertionError("no report without an address")
 
     assert _report(never, url="")[0] == "not configured"
+
+
+def test_a_job_that_ended_never_gets_an_exception_from_its_report() -> None:
+    """The report runs after the terminal state is written, in the job's own
+    worker: whatever goes wrong comes back as a sentence for the job log."""
+    def never(request, timeout):
+        raise AssertionError("an unsendable address is not sent to")
+
+    assert _report(never, url="open-science-web/internal/usage/v1/engine")[0] == "not sent (invalid report URL)"
+
+    def garbled(request, timeout):
+        raise http.client.BadStatusLine("garbage")
+
+    outcome, sleeps = _report(garbled)
+    assert outcome == "undelivered (BadStatusLine)"
+    assert sleeps == [1, 2]
 
 
 def test_an_mr_job_reports_under_the_owner_its_protected_queue_recorded(tmp_path, monkeypatch) -> None:
