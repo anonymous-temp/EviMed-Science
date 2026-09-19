@@ -880,8 +880,14 @@ export class MemoryIntelligence {
       kind: "run_summary",
       key: questionDigest ? `run.question.${questionDigest}` : `run.${run.id}`.toLowerCase(),
       value,
+      // The question, in the words and the language it was asked in. It used to
+      // be labelled 「Conversation about: …」, which put English into every
+      // Chinese researcher's episode record and into what the agent-memory
+      // API hands out; the kind (运行摘要) already says what the record is. A
+      // run with no user message has no language to follow and keeps the
+      // status line.
       summary: question
-        ? `Conversation about: ${question.slice(0, 240)}`
+        ? question.slice(0, 240)
         : `Run ${run.id} finished with status ${run.status}; ${run.artifacts.length} artifact(s) recorded.`,
       origin: "system",
       // The run summary can only be parked for the sensitive screen — its
@@ -940,6 +946,20 @@ export class MemoryIntelligence {
                 "Return JSON only: {\"candidates\":[...]}. Maximum 12 candidates.",
                 "Each candidate must contain scope, kind, key, value, summary, origin, confidence, importance, sensitive, sourceRef, evidenceQuote.",
                 "You are building a long-term picture of this user across many sessions, so prefer what will still be true next month over what only matters in this conversation.",
+                // The language of what is stored. Seen on the live site
+                // 2026-09-19: Chinese conversations produced English memories.
+                // Nothing here said which language to write in, and these
+                // instructions are English; English is what came back. The
+                // researcher then read their own memory page in a language they
+                // had not written, and an English project fact or analysis
+                // could not reach a later Chinese question through the
+                // built-in matcher, which compares CJK bigrams with ASCII words
+                // and so finds no shared term. Said here rather than decided in
+                // code (principles 5 and 7): which language a conversation is
+                // in is a language judgement. The run-title prompt
+                // (runTitles.mjs) carries the same rule.
+                "Write value and summary in the researcher's own language: the language of the user messages among the sources, or of the assistant's replies when no user message is among them. A conversation held in Chinese gets Chinese values and summaries, even where existingMemories or tool results are written in English.",
+                "Translate nothing that has to stay exact: identifiers (PMID, DOI, NCT and dataset ids, file names), drug, gene and protein names, numbers, units, statistical notation and anything quoted keep the exact form the source gives them.",
                 // The scope a kind must carry is enforced on the way in. Saying
                 // so here is the difference between a candidate being stored and
                 // being silently dropped for a mismatch the model could not see.
@@ -948,11 +968,29 @@ export class MemoryIntelligence {
                 "Allowed origins: explicit, inferred, system. explicit and inferred must cite a user message; system must cite an assistant message and is only for assistant-grounded analysis, decisions, follow-ups, or corrections.",
                 `Use explicit when the user stated it outright, inferred when it follows from what they did; an inferred candidate stays provisional until ${MEMORY_PROMOTION_MIN_OCCURRENCES} observations across at least ${MEMORY_PROMOTION_MIN_RUNS} separate runs agree, so record it rather than withholding it.`,
                 "Sources with role \"tool\" are results the platform computed or retrieved. They hold what prose loses: the search that worked, the identifier a term resolved to, the effect estimate and its interval. Record those as analysis or project_fact with origin \"system\", quoting the tool source exactly, and keep the numbers rather than describing them.",
-                "evidenceQuote must be a short exact substring of the referenced source, copied character for character. Do not infer identity, health, beliefs, demographics, or preferences without direct evidence.",
+                // "In the source's own language": a value written in Chinese
+                // pulls a quote from an English tool result towards Chinese too,
+                // and a translated quote is not verbatim, so the candidate would
+                // be refused (the commonest rejection already).
+                "evidenceQuote must be a short exact substring of the referenced source, copied character for character in the source's own language, never translated. Do not infer identity, health, beliefs, demographics, or preferences without direct evidence.",
                 "Store durable facts and compact analytical essentials: dataset or artifact reference, population/filter, parameter, unit, method, result, decision, and unresolved follow-up.",
                 "Do not store greetings, transient requests, chain-of-thought, secrets, full documents, or unsupported conclusions.",
-                "Keys must be stable lowercase dotted paths that a later session would choose again for the same fact, so that repeat observations reinforce one memory instead of creating near-duplicates: prefer preference.output_language over preference.user_wants_chinese.",
+                // English whatever the conversation: `memoryKeyPattern` admits
+                // lowercase ASCII only, and a key that followed the language
+                // would make the same fact two memories for a bilingual user.
+                "Keys are identifiers, not text: always English, whatever language the conversation is in, and stable lowercase dotted paths that a later session would choose again for the same fact, so that repeat observations reinforce one memory instead of creating near-duplicates: prefer preference.output_language over preference.user_wants_chinese.",
                 "existingMemories lists what is already stored. When this conversation restates or refines one of them, reuse its exact scope, kind and key so the observation reinforces that memory; only mint a new key for a fact none of them covers.",
+                // Production, 2026-09-19: many of the acceptance account's 54
+                // records began "Reinforced:" or "Refined:" -- the words of the
+                // line above, the likeliest source, turned into labels on the
+                // value. A label is not the fact: the value is what recall puts
+                // in front of the model and what the memory page shows, and
+                // `contradictedValue` compares values, so a labelled
+                // restatement of a confirmed memory reads as a changed one and
+                // raises the "a confirmed memory was rewritten" inbox notice.
+                // Counting observations is the store's job (evidenceCount), and
+                // so is keeping what a value replaced (revisions).
+                "value and summary state the fact itself, as it now stands, never the act of recording it: no label such as \"Reinforced:\", \"Refined:\", \"Updated:\" or \"Confirmed:\" in front of it, in any language. A reused key gets the complete current value; the store counts repeat observations and keeps every earlier value as a revision on its own.",
               ].join(" "),
             },
             {
