@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RunFilePage } from "./RunFilePage";
@@ -91,7 +91,9 @@ describe("RunFilePage", () => {
   it("still reads the file when no project has its run", async () => {
     renderAt(`/app/runs/run_gone/files/${REPORT}`);
     expect(await screen.findByRole("heading", { level: 1, name: "证据分析报告" })).toBeInTheDocument();
-    expect(await screen.findByText(/结论/)).toBeInTheDocument();
+    // The body renders, then re-renders once the claim check and the source
+    // notices settle; the first text node found can be the one replaced.
+    await waitFor(() => expect(screen.getByText(/结论/)).toBeInTheDocument());
     expect(mocks.openRunProject).toHaveBeenCalledWith("run_gone");
     expect(screen.queryByText("正在打开这次运行所在的项目…")).toBeNull();
   });
