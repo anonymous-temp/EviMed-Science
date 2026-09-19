@@ -247,8 +247,20 @@ function runLabel(run) {
 export function runFinishedNotifies(run) {
   if (run?.dispatchStatus === "rejected") return false;
   if (run?.status === "canceled" && run?.canceledBy !== "platform") return false;
+  // A conversation turn the reader watched finish: answered in the chat, no
+  // file, in under two minutes. Its notice said 「研究结果已准备好，可以查看运行
+  // 记录和交付物」 about a two-sentence answer already on screen, with nothing
+  // to open (2026-09-19 live walk: a 3-second question lit the bell). A run
+  // that took longer may have been left to work, and one with a clinical
+  // safety finding interrupts whatever its length.
+  if (run?.status === "succeeded" && !run?.errorCode && Number(run?.durationMs) < WATCHED_TURN_MS
+    && [...(run?.artifacts ?? []), ...(run?.unverifiedArtifacts ?? [])].length === 0
+    && runFinishedNotice(run).severity !== "safety") return false;
   return true;
 }
+
+/** How long a turn may take and still count as one the reader watched. */
+const WATCHED_TURN_MS = 120_000;
 
 /** @param {{ outcome: string, severity: string }} notice */
 function routineCompletion(notice) {
