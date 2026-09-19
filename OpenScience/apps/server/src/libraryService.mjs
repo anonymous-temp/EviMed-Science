@@ -514,10 +514,11 @@ export class LibraryService {
   }
 
   /**
-   * The capsule a publication writes into: the researcher's own primary
-   * capsule for the account. With none, one is made and made primary, keeping
-   * every reference capsule that was active beside it. A primary capsule that
-   * someone else shared is never written into.
+   * The capsule a publication writes into: the account's one capsule
+   * (`CapsuleService.ownCapsule` — one capsule per person, 「我的记忆胶囊」),
+   * made and made primary when there is none, with every reference capsule
+   * left active beside it. A primary capsule that someone else shared is never
+   * written into, and never quietly replaced by a publication either.
    * @param {string} userId
    */
   async #targetCapsule(userId) {
@@ -525,18 +526,12 @@ export class LibraryService {
     for (const item of active.items) {
       if (item.mode !== "own") continue;
       const capsule = await this.capsules.get(userId, item.capsuleId).catch(() => null);
-      if (!capsule) continue;
-      if (capsule.payload.imported) {
+      if (capsule?.payload.imported) {
         throw new HttpError(409, "library_capsule_unavailable", "The account's primary capsule is someone else's; documents are published only into your own.");
       }
-      return capsule;
     }
-    const capsule = await this.capsules.create(userId, { title: "我的记忆胶囊",
-      description: "你的研究记忆。个人资料库发布的资料事实和方法草稿也在这里，每一条都标着出处。" });
-    await this.capsules.activate(userId, capsule.id, { mode: "own", projectId: null });
-    for (const reference of active.items.filter((/** @type {any} */ item) => item.mode !== "own")) {
-      await this.capsules.activate(userId, reference.capsuleId, { mode: reference.mode, projectId: null }).catch(() => null);
-    }
+    const capsule = await this.capsules.ownCapsule(userId, { create: true });
+    if (!capsule) throw new HttpError(503, "library_unavailable", "The memory capsule is unavailable on this deployment.");
     return capsule;
   }
 
