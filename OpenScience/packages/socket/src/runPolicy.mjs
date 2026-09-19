@@ -824,6 +824,22 @@ export function buildDelegation(input) {
     '',
     `全部文件必须写在 \`deliverables/${input.item.id}/\` 下。写完后调用 \`evimed_submit_deliverable{deliverableId:"${input.item.id}"}\`，它会当场返回裁定；未通过就按 issues 修好再提交，直到通过。提交次数有限，\`evimed_package_check\` 给出同一份裁定而不占提交次数。`,
     '',
+    // Where things are, said once. Measured on the 2026-09-18 aspirin runs:
+    // every child opened by locating itself — `pwd`, `ls`, `cat task-plan.json`,
+    // the brief again — and a clinical child checked which papers were
+    // preserved by walking `.evimed-sources/pubmed/PMID*` in Python loops, a
+    // quarter of its shell calls spent finding what this message could say.
+    '## 工作区',
+    '',
+    `- 当前目录是这次运行的工作区。你负责的交付物、相关题面与要写的文件都在本消息里；完整题面在 \`${workspaceLayout.briefFile}\`，全部交付物的计划在 \`${workspaceLayout.planFile}\`。`,
+    `- 检索、全文与官方页面工具保存的来源都在 \`${workspaceLayout.sourcesDir}/\` 下，每个工具结果都写明了它保存的来源的路径或 id；按那个路径用 read/grep 读原文。`,
+    ...(input.toolFilter.some((name) => name.endsWith('__locate_quote'))
+      ? ['- 核对一句引文在不在原文里、在哪一段，用 `mcp__evimed__locate_quote{sourceId, quote}`：sourceId 用那个路径，或 PMCID、DOI 等 id；它按交付核验同样的规则判断，也会给出原文实际怎么写。']
+      : []),
+    ...((input.item.dependsOn ?? []).length
+      ? [`- 这件交付物依赖的交付物已经完成，文件在 ${input.item.dependsOn.map((/** @type {string} */ id) => `\`deliverables/${id}/\``).join('、')}，只读。`]
+      : []),
+    '',
     ...(Object.keys(input.inputs ?? {}).length
       ? ['## 输入参数', '', '```json', JSON.stringify(input.inputs, null, 2), '```', '']
       : []),

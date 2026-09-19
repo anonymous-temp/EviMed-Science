@@ -109,6 +109,22 @@ test("the delegation message opens with the stable method and says how to reach 
   assert.match(capped.prompt, /标题下写着原文所在的文件与行号/, "the child is told the stubs say where the text is");
 });
 
+test("the delegation message says where the sources and the deliverables it builds on are", () => {
+  // The 2026-09-18 aspirin runs: children located themselves with pwd/ls and
+  // checked which papers were preserved by walking the sources folder.
+  const manifest = { id: "demo", produces: [{ contractKind: "clinical-evidence-report", outputs: [{ path: "report.md", required: true }] }] };
+  const item = { id: "brief", title: "综合简报", contractKind: "clinical-evidence-report", dependsOn: ["review", "safety"] };
+  const withLocator = buildDelegation({ manifest, item, briefExcerpt: "题面", skillBodies: [{ name: "demo", body: "## 步骤" }], toolFilter: ["read", "mcp__evimed__locate_quote"] });
+  assert.match(withLocator.prompt, /## 工作区/);
+  assert.match(withLocator.prompt, /`\.evimed-sources\/` 下/);
+  assert.match(withLocator.prompt, /mcp__evimed__locate_quote\{sourceId, quote\}/);
+  assert.match(withLocator.prompt, /`deliverables\/review\/`、`deliverables\/safety\/`，只读/);
+  assert.ok(withLocator.prompt.indexOf("## 工作区") > withLocator.prompt.indexOf("## 你要写出的文件"), "per-task facts close the message");
+  const plain = buildDelegation({ manifest, item: { ...item, dependsOn: [] }, briefExcerpt: "题面", skillBodies: [{ name: "demo", body: "## 步骤" }], toolFilter: ["read"] });
+  assert.doesNotMatch(plain.prompt, /locate_quote/, "a tool the child does not have is not offered");
+  assert.doesNotMatch(plain.prompt, /依赖的交付物/, "no dependency, no line");
+});
+
 test("the shipped clinical method fits the cap with its safety boundaries inline", async () => {
   // Walks the real capability, so a skill that grows past what a child can be
   // handed shows up here rather than in a run.
