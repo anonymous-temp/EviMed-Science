@@ -9,6 +9,7 @@ vi.mock("@/components/capsule/UnderstandingSection", () => ({ UnderstandingSecti
 vi.mock("@/components/capsule/ProjectDossierSection", () => ({ ProjectDossierSection: () => <p>dossier section</p> }));
 vi.mock("@/components/capsule/CapsuleMethodsSection", () => ({ CapsuleMethodsSection: () => <p>methods section</p> }));
 vi.mock("@/components/capsule/CapsuleTimeline", () => ({ CapsuleTimeline: () => <p>timeline section</p> }));
+vi.mock("@/components/capsule/LibrarySection", () => ({ LibrarySection: () => <p>library section</p> }));
 vi.mock("@/components/capsule/ReceivedShelf", () => ({ ReceivedShelf: () => null }));
 vi.mock("@/components/memory/useMemoryWritePrompt", () => ({ useMemoryWritePrompt: () => {} }));
 vi.mock("./MemoryPage", () => ({ MemoryPage: () => null }));

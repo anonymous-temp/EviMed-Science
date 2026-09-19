@@ -4,6 +4,7 @@ import { fetchMemoryProfile, updateStructuredMemory, webErrorMessage, type WebSt
 import { formatDateTime } from "@/lib/format";
 import { announceMemoryChanged, archiveMemoryRecord, fetchMyCapsule, undoMemoryRecord } from "@/lib/memoryClient";
 import { MEMORY_BASIS_LABELS, memoryExcerpt, memoryStrength } from "@/lib/memoryText";
+import { fetchLibrary } from "@/lib/libraryClient";
 import { listMethods } from "@/lib/methodsClient";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
@@ -39,16 +40,19 @@ export interface OverviewCounts {
  * rewrites them for this page: a portrait that paraphrased would be a second
  * version of the person nobody can trace.
  */
-export function CapsuleOverview({ library = null }: OverviewCounts) {
+export function CapsuleOverview({ library: given }: OverviewCounts) {
   const [, setParams] = useSearchParams();
   const { data, failed, reload } = useCapsuleData(async () => {
-    const [profile, mine, methods] = await Promise.all([
+    const [profile, mine, methods, library] = await Promise.all([
       fetchMemoryProfile(),
       fetchMyCapsule().catch(() => null),
       listMethods().catch(() => null),
+      // A deployment without the library answers null; a failure is unknown.
+      given === undefined ? fetchLibrary().catch(() => null) : Promise.resolve(null),
     ]);
-    return { profile, mine, methods };
+    return { profile, mine, methods, library };
   });
+  const library = given !== undefined ? given : data?.library ? data.library.length : null;
   const [editing, setEditing] = useState<string | null>(null);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState<string | null>(null);

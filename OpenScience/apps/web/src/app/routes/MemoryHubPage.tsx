@@ -5,6 +5,7 @@ import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
 import { CapsuleMethodsSection } from "@/components/capsule/CapsuleMethodsSection";
 import { CapsuleOverview } from "@/components/capsule/CapsuleOverview";
 import { CapsuleTimeline } from "@/components/capsule/CapsuleTimeline";
+import { LibrarySection } from "@/components/capsule/LibrarySection";
 import { ProjectDossierSection } from "@/components/capsule/ProjectDossierSection";
 import { ReceivedShelf } from "@/components/capsule/ReceivedShelf";
 import { UnderstandingSection } from "@/components/capsule/UnderstandingSection";
@@ -54,17 +55,7 @@ const TABS: readonly WorkbenchTab[] = [
       />
     ),
   },
-  {
-    key: "library",
-    label: "资料",
-    render: () => (
-      <div className="h-full overflow-y-auto">
-        <p className="mx-auto w-full max-w-content-wide px-6 py-8 text-ui text-muted">
-          你的资料在「知识库」里；这里会列出每份资料为胶囊贡献了什么。
-        </p>
-      </div>
-    ),
-  },
+  { key: "library", label: "资料", render: () => <LibrarySection /> },
   { key: "timeline", label: "时间轴", render: () => <CapsuleTimeline /> },
 ];
 
