@@ -48,6 +48,8 @@ import { workspaceLayout } from './workspaceLayout.mjs'
 export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   { tag: 'evimed-brief', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   { tag: 'evimed-capsule', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
+  // A 「试用一次」 conversation's borrowed capsule, in its dispatch context.
+  { tag: 'evimed-capsule-trial', role: 'injected', emitters: ['apps/server/src/capsuleService.mjs'] },
   { tag: 'evimed-agenda', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   { tag: 'evimed-budget', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   { tag: 'evimed-run', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
