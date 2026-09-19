@@ -106,6 +106,9 @@ class ToolContractTests(unittest.TestCase):
             "get_usgs_water_data",
             "peer_review",
             "drug_safety_analysis",
+            # The researcher's own knowledge base, through the server's index
+            # (`kb_search.py`, 2026-09-20).
+            "kb_search",
         }
         self.assertEqual(set(by_name), expected)
         for tool in tools:

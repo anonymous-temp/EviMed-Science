@@ -21,7 +21,11 @@ x-runtime-caps: &runtime-caps
 
 services:
   evimed-postgres:
-    image: postgres:16.14-bookworm
+    # pgvector's build of the official postgres:16 image (deps-version.json
+    # `pgvector`): same data directory, plus the extension the knowledge-base
+    # index's vector leg needs. Pinned by digest; see the pin's notes for the
+    # host steps a move takes.
+    image: pgvector/pgvector:0.8.6-pg16-bookworm@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     environment:
       POSTGRES_DB: evimed
       POSTGRES_USER: evimed
@@ -488,6 +492,15 @@ services:
       OPEN_SCIENCE_WEB_SEARCH_URL: ${OPEN_SCIENCE_WEB_SEARCH_URL:-}
       OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/search/v1/query}
       OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS: ${OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS:-30000}
+      # Knowledge-base search (`kb_search`) and the index behind it. Off, the
+      # tool answers "disabled", nothing is indexed or embedded, and a run reads
+      # the knowledge-base files as before.
+      OPEN_SCIENCE_KB_SEARCH_ENABLED: ${OPEN_SCIENCE_KB_SEARCH_ENABLED:-true}
+      OPEN_SCIENCE_KB_SEARCH_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_KB_SEARCH_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/kb/v1/search}
+      OPEN_SCIENCE_KB_SEARCH_TIMEOUT_MS: ${OPEN_SCIENCE_KB_SEARCH_TIMEOUT_MS:-20000}
+      OPEN_SCIENCE_KB_SMALL_LIBRARY_TOKENS: ${OPEN_SCIENCE_KB_SMALL_LIBRARY_TOKENS:-150000}
+      OPEN_SCIENCE_KB_INDEX_RECONCILE_MS: ${OPEN_SCIENCE_KB_INDEX_RECONCILE_MS:-60000}
+      OPEN_SCIENCE_KB_EMBEDDING_TIMEOUT_MS: ${OPEN_SCIENCE_KB_EMBEDDING_TIMEOUT_MS:-30000}
       # The GEO probe channel: what the consumer LLM front-ends actually answer.
       # Empty disables it and `geo_visibility_probe` refuses with a stated
       # reason, which is the right answer for a deployment that cannot measure

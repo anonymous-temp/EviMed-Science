@@ -50,7 +50,7 @@ function readKeyFile(file) {
 export class MemoryRerank {
   /**
    * @param {{apiKey?:string,apiKeyFile?:string,model?:string,apiBase?:string,timeoutMs?:number,
-   *   maxDocuments?:number,maxCharsPerDocument?:number}} options
+   *   maxDocuments?:number,maxCharsPerDocument?:number,instruct?:string}} options
    * @param {{fetchImpl?:any,report?:(code:string)=>void}} [dependencies]
    */
   constructor({
@@ -61,6 +61,7 @@ export class MemoryRerank {
     timeoutMs = 3_000,
     maxDocuments = 32,
     maxCharsPerDocument = 2_000,
+    instruct = "",
   } = {}, { fetchImpl = globalThis.fetch, report = defaultReport } = {}) {
     const key = apiKeyFile ? readKeyFile(apiKeyFile) : { value: String(apiKey ?? ""), error: null };
     this.apiKey = key.value;
@@ -70,6 +71,9 @@ export class MemoryRerank {
     this.timeoutMs = Math.max(100, Math.min(30_000, Number(timeoutMs) || 3_000));
     this.maxDocuments = Math.max(2, Math.min(100, Number(maxDocuments) || 32));
     this.maxCharsPerDocument = Math.max(100, Math.min(20_000, Number(maxCharsPerDocument) || 2_000));
+    // qwen3-rerank's task instruction (English, per its documentation). Unset,
+    // the model ranks for its default of web-search question answering.
+    this.instruct = String(instruct ?? "").trim();
     this.fetchImpl = fetchImpl;
     this.report = report;
     this.lastError = this.keyError;
@@ -144,9 +148,10 @@ export class MemoryRerank {
 
   /** @param {string} query @param {string[]} documents */
   #body(query, documents) {
+    const instruct = this.instruct ? { instruct: this.instruct } : {};
     return this.apiBase.includes(NATIVE_PATH_MARKER)
-      ? { model: this.model, input: { query, documents }, parameters: { return_documents: false } }
-      : { model: this.model, query, documents, top_n: documents.length };
+      ? { model: this.model, input: { query, documents }, parameters: { return_documents: false, ...instruct } }
+      : { model: this.model, query, documents, top_n: documents.length, ...instruct };
   }
 
   /** Keep the order that arrived, and say once why it was not improved.

@@ -472,7 +472,8 @@ test("production compose isolates runtimes behind the internal model gateway net
 test("production compose holds every memory in PostgreSQL and ranks it with the bundled index", async () => {
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const envExample = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
-  assert.match(compose, /evimed-postgres:\n\s+image: postgres:16\.14-bookworm/);
+  // pgvector's build of postgres:16, pinned by digest (packages/contracts/pgvector).
+  assert.match(compose, /evimed-postgres:\n(?:\s+#.*\n)*\s+image: pgvector\/pgvector:0\.8\.\d+-pg16-bookworm@sha256:[a-f0-9]{64}\n/);
   assert.match(compose, /POSTGRES_PASSWORD_FILE: \/run\/secrets\/postgres-password/);
   assert.match(compose, /OPEN_SCIENCE_STATE_STORE: postgres/);
   assert.match(compose, /OPEN_SCIENCE_REQUIRE_SHARED_STATE_STORE: "true"/);

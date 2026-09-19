@@ -23,7 +23,9 @@ jobs:
     timeout-minutes: 45
     services:
       postgres:
-        image: postgres:16.14-bookworm
+        # The production image (deps-version.json `pgvector`), so the
+        # knowledge-base index's vector leg is tested where it will run.
+        image: pgvector/pgvector:0.8.6-pg16-bookworm@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
         env:
           POSTGRES_USER: postgres
           POSTGRES_DB: evimed_test_auth

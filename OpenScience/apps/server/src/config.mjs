@@ -1217,6 +1217,34 @@ export function loadConfig(overrides = {}) {
       ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_DAILY_LIMIT_CNY ?? 10),
     sourceUnderstandingWeeklyLimitCny: Number(overrides.sourceUnderstandingWeeklyLimitCny
       ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_WEEKLY_LIMIT_CNY ?? 50),
+    // Knowledge-base search (`kb_search`, 2026-09-20). One switch for the tool
+    // and the index behind it: off, the gateway answers `kb_search_disabled`,
+    // nothing is indexed or embedded, and a run reads the files as before.
+    kbSearchEnabled: overrides.kbSearchEnabled ?? boolEnv("OPEN_SCIENCE_KB_SEARCH_ENABLED", true),
+    kbSearchGatewayInternalUrl:
+      overrides.kbSearchGatewayInternalUrl ??
+      process.env.OPEN_SCIENCE_KB_SEARCH_GATEWAY_INTERNAL_URL ??
+      (production
+        ? "http://open-science-web:8787/internal/kb/v1/search"
+        : `http://127.0.0.1:${port}/internal/kb/v1/search`),
+    // One search: three SQL legs, one query embedding and one rerank call.
+    // 20 s is several times their sum on a large library; past it the run is
+    // told to read the files rather than kept waiting.
+    kbSearchTimeoutMs: Number(overrides.kbSearchTimeoutMs ?? process.env.OPEN_SCIENCE_KB_SEARCH_TIMEOUT_MS ?? 20_000),
+    // Below this many tokens across a project's documents and the library, the
+    // search answers with the files to read instead of fragments (plan §3.2:
+    // 150–200K; Anthropic's guidance is not to retrieve under ~200K).
+    kbSmallLibraryTokens: Number(overrides.kbSmallLibraryTokens ?? process.env.OPEN_SCIENCE_KB_SMALL_LIBRARY_TOKENS ?? 150_000),
+    // How often the index worker converges on the sources when nothing woke
+    // it. A finished source wakes it at once; this is the safety net.
+    kbIndexReconcileMs: Number(overrides.kbIndexReconcileMs ?? process.env.OPEN_SCIENCE_KB_INDEX_RECONCILE_MS ?? 60_000),
+    // One embedding request of ten chunks against DashScope.
+    kbEmbeddingTimeoutMs: Number(overrides.kbEmbeddingTimeoutMs ?? process.env.OPEN_SCIENCE_KB_EMBEDDING_TIMEOUT_MS ?? 30_000),
+    // The model and width are the memory index's pin, so one key and one price
+    // cover both and a change of either is one edit in deps-version.json.
+    kbEmbeddingModel: String(depsVersions.openviking?.embedding?.model ?? ""),
+    kbEmbeddingDimension: Number(depsVersions.openviking?.embedding?.dimension ?? 1024),
+    kbEmbeddingApiBase: String(depsVersions.openviking?.embedding?.apiBase ?? ""),
     autopilotEnabled: overrides.autopilotEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_ENABLED", production),
     autopilotPollMs: Number(overrides.autopilotPollMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_POLL_MS ?? 1_000),
     autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),
@@ -1390,24 +1418,6 @@ export function loadConfig(overrides = {}) {
     // extracted from those runs has no expiry.
     memoryRunSummaryTtlDays: Number(
       overrides.memoryRunSummaryTtlDays ?? process.env.OPEN_SCIENCE_MEMORY_RUN_SUMMARY_TTL_DAYS ?? 90,
-    ),
-    knowledgeChunkChars: Number(
-      overrides.knowledgeChunkChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_CHUNK_CHARS ?? 1_600,
-    ),
-    knowledgeChunkOverlapChars: Number(
-      overrides.knowledgeChunkOverlapChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_CHUNK_OVERLAP_CHARS ?? 240,
-    ),
-    knowledgeTopK: Number(
-      overrides.knowledgeTopK ?? process.env.OPEN_SCIENCE_KNOWLEDGE_TOP_K ?? 6,
-    ),
-    knowledgeContextMaxChars: Number(
-      overrides.knowledgeContextMaxChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_CONTEXT_MAX_CHARS ?? 12_000,
-    ),
-    knowledgeIndexMaxFileBytes: Number(
-      overrides.knowledgeIndexMaxFileBytes ?? process.env.OPEN_SCIENCE_KNOWLEDGE_INDEX_MAX_FILE_BYTES ?? 5 * 1024 * 1024,
-    ),
-    knowledgeIndexMaxChars: Number(
-      overrides.knowledgeIndexMaxChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_INDEX_MAX_CHARS ?? 5_000_000,
     ),
     allowRuntimeHostNetwork:
       overrides.allowRuntimeHostNetwork ?? boolEnv("OPEN_SCIENCE_ALLOW_RUNTIME_HOST_NETWORK", false),

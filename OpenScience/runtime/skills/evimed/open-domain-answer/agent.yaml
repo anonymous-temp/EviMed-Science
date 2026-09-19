@@ -25,6 +25,7 @@ optionalTools:
   - guideline_search
   - drug_label_search
   - pharmacy_reference_search
+  - kb_search
 dataSources:
   - literature
   - guidelines
