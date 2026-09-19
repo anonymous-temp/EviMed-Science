@@ -584,6 +584,29 @@ services:
       # rt: runtime UX — warm the most recently used project's runtime at
       # sign-in. Value-less: unset keeps config.mjs's default, on.
       OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN:
+      # rt: the AgentBay runtime provider (plan §3.1). Web only — the
+      # controller and the receipt scheduler keep running Docker runtimes.
+      # Value-less: unset keeps config.mjs's defaults, and `docker` stays the
+      # provider. The API key file arrives with docker-compose.agentbay.yml.
+      OPEN_SCIENCE_RUNTIME_PROVIDER:
+      OPEN_SCIENCE_AGENTBAY_REGION:
+      OPEN_SCIENCE_AGENTBAY_ENDPOINT:
+      OPEN_SCIENCE_AGENTBAY_IMAGE_ID:
+      OPEN_SCIENCE_AGENTBAY_IDLE_RELEASE_MINUTES:
+      OPEN_SCIENCE_AGENTBAY_MAX_RUNTIME_MINUTES:
+      OPEN_SCIENCE_AGENTBAY_HEARTBEAT_MS:
+      OPEN_SCIENCE_AGENTBAY_POLICY_ID:
+      OPEN_SCIENCE_AGENTBAY_BRIDGE_PORT:
+      OPEN_SCIENCE_AGENTBAY_BRIDGE_SECRET_MODE:
+      OPEN_SCIENCE_AGENTBAY_WORKLOAD_TOKEN_TTL_SECONDS:
+      OPEN_SCIENCE_AGENTBAY_WORKLOAD_TOKEN_REFRESH_SECONDS:
+      OPEN_SCIENCE_AGENTBAY_SANDBOX_ENFORCEMENT:
+      OPEN_SCIENCE_AGENTBAY_FIREWALL_REQUIRED:
+      OPEN_SCIENCE_AGENTBAY_SYNC_INTERVAL_MS:
+      OPEN_SCIENCE_AGENTBAY_SYNC_MAX_FILE_BYTES:
+      OPEN_SCIENCE_AGENTBAY_CONTEXT_PREFIX:
+      OPEN_SCIENCE_RUNTIME_GATEWAY_PUBLIC_URL:
+      OPEN_SCIENCE_RUNTIME_GATEWAY_RATE_LIMIT_PER_MINUTE:
     volumes:
       - open-science-data:/data
       - open-science-backups:/backups:ro

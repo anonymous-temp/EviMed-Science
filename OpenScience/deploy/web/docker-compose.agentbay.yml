@@ -1,0 +1,17 @@
+# rt: the AgentBay runtime provider (plan §3.1).
+#
+# Added with -f when a deployment sets OPEN_SCIENCE_RUNTIME_PROVIDER=agentbay:
+# the AgentBay API key file, mounted read-only into the web service and nowhere
+# else. The control plane reads it on first use (apps/server/src/agentbay/
+# client.mjs); it never enters a runtime, a Context, a log or an error message.
+# A separate file because compose cannot make a bind mount conditional, and a
+# deployment that stays on Docker has no key to name.
+services:
+  open-science-web:
+    environment:
+      OPEN_SCIENCE_AGENTBAY_API_KEY_FILE: /run/secrets/agentbay-api-key
+    volumes:
+      - type: bind
+        source: ${OPEN_SCIENCE_AGENTBAY_API_KEY_HOST_FILE:?set OPEN_SCIENCE_AGENTBAY_API_KEY_HOST_FILE}
+        target: /run/secrets/agentbay-api-key
+        read_only: true
