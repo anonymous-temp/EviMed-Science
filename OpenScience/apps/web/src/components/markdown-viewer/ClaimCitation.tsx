@@ -9,6 +9,7 @@ import {
   type ClaimEvidence,
   type ClaimSource,
   type ClaimVerification,
+  type SourceUpdate,
 } from "@/lib/claimCitations";
 import { claimAppraisalDisplay } from "@/lib/claimAppraisal";
 import { cn } from "@/lib/cn";
@@ -16,6 +17,7 @@ import type { WebReadPage } from "@/lib/apiClient";
 import { pageForSource } from "@/lib/readPages";
 import { ReadPageCard } from "@/components/runs/ReadPages";
 import { ClaimAppraisalSummary } from "./ClaimAppraisal";
+import { SourceUpdateBadges } from "./SourceUpdateBadges";
 
 const TYPE_LABEL: Record<string, string> = { direct: "直接证据", synthesized: "综合结论", derived: "推导结果" };
 const ACCESS_LABEL: Record<string, string> = {
@@ -62,13 +64,15 @@ function SourceBadge({ source }: { source: ClaimSource }) {
   );
 }
 
-function Source({ source, index, count, status, runId, pagesRead }: {
+function Source({ source, index, count, status, runId, pagesRead, updates }: {
   source: ClaimSource;
   index: number;
   count: number;
   status?: string;
   runId?: string | null;
   pagesRead?: readonly WebReadPage[];
+  /** The cited work's retraction and correction notices, when Crossref answered. */
+  updates?: readonly SourceUpdate[];
 }) {
   const href = safeHref(source.sourceUrl);
   const page = pageForSource(pagesRead, source);
@@ -79,6 +83,7 @@ function Source({ source, index, count, status, runId, pagesRead }: {
         {count > 1 && <span>第 {index + 1} 段引文</span>}
         <SourceBadge source={source} />
         {statusText && count > 1 && <span className={TONE_CLASS[statusText.tone]}>{statusText.tone === "ok" ? "✓ 已核对" : "⚠ 未核对上"}</span>}
+        <SourceUpdateBadges updates={updates} />
       </p>
       {source.supportQuote && (
         <blockquote className="border-l-2 border-strong pl-2 text-ui text-text">“{source.supportQuote}”</blockquote>
@@ -153,6 +158,7 @@ export function ClaimEvidenceList({ ids, claims, statuses, reading }: {
                 status={verified?.sources[index]?.status}
                 runId={reading?.runId}
                 pagesRead={reading?.pagesRead}
+                updates={verified?.sources[index]?.updates}
               />
             ))}
             {claim.claimType === "derived" && (

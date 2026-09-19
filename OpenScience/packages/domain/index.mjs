@@ -566,3 +566,12 @@ export {
   gateIssueSeverity,
   summarizeGateNotices,
 } from './src/gateIssueText.mjs'
+
+// sourceUpdates — 5 exports (retraction and correction notices on a cited work, 2026-09-20)
+export {
+  SOURCE_UPDATE_KINDS,
+  SOURCE_UPDATE_LABELS_ZH,
+  SOURCE_UPDATE_WEIGHT,
+  doiOf,
+  sourceUpdatesFromCrossref,
+} from './src/sourceUpdates.mjs'

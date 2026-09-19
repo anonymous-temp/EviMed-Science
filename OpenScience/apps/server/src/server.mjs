@@ -84,8 +84,9 @@ import { createSourceUnderstandingRuntime } from "./sourceUnderstandingRuntime.m
 import { removeSourceCopies, sourceAttemptId, stageParserInput } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { createWebRenderer } from "./agentbay/browser.mjs";
-import { createWebReader, webReadMetricFamilies, webReadTransportFor } from "./webRead.mjs";
+import { createWebReader, webReadMetricFamilies, webReadTransportFor, webReadUserAgent } from "./webRead.mjs";
 import { pagesReadFromSessions } from "./webReadPages.mjs";
+import { createSourceUpdateLookup, sourceUpdateMetricFamilies } from "./sourceUpdates.mjs";
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
 import { AutopilotService, VERIFICATION_ARTIFACT, VERIFICATION_ROUTE_REASON, parseVerificationResult, verificationBrief,
@@ -2206,7 +2207,14 @@ export function createWebApiApp(overrides = {}) {
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
   });
-  const commands = createCommandRegistry({ config, runtimeManager });
+  // Retraction and correction notices on cited sources (plan §3.9), for the
+  // 「依据」 popover; off leaves the source cards without them.
+  const sourceUpdates = config.sourceUpdatesEnabled === false ? null : createSourceUpdateLookup({
+    userAgent: webReadUserAgent(config),
+    timeoutMs: config.sourceUpdatesTimeoutMs,
+    fetchImpl: overrides.sourceUpdatesFetch ?? globalThis.fetch,
+  });
+  const commands = createCommandRegistry({ config, runtimeManager, sourceUpdates });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx), {
     claimAllowed: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
   });
@@ -2485,6 +2493,7 @@ export function createWebApiApp(overrides = {}) {
           operationalMetrics,
           activeCommands,
           webReader,
+          sourceUpdates,
         });
         return;
       }
@@ -4907,7 +4916,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, webReader = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, webReader = null, sourceUpdates = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -5022,6 +5031,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   });
   // Web reading's outcomes and limits (webRead.mjs).
   for (const family of webReadMetricFamilies(webReader?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of sourceUpdateMetricFamilies(sourceUpdates?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
   addMetric(lines, "open_science_task_total", "Known task records in the current process.", "gauge", {
     value: taskStats.total,
   });

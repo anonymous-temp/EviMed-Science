@@ -1474,6 +1474,12 @@ export function loadConfig(overrides = {}) {
     // from Crossref when its 「依据」 are opened. A notice, never a gate
     // (principle 13); off, the source cards simply carry none.
     sourceUpdatesEnabled: overrides.sourceUpdatesEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_UPDATES_ENABLED", true),
+    // One Crossref request for twenty cited works, made while a reader waits
+    // for a report's 「依据」 marks: past this the badges are simply absent.
+    // Counted in open_science_source_updates_total{outcome="failed"}.
+    sourceUpdatesTimeoutMs: Math.max(500, Number(
+      overrides.sourceUpdatesTimeoutMs ?? process.env.OPEN_SCIENCE_SOURCE_UPDATES_TIMEOUT_MS ?? 3_000,
+    ) || 3_000),
     // --- AgentBay (contract X3; the runtime-provider stream adds the same
     // three keys — one block survives the merge). The key is read from its
     // file by the control plane only; empty means AgentBay is off. ---

@@ -68,13 +68,28 @@ export interface ClaimMatrixDocument {
  */
 export type ClaimStatus = "verified" | "quote_not_found" | "source_unavailable" | "no_quote" | "derived";
 
+/**
+ * A retraction or correction notice on a cited work, from Crossref (plan
+ * §3.9): `kind` is one of the domain's SOURCE_UPDATE_KINDS.
+ */
+export interface SourceUpdate {
+  kind: string;
+  noticeDoi: string | null;
+  date: string | null;
+  source: string | null;
+}
+
 export interface ClaimVerification {
   claims: {
     claimId: string;
     claimType: string;
     status: ClaimStatus | string;
-    /** `sourceType` is what the preserving tool stamped beside the capture (C8), added by the control plane. */
-    sources: { artifactPath: string | null; status: string; sourceType?: string }[];
+    /**
+     * `sourceType` is what the preserving tool stamped beside the capture (C8),
+     * added by the control plane; `doi` and `updates` are the work's Crossref
+     * notices, present only when Crossref was asked and answered.
+     */
+    sources: { artifactPath: string | null; status: string; sourceType?: string; doi?: string; updates?: SourceUpdate[] }[];
   }[];
   counts: Record<string, number>;
 }
