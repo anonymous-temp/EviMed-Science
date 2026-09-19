@@ -1420,5 +1420,65 @@ export function loadConfig(overrides = {}) {
       "OPEN_SCIENCE_MEMORY_RECALL_ENABLED",
       overrides.memoryEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_ENABLED", true),
     ),
+    // --- web reading (web stream, 2026-09-20; plan §3.5) ---
+    // `web_read`, the one tool that reads any public page. Off hides the tool
+    // from the runtime and refuses the gateway's web-read mode; the native
+    // conversation is untouched (principle 11).
+    webReadEnabled: overrides.webReadEnabled ?? boolEnv("OPEN_SCIENCE_WEB_READ_ENABLED", true),
+    // Reads in flight at once, every site together. Each may hold a 16 MiB
+    // body and, for HTML, a parsed DOM ten times its size; eight bound the
+    // worst case on a shared host. Counted in
+    // open_science_web_read_limits_total{limit="concurrency"}.
+    webReadConcurrency: Math.max(1, Number(
+      overrides.webReadConcurrency ?? process.env.OPEN_SCIENCE_WEB_READ_CONCURRENCY ?? 8,
+    ) || 8),
+    // The least time between two requests to one site (a robots.txt
+    // Crawl-delay stretches it): a run fanning out over a regulator's notice
+    // list must not read as a flood from our address. Counted in
+    // open_science_web_read_limits_total{limit="host_interval"}.
+    webReadHostIntervalMs: Math.max(0, Number(
+      overrides.webReadHostIntervalMs ?? process.env.OPEN_SCIENCE_WEB_READ_HOST_INTERVAL_MS ?? 1_000,
+    ) || 0),
+    // One whole read — robots, redirects, a render, a document parse. Clamped
+    // under the kernel's tool-call ceiling like the GEO probe's: a deadline
+    // the caller has already abandoned is a timeout nobody is told about.
+    webReadTimeoutMs: Math.min(
+      MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS,
+      Math.max(5_000, Number(
+        overrides.webReadTimeoutMs ?? process.env.OPEN_SCIENCE_WEB_READ_TIMEOUT_MS ?? 150_000,
+      ) || 150_000),
+    ),
+    // Tier 3: a page drawn in script opened in AgentBay's cloud browser. Off
+    // until the deployment has an AgentBay key; off, a page that needs a
+    // browser is the named error `web_read_needs_browser` and the run uses
+    // another source.
+    webRenderEnabled: overrides.webRenderEnabled ?? boolEnv("OPEN_SCIENCE_WEB_RENDER_ENABLED", false),
+    // Renders at once: each is a browser context in the one warm session, and
+    // that session's VM is the resource. Counted in
+    // open_science_web_render_events_total.
+    webRenderConcurrency: Math.max(1, Number(
+      overrides.webRenderConcurrency ?? process.env.OPEN_SCIENCE_WEB_RENDER_CONCURRENCY ?? 2,
+    ) || 2),
+    // One page's time in the browser, a JavaScript challenge solving itself
+    // included (NMPA's resolves in seconds).
+    webRenderTimeoutMs: Math.max(5_000, Number(
+      overrides.webRenderTimeoutMs ?? process.env.OPEN_SCIENCE_WEB_RENDER_TIMEOUT_MS ?? 30_000,
+    ) || 30_000),
+    // How long the warm browser session outlives the last render: it saves a
+    // session start per page while a run is reading, and costs AgentBay time
+    // once nobody is.
+    webRenderIdleReleaseMs: Math.max(10_000, Number(
+      overrides.webRenderIdleReleaseMs ?? process.env.OPEN_SCIENCE_WEB_RENDER_IDLE_RELEASE_MS ?? 300_000,
+    ) || 300_000),
+    // Retraction and correction flags on the sources a report cites, read
+    // from Crossref when its 「依据」 are opened. A notice, never a gate
+    // (principle 13); off, the source cards simply carry none.
+    sourceUpdatesEnabled: overrides.sourceUpdatesEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_UPDATES_ENABLED", true),
+    // --- AgentBay (contract X3; the runtime-provider stream adds the same
+    // three keys — one block survives the merge). The key is read from its
+    // file by the control plane only; empty means AgentBay is off. ---
+    agentbayApiKeyFile: String(overrides.agentbayApiKeyFile ?? process.env.OPEN_SCIENCE_AGENTBAY_API_KEY_FILE ?? "").trim(),
+    agentbayRegion: String(overrides.agentbayRegion ?? process.env.OPEN_SCIENCE_AGENTBAY_REGION ?? "cn-hangzhou").trim() || "cn-hangzhou",
+    agentbayEndpoint: String(overrides.agentbayEndpoint ?? process.env.OPEN_SCIENCE_AGENTBAY_ENDPOINT ?? "").trim(),
   };
 }
