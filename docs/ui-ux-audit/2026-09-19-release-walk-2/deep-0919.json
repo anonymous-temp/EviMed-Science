@@ -1,0 +1,369 @@
+{
+ "startedAt": "2026-09-19T05:05:27.680Z",
+ "moments": [
+  {
+   "minute": 1,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 2,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "fulltext"
+  },
+  {
+   "minute": 3,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 4,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 5,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "fulltext"
+  },
+  {
+   "minute": 6,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 7,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 8,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 9,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 1,
+    "verified": 1
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 10,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 2,
+    "verified": 1
+   },
+   "phase": "fulltext"
+  },
+  {
+   "minute": 11,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 2,
+    "verified": 1
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 12,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 2,
+    "verified": 1
+   },
+   "phase": "write"
+  },
+  {
+   "minute": 13,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 2,
+    "verified": 1
+   },
+   "phase": "write"
+  },
+  {
+   "minute": 14,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 2,
+    "verified": 1
+   },
+   "phase": "write"
+  },
+  {
+   "minute": 15,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 19,
+    "verified": 18
+   },
+   "phase": "write"
+  },
+  {
+   "minute": 16,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 2,
+    "verified": 1
+   },
+   "phase": "claims"
+  },
+  {
+   "minute": 17,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 74,
+    "verified": 66
+   },
+   "phase": "claims"
+  },
+  {
+   "minute": 18,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:delegated:0"
+   ],
+   "claims": {
+    "total": 77,
+    "verified": 65
+   },
+   "phase": "write"
+  },
+  {
+   "minute": 19,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:accepted:1"
+   ],
+   "claims": {
+    "total": 72,
+    "verified": 72
+   },
+   "phase": "claims"
+  },
+  {
+   "minute": 20,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delegated:0",
+    "adr-aspirin-primary-prevention-elderly:accepted:1"
+   ],
+   "claims": {
+    "total": 71,
+    "verified": 69
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 21,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:accepted:1",
+    "adr-aspirin-primary-prevention-elderly:accepted:1"
+   ],
+   "claims": {
+    "total": 71,
+    "verified": 69
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 22,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:accepted:1",
+    "adr-aspirin-primary-prevention-elderly:accepted:1"
+   ],
+   "claims": {
+    "total": 71,
+    "verified": 69
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 23,
+   "status": "succeeded",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus:delivered:1",
+    "adr-aspirin-primary-prevention-elderly:delivered:1"
+   ],
+   "claims": {
+    "total": 71,
+    "verified": 69
+   },
+   "phase": "deliver"
+  }
+ ],
+ "console": [],
+ "projectId": "p-48a2c473",
+ "frameProject": "p-48a2c473",
+ "sentAt": "2026-09-19T05:05:39.506Z",
+ "finishedAfterMin": 23,
+ "run": {
+  "id": "run_856b0a446c36414e3f2f544fe61e5ff9",
+  "status": "succeeded",
+  "verification": "unverified",
+  "durationMs": 1376817,
+  "title": "≥70岁阿司匹林一级预防指南与不良反应",
+  "usage": {
+   "requests": 198,
+   "inputTokens": 35900187,
+   "cachedInputTokens": 35063168,
+   "outputTokens": 276118,
+   "costCny": 2.642754
+  },
+  "artifactCounts": {
+   "deliverable": 4,
+   "revisionNotes": 2,
+   "work": 0,
+   "superseded": 0
+  },
+  "qualityNotices": [],
+  "deliverables": [
+   "clinical-aspirin-primary-prevention-70plus:delivered:1:pass",
+   "adr-aspirin-primary-prevention-elderly:delivered:1:pass"
+  ]
+ },
+ "inbox": [
+  {
+   "title": "研究已交付，待你复核",
+   "project": "p-48a2c473",
+   "body": "已交付，但有核验没有通过；引用前请在报告的「依据」里核对带 ⚠ 的结论。\n本次运行产出 6 个文件，仍在工作区里，可以直接打开。"
+  },
+  {
+   "title": "研究已完成",
+   "project": "default",
+   "body": "研究结果已准备好，可以查看运行记录和交付物。"
+  }
+ ]
+}

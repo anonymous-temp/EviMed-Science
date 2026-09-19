@@ -1,0 +1,56 @@
+{
+ "startedAt": "2026-09-19T05:48:26.376Z",
+ "moments": [
+  {
+   "minute": 1,
+   "status": "failed",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": null
+  }
+ ],
+ "console": [],
+ "projectId": "p-48a2c473",
+ "frameProject": "p-48a2c473",
+ "sentAt": "2026-09-19T05:48:36.785Z",
+ "finishedAfterMin": 1,
+ "run": {
+  "id": "run_4e67bea8654e0042cdaa73aa1996c7a6",
+  "status": "failed",
+  "verification": null,
+  "durationMs": 25446,
+  "title": "≥70岁阿司匹林一级预防指南与不良反应",
+  "usage": {
+   "requests": 2,
+   "inputTokens": 169,
+   "cachedInputTokens": 0,
+   "outputTokens": 17,
+   "costCny": 0.000237
+  },
+  "qualityNotices": [
+   "advice:运行时未载入能力方法"
+  ],
+  "deliverables": []
+ },
+ "inbox": [
+  {
+   "title": "交付物未通过核验",
+   "project": "p-48a2c473",
+   "body": "这次运行没有加载本项能力约定必须使用的方法说明，因此无法确认结论是按该方法做出来的。这不是对结论对错的判断，重新发起一次即可。"
+  },
+  {
+   "title": "研究已交付，待你复核",
+   "project": "p-48a2c473",
+   "body": "已交付，但有核验没有通过；引用前请在报告的「依据」里核对带 ⚠ 的结论。\n本次运行产出 6 个文件，仍在工作区里，可以直接打开。"
+  },
+  {
+   "title": "研究已完成",
+   "project": "default",
+   "body": "研究结果已准备好，可以查看运行记录和交付物。"
+  }
+ ]
+}

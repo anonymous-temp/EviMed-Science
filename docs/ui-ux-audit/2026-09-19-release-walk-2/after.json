@@ -1,0 +1,29 @@
+{
+ "label": "after",
+ "console": [
+  "error: [session-controller] control stream failed: RemoteError: Runtime stream capacity\n    at terminalStreamFailure (https://82.156.128.153:8443/__evimed/k/plugins/??"
+ ],
+ "failed": [],
+ "timings": {
+  "open1": {
+   "ms": 7274,
+   "wall": 8898,
+   "bytes": 1462886
+  },
+  "open2": {
+   "ms": 3,
+   "wall": 365,
+   "bytes": 7788
+  },
+  "plainAnswerMs": 3019
+ },
+ "slashMenu": [
+  "指令 能力 选择一项研究能力，把它的题面填进输入框 技能 astronomy-data-analysis Process and interpret astronomical observations and simulations. Use for FITS files, WCS coordinates, photometry, spectra, light curves, catalogs, uncertainty propagation, or Astropy-style workflows. bayesian-modeling Specify, fit, diagnose, and c",
+  "指令 能力 选择一项研究能力，把它的题面填进输入框 技能 astronomy-data-analysis Process and interpret astronomical observations and simulations. Use for FITS files, WCS coordinates, photometry, spectra, light curves, catalogs, uncertainty propagation, or Astropy-style workflows. bayesian-modeling Specify, fit, diagnose, and c"
+ ],
+ "plainTail": "阿司匹林和布洛芬同时服用要\n阿司匹林和布洛芬同时服用要注意什么？两句话。\n12:46\n已思考\n\n先说要紧的：阿司匹林与布洛芬同服，主要风险是布洛芬竞争性占据血小板 COX-1 位点，可能削弱小剂量阿司匹林的心血管保护作用；此外两者叠加会明显增加消化道出血与肾损伤风险，若确需合用，应由医生评估并错开服药时间（如阿司匹林服后至少间隔 30 分钟、布洛芬在阿司匹林前 8 小时或后 30 分钟给药），不要自行长期联用。证据与不确定性：该结论基于药效学机制与药代动力学研究（属已确立知识，但最佳给药间隔在不同研究与说明书间并不完全一致），如果你或家人正在服用小剂量阿司匹林做心血管二级预防、又需要用布洛芬止痛，具体能不能用、怎么排时间，建议先与处方医生或药师确认。\n\n用量 18.5K tok\n用时 2秒\n12:46\n继续这项研究，或提出下一个任务… / 调用指令，@ 引用文件或会话\n项目工作区\n1 轮 1 步·162 tok/s\n18.5K tok·缓存命中 27%",
+ "knowledgeText": "知识库\n\n上传与整理研究资料，查看解析进度。\n\n文件\n整理进度\n个人知识库\n\n这里还没有资料\n\n上传文献、报告或数据后，问答与科研执行会自动参考相关内容。\n\n个人知识库\n\n集中保存你的文献、报告与数据。EviMed 在问答和科研执行时会自动读取相关资料。",
+ "notebookMentioned": false,
+ "paletteHasNotebook": false,
+ "notebookRedirect": "/app/files"
+}

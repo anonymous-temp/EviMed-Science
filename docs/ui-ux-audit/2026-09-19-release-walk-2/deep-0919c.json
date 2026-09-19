@@ -1,0 +1,96 @@
+{
+ "startedAt": "2026-09-19T06:03:07.833Z",
+ "moments": [
+  {
+   "minute": 1,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus-v2:delegated:0",
+    "adr-aspirin-primary-prevention-elderly-v2:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 2,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus-v2:delegated:0",
+    "adr-aspirin-primary-prevention-elderly-v2:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "claims"
+  },
+  {
+   "minute": 3,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus-v2:delegated:0",
+    "adr-aspirin-primary-prevention-elderly-v2:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 4,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus-v2:delegated:0",
+    "adr-aspirin-primary-prevention-elderly-v2:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "search"
+  },
+  {
+   "minute": 5,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus-v2:delegated:0",
+    "adr-aspirin-primary-prevention-elderly-v2:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "claims"
+  },
+  {
+   "minute": 6,
+   "status": "running",
+   "title": "≥70岁阿司匹林一级预防指南与不良反应",
+   "deliverables": [
+    "clinical-aspirin-primary-prevention-70plus-v2:delegated:0",
+    "adr-aspirin-primary-prevention-elderly-v2:delegated:0"
+   ],
+   "claims": {
+    "total": 0,
+    "verified": 0
+   },
+   "phase": "search"
+  }
+ ],
+ "console": [
+  "Failed to load resource: net::ERR_HTTP2_PING_FAILED"
+ ],
+ "projectId": "p-48a2c473",
+ "frameProject": "p-48a2c473",
+ "sentAt": "2026-09-19T06:03:19.462Z",
+ "error": "apiRequestContext.get: Timeout 30000ms exceeded.\nCall log:\n  - → GET https://82.156.128.153/api/agent-runs\n    - user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.0.0 Safari/537.36\n    - accept: */*\n    - accept-encoding: gzip,deflate,br\n    - X-Open-Science-Project: p-48a2c473\n    - cookie: os_session=<hidden>\n\n    at /home/coder/workspace/EviMedScience/.evimed-local/acceptance/perf/deep-0919c.cjs:51:43"
+}
