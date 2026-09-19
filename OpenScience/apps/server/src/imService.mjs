@@ -360,7 +360,10 @@ export class ImService {
     }
     entry.touchedAt = this.now();
     const home = appLink(this.config, "/app/chat");
-    const avatar = appLink(this.config, "/icons/evimed-512.png");
+    // The full-bleed square (the PWA's maskable icon), not the rounded tile:
+    // Feishu crops an avatar itself, and a tile with transparent corners
+    // would show slivers of whatever sits behind the crop.
+    const avatar = appLink(this.config, "/icons/evimed-maskable-512.png");
     return entry.manager.start({
       source: "evimed",
       // Only a new app: selecting an existing one on the confirmation page

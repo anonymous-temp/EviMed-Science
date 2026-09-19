@@ -102,6 +102,27 @@ describe("ReportReader", () => {
     expect(await screen.findByRole("note")).toHaveTextContent("本报告 2 条主张");
   });
 
+  // One table of contents at a time: a column beside a wide page, folded
+  // above the report on a phone or a tablet, where the column has no room.
+  it("puts the contents beside a wide page and folds them above the report on a narrow one", async () => {
+    const wide = vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+      matches: query === "(min-width: 1024px)", media: query, onchange: null,
+      addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false,
+    }) as unknown as MediaQueryList);
+    const first = renderReader();
+    const column = await screen.findByRole("navigation", { name: "目录" });
+    expect(column.closest("aside")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "回到顶部" })).toBeInTheDocument();
+    first.unmount();
+    wide.mockRestore();
+
+    renderReader();
+    const folded = await screen.findByRole("navigation", { name: "目录" });
+    expect(folded.closest("details")).not.toBeNull();
+    expect(screen.getByText("目录 · 4 节")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "回到顶部" })).toBeNull();
+  });
+
   it("shows the evidence matrix as a table on its own tab", async () => {
     renderReader();
     await userEvent.click(await screen.findByRole("radio", { name: "证据矩阵（2）" }));

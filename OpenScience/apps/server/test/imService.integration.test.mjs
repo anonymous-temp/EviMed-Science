@@ -110,7 +110,7 @@ test("scanning creates the bot, keeps its secret, turns pushes on, connects, and
   assert.match(waiting.qrCodeUrl, /tp=sdk/);
   const asked = fake.callsTo("registerApp")[0].args;
   assert.equal(asked.createOnly, true);
-  assert.equal(asked.appPreset.avatar, "https://science.example.com/icons/evimed-512.png");
+  assert.equal(asked.appPreset.avatar, "https://science.example.com/icons/evimed-maskable-512.png");
   assert.match(asked.appPreset.desc, /https:\/\/science\.example\.com\/app\/chat/);
   assert.deepEqual(asked.addons.events.items.tenant, ["im.message.receive_v1"]);
   fake.scan();
