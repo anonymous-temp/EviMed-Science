@@ -81,6 +81,7 @@ test("one document added from two projects is one entry, read from a third, and 
     assert.equal(added.body.data.pageCount, 3);
     assert.equal(added.body.data.status, "ready");
     assert.deepEqual(added.body.data.projects, ["papers-a", "papers-b"]);
+    assert.deepEqual(added.body.data.sourceIds, [inA.id, inB.id].sort(), "each project's source card can find its document");
     assert.ok(Date.parse(added.body.data.addedAt));
     const again = await call("/api/library", { method: "POST", body: { sourceId: inB.id } });
     assert.equal(again.status, 200, "the same document from another project is the entry it already is");
@@ -116,6 +117,7 @@ test("one document added from two projects is one entry, read from a third, and 
     assert.equal(deleted.status, 200);
     let [entry] = (await call("/api/library")).body.data.items;
     assert.deepEqual(entry.projects, ["papers-b"]);
+    assert.deepEqual(entry.sourceIds, [inB.id]);
     assert.equal(entry.status, "processing", "its copy is rewritten from the remaining project");
     const pass = await app.kbIndex.sync({ userId: user.id });
     assert.equal(pass.library.written, 1);

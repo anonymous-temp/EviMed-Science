@@ -17,7 +17,8 @@ import {
 } from "lucide-react";
 import { extOf, extToKind, previewKindForName, type PreviewKind } from "@/lib/artifacts";
 import { listDir, type DirEntry } from "@/lib/artifactFile";
-import { addFilesToWorkspace, uploadFilesToWorkspace } from "@/lib/backend";
+import { KNOWLEDGE_BASE_FORMATS, sourceFormatRoute } from "@evimed/domain";
+import { addFilesToWorkspace, pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
 import { webErrorMessage, getWebProjectId, hasWebApi } from "@/lib/apiClient";
 import { useFileDrop } from "@/lib/useFileDrop";
 import { baseName } from "@/lib/format";
@@ -39,6 +40,45 @@ const EXT_LANG: Record<string, string> = {
   ipynb: "json",
 };
 const KNOWLEDGE_ROOT = "knowledge-base";
+
+/**
+ * The knowledge base's accepted formats as a researcher reads them: eight
+ * families instead of thirty extensions. The families are held equal to the
+ * list the upload check itself uses (`KNOWLEDGE_BASE_FORMATS` in
+ * `@evimed/domain`, which the server refuses against) by a test, so the copy
+ * cannot promise a format the server turns away.
+ */
+export const KNOWLEDGE_BASE_FORMAT_FAMILIES: ReadonlyArray<readonly [string, readonly string[]]> = [
+  ["PDF", ["pdf"]],
+  ["Word", ["doc", "docx", "rtf"]],
+  ["PPT", ["ppt", "pptx"]],
+  ["Excel 与表格", ["xls", "xlsx", "xlsm", "csv", "tsv"]],
+  ["图片", ["jpg", "jpeg", "png", "bmp", "gif"]],
+  ["电子书", ["epub", "mobi"]],
+  ["网页", ["htm", "html", "xml"]],
+  ["纯文本与代码", ["txt", "md", "json", "yaml", "yml", "r", "py", "sql"]],
+];
+/** The picker's default filter: what the knowledge base accepts. */
+const KNOWLEDGE_BASE_ACCEPT = KNOWLEDGE_BASE_FORMATS.map((format) => `.${format}`).join(",");
+export const KNOWLEDGE_BASE_UPLOAD_HINT =
+  `支持 ${KNOWLEDGE_BASE_FORMAT_FAMILIES.map(([label]) => label).join("、")}；音视频暂不支持。`;
+
+/**
+ * What the knowledge base would refuse, told before anything is sent: a
+ * recording is not parsed at all yet, and any other format is outside the
+ * list. The server refuses the same files with the same reasons; this only
+ * saves the round trip and keeps one refused file from stopping the rest.
+ */
+export function partitionKnowledgeBaseFiles(files: readonly File[]) {
+  const accepted: File[] = [];
+  const refused: { name: string; reason: string }[] = [];
+  for (const file of files) {
+    const route = sourceFormatRoute(file.name);
+    if (route === "local" || route === "api") accepted.push(file);
+    else refused.push({ name: file.name, reason: route === "media" ? "音视频暂不支持" : "格式不在支持范围内" });
+  }
+  return { accepted, refused };
+}
 
 function iconFor(entry: DirEntry) {
   if (entry.isDir) return <Folder size={15} className="text-accent" aria-hidden="true" />;
@@ -98,9 +138,11 @@ export function FilesPage() {
   const uploadFiles = async (dropped?: File[]) => {
     setUploading(true);
     try {
-      const names = dropped
-        ? await uploadFilesToWorkspace(dropped, dir, "base")
-        : await addFilesToWorkspace(dir, "base");
+      const { accepted, refused } = partitionKnowledgeBaseFiles(dropped ?? await pickFiles(KNOWLEDGE_BASE_ACCEPT));
+      if (refused.length > 0) {
+        toast.error(`没有上传：${refused.map((file) => `${file.name}（${file.reason}）`).join("、")}。${KNOWLEDGE_BASE_UPLOAD_HINT}`);
+      }
+      const names = accepted.length > 0 ? await uploadFilesToWorkspace(accepted, dir, "base") : [];
       if (names.length > 0) {
         await load(dir);
         toast.success(`已上传 ${names.length} 个文件。`);
@@ -166,7 +208,7 @@ export function FilesPage() {
               <button
                 className="flex h-7 w-7 items-center justify-center rounded-input text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
                 aria-label="上传资料"
-                title="上传资料到个人知识库"
+                title={`上传资料到个人知识库。${KNOWLEDGE_BASE_UPLOAD_HINT}`}
                 onClick={() => void uploadFiles()}
                 disabled={uploading}
               >
@@ -184,7 +226,7 @@ export function FilesPage() {
               <EmptyState
                 icon={FolderOpen}
                 title="这里还没有资料"
-                description="上传文献、报告或数据后，问答与科研执行会自动参考相关内容。"
+                description={`上传文献、报告或数据后，问答与科研执行会自动参考相关内容。${KNOWLEDGE_BASE_UPLOAD_HINT}`}
                 className="px-2 py-8"
               />
             ) : (
@@ -220,7 +262,7 @@ export function FilesPage() {
           <EmptyState
             icon={FolderOpen}
             title="个人知识库"
-            description="集中保存你的文献、报告与数据。EviMed 在问答和科研执行时会自动读取相关资料。"
+            description={`集中保存你的文献、报告与数据。EviMed 在问答和科研执行时会自动读取相关资料。${KNOWLEDGE_BASE_UPLOAD_HINT}`}
             className="h-full"
           />
         )}

@@ -33,6 +33,16 @@ export async function uploadFilesToWorkspace(
   return uploadBrowserFiles(files, targetDir, root);
 }
 
+/**
+ * Open the browser's file picker and return what was picked, [] on cancel.
+ * `accept` narrows the dialog's default filter (`.pdf,.docx,…`); the person
+ * can still pick anything, so the caller checks what came back.
+ */
+export async function pickFiles(accept?: string): Promise<File[]> {
+  if (!hasWebApi || typeof document === "undefined") return [];
+  return pickBrowserFiles(accept);
+}
+
 async function uploadBrowserFiles(files: File[], targetDir: string, root: FileRoot): Promise<string[]> {
   const uploaded: string[] = [];
   const prefix = targetDir.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
@@ -51,11 +61,12 @@ async function uploadBrowserFiles(files: File[], targetDir: string, root: FileRo
   return uploaded;
 }
 
-function pickBrowserFiles(): Promise<File[]> {
+function pickBrowserFiles(accept?: string): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
     input.multiple = true;
+    if (accept) input.accept = accept;
     input.style.position = "fixed";
     input.style.left = "-10000px";
     input.style.top = "-10000px";
