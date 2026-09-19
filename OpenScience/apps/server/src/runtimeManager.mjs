@@ -14,6 +14,7 @@ import {
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
 import { capsuleMethodsDirName, materializeCapsuleMethods } from "./capsuleMethods.mjs";
+import { KNOWLEDGE_BASE_DIR } from "./researchContext.mjs";
 import { CAPSULE_PROFILE_FACT_KINDS, renderCapsuleProfile } from "./capsuleProfile.mjs";
 import { supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockDshRuntime } from "./mockDshRuntime.mjs";
@@ -39,6 +40,7 @@ import {
   assertNoSymlinkPath,
   assertProjectUsageWithinQuota,
   ensureDir,
+  openScopedDirectoryNoFollow,
   randomId,
   safeId,
   readBody,
@@ -2214,6 +2216,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     const socketPath = path.join(controlDir, RUNTIME_SOCKET_FILE_NAME);
     assertConnectableSocketPath(socketPath, Boolean(config.runtimeDataVolume));
     const containerName = runtimeContainerName(project);
+    const readOnlyViews = readOnlyWorkspaceViews(config, project);
     return {
       sandboxMode,
       containerName,
@@ -2249,6 +2252,14 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         String(config.runtimeMemoryLimit),
         "--mount",
         dockerWorkspaceMount(config, project),
+        // Nested over the workspace mount, so the same directory is reachable
+        // only through the read-only view (see `readOnlyWorkspaceViews`).
+        ...(readOnlyViews.knowledgeBase
+          ? ["--mount", `${dockerRuntimeMount(config, readOnlyViews.knowledgeBase, RUNTIME_KNOWLEDGE_BASE_DIR)},readonly`]
+          : []),
+        ...(readOnlyViews.library
+          ? ["--mount", `${dockerRuntimeMount(config, readOnlyViews.library, RUNTIME_LIBRARY_DIR)},readonly`]
+          : []),
         "--mount",
         dockerRuntimeMount(config, runtimeRoot),
         // Only when something was written. `--mount type=bind` refuses a source
@@ -2397,6 +2408,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
       // other half of the deployment -- the directory the profile names -- from
       // the same number that decided whether anything is mounted at all.
       capsuleMethodCount,
+      readOnlyViews,
       runtimeDirs: [
         runtimeRoot,
         controlDir,
@@ -2557,6 +2569,70 @@ function mountedCapsuleMethodCount(directory) {
  */
 export function capsuleMethodsRuntimePath(plan) {
   return plan.capsuleMethodCount ? runtimeCapsuleMethodsDir : "";
+}
+
+/** Where a runtime sees the project's knowledge base: inside its workspace,
+ *  where the source pipeline has always written it, but read-only. */
+export const RUNTIME_KNOWLEDGE_BASE_DIR = `/workspace/${KNOWLEDGE_BASE_DIR}`;
+
+/** Where a runtime sees its account's personal library (plan §3.2 #4). */
+export const RUNTIME_LIBRARY_DIR = "/workspace/library";
+
+/**
+ * The host directory of an account's personal library, shared by every project
+ * of the account and read-only in all of them.
+ *
+ * Derived from the data directory the same way the account's own root is
+ * (`<dataDir>/users/<userId>`), because the library is the account's and not a
+ * project's. The knowledge-base stream owns the library itself
+ * (`libraryService.mjs`, `userLibraryDir`); this is the path the runtime side
+ * mounts, and the two must name one directory.
+ *
+ * @param {Record<string, any>} config @param {string} userId
+ */
+export function personalLibraryDir(config, userId) {
+  return path.join(config.dataDir, "users", safeId(String(userId), "user id"), "library");
+}
+
+/** A real directory, not a symlink to one: a mount source the run could have
+ *  redirected would be a way out of the project. */
+function realDirectory(target) {
+  try {
+    const stat = lstatSync(target);
+    return stat.isDirectory() && !stat.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The two read-only views a runtime gets into its workspace, as host paths, or
+ * null for a view this launch does not mount.
+ *
+ * The knowledge base is the project's source material (plan §3.2 #3, §3.1 #4):
+ * a run reads it and cites it, and a run that could rewrite it could make a
+ * quotation true after the fact — the verbatim-quote gate reads the same
+ * bytes. It is mounted only where it already sits inside the mounted
+ * workspace (a scratch sub-workspace for a verification or a source reading
+ * never contained it and gains no view of it here).
+ *
+ * The library is mounted only once it exists; the knowledge-base stream creates
+ * it with the first entry. Both sides of the controller boundary decide from
+ * the filesystem, the way the capsule methods mount does, so the privileged
+ * controller and the API build the same argv from the same facts.
+ *
+ * @param {Record<string, any>} config @param {Record<string, any>} project
+ * @returns {{ knowledgeBase: string | null, library: string | null }}
+ */
+export function readOnlyWorkspaceViews(config, project) {
+  const inBaseWorkspace = Boolean(project.baseDir)
+    && path.resolve(String(project.workspaceDir)) === path.resolve(String(project.baseDir));
+  const knowledgeBase = inBaseWorkspace ? path.join(project.baseDir, KNOWLEDGE_BASE_DIR) : null;
+  const library = config.dataDir && project.userId ? personalLibraryDir(config, project.userId) : null;
+  return {
+    knowledgeBase: knowledgeBase && realDirectory(knowledgeBase) ? knowledgeBase : null,
+    library: library && realDirectory(library) ? library : null,
+  };
 }
 
 /** `sockaddr_un.sun_path` is a fixed 108-byte field on Linux, NUL included, so
@@ -3192,6 +3268,10 @@ export class RuntimeManager {
     // can say which revision of which method was in the room. A digest recorded
     // at mount time is the only record that survives the container.
     this.lastMountedLearnedMethods.set(this.key(project), mountedMethods.learned ?? []);
+    // Before the plan, for the same reason: the read-only view of the knowledge
+    // base is mounted when the directory exists, and a project whose first
+    // source arrives while its runtime runs must not find it writable then.
+    await this.ensureKnowledgeBaseDir(project);
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig });
     plan.pluginConfig = pluginConfig;
     await Promise.all(plan.runtimeDirs.map((dir) => fs.mkdir(dir, { recursive: true, mode: 0o700 })));
@@ -3598,6 +3678,19 @@ export class RuntimeManager {
       throw err;
     }
     return runtime;
+  }
+
+  /**
+   * The project's knowledge-base directory, created empty when missing, so the
+   * launch can mount it read-only (`readOnlyWorkspaceViews`). A failure leaves
+   * the launch without that view rather than without a runtime.
+   * @param {Record<string, any>} project
+   */
+  async ensureKnowledgeBaseDir(project) {
+    if (!project.baseDir || path.resolve(String(project.workspaceDir)) !== path.resolve(String(project.baseDir))) return;
+    const opened = await openScopedDirectoryNoFollow(project.baseDir, path.join(project.baseDir, KNOWLEDGE_BASE_DIR), { create: true })
+      .catch(() => null);
+    await opened?.handle.close();
   }
 
   async waitUntilReady(runtime) {

@@ -182,3 +182,73 @@ test("sign-in warms the project whose runtime was used last, or the default one 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("the knowledge base and the personal library reach a Docker runtime read-only, and only where they belong", async (t) => {
+  const { buildRuntimeLaunchPlan, RUNTIME_KNOWLEDGE_BASE_DIR, RUNTIME_LIBRARY_DIR, personalLibraryDir } = await import("../src/runtimeManager.mjs");
+  const { symlink } = await import("node:fs/promises");
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "rt-views-"));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  const rootDir = path.join(dataDir, "users", "alice", "projects", "paper1");
+  const baseDir = path.join(rootDir, "workspace");
+  const docker = {
+    dataDir,
+    runtimeSandboxMode: "docker",
+    runtimeContainerBin: "docker",
+    runtimeContainerImage: "evimed-runtime-dsh:test",
+    runtimeTransport: "unix",
+    runtimeNetworkMode: "none",
+    runtimeCpuLimit: "1",
+    runtimeMemoryLimit: "1g",
+  };
+  const base = { id: "paper1", userId: "alice", rootDir, baseDir, workspaceDir: baseDir, runtimeDir: path.join(rootDir, "runtime") };
+  const mounts = (plan) => plan.args.filter((_, index) => plan.args[index - 1] === "--mount");
+
+  // Nothing to view yet: no extra mount, and nothing about the plan changes.
+  let plan = buildRuntimeLaunchPlan(docker, base, 4096);
+  assert.equal(mounts(plan).some((mount) => mount.includes(RUNTIME_KNOWLEDGE_BASE_DIR)), false);
+  assert.equal(mounts(plan).some((mount) => mount.includes(RUNTIME_LIBRARY_DIR)), false);
+
+  await mkdir(path.join(baseDir, "knowledge-base"), { recursive: true });
+  await mkdir(personalLibraryDir(docker, "alice"), { recursive: true });
+  plan = buildRuntimeLaunchPlan(docker, base, 4096);
+  assert.ok(mounts(plan).includes(`type=bind,src=${path.join(baseDir, "knowledge-base")},dst=${RUNTIME_KNOWLEDGE_BASE_DIR},readonly`));
+  assert.ok(mounts(plan).includes(`type=bind,src=${path.join(dataDir, "users", "alice", "library")},dst=${RUNTIME_LIBRARY_DIR},readonly`));
+  // Nested after the workspace mount, or the workspace would cover them.
+  const order = mounts(plan);
+  assert.ok(order.findIndex((mount) => mount.endsWith("dst=/workspace")) < order.findIndex((mount) => mount.includes(RUNTIME_KNOWLEDGE_BASE_DIR)));
+
+  // A volume-backed deployment mounts the same subpaths, still read-only.
+  plan = buildRuntimeLaunchPlan({ ...docker, runtimeDataVolume: "open-science-data" }, base, 4096);
+  assert.ok(mounts(plan).includes(`type=volume,src=open-science-data,dst=${RUNTIME_KNOWLEDGE_BASE_DIR},volume-subpath=users/alice/projects/paper1/workspace/knowledge-base,readonly`));
+
+  // A scratch sub-workspace never contained the knowledge base and gains no
+  // view of it; the account's library is still its own.
+  const scratch = { ...base, workspaceDir: path.join(baseDir, "session_2026") };
+  await mkdir(scratch.workspaceDir, { recursive: true });
+  plan = buildRuntimeLaunchPlan(docker, scratch, 4096);
+  assert.equal(mounts(plan).some((mount) => mount.includes(RUNTIME_KNOWLEDGE_BASE_DIR)), false);
+  assert.ok(mounts(plan).some((mount) => mount.includes(RUNTIME_LIBRARY_DIR)));
+
+  // A library that is a symlink is a way out of the account, not a library.
+  await rm(personalLibraryDir(docker, "alice"), { recursive: true });
+  await mkdir(path.join(dataDir, "elsewhere"), { recursive: true });
+  await symlink(path.join(dataDir, "elsewhere"), personalLibraryDir(docker, "alice"));
+  plan = buildRuntimeLaunchPlan(docker, base, 4096);
+  assert.equal(mounts(plan).some((mount) => mount.includes(RUNTIME_LIBRARY_DIR)), false);
+});
+
+test("a launch creates the knowledge-base directory first, so its view is mounted from the first start", async (t) => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "rt-kbdir-"));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  const baseDir = path.join(dataDir, "users", "alice", "projects", "paper1", "workspace");
+  await mkdir(baseDir, { recursive: true });
+  const manager = managerWith({ dataDir });
+  await manager.ensureKnowledgeBaseDir({ id: "paper1", userId: "alice", baseDir, workspaceDir: baseDir });
+  const { stat } = await import("node:fs/promises");
+  assert.ok((await stat(path.join(baseDir, "knowledge-base"))).isDirectory());
+  // Not in a scratch workspace: nothing is created there.
+  const scratch = path.join(baseDir, "session_x");
+  await mkdir(scratch);
+  await manager.ensureKnowledgeBaseDir({ id: "paper1", userId: "alice", baseDir, workspaceDir: scratch });
+  await assert.rejects(() => stat(path.join(scratch, "knowledge-base")));
+});
