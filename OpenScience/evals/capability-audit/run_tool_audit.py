@@ -55,6 +55,11 @@ TASK_FIXTURES = {
     # and `ci:web` reported the whole audit as stale evidence, so a tool nobody
     # had ever probed read like evidence that was merely old.
     "web_search": {"query": "systematic review reporting guideline PRISMA 2020", "limit": 2},
+    # Added 2026-09-20 with the tool. It asks the control plane about the
+    # probe account's own knowledge base, which is empty here: the small-library
+    # answer ("read these files", with none to read) is a real answer from the
+    # real gateway and the only one that needs no corpus planted first.
+    "kb_search": {"query": "阿司匹林 一级预防 剂量", "limit": 3},
     # `op: providers` asks the probe which front-ends this deployment can reach
     # and is the only operation with no side effect: `ask` would drive real
     # browser sessions against five consumer products. The tool was declared,
