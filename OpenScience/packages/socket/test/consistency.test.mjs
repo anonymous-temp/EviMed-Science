@@ -1718,6 +1718,58 @@ test("a same-run control-plane repair gets one submission after an unaccepted ce
   assert.equal(replayed.error?.code, "GUARDED", "the repair context grants exactly one extra submission");
 });
 
+test("asking again is the authorization: a follow-up turn may change what the last one delivered", async () => {
+  // The chain the 2026-09-20 aspirin run died on: acceptance froze the package,
+  // the review ran after the freeze, and `evimed_revise_deliverable` answered
+  // `deliverable_revision_unauthorized` six times because a grant is minted
+  // only by a server-side repair round — and repair rounds have defaulted to 0
+  // since 2026-09-17, so no path could ever mint one. The freeze is the turn
+  // ending now, and a new turn is the researcher asking again.
+  const f = await nativePolicyFixture({ briefId: "followup-owner" });
+  /** @type {string[]} */
+  const written = [];
+  f.ctx.tools.register({
+    name: "write",
+    execute: async (/** @type {any} */ args) => { written.push(String(args.path)); return { ok: true }; },
+    output: { schema: { type: "object", additionalProperties: true }, render: () => [] },
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded report"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }],
+  });
+  const reportPath = "/workspace/deliverables/d1/brief.md";
+  f.files.set(reportPath, "# Report\nFirst delivered version.\n");
+  assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+  await f.endTurn();
+
+  // Frozen between the turn ending and the researcher's next word: that window
+  // is when the control plane reads what was delivered, and its digests have to
+  // still describe it.
+  const frozenWrite = await f.execute("write", { path: "deliverables/d1/brief.md", content: "# 改动\n" });
+  assert.equal(frozenWrite.error?.code, "DENIED");
+  assert.match(frozenWrite.content[0].text, /accepted_deliverable_frozen/);
+  assert.deepEqual(written, [], "the frozen write never reaches the tool");
+
+  // The next turn thaws it, and no authorization call is made for it — there is
+  // no `revisionAuthorizeUrl` in this fixture at all, so a request would fail.
+  await f.step(2);
+  const thawedWrite = await f.execute("write", { path: "deliverables/d1/brief.md", content: "# 改动\n" });
+  assert.equal(thawedWrite.error, undefined, "the researcher asked, so the package is theirs to change again");
+  const opened = await f.execute("evimed_revise_deliverable", { deliverableId: "d1", reason: "用户在同一对话里要求改一处编号。" });
+  assert.equal(opened.value.ok, true, JSON.stringify(opened.value));
+  assert.match(opened.value.data.note, /直接改/);
+  f.files.set(reportPath, "# Report\nSecond version, after the researcher asked.\n");
+  const resubmitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+  assert.equal(resubmitted.value.ok, true, JSON.stringify(resubmitted.value));
+
+  // And the receipt describes what was actually delivered in the end.
+  await f.endTurn();
+  const receipt = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
+  assert.equal(receipt.entries[0].files[0].bytes, Buffer.byteLength("# Report\nSecond version, after the researcher asked.\n"));
+});
+
 test("a model cannot open an accepted revision before the control plane authorizes it", async () => {
   const f = await nativePolicyFixture({ briefId: "revision-owner" });
   await f.step(1);

@@ -218,8 +218,8 @@ async function callWith(t, { attributeRun = null, runPurpose = null, caller = { 
     }));
   const gatewayBase = await listen(gateway);
   t.after(() => new Promise((resolve) => gateway.close(resolve)));
-  const post = () => fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
-    method: "POST", headers: { authorization: "Bearer runtime", "content-type": "application/json" }, body: JSON.stringify(requestBody),
+  const post = (/** @type {Record<string, string>} */ headers = {}) => fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
+    method: "POST", headers: { authorization: "Bearer runtime", "content-type": "application/json", ...headers }, body: JSON.stringify(requestBody),
   }).then((response) => response.text());
   return { events, post };
 }
@@ -231,9 +231,35 @@ test("an interactive runtime's call is charged to the one run going in its proje
     extraConfig: { userRunSpendLimit: 3 },
   }, { messages: [{ role: "user", content: "Attribute me." }] });
   await post();
-  assert.deepEqual(asked, [{ userId: "usage-owner", projectId: "default" }]);
+  assert.deepEqual(asked, [{ userId: "usage-owner", projectId: "default", sessionId: null }]);
   assert.equal(events[0].input.runId, "run_interactive");
   assert.equal(events[0].input.runLimit, 3, "the interactive per-run cap applies once the call has a run");
+});
+
+test("the conversation the kernel names is what the request is attributed by", async (t) => {
+  // The kernel's provider stamps `x-deepseek-harness-session-id` on every model
+  // call. Without it the control plane could only ask 「is exactly one run going
+  // in this project」, and two conversations in the catch-all default project
+  // both read 「约 ¥0.00」 (2026-09-20). It is a hint, not authority: the
+  // resolver only ever matches it against the runs of the token's own project.
+  const asked = [];
+  const { events, post } = await callWith(t, {
+    attributeRun: async (caller) => { asked.push(caller); return caller.sessionId === "ses_geo" ? "run_geo" : "run_other"; },
+    extraConfig: { userRunSpendLimit: 3 },
+  }, { messages: [{ role: "user", content: "Attribute me." }] });
+  await post({ "x-deepseek-harness-session-id": "ses_geo" });
+  assert.deepEqual(asked, [{ userId: "usage-owner", projectId: "default", sessionId: "ses_geo" }]);
+  assert.equal(events[0].input.runId, "run_geo");
+
+  // Nothing usable is nothing: a blank or oversized header is not a session id,
+  // and the request falls back to the project rule. (A control character
+  // cannot reach here at all — an HTTP client refuses to send one — and the
+  // reader rejects it anyway rather than trusting that.)
+  for (const value of ["   ", "x".repeat(201)]) {
+    asked.length = 0;
+    await post({ "x-deepseek-harness-session-id": value });
+    assert.deepEqual(asked.at(-1), { userId: "usage-owner", projectId: "default", sessionId: null }, JSON.stringify(value));
+  }
 });
 
 test("a bounded runtime keeps the run its token names, and an unattributable call carries none", async (t) => {

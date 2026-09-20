@@ -256,9 +256,25 @@ test("official specialist packages preserve domain-specific evidence and release
   assert.match(skills["research-topic-selection"], /absence from a small search is not proof of novelty/i);
   for (const id of ["clinical-evidence-synthesis", "research-topic-selection"]) {
     const deliverySkill = await readFile(path.join(officialCapabilityRoot, id, "SKILL.md"), "utf8");
+    // 「先审查再提交」 used to be prose in a 1,839-line method body, and the run
+    // it was written for skipped it: submission froze the package before
+    // anybody had looked at it. A step another step depends on is a data
+    // dependency, so submission runs the review itself (2026-09-20) — and the
+    // skill has to say so, because a method that still describes a separate
+    // pre-submission call describes a product we no longer have.
+    assert.match(
+      deliverySkill,
+      /提交|[Ss]ubmission (?:runs|does)/,
+      `${id} must say what submission does`,
+    );
     assert.ok(
-      deliverySkill.lastIndexOf("evimed_review_run") < deliverySkill.lastIndexOf("evimed_submit_deliverable"),
-      `${id} must run scientific review while the draft is still editable, before submission freezes it`,
+      /reviewer|审查/.test(deliverySkill) && /evimed_review_run/.test(deliverySkill),
+      `${id} must still name the reviewer a model may call mid-draft`,
+    );
+    assert.doesNotMatch(
+      deliverySkill,
+      /submission freezes the accepted bytes|Submission freezes/i,
+      `${id} must not say acceptance freezes: the freeze is the end of the conversation turn`,
     );
   }
   assert.match(skills["peer-review"], /do not turn an exception into a\s+synthetic completed review/i);

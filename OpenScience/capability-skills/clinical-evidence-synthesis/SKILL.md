@@ -1684,29 +1684,32 @@ Read every output back before claiming success. Do not use `grep` or another unb
 - the section names are the manuscript ones and no commissioning, acceptance-specification, or self-referential prose survives anywhere in the report (see "Register: what a manuscript never says"). Read the request once more and confirm that no phrase of it was copied into the report — the request's wording is the usual way this register gets in;
 - the practical answer is medically correct, source-supported, and does not encourage delay.
 
-Before submission, run the independent scientific reviewer while every file is
-still editable:
-
-```
-evimed_review_run{focus: "source status, independent study identity, denominators, quantitative claims, current applicability, and contradictions"}
-```
-
-Repair every `weakened` or `contradicted` finding that applies, then re-run
-the review. Record a reason in `revision-notes.md` for a finding that does not
-apply. Do not run this for the first time after acceptance: submission freezes
-the accepted bytes.
-
-Then submit the package:
+Submit the package:
 
 ```
 evimed_submit_deliverable{deliverableId: "<your deliverable id>"}
 ```
 
-It answers with the verdict, in place. A first submission that comes back with
-issues is the normal case, not a failure: fix everything it lists as 必修,
-submit again, and repeat until it answers `ok`. The rules it applies are the
-same ones the server applies afterwards — there is one implementation of them
-now, so a package this accepts is a package the server accepts.
+Submission does three things in one call and answers with all three: it renders
+the citation numbering and the reference list from the matrix, it runs the
+delivery gate, and it runs the independent scientific reviewer over what you
+wrote. A first submission that comes back with issues is the normal case, not a
+failure: fix everything it lists as 必修 — including a reviewer's
+`contradicted` finding — submit again, and repeat until it answers `ok`. Record
+a reason in `revision-notes.md` for a finding that does not apply.
+
+The files stay editable for the rest of this conversation turn, so a finding
+that arrives with an acceptance is still a finding you can repair; what freezes
+them is the turn ending. The rules the gate applies are the same ones the server
+applies afterwards — there is one implementation of them now, so a package this
+accepts is a package the server accepts.
+
+To hear the reviewer mid-draft, before you have a package worth submitting, call
+it yourself:
+
+```
+evimed_review_run{focus: "source status, independent study identity, denominators, quantitative claims, current applicability, and contradictions"}
+```
 
 The verdict also carries advisory issues, which do not decide the outcome
 because they cannot be settled mechanically. Read them and act where they apply.
