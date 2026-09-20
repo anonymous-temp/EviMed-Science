@@ -32,6 +32,16 @@
 # pin move, or anything under `runtime/` other than the curated skills' prose
 # and the research MCP server's own Python sources (see those steps).
 # Those change what the base installed, and the base is what this trusts.
+#
+# The lockfile rule is about what the base installed, not about the file: the
+# runtime image never runs an install from the workspace lock. It copies
+# `packages/socket`, `@evimed/domain` and `@evimed/harness-port` as trees, and
+# everything it does install (Debian, R, Chromium, uv, Node, the pinned DSH
+# CLI) comes from `install-runtime.sh` and its own pins. So a lock change that
+# touches only `apps/web`'s dependencies — 2026-09-20 dropped a font package —
+# changes nothing this image contains, and a delta stays admissible. Read the
+# diff before deciding; a change under `packages/*` dependencies is the case
+# the rule is for.
 # Build the full `Dockerfile` for them.
 ARG RUNTIME_BASE_IMAGE
 FROM ${RUNTIME_BASE_IMAGE}
