@@ -76,7 +76,7 @@ describe("Textarea", () => {
 
 describe("class helpers", () => {
   it("share the control look for selects and custom controls", () => {
-    expect(inputClasses()).toContain("h-9");
+    expect(inputClasses()).toContain("h-8");
     expect(inputClasses({ error: true })).toContain("border-error");
     expect(textareaClasses()).toContain("resize-y");
     expect(inputClasses({ className: "pl-9" })).toContain("pl-9");

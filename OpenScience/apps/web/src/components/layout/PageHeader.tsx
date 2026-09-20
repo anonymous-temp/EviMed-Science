@@ -3,13 +3,19 @@ import { PageTitle } from "@/components/layout/PageTitle";
 import { cn } from "@/lib/cn";
 
 /**
- * A page's title, said once, at one size.
+ * A page's title, said once, at one size, in the sans stack the conversation
+ * beside it uses.
  *
  * 「运行记录」 was 26 px and 「收件箱」 20 px for no reason a reader could infer
- * (review B §2.5): half the pages used the display rung and half the title
- * rung. Every page H1 is the title rung now; `display` is kept for the login
- * page and empty states, which is what the scale always said it was for. No
- * letter-spacing — tracking on Chinese breaks the character grid.
+ * (review B §2.5), and both were serif while the kernel's conversation was
+ * not — the seam the 2026-09-20 rectification closed. Every page H1 is the
+ * 20 px `title` rung now; `display` (24) is the home hero, the login page and
+ * a full-page empty state. No letter-spacing — tracking on Chinese breaks the
+ * character grid.
+ *
+ * Prefer `PageShell`, which puts this header and the page body in one
+ * container. Use `PageHeader` alone only where the page already owns its
+ * container (`WorkbenchTabs`).
  */
 export function PageHeader({
   title,
@@ -31,7 +37,7 @@ export function PageHeader({
       <PageTitle page={documentTitle ?? title} />
       <div className="min-w-0">
         <h1 className={PAGE_TITLE_CLASS}>{title}</h1>
-        {description && <p className="mt-1 max-w-2xl text-ui text-muted">{description}</p>}
+        {description && <p className="mt-2 text-ui text-muted">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </header>
@@ -39,4 +45,4 @@ export function PageHeader({
 }
 
 /** The class every page H1 wears, for the few that cannot use `PageHeader`. */
-export const PAGE_TITLE_CLASS = "font-serif text-title font-semibold text-text";
+export const PAGE_TITLE_CLASS = "text-title font-semibold text-text";

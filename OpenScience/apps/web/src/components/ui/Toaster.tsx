@@ -50,14 +50,14 @@ function ToastCard({
       onFocus={onPause}
       onBlur={onResume}
       className={cn(
-        "pointer-events-auto flex max-w-[70vw] items-center gap-2 rounded-card border px-3.5 py-2 text-ui shadow-pop",
+        "pointer-events-auto flex min-h-9 max-w-[70vw] items-center gap-2 rounded-card border px-3 py-2 text-ui shadow-pop",
         isError ? "border-danger bg-surface text-error" : "border-ok bg-surface text-text",
       )}
     >
       {isError ? (
-        <XCircle size={15} className="shrink-0 text-error" aria-hidden="true" />
+        <XCircle size={16} className="shrink-0 text-error" aria-hidden="true" />
       ) : (
-        <CheckCircle2 size={15} className="shrink-0 text-ok" aria-hidden="true" />
+        <CheckCircle2 size={16} className="shrink-0 text-ok" aria-hidden="true" />
       )}
       <button
         type="button"
@@ -85,7 +85,7 @@ function ToastCard({
         className="shrink-0 text-muted hover:text-text"
         onClick={onDismiss}
       >
-        <X size={14} aria-hidden="true" />
+        <X size={16} aria-hidden="true" />
       </button>
     </div>
   );

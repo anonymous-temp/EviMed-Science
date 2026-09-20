@@ -3,8 +3,9 @@ import { trapTab } from "@/lib/focusTrap";
 import { Button } from "@/components/ui/Button";
 
 /**
- * Minimal in-app confirmation dialog. `window.confirm` is unreliable inside
- * the desktop webview, so destructive actions confirm through this instead.
+ * The one confirmation dialog: a 16 px panel on the scrim, 24 px inside, the
+ * two buttons at the standard control height. `window.confirm` cannot be
+ * styled, translated or focus-managed, so destructive actions ask here.
  *
  * Focus management (P1-7, spec §11.3): initial focus lands on 取消 (the safe
  * choice), Tab is trapped inside the dialog, Enter confirms, Escape / clicking
@@ -64,7 +65,7 @@ export function ConfirmDialog({
     // and the keyboard equivalent is Escape. role="presentation" keeps it
     // out of the accessibility tree.
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -76,17 +77,17 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={bodyId}
-        className="w-full max-w-sm rounded-card border border-border bg-surface p-4 shadow-modal"
+        className="w-full max-w-sm rounded-panel border border-border bg-surface p-6 shadow-modal"
       >
         <h2 id={titleId} className="text-ui font-semibold text-text">{title}</h2>
-        <p id={bodyId} className="mt-1.5 text-ui text-muted">
+        <p id={bodyId} className="mt-2 text-ui text-muted">
           {body}
         </p>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button ref={cancelRef} size="sm" variant="ghost" onClick={onCancel}>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button ref={cancelRef} variant="ghost" onClick={onCancel}>
             取消
           </Button>
-          <Button size="sm" variant={tone === "danger" ? "danger" : "primary"} onClick={onConfirm}>
+          <Button variant={tone === "danger" ? "danger" : "primary"} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>
