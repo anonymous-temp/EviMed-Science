@@ -220,22 +220,26 @@ export async function prepareResearchContext(
   const routedSkills = routedSpecialist
     ? [routedSpecialist.skill, ...(routedSpecialist.companionSkills ?? [])].filter(Boolean)
     : [];
-  // A routed turn's methods reach the model by one route only: `evimed_delegate`
-  // injects every skill the capability's manifest lists into the child's
-  // prompt, and records the injection. The `skill` tool cannot load a
-  // capability body at all — those live outside the kernel's skill roots on
-  // purpose — so an instruction to "load all of these with the skill tool"
-  // asked for the impossible, contradicted the persona's plan-then-delegate
-  // rule, and on 2026-09-09 sent a geo-content run to do an hour's work in the
-  // root session, where the completion gate then failed it for the method it
-  // was never able to fetch.
+  // A routed turn's methods reach the model without it asking: the run policy
+  // hands this session the capability's skill bodies, persona and tools the
+  // moment the plan names it, and a delegation injects the same three into a
+  // child. The `skill` tool cannot load a capability body at all — those live
+  // outside the kernel's skill roots on purpose — so an instruction to "load
+  // all of these with the skill tool" asked for the impossible.
+  //
+  // This block used to order the delegation and forbid the parent from doing
+  // the work. That is what put a twenty-minute run behind 「正在等待 1 个子任务
+  // …」 with its whole process in another view, and a single-child delegation
+  // buys neither parallelism nor a smaller context (2026-09-20 review, 附录 B).
+  // Delegation is the model's judgement now, and this says what the turn is
+  // about rather than how to arrange it.
   const routingInstruction = routedSpecialist
     ? [
         `平台已根据当前问题确定性路由到专项能力：${escapeContext(routedSpecialist.agentId)}（${escapeContext(routedSpecialist.runtimeAgent)}）。`,
-        `先用 evimed_plan 写下计划，然后用 evimed_delegate 把该专项的交付物委派给能力 ${escapeContext(routedSpecialist.agentId)}：委派会自动把它的方法正文注入子代理`
+        `先用 evimed_plan 写下计划，把交付物的 capability 写成 ${escapeContext(routedSpecialist.agentId)}；它的方法正文`
           + (routedSkills.length ? `（${escapeContext(routedSkills.join("、"))}）` : "")
-          + "，无需也无法用 skill 工具在本会话中加载专项方法。父代理不要自行执行专项的检索、写作或交付。",
-        "子代理提交并通过门禁后，父代理综合并用 evimed_complete_run 交付；只有满足该专项的必需交付物和完成门禁时才能声称本轮成功。不得退回普通开放域回答来绕过专项契约。",
+          + "会随之送到本会话，不需要也无法用 skill 工具加载。默认就在这次对话里按该方法完成检索、阅读、证据与写作；只有同时有多件互相独立的交付物时才委派。",
+        "该专项的必需交付物与门禁照常适用：只有它们齐备并通过校验，本轮才算完成。不得退回普通开放域回答来绕过专项契约。",
       ].join("\n")
     : session.mode === "open-domain"
       ? [

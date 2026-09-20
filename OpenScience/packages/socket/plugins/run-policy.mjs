@@ -366,6 +366,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         /** Set when the turn ended: the receipt is written and the bytes are
          *  the delivery. Within a turn a deliverable stays editable. */
         frozen: false,
+        /** The turn this session is in, so the next one can thaw the freeze. */
+        turn: 0,
       }
       state.set(sessionId, entry)
     }
@@ -670,6 +672,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         entry.rootActive = true
         entry.agentId = step.agentId || entry.agentId
         entry.wakeSuppressed = false
+        // A new turn is the researcher asking again, and asking IS the
+        // authorization to change what the last turn delivered (plan §3.8 #3).
+        // The freeze exists for the window between a turn ending and the
+        // control plane reading what it delivered — not for the conversation.
+        if (entry.turn !== step.turn) {
+          entry.turn = step.turn
+          entry.frozen = false
+        }
       }
       // Every control-plane dispatch commits a new context revision. Reading it
       // before every root step covers both a session's first request and later

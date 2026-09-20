@@ -178,6 +178,31 @@ function sendError(res, error, onFailure) {
   res.end(body);
 }
 
+/**
+ * The conversation a runtime's model request belongs to.
+ *
+ * The kernel's LLM provider stamps `x-deepseek-harness-session-id` on every
+ * request it makes, from the session its agent loop is running (a subagent
+ * carries its own). We read it as a hint and nothing more: the header comes
+ * from the container, so it is only ever resolved against the runs of the
+ * project the request's own token names — a forged value maps to nothing and
+ * falls back to the project rule.
+ *
+ * Bounded like every other caller-supplied string; a session id is an opaque
+ * identifier, never a path or a query.
+ * @param {any} req @returns {string | null}
+ */
+function kernelSessionId(req) {
+  const raw = req?.headers?.["x-deepseek-harness-session-id"];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 200) return null;
+  // Printable only: a session id is an opaque identifier, and a control
+  // character in one is not a session id, it is somebody probing a log.
+  return [...trimmed].every((character) => character.codePointAt(0) >= 0x20 && character.codePointAt(0) !== 0x7f) ? trimmed : null;
+}
+
 function bearerToken(req) {
   const value = req.headers.authorization;
   if (typeof value !== "string" || !value.startsWith("Bearer ")) {
@@ -510,7 +535,7 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
 /**
  * @param {Record<string, any>} config @param {any} runtimeManager
  * @param {{ fetchImpl?: typeof fetch, usageLedger?: any,
- *           attributeRun?: (caller: { userId: string, projectId: string }) => Promise<string | null>,
+ *           attributeRun?: (caller: { userId: string, projectId: string, sessionId?: string | null }) => Promise<string | null>,
  *           runPurpose?: (request: { userId: string, projectId: string, runId: string | null }) => Promise<string> }} [options]
  *   `attributeRun` names the ledger run an interactive runtime's request
  *   belongs to (see below); a bounded runtime's token already carries one.
@@ -589,12 +614,18 @@ export function createModelGatewayHandler(config, runtimeManager, {
         // its token says so. An interactive runtime's token is per project,
         // so every one of its requests reached the ledger with no run at all:
         // per-run cost read zero and the per-run cap could never fire (E §9.4,
-        // memory "per-run usage is never attributed"). The control plane knows
-        // which run is running in the project; when exactly one is, the
-        // request is that run's. Two at once in one project stay unattributed
-        // rather than guessed — they still count toward the account's caps.
+        // memory "per-run usage is never attributed").
+        //
+        // The conversation is on the request: the kernel's own agent loop
+        // stamps its session id on every model call. With it, two runs in one
+        // project each get their own spend; without it — an older kernel, an
+        // auxiliary call that carries none — the control plane falls back to
+        // asking which run is running in the project, and two at once stay
+        // unattributed rather than guessed (they still count toward the
+        // account's caps). Measured on 2026-09-20: two conversations in the
+        // default project overlapped, and both read 「约 ¥0.00」.
         const attributed = caller.runId == null && attributeRun
-          ? await attributeRun({ userId: caller.userId, projectId: caller.projectId }).catch(() => null)
+          ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: kernelSessionId(req) }).catch(() => null)
           : null;
         const runId = caller.runId ?? attributed ?? null;
         // A runtime's request is the kernel's unless its run says otherwise.

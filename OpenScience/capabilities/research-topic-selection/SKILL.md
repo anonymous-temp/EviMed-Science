@@ -188,17 +188,19 @@ python3 "scripts/preflight.py" --workspace .
 ```
 
 It is this capability's tooling, not a second delivery gate: fix what it reports
-as an issue and assess its advisory warnings. Then run scientific review while
-the files are still editable:
+as an issue and assess its advisory warnings. Then submit the package.
+
+Submission runs the delivery gate and the independent scientific reviewer in one
+call and answers with both. Repair every `weakened` or `contradicted` finding
+that applies and submit again; record a reason in `revision-notes.md` for a
+finding that does not apply. The files stay editable for the rest of this
+conversation turn — what freezes them is the turn ending — so a finding that
+arrives with an acceptance can still be repaired. To hear the reviewer mid-draft
+instead, call it yourself:
 
 ```
 evimed_review_run{focus: "candidate novelty, source status, estimands, required data, calculations, and inferential decision rules"}
 ```
-
-Repair every `weakened` or `contradicted` finding that applies. Re-run the
-review after changes; record a reason in `revision-notes.md` for a finding that
-does not apply. Only then submit the package. Submission freezes the accepted
-bytes, so review after submission cannot repair the delivered version.
 
 ```
 evimed_submit_deliverable{deliverableId: "<your deliverable id>"}

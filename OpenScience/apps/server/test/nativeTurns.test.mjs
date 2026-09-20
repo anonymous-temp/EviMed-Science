@@ -551,27 +551,19 @@ function completeFrames(seq, ok) {
   ];
 }
 
-test("durable native completion respects the current complete_run rejection despite an accepted receipt", async (t) => {
+test("a native turn is judged by its receipt, not by a completion tool that no longer exists", async (t) => {
+  // `evimed_complete_run` was deleted on 2026-09-20: a conversation turn ending
+  // is the run ending, and nothing the model calls may be able to refuse it.
+  // Transcripts recorded before then still carry its rows — including the
+  // refusal that ended the GEO run with three tool calls after its answer — and
+  // a run holding an accepted receipt must not be failed by one.
   const f = await setupWorkflow(t, true, false);
   f.setEvents([...workflowEvents(true).events.filter((event) => event.type !== "turn/end"), ...completeFrames(240, false)]);
   await f.adopt();
   f.restart();
   const finished = await f.store.finishFromDurableRecord(f.project, (await f.runs())[0]);
-  assert.equal(finished.status, "failed");
-  assert.equal(finished.errorCode, "specialist_deliverable_not_accepted");
-  assert.ok(noticeTexts(finished).includes("Current completion safety rejection"));
-});
-
-test("a genuinely later successful complete_run replaces an earlier rejection in the same native turn", async (t) => {
-  const f = await setupWorkflow(t, true, false);
-  const earlier = [...workflowEvents(true).events.filter((event) => event.type !== "turn/end"), ...completeFrames(240, false)];
-  f.setEvents(earlier);
-  await f.adopt();
-  f.setEvents([...earlier, ...completeFrames(250, true)]);
-  await f.adopt();
-  f.restart();
-  const finished = await f.store.finishFromDurableRecord(f.project, (await f.runs())[0]);
   assert.equal(finished.status, "succeeded");
+  assert.ok(!noticeTexts(finished).includes("Current completion safety rejection"), "the deleted tool's verdict is not a verdict");
 });
 
 test("a dispatched run is not credited with a receipt another run of the project wrote", async (t) => {
