@@ -123,14 +123,15 @@ describe("the right column's tabs", () => {
     act(() => f.kit.hub.deliver("evidence", { runId: "run-1", reportPath: live.artifacts[0], claims: [
       { claimId: "CLM-002", claim: "老年患者大出血风险相近。", claimType: "direct", status: "quote_not_found", sourceTitle: "ARISTOTLE" },
     ], sources: [] }));
-    const Deliverables = f.components.get("evimed-deliverables") as (props: Record<string, unknown>) => React.ReactElement;
-    render(<Deliverables />);
+    // The right column is the file list; the run view carries the conclusions.
+    const Files = f.components.get("evimed-files") as (props: Record<string, unknown>) => React.ReactElement;
+    render(<Files />);
     const [report] = screen.getAllByRole("button", { name: "打开" });
     fireEvent.click(report);
     expect(sent).toEqual([["open-artifact", { runId: "run-1", path: "deliverables/evidence/clinical-evidence-report.md" }]]);
     cleanup();
-    const Evidence = f.components.get("evimed-evidence") as (props: Record<string, unknown>) => React.ReactElement;
-    render(<Evidence />);
+    const RunView = f.components.get("conversation.view") as (props: Record<string, unknown>) => React.ReactElement;
+    render(<RunView />);
     fireEvent.click(screen.getByText("老年患者大出血风险相近。"));
     expect(sent.at(-1)).toEqual(["open-artifact", { runId: "run-1", path: "deliverables/evidence/clinical-evidence-report.md", anchor: "CLM-002" }]);
   });
@@ -147,32 +148,37 @@ describe("the right column's tabs", () => {
   });
 });
 
-describe("the role cards on a blank conversation", () => {
+describe("the tools on a blank conversation", () => {
   afterEach(() => { cleanup(); });
 
-  it("fill the open conversation's composer with the role's brief", () => {
-    const drafts: Array<[string, string]> = [];
+  it("bind the conversation to the tool, and carry the question already typed", () => {
     const components = new Map<string, (props: Record<string, unknown>) => unknown>();
     const ctx: Record<string, unknown> = {
       slots: { inject: (_name: string, setup: () => unknown) => setup(),
         register: (options: { name: string }, component: (props: Record<string, unknown>) => unknown) => { components.set(options.name, component); return () => {}; } },
       sessions: { list: { getSnapshot: () => ({ current: "session-a" }), subscribe: () => () => {} }, scope: (id: string) => ({ id }) },
-      conversation: { input: { for: (scope: { id: string }) => ({ setDraft: (text: string) => drafts.push([scope.id, text]) }) } },
+      conversation: { input: { for: () => ({ setDraft: () => {}, state: { getSnapshot: () => ({ draft: "老年房颤该不该抗凝？" }) } }) } },
       effect: (setup: () => unknown) => setup(),
       on: () => () => {},
     };
     const target = {
       __EVIMED_FRAME__: { version: 1, frameId: "f", projectId: "p", shellOrigin: "https://app.example", cwd: "/workspace", capabilities: [
-        { id: "clinical-evidence-synthesis", title: "临床证据深度分析", category: "临床证据", brief: "请以「临床证据深度分析」能力完成以下任务：\n……" },
+        { id: "clinical-evidence-synthesis", title: "临床证据深度分析", category: "临床证据", brief: "b", summary: "围绕一个临床问题检索并综合证据。", minutes: [30, 70], starters: ["≥70 岁人群阿司匹林一级预防的获益与出血风险。"], outputs: ["证据综述报告"], limits: [], materials: "" },
       ] },
       parent: { postMessage() {} }, addEventListener() {}, removeEventListener() {}, console,
     };
     const kit = createFrameKit(ctx, target, (id: string) => (id === "react" ? React : undefined), FRAME_VOCABULARY);
+    const sent: Array<[string, Record<string, unknown>]> = [];
+    kit.hub.attach((type: string, fields: Record<string, unknown>) => { sent.push([type, fields]); });
     applyCommands(ctx, {}, target, undefined, kit);
-    const Cards = components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
-    render(<Cards />);
-    fireEvent.click(screen.getByRole("button", { name: /临床问题/ }));
-    expect(drafts).toEqual([["session-a", "请以「临床证据深度分析」能力完成以下任务：\n……"]]);
+    const Hero = components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
+    const view = render(<Hero />);
+    fireEvent.click(screen.getByRole("button", { name: /临床证据深度分析/ }));
+    expect(sent).toEqual([["bind-capability", { capabilityId: "clinical-evidence-synthesis", sessionId: "session-a", draft: "老年房颤该不该抗凝？" }]]);
+    // The hero becomes that tool's page: what it does, what you get, and
+    // questions to start from — above the same composer.
+    view.rerender(<Hero />);
+    expect(screen.getByText(/你会拿到：证据综述报告/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /≥70 岁人群阿司匹林一级预防/ })).toBeInTheDocument();
   });
 });
-

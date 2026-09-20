@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
-import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, getWebProjectId, startWebRuntime, webErrorMessage, WebApiError, webRuntimeProfile, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
+import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { provideFrameSessionSearch, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
 import { Button } from "@/components/ui/Button";
 import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
 import { useUiStore } from "@/lib/store";
 
-/** Why this surface is showing an alert instead of the research session. */
+/** Why this surface is showing an alert instead of the conversation. */
 interface FrameFailure {
   text: string;
   /** Whether building the binding again could plausibly succeed right now. A
@@ -20,10 +20,11 @@ interface FrameFailure {
    *  where the ceiling is raised, so it is the offered action instead. */
   capped: boolean;
   /** A concurrency ceiling rather than a spend one: the action that helps is
-   *  stopping a session that is already running, not raising a quota. */
-  ledger?: boolean;
-  /** A specific task could not be opened: offer a new one beside the retry,
-   *  which would only ask for the same task again. */
+   *  stopping a conversation that is already running, not raising a quota, so
+   *  the account page is not offered. */
+  concurrency?: boolean;
+  /** A specific conversation could not be opened: offer a new one beside the
+   *  retry, which would only ask for the same conversation again. */
   newTask?: boolean;
 }
 
@@ -38,7 +39,7 @@ function frameFailure(text: string): FrameFailure {
  *
  * `createWebRuntimeUiFrame` rejects with a `WebApiError` carrying the code, the
  * declared amounts and the reset moment, and every one of them used to end in
- * `.catch(() => setError("研究会话暂时无法连接"))` — five distinct causes
+ * one sentence about the connection — five distinct causes
  * (an expired login, a project that is gone, a disabled surface, a CSRF
  * mismatch, a network fault) collapsed into one sentence that suggests the
  * fault is transient and invites an immediate retry.
@@ -52,7 +53,7 @@ function frameFailure(text: string): FrameFailure {
  * path. This function renders what does reach us.
  */
 function refusedFrame(error: unknown): FrameFailure {
-  const text = webErrorMessage(error, { fallback: "研究会话暂时无法连接，请重试。" });
+  const text = webErrorMessage(error, { fallback: "对话暂时无法连接，请重试。" });
   if (!(error instanceof WebApiError)) return frameFailure(text);
   const capped = errorCodeOutcome(error.code ?? "") === "capped" || [402, 423, 429].includes(error.status);
   // A 401 is already being handled elsewhere — `fetchWithWebAuth` announces the
@@ -66,20 +67,22 @@ function refusedFrame(error: unknown): FrameFailure {
  *
  * The runtime-UI origin serves a notice page when the session cannot be
  * opened, and that page now posts the code and the sentence it rendered. The
- * codes worth acting on differently are the ceilings: a session refused
+ * codes worth acting on differently are the ceilings: a conversation refused
  * because the deployment is already at its runtime limit is waited out or
- * freed, and pointing at the run ledger is the only action that helps.
+ * freed, and no quota page can lift it.
  */
 /** The slot cap, said as what it is. On 2026-09-15 the only runtime slot of
  *  the deployment was taken and the shell told the second reader that "cold
  *  starts sometimes take longer" — a retry loop against a limit that no wait
- *  could lift. What helps is a running session ending, or stopping one. */
-const RUNTIME_SLOT_CAP_TEXT = "同时运行的研究环境已达本部署上限，这次没有为你新开一个。等已在运行的任务结束，或去「运行记录」停掉一个，再重试。";
+ *  could lift. What helps is a running conversation ending, or stopping one —
+ *  which is done in the conversation itself, from its own composer or from the
+ *  menu on its row in the sidebar. */
+const RUNTIME_SLOT_CAP_TEXT = "同时运行的研究环境已达本部署上限，这次没有为你新开一个。等正在进行的对话结束，或在侧栏里停掉一个，再重试。";
 
 function noticedFrame(code: string, detail: string): FrameFailure {
   const text = detail || (code === "runtime_limit_exceeded" ? RUNTIME_SLOT_CAP_TEXT : errorCodeMessage(code));
   const capped = errorCodeOutcome(code) === "capped";
-  return { text, retryable: true, capped, ledger: capped };
+  return { text, retryable: true, capped, concurrency: capped };
 }
 
 /**
@@ -91,7 +94,7 @@ function noticedFrame(code: string, detail: string): FrameFailure {
  */
 function refusedStart(error: unknown): FrameFailure | null {
   if (!(error instanceof WebApiError) || errorCodeOutcome(error.code ?? "") !== "capped") return null;
-  if (error.code === "runtime_limit_exceeded") return { text: RUNTIME_SLOT_CAP_TEXT, retryable: true, capped: true, ledger: true };
+  if (error.code === "runtime_limit_exceeded") return { text: RUNTIME_SLOT_CAP_TEXT, retryable: true, capped: true, concurrency: true };
   return refusedFrame(error);
 }
 
@@ -110,7 +113,7 @@ function artifactPath(value: unknown): string | null {
 }
 
 /**
- * The moments of opening a task, in the order they happen. The first three are
+ * The moments of opening a conversation, in the order they happen. The first three are
  * the runtime's own start as the control plane reports it (plan §3.1 #8):
  * 准备环境, 同步文件 and 启动内核. A local container mounts the project's
  * files, so only a remote session has the second one, and the Docker provider
@@ -118,15 +121,15 @@ function artifactPath(value: unknown): string | null {
  */
 export type OpenStep = "environment" | "sync" | "kernel" | "interface" | "task";
 const OPEN_STEP_LABELS: Record<OpenStep, string> = {
-  environment: "准备环境", sync: "同步文件", kernel: "启动内核", interface: "载入界面", task: "打开任务",
+  environment: "准备环境", sync: "同步文件", kernel: "启动内核", interface: "载入界面", task: "打开对话",
 };
 /** What each moment is doing, said once it has taken five seconds. */
 const OPEN_STEP_NOTES: Record<OpenStep, string> = {
   environment: "正在为这个项目准备研究环境；已在运行的环境会直接复用。",
   sync: "正在把项目文件同步到研究环境；文件较多时会久一些。",
   kernel: "研究环境已就绪，正在启动研究内核。",
-  interface: "研究内核已启动，正在载入会话界面；网络较慢时会多等一会儿。",
-  task: "正在读取这个任务的完整记录；运行了很久的任务，记录会大一些。",
+  interface: "研究内核已启动，正在载入对话界面；网络较慢时会多等一会儿。",
+  task: "正在读取这条对话的完整记录；进行了很久的对话，记录会大一些。",
 };
 /** The steps a provider goes through. */
 export function openSteps(provider: string | null): OpenStep[] {
@@ -155,16 +158,27 @@ const OPEN_STEP_TIMEOUTS: Record<Exclude<OpenStep, "task">, string> = {
   environment: "研究环境 90 秒内没有准备好；重试会重新建立连接。",
   sync: "项目文件 90 秒内没有同步完成；重试会重新建立连接。",
   kernel: "研究内核 90 秒内没有启动完成；重试会重新建立连接。",
-  interface: "会话界面 60 秒内没有载入完成，可能是网络较慢；重试会重新建立连接。",
+  interface: "对话界面 60 秒内没有载入完成，可能是网络较慢；重试会重新建立连接。",
 };
 
 /**
- * The wait before a task is on screen, drawn as what it is: the composer the
+ * How a renewal that failed is retried: silently, and at widening intervals.
+ *
+ * On 2026-09-20 one renewal that threw in the browser covered a working
+ * conversation with a blocking alert — all 52 renewals of that day reached the
+ * server and all 52 answered 200, so the one the reader saw was a local
+ * network blip. A blip is waited out, not announced, and the lease it renews
+ * lasts far longer than this ladder.
+ */
+const RENEW_RETRY_MS = [1_000, 3_000, 10_000, 30_000] as const;
+
+/**
+ * The wait before a conversation is on screen, drawn as what it is: the composer the
  * reader is about to type into, and the moments the opening goes through, each
  * advanced by the event that ends it — the control plane's account of the
  * runtime start, the kernel's page booting and reporting ready, the task's
  * acknowledgement. A single sentence used to stand for all of them, so a slow
- * kernel, a slot the deployment had run out of and a slow task read looked the
+ * kernel, a slot the deployment had run out of and a slow read looked the
  * same, and none said which it was. After five seconds in one moment a line
  * says what that moment is doing.
  */
@@ -201,18 +215,50 @@ export function FrameWaiting({ step, provider = null, line }: { step: OpenStep; 
   );
 }
 
-/** The native application stays on its own origin and immutable project frame. */
-export function RuntimeUiFrame() {
-  const projectId = getWebProjectId();
-  const origin = webRuntimeProfile().uiOrigin;
-  // A project switch replaces the entire binding and all message state.
-  return <BoundRuntimeUiFrame key={`${origin}:${projectId}`} projectId={projectId} origin={origin} />;
+/**
+ * A wait with nothing to say about it.
+ *
+ * Shown when the frame's own document is loading: the four moments above
+ * describe a runtime starting, and a reader who has one running reads them as
+ * a cold start that is not happening (plan §3.11).
+ */
+export function FrameSkeleton({ line = "正在打开对话…" }: { line?: string }) {
+  return (
+    <div role="status" aria-live="polite" data-frame-skeleton="" className="absolute inset-0 z-10 flex flex-col bg-bg">
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-ui-sm text-muted">{line}</p>
+      </div>
+      <div aria-hidden="true" className="mx-auto mb-6 w-full max-w-content px-4">
+        <div className="h-24 animate-pulse rounded-card border border-border bg-surface" />
+      </div>
+    </div>
+  );
 }
 
-function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin: string }) {
+/**
+ * The kernel's own application, on its own origin and immutable project frame.
+ *
+ * Rendered by the shell rather than by the chat route (`SessionFrameHost`), so
+ * that leaving the conversation for any other page hides this rather than
+ * unmounting it. An unmount DELETEs the binding, and the next visit paid for a
+ * new container document, a new websocket and a fresh kernel handshake — seven
+ * times in twenty-five minutes on production (2026-09-20 walk, fact 1).
+ *
+ * `active` is the conversation surface being on screen in this project:
+ * inactive frames keep their document and their lease and send nothing.
+ */
+export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = true, suspended = false }: {
+  projectId: string;
+  origin: string;
+  /** The conversation this surface should be showing, from the address. */
+  sessionId?: string | null;
+  active?: boolean;
+  /** The address does not yet name a conversation and the shell is finding
+   *  one: hold the opening request, but let the runtime warm up meanwhile. */
+  suspended?: boolean;
+}) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { sessionId } = useParams<{ sessionId: string }>();
   const mirroredSession = useRef<{ sessionId: string; attempt: number } | null>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
   const retryButton = useRef<HTMLButtonElement>(null);
@@ -231,7 +277,13 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   const [pending, setPending] = useState(false);
   const [navigated, setNavigated] = useState(false);
   const [error, setError] = useState<FrameFailure | null>(null);
-  const [leaseError, setLeaseError] = useState<string | null>(null);
+  /** A renewal that failed, kept while it is retried underneath. */
+  const [leaseFailure, setLeaseFailure] = useState<{ text: string; final: boolean } | null>(null);
+  /** The lease this frame holds has run out. Timed rather than polled. */
+  const [leaseExpired, setLeaseExpired] = useState(false);
+  /** The kernel's own page said it cannot reconnect — a different fact from a
+   *  renewal failing, and the one the reader can do nothing silent about. */
+  const [nativeError, setNativeError] = useState<string | null>(null);
   const [renewing, setRenewing] = useState(false);
   const [attempt, setAttempt] = useState(0);
   // The control plane's account of the runtime start this opening waits on.
@@ -250,6 +302,9 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   currentBinding.current = binding;
   const frameId = binding?.frameId;
   const intent = useMemo(() => {
+    // A frame the reader is not looking at holds its document and its lease
+    // and commands nothing: two cached projects must not both open a session.
+    if (!active || suspended) return null;
     const explicit = runtimeUiIntentFromState(location.state, projectId);
     if (explicit) return explicit;
     // URL updates acknowledged by the native application do not command it
@@ -257,7 +312,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
     if (sessionId && mirroredSession.current?.sessionId === sessionId && mirroredSession.current?.attempt === attempt) return null;
     return { kind: sessionId ? "open" : "create", projectId, requestId: crypto.randomUUID(),
       sessionId: sessionId ?? crypto.randomUUID() } satisfies RuntimeUiIntent;
-  }, [location.state, projectId, sessionId, attempt]);
+  }, [active, suspended, location.state, projectId, sessionId, attempt]);
 
   const navigationKey = `${location.pathname}:${runtimeUiIntentFromState(location.state, projectId)?.requestId ?? ""}`;
   const previousNavigation = useRef(navigationKey);
@@ -265,12 +320,14 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
     const changed = previousNavigation.current !== navigationKey;
     previousNavigation.current = navigationKey;
     // Errors release the old cookie and document. A different target is a new
-    // navigation, so recreate its binding rather than leaving the prior error sticky.
-    if (changed && error) setAttempt(value => value + 1);
-  }, [navigationKey, error]);
+    // navigation, so recreate its binding rather than leaving the prior error
+    // sticky. Only for the frame on screen: a hidden one would rebuild itself
+    // on every navigation the shell makes elsewhere.
+    if (changed && error && active) setAttempt(value => value + 1);
+  }, [navigationKey, error, active]);
 
   useEffect(() => {
-    let active = true;
+    let live = true;
     let frameId: string | null = null;
     const released = new Set<string>();
     releaseBinding.current = null;
@@ -281,12 +338,13 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         // Cookie cleanup is best effort; login expiry and revocation remain authoritative.
       });
     };
-    setBinding(null); setReady(false); setBooted(0); setFrameTask(null); setPending(false); setNavigated(false); setError(null); setLeaseError(null); setRenewing(false); setStartStatus(null);
+    setBinding(null); setReady(false); setBooted(0); setFrameTask(null); setPending(false); setNavigated(false); setError(null);
+    setLeaseFailure(null); setLeaseExpired(false); setNativeError(null); setRenewing(false); setStartStatus(null);
     recoveryAttempted.current = false;
     nativeReady.current = false;
     incoming.current = 0; outgoing.current = 0; lastSent.current = ""; currentRequest.current = null;
     void createWebRuntimeUiFrame(projectId).then(value => {
-      if (!active) { release(value.frameId); return; }
+      if (!live) { release(value.frameId); return; }
       frameId = value.frameId;
       releaseBinding.current = () => release(value.frameId);
       const url = new URL(value.frameUrl);
@@ -294,46 +352,59 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         || !Number.isFinite(value.expiresAt) || value.expiresAt <= Date.now()
         || typeof value.renewalToken !== "string" || !value.renewalToken) throw new Error("Invalid frame binding");
       setBinding(value);
-    }).catch((cause: unknown) => { if (active) setError(refusedFrame(cause)); });
-    return () => { active = false; if (frameId) release(frameId); };
+    }).catch((cause: unknown) => { if (live) setError(refusedFrame(cause)); });
+    return () => { live = false; if (frameId) release(frameId); };
   }, [projectId, origin, attempt]);
 
   useEffect(() => {
     if (!frameId) return;
-    let active = true;
+    let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let inFlight: Promise<void> | null = null;
-    const schedule = (expiresAt: number) => {
+    /** Consecutive failed renewals, which is what widens the retry interval. */
+    let failures = 0;
+    const after = (delay: number) => {
       clearTimeout(timer);
-      // Renew with enough margin for a background browser's throttled timers.
-      timer = setTimeout(() => { void renew(); }, Math.max(1000, Math.min(120_000, (expiresAt - Date.now()) * 0.6)));
+      timer = setTimeout(() => { void renew(); }, Math.max(1_000, delay));
     };
+    // Halfway through what is left, so a renewal has the whole second half of
+    // the lease to succeed in before anything is lost, and a background tab's
+    // throttled timers still have room.
+    const schedule = (expiresAt: number) => after((expiresAt - Date.now()) * 0.5);
     const renew = (): Promise<void> => {
       if (inFlight) return inFlight;
       const prior = currentBinding.current;
-      if (!active || !prior || prior.frameId !== frameId) return Promise.resolve();
+      if (!live || !prior || prior.frameId !== frameId) return Promise.resolve();
       clearTimeout(timer);
       setRenewing(true);
       inFlight = renewWebRuntimeUiFrame(prior).then(value => {
-        if (!active) { void releaseWebRuntimeUiFrame(prior.frameId).catch(() => {}); return; }
+        if (!live) { void releaseWebRuntimeUiFrame(prior.frameId).catch(() => {}); return; }
         if (value.frameId !== prior.frameId || value.frameUrl !== prior.frameUrl
           || !Number.isFinite(value.expiresAt) || value.expiresAt <= Date.now()
           || typeof value.renewalToken !== "string" || !value.renewalToken) throw new Error("Invalid renewed binding");
+        failures = 0;
         currentBinding.current = value;
         setBinding(value);
-        setLeaseError(null);
+        setLeaseFailure(null);
         schedule(value.expiresAt);
         if (!nativeReady.current) iframe.current?.contentWindow?.postMessage({
           type: "evimed.runtime-ui.resume", version: 1, frameId, projectId, seq: ++outgoing.current,
         }, origin);
       }).catch((cause: unknown) => {
+        if (!live) return;
+        // An expired login is the one failure retrying cannot fix: the shell is
+        // already moving to the login route on the same answer. Everything else
+        // is retried underneath, and the lease outlives the whole ladder.
+        const expiredLogin = cause instanceof WebApiError && cause.status === 401;
+        failures += 1;
         // The renewal answers with the same envelope the creation does, so an
         // expired login or a revoked project says so instead of arriving as a
         // sentence about the connection.
-        if (active) setLeaseError(webErrorMessage(cause, { fallback: "研究连接暂时无法续期，请重试" }));
+        setLeaseFailure({ text: webErrorMessage(cause, { fallback: "研究连接暂时无法续期，正在自动重连" }), final: expiredLogin });
+        if (!expiredLogin) after(RENEW_RETRY_MS[Math.min(failures - 1, RENEW_RETRY_MS.length - 1)]);
       }).finally(() => {
         inFlight = null;
-        if (active) setRenewing(false);
+        if (live) setRenewing(false);
       });
       return inFlight;
     };
@@ -344,13 +415,25 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
     document.addEventListener("visibilitychange", foreground);
     window.addEventListener("online", resume);
     return () => {
-      active = false;
+      live = false;
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", foreground);
       window.removeEventListener("online", resume);
       if (renewBinding.current === resume) renewBinding.current = null;
     };
   }, [frameId, origin, projectId]);
+
+  // When this frame's lease runs out, timed from the lease itself. Only a
+  // failure that is still standing at that moment is worth covering the
+  // conversation for; before it, a retry is still ahead of the reader.
+  useEffect(() => {
+    if (!binding) { setLeaseExpired(false); return; }
+    const remaining = binding.expiresAt - Date.now();
+    if (remaining <= 0) { setLeaseExpired(true); return; }
+    setLeaseExpired(false);
+    const timer = setTimeout(() => setLeaseExpired(true), remaining);
+    return () => clearTimeout(timer);
+  }, [binding]);
 
   useEffect(() => {
     if (error) releaseBinding.current?.();
@@ -359,6 +442,16 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   // The runtime is up once the control plane says so or the kernel's own page
   // has booted inside the frame, whichever is heard first.
   const runtimeUp = navigated || ready || booted > 0 || startStatus?.running === true;
+  // Whether this opening had to start a runtime, decided once and kept: it is
+  // what says which cover the reader gets, and a cover that changed its mind
+  // halfway would be the cold-start theatre this removes (plan §3.11).
+  const [coldStart, setColdStart] = useState<boolean | null>(null);
+  useEffect(() => { setColdStart(null); }, [projectId, attempt]);
+  useEffect(() => {
+    // Only once there is an answer: a runtime already running reports so on
+    // the first status read, and a frame whose page boots proves it too.
+    setColdStart((known) => (known !== null || (!startStatus && !runtimeUp) ? known : !runtimeUp));
+  }, [startStatus, runtimeUp]);
   const runtimeStep: OpenStep = startStatus?.startStage ?? "environment";
   // Which moment the opening is in, for its deadline; opening the task (a
   // request in flight) is timed by its own deadline further down.
@@ -380,28 +473,28 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   // the status of — and because it belongs to this attempt, a refusal from an
   // earlier one cannot fail the retry.
   useEffect(() => {
-    let active = true;
+    let live = true;
     void startWebRuntime().catch((cause: unknown) => {
-      const refusal = active ? refusedStart(cause) : null;
+      const refusal = live ? refusedStart(cause) : null;
       if (refusal) setError(refusal);
     });
-    return () => { active = false; };
+    return () => { live = false; };
   }, [projectId, attempt]);
 
   // The moment the start is in, asked while the runtime is not up yet. A
   // status read that fails changes nothing: the deadline stays in charge.
   useEffect(() => {
     if (error || runtimeUp) return;
-    let active = true;
+    let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = () => {
       void fetchWebRuntimeStatus()
-        .then((status) => { if (active) setStartStatus(status); })
+        .then((status) => { if (live) setStartStatus(status); })
         .catch(() => {})
-        .finally(() => { if (active) timer = setTimeout(poll, 1_500); });
+        .finally(() => { if (live) timer = setTimeout(poll, 1_500); });
     };
     poll();
-    return () => { active = false; clearTimeout(timer); };
+    return () => { live = false; clearTimeout(timer); };
   }, [error, runtimeUp, attempt, projectId]);
 
   /** One message to the frame's bridge, in the envelope and sequence it checks. */
@@ -436,7 +529,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
       } else if (message.type === "evimed.runtime-ui.ready") {
         nativeReady.current = true;
         recoveryAttempted.current = false;
-        setLeaseError(null);
+        setNativeError(null);
         incoming.current = message.seq; lastSent.current = ""; setReady(true);
         setReadyGeneration(value => value + 1);
       } else if (message.type === "evimed.runtime-ui.connecting") {
@@ -449,15 +542,15 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         if (navigated) {
           setReady(false);
           if (!recoveryAttempted.current) { recoveryAttempted.current = true; renewBinding.current?.(); }
-          else setLeaseError("研究连接暂时无法恢复，请重试");
-        } else setError(frameFailure("研究会话没有完成初始化，请重试。"));
+          else setNativeError("研究连接暂时无法恢复，请重试");
+        } else setError(frameFailure("对话没有完成初始化，请重试。"));
       } else if (message.type === "evimed.runtime-ui.shell-navigate") {
         // The rail inside the frame asking the shell to move. A closed
         // vocabulary, mapped here: the frame runs third-party-composed code on
         // its own origin, so a destination it could spell freely would be a
         // redirect it could choose.
         const routes: Record<string, string> = {
-          "new-task": "/app/chat", runs: "/app/runs", knowledge: "/app/files",
+          "new-task": "/app/chat", knowledge: "/app/files",
           memory: "/app/memory", capabilities: "/app/capabilities", account: "/app/account",
         };
         const to = routes[String(message.destination)];
@@ -523,7 +616,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
           || (message.ok && (typeof message.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(message.sessionId)
             || (request.kind === "open" && message.sessionId !== request.sessionId)))) return;
         incoming.current = message.seq;
-        if (!message.ok) { setError({ ...frameFailure("研究任务暂时无法打开"), newTask: request.kind === "open" }); return; }
+        if (!message.ok) { setError({ ...frameFailure("这条对话暂时无法打开"), newTask: request.kind === "open" }); return; }
         currentRequest.current = null; setPending(false); setNavigated(true);
         mirroredSession.current = { sessionId: message.sessionId, attempt };
         setFrameTask(message.sessionId);
@@ -568,7 +661,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
 
   useEffect(() => {
     if (!ready || error || !binding || !intent || !iframe.current?.contentWindow) return;
-    if (!/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)) { setError(frameFailure("研究任务暂时无法打开")); return; }
+    if (!/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)) { setError(frameFailure("这条对话暂时无法打开")); return; }
     const key = `${binding.frameId}:${intent.requestId}`;
     if (lastSent.current === key) return;
     lastSent.current = key; currentRequest.current = intent; setPending(true);
@@ -636,8 +729,8 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   // whatever had it before the page changed under it.
   useEffect(() => {
     if (!navigated || pending || error || !ready) return;
-    const active = document.activeElement;
-    if (!active || active === document.body) iframe.current?.focus();
+    const focused = document.activeElement;
+    if (!focused || focused === document.body) iframe.current?.focus();
   }, [navigated, pending, error, ready]);
   useEffect(() => {
     if (error?.retryable) retryButton.current?.focus();
@@ -645,9 +738,29 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
 
   useEffect(() => {
     if (!pending || error) return;
-    const timeout = setTimeout(() => setError(frameFailure("研究任务暂时无法打开")), 20_000);
+    const timeout = setTimeout(() => setError(frameFailure("这条对话暂时无法打开")), 20_000);
     return () => clearTimeout(timeout);
   }, [pending, error, attempt, intent?.requestId]);
+
+  // What covers the conversation, and when.
+  //
+  // The four moments belong to a runtime that is actually starting, so they
+  // are shown only for an opening that had to start one. When it was already
+  // running, a document still loading gets a neutral skeleton; and once this
+  // frame has opened a conversation at all, switching to another one shows
+  // nothing — the kernel is on screen and keeps its own composer. Until
+  // 2026-09-20 every opening got the four steps, so a conversation switch
+  // inside a live runtime read as a cold start that was not happening (walk,
+  // 「每次点会话都要冷启动」).
+  const opening = !navigated || pending;
+  const cover = !opening ? null
+    : coldStart ? <FrameWaiting step={displayStep} provider={startStatus?.provider ?? null} />
+      : !navigated ? <FrameSkeleton />
+        : null;
+  // A renewal that failed is only worth saying once the lease it renews has
+  // actually run out — or when it is an expired login, which no retry fixes.
+  const leaseAlert = leaseFailure && (leaseFailure.final || leaseExpired) ? leaseFailure.text : null;
+  const connectionNotice = nativeError ?? leaseAlert;
 
   return (
     <div className="relative h-full w-full">
@@ -655,22 +768,20 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-ui-sm text-error">
           <p>{error.text}</p>
           {error.retryable && <Button ref={retryButton} variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>}
-          {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建任务</Button>}
-          {error.ledger
-            ? <Button variant="ghost" onClick={() => navigate("/app/runs")}>去运行记录</Button>
-            : error.capped && <Button variant="ghost" onClick={() => navigate("/app/account")}>查看账户与额度</Button>}
+          {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建对话</Button>}
+          {error.capped && !error.concurrency && <Button variant="ghost" onClick={() => navigate("/app/account")}>查看账户与额度</Button>}
         </div>
       ) : (
         <>
-          {navigated && (leaseError || !ready || (renewing && binding && binding.expiresAt <= Date.now())) && (
-            <div role={leaseError ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui-sm text-muted">
-              <p>{leaseError ?? "正在恢复研究连接…"}</p>
-              {leaseError && <Button variant="ghost" onClick={() => renewBinding.current?.()} disabled={renewing}>重新连接</Button>}
+          {navigated && (connectionNotice || !ready) && (
+            <div role={connectionNotice ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui-sm text-muted">
+              <p>{connectionNotice ?? "正在恢复研究连接…"}</p>
+              {connectionNotice && <Button variant="ghost" onClick={() => renewBinding.current?.()} disabled={renewing}>重新连接</Button>}
             </div>
           )}
-          {(!navigated || pending) && <FrameWaiting step={displayStep} provider={startStatus?.provider ?? null} />}
+          {cover}
           {binding && <iframe
-            key={binding.frameId} ref={iframe} src={binding.frameUrl} title="研究会话"
+            key={binding.frameId} ref={iframe} src={binding.frameUrl} title="对话"
             className="h-full w-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
             allow="clipboard-read; clipboard-write"

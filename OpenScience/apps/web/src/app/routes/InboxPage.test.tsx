@@ -35,7 +35,7 @@ it("shows blocking reviews first and resolves a selected action", async () => {
   vi.mocked(api.resolveInboxItem).mockResolvedValue({ ...review, revision: 2, resolvedAt: "2026-09-06T00:01:00Z", resolution: { actionId: "adopt" } });
   render(<MemoryRouter><InboxPage /></MemoryRouter>);
   expect(await screen.findByText("审阅一个研究结论")).toBeInTheDocument();
-  expect(screen.getByText("需要审阅")).toBeInTheDocument();
+  expect(screen.getByText("有结论要核对")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "采纳" }));
   await waitFor(() => expect(api.resolveInboxItem).toHaveBeenCalledWith("review-one", "adopt", 1));
   expect(await screen.findByText("已处理")).toBeInTheDocument();
@@ -116,19 +116,19 @@ it("opens the run a notice names, and keeps that link after the notice is handle
   // The inbox was the one surface that named a run and then offered no way to
   // reach it: the card rendered no control, so a reader who was told their
   // research had finished had to go and find it by hand in a list ordered by
-  // time. RunsPage has accepted `?run=` since the sidebar started linking to
-  // it; nothing was ever pointed at it from here.
+  // time. A notice names a run, and `?run=` is resolved to the conversation
+  // that run happened in (`RunRedirect`, router.tsx).
   const runNotice = { ...review, id: "run-finished", noticeType: "notify" as const,
     title: "交付物未通过质量门",
     body: "这次运行没有通过交付前的质量门。\n本次运行产出 8 个文件，仍在工作区里，可以直接打开。",
     source: { type: "run" as const, id: "run_abc123" },
-    actions: [{ id: "open", label: "查看运行", style: "primary" as const }],
+    actions: [{ id: "open", label: "打开对话", style: "primary" as const }],
     readAt: "2026-09-06T00:01:00Z", resolvedAt: "2026-09-06T00:01:00Z" };
   vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice], nextCursor: null });
 
   render(<MemoryRouter><InboxPage /></MemoryRouter>);
 
-  const link = await screen.findByRole("link", { name: "查看运行" });
+  const link = await screen.findByRole("link", { name: "打开对话" });
   expect(link).toHaveAttribute("href", "/app/runs?run=run_abc123");
   // Opening a run is navigation, not a decision, so a handled notice must not
   // hide it — and it must not resolve anything on the way.
@@ -145,7 +145,7 @@ it("says which outcome a finished run had, and that its files are still there", 
     title: "研究已交付，待你复核",
     body: "结果已交付，但有质量检查没有通过，需要你自己复核后再使用。\n本次运行产出 3 个文件，仍在工作区里，可以直接打开。",
     source: { type: "run" as const, id: "run_xyz" },
-    actions: [{ id: "open", label: "查看运行", style: "primary" as const }] };
+    actions: [{ id: "open", label: "打开对话", style: "primary" as const }] };
   vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice], nextCursor: null });
 
   render(<MemoryRouter><InboxPage /></MemoryRouter>);
@@ -179,14 +179,14 @@ const todayEarly = (() => { const d = new Date(); d.setHours(0, 30, 0, 0); retur
 
 function runNotice(over: Partial<api.InboxItem>): api.InboxItem {
   return {
-    ...review, noticeType: "notify", title: "研究已完成", body: "研究结果已准备好，可以查看运行记录和交付物。",
+    ...review, noticeType: "notify", title: "研究已完成", body: "研究结果已准备好，报告与文件都在这条对话里。",
     source: { type: "run", id: `run_${over.id ?? "x"}` },
-    actions: [{ id: "open", label: "查看运行", style: "primary" }],
+    actions: [{ id: "open", label: "打开对话", style: "primary" }],
     createdAt: todayEarly, ...over,
   };
 }
 
-// B §1e: every run notice carries an 「查看运行」 action, and the page only
+// B §1e: every run notice carries an 「打开对话」 action, and the page only
 // offered 标为已读 on items with none — so the commonest item could never be
 // marked read without clicking through.
 it("marks any unread item read, including one that carries actions", async () => {
@@ -224,7 +224,7 @@ it("reads a notice when its link is followed", async () => {
   vi.mocked(api.markInboxRead).mockResolvedValue({ ...notice, readAt: at(0), revision: 2 });
   render(<MemoryRouter><InboxPage /></MemoryRouter>);
 
-  await userEvent.click(await screen.findByRole("link", { name: "查看运行" }));
+  await userEvent.click(await screen.findByRole("link", { name: "打开对话" }));
   await waitFor(() => expect(api.markInboxRead).toHaveBeenCalledWith("follow", 1));
 });
 
@@ -245,15 +245,15 @@ it("groups by day, newest day first", async () => {
 // Older per-run items: ten identical 「研究已完成」 cards for one afternoon.
 it("folds a day's older per-run completions into one line", async () => {
   vi.mocked(api.listInbox).mockResolvedValue({
-    items: [runNotice({ id: "c1" }), runNotice({ id: "c2", readAt: at(0) }), runNotice({ id: "c3", title: "研究已交付，待你复核" })],
+    items: [runNotice({ id: "c1" }), runNotice({ id: "c2", readAt: at(0) }), runNotice({ id: "c3", title: "研究已交付" })],
     nextCursor: null,
   });
   vi.mocked(api.markInboxRead).mockImplementation(async (id: string) => ({ ...runNotice({ id }), readAt: at(0), revision: 2 }));
   render(<MemoryRouter><InboxPage /></MemoryRouter>);
 
   const row = await screen.findByRole("article", { name: "研究已完成 × 3" });
-  expect(row).toHaveTextContent("其中 1 项待你复核");
-  expect(screen.getAllByRole("link", { name: "查看运行" })).toHaveLength(3);
+  expect(row).toHaveTextContent("其中 1 项有结论要核对");
+  expect(screen.getAllByRole("link", { name: "打开对话" })).toHaveLength(3);
   await userEvent.click(screen.getByRole("button", { name: "标为已读" }));
   // Reading the line reads each unread item it stands for, and only those.
   await waitFor(() => expect(api.markInboxRead).toHaveBeenCalledTimes(2));

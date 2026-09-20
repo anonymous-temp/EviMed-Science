@@ -45,13 +45,12 @@ describe("CommandPalette", () => {
     expect(screen.getByText("导航")).toBeInTheDocument();
     expect(screen.getByText("动作")).toBeInTheDocument();
     for (const label of [
-      "新任务",
-      "运行记录",
+      "新对话",
       "知识库",
       "记忆胶囊",
       "方法",
       "主动科研",
-      "科研能力",
+      "科研工具",
       "收件箱",
       "账户与额度",
       "打开设置",
@@ -98,7 +97,7 @@ describe("CommandPalette", () => {
   it("creates a native task intent without submitting a prompt", async () => {
     useUiStore.setState({ paletteOpen: true });
     render(<MemoryRouter initialEntries={["/app/chat"]}><Pathname /><CommandPalette /></MemoryRouter>);
-    await userEvent.click(screen.getByText("新任务"));
+    await userEvent.click(screen.getByText("新对话"));
     const intent = JSON.parse(screen.getByTestId("intent").textContent!);
     expect(intent.kind).toBe("create"); expect(intent.requestId).toBeTruthy(); expect(intent.sessionId).toBeTruthy();
     expect(intent.draft).toBeUndefined(); expect(useUiStore.getState().paletteOpen).toBe(false);

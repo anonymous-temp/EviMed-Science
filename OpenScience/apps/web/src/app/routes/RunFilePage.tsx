@@ -6,7 +6,7 @@ import { extOf, extToKind, previewKindForName } from "@/lib/artifacts";
 import { readArtifact } from "@/lib/artifactFile";
 import { isClaimMatrixPath, safeWorkspacePath } from "@/lib/claimCitations";
 import { runTitle } from "@/lib/runPresentation";
-import { openRunProject } from "@/lib/runLocation";
+import { chatPath, openRunProject } from "@/lib/runLocation";
 import { artifactDisplayName } from "@/lib/artifactNames";
 import { parseFailureMessage } from "@/lib/errorText";
 import { PageTitle } from "@/components/layout/PageTitle";
@@ -23,10 +23,10 @@ const CLAIM_ID = /^CLM-\d{3,6}$/;
 /**
  * One file of one run, on its own page: `/app/runs/:runId/files/*`.
  *
- * The kernel frame's 交付物 and 依据 tabs post `open-artifact` and land here
- * (contract C9), with the claim to open as the fragment (`#CLM-003`); the runs
- * page links here as 「阅读」; a quotation's 「在保存的原文中定位」 opens the
- * preserved source here with `?quote=`, which is highlighted where it is.
+ * The kernel frame links here for a delivered file (contract C9), with the
+ * claim to open as the fragment (`#CLM-003`); a quotation's
+ * 「在保存的原文中定位」 opens the preserved source here with `?quote=`,
+ * which is highlighted where it is.
  *
  * A report gets the full reader; a clinical evidence matrix, its table; any
  * other file, the same preview the right pane uses. The run is looked up for
@@ -97,7 +97,11 @@ export function RunFilePage() {
     return () => { cancelled = true; };
   }, [path, readsText]);
 
-  const backTo = run ? `/app/runs?run=${encodeURIComponent(run.id)}` : "/app/runs";
+  // Back into the conversation this file was written in. It used to be the run
+  // ledger's row about it; that page was deleted on 2026-09-20, and a run with
+  // no conversation to return to lands on the surface itself rather than on a
+  // page that no longer exists.
+  const backTo = chatPath(run?.sessionId);
 
   return (
     <ReportRunContext.Provider value={runId ? { runId: run?.id ?? runId, run } : null}>
@@ -107,7 +111,7 @@ export function RunFilePage() {
           {/* Never squeezed by a long title (at 390 px it stacked a character
             * a line), and a 30 px target: on a phone it is the way back. */}
           <Link to={backTo} className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap py-1 text-ui text-link hover:underline">
-            <ArrowLeft size={14} aria-hidden="true" />运行记录
+            <ArrowLeft size={14} aria-hidden="true" />返回对话
           </Link>
           <span className="text-muted" aria-hidden="true">/</span>
           <h1 className="min-w-0 truncate text-ui font-semibold text-text">
@@ -117,11 +121,11 @@ export function RunFilePage() {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {locating && (
             <p role="status" className="flex items-center gap-2 p-6 text-ui text-muted">
-              <Loader2 size={15} className="animate-spin" aria-hidden="true" />正在打开这次运行所在的项目…
+              <Loader2 size={15} className="animate-spin" aria-hidden="true" />正在打开这次研究所在的项目…
             </p>
           )}
           {!locating && !path && (
-            <EmptyState icon={FileQuestion} title="这个地址没有指向文件" description="从运行记录里打开一个交付物，或检查链接是否完整。" />
+            <EmptyState icon={FileQuestion} title="这个地址没有指向文件" description="从对话里打开一份报告或文件，或检查链接是否完整。" />
           )}
           {!locating && path && readsText && loading && (
             <p role="status" className="flex items-center gap-2 p-6 text-ui text-muted">
@@ -159,7 +163,7 @@ function MatrixPage({ path, runId }: { path: string; runId: string }) {
     <div className="mx-auto w-full max-w-content-full px-6 py-6 max-sm:px-0 max-sm:py-3">
       {document
         ? <EvidenceMatrixTable claims={document.claims} verified={verified} runId={runId} className="max-sm:rounded-none max-sm:border-x-0" />
-        : <p className="text-ui text-muted max-sm:px-4">这个证据矩阵里没有可读的主张。</p>}
+        : <p className="text-ui text-muted max-sm:px-4">这个证据矩阵里没有可读的结论。</p>}
     </div>
   );
 }

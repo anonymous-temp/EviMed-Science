@@ -22,7 +22,9 @@ import { layoutInbox, severityOf, timeOfDay, type InboxEntry } from "@/lib/inbox
 import { labelFor } from "@/lib/statusLabel";
 import { cn } from "@/lib/cn";
 
-const TYPE_LABEL: Record<string, string> = { review: "需要审阅", question: "等待回答", notify: "通知" };
+// What a notice is, said as what happened rather than as a chore assigned to
+// the reader (WP8, 2026-09-20): the inbox records, it does not hand out work.
+const TYPE_LABEL: Record<string, string> = { review: "有结论要核对", question: "等待回答", notify: "通知" };
 
 /**
  * The inbox (contract C1, appendix C §3.4).
@@ -36,7 +38,7 @@ const TYPE_LABEL: Record<string, string> = { review: "需要审阅", question: "
  * plain line in its day.
  *
  * Any unread item can be marked read — the most common item, a finished run,
- * carries an 「查看运行」 action and used to have no way to be marked read at
+ * carries an 「打开对话」 action and used to have no way to be marked read at
  * all (B §1e) — and 「全部已读」 does the whole inbox in one request.
  */
 export function InboxPage() {
@@ -228,8 +230,9 @@ function actionHref(item: InboxItem, action: InboxAction): string | null {
   // `Link`, not `<a href>`: a bare anchor inside the shell reloaded the whole
   // application to move between two of its own pages (U10).
   if (item.source.type === "digest") return `/app/autopilot?digest=${encodeURIComponent(item.source.id)}`;
-  // RunsPage has taken `?run=` since the sidebar started linking to it; the
-  // inbox was the one surface that named a run and offered no way to open it.
+  // A notice names a run, and a run is read in the conversation it happened in.
+  // Only the ledger knows which conversation that is, so this stays the run's
+  // own address and `RunRedirect` resolves it (router.tsx).
   if (item.source.type === "run") return `/app/runs?run=${encodeURIComponent(item.source.id)}`;
   // A memory's confirm, correct and delete controls are on its own page.
   if (item.source.type === "memory") return `/app/memory?record=${encodeURIComponent(item.source.id)}`;
@@ -264,7 +267,7 @@ function InboxRow({ item, busy, onRead, onResolve, onOpened }: {
         {severity === "safety" && <span className="inline-flex items-center gap-1 font-semibold text-danger-strong">
           <ShieldAlert size={14} aria-hidden="true" />临床安全</span>}
         {severity === "attention" && <span className="inline-flex items-center gap-1 font-medium text-warn-strong">
-          <AlertCircle size={14} aria-hidden="true" />{item.noticeType === "notify" ? "需要你看一下" : labelFor(TYPE_LABEL, item.noticeType, "需要你看一下")}</span>}
+          <AlertCircle size={14} aria-hidden="true" />{labelFor(TYPE_LABEL, item.noticeType, "值得一看")}</span>}
         {severity === "info" && item.noticeType !== "notify" && <span className="text-muted">{labelFor(TYPE_LABEL, item.noticeType, "通知")}</span>}
         {item.count > 1 && !mergedRuns && <span className="text-muted">合并 {item.count} 条</span>}
         <span className="ml-auto flex items-center gap-2 text-muted">
@@ -309,7 +312,7 @@ function CompletionsRow({ items, busy, onRead, onOpened }: {
   return <li className="rounded-card border border-border bg-surface p-4">
     <article className="space-y-2" aria-label={`研究已完成 × ${items.length}`}>
       <div className="flex items-center gap-2 text-caption text-muted">
-        {review > 0 && <span>其中 {review} 项待你复核</span>}
+        {review > 0 && <span>其中 {review} 项有结论要核对</span>}
         <time className="ml-auto" dateTime={items[0].createdAt}>{timeOfDay(items[0].createdAt)}</time>
       </div>
       <h3 className={cn("flex items-center gap-2 text-body text-text", unread ? "font-semibold" : "font-normal")}>
@@ -324,7 +327,7 @@ function CompletionsRow({ items, busy, onRead, onOpened }: {
             return <li key={item.id} className="flex items-center gap-2 text-ui">
               <time className="w-12 shrink-0 tabular-nums text-muted" dateTime={item.createdAt}>{timeOfDay(item.createdAt)}</time>
               <span className={cn("min-w-0 flex-1 truncate", !item.readAt && "font-medium")}>{item.title}</span>
-              {href && <Link to={href} onClick={() => onOpened(item)} className="shrink-0 text-link hover:underline">查看运行</Link>}
+              {href && <Link to={href} onClick={() => onOpened(item)} className="shrink-0 text-link hover:underline">打开对话</Link>}
             </li>;
           })}
         </ul>

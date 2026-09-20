@@ -197,7 +197,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
   it("starts a new task in another project: the switch first, then an intent minted there", async () => {
     renderBrowser("/app/files");
 
-    await userEvent.click(await screen.findByRole("button", { name: "在「Paper 1」新建任务" }));
+    await userEvent.click(await screen.findByRole("button", { name: "在「Paper 1」新建对话" }));
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/chat/));
     expect(useProjectStore.getState().currentId).toBe("paper1");
@@ -209,7 +209,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
   it("starts a new task in the current project without asking the server anything", async () => {
     renderBrowser("/app/files");
 
-    await userEvent.click(await screen.findByRole("button", { name: "在「我的研究」新建任务" }));
+    await userEvent.click(await screen.findByRole("button", { name: "在「我的研究」新建对话" }));
 
     expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/chat/);
     expect(JSON.parse(screen.getByTestId("intent").textContent!)).toMatchObject({ kind: "create", projectId: "default" });
@@ -236,7 +236,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     mocks.fetchWebMe.mockImplementation(async () => ({ user: { id: "alice", name: "Alice" }, project: { id: "default", name: "我的研究" }, projects: PROJECTS }));
     renderBrowser("/app/files");
 
-    await userEvent.click(await screen.findByRole("button", { name: "在「Paper 1」新建任务" }));
+    await userEvent.click(await screen.findByRole("button", { name: "在「Paper 1」新建对话" }));
 
     // Said in the dictionary's words for a switch, as the dropdown before this did.
     expect(await screen.findByRole("alert")).toHaveTextContent("无法切换到这个项目，请稍后重试。");
@@ -251,7 +251,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     await screen.findByRole("link", { name: /任务 0/ });
     expect(screen.getAllByRole("link", { name: /^任务 \d/ })).toHaveLength(5);
 
-    const more = screen.getByRole("button", { name: "展开其余 2 个任务" });
+    const more = screen.getByRole("button", { name: "展开其余 2 条对话" });
     expect(more).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(more);
     expect(screen.getAllByRole("link", { name: /^任务 \d/ })).toHaveLength(7);
@@ -263,7 +263,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
   it("marks a project whose task is running, in words as well as the dot", async () => {
     mocks.runs.default = [run({ id: "r", question: "进行中的任务", status: "running", finishedAt: null })];
     renderBrowser();
-    expect(await screen.findByRole("button", { name: /^我的研究\s*（当前项目，有任务正在运行）$/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^我的研究\s*（当前项目，有对话正在运行）$/ })).toBeInTheDocument();
   });
 
   it("marks the task on screen as the current page", async () => {
@@ -283,12 +283,26 @@ describe("ProjectBrowser — the projects and their tasks", () => {
     expect(mocks.warmWebRuntime).toHaveBeenCalledWith("paper1");
 
     mocks.warmWebRuntime.mockClear();
-    act(() => screen.getByRole("button", { name: "在「心衰」新建任务" }).focus());
+    act(() => screen.getByRole("button", { name: "在「心衰」新建对话" }).focus());
     expect(mocks.warmWebRuntime).toHaveBeenCalledWith("p-heart");
 
     mocks.warmWebRuntime.mockClear();
     await userEvent.hover(screen.getByRole("button", { name: /^我的研究\s*（当前项目）$/ }));
     expect(mocks.warmWebRuntime).not.toHaveBeenCalled();
+  });
+
+  // Opening a group is the strongest signal short of a click, and a cold
+  // runtime takes about five seconds (2026-09-19 measurement; plan §3.11).
+  // Keyboard, so the pointer's own warming is not what is being observed.
+  it("warms a project's runtime when its group is expanded from the keyboard", async () => {
+    renderBrowser();
+    const other = await screen.findByRole("button", { name: "Paper 1" });
+    act(() => other.focus());
+    mocks.warmWebRuntime.mockClear();
+
+    await userEvent.keyboard("{Enter}");
+    expect(other).toHaveAttribute("aria-expanded", "true");
+    expect(mocks.warmWebRuntime).toHaveBeenCalledWith("paper1");
   });
 
   it("links to the account page for exporting and deleting projects", async () => {
@@ -304,8 +318,8 @@ describe("ProjectBrowser — reading the ledgers", () => {
     mocks.listWebAgentRuns.mockRejectedValueOnce(new Error("boom"));
     renderBrowser();
 
-    expect(await screen.findByText("这个项目的任务暂时读不到")).toBeInTheDocument();
-    expect(screen.queryByText("还没有任务")).not.toBeInTheDocument();
+    expect(await screen.findByText("这个项目的对话暂时读不到")).toBeInTheDocument();
+    expect(screen.queryByText("还没有对话")).not.toBeInTheDocument();
 
     mocks.runs.default = [run({ id: "run-1", question: "已经读到的运行" })];
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
@@ -314,7 +328,7 @@ describe("ProjectBrowser — reading the ledgers", () => {
     mocks.listWebAgentRuns.mockRejectedValue(new Error("boom"));
     await act(async () => { window.dispatchEvent(new Event(RUNS_CHANGED_EVENT)); });
     expect(screen.getByRole("link", { name: /已经读到的运行/ })).toBeInTheDocument();
-    expect(screen.queryByText("这个项目的任务暂时读不到")).not.toBeInTheDocument();
+    expect(screen.queryByText("这个项目的对话暂时读不到")).not.toBeInTheDocument();
   });
 
   it("re-reads every open group when a page announces a change to its runs", async () => {
@@ -329,7 +343,7 @@ describe("ProjectBrowser — reading the ledgers", () => {
 
   it("says so when a project has no tasks yet", async () => {
     renderBrowser();
-    expect(await screen.findByText("还没有任务")).toBeInTheDocument();
+    expect(await screen.findByText("还没有对话")).toBeInTheDocument();
   });
 
   // The list of projects itself failing must not cost the reader the tasks of
@@ -351,11 +365,33 @@ describe("ProjectBrowser — reading the ledgers", () => {
 });
 
 describe("ProjectBrowser — task rows", () => {
-  // A run whose session id is not addressable still has a ledger entry.
-  it("falls back to the ledger for a run with no addressable session", async () => {
+  // A run whose session id is not addressable has no conversation to open. It
+  // used to link to its row on the run ledger; that page went on 2026-09-20,
+  // so the row states the fact instead of pointing at a page that answers
+  // 「找不到」.
+  it("shows a run with no addressable session without offering a way in", async () => {
     mocks.runs.default = [run({ id: "run-1", question: "早期的运行", sessionId: "not a session id" })];
     renderBrowser();
-    expect(await screen.findByRole("link", { name: /早期的运行/ })).toHaveAttribute("href", "/app/runs?run=run-1");
+    expect(await screen.findByTitle("这次研究没有留下可打开的对话")).toHaveTextContent("早期的运行");
+    expect(screen.queryByRole("link", { name: /早期的运行/ })).toBeNull();
+  });
+
+  // The controls the run ledger page held for one conversation, on its row.
+  it("offers stop, rename and the identifiers on a running conversation's row", async () => {
+    mocks.runs.default = [run({ id: "run-1", question: "进行中的研究", status: "running", finishedAt: null })];
+    renderBrowser();
+    await userEvent.click(await screen.findByRole("button", { name: "「进行中的研究」的操作" }));
+    expect(await screen.findByRole("menuitem", { name: "停止" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "复制诊断信息" })).toBeInTheDocument();
+  });
+
+  it("does not offer 停止 on a conversation that has finished", async () => {
+    mocks.runs.default = [run({ id: "run-1", question: "做完的研究" })];
+    renderBrowser();
+    await userEvent.click(await screen.findByRole("button", { name: "「做完的研究」的操作" }));
+    expect(await screen.findByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "停止" })).toBeNull();
   });
 
   // A session says a conversation happened, a run says how it came out. A
@@ -420,8 +456,8 @@ describe("ProjectBrowser — search", () => {
     await userEvent.click(screen.getByRole("button", { name: "Paper 1" }));
     await screen.findByRole("button", { name: /阿司匹林与出血/ });
 
-    await userEvent.click(screen.getByRole("button", { name: "搜索任务" }));
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索任务" }), "阿司匹林");
+    await userEvent.click(screen.getByRole("button", { name: "搜索对话" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索对话" }), "阿司匹林");
 
     const results = screen.getByRole("list", { name: "搜索结果" });
     expect(within(results).getAllByRole("listitem")).toHaveLength(2);
@@ -440,15 +476,15 @@ describe("ProjectBrowser — search", () => {
     mocks.runs.default = [run({ id: "d1", question: "阿司匹林一级预防" })];
     renderBrowser();
     await screen.findByRole("link", { name: /阿司匹林一级预防/ });
-    await userEvent.click(screen.getByRole("button", { name: "搜索任务" }));
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索任务" }), "不存在的词");
-    expect(screen.getByText("没有匹配的任务")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "搜索对话" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索对话" }), "不存在的词");
+    expect(screen.getByText("没有匹配的对话")).toBeInTheDocument();
 
     await userEvent.keyboard("{Escape}");
 
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /阿司匹林一级预防/ })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "搜索任务" })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole("button", { name: "搜索对话" })).toHaveFocus());
   });
 
   it("opens a result in another project in place, and the tree shows it where it lives", async () => {
@@ -457,8 +493,8 @@ describe("ProjectBrowser — search", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Paper 1" }));
     await screen.findByRole("button", { name: /论文任务 0/ });
     await userEvent.click(screen.getByRole("button", { name: "Paper 1" }));
-    await userEvent.click(screen.getByRole("button", { name: "搜索任务" }));
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索任务" }), "论文任务 6");
+    await userEvent.click(screen.getByRole("button", { name: "搜索对话" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索对话" }), "论文任务 6");
 
     await userEvent.click(within(screen.getByRole("list", { name: "搜索结果" })).getByRole("button", { name: /论文任务 6/ }));
 
@@ -478,8 +514,8 @@ describe("ProjectBrowser — search", () => {
     }));
     renderBrowser();
     await screen.findByRole("button", { name: /^我的研究\s*（当前项目）$/ });
-    await userEvent.click(screen.getByRole("button", { name: "搜索任务" }));
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索任务" }), "ASPREE");
+    await userEvent.click(screen.getByRole("button", { name: "搜索对话" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索对话" }), "ASPREE");
 
     expect(await screen.findByRole("link", { name: /引用了 ASPREE 的对话/ })).toHaveAttribute("href", "/app/chat/sess-x");
   });

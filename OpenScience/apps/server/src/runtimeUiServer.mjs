@@ -80,15 +80,15 @@ function escapeHtml(value) {
  * the control plane raises already has a Simplified Chinese sentence in
  * `@evimed/domain`; this routes through it, and adds the one sentence the
  * table cannot carry because it is about this surface rather than the code:
- * a session that cannot start because another is running is waited out or
+ * a conversation that cannot start because another is running is waited out or
  * freed, not retried.
  *
  * @param {string} code
  */
 function noticeDetail(code) {
   if (code === "runtime_limit_exceeded") {
-    return "当前正在运行的研究会话已达本部署上限，这次没有为你新开一个。"
-      + "等已在运行的会话结束，或先去「运行记录」停掉一个，再重新打开。";
+    return "当前正在进行的研究对话已达本部署上限，这次没有为你新开一个。"
+      + "等正在进行的对话结束，或先在侧栏里停掉一个，再重新打开。";
   }
   return errorCodeMessage(code);
 }
