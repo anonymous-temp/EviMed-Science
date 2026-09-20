@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  apply, awaitView, BODY, claimView, delegateView, liveRunFor, planView, refusalOf, verdictView,
+  apply, awaitView, BODY, claimView, delegateView, liveRunFor, planView, refusalOf, reviewSummaryText, verdictView,
 } from '../src/runtimeUiToolviews.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 
@@ -280,4 +280,12 @@ test('the cards render Chinese markup, and a call of an unknown shape draws a pl
   assert.match(renderStatic(view('evimed_delegate'), { block: unreadable }), /子任务/);
   assert.ok(target.warnings.some((/** @type {any[]} */ entry) => String(entry[0]).includes('delegate view could not read a call')));
   assert.deepEqual(target.warnings.filter((/** @type {any[]} */ entry) => String(entry[0]).includes('did not start')), []);
+});
+
+test('a submission says what the reviewer looked at, once it has looked', () => {
+  const summary = reviewSummaryText;
+  assert.equal(summary(null), null);
+  assert.equal(summary({ examined: 0, mustFix: 0, advice: 0 }), null, 'a reviewer that examined nothing says nothing');
+  assert.equal(summary({ examined: 20, mustFix: 0, advice: 9 }), '审查 20 条 · 9 条建议');
+  assert.equal(summary({ examined: 20, mustFix: 3, advice: 9 }), '审查 20 条 · 3 条必须改 · 9 条建议');
 });
