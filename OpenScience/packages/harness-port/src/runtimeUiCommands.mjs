@@ -293,24 +293,28 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     h('span', { style: { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } }, entry.summary),
     entry.minutes ? h('span', { style: { color: 'var(--dsw-alias-label-tertiary)' } }, entry.minutes) : null);
 
-    /** The grid, on a conversation with no tool chosen. */
+    /**
+     * The grid, on a conversation with no tool chosen: the first two of each
+     * category, so every category is represented, and the rest one click away.
+     * A flat budget spent in catalogue order left the last category out
+     * entirely and showed one of the one before it.
+     */
+    const PER_CATEGORY = 2;
     const ToolGrid = () => {
       const [all, setAll] = React.useState(false);
-      let budget = all ? total : 8;
       return h('div', {
         'data-evimed-tools': '',
         style: { flex: '1 1 100%', margin: '12px 0 4px', display: 'flex', flexDirection: 'column', gap: '10px' },
       },
       groups.map((group) => {
-        const shown = group.tools.slice(0, Math.max(0, budget));
-        budget -= shown.length;
+        const shown = all ? group.tools : group.tools.slice(0, PER_CATEGORY);
         if (!shown.length) return null;
         return h('div', { key: group.category },
           h('div', { style: { ...section, margin: '0 0 4px' } }, group.category),
           h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' } },
             shown.map((entry) => h(ToolCard, { key: entry.id, tool: entry, onPick: bind }))));
       }),
-      total > 8 ? h('button', {
+      groups.some((group) => group.tools.length > PER_CATEGORY) ? h('button', {
         type: 'button', style: { ...button, marginLeft: 0, alignSelf: 'flex-start' }, onClick: () => setAll(!all),
       }, all ? '收起' : `全部 ${total} 个工具`) : null);
     };
