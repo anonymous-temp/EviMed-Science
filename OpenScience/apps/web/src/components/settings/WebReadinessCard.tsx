@@ -69,7 +69,7 @@ export function WebReadinessCard() {
     <section className="mt-5 rounded-card border border-border bg-surface">
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="font-serif text-body text-text">部署就绪检查</h2>
+          <h2 className="text-body text-text">部署就绪检查</h2>
           <p className="mt-0.5 truncate text-caption text-muted">
             {readiness ? (readiness.ok ? "部署检查全部通过" : "部署检查需要关注") : "服务端就绪检查"}
           </p>

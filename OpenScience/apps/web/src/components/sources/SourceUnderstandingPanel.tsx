@@ -111,7 +111,7 @@ export function SourceUnderstandingPanel({ projectId, sourceId, sourceName, gene
   const shown = selected ?? detail?.current;
 
   return <Card title="资料理解" hint={sourceName} header={<div className="flex items-center justify-between gap-3">
-    <div><h2 ref={heading} tabIndex={-1} className="font-serif text-body text-text">资料理解</h2><p className="text-ui text-muted">{sourceName}</p></div>
+    <div><h2 ref={heading} tabIndex={-1} className="text-body text-text">资料理解</h2><p className="text-ui text-muted">{sourceName}</p></div>
     <Button size="sm" variant="ghost" onClick={onClose}>关闭理解详情</Button>
   </div>}>
     <div className="space-y-4">
