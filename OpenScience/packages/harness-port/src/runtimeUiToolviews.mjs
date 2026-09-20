@@ -47,7 +47,7 @@ export function toolviewText() {
   return {
     // A deliverable's place in the plan (C3 `deliverables[].status`).
     status: {
-      planned: '待开始', delegated: '进行中', submitted: '核验中', rejected: '需修改',
+      planned: '待开始', delegated: '进行中', submitted: '核对中', rejected: '需修改',
       accepted: '已通过', delivered: '已交付', failed: '未完成',
     },
     // A delegated child as the control plane last saw it (C5 `children[].state`).
@@ -57,12 +57,12 @@ export function toolviewText() {
     // Tool-level refusals: the call was not accepted for work or judgement.
     refusal: {
       plan_invalid: '计划需要修改',
-      deliverable_unknown: '计划里没有这件交付物',
-      deliverable_not_owned: '这件交付物不由当前子任务负责',
-      deliverable_attempts_spent: '这件交付物的提交次数已用完',
-      deliverable_dependency_pending: '它依赖的交付物还没有通过',
-      capability_unknown: '能力目录里没有这项能力',
-      capability_background_only: '这项能力只在后台运行',
+      deliverable_unknown: '计划里没有这一件',
+      deliverable_not_owned: '这一件不由当前子任务负责',
+      deliverable_attempts_spent: '这一件的提交次数已用完',
+      deliverable_dependency_pending: '它依赖的那一件还没有通过',
+      capability_unknown: '工具目录里没有这一项',
+      capability_background_only: '这项工具只在后台运行',
       subagent_start_failed: '子任务没有启动',
       subagent_failed: '子任务没有完成',
     },
@@ -77,7 +77,7 @@ export function toolviewText() {
 export function verdictText(value) {
   if (value.verdict === 'pass') return { text: '✓ 通过', tone: 'ok' };
   if (value.verdict === 'issues') return { text: `⚠ ${Math.max(1, Number(value.mustFix) || 0)} 项需核对`, tone: 'warn' };
-  return { text: '未核验', tone: 'muted' };
+  return { text: '未核对', tone: 'muted' };
 }
 
 /**
@@ -234,7 +234,7 @@ export function delegateView(block, live, now, kit, known = new Map()) {
   const childSessionId = idOf(data?.childSessionId) ?? idOf(child?.childSessionId) ?? idOf(liveItem?.childSessionId);
   const base = {
     deliverableId,
-    title: String(liveItem?.title || known.get(deliverableId) || deliverableId || '交付物'),
+    title: String(liveItem?.title || known.get(deliverableId) || deliverableId || '这一件'),
     capability: kit.capabilityTitle(liveItem?.capability) ?? null,
     childSessionId,
   };
@@ -318,7 +318,7 @@ export function awaitView(block, live, kit, known = new Map()) {
       const submission = entry.submission && typeof entry.submission === 'object' ? entry.submission : null;
       return {
         deliverableId: id,
-        title: String(liveDeliverable(live, id)?.title || known.get(id) || id || '交付物'),
+        title: String(liveDeliverable(live, id)?.title || known.get(id) || id || '这一件'),
         status: words[entry.status] ?? '未知',
         tone: entry.status === 'completed' ? 'ok' : entry.status === 'failed' ? 'warn' : 'active',
         verdict: submission && submission.verdict ? verdictText({ verdict: submission.verdict }) : null,
@@ -339,7 +339,7 @@ export function verdictView(block, live, kit, known = new Map()) {
   const liveItem = deliverableId ? liveDeliverable(live, deliverableId) : null;
   const result = call.result;
   const label = result && result.ok && typeof result.data?.label === 'string' ? result.data.label : null;
-  const base = { deliverableId, title: String(liveItem?.title || known.get(deliverableId) || label || deliverableId || '交付物'), label };
+  const base = { deliverableId, title: String(liveItem?.title || known.get(deliverableId) || label || deliverableId || '这一件'), label };
   if (call.running) return { ...base, kind: 'judging', verdict: null, advice: 0 };
   if (!result) return { ...base, kind: call.stopped ? 'stopped' : 'unknown', verdict: null, advice: 0 };
   const refusal = refusalOf(result);
@@ -479,7 +479,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     item.status ? h('span', { style: { ...pill(item.status.key === 'accepted' || item.status.key === 'delivered' ? 'ok' : ['rejected', 'failed'].includes(item.status.key) ? 'warn' : item.status.key === 'planned' ? 'muted' : 'active'), marginLeft: 'auto' } }, item.status.text) : null));
     return h('div', { style: card, 'data-evimed-toolview': 'plan' },
       h('div', { style: line }, h('span', { style: title }, heading),
-        model.deliverables.length ? h('span', { style: quiet }, `${model.deliverables.length} 件交付物`) : null),
+        model.deliverables.length ? h('span', { style: quiet }, `要交付 ${model.deliverables.length} 件`) : null),
       model.reason ? h('div', { style: quiet }, model.reason) : null,
       rows.length ? h('ul', { style: { margin: '4px 0 0', padding: 0 } }, rows) : null,
       model.clarifications.length ? h('details', { style: { marginTop: '4px' } },
@@ -541,10 +541,10 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const model = modelOf('verdict', () => verdictView(block, live, kit, known));
     if (!model) return h(PlainRow, { label: heading });
     const state = model.kind === 'judging'
-      ? h('span', { style: pill('active') }, '核验中…')
+      ? h('span', { style: pill('active') }, '核对中…')
       : model.kind === 'refused' ? h('span', { style: pill('warn') }, model.text)
         : model.kind === 'judged' ? h('span', { style: pill(model.verdict.tone) }, model.verdict.text)
-          : h('span', { style: pill('muted') }, model.kind === 'stopped' ? '已停止' : '未核验');
+          : h('span', { style: pill('muted') }, model.kind === 'stopped' ? '已停止' : '未核对');
     return h('div', { style: line, 'data-evimed-toolview': 'verdict' },
       h('span', { style: quiet }, heading),
       h('span', { style: title }, model.title),

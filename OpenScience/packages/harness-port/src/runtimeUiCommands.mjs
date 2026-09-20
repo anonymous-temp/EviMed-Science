@@ -1,7 +1,15 @@
 /**
- * The research capabilities, offered where the typing happens: a `/能力`
- * command in the kernel's own slash menu, four role cards on a blank
- * conversation, and `@` references to the researcher's knowledge base.
+ * The research tools, offered where the typing happens: a grid on the blank
+ * conversation, a page for the one you picked above that same composer, a
+ * `/工具` command in the kernel's own slash menu, and `@` references to the
+ * researcher's knowledge base.
+ *
+ * The shape is the one every comparable product settled on (Manus, Kimi,
+ * ChatGPT's GPTs, 豆包, Genspark): pick a tool under the composer, the tool
+ * becomes a removable chip in that same composer, and its examples appear
+ * above it. Nobody opens a drawer with a second input box, which is what this
+ * replaced — and what sent a researcher who had already typed their question
+ * to a different page to type it again.
  *
  * Hidden knowledge, read off the pinned 0.1.5-rc.2 client:
  *
@@ -14,22 +22,26 @@
  *    name collides with a host command fails loud at candidate synthesis and
  *    takes the whole menu with it; host commands are ASCII identifiers, and
  *    this one's name is not.
- *  - A pick fills the CURRENT conversation's composer
- *    (`conversation.input.for(scope).setDraft`). The old row of pills opened a
- *    new task instead, which threw away whatever the researcher had open. The
- *    popup then tries to remove the `/能力` token it was opened from; the
- *    draft has changed under it, so that compare-and-swap misses, which the
- *    pipeline treats as benign — the brief stays.
  *  - The blank conversation's hero declares `conversation.hero.agentPreset`,
  *    a single seat whose kernel occupant (the agent-preset picker) the hosted
- *    profile disables. The role cards sit there, below the headline, and the
- *    seat renders only while the conversation is blank.
+ *    profile disables. The grid and the tool page sit there, below the
+ *    headline, and the seat renders only while the conversation is blank.
+ *  - `conversation.input.dock` is a list seat directly above the composer, in
+ *    every session; the chip that says which tool this conversation runs sits
+ *    there beside the busy hint.
  *  - `ctx.inputTriggers.registerSource({ trigger: '@', … })` adds a group to
  *    the `@` menu. A pick inserts a reference chip; `codec.serialize` is what
  *    the model receives for it at send time. The page cannot read the
  *    control plane's source list, so the candidates are asked of the shell
  *    (`kb-query` → `kb-result`), which answers from the sources this project
  *    already parsed.
+ *
+ * Picking a tool binds this conversation to it through the shell
+ * (`bind-capability`), which is the control plane's own deterministic route —
+ * the same one the capabilities page has always used. It no longer writes
+ * 「请以「X」能力完成以下任务：」 into the draft: that prefix became the
+ * conversation's title, and the router re-decided the capability anyway with a
+ * classifier the researcher had already answered for.
  *
  * @module @evimed/harness-port/runtime-ui-commands
  */
@@ -40,49 +52,71 @@ import { frameStyles } from './runtimeUiStyles.mjs';
 export const inject = ['slots', 'sessions', 'conversation'];
 
 /**
- * The slash popup's rows: every public capability, in catalogue order (which
- * is by category), the category first in the detail line.
+ * A capability's typical duration, as the cards and the popup say it.
+ * @param {any} entry
+ * @returns {string | null}
+ */
+export function toolMinutes(entry) {
+  const minutes = entry && Array.isArray(entry.minutes) && entry.minutes.length === 2 ? entry.minutes : null;
+  if (!minutes) return null;
+  return minutes[0] === minutes[1] ? `约 ${minutes[0]} 分钟` : `约 ${minutes[0]}–${minutes[1]} 分钟`;
+}
+
+/**
+ * The slash popup's rows: every public tool, in catalogue order (which is by
+ * category), the category first in the detail line.
  * @param {any[]} capabilities the frame's validated catalogue
  * @returns {{ id: string, label: string, detail: string }[]}
  */
 export function capabilityOptions(capabilities) {
   return (Array.isArray(capabilities) ? capabilities : [])
     .filter((entry) => entry && !entry.internal && entry.id && entry.title)
-    .map((entry) => {
-      const minutes = Array.isArray(entry.minutes) && entry.minutes.length === 2
-        ? (entry.minutes[0] === entry.minutes[1] ? `约 ${entry.minutes[0]} 分钟` : `约 ${entry.minutes[0]}–${entry.minutes[1]} 分钟`)
-        : null;
-      return {
-        id: String(entry.id),
-        label: String(entry.title),
-        detail: [entry.category, entry.summary, minutes].filter((part) => typeof part === 'string' && part).join(' · '),
-      };
-    });
+    .map((entry) => ({
+      id: String(entry.id),
+      label: String(entry.title),
+      detail: [entry.category, entry.summary, toolMinutes(entry)].filter((part) => typeof part === 'string' && part).join(' · '),
+    }));
 }
 
 /**
- * The four ways into the product on a blank conversation, by role rather than
- * by capability name — fifteen names ask a researcher to know the catalogue
- * before they have asked anything. Each card is the capability that answers
- * that role's first question; a card whose capability this deployment does
- * not offer is left out.
+ * The blank conversation's grid: every public tool, grouped by category in
+ * catalogue order.
  * @param {any[]} capabilities
- * @returns {{ role: string, text: string, capabilityId: string, capabilityTitle: string, brief: string }[]}
+ * @returns {{ category: string, tools: any[] }[]}
  */
-export function roleCards(capabilities) {
-  const roles = [
-    { role: '临床问题', text: '从一个临床问题出发，检索证据，给出可追溯的结论', capabilityId: 'clinical-evidence-synthesis' },
-    { role: '药物评价', text: '围绕一个药品与适应证，完成多维度的综合评价', capabilityId: 'comprehensive-drug-evaluation' },
-    { role: '选题与申报', text: '找到有证据依据、可落地的研究选题', capabilityId: 'research-topic-selection' },
-    { role: '数据可行性', text: '判断手头的数据能支撑哪些研究课题', capabilityId: 'dataset-research-scoping' },
-  ];
-  const catalogue = Array.isArray(capabilities) ? capabilities : [];
-  return roles.flatMap((role) => {
-    const entry = catalogue.find((candidate) => candidate && candidate.id === role.capabilityId && !candidate.internal);
-    return entry && typeof entry.brief === 'string' && entry.brief
-      ? [{ ...role, capabilityTitle: String(entry.title), brief: entry.brief }]
-      : [];
-  });
+export function toolGroups(capabilities) {
+  /** @type {Map<string, any[]>} */
+  const groups = new Map();
+  for (const entry of Array.isArray(capabilities) ? capabilities : []) {
+    if (!entry || entry.internal || !entry.id || !entry.title) continue;
+    const category = String(entry.category || '其他');
+    const list = groups.get(category) ?? [];
+    list.push({ id: String(entry.id), title: String(entry.title), summary: String(entry.summary || ''), minutes: toolMinutes(entry) });
+    groups.set(category, list);
+  }
+  return [...groups.entries()].map(([category, tools]) => ({ category, tools }));
+}
+
+/**
+ * The page of the tool this conversation runs: what it does, what it hands
+ * back, how long it usually takes, what it needs from the researcher, and
+ * three questions to start from.
+ * @param {any[]} capabilities @param {unknown} id
+ */
+export function toolPageModel(capabilities, id) {
+  const key = String(id ?? '');
+  const entry = (Array.isArray(capabilities) ? capabilities : []).find((candidate) => candidate && candidate.id === key && !candidate.internal);
+  if (!entry) return null;
+  return {
+    id: entry.id,
+    title: String(entry.title),
+    category: String(entry.category || ''),
+    summary: String(entry.summary || ''),
+    minutes: toolMinutes(entry),
+    outputs: Array.isArray(entry.outputs) ? entry.outputs : [],
+    materials: typeof entry.materials === 'string' ? entry.materials : '',
+    starters: Array.isArray(entry.starters) ? entry.starters : [],
+  };
 }
 
 /**
@@ -147,77 +181,165 @@ export function knowledgeSerialization(ref, knowledgeDir) {
 export function apply(ctx, _config, target = globalThis, _require = undefined, kit = undefined) {
   if (!kit || !kit.ours || !kit.h) return;
   const h = kit.h;
+  const React = kit.react;
+  const { card, line, title, quiet, pill, button, section, secondary } = frameStyles();
   const catalogue = kit.frame.capabilities.filter((/** @type {any} */ entry) => !entry.internal);
   const knowledgeDir = String(kit.vocabulary?.knowledgeDir || '.evimed-knowledge');
 
-  /**
-   * Fill the composer of a session with a brief; with no session open, ask the
-   * shell for a new task carrying it.
-   * @param {string | null | undefined} sessionId @param {string} brief
-   */
-  const fill = (sessionId, brief) => {
-    const scope = sessionId && typeof ctx.sessions?.scope === 'function' ? ctx.sessions.scope(sessionId) : null;
-    if (scope && ctx.conversation?.input) {
-      ctx.conversation.input.for(scope).setDraft(brief);
-      return;
-    }
-    target.__EVIMED_SHELL__?.navigate?.('new-task', brief);
+  // Which tool this conversation runs. The control plane owns the answer — it
+  // binds the session and tells the frame — and this holds the optimistic one
+  // between the pick and that confirmation, so the page never reads as if the
+  // click did nothing.
+  /** @type {{ id: string | null }} */
+  const tool = { id: null };
+  /** @type {Set<() => void>} */
+  const toolListeners = new Set();
+  /** @param {string | null} id */
+  const setTool = (id) => {
+    if (tool.id === id) return;
+    tool.id = id;
+    for (const listener of [...toolListeners]) { try { listener(); } catch { /* a listener must not stop the others */ } }
+  };
+  const useTool = () => React.useSyncExternalStore(
+    (/** @type {() => void} */ listener) => { toolListeners.add(listener); return () => { toolListeners.delete(listener); }; },
+    () => tool.id, () => tool.id,
+  );
+
+  const currentSession = () => {
+    try { return ctx.sessions?.list?.getSnapshot?.()?.current ?? null; } catch { return null; }
+  };
+  /** @param {string | null} id */
+  const bind = (id) => {
+    setTool(id);
+    kit.hub.send('bind-capability', { capabilityId: id, sessionId: currentSession() });
   };
 
-  // `/能力`: the whole catalogue, searchable, in the kernel's own popup.
+  // The shell's answer, and a conversation switch. A tool belongs to a
+  // conversation, so moving to another one drops it until the shell says what
+  // that one runs.
+  ctx.effect(() => kit.hub.on('capability', (/** @type {any} */ data) => {
+    setTool(data && typeof data.capabilityId === 'string' ? data.capabilityId : null);
+  }), 'evimed-commands: bound capability');
+  ctx.effect(() => kit.hub.on('session', () => { setTool(null); }), 'evimed-commands: capability follows the conversation');
+
+  /**
+   * Put a question in the composer of the session on screen; with none open,
+   * ask the shell for a new conversation carrying it.
+   * @param {string} text
+   */
+  const fill = (text) => {
+    const sessionId = currentSession();
+    const scope = sessionId && typeof ctx.sessions?.scope === 'function' ? ctx.sessions.scope(sessionId) : null;
+    if (scope && ctx.conversation?.input) {
+      ctx.conversation.input.for(scope).setDraft(text);
+      return;
+    }
+    target.__EVIMED_SHELL__?.navigate?.('new-task', text);
+  };
+
+  // `/工具`: the whole catalogue, searchable, in the kernel's own popup.
   kit.withServices(['commandUi'], (/** @type {any} */ scope) => {
     const options = capabilityOptions(catalogue);
     if (!options.length) return;
     scope.effect(() => scope.commandUi.register({
-      name: '能力',
-      description: () => '选择一项研究能力，把它的题面填进输入框',
+      name: '工具',
+      description: () => '选择一项科研工具，这次对话就按它来做',
       available: () => true,
       ui: {
         kind: 'popupSelect',
         options: async () => options,
-        /** @param {{ id: string }} option @param {{ sessionId: string }} session */
-        onSelect(option, session) {
-          const entry = catalogue.find((/** @type {any} */ candidate) => candidate.id === option.id);
-          if (!entry) return;
-          const scopeOf = ctx.sessions.scope(session.sessionId);
-          if (!scopeOf) throw new Error('这个会话还没有准备好，请稍后再选');
-          ctx.conversation.input.for(scopeOf).setDraft(entry.brief);
-        },
+        /** @param {{ id: string }} option */
+        onSelect(option) { bind(String(option.id)); },
       },
-    }), 'evimed-commands: /能力');
+    }), 'evimed-commands: /工具');
   });
 
-  // The role cards on a blank conversation.
-  const cards = roleCards(catalogue);
-  if (cards.length) {
-    const { secondary } = frameStyles();
-    const RoleCards = () => h('div', {
-      'data-evimed-role-cards': '',
-      style: { flex: '1 1 100%', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px', margin: '12px 0 4px' },
-    }, cards.map((card) => h('button', {
-      key: card.role,
+  if (React && catalogue.length) {
+    const groups = toolGroups(catalogue);
+    const total = groups.reduce((sum, group) => sum + group.tools.length, 0);
+
+    /** @param {{ tool: any, onPick: (id: string) => void }} props */
+    const ToolCard = ({ tool: entry, onPick }) => h('button', {
       type: 'button',
-      title: `由「${card.capabilityTitle}」完成；点选后题面会填进输入框，改成你的问题再发送`,
-      onClick: () => fill(ctx.sessions?.list?.getSnapshot?.()?.current, card.brief),
+      'data-evimed-tool': entry.id,
+      onClick: () => onPick(entry.id),
+      title: entry.summary,
       style: {
         ...secondary,
-        textAlign: 'left',
-        font: 'inherit',
-        cursor: 'pointer',
-        border: '0.5px solid var(--dsw-alias-border-l4)',
-        borderRadius: '12px',
-        background: 'var(--dsw-alias-bg-layer-1)',
-        color: 'var(--dsw-alias-label-secondary)',
-        padding: '10px 12px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '2px',
-        minWidth: 0,
+        textAlign: 'left', font: 'inherit', cursor: 'pointer', minWidth: 0,
+        border: '0.5px solid var(--dsw-alias-border-l4)', borderRadius: '12px',
+        background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-secondary)',
+        padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '2px',
       },
     },
-    h('span', { style: { color: 'var(--dsw-alias-label-primary)', fontWeight: 600 } }, card.role),
-    h('span', null, card.text))));
-    kit.guarded('role cards', () => kit.occupy({ slot: 'conversation.hero.agentPreset', priority: -1 }, RoleCards));
+    h('span', { style: { color: 'var(--dsw-alias-label-primary)', fontWeight: 600 } }, entry.title),
+    h('span', { style: { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } }, entry.summary),
+    entry.minutes ? h('span', { style: { color: 'var(--dsw-alias-label-tertiary)' } }, entry.minutes) : null);
+
+    /** The grid, on a conversation with no tool chosen. */
+    const ToolGrid = () => {
+      const [all, setAll] = React.useState(false);
+      let budget = all ? total : 8;
+      return h('div', {
+        'data-evimed-tools': '',
+        style: { flex: '1 1 100%', margin: '12px 0 4px', display: 'flex', flexDirection: 'column', gap: '10px' },
+      },
+      groups.map((group) => {
+        const shown = group.tools.slice(0, Math.max(0, budget));
+        budget -= shown.length;
+        if (!shown.length) return null;
+        return h('div', { key: group.category },
+          h('div', { style: { ...section, margin: '0 0 4px' } }, group.category),
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' } },
+            shown.map((entry) => h(ToolCard, { key: entry.id, tool: entry, onPick: bind }))));
+      }),
+      total > 8 ? h('button', {
+        type: 'button', style: { ...button, marginLeft: 0, alignSelf: 'flex-start' }, onClick: () => setAll(!all),
+      }, all ? '收起' : `全部 ${total} 个工具`) : null);
+    };
+
+    /** The page of the chosen tool, above the same composer. */
+    /** @param {{ id: string }} props */
+    const ToolPage = ({ id }) => {
+      const model = toolPageModel(catalogue, id);
+      if (!model) return null;
+      return h('div', {
+        'data-evimed-tool-page': model.id,
+        style: { flex: '1 1 100%', margin: '12px 0 4px', display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' },
+      },
+      h('div', { style: line },
+        h('span', { style: { ...title, fontSize: '16px' } }, model.title),
+        model.minutes ? h('span', { style: pill('muted') }, model.minutes) : null,
+        h('button', { type: 'button', style: button, onClick: () => bind(null) }, '换一个工具')),
+      h('div', { style: { ...secondary, color: 'var(--dsw-alias-label-secondary)' } }, model.summary),
+      model.outputs.length ? h('div', { style: { ...secondary, color: 'var(--dsw-alias-label-tertiary)' } }, `你会拿到：${model.outputs.join('；')}`) : null,
+      model.materials ? h('div', { style: { ...secondary, color: 'var(--dsw-alias-label-tertiary)' } }, `开始前：${model.materials}`) : null,
+      model.starters.length ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' } },
+        model.starters.map((/** @type {string} */ starter) => h('button', {
+          key: starter, type: 'button', onClick: () => fill(starter),
+          style: { ...card, margin: 0, display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', font: 'inherit' },
+        }, starter))) : null);
+    };
+
+    const HeroTools = () => {
+      const id = useTool();
+      return id ? h(ToolPage, { id }) : h(ToolGrid, null);
+    };
+    kit.guarded('hero tools', () => kit.occupy({ slot: 'conversation.hero.agentPreset', priority: -1 }, HeroTools));
+
+    // The chip above the composer: which tool this conversation runs, and the
+    // way out of it. In a session the hero is gone, so this is the only place
+    // that still says it.
+    const ToolChip = () => {
+      const id = useTool();
+      const model = id ? toolPageModel(catalogue, id) : null;
+      if (!model) return null;
+      return h('div', { 'data-evimed-tool-chip': model.id, style: { ...line, justifyContent: 'flex-start', padding: '0 4px 4px' } },
+        h('span', { style: { ...pill('active'), fontWeight: 500 } }, model.title),
+        model.minutes ? h('span', { style: quiet }, model.minutes) : null,
+        h('button', { type: 'button', 'aria-label': `不再用「${model.title}」`, style: { ...button, marginLeft: 0 }, onClick: () => bind(null) }, '移除'));
+    };
+    kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-tool' }, ToolChip));
   }
 
   // `@` knowledge-base references.
@@ -258,5 +380,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'commands',
   inject,
-  parts: Object.freeze([frameStyles, capabilityOptions, roleCards, knowledgeCandidates, knowledgeReference, knowledgeSerialization, apply]),
+  parts: Object.freeze([frameStyles, toolMinutes, capabilityOptions, toolGroups, toolPageModel, knowledgeCandidates, knowledgeReference, knowledgeSerialization, apply]),
 });

@@ -80,6 +80,13 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
   'conversation.hero.brand.mark': Object.freeze({ kind: 'single', scope: 'root', declaredBy: 'ui-conversation' }),
   'conversation.hero.workspace': Object.freeze({ kind: 'single', scope: 'root', declaredBy: 'ui-conversation' }),
   'conversation.hero.agentPreset': Object.freeze({ kind: 'single', scope: 'root', declaredBy: 'ui-conversation' }),
+  // The conversation's own view ring: one entry per tab, rendered one at a
+  // time, with the tab strip in the session header. `ui-chat` holds `chat` at
+  // order 0 and `ui-trajectory` holds `trajectory` (operator-only here), so an
+  // entry of ours adds a tab beside them rather than replacing either. The
+  // registration's `label` is read through the kernel's own label resolver and
+  // may be a thunk, so it re-reads on a language change.
+  'conversation.view': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // Above the composer card: `main.conversation`'s children table.
   'conversation.input.dock': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // The composer: `conversation.composer.bar`'s children table.

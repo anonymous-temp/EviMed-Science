@@ -249,6 +249,12 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
           brief: capabilityBrief(display.title, display.starterPrompts[0] ?? ""),
           summary: display.description,
           minutes: agent.estimatedMinutes,
+          // What the tool's own page shows above the composer: the three
+          // example questions, what the run hands back, and whether it needs
+          // material of the researcher's before it can start.
+          starters: display.starterPrompts.slice(0, 3),
+          outputs: (display.outputs ?? []).slice(0, 4),
+          materials: typeof display.materials === "string" ? display.materials : "",
         }))
         .sort((left, right) => left.category.localeCompare(right.category, "zh") || left.title.localeCompare(right.title, "zh"));
     } catch {

@@ -271,6 +271,16 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       const { type: _type, version: _version, frameId: _frameId, projectId: _projectId, seq: _seq, ...rest } = data;
       return rest;
     },
+    /**
+     * Which research tool this conversation runs, as the control plane holds
+     * it. The frame shows it and offers the way out of it; the binding itself
+     * is the control plane's, so a page that lies about it changes nothing.
+     * @param {any} data
+     */
+    capability(data) {
+      const id = typeof data.capabilityId === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(data.capabilityId) ? data.capabilityId : null;
+      return { capabilityId: id, sessionId: validId(data.sessionId) ? data.sessionId : null };
+    },
     /** @param {any} data */
     'kb-result'(data) {
       if (typeof data.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(data.requestId)) return null;
