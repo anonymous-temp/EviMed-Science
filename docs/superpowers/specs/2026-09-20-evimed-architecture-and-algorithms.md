@@ -226,14 +226,15 @@
 1. **用量账本的修复还没上生产。** 在它发布前，删项目仍会抹掉该项目花过的钱，并把当天的滚动上限分母降下来。修复已在 main（`9bbdfeae`），随下次发布生效。
 2. **深度任务的用时与成本在 09-20 这一版上升了，原因未定。** 见 §6。需要：同一版、同一题、保留项目地重跑一次，对着账本按 `purpose` 分解。
 3. **`pnpm audit:capabilities` 红着，它是 `ci:web` 里唯一红的一关。** 工具探针证据停在 2026-07-31（51 天，窗口 14 天），且记录的还是已退役的 `evimed_` 前缀工具名。探针夹具已在这次补齐到 36 个工具（`4e009140b`），但要转绿还需要：跑一次真探针（生产可达，能跑），以及六个专科作业各一份 14 天内的签名回执——其中 MR 需要 **OpenGWAS JWT**（14 天有效期，只有账号主能签，生产上从未配置过）。
-4. **八个托管凭据连接器在生产上全是空的**：UMLS、OMIM、Addgene、BioGRID、CORE、OpenGWAS、evimed-evidence、以及 NCBI / openFDA / Semantic Scholar / OpenAlex 的限速密钥。只有 Unpaywall 邮箱配了。后果是术语规范化、遗传病、相互作用这些连接器一律 fail-closed，公共源走匿名限速档。大半是免费注册，十几分钟的事。
-5. **五个公开能力从未端到端交付过**：综合药物评价、药品遴选、孟德尔随机化、论文审稿、科研选题。验收台账 `evals/acceptance-ledger.json` 停在 2026-09-10，此后门禁改过判定，台账没更新——**它自己也是缺口**。
-6. **开放获取 PDF 那条路仍有 DNS 重绑定窗口。** `publicSourceGateway` 只核地址不钉 socket（注释里写明了）；`web_read` 已经有 `pinnedPublicLookup`，把那条路换成钉 socket 的传输即可，属于一次独立改动。
-7. **自迭代回路在生产上从未转过。** 反馈事件只有 20 条，全部是消融留下的记忆接受/拒绝；`distill` / `consolidate` / `episode` / `verify` / `digest` 作业一条都没成功过；方法文档 0 份。不是缺陷，是没有真实使用——这正是接下来要变的。
-8. **三个社区 bundle 进了镜像但没在真实会话里各走一遍**：`dsh-cite`（它的 `plugin-support.json` 明写"装上不等于可用：`cite_health` 与一次成功的 DOI 查询要过"）、`dsh-annotation`、`dsh-mermaid`。
-9. **语料级覆盖台账与遗漏审计仍缺**：`distillationCompleteness` 契约强制 `not_run`；一次交付读过哪些资料、到哪一层，没有记录。
-10. **飞书未验证**：`evimed_channels` 全部 0 行，需要手机扫一次码。
-11. **公开仓库里的 Java 密钥**：`anonymous-temp/EviMed-Science` 仍是 public，`ca3fb79b9` 可读到三处硬编码密钥。两件事都要做才算解决——轮换那些密钥，以及仓库转私有或重写历史；只转私有不会让已经被抓走的密钥失效。
+4. **三个花费上限在生产上全是 0，也就是没有上限。** `OPEN_SCIENCE_USER_{RUN,DAILY,WEEKLY}_SPEND_LIMIT` 都是 0，`assertWithinLimits` 在两个都 ≤ 0 时直接放行。机制在、有测试、账本也在记，只是没有配过一个数——今天没有任何东西拦得住一次失控的运行或失控的一天。顺带一件到收费时才咬人的事：**预留按缓存未命中定价**，而实际缓存命中 97.7%，所以预留额约是实际的 70 倍（本次基准跑：预留合计 ¥163，已结算实际 ¥2.25）。已结算的行会被实际值替换，没事；`uncertain` 的行会带着膨胀的预留额压在滚动窗口里整整一个窗口（本次 4 行、¥4.16，而同期真实花费 ¥2.25）。
+5. **八个托管凭据连接器在生产上全是空的**：UMLS、OMIM、Addgene、BioGRID、CORE、OpenGWAS、evimed-evidence、以及 NCBI / openFDA / Semantic Scholar / OpenAlex 的限速密钥。只有 Unpaywall 邮箱配了。后果是术语规范化、遗传病、相互作用这些连接器一律 fail-closed，公共源走匿名限速档。大半是免费注册，十几分钟的事。
+6. **五个公开能力从未端到端交付过**：综合药物评价、药品遴选、孟德尔随机化、论文审稿、科研选题。验收台账 `evals/acceptance-ledger.json` 停在 2026-09-10，此后门禁改过判定，台账没更新——**它自己也是缺口**。
+7. **开放获取 PDF 那条路仍有 DNS 重绑定窗口。** `publicSourceGateway` 只核地址不钉 socket（注释里写明了）；`web_read` 已经有 `pinnedPublicLookup`，把那条路换成钉 socket 的传输即可，属于一次独立改动。
+8. **自迭代回路在生产上从未转过。** 反馈事件只有 20 条，全部是消融留下的记忆接受/拒绝；`distill` / `consolidate` / `episode` / `verify` / `digest` 作业一条都没成功过；方法文档 0 份。不是缺陷，是没有真实使用——这正是接下来要变的。
+9. **三个社区 bundle 进了镜像但没在真实会话里各走一遍**：`dsh-cite`（它的 `plugin-support.json` 明写"装上不等于可用：`cite_health` 与一次成功的 DOI 查询要过"）、`dsh-annotation`、`dsh-mermaid`。
+10. **语料级覆盖台账与遗漏审计仍缺**：`distillationCompleteness` 契约强制 `not_run`；一次交付读过哪些资料、到哪一层，没有记录。
+11. **飞书未验证**：`evimed_channels` 全部 0 行，需要手机扫一次码。
+12. **公开仓库里的 Java 密钥**：`anonymous-temp/EviMed-Science` 仍是 public，`ca3fb79b9` 可读到三处硬编码密钥。两件事都要做才算解决——轮换那些密钥，以及仓库转私有或重写历史；只转私有不会让已经被抓走的密钥失效。
 
 ---
 
