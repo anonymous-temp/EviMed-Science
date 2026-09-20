@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Pencil, Trash2, Undo2, X } from "lucide-react";
-import { deleteStructuredMemory, updateStructuredMemory, webErrorMessage, type WebStructuredMemory } from "@/lib/apiClient";
+import { Link } from "react-router";
+import { Check, Pencil, Undo2, X } from "lucide-react";
+import { deleteStructuredMemory, updateStructuredMemory, webErrorMessage, type WebMemoryUsage, type WebStructuredMemory } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { formatDateTime } from "@/lib/format";
 import { announceMemoryChanged, archiveMemoryRecord, undoMemoryRecord } from "@/lib/memoryClient";
-import { MEMORY_BASIS_LABELS, evidenceSourceLabel, looksInjected, memoryExcerpt, memoryStrength } from "@/lib/memoryText";
+import { MEMORY_BASIS_LABELS, STATED_BASES, looksInjected, memoryExcerpt, memoryStrength, memoryUsage } from "@/lib/memoryText";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -25,34 +26,63 @@ function when(value: string | null | undefined) {
   return formatDateTime(date, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function day(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return formatDateTime(date, { month: "long", day: "numeric" });
+}
+
 function failed(error: unknown) {
   return webErrorMessage(error, { fallback: "操作未完成，请重试。" });
 }
 
 /**
- * One memory as a line of its topic: the sentence, where it came from and how
- * established it is — counted, never a percentage — and, opened, the words it
- * rests on and every version it has had.
+ * The conversation a memory came out of: the session its first evidence names.
  *
- * Nothing here asks before acting except what cannot be undone (删除) and the
- * one checkpoint the owner kept: a memory naming a clinical-safety rule waits
- * as 「等你看过」 (plan §3.3 #1). 「不要再提」 archives, as a revision the toast
- * can take back.
+ * An evidence `sourceRef` is `sessions/<id>/messages/<n>`, which is also the
+ * address the conversation opens at — so 「来自 9月12日《…》」 is a link back to
+ * the place the memory was said, and not a claim the page cannot honour.
+ */
+export function memorySource(record: WebStructuredMemory): { sessionId: string; at: string | null } | null {
+  for (const item of record.evidence) {
+    const sessionId = /^sessions\/([^/]+)\//.exec(item.sourceRef ?? "")?.[1];
+    if (sessionId) return { sessionId, at: item.observedAt ?? record.createdAt };
+  }
+  return null;
+}
+
+/**
+ * One memory as a line of the list: the sentence in the researcher's own
+ * language, where it came from, how established it is — counted, never a
+ * percentage — how often it has actually been used, and the conversation it
+ * was said in. Opened, the words it rests on and every version it has had.
+ *
+ * Three actions and no more (owner ruling 2026-09-20): 改 and 忘记 on every
+ * row, and 不对 on one EviMed inferred. 忘记 archives, as a revision the toast
+ * takes back; 不对 deletes, which is the one irreversible act here and the only
+ * one that also stops the extractor inferring it again — so it is the only one
+ * that asks first.
  */
 export function MemoryRecordRow({
   record,
   highlighted = false,
+  conversationTitle = "",
+  usage,
   onChanged,
 }: {
   record: WebStructuredMemory;
   highlighted?: boolean;
+  /** What the conversation it came from was about, when the page knows. */
+  conversationTitle?: string;
+  usage?: WebMemoryUsage;
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(record.summary || record.value);
   const [busy, setBusy] = useState(false);
   const [confirmingSensitive, setConfirmingSensitive] = useState<null | { value?: string }>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const row = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
@@ -88,24 +118,31 @@ export function MemoryRecordRow({
     if (record.status === "pending" && record.sensitive) setConfirmingSensitive(next);
     else void save(next);
   };
-  const archive = () => run(async () => {
+  const forget = () => run(async () => {
     const archived = await archiveMemoryRecord(record.id, record.version);
     toast.success("好的，之后不再提这条", {
       action: { label: "撤销", onClick: () => void undoMemoryRecord(record.id, archived.version).then(() => { announceMemoryChanged(); onChanged(); }, (error) => toast.error(failed(error))) },
     });
   });
+  const restore = () => run(async () => {
+    await updateStructuredMemory(record, { status: "active" });
+    toast.success("已恢复这条记忆");
+  });
   const undo = () => run(async () => {
     const result = await undoMemoryRecord(record.id, record.version);
     toast.success(result.undone === "removed" ? "已撤销这条记忆" : "已撤销上次改动");
   });
-  const remove = () => run(async () => {
-    setDeleting(false);
+  const reject = () => run(async () => {
+    setRejecting(false);
     await deleteStructuredMemory(record.id);
-    toast.success("已删除这条记忆");
+    toast.success("已记下这条是错的，之后不会再推断出来");
   });
 
   const text = memoryExcerpt(record.summary || record.value);
   const expires = record.expiresAt ? when(record.expiresAt) : "";
+  const inferred = !STATED_BASES.has(record.provenance?.basis ?? "inferred");
+  const source = memorySource(record);
+  const forgotten = record.status === "archived";
   return (
     <li
       ref={row}
@@ -114,18 +151,26 @@ export function MemoryRecordRow({
     >
       {editing ? (
         <div>
-          <Textarea value={value} onChange={(event) => setValue(event.target.value)} aria-label="修正这条记忆" rows={3} className="bg-bg text-ui" />
+          <Textarea value={value} onChange={(event) => setValue(event.target.value)} aria-label="改这条记忆" rows={3} className="bg-bg text-ui" />
           <div className="mt-2 flex justify-end gap-2">
             <Button size="sm" variant="ghost" onClick={() => setEditing(false)}><X size={13} aria-hidden="true" />取消</Button>
-            <Button size="sm" loading={busy} disabled={!value.trim()} onClick={() => confirmOrSave({ value, status: "active" })}>保存修正</Button>
+            <Button size="sm" loading={busy} disabled={!value.trim()} onClick={() => confirmOrSave({ value, status: "active" })}>保存</Button>
           </div>
         </div>
       ) : (
-        <p className="text-ui text-text">{text}</p>
+        <p className={cn("text-ui", forgotten ? "text-muted line-through decoration-muted" : "text-text")}>{text}</p>
       )}
-      <p className="mt-1 flex flex-wrap gap-x-2 text-caption text-muted">
-        {record.provenance && <span className="text-text">{MEMORY_BASIS_LABELS[record.provenance.basis]}</span>}
+      <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
+        {record.provenance && (
+          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-text">{MEMORY_BASIS_LABELS[record.provenance.basis]}</span>
+        )}
         <span>{memoryStrength(record.provenance, record.evidenceCount)}</span>
+        {source && (
+          <Link to={`/app/chat/${encodeURIComponent(source.sessionId)}`} className="underline underline-offset-2 hover:text-text">
+            来自 {day(source.at)}{conversationTitle ? `《${memoryExcerpt(conversationTitle, 24)}》` : "的对话"}
+          </Link>
+        )}
+        <span>{memoryUsage(usage, day)}</span>
         {record.status === "pending" && <span className="text-warn-strong">涉及用药安全，等你看过</span>}
         {record.sensitive && <span>敏感 · 不会被自动调取</span>}
         {expires && record.status === "active" && <span>短期 · {expires} 前有效</span>}
@@ -137,7 +182,7 @@ export function MemoryRecordRow({
             {record.evidence.slice(-3).reverse().map((evidence) => (
               <div key={evidence.fingerprint || `${evidence.sourceRef}-${evidence.observedAt}`}>
                 <p className="text-text">“{evidence.quote}”</p>
-                <p className="mt-0.5">{evidenceSourceLabel(evidence.sourceType)}{evidence.observedAt ? ` · ${when(evidence.observedAt)}` : ""}</p>
+                <p className="mt-0.5">{evidence.observedAt ? when(evidence.observedAt) : ""}</p>
               </div>
             ))}
             {[...record.revisions].reverse().slice(0, 5).map((revision) => (
@@ -156,12 +201,22 @@ export function MemoryRecordRow({
               <Check size={13} aria-hidden="true" />是这样
             </Button>
           )}
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(true)}><Pencil size={13} aria-hidden="true" />修正</Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void archive()}>{record.status === "pending" ? "不是这样" : "不要再提"}</Button>
-          {record.revisions.length > 0 && (
-            <Button size="sm" variant="ghost" disabled={busy} onClick={() => void undo()}><Undo2 size={13} aria-hidden="true" />撤销上次改动</Button>
+          {forgotten ? (
+            <Button size="sm" variant="ghost" loading={busy} disabled={busy} onClick={() => void restore()}>
+              <Undo2 size={13} aria-hidden="true" />恢复
+            </Button>
+          ) : (
+            <>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(true)}><Pencil size={13} aria-hidden="true" />改</Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => void forget()}>忘记</Button>
+              {inferred && (
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => setRejecting(true)}>不对</Button>
+              )}
+              {record.revisions.length > 0 && (
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void undo()}><Undo2 size={13} aria-hidden="true" />撤销上次改动</Button>
+              )}
+            </>
           )}
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => setDeleting(true)}><Trash2 size={13} aria-hidden="true" />删除</Button>
         </div>
       )}
       {confirmingSensitive && (
@@ -174,13 +229,13 @@ export function MemoryRecordRow({
           onCancel={() => setConfirmingSensitive(null)}
         />
       )}
-      {deleting && (
+      {rejecting && (
         <ConfirmDialog
-          title="删除这条记忆？"
-          body="删除这条记忆及其依据与修订记录，之后的对话不会再用它，检索索引中的副本随后移除。不会删除产生它的对话与运行记录；EviMed 不会再凭推断把它记回来，只有你以后亲口再说时才会重新记下。"
+          title="这条推断不对？"
+          body="这条会被删除，它的依据和改动记录一并删除，之后的研究不会再用它。EviMed 也不会再凭推断把它记回来，只有你以后亲口再说时才会重新记下。产生它的对话和报告不受影响。想只是先不用，选「忘记」——那一步随时可以恢复。"
           confirmLabel="删除"
-          onConfirm={() => void remove()}
-          onCancel={() => setDeleting(false)}
+          onConfirm={() => void reject()}
+          onCancel={() => setRejecting(false)}
         />
       )}
     </li>

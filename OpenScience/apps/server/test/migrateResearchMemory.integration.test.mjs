@@ -35,7 +35,10 @@ const schema = `memos_source_${randomUUID().replaceAll("-", "")}`;
 /** @type {string} */ let workspace;
 
 /** The two digests the retired service derived a user's identity from: one
- *  salt for records, a different one for notes. @param {string} userId */
+ *  salt for records. The free-text half of this import went with
+ *  `evimed_memory.notes` on 2026-09-20; the tag digest stays here because the
+ *  fixture still writes the memo rows the import must now leave alone.
+ *  @param {string} userId */
 function digests(userId) {
   return {
     namespace: `evimed-science-${createHash("sha256").update(`evimed/memory-record/user/v1:${userId}`).digest("hex").slice(0, 24)}`,
@@ -261,9 +264,10 @@ test("a dry run reports what it would carry and writes nothing", options, async 
     { total: 5, imported: 3, alreadyPresent: 0, unmapped: 1, quarantined: 1,
       reasons: { unknown_namespace: 1, invalid_key: 1 } },
   );
-  assert.deepEqual(report.notes,
-    { total: 5, imported: 3, alreadyPresent: 0, unmapped: 1, quarantined: 1,
-      reasons: { no_owner_tag: 1, multiple_owner_tags: 1 } });
+  // 「你写下的笔记」 and its table were deleted on 2026-09-20, so there is
+  // nowhere left to carry a memo to and the import no longer reads the memo
+  // table at all.
+  assert.equal(report.notes, undefined);
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.records WHERE user_id=ANY($1::text[])",
     [[alpha, beta]])).rows[0].count, 0, "a dry run writes nothing");
 
@@ -275,10 +279,9 @@ test("a dry run reports what it would carry and writes nothing", options, async 
   }
 });
 
-test("the import maps both digests, keeps identity and history, and refuses what it cannot attribute", options, async () => {
+test("the import maps the namespace, keeps identity and history, and refuses what it cannot attribute", options, async () => {
   const { report } = await importMemory(["--source", url, "--source-schema", schema]);
   assert.equal(report.records.imported, 3);
-  assert.equal(report.notes.imported, 3);
 
   const rows = (await database.query(
     "SELECT * FROM evimed_memory.records WHERE user_id=$1 ORDER BY key", [alpha])).rows;
@@ -308,23 +311,10 @@ test("the import maps both digests, keeps identity and history, and refuses what
   assert.equal(new Date(summary.expires_at).toISOString(), instant(createdTs + 86_400).replace("Z", ".000Z"));
   assert.deepEqual(preference.evidence.length, 2);
 
-  const notes = (await database.query("SELECT * FROM evimed_memory.notes WHERE user_id=$1 ORDER BY id", [alpha])).rows;
-  assert.deepEqual(notes.map((note) => note.id), ["memoalpha1", "memoalpha2"],
-    "the note carrying two accounts' tags is quarantined, not handed to either of them");
-  assert.equal(notes[0].content, "重点核对老年人感染风险。 #药物安全", "the internal tag line is not stored");
-  assert.deepEqual(notes[0].tags, ["药物安全"]);
-  assert.equal(notes[0].pinned, true);
-  assert.equal(notes[0].state, "normal");
-  // The tags are the ones usememos computed with goldmark and its UI already
-  // filters on, not a second reading of the text: re-deriving them would add a
-  // tag for a URL fragment or a word in a pasted command, and the account's
-  // project-deletion rule is decided on exactly this list.
-  assert.deepEqual(notes[1].tags, ["证据"],
-    "only the tag the researcher typed survives; the internal tag is dropped from the stored list");
-  assert.ok(notes[1].content.includes("#outcome"), "the note's own text is carried over whole");
-
-  const betaNotes = (await database.query("SELECT * FROM evimed_memory.notes WHERE user_id=$1", [beta])).rows;
-  assert.deepEqual(betaNotes.map((note) => [note.id, note.state]), [["memobeta1", "archived"]]);
+  // The memos in the source are left where they are: `evimed_memory.notes` was
+  // dropped on 2026-09-20 with the composer that was its only writer, so there
+  // is nowhere to carry one to and the import no longer reads the memo table.
+  assert.ok((await database.query(`SELECT count(*)::integer AS count FROM "${schema}".memo`)).rows[0].count > 0);
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.records WHERE user_id=$1",
     [beta])).rows[0].count, 1);
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.records WHERE id='recordorphan'"))
@@ -334,7 +324,6 @@ test("the import maps both digests, keeps identity and history, and refuses what
 test("running the import again is a no-op", options, async () => {
   const { report } = await importMemory(["--source", url, "--source-schema", schema]);
   assert.deepEqual([report.records.imported, report.records.alreadyPresent], [0, 3]);
-  assert.deepEqual([report.notes.imported, report.notes.alreadyPresent], [0, 3]);
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.records WHERE user_id=ANY($1::text[])",
     [[alpha, beta]])).rows[0].count, 3);
   // A rerun after an interrupted import adds what is missing and touches
@@ -352,17 +341,14 @@ test("running the import again is a no-op", options, async () => {
 // credential — an argument is readable in `ps` and in `/proc/<pid>/cmdline` for
 // the length of the run, and stays in shell history afterwards.
 test("the production form needs no connection string on the command line", options, async () => {
-  for (const table of ["evimed_memory.notes", "evimed_memory.records"]) {
-    await database.query(`DELETE FROM ${table} WHERE user_id=ANY($1::text[])`, [[alpha, beta]]);
-  }
+  await database.query("DELETE FROM evimed_memory.records WHERE user_id=ANY($1::text[])", [[alpha, beta]]);
   const argv = ["--source", "same", "--source-schema", schema];
   assert.ok(!argv.some((argument) => argument.includes("://")), "no argument is a connection string");
   const result = await run(process.execPath, [script, ...argv],
     { encoding: "utf8", env: { ...process.env, OPEN_SCIENCE_DATABASE_URL: url } });
   const report = JSON.parse(result.stdout);
   assert.equal(report.driver, "postgres");
-  assert.deepEqual([report.records.imported, report.notes.imported], [3, 3],
-    "the same rows arrive, read through the target's own connection");
+  assert.equal(report.records.imported, 3, "the same rows arrive, read through the target's own connection");
   assert.ok(!result.stdout.includes(url), "and the report still prints no connection string");
 });
 
@@ -395,7 +381,7 @@ test("a SQLite source imports the same way", options, async () => {
   const { report } = await importMemory(["--source", `sqlite:${file}`]);
   assert.equal(report.driver, "sqlite");
   assert.equal(report.records.imported, 1);
-  assert.equal(report.notes.imported, 2);
+  assert.equal(report.notes, undefined);
   const row = (await database.query("SELECT * FROM evimed_memory.records WHERE user_id=$1 AND id='sqliterecord1'",
     [alpha])).rows[0];
   assert.equal(row.kind, "behavior");
@@ -403,12 +389,6 @@ test("a SQLite source imports the same way", options, async () => {
   assert.equal(row.version, 2);
   assert.equal(row.evidence.length, 2);
   assert.equal(row.evidence[0].observedAt, instant(observedTs));
-  const note = (await database.query("SELECT * FROM evimed_memory.notes WHERE user_id=$1 AND id='sqlitememo1'",
-    [alpha])).rows[0];
-  assert.deepEqual(note.tags, ["本地"]);
-  const derived = (await database.query("SELECT * FROM evimed_memory.notes WHERE user_id=$1 AND id='sqlitememo2'",
-    [alpha])).rows[0];
-  assert.deepEqual(derived.tags, ["旧标签"], "a note with no stored tag list is read from its own text");
   assert.equal((await importMemory(["--source", `sqlite:${file}`])).report.records.imported, 0, "and it is idempotent too");
 });
 
@@ -454,9 +434,9 @@ test("the retired copy is emptied only once nothing was left behind", options, a
   const refusal = await run(process.execPath,
     [script, "--target", url, "--source", "same", "--source-schema", schema, "--purge-source"],
     { encoding: "utf8" }).catch((/** @type {any} */ error) => error);
-  assert.ok(refusal.stderr?.includes("refusing to empty the retired tables"),
+  assert.ok(refusal.stderr?.includes("refusing to empty the retired table"),
     `a source with unattributed rows must be refused, got: ${refusal.stderr ?? refusal.stdout}`);
-  assert.ok((await database.query(`SELECT count(*)::integer AS count FROM "${schema}".memo`)).rows[0].count > 0,
+  assert.ok((await database.query(`SELECT count(*)::integer AS count FROM "${schema}".memory_record`)).rows[0].count > 0,
     "and the refusal must have emptied nothing");
 
   const clean = `memos_clean_${randomUUID().replaceAll("-", "")}`;
@@ -475,9 +455,13 @@ test("the retired copy is emptied only once nothing was left behind", options, a
       memoPayload([`evimed-user-${alphaDigests.tag}`])]);
 
     const { report } = await importMemory(["--source", "same", "--source-schema", clean, "--purge-source"]);
-    assert.deepEqual(report.purged, { memory_record: 1, memo: 1 });
+    // `memo` is deliberately left alone: its destination table is gone, so
+    // nothing carried those rows over and emptying them would be a deletion
+    // with no import behind it.
+    assert.deepEqual(report.purged, { memory_record: 1 });
     assert.equal((await database.query(`SELECT count(*)::integer AS count FROM "${clean}".memory_record`)).rows[0].count, 0);
-    assert.equal((await database.query(`SELECT count(*)::integer AS count FROM "${clean}".memo`)).rows[0].count, 0);
+    assert.equal((await database.query(`SELECT count(*)::integer AS count FROM "${clean}".memo`)).rows[0].count, 1,
+      "the retired memo rows stay where they are");
     assert.equal((await database.query(
       "SELECT count(*)::integer AS count FROM evimed_memory.records WHERE user_id=$1 AND id=$2",
       [alpha, "recordclean1"])).rows[0].count, 1, "and what it emptied must be the copy, not the memory");

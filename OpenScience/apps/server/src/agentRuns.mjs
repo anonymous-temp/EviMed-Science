@@ -3835,8 +3835,8 @@ export class AgentRunStore {
   /**
    * The runs of a project that are still going, with the conversation each is
    * in — what the capsule gateway asks to know whose recall it is answering
-   * (an incognito conversation, a 「本次不用」). The same fold as
-   * `activeRunIds`, asked per recall.
+   * (a conversation trying someone else's capsule, and which run to record the
+   * recall on). The same fold as `activeRunIds`, asked per recall.
    * @param {any} project @returns {Promise<{ id: string, sessionId: string }[]>}
    */
   async activeRuns(project) {

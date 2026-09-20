@@ -10,11 +10,9 @@ import {
   boundedText,
   currentStateEqual,
   evidenceFingerprint,
-  extractTags,
   memoryInstant,
   mergeEvidence,
   normalizeMemoryKey,
-  normalizeNoteContent,
   validateRecordInput,
 } from "../src/researchMemory.mjs";
 
@@ -187,53 +185,23 @@ test("timestamps are whole seconds, formatted the way the retired service format
     "2026-09-11T06:51:44Z");
 });
 
-// The rule of 记忆模块/internal/markdown/parser/tag.go, reproduced rather than
-// simplified: these strings are already in the UI's filters and in exported
-// archives, so narrowing the rule would silently drop tags a researcher uses.
-test("note tags follow the usememos rule", () => {
-  assert.deepEqual(extractTags("#利妥昔单抗\n重点核对老年人感染风险。 #药物安全"), ["利妥昔单抗", "药物安全"]);
-  assert.deepEqual(extractTags("a #tag in the middle"), ["tag"]);
-  assert.deepEqual(extractTags("#a/b #c-d #e_f #g&h"), ["a/b", "c-d", "e_f", "g&h"],
-    "slash, hyphen, underscore and ampersand are tag characters");
-  assert.deepEqual(extractTags("#dup and #dup again and #DUP"), ["dup", "DUP"], "deduplicated, first-seen case kept");
-  assert.deepEqual(extractTags("# heading\n## also heading"), [], "a hash followed by a space is not a tag");
-  assert.deepEqual(extractTags("## Section title #real"), ["real"], "but a tag inside a heading line still counts");
-  assert.deepEqual(extractTags("##tag"), ["tag"],
-    "the scan resumes at the next character, exactly as the goldmark parser does");
-  assert.deepEqual(extractTags("`#code` is inline\n```\n#fenced\n```\n#real"), ["real"], "a tag inside code is code");
-  assert.deepEqual(extractTags("#tag, then punctuation. #next!"), ["tag", "next"], "a tag stops at punctuation");
-  assert.deepEqual(extractTags(`#${"x".repeat(120)}`), ["x".repeat(100)], "at most 100 runes");
-  assert.deepEqual(extractTags("#"), []);
-  assert.deepEqual(extractTags("# "), []);
-});
-
-// A research note cites sources, and a citation is a URL with a fragment. The
-// GFM autolink extension consumes the whole URL and the link parser consumes a
-// destination, so neither reaches the inline tag parser: goldmark makes no tag
-// out of either, and a scanner that only skipped code used to make two.
-test("a URL fragment in a citation is not a tag", () => {
-  assert.deepEqual(extractTags("见 https://doi.org/10.1000/xyz#section 的第二段 #证据"), ["证据"]);
-  assert.deepEqual(extractTags("[来源](https://pubmed.ncbi.nlm.nih.gov/12345/#abstract) #药物安全"), ["药物安全"]);
-  assert.deepEqual(extractTags("<https://example.org/a#fragment> #kept"), ["kept"]);
-  assert.deepEqual(extractTags("www.example.org/guide#part-2 #kept"), ["kept"]);
-  assert.deepEqual(extractTags("[ref]: https://example.org/a#frag"), [], "a link definition is a destination too");
-  assert.deepEqual(extractTags("![图](/img/a.png#anchor) #图表"), ["图表"], "an image destination reads the same way");
-  assert.deepEqual(extractTags("the label keeps its tag: [#标签](https://example.org/a#frag)"), ["标签"]);
-});
-
-// The tenancy fence that used to live inside the text. Ownership is a column
-// now, so the tag is neither stored nor returned: echoing another account's
-// digest back is the one piece of the old design worth not carrying over.
-test("the retired per-user tag is stripped from content and never returned as a tag", () => {
-  const digest = "a".repeat(24);
-  const content = `重点核对老年人感染风险。 #药物安全\n\n#evimed-user-${digest}`;
-  assert.equal(normalizeNoteContent(content), "重点核对老年人感染风险。 #药物安全");
-  assert.deepEqual(extractTags(normalizeNoteContent(content)), ["药物安全"]);
-  // An inline occurrence survives the line-wise strip, exactly as it did
-  // before, and is still refused as a tag.
-  assert.deepEqual(extractTags(`carried inline #evimed-user-${digest} here #real`), ["real"]);
-  assert.equal(normalizeNoteContent("a\n\n\n\n\nb"), "a\n\nb", "runs of blank lines collapse");
-  assert.equal(normalizeNoteContent(`  \n#evimed-user-${digest}\n  `), "", "a note that is only the tag line is empty");
+// 「你写下的笔记」 is gone, and with it the usememos tag rule this file used to
+// hold three suites for (`extractTags`, the URL-fragment case, the retired
+// per-user tenancy tag). The composer was a hand-written duplicate of what the
+// extractor already writes; production held zero rows, so the table is dropped
+// rather than migrated. A memory now has a canonical key and its evidence, and
+// nothing about it is parsed out of free text.
+test("the note store and everything that parsed a note's text are gone", async () => {
+  const module = await import("../src/researchMemory.mjs");
+  for (const name of ["extractTags", "normalizeNoteContent", "sessionExclusion", "MEMORY_NOTE_CONTENT_LIMIT"]) {
+    assert.equal(module[name], undefined, `${name} is deleted, not kept for a caller that no longer exists`);
+  }
+  const store = new ResearchMemoryStore({});
+  for (const name of ["create", "update", "delete", "list", "listAllMemos", "searchNotes"]) {
+    assert.equal(typeof (/** @type {any} */ (store))[name], "undefined", `the store no longer offers ${name}`);
+  }
+  const persistence = await import("../src/researchMemoryPersistence.mjs");
+  assert.equal(persistence.MEMORY_NOTE_STATES, undefined, "the note state vocabulary went with the table");
 });
 
 // A deployment without a control-plane database has no research memory, which
@@ -250,7 +218,6 @@ test("without a database the store is unconfigured, and says so rather than fail
     structured: false,
   });
   for (const call of [
-    () => store.create("alpha", "content"),
     () => store.listRecords("alpha"),
     () => store.getRecord("alpha", "record_1"),
     () => store.upsertRecord("alpha", candidate()),
@@ -281,8 +248,8 @@ test("a database that cannot be reached is 503 memory_unavailable, not a rejecte
   for (const call of [
     () => store.listRecords("alpha"),
     () => store.upsertRecord("alpha", candidate()),
-    () => store.list("alpha"),
-    () => store.create("alpha", "content"),
+    () => store.searchRecords("alpha", { query: "肾功能" }),
+    () => store.recordUsage("alpha", ["rec_1"]),
     () => store.deleteProjectMemory("alpha", "project-1"),
   ]) {
     await assert.rejects(call, (error) => error?.status === 503 && error?.code === "memory_unavailable");

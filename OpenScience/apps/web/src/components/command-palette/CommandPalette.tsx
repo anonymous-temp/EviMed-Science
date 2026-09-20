@@ -7,7 +7,6 @@ import {
   Brain,
   FlaskConical,
   FolderTree,
-  ListFilter,
   Orbit,
   Moon,
   Settings,
@@ -90,10 +89,10 @@ export function CommandPalette() {
     { id: "new", label: "新任务", icon: <SquarePen size={16} aria-hidden="true" />, run: () => { navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }); close(); } },
     { id: "runs", label: "运行记录", icon: <FlaskConical size={16} aria-hidden="true" />, run: () => go("/app/runs") },
     { id: "files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" />, run: () => go("/app/files") },
-    { id: "sources", label: "资料整理进度", icon: <ListFilter size={16} aria-hidden="true" />, run: () => go("/app/files?tab=sources") },
+    // One entry each: 知识库 and 记忆胶囊 became one page apiece on 2026-09-20,
+    // so 「资料整理进度」, 「方法」 and 「胶囊时间轴」 all named a tab of a page
+    // that is already in this list.
     { id: "memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" />, run: () => go("/app/memory") },
-    { id: "capsules", label: "方法", icon: <Brain size={16} aria-hidden="true" />, run: () => go("/app/memory?tab=methods") },
-    { id: "capsule-timeline", label: "胶囊时间轴", icon: <Brain size={16} aria-hidden="true" />, run: () => go("/app/memory?tab=timeline") },
     { id: "autopilot", label: "主动科研", icon: <Orbit size={16} aria-hidden="true" />, run: () => go("/app/autopilot") },
     { id: "capabilities", label: "科研能力", icon: <Bot size={16} aria-hidden="true" />, run: () => go("/app/capabilities") },
     { id: "inbox", label: "收件箱", icon: <Bell size={16} aria-hidden="true" />, run: () => go("/app/inbox") },

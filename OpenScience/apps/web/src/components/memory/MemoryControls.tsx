@@ -13,17 +13,23 @@ import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
-type SwitchKey = "learning" | "recall" | "project";
+type SwitchKey = "memory" | "project";
 
 /**
- * The researcher's own controls over memory (2026-09-16 review, M4④): pause
- * learning, pause use, leave this project out, and reset.
+ * Two switches, and a reset behind a confirmation.
  *
- * Pause and reset are kept apart on purpose, as the products people already
- * trust do: a pause deletes nothing and is undone by the same switch, while a
- * reset deletes and says exactly what it deletes and what it leaves. The
- * switches are phrased as what is on, so the default state reads as three
- * things that are happening rather than three things that are not paused.
+ * There were three: 「从对话中学习新记忆」, 「回答时参考记忆」 and
+ * 「当前项目使用记忆」. The first two are one decision — nobody wants a
+ * platform that keeps learning things it will never use, or that uses things it
+ * has stopped learning — and splitting them made the page ask the researcher to
+ * reason about the platform's internals to answer a question about themselves
+ * (owner ruling 2026-09-20: 三个开关并成两个). They are set together now, and
+ * the store still holds them apart, so a deployment or a script that paused one
+ * of them keeps that state until this switch is next touched.
+ *
+ * Pause and reset stay apart, as the products people already trust keep them: a
+ * pause deletes nothing and is undone by the same switch, while a reset deletes
+ * and says exactly what it deletes and what it leaves.
  */
 export function MemoryControls({ onReset }: { onReset: () => void }) {
   const [settings, setSettings] = useState<WebMemorySettings | null>(null);
@@ -42,12 +48,15 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
 
   if (failed) {
     return (
-      <p className="mt-6 text-ui text-muted">记忆开关暂时读取不到，刷新页面后再试。记忆本身不受影响。</p>
+      <p className="text-ui text-muted">记忆开关暂时读取不到，刷新页面后再试。记忆本身不受影响。</p>
     );
   }
   if (!settings) return null;
 
   const projectPaused = settings.pausedProjects.includes(projectId);
+  // On only when both halves are on: a page that said 「已开启」 while recall was
+  // paused underneath would be telling the researcher something untrue.
+  const memoryOn = !settings.learningPaused && !settings.recallPaused;
   const change = async (key: SwitchKey, patch: Parameters<typeof updateMemorySettings>[0], done: string) => {
     setBusy(key);
     try {
@@ -64,7 +73,7 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
     setBusy("reset");
     try {
       const removed = await resetMemory();
-      toast.success(`已删除 ${removed.structured} 条记忆和 ${removed.manual} 条笔记。`);
+      toast.success(`已删除 ${removed.structured} 条记忆。`);
       onReset();
     } catch (error) {
       toast.error(`重置没有完成：${webErrorMessage(error, { fallback: "请稍后重试。" })}`);
@@ -75,42 +84,32 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
 
   const rows: { key: SwitchKey; label: string; on: boolean; detail: string; toggle: () => void }[] = [
     {
-      key: "learning",
-      label: "从对话中学习新记忆",
-      on: !settings.learningPaused,
-      detail: settings.learningPaused
-        ? "已暂停：之后的对话不会写入新记忆，已有记忆保留。"
-        : "对话结束后，EviMed 会提炼值得长期保留的背景与偏好。",
-      toggle: () => void change("learning", { learningPaused: !settings.learningPaused },
-        settings.learningPaused ? "已恢复学习新记忆" : "已暂停学习新记忆，已有记忆保留"),
-    },
-    {
-      key: "recall",
-      label: "回答时参考记忆",
-      on: !settings.recallPaused,
-      detail: settings.recallPaused
-        ? "已暂停：回答不再参考科研记忆，记忆本身没有删除。方法胶囊按各自的启用状态使用。"
-        : "EviMed 会按当前问题挑选相关记忆作为背景。",
-      toggle: () => void change("recall", { recallPaused: !settings.recallPaused },
-        settings.recallPaused ? "回答会重新参考记忆" : "回答已暂停参考记忆，记忆本身没有删除"),
+      key: "memory",
+      label: "让 EviMed 记住并使用",
+      on: memoryOn,
+      detail: memoryOn
+        ? "对话结束后自动记下值得长期保留的内容，之后回答时按当前问题挑相关的用上。"
+        : "已暂停：不再记下新的，也不再在回答时使用已有的。已记下的都保留着。",
+      toggle: () => void change("memory", { learningPaused: memoryOn, recallPaused: memoryOn },
+        memoryOn ? "已暂停，已记下的都保留着" : "已恢复：之后会继续记下并使用"),
     },
     {
       key: "project",
-      label: "当前项目使用记忆",
-      on: !projectPaused,
+      label: "本项目不使用记忆",
+      on: projectPaused,
       detail: projectPaused
-        ? "已暂停：这个项目里的对话既不学习也不参考记忆，其他项目不受影响。"
-        : "只影响当前项目；关闭后这个项目既不学习也不参考记忆。",
+        ? "这个项目里的对话既不记下也不使用记忆，其他项目不受影响。"
+        : "打开后，只有这个项目既不记下也不使用记忆。",
       toggle: () => void change("project", {
         pausedProjects: projectPaused
           ? settings.pausedProjects.filter((id) => id !== projectId)
           : [...settings.pausedProjects, projectId],
-      }, projectPaused ? "当前项目已恢复使用记忆" : "当前项目已暂停使用记忆"),
+      }, projectPaused ? "本项目已恢复使用记忆" : "本项目已停用记忆"),
     },
   ];
 
   return (
-    <section aria-labelledby="memory-controls-title" className="mt-7 rounded-card border border-border bg-surface">
+    <section aria-labelledby="memory-controls-title" className="rounded-card border border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border px-5 py-3">
         <h2 id="memory-controls-title" className="text-ui font-medium text-text">记忆开关</h2>
         <Button variant="ghost" size="sm" loading={busy === "reset"} disabled={busy !== null} onClick={() => setConfirmingReset(true)}>
@@ -134,9 +133,9 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
               loading={busy === row.key}
               disabled={busy !== null}
               onClick={row.toggle}
-              className={cn("min-w-16", row.on ? "text-ok" : "text-muted")}
+              className={cn("min-w-16", row.on === (row.key === "memory") ? "text-ok" : "text-muted")}
             >
-              {row.on ? "已开启" : "已暂停"}
+              {row.on ? "已开启" : "已关闭"}
             </Button>
           </li>
         ))}
@@ -144,7 +143,7 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
       {confirmingReset && (
         <ConfirmDialog
           title="重置全部记忆？"
-          body="将永久删除这个账号的全部科研记忆：画像、偏好、项目事实、运行摘要、待确认项和手写笔记。不会删除对话与运行记录、交付文件、知识库来源和方法胶囊，上面的开关也保持不变。此操作无法撤销。"
+          body="将永久删除这个账号的全部记忆：EviMed 对你的理解、你的做法、项目事实、做过的研究和待确认项。不会删除对话与报告、知识库里的资料、收到的胶囊，上面的开关也保持不变。此操作无法撤销。"
           confirmLabel="全部删除"
           onConfirm={() => void reset()}
           onCancel={() => setConfirmingReset(false)}

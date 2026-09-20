@@ -12,19 +12,24 @@
  * product's.
  *
  * The rule that has to be structural: **nothing that generates a method may
- * approve one.** `createCandidate` writes `candidate`, always, with no
- * parameter to say otherwise. `approve` does not take a verdict from its caller
- * either — it recomputes `promotionVerdict` from the stored document and
- * refuses if the answer is not "approved". So a distillation run that decides
- * it has produced something excellent, a consolidation job with a bug, and a
- * hand-written call from a future route all fail the same way. The only path to
- * `approved` runs through evidence that is on the record.
+ * assert its own status.** `createCandidate` takes no `status` parameter and
+ * `approve` takes no verdict; both recompute `promotionVerdict` from the stored
+ * document. So a distillation run that decides it has produced something
+ * excellent, a consolidation job with a bug, and a hand-written call from a
+ * future route all reach exactly the same answer as everybody else.
  *
- * The counterpart rule: an explicitly taught method needs none of that. When a
- * researcher says "always check the label revision date first", the loop is not
- * entitled to hold an opinion — `promotionVerdict` returns approved for an
- * explicit origin on the spot, and the safety net is that every change is a
- * revision and every revision can be restored.
+ * What that answer is changed on 2026-09-20. It used to be: an inferred method
+ * waits for three trajectories, two independent runs and a passing paired
+ * evaluation against a live baseline. In production it never once cleared that
+ * bar — `learningEvaluationCommand` defaults to empty, so the evaluate job
+ * failed terminally by name and `evimed_product.documents` held zero effective
+ * methods while the product told researchers it learned their way of working.
+ * The evidence bar moved to demotion: a method takes effect the night it is
+ * learned, wears 「新」, and the same paired evaluation runs afterwards and
+ * retires it if it measures worse (`retirementProposal`). The only thing that
+ * still blocks effect is an unresolved conflict with another method, which no
+ * measurement repairs. The safety net is unchanged: every change is a revision
+ * and every revision can be restored.
  *
  * @module learningService
  */
@@ -164,7 +169,8 @@ export class LearningService {
    * Record a new candidate.
    *
    * There is no `status` parameter. A caller who wants one is a caller who has
-   * decided their own output is good enough to mount.
+   * decided its own output is good enough to mount; what decides is the verdict
+   * below, over the record's own fields.
    * @param {string} userId
    * @param {{projectId?: string|null, frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], mountedTools?: readonly string[]}} input
    */
@@ -186,19 +192,17 @@ export class LearningService {
       provenance,
       createdAt: this.now().toISOString(),
     };
-    // A method the researcher wrote takes effect now.
+    // A method takes effect now — the researcher's own, and since 2026-09-20 a
+    // distilled one too (see `promotionVerdict`: the evidence bar moved to
+    // demotion, because under stock configuration the promotion bar had never
+    // once been cleared).
     //
     // The verdict is computed here rather than passed in — the same rule
     // `approve` applies, in the same module, from the record's own fields — so
     // there is still exactly one place that decides what may be mounted and no
-    // caller can assert its way past it. For an inferred method this is never
-    // true at creation: it has no observations and no evaluation, so
-    // `promotionVerdict` returns `candidate` and the nightly job is still the
-    // only path to effect.
-    //
-    // This is what makes the absence of an approve route honest rather than a
-    // gap. Without it the only way a method could ever be mounted was to
-    // survive a threshold that needs the method to have already been mounted.
+    // caller can assert its way past it. A fresh candidate with an unresolved
+    // conflict is still born `candidate`, which is the one thing measurement
+    // cannot repair.
     const verdict = promotionVerdict(methodRecordFrom({ id, payload }));
     if (verdict.status === "approved") {
       payload.status = "approved";
@@ -315,8 +319,13 @@ export class LearningService {
     for (const methodId of ids) {
       const document = await this.getMethod(userId, methodId);
       const status = document.payload?.status;
-      if (status !== "candidate") {
-        throw new HttpError(409, "method_trial_not_candidate", `Only a candidate may be put on trial; ${methodId} is ${status}.`);
+      // Anything but retired. It read `!== "candidate"` until 2026-09-20, when
+      // a distilled method started taking effect the night it is learned:
+      // every method the evaluation account would want to pin is `approved`
+      // from birth, and a trial that only accepted candidates could pin none
+      // of them.
+      if (status === "retired" || !status) {
+        throw new HttpError(409, "method_trial_not_candidate", `A retired method cannot be put on trial; ${methodId} is ${status}.`);
       }
       digestById[methodId] = String(document.payload?.contentDigest ?? "");
     }
@@ -389,11 +398,10 @@ export class LearningService {
    */
   async approve(userId, methodId, input) {
     const document = await this.getMethod(userId, methodId);
-    const currentBaselineDigest = document.payload.provenance?.origin === "explicit" ? ""
-      : await this.currentBaselineDigest(userId, document.projectId);
-    const verdict = promotionVerdict(methodRecordFrom(document), {
-      currentBaselineDigest,
-    });
+    // No baseline read: since 2026-09-20 the verdict reads the method's own
+    // conflicts and nothing else, so fetching a digest it will not look at
+    // would be one more thing to be down at the moment of a write.
+    const verdict = promotionVerdict(methodRecordFrom(document));
     if (verdict.status !== "approved") {
       throw new HttpError(409, "method_not_promotable", `The method is not eligible: ${verdict.missing.join("; ")}`);
     }

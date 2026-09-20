@@ -148,7 +148,7 @@ function finishedRun(runId, method) {
   };
 }
 
-test("a candidate reaches a container, earns observations, is promoted on a digest-bound verdict, and leaves when retired", async (t) => {
+test("a distilled method reaches a container, earns observations, is measured, and leaves when retired", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "evimed-learning-chain-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const project = { id: PROJECT, userId: USER, rootDir: root, workspaceDir: path.join(root, "workspace") };
@@ -169,24 +169,13 @@ test("a candidate reaches a container, earns observations, is promoted on a dige
     body: BODY,
     provenance: { origin: "distilled", runIds: ["run_seed"] },
   });
-  assert.equal(created.payload.status, "candidate");
+  assert.equal(created.payload.status, "approved", "a distilled method takes effect the night it is learned");
   const digest = created.payload.contentDigest;
 
-  // A candidate is not mounted by being a candidate. This is the guarantee the
-  // trial route is allowed to exist at all: a researcher's own launch never
-  // receives unproven text.
-  const beforeTrial = await launch(learning, project);
-  assert.deepEqual(beforeTrial.learned, [], "a candidate must not mount without a trial");
-
-  // --- 2. an evaluation identity puts it on trial (A2) ----------------------
-  await learning.setMethodTrial(USER, {
-    projectId: PROJECT, methodIds: [created.id], requestedBy: "evaluator", ttlMs: 3_600_000,
-  });
-
-  // --- 3. the launch path writes it into the container's directory (A1) -----
+  // --- 2. the launch path writes it into the container's directory (A1) -----
   const mounted = await launch(learning, project);
-  assert.equal(mounted.count, 1, "the trialled candidate did not reach the method directory");
-  assert.equal(mounted.learned[0].trial, true, "a trialled mount must be marked as one");
+  assert.equal(mounted.count, 1, "the method did not reach the method directory");
+  assert.equal(mounted.learned[0].trial, undefined, "no trial was needed to get it there");
   const [directoryName] = await readdir(mounted.directory);
   const written = await readFile(path.join(mounted.directory, directoryName, "SKILL.md"), "utf8");
   // The bytes the container reads are the bytes the digest names. A receipt
@@ -194,10 +183,7 @@ test("a candidate reaches a container, earns observations, is promoted on a dige
   assert.equal(mounted.learned[0].digest, mountedMethodDigest(created.payload, sha256));
   assert.match(written, /Quote the source sentence before writing the number\./);
 
-  // --- 4. a finished run earns the candidate an observation (A3) ------------
-  // The observation producer is given the trialled candidate, which is what
-  // `recordMethodUse` now assembles; before that it saw approved methods only
-  // and a trialled candidate earned nothing, forever.
+  // --- 3. a finished run earns the method an observation (A3) --------------
   const method = { id: created.id, name: "quote-before-number", digest: mounted.learned[0].digest };
   for (const runId of ["run_a", "run_b", "run_c"]) {
     const derived = runMethodObservations(finishedRun(runId, method));
@@ -209,7 +195,7 @@ test("a candidate reaches a container, earns observations, is promoted on a dige
   const observed = await learning.getMethod(USER, created.id);
   assert.equal(observed.payload.learning.counts.observed ?? observed.payload.learning.observations.length, 3);
 
-  // --- 5. the nightly pass does not skip a lone candidate (A4) --------------
+  // --- 4. the nightly pass does not skip a lone method (A4) ----------------
   /** @type {string[]} */ const audited = [];
   const consolidation = new MethodConsolidation({
     dispatch: async () => { throw new Error("the chain must not dispatch a run here"); },
@@ -228,16 +214,16 @@ test("a candidate reaches a container, earns observations, is promoted on a dige
   });
   const job = { userId: USER, projectId: PROJECT, payload: { action: "sleep" } };
   const slept = await consolidation.sleep({ job });
-  assert.equal(slept.methods, 1, "the pass must see the one candidate rather than returning early");
-  // It cannot be promoted yet — there is no evaluation — but the pass has to
-  // have tried, and to have queued the evaluation that unblocks it.
-  assert.deepEqual(slept.promoted, [], "a candidate with no evaluation must not be promoted");
+  assert.equal(slept.methods, 1, "the pass must see the one method rather than returning early");
+  // Nothing to promote — it is already effective — but the pass has to queue
+  // the measurement that can retire it.
+  assert.deepEqual(slept.promoted, [], "an effective method is not promoted again");
   assert.ok(
     slept.queuedForEvaluation.length > 0 || enqueued.some((entry) => entry.payload?.action === "evaluate"),
-    "a lone eligible candidate must reach the evaluation queue; the pass used to return before this line",
+    "an eligible method must reach the evaluation queue; the pass used to return before this line",
   );
 
-  // --- 6. a verdict is credited to the text it measured (A5) ----------------
+  // --- 5. a verdict is credited to the text it measured (A5) ----------------
   // First the failure this replaced: a verdict that arrives for text the
   // method no longer holds is refused, not folded into the new text's score.
   await assert.rejects(
@@ -256,15 +242,14 @@ test("a candidate reaches a container, earns observations, is promoted on a dige
     "the recorded verdict must name the text it measured");
   assert.equal(evaluated.payload.learning.counts.validated, 1, "a verdict on the current text must count");
 
-  // --- 7. approval, and a mount that is no longer a trial -------------------
-  await learning.clearMethodTrial(USER, PROJECT);
+  // --- 6. a passing verdict changes nothing about what is mounted ----------
   const afterSecondPass = await consolidation.sleep({ job });
-  assert.deepEqual(afterSecondPass.promoted, [created.id], "the evaluated candidate was not promoted");
+  assert.deepEqual(afterSecondPass.promoted, [], "it was already in force before the measurement");
   const approvedMount = await launch(learning, project);
-  assert.equal(approvedMount.count, 1, "an approved method must mount without a trial");
-  assert.equal(approvedMount.learned[0].trial, undefined, "an approved mount must not be marked as a trial");
+  assert.equal(approvedMount.count, 1);
+  assert.equal(approvedMount.learned[0].trial, undefined);
 
-  // --- 8. retirement removes it from the next launch ------------------------
+  // --- 7. retirement removes it from the next launch ------------------------
   const approved = await learning.getMethod(USER, created.id);
   await learning.retire(USER, created.id, { expectedRevision: approved.revision, reason: "chain test" });
   const afterRetire = await launch(learning, project);
@@ -273,7 +258,7 @@ test("a candidate reaches a container, earns observations, is promoted on a dige
     "the directory is rebuilt every launch, so a retired method leaves no file behind");
 });
 
-test("a trial expires, and an expired one mounts nothing", async (t) => {
+test("a trial expires, and an expired one leaves only what stands on its own", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "evimed-learning-trial-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const project = { id: PROJECT, userId: USER, rootDir: root, workspaceDir: path.join(root, "workspace") };
@@ -284,16 +269,25 @@ test("a trial expires, and an expired one mounts nothing", async (t) => {
     projectId: PROJECT, frontmatter: frontmatter("expiring-method"), body: BODY,
     provenance: { origin: "distilled", runIds: ["run_seed"] },
   });
-  await learning.setMethodTrial(USER, { projectId: PROJECT, methodIds: [created.id], requestedBy: "evaluator", ttlMs: 60_000 });
+  // Retired first, so the trial is the only reason it could be mounted: since
+  // 2026-09-20 a distilled method is effective from birth, and a trial over an
+  // effective method would prove nothing about the trial.
+  const stopped = await learning.retire(USER, created.id, { expectedRevision: created.revision });
+  assert.equal((await launch(learning, project)).count, 0);
+  const revived = await learning.rollback(USER, created.id, { expectedRevision: stopped.revision, targetRevision: created.revision });
+  await learning.setMethodTrial(USER, { projectId: PROJECT, methodIds: [revived.id], requestedBy: "evaluator", ttlMs: 60_000 });
   assert.equal((await launch(learning, project)).count, 1);
-  // Expiry is applied on read, so a trial nobody cleared cannot leave unproven
-  // text mounted in front of later runs — there is no sweeper whose failure
-  // would make that happen.
+  // Expiry is applied on read, so a trial nobody cleared cannot leave text
+  // mounted in front of later runs on the strength of the trial alone — there
+  // is no sweeper whose failure would make that happen.
   now = new Date("2026-09-10T02:00:00.000Z");
-  assert.equal((await launch(learning, project)).count, 0, "an expired trial must mount nothing");
+  const expired = await launch(learning, project);
+  assert.equal(expired.count, 1, "what is left is the method's own effect, not the trial's");
+  await learning.retire(USER, created.id, { expectedRevision: (await learning.getMethod(USER, created.id)).revision });
+  assert.equal((await launch(learning, project)).count, 0, "an expired trial mounts nothing of its own");
 });
 
-test("a fresh inferred candidate is queued for bounded bootstrap evaluation without observations", async () => {
+test("a fresh method is queued for bounded bootstrap evaluation without observations", async () => {
   const learning = new LearningService({ documents: fakeDocuments() });
   const created = await learning.createCandidate(USER, {
     projectId: PROJECT, frontmatter: frontmatter("bootstrap-method"), body: BODY,
@@ -308,7 +302,8 @@ test("a fresh inferred candidate is queued for bounded bootstrap evaluation with
   assert.equal(queued.length, 1);
   assert.equal(queued[0].bootstrap, true);
   assert.equal(queued[0].candidateDigest, created.payload.contentDigest);
-  assert.equal((await learning.getMethod(USER, created.id)).payload.status, "candidate");
+  assert.equal((await learning.getMethod(USER, created.id)).payload.status, "approved",
+    "queueing a measurement is not what decides effect");
   consolidation.evaluate = async () => ({ verdict: "better", report: "bootstrap-report.json", candidateDigest: created.payload.contentDigest });
   await consolidation.evaluateCandidate({ job: { userId: USER, projectId: PROJECT, payload: queued[0] } });
   assert.equal((await learning.getMethod(USER, created.id)).payload.learning.evaluations.length, 0,
@@ -317,6 +312,16 @@ test("a fresh inferred candidate is queued for bounded bootstrap evaluation with
     await learning.recordObservation(USER, created.id, { runId: `trial-${i}`, family: `trial-${i}:d1`, outcome: "accepted", contentDigest: created.payload.contentDigest });
   }
   await consolidation.sleep({ job: { userId: USER, projectId: PROJECT, payload: { action: "sleep" } } });
-  assert.equal(queued[1].bootstrap, false, "observations unlock the full evaluation, not approval");
-  assert.equal((await learning.getMethod(USER, created.id)).payload.status, "candidate");
+  assert.equal(queued[1].bootstrap, false, "observations unlock the full evaluation, which is about retirement now");
+  assert.equal((await learning.getMethod(USER, created.id)).payload.status, "approved");
+
+  // And the full evaluation is what can take it away. A `worse` verdict on the
+  // text that is mounted retires it in the same job, rather than waiting for
+  // the next nightly pass to notice.
+  consolidation.evaluate = async () => ({ verdict: "worse", report: "paired.json", candidateDigest: created.payload.contentDigest });
+  const measured = await consolidation.evaluateCandidate({ job: { userId: USER, projectId: PROJECT, payload: queued[1] } });
+  assert.equal(measured.retired, created.id);
+  const after = await learning.getMethod(USER, created.id);
+  assert.equal(after.payload.status, "retired");
+  assert.match(after.payload.statusReason, /worse than working without it/);
 });
