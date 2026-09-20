@@ -158,7 +158,12 @@ export async function selectLearnedMethods(learning, scope) {
     // than thrown: an evaluation of a method that has since been withdrawn
     // should measure nothing, not fail to start.
     try { document = await learning.getMethod(scope.userId, methodId); } catch { continue; }
-    if (document?.payload?.status !== "candidate") continue;
+    // Anything but retired. It read `!== "candidate"` until 2026-09-20, when a
+    // distilled method started taking effect the night it is learned: the
+    // paired evaluation now measures an already-effective method, and a trial
+    // branch that only accepted candidates would have made the candidate arm
+    // mount nothing and every verdict meaningless.
+    if (!document?.payload?.status || document.payload.status === "retired") continue;
     documents.push(document);
     trials.add(String(document.id));
   }

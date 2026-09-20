@@ -1,6 +1,6 @@
 /**
  * The research-memory schema: the authoritative home of structured memory
- * records and manual notes.
+ * records.
  *
  * These rows used to live in a separate service with its own database, reached
  * over REST. They are ordinary account-scoped product state — one row per
@@ -34,7 +34,6 @@ export const MEMORY_KIND_LABELS_ZH = Object.freeze({
 });
 export const MEMORY_ORIGINS = Object.freeze(["explicit", "inferred", "system", "manual"]);
 export const MEMORY_STATUSES = Object.freeze(["active", "pending", "superseded", "archived"]);
-export const MEMORY_NOTE_STATES = Object.freeze(["normal", "archived"]);
 
 /** How much history one record carries. Both are enforced twice on purpose: in
  *  the store, which trims before writing, and here, so a second writer — the
@@ -44,12 +43,6 @@ export const MEMORY_REVISION_LIMIT = 32;
 /** How many projects one account may pause memory for. A project id list, so
  *  bounded like every other array this schema stores. */
 export const MEMORY_PAUSED_PROJECT_LIMIT = 100;
-/** How many items one conversation may set aside with 「本次不用」. A recall
- *  hands back at most a few dozen, so this bounds a list, not a choice. */
-export const MEMORY_SESSION_EXCLUSION_LIMIT = 200;
-/** What 「本次不用」 can set aside: a structured memory, a note, a capsule fact
- *  or a mounted method — the four things a conversation is handed. */
-export const MEMORY_SESSION_EXCLUSION_TYPES = Object.freeze(["memory", "note", "capsule", "method"]);
 
 /** @param {readonly string[]} values */
 function vocabulary(values) {
@@ -103,25 +96,28 @@ ALTER TABLE evimed_memory.records ADD COLUMN IF NOT EXISTS invalid_since timesta
 CREATE INDEX IF NOT EXISTS memory_records_rank_idx ON evimed_memory.records
   (user_id, status, importance DESC, confidence DESC, updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS memory_records_scope_idx ON evimed_memory.records (user_id, scope, scope_id, kind);
-CREATE TABLE IF NOT EXISTS evimed_memory.notes (
+-- 「你写下的笔记」 is gone (2026-09-20). It was the third user-writable store of
+-- "what to know about me" beside the records and the capsule's own entries, and
+-- the one the researcher had to fill by hand — a composer for exactly what the
+-- extractor already writes from the conversation. Production held zero rows, so
+-- the table is dropped rather than migrated; what a researcher wants remembered
+-- they now say in a conversation, and it is recorded with its evidence.
+DROP TABLE IF EXISTS evimed_memory.notes;
+-- How often a memory was actually handed to a run, and when it last was.
+--
+-- Derived and rebuildable: losing it loses a count, never a memory, which is
+-- why it is a table of its own and not a column on the record — a counter on
+-- the record would spend a revision and a version bump on every recall, and
+-- the undo the page offers would start undoing reads. It exists because the
+-- page says 「用过 7 次，上次 9月18日」, and a page that cannot say whether a
+-- memory is ever used asks the researcher to curate blind.
+CREATE TABLE IF NOT EXISTS evimed_memory.record_usage (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
-  id text NOT NULL CHECK (id ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'),
-  content text NOT NULL CHECK (char_length(content) BETWEEN 1 AND 100000),
-  state text NOT NULL DEFAULT 'normal' CHECK (state IN (${vocabulary(MEMORY_NOTE_STATES)})),
-  pinned boolean NOT NULL DEFAULT false,
-  tags text[] NOT NULL DEFAULT '{}',
-  created_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp()),
-  updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp()),
-  PRIMARY KEY (user_id, id)
+  record_id text NOT NULL CHECK (record_id ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'),
+  used_count bigint NOT NULL DEFAULT 0 CHECK (used_count >= 0),
+  last_used_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp()),
+  PRIMARY KEY (user_id, record_id)
 );
-CREATE INDEX IF NOT EXISTS memory_notes_order_idx ON evimed_memory.notes
-  (user_id, state, pinned DESC, updated_at DESC, id DESC);
--- Every note searchable, not the newest hundred (plan §3.4 #8): the note's
--- tokens by the recall tokenizer (CJK bigrams included), written by
--- researchMemory on every write; NULL on a row written before this column,
--- filled lazily the first time that account's notes are searched.
-ALTER TABLE evimed_memory.notes ADD COLUMN IF NOT EXISTS search_vector tsvector;
-CREATE INDEX IF NOT EXISTS memory_notes_search_idx ON evimed_memory.notes USING GIN (search_vector);
 -- The researcher's own switches over their memory. No row means every switch
 -- is off, which is how the platform behaved before the switches existed.
 CREATE TABLE IF NOT EXISTS evimed_memory.settings (
@@ -131,61 +127,58 @@ CREATE TABLE IF NOT EXISTS evimed_memory.settings (
   paused_projects text[] NOT NULL DEFAULT '{}' CHECK (cardinality(paused_projects) <= ${MEMORY_PAUSED_PROJECT_LIMIT}),
   updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp())
 );
--- One conversation's own memory state (2026-09-20): whether it is incognito —
--- nothing extracted from it, nothing recalled into it — and what the
--- researcher said 「本次不用」 to in its 「本次用到的背景」 panel. Keyed by the
--- kernel's session id inside a project; deleted with the account, and with the
--- project by deleteProjectMemory.
+-- One conversation's own memory state. Keyed by the kernel's session id inside
+-- a project; deleted with the account, and with the project by
+-- deleteProjectMemory. All that is left of it is the capsule a conversation is
+-- trying: 无痕 and 「本次不用」 were deleted on 2026-09-20 together with the bar
+-- that was their only control. Incognito in particular cost ten server call
+-- sites for a switch that duplicated the account-level recall pause, and the
+-- columns are dropped here rather than left unread — an unread column is a
+-- reader somebody adds back by accident.
 CREATE TABLE IF NOT EXISTS evimed_memory.sessions (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   project_id text NOT NULL CHECK (project_id ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$'),
   session_id text NOT NULL CHECK (session_id ~ '^[A-Za-z0-9_-]{1,160}$'),
-  incognito boolean NOT NULL DEFAULT false,
-  excluded jsonb NOT NULL DEFAULT '[]'::jsonb
-    CHECK (jsonb_typeof(excluded) = 'array' AND jsonb_array_length(excluded) <= ${MEMORY_SESSION_EXCLUSION_LIMIT}),
   updated_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp()),
   PRIMARY KEY (user_id, project_id, session_id)
 );
+ALTER TABLE evimed_memory.sessions DROP COLUMN IF EXISTS incognito;
+ALTER TABLE evimed_memory.sessions DROP COLUMN IF EXISTS excluded;
 -- A conversation that tries a capsule someone shared (「试用一次」): the pack
 -- it is handed as context. It writes nothing into the researcher's own
--- memory (memoryPausedFor), whatever its incognito switch says.
+-- memory (memoryPausedFor) while the trial lasts.
 ALTER TABLE evimed_memory.sessions ADD COLUMN IF NOT EXISTS trial_capsule_id text
   CHECK (trial_capsule_id IS NULL OR trial_capsule_id ~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,199}$');
 DO $foreign_keys$
+DECLARE
+  owned text;
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
-    WHERE n.nspname='evimed_memory' AND t.relname='records' AND c.contype='f'
-      AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)%'
-  ) THEN
-    ALTER TABLE evimed_memory.records ADD CONSTRAINT memory_records_user_fk
-      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID;
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
-    WHERE n.nspname='evimed_memory' AND t.relname='notes' AND c.contype='f'
-      AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)%'
-  ) THEN
-    ALTER TABLE evimed_memory.notes ADD CONSTRAINT memory_notes_user_fk
-      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID;
-  END IF;
-  -- Validate what was just added. The audit that readiness runs refuses an
-  -- unvalidated constraint, and both tables are either empty or already
-  -- consistent by construction, so the scan is free and cannot fail. Without
-  -- this, the first deployment to take the NOT VALID path would answer 503
-  -- until somebody ran an ops command nothing tells them about.
-  IF EXISTS (
-    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
-    WHERE n.nspname='evimed_memory' AND t.relname='records' AND c.conname='memory_records_user_fk' AND NOT c.convalidated
-  ) THEN
-    ALTER TABLE evimed_memory.records VALIDATE CONSTRAINT memory_records_user_fk;
-  END IF;
-  IF EXISTS (
-    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
-    WHERE n.nspname='evimed_memory' AND t.relname='notes' AND c.conname='memory_notes_user_fk' AND NOT c.convalidated
-  ) THEN
-    ALTER TABLE evimed_memory.notes VALIDATE CONSTRAINT memory_notes_user_fk;
-  END IF;
+  -- Every table of this schema is one account's, and the cascade is what makes
+  -- "delete my account" true rather than a promise. The inline REFERENCES in
+  -- each CREATE TABLE only applies to a table that statement actually creates,
+  -- so a deployment that got a table before evimed_control.users existed has
+  -- kept the rows of every deleted account ever since — found on a test
+  -- database on 2026-09-20, where deleting an account left its conversation
+  -- state and its switches behind. One loop, because four hand-written copies
+  -- of this block were four places for one of them to be forgotten, which is
+  -- exactly what happened to sessions and settings.
+  FOREACH owned IN ARRAY ARRAY['records', 'settings', 'sessions', 'record_usage'] LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+      WHERE n.nspname='evimed_memory' AND t.relname=owned AND c.contype='f'
+        AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)%'
+    ) THEN
+      -- What the missing cascade already left behind, before the constraint
+      -- that would have refused it: a row belonging to an account that is gone
+      -- is a copy of deleted data, and it is the reason the constraint could
+      -- not simply be added.
+      EXECUTE format(
+        'DELETE FROM evimed_memory.%I s WHERE NOT EXISTS (SELECT 1 FROM evimed_control.users u WHERE u.id = s.user_id)', owned);
+      EXECUTE format(
+        'ALTER TABLE evimed_memory.%I ADD CONSTRAINT %I FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE',
+        owned, 'memory_' || owned || '_user_fk');
+    END IF;
+  END LOOP;
 END $foreign_keys$;
 `;
 

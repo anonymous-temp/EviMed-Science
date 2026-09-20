@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { PLATFORM_CONTEXT_TAGS } from "@evimed/domain";
-import { evidenceSourceLabel, looksInjected, memoryExcerpt, memoryStrength, readableMemory } from "./memoryText";
+import {
+  MEMORY_BASIS_LABELS, STATED_BASES, evidenceSourceLabel, looksInjected, memoryExcerpt, memoryStrength, memoryUsage, readableMemory,
+} from "./memoryText";
 
 describe("a stored memory that is really a machine's own text", () => {
   // Eleven of these were active on the operator's account on 2026-09-16, each
@@ -49,13 +51,40 @@ describe("a stored memory that is really a machine's own text", () => {
 describe("how established a memory is", () => {
   it("is counted from its evidence, never a percentage", () => {
     expect(memoryStrength({ basis: "stated", observations: 3, runs: 2, conversations: 2 })).toBe("你说过 3 次 · 2 次对话");
-    expect(memoryStrength({ basis: "inferred", observations: 5, runs: 4, conversations: 3 })).toBe("在 4 次任务中观察到");
+    expect(memoryStrength({ basis: "inferred", observations: 5, runs: 4, conversations: 3 })).toBe("在 4 次研究中观察到");
     expect(memoryStrength({ basis: "confirmed", observations: 1, runs: 1, conversations: 1 })).toBe("你确认过 · 观察到 1 次");
-    expect(memoryStrength({ basis: "tool", observations: 2, runs: 1, conversations: 1 })).toBe("来自工具结果 · 2 处依据");
+    expect(memoryStrength({ basis: "tool", observations: 2, runs: 1, conversations: 1 })).toBe("2 处依据");
     for (const line of [
       memoryStrength({ basis: "stated", observations: 1, runs: 1, conversations: 1 }),
       memoryStrength(undefined, 2),
     ]) expect(line).not.toMatch(/%|置信/);
+  });
+});
+
+// 「用过 7 次，上次 9月18日」. Counted at the one port every recall passes
+// through, so a memory the platform never actually uses says so plainly rather
+// than showing a zero the reader has to interpret.
+describe("how often a memory has been used", () => {
+  const day = (value: string) => new Date(value).toISOString().slice(5, 10);
+
+  it("is a count and a date, or a plain sentence when there is neither", () => {
+    expect(memoryUsage({ count: 7, lastUsedAt: "2026-09-18T00:00:00.000Z" }, day)).toBe("用过 7 次，上次 09-18");
+    expect(memoryUsage({ count: 3, lastUsedAt: null }, day)).toBe("用过 3 次");
+    expect(memoryUsage({ count: 0, lastUsedAt: null }, day)).toBe("还没用过");
+    expect(memoryUsage(undefined, day)).toBe("还没用过");
+  });
+});
+
+// The four words the page has for where a memory came from. 「来自工具结果」 and
+// 「来自对话中的分析」 were the same thing said twice.
+describe("where a memory came from", () => {
+  it("is one of four labels, and an inference is never the researcher's own word", () => {
+    expect(MEMORY_BASIS_LABELS.stated).toBe("你说的");
+    expect(MEMORY_BASIS_LABELS.inferred).toBe("EviMed 推断");
+    expect(MEMORY_BASIS_LABELS.tool).toBe("来自研究");
+    expect(MEMORY_BASIS_LABELS.assistant).toBe("来自研究");
+    for (const basis of ["stated", "confirmed", "edited"]) expect(STATED_BASES.has(basis)).toBe(true);
+    for (const basis of ["inferred", "tool", "assistant"]) expect(STATED_BASES.has(basis)).toBe(false);
   });
 });
 

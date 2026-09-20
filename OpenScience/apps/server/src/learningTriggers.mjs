@@ -137,7 +137,7 @@ export function learningTriggersFor({ run, runs, projection = null, memoryResult
 export class LearningTriggers {
   /**
    * @param {{ jobs: any, agentRuns: any, memory?: any, internalAgent?: (agentId: string) => boolean | Promise<boolean>,
-   *   sessionState?: ((userId: string, projectId: string, sessionId: string) => Promise<{ incognito?: boolean, trialCapsuleId?: string | null } | null>) | null,
+   *   sessionState?: ((userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null } | null>) | null,
    *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} dependencies
    */
   constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {} }) {
@@ -166,9 +166,8 @@ export class LearningTriggers {
     }
     if (this.sessionState && run.sessionId) {
       const state = await this.sessionState(project.userId, project.id, run.sessionId).catch(() => null);
-      // An incognito conversation leaves nothing behind: no memory, no method.
-      if (state?.incognito) return { queued: [], skipped: "incognito" };
-      // Nor does one trying someone else's capsule: its work was theirs.
+      // A conversation trying someone else's capsule leaves nothing behind:
+      // its work was theirs.
       if (state?.trialCapsuleId) return { queued: [], skipped: "trial" };
     }
     const runs = await this.agentRuns.list(project).catch(() => []);

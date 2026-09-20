@@ -140,9 +140,11 @@ test("one document added from two projects is one entry, read from a third, and 
     const detached = await app.kbIndex.search({ userId: user.id, projectId: reader.id, query: "达比加群", limit: 3 });
     assert.equal(detached.hits[0]?.sourceId, inA.id);
     await access(path.join(libraryDir, inA.id, "index.md"));
-    const publish = await call(`/api/library/${inA.id}/publish-to-capsule`, { method: "POST" });
-    assert.equal(publish.status, 409);
-    assert.equal(publish.body.code, "library_source_removed");
+    // A document no project holds any more can still be read from the library's
+    // own copy, and its understanding went with the last project that held it —
+    // so there is nothing left for the automatic publication to carry.
+    await assert.rejects(app.libraryService.publishSourceUnderstanding(user.id, inA.id),
+      (error) => error?.code === "library_source_removed");
 
     // Taken out of the library: its copy and its index go.
     const removed = await call(`/api/library/${inA.id}`, { method: "DELETE" });
@@ -155,24 +157,24 @@ test("one document added from two projects is one entry, read from a third, and 
   } finally { await context.close(); }
 });
 
-test("publishing writes the document's facts and method drafts into the researcher's own capsule, labelled and once", { skip }, async () => {
+test("understanding a document writes its facts and method drafts into the researcher's own capsule, labelled and once", { skip }, async () => {
   const context = await signedIn();
   try {
     const { app, user, base, headers } = context;
     const call = api(base, headers);
+    const publish = () => app.libraryService.publishSourceUnderstanding(user.id, source.id);
     const [source] = await ingestCorpus(context, { names: [GUIDELINE] });
-    assert.equal((await call("/api/library", { method: "POST", body: { sourceId: source.id } })).status, 201);
-    const early = await call(`/api/library/${source.id}/publish-to-capsule`, { method: "POST" });
-    assert.equal(early.status, 409);
-    assert.equal(early.body.code, "library_understanding_missing");
+    // Nothing read yet: there is nothing to carry, and it says so by name
+    // rather than writing an empty publication.
+    await assert.rejects(publish(), (error) => error?.code === "library_understanding_missing");
 
     // A reference capsule already active for the account stays active beside the one made.
     const reference = await app.capsuleService.create(user.id, { title: "同事的胶囊" });
     await app.capsuleService.activate(user.id, reference.id, { mode: "guest" });
     await giveUnderstanding(app, user, source, { statement: "利伐沙班推荐 20 mg 每日一次，随餐服用", quote: "推荐剂量为20 mg，每日一次，随餐服用" });
-    const published = await call(`/api/library/${source.id}/publish-to-capsule`, { method: "POST" });
-    assert.equal(published.status, 200, JSON.stringify(published.body));
-    const result = published.body.data;
+    // This is what the source worker calls when an understanding is published:
+    // no route, no button, and the researcher is not asked.
+    const result = await publish();
     assert.deepEqual({ facts: result.facts, methods: result.methods, added: result.added, kept: result.kept, retired: result.retired },
       { facts: 2, methods: 1, added: 3, kept: 0, retired: 0 });
     assert.equal(result.capsuleTitle, "我的记忆胶囊");
@@ -186,7 +188,7 @@ test("publishing writes the document's facts and method drafts into the research
       assert.equal(entry.payload.layer, "sources", "never a layer a method mount or a share reads");
       assert.equal(entry.payload.status, "approved", "in effect at once, without a confirmation");
       assert.equal(entry.payload.origin, "inferred");
-      assert.equal(entry.payload.provenance[0].type, "source");
+      assert.equal(entry.payload.provenance[0].type, "source", "what the row reads 「来自资料」 from");
       assert.ok(entry.payload.provenance[0].id.startsWith(`${source.id}#`));
     }
     const claim = entries.find((entry) => entry.payload.content.includes("20 mg"));
@@ -196,16 +198,18 @@ test("publishing writes the document's facts and method drafts into the research
     const method = entries.find((entry) => entry.payload.factKind === "analysis");
     assert.match(method.payload.content, /^方法草稿（整理自资料《/);
 
-    const repeated = (await call(`/api/library/${source.id}/publish-to-capsule`, { method: "POST" })).body.data;
+    // Idempotent, so the worker may call it more than once for one generation.
+    const repeated = await publish();
     assert.deepEqual({ added: repeated.added, kept: repeated.kept, retired: repeated.retired }, { added: 0, kept: 3, retired: 0 });
     assert.equal(repeated.capsuleId, result.capsuleId);
 
-    // More publishes at once than the pool has connections: each one runs or
+    // More publications at once than the pool has connections: each one runs or
     // is refused as busy, none waits holding a connection, and nothing is
     // published twice (security review 2026-09-20: this starved every tenant).
-    const burst = await Promise.all(Array.from({ length: 12 }, () => call(`/api/library/${source.id}/publish-to-capsule`, { method: "POST" })));
-    for (const response of burst) {
-      assert.ok(response.status === 200 || (response.status === 409 && response.body.code === "library_publish_busy"), JSON.stringify(response));
+    const burst = await Promise.allSettled(Array.from({ length: 12 }, () => publish()));
+    for (const outcome of burst) {
+      assert.ok(outcome.status === "fulfilled" || outcome.reason?.code === "library_publish_busy",
+        JSON.stringify(outcome.reason?.code ?? outcome.status));
     }
     assert.equal((await app.capsuleService.entries(user.id, result.capsuleId)).items.length, 3);
     assert.equal((await call("/api/library")).status, 200, "the account is served again at once");
@@ -213,12 +217,9 @@ test("publishing writes the document's facts and method drafts into the research
     // The document read again says something else: that one fact is replaced,
     // the old one kept as retired.
     await giveUnderstanding(app, user, source, { statement: "达比加群酯剂量 150 mg，每日两次", quote: "剂量150 mg，每日两次" });
-    const changed = (await call(`/api/library/${source.id}/publish-to-capsule`, { method: "POST" })).body.data;
+    const changed = await publish();
     assert.deepEqual({ added: changed.added, kept: changed.kept, retired: changed.retired }, { added: 1, kept: 2, retired: 1 });
     const retired = await app.sourceService.documents.get(user.id, "fact", claim.id);
     assert.equal(retired.payload.status, "retired");
-    const [item] = (await call("/api/library")).body.data.items;
-    assert.deepEqual({ capsuleId: item.published.capsuleId, facts: item.published.facts, methods: item.published.methods },
-      { capsuleId: result.capsuleId, facts: 2, methods: 1 });
   } finally { await context.close(); }
 });

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
-  DURABLE_RECALL_KINDS, noteSearchQuery, noteSearchTokens, recallContent, searchTokens, selectWithinBudget, setAsideIn,
+  DURABLE_RECALL_KINDS, recallContent, searchTokens, selectWithinBudget,
 } from "./memoryRecallPolicy.mjs";
 import { HttpError } from "./security.mjs";
 import {
@@ -10,15 +10,13 @@ import {
   MEMORY_PAUSED_PROJECT_LIMIT,
   MEMORY_REVISION_LIMIT,
   MEMORY_SCOPES,
-  MEMORY_SESSION_EXCLUSION_TYPES,
   MEMORY_STATUSES,
   migrateResearchMemory,
 } from "./researchMemoryPersistence.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 
 /**
- * Research memory — structured records and manual notes — on the control-plane
- * database.
+ * Research memory — the structured records — on the control-plane database.
  *
  * This replaces a REST client to a separate service. The method surface, the
  * return shapes, the ordering and the error codes are the ones its callers
@@ -26,25 +24,22 @@ import { migrateProductStore } from "./productPersistence.mjs";
  * live, not what a recall or a confirmation means.
  *
  * Two things the boundary used to hide are now decidable in one place:
- * ownership is a column rather than a hidden tag inside the text (see
- * `extractTags`), and every limit is counted in characters, the unit the routes
- * and the extractor already validate in.
+ * ownership is a column rather than a hidden tag inside the text, and every
+ * limit is counted in characters, the unit the routes and the extractor
+ * already validate in.
+ *
+ * 「你写下的笔记」 — a second, hand-written store of the same intent — was
+ * deleted on 2026-09-20 along with its table; what a researcher wants
+ * remembered they say in a conversation, and the extractor records it with the
+ * quote it rests on.
  */
 
 const recordIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 const memoryKeyPattern = /^[a-z0-9][a-z0-9._/-]{0,254}$/;
-/** The per-user tag the retired client appended to every note to fence one
- *  account off from another. Ownership is a column now; the tag is neither
- *  stored nor returned, and a line of it inside imported text is removed. */
-const internalTagLine = /^#evimed-user-[a-f0-9]{24}$/gm;
-const internalTagName = /^evimed-user-[a-f0-9]{24}$/;
-/** A tag is at most 100 runes (`记忆模块/internal/markdown/parser/tag.go`). */
-const MAX_TAG_RUNES = 100;
 /** The fingerprint separator, written as an escape. A raw control byte in a
  *  source file is invisible to every reader and to every grep that would
  *  look for it. */
 const NUL_SEPARATOR = "\u0000";
-const tagCharacter = /[\p{L}\p{N}\p{S}\p{M}\u200D_\-/&]/u;
 
 export const MEMORY_VALUE_LIMIT = 100_000;
 export const MEMORY_SUMMARY_LIMIT = 2_000;
@@ -54,7 +49,6 @@ export const MEMORY_QUERY_LIMIT = 500;
 export const MEMORY_QUOTE_LIMIT = 4_000;
 export const MEMORY_SOURCE_TYPE_LIMIT = 64;
 export const MEMORY_SOURCE_REF_LIMIT = 500;
-export const MEMORY_NOTE_CONTENT_LIMIT = 100_000;
 /** One statement answers a whole export. Past this a caller is not exporting,
  *  it is asking the process to hold a database in memory. */
 export const MEMORY_EXPORT_LIMIT = 100_000;
@@ -234,99 +228,10 @@ export function currentStateEqual(stored, next) {
     && (stored.invalidSince ?? null) === (next.invalidSince ?? null);
 }
 
-/** A URL the GFM autolink extension consumes whole: a bare `https://…`,
- *  `ftp://…` or `www.…`, or an angle-bracket autolink with a scheme. What
- *  follows a `#` inside one is a fragment, not a tag. */
-const autolinkedUrl = /<[a-zA-Z][a-zA-Z0-9+.-]*:[^>\s]*>|\b(?:https?|ftp):\/\/\S+|\bwww\.\S+/gi;
-/** The destination half of `[label](destination)`, which the link parser reads
- *  as a URL rather than handing to the inline parsers. */
-const linkDestination = /\]\([^)\n]*\)/g;
-
-/**
- * Text with everything the inline tag parser never sees removed: code spans,
- * fenced blocks, autolinked URLs and link destinations. A researcher's note
- * cites DOIs and PubMed links, and `https://doi.org/10.1000/xyz#section` used
- * to become the tag `section` here while goldmark made no tag at all.
- *
- * One construct is deliberately not reproduced: an indented code block (four
- * spaces after a blank line). Telling one from a list-item continuation needs a
- * block parser, and dropping a tag a researcher typed is worse than keeping one
- * goldmark would not have made. Keeps line structure so the caller can still
- * reason in lines.
- */
-function tagScannableText(content) {
-  const kept = [];
-  let fenced = false;
-  for (const line of String(content ?? "").split("\n")) {
-    if (/^\s*(?:```|~~~)/.test(line)) { fenced = !fenced; continue; }
-    kept.push(fenced ? "" : line
-      .replaceAll(/`[^`\n]*`/g, " ")
-      .replaceAll(linkDestination, "] ")
-      .replaceAll(autolinkedUrl, " "));
-  }
-  return kept.join("\n");
-}
-
-/**
- * The tags a note carries, by the rule the retired service used.
- *
- * `#` followed by 1..100 runes of Unicode letters, numbers, symbols or marks,
- * ZWJ, `_`, `-`, `/` or `&`; `##` and `# ` are headings rather than tags, and
- * the scan resumes at the next character exactly as the goldmark inline parser
- * does, so `##tag` still yields `tag`. Duplicates keep their first-seen case
- * and position. The rule is reproduced rather than simplified because these
- * strings are already in the UI's filters and in exported archives.
- *
- * This is the rule for notes written after the move. A note carried over from
- * the retired service keeps the tag list that service computed with goldmark
- * itself — see the import script — because that list is what its UI already
- * shows.
- *
- * The per-user internal tag is never returned: it was a tenancy fence, the
- * fence is a column now, and echoing another account's digest back would be the
- * one piece of the old design worth not carrying over.
- * @param {unknown} content @returns {string[]}
- */
-export function extractTags(content) {
-  const characters = [...tagScannableText(content)];
-  const tags = [];
-  const seen = new Set();
-  for (let index = 0; index < characters.length; index += 1) {
-    if (characters[index] !== "#") continue;
-    const next = characters[index + 1];
-    if (next === undefined || next === "#" || next === " ") continue;
-    let end = index + 1;
-    while (end < characters.length && end - index <= MAX_TAG_RUNES && tagCharacter.test(characters[end])) end += 1;
-    if (end === index + 1) continue;
-    const tag = characters.slice(index + 1, end).join("");
-    index = end - 1;
-    if (internalTagName.test(tag) || seen.has(tag)) continue;
-    seen.add(tag);
-    tags.push(tag);
-  }
-  return tags;
-}
-
-/** What a note stores: the researcher's text, minus any whole line that is one
- *  of the retired internal tags, with runs of blank lines collapsed. */
-export function normalizeNoteContent(content) {
-  return String(content ?? "")
-    .replaceAll(internalTagLine, "")
-    .replaceAll(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
 /** @param {unknown} value */
 function assertRecordId(value) {
   const id = String(value ?? "");
   if (!recordIdPattern.test(id)) throw new HttpError(400, "memory_id_invalid", "Structured memory id is invalid.");
-  return id;
-}
-
-/** @param {unknown} value */
-function assertNoteId(value) {
-  const id = String(value ?? "");
-  if (!recordIdPattern.test(id)) throw new HttpError(400, "memory_id_invalid", "Memory id is invalid.");
   return id;
 }
 
@@ -438,37 +343,35 @@ function pausedProjectList(value) {
  * no memory to pause, and the doubles the extraction tests use predate them.
  * Both read as "nothing paused", which is the behaviour before the switches.
  *
- * An incognito conversation (2026-09-20) is paused both ways for itself only:
- * nothing is extracted from it and nothing is recalled into it. A conversation
- * trying someone else's capsule (`trial`) writes nothing and still reads.
- * `excluded` is what the researcher set aside in that conversation with 「本次不用」.
+ * A conversation trying someone else's capsule (`trial`) writes nothing and
+ * still reads. 无痕 used to be the third thing read here; it was deleted on
+ * 2026-09-20 with the bar that was its only control, and the account-level
+ * recall pause is the remaining switch.
  *
  * @param {any} store @param {string} userId @param {string | null} projectId @param {string | null} [sessionId]
- * @returns {Promise<{ learning: boolean, recall: boolean, incognito: boolean, trial: boolean, excluded: { type: string, id: string, label?: string }[] }>} true = paused
+ * @returns {Promise<{ learning: boolean, recall: boolean, trial: boolean }>} true = paused
  */
 export async function memoryPausedFor(store, userId, projectId, sessionId = null) {
   if (typeof store?.settings !== "function" || store.configured === false) {
-    return { learning: false, recall: false, incognito: false, trial: false, excluded: [] };
+    return { learning: false, recall: false, trial: false };
   }
   const settings = await store.settings(userId);
   const projectPaused = Boolean(projectId) && settings.pausedProjects.includes(String(projectId));
-  // A conversation id this store cannot hold has no state: nothing set aside,
-  // not incognito. Any other failure is the store's, and propagates.
+  // A conversation id this store cannot hold has no state. Any other failure
+  // is the store's, and propagates.
   const session = sessionId && projectId && typeof store.sessionState === "function"
     ? await store.sessionState(userId, projectId, sessionId).catch((/** @type {any} */ error) => {
-      if (error?.code === "memory_session_invalid") return { incognito: false, excluded: [] };
+      if (error?.code === "memory_session_invalid") return { trialCapsuleId: null };
       throw error;
     })
-    : { incognito: false, excluded: [] };
+    : { trialCapsuleId: null };
   // A conversation trying someone else's capsule writes nothing into this
   // researcher's memory (「试用一次」); it still reads it.
   const trial = Boolean(session.trialCapsuleId);
   return {
-    learning: settings.learningPaused || projectPaused || session.incognito || trial,
-    recall: settings.recallPaused || projectPaused || session.incognito,
-    incognito: session.incognito,
+    learning: settings.learningPaused || projectPaused || trial,
+    recall: settings.recallPaused || projectPaused,
     trial,
-    excluded: session.excluded,
   };
 }
 
@@ -486,29 +389,9 @@ function assertProjectId(value) {
   return id;
 }
 
-/**
- * One 「本次不用」 item, bounded: what kind of thing it is, its id as recall
- * names it, and a label so the panel can still say what was set aside after
- * the thing itself is gone.
- * @param {unknown} value
- */
-export function sessionExclusion(value) {
-  const item = /** @type {Record<string, unknown>} */ (value && typeof value === "object" ? value : {});
-  const type = String(item.type ?? "");
-  if (!MEMORY_SESSION_EXCLUSION_TYPES.includes(type)) throw new HttpError(400, "memory_session_invalid", "Unknown exclusion type.");
-  const id = String(item.id ?? "").trim();
-  if (!/^[A-Za-z0-9][A-Za-z0-9:_./-]{0,299}$/.test(id)) throw new HttpError(400, "memory_session_invalid", "The excluded item's id is invalid.");
-  const label = boundedText(item.label, 200);
-  return { type, id, ...(label ? { label } : {}) };
-}
-
 /** @param {any} row */
 function publicSessionState(row) {
   return {
-    incognito: row?.incognito === true,
-    excluded: Array.isArray(row?.excluded) ? row.excluded.map((item) => {
-      try { return sessionExclusion(item); } catch { return null; }
-    }).filter(Boolean) : [],
     trialCapsuleId: typeof row?.trial_capsule_id === "string" ? row.trial_capsule_id : null,
     updatedAt: row?.updated_at ? memoryInstant(row.updated_at) : null,
   };
@@ -528,6 +411,47 @@ function publicSessionState(row) {
  *
  * @param {any} row @param {any[]} evidence @param {any[]} revisions
  */
+/**
+ * The conversations one record rests on, by the id a link can use.
+ *
+ * An evidence `sourceRef` is `sessions/<sessionId>/messages/<n>` (or
+ * `.../tools/<n>`) — the extractor's own shape, so this reads the record
+ * rather than a second index of where it came from.
+ * @param {{ evidence?: readonly { sourceRef?: string }[] }} record @returns {string[]}
+ */
+export function sessionsOf(record) {
+  const found = [];
+  for (const item of record?.evidence ?? []) {
+    const id = /^sessions\/([^/]+)\//.exec(String(item?.sourceRef ?? ""))?.[1];
+    if (id && !found.includes(id)) found.push(id);
+  }
+  return found;
+}
+
+/**
+ * What each conversation was about, in the researcher's own words: the
+ * question its run summary stored.
+ *
+ * The page shows 「来自 9月12日《…》」 on every row, and this is where the 《…》
+ * comes from. Derived from the records already in hand — a run summary is one
+ * per conversation and carries the question as its summary — so naming the
+ * conversation costs no ledger read and stays true if the ledger is rotated.
+ * @param {readonly any[]} records @returns {Record<string, string>}
+ */
+export function conversationTitlesIn(records) {
+  /** @type {Record<string, string>} */
+  const titles = {};
+  for (const record of records ?? []) {
+    if (record?.kind !== "run_summary") continue;
+    let sessionId = "";
+    try { sessionId = String(JSON.parse(record.value)?.sessionId ?? ""); } catch { sessionId = ""; }
+    if (!sessionId) continue;
+    const title = String(record.summary ?? "").trim();
+    if (title) titles[sessionId] = title;
+  }
+  return titles;
+}
+
 export function recordProvenance(row, evidence, revisions) {
   const refs = evidence.map((item) => String(item?.sourceRef ?? ""));
   // Our own audit vocabulary (the memory routes write this reason), not prose.
@@ -615,19 +539,6 @@ function publicRecord(row) {
   };
 }
 
-/** @param {any} row */
-function publicNote(row) {
-  return {
-    id: row.id,
-    content: row.content,
-    state: row.state,
-    pinned: Boolean(row.pinned),
-    tags: Array.isArray(row.tags) ? row.tags : [],
-    createdAt: memoryInstant(row.created_at),
-    updatedAt: memoryInstant(row.updated_at),
-  };
-}
-
 /**
  * What a database failure means to a caller.
  *
@@ -680,8 +591,6 @@ const recordColumns = "user_id,id,scope,scope_id,kind,key,value,summary,origin,s
   + "sensitive,evidence,revisions,version,created_at,updated_at,last_confirmed_at,expires_at,superseded_by,invalid_since";
 
 export class ResearchMemoryStore {
-  /** Accounts whose notes all carry search tokens, in this process. */
-  #vectorsReady = new Set();
 
   /**
    * `jobs` is the derived index's outbox, and it is handed over only when
@@ -1177,6 +1086,9 @@ export class ResearchMemoryStore {
       await this.#enqueueRecordIndex(client, owner, {
         id: row.id, scope: row.scope, scopeId: row.scope_id, kind: row.kind,
       });
+      // The usage counter has no foreign key — a recall must never be able to
+      // fail on a row being deleted underneath it — so it is cleared here.
+      await client.query("DELETE FROM evimed_memory.record_usage WHERE user_id=$1 AND record_id=$2", [owner, recordId]);
       return true;
     });
   }
@@ -1234,7 +1146,8 @@ export class ResearchMemoryStore {
   // --------------------------------------------------------------- sessions
 
   /**
-   * One conversation's memory state; every switch off when it has none.
+   * One conversation's memory state; nothing set when it has none. All that is
+   * left of it is the shared capsule the conversation is trying.
    * @param {string} userId @param {string} projectId @param {string} sessionId
    */
   async sessionState(userId, projectId, sessionId) {
@@ -1245,165 +1158,27 @@ export class ResearchMemoryStore {
   }
 
   /**
-   * Change one conversation's memory state in one statement: the incognito
-   * switch, and one item set aside (`exclude`) or brought back (`include`).
-   * Two tabs changing different things at once must both win, which is why
-   * this is an upsert over the stored array rather than a read and a write.
+   * Mark a conversation as trying a shared capsule, or end the trial (`null`).
    * @param {string} userId @param {string} projectId @param {string} sessionId
-   * @param {{ incognito?: unknown, exclude?: unknown, include?: unknown, trialCapsuleId?: unknown }} patch
-   *   `trialCapsuleId` marks the conversation as a trial of a shared capsule (null ends it).
+   * @param {{ trialCapsuleId?: unknown }} patch
    */
   async updateSessionState(userId, projectId, sessionId, patch) {
     const owner = assertUserId(userId);
     const project = assertProjectId(projectId);
     const session = assertSessionId(sessionId);
-    if (patch?.incognito !== undefined && typeof patch.incognito !== "boolean") {
-      throw new HttpError(400, "memory_session_invalid", "incognito must be true or false.");
-    }
     const trialGiven = patch?.trialCapsuleId !== undefined;
     if (trialGiven && patch.trialCapsuleId !== null
       && (typeof patch.trialCapsuleId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9:_-]{0,199}$/.test(patch.trialCapsuleId))) {
       throw new HttpError(400, "memory_session_invalid", "The trial capsule id is invalid.");
     }
-    const exclude = patch?.exclude === undefined ? null : sessionExclusion(patch.exclude);
-    const include = patch?.include === undefined ? null : sessionExclusion({ label: "", ...(/** @type {any} */ (patch.include)) });
-    const result = await this.#query(`INSERT INTO evimed_memory.sessions AS s (user_id, project_id, session_id, incognito, excluded, trial_capsule_id)
-      VALUES ($1, $2, $3, COALESCE($4::boolean, false), CASE WHEN $5::jsonb IS NULL THEN '[]'::jsonb ELSE jsonb_build_array($5::jsonb) END,
-        CASE WHEN $7::boolean THEN $8::text ELSE NULL END)
+    const result = await this.#query(`INSERT INTO evimed_memory.sessions AS s (user_id, project_id, session_id, trial_capsule_id)
+      VALUES ($1, $2, $3, CASE WHEN $4::boolean THEN $5::text ELSE NULL END)
       ON CONFLICT (user_id, project_id, session_id) DO UPDATE SET
-        incognito = COALESCE($4::boolean, s.incognito),
-        trial_capsule_id = CASE WHEN $7::boolean THEN $8::text ELSE s.trial_capsule_id END,
-        excluded = (
-          SELECT COALESCE(jsonb_agg(item ORDER BY ordinal), '[]'::jsonb) FROM (
-            SELECT item, ordinal FROM jsonb_array_elements(s.excluded) WITH ORDINALITY AS kept(item, ordinal)
-            WHERE NOT ($5::jsonb IS NOT NULL AND item->>'type' = $5::jsonb->>'type' AND item->>'id' = $5::jsonb->>'id')
-              AND NOT ($6::jsonb IS NOT NULL AND item->>'type' = $6::jsonb->>'type' AND item->>'id' = $6::jsonb->>'id')
-            UNION ALL
-            SELECT $5::jsonb, 1000000 WHERE $5::jsonb IS NOT NULL
-          ) AS merged
-        ),
+        trial_capsule_id = CASE WHEN $4::boolean THEN $5::text ELSE s.trial_capsule_id END,
         updated_at = date_trunc('second', clock_timestamp())
       RETURNING *`,
-    [owner, project, session, patch?.incognito ?? null, exclude ? JSON.stringify(exclude) : null,
-      include ? JSON.stringify({ type: include.type, id: include.id }) : null, trialGiven, trialGiven ? patch.trialCapsuleId : null]);
-    // The table's CHECK bounds the list at MEMORY_SESSION_EXCLUSION_LIMIT; a
-    // write past it is refused there, as a payload error.
+    [owner, project, session, trialGiven, trialGiven ? patch.trialCapsuleId : null]);
     return publicSessionState(result.rows[0]);
-  }
-
-  // ------------------------------------------------------------------ notes
-
-  /** @param {string} userId @param {{ state?: string, pageSize?: number }} options */
-  async list(userId, { state = "normal", pageSize = 100 } = {}) {
-    const result = await this.#query(`SELECT * FROM evimed_memory.notes WHERE user_id=$1 AND state=$2
-      ORDER BY pinned DESC, updated_at DESC, id DESC LIMIT $3`,
-    [assertUserId(userId), state === "archived" ? "archived" : "normal",
-      Math.max(1, Math.min(200, Number(pageSize) || 100))]);
-    return result.rows.map(publicNote);
-  }
-
-  /** @param {string} userId @param {{ state?: string }} options */
-  async listAllMemos(userId, { state = "normal" } = {}) {
-    const result = await this.#query(`SELECT * FROM evimed_memory.notes WHERE user_id=$1 AND state=$2
-      ORDER BY pinned DESC, updated_at DESC, id DESC LIMIT $3`,
-    [assertUserId(userId), state === "archived" ? "archived" : "normal", MEMORY_EXPORT_LIMIT + 1]);
-    if (result.rows.length > MEMORY_EXPORT_LIMIT) {
-      throw new HttpError(413, "memory_export_too_large", "This account holds more notes than one export can carry.");
-    }
-    return result.rows.map(publicNote);
-  }
-
-  /** @param {string} userId @param {string} content */
-  async create(userId, content) {
-    const owner = assertUserId(userId);
-    const text = normalizeNoteContent(content);
-    if (!text || text.length > MEMORY_NOTE_CONTENT_LIMIT) throw invalid("content");
-    // One read of the clock for both stamps: two evaluations of a volatile
-    // function in one statement can land either side of a second boundary.
-    const result = await this.#query(`INSERT INTO evimed_memory.notes(user_id,id,content,state,pinned,tags,created_at,updated_at,search_vector)
-      SELECT $1,$2,$3,'normal',false,$4::text[],stamp,stamp,array_to_tsvector($5::text[])
-      FROM (SELECT date_trunc('second',clock_timestamp()) AS stamp) clock RETURNING *`,
-    [owner, randomUUID(), text, extractTags(text), noteSearchTokens(text)]);
-    return publicNote(result.rows[0]);
-  }
-
-  /** @param {string} userId @param {string} id @param {Record<string, any>} update */
-  async update(userId, id, update) {
-    const owner = assertUserId(userId);
-    const noteId = assertNoteId(id);
-    return this.#transaction(async (client) => {
-      const found = await client.query("SELECT * FROM evimed_memory.notes WHERE user_id=$1 AND id=$2 FOR UPDATE",
-        [owner, noteId]);
-      if (found.rowCount !== 1) throw new HttpError(404, "memory_not_found", "Memory not found.");
-      const current = publicNote(found.rows[0]);
-      const next = { content: current.content, pinned: current.pinned, state: current.state };
-      if (Object.hasOwn(update ?? {}, "content")) {
-        next.content = normalizeNoteContent(update.content);
-        if (!next.content || next.content.length > MEMORY_NOTE_CONTENT_LIMIT) throw invalid("content");
-      }
-      if (Object.hasOwn(update ?? {}, "pinned")) next.pinned = Boolean(update.pinned);
-      if (Object.hasOwn(update ?? {}, "state")) next.state = update.state === "archived" ? "archived" : "normal";
-      // Nothing changed, so nothing is written: an edit that restores what is
-      // already there must not reorder the list by moving `updatedAt`.
-      if (next.content === current.content && next.pinned === current.pinned && next.state === current.state) {
-        return current;
-      }
-      const updated = await client.query(`UPDATE evimed_memory.notes
-        SET content=$3,pinned=$4,state=$5,tags=$6::text[],updated_at=date_trunc('second',clock_timestamp()),
-          search_vector=array_to_tsvector($7::text[])
-        WHERE user_id=$1 AND id=$2 RETURNING *`,
-      [owner, noteId, next.content, next.pinned, next.state, extractTags(next.content), noteSearchTokens(next.content)]);
-      return publicNote(updated.rows[0]);
-    });
-  }
-
-  /**
-   * The notes a question can reach: every note of the account that shares a
-   * token with it, and every pinned note — the same two things the matcher
-   * below always let through, now over all of them rather than the newest
-   * hundred (plan §3.4 #8). Ordered by how much of the question each matches;
-   * the caller scores them. Reached only through this store (principle 18):
-   * the knowledge-base search never reads memory, nor this the KB.
-   * @param {string} userId @param {string} query @param {{ limit?: number }} [options]
-   */
-  async searchNotes(userId, query, { limit = 100 } = {}) {
-    const owner = assertUserId(userId);
-    await this.#backfillNoteVectors(owner);
-    const result = await this.#query(`SELECT * FROM evimed_memory.notes
-      WHERE user_id=$1 AND state='normal' AND (pinned OR ($2::tsquery IS NOT NULL AND search_vector @@ $2::tsquery))
-      ORDER BY CASE WHEN $2::tsquery IS NULL THEN 0 ELSE ts_rank(search_vector, $2::tsquery) END DESC,
-        pinned DESC, updated_at DESC, id DESC
-      LIMIT $3`,
-    [owner, noteSearchQuery(query), Math.max(1, Math.min(200, Number(limit) || 100))]);
-    return result.rows.map(publicNote);
-  }
-
-  /**
-   * Give the notes written before `search_vector` existed their tokens, once
-   * per account per process. A row edited meanwhile keeps the tokens its edit
-   * wrote: the update matches on the content it tokenized.
-   * @param {string} owner
-   */
-  async #backfillNoteVectors(owner) {
-    if (this.#vectorsReady.has(owner)) return;
-    for (let round = 0; round < 50; round += 1) {
-      const pending = await this.#query(`SELECT id, content FROM evimed_memory.notes
-        WHERE user_id=$1 AND search_vector IS NULL ORDER BY id LIMIT 200`, [owner]);
-      if (pending.rowCount === 0) break;
-      for (const row of pending.rows) {
-        await this.#query(`UPDATE evimed_memory.notes SET search_vector=array_to_tsvector($4::text[])
-          WHERE user_id=$1 AND id=$2 AND content=$3 AND search_vector IS NULL`, [owner, row.id, row.content, noteSearchTokens(row.content)]);
-      }
-    }
-    this.#vectorsReady.add(owner);
-  }
-
-  /** @param {string} userId @param {string} id */
-  async delete(userId, id) {
-    const result = await this.#query("DELETE FROM evimed_memory.notes WHERE user_id=$1 AND id=$2 RETURNING id",
-      [assertUserId(userId), assertNoteId(id)]);
-    if (result.rowCount !== 1) throw new HttpError(404, "memory_not_found", "Memory not found.");
-    return true;
   }
 
   // ------------------------------------------------------------- composites
@@ -1416,19 +1191,17 @@ export class ResearchMemoryStore {
    * exactly as it was.
    *
    * @param {string} userId @param {string} query
-   * @param {{ projectId?: string|null, sessionId?: string|null, excluded?: readonly { type: string, id: string }[] }} scope
+   * @param {{ projectId?: string|null, sessionId?: string|null }} scope
    */
-  async relevant(userId, query, { projectId = null, sessionId = null, excluded = [] } = {}) {
+  async relevant(userId, query, { projectId = null, sessionId = null } = {}) {
     if (!this.configured || this.contextLimit === 0 || this.contextMaxChars === 0) return [];
-    const setAside = setAsideIn(excluded);
     const terms = searchTokens(query);
     // Durable memories are fetched in their own query. A single page ordered by
     // importance cannot hold both: run summaries arrive one per run and a failed
     // one carries importance 0.7 against a preference's 0.6, so past a hundred
     // runs the page is all episodes and the user's long-term picture becomes
     // permanently unreachable — silently, because a full page still looks fine.
-    const [memos, durableRecords, episodicRecords] = await Promise.all([
-      this.searchNotes(userId, query),
+    const [durableRecords, episodicRecords] = await Promise.all([
       this.listRecords(userId, { statuses: ["active"], kinds: [...DURABLE_RECALL_KINDS], pageSize: 100 }),
       this.listRecords(userId, { statuses: ["active"], pageSize: 100 }),
     ]);
@@ -1481,19 +1254,10 @@ export class ResearchMemoryStore {
           score,
         };
       })
-      .filter((row) => row.recallable)
-      .filter((row) => !setAside(row.memo));
-    const legacy = memos
-      .map((memo) => {
-        const haystack = memo.content.toLowerCase();
-        const matches = terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
-        return { memo: { ...memo, memoryType: "manual" }, score: matches + (memo.pinned ? 0.25 : 0) };
-      })
-      .filter((row) => row.score > 0)
-      .filter((row) => !setAside(row.memo));
+      .filter((row) => row.recallable);
     const byScore = (left, right) =>
       right.score - left.score || String(right.memo.updatedAt).localeCompare(String(left.memo.updatedAt));
-    const ranked = [...structured, ...legacy].sort(byScore);
+    const ranked = [...structured].sort(byScore);
     return selectWithinBudget(ranked, {
       contextLimit: this.contextLimit,
       contextMaxChars: this.contextMaxChars,
@@ -1522,11 +1286,6 @@ export class ResearchMemoryStore {
 
   /**
    * Everything a deleted project leaves behind.
-   *
-   * The notes half is the legacy rule kept verbatim: nothing writes a note with
-   * the `evimed-agent-run` tag and a `- Project: <id>` line any more, and a
-   * deployment that ran the version which did must still lose them with the
-   * project.
    * @param {string} userId @param {string} projectId
    */
   async deleteProjectMemory(userId, projectId) {
@@ -1537,21 +1296,16 @@ export class ResearchMemoryStore {
       "DELETE FROM evimed_memory.records WHERE user_id=$1 AND scope='project' AND scope_id=$2", [owner, scopeId]);
     // The project's conversations' own state goes with it.
     await this.#query("DELETE FROM evimed_memory.sessions WHERE user_id=$1 AND project_id=$2", [owner, scopeId]);
-    const notes = await this.#query(`DELETE FROM evimed_memory.notes
-      WHERE user_id=$1 AND 'evimed-agent-run'=ANY(tags) AND $2=ANY(string_to_array(content,chr(10)))`,
-    [owner, `- Project: ${scopeId}`]);
-    return { structured: Number(records.rowCount ?? 0), manual: Number(notes.rowCount ?? 0) };
+    return { structured: Number(records.rowCount ?? 0) };
   }
 
   /** @param {string} userId */
   async exportUserMemory(userId) {
-    const [records, current, archived, settings] = await Promise.all([
-      this.listAllRecords(userId),
-      this.listAllMemos(userId, { state: "normal" }),
-      this.listAllMemos(userId, { state: "archived" }),
-      this.settings(userId),
-    ]);
-    return { version: 1, records, manualMemos: [...current, ...archived], settings };
+    const [records, settings] = await Promise.all([this.listAllRecords(userId), this.settings(userId)]);
+    // `manualMemos` is still in the archive, always empty: an archive a
+    // customer already downloaded has the key, and a reader that expects it is
+    // owed the same shape rather than a missing field it has to guess about.
+    return { version: 1, records, manualMemos: [], settings };
   }
 
   /** What an account's memory amounts to, without deleting any of it.
@@ -1563,10 +1317,9 @@ export class ResearchMemoryStore {
    *  @param {string} userId */
   async countUserMemory(userId) {
     const owner = assertUserId(userId);
-    const result = await this.#query(`SELECT
-      (SELECT count(*)::integer FROM evimed_memory.records WHERE user_id=$1) AS structured,
-      (SELECT count(*)::integer FROM evimed_memory.notes WHERE user_id=$1) AS manual`, [owner]);
-    return { structured: result.rows[0].structured, manual: result.rows[0].manual };
+    const result = await this.#query(
+      "SELECT count(*)::integer AS structured FROM evimed_memory.records WHERE user_id=$1", [owner]);
+    return { structured: result.rows[0].structured };
   }
 
   /** Hard deletion of everything one account holds, with the counts the
@@ -1577,7 +1330,101 @@ export class ResearchMemoryStore {
   async purgeUserMemory(userId) {
     const owner = assertUserId(userId);
     const structured = await this.purgeRecords(owner);
-    const notes = await this.#query("DELETE FROM evimed_memory.notes WHERE user_id=$1", [owner]);
-    return { structured, manual: Number(notes.rowCount ?? 0) };
+    // The counters go with the records they count: a usage row for a record
+    // that no longer exists is a copy of deleted data, however small.
+    await this.#query("DELETE FROM evimed_memory.record_usage WHERE user_id=$1", [owner]);
+    return { structured };
+  }
+
+  // ------------------------------------------------------------------ usage
+
+  /**
+   * Note that these memories were handed to a run, for 「用过 7 次，上次 9月18日」.
+   *
+   * One statement for the whole recall, and never awaited by the recall itself
+   * (see `MemorySubstrate.recall`): a counter that could fail an answer would
+   * be a bookkeeping row deciding whether a researcher gets a reply. A record
+   * deleted between the recall and this write leaves nothing behind — the
+   * foreign key on `records` is deliberately absent so a concurrent delete
+   * cannot fail the statement, and `purgeRecords`/`deleteRecord` clear the
+   * rows they orphan.
+   * @param {string} userId @param {readonly string[]} recordIds
+   */
+  async noteRecordUsage(userId, recordIds) {
+    const owner = assertUserId(userId);
+    const ids = [...new Set((recordIds ?? []).map(String).filter((id) => recordIdPattern.test(id)))].slice(0, 100);
+    if (ids.length === 0) return 0;
+    const result = await this.#query(`INSERT INTO evimed_memory.record_usage AS u (user_id, record_id, used_count, last_used_at)
+      SELECT $1, id, 1, date_trunc('second', clock_timestamp()) FROM unnest($2::text[]) AS given(id)
+      ON CONFLICT (user_id, record_id) DO UPDATE
+        SET used_count = u.used_count + 1, last_used_at = date_trunc('second', clock_timestamp())`,
+    [owner, ids]);
+    return Number(result.rowCount ?? 0);
+  }
+
+  /**
+   * How often each of these memories has been used, and when last — the rows
+   * that have one. Absent means never used, which the page says as 「还没用过」
+   * rather than as a zero the reader has to interpret.
+   * @param {string} userId @param {readonly string[]} recordIds
+   * @returns {Promise<Record<string, { count: number, lastUsedAt: string | null }>>}
+   */
+  async recordUsage(userId, recordIds) {
+    const owner = assertUserId(userId);
+    const ids = [...new Set((recordIds ?? []).map(String).filter((id) => recordIdPattern.test(id)))].slice(0, 2000);
+    if (ids.length === 0) return {};
+    const result = await this.#query(`SELECT record_id, used_count, last_used_at FROM evimed_memory.record_usage
+      WHERE user_id=$1 AND record_id = ANY($2::text[])`, [owner, ids]);
+    /** @type {Record<string, { count: number, lastUsedAt: string | null }>} */
+    const usage = {};
+    for (const row of result.rows) {
+      usage[String(row.record_id)] = { count: Number(row.used_count) || 0, lastUsedAt: memoryInstant(row.last_used_at) };
+    }
+    return usage;
+  }
+
+  // ----------------------------------------------------------------- search
+
+  /**
+   * The memory page's own search: keyword over everything the account holds,
+   * including what recall never serves.
+   *
+   * Deliberately not `relevant`. That is the recall path — it drops archived
+   * rows, drops episodes, applies the prompt budget and answers with rendered
+   * strings, all correct for handing memories to a model and all wrong for a
+   * person looking for one. The page had no server search at all: its box was
+   * a `toLowerCase().includes` over the notes already on screen, so 「阿司匹林」
+   * found nothing unless the row happened to be loaded.
+   *
+   * Three haystacks, because those are the three things a person remembers a
+   * memory by: what it says, which conversation it came out of, and which
+   * project it belongs to. The conversation's own words come from its run
+   * summary — the record the extractor writes per conversation — so this needs
+   * no run-ledger scan.
+   *
+   * Keyword only here; the semantic half is the recall index, and the route
+   * unions the two (`memoryRoutes`). A store with no index still searches.
+   * @param {string} userId
+   * @param {{ query: string, projectId?: string|null, limit?: number }} input
+   */
+  async searchRecords(userId, { query, projectId = null, limit = 100 }) {
+    const owner = assertUserId(userId);
+    const terms = searchTokens(boundedText(query, MEMORY_QUERY_LIMIT));
+    const bound = Math.max(1, Math.min(500, Number(limit) || 100));
+    const records = await this.listAllRecords(owner);
+    const titles = conversationTitlesIn(records);
+    const project = String(projectId ?? "");
+    if (terms.length === 0) return { items: records.slice(0, bound), titles };
+    const scored = records
+      .map((record) => {
+        const conversation = sessionsOf(record).map((id) => titles[id] ?? "").join(" ");
+        const haystack = `${record.key} ${record.summary} ${record.value} ${conversation} ${record.scopeId}`.toLowerCase();
+        return { record, score: terms.reduce((sum, term) => sum + (haystack.includes(term) ? 1 : 0), 0) };
+      })
+      .filter((row) => row.score > 0)
+      .sort((left, right) => right.score - left.score
+        || Number(right.record.scopeId === project) - Number(left.record.scopeId === project)
+        || String(right.record.updatedAt).localeCompare(String(left.record.updatedAt)));
+    return { items: scored.slice(0, bound).map((row) => row.record), titles };
   }
 }

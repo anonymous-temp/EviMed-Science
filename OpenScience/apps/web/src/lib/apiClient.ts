@@ -517,16 +517,6 @@ export interface WebMemorySettings {
   updatedAt: string | null;
 }
 
-export interface WebResearchMemory {
-  id: string;
-  content: string;
-  state: "normal" | "archived";
-  pinned: boolean;
-  tags: string[];
-  createdAt: string | null;
-  updatedAt: string | null;
-}
-
 export type WebStructuredMemoryKind =
   | "profile"
   | "preference"
@@ -594,14 +584,35 @@ export interface WebMemoryProvenance {
   conversations: number;
 }
 
+/** How often one memory has been handed to a run, and when it last was. */
+export interface WebMemoryUsage {
+  count: number;
+  lastUsedAt: string | null;
+}
+
 export interface WebMemoryProfile {
   records: WebStructuredMemory[];
   groups: Record<WebStructuredMemoryKind, WebStructuredMemory[]>;
   /** Memories in force, run summaries not included. */
   activeCount: number;
   pendingCount: number;
-  /** Run summaries: entries on the timeline, never counted as memory in force. */
+  /** Run summaries: 「做过的研究」, never counted as memory in force. */
   episodeCount?: number;
+  /** What each conversation was about, by its id: the 《…》 in 「来自 9月12日《…》」. */
+  conversations?: Record<string, string>;
+  /** Per record id. A record with no entry has never been used. */
+  usage?: Record<string, WebMemoryUsage>;
+}
+
+/** The memory page's search: keyword over everything stored, unioned with the
+ *  recall index's semantic hits, each resolved back to the stored record. */
+export interface WebMemorySearch {
+  items: WebStructuredMemory[];
+  query: string;
+  /** How many of the items only the index found. */
+  semantic: number;
+  conversations?: Record<string, string>;
+  usage?: Record<string, WebMemoryUsage>;
 }
 
 export type WebAgentRunStatus = "running" | "succeeded" | "failed" | "canceled";
@@ -1472,46 +1483,6 @@ export async function fetchMemoryStatus(): Promise<WebMemoryStatus> {
   return parseApiResponse<WebMemoryStatus>(res);
 }
 
-/**
- * `/memory/memos` is the free-text note route. The segment is a route name the
- * control plane keeps for its clients, not the service the notes used to live
- * in: the notes are rows of the control plane's own database.
- */
-export async function listResearchMemories(state: "normal" | "archived" = "normal"): Promise<WebResearchMemory[]> {
-  if (!hasWebApi) throw new BackendUnavailableError("memory.list");
-  const res = await fetchWithWebAuth(apiUrl(`/memory/memos?state=${encodeURIComponent(state)}`));
-  return parseApiResponse<WebResearchMemory[]>(res);
-}
-
-export async function createResearchMemory(content: string): Promise<WebResearchMemory> {
-  if (!hasWebApi) throw new BackendUnavailableError("memory.create");
-  const res = await fetchWithWebAuth(apiUrl("/memory/memos"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
-  });
-  return parseApiResponse<WebResearchMemory>(res);
-}
-
-export async function updateResearchMemory(
-  id: string,
-  update: Partial<Pick<WebResearchMemory, "content" | "pinned" | "state">>,
-): Promise<WebResearchMemory> {
-  if (!hasWebApi) throw new BackendUnavailableError("memory.update");
-  const res = await fetchWithWebAuth(apiUrl(`/memory/memos/${encodeURIComponent(id)}`), {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(update),
-  });
-  return parseApiResponse<WebResearchMemory>(res);
-}
-
-export async function deleteResearchMemory(id: string): Promise<void> {
-  if (!hasWebApi) throw new BackendUnavailableError("memory.delete");
-  const res = await fetchWithWebAuth(apiUrl(`/memory/memos/${encodeURIComponent(id)}`), { method: "DELETE" });
-  await parseApiResponse<boolean>(res);
-}
-
 export async function fetchMemorySettings(): Promise<WebMemorySettings> {
   if (!hasWebApi) throw new BackendUnavailableError("memory.settings");
   const res = await fetchWithWebAuth(apiUrl("/memory/settings"));
@@ -1530,15 +1501,26 @@ export async function updateMemorySettings(
   return parseApiResponse<WebMemorySettings>(res);
 }
 
-/** Deletes every memory record and note this account holds; the switches stay. */
-export async function resetMemory(): Promise<{ structured: number; manual: number }> {
+/** Deletes every memory this account holds; the switches stay. */
+export async function resetMemory(): Promise<{ structured: number }> {
   if (!hasWebApi) throw new BackendUnavailableError("memory.reset");
   const res = await fetchWithWebAuth(apiUrl("/memory/reset"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ confirm: "reset" }),
   });
-  return parseApiResponse<{ structured: number; manual: number }>(res);
+  return parseApiResponse<{ structured: number }>(res);
+}
+
+/**
+ * The memory page's search box. Keyword and semantic, unioned by the server:
+ * the box used to be a `toLowerCase().includes` over the rows already on
+ * screen, so 「阿司匹林」 found nothing unless its row happened to be loaded.
+ */
+export async function searchMemories(query: string): Promise<WebMemorySearch> {
+  if (!hasWebApi) throw new BackendUnavailableError("memory.search");
+  const res = await fetchWithWebAuth(apiUrl(`/memory/search?q=${encodeURIComponent(query)}`));
+  return parseApiResponse<WebMemorySearch>(res);
 }
 
 export async function fetchMemoryProfile(): Promise<WebMemoryProfile> {

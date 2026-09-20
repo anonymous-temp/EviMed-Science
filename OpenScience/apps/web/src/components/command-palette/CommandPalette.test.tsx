@@ -49,7 +49,6 @@ describe("CommandPalette", () => {
       "运行记录",
       "知识库",
       "记忆胶囊",
-      "方法",
       "主动科研",
       "科研能力",
       "收件箱",
@@ -58,6 +57,12 @@ describe("CommandPalette", () => {
       "切换主题",
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    // 「方法」, 「资料整理进度」 and 「胶囊时间轴」 all named a tab of a page that
+    // is already in this list; 知识库 and 记忆胶囊 are one page each since
+    // 2026-09-20.
+    for (const gone of ["方法", "资料整理进度", "胶囊时间轴"]) {
+      expect(screen.queryByText(gone)).toBeNull();
     }
     // Deleted on 2026-09-19 with the page it opened.
     expect(screen.queryByText("计算笔记本")).not.toBeInTheDocument();

@@ -43,17 +43,26 @@ function displayPath(path: string) {
   return path.replace(/^\/tenants\/[^/]+/, "") || "/";
 }
 
-/** @param embedded rendered as one view of 知识库 rather than as its own
- *  destination, so the hub above it owns the title. */
-export function SourcesPage({ embedded = false }: { embedded?: boolean } = {}) {
+/** How much of this project's material still needs something. What 知识库
+ *  says as one line at the top, in place of the 整理进度 tab. */
+export interface SourceProgress {
+  needsAttention: number;
+  working: number;
+}
+
+/** @param embedded rendered as part of 知识库 rather than as its own
+ *  destination, so the page above it owns the title.
+ *  @param onProgress told what still needs attention, so the page above can say
+ *  so once instead of keeping a tab for it. */
+export function SourcesPage({ embedded = false, onProgress }: { embedded?: boolean; onProgress?: (progress: SourceProgress) => void } = {}) {
   // Store fallback repairs do not reload the document. Subscribe to those
   // repairs, while the tab's current selection still owns in-flight requests.
   useProjectStore(state => state.currentId);
   const projectId = getWebProjectId();
-  return <ProjectSourcesPage key={projectId} projectId={projectId} embedded={embedded} />;
+  return <ProjectSourcesPage key={projectId} projectId={projectId} embedded={embedded} onProgress={onProgress} />;
 }
 
-function ProjectSourcesPage({ projectId, embedded }: { projectId: string; embedded: boolean }) {
+function ProjectSourcesPage({ projectId, embedded, onProgress }: { projectId: string; embedded: boolean; onProgress?: (progress: SourceProgress) => void }) {
   const [filter, setFilter] = useState("all");
   const [sources, setSources] = useState<SourceRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -109,33 +118,47 @@ function ProjectSourcesPage({ projectId, embedded }: { projectId: string; embedd
     finally { if (getWebProjectId() === projectId) setBusy(false); }
   };
   const selectedSource = sources?.find(source => source.id === understandingId);
-  // Which of this project's sources hold a document the personal library has.
-  // Null while unknown or when the library is unavailable: the card then offers
-  // nothing rather than a button that cannot work.
-  const [librarySources, setLibrarySources] = useState<Set<string> | null>(null);
-  const loadLibrary = useCallback(async () => {
-    try { setLibrarySources(new Set((await listLibrary()).items.flatMap(item => item.sourceIds))); }
-    catch { setLibrarySources(null); }
+  // Which of this project's documents every project of this account can read.
+  //
+  // This is the switch 「加入资料库」 used to be. Same store, same call — what
+  // changed is the word: 「资料库」 was a second noun for a thing that is just
+  // this document, readable from more than one project, and a reader had to
+  // work out how it differed from 知识库 and from 记忆胶囊 (plan §3.1: 知识库 is
+  // 项目内，可标为「所有项目可用」). Null while unknown or when the store is
+  // unavailable: the row then offers nothing rather than a switch that cannot
+  // work.
+  const [sharedSources, setSharedSources] = useState<Set<string> | null>(null);
+  const loadShared = useCallback(async () => {
+    try { setSharedSources(new Set((await listLibrary()).items.flatMap(item => item.sourceIds))); }
+    catch { setSharedSources(null); }
   }, []);
-  useEffect(() => { void loadLibrary(); }, [loadLibrary]);
-  const toggleLibrary = async (source: SourceRecord) => {
+  useEffect(() => { void loadShared(); }, [loadShared]);
+  const toggleShared = async (source: SourceRecord) => {
     if (getWebProjectId() !== projectId) return;
     setBusy(true);
     setActionError(null);
     try {
-      if (librarySources?.has(source.id)) await removeFromLibrary(source.id);
+      if (sharedSources?.has(source.id)) await removeFromLibrary(source.id);
       else await addToLibrary(source.id);
-      await loadLibrary();
+      await loadShared();
     } catch (operationError) { if (getWebProjectId() === projectId) setActionError(productErrorMessage(operationError)); }
     finally { if (getWebProjectId() === projectId) setBusy(false); }
   };
+  // What the page above says as one line, and only when it is true.
+  useEffect(() => {
+    if (!onProgress) return;
+    onProgress({
+      needsAttention: sources?.filter(source => source.payload.status === "needs_attention").length ?? 0,
+      working: sources?.filter(source => ["queued", "parsing"].includes(source.payload.status)).length ?? 0,
+    });
+  }, [sources, onProgress]);
 
   return (
-    <div className="h-full overflow-y-auto px-5 py-6">
-      <div className="mx-auto max-w-content-wide space-y-5">
+    <div className={embedded ? undefined : "h-full overflow-y-auto px-5 py-6"}>
+      <div className={embedded ? "space-y-5" : "mx-auto max-w-content-wide space-y-5"}>
         {embedded
-          ? <header className="flex flex-wrap items-start justify-between gap-3">
-            <p className="max-w-2xl text-ui text-muted">查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。</p>
+          ? <header className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-body font-semibold text-text">资料</h2>
             <SourcesActions onDuplicates={() => setShowDuplicates((value) => !value)} onOpenList={() => setShowOpenList((value) => !value)} />
           </header>
           : <PageHeader title="资料整理" description="查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。"
@@ -156,7 +179,7 @@ function ProjectSourcesPage({ projectId, embedded }: { projectId: string; embedd
         {sources === null ? <MemorySkeleton /> : sources.length === 0 && !error ? <EmptyState icon={Database} title="还没有进入分析流程的资料"
           description="从知识库上传资料后，系统会先建立索引，再按价值进行结构化或深度分析。" /> : (
           <div className="space-y-4">{sources.map((source) => <SourceCard key={source.id} source={source} busy={busy}
-            inLibrary={librarySources ? librarySources.has(source.id) : null} onLibrary={() => void toggleLibrary(source)}
+            shared={sharedSources ? sharedSources.has(source.id) : null} onShare={() => void toggleShared(source)}
             onUnderstanding={() => setUnderstandingId(source.id)}
             onEdit={() => setEditing(source)} onRaiseDepth={() => setEditing(source)} onRetry={() => void mutate(() => retrySource(source.id, source.revision))}
             onCancel={() => void mutate(() => cancelSource(source.id, source.revision))} onDelete={() => setDeleting(source)} />)}</div>
@@ -450,8 +473,8 @@ export function SourceMetadataLine({ metadata, pageCount, fileName }: { metadata
   </div>;
 }
 
-function SourceCard({ source, busy, inLibrary, onLibrary, onEdit, onRaiseDepth, onRetry, onCancel, onDelete, onUnderstanding }: {
-  source: SourceRecord; busy: boolean; inLibrary: boolean | null; onLibrary: () => void; onEdit: () => void; onRaiseDepth: () => void; onRetry: () => void; onCancel: () => void; onDelete: () => void; onUnderstanding: () => void;
+function SourceCard({ source, busy, shared, onShare, onEdit, onRaiseDepth, onRetry, onCancel, onDelete, onUnderstanding }: {
+  source: SourceRecord; busy: boolean; shared: boolean | null; onShare: () => void; onEdit: () => void; onRaiseDepth: () => void; onRetry: () => void; onCancel: () => void; onDelete: () => void; onUnderstanding: () => void;
 }) {
   const operator = useOperator();
   const [showChain, setShowChain] = useState(false);
@@ -494,11 +517,11 @@ function SourceCard({ source, busy, inLibrary, onLibrary, onEdit, onRaiseDepth, 
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="ghost" onClick={onUnderstanding}><FileSearch size={13} aria-hidden="true" />查看理解</Button>
         <Button size="sm" variant="ghost" onClick={() => setShowChain((value) => !value)}><GitBranch size={13} aria-hidden="true" />查看版本链</Button>
-        {/* The personal library: every project of this account reads it, read-only. */}
-        {inLibrary === true && <Button size="sm" variant="ghost" disabled={busy} onClick={onLibrary}
-          title="从个人资料库移出；这个项目里的资料不受影响"><BookmarkMinus size={13} aria-hidden="true" />移出资料库</Button>}
-        {inLibrary === false && ["complete", "needs_attention"].includes(source.payload.status) && <Button size="sm" variant="ghost" disabled={busy}
-          onClick={onLibrary} title="加入个人资料库：你的每个项目都能读取和检索它"><BookmarkPlus size={13} aria-hidden="true" />加入资料库</Button>}
+        {/* One document, readable from one project or from all of them. */}
+        {shared === true && <Button size="sm" variant="ghost" disabled={busy} onClick={onShare}
+          title="改回只在这个项目里可用"><BookmarkMinus size={13} aria-hidden="true" />改为仅本项目</Button>}
+        {shared === false && ["complete", "needs_attention"].includes(source.payload.status) && <Button size="sm" variant="ghost" disabled={busy}
+          onClick={onShare} title="你的每个项目都能读取和检索它"><BookmarkPlus size={13} aria-hidden="true" />所有项目可用</Button>}
         <Button size="sm" variant="ghost" disabled={busy} onClick={onEdit}><SlidersHorizontal size={13} aria-hidden="true" />调整分析</Button>
         {["failed", "needs_attention", "complete", "canceled"].includes(source.payload.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={onRetry}><RotateCcw size={13} aria-hidden="true" />重新分析</Button>}
         {["queued", "parsing"].includes(source.payload.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}><XCircle size={13} aria-hidden="true" />取消</Button>}

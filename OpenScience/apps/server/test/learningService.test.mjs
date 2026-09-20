@@ -12,10 +12,7 @@ import test from "node:test";
 import { METHOD_SKILL_SCHEMA, methodContentDigest, renderMethodSkill, evaluationEligible } from "@evimed/domain";
 
 import { LearningService, learnedMethodId, methodRecordFrom } from "../src/learningService.mjs";
-import { freezeLearningEvaluation } from "../src/learningEvaluation.mjs";
 import { MethodConsolidation } from "../src/methodConsolidation.mjs";
-import { freezeLearningBaseline } from "../src/learningBaseline.mjs";
-import { productId } from "../src/productPersistence.mjs";
 
 /** @param {string} text */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -117,17 +114,22 @@ const create = (learning, input = {}) => learning.createCandidate("u1", {
   ...input,
 });
 
-test("a created method is a candidate, and there is no parameter that says otherwise", async () => {
+test("a created method takes effect at once, and no caller parameter says otherwise", async () => {
   const { learning } = service();
   const document = await create(learning);
-  assert.equal(document.payload.status, "candidate");
+  // Since 2026-09-20 the evidence bar is on demotion, not on effect: a
+  // distilled method is effective the night it is learned. The status is still
+  // computed from the record by `promotionVerdict` and never read off the
+  // caller, which is what keeps "what may be mounted" in one place.
+  assert.equal(document.payload.status, "approved");
+  assert.equal(document.payload.statusChangedAt, document.payload.createdAt, "the mount orders on this field");
   assert.equal(document.id, learnedMethodId("do-the-thing"));
   assert.equal(document.payload.contentDigest, methodContentDigest({ frontmatter: frontmatter(), body: BODY }, sha256));
   assert.deepEqual(document.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 });
 
   // The API surface itself: nothing accepts a status.
   const created = await create(learning, { frontmatter: frontmatter({ name: "another-thing" }) });
-  assert.equal(created.payload.status, "candidate");
+  assert.equal(created.payload.status, "approved");
 });
 
 test("a method that breaks a rule is refused at the store, not only at the contract", async () => {
@@ -213,7 +215,7 @@ test("retirement needs no evidence, says why, and is undone by the rollback the 
   // ways to reach one status is two places for the rules to drift.
   assert.equal(typeof (/** @type {any} */ (learning).revive), "undefined");
   const restored = await learning.rollback("u1", created.id, { expectedRevision: retired.revision, targetRevision: created.revision });
-  assert.equal(restored.payload.status, "candidate");
+  assert.equal(restored.payload.status, "approved", "an earlier revision that was effective is effective again");
 });
 
 test("retirement proposals never include a method that is still being used", async () => {
@@ -256,60 +258,47 @@ test("concurrent successful bootstrap observations all survive CAS conflicts", a
   assert.equal((await learning.getMethod("u1", created.id)).payload.learning.observations.length, 3);
 });
 
-test("nothing that generates a method can approve one", async () => {
-  const { learning } = service({ resolveBaselineDigest: async () => `sha256:${"b".repeat(64)}` });
+test("nothing that generates a method can assert its status, and a conflict is the one thing that blocks it", async () => {
+  const { learning } = service();
   const created = await create(learning);
 
-  // 1. A fresh candidate cannot be approved, and the refusal names what is missing.
-  await assert.rejects(
-    () => learning.approve("u1", created.id, { expectedRevision: created.revision }),
-    (error) => error.code === "method_not_promotable" && /run families|paired evaluation/.test(error.message),
-  );
-
-  // 2. Nor can it be approved by claiming an evaluation it did not have: the
-  //    verdict is recomputed from the stored record, so a caller's opinion is
-  //    not an input.
-  let document = created;
-  for (const index of [1, 2, 3]) {
-    document = await learning.recordObservation("u1", created.id, {
-      runId: `r${index}`, family: `f${index}`, outcome: "accepted", at: "2026-09-06T00:00:00.000Z", invoked: true,
-    });
-  }
-  await assert.rejects(
-    () => learning.approve("u1", created.id, { expectedRevision: document.revision }),
-    (error) => error.code === "method_not_promotable" && /no paired evaluation/.test(error.message),
-  );
-
-  // 3. Nor by an evaluation that does not name the text it measured: a verdict
-  //    with no candidate digest describes nothing in particular, and crediting
-  //    it is how a score for one revision became the first vote for another.
-  document = await learning.recordEvaluation("u1", created.id, {
-    report: "evals/method-quality/reports/0.json", baselineDigest: `sha256:${"b".repeat(64)}`, verdict: "better",
-  });
-  await assert.rejects(
-    () => learning.approve("u1", created.id, { expectedRevision: document.revision }),
-    (error) => error.code === "method_not_promotable" && /does not name the text it measured/.test(error.message),
-  );
-
-  // 4. With a passing evaluation on this text and against the current
-  //    baseline, it goes through.
-  const baseline = `sha256:${"b".repeat(64)}`;
-  document = await learning.recordEvaluation("u1", created.id, {
-    report: "evals/method-quality/reports/1.json", baselineDigest: baseline, verdict: "better",
-    candidateDigest: document.payload.contentDigest,
-  });
-  const approved = await learning.approve("u1", created.id, { expectedRevision: document.revision, currentBaselineDigest: baseline });
+  // Effective from creation, by the verdict — not because the caller said so.
+  assert.equal(created.payload.status, "approved");
+  const approved = await learning.approve("u1", created.id, { expectedRevision: created.revision });
   assert.equal(approved.payload.status, "approved");
 
-  // 5. And a baseline that has since moved takes the approval away again.
-  const moved = await learning.amendMethod("u1", created.id, {
-    expectedRevision: approved.revision, frontmatter: frontmatter(), body: `${BODY}\n\nA later thought.`,
-  });
-  assert.equal(moved.payload.status, "candidate", "a changed body is never still approved");
+  // An unresolved conflict with another method is what no measurement repairs,
+  // and it is what still refuses. `approve` recomputes the verdict from the
+  // stored record, so a caller's opinion is not an input either way.
+  const conflicted = await learning.recordRelations("u1", created.id, [
+    { type: "conflicts_with", target: "other-thing", evidence: "两条方法对同一步给出相反要求", proposedBy: "consolidate:job_1" },
+  ], () => true);
   await assert.rejects(
-    () => learning.approve("u1", created.id, { expectedRevision: moved.revision, currentBaselineDigest: baseline }),
-    (error) => error.code === "method_not_promotable",
+    () => learning.approve("u1", created.id, { expectedRevision: conflicted.revision }),
+    (error) => error.code === "method_not_promotable" && /unresolved conflict/.test(error.message),
   );
+
+  // A changed body starts the measurement over and is still effective: the
+  // researcher keeps working while the comparison runs.
+  const moved = await learning.amendMethod("u1", created.id, {
+    expectedRevision: conflicted.revision, frontmatter: frontmatter(), body: `${BODY}\n\nA later thought.`,
+  });
+  assert.deepEqual(moved.payload.learning.evaluations, [], "a changed body keeps no verdict about the old text");
+});
+
+test("the paired evaluation no longer reads a baseline to decide effect", async () => {
+  // Four suites used to live here, one per way a live baseline could differ
+  // from the evaluated one, plus one for a candidate changed during the
+  // baseline read. All of them described a gate that under stock configuration
+  // had never once opened: `learningEvaluationCommand` defaults to empty, the
+  // evaluate job failed terminally by name, and production held zero effective
+  // methods. What the comparison decides now is retirement.
+  let baselineReads = 0;
+  const { learning } = service({ resolveBaselineDigest: async () => { baselineReads += 1; return `sha256:${"b".repeat(64)}`; } });
+  const created = await create(learning);
+  const approved = await learning.approve("u1", created.id, { expectedRevision: created.revision });
+  assert.equal(approved.payload.status, "approved");
+  assert.equal(baselineReads, 0, "no read of a digest the verdict will not look at");
 });
 
 async function evaluatedCandidate(learning) {
@@ -322,132 +311,6 @@ async function evaluatedCandidate(learning) {
   }
   return document;
 }
-
-test("an inferred approval cannot use a caller digest when its live baseline resolver is missing", async () => {
-  const { learning } = service();
-  const candidate = await evaluatedCandidate(learning);
-  const baselineDigest = `sha256:${"b".repeat(64)}`;
-  const evaluated = await learning.recordEvaluation("u1", candidate.id, {
-    report: "r.json", baselineDigest, candidateDigest: candidate.payload.contentDigest, verdict: "better",
-  });
-  for (const supplied of [undefined, baselineDigest]) {
-    await assert.rejects(() => learning.approve("u1", evaluated.id, {
-      expectedRevision: evaluated.revision, currentBaselineDigest: supplied,
-    }), (error) => error.code === "method_not_promotable" && /current baseline.*unavailable/.test(error.message));
-  }
-  assert.equal((await learning.getMethod("u1", evaluated.id)).payload.status, "candidate");
-});
-
-for (const change of ["project method", "account method", "capsule method", "unavailable", "unchanged"]) {
-  test(`promotion compares the evaluated baseline to the live ${change}`, async () => {
-    const entries = [{ id: "preference", payload: { status: "approved", factKind: "method_preference", layer: "methods", content: "Quote the source." } }];
-    const capsules = {
-      active: async () => ({ items: [{ capsuleId: "capsule" }] }),
-      entries: async () => ({ items: entries }),
-    };
-    let unavailable = false;
-    const { learning, enqueued } = service({ resolveBaselineDigest: async (userId, projectId) => {
-      assert.equal(userId, "u1");
-      assert.equal(projectId, "p1");
-      if (unavailable) throw new Error("baseline store unavailable");
-      return (await freezeLearningBaseline({ learning, capsules, userId, projectId })).baselineDigest;
-    } });
-    const candidate = await evaluatedCandidate(learning);
-    const frozen = await freezeLearningEvaluation({ learning, capsules, project: { id: "p1" },
-      request: { userId: "u1", methodId: candidate.id, candidateDigest: candidate.payload.contentDigest } });
-    const evaluated = await learning.recordEvaluation("u1", candidate.id, {
-      report: "original.json", baselineDigest: frozen.grant.baselineDigest,
-      candidateDigest: candidate.payload.contentDigest, verdict: "better",
-    });
-    if (change.endsWith("method") && change !== "capsule method") {
-      await create(learning, { frontmatter: frontmatter({ name: "new-library-method" }),
-        projectId: change === "account method" ? null : "p1", provenance: { origin: "explicit" } });
-    } else if (change === "capsule method") {
-      entries[0].payload.content = "Check the revised label before quoting the source.";
-    } else if (change === "unavailable") unavailable = true;
-
-    if (change === "unchanged") {
-      const approved = await learning.approve("u1", candidate.id, { expectedRevision: evaluated.revision });
-      assert.equal(approved.payload.status, "approved");
-      return;
-    }
-    await assert.rejects(() => learning.approve("u1", candidate.id, {
-      expectedRevision: evaluated.revision, currentBaselineDigest: frozen.grant.baselineDigest,
-    }), change === "unavailable" ? /baseline store unavailable/ : /baseline that has since moved/);
-    assert.equal((await learning.getMethod("u1", candidate.id)).payload.status, "candidate");
-    assert.deepEqual((await learning.getMethod("u1", candidate.id)).payload.learning.evaluations, evaluated.payload.learning.evaluations);
-    if (change === "unavailable") return;
-
-    // The production nightly pass must queue a new comparison, preserving the
-    // old verdict rather than crediting its result to the changed baseline.
-    const consolidation = new MethodConsolidation({ learning,
-      jobs: { enqueue: async (userId, kind, payload, options) => {
-        productId(options.idempotencyKey, "idempotency key");
-        enqueued.push({ userId, kind, payload, options }); return { id: "evaluation" };
-      } },
-      dispatch: async () => { throw new Error("no model calls in this test"); }, readResult: async () => ({}),
-    });
-    const job = { id: "night", userId: "u1", projectId: "p1" };
-    const slept = await consolidation.sleep({ job });
-    assert.deepEqual(slept.promoted, []);
-    assert.deepEqual(slept.queuedForEvaluation, [candidate.id]);
-    const queued = enqueued.at(-1);
-    assert.equal(queued.payload.bootstrap, false);
-    assert.notEqual(queued.payload.baselineDigest, frozen.grant.baselineDigest);
-    assert.ok(queued.payload.baselineDigest);
-    assert.ok(queued.options.idempotencyKey.endsWith(queued.payload.baselineDigest));
-    await consolidation.sleep({ job: { ...job, id: "next-night" } });
-    assert.equal(enqueued.at(-1).options.idempotencyKey, queued.options.idempotencyKey,
-      "the same changed baseline has one durable evaluation identity");
-    assert.deepEqual((await learning.getMethod("u1", candidate.id)).payload.learning.evaluations, evaluated.payload.learning.evaluations);
-    await learning.recordEvaluation("u1", candidate.id, {
-      report: "reevaluated.json", baselineDigest: queued.payload.baselineDigest,
-      candidateDigest: candidate.payload.contentDigest, verdict: "non_inferior",
-    });
-    const afterReevaluation = await consolidation.sleep({ job });
-    assert.deepEqual(afterReevaluation.promoted, [candidate.id]);
-    assert.equal((await learning.getMethod("u1", candidate.id)).payload.learning.evaluations.length, 2);
-  });
-}
-
-test("changing candidate text during the baseline read cannot overwrite its new revision", async () => {
-  let changeCandidate;
-  const { learning } = service({ resolveBaselineDigest: async () => {
-    await changeCandidate();
-    return `sha256:${"b".repeat(64)}`;
-  } });
-  const candidate = await evaluatedCandidate(learning);
-  const evaluated = await learning.recordEvaluation("u1", candidate.id, {
-    report: "r.json", baselineDigest: `sha256:${"b".repeat(64)}`,
-    candidateDigest: candidate.payload.contentDigest, verdict: "better",
-  });
-  changeCandidate = () => learning.amendMethod("u1", candidate.id, {
-    expectedRevision: evaluated.revision, frontmatter: frontmatter(), body: `${BODY}\nNew candidate revision.`,
-  });
-  await assert.rejects(() => learning.approve("u1", candidate.id, { expectedRevision: evaluated.revision }),
-    { code: "product_revision_conflict" });
-  const changed = await learning.getMethod("u1", candidate.id);
-  assert.equal(changed.payload.status, "candidate");
-  assert.match(changed.payload.body, /New candidate revision/);
-  assert.deepEqual(changed.payload.learning.evaluations, []);
-});
-
-test("an inferred method without a stored project scope cannot borrow a caller's baseline", async () => {
-  const { learning } = service({ resolveBaselineDigest: async () => { throw new Error("no project scope should be read"); } });
-  const candidate = await create(learning, { projectId: null });
-  let evaluated = candidate;
-  for (const index of [1, 2, 3]) evaluated = await learning.recordObservation("u1", candidate.id, {
-    runId: `r${index}`, family: `f${index}`, outcome: "accepted", invoked: true,
-    at: "2026-09-10T00:00:00.000Z", contentDigest: candidate.payload.contentDigest,
-  });
-  evaluated = await learning.recordEvaluation("u1", candidate.id, {
-    report: "r.json", baselineDigest: `sha256:${"b".repeat(64)}`,
-    candidateDigest: candidate.payload.contentDigest, verdict: "better",
-  });
-  await assert.rejects(() => learning.approve("u1", candidate.id, {
-    expectedRevision: evaluated.revision, currentBaselineDigest: `sha256:${"b".repeat(64)}`,
-  }), /current baseline.*unavailable/);
-});
 
 test("an unchanged inconclusive evaluation is not rerun by every nightly pass", async () => {
   const baselineDigest = `sha256:${"b".repeat(64)}`;
@@ -511,17 +374,19 @@ test("an explicitly taught method takes effect at once, which is the other half 
   assert.match(notices.at(-1).body, /immediately|回滚|rollback/i);
 });
 
-test("an inferred method is never approved at creation, whatever it claims about itself", async () => {
+test("a caller cannot assert a status, an origin or a verdict of its own", async () => {
   const { learning } = service();
   // The store is the last place that can refuse, so it may not read a status,
-  // an origin the caller invented, or a verdict the caller computed.
+  // an origin the caller invented, or a verdict the caller computed. What
+  // decides is `promotionVerdict` over the record's own fields.
   const created = await create(learning, {
     provenance: { origin: "inferred", runId: "run_1" },
     // @ts-expect-error the point of the test is that these are not parameters
-    status: "approved", promotion: { status: "approved" },
+    status: "retired", promotion: { status: "retired" },
   });
-  assert.equal(created.payload.status, "candidate");
-  assert.deepEqual(await learning.approvedMethods("u1"), []);
+  assert.equal(created.payload.status, "approved", "the verdict decided, not the caller");
+  assert.equal(created.payload.provenance.origin, "inferred");
+  assert.deepEqual((await learning.approvedMethods("u1")).map((item) => item.id), [created.id]);
 });
 
 test("the record the promotion rule reads is assembled in one place", async () => {

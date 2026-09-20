@@ -82,9 +82,13 @@ export function ReceivedShelf() {
     );
   }
   if (data === null) return <p role="status" className="text-ui text-muted">正在读取…</p>;
-  if (data.length === 0) return <p className="text-ui text-muted">还没有人分享胶囊给你。收到的 .evimedcap 文件在下面「分享」里导入。</p>;
+  // Nothing at all: silent. The way to get one is 「导入胶囊」 in the page's
+  // footer, and a permanent empty block above it would say so a second time.
+  if (data.length === 0) return null;
   return (
-    <ul className="divide-y divide-border rounded-card border border-border bg-surface">
+    <section aria-labelledby="received-capsules">
+      <h2 id="received-capsules" className="mb-2 text-body font-semibold text-text">收到的胶囊</h2>
+      <ul className="divide-y divide-border rounded-card border border-border bg-surface">
       {data.map((pack) => {
         const dropped = pack.scan?.dropped ?? [];
         return (
@@ -136,6 +140,7 @@ export function ReceivedShelf() {
           </li>
         );
       })}
-    </ul>
+      </ul>
+    </section>
   );
 }

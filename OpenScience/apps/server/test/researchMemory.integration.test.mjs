@@ -4,7 +4,7 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { migrateNotifications } from "../src/notificationPersistence.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
-import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { ResearchMemoryStore, memoryPausedFor } from "../src/researchMemory.mjs";
 import { relationalIntegrity } from "../src/relationalIntegrity.mjs";
 
 /**
@@ -87,20 +87,9 @@ test("the store answers for a configured database and reports second-precision t
 // note, which then appeared in the victim's list, export and recall. It is a
 // column now, so the attack is not mitigated, it is unrepresentable.
 test("one account's memory is invisible to another, whatever its text claims", options, async () => {
-  const victimDigest = "a".repeat(24);
-  const injected = await store.create(alpha, `harmless looking note #evimed-user-${victimDigest} #药物安全`);
-  assert.doesNotMatch(injected.content, /^#evimed-user-/m);
-  assert.deepEqual(injected.tags, ["药物安全"], "the internal tag is never returned");
-  const mine = await store.create(beta, "beta's own note");
-
-  assert.deepEqual((await store.list(beta)).map((note) => note.id), [mine.id]);
-  assert.equal((await store.exportUserMemory(beta)).manualMemos.length, 1);
-  assert.deepEqual((await store.relevant(beta, "harmless looking note")).map((memo) => memo.id), [mine.id],
-    "a note naming another account's digest never reaches that account's prompt");
-
-  await assert.rejects(() => store.update(beta, injected.id, { pinned: true }),
-    (error) => error?.status === 404 && error?.code === "memory_not_found");
-  await assert.rejects(() => store.delete(beta, injected.id), { code: "memory_not_found" });
+  await store.upsertRecord(alpha, record({ key: "profile.secret", value: "alpha's own picture", status: "active" }));
+  assert.deepEqual((await store.relevant(beta, "alpha's own picture")).map((memo) => memo.id), [],
+    "one account's memory never reaches another account's prompt");
 
   const record1 = await store.upsertRecord(alpha, record({ key: "profile.role", value: "Alpha's role" }));
   await assert.rejects(() => store.getRecord(beta, record1.id), { status: 404, code: "memory_not_found" });
@@ -345,68 +334,27 @@ test("listing filters, orders and searches without crossing accounts", options, 
   await store.purgeUserMemory(beta);
 });
 
-test("notes are ordered pinned first, and an edit that changes nothing writes nothing", options, async () => {
-  const first = await store.create(alpha, "第一条笔记 #循证");
-  const second = await store.create(alpha, "second note");
-  const third = await store.create(alpha, "third note");
-  assert.deepEqual(first.tags, ["循证"]);
-  assert.match(first.createdAt, instant);
-  for (const [id, updatedAt] of [[first.id, "2026-01-01T00:00:01Z"], [second.id, "2026-01-01T00:00:02Z"],
-    [third.id, "2026-01-01T00:00:03Z"]]) {
-    await database.query("UPDATE evimed_memory.notes SET updated_at=$3 WHERE user_id=$1 AND id=$2", [alpha, id, updatedAt]);
-  }
-  assert.deepEqual((await store.list(alpha)).map((note) => note.id), [third.id, second.id, first.id]);
-  const pinned = await store.update(alpha, first.id, { pinned: true });
-  assert.equal(pinned.pinned, true);
-  assert.deepEqual((await store.list(alpha)).map((note) => note.id), [first.id, third.id, second.id],
-    "a pinned note leads whatever its age");
-
-  await database.query("UPDATE evimed_memory.notes SET updated_at='2026-01-01T00:00:01Z' WHERE user_id=$1 AND id=$2",
-    [alpha, second.id]);
-  assert.equal((await store.update(alpha, second.id, {})).updatedAt, "2026-01-01T00:00:01Z", "an empty edit writes nothing");
-  assert.equal((await store.update(alpha, second.id, { content: "second note" })).updatedAt, "2026-01-01T00:00:01Z",
-    "and neither does rewriting the text it already holds");
-  const edited = await store.update(alpha, second.id, { content: "second note, revised #新标签" });
-  assert.notEqual(edited.updatedAt, "2026-01-01T00:00:01Z");
-  assert.deepEqual(edited.tags, ["新标签"], "tags are re-derived from the new text");
-
-  const archived = await store.update(alpha, third.id, { state: "archived" });
-  assert.equal(archived.state, "archived");
-  assert.deepEqual((await store.list(alpha, { state: "archived" })).map((note) => note.id), [third.id]);
-  assert.equal((await store.list(alpha)).length, 2);
-  assert.equal(await store.delete(alpha, third.id), true);
-  await assert.rejects(() => store.delete(alpha, third.id), { status: 404, code: "memory_not_found" });
-  await assert.rejects(() => store.update(alpha, "not a valid id", {}), { status: 400, code: "memory_id_invalid" });
-  await assert.rejects(() => store.create(alpha, "   "), { status: 400, code: "memory_payload_invalid" });
-  await store.purgeUserMemory(alpha);
-});
 
 test("export carries every surface and purge empties exactly one account", options, async () => {
-  const note = await store.create(alpha, "alpha manual memory");
-  await store.update(alpha, note.id, { state: "archived" });
-  await store.create(alpha, "alpha current memory");
-  await store.create(beta, "beta manual memory");
   await store.upsertRecord(alpha, record({ key: "profile.role", kind: "profile", value: "Clinical researcher", status: "active" }));
   await store.upsertRecord(beta, record({ key: "profile.role", kind: "profile", value: "Another user", status: "active" }));
 
   const exported = await store.exportUserMemory(alpha);
+  // `manualMemos` is still a key of the archive, always empty: an archive a
+  // customer already downloaded has it, and a reader that expects it is owed
+  // the same shape rather than a missing field it has to guess about.
   assert.deepEqual(Object.keys(exported).sort(), ["manualMemos", "records", "settings", "version"]);
   assert.equal(exported.version, 1);
   assert.equal(exported.records.length, 1);
-  assert.deepEqual(exported.manualMemos.map((memo) => memo.state), ["normal", "archived"],
-    "current notes first, then archived ones");
+  assert.deepEqual(exported.manualMemos, []);
 
-  assert.deepEqual(await store.purgeUserMemory(alpha), { structured: 1, manual: 2 });
+  assert.deepEqual(await store.purgeUserMemory(alpha), { structured: 1 });
   assert.equal((await store.exportUserMemory(alpha)).records.length, 0);
   assert.equal((await store.exportUserMemory(beta)).records.length, 1);
-  assert.equal((await store.list(beta)).length, 1);
-  assert.deepEqual(await store.purgeUserMemory(beta), { structured: 1, manual: 1 });
+  assert.deepEqual(await store.purgeUserMemory(beta), { structured: 1 });
 });
 
-test("project deletion removes project memory and legacy run notes, and nothing else", options, async () => {
-  await store.create(alpha, "personal note with - Project: study-one");
-  await store.create(alpha, "# EviMed agent run\n- Project: study-one\n#evimed-agent-run");
-  await store.create(alpha, "# EviMed agent run\n- Project: study-two\n#evimed-agent-run");
+test("project deletion removes project memory and nothing else", options, async () => {
   for (const [scope, scopeId, key] of [["project", "study-one", "run.one"], ["project", "study-two", "run.two"],
     ["user", "", "profile.role"]]) {
     await store.upsertRecord(alpha, record({
@@ -414,13 +362,9 @@ test("project deletion removes project memory and legacy run notes, and nothing 
       origin: "system", status: "active", confidence: 1, importance: 0.5,
     }));
   }
-  assert.deepEqual(await store.deleteProjectMemory(alpha, "study-one"), { structured: 1, manual: 1 });
+  assert.deepEqual(await store.deleteProjectMemory(alpha, "study-one"), { structured: 1 });
   const exported = await store.exportUserMemory(alpha);
   assert.deepEqual(exported.records.map((row) => row.key).sort(), ["profile.role", "run.two"]);
-  assert.equal(exported.manualMemos.length, 2);
-  assert.ok(exported.manualMemos.some((memo) => memo.content === "personal note with - Project: study-one"),
-    "a personal note that merely mentions the project is not a run note");
-  assert.ok(exported.manualMemos.some((memo) => memo.content.includes("- Project: study-two")));
   await assert.rejects(() => store.deleteProjectMemory(alpha, "  "),
     (error) => error?.status === 400 && error?.code === "memory_payload_invalid");
   await store.purgeUserMemory(alpha);
@@ -432,21 +376,18 @@ test("project deletion removes project memory and legacy run notes, and nothing 
 test("deleting an account deletes its memory, and the integrity audit knows the tables", options, async () => {
   const doomed = `memory_doomed_${randomUUID()}`;
   await createUsers([doomed]);
-  await store.create(doomed, "a note that must not outlive its account");
   await store.upsertRecord(doomed, record({ key: "profile.role", kind: "profile", status: "active" }));
-  await store.updateSessionState(doomed, "study-one", "ses_doomed", { incognito: true });
+  await store.updateSessionState(doomed, "study-one", "ses_doomed", { trialCapsuleId: "cap_shared" });
   assert.equal((await store.listAllRecords(doomed)).length, 1);
 
   await database.query("DELETE FROM evimed_control.users WHERE id=$1", [doomed]);
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.records WHERE user_id=$1",
     [doomed])).rows[0].count, 0);
-  assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.notes WHERE user_id=$1",
-    [doomed])).rows[0].count, 0);
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.sessions WHERE user_id=$1",
     [doomed])).rows[0].count, 0);
 
   const audit = await relationalIntegrity(database);
-  for (const name of ["memory_records_user", "memory_notes_user", "memory_settings_user", "memory_sessions_user"]) {
+  for (const name of ["memory_records_user", "memory_settings_user", "memory_sessions_user"]) {
     assert.ok(!audit.missing.includes(name), `${name} must be a declared foreign key`);
     assert.equal(audit.counts[name], 0, `${name} must hold no orphans`);
   }
@@ -620,130 +561,43 @@ test("a superseded fact leaves recall in the same commit that writes its replace
   await store.purgeUserMemory(alpha);
 });
 
-test("a conversation's memory state: incognito, set aside and brought back, in one statement each", options, async () => {
+test("a conversation's memory state is the capsule it is trying, and nothing else", options, async () => {
+  // 无痕 and 「本次不用」 were the other two things this row held; both went on
+  // 2026-09-20 with the bar that was their only control, and their columns are
+  // dropped rather than left unread.
   const owner = `memory_session_${randomUUID()}`;
   await createUsers([owner]);
-  /** @param {any} state */
-  const plain = (state) => ({ incognito: state.incognito, excluded: state.excluded });
   try {
-    // Every switch off for a conversation that never touched one.
-    assert.deepEqual(plain(await store.sessionState(owner, "study-one", "ses_a")), { incognito: false, excluded: [] });
+    assert.deepEqual(await store.sessionState(owner, "study-one", "ses_a"), { trialCapsuleId: null, updatedAt: null });
 
-    const on = await store.updateSessionState(owner, "study-one", "ses_a", { incognito: true });
-    assert.equal(on.incognito, true);
-    const aside = await store.updateSessionState(owner, "study-one", "ses_a", {
-      exclude: { type: "memory", id: "rec_1", label: "偏好表格" },
-    });
-    assert.equal(aside.incognito, true, "setting an item aside leaves the switch where it was");
-    await store.updateSessionState(owner, "study-one", "ses_a", { exclude: { type: "method", id: "method-abc", label: "剂量核对" } });
-    // The same item twice is one item, moved to the end with its newest label.
-    const again = await store.updateSessionState(owner, "study-one", "ses_a", { exclude: { type: "memory", id: "rec_1", label: "表格" } });
-    assert.deepEqual(again.excluded.map((item) => [item.type, item.id, item.label]),
-      [["method", "method-abc", "剂量核对"], ["memory", "rec_1", "表格"]]);
-    const back = await store.updateSessionState(owner, "study-one", "ses_a", { include: { type: "memory", id: "rec_1" } });
-    assert.deepEqual(back.excluded.map((item) => item.id), ["method-abc"]);
-
-    // Another conversation, and the same conversation id in another project, are their own.
-    assert.deepEqual(plain(await store.sessionState(owner, "study-one", "ses_b")), { incognito: false, excluded: [] });
-    assert.deepEqual(plain(await store.sessionState(owner, "study-two", "ses_a")), { incognito: false, excluded: [] });
-
-    // Two tabs at once both win: one sets an item aside while the other turns incognito off.
-    await Promise.all([
-      store.updateSessionState(owner, "study-one", "ses_a", { exclude: { type: "note", id: "note_1", label: "" } }),
-      store.updateSessionState(owner, "study-one", "ses_a", { incognito: false }),
-    ]);
-    const both = await store.sessionState(owner, "study-one", "ses_a");
-    assert.equal(both.incognito, false);
-    assert.deepEqual(both.excluded.map((item) => item.id).sort(), ["method-abc", "note_1"]);
-
-    // Refused as payload errors, by name.
-    for (const patch of [{ incognito: "yes" }, { exclude: { type: "tool", id: "x" } }, { exclude: { type: "memory", id: "../x" } }]) {
-      await assert.rejects(() => store.updateSessionState(owner, "study-one", "ses_a", patch),
-        (error) => error?.status === 400, JSON.stringify(patch));
-    }
-    await assert.rejects(() => store.sessionState(owner, "study-one", "ses a"), (error) => error?.code === "memory_session_invalid");
-
-    // Recall leaves out what the conversation set aside, and frees the slot.
-    await store.upsertRecord(owner, record({ key: "response.format", kind: "preference", value: "Tables for kidney outcomes.",
-      summary: "Tables", origin: "explicit", status: "active", confidence: 1 }));
-    const kept = await store.upsertRecord(owner, record({ key: "response.language", kind: "preference",
-      value: "Answer kidney questions in Chinese.", summary: "Chinese", origin: "explicit", status: "active", confidence: 1 }));
-    const all = await store.relevant(owner, "kidney", { projectId: "study-one" });
-    assert.equal(all.length, 2);
-    const [first] = all;
-    const filtered = await store.relevant(owner, "kidney", { projectId: "study-one",
-      excluded: [{ type: "memory", id: first.id.slice("record:".length) }] });
-    assert.deepEqual(filtered.map((memo) => memo.id), all.slice(1).map((memo) => memo.id));
-    assert.ok(all.some((memo) => memo.id === `record:${kept.id}`));
-
-    // A conversation trying someone else's capsule: marked, kept through other
-    // changes, cleared by name; it writes nothing and still reads.
-    const trying = await store.updateSessionState(owner, "study-one", "ses_trial", { trialCapsuleId: "pack-1" });
-    assert.equal(trying.trialCapsuleId, "pack-1");
-    assert.equal(trying.incognito, false);
-    await store.updateSessionState(owner, "study-one", "ses_trial", { exclude: { type: "note", id: "note_1", label: "" } });
-    assert.equal((await store.sessionState(owner, "study-one", "ses_trial")).trialCapsuleId, "pack-1");
-    const { memoryPausedFor } = await import("../src/researchMemory.mjs");
-    const paused = await memoryPausedFor(store, owner, "study-one", "ses_trial");
+    const trying = await store.updateSessionState(owner, "study-one", "ses_a", { trialCapsuleId: "cap_shared" });
+    assert.equal(trying.trialCapsuleId, "cap_shared");
+    assert.equal((await store.sessionState(owner, "study-one", "ses_a")).trialCapsuleId, "cap_shared");
+    // A trial writes nothing into the researcher's own memory, and still reads it.
+    const paused = await memoryPausedFor(store, owner, "study-one", "ses_a");
     assert.deepEqual([paused.learning, paused.recall, paused.trial], [true, false, true]);
-    assert.equal((await store.updateSessionState(owner, "study-one", "ses_trial", { trialCapsuleId: null })).trialCapsuleId, null);
-    await assert.rejects(() => store.updateSessionState(owner, "study-one", "ses_trial", { trialCapsuleId: "../x" }),
-      (error) => error?.status === 400);
 
-    // Forgetting the project forgets its conversations' state, and only its.
-    await store.updateSessionState(owner, "study-two", "ses_c", { incognito: true });
-    await store.deleteProjectMemory(owner, "study-one");
-    assert.deepEqual(plain(await store.sessionState(owner, "study-one", "ses_a")), { incognito: false, excluded: [] });
-    assert.equal((await store.sessionState(owner, "study-two", "ses_c")).incognito, true);
+    const ended = await store.updateSessionState(owner, "study-one", "ses_a", { trialCapsuleId: null });
+    assert.equal(ended.trialCapsuleId, null);
+
+    // Each conversation of each project is its own row.
+    assert.equal((await store.sessionState(owner, "study-two", "ses_a")).trialCapsuleId, null);
+    for (const patch of [{ trialCapsuleId: 7 }, { trialCapsuleId: "../x" }]) {
+      await assert.rejects(() => store.updateSessionState(owner, "study-one", "ses_a", patch),
+        (error) => error?.status === 400 && error?.code === "memory_session_invalid");
+    }
+    await assert.rejects(() => store.sessionState(owner, "study one", "ses_a"), { code: "memory_session_invalid" });
+
+    // A deleted project takes its conversations' state with it.
+    await store.updateSessionState(owner, "study-two", "ses_c", { trialCapsuleId: "cap_shared" });
+    await store.deleteProjectMemory(owner, "study-two");
+    assert.equal((await store.sessionState(owner, "study-two", "ses_c")).trialCapsuleId, null);
   } finally {
+    await store.purgeUserMemory(owner);
     await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
   }
 });
 
-test("every note is searchable, not the newest hundred, by the recall tokenizer's words", options, async () => {
-  const owner = `memory_notes_${randomUUID()}`;
-  await createUsers([owner]);
-  try {
-    const oldest = await store.create(owner, "利妥昔单抗的感染风险要单独评估，尤其合并乙肝时。");
-    // Written long ago: the listing orders by time, and notes made in one
-    // second would otherwise tie and be told apart by their random ids.
-    await database.query(`UPDATE evimed_memory.notes SET created_at=created_at - interval '30 days',
-      updated_at=updated_at - interval '30 days' WHERE user_id=$1 AND id=$2`, [owner, oldest.id]);
-    for (let index = 0; index < 120; index += 1) await store.create(owner, `第 ${index} 条日常笔记 routine`);
-    const pinned = await store.update(owner, (await store.create(owner, "总是先报告结论")).id, { pinned: true });
-    const archived = await store.create(owner, "利妥昔单抗 旧的看法");
-    await store.update(owner, archived.id, { state: "archived" });
-
-    // The newest hundred no longer hold the oldest note; the search still finds it.
-    assert.ok(!(await store.list(owner, { pageSize: 100 })).some((note) => note.id === oldest.id));
-    const found = await store.searchNotes(owner, "利妥昔单抗 感染");
-    assert.equal(found[0].id, oldest.id, "the note that matches most comes first");
-    assert.ok(found.some((note) => note.id === pinned.id), "a pinned note is always let through, as the matcher always did");
-    assert.ok(!found.some((note) => note.id === archived.id), "an archived note is not searched");
-    // A two-character Chinese term inside a longer run is a word.
-    const bigram = await store.create(owner, "患者肾功能不全时需要减量");
-    assert.ok((await store.searchNotes(owner, "肾功")).some((note) => note.id === bigram.id));
-    // An edit re-tokenizes.
-    await store.update(owner, bigram.id, { content: "透析患者另行处理" });
-    assert.ok(!(await store.searchNotes(owner, "肾功")).some((note) => note.id === bigram.id));
-    assert.ok((await store.searchNotes(owner, "透析")).some((note) => note.id === bigram.id));
-
-    // The recall reaches it too.
-    const recalled = await store.relevant(owner, "利妥昔单抗的感染风险");
-    assert.ok(recalled.some((memo) => memo.id === oldest.id), "the builtin recall reads the search, not the newest page");
-
-    // A note written before the column existed gets its tokens the first time it is searched.
-    await database.query(`INSERT INTO evimed_memory.notes(user_id,id,content) VALUES ($1,'legacy-note','华法林与胺碘酮合用要监测 INR')`, [owner]);
-    const fresh = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
-    assert.ok((await fresh.searchNotes(owner, "胺碘酮")).some((note) => note.id === "legacy-note"));
-    assert.equal((await database.query(`SELECT count(*)::integer AS count FROM evimed_memory.notes
-      WHERE user_id=$1 AND search_vector IS NULL`, [owner])).rows[0].count, 0);
-    // A question with nothing to match still sees the pinned notes, and only them.
-    assert.deepEqual((await store.searchNotes(owner, "?!")).map((note) => note.id), [pinned.id]);
-  } finally {
-    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
-  }
-});
 
 test("the read-only views read a memory light: texts cut, observations to their source, the same provenance, bounded", options, async () => {
   // Security review 2026-09-20: the timeline read every memory of the account

@@ -72,7 +72,11 @@ export function recordEvents(record, byId = new Map()) {
   const current = { value: record.value, summary: record.summary, status: record.status };
   const states = [...revisions.map((item) => ({ value: item.value, summary: item.summary, status: item.status })), current];
   const words = (/** @type {{ summary: string, value: string }} */ state) => excerpt(state.summary || state.value);
-  const base = { type: "memory", recordId: record.id, kind: record.kind, scope: record.scope };
+  // The version the undo names. 「最近变化」 offers 撤销 on every line it shows,
+  // and an undo is a compare-and-swap on the record's current version — so an
+  // event that named only the record would make the page read the record again
+  // before it could offer the button, once per line.
+  const base = { type: "memory", recordId: record.id, kind: record.kind, scope: record.scope, version: record.version };
   /** @type {any[]} */
   const events = [];
   const createdAt = instant(record.createdAt);

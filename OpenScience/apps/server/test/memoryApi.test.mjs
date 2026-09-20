@@ -52,7 +52,8 @@ test("memory status reports an unconfigured store without pretending to be conne
   // Not an empty answer: a deployment with no memory must not look like a
   // researcher who has never told the product anything.
   await assert.rejects(
-    () => store.create("alpha", "content"),
+    () => store.upsertRecord("alpha", { scope: "user", scopeId: "", kind: "preference", key: "a.b", value: "v",
+      summary: "", origin: "explicit", status: "active", confidence: 1, importance: 0.5, sensitive: false }),
     (error) => error?.status === 503 && error?.code === "memory_unconfigured",
   );
 });

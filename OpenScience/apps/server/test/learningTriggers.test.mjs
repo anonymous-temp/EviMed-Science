@@ -108,7 +108,7 @@ test("the platform's own work and a plain answer never teach the researcher's lo
   assert.deepEqual(triggers(learningTriggersFor({ run: answers[2], runs: answers })), ["delivered"]);
 });
 
-test("the queue is fed with one job per lesson, and nothing when the researcher paused learning or talked incognito", async () => {
+test("the queue is fed with one job per lesson, and nothing when the researcher paused learning", async () => {
   const subject = run({ corrections: 1 });
   const enqueued = [];
   const jobs = { enqueue: async (userId, kind, payload, options) => { enqueued.push({ userId, kind, payload, options }); return { id: "job" }; } };
@@ -125,10 +125,7 @@ test("the queue is fed with one job per lesson, and nothing when the researcher 
   enqueued.length = 0;
   const paused = { configured: true, settings: async () => ({ learningPaused: true, recallPaused: false, pausedProjects: [] }) };
   assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, memory: paused }).afterRun(project, subject), { queued: [], skipped: "paused" });
-  const incognito = async () => ({ incognito: true });
-  assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, sessionState: incognito }).afterRun(project, subject),
-    { queued: [], skipped: "incognito" });
-  const trial = async () => ({ incognito: false, trialCapsuleId: "pack-1" });
+  const trial = async () => ({ trialCapsuleId: "pack-1" });
   assert.deepEqual(await new LearningTriggers({ jobs, agentRuns, sessionState: trial }).afterRun(project, subject),
     { queued: [], skipped: "trial" }, "a conversation trying someone else's capsule teaches the loop nothing");
   assert.equal(enqueued.length, 0);
