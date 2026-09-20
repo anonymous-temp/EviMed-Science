@@ -46,20 +46,26 @@ services:
       - ./monitoring/blackbox.json:/etc/blackbox/blackbox.json:ro
     restart: unless-stopped
 
-  # Host metrics, for one question the rest of this stack cannot answer: how much
-  # disk is left. The production host reached 3.3 GB free on 2026-09-07 with
-  # nothing watching it, and the first symptom would have been a failed release
-  # build or a Postgres write error, neither of which names the cause.
+  # Host metrics, for the two questions the rest of this stack cannot answer:
+  # how much disk is left, and how much memory. The production host reached
+  # 3.3 GB free on 2026-09-07 with nothing watching it, and the first symptom
+  # would have been a failed release build or a Postgres write error, neither of
+  # which names the cause. Memory was added on 2026-09-20 for the same reason
+  # one release later: on the evening of 09-19 another product's image build
+  # took the shared host's memory, the OOM killer fired, and EviMed was
+  # unreachable for about 70 minutes — every metric in this stack came from
+  # inside EviMed, so all of them simply stopped.
   node-exporter:
     image: prom/node-exporter:${OPEN_SCIENCE_NODE_EXPORTER_VERSION:-v1.10.2}
     profiles: ["monitoring"]
     command:
       - --path.rootfs=/host
-      # Only the filesystem collector. This exporter reads the host's /proc and
-      # its whole default collector set is a much larger surface than the one
-      # metric these alerts need.
+      # Two collectors, not the default set. This exporter reads the host's
+      # /proc and its whole default collector set is a much larger surface than
+      # the metrics these alerts need.
       - --collector.disable-defaults
       - --collector.filesystem
+      - --collector.meminfo
       - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+|var/lib/kubelet/.+)($$|/)
     pid: host
     volumes:
