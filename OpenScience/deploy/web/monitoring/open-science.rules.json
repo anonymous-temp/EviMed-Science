@@ -197,6 +197,30 @@
             "summary": "The production host has under 8 GB free.",
             "description": "Below this the Postgres volume and the run workspaces are at risk. Reclaim space now; see the disk section of the operations runbook."
           }
+        },
+        {
+          "alert": "OpenScienceHostMemoryLow",
+          "expr": "node_memory_MemAvailable_bytes{job=\"node\"} / 1024 / 1024 / 1024 < 2",
+          "for": "10m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The production host has under 2 GB of memory available.",
+            "description": "This host is shared with five other products and their image builds. On 2026-09-19 one build step reached 5.9 GB, the kernel's OOM killer fired, and EviMed was unreachable for about 70 minutes with nothing in this stack naming the cause. Check `free -h` and `docker stats --no-stream` on the host, and whether another product is building."
+          }
+        },
+        {
+          "alert": "OpenScienceHostMemoryCritical",
+          "expr": "node_memory_MemAvailable_bytes{job=\"node\"} / 1024 / 1024 / 1024 < 1",
+          "for": "2m",
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "The production host has under 1 GB of memory available.",
+            "description": "The OOM killer is about to choose a victim, and it chooses by size — the runtime containers and Postgres are the largest things here. Stop whatever is building before it picks for you."
+          }
         }
       ]
     },
