@@ -96,6 +96,9 @@ test('the hero shows the grid, then that tool\'s page, and a chip above the comp
   const grid = renderStatic(seat.component);
   for (const tool of ['临床证据深度分析', '综合药品评价', '科研选题']) assert.match(grid, new RegExp(tool));
   assert.doesNotMatch(grid, /来源理解/, 'an internal capability is not a tool');
+  // Every category is represented before any is filled: a flat budget spent in
+  // catalogue order dropped the last category entirely.
+  assert.match(grid, /研究规划/);
   const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.input.dock' && entry.options.id === 'evimed-tool');
   assert.equal(renderStatic(chip.component), '', 'no tool, no chip');
   // The shell reports what the control plane bound this conversation to.
