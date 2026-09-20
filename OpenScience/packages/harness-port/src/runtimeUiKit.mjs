@@ -62,6 +62,8 @@ export function validFrame(value) {
         .filter((/** @type {unknown} */ line) => typeof line === 'string' && line).slice(0, 3).map((/** @type {string} */ line) => line.slice(0, 400)),
       outputs: (Array.isArray(entry.outputs) ? entry.outputs : [])
         .filter((/** @type {unknown} */ line) => typeof line === 'string' && line).slice(0, 4).map((/** @type {string} */ line) => line.slice(0, 200)),
+      limits: (Array.isArray(entry.limits) ? entry.limits : [])
+        .filter((/** @type {unknown} */ line) => typeof line === 'string' && line).slice(0, 4).map((/** @type {string} */ line) => line.slice(0, 300)),
       materials: typeof entry.materials === 'string' ? entry.materials.slice(0, 200) : '',
       internal: entry.visibility === 'internal',
     }));
