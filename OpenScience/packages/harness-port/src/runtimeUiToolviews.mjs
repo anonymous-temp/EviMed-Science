@@ -345,7 +345,33 @@ export function verdictView(block, live, kit, known = new Map()) {
   const refusal = refusalOf(result);
   if (refusal) return { ...base, kind: 'refused', text: refusal, verdict: null, advice: 0 };
   const verdict = kit.verdictOf(result);
-  return { ...base, kind: 'judged', verdict: verdictText(verdict), advice: verdict.advice };
+  // A submission renders the numbering, runs the gate and calls the
+  // independent reviewer, and comes back with all three. The reviewer's count
+  // is worth a reader's glance — it is the half that catches what a
+  // deterministic check cannot.
+  const review = result.ok && result.data?.review && typeof result.data.review === 'object' ? result.data.review : null;
+  return {
+    ...base,
+    kind: 'judged',
+    verdict: verdictText(verdict),
+    advice: verdict.advice,
+    review: review && review.status === 'done'
+      ? { examined: Number(review.examined) || 0, mustFix: Number(review.mustFix) || 0, advice: Number(review.advice) || 0 }
+      : null,
+  };
+}
+
+/**
+ * What the reviewer found, in one phrase, or null when it did not run.
+ * @param {{ examined: number, mustFix: number, advice: number } | null} review
+ * @returns {string | null}
+ */
+export function reviewSummaryText(review) {
+  if (!review || !review.examined) return null;
+  const parts = [`审查 ${review.examined} 条`];
+  if (review.mustFix) parts.push(`${review.mustFix} 条必须改`);
+  if (review.advice) parts.push(`${review.advice} 条建议`);
+  return parts.join(' · ');
 }
 
 /**
@@ -549,7 +575,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       h('span', { style: quiet }, heading),
       h('span', { style: title }, model.title),
       state,
-      model.kind === 'judged' && model.advice > 0 ? h('span', { style: quiet }, `另有 ${model.advice} 条建议`) : null);
+      model.kind === 'judged' && model.advice > 0 ? h('span', { style: quiet }, `另有 ${model.advice} 条建议`) : null,
+      model.kind === 'judged' && reviewSummaryText(model.review) ? h('span', { style: quiet }, reviewSummaryText(model.review)) : null);
   }
 
   /** @param {{ block: any }} props */
@@ -583,5 +610,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'toolviews',
   inject,
-  parts: Object.freeze([frameStyles, toolviewText, verdictText, refusalOf, liveRunFor, liveDeliverable, liveChild, planView, delegateView, awaitView, verdictView, claimView, childLinkFor, apply]),
+  parts: Object.freeze([frameStyles, toolviewText, verdictText, refusalOf, liveRunFor, liveDeliverable, liveChild, planView, delegateView, awaitView, verdictView, reviewSummaryText, claimView, childLinkFor, apply]),
 });
