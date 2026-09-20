@@ -212,6 +212,25 @@ test("extraction is shown the keys already in use, and never the summaries it wr
   }
 });
 
+test("a condition on the task in hand is not told to the model as a preference", async () => {
+  // Found on the 2026-09-20 release check: 「只依据我的资料回答，并注明来源文件」,
+  // said about one question, was stored as a durable user preference — every
+  // later run would then be told the researcher always wants that. Whether a
+  // sentence sets a standing preference or scopes one request is language, so
+  // the boundary is in the instructions and this is what holds it there.
+  let systemPrompt = null;
+  const intelligence = new MemoryIntelligence(config, new MemoryStoreDouble(), {
+    fetchImpl: async (_input, init) => {
+      systemPrompt = JSON.parse(String(init.body)).messages[0].content;
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] });
+    },
+  });
+  await intelligence.recordRun(project(), run("run_scope"), [message("m1", "只依据我上传的资料回答。")]);
+  assert.ok(systemPrompt, "the extraction request carries instructions");
+  assert.match(systemPrompt, /condition the user puts on the task at hand is not a preference/);
+  assert.match(systemPrompt, /always want|how they always want work done/);
+});
+
 test("memory extraction accepts only candidates backed by an exact source quote", async () => {
   const store = new MemoryStoreDouble();
   const text = "以后回答请优先引用原始研究，并明确说明证据不确定性。";
