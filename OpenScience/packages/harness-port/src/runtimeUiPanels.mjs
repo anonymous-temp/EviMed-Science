@@ -280,10 +280,14 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     kit.hub.send('open-artifact', { runId, path, ...(anchor ? { anchor } : {}) });
   };
 
-  /** The files of a run, as rows. Shared by the view and the right column. */
-  /** @param {{ model: any, dense?: boolean }} props */
-  const FileGroups = ({ model, dense }) => h('div', null, model.groups.map((/** @type {any} */ group) => h('div', { key: group.deliverableId ?? '', style: { marginBottom: '8px' } },
-    dense ? h('div', { style: section }, group.title) : null,
+  /**
+   * The files of a run, as rows. Shared by the view and the right column; the
+   * group's own title appears only when there is more than one, because with
+   * one piece of work it just repeats the run's title.
+   */
+  /** @param {{ model: any }} props */
+  const FileGroups = ({ model }) => h('div', null, model.groups.map((/** @type {any} */ group) => h('div', { key: group.deliverableId ?? '', style: { marginBottom: '8px' } },
+    model.groups.length > 1 ? h('div', { style: section }, group.title) : null,
     group.files.map((/** @type {any} */ file) => h('div', { key: file.path, style: card, 'data-artifact': file.path },
       h('div', { style: line },
         h('span', { style: { ...pill(file.kind === 'report' ? 'active' : 'muted'), fontWeight: 500 } }, file.label),
@@ -372,7 +376,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const live = useLive();
     const model = kit.guarded('files tab', () => artifactModel(live));
     if (!model || !model.groups.length) return h(Empty, { text: '还没有产出文件。报告和证据表写成后会出现在这里。' });
-    return h('div', { style: pane, 'data-evimed-tab': 'files' }, h(FileGroups, { model, dense: true }));
+    return h('div', { style: pane, 'data-evimed-tab': 'files' }, h(FileGroups, { model }));
   }
 
   kit.guarded('run view', () => kit.occupy({ slot: 'conversation.view', id: view.id, order: view.order, label: () => view.label }, RunView));
