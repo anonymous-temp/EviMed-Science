@@ -430,20 +430,6 @@ export function createFrameKit(ctx, target, require, vocabulary) {
   }
 
   /**
-   * A stylesheet for the lifetime of the calling body.
-   * @param {string} id @param {string} text
-   */
-  function css(id, text) {
-    const doc = target?.document;
-    if (!doc || typeof doc.createElement !== 'function' || !doc.head) return;
-    const style = doc.createElement('style');
-    style.setAttribute('data-evimed-frame', id);
-    style.textContent = text;
-    doc.head.appendChild(style);
-    ctx.effect(() => () => { style.remove(); }, `evimed-frame: ${id} stylesheet`);
-  }
-
-  /**
    * Cosmetic work must never sink the bodies that share this bundle.
    * @template T @param {string} label @param {() => T} fn @returns {T | undefined}
    */
@@ -478,7 +464,6 @@ export function createFrameKit(ctx, target, require, vocabulary) {
   return {
     frame,
     ours: frame !== null,
-    embedded: frame !== null && target?.parent !== target,
     operator: frame?.operator === true,
     /** @param {string} name */
     isOff(name) { return Boolean(frame && frame.off.includes(name)); },
@@ -487,7 +472,6 @@ export function createFrameKit(ctx, target, require, vocabulary) {
     vocabulary: vocabulary ?? {},
     hub,
     occupy,
-    css,
     guarded,
     withServices,
     useFrameState,
