@@ -30,7 +30,7 @@ export function Disclosure({
           summaryClassName,
         )}
       >
-        <ChevronRight size={14} className="shrink-0 transition-transform duration-fast group-open:rotate-90" aria-hidden="true" />
+        <ChevronRight size={16} className="shrink-0 transition-transform duration-fast group-open:rotate-90" aria-hidden="true" />
         <span className="min-w-0">{summary}</span>
       </summary>
       <div className="mt-2">{children}</div>

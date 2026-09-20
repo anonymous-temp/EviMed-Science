@@ -7,15 +7,15 @@ const banned = (pattern, message) => [
 const tokenRules = [
   ...banned(
     "/text-\\[\\d+(\\.\\d+)?px\\]/",
-    "Arbitrary px font sizes are banned in components. Use the semantic type scale: text-caption (12) / text-ui (14) / text-body (16) / text-title (20) / text-display (26), plus text-badge and text-wordmark (see fontSize in tailwind.config.js).",
+    "Arbitrary px font sizes are banned in components. Use the semantic type scale: text-badge / text-meta (12) / text-caption (13) / text-ui (14) / text-body (16) / text-wordmark (16) / text-title (20) / text-display (24) — six sizes, no more (see DESIGN.md and fontSize in tailwind.config.js).",
   ),
   ...banned(
     "/(^|[\\s:])text-(xs|sm|base|lg|xl|[2-9]xl)($|\\s)/",
-    "Tailwind's default text sizes bypass the type scale. Use text-caption (12px) / text-ui (14px) / text-body (16px) / text-title (20px) / text-display (26px) (see fontSize in tailwind.config.js).",
+    "Tailwind's default text sizes bypass the type scale. Use text-meta (12px) / text-caption (13px) / text-ui (14px) / text-body (16px) / text-title (20px) / text-display (24px) (see fontSize in tailwind.config.js).",
   ),
   ...banned(
     "/rounded-\\[\\d+px\\]/",
-    "Arbitrary px radii are banned in components. Use rounded (4px), rounded-input (8px), rounded-card (12px) or rounded-panel (16px) (see borderRadius in tailwind.config.js).",
+    "Arbitrary px radii are banned in components. Use rounded (8px: controls and rows), rounded-card (12px: cards and popovers), rounded-panel (16px: panels and dialogs), rounded-composer (24px) or rounded-full (chips) (see borderRadius in tailwind.config.js).",
   ),
   ...banned(
     "/\\bshadow-(sm|md|lg)\\b/",
@@ -34,7 +34,7 @@ const tokenRules = [
   // slash is written `\x2F` because an esquery regex literal cannot contain
   // one.
   ...banned(
-    "/(^|[\\s:])(bg|text|border|ring|outline|divide|placeholder|decoration|fill|stroke|from|to|via|shadow|caret)-(bg|surface|surface-2|border|faint|strong|text|muted|accent|accent-fg|accent-soft|accent-strong|link|warn|warn-soft|warn-strong|ok|ok-soft|error|error-fg|danger|danger-soft|danger-strong|info-soft|verify-ok|verify-pending|focus|unread|unread-fg|dot-[a-z]+)\\x2F\\d+/",
+    "/(^|[\\s:])(bg|text|border|ring|outline|divide|placeholder|decoration|fill|stroke|from|to|via|shadow|caret)-(bg|surface|surface-1|surface-2|scrim|border|border-hairline|border-faint|border-control|faint|strong|text|text-2|text-3|muted|accent|accent-fg|accent-soft|accent-strong|accent-pressed|link|warn|warn-soft|warn-strong|ok|ok-soft|error|error-fg|danger|danger-soft|danger-strong|info|info-soft|verify-ok|verify-pending|highlight|focus|unread|unread-fg|dot-[a-z]+)\\x2F\\d+/",
     "An opacity modifier on a design-token colour generates no CSS (the tokens are var() colours). Use a solid token or its -soft / -strong partner from src/index.css.",
   ),
   ...banned(
@@ -49,6 +49,17 @@ const tokenRules = [
 const retiredTypeRules = banned(
   "/(^|[\\s:])text-ui-sm($|\\s)/",
   "text-ui-sm (13px) was merged into text-ui (14px): the 13 and 13.5 px rungs were one rung half a pixel apart. Use text-ui, or text-caption for metadata.",
+);
+
+// The serif family is gone (DESIGN.md, 2026-09-20): `font-serif` resolves to
+// the sans stack so an unmigrated page renders in it rather than falling to
+// the browser's Georgia, which makes the class silently inert — exactly the
+// kind of thing that grows back. Scoped to the primitives this rectification
+// rewrote; the page streams drop their own call sites, and the override widens
+// to `src/**` once they have.
+const serifRules = banned(
+  "/(^|[\\s:])font-serif($|\\s)/",
+  "There is no serif family. One sans stack carries the shell and the kernel conversation; the class resolves to it and does nothing (see fontFamily in tailwind.config.js and DESIGN.md).",
 );
 
 const errorTextRules = [
@@ -104,6 +115,18 @@ module.exports = {
       files: ["src/**/*.{ts,tsx}"],
       rules: {
         "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...errorTextRules],
+      },
+    },
+    {
+      // The design-system primitives: the type scale, the four radii and the
+      // one sans stack are theirs to hold, so they take the serif ban too.
+      files: [
+        "src/components/ui/**/*.{ts,tsx}",
+        "src/components/layout/**/*.{ts,tsx}",
+        "src/components/cards/**/*.{ts,tsx}",
+      ],
+      rules: {
+        "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...serifRules, ...errorTextRules],
       },
     },
     {

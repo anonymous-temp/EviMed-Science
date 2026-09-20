@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { colorRole } from "@evimed/domain/design-tokens";
 
 /**
  * The web app manifest: what a phone's 「添加到主屏幕」 installs. A Feishu card
@@ -62,11 +63,12 @@ describe("the web app manifest", () => {
   });
 
   it("takes its colours from the tokens: the light canvas, as the page's own theme-color does", () => {
-    // `--bg` is `--n-50` in the light theme; the manifest has one colour, and
-    // the page's per-scheme meta tags take over once it has loaded.
-    expect(css).toMatch(/--bg:\s*var\(--n-50\)/);
-    const canvas = /--n-50:\s*(#[0-9a-f]{6})/i.exec(css)?.[1];
-    expect(canvas).toBeDefined();
+    // The manifest has one colour, and the page's per-scheme meta tags take
+    // over once it has loaded. Read the role rather than a primitive step: the
+    // canvas moved from the cool paper grey to white on 2026-09-20, and a test
+    // pinned to `--n-50` would have gone green on the wrong colour.
+    const canvas = colorRole("bg", "light");
+    expect(css).toContain(`--bg: ${canvas}`);
     expect(manifest.theme_color).toBe(canvas);
     expect(manifest.background_color).toBe(canvas);
     expect(html).toContain(`<meta name="theme-color" media="(prefers-color-scheme: light)" content="${canvas}" />`);

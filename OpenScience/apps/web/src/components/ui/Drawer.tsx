@@ -67,7 +67,7 @@ export function Drawer({
     // equivalent, bound above; role="presentation" keeps it out of the tree.
     <div
       role="presentation"
-      className="fixed inset-0 z-40 flex justify-end bg-black/30"
+      className="fixed inset-0 z-40 flex justify-end bg-scrim"
       onClick={(event) => { if (event.target === event.currentTarget) close.current(); }}
     >
       <div
@@ -87,9 +87,9 @@ export function Drawer({
           <div className="min-h-0 flex-1">{children}</div>
         ) : (
           <>
-            <header className="flex items-start gap-3 border-b border-border px-5 py-4">
+            <header className="flex items-start gap-3 border-b border-border px-6 py-4">
               <div className="min-w-0 flex-1">
-                <h2 id={titleId} className="font-serif text-title font-semibold text-text">{title}</h2>
+                <h2 id={titleId} className="text-title font-semibold text-text">{title}</h2>
                 {description && <p id={descriptionId} className="mt-1 text-caption text-muted">{description}</p>}
               </div>
               {actions}
@@ -98,12 +98,12 @@ export function Drawer({
                 type="button"
                 onClick={() => close.current()}
                 aria-label="关闭"
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-input text-muted hover:bg-surface-2 hover:text-text"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded text-muted hover:bg-surface-2 hover:text-text"
               >
                 <X size={16} aria-hidden="true" />
               </button>
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">{children}</div>
           </>
         )}
       </div>
