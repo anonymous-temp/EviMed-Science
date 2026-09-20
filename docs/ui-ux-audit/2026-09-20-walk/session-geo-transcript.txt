@@ -1,0 +1,135 @@
+测一测「速效救心丸开封后多
+/
+2 个子任务
+测一测「速效救心丸开封后多久失效」在各平台的回答，并写出可被引用的内容块。
+21:12
+思考
+The user wants me to test how different platforms answer the question about how long 速效救心丸 (a traditional Chinese medicine) remains effective after opening, then create citation-ready content blocks with proper evidence and conclusions. This matches the geo-content capability, so I should start by recalling relevant memories and capsules, then write out a plan and delegate the work.
+工具调用
+evimed_capsule_recall · 速效救心丸 开封 有效期 稳定性 中成药 贮藏
+工具调用
+evimed_capsule_recall · GEO 内容块 平台回答测量 消费者问答引擎 品牌内容
+失败
+Bash
+Inspect workspace state
+思考
+I need to set up the work plan and delegate to the geo-content capability. I notice that the recall function returned no results from memory, so I shouldn't claim any prior research context. For this deliverable, I'm planning a GEO content pack, which requires a real measurement component — an actual query across different platforms. I should note my assumptions about what I'm testing.
+研究计划
+1 件交付物
+「速效救心丸开封后多久失效」各平台回答实测与可引用内容块
+答案引擎内容优化 · GEO 内容包
+已交付
+澄清与假设 · 6 条
+思考
+I need to set up a delegation brief that includes context and requirements without doing the actual retrieval work myself, keeping the brief concise while pointing the subagent to the relevant skill body that's already injected.
+子任务
+「速效救心丸开封后多久失效」各平台回答实测与可引用内容块
+答案引擎内容优化
+已交付
+已用时 6 分 05 秒
+第 1 次提交✓ 通过
+查看子任务
+等待子任务
+「速效救心丸开封后多久失效」各平台回答实测与可引用内容块
+已完成
+✓ 通过
+思考
+The subagent cleared the gate but there's a citation concern I need to investigate. I should review the deliverables and run the cross-deliverable check before submitting, since the instructions require calling evimed_review_run before the first submission. Let me start by examining what's actually in the deliverable directory.
+Bash
+List deliverable files
+研究计划 · 当前进度
+1 件交付物
+「速效救心丸开封后多久失效」各平台回答实测与可引用内容块
+答案引擎内容优化 · GEO 内容包
+已交付
+思考
+The deliverable has passed validation with accepted status, and I'm verifying the key files to ensure the content is accurate—checking facts, citations, and safety considerations across the delivery summary, measurement data, and the main content pack.
+读取
+deliverables/geo-answer-audit/geo-content-pack.md
+读取
+deliverables/geo-answer-audit/delivery-summary.md
+思考
+I'm catching a couple of quality issues to address. There's a duplicated Chinese sentence in the B2 依据 block at line 39 that needs to be removed. Also, I'm noticing that reference [1] cites a third-party pharmacy aggregator site, which may not be the most reliable source for this context.
+读取
+deliverables/geo-answer-audit/citation-ledger.csv
+工具调用
+evimed_review_run · 「速效救心丸开封后多久失效」内容块：说明书有效期与贮藏条件、开封后无官方期限的表述、急症就医边界，以及引用来源可解析性与证据层级
+思考
+The review flagged several issues that need addressing, with nothing blocking the process. The main problems are a duplicated sentence in the report that needs fixing, citation routing inconsistencies in the evidence section, an unparseable citation lacking proper identifiers and URL, and some concerns about source authority for one of the references.
+工具调用
+evimed_revise_deliverable · geo-answer-audit
+思考
+So revisions are locked during the run and I can't modify accepted bytes — revisions must happen before submission. The review findings don't block acceptance, so I need to surface the issues in my final response and delivery summary. I'm checking whether I can add a separate advisory file to the deliverables directory or if that would overwrite the accepted files.
+自检
+「速效救心丸开封后多久失效」各平台回答实测与可引用内容块
+✓ 通过
+另有 1 条建议
+读取
+deliverables/geo-answer-audit/geo-measurement.md
+思考
+The package check passes but flagged an important issue: the probe failed so nothing was measured, which means the pack can only state what wasn't observed rather than what was observed. I need to surface this prominently in the final response. I'm also noticing that the "watchPhrases" counts only appeared for one phrase in the measurement file, which seems off.
+Bash
+Verify pack JSON structure and probe log
+思考
+I'm noticing a discrepancy in the JSON structure — the citations field shows zero items, but the markdown references suggest they should come from a citation-ledger or be embedded in the blocks themselves. Let me check where the citation data actually lives in the JSON to make sure it's properly structured.
+Bash
+Inspect block schema in pack JSON
+思考
+I'm noticing the citations are structured correctly with per-block organization, though there are some issues that weren't caught by the gate initially—a missing URL in the JSON-LD for citation [6], a duplicated sentence, and a missing URL in the citation-ledger for consensus. Now I'm pulling together the delivery summary for the user, making sure to include the notices prominently. I'll structure the final answer with the conclusion first, then the measurement section clearly labeled as not tested rather than a negative result, followed by the content blocks summary and platform information.
+Bash
+Read revision notes head
+思考
+The subagent's language cleanup didn't catch the duplication, so that's still there. I'm also noticing the pre-submission review flagged 2 contradicted and 8 weakened issues but the deliverable was still accepted—this is actually useful context for the user because the review provides tailored advice rather than rigid approval criteria. I need to wrap this up cleanly, and the fact that zero measurement rounds happened is a key detail that affects how I complete the run.
+
+本轮已按 geo-content 专项契约完成，产物通过门禁并冻结。以下是综合结果，以及发布前必须知道的两件事。
+
+一、结论先说
+测量任务没有完成，而且不能当成阴性结果。 平台回答探测通道在本部署未启用：三次调用（通道就绪检查、计划内首个平台提问、平台名单枚举）都在派发前被拒绝，因此没有任何平台被问到。计划 5 平台 × 4 问题变体 = 20 回合，实测 20 计划、0 实测，任何「提及率／首位率」都不可计算——分母为 0。连「哪些平台可用」这件事本身也是未知的，不是空的。所以现在没有「各平台怎么答」这一层数据。
+可被引用的内容块已写好，共 3 块（结论 → 依据 → 适用条件），另附 5 条常见问答、3 段 JSON-LD、站点级 llms.txt、7 行引用台账。核心口径是：说明书只标注有效期 36 个月与贮藏「密封，置阴凉干燥处」，没有规定开封后使用期限；因此准确说法是「公开资料未规定开封后期限」，不是「开封后可以放很久」。
+发布前有两处必修（本地门禁已通过，但跨产物审查提出，我在冻结后无法再改，须在发布前手工改掉）：① 第二块「依据」段同一层意思重复写了两遍（编辑缺陷）；② 引用 [6]（专家共识）在台账里没有 DOI／URL，读者打不开，与「引用均为读者可打开来源」的自我声明冲突——需补期刊发表的公开链接或降为内部资料不引用。
+二、内容块的三个核心结论
+B1 有效期与贮藏：36 个月与「密封，置阴凉干燥处」是该产品说明书对密封、未开封产品的标注，不是开封后另算的期限 [1]。
+B2 开封后使用期限：说明书各项均无「开封后使用期限」表述，2019 年专家共识正文也不涉及有效期与开封后期限。开封后期限是逐产品标注事项——人胰岛素说明书就规定开封后使用期限（Cochrane 记录的范围 10 至 45 天），但那是注射用生物制品，不能套到口服滴丸上 [1][4]。本轮未检回针对本品开封后稳定性或成分含量变化的研究；这是「通道受限下的未检出」，不等于「无此研究」。
+B3 急救边界（安全优先）：出现持续或加重的胸痛／心绞痛时，是否就医不取决于手上的药是否在效期内、是否开封、服药后是否缓解。说明书本身要求心绞痛持续发作时加用硝酸酯类药物 [1]；该药作为治疗选择的研究证据（多中心 RCT，OR 2.43，95% CI 1.32–4.47，174 例 [5]；Cochrane 系统评价 15 项 RCT／1776 例、结论为可能有效但证据薄弱 [3]）不能被读成「可以据此推迟就医」。若胸痛持续不缓解、伴大汗、呼吸困难或濒死感，应立即拨打急救电话或前往急诊，不要等药物起效。内容块全篇不含任何服用剂量、停药或继续用药的个体化建议；是否用药须由经治医师判断。
+三、必须随交付一起读的三条限制
+通道失败留档：探测失败、网页检索 HTTP 502（说明书原页与药监局库均未能打开复核）都记为测量失败，不写成「查无此事」；失败码与是否进分母逐行留存，可复算。
+引用权威层级偏低：主体引用 [1] 的可打开页面是第三方药品信息站（其快照自述「Official source: no」），快照日期 2021-05-17；本轮未能访问官方库逐字比对，注册号、生产企业与贮藏项须在发布前用现行批准说明书核对。索引记录里另有一个生产企业别名与「舒心口服液」字样，疑为索引串接，已标为待核验。
+审查另有提醒：内容块中两条旁证（人胰岛素开封期限、家用产品二次污染综述）对本问题几乎不提供证据权重，虽已在「适用条件」中声明不能套用，仍需在发布版中更显眼地标明；台账 locator 使用了内部编号形式，读者只能按 URL 打开，不能按节定位。
+
+另：跨产物审查输出里包含一批与本任务无关的阿司匹林一级预防主张（ASPIRE-* 编号），来自工作区其他产物，不在本次交付范围内，我未据此改动任何内容。
+
+四、产物
+
+deliverables/geo-answer-audit/：geo-content-pack.md、geo-content-pack.json、geo-measurement.md、geo-probe-log.jsonl、geo-monitor.csv、citation-ledger.csv、brand-entity.json、llms.txt、delivery-summary.md、revision-notes.md。下一轮通道恢复后的最小动作：先枚举平台名单，再按 4 个问题变体逐平台、逐新会话提问，不可达平台保留在计划列并记为未测。
+
+参考文献
+速效救心丸 说明书（注册号 国药准字Z12020025），快照 2021-05-17。https://www.yaozs.com/sms71795/
+Microbial contamination of medicines, medical devices, cosmetics, child and personal care products: a comprehensive review of secondary contamination risks in home-use settings. Frontiers in Microbiology, 2026. https://europepmc.org/articles/PMC13233510
+Chinese herbal medicine suxiao jiuxin wan for angina pectoris. Cochrane Database of Systematic Reviews, 2008. https://pubmed.ncbi.nlm.nih.gov/18254051/
+Thermal stability and storage of human insulin. Cochrane Database of Systematic Reviews, 2023. https://pubmed.ncbi.nlm.nih.gov/37930742/
+Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter Randomized Double-blind Placebo-controlled Study. BMC Complementary Medicine and Therapies, 2024. https://pubmed.ncbi.nlm.nih.gov/39367481/
+速效救心丸治疗冠心病中国专家共识. 中国中西医结合学会, 2019.（无 DOI／URL，见上文必修第 ② 条）
+仅可从已完成轮次的最后一条消息分支
+用量 590K tok
+用时 9分51秒
+21:21
+工具调用
+evimed_complete_run · {}
+思考
+The completion gate is flagging geo-content-pack as a non-clinical contract even though clinical content is being mentioned alongside it. The issue is that multiple files in the same deliverable reference the drug, so I need to either switch the deliverable to a clinical contract type or remove the clinical references. I'm checking the available contract kinds — geo-content-pack exists alongside options like clinical-evidence-report, but the deliverable was routed to geo-content based on the brief, which already contained the clinical content.
+Bash
+Locate gate rule implementation
+Bash
+Inspect clinical gate rule logic
+思考
+The issue is that the deliverables directory needs to be nested under a clinical contract kind path, but the geo-answer-audit project only has geo-content-pack. I can't change the contract kind through the plan alone — I need to check if writing a revised plan with a different contract kind is possible, though the contract kind gets derived from the plan and enforced by the gate.
+Bash
+Read gate rule context
+思考
+I'm looking at a couple of approaches to handle the orphaned GCP files. One option is to reposition one of the deliverables—like a clinical evidence report—into a clinical directory structure so the files are properly organized and attributed to the clinical content, which would resolve the mismatch without flagging the files as missing their contract.
+工具调用
+evimed_complete_run · {"partial": true}
+继续这项研究，或提出下一个任务… / 调用指令，@ 引用文件或会话
+项目工作区
+1 轮 17 步·214 tok/s
+590K tok·缓存命中 95%

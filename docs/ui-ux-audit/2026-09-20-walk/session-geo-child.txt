@@ -1,0 +1,311 @@
+测一测「速效救心丸开封后多
+/
+「速效救心丸开封后多久失效」各平台回答实测与可引用内容块
+加载更早
+思考
+I'm checking what's actually in these 216 abstract files from the aspirin subagent — they might not be relevant, but there's a chance one of them could be about Suxiao Jiuxin or nitroglycerin storage. Let me search the pubmed directory for those specific terms to see if there's anything useful. I should also look at the PMC13398386 full text since it could potentially relate to this topic.
+Grep
+Suxiao|Jiuxin|borneol|速效救心
+读取
+.evimed-sources/PMC13398386/533427cce18a5448ababb918bb0f82d5f3b0b2f8d95c80b9dc44b5406bf2dd71/source.json
+思考
+Those aspirin files won't help me here. I need to dig into the evidence through available channels—PubMed references, regulatory sources, and the Chinese label data I already have. Web search seems to be down right now, so let me try that again.
+失败
+工具调用
+Error: {"status":"error","summary":"The web-search gateway returned HTTP 502.","next_actions":["Retry once the backend recovers."],"error":{"code":"web_search_upstream_error","message":"The web-search gateway returned HTTP 502.","retryable":true,"stopReason":"retry"}}
+工具调用
+mcp__evimed__literature_search · Suxiao Jiuxin Pill storage stability content determination shelf life
+思考
+I'm checking the evidence base for this question—the FDA label provides the core claims about the 36-month shelf life and the sealed, dry storage requirement. There's also a Chinese expert consensus document that discusses the product itself.
+工具调用
+mcp__evimed__biomedical_source_search · dailymed
+工具调用
+mcp__evimed__biomedical_source_search · pubmed
+思考
+I'm identifying PMID 18254051 as a Cochrane review on Suxiao Jiuxin Wan for angina, which provides solid background on the product, though it doesn't address storage concerns. PMID 7900539 involves GC-MS analysis of borneol, a volatile component I need to track. I'll pull the abstracts from both to extract relevant details.
+工具调用
+mcp__evimed__literature_search · {"limit": 15, "pmids": ["18254051", "7900539"]}
+工具调用
+mcp__evimed__biomedical_source_search · Suxiao Jiuxin Wan stability
+思考
+I'm looking for studies on storage and stability of Suxiao Jiuxin Wan, focusing on its physical properties after opening—particularly the hygroscopic characteristics of borneol and how that affects the pill's degradation.
+工具调用
+mcp__evimed__biomedical_source_search · Suxiao Jiuxin
+工具调用
+mcp__evimed__biomedical_source_search · in-use stability oral solid dosage form patient storage expiry
+思考
+I'm searching Europe PMC for studies on the shelf life and stability of Suxiao Jiuxin Pills, particularly looking for research on how volatile components like borneol evaporate during storage and affect the pills' efficacy.
+工具调用
+mcp__evimed__biomedical_source_search · Suxiao Jiuxin Pill storage stability shelf life volatile components
+工具调用
+mcp__evimed__biomedical_source_search · drug storage conditions patients home expiry date potency
+思考
+I found a relevant Cochrane review on insulin that directly addresses the concept I need—it discusses how manufacturers set specific storage times and temperature limits once a product is opened, ranging from 10 to 45 days depending on the formulation. This gives me a comparable framework to explain why a drug label might specify a particular in-use period.
+工具调用
+mcp__evimed__literature_search · {"limit": 5, "pmids": ["37930742"]}
+工具调用
+mcp__evimed__biomedical_source_search · medicine storage conditions patient home effect on drug quality stability
+思考
+I found a 2026 review on microbial contamination in home-use medicines that directly addresses the regulatory gap between manufacturing and patient use, though it focuses on these specific dosage forms rather than the stability question.
+失败
+工具调用
+Error: {"status":"error","summary":"The web-search gateway returned HTTP 502.","next_actions":["Retry once the backend recovers."],"error":{"code":"web_search_upstream_error","message":"The web-search gateway returned HTTP 502.","retryable":true,"stopReason":"retry"}}
+工具调用
+mcp__evimed__biomedical_source_search · borneol volatile stability loss traditional Chinese medicine preparation storage packaging
+思考
+I'm noticing that the 2026 review from Frontiers in Microbiology directly addresses the gap between manufacturing controls and home-use conditions, and it's available through Europe PMC with an abstract—though I should verify the PMID and DOI to ensure accuracy.
+工具调用
+mcp__evimed__literature_search · {"limit": 5, "pmids": ["42254497", "39367481"]}
+Bash
+Create deliverable directory
+思考
+I've got all eight sources verified with their identifiers, and now I'm checking whether I can access the full text of the PMC article on secondary contamination risks in home-use settings to gather more detailed information for the content block.
+工具调用
+mcp__evimed__open_access_full_text · PMC13233510
+工具调用
+mcp__evimed__literature_search · zh
+思考
+The Chinese literature search didn't yield anything useful, but I found the full text for PMC13233510. I need to extract a quotable passage about the post-marketing contamination gap from the Discussion and Conclusion sections, so I'm looking at the relevant line ranges around lines 265-288 to pull that information.
+读取
+.evimed-sources/PMC13233510/af0dc62b5088837fe14aa171f5b5885f40467c4368a7b7be22b1935c17863719/fulltext.md
+读取
+.evimed-sources/PMC13233510/af0dc62b5088837fe14aa171f5b5885f40467c4368a7b7be22b1935c17863719/fulltext.md
+思考
+I found a strong quotable passage about how regulatory bodies need to extend safety frameworks beyond just manufacturing to cover consumer use, which directly supports the regulatory gap concept I'm exploring.
+Bash
+Get current date
+失败
+工具调用
+Error: {"status":"error","summary":"The web-search gateway returned HTTP 502.","next_actions":["Retry once the backend recovers."],"error":{"code":"web_search_upstream_error","message":"The web-search gateway returned HTTP 502.","retryable":true,"stopReason":"retry"}}
+思考
+I'm trying the web search one more time before giving up, then I'll test whether the source search can retrieve the NMPA record for that drug approval number.
+失败
+工具调用
+Error: {"status":"error","summary":"The web-search gateway returned HTTP 502.","next_actions":["Retry once the backend recovers."],"error":{"code":"web_search_upstream_error","message":"The web-search gateway returned HTTP 502.","retryable":true,"stopReason":"retry"}}
+工具调用
+mcp__evimed__drug_term_normalize · 速效救心丸
+思考
+Now I'm documenting the web search failure results and compiling the source information for the delivery package, starting with the drug label data that includes the registration number and approval details. I'm also noting the adverse reactions, contraindications, and storage requirements from the label. For the second source, I'm citing an expert consensus on Suxiao Jiuxin Wan from 2019, capturing the product description, key findings on efficacy, safety data, and clinical recommendations including dosage information. Now I'm looking at the third source, a Cochrane systematic review on Suxiao Jiuxin Wan for angina treatment that analyzed 15 randomized trials with over 1,700 participants across different comparison groups. Now I'm looking at a fourth source—a systematic review examining refrigerated medications and their stability at room temperature, which provides important context about how temperature fluctuations during transport and storage can affect drug potency and patient safety. ches are producing biased or systematically flawed results.
+
+The probe channel is unavailable and web search is returning HTTP 502. Let me start writing the artifacts, beginning with the measurement half.
+
+写入
+deliverables/geo-answer-audit/geo-probe-log.jsonl
++3 -0
+写入
+deliverables/geo-answer-audit/geo-monitor.csv
++4 -0
+思考
+I'm starting with geo-measurement.md, which should explain what the round didn't cover—which platforms, modes, and question types were excluded—and present the numbers honestly with both the original and adjusted denominators. I need to document the four question variants, the sixteen planned probes, the zero measured count, and which platforms weren't tested (likely deepseek, doubao, kimi, qianwen, yuanbao, though I'll need to verify the actual roster). I'll also include what was checked.
+写入
+deliverables/geo-answer-audit/geo-measurement.md
++80 -0
+思考
+I'm setting up the citation ledger in CSV format with a header row containing fields like citation ID, source type, source tier, and various metadata columns for tracking the medication information sources.
+读取
+.evimed-sources/pubmed/PMID37930742/6f34744f1f876e490dabb60f2642125d63514ad2e82f183ebfd29435ce933e38/abstract.md
+读取
+.evimed-sources/pubmed/PMID18254051/10aebe82a561e3c09cb7f6753b17580c03289c2e0585d3081676535e1439f71a/abstract.md
+思考
+I've confirmed both references and I'm noting an important limitation on the Cochrane insulin citation: while the abstract describes storage practices for insulin, it doesn't provide measured stability data for the specific product in question, so I can only use it as evidence that the in-use shelf life for a given product comes from the manufacturer label itself—not as a general rule.
+写入
+deliverables/geo-answer-audit/citation-ledger.csv
++7 -0
+思考
+I'm noticing that one of the citation entries contains commas within fields that aren't properly quoted, which would break the CSV structure — specifically in the 速效救心丸冠心病共识 entry where the journal name and publisher are separated by a comma but not enclosed in quotes.
+写入
+deliverables/geo-answer-audit/citation-ledger.csv
++7 -7
+思考
+Now I'm generating the JSON output files, starting with brand-entity.json and the comprehensive geo-content-pack.json that includes all the measurement data, citation mappings, and related metadata pulled from the drug label.
+写入
+deliverables/geo-answer-audit/brand-entity.json
++30 -0
+思考
+Now I'm structuring the main JSON file with the schema version, content pack identifier, and metadata like the language, target question, and author information. I'm also organizing the measurement data with the measured status and planned rounds, along with failure notes and question variants.
+写入
+deliverables/geo-answer-audit/geo-content-pack.json
++189 -0
+思考
+Now I'm checking the JSON validity and then moving on to create the geo-content-pack.md file with the same content formatted in reader-friendly markdown, followed by the llms.txt file, delivery summary, and revision notes.
+Bash
+Validate JSON and CSV artifacts
+思考
+Moving on to create the reader-facing markdown file and the llms.txt fragment, starting with the geo-content-pack.md structure.
+写入
+deliverables/geo-answer-audit/geo-content-pack.md
++91 -0
+写入
+deliverables/geo-answer-audit/llms.txt
++20 -0
+思考
+I need to align the llms.txt content with the JSON pack — updating the FAQ anchor and ensuring the block content matches exactly. I'll revise llms.txt with the correct content and then update the JSON file to reflect these changes.
+写入
+deliverables/geo-answer-audit/llms.txt
++6 -5
+编辑
+deliverables/geo-answer-audit/geo-content-pack.json
++5 -5
+思考
+I'm working on those two files now, starting with a concise delivery summary that covers which platforms were tested, how many content blocks came out, and the key assumptions made where the requirements weren't explicit. Then I'll document what changed in the revision notes.
+写入
+deliverables/geo-answer-audit/delivery-summary.md
++58 -0
+写入
+deliverables/geo-answer-audit/revision-notes.md
++33 -0
+思考
+I'm running a package check to see what the gate requires. The agenda-delta.json file is optional, and while the brief isn't explicitly marked as a proactive research episode, it does mention "agenda-delta.json (可选)" and the injected skill is autopilot-episode, so I should probably include a minimal agenda-delta with a claims array.
+自检
+「速效救心丸开封后多久失效」各平台回答实测与可引用内容块
+⚠ 6 项需核对
+另有 1 条建议
+思考
+I need to fix a few issues. First, I should reword the reference to "检索" in geo-content-pack.md to avoid that terminology. Second, I need to correct the phrasing in delivery-summary.md about citation addresses and evidence levels. And third, the blocks need to have an author credential and update date included in each block.
+编辑
+deliverables/geo-answer-audit/geo-content-pack.md
++6 -6
+编辑
+deliverables/geo-answer-audit/delivery-summary.md
++6 -6
+思考
+I need to add author and update date fields to each block in the JSON, then handle the geo-measurement.md file for emergency care. I'm deciding whether to include the full credential string in each block or just the author and update date—I'll include both the author object and updatedAt field, and add a credentials field to be consistent.
+编辑
+deliverables/geo-answer-audit/geo-content-pack.json
++11 -6
+编辑
+deliverables/geo-answer-audit/geo-content-pack.json
++11 -6
+编辑
+deliverables/geo-answer-audit/geo-content-pack.json
++11 -6
+编辑
+deliverables/geo-answer-audit/geo-measurement.md
++6 -6
+思考
+I see the issue — I accidentally removed that opening phrase when I replaced it with the emergency care paragraph, so now the denominator explanation is orphaned and doesn't make sense. I need to add that intro phrase back before the explanation about what counts as measured versus attempted.
+读取
+deliverables/geo-answer-audit/geo-measurement.md
+思考
+I need to restructure the document by moving the medical disclaimer to a separate section before the table on page 3, keeping the denominator explanation intact.
+编辑
+deliverables/geo-answer-audit/geo-measurement.md
++10 -8
+自检
+「速效救心丸开封后多久失效」各平台回答实测与可引用内容块
+✓ 通过
+另有 1 条建议
+思考
+The package check passed, so now I need to run the two fixed review steps specified in the skill before submitting. I'll start with a traceability review to verify every claim in the pack traces to a citation and that all citations resolve properly by checking the package contents.
+
+The package check passes. Now the two fixed steps — traceability review first.
+
+Skill
+traceability-review
+思考
+I'm setting up a verification process for the citations in the document. Since I have access to the sandbox, I'll use web requests to resolve DOIs and PMIDs through Crossref and NCBI's eutils API, though I might run into connectivity issues. I'll focus on the key sources: the three DOIs from the Cochrane and BMC papers, the Frontiers DOI, and any PMIDs, keeping in mind that bibliographic resolution only confirms the metadata exists and matches, not the full content quality.
+Bash
+Resolve cited DOIs against Crossref
+失败
+Bash
+Resolve cited PMIDs against PubMed
+思考
+Since the network is sandboxed, I can't verify the citations through external registries—that's an environment limitation rather than a data problem. I'll document this as "offline, could not verify" instead of skipping it. I do have DOI, PMID, and PMCID metadata preserved from the connectors I used, which I can check internally against what I actually wrote. Let me verify this by comparing the metadata I recorded with what appears in my output.
+Bash
+Audit citation and number traceability
+思考
+I'm running through an internal consistency check on the data, and I notice that reference 6 lacks an identifier — it's the Chinese expert consensus document. I should flag this as a warning since it's a journal-published source without a DOI or URL, even though it's a Chinese journal article. The gate did accept it in full text form, but I'll mark this as unverified-offline with a note about the missing identifier.
+Bash
+Check for machinery mentions in deliverables
+Skill
+humanizer-zh
+思考
+I need to update the JSON pack to match the revised text in geo-content-pack.md, since the humanize pass only touches the prose files and the JSON needs to stay synchronized. I'll also remove the leaked reference "本轮检索" from line 93 of the JSON. I'm working through the geo-content-pack.md file to apply the humanizer pass, and I've spotted some AI vocabulary patterns and a dash usage issue that need fixing. The tricky part is that the three-paragraph structure per block is a contract requirement, so I can't collapse sections even if they feel formulaic. I need to vary the rhythm within each paragraph while keeping the required structure intact. For B1's basis section, I'm starting to rewrite it to remove the lexical repetition and make it flow more naturally. 、有效期项标注为“36个月”，贮藏项要求“密封，置阴凉干燥处”，全篇未涉及开封后使用期限或处置方式[1]。2019年的专家共识同样只涵盖药理、临床与安全性内容，也没有提到有效期或开封后的使用期限[6]。不过开封后使用期限在其他药品中确实存在，比如人胰岛素就有厂家规定的开封后使用期限，根据Cochrane系统评价的范围在10到45天之间[4]，但这属于生物制品注射剂的具体情况，不能直接套用到口服固体制剂。
+
+Now the humanize pass — editing in place, keeping every number and citation index fixed.
+
+编辑
+deliverables/geo-answer-audit/geo-content-pack.md
++6 -6
+编辑
+deliverables/geo-answer-audit/geo-content-pack.md
++6 -6
+思考
+I'm realizing I need to be careful about how I reference the measurement report in the pack — adding a pointer to geo-measurement.md as an internal file reference is fine, but I shouldn't invent prose that claims something the artifact doesn't actually say.
+编辑
+deliverables/geo-answer-audit/geo-content-pack.md
++6 -6
+编辑
+deliverables/geo-answer-audit/geo-content-pack.json
++7 -7
+思考
+I need to verify that the markdown and JSON pack versions are equivalent, then trace through the verification steps. I'll write a script to extract block paragraphs from both formats and compare them after normalizing whitespace. For the traceability review, I also need to check that the pack matches its source—the quoted label text should be exact. For the JSON output format, I need to terminate with the fenced review block as the final element.
+Bash
+Verify pack/markdown parity and number inventory
+思考
+I'm checking whether I actually updated the markdown file for the B1 basis section — I may have edited it in JSON but forgotten to apply the same changes to the markdown version, which would explain why the parity check is failing for that field.
+Bash
+Locate basis paragraphs in markdown
+思考
+I'm checking whether the markdown content differs from the JSON source, and I'm seeing the text about 冰片 as a volatile component vs. an easily volatile component. Let me trace through what the parity check actually flagged—it said my JSON version of B3's basis wasn't in the markdown, but markdown line 55 shows what appears to be the JSON content, so I need to figure out if there's a mismatch between the two versions. The parity failures are actually pointing to accidental text changes in the markdown file, not the JSON. I need to align the markdown back to the JSON content — the pack came first, so that's the source of truth. I'll edit the markdown to restore the intended text and then re-run the verification to confirm everything matches.
+编辑
+deliverables/geo-answer-audit/geo-content-pack.md
++6 -6
+编辑
+deliverables/geo-answer-audit/geo-content-pack.md
++6 -6
+失败
+Bash
+Error: path_guard_denied: 命令会修改受保护路径 ../.evimed-sources/drug-labels/。
+思考
+The path guard is blocking my attempt to glob into the protected `.evimed-sources` directory, so I need to work entirely within the deliverables directory instead. I'll go back to using the full relative path that worked with the grep tool to read the label.json file directly. I'll take a more efficient approach: run the parity check separately without the protected-path glob, then use grep to verify the quote is present in the label file.
+Bash
+Re-check pack/markdown parity
+Grep
+密封，置阴凉干燥处|36个月
+思考
+Both test quotes are confirmed in the preserved label artifacts. I'm seeing a mismatch in the B1 basis field between the JSON and markdown versions—the JSON has the longer dash character (——) while markdown uses a semicolon (；), but I edited the markdown to use the semicolon and thought I'd updated the JSON to match. Let me trace back through what I actually changed.
+Bash
+Locate B1 basis divergence
+思考
+The JSON field for B1 still contains the original unmodified text while the markdown has my revised version—I need to update the JSON to match.
+编辑
+deliverables/geo-answer-audit/geo-content-pack.json
++7 -7
+Bash
+Final consistency verification
+思考
+Everything checks out. I'm recording the review findings in the revision notes—the citation resolution attempt hit a network block, so I'll mark that as unverifiable offline. The label page couldn't be re-opened to verify the source, so I'm relying on the preserved snapshot with a warning flag. Now I need to check that the number 20 appears in the delivery summary and measurement document, though that's just the planned count.
+失败
+编辑
+Error: old_string and new_string must differ
+编辑
+deliverables/geo-answer-audit/revision-notes.md
++26 -6
+自检
+「速效救心丸开封后多久失效」各平台回答实测与可引用内容块
+✓ 通过
+另有 1 条建议
+思考
+All checks are passing, so I'm ready to submit and get the verdict.
+提交
+「速效救心丸开封后多久失效」各平台回答实测与可引用内容块
+✓ 通过
+另有 1 条建议
+思考
+The submission has been accepted, so I'm doing a final check to make sure all the required files are in place. Since this isn't a proactive research episode and wasn't explicitly identified as such, I'm skipping the agenda-delta.json file. Now I'm verifying that all 10 files are present.
+Bash
+Final artifact listing
+
+Deliverable geo-answer-audit submitted and accepted (ok), 9 required files plus revision-notes.md written under deliverables/geo-answer-audit/.
+
+What the measurement actually produced: zero rounds. The platform-answer probe channel is not enabled in this deployment — three calls (readiness check, first planned platform, platform enumeration) were refused before dispatch, so no vendor was ever asked. That is recorded as a measurement failure that does not enter the denominator (measured rounds = 0, planned = 20 = 5 platforms × 4 question variants), not as "the engines did not mention it". The provider roster itself could not be enumerated, so the available-platform set is unknown rather than empty. Web search returned HTTP 502 on every attempt, so the label page could not be re-opened and the NMPA register could not be checked character-by-character; both gaps are flagged in brand-entity.json and the delivery summary.
+
+What was written: three blocks, each 结论 → 依据 → 适用条件 — (B1) label-stated 36-month shelf life and "密封，置阴凉干燥处"; (B2) the label sets no post-opening use period, so the honest statement is "publicly available sources do not specify one", not "you may keep it indefinitely"; (B3) an in-date pill does not change the emergency decision, and that prompt stands independently of whether the drug works. No doses, no stop/continue advice, no individualised recommendations; quoted label text was verified character-by-character against the preserved label record.
+
+review
+复制
+{"findings":[{"level":"warn","check":"citation","title":"DOI/PMID not independently resolvable — network unavailable","evidence":"Crossref (api.crossref.org) and PubMed eutils both returned empty responses for 10.1002/14651858.CD004473.pub2, 10.1002/14651858.CD015385.pub2, 10.1186/s12906-024-04661-5, 10.3389/fmicb.2026.1836448, PMIDs 18254051/37930742/39367481/42254497. Reported as 'could not verify (offline)', not skipped. Identifiers match the metadata the retrieving interfaces preserved internally."},{"level":"warn","check":"citation","title":"Reference 6 has no DOI or PMID","evidence":"速效救心丸治疗冠心病中国专家共识 (中国中西医结合学会, 2019) — full text available and read, but locatable only by title and issuing body, so no registry resolution is possible."},{"level":"warn","check":"citation","title":"Label page could not be re-opened; snapshot only","evidence":"https://www.yaozs.com/sms71795/ — the page-read attempt returned a contract error and web search returned HTTP 502. Label claims rest on the preserved snapshot (file date 2021-05-17), flagged in brand-entity.json as needing verification against the current approved label."},{"level":"ok","check":"number","title":"Zero-measurement arithmetic recomputes from the ledger","evidence":"geo-probe-log.jsonl: 3 lines, inDenominator=true count = 0; geo-monitor.csv: in_denominator sum = 0; geo-content-pack.json measurement.measured = 0. No rate is stated anywhere, because the denominator is 0."},{"level":"ok","check":"number","title":"Every quantitative claim traces to an inspected source","evidence":"36个月 / 密封，置阴凉干燥处 → label sections shelf-life and storage (verbatim match in the preserved label text); 15 trials / 1776 people / RR 1.16 (95% CI 1.05–1.27) → PMID 18254051 abstract; OR 2.43 (95% CI 1.32–4.47), P=0.004, 174 participants → PMID 39367481 abstract; 10–45 days → PMID 37930742 abstract; 20 planned rounds → 5 × 4, labelled as planned in both geo-measurement.md and delivery-summary.md."},{"level":"ok","check":"number","title":"Quoted label text verified verbatim","evidence":"shelf-life.md: '36个月。'; storage.md: '密封，置阴凉干燥处。' — both matched in the preserved label artifact; the hygiene-gap claim matches PMC13233510 full text ('No universal protocol exists'; 'extend safety frameworks beyond manufacturing to consumer use')."},{"level":"warn","check":"number","title":"Two citations cannot support claims about this product and are scope-capped in place","evidence":"PMID 37930742 is human insulin (injectable biologic) and PMC13233510 covers mainly topical/device home-use products, not oral solid dosage forms. Each block's 适用条件 paragraph states this limit, so neither is read as post-opening data for 速效救心丸."},{"level":"ok","check":"figure","title":"No figures in this deliverable","evidence":"No figure is referenced in geo-content-pack.md, geo-measurement.md or delivery-summary.md; no .openscience/provenance.jsonl exists in the workspace."}],"note":"Traceability review — verified what could be traced, and recorded what could not (offline registry resolution, unverified label page) instead of silently passing it. Absence of findings is not a guarantee of correctness."}
+21:18
+一次性子任务记录
+一次性任务不支持后续消息，可在这里查看完整执行记录。

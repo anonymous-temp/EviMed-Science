@@ -58,6 +58,11 @@ export function validFrame(value) {
       minutes: Array.isArray(entry.minutes) && entry.minutes.length === 2
         && entry.minutes.every((/** @type {unknown} */ minute) => Number.isInteger(minute) && Number(minute) > 0)
         ? [Number(entry.minutes[0]), Number(entry.minutes[1])] : null,
+      starters: (Array.isArray(entry.starters) ? entry.starters : [])
+        .filter((/** @type {unknown} */ line) => typeof line === 'string' && line).slice(0, 3).map((/** @type {string} */ line) => line.slice(0, 400)),
+      outputs: (Array.isArray(entry.outputs) ? entry.outputs : [])
+        .filter((/** @type {unknown} */ line) => typeof line === 'string' && line).slice(0, 4).map((/** @type {string} */ line) => line.slice(0, 200)),
+      materials: typeof entry.materials === 'string' ? entry.materials.slice(0, 200) : '',
       internal: entry.visibility === 'internal',
     }));
   const off = (Array.isArray(value.off) ? value.off : [])
@@ -380,7 +385,7 @@ export function createFrameKit(ctx, target, require, vocabulary) {
    * break THAT entry — the chat view, the composer — so it is caught and
    * logged instead, and costs only this occupant.
    *
-   * @param {{ slot: string, id?: string, key?: string, priority?: number, order?: number, select?: (owner: any) => any, locale?: string, inject?: any, label?: string }} spec
+   * @param {{ slot: string, id?: string, key?: string, priority?: number, order?: number, select?: (owner: any) => any, locale?: string, inject?: any, label?: string | (() => string) }} spec
    * @param {any} Component
    * @returns {() => void}
    */

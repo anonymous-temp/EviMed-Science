@@ -162,7 +162,7 @@ test('a refused delegation names its reason, and a streaming one its deliverable
   const refused = delegateView(settled('evimed_delegate', { deliverableId: 'drug-eval' },
     'failed: deliverable_dependency_pending\n- (required) deliverable_dependency_pending 它依赖 evidence，等这些通过后再委派。'), null, 0, kit());
   assert.equal(refused.state, 'refused');
-  assert.equal(refused.stateText, '它依赖的交付物还没有通过');
+  assert.equal(refused.stateText, '它依赖的那一件还没有通过');
   const streaming = delegateView(running('evimed_delegate', '{"deliverableId":"drug-eval","brief":"比较'), LIVE, 1_030_000, kit());
   assert.equal(streaming.title, '利伐沙班综合评价');
   assert.equal(streaming.state, 'running');
@@ -203,7 +203,7 @@ test('a submission is a verdict in three words, never the validator text', () =>
   const refused = verdictView(settled('evimed_submit_deliverable', { deliverableId: 'evidence' },
     'failed: deliverable_not_owned\n- (required) deliverable_not_owned 此能力子代理只负责交付物「x」。'), null, kit());
   assert.equal(refused.kind, 'refused');
-  assert.equal(/** @type {any} */ (refused).text, '这件交付物不由当前子任务负责');
+  assert.equal(/** @type {any} */ (refused).text, '这一件不由当前子任务负责');
   assert.equal(verdictView(running('evimed_submit_deliverable', { deliverableId: 'evidence' }), null, kit()).kind, 'judging');
   assert.equal(refusalOf({ ok: false, code: 'quote_not_in_source', issues: [{ code: 'quote_not_in_source' }] }), null);
 });

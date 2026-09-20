@@ -1,33 +1,36 @@
 /**
- * The right column as the run's workbench: 进展 (how far each piece of work
- * is), 交付物 (what it produced, opened in the shell's reader), 依据 (whether
- * each claim of the report checks out against its preserved source) and 来源
- * (what the report stands on).
+ * Two surfaces the kernel already has seats for, and one job each:
  *
- * Hidden knowledge, read off the pinned 0.1.5-rc.2 client
- * (`dsh-client-ui-sidebar-right`):
+ *  - **运行**, an entry in the conversation's own view ring
+ *    (`conversation.view`), beside 对话: what this research run is made of —
+ *    how far it is, what it produced, whether each conclusion checked out
+ *    against its source, and what it stands on.
+ *  - **文件**, the right column's single tab: the files this conversation
+ *    produced, opened in the product's reader.
  *
- *  - A tab type registers in two stages: `ctx.sidebarRightTabs.register(…)`
- *    says what the type is (id, kind, title, guide entry), and a keyed
- *    `sidebar.right.pane.tab` entry under the definition's `id` draws its body.
- *    `priority: 'extension'` is the band for a type from outside the product.
- *    A page type (no address patterns) is opened by kind.
+ * Hidden knowledge, read off the pinned 0.1.5-rc.2 client:
+ *
+ *  - `conversation.view` is a list slot whose entries ARE the tab strip in the
+ *    session header (`viewTabs()` in `ui-conversation`'s client reads
+ *    `options.id` and `options.label` off each entry, label falling back to the
+ *    id). `ui-chat` holds `chat` at order 0 and stays the default, so an entry
+ *    of ours adds a tab rather than taking one. Only the selected view renders.
+ *  - The right column's default page depends on the number of registered GUIDE
+ *    entries, not on tab types: exactly one opens that page directly, while
+ *    zero or several open the guide — whose title is 「开始」 and whose body is
+ *    a compass with one capsule per entry. Four entries are why every session
+ *    opened onto a launcher that launched nothing, and why 「+ 新标签页」 read
+ *    as a way to start work while a sub-task was running. One entry, and the
+ *    panel is the file list.
  *  - `ctx.sidebarRight.openTab(kind)` acts through the mounted seat and throws
- *    when no seat is mounted, so an automatic open is attempted, and retried
- *    on the next change, rather than assumed.
- *  - The hosted composition mounts no other tab type: the file tree and the
- *    document preview read the workspace unrestricted and stay disabled. What
- *    a tab here opens, it opens in the shell (`open-artifact`), whose reader
- *    goes through the control plane's own file boundary.
+ *    when none is mounted, so an automatic open is attempted and retried on the
+ *    next change rather than assumed.
  *
  * Everything drawn comes from the shell: the bound run's state (C9 `run-state`,
  * with the run's delivered files) and the claims and sources read from its
- * evidence matrix (`evidence`). The frame reads no file itself.
- *
- * Opening on its own is kept to two moments a reader would want it: 进展 when
- * the run on screen is working through delegated pieces, 交付物 when a report
- * or matrix appears while the reader is watching — once per run each, and not
- * on every visit to a finished task.
+ * evidence matrix (`evidence`). The frame reads no file itself; opening one is
+ * a message to the shell, whose reader goes through the control plane's own
+ * file boundary.
  *
  * @module @evimed/harness-port/runtime-ui-panels
  */
@@ -39,29 +42,32 @@ import { childLinkFor, liveRunFor, toolviewText, verdictText } from './runtimeUi
 export const inject = ['slots', 'sessions'];
 
 /**
- * The four tab types, in guide order.
+ * The right column's tab types. One, deliberately: a second guide entry turns
+ * the column's default page into the kernel's empty compass.
  * @returns {{ id: string, title: string, description: string }[]}
  */
 export function panelTabs() {
   return [
-    { id: 'evimed-progress', title: '进展', description: '每件交付物做到哪一步、用了多久' },
-    { id: 'evimed-deliverables', title: '交付物', description: '报告、证据矩阵与修订说明' },
-    { id: 'evimed-evidence', title: '依据', description: '每条主张的引文是否在原文中核对过' },
-    { id: 'evimed-sources', title: '来源', description: '本次纳入的文献、指南与说明书' },
+    { id: 'evimed-files', title: '文件', description: '这次对话产出的报告、证据矩阵与附件' },
   ];
 }
 
+/** The view-ring entry this body adds, beside the kernel's own 对话. */
+export function runViewTab() {
+  return { id: 'evimed-run', label: '运行', order: 5 };
+}
+
 /**
- * A run's state in the words of the runs page.
+ * A run's state in the words every surface uses for it.
  * @param {any} live
  * @returns {{ text: string, tone: string }}
  */
 export function runStateText(live) {
   const state = String(live?.state ?? '');
-  if (state === 'running') return { text: '运行中', tone: 'active' };
-  if (state === 'succeeded') return live?.verification === 'unverified' ? { text: '已交付 · 未核验', tone: 'warn' } : { text: '已完成', tone: 'ok' };
+  if (state === 'running') return { text: '进行中', tone: 'active' };
+  if (state === 'succeeded') return live?.verification === 'unverified' ? { text: '已交付 · 有结论未逐字核对', tone: 'warn' } : { text: '已交付', tone: 'ok' };
   if (state === 'failed') return { text: '未完成', tone: 'warn' };
-  if (state === 'canceled' || state === 'cancelled') return { text: '已取消', tone: 'muted' };
+  if (state === 'canceled' || state === 'cancelled') return { text: '已停止', tone: 'muted' };
   return { text: '等待中', tone: 'muted' };
 }
 
@@ -74,7 +80,7 @@ export function runStateText(live) {
  */
 export function artifactKind(path) {
   const name = String(path).split('/').pop()?.toLowerCase() ?? '';
-  if (/matrix.*\.json$/.test(name)) return { kind: 'matrix', label: '证据矩阵' };
+  if (/matrix.*\.json$/.test(name)) return { kind: 'matrix', label: '证据表' };
   if (/revision-notes?\.md$/.test(name)) return { kind: 'notes', label: '修订说明' };
   if (/report.*\.(md|docx|pdf|html)$/.test(name)) return { kind: 'report', label: '报告' };
   if (/\.(md|docx|pdf|html)$/.test(name)) return { kind: 'document', label: '文档' };
@@ -82,7 +88,13 @@ export function artifactKind(path) {
 }
 
 /**
- * The 进展 tab: the run, its phases, its counts and each deliverable.
+ * The run, its phases, its counts and each piece of work.
+ *
+ * The phase reads as the furthest one reached rather than the latest labelled
+ * call, and a phase nothing happened in is left out: a delivered run used to
+ * read 「核验」 because a verification call happened to be last, and 「筛选」 read
+ * 0 on every run because two tools carry it.
+ *
  * @param {any} live @param {number} now @param {any} kit
  */
 export function progressModel(live, now, kit) {
@@ -91,11 +103,14 @@ export function progressModel(live, now, kit) {
   const vocabulary = kit.vocabulary || {};
   const phaseLabels = vocabulary.phaseLabels || {};
   const counts = progress.phaseCounts && typeof progress.phaseCounts === 'object' ? progress.phaseCounts : {};
-  const phases = (Array.isArray(vocabulary.phases) ? vocabulary.phases : []).map((/** @type {string} */ key) => ({
+  const order = Array.isArray(vocabulary.phases) ? vocabulary.phases : [];
+  const reached = order.filter((/** @type {string} */ key) => Number(counts[key]) > 0);
+  const furthest = reached.length ? reached[reached.length - 1] : null;
+  const phases = reached.map((/** @type {string} */ key) => ({
     key,
     label: phaseLabels[key] ?? key,
-    count: Number.isFinite(counts[key]) ? Number(counts[key]) : 0,
-    current: progress.currentPhase === key,
+    count: Number(counts[key]) || 0,
+    current: key === furthest && live.state === 'running',
   }));
   const started = typeof progress.startedAt === 'string' ? Date.parse(progress.startedAt) : NaN;
   const running = live.state === 'running';
@@ -136,15 +151,15 @@ export function progressModel(live, now, kit) {
       // `searched` counts search calls, not records found: 「次」, never 「篇」.
       ? `检索 ${Number(sources.searched) || 0} 次 · 纳入 ${Number(sources.included) || 0} 篇 · 全文 ${Number(sources.fullText) || 0} 篇` : null,
     claims: claims && Number.isFinite(claims.total) && claims.total > 0
-      ? `主张 ${claims.total} 条 · 已核对 ${Number(claims.verified) || 0} 条` : null,
+      ? `结论 ${claims.total} 条 · 已核对 ${Number(claims.verified) || 0} 条` : null,
     deliverables,
   };
 }
 
 /**
- * The 交付物 tab: the run's files, grouped by the deliverable that wrote them.
- * A file the gate accepted and one it did not are both the run's output; the
- * second says so.
+ * The run's files, grouped by the piece of work that wrote them. A file the
+ * gate accepted and one it did not are both the run's output; the second says
+ * so.
  * @param {any} live
  */
 export function artifactModel(live) {
@@ -176,21 +191,19 @@ export function artifactModel(live) {
 }
 
 /**
- * The 依据 tab: each claim of the report and what the control plane found when
- * it looked its quotation up in the source it names.
+ * Each conclusion of the report and what the control plane found when it
+ * looked its quotation up in the source it names.
  * @param {any} evidence the shell's last `evidence`
  * @param {any} live
  */
 export function evidenceModel(evidence, live) {
   if (!evidence || !Array.isArray(evidence.claims) || (live && evidence.runId && evidence.runId !== live.runId)) return null;
-  // The words are the shell's own for the same statuses (`CLAIM_STATUS_TEXT`),
-  // shortened for a narrow column.
   const marks = {
     verified: { mark: '✓', tone: 'ok', statusText: '引文已在保存的原文中核对' },
     quote_not_found: { mark: '⚠', tone: 'warn', statusText: '引文未在保存的原文中找到' },
     source_unavailable: { mark: '⚠', tone: 'warn', statusText: '来源原文没有保存，无法核对' },
     no_quote: { mark: '⚠', tone: 'warn', statusText: '没有给出可核对的引文' },
-    derived: { mark: '·', tone: 'muted', statusText: '推导结果，本身没有引文' },
+    derived: { mark: '·', tone: 'muted', statusText: '推算结果，本身没有引文' },
   };
   const claims = evidence.claims.filter((/** @type {any} */ claim) => claim && typeof claim.claimId === 'string').map((/** @type {any} */ claim) => {
     const status = /** @type {Record<string, any>} */ (marks)[claim.status] ?? { mark: '?', tone: 'muted', statusText: '尚未核对' };
@@ -206,23 +219,20 @@ export function evidenceModel(evidence, live) {
   return {
     runId: typeof evidence.runId === 'string' ? evidence.runId : null,
     reportPath: typeof evidence.reportPath === 'string' ? evidence.reportPath : null,
-    summary: claims.length ? `${claims.length} 条主张：✓ ${verified} 条已核对${attention ? `，⚠ ${attention} 条需核对` : ''}` : null,
+    summary: claims.length ? `${claims.length} 条结论：✓ ${verified} 条已核对${attention ? `，⚠ ${attention} 条待核对` : ''}` : null,
     attention,
     claims,
   };
 }
 
 /**
- * The 来源 tab: the run's counts, and the sources the report's claims cite.
+ * The sources the report's conclusions cite.
  * @param {any} evidence @param {any} live @param {any} kit
  */
 export function sourcesModel(evidence, live, kit) {
-  const counts = live?.progress?.sources;
   const labels = (kit.vocabulary && kit.vocabulary.sourceTypeLabels) || {};
   const list = evidence && Array.isArray(evidence.sources) && !(live && evidence.runId && evidence.runId !== live.runId) ? evidence.sources : [];
   return {
-    counts: counts && Number.isFinite(counts.included)
-      ? `检索 ${Number(counts.searched) || 0} 次 · 纳入 ${Number(counts.included) || 0} 篇 · 获取全文 ${Number(counts.fullText) || 0} 篇` : null,
     sources: list.filter((/** @type {any} */ source) => source && (source.title || source.identifier)).map((/** @type {any} */ source) => ({
       title: String(source.title || source.identifier),
       identifier: typeof source.identifier === 'string' && source.identifier !== source.title ? source.identifier : null,
@@ -247,7 +257,13 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   const { card, line, title, quiet, pill, button, section, empty, secondary } = frameStyles();
   const ChildLink = childLinkFor(ctx, kit, target);
   const tabs = panelTabs();
+  const view = runViewTab();
   const pane = { ...secondary, padding: '12px 16px 24px', overflowY: 'auto', height: '100%', boxSizing: 'border-box', color: 'var(--dsw-alias-label-secondary)' };
+  // The view fills the conversation body, which is wider than the right
+  // column; the reading column is held to the transcript's own width so the
+  // two tabs do not read as two different pages.
+  const viewPane = { ...pane, padding: '16px 24px 48px' };
+  const column = { maxWidth: '748px', margin: '0 auto' };
 
   function useLive() {
     const runState = kit.useFrameState((/** @type {any} */ state) => state.runState);
@@ -264,18 +280,43 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     kit.hub.send('open-artifact', { runId, path, ...(anchor ? { anchor } : {}) });
   };
 
-  function ProgressTab() {
+  /** The files of a run, as rows. Shared by the view and the right column. */
+  /** @param {{ model: any, dense?: boolean }} props */
+  const FileGroups = ({ model, dense }) => h('div', null, model.groups.map((/** @type {any} */ group) => h('div', { key: group.deliverableId ?? '', style: { marginBottom: '8px' } },
+    dense ? h('div', { style: section }, group.title) : null,
+    group.files.map((/** @type {any} */ file) => h('div', { key: file.path, style: card, 'data-artifact': file.path },
+      h('div', { style: line },
+        h('span', { style: { ...pill(file.kind === 'report' ? 'active' : 'muted'), fontWeight: 500 } }, file.label),
+        h('span', { style: { ...quiet, color: 'var(--dsw-alias-label-secondary)', flex: '1 1 auto' }, title: file.path }, file.name),
+        file.verified ? null : h('span', { style: pill('warn'), title: '这件文件没有通过交付核对，内容照常保留' }, '未核对'),
+        h('button', { type: 'button', style: button, onClick: () => openArtifact(model.runId, file.path) }, '打开')))))));
+
+  /**
+   * The 运行 view: everything about this conversation's research run, in the
+   * order a reader asks for it — how it is going, what it is producing,
+   * whether the conclusions check out, and what they stand on.
+   */
+  function RunView() {
     const live = useLive();
+    const evidence = useEvidence();
     const [now, setNow] = React.useState(() => Date.now());
+    const [onlyAttention, setOnlyAttention] = React.useState(false);
     const running = live?.state === 'running';
     React.useEffect(() => {
       if (!running || typeof target.setInterval !== 'function') return undefined;
       const timer = target.setInterval(() => setNow(Date.now()), 1000);
       return () => target.clearInterval(timer);
     }, [running]);
-    const model = kit.guarded('progress tab', () => progressModel(live, now, kit));
-    if (!model) return h(Empty, { text: '这个任务还没有关联的研究运行。提交研究问题后，这里会显示每件交付物的进展。' });
-    return h('div', { style: pane, 'data-evimed-tab': 'progress' },
+    const model = kit.guarded('run view', () => progressModel(live, now, kit));
+    if (!model) {
+      return h('div', { style: viewPane, 'data-evimed-view': 'run' },
+        h('div', { style: column }, h(Empty, { text: '这次对话还没有研究任务。提出一个研究问题，这里会显示它的进展、产出和核对结果。' })));
+    }
+    const claims = kit.guarded('run view claims', () => evidenceModel(evidence, live));
+    const sources = kit.guarded('run view sources', () => sourcesModel(evidence, live, kit));
+    const files = kit.guarded('run view files', () => artifactModel(live));
+    const shownClaims = claims && onlyAttention ? claims.claims.filter((/** @type {any} */ claim) => claim.tone === 'warn') : claims?.claims ?? [];
+    return h('div', { style: viewPane, 'data-evimed-view': 'run' }, h('div', { style: column },
       h('div', { style: line },
         model.title ? h('span', { style: { ...title, flex: '1 1 auto', whiteSpace: 'normal' } }, model.title) : null,
         h('span', { style: { ...pill(model.state.tone), marginLeft: 'auto' } }, model.state.text)),
@@ -283,10 +324,11 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       model.phases.length ? h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '4px 12px', margin: '10px 0 0' } },
         model.phases.map((/** @type {any} */ phase) => h('span', {
           key: phase.key, 'data-phase': phase.key, 'data-current': phase.current || undefined,
-          style: { color: phase.current ? 'var(--dsw-alias-state-business-primary)' : phase.count ? 'var(--dsw-alias-label-secondary)' : 'var(--dsw-alias-label-tertiary)', fontWeight: phase.current ? 600 : 400 },
+          style: { color: phase.current ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)', fontWeight: phase.current ? 600 : 400 },
         }, `${phase.label} ${phase.count}`))) : null,
       model.sources || model.claims ? h('div', { style: { ...quiet, whiteSpace: 'normal', marginTop: '4px' } }, [model.sources, model.claims].filter(Boolean).join(' · ')) : null,
-      h('div', { style: section }, `交付物 · ${model.deliverables.length} 件`),
+
+      h('div', { style: section }, `这次要交付的 · ${model.deliverables.length} 件`),
       model.deliverables.length
         ? model.deliverables.map((/** @type {any} */ item) => h('div', { key: item.id, style: card, 'data-deliverable': item.id },
           h('div', { style: line },
@@ -296,69 +338,46 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
             h('span', { style: quiet }, [item.capability, item.childState ? `子任务${item.childState}` : null, item.attempts ? `第 ${item.attempts} 次提交` : null].filter(Boolean).join(' · ')),
             item.verdict ? h('span', { style: pill(item.verdict.tone) }, item.verdict.text) : null,
             item.childSessionId ? h(ChildLink, { childSessionId: item.childSessionId }) : null)))
-        : h('div', { style: quiet }, '计划写好后，交付物会列在这里。'));
-  }
+        : h('div', { style: quiet }, '计划写好后，要交付的东西会列在这里。'),
 
-  function DeliverablesTab() {
-    const live = useLive();
-    const model = kit.guarded('deliverables tab', () => artifactModel(live));
-    if (!model || !model.groups.length) return h(Empty, { text: '还没有交付物。报告和证据矩阵写成后会出现在这里。' });
-    return h('div', { style: pane, 'data-evimed-tab': 'deliverables' },
-      model.groups.map((/** @type {any} */ group) => h('div', { key: group.deliverableId ?? '', style: { marginBottom: '8px' } },
-        h('div', { style: section }, group.title),
-        group.files.map((/** @type {any} */ file) => h('div', { key: file.path, style: card, 'data-artifact': file.path },
+      claims && claims.claims.length ? h('div', null,
+        h('div', { style: { ...section, display: 'flex', alignItems: 'baseline', gap: '8px' } },
+          h('span', { style: { flex: '1 1 auto' } }, claims.summary),
+          claims.attention ? h('button', { type: 'button', style: { ...button, marginLeft: 0 }, 'aria-pressed': onlyAttention, onClick: () => setOnlyAttention(!onlyAttention) }, onlyAttention ? '显示全部' : '只看待核对') : null),
+        shownClaims.map((/** @type {any} */ claim) => h('button', {
+          key: claim.claimId, type: 'button', 'data-claim': claim.claimId, title: claim.text,
+          onClick: () => { if (claims.runId && claims.reportPath) openArtifact(claims.runId, claims.reportPath, claim.claimId); },
+          style: { ...card, display: 'block', width: '100%', textAlign: 'left', cursor: claims.reportPath ? 'pointer' : 'default', font: 'inherit' },
+        },
+        h('div', { style: line },
+          h('span', { style: pill(claim.tone), 'aria-label': claim.statusText }, claim.mark),
+          h('span', { style: { color: 'var(--dsw-alias-label-primary)', minWidth: 0, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } }, claim.text)),
+        h('div', { style: { ...quiet, paddingLeft: '20px' } }, [claim.source, claim.tone !== 'ok' ? claim.statusText : null].filter(Boolean).join(' · ') || claim.claimId)))) : null,
+
+      files && files.groups.length ? h('div', null, h('div', { style: section }, '产出的文件'), h(FileGroups, { model: files })) : null,
+
+      sources && sources.sources.length ? h('div', null,
+        h('div', { style: section }, `报告引用的来源 · ${sources.sources.length} 项`),
+        sources.sources.map((/** @type {any} */ source, /** @type {number} */ index) => h('div', { key: `${source.title}:${index}`, style: card },
           h('div', { style: line },
-            h('span', { style: { ...pill(file.kind === 'report' ? 'active' : 'muted'), fontWeight: 500 } }, file.label),
-            h('span', { style: { ...quiet, color: 'var(--dsw-alias-label-secondary)', flex: '1 1 auto' }, title: file.path }, file.name),
-            file.verified ? null : h('span', { style: pill('warn'), title: '这件文件没有通过交付核验，内容照常保留' }, '未核验'),
-            h('button', { type: 'button', style: button, onClick: () => openArtifact(model.runId, file.path) }, '打开')))))));
+            source.type ? h('span', { style: pill('active') }, source.type) : null,
+            source.url
+              ? h('a', { href: source.url, target: '_blank', rel: 'noopener noreferrer', style: { color: 'var(--dsw-alias-link)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' } }, source.title)
+              : h('span', { style: { color: 'var(--dsw-alias-label-primary)', minWidth: 0 } }, source.title)),
+          h('div', { style: quiet }, [source.identifier, source.claims ? `支撑 ${source.claims} 条结论` : null].filter(Boolean).join(' · '))))) : null));
   }
 
-  function EvidenceTab() {
+  /** The right column: this conversation's files, and nothing else. */
+  function FilesTab() {
     const live = useLive();
-    const evidence = useEvidence();
-    const [onlyAttention, setOnlyAttention] = React.useState(false);
-    const model = kit.guarded('evidence tab', () => evidenceModel(evidence, live));
-    if (!model || !model.claims.length) return h(Empty, { text: '报告写成后，这里逐条列出每条主张的引文是否在保存的原文中核对过。' });
-    const shown = onlyAttention ? model.claims.filter((/** @type {any} */ claim) => claim.tone === 'warn') : model.claims;
-    return h('div', { style: pane, 'data-evimed-tab': 'evidence' },
-      h('div', { style: line },
-        h('span', { style: { ...title, flex: '1 1 auto', whiteSpace: 'normal' } }, model.summary),
-        model.attention ? h('button', { type: 'button', style: button, 'aria-pressed': onlyAttention, onClick: () => setOnlyAttention(!onlyAttention) }, onlyAttention ? '显示全部' : '只看需核对') : null),
-      shown.map((/** @type {any} */ claim) => h('button', {
-        key: claim.claimId, type: 'button', 'data-claim': claim.claimId, title: claim.text,
-        onClick: () => { if (model.runId && model.reportPath) openArtifact(model.runId, model.reportPath, claim.claimId); },
-        style: { ...card, display: 'block', width: '100%', textAlign: 'left', cursor: model.reportPath ? 'pointer' : 'default', font: 'inherit' },
-      },
-      h('div', { style: line },
-        h('span', { style: pill(claim.tone), 'aria-label': claim.statusText }, claim.mark),
-        h('span', { style: { color: 'var(--dsw-alias-label-primary)', minWidth: 0, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } }, claim.text)),
-      h('div', { style: { ...quiet, paddingLeft: '20px' } }, [claim.source, claim.tone !== 'ok' ? claim.statusText : null].filter(Boolean).join(' · ') || claim.claimId))));
+    const model = kit.guarded('files tab', () => artifactModel(live));
+    if (!model || !model.groups.length) return h(Empty, { text: '还没有产出文件。报告和证据表写成后会出现在这里。' });
+    return h('div', { style: pane, 'data-evimed-tab': 'files' }, h(FileGroups, { model, dense: true }));
   }
 
-  function SourcesTab() {
-    const live = useLive();
-    const evidence = useEvidence();
-    const model = kit.guarded('sources tab', () => sourcesModel(evidence, live, kit));
-    if (!model || (!model.counts && !model.sources.length)) return h(Empty, { text: '检索开始后，这里显示纳入的文献、指南与说明书。' });
-    return h('div', { style: pane, 'data-evimed-tab': 'sources' },
-      model.counts ? h('div', { style: { ...title, whiteSpace: 'normal' } }, model.counts) : null,
-      model.sources.length
-        ? h('div', null,
-          h('div', { style: section }, `报告引用的来源 · ${model.sources.length} 项`),
-          model.sources.map((/** @type {any} */ source, /** @type {number} */ index) => h('div', { key: `${source.title}:${index}`, style: card },
-            h('div', { style: line },
-              source.type ? h('span', { style: pill('active') }, source.type) : null,
-              source.url
-                ? h('a', { href: source.url, target: '_blank', rel: 'noopener noreferrer', style: { color: 'var(--dsw-alias-link)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' } }, source.title)
-                : h('span', { style: { color: 'var(--dsw-alias-label-primary)', minWidth: 0 } }, source.title)),
-            h('div', { style: quiet }, [source.identifier, source.claims ? `支撑 ${source.claims} 条主张` : null].filter(Boolean).join(' · ')))))
-        : h('div', { style: { ...quiet, whiteSpace: 'normal', marginTop: '8px' } }, '报告写成后，这里列出它引用的每一个来源。'));
-  }
-
-  const bodies = { 'evimed-progress': ProgressTab, 'evimed-deliverables': DeliverablesTab, 'evimed-evidence': EvidenceTab, 'evimed-sources': SourcesTab };
+  kit.guarded('run view', () => kit.occupy({ slot: 'conversation.view', id: view.id, order: view.order, label: () => view.label }, RunView));
   for (const tab of tabs) {
-    kit.guarded(`${tab.id} body`, () => kit.occupy({ slot: 'sidebar.right.pane.tab', key: tab.id }, /** @type {Record<string, any>} */ (bodies)[tab.id]));
+    kit.guarded(`${tab.id} body`, () => kit.occupy({ slot: 'sidebar.right.pane.tab', key: tab.id }, FilesTab));
   }
 
   kit.withServices(['sidebarRightTabs'], (/** @type {any} */ scope) => {
@@ -373,29 +392,23 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     });
   });
 
+  // The column opens itself once per run, when that run first produces a file
+  // while the reader is watching — never on a visit to a finished task, and
+  // never onto an empty list.
   kit.withServices(['sidebarRight'], (/** @type {any} */ scope) => {
     /** @type {Set<string>} */
     const opened = new Set();
     /** @type {Set<string>} */
     const watchedWithout = new Set();
-    /** @param {string} runId @param {string} kind */
-    const open = (runId, kind) => {
-      const key = `${runId}:${kind}`;
-      if (opened.has(key)) return;
-      try { scope.sidebarRight.openTab(kind); opened.add(key); } catch { /* no seat mounted yet; the next change tries again */ }
-    };
     const check = () => {
       const state = kit.hub.getState();
       const live = liveRunFor(state.runState, state.session);
       if (!live || !live.runId) return;
       const runId = String(live.runId);
-      const progress = live.progress && typeof live.progress === 'object' ? live.progress : {};
-      const delegated = (Array.isArray(progress.children) && progress.children.length > 0)
-        || (Array.isArray(progress.deliverables) && progress.deliverables.some((/** @type {any} */ item) => item && ['delegated', 'submitted', 'rejected'].includes(item.status)));
-      if (live.state === 'running' && delegated) open(runId, 'evimed-progress');
       const produced = Boolean(artifactModel(live)?.produced);
-      if (!produced) watchedWithout.add(runId);
-      else if (watchedWithout.has(runId)) open(runId, 'evimed-deliverables');
+      if (!produced) { watchedWithout.add(runId); return; }
+      if (!watchedWithout.has(runId) || opened.has(runId)) return;
+      try { scope.sidebarRight.openTab(tabs[0].id); opened.add(runId); } catch { /* no seat mounted yet; the next change tries again */ }
     };
     scope.effect(() => kit.hub.subscribe(check), 'evimed-panels: automatic open');
     check();
@@ -406,5 +419,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'panels',
   inject,
-  parts: Object.freeze([frameStyles, toolviewText, verdictText, liveRunFor, childLinkFor, panelTabs, runStateText, artifactKind, progressModel, artifactModel, evidenceModel, sourcesModel, apply]),
+  parts: Object.freeze([frameStyles, toolviewText, verdictText, liveRunFor, childLinkFor, panelTabs, runViewTab, runStateText, artifactKind, progressModel, artifactModel, evidenceModel, sourcesModel, apply]),
 });
