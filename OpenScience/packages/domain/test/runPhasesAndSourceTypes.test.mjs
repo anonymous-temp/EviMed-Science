@@ -39,7 +39,7 @@ test("a plain question has no phase at all", () => {
   assert.deepEqual(Object.values(summary.counts), [0, 0, 0, 0, 0, 0]);
 });
 
-test("the summary counts calls and names the latest labelled phase", () => {
+test("the summary counts calls and names the furthest phase reached", () => {
   const summary = summarizeRunPhases([
     { tool: "mcp__evimed__literature_search" },
     { tool: "mcp__evimed__literature_search" },
@@ -50,6 +50,25 @@ test("the summary counts calls and names the latest labelled phase", () => {
   assert.equal(summary.counts.search, 2);
   assert.equal(summary.counts.fulltext, 1);
   assert.equal(summary.current, "fulltext");
+  assert.deepEqual(summary.reached, ["search", "fulltext"], "a phase with no call behind it is not something to show");
+});
+
+test("the phase only advances: a run that delivered does not fall back to checking", () => {
+  // `current` used to be the phase of the most recent labelled call, so a run
+  // that delivered and then made one more checking call read 「核验」 for the
+  // rest of its life, while 「筛选」 read 0 on nearly every run. A reader
+  // watching a twenty-minute run asks how far it has got.
+  const summary = summarizeRunPhases([
+    { tool: "mcp__evimed__literature_search" },
+    { tool: "write", input: { filePath: "deliverables/d1/clinical-evidence-report.md" } },
+    { tool: "evimed_submit_deliverable" },
+    { tool: "evimed_package_check" },
+    { tool: "mcp__evimed__locate_quote" },
+  ]);
+  assert.equal(summary.current, "deliver");
+  assert.deepEqual(summary.reached, ["search", "claims", "write", "deliver"]);
+  assert.equal(summary.counts.claims, 2, "the counts are the evidence and are unchanged");
+  assert.equal(summary.counts.screen, 0);
 });
 
 test("source types come from publication types, most specific form first", () => {

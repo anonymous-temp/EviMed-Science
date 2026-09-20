@@ -850,6 +850,13 @@ test("the reference list is untranslated by definition, and it is the only secti
     "\n1. Authoritative source 1. https://professional.heart.org/evidence/1",
     `\n1. Zhang L, Wang Y, et al. ${title}. Lancet. 2023. https://doi.org/10.1000/prehospital.ntg`,
   );
+  // The claim that cites [1] is the paper now listed there. Rewriting the entry
+  // and leaving the ledger naming a different source is the defect
+  // `claim-reference-identity` reports, and this case is about the language of
+  // a bibliography, not about who [1] is.
+  for (const claim of listed.matrix.claims) {
+    if (claim.referenceNumber === 1) claim.sourceTitle = title;
+  }
   assert.ok(listed.reportText.includes(title), "the title must be in the reference list for this case to mean anything");
   const cited = validateClinicalEvidencePackage(listed);
   assert.equal(cited.valid, true, cited.issues.join("\n"));

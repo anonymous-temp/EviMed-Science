@@ -79,6 +79,19 @@ export async function apply(ctx, config) {
      * @type {Set<string>}
      */
     injectedSkills: new Set(),
+    /**
+     * What a run-level tool may look at, per root session: the deliverables
+     * this conversation planned, and a resolver for the claim ids they carry.
+     *
+     * Written by the run policy, which owns the plan; read by the reviewer,
+     * which otherwise reads `deliverables/` — the whole project workspace,
+     * every conversation that ever ran in it. One did: a GEO run's review came
+     * back judging another conversation's aspirin claims (2026-09-20).
+     * @type {Map<string, { deliverableIds: string[], resolveClaimIds: () => Promise<Set<string>> }>}
+     */
+    reviewScopes: new Map(),
+    /** @param {string} sessionId */
+    reviewScope(sessionId) { return this.reviewScopes.get(sessionId) ?? null },
     /** @param {string} sessionId @returns {string} */
     runIdForSession(sessionId) { return this.sessionRuns.get(sessionId) ?? '' },
   }

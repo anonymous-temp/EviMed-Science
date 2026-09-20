@@ -122,7 +122,7 @@ test("injects the live specialist registry into open-domain routing without forc
   });
 });
 
-test("a direct specialist route tells the model to delegate, and names what delegation injects", async () => {
+test("a direct specialist route names the capability and its method, and orders no delegation", async () => {
   await withProject(async (project) => {
     const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config, {
       routedSpecialist: {
@@ -136,15 +136,21 @@ test("a direct specialist route tells the model to delegate, and names what dele
       prepared.system,
       /clinical-evidence-synthesis、deep-research、biomedical-database-search、citation-integrity、manuscript-humanize/,
     );
-    assert.match(prepared.system, /用 evimed_delegate 把该专项的交付物委派给能力 clinical-evidence-synthesis/);
+    assert.match(prepared.system, /把交付物的 capability 写成 clinical-evidence-synthesis/);
+    // The default is to do the work in this conversation. A single-child
+    // delegation buys neither parallelism nor a smaller context, and it put a
+    // twenty-minute run behind 「正在等待 1 个子任务…」 with its whole process
+    // in another view (2026-09-20).
+    assert.match(prepared.system, /默认就在这次对话里按该方法完成检索、阅读、证据与写作/);
+    assert.doesNotMatch(prepared.system, /父代理不要自行执行/);
     // The capability bodies are not in the kernel's skill roots. Telling the
     // model to fetch them with the skill tool asked for the impossible, and a
     // geo-content run that obeyed the rest of that instruction did an hour of
     // work in the root session and failed the gate for the method it could
-    // never load.
-    assert.match(prepared.system, /无需也无法用 skill 工具在本会话中加载专项方法/);
+    // never load. The run policy hands them over instead.
+    assert.match(prepared.system, /不需要也无法用 skill 工具加载/);
     assert.doesNotMatch(prepared.system, /逐个调用 skill 工具/);
-    assert.match(prepared.system, /evimed_complete_run/);
+    assert.doesNotMatch(prepared.system, /evimed_complete_run/, "a conversation turn ending is the run ending");
   });
 });
 
@@ -269,7 +275,7 @@ test("a skill with an empty body is not reported as mounted", async () => {
   });
 });
 
-test("a routed specialist turn mounts nothing and keeps its own delegation instruction", async () => {
+test("a routed specialist turn mounts nothing and keeps its own capability instruction", async () => {
   await withProject(async (project) => {
     const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config, {
       routedSpecialist: {
@@ -278,14 +284,14 @@ test("a routed specialist turn mounts nothing and keeps its own delegation instr
         skill: "clinical-evidence-synthesis",
         companionSkills: [],
       },
-      // Even offered one, a routed turn must not take it: delegation injects
-      // the capability's skills into the child, and a second copy in the root
-      // system prompt would be a persona the child never sees.
+      // Even offered one, a routed turn must not take it: the answer persona
+      // says report packages are not its job, and the capability's own method
+      // is what this turn works from.
       mountableSkills: [{ name: "open-domain-answer", body: "answers first"  }],
     });
 
     assert.deepEqual(prepared.mountedSkills, []);
     assert.doesNotMatch(prepared.system, /<evimed-skill/);
-    assert.match(prepared.system, /用 evimed_delegate 把该专项的交付物委派给能力 clinical-evidence-synthesis/);
+    assert.match(prepared.system, /把交付物的 capability 写成 clinical-evidence-synthesis/);
   });
 });

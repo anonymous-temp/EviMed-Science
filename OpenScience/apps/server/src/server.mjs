@@ -1234,23 +1234,35 @@ export function createWebApiApp(overrides = {}) {
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
     usageLedger,
   });
-  // Which run an interactive runtime's model request belongs to (E §9.4):
-  // the one running in its project, when exactly one is. Remembered for a
-  // few seconds because the gateway asks on every model call, and forgotten
-  // the moment any run of the project changes state.
-  /** @type {Map<string, { at: number, runId: string | null }>} */
+  // Which run an interactive runtime's model request belongs to (E §9.4).
+  //
+  // By conversation, when the request says which one it is: the kernel stamps
+  // its session id on every model call, and the run ledger knows which run each
+  // conversation — and each of its subagents — belongs to. Without it, the old
+  // rule: the run in this project, when exactly one is running. That rule is
+  // why two conversations in the default project both read 「约 ¥0.00」 on
+  // 2026-09-20; the catch-all project makes concurrency the normal case.
+  //
+  // The running list is remembered for a few seconds because the gateway asks
+  // on every model call, and forgotten the moment any run of the project
+  // changes state. The session is resolved per request against that list, so a
+  // conversation never inherits another's cached answer.
+  /** @type {Map<string, { at: number, running: { id: string, sessionId: string }[] }>} */
   const runAttribution = new Map();
-  const attributeRun = async ({ userId, projectId }) => {
+  const attributeRun = async ({ userId, projectId, sessionId = null }) => {
     const key = `${userId}\0${projectId}`;
     const known = runAttribution.get(key);
-    if (known && Date.now() - known.at < 3_000) return known.runId;
-    const user = await store.userById(userId);
-    if (!user) return null;
-    const running = await agentRuns.activeRunIds(await store.requireProject(user, projectId));
-    const runId = running.length === 1 ? running[0] : null;
-    runAttribution.set(key, { at: Date.now(), runId });
-    if (runAttribution.size > 5_000) runAttribution.delete(runAttribution.keys().next().value);
-    return runId;
+    let running = known && Date.now() - known.at < 3_000 ? known.running : null;
+    if (!running) {
+      const user = await store.userById(userId);
+      if (!user) return null;
+      running = await agentRuns.activeRuns(await store.requireProject(user, projectId));
+      runAttribution.set(key, { at: Date.now(), running });
+      if (runAttribution.size > 5_000) runAttribution.delete(runAttribution.keys().next().value);
+    }
+    // Scoped to this project's own running runs, because the session id is a
+    // hint from inside the container.
+    return agentRuns.runIdForSession(sessionId, running) ?? (running.length === 1 ? running[0].id : null);
   };
   // Run outcomes for /api/ops/metrics (plan §3.8): counted in memory as each
   // run ends, never read back from a project's run ledger, which can be wiped.
