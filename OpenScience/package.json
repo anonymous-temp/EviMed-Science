@@ -78,6 +78,8 @@
     "lint:domain": "pnpm --filter @evimed/domain lint",
     "typecheck:server": "pnpm --filter @ai4s/server typecheck",
     "build:capabilities": "node scripts/build/generate-capability-manifests.mjs",
+    "tokens:css": "node scripts/build/generate-design-tokens.mjs",
+    "check:tokens-css": "node scripts/build/generate-design-tokens.mjs --check",
     "check:composition-references": "node scripts/ops/verify-composition-references.mjs",
     "check:capabilities": "node scripts/build/generate-capability-manifests.mjs --check",
     "check:tool-graph": "node scripts/dev/build-tool-graph.mjs --check",
