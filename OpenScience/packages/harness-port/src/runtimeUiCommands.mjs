@@ -114,6 +114,7 @@ export function toolPageModel(capabilities, id) {
     summary: String(entry.summary || ''),
     minutes: toolMinutes(entry),
     outputs: Array.isArray(entry.outputs) ? entry.outputs : [],
+    limits: Array.isArray(entry.limits) ? entry.limits : [],
     materials: typeof entry.materials === 'string' ? entry.materials : '',
     starters: Array.isArray(entry.starters) ? entry.starters : [],
   };
@@ -314,6 +315,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       h('div', { style: { ...secondary, color: 'var(--dsw-alias-label-secondary)' } }, model.summary),
       model.outputs.length ? h('div', { style: { ...secondary, color: 'var(--dsw-alias-label-tertiary)' } }, `你会拿到：${model.outputs.join('；')}`) : null,
       model.materials ? h('div', { style: { ...secondary, color: 'var(--dsw-alias-label-tertiary)' } }, `开始前：${model.materials}`) : null,
+      model.limits.length ? h('div', { style: { ...secondary, color: 'var(--dsw-alias-label-tertiary)' } }, `做不到：${model.limits.join('；')}`) : null,
       model.starters.length ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' } },
         model.starters.map((/** @type {string} */ starter) => h('button', {
           key: starter, type: 'button', onClick: () => fill(starter),

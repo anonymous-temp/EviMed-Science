@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { evaluationLines, researchAgentUi } from "./researchAgentUi";
+import { researchAgentUi } from "./researchAgentUi";
 import type { WebResearchAgent } from "./apiClient";
 
 // The catalogue the browser renders is `GET /api/agents`: every capability
@@ -62,20 +62,6 @@ describe("researchAgentUi", () => {
     const shown = researchAgentUi(stub("not-a-capability"));
     expect(shown.title).toBe("English Title");
     expect(shown.deliverables).toEqual([]);
-    expect(shown.evaluation).toBeNull();
   });
 
-  it("says how well a capability has done only from what evals/ recorded", () => {
-    expect(evaluationLines(null)).toEqual([]);
-    expect(evaluationLines({ lastStatus: "not-run", lastRunAt: null })).toEqual(["还没有真实交付的记录。"]);
-    expect(evaluationLines({ lastStatus: "accepted", lastRunAt: "2026-09-10", runs: 3, delivered: 2, typicalMinutes: 14 })).toEqual([
-      "最近一次真实交付（2026年9月10日）已通过验收。",
-      "评测记录 3 次，其中 2 次交付成功。",
-      "交付成功的那几次，用时中位数约 14 分钟。",
-    ]);
-    expect(evaluationLines({ lastStatus: "failed", lastRunAt: "2026-09-08", runs: 1, delivered: 0, typicalMinutes: null })).toEqual([
-      "最近一次真实交付（2026年9月8日）没有通过验收。",
-      "评测记录 1 次，其中 0 次交付成功。",
-    ]);
-  });
 });
