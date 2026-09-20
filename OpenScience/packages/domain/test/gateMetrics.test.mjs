@@ -113,3 +113,51 @@ test("the metrics never block: they are advisory whatever they say", () => {
     assert.deepEqual(fromMetrics, [], `${kind} turned a verification metric into a blocking issue`);
   }
 });
+
+test("a claim whose reference number names a different source is reported, and counted", async () => {
+  // The 2026-09-20 aspirin delivery: a child renumbered its citations by hand,
+  // every number resolved to an entry, every line was paired — and from [5] on
+  // the body ran one ahead of the list. A review model plus five shell calls
+  // found it; it is decidable from two recorded fields.
+  const { validateClinicalEvidencePackage, verificationGateMetrics, clinicalCheckTier } = await import("../src/clinicalEvidence.mjs");
+  const report = [
+    "# 报告",
+    "",
+    "阿司匹林降低复发风险 <!-- claim:CLM-001 --> [1]。",
+    "",
+    "## 参考文献",
+    "",
+    "1. Beta et al. A different paper entirely. Journal B. 2023. PMID: 22222222",
+    "2. Alpha et al. The paper the claim names. Journal A. 2024. PMID: 11111111",
+    "",
+  ].join("\n");
+  const claims = [{
+    claimId: "CLM-001",
+    claimType: "direct",
+    claim: "阿司匹林降低复发风险",
+    referenceNumber: 1,
+    identifier: "PMID: 11111111",
+    sourceTitle: "The paper the claim names",
+    supportQuote: "aspirin reduced recurrence",
+    artifactPath: ".evimed-sources/pubmed/PMID11111111.txt",
+    accessLevel: "full-text",
+  }];
+  const verdict = validateClinicalEvidencePackage({
+    reportText: report,
+    matrix: { claims },
+    sourceArtifacts: { ".evimed-sources/pubmed/PMID11111111.txt": "aspirin reduced recurrence" },
+    successfulArtifacts: new Set([".evimed-sources/pubmed/PMID11111111.txt"]),
+  });
+  const finding = (verdict.issueChecks ?? []).find((entry) => entry.check === "claim-reference-identity");
+  assert.ok(finding, `the mismatch is reported: ${JSON.stringify((verdict.issueChecks ?? []).map((entry) => entry.check))}`);
+  assert.match(finding.text, /CLM-001/);
+  assert.match(finding.text, /evimed_render_report/, "and it says how to put the numbering right");
+  assert.equal(clinicalCheckTier("claim-reference-identity"), "advisory", "a new check ships as a notice with a counter (principle 4)");
+
+  // The counter the distribution is read off.
+  assert.equal(verificationGateMetrics({ matrix: { claims }, reportText: report }).referenceIdentityMismatches, 1);
+
+  // And an entry that does name the claim's source says nothing.
+  const agreeing = report.replace("1. Beta et al. A different paper entirely. Journal B. 2023. PMID: 22222222", "1. Alpha et al. The paper the claim names. Journal A. 2024. PMID: 11111111");
+  assert.equal(verificationGateMetrics({ matrix: { claims }, reportText: agreeing }).referenceIdentityMismatches, 0);
+});

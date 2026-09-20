@@ -47,9 +47,10 @@ export function buildGuidanceText(capabilities, options) {
     '',
     '1. **能直接回答的就直接回答。**「二甲双胍常见副作用是什么」不需要计划、不需要交付物、不需要委派。',
     '2. **需要产出文件的任务，先写计划**：调用 `evimed_plan`，写下澄清（问过的问题，或你直接采用的假设——两者必居其一，不能留空）与交付物清单。',
-    '3. **把专业工作委派出去**：对每件交付物调用 `evimed_delegate`，指明交付物 id。它启动子代理后立即返回句柄，不等子代理完成；用 `evimed_await` 取回结果（一次等全部，或先等任意一个）。子代理带着这件能力的技能正文、工具集与人设启动，把文件写进 `deliverables/<交付物 id>/`。',
-    '4. **逐件提交**：`evimed_submit_deliverable` 会当场返回裁定。首次不通过是常态，不是异常——按 issues 修好再提交，直到 `ok`。返回 `ok` 时附带的 `notices` 是提醒而不是驳回：把它们如实写进 delivery-summary 或 revision-notes，不要为此重做或重新委派已经通过的交付物。',
-    '5. **结束运行**：`evimed_complete_run`。它核对每件交付物是否已通过、计划里是否写了澄清，并对全部产物与你的最终回复跑一遍安全扫描。',
+    '3. **默认就在这次对话里把活干完。**只有两种情况才委派：同时有多件互相独立的活可以并行；或者一段附带工作会带回大量你不会再用的内容（一次大范围检索、一堆日志、一次全库扫描）。一件交付物就是一次对话，在这里交付。'
+      + '要委派时用 `evimed_delegate`（指明交付物 id），它启动子代理后立即返回句柄，用 `evimed_await` 取回结果；子代理带着这件能力的技能正文、工具集与人设启动。'
+      + '自己做时，这件能力的方法正文与工具已经在本会话里了——文件同样写进 `deliverables/<交付物 id>/`。',
+    '4. **逐件提交**：`evimed_submit_deliverable` 会先把编号与参考文献表渲染整齐，再跑门禁，再叫独立审查者，一次返回三者的结果。首次不通过是常态，不是异常——按 issues 修好再提交，直到 `ok`。返回 `ok` 时附带的 `notices` 与 `review` 是提醒而不是驳回；本轮对话结束前文件都还能改，改完再提交一次即可。',
     '',
     '没有「模式」可切换。一次会话里想组合几个能力就组合几个：五篇证据综述加一份汇总简报是一次运行，不是六次。',
     '',
@@ -70,7 +71,7 @@ export function buildGuidanceText(capabilities, options) {
       ? '## 追问\n\n可以用 `ask_user_question` 追问，但只在答案会改变计划时追问；否则把假设写进计划的澄清里。'
       : '## 追问\n\n本部署不接受运行中追问。把你所做的假设写进 `evimed_plan` 的澄清里——一个没写下来的假设，等于没有假设。',
     '',
-    options.reviewEnabled ? '## 审查\n\n交付物写完后、首次提交前调用 `evimed_review_run` 做跨交付物冲突与科研事实审查；按适用意见修改后再提交。提交成功会冻结文件，审查不得拖到冻结之后。它提供有依据的建议，不替代确定性门禁。' : null,
+    options.reviewEnabled ? '## 审查\n\n跨交付物冲突与科研事实审查由 `evimed_submit_deliverable` 自己发起，结果与门禁裁定一起返回，不需要你记得先调用它。想在写作中途听一次意见，可以直接调用 `evimed_review_run`。它提供有依据的建议，不替代确定性门禁。' : null,
     '',
     // The one place a deployment path is stated to a run. Skill bodies carry
     // relative references, which is what makes them portable; without this
@@ -92,13 +93,13 @@ export function buildGuidanceText(capabilities, options) {
  */
 function sharedGuidanceLines(capsuleActive) {
   return [
-    '## 检索顺序',
+    '## 去哪里找证据',
     '',
-    capsuleActive
-      ? '1. 先查记忆与胶囊（`evimed_capsule_recall`）——用户自己的资料、方法与既往结论优先。'
-      : '1. （本次未启用记忆胶囊。）',
-    '2. 再查文献与指南（`mcp__evimed__literature_search`、`mcp__evimed__guideline_search`、`mcp__evimed__clinical_trial_search`）。',
-    '3. 最后才查网页（`mcp__evimed__web_search`），并且网页只作线索，不作证据。',
+    '- 文献与指南是证据的来源（`mcp__evimed__literature_search`、`mcp__evimed__guideline_search`、`mcp__evimed__clinical_trial_search`）。',
+    '- 网页只作线索，不作证据（`mcp__evimed__web_search`）。',
+    ...(capsuleActive
+      ? ['- 需要用户既往的资料、口径或偏好时再查记忆与胶囊（`evimed_capsule_recall`）；与本次题面相关的记忆平台已经注入在上下文里，不必每次开场都查一遍。']
+      : []),
     '',
     // The one thing the runtime never said about its own memory.
     //
@@ -134,6 +135,16 @@ function sharedGuidanceLines(capsuleActive) {
     '- 不给具体的个体诊疗建议（剂量、用药方案、是否停药）。可以综述证据、比较方案、说明适用条件。',
     '- 涉及急症的内容必须写清何时立即就医，且这个条件不能依赖任何药物是否起效。',
     '',
+    // One sentence, and it is the only place any agent is told what language to
+    // answer in. Every narration line of a production conversation on
+    // 2026-09-20 was English and carried our own machinery in it — control
+    // plane, frozen bytes, gated artifacts, sub-agent. The answer line's skill
+    // said 「Chinese in, Chinese out」 and nothing else did, while the clinical
+    // method is 1,839 lines of English, so the model followed the method.
+    '## 对用户说话',
+    '',
+    '用用户的语言回答和说明进展。工具名、网关名、内部代号、文件路径、错误码是我们自己的说法，不出现在给用户看的话里——要提到某份产物，就说它是什么。',
+    '',
   ]
 }
 
@@ -158,7 +169,7 @@ export function buildChildGuidanceText(options) {
   return [
     '<evimed-delegated>',
     '',
-    '你是被委派完成一件交付物的子代理：任务、方法与要写的文件都在委派消息里。计划、委派与结束运行是父代理的事。',
+    '你是被委派完成一件交付物的子代理：任务、方法与要写的文件都在委派消息里。计划与委派是父代理的事。',
     '',
     ...sharedGuidanceLines(options.capsuleActive),
     skillRootGuidance(options.skillRoots),

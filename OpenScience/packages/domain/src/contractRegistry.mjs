@@ -340,6 +340,9 @@ function validateClinicalEvidenceReport(input) {
       ...verificationGateMetrics({
         matrix,
         staleEvidenceCount: input.staleEvidenceCount ?? 0,
+        // The reference-identity counter reads the report and the matrix
+        // together; a metric computed from half of a package measures nothing.
+        reportText: text(input, 'clinical-evidence-report.md'),
       }),
       // A measurement, not a rule: which section serves which question is not
       // decidable here, so the run is handed the shares and applies the rule.

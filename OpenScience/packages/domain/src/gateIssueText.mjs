@@ -90,6 +90,7 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'practical-claim-anchor': '实践建议缺少证据引用',
   'reference-list-duplication': '同一文献被重复编号',
   'reference-number-unresolved': '引用编号缺少文献条目',
+  'claim-reference-identity': '引用编号指向了另一篇来源',
   'claim-inline-citation': '主张未配正文编号引用',
   'advisory-notes': '写作层面的改进建议',
   // A claim's structured appraisal (`appraisalStructure.mjs`, S6 2026-09-18):

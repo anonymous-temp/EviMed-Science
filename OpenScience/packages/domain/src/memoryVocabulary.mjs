@@ -55,6 +55,9 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   { tag: 'evimed-run', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   { tag: 'evimed-skill', role: 'injected', emitters: ['packages/socket/plugins/guidance.mjs', 'apps/server/src/researchContext.mjs'] },
   { tag: 'evimed-orchestration', role: 'injected', emitters: ['packages/socket/src/guidanceText.mjs'] },
+  // The capability's method, handed to the session that is doing the work
+  // itself rather than delegating it (2026-09-20).
+  { tag: 'evimed-method', role: 'injected', emitters: ['packages/socket/src/runPolicy.mjs'] },
   { tag: 'evimed-delegated', role: 'injected', emitters: ['packages/socket/src/guidanceText.mjs'] },
   { tag: 'evimed-memory', role: 'injected', emitters: ['apps/server/src/researchContext.mjs'] },
   {

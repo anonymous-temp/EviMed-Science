@@ -13,10 +13,17 @@
  * no access to the reasoning it is checking, and grounding tools the original
  * reasoner did not use — and its output is advice.
  *
+ * The review itself lives in `../src/review.mjs`, because `evimed_submit_deliverable`
+ * runs it too (2026-09-20): a review the method text asked the model to
+ * remember was a review that got skipped, and the package was frozen before
+ * anybody had looked at it. This tool stays for a model that wants an opinion
+ * mid-draft.
+ *
  * @module @evimed/dsh-socket/plugins/review
  */
 
-import { configSchema, defineTool, registerTool, startSubagent, toSubagentOutcome } from '@evimed/harness-port'
+import { configSchema, defineTool, registerTool } from '@evimed/harness-port'
+import { REVIEW_MAX_CLAIMS, REVIEW_VERDICT_SCHEMA, reviewNoticeText, runReview } from '../src/review.mjs'
 
 const Schema = await configSchema()
 
@@ -30,32 +37,11 @@ export const inject = ['tools', 'subagents']
  */
 
 export const Config = Schema.object({
-  maxClaims: Schema.number().default(40)
+  maxClaims: Schema.number().default(REVIEW_MAX_CLAIMS)
     .description('Claims examined per review. A ceiling exists because review cost scales with the package and its value does not.'),
 })
 
-/** The reviewer's fixed output shape: a verdict per claim, with its grounds. */
-export const REVIEW_VERDICT_SCHEMA = Object.freeze({
-  type: 'object',
-  additionalProperties: true,
-  required: ['verdicts'],
-  properties: {
-    verdicts: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: true,
-        required: ['claimId', 'verdict', 'grounds'],
-        properties: {
-          claimId: { type: 'string' },
-          verdict: { type: 'string', enum: ['stands', 'weakened', 'contradicted'] },
-          grounds: { type: 'string' },
-          conflictsWith: { type: 'array', items: { type: 'string' } },
-        },
-      },
-    },
-  },
-})
+export { REVIEW_VERDICT_SCHEMA }
 
 /**
  * @param {any} ctx
@@ -71,8 +57,8 @@ export async function apply(ctx, config) {
   const reviewTool = await defineTool({
     name: 'evimed_review_run',
     description: [
-      '对本次运行的全部交付物做一次跨产物审查：同一实体的结论是否互相矛盾、抽样事实是否核得住。',
-      '在首次提交前调用，按适用意见修改并复审；提交后文件被冻结，届时意见不能再修进交付版。',
+      '对本次运行的交付物做一次跨产物审查：同一实体的结论是否互相矛盾、抽样事实是否核得住。',
+      '提交时会自动跑一次，裁定与审查意见一起返回；写作中途想先听一次意见，再调用它。',
       '它给建议，不替代确定性门禁。',
     ].join(' '),
     parameters: {
@@ -83,48 +69,29 @@ export async function apply(ctx, config) {
       // lookup on the right was always the branch taken — a preference that
       // read as deliberate and could never apply.
       const parent = ctx.get('agents')?.get?.(call.agentId)
-      if (!parent) return { ok: false, code: 'review_unavailable', issues: [{ code: 'review_unavailable', severity: 'advisory', message: '当前会话不可审查。' }] }
-      const request = {
-        capability: 'evimed-review',
-        label: '跨交付物审查',
-        prompt: reviewPrompt(args.focus ?? '', config.maxClaims),
-        // Grounding tools the original reasoner did not use: a verifier that can
-        // only re-read the same artifacts can only re-derive the same mistakes.
-        tools: ['read', 'glob', 'grep', 'mcp__evimed__literature_search', 'mcp__evimed__open_access_full_text', 'mcp__evimed__web_read'],
-        persona: '你是独立审查者。你没有看过产出这些结论的推理过程，也不要去猜它。你的任务是评价，不是续写。',
-        outputSchema: REVIEW_VERDICT_SCHEMA,
-        maxDepth: 1,
+      // Which deliverables belong to this conversation. Published by the run
+      // policy, because the plan is its state; absent (a native turn with no
+      // plan) the reviewer reads the whole directory as it always did.
+      const scope = ctx.get('evimedRun')?.reviewScope?.(call.sessionId) ?? null
+      const result = await runReview(ctx, {
+        parent,
+        signal: call.signal,
+        deliverableIds: scope?.deliverableIds ?? [],
+        claimIds: scope?.claimIds ?? null,
+        focus: args.focus ?? '',
+        maxClaims: config.maxClaims,
+      })
+      if (!result.ok) {
+        return { ok: false, code: result.code, issues: [{ code: result.code, severity: 'advisory', message: result.message }] }
       }
-      const run = await startSubagent(ctx, request, parent, call.signal)
-      const outcome = toSubagentOutcome(run, await run.result)
-      if (outcome.stopReason !== 'completed') {
-        return { ok: false, code: 'review_unavailable', issues: [{ code: 'review_unavailable', severity: 'advisory', message: `审查未完成：${outcome.diagnostic || outcome.stopReason}` }] }
-      }
-      const verdicts = Array.isArray(outcome.structured?.verdicts) ? outcome.structured.verdicts : []
       const diagnostics = ctx.get('evimedDiagnostics')?.forSession?.(call.sessionId) ?? ctx.get('evimedDiagnostics')
-      for (const verdict of verdicts) {
+      for (const verdict of result.verdicts) {
         if (verdict?.verdict === 'stands') continue
-        diagnostics?.notice?.(`review ${verdict?.verdict}: ${verdict?.claimId} — ${verdict?.grounds}`)
+        diagnostics?.notice?.(reviewNoticeText(verdict))
       }
       // Advice, not a verdict: nothing here changes a deliverable's status.
-      return { ok: true, data: { verdicts, blocking: false } }
+      return { ok: true, data: { verdicts: result.verdicts, blocking: false, ...(result.outOfScope ? { outOfScope: result.outOfScope } : {}) } }
     },
   })
   ctx.effect(() => registerTool(ctx, reviewTool))
-}
-
-/** @param {string} focus @param {number} maxClaims @returns {string} */
-function reviewPrompt(focus, maxClaims) {
-  return [
-    '审查本次运行 `deliverables/` 下的全部产物。',
-    '',
-    '1. 读出每份产物里的结论（claim）与它引用的来源。',
-    '2. 找出**同一实体上互相矛盾**的结论，逐对指出。',
-    `3. 抽样核查最多 ${maxClaims} 条结论：用检索工具去核，只接受可解析的文献结果作为依据。`,
-    '4. 对每条给出 stands / weakened / contradicted 与理由。',
-    '',
-    focus ? `重点：${focus}` : '',
-    '',
-    '你没有看过产出这些结论的推理过程。不要重建它，也不要替它辩护——按产物本身与你自己查到的证据判断。',
-  ].filter(Boolean).join('\n')
 }

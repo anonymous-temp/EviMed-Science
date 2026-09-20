@@ -78,6 +78,8 @@ import {
   accumulateBudget,
   awaitSelection,
   buildDelegation,
+  buildInlineMethod,
+  namedCapabilityIds,
   childReport,
   completionCheck,
   contentTriggerIssues,
@@ -98,6 +100,7 @@ import {
   unmetDependencies,
 } from '../src/runPolicy.mjs'
 import { advancePlanItem } from '../src/runMirror.mjs'
+import { REVIEW_MAX_CLAIMS, reviewFindings, reviewNoticeText, runReview } from '../src/review.mjs'
 import { capSkillBodies } from '../src/skillBodies.mjs'
 import { proseShape } from '../src/proseShape.mjs'
 import {
@@ -142,6 +145,7 @@ export const inject = ['tools', 'agents', 'sessions', 'subagents']
  * @property {string} [revisionAuthorizeUrl]
  * @property {string} [tokenFile]
  * @property {number} [revisionAuthorizeTimeoutMs]
+ * @property {boolean} reviewEnabled
  */
 
 export const Config = Schema.object({
@@ -178,6 +182,12 @@ export const Config = Schema.object({
     .description('Path to the current workload token used only for the internal revision authorization call.'),
   revisionAuthorizeTimeoutMs: Schema.number().default(3000)
     .description('Bound for the internal revision authorization call.'),
+  // The same switch the review row and the guidance read. A submission runs
+  // the review itself now, so this plugin has to know whether the deployment
+  // composed one; asking the review plugin is not available to it (a preset row
+  // may not publish a process-global service).
+  reviewEnabled: Schema.boolean().default(false)
+    .description('Whether the independent reviewer is composed in this deployment. Submission runs it when it is.'),
 })
 
 /**
@@ -348,6 +358,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         /** Set when the researcher cancelled: nothing may wake the run again. */
         wakeSuppressed: false,
         completed: false,
+        /** Capabilities whose method is already in front of this session. */
+        inlineCapabilities: new Set(),
+        /** The control plane's context block for this dispatch, kept because it
+         *  is where a routed session's capability is named. */
+        contextText: null,
+        /** Set when the turn ended: the receipt is written and the bytes are
+         *  the delivery. Within a turn a deliverable stays editable. */
+        frozen: false,
       }
       state.set(sessionId, entry)
     }
@@ -417,9 +435,17 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** @param {string} sessionId */
   const diagnostics = (sessionId) => ctx.get('evimedDiagnostics')?.forSession?.(sessionId) ?? ctx.get('evimedDiagnostics')
 
-  /** Root agents whose research-tool surface has been narrowed. An agent
-   *  that resumes or compacts starts its session again and keeps its scope. */
-  const narrowed = new WeakSet()
+  /**
+   * Root agents whose tool surface this plugin narrowed, with the disposers.
+   *
+   * Kept rather than forgotten: the registry intersects every restriction on an
+   * agent's scope, so the only way to hand a tool back is to dispose the
+   * restriction and re-apply a smaller one. That is what the inline path needs
+   * — a session doing a capability's work itself must be able to call the
+   * capability's tools, and the root is narrowed before it has a plan.
+   * @type {WeakMap<any, { disposers: (() => void)[], allowed: Set<string> }>}
+   */
+  const rootScopes = new WeakMap()
 
   /**
    * Show the root session only the research tools its own work calls for.
@@ -440,15 +466,37 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    * @param {any} agent
    */
   const narrowRootTools = (agent) => {
-    if (!agent?.ctx || isSubagentSession(agent) || narrowed.has(agent)) return
-    narrowed.add(agent)
+    if (!agent?.ctx || isSubagentSession(agent) || rootScopes.has(agent)) return
+    applyRootNarrowing(agent, [])
+  }
+
+  /**
+   * Narrow this root to its own tools plus `allowed`, replacing whatever
+   * narrowing it carried.
+   * @param {any} agent @param {Iterable<string>} allowed
+   */
+  const applyRootNarrowing = (agent, allowed) => {
     const sessionId = String(agent?.session?.id ?? '')
-    // The claim tools are a child's: the root delegates the evidence work, and
-    // their two schemas would otherwise ride every root request. Their own
-    // restriction, so a failure here leaves the research narrowing standing.
-    // They are this plugin's own registrations, known before any session.
+    for (const dispose of rootScopes.get(agent)?.disposers ?? []) {
+      // isolated: a restriction that is already gone is gone; failing here
+      // would leave the session with no narrowing and no explanation.
+      try {
+        dispose()
+      } catch (error) {
+        diagnostics(sessionId)?.degrade?.(`root narrowing not released: ${errorMessage(error)}`)
+      }
+    }
+    const keep = new Set(allowed)
+    /** @type {(() => void)[]} */
+    const disposers = []
+    // The claim tools are the evidence writer's: without a capability of its
+    // own a root has no matrix to write, and their two schemas would ride every
+    // root request. Their own restriction, so a failure here leaves the
+    // research narrowing standing. They are this plugin's own registrations,
+    // known before any session.
     try {
-      restrictAgentTools(agent, { deny: CLAIM_TOOLS })
+      const deny = CLAIM_TOOLS.filter((tool) => !keep.has(tool))
+      if (deny.length) disposers.push(restrictAgentTools(agent, { deny }))
     } catch (error) {
       diagnostics(sessionId)?.degrade?.(`root claim-tool narrowing failed: ${errorMessage(error)}`)
     }
@@ -456,13 +504,136 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       const registered = registeredToolNames(ctx)
       if (registered.length && !registered.some((tool) => tool.startsWith(MCP_TOOL_PREFIX))) {
         diagnostics(sessionId)?.degrade?.('root research-tool narrowing found no research tools registered at session start')
-        return
+      } else {
+        const deny = rootHiddenMcpTools(registered).filter((tool) => !keep.has(tool))
+        if (deny.length) disposers.push(restrictAgentTools(agent, { deny }))
       }
-      const deny = rootHiddenMcpTools(registered)
-      if (deny.length) restrictAgentTools(agent, { deny })
     } catch (error) {
       diagnostics(sessionId)?.degrade?.(`root research-tool narrowing failed: ${errorMessage(error)}`)
     }
+    rootScopes.set(agent, { disposers, allowed: keep })
+  }
+
+  /**
+   * Give this session what a delegated child would have been given for one
+   * capability: its method, its persona, and the tools its manifest asks for.
+   *
+   * Delegation is on demand now. The root is told to do the work here unless
+   * parallelism or noise isolation buys something, and 「do it here」 without
+   * the method is how a run produced a full package and was then marked
+   * 未核验 for a method the platform was holding (2026-09-09, and again in the
+   * 2026-09-20 walk). The skill names are recorded through the same receipt a
+   * delegation writes, so the control plane's completion check sees the method
+   * was in front of the model however the work was done.
+   *
+   * @param {Record<string, any>} entry @param {any} agent @param {string} capabilityId
+   * @param {{ contractKind?: string, item?: Record<string, any> | null }} [options]
+   * @returns {Promise<boolean>}
+   */
+  const activateInlineCapability = async (entry, agent, capabilityId, options = {}) => {
+    if (!agent || entry.subagent || !capabilityId) return false
+    if (entry.inlineCapabilities.has(capabilityId)) return false
+    const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === capabilityId)
+    // An internal capability is dispatched by its own background workflow and
+    // is not something a conversation takes on.
+    if (!manifest || manifest.visibility === 'internal') return false
+    const item = options.item ?? null
+    const kind = resolveContractKind(manifest, options.contractKind ?? item?.contractKind ?? '')
+    const contractKind = kind.ok ? kind.contractKind : ''
+    entry.inlineCapabilities.add(capabilityId)
+    // Tools before the method: a method naming a tool the session cannot call
+    // is worse than no method at all.
+    const scope = rootScopes.get(agent)
+    if (scope) applyRootNarrowing(agent, [...scope.allowed, ...delegationToolFilter(manifest, { allowBash: true, contractKind })])
+    const skillBodies = await readSkillBodies(ctx, config.skillsDir, manifest)
+    const method = capSkillBodies(skillBodies, { skillsDir: config.skillsDir })
+    try {
+      injectContext(agent, buildInlineMethod({
+        manifest,
+        item,
+        contractKind,
+        skillBodies: method.inline,
+        deferredSections: method.deferred,
+        capsuleMethods: ctx.get('evimedCapsuleMethods') ?? [],
+      }), name)
+    } catch (error) {
+      diagnostics(entry.sessionId)?.degrade?.(`inline capability method not injected: ${errorMessage(error)}`)
+      return false
+    }
+    // The receipt. `skillsLoaded` is a deterministic property — was the method
+    // in front of the model — and this is the same channel delegation writes it
+    // through, read by the control plane out of the run-state projection.
+    for (const skill of skillBodies) ctx.get('evimedDiagnostics')?.injectedSkill?.(skill.name)
+    return true
+  }
+
+  /**
+   * The capability this session is working as, when there is exactly one.
+   *
+   * The plan is the model's own declaration and comes first. Before there is a
+   * plan, a session the control plane routed to a capability says so in the
+   * context block it was dispatched with, and matching that against the
+   * catalogue is a closed-vocabulary lookup (principle 5). Two capabilities
+   * named is a run that should delegate them in parallel, and neither is
+   * activated.
+   * @param {Record<string, any>} entry @param {any} agent
+   * @returns {Promise<void>}
+   */
+  const activateBoundCapability = async (entry, agent) => {
+    if (!agent || entry.subagent) return
+    const planned = [...new Set(entry.items.map((/** @type {any} */ item) => String(item.capability ?? '')).filter(Boolean))]
+    if (planned.length > 1) return
+    if (planned.length === 1) {
+      const item = entry.items.find((/** @type {any} */ candidate) => String(candidate.capability ?? '') === planned[0]) ?? null
+      await activateInlineCapability(entry, agent, planned[0], { item, contractKind: item?.contractKind ?? '' })
+      return
+    }
+    const named = namedCapabilityIds(`${entry.briefText ?? ''}\n${entry.contextText ?? ''}`, ctx.get('evimedCapabilities') ?? [])
+    if (named.length === 1) await activateInlineCapability(entry, agent, named[0])
+  }
+
+  /**
+   * What a run-level tool may look at: the deliverables this conversation
+   * planned, and the claims they carry.
+   *
+   * One project's workspace holds every conversation that ran in it, so
+   * `deliverables/` is not a scope. A GEO run's review came back judging
+   * another conversation's aspirin claims (2026-09-20).
+   * @param {Record<string, any>} entry @param {string} cwd
+   */
+  const publishReviewScope = (entry, cwd) => {
+    const scopes = ctx.get('evimedRun')?.reviewScopes
+    if (!scopes) return
+    const deliverableIds = entry.items.map((/** @type {any} */ item) => String(item.id)).filter(Boolean)
+    if (!deliverableIds.length) {
+      scopes.delete(entry.sessionId)
+      return
+    }
+    scopes.set(entry.sessionId, {
+      deliverableIds,
+      resolveClaimIds: () => runClaimIds(entry, cwd),
+    })
+  }
+
+  /**
+   * Every claim id this run's own matrices carry. A verdict on a claim that is
+   * not in here is a verdict on another conversation's package.
+   * @param {Record<string, any>} entry @param {string} cwd @returns {Promise<Set<string>>}
+   */
+  const runClaimIds = async (entry, cwd) => {
+    /** @type {Set<string>} */
+    const ids = new Set()
+    for (const item of entry.items) {
+      const matrixText = await readFileAt(ctx, cwd || entry.cwd, deliverablePath(String(item.id), CLAIM_MATRIX_FILE))
+      if (matrixText == null) continue
+      const read = readMatrix(matrixText)
+      if (!read.ok) continue
+      for (const claim of read.matrix?.claims ?? []) {
+        const claimId = String(claim?.claimId ?? '')
+        if (claimId) ids.add(claimId)
+      }
+    }
+    return ids
   }
 
   /**
@@ -511,7 +682,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // the same never-fires shape as `ctx.get('evimedRunId')`, and just as
         // reassuring to read. If the lookup misses, `injectBrief` must see the
         // miss rather than a second name for the same nothing.
-        await injectBrief(ctx, ctx.get('agents')?.get?.(step.agentId), sessionState, config)
+        const agent = ctx.get('agents')?.get?.(step.agentId)
+        await injectBrief(ctx, agent, sessionState, config)
+        // What a delegated child would have been handed, handed to the session
+        // that is going to do the work itself.
+        await activateBoundCapability(entry, agent)
       }
       // Native UI input has no control-plane brief. Give its root workflow a
       // stable name at the first real step, after an ordinary dispatch has had
@@ -604,7 +779,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       limits: entry.limits,
       submitAttempts: entry.attempts.get(String(call.args?.deliverableId ?? '')) ?? 0,
       deliveryAttemptLimit: config.deliveryAttemptLimit,
-      acceptedDeliverables: entry.items.filter((/** @type {any} */ item) => item.status === 'accepted').map((/** @type {any} */ item) => item.id),
+      // Only once the turn that wrote them has ended: inside it, an accepted
+      // deliverable is still the run's to repair.
+      frozenDeliverables: entry.frozen ? entry.items.filter((/** @type {any} */ item) => item.status === 'accepted').map((/** @type {any} */ item) => item.id) : [],
     })
   }))
 
@@ -619,7 +796,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     const grantMatches = revisionSubmissionGrantMatches(entry, item, revisionGrant)
     if (revisionGrant && !grantMatches) entry.revisionSubmissionGrants.delete(id)
     if (attempts < config.deliveryAttemptLimit || grantMatches) return undefined
-    return `交付物「${id}」已提交 ${attempts} 次，达到本部署上限。请调用 evimed_complete_run{partial:true} 交付已完成的部分。`
+    return `交付物「${id}」已提交 ${attempts} 次，达到本部署上限。写出的文件会连同未通过的核验项一起交付；把结论写给用户，本轮到此为止。`
   }))
 
   // ---- one retry for a recoverable source failure, inside the run ---------
@@ -658,6 +835,109 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     entry.producedTexts.push({ path, text: String(call.args?.content ?? call.args?.new_string ?? '') })
   }))
 
+  /**
+   * The end of a turn is the end of the run.
+   *
+   * `evimed_complete_run` used to be the model's last tool call: it ran the
+   * completeness check, scanned what the run produced, wrote the delivery
+   * summary and could refuse to end. On 2026-09-20 it refused a finished GEO
+   * run over a rule, the model read the gate's own implementation with `bash`
+   * and retried with `{partial:true}` — three tool rows after the answer the
+   * researcher was meant to read. A conversation turn ending IS the run
+   * ending; nothing the model calls may be able to refuse it.
+   *
+   * So the same work happens here, and every finding is attached rather than
+   * raised: the summary is written, the completeness findings become notices
+   * the control plane carries into the verdict, and the accepted bytes are
+   * frozen with a receipt that describes them as they finally stand.
+   *
+   * @param {Record<string, any>} entry
+   * @returns {Promise<void>}
+   */
+  const finalizeTurn = async (entry) => {
+    const cwd = entry.cwd
+    const partial = entry.items.some((/** @type {any} */ item) => item.status !== 'accepted')
+    const check = completionCheck({
+      plan: entry.plan,
+      items: entry.items,
+      producedTexts: entry.producedTexts,
+      finalReplyText: String(entry.finalReply ?? ''),
+      // Never blocking: there is nothing left to block. The findings are the
+      // reader's, and the control plane attaches them to the delivery.
+      partial: true,
+    })
+    const session = diagnostics(entry.sessionId)
+    for (const found of check.issues) session?.notice?.(`${found.code}: ${found.message}`)
+    const summary = renderDeliverySummary({
+      plan: entry.plan,
+      items: entry.items,
+      issues: check.issues,
+      partial,
+      runId: entry.runId,
+      at: new Date().toISOString(),
+    })
+    // The report node is unconditional. A run that failed silently and a run
+    // that never started are indistinguishable without one.
+    try {
+      await writeFileAt(ctx, cwd, workspaceLayout.deliverySummaryFile, summary)
+    } catch (error) {
+      session?.degrade?.(`delivery summary not written: ${errorMessage(error)}`)
+    }
+    await refreshReceipt(entry, cwd)
+    entry.completed = true
+    entry.frozen = true
+    await putPlanIndex(store(), entry)
+    await putRunMirror(ctx, entry, config.bundleVersion)
+  }
+
+  /**
+   * The receipt, written again over the bytes as they finally stand.
+   *
+   * Acceptance no longer freezes a deliverable, so a package accepted at 14:02
+   * and repaired at 14:09 would otherwise carry digests of the version nobody
+   * receives — and the control plane, which re-hashes every accepted file
+   * against the receipt, would read that as the workspace having been tampered
+   * with. The receipt is the description of what was delivered; it is written
+   * when the delivery is what it is going to be.
+   *
+   * @param {Record<string, any>} entry @param {string} cwd
+   * @returns {Promise<void>}
+   */
+  const refreshReceipt = async (entry, cwd) => {
+    const receipt = parseJson(await readFileAt(ctx, cwd, workspaceLayout.receiptFile) ?? '')
+    if (!receipt || !Array.isArray(receipt.entries) || receipt.runId !== entry.runId) return
+    let changed = false
+    /** @type {Record<string, any>[]} */
+    const entries = []
+    for (const receiptEntry of receipt.entries) {
+      const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === receiptEntry.deliverableId)
+      if (!item) {
+        entries.push(receiptEntry)
+        continue
+      }
+      const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
+      const expectedOutputs = manifest?.produces?.find((/** @type {any} */ produced) => produced.contractKind === item.contractKind)?.outputs ?? []
+      const files = await digestFiles(await readDeliverableFiles(ctx, cwd, item.id, expectedOutputs), item.id)
+      const same = files.length === (receiptEntry.files ?? []).length && files.every((file) => (receiptEntry.files ?? []).some((/** @type {any} */ recorded) => (
+        recorded.path === file.path && recorded.sha256 === file.sha256 && recorded.bytes === file.bytes
+      )))
+      if (same) {
+        entries.push(receiptEntry)
+        continue
+      }
+      changed = true
+      const updated = { ...receiptEntry, files, revisedAt: new Date().toISOString() }
+      entries.push(updated)
+      item.receiptDigest = await sha256Hex(JSON.stringify(updated))
+    }
+    if (!changed) return
+    try {
+      await writeFileAt(ctx, cwd, workspaceLayout.receiptFile, `${JSON.stringify({ ...receipt, entries }, null, 2)}\n`)
+    } catch (error) {
+      diagnostics(entry.sessionId)?.degrade?.(`receipt not refreshed at the end of the turn: ${errorMessage(error)}`)
+    }
+  }
+
   // ---- a subagent that did not complete must not disappear ---------------
   ctx.effect(() => onTurnEnd(ctx, (session, end) => {
     if (session.subagent) return
@@ -687,6 +967,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     }
     if (!session.subagent && end.kind === 'completed') {
       void scanFinalReply(ctx, session, entry, diagnostics(session.sessionId))
+      // A turn that ended with children still working is not the end of the
+      // run: their settlement wakes the root, and the turn that follows is.
+      if (!runningDelegations(entry).length) void withRunLock(entry, () => finalizeTurn(entry))
     }
   }))
 
@@ -707,7 +990,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       entry.childrenReminders += 1
       const running = outstanding.filter((delegation) => delegation.status === 'running')
       const reminder = `<evimed-run>还有 ${outstanding.length} 个子代理的结果没有取回（${outstanding.map((delegation) => delegation.handle).join('、')}${running.length ? `，其中 ${running.length} 个仍在工作` : ''}）。`
-        + '用 evimed_await 取回它们的结果后再汇总；要现在结束，用 evimed_complete_run{partial:true}，仍在工作的会被取消。</evimed-run>'
+        + '用 evimed_await 取回它们的结果后再汇总；不等了就直接写结论，仍在工作的子代理会被取消。</evimed-run>'
       try {
         steerContext(agent, reminder, name)
       } catch {
@@ -721,7 +1004,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     // isolated: evimed_steer_failures_total — a nudge that throws must not turn
     // a finishing turn into a failed one.
     try {
-      injectContext(agent, '<evimed-run>计划里还有未通过的交付物。请继续提交，或调用 evimed_complete_run{partial:true} 以部分交付结束。</evimed-run>', name)
+      injectContext(agent, '<evimed-run>计划里还有未通过的交付物。继续提交，或把已经写出的部分连同未决问题写给用户——文件会照样交付。</evimed-run>', name)
     } catch {
       diagnostics(sessionId)?.degrade?.('steer injection failed')
     }
@@ -735,7 +1018,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   // plugin's apply failed on its first line and the run either refused to start
   // or came up with no gate at all. The effect callbacks stay synchronous
   // because what they return is the disposer.
-  const [plan, delegate, awaitChildren, revise, submit, packageCheck, claimUpsert, renderReport, complete] = await Promise.all([
+  const [plan, delegate, awaitChildren, revise, submit, packageCheck, claimUpsert, renderReport] = await Promise.all([
     planTool(),
     delegateTool(),
     awaitTool(),
@@ -744,7 +1027,6 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     packageCheckTool(),
     claimUpsertTool(),
     renderReportTool(),
-    completeTool(),
   ])
   ctx.effect(() => registerTool(ctx, plan))
   ctx.effect(() => registerTool(ctx, delegate))
@@ -754,7 +1036,6 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   ctx.effect(() => registerTool(ctx, packageCheck))
   ctx.effect(() => registerTool(ctx, claimUpsert))
   ctx.effect(() => registerTool(ctx, renderReport))
-  ctx.effect(() => registerTool(ctx, complete))
 
   async function planTool() {
     return defineTool({
@@ -825,6 +1106,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           }
           await writeFileAt(ctx, entry.cwd || call.cwd, workspaceLayout.planFile, `${JSON.stringify(raw, null, 2)}\n`)
           await putPlanIndex(store(), entry)
+          // What the run-level tools may look at: this conversation's own
+          // deliverables, not everything the project's workspace holds.
+          publishReviewScope(entry, entry.cwd || call.cwd)
+          // One capability in the plan is one line of work, and the default is
+          // to do it here — so this session needs that capability's method and
+          // tools, exactly as a child would have been given them.
+          await activateBoundCapability(entry, ctx.get('agents')?.get?.(call.agentId))
           return { ok: true, data: { runId: entry.runId, revision, deliverables: entry.items.map(publicItem) } }
         })
       },
@@ -840,7 +1128,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** @param {string} id */
   const attemptsSpentAdvice = (id) => `交付物「${id}」的 ${config.deliveryAttemptLimit} 次提交已经用完，再委派一个子代理也无法提交。`
     + `它的文件留在 deliverables/${id}/ 里，会连同没有通过的核验项按「未核验」交付给读者——这不是失败。`
-    + '不要为同一件事重新规划一个新交付物；请调用 evimed_complete_run{partial:true} 结束本次运行。'
+    + '不要为同一件事重新规划一个新交付物；把结论写给用户，本轮到此为止。'
 
   /** A refusal the model can act on, as every tool here answers one.
    * @param {string} code @param {string} message */
@@ -865,6 +1153,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       name: 'evimed_delegate',
       description: [
         '把一件交付物委派给能力目录中的一项能力：启动一个子代理后立即返回句柄（handle），不等它完成；用 evimed_await 取回结果。',
+        '默认不用它：一件交付物就在这次对话里做完。值得委派的只有两种情况——同时有多件互相独立的活可以并行，或者一段附带工作会带回大量你不会再用的内容。',
         '子代理带着该能力的技能正文、工具集与人设启动，把文件写进 deliverables/<交付物 id>/ 并自行提交。互不依赖的交付物可以一起委派，它们会同时进行。',
         '它依赖的交付物还没有交付时，委派会被拒绝，并告诉你还差哪一件。',
         '委派前不要替子代理检索、读取来源或预写交付文件；需要证据时，让同一个子代理完成完整证据链。',
@@ -885,7 +1174,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           if (!item) return refusal('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)
           if (item.status === 'accepted') return refusal('deliverable_already_accepted', `交付物「${item.id}」已经通过，不需要再委派。`)
           if (item.status === 'failed') {
-            return refusal('deliverable_failed', `交付物「${item.id}」的分工已经连续失败，不会再自动委派。修订计划换一种做法，或调用 evimed_complete_run{partial:true} 结束。`)
+            return refusal('deliverable_failed', `交付物「${item.id}」的分工已经连续失败，不会再自动委派。修订计划换一种做法，或者自己把这件做完。`)
           }
           const working = runningDelegations(entry).find((delegation) => delegation.deliverableId === item.id)
           if (working) {
@@ -1175,7 +1464,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     try {
       steerContext(agent, [
         '<evimed-run>',
-        '你委派的子代理都已结束，下面是它们的结果（与 evimed_await 返回的相同）。汇总后用 evimed_complete_run 结束本次运行。',
+        '你委派的子代理都已结束，下面是它们的结果（与 evimed_await 返回的相同）。汇总后把结论写给用户。',
         JSON.stringify({ results }, null, 2),
         '</evimed-run>',
       ].join('\n'), name)
@@ -1320,8 +1609,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     return defineTool({
       name: 'evimed_submit_deliverable',
       description: [
-        '提交一件交付物，当场得到裁定。通过则写下回执；未通过则返回 issues（必修 / 建议 / 可选）。',
+        '提交一件交付物，当场得到裁定：先把引用编号与参考文献表渲染整齐，再跑门禁，再叫独立审查者，三者的结果一次返回。',
         '第一次不通过是常态：按 issues 修好，再提交，直到 ok。契约种类由计划派生，不需要你传。',
+        '本轮对话结束前文件都还能改；回执与冻结在本轮结束时才发生。',
       ].join(' '),
       parameters: {
         deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
@@ -1330,11 +1620,18 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // Under the run lock from the attempt count to the persisted verdict:
         // the count is read here, two awaits pass, and it is written below —
         // with children submitting in parallel, an unlocked read-modify-write
-        // lets one submission's charge overwrite another's.
-        return withRunLock(ownedSessionState(call.sessionId).entry, async () => {
+        // lets one submission's charge overwrite another's. The review runs
+        // after the lock is released: it is a subagent that takes minutes, and
+        // nothing it does touches this run's counters.
+        /** @type {{ envelope: { ok: boolean, code?: string, data?: any, issues?: any[] }, entry?: Record<string, any> }} */
+        const judged = await withRunLock(ownedSessionState(call.sessionId).entry, async () => {
           const resolved = resolveDeliverable(call, args.deliverableId)
-          if (resolved.refusal) return resolved.refusal
+          if (resolved.refusal) return { envelope: resolved.refusal }
           const { entry, item } = resolved
+          // Rendered before it is judged: the numbering is an artifact of the
+          // matrix and the body, and a run that types it by hand delivers a
+          // report whose citations do not match its own reference list.
+          const rendered = await renderNumbering(entry, item, entry.cwd || call.cwd)
           // Counted after the verdict, not before it: what a submission costs
           // depends on whether the gate could read it. See below.
           const attempts = (entry.attempts.get(item.id) ?? 0) + 1
@@ -1370,22 +1667,22 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           // to tell a run being repaired from one that has stopped.
           await putRunMirror(ctx, entry, config.bundleVersion)
 
+          const renderedData = rendered?.ok ? { rendered: rendered.data } : {}
           if (!verdict.ok) {
             // Acceptance is not revocable by a later attempt. This forced the item
             // to `submitted` and then applied `reject` whatever it had been, so a
             // seventh submission took a package that had passed at attempt 4 back
             // to rejected — and the run finished 部分交付 holding a receipt for an
-            // accepted delivery. The files are frozen at acceptance now, so this
-            // is the second lock rather than the first.
+            // accepted delivery.
             if (item.status === 'accepted') {
               Object.assign(item, { lastIssues: verdict.issues })
               await putPlanIndex(store(), entry)
-              return rejectionEnvelope(verdict)
+              return { envelope: { ...rejectionEnvelope(verdict), data: { deliverableId: item.id, ...renderedData } } }
             }
             Object.assign(item, { status: item.status === 'delegated' ? 'submitted' : item.status, lastIssues: verdict.issues })
             Object.assign(item, advancePlanItem({ ...item, status: 'submitted' }, 'reject', { lastIssues: verdict.issues }))
             await putPlanIndex(store(), entry)
-            return rejectionEnvelope(verdict)
+            return { envelope: { ...rejectionEnvelope(verdict), data: { deliverableId: item.id, ...renderedData } } }
           }
 
           const receiptEntry = {
@@ -1400,11 +1697,18 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           await writeReceipt(ctx, entry, receiptEntry, config.bundleVersion, call)
           Object.assign(item, advancePlanItem({ ...item, status: 'submitted' }, 'accept', { receiptDigest: await sha256Hex(JSON.stringify(receiptEntry)), lastIssues: [] }))
           await putPlanIndex(store(), entry)
-          // Accepted: the run is done with this deliverable. The receipt keeps
-          // every notice; the reply carries a bounded few, because a long list
-          // after "ok" reads as work still owed on a package that is now frozen.
-          return { ok: true, data: { deliverableId: item.id, contractKind: item.contractKind, label: contractKindLabel(item.contractKind), metrics: verdict.metrics, notices: boundedSuggestions(receiptEntry.notices, (count) => `另有 ${count} 条建议记在回执里，不需要再处理。`) } }
+          // Accepted: the contract is satisfied. The receipt keeps every notice;
+          // the reply carries a bounded few. The files stay editable until the
+          // turn ends, so a reviewer's finding can still be repaired here.
+          return {
+            envelope: { ok: true, data: { deliverableId: item.id, contractKind: item.contractKind, label: contractKindLabel(item.contractKind), metrics: verdict.metrics, ...renderedData, notices: boundedSuggestions(receiptEntry.notices, (count) => `另有 ${count} 条建议记在回执里，不需要再处理。`) } },
+            entry,
+          }
         })
+        // A submission the gate could read is a version that could be
+        // delivered, so it is the version worth an independent opinion.
+        if (!judged.entry) return judged.envelope
+        return withReview(judged.envelope, await reviewSubmission(judged.entry, call))
       },
     })
   }
@@ -1508,8 +1812,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (!outputs.some((/** @type {any} */ output) => output.path === CLAIM_MATRIX_FILE)) {
       return { refusal: refusal('claim_matrix_unsupported', `交付物「${item.id}」的契约（${contractKindLabel(item.contractKind)}）没有证据矩阵，这两个工具只用于有 ${CLAIM_MATRIX_FILE} 的交付物。`) }
     }
-    if (item.status === 'accepted') {
-      return { refusal: refusal('deliverable_already_accepted', `交付物「${item.id}」已经通过，文件已冻结；需要修改时先调用 evimed_revise_deliverable。`) }
+    // Acceptance no longer freezes: within this turn the deliverable may be
+    // re-edited and re-submitted as often as the attempt budget allows. What
+    // freezes is the turn ending, which is when the receipt is finalised
+    // (2026-09-20). A later turn asking for a change mints its own
+    // authorization through the control plane.
+    if (entry.frozen) {
+      return { refusal: refusal('deliverable_frozen', `交付物「${item.id}」在上一轮结束时已出回执并冻结；要改先调用 evimed_revise_deliverable。`) }
     }
     return { entry, item }
   }
@@ -1635,6 +1944,131 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     })
   }
 
+  /**
+   * Put a deliverable's citation numbering in order.
+   *
+   * One implementation, called by `evimed_render_report` and by every
+   * submission of a contract that has a report and a matrix. It used to be a
+   * tool the model could forget: on 2026-09-20 a child renumbered its own
+   * citations with three `bash` edits instead, and the delivered report's body
+   * citations ran one ahead of its reference list from [5] on. Numbers are a
+   * rendered artifact, not typed prose (principle 10c).
+   *
+   * Returns null when this contract has no report+matrix pair; an envelope
+   * otherwise, including the refusals a caller may want to show.
+   *
+   * @param {Record<string, any>} entry @param {Record<string, any>} item @param {string} cwd
+   * @returns {Promise<{ ok: boolean, code?: string, data?: any, issues?: any[] } | null>}
+   */
+  const renderNumbering = async (entry, item, cwd) => {
+    const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
+    const outputs = manifest?.produces?.find((/** @type {any} */ produced) => produced.contractKind === item.contractKind)?.outputs ?? []
+    const carries = (/** @type {string} */ path) => outputs.some((/** @type {any} */ output) => output.path === path)
+    if (!carries(CLAIM_REPORT_FILE) || !carries(CLAIM_MATRIX_FILE)) return null
+    return withDeliverableLock(entry, item.id, async () => {
+      const reportPath = deliverablePath(item.id, CLAIM_REPORT_FILE)
+      const matrixPath = deliverablePath(item.id, CLAIM_MATRIX_FILE)
+      const reportText = await readFileAt(ctx, cwd, reportPath)
+      if (reportText == null || !String(reportText).trim()) {
+        return refusal('report_missing', `还没有 ${reportPath}；先写报告，再整理编号。`)
+      }
+      const matrixText = await readFileAt(ctx, cwd, matrixPath)
+      const read = readMatrix(matrixText)
+      if (!read.ok) return refusal('matrix_unreadable', `${read.reason} 这个文件不会被覆盖；修好后再整理编号。`)
+      const rendered = renderClinicalReport({ reportText: String(reportText), matrix: matrixText == null ? null : read.matrix })
+      if (rendered.changed.report) await writeFileAt(ctx, cwd, reportPath, rendered.text)
+      if (rendered.changed.matrix && rendered.matrix) await writeFileAt(ctx, cwd, matrixPath, `${JSON.stringify(rendered.matrix, null, 2)}\n`)
+      const unresolved = [
+        ...rendered.unresolved.citations.map((/** @type {number} */ number) => `[${number}]`),
+        ...rendered.unresolved.claims,
+      ]
+      return {
+        ok: true,
+        data: {
+          file: reportPath,
+          references: rendered.references,
+          markersSynced: rendered.markersSynced,
+          renumbered: rendered.renumbered,
+          ...(rendered.merged.length ? { merged: rendered.merged } : {}),
+          ...(rendered.added.length ? { added: rendered.added } : {}),
+          ...(rendered.uncited.length ? { uncited: rendered.uncited } : {}),
+          ...(unresolved.length ? { unresolved } : {}),
+        },
+      }
+    })
+  }
+
+  /**
+   * The independent review of what this run has written, run as part of a
+   * submission.
+   *
+   * 「审查完再提交」 lived in a 1,839-line method body and was skipped on the
+   * run it was written for; submission froze the package before anybody had
+   * looked at it. A step another step depends on is a data dependency, not a
+   * sentence (principle 12). Scoped to this run's own deliverables and claims,
+   * because one project's workspace holds every conversation that ran in it.
+   *
+   * @param {Record<string, any>} entry @param {Record<string, any>} call
+   * @returns {Promise<{ ok: true, verdicts: any[], outOfScope: number } | { ok: false, code: string, message: string } | null>}
+   */
+  const reviewSubmission = async (entry, call) => {
+    if (!config.reviewEnabled) return null
+    const parent = ctx.get('agents')?.get?.(call.agentId)
+    const cwd = entry.cwd || call.cwd
+    const result = await runReview(ctx, {
+      parent,
+      signal: call.signal,
+      deliverableIds: entry.items.map((/** @type {any} */ item) => String(item.id)).filter(Boolean),
+      claimIds: await runClaimIds(entry, cwd),
+      maxClaims: REVIEW_MAX_CLAIMS,
+    })
+    if (result.ok) {
+      const session = diagnostics(entry.sessionId)
+      for (const verdict of result.verdicts) {
+        if (verdict?.verdict === 'stands') continue
+        session?.notice?.(reviewNoticeText(verdict))
+      }
+    }
+    return result
+  }
+
+  /**
+   * One envelope carrying the gate's verdict and the reviewer's findings.
+   * `contradicted` is something to fix while the files are still editable;
+   * `weakened` is advice. Neither withholds the delivery — a gate verdict never
+   * does (2026-09-17).
+   * @param {{ ok: boolean, code?: string, data?: any, issues?: any[] }} envelope @param {any} review
+   * @returns {{ ok: boolean, code?: string, data?: any, issues?: any[] }}
+   */
+  const withReview = (envelope, review) => {
+    if (!review) return envelope
+    if (!review.ok) {
+      return { ...envelope, data: { ...(envelope.data ?? {}), review: { status: 'unavailable', reason: review.message } } }
+    }
+    const { mustFix, advice } = reviewFindings(review.verdicts)
+    return {
+      ...envelope,
+      data: {
+        ...(envelope.data ?? {}),
+        review: {
+          status: 'done',
+          examined: review.verdicts.length,
+          mustFix: mustFix.length,
+          advice: advice.length,
+          ...(review.outOfScope ? { outOfScope: review.outOfScope } : {}),
+        },
+      },
+      issues: [
+        ...(envelope.issues ?? []),
+        ...mustFix.map((/** @type {any} */ verdict) => ({ code: 'review_contradicted', severity: 'required', message: reviewNoticeText(verdict) })),
+        ...boundedSuggestions(
+          advice.map((/** @type {any} */ verdict) => ({ code: 'review_weakened', severity: 'advisory', message: reviewNoticeText(verdict) })),
+          (count) => ({ code: 'review_weakened', severity: 'advisory', message: `另有 ${count} 条审查建议没有列出。` }),
+        ),
+      ],
+    }
+  }
+
   async function renderReportTool() {
     return defineTool({
       name: SOCKET_TOOL_NAMES.renderReport,
@@ -1648,40 +2082,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       concurrencySafe: true,
       async execute(args, call) {
         const resolved = claimDeliverable(call, args.deliverableId)
-        if (resolved.refusal) return resolved.refusal
+        if (resolved.refusal) return { ok: false, code: String(resolved.refusal.code), issues: resolved.refusal.issues }
         const { entry, item } = resolved
-        return withDeliverableLock(entry, item.id, async () => {
-          const cwd = entry.cwd || call.cwd
-          const reportPath = deliverablePath(item.id, CLAIM_REPORT_FILE)
-          const matrixPath = deliverablePath(item.id, CLAIM_MATRIX_FILE)
-          const reportText = await readFileAt(ctx, cwd, reportPath)
-          if (reportText == null || !String(reportText).trim()) {
-            return refusal('report_missing', `还没有 ${reportPath}；先写报告，再整理编号。`)
-          }
-          const matrixText = await readFileAt(ctx, cwd, matrixPath)
-          const read = readMatrix(matrixText)
-          if (!read.ok) return refusal('matrix_unreadable', `${read.reason} 这个文件不会被覆盖；修好后再整理编号。`)
-          const rendered = renderClinicalReport({ reportText: String(reportText), matrix: matrixText == null ? null : read.matrix })
-          if (rendered.changed.report) await writeFileAt(ctx, cwd, reportPath, rendered.text)
-          if (rendered.changed.matrix && rendered.matrix) await writeFileAt(ctx, cwd, matrixPath, `${JSON.stringify(rendered.matrix, null, 2)}\n`)
-          const unresolved = [
-            ...rendered.unresolved.citations.map((number) => `[${number}]`),
-            ...rendered.unresolved.claims,
-          ]
-          return {
-            ok: true,
-            data: {
-              file: reportPath,
-              references: rendered.references,
-              markersSynced: rendered.markersSynced,
-              renumbered: rendered.renumbered,
-              ...(rendered.merged.length ? { merged: rendered.merged } : {}),
-              ...(rendered.added.length ? { added: rendered.added } : {}),
-              ...(rendered.uncited.length ? { uncited: rendered.uncited } : {}),
-              ...(unresolved.length ? { unresolved } : {}),
-            },
-          }
-        })
+        const rendered = await renderNumbering(entry, item, entry.cwd || call.cwd)
+        return rendered ?? refusal('claim_matrix_unsupported', `交付物「${item.id}」的契约（${contractKindLabel(item.contractKind)}）没有报告与证据矩阵这一对文件，没有编号可整理。`)
       },
     })
   }
@@ -1704,6 +2108,12 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
           if (!item) return { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)] }
           if (item.status !== 'accepted') return { ok: false, code: 'deliverable_revision_unavailable', issues: [issue('deliverable_revision_unavailable', '只有已经通过门禁且仍与当前回执一致的交付物才能开启新修订。')] }
+          // Inside the turn that wrote it, a deliverable is simply editable:
+          // write the file and submit again. This tool is for the frozen bytes
+          // of a turn that has already ended.
+          if (!entry.frozen) {
+            return { ok: true, data: { deliverableId: item.id, revisionId: '', priorFiles: 0, note: '本轮的文件还没有冻结：直接改，然后重新提交即可。' } }
+          }
           const reason = String(args.reason ?? '').trim()
           if (!reason || reason.length > 1000) return { ok: false, code: 'deliverable_revision_reason_invalid', issues: [issue('deliverable_revision_reason_invalid', '修订原因必须是 1 到 1000 个字符。')] }
           const runStore = store()
@@ -1729,6 +2139,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           if (!authorized) return { ok: false, code: 'deliverable_revision_unauthorized', issues: [issue('deliverable_revision_unauthorized', '控制面尚未为当前已接受字节创建可消费的修订授权，原版本继续冻结。')] }
           const revisionId = `${entry.runId}:${item.id}:${acceptedDigest}`
           Object.assign(item, advancePlanItem(item, 'revise', { revisionId, lastIssues: [] }))
+          // The authorization is what unfreezes the delivered bytes; the next
+          // turn to end will write the receipt over whatever replaces them.
+          entry.frozen = false
           entry.revisionSubmissionGrants.set(item.id, {
             kind: 'accepted-revision',
             revisionId,
@@ -1745,72 +2158,6 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     })
   }
 
-  async function completeTool() {
-    return defineTool({
-      name: 'evimed_complete_run',
-      description: [
-        '结束本次运行。核对每件交付物是否已通过、计划里是否写了澄清，并对全部产物与你的最终回复跑一遍安全扫描。',
-        '通过则本回合到此结束。仍有未完成项时会返回原因；确实无法完成时用 partial:true 交付已完成的部分。',
-        '还有子代理在工作时不会结束，并列出它们的句柄；partial:true 会取消这些子代理并如实记录。',
-      ].join(' '),
-      parameters: {
-        partial: { type: 'boolean', description: '以部分交付结束。只有交付语义才用布尔值。' },
-      },
-      async execute(args, call) {
-        const entry = sessionState(call.sessionId)
-        return withRunLock(entry, async () => {
-          const partial = Boolean(args.partial)
-          // A run does not end while a child it started is still working. With
-          // delegation no longer waiting inside its own call, a parent can reach
-          // this tool with children mid-flight; ending there would leave them
-          // writing into a delivery the control plane has already closed. So an
-          // ordinary completion is refused with the handles to wait for, and a
-          // partial one — the exit a run takes when it cannot finish — cancels
-          // them, marks their deliverables, and says so in its reply.
-          const running = runningDelegations(entry)
-          if (running.length && !partial) {
-            return refusal('children_running', `还有 ${running.length} 个子代理在工作：${running.map((delegation) => `${delegation.deliverableId}（句柄 ${delegation.handle}）`).join('、')}。`
-              + '用 evimed_await 等它们结束后再结束运行；确实要现在结束，用 partial:true，它们会被取消并如实记录。')
-          }
-          /** @type {string[]} */
-          const cancelledChildren = []
-          for (const delegation of running) {
-            delegation.abort.abort(new Error('运行以部分交付结束时它仍在工作'))
-            cancelledChildren.push(delegation.handle)
-            const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === delegation.deliverableId)
-            if (item && canTransition('planItem', item.status, 'fail')) {
-              Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_cancelled', '运行以部分交付结束时这件交付物的子代理仍在工作，已取消。')] }))
-            }
-          }
-          const finalReply = String(entry.finalReply ?? '')
-          const check = completionCheck({
-            plan: entry.plan,
-            items: entry.items,
-            producedTexts: entry.producedTexts,
-            finalReplyText: finalReply,
-            partial,
-          })
-          const summary = renderDeliverySummary({
-            plan: entry.plan,
-            items: entry.items,
-            issues: check.issues,
-            partial,
-            runId: entry.runId,
-            at: new Date().toISOString(),
-          })
-          // The report node is unconditional. A run that failed silently and a run
-          // that never started are indistinguishable without one.
-          await writeFileAt(ctx, entry.cwd || call.cwd, workspaceLayout.deliverySummaryFile, summary)
-          if (cancelledChildren.length) await putPlanIndex(store(), entry)
-          if (!check.ok) {
-            return { ok: false, code: 'run_incomplete', issues: check.issues.map(withSeverity) }
-          }
-          entry.completed = true
-          return { ok: true, data: { partial, issues: check.issues.map(withSeverity), ...(cancelledChildren.length ? { cancelledChildren } : {}) }, concludeTurn: true }
-        })
-      },
-    })
-  }
 }
 
 /* ------------------------------------------------------------ small parts */
@@ -2051,6 +2398,9 @@ async function injectBriefRevision(ctx, agent, entry, config) {
       })
     }
     entry.completed = false
+    // The control plane asked for a repair, which is the authorization: the
+    // package the previous turn froze is editable again.
+    entry.frozen = false
   }
   entry.limits = runLimits(config, index?.budget && typeof index.budget === 'object' ? index.budget : {})
   const brief = await readFileAt(ctx, cwd, workspaceLayout.briefFile)
@@ -2064,6 +2414,7 @@ async function injectBriefRevision(ctx, agent, entry, config) {
   const memory = await readFileAt(ctx, cwd, `${sessionBriefDir}/memory.md`)
     ?? await readFileAt(ctx, cwd, workspaceLayout.briefMemoryFile)
   entry.briefText = brief
+  entry.contextText = typeof context === 'string' ? context : null
   entry.memoryText = typeof memory === 'string' && memory.trim() ? memory : null
   entry.knowledgeEntries = (await listDirAt(ctx, cwd, workspaceLayout.knowledgeDir)).length
   const parts = []
@@ -2117,6 +2468,8 @@ function resetRunState(entry, runId) {
   entry.childrenReminders = 0
   entry.wakeSuppressed = false
   entry.completed = false
+  entry.inlineCapabilities = new Set()
+  entry.frozen = false
 }
 
 /**
