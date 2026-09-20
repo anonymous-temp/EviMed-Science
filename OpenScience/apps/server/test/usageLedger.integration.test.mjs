@@ -22,20 +22,23 @@ const stale = `usage_${randomUUID()}`;
 // Its own account again: the cap test below asserts what the caps count, which
 // any other test's spend would change.
 const capped = `usage_${randomUUID()}`;
+// Again its own account: this one deletes a project out from under settled
+// spend and then asserts what the caps still count.
+const orphaned = `usage_${randomUUID()}`;
 let database;
 let ledger;
 
 before(async () => {
   if (!databaseUrl) return;
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 8, databaseConnectionTimeoutMs: 2_000 });
-  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Usage owner','development'),($2,'Other owner','development'),($3,'Stale owner','development'),($4,'Capped owner','development')", [owner, other, stale, capped]);
-  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Usage',1048576),($2,'default','Other',1048576),($3,'default','Stale',1048576),($4,'default','Capped',1048576)", [owner, other, stale, capped]);
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Usage owner','development'),($2,'Other owner','development'),($3,'Stale owner','development'),($4,'Capped owner','development'),($5,'Orphaned owner','development')", [owner, other, stale, capped, orphaned]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Usage',1048576),($2,'default','Other',1048576),($3,'default','Stale',1048576),($4,'default','Capped',1048576),($5,'doomed','Doomed',1048576)", [owner, other, stale, capped, orphaned]);
   ledger = new UsageLedger(database);
 });
 
 after(async () => {
   if (!database) return;
-  await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[owner, other, stale, capped]]);
+  await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[owner, other, stale, capped, orphaned]]);
   await database.close();
 });
 
@@ -485,4 +488,43 @@ test("an engine's spend is in every report and in no cap", options, async () => 
   // And every report still carries every yuan of it.
   assert.equal((await ledger.summaryRun(capped, runId)).actualCost, 5.9);
   assert.equal((await ledger.summary(capped, { since: at })).actualCost, 5.9);
+});
+
+test("spend outlives the project it was charged to, and the caps keep counting it", options, async () => {
+  // The project reference cascaded until 2026-09-20: deleting a project deleted
+  // its rows out of the ledger. Two things went with them — the record of money
+  // already paid to the provider, and the spend the rolling caps count, so an
+  // account could clear its daily limit by deleting a project. Both are asserted
+  // here against a real delete of a real project row.
+  const at = new Date("2035-06-06T00:00:00.000Z");
+  const now = new Date("2035-06-06T01:00:00.000Z");
+  await ledger.recordSettled({
+    id: `engine_${randomUUID().replaceAll("-", "")}`, userId: orphaned, projectId: "doomed", runId: null, purpose: "kernel",
+    model: "deepseek-flash", priceVersion: "evimed-reference-2026-09-10", currency: "CNY",
+    requestFingerprint: createHash("sha256").update("outlives-its-project").digest("hex"),
+    usage: { cacheHitTokens: 0, cacheMissTokens: 20_000, completionTokens: 2_000 }, actualCost: 2, priced: true,
+    providerRequestId: "kernel:outlives#1", now: at,
+  });
+  // A project the account does not hold is still refused: only the delete
+  // action changed, not the reference.
+  await assert.rejects(
+    ledger.recordSettled({
+      id: `engine_${randomUUID().replaceAll("-", "")}`, userId: orphaned, projectId: "no-such-project", runId: null, purpose: "kernel",
+      model: "deepseek-flash", priceVersion: "evimed-reference-2026-09-10", currency: "CNY",
+      requestFingerprint: createHash("sha256").update("outlives-its-project-2").digest("hex"),
+      usage: { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 }, actualCost: 0.01, priced: true, now: at,
+    }),
+    (error) => error.code === "23503",
+  );
+  await database.query("DELETE FROM evimed_control.projects WHERE user_id=$1 AND id=$2", [orphaned, "doomed"]);
+  const rows = await database.query("SELECT project_id,actual_cost,status FROM evimed_usage.model_requests WHERE user_id=$1", [orphaned]);
+  assert.equal(rows.rowCount, 1, "the settled row outlived its project");
+  assert.equal(rows.rows[0].project_id, null, "and carries no project, rather than one that no longer exists");
+  assert.equal(rows.rows[0].status, "settled");
+  assert.equal((await ledger.summary(orphaned, { since: at })).actualCost, 2, "the account's report still holds the spend");
+  await assert.rejects(
+    ledger.assertWithinLimits(orphaned, { dailyLimit: 1, weeklyLimit: 0, now }),
+    (error) => error.code === "usage_budget_exceeded" && error.details?.window === "day",
+    "deleting the project did not clear the day's spend",
+  );
 });

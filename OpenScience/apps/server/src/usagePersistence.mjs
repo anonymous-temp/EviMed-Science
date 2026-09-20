@@ -18,7 +18,7 @@ CREATE SCHEMA IF NOT EXISTS evimed_usage;
 CREATE TABLE IF NOT EXISTS evimed_usage.model_requests (
   id text PRIMARY KEY,
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
-  project_id text NOT NULL,
+  project_id text,
   run_id text,
   model text NOT NULL,
   price_version text NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS evimed_usage.model_requests (
   reservation_expires_at timestamptz(3) NOT NULL,
   created_at timestamptz(3) NOT NULL,
   settled_at timestamptz(3),
-  FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE SET NULL (project_id),
   CHECK (actual_cost IS NULL OR actual_cost >= 0),
   CHECK (cache_hit_tokens IS NULL OR cache_hit_tokens >= 0),
   CHECK (cache_miss_tokens IS NULL OR cache_miss_tokens >= 0),
@@ -64,6 +64,7 @@ ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS run_id text;
 CREATE INDEX IF NOT EXISTS usage_model_requests_run_idx
   ON evimed_usage.model_requests(user_id,run_id,created_at,id) WHERE run_id IS NOT NULL;
 DO $foreign_keys$
+DECLARE stale record;
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
@@ -73,13 +74,35 @@ BEGIN
     ALTER TABLE evimed_usage.model_requests ADD CONSTRAINT usage_model_requests_user_fk
       FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID;
   END IF;
+  -- The project reference used to cascade, and that is how money left the
+  -- books: deleting a project deleted every model request ever charged under
+  -- it. Measured on production 2026-09-20 — clearing the acceptance projects
+  -- took about 1,700 settled rows with them, and the ledger's newest surviving
+  -- row predated the release it was supposed to account for. It also opened the
+  -- caps: assertWithinLimits sums the rolling 24h/7d windows per user across
+  -- projects, so deleting a project lowered the spend the next request is
+  -- admitted against. The reference stays, because refusing a row for a project
+  -- the account does not hold is a tenancy check worth keeping at the storage
+  -- layer; only its delete action changes. The row survives its project with
+  -- an empty project_id: what it cost is a fact, which project asked for it is
+  -- no longer one.
+  ALTER TABLE evimed_usage.model_requests ALTER COLUMN project_id DROP NOT NULL;
+  FOR stale IN
+    SELECT c.conname FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_usage' AND t.relname='model_requests' AND c.contype='f'
+      AND c.confrelid='evimed_control.projects'::regclass
+      AND pg_get_constraintdef(c.oid) NOT LIKE '%ON DELETE SET NULL (project_id)%'
+  LOOP
+    EXECUTE format('ALTER TABLE evimed_usage.model_requests DROP CONSTRAINT %I', stale.conname);
+  END LOOP;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
     WHERE n.nspname='evimed_usage' AND t.relname='model_requests' AND c.contype='f'
-      AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id)%'
+      AND c.confrelid='evimed_control.projects'::regclass
   ) THEN
     ALTER TABLE evimed_usage.model_requests ADD CONSTRAINT usage_model_requests_project_fk
-      FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE NOT VALID;
+      FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id)
+      ON DELETE SET NULL (project_id) NOT VALID;
   END IF;
 END $foreign_keys$;
 DO $$ BEGIN
