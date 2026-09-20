@@ -1,5 +1,11 @@
 # EviMed Science 架构总览（2026-08-26）
 
+> **【已被取代 · 2026-09-20】本文写于换内核收尾期。此后四周里记忆底座（MemOS → PostgreSQL + OpenViking）、
+> 文档解析（MinerU → 自研接口）、知识库检索（新增 `kb_search`）、网页阅读（`web_read`）、运行时提供方
+> （新增 AgentBay）、门禁判定（改为不扣留交付物）、前端形态（桌面端删除）全部变过。当前总览在
+> `2026-09-20-evimed-architecture-and-algorithms.md`，本文只作历史记录，不要照它实现或排障。
+> 逐段作废清单见新文 §10.2。**
+
 - 文档性质：**当前架构的独立可读总览**——把分散在插排-插头方案（v3.9，30 章）、两份七月上位方案与执行状态（STATUS S0–S158、PROGRESS）里的设计收成一份。它回答四件事：系统是什么、为什么这样设计（原则与逻辑）、每一部分怎么运作（机制）、算法与能力是按什么流程搭起来的。
 - 口径：只写核实过的事实；已设计未落地的部分标【设计】，已落地标【已落地】，部分落地标【部分】。深度细节一律指向 `2026-08-22-evimed-dsh-plug-harness-design.md`（下文简称 spec）的章节，本文不复制决策日志。
 - 上位文档：`2026-07-16-evimed-openscience-platform-design.md`（平台统一底座 v4）、`2026-07-17-evimed-grok-build-fusion-design.md`（融合方案）；生态接入清单：`plans/2026-08-24-dsh-ecosystem-adoption-shortlist.md`。
