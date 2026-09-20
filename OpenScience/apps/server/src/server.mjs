@@ -50,7 +50,7 @@ import { NotificationService, runFinishedInboxItem, runFinishedNotifies } from "
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
 import { createMemoryRoutes } from "./memoryRoutes.mjs";
-import { createMemorySessionRoutes, mountedMethodsFor, sessionDispatchNotes } from "./memorySessions.mjs";
+import { sessionDispatchNotes } from "./memorySessions.mjs";
 import { createMemoryTimelineRoutes } from "./memoryTimeline.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
@@ -438,7 +438,6 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/tasks/")) return "/api/tasks/:taskId";
   if (pathname.startsWith("/api/logs/")) return "/api/logs/:kind";
   if (pathname === "/api/feedback/events") return pathname;
-  if (pathname.startsWith("/api/memory/memos/")) return "/api/memory/memos/:memoId";
   if (pathname.startsWith("/api/memory/")) return "/api/memory/:route";
   if (pathname.startsWith("/api/agent-memory/v1")) return "/api/agent-memory/v1/:action";
   if (pathname.startsWith("/api/agent-keys/")) return "/api/agent-keys/:keyId";
@@ -1089,6 +1088,15 @@ export function createWebApiApp(overrides = {}) {
     onPublished: (job) => {
       kbIndex?.wake();
       void libraryService?.refreshSource(job.userId, job.payload?.sourceId);
+      // What the platform read out of the document goes into the researcher's
+      // capsule here, labelled 来自资料 and reversible — the replacement for
+      // the 「放进胶囊」 button that used to ask them to do it once per file
+      // (plan §3.10). Never awaited and never able to fail the ingestion: a
+      // document is parsed and indexed whatever the capsule is doing, and the
+      // publication is idempotent, so the next understanding of the same
+      // document retries it.
+      void libraryService?.publishSourceUnderstanding(job.userId, job.payload?.sourceId)
+        .catch(() => securityAudit(config, "library.publish.failed", "failed", { target: job.payload?.sourceId }));
     },
     resolveSource: async (job, source) => {
       const connectorType = source.payload.connector?.type;
@@ -1981,7 +1989,7 @@ export function createWebApiApp(overrides = {}) {
     });
     learningTriggers = new LearningTriggers({
       jobs: productJobs, agentRuns, memory: researchMemory,
-      // An incognito conversation teaches the loop nothing either.
+      // A conversation trying someone else's capsule teaches the loop nothing.
       sessionState: researchMemory.configured
         ? (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId) : null,
       // The loop's own bounded runs and source understanding are internal
@@ -2313,8 +2321,8 @@ export function createWebApiApp(overrides = {}) {
   });
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate,
     // Whose conversation a runtime's recall is (capsuleGateway.mjs): the
-    // project's running runs, each conversation's memory state, and the run
-    // ledger line the 「本次用到的背景」 panel reads.
+    // project's running runs, each conversation's own state, and the run
+    // ledger line that records what it was handed.
     sessions: researchMemory.configured ? {
       running: (_user, project) => agentRuns.activeRuns(project),
       state: (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId),
@@ -2324,10 +2332,7 @@ export function createWebApiApp(overrides = {}) {
           : { id: item.id, kind: item.kind ?? "note", scope: item.scope ?? "user" })),
       }),
     } : null });
-  // 「本次用到的背景」, 「本次不用」 and the incognito switch, per conversation.
-  const memorySessionRoutes = createMemorySessionRoutes({ config, researchMemory, agentRuns, capsules: capsuleService, context, audit,
-    mountedMethods: (project) => mountedMethodsFor({ runtimeManager, capsules: capsuleService, learning: learningService }, project) });
-  // 「时间轴」, derived when read from the records, the ledger and the methods.
+  // 「最近变化」, derived when read from the records, the ledger and the methods.
   const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService, context });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
@@ -3023,7 +3028,6 @@ export function createWebApiApp(overrides = {}) {
       }
 
       if (await memoryRoutes(req, res)) return;
-      if (await memorySessionRoutes(req, res)) return;
       if (await memoryTimelineRoutes(req, res)) return;
       if (await agentKeyRoutes(req, res)) return;
 
@@ -3368,9 +3372,8 @@ export function createWebApiApp(overrides = {}) {
                 }
               : routedSpecialist,
           });
-          // What this conversation's own memory state adds (memorySessions.mjs):
-          // a method set aside with 「本次不用」, which recall cannot withhold,
-          // and the capsule a 「试用一次」 conversation is trying.
+          // What this conversation's own state adds (memorySessions.mjs): the
+          // capsule a 「试用一次」 conversation is trying.
           const sessionNotes = await sessionDispatchNotes({ researchMemory, capsules: capsuleService }, ctx.user.id, ctx.project.id, session.sessionId);
           // Before the prompt goes out, like the brief: a mount the ledger has
           // not recorded cannot be told apart from one that never happened.

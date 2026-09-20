@@ -16,12 +16,23 @@ const sha256 = (text) => createHash("sha256").update(text).digest("hex");
  */
 export async function freezeLearningEvaluation({ learning, capsules, project, request }) {
   const candidate = structuredClone(await learning.getMethod(request.userId, request.methodId));
-  if (candidate.payload?.status !== "candidate" || candidate.payload.contentDigest !== request.candidateDigest
+  // Effective or not yet: since 2026-09-20 a distilled method is effective the
+  // night it is learned, and this comparison is what can take it away again, so
+  // refusing an `approved` one would mean the demotion signal could never be
+  // measured. Retired is still refused — there is nothing left to compare.
+  if (candidate.payload?.status === "retired" || candidate.payload.contentDigest !== request.candidateDigest
     || (candidate.projectId != null && candidate.projectId !== project.id)) {
     throw new HttpError(409, "method_evaluation_stale", "The candidate no longer matches the requested owner, project and revision.");
   }
-  const { approved, approvedMethods, capsuleMethods, learnedMethods: baseline, limits, baselineDigest } =
-    await freezeLearningBaseline({ learning, capsules, userId: request.userId, projectId: project.id });
+  const frozen = await freezeLearningBaseline({
+    learning, capsules, userId: request.userId, projectId: project.id,
+    // The whole experiment is "with it and without it". An effective method is
+    // in its own library, so a baseline built from the library unchanged would
+    // mount it in both arms and every verdict would be `non_inferior` by
+    // construction — a comparison of a thing with itself, reported as evidence.
+    excludeMethodIds: [candidate.id],
+  });
+  const { approved, approvedMethods, capsuleMethods, learnedMethods: baseline, limits, baselineDigest } = frozen;
   const frozenLearning = {
     getMethod: async (_userId, id) => id === candidate.id ? candidate : null,
     approvedMethods,

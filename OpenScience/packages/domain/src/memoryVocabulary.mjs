@@ -172,3 +172,89 @@ export function platformIdentifiersIn(text) {
   }
   return found
 }
+
+/**
+ * The words this platform uses for its own machinery, in Chinese.
+ *
+ * Hidden knowledge: on 2026-09-20 the production account's 「项目档案」 held
+ * sixteen rows and every one of them was the run talking about itself — a
+ * ledger's field name, what the gate had asked for, which artifact had been
+ * written. `platformIdentifiersIn` could not see any of it, because it only
+ * knows identifiers we ship (`evimed_*`, `.evimed-run/`), and a run narrating
+ * its own bookkeeping does it in prose: 「台账」, 「门禁」, 「交付物」.
+ *
+ * Enumerated, not patterned, for the same reason `PLATFORM_CONTEXT_TAGS` is:
+ * this is a closed vocabulary we control (principle 5), and each entry names
+ * where the platform itself says it, so a reader can check that it is our word
+ * and not the researcher's. Terms a pharmacologist might plausibly write about
+ * medicine — 证据, 评价, 方案 — are deliberately absent: whether prose is
+ * *about* the machinery is language, and it belongs to the extraction
+ * instructions.
+ *
+ * @type {readonly { term: string, saidIn: string }[]}
+ */
+export const PLATFORM_JARGON_ZH = Object.freeze([
+  { term: '控制面', saidIn: 'the control plane, in our own architecture prose' },
+  { term: '门禁', saidIn: 'the delivery gate (`gateIssueText.mjs`)' },
+  { term: '台账', saidIn: 'the run ledger and the coverage ledger' },
+  { term: '交付物', saidIn: 'a deliverable (`contractKinds.mjs`, the plan card)' },
+  { term: '运行账本', saidIn: 'the run ledger' },
+  { term: '运行环境', saidIn: 'a project runtime (`runtimeManager.mjs`)' },
+  { term: '工作区', saidIn: 'the run workspace (`workspaceLayout.mjs`)' },
+  { term: '提示词', saidIn: 'the system prompt' },
+  { term: '内核', saidIn: 'the DSH kernel' },
+  { term: '子任务', saidIn: 'a delegated child run (`runtimeUiToolviews.mjs`)' },
+  { term: '回执', saidIn: 'the run receipt (`receipt.mjs`)' },
+  { term: '预检', saidIn: "a capability's `preflight.py`" },
+  { term: '自检', saidIn: "a package's self-declared quality checks" },
+  { term: '召回', saidIn: 'memory recall (`memoryRecall.mjs`)' },
+])
+
+const JARGON_PATTERN = new RegExp(
+  PLATFORM_JARGON_ZH.map((entry) => escapeRegExp(entry.term))
+    .sort((left, right) => right.length - left.length)
+    .join('|'),
+  'g',
+)
+
+/**
+ * Identifier shapes a researcher does not type as research: a field name in
+ * camelCase (`referenceNumber`), a file name with one of the extensions a run
+ * writes, or a dotted/slashed path. A format check, like a DOI or a PMID —
+ * decidable from the token itself, with no opinion about what it means.
+ *
+ * `[A-Za-z]` only: a Chinese sentence quoting one still trips, which is the
+ * point — 「ledger 的 referenceNumber 字段是…」 is the run's bookkeeping in the
+ * researcher's language.
+ */
+const CODE_SHAPE_PATTERN = new RegExp(
+  // camelCase or PascalCase with a lower→upper hump, at least two segments
+  '(?<![A-Za-z0-9_-])[A-Za-z][a-z0-9]+(?:[A-Z][a-z0-9]+)+(?![A-Za-z0-9_-])'
+  // a file name with an extension a run writes
+  + '|(?<![A-Za-z0-9_-])[A-Za-z0-9][A-Za-z0-9._-]*\\.(?:md|json|jsonl|ya?ml|csv|tsv|py|mjs|js|ts|bib|xlsx|docx|ipynb|log|txt|sh|R)(?![A-Za-z0-9])',
+  'g',
+)
+
+/**
+ * What a text says that makes it the run's own bookkeeping rather than
+ * something known about the researcher — our Chinese jargon and identifier
+ * shapes, in order of first appearance.
+ *
+ * Both halves are closed or structural on purpose. The decision this feeds is
+ * "refuse to store", which is an engineering boundary (principle 14) and has
+ * to be decidable; every judgement about whether a sentence is *about* the
+ * machinery stays with the extraction model.
+ *
+ * @param {unknown} text @returns {string[]}
+ */
+export function runBookkeepingIn(text) {
+  const value = String(text ?? '')
+  /** @type {string[]} */
+  const found = []
+  for (const pattern of [JARGON_PATTERN, CODE_SHAPE_PATTERN]) {
+    for (const match of value.matchAll(pattern)) {
+      if (!found.includes(match[0])) found.push(match[0])
+    }
+  }
+  return found
+}

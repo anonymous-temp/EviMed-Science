@@ -140,49 +140,36 @@ test("a researcher who paused recall, for the account or for this project, is ha
     "pausing learning is not pausing recall");
 });
 
-test("an incognito conversation is handed no memories, and another conversation of the project still is", async () => {
-  // 2026-09-20: the conversation's own switch, read before either path.
-  const states = { [SESSION]: { incognito: true, excluded: [] } };
-  const store = {
-    ...fakeStore([]), configured: true,
-    settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [] }),
-    sessionState: async (_userId, _projectId, sessionId) => states[sessionId] ?? { incognito: false, excluded: [] },
-  };
-  const substrate = new MemorySubstrate({}, { store });
-  assert.deepEqual(await substrate.recall(USER, "kidney outcomes", { projectId: PROJECT, sessionId: SESSION }), []);
-  assert.equal(store.calls.relevant, 0, "an incognito recall must not reach the store's matcher");
-  assert.equal((await substrate.recall(USER, "kidney outcomes", { projectId: PROJECT, sessionId: "ses_two" })).length, 1);
-  // A conversation id the store cannot hold is a conversation with no state, not a failed recall.
-  const odd = { ...store, sessionState: async () => { throw Object.assign(new Error("bad id"), { code: "memory_session_invalid" }); } };
-  assert.equal((await new MemorySubstrate({}, { store: odd }).recall(USER, "kidney outcomes", { projectId: PROJECT, sessionId: "x" })).length, 1);
-});
-
-test("what a conversation set aside stays out of its recall on both paths, and frees its slot", async () => {
-  const records = [
-    record({ id: "rec1", key: "a", value: "Prefers tables over prose." }),
-    record({ id: "rec2", key: "b", kind: "analysis", value: "Empagliflozin slowed eGFR decline.", summary: "" }),
-  ];
-  const notes = [{ id: "note1", content: "kidney note", pinned: false, updatedAt: "2026-09-01T00:00:00Z" }];
-  const sessionStore = (base) => ({
+// Every recall passes through this port, which is why the counter that answers
+// 「用过 7 次，上次 9月18日」 is written here and nowhere else. Never awaited,
+// and never able to fail the recall: a bookkeeping row must not be able to
+// decide whether a run gets its memories.
+test("a recall counts what it served, on both paths, and a counter that throws costs nothing", async () => {
+  const noted = [];
+  const records = [record({ id: "rec1", key: "a", value: "Prefers tables over prose." })];
+  const counting = (base) => ({
     ...base, configured: true,
     settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [] }),
-    sessionState: async () => ({ incognito: false, excluded: [{ type: "memory", id: "rec2", label: "" }] }),
+    noteRecordUsage: async (_userId, ids) => { noted.push(ids); },
   });
-  const index = fakeIndex(records.map((row, n) => hit(
-    memoryUri(USER, { scope: "user", scopeId: "", kind: row.kind, recordId: row.id }), 0.9 - n / 10)));
-  const ranked = new MemorySubstrate(openVikingConfig, { store: sessionStore(fakeStore(records, { memos: notes })), openViking: index });
-  const recalled = await ranked.recall(USER, "kidney", { projectId: PROJECT, sessionId: SESSION,
-    excluded: [{ type: "note", id: "note1" }] });
-  assert.equal(index.calls.find.length, 1, "the index path was taken");
-  assert.deepEqual(recalled.map((row) => row.id), ["record:rec1"],
-    "the session's own set-aside record and the caller's set-aside note are both gone");
+  const index = fakeIndex([hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.9)]);
+  const ranked = new MemorySubstrate(openVikingConfig, { store: counting(fakeStore(records)), openViking: index });
+  assert.deepEqual((await ranked.recall(USER, "tables", { projectId: PROJECT })).map((row) => row.id), ["record:rec1"]);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(noted, [["rec1"]], "the record id, without the recall path's `record:` prefix");
 
-  // The term matcher is handed the same union.
-  let handed = null;
-  const builtin = sessionStore({ ...fakeStore([]), relevant: async (_u, _q, options) => { handed = options.excluded; return []; } });
-  await new MemorySubstrate({}, { store: builtin }).recall(USER, "kidney", { projectId: PROJECT, sessionId: SESSION,
-    excluded: [{ type: "note", id: "note1" }] });
-  assert.deepEqual(handed.map((item) => `${item.type}:${item.id}`), ["memory:rec2", "note:note1"]);
+  // The term matcher's answers are counted the same way. Its ids carry the
+  // same `record:` prefix the ranked path's do — that is `relevant`'s own shape.
+  noted.length = 0;
+  const matcher = counting({ ...fakeStore([]), relevant: async () => [{ id: "record:rec9", content: "x", memoryType: "structured" }] });
+  await new MemorySubstrate({}, { store: matcher }).recall(USER, "anything", { projectId: PROJECT });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(noted, [["rec9"]]);
+
+  // A counter that throws is a counter that is one short, never a failed recall.
+  const broken = { ...counting(fakeStore([])), noteRecordUsage: async () => { throw new Error("counter down"); } };
+  assert.equal((await new MemorySubstrate({}, { store: broken }).recall(USER, "anything", { projectId: PROJECT })).length, 1);
+  await new Promise((resolve) => setImmediate(resolve));
 });
 
 test("an unknown provider name falls back rather than composing a broken deployment", () => {
@@ -386,50 +373,21 @@ test("a deployment on the term matcher has nothing to forget and does not preten
   assert.equal(index.calls.remove.length, 0);
 });
 
-// Two score spaces in one sort. The index answers with cosine similarity,
-// where a good hit is about 0.6; the note matcher answers with a count of
-// matched query terms, where one matched word is 1.0. Compared directly, a
-// handful of notes mentioning one word of the question takes the whole budget
-// and the researcher's structured profile never reaches the prompt — silently,
-// and only on the provider this stack now selects by default.
-test("a note that shares a word with the question cannot crowd out every memory the index found", async () => {
-  const records = [0, 1, 2, 3].map((n) => record({
-    id: `rec${n}`, key: `topic.${n}`, value: `Structured memory ${n} about metformin dosing.`,
-    updatedAt: `2026-09-0${n + 1}T00:00:00Z`,
-  }));
-  const notes = [0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({
-    id: `note${n}`, content: "a passing note that mentions metformin", pinned: false,
-    updatedAt: `2026-08-0${n + 1}T00:00:00Z`,
-  }));
-  const index = fakeIndex(records.map((row, n) => hit(
-    memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: row.id }), 0.61 - n * 0.02)));
-  const substrate = new MemorySubstrate(openVikingConfig, {
-    store: fakeStore(records, { memos: notes }), openViking: index,
-  });
-
-  const recalled = await substrate.recall(USER, "metformin dosing", {});
-  const kinds = recalled.map((row) => row.memoryType);
-  assert.ok(kinds.includes("structured"), `the index's hits were crowded out entirely: ${kinds.join(",")}`);
-  assert.ok(kinds.filter((kind) => kind === "structured").length >= 3,
-    `the best records must compete with the best notes, not lose to all of them: ${kinds.join(",")}`);
-  assert.ok(kinds.includes("manual"), "and a matching note must still be able to reach the prompt");
-});
-
-test("the indexed recall searches every note through the store, not the newest page", async () => {
-  // plan §3.4 #8: the notes half read the newest hundred and matched in code.
-  const asked = [];
+// The two suites that used to sit here measured the note half of a fused
+// recall: that a handful of notes matching one word could not take the whole
+// budget from the index's hits, and that the note search read the whole store
+// rather than the newest page. 「你写下的笔记」 and its table were deleted on
+// 2026-09-20, so recall has one list; what those suites protected — that the
+// budget is spent on the best of what was found — is the budget's own test.
+test("the note half of the recall is gone, and nothing asks the store for one", async () => {
   const store = {
     ...fakeStore([record({ id: "rec1" })]),
-    async list() { throw new Error("the newest page must not be the source any more"); },
-    async searchNotes(userId, query) {
-      asked.push([userId, query]);
-      return [{ id: "note_old", content: "利妥昔单抗的感染风险", pinned: false, updatedAt: "2025-01-01T00:00:00Z" }];
-    },
+    async list() { throw new Error("a recall must not read notes"); },
+    async searchNotes() { throw new Error("a recall must not search notes"); },
   };
   const index = fakeIndex([hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.5)]);
   const recalled = await new MemorySubstrate(openVikingConfig, { store, openViking: index }).recall(USER, "利妥昔单抗 感染", {});
-  assert.deepEqual(asked, [[USER, "利妥昔单抗 感染"]]);
-  assert.ok(recalled.some((row) => row.id === "note_old"));
+  assert.deepEqual(recalled.map((row) => row.memoryType), ["structured"]);
 });
 
 // Ten attempts spread over about five minutes of backoff, which an ordinary

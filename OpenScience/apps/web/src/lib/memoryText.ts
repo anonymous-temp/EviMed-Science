@@ -73,17 +73,27 @@ export function memoryExcerpt(text: string, max = 400): string {
 
 /**
  * The label a memory keeps for good (principle 18): who it came from. An
- * inference is 「推断」 however often it is seen; only its owner makes it
+ * inference is 「EviMed 推断」 however often it is seen; only its owner makes it
  * anything else.
+ *
+ * The page's whole vocabulary of origins is 你说的 / EviMed 推断 / 来自研究 /
+ * 来自资料 / 来自 X 的胶囊; the last two belong to a capsule entry, which
+ * carries its own label. 「来自工具结果」 and 「来自对话中的分析」 were the same
+ * thing said twice — both mean the platform saw it while doing the work — and
+ * the difference was not one a reader could act on.
  */
 export const MEMORY_BASIS_LABELS: Record<WebMemoryProvenance["basis"], string> = {
-  stated: "你说过",
+  stated: "你说的",
   confirmed: "你确认过",
   edited: "你改过",
-  inferred: "推断",
-  tool: "来自工具结果",
-  assistant: "来自对话中的分析",
+  inferred: "EviMed 推断",
+  tool: "来自研究",
+  assistant: "来自研究",
 };
+
+/** The researcher's own word, as opposed to the platform's observation: what
+ *  the 关于我 filter keeps, and what 「不对」 is never offered on. */
+export const STATED_BASES: ReadonlySet<string> = new Set(["stated", "confirmed", "edited"]);
 
 /**
  * How established a memory is, counted — never a percentage. The page used
@@ -98,10 +108,26 @@ export function memoryStrength(provenance: WebMemoryProvenance | undefined, evid
     case "stated": return `你说过 ${times} 次${spread}`;
     case "confirmed": return `你确认过 · 观察到 ${times} 次`;
     case "edited": return "你改过";
-    case "inferred": return `在 ${Math.max(provenance.runs, 1)} 次任务中观察到`;
-    case "tool": return `来自工具结果 · ${times} 处依据`;
-    case "assistant": return `来自对话中的分析 · ${times} 处依据`;
+    case "inferred": return `在 ${Math.max(provenance.runs, 1)} 次研究中观察到`;
+    case "tool":
+    case "assistant": return `${times} 处依据`;
   }
+}
+
+/**
+ * 「用过 7 次，上次 9月18日」 — how often this memory actually reached a run.
+ *
+ * A count, never a share: a percentage here would be a number nobody measured,
+ * which is the mistake 「置信度 85%」 was. A memory with no usage row has never
+ * been used, and says so rather than showing a zero to interpret.
+ */
+export function memoryUsage(
+  usage: { count: number; lastUsedAt: string | null } | undefined,
+  when: (value: string) => string,
+): string {
+  if (!usage || usage.count <= 0) return "还没用过";
+  const last = usage.lastUsedAt ? when(usage.lastUsedAt) : "";
+  return last ? `用过 ${usage.count} 次，上次 ${last}` : `用过 ${usage.count} 次`;
 }
 
 /** The memory kinds, in the researcher's words. */
@@ -114,8 +140,7 @@ export const MEMORY_KIND_LABELS: Record<string, string> = {
   analysis: "分析口径",
   decision: "已定的决策",
   follow_up: "待跟进",
-  run_summary: "过往运行摘要",
-  note: "笔记",
+  run_summary: "做过的研究",
 };
 
 export function memoryKindLabel(kind: string): string {
