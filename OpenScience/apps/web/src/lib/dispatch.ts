@@ -1,6 +1,7 @@
 import {
   cancelWebAgentRun,
   dispatchWebAgentRun,
+  listWebResearchSessions,
   putWebResearchSession,
   WebApiError,
   type WebAgentRun,
@@ -124,4 +125,55 @@ export function minutesText(range: { min: number; max: number } | null | undefin
   const max = Math.max(min, Math.round(range.max));
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= 0) return null;
   return min === max ? `通常约 ${max} 分钟` : `通常 ${min}–${max} 分钟`;
+}
+
+/**
+ * Which research tool a conversation runs, as the control plane holds it.
+ *
+ * The frame shows it above the composer and offers the way out of it, but the
+ * binding is the control plane's: `session-binding` is what makes the router
+ * skip its classifier, and a page that only claimed a tool would be a page
+ * whose promise the run does not keep.
+ */
+export async function conversationCapability(sessionId: string): Promise<string | null> {
+  const sessions = await listWebResearchSessions().catch(() => []);
+  const bound = sessions.find((session) => session.sessionId === sessionId);
+  return bound && bound.mode === "specialist" ? bound.agentId ?? null : null;
+}
+
+/**
+ * Binds a conversation to a tool, and says which conversation it ended up on.
+ *
+ * A binding cannot change once its session exists
+ * (`research_session_identity_conflict`), so choosing a different tool — or
+ * dropping one — is a fresh conversation rather than an edit. The caller
+ * carries the draft across, because the researcher may have typed the question
+ * before picking the tool.
+ */
+export async function bindConversationCapability(
+  sessionId: string | null,
+  agent: { agentId: string; agentVersion: string } | null,
+): Promise<{ sessionId: string; rebound: boolean }> {
+  const current = sessionId && /^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/.test(sessionId) ? sessionId : null;
+  const bound = current ? await conversationCapability(current) : null;
+  const wanted = agent?.agentId ?? null;
+  if (bound === wanted && current) return { sessionId: current, rebound: false };
+  const target = current && bound === null && wanted !== null ? current : newResearchSessionId();
+  try {
+    await putWebResearchSession(
+      target,
+      agent ? { mode: "specialist", agentId: agent.agentId, agentVersion: agent.agentVersion } : { mode: "open-domain" },
+    );
+    return { sessionId: target, rebound: target !== current };
+  } catch (error) {
+    // An identity conflict means this conversation already ran under another
+    // tool; the next one starts clean rather than refusing the choice.
+    if (!(error instanceof WebApiError && error.status === 409)) throw error;
+    const fresh = newResearchSessionId();
+    await putWebResearchSession(
+      fresh,
+      agent ? { mode: "specialist", agentId: agent.agentId, agentVersion: agent.agentVersion } : { mode: "open-domain" },
+    );
+    return { sessionId: fresh, rebound: true };
+  }
 }
