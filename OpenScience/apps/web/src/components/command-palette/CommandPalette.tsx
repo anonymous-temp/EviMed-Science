@@ -5,7 +5,6 @@ import {
   Bell,
   Bot,
   Brain,
-  FlaskConical,
   FolderTree,
   ListFilter,
   Orbit,
@@ -83,23 +82,24 @@ export function CommandPalette() {
     close();
   };
 
-  // The six destinations plus the views inside them. The palette may be longer
+  // The five destinations plus the views inside them. The palette may be longer
   // than the sidebar — typing a name is how someone reaches a view without
-  // knowing which destination now owns it.
+  // knowing which destination now owns it. 「运行记录」 is not among them: the
+  // ledger page was deleted on 2026-09-20 and a run is read in the conversation
+  // it happened in, which the sidebar's tree lists.
   const navigation: Action[] = [
-    { id: "new", label: "新任务", icon: <SquarePen size={16} aria-hidden="true" />, run: () => { navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }); close(); } },
-    { id: "runs", label: "运行记录", icon: <FlaskConical size={16} aria-hidden="true" />, run: () => go("/app/runs") },
+    { id: "new", label: "新对话", icon: <SquarePen size={16} aria-hidden="true" />, run: () => { navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }); close(); } },
+    { id: "capabilities", label: "科研工具", icon: <Bot size={16} aria-hidden="true" />, run: () => go("/app/capabilities") },
     { id: "files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" />, run: () => go("/app/files") },
     { id: "sources", label: "资料整理进度", icon: <ListFilter size={16} aria-hidden="true" />, run: () => go("/app/files?tab=sources") },
     { id: "memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" />, run: () => go("/app/memory") },
     { id: "capsules", label: "方法", icon: <Brain size={16} aria-hidden="true" />, run: () => go("/app/memory?tab=methods") },
     { id: "capsule-timeline", label: "胶囊时间轴", icon: <Brain size={16} aria-hidden="true" />, run: () => go("/app/memory?tab=timeline") },
     { id: "autopilot", label: "主动科研", icon: <Orbit size={16} aria-hidden="true" />, run: () => go("/app/autopilot") },
-    { id: "capabilities", label: "科研能力", icon: <Bot size={16} aria-hidden="true" />, run: () => go("/app/capabilities") },
     { id: "inbox", label: "收件箱", icon: <Bell size={16} aria-hidden="true" />, run: () => go("/app/inbox") },
   ];
 
-  // Task creation travels as a native navigation intent; no prompt is submitted.
+  // A new conversation travels as a native navigation intent; no prompt is submitted.
   const actions: Action[] = [
     { id: "account", label: "账户与额度", icon: <UserRound size={16} aria-hidden="true" />, run: () => go("/app/account") },
     { id: "settings", label: "打开设置", icon: <Settings size={16} aria-hidden="true" />, run: () => go("/app/account?tab=settings") },

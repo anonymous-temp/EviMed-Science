@@ -99,8 +99,10 @@ export function WebAccountCard({
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="text-body text-text">账户</h2>
+          {/* The id is printed once in this card, on the row below, where it
+              is what export and deletion act on. */}
           <p className="mt-0.5 truncate text-caption text-muted">
-            {account ? `${account.name || account.id} · ${account.id}` : "当前登录会话"}
+            {account ? account.name || account.id : "当前登录会话"}
           </p>
         </div>
         <button

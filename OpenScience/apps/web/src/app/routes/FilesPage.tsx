@@ -385,21 +385,21 @@ export function SessionFilesPane({
         <span className="truncate text-ui font-medium text-text" title={workspace ?? undefined}>
           {baseName(workspace)}
         </span>
-        <span className="text-caption text-muted">本次任务文件</span>
+        <span className="text-caption text-muted">本次对话的文件</span>
         <div className="flex-1" />
         {controls}
         {hasWebApi && (
           <button
             className="flex h-7 w-7 items-center justify-center rounded-input text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
             aria-label="上传文件"
-            title="上传文件到本次任务"
+            title="上传文件到本次对话"
             onClick={() => void uploadFiles()}
             disabled={uploading}
           >
             {uploading ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Upload size={14} aria-hidden="true" />}
           </button>
         )}
-        <button className="text-text hover:opacity-60" aria-label="关闭任务文件" onClick={onClose}>
+        <button className="text-text hover:opacity-60" aria-label="关闭对话文件" onClick={onClose}>
           <X size={14} strokeWidth={1.5} aria-hidden="true" />
         </button>
       </div>
@@ -429,7 +429,7 @@ export function SessionFilesPane({
         {entries === null && <FilesSkeleton />}
         {error && <LoadError message={error} onRetry={() => void loadEntries(dir)} className="m-2" />}
         {entries && entries.length === 0 && !error && (
-          <EmptyState icon={FolderOpen} title="本次任务还没有文件" className="px-2 py-8" />
+          <EmptyState icon={FolderOpen} title="本次对话还没有文件" className="px-2 py-8" />
         )}
         {entries?.map((entry) => (
           <button

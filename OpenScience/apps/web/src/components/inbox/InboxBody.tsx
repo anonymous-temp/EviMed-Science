@@ -20,7 +20,7 @@ export function InboxBody({ body, className }: { body: string; className?: strin
     <div className={cn("space-y-0.5 text-ui text-muted", className)}>
       {lines.map((line, index) => <p key={index}>{line}</p>)}
       {technical.length > 0 && !operator && (
-        <p className="text-caption">另有 {technical.length} 条技术提示，打开运行记录可看核验结果。</p>
+        <p className="text-caption">另有 {technical.length} 条技术提示，在对话里可看核对结果。</p>
       )}
       {technical.length > 0 && operator && (
         <Disclosure summary={<>另有 {technical.length} 条技术原文（仅运维账号可见）</>} summaryClassName="text-caption">

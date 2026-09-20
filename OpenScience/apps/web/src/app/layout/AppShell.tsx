@@ -1,7 +1,10 @@
 import { Suspense, useEffect, useState } from "react";
-import { Navigate, Outlet } from "react-router";
+import { Navigate, Outlet, useLocation } from "react-router";
 import { Loader2, PanelLeft } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { isChatPath } from "@/lib/runLocation";
 import { isMacPlatform } from "@/lib/platform";
+import { SessionFrameHost } from "@/app/layout/SessionFrameHost";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { ShortcutHelp } from "@/components/ui/ShortcutHelp";
@@ -13,6 +16,7 @@ import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "
 export function AppShell() {
   const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
   const currentProjectId = useProjectStore((state) => state.currentId);
+  const onChat = isChatPath(useLocation().pathname);
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
 
   // Below `lg` the sidebar is a drawer over the content, not a column beside
@@ -108,17 +112,28 @@ export function AppShell() {
             </button>
           </div>
         )}
-        <div className="min-h-0 flex-1">
-          <Suspense fallback={<RouteFallback />}>
-            {/* Keyed by the project: a switch remounts the page under the
-              * new one. Every page reads the project when it mounts — as a
-              * header, a workspace path, a frame binding — and none of them
-              * listens for a change; the reload this replaced relied on
-              * exactly that, and so does this. What sits outside it (the
-              * sidebar, the bell, the palette) is either account-wide or
-              * follows `currentId` itself. */}
-            <Outlet key={currentProjectId} />
-          </Suspense>
+        <div className="relative min-h-0 flex-1">
+          {/* The conversation surface, above the router and hidden rather than
+            * unmounted off it (`SessionFrameHost`). This is the one page that
+            * costs a container document, a websocket and a kernel handshake to
+            * mount, and putting it inside the router made every visit to any
+            * other page pay for all three again on the way back. */}
+          <SessionFrameHost />
+          {/* Keyed by the project — but never on the conversation surface,
+            * whose frame must survive a project switch. A switch remounts the
+            * page under the new one: every other page reads the project when
+            * it mounts (a header, a workspace path, a list) and none of them
+            * listens for a change; the reload this replaced relied on exactly
+            * that, and so does this. What sits outside it (the sidebar, the
+            * bell, the palette) is either account-wide or follows `currentId`
+            * itself.
+            * On the conversation surface the route renders overlays only, so
+            * it floats above the frame and lets pointer events through. */}
+          <div className={cn(onChat && "pointer-events-none absolute inset-0 z-20", !onChat && "h-full")}>
+            <Suspense fallback={onChat ? null : <RouteFallback />}>
+              <Outlet key={onChat ? "chat" : currentProjectId} />
+            </Suspense>
+          </div>
         </div>
       </main>
       {/* Every shell form gets the palette and the shortcut cheat sheet — the

@@ -57,7 +57,7 @@ describe("AutopilotPage", () => {
     mocks.listDigests.mockResolvedValue({ items: [], nextCursor: null });
     mocks.getDigest.mockResolvedValue(null);
     render("/app/autopilot");
-    expect(await screen.findByText(/「心衰证据追踪」将在每天 01:00（Asia\/Shanghai）运行一回合/)).toBeInTheDocument();
+    expect(await screen.findByText(/「心衰证据追踪」将在每天 01:00（Asia\/Shanghai）跑一次/)).toBeInTheDocument();
   });
 
   it("says a paused agenda is waiting on the researcher, not on the clock", async () => {
@@ -84,16 +84,16 @@ describe("AutopilotPage", () => {
     render();
     expect(await screen.findByRole("heading", { name: "主动科研" })).toBeInTheDocument();
     expect(await screen.findByText("心衰证据追踪")).toBeInTheDocument();
-    expect(screen.getByText("每日 ¥20 · 每周 ¥80 · 单回合 ¥8")).toBeInTheDocument();
+    expect(screen.getByText("每日 ¥20 · 每周 ¥80 · 单次 ¥8")).toBeInTheDocument();
     expect(screen.getByText("新增直接证据")).toBeInTheDocument();
     expect(screen.getAllByText("待验证线索").length).toBeGreaterThan(0);
     // Running costs money on one click, so it says what it may cost first
     // (2026-09-16 review, U17) — and the date is the agenda's own, not UTC:
     // `toISOString()` named yesterday between 00:00 and 08:00 Beijing time.
-    await userEvent.click(screen.getByRole("button", { name: "立即运行一回合" }));
-    expect(await screen.findByText("现在就跑一回合？")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "立即跑一次" }));
+    expect(await screen.findByText("现在就跑一次？")).toBeInTheDocument();
     expect(mocks.scheduleAgenda).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "开始这一回合" }));
+    await userEvent.click(screen.getByRole("button", { name: "现在就跑" }));
     await waitFor(() => expect(mocks.scheduleAgenda).toHaveBeenCalledWith("agenda-one", expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)));
   });
 

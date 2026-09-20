@@ -10,7 +10,10 @@ const mocks = vi.hoisted(() => ({
   openRunProject: vi.fn(),
 }));
 
-vi.mock("@/lib/runLocation", () => ({ openRunProject: mocks.openRunProject }));
+vi.mock("@/lib/runLocation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/runLocation")>()),
+  openRunProject: mocks.openRunProject,
+}));
 
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
@@ -59,7 +62,8 @@ describe("RunFilePage", () => {
   it("opens a run's report in the reader, under the run's title, and opens the claim the fragment names", async () => {
     renderAt(`/app/runs/run_1/files/${REPORT}#CLM-001`);
     expect(await screen.findByRole("heading", { level: 1, name: "阿司匹林一级预防 · 证据分析报告" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "运行记录" })).toHaveAttribute("href", "/app/runs?run=run_1");
+    // Back into the conversation the file was written in, not into a ledger row.
+    expect(screen.getByRole("link", { name: "返回对话" })).toHaveAttribute("href", "/app/chat/ses_1");
     const evidence = await screen.findByRole("dialog");
     expect(within(evidence).getByText("结论。")).toBeInTheDocument();
     expect(mocks.readArtifact).toHaveBeenCalledWith(REPORT, "workspace");
@@ -83,7 +87,7 @@ describe("RunFilePage", () => {
     mocks.openRunProject.mockReturnValue(new Promise(() => {}));
     mocks.readArtifact.mockResolvedValue(null);
     renderAt(`/app/runs/run_other/files/${REPORT}`);
-    expect(await screen.findByText("正在打开这次运行所在的项目…")).toBeInTheDocument();
+    expect(await screen.findByText("正在打开这次研究所在的项目…")).toBeInTheDocument();
     expect(mocks.openRunProject).toHaveBeenCalledWith("run_other");
     expect(screen.queryByRole("alert")).toBeNull();
   });
