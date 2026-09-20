@@ -25,6 +25,8 @@
  * @module @evimed/harness-port/runtime-ui-frame
  */
 
+import { kernelThemeTokens } from '@evimed/domain/design-tokens';
+
 import {
   CONTRACT_KIND_LABELS,
   EVIDENCE_SOURCE_TYPE_LABELS_ZH,
@@ -73,6 +75,13 @@ export const FRAME_SWITCHABLE_BODIES = Object.freeze(FRAME_BODIES.map((body) => 
 export const FRAME_VOCABULARY = Object.freeze({
   kernelPin: RUNTIME_UI_KERNEL_PIN,
   slots: RUNTIME_UI_SLOTS,
+  // The product's palette and type, from the one token module the shell's own
+  // stylesheet and Tailwind theme are generated from. Inlined here at build
+  // time because a frame body may import nothing: the frame reaches the browser
+  // as serialized functions, so the only way a value crosses is as data in this
+  // table. Two hand-kept copies of a palette is how the shell and the frame
+  // came to disagree about the sidebar's grey.
+  themeTokens: kernelThemeTokens(),
   phases: RUN_ACTIVITY_PHASES,
   phaseLabels: RUN_ACTIVITY_PHASE_LABELS_ZH,
   sourceTypes: EVIDENCE_SOURCE_TYPES,

@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { FRAME_VOCABULARY } from '../src/runtimeUiFrame.mjs';
 import { apply, BODY, evimedThemeTokens, THEME_LAYER_SOURCE } from '../src/runtimeUiTheme.mjs';
 import { fakeCtx, fakeTarget, kitFor } from './helpers/frameFakes.mjs';
 
@@ -29,7 +30,10 @@ function contrast(a, b) {
   return (light + 0.05) / (dark + 0.05);
 }
 
-const tokens = evimedThemeTokens();
+// The build inlines the product's token module into the frame's vocabulary;
+// the body reads it rather than keeping a second copy, so the contrast this
+// file measures is the contrast the shell ships.
+const tokens = evimedThemeTokens(FRAME_VOCABULARY);
 const schemes = /** @type {const} */ (['light', 'dark']);
 /** @param {string} name @param {'light' | 'dark'} scheme */
 const value = (name, scheme) => {
