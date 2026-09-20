@@ -114,18 +114,27 @@ per-project workspace + JSONL provenance.
 
 - UI baseline language is **Simplified Chinese** (code/comments stay English);
   technical identifiers (URLs, enum values, model/provider ids) stay as-is.
-- Design tokens are the single source of truth, written down in `DESIGN.md`
-  (direction A 「循证青」): colors via CSS variables in `src/index.css` +
-  `tailwind.config.js` semantic mapping (light/dark via `[data-theme]`); type
-  scale `text-caption/ui/body/title/display` (+ `badge`, `wordmark`);
-  containers `max-w-content-narrow/content/content-wide/content-full`; radii
-  `rounded/rounded-input/rounded-card/rounded-panel`; static cards have no
+- **The design tokens are one module — `packages/domain/src/designTokens.mjs` —
+  and `DESIGN.md` is its prose.** Three consumers derive from it and none
+  restates it: the generated block in `src/index.css` (`pnpm tokens:css`),
+  `tailwind.config.js` (imports it), and the kernel frame's theme override
+  (`kernelThemeTokens()`). `apps/web/src/app/designTokens.test.ts` regenerates
+  and compares, so editing a consumer instead of the module is a red test.
+  The shell conforms to the kernel, not the other way around.
+- One sans stack, **no serif in the chrome**; six sizes only (12/13/14/16/20/24)
+  as `text-badge/meta/caption/ui/body/wordmark/title/display`; weights 400/500/600.
+  Containers `max-w-content-narrow` 560 / `max-w-content` 748 / `max-w-content-wide`
+  1000 — a page uses **`PageShell`** so its title and body share one container.
+  Radii: `rounded` 8 (controls, rows), `rounded-card` 12, `rounded-panel` 16,
+  `rounded-composer` 24, `rounded-full` chips. Heights: 32 controls, 28 chips,
+  36 rows, 44 bars, 40 only for a form's primary button. Static cards have no
   shadow — `shadow-pop` (menus, popovers) / `shadow-modal` (dialogs, drawers).
 - ESLint bans new arbitrary values (`text-[Npx]`, `rounded-[Npx]`, bare
   `shadow-sm/md/lg`, `shadow-card`, opacity modifiers on token colours) across
-  `src/**` — use the semantic scales; rare exceptions need an inline
-  `eslint-disable` with a reason. A test fails on hex literals outside the
-  token file. `eslint-plugin-jsx-a11y` is enforced.
+  `src/**`, and `font-serif` inside `components/{ui,layout,cards}` — use the
+  semantic scales; rare exceptions need an inline `eslint-disable` with a
+  reason. A test fails on hex literals outside the token module.
+  `eslint-plugin-jsx-a11y` is enforced.
 - New UI must use the `components/ui/` primitives instead of hand-rolled
   buttons/inputs/empty states; keep the four-state discipline (loading skeleton /
   empty / error-with-retry / success) on every list page.

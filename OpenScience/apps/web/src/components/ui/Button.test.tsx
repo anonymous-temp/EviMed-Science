@@ -39,15 +39,16 @@ describe("Button", () => {
         </Button>
       </>,
     );
-    expect(screen.getByRole("button", { name: "主按钮" })).toHaveClass("bg-accent", "text-accent-fg", "h-9");
+    // 32 is the control height (md); `sm` is the 28 px compact control.
+    expect(screen.getByRole("button", { name: "主按钮" })).toHaveClass("bg-accent", "text-accent-fg", "h-8");
     expect(screen.getByRole("button", { name: "次按钮" })).toHaveClass("border", "border-strong", "bg-surface");
-    expect(screen.getByRole("button", { name: "删除" })).toHaveClass("bg-error", "text-error-fg", "h-8");
+    expect(screen.getByRole("button", { name: "删除" })).toHaveClass("bg-error", "text-error-fg", "h-7");
   });
 
   it("merges caller classes with conflict resolution", () => {
     render(<Button className="h-11 w-full">宽按钮</Button>);
     expect(screen.getByRole("button", { name: "宽按钮" })).toHaveClass("h-11", "w-full");
-    expect(screen.getByRole("button", { name: "宽按钮" })).not.toHaveClass("h-9");
+    expect(screen.getByRole("button", { name: "宽按钮" })).not.toHaveClass("h-8");
   });
 
   it("loading shows a spinner, sets aria-busy and disables the button", () => {
@@ -74,5 +75,7 @@ describe("buttonClasses", () => {
     expect(buttonClasses({ variant: "danger", size: "sm" })).toContain("bg-error");
     expect(buttonClasses({ className: "w-full" })).toContain("w-full");
     expect(buttonClasses()).toContain("bg-accent");
+    // 40 px is a form's primary button and nothing else.
+    expect(buttonClasses({ size: "lg" })).toContain("h-10");
   });
 });

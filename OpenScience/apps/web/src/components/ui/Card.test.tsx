@@ -18,15 +18,15 @@ describe("Card", () => {
     expect(section?.className).not.toMatch(/shadow/);
   });
 
-  it("applies the padding scale to the body (p-5 default, p-4 dense)", () => {
+  it("applies the padding scale to the body (16 default, 12 dense)", () => {
     const { rerender } = render(<Card title="t">正文</Card>);
-    expect(screen.getByText("正文")).toHaveClass("p-5");
+    expect(screen.getByText("正文")).toHaveClass("p-4");
     rerender(
-      <Card title="t" padding="p-4">
+      <Card title="t" padding="p-3">
         正文
       </Card>,
     );
-    expect(screen.getByText("正文")).toHaveClass("p-4");
+    expect(screen.getByText("正文")).toHaveClass("p-3");
   });
 
   it("renders a raw header slot instead of the title block when given", () => {

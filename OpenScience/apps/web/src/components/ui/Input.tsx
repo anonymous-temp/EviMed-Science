@@ -10,10 +10,13 @@ import { cn } from "@/lib/cn";
  * With neither `label` nor `error` they render the bare control, so existing
  * label-wrapping markup (icon inputs, search boxes) can adopt them in place.
  * `inputClasses` exposes the same look for <select> and read-only displays.
+ *
+ * 32 px tall and 8 px round — the control height and radius of DESIGN.md, so a
+ * field, the button beside it and the kernel's own inputs line up.
  */
 
 const controlBase = cn(
-  "w-full rounded-input border bg-surface px-3 text-ui text-text outline-none transition-colors",
+  "w-full rounded border bg-surface px-3 text-ui text-text outline-none transition-colors",
   "placeholder:text-muted disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted",
 );
 
@@ -26,7 +29,7 @@ function borderClasses(error: boolean): string {
 }
 
 export function inputClasses({ error = false, className }: { error?: boolean; className?: string } = {}): string {
-  return cn(controlBase, "h-9", borderClasses(error), className);
+  return cn(controlBase, "h-8", borderClasses(error), className);
 }
 
 export function textareaClasses({ error = false, className }: { error?: boolean; className?: string } = {}): string {
@@ -46,13 +49,13 @@ function FieldShell({ id, label, error, children }: FieldShellProps) {
   return (
     <div>
       {label != null && (
-        <label htmlFor={id} className="mb-1.5 block text-ui font-medium text-text">
+        <label htmlFor={id} className="mb-2 block text-ui font-medium text-text">
           {label}
         </label>
       )}
       {children}
       {error != null && (
-        <p id={`${id}-error`} role="alert" className="mt-1.5 text-ui text-error">
+        <p id={`${id}-error`} role="alert" className="mt-2 text-ui text-error">
           {error}
         </p>
       )}

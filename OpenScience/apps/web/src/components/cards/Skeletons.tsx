@@ -15,9 +15,10 @@ function Bar({ className }: { className?: string }) {
 export function FilesSkeleton() {
   const widths = ["w-3/4", "w-1/2", "w-2/3", "w-3/5", "w-1/2", "w-2/3"];
   return (
-    <div className="animate-pulse space-y-0.5 p-2" aria-hidden>
+    <div className="animate-pulse p-2" aria-hidden>
       {widths.map((w, i) => (
-        <div key={i} className="flex items-center gap-2 px-2 py-1.5">
+        // 36 px — the list-row height, so nothing jumps when the rows arrive.
+        <div key={i} className="flex h-9 items-center gap-2 px-2">
           <Bar className="h-4 w-4 shrink-0" />
           <Bar className={cn("h-3.5", w)} />
           <Bar className="ml-auto h-3 w-9 shrink-0" />
@@ -33,18 +34,18 @@ export function RunsSkeleton({ filter = true }: { filter?: boolean }) {
   return (
     <div className="animate-pulse" aria-hidden>
       {filter && (
-        <div className="flex flex-wrap items-center gap-2 px-1 py-2">
-          <Bar className="h-8 min-w-[12rem] flex-1 rounded-input" />
+        <div className="flex flex-wrap items-center gap-2 px-2 py-2">
+          <Bar className="h-8 min-w-[12rem] flex-1 rounded" />
           <Bar className="h-6 w-16 rounded-full" />
           <Bar className="h-6 w-16 rounded-full" />
           <Bar className="h-6 w-36 rounded-full" />
         </div>
       )}
-      <div className="mt-2 px-1 py-1">
+      <div className="mt-2 px-2 py-2">
         <Bar className="h-3 w-16" />
       </div>
       {widths.map((w, i) => (
-        <div key={i} className="flex items-center gap-2.5 px-2 py-2">
+        <div key={i} className="flex h-9 items-center gap-3 px-2">
           <Bar className="h-1.5 w-1.5 shrink-0 rounded-full" />
           <Bar className={cn("h-3.5", w)} />
           <Bar className="ml-auto h-3 w-12 shrink-0" />
@@ -57,14 +58,14 @@ export function RunsSkeleton({ filter = true }: { filter?: boolean }) {
 /** Memory page — the two-column card grid. */
 export function MemorySkeleton() {
   return (
-    <div className="mt-6 grid animate-pulse items-start gap-4 md:grid-cols-2" aria-hidden>
+    <div className="mt-6 grid animate-pulse items-start gap-3 md:grid-cols-2" aria-hidden>
       {[3, 2, 3, 2].map((lines, i) => (
-        <div key={i} className="rounded-card border border-border bg-surface p-5">
+        <div key={i} className="rounded-card border border-border bg-surface p-4">
           <div className="flex items-center justify-between">
             <Bar className="h-3 w-24" />
             <Bar className="h-4 w-16" />
           </div>
-          <div className="mt-4 space-y-2.5">
+          <div className="mt-4 space-y-2">
             {Array.from({ length: lines }, (_, j) => (
               <Bar key={j} className={cn("h-3.5", j === lines - 1 ? "w-2/3" : "w-full")} />
             ))}
@@ -85,7 +86,7 @@ export function AgentsSkeleton() {
     <div className="animate-pulse divide-y divide-border" aria-hidden>
       {["w-1/2", "w-2/3", "w-2/5", "w-3/5"].map((w, i) => (
         <div key={i} className="grid grid-cols-[3rem_minmax(0,1fr)_auto] gap-4 py-6">
-          <Bar className="h-9 w-9 rounded-input" />
+          <Bar className="h-9 w-9 rounded" />
           <div>
             <Bar className="h-3 w-32" />
             <Bar className={cn("mt-2.5 h-4", w)} />

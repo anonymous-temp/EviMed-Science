@@ -75,7 +75,7 @@ export function ShortcutHelp() {
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- click-outside dismisses the panel; the keyboard equivalent is the global Escape handler above.
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/20 pt-[16vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-scrim pt-[16vh]"
       onClick={() => setOpen(false)}
     >
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- stopPropagation only, so clicks inside do not dismiss; no activation semantics here. */}
@@ -86,14 +86,14 @@ export function ShortcutHelp() {
           aria-modal="true"
           aria-label="键盘快捷键"
           tabIndex={-1}
-          className="w-full max-w-md rounded-card border border-border bg-surface shadow-pop outline-none"
+          className="w-full max-w-md rounded-panel border border-border bg-surface shadow-modal outline-none"
         >
-          <header className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <header className="flex h-11 items-center gap-2 border-b border-border px-4">
             <h2 className="flex-1 text-ui font-medium text-text">键盘快捷键</h2>
             <button
               onClick={() => setOpen(false)}
               aria-label="关闭快捷键面板"
-              className="rounded p-1 text-muted hover:bg-surface-2 hover:text-text"
+              className="grid h-8 w-8 place-items-center rounded text-muted hover:bg-surface-2 hover:text-text"
             >
               <X size={14} aria-hidden="true" />
             </button>
@@ -102,16 +102,16 @@ export function ShortcutHelp() {
             {rows.map((row) => (
               <li
                 key={row.keys}
-                className="flex items-center gap-3 border-b border-border py-2 text-ui last:border-b-0"
+                className="flex h-9 items-center gap-3 border-b border-border text-ui last:border-b-0"
               >
-                <kbd className="w-28 shrink-0 rounded bg-surface-2 px-1.5 py-0.5 text-center font-mono text-caption text-text ring-1 ring-border">
+                <kbd className="w-28 shrink-0 rounded bg-surface-1 px-2 py-1 text-center font-mono text-caption text-text ring-1 ring-border">
                   {row.keys}
                 </kbd>
                 <span className="text-muted">{row.description}</span>
               </li>
             ))}
           </ul>
-          <p className="border-t border-border px-4 py-2 text-caption text-muted">
+          <p className="border-t border-border px-4 py-3 text-caption text-muted">
             对话输入框里的按键（发送、换行、斜杠命令）由对话界面自己处理。
           </p>
         </div>

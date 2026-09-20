@@ -8,8 +8,8 @@ import { cn } from "@/lib/cn";
  * selection — focus follows selection, as in a native radio group. Fully
  * controlled: `value` + `onChange`.
  *
- * Visual: the existing inset-track switch used by Settings (theme) and Memory
- * (current/archived) — one implementation now, no second copy to drift.
+ * Visual: a 32 px inset track (the control height) with the selected segment
+ * lifted onto the surface — one implementation, no second copy to drift.
  */
 export interface SegmentedControlOption<T extends string> {
   value: T;
@@ -62,7 +62,7 @@ export function SegmentedControl<T extends string>({
       role="radiogroup"
       aria-label={ariaLabel}
       onKeyDown={onKeyDown}
-      className={cn("inline-flex rounded-input border border-strong bg-surface-2 p-0.5", className)}
+      className={cn("inline-flex h-8 items-center rounded border border-strong bg-surface-1 p-0.5", className)}
     >
       {options.map((option, i) => {
         const checked = option.value === value;
@@ -75,7 +75,9 @@ export function SegmentedControl<T extends string>({
             tabIndex={checked ? 0 : -1}
             onClick={() => select(i)}
             className={cn(
-              "rounded-md px-3 py-1.5 text-ui outline-none transition-colors",
+              // A control nested in another wears the outer radius minus the
+              // padding: 8 - 2 = 6.
+              "h-7 rounded-md px-3 text-ui outline-none transition-colors",
               "focus-visible:ring-2 focus-visible:ring-focus",
               checked ? "bg-surface font-medium text-text ring-1 ring-border" : "text-muted hover:text-text",
             )}

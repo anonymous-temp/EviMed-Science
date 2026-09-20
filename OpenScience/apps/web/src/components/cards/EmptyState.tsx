@@ -22,11 +22,11 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col items-center justify-center px-6 py-10 text-center", className)}>
-      {Icon && <Icon size={22} strokeWidth={1.5} className="text-muted" aria-hidden />}
-      <p className={cn("text-ui font-medium text-text", Icon && "mt-2")}>{title}</p>
-      {description && <div className="mt-1 max-w-sm text-caption leading-5 text-muted">{description}</div>}
-      {action && <div className="mt-4">{action}</div>}
+    <div className={cn("flex flex-col items-center justify-center px-6 py-12 text-center", className)}>
+      {Icon && <Icon size={20} strokeWidth={1.5} className="text-muted" aria-hidden />}
+      <p className={cn("text-ui font-medium text-text", Icon && "mt-3")}>{title}</p>
+      {description && <div className="mt-2 max-w-sm text-caption text-muted">{description}</div>}
+      {action && <div className="mt-6">{action}</div>}
     </div>
   );
 }

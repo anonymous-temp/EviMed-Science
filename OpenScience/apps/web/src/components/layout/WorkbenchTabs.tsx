@@ -55,18 +55,18 @@ export function WorkbenchTabs({
   return (
     <div className="flex h-full min-h-0 flex-col bg-bg">
       <PageTitle page={title} section={active.label} />
-      <div className="shrink-0 border-b border-border px-8 pt-8">
-        <div className="mx-auto flex max-w-content-full flex-wrap items-end justify-between gap-3">
+      <div className="shrink-0 border-b border-border px-6 pt-6">
+        <div className="mx-auto flex max-w-content-wide flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className={PAGE_TITLE_CLASS}>{title}</h1>
-            {description && <p className="mt-2 max-w-2xl text-ui text-muted">{description}</p>}
+            {description && <p className="mt-2 text-ui text-muted">{description}</p>}
           </div>
           {actions}
         </div>
         {/* WAI tabs: one stop in the tab order, arrows move between the tabs,
             Home/End jump to the ends. Without it a keyboard had to tab through
             every view's name to reach the content (2026-09-16 walk, U10). */}
-        <div ref={strip} className="mx-auto mt-5 flex max-w-content-full gap-1" role="tablist" aria-label={title}>
+        <div ref={strip} className="mx-auto mt-6 flex h-11 max-w-content-wide items-stretch gap-1" role="tablist" aria-label={title}>
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -90,7 +90,7 @@ export function WorkbenchTabs({
                 strip.current?.querySelectorAll("button")[next]?.focus();
               }}
               className={cn(
-                "-mb-px border-b-2 px-3 py-2 text-ui transition-colors",
+                "-mb-px border-b-2 px-3 text-ui transition-colors",
                 tab.key === active.key
                   ? "border-accent font-medium text-text"
                   : "border-transparent text-muted hover:text-text",
