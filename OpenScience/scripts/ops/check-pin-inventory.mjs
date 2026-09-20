@@ -88,6 +88,11 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/packages\/domain\/src\/designTokens\.mjs$/,
+    why: "the kernel-token mapping names which `--dsw-*` aliases read which ramp step, read off this exact client's stylesheets; the mapping is only true of the client it was read from, so it is re-read when the pin moves rather than moved with it",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/scripts\/ops\/check-kernel-defaults\.mjs$/,
     why: "records which version produced the stored --dump-config baseline; it moves when the baseline is re-recorded, not when the pin moves",
   },
