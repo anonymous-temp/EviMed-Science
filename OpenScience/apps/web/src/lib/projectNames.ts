@@ -9,7 +9,7 @@ import { relativeTime } from "@/lib/runPresentation";
  * reloading the page (2026-09-19): a switch starts the other project's runtime
  * if it is not running and leaves this one alone.
  */
-export const PROJECT_EXPLAINER = "一个项目 = 独立的工作区、运行记录与记忆范围，各有自己的研究运行时。";
+export const PROJECT_EXPLAINER = "一个项目 = 独立的工作区、对话与记忆范围，各有自己的研究环境。";
 
 /** The longest name the control plane accepts (contract C4). */
 export const PROJECT_NAME_MAX = 40;
