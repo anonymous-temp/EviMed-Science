@@ -122,8 +122,8 @@ function sameSemantics(item, values) {
 /**
  * What the inbox says about a finished run.
  *
- * Both bodies used to be fixed strings — "研究结果已准备好" and "研究运行已结束，请
- * 查看运行记录了解状态" — which told the reader to go somewhere else to learn
+ * Both bodies used to be fixed strings — "研究结果已准备好" and one that told
+ * the reader to go and look up a ledger row — which sent them somewhere else to learn
  * what the control plane already knew. Worse, a run the platform stopped on a
  * timer and a package the gate refused arrived under the same sentence, so the
  * inbox could not distinguish "your work was rejected" from "we killed it".
@@ -142,9 +142,9 @@ export function runFinishedNotice(run) {
     : run?.verification ? "qualified" : "delivered";
   const title = {
     delivered: "研究已完成",
-    qualified: "研究已交付，待你复核",
-    // 「核验」, the reader's word; 「质量门」 is the engineering one (B §1g).
-    gated: "交付物未通过核验",
+    qualified: "研究已交付",
+    // 「核对」, the reader's word; 「质量门」 is the engineering one (B §1g).
+    gated: "报告与文件未通过检查",
     stopped: "研究运行已被平台终止",
     capped: "研究未开始：额度或并发受限",
     upstream: "研究中断：外部数据源或服务异常",
@@ -166,11 +166,11 @@ export function runFinishedNotice(run) {
       ? errorCodeMessage(run.errorCode)
       : run?.verification === "unverified"
         ? failing > 0
-          ? `已交付。${failing} 项自证未通过${summary.safety ? `，其中 ${summary.safety} 项涉及临床安全` : ""}；引用前请在报告的「依据」里核对带 ⚠ 的结论。`
-          : "已交付，但有核验没有通过；引用前请在报告的「依据」里核对带 ⚠ 的结论。"
+          ? `已交付。其中 ${failing} 条结论没能逐字核对${summary.safety ? `，${summary.safety} 条涉及临床安全` : ""}；引用前请在报告的「依据」里核对带 ⚠ 的结论。`
+          : "已交付。有结论没能逐字核对；引用前请在报告的「依据」里核对带 ⚠ 的结论。"
         : run?.verification === "unchecked"
-          ? "已交付，但有一项核验没有运行，无法确认是否达标；引用前请自行核对来源。"
-          : "研究结果已准备好，可以查看运行记录和交付物。";
+          ? "已交付。有一项检查没有运行，无法确认是否达标；引用前请自行核对来源。"
+          : "研究结果已准备好，报告与文件都在这条对话里。";
   // Files on disk are the researcher's own work whatever the verdict was, and
   // saying so here is the same rule the run surface follows: a refused package
   // is not a deleted one.
@@ -318,17 +318,17 @@ export function runFinishedInboxItem(project, run, { peers = [], silent = false 
   const review = members.filter((member) => member.notice.outcome === "qualified");
   const failing = review.reduce((sum, member) => sum + member.notice.counts.safety + member.notice.counts.mustFix, 0);
   const [, month, date] = day.split("-").map(Number);
-  const parts = [review.length ? `${review.length} 项待你复核` : null, members.length - review.length ? `${members.length - review.length} 项已完成` : null].filter(Boolean);
+  const parts = [review.length ? `${review.length} 项有结论要核对` : null, members.length - review.length ? `${members.length - review.length} 项已完成` : null].filter(Boolean);
   const shown = members.slice(0, 3).map(({ run: member, notice: memberNotice }) => {
     const memberFailing = memberNotice.counts.safety + memberNotice.counts.mustFix;
-    const state = memberNotice.outcome !== "qualified" ? "已完成" : memberFailing ? `待复核，${memberFailing} 项自证未通过` : "待复核";
+    const state = memberNotice.outcome !== "qualified" ? "已完成" : memberFailing ? `已交付，${memberFailing} 条结论要核对` : "已交付";
     return `· ${runLabel(member)}：${state}`;
   });
   const body = [
     `其中 ${parts.join("，")}。`,
-    failing > 0 ? `待复核的研究共有 ${failing} 项自证未通过；引用前请在报告的「依据」里核对带 ⚠ 的结论。` : null,
+    failing > 0 ? `这些研究里共有 ${failing} 条结论没能逐字核对；引用前请在报告的「依据」里核对带 ⚠ 的结论。` : null,
     ...shown,
-    members.length > shown.length ? `另有 ${members.length - shown.length} 项，见运行记录。` : null,
+    members.length > shown.length ? `另有 ${members.length - shown.length} 项。` : null,
   ].filter(Boolean).join("\n");
   const severity = members.some((member) => member.notice.severity === "attention") ? "attention" : "info";
   return {

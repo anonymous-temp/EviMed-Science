@@ -11,6 +11,7 @@ import { InboxBody } from "@/components/inbox/InboxBody";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { MemorySkeleton } from "@/components/cards/Skeletons";
@@ -22,7 +23,7 @@ function pendingFollowUps(agenda: AgendaRecord): number {
 }
 
 /**
- * The kinds of turn an agenda may run, in the product's words.
+ * The kinds of work an agenda may do, in the product's words.
  *
  * Mirrors `@evimed/domain`'s `AUTOPILOT_TASK_TYPES`; the service validates
  * against that list, so a value here that is not there is refused rather than
@@ -39,14 +40,52 @@ const TASK_TYPE_LABELS: ReadonlyArray<{ value: string; label: string }> = [
 ];
 
 /**
- * Creating an agenda.
+ * What the platform picks when the researcher says nothing about it.
+ *
+ * ¥2 a turn, ¥10 a day, ¥50 a week is the ordered triple the service accepts
+ * and roughly half a deep run's measured cost (¥3.4, 2026-09-20 benchmark), so
+ * an agenda left alone costs less in a week than two deep runs. 07:00 is
+ * before a working day in the researcher's own zone.
+ */
+const AGENDA_DEFAULTS = {
+  taskTypes: ["literature-sentinel"],
+  maxEpisodeCny: "2",
+  dailyBudgetCny: "10",
+  weeklyBudgetCny: "50",
+  scheduleHour: "7",
+} as const;
+
+/** A name for an agenda the researcher did not name: their own sentence. */
+function defaultTitle(direction: string): string {
+  const text = direction.trim().replace(/\s+/g, " ");
+  return text.length <= 60 ? text : `${text.slice(0, 59)}…`;
+}
+
+/**
+ * The directions a sentence names. A researcher writing 「司美格鲁肽的胰腺炎
+ * 与心血管结局」 means three of them; splitting on the punctuation that already
+ * separates them is what makes 「研究方向」 a field they never have to fill.
+ */
+function splitTopics(direction: string): string[] {
+  const parts = direction.split(/[,，、;；\n]|\s和\s|与/).map((value) => value.trim()).filter(Boolean);
+  return parts.length > 0 ? parts.slice(0, 12) : [];
+}
+
+/**
+ * Creating an agenda: one sentence.
  *
  * `POST /api/autopilot/agendas` has existed since the service shipped and no
- * surface ever called it: the page offered 开始 / 停止 / 立即运行一回合 over a
- * list that could only ever be empty, so 「主动科研」 was a navigation row to a
- * dead end (2026-09-15 walk, B4). An agenda is created paused — the service
- * sets `enabled: false` and says why — so this form spends nothing; the
- * researcher presses 开始 afterwards.
+ * surface ever called it: the page offered 开始 / 停止 / 立即运行 over a list
+ * that could only ever be empty, so 「主动科研」 was a navigation row to a dead
+ * end (2026-09-15 walk, B4). The form that fixed that asked for a name, a list
+ * of directions, a set of task types and three budgets before it would accept
+ * anything — six fields to start something the platform is supposed to run by
+ * itself (2026-09-20 plan, R3). Now it asks for the one thing only the
+ * researcher knows, picks the rest, and keeps every field editable behind
+ * 「高级」 for the researcher who does care. The API is unchanged.
+ *
+ * An agenda is created paused — the service sets `enabled: false` and says why
+ * — so this form spends nothing; the researcher presses 开始 afterwards.
  */
 function NewAgendaForm({ projectId, busy, onCreated, onError }: {
   projectId: string;
@@ -55,25 +94,26 @@ function NewAgendaForm({ projectId, busy, onCreated, onError }: {
   onError: (message: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [direction, setDirection] = useState("");
   const [title, setTitle] = useState("");
-  const [topics, setTopics] = useState("");
-  const [taskTypes, setTaskTypes] = useState<string[]>(["literature-sentinel"]);
-  const [maxEpisodeCny, setMaxEpisodeCny] = useState("2");
-  const [dailyBudgetCny, setDailyBudgetCny] = useState("10");
-  const [weeklyBudgetCny, setWeeklyBudgetCny] = useState("50");
-  const [scheduleHour, setScheduleHour] = useState("7");
+  const [taskTypes, setTaskTypes] = useState<string[]>([...AGENDA_DEFAULTS.taskTypes]);
+  const [maxEpisodeCny, setMaxEpisodeCny] = useState<string>(AGENDA_DEFAULTS.maxEpisodeCny);
+  const [dailyBudgetCny, setDailyBudgetCny] = useState<string>(AGENDA_DEFAULTS.dailyBudgetCny);
+  const [weeklyBudgetCny, setWeeklyBudgetCny] = useState<string>(AGENDA_DEFAULTS.weeklyBudgetCny);
+  const [scheduleHour, setScheduleHour] = useState<string>(AGENDA_DEFAULTS.scheduleHour);
   const [saving, setSaving] = useState(false);
 
-  const topicList = topics.split(/[,，\n]/).map((value) => value.trim()).filter(Boolean);
+  const topicList = splitTopics(direction);
   const episode = Number(maxEpisodeCny);
   const daily = Number(dailyBudgetCny);
   const weekly = Number(weeklyBudgetCny);
   // The service refuses an unordered triple with `autopilot_budget_invalid`.
   // Saying so before the request is what keeps that refusal from being the
-  // first the researcher hears of the rule.
+  // first the researcher hears of the rule — and these are only reachable
+  // under 「高级」, so the defaults can never trip it.
   const budgetsOrdered = [episode, daily, weekly].every((value) => Number.isFinite(value) && value > 0)
     && episode <= daily && daily <= weekly;
-  const ready = title.trim().length > 0 && topicList.length > 0 && taskTypes.length > 0 && budgetsOrdered;
+  const ready = topicList.length > 0 && taskTypes.length > 0 && budgetsOrdered;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -82,7 +122,7 @@ function NewAgendaForm({ projectId, busy, onCreated, onError }: {
     try {
       await createAgenda({
         projectId,
-        title: title.trim(),
+        title: title.trim() || defaultTitle(direction),
         topics: topicList,
         taskTypes,
         maxEpisodeCny: episode,
@@ -94,7 +134,7 @@ function NewAgendaForm({ projectId, busy, onCreated, onError }: {
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
       });
       setOpen(false);
-      setTitle(""); setTopics("");
+      setDirection(""); setTitle("");
       onCreated();
     } catch (caught) {
       onError(productErrorMessage(caught));
@@ -110,35 +150,43 @@ function NewAgendaForm({ projectId, busy, onCreated, onError }: {
   }
 
   return (
-    <Card title="新建研究议程" hint="议程创建后处于暂停状态，只有你按下「开始主动科研」才会运行和产生费用。">
+    <Card title="让 EviMed 持续盯住一个方向" hint="议程创建后处于暂停状态，只有你按下「开始主动科研」才会运行和产生费用。">
       <form className="space-y-3" onSubmit={submit}>
-        <Input label="议程名称" value={title} maxLength={200} required
-          placeholder="例如：GLP-1 受体激动剂安全性跟踪"
-          onChange={(event) => setTitle(event.target.value)} />
-        <Input label="研究方向" value={topics} required
-          placeholder="逗号分隔，例如：司美格鲁肽, 胰腺炎, 心血管结局"
-          onChange={(event) => setTopics(event.target.value)} />
-        <fieldset className="space-y-1">
-          <legend className="text-ui font-medium text-text">回合类型</legend>
-          <div className="flex flex-wrap gap-3">
-            {TASK_TYPE_LABELS.map((type) => (
-              <label key={type.value} className="flex items-center gap-1.5 text-ui text-text">
-                <input type="checkbox" checked={taskTypes.includes(type.value)}
-                  onChange={(event) => setTaskTypes((current) => event.target.checked
-                    ? [...current, type.value]
-                    : current.filter((value) => value !== type.value))} />
-                {type.label}
-              </label>
-            ))}
+        <Input label="想持续跟进什么？" value={direction} required maxLength={400}
+          placeholder="例如：司美格鲁肽的胰腺炎与心血管结局"
+          onChange={(event) => setDirection(event.target.value)} />
+        <p className="text-caption text-muted">
+          默认每天 {AGENDA_DEFAULTS.scheduleHour.padStart(2, "0")}:00 跑一次文献哨兵，
+          单次最多 ¥{AGENDA_DEFAULTS.maxEpisodeCny}、每天 ¥{AGENDA_DEFAULTS.dailyBudgetCny}、每周 ¥{AGENDA_DEFAULTS.weeklyBudgetCny}。
+        </p>
+        <Disclosure summary="高级：名称、任务类型、预算与时刻">
+          <div className="space-y-3">
+            <Input label="议程名称" value={title} maxLength={200}
+              placeholder={direction.trim() ? defaultTitle(direction) : "留空就用上面这句话"}
+              onChange={(event) => setTitle(event.target.value)} />
+            <fieldset className="space-y-1">
+              <legend className="text-ui font-medium text-text">任务类型</legend>
+              <div className="flex flex-wrap gap-3">
+                {TASK_TYPE_LABELS.map((type) => (
+                  <label key={type.value} className="flex items-center gap-1.5 text-ui text-text">
+                    <input type="checkbox" checked={taskTypes.includes(type.value)}
+                      onChange={(event) => setTaskTypes((current) => event.target.checked
+                        ? [...current, type.value]
+                        : current.filter((value) => value !== type.value))} />
+                    {type.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <Input label="单次上限 ¥" type="number" min="0" step="0.5" value={maxEpisodeCny} onChange={(event) => setMaxEpisodeCny(event.target.value)} />
+              <Input label="每日上限 ¥" type="number" min="0" step="1" value={dailyBudgetCny} onChange={(event) => setDailyBudgetCny(event.target.value)} />
+              <Input label="每周上限 ¥" type="number" min="0" step="1" value={weeklyBudgetCny} onChange={(event) => setWeeklyBudgetCny(event.target.value)} />
+              <Input label="每天运行时刻" type="number" min="0" max="23" step="1" value={scheduleHour} onChange={(event) => setScheduleHour(event.target.value)} />
+            </div>
+            {!budgetsOrdered && <p className="text-ui text-muted">三档预算需满足：单次 ≤ 每日 ≤ 每周，且都大于 0。</p>}
           </div>
-        </fieldset>
-        <div className="grid gap-3 sm:grid-cols-4">
-          <Input label="单回合上限 ¥" type="number" min="0" step="0.5" value={maxEpisodeCny} onChange={(event) => setMaxEpisodeCny(event.target.value)} />
-          <Input label="每日上限 ¥" type="number" min="0" step="1" value={dailyBudgetCny} onChange={(event) => setDailyBudgetCny(event.target.value)} />
-          <Input label="每周上限 ¥" type="number" min="0" step="1" value={weeklyBudgetCny} onChange={(event) => setWeeklyBudgetCny(event.target.value)} />
-          <Input label="每天运行时刻" type="number" min="0" max="23" step="1" value={scheduleHour} onChange={(event) => setScheduleHour(event.target.value)} />
-        </div>
-        {!budgetsOrdered && <p className="text-ui text-muted">三档预算需满足：单回合 ≤ 每日 ≤ 每周，且都大于 0。</p>}
+        </Disclosure>
         <div className="flex gap-2">
           <Button size="sm" type="submit" disabled={!ready || saving}>创建议程</Button>
           <Button size="sm" type="button" variant="ghost" disabled={saving} onClick={() => setOpen(false)}>取消</Button>
@@ -163,7 +211,7 @@ function verificationLabel(claim: DigestClaim): { text: string; refuted: boolean
   if (claim.tier === "reproduced") return { text: "独立复核已复现", refuted: false };
   if (claim.refutation === "stands") return { text: "独立复核未能推翻", refuted: false };
   if (claim.verification?.status === "queued") return { text: "独立复核排队中", refuted: false };
-  if (claim.verification?.status === "unavailable") return { text: "独立复核未完成，仍停留在门禁通过", refuted: false };
+  if (claim.verification?.status === "unavailable") return { text: "独立复核未完成，只通过了交付前的检查", refuted: false };
   // A claim that was never scheduled is not a claim awaiting its turn. The
   // service records the two separately on purpose, and a reader who cannot tell
   // them apart is waiting for something that is never coming.
@@ -171,7 +219,7 @@ function verificationLabel(claim: DigestClaim): { text: string; refuted: boolean
     return { text: claim.verification.reason === "verification_budget_unavailable"
       ? "本轮预算不足以安排独立复核" : "本轮复核名额已满，未安排独立复核", refuted: false };
   }
-  if (claim.tier === "gated") return { text: "已通过交付门禁，尚未独立复核", refuted: false };
+  if (claim.tier === "gated") return { text: "已通过交付前的检查，尚未独立复核", refuted: false };
   if (claim.tier === "unverified") return { text: "尚未通过任何验证", refuted: false };
   return null;
 }
@@ -316,7 +364,7 @@ export function AutopilotPage() {
    *
    * `toISOString().slice(0, 10)` is the UTC date, and the create form already
    * records the researcher's zone precisely because the two differ: between
-   * 00:00 and 08:00 Beijing time it names yesterday, so 「立即运行一回合」
+   * 00:00 and 08:00 Beijing time it names yesterday, so 「立即跑一次」
    * scheduled the previous day's episode (2026-09-16 walk, U7). Read per
    * agenda, because two agendas may not share a zone.
    */
@@ -339,7 +387,7 @@ export function AutopilotPage() {
   const summaryLine = latest
     ? `${latest.payload.date} 的简报：${latest.payload.headlines.length} 条重点发现 · `
       + `${latest.payload.leads.length} 条待验证线索 · 花费 ¥${latest.payload.costCny}`
-    : "按研究议程运行受额度和停止规则约束的回合，结果仍走普通研究门禁。";
+    : "按研究议程自动跑，受额度和停止规则约束；结果和你自己发起的研究走同一套检查。";
 
   /**
    * When the first briefing is due, said in the agenda's own words.
@@ -352,14 +400,14 @@ export function AutopilotPage() {
   const scheduled = (agendas ?? []).find((agenda) => agenda.payload.status === "active");
   const firstRunHint = scheduled
     ? `「${scheduled.payload.title}」将在每天 ${String(scheduled.payload.scheduleHour).padStart(2, "0")}:00`
-      + `（${scheduled.payload.timeZone}）运行一回合，完成后在这里汇总发现、变化与花费。`
+      + `（${scheduled.payload.timeZone}）跑一次，完成后在这里汇总发现、变化与花费。`
     : (agendas ?? []).length > 0
       ? "议程目前是暂停的。按「开始主动科研」之后，它会按设定的时刻运行，第一份简报在那之后出现。"
-      : "完成的主动科研回合会在这里汇总发现、变化与花费。";
+      : "完成的主动科研会在这里汇总发现、变化与花费。";
   const runDialog = running ? <ConfirmDialog
-    title="现在就跑一回合？"
-    body={`「${running.payload.title}」会立即开始一次主动科研回合，按上限最多花费 ¥${running.payload.maxEpisodeCny}（每日上限 ¥${running.payload.dailyBudgetCny}）。结果会作为简报出现在这一页。`}
-    confirmLabel="开始这一回合"
+    title="现在就跑一次？"
+    body={`「${running.payload.title}」会立即开始一次主动科研，按上限最多花费 ¥${running.payload.maxEpisodeCny}（每日上限 ¥${running.payload.dailyBudgetCny}）。结果会作为简报出现在这一页。`}
+    confirmLabel="现在就跑"
     onCancel={() => setRunning(null)}
     onConfirm={() => {
       const agenda = running;
@@ -408,7 +456,7 @@ export function AutopilotPage() {
                 if (!note) return;
                 void mutate(async () => { await decideDigest(digest.id, { action: "question", claimId: claim.id, note }); setFollowUp(null); });
               }}>
-                <Input className="min-w-0 flex-1" label="追问" placeholder="想让下一回合先回答什么？" value={followUp.note} onChange={(event) => setFollowUp({ ...followUp, note: event.target.value })} />
+                <Input className="min-w-0 flex-1" label="追问" placeholder="想让下一次先回答什么？" value={followUp.note} onChange={(event) => setFollowUp({ ...followUp, note: event.target.value })} />
                 <Button size="sm" type="submit" disabled={busy || !followUp.note.trim()}>发送追问</Button>
               </form>}
             </div>)}</div></Card>)}
@@ -428,20 +476,20 @@ export function AutopilotPage() {
     <section className="space-y-3" aria-label="研究议程">
       <h2 className="font-serif text-body text-text">研究议程</h2>
       {agendas === null ? <MemorySkeleton /> : agendas.length === 0
-        ? <EmptyState icon={CalendarClock} title="还没有主动科研议程" description="用右上角的「新建议程」写下方向、回合类型和三档预算。议程创建后默认暂停，只有你主动开始才会运行和产生费用。" />
+        ? <EmptyState icon={CalendarClock} title="还没有主动科研议程" description="用右上角的「新建议程」写一句想持续跟进的方向就行，其余由平台给默认值。议程创建后默认暂停，只有你主动开始才会运行和产生费用。" />
         : agendas.map((agenda) => <Card key={agenda.id} title={agenda.payload.title}
           hint={`${agenda.payload.status === "active" ? "运行中" : "已暂停"} · ${agenda.payload.topics.join("、")}`}><div className="space-y-3">
-          <p className="text-ui text-muted">每日 ¥{agenda.payload.dailyBudgetCny} · 每周 ¥{agenda.payload.weeklyBudgetCny} · 单回合 ¥{agenda.payload.maxEpisodeCny}</p>
+          <p className="text-ui text-muted">每日 ¥{agenda.payload.dailyBudgetCny} · 每周 ¥{agenda.payload.weeklyBudgetCny} · 单次 ¥{agenda.payload.maxEpisodeCny}</p>
           {agenda.payload.pauseReason && <p className="text-ui text-muted">{agenda.payload.pauseReason}</p>}
-          {pendingFollowUps(agenda) > 0 && <p className="text-ui text-muted">下一回合先回答 {pendingFollowUps(agenda)} 条追问。</p>}
+          {pendingFollowUps(agenda) > 0 && <p className="text-ui text-muted">下一次先回答 {pendingFollowUps(agenda)} 条追问。</p>}
           <div className="flex flex-wrap gap-2">
             {/* Spending is confirmed; a verdict is not.
-              * 「立即运行一回合」 starts a paid episode on one click, so it says
+              * 「立即跑一次」 starts a paid episode on one click, so it says
               * what it may cost first (2026-09-16 review, U17). 「采纳 / 驳回」
               * are deliberately left one-click: `rememberDecision` writes a
               * capsule CANDIDATE, which takes effect only once confirmed — so
               * a dialog there would guard a step that already has a gate. */}
-            {agenda.payload.status === "active" ? <><Button size="sm" disabled={busy} onClick={() => setRunning(agenda)}><Sparkles size={13} aria-hidden="true" />立即运行一回合</Button>
+            {agenda.payload.status === "active" ? <><Button size="sm" disabled={busy} onClick={() => setRunning(agenda)}><Sparkles size={13} aria-hidden="true" />立即跑一次</Button>
               <Button size="sm" variant="ghost" disabled={busy} onClick={() => void mutate(() => stopAgenda(agenda.id, agenda.revision))}><PauseCircle size={13} aria-hidden="true" />停止</Button></>
               : <Button size="sm" disabled={busy} onClick={() => void mutate(() => startAgenda(agenda.id, agenda.revision))}><PlayCircle size={13} aria-hidden="true" />开始主动科研</Button>}
           </div></div></Card>)}

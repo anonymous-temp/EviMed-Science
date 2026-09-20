@@ -89,9 +89,21 @@ export function appLink(config, pathAndQuery) {
   return `${base}${pathAndQuery}`;
 }
 
-/** @param {string} runId */
-export function runLink(config, runId) {
-  return appLink(config, `/app/runs?run=${encodeURIComponent(runId)}`);
+/**
+ * Where a run is read: the conversation it happened in.
+ *
+ * The run ledger page was deleted on 2026-09-20. When the caller knows the
+ * conversation, the link names it; otherwise it stays the run's own address,
+ * which the shell resolves to the same conversation (`RunRedirect`,
+ * router.tsx) — a notice carries a run id and nothing else.
+ *
+ * @param {Record<string, any>} config @param {string} runId
+ * @param {string | null | undefined} [sessionId]
+ */
+export function runLink(config, runId, sessionId) {
+  return /^[A-Za-z0-9_-]{1,160}$/.test(String(sessionId ?? ""))
+    ? appLink(config, `/app/chat/${encodeURIComponent(String(sessionId))}`)
+    : appLink(config, `/app/runs?run=${encodeURIComponent(runId)}`);
 }
 
 /** @param {string} runId @param {string} filePath */
@@ -857,7 +869,7 @@ export class ImService {
       });
       return { status: "done", outcome: { action: "refused", code } };
     }
-    const link = runLink(this.config, run.id);
+    const link = runLink(this.config, run.id, run.sessionId);
     const task = await this.store.createTask({
       bindingId: binding.id, userId: user.id, projectId, chatId: message.chatId, replyTo: message.messageId,
       sessionId, runId: run.id, card: { ...card, link: link ?? null, lastUpdatedAt: 0 },
@@ -995,7 +1007,7 @@ export class ImService {
   async #deliverResult(/** @type {any} */ { task, binding, conversation, project, run, card }) {
     const result = { ...task.result };
     const question = card.question ?? run.question ?? "";
-    const link = card.link ?? runLink(this.config, run.id);
+    const link = card.link ?? runLink(this.config, run.id, run.sessionId);
     const notice = runFinishedNotice(run);
     const minutes = elapsedMinutes(run.startedAt, Date.parse(run.finishedAt ?? "") || this.now());
     if (!result.cardClosed) {

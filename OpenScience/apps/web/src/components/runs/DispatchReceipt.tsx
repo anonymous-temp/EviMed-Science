@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { ListChecks, MessageSquare, Square, X } from "lucide-react";
+import { MessageSquare, Square, X } from "lucide-react";
 import { cancelWebAgentRun, webErrorMessage, type WebAgentRun, type WebResearchAgent } from "@/lib/apiClient";
 import { rerouteRun, routeLineOf, type DispatchTarget } from "@/lib/dispatch";
+import { chatPath } from "@/lib/runLocation";
 import { announceRunsChanged, runState, runTitle } from "@/lib/runPresentation";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -11,14 +12,14 @@ import { RunStatusDot } from "@/components/runs/RunStatusDot";
 
 /**
  * What the shell shows the moment it starts a run: that it started, the route
- * line with the change offered, and the three ways on — watch the
- * conversation, follow the progress, or stop it.
+ * line with the change offered, and the two ways on — open the conversation,
+ * or stop it.
  *
  * The change is offered here and nowhere later. Right after a dispatch it
  * costs a few seconds of work to stop the run and start the same question on
  * another line; on a run that has been going for twenty minutes the same
- * button would throw those twenty minutes away, and the runs page offers a
- * plain 取消 there instead.
+ * button would throw those twenty minutes away, and stopping it is then done
+ * from the conversation itself or from the menu on its sidebar row.
  */
 export function DispatchReceipt({
   run: initialRun,
@@ -65,11 +66,11 @@ export function DispatchReceipt({
       const landed = routeLineOf(next, catalog);
       setNotice(
         target.kind === "open-domain" && !landed.answerLine
-          ? `已重新提交，但路由判断这个问题仍需要「${landed.label}」；原来那次运行已停止。只想要简短回答的话，可以在对话里直接问。`
-          : `已改为按「${label}」处理；原来那次运行已停止。`,
+          ? `已重新提交，但路由判断这个问题仍需要「${landed.label}」；原来那次研究已停止。只想要简短回答的话，可以在对话里直接问。`
+          : `已改为按「${label}」处理；原来那次研究已停止。`,
       );
     } catch (error) {
-      setFailure(webErrorMessage(error, { fallback: "没能改线，原来的运行仍在进行。" }));
+      setFailure(webErrorMessage(error, { fallback: "没能改用其他工具，原来那次研究仍在进行。" }));
     } finally {
       setBusy(false);
     }
@@ -82,9 +83,9 @@ export function DispatchReceipt({
     try {
       setRun(await cancelWebAgentRun(run.id));
       announceRunsChanged();
-      setNotice("已停止这次运行。");
+      setNotice("已停止这次研究。");
     } catch (error) {
-      setFailure(webErrorMessage(error, { fallback: "没能停止，请到运行记录里重试。" }));
+      setFailure(webErrorMessage(error, { fallback: "没能停止，请稍后重试。" }));
     } finally {
       setBusy(false);
     }
@@ -118,11 +119,11 @@ export function DispatchReceipt({
           </p>
           {failure && <p role="alert" className="mt-1 text-caption text-error">{failure}</p>}
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => navigate(`/app/chat/${encodeURIComponent(run.sessionId)}`)}>
+            {/* One way on, not two. 「查看进度」 opened the run ledger beside
+              * the conversation that already shows the same progress; the
+              * ledger page was deleted on 2026-09-20. */}
+            <Button size="sm" onClick={() => navigate(chatPath(run.sessionId))}>
               <MessageSquare size={14} aria-hidden="true" />打开对话
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => navigate(`/app/runs?run=${encodeURIComponent(run.id)}`)}>
-              <ListChecks size={14} aria-hidden="true" />查看进度
             </Button>
             {running && (
               <Button size="sm" variant="ghost" disabled={busy} onClick={() => setConfirmingCancel(true)}>
@@ -142,9 +143,9 @@ export function DispatchReceipt({
       </div>
       {confirmingCancel && (
         <ConfirmDialog
-          title="停止这次运行？"
-          body="已经做完的检索和写好的文件会留在工作区，但这次运行不会再交付。"
-          confirmLabel="停止运行"
+          title="停止这次研究？"
+          body="已经做完的检索和写好的文件会留在工作区，但这次研究不会再继续。"
+          confirmLabel="停止"
           onConfirm={() => void cancel()}
           onCancel={() => setConfirmingCancel(false)}
         />

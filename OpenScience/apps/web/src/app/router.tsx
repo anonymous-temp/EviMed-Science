@@ -1,6 +1,8 @@
-import { lazy } from "react";
-import { createBrowserRouter, Navigate, useParams, type RouteObject } from "react-router";
+import { lazy, useEffect, useState } from "react";
+import { createBrowserRouter, Navigate, useParams, useSearchParams, type RouteObject } from "react-router";
+import { chatPath, findRunSession } from "@/lib/runLocation";
 import { AppShell } from "./layout/AppShell";
+import { FrameSkeleton } from "./routes/RuntimeUiFrame";
 import { LoginPage } from "./routes/LoginPage";
 import { NotFound } from "./routes/NotFound";
 
@@ -23,7 +25,6 @@ const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m)
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
 const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ default: m.AccountPage })));
-const RunsPage = lazy(() => import("./routes/RunsPage").then((m) => ({ default: m.RunsPage })));
 const RunFilePage = lazy(() => import("./routes/RunFilePage").then((m) => ({ default: m.RunFilePage })));
 
 /**
@@ -42,9 +43,15 @@ export const routes: RouteObject[] = [
     element: <AppShell />,
     children: [
       { index: true, element: <Navigate to="/app/chat" replace /> },
-      { path: "chat", element: <SessionRoute /> },
-      { path: "chat/:sessionId", element: <SessionRoute /> },
-      { path: "runs", element: <RunsPage /> },
+      // One route, with or without the conversation's id. Two route objects
+      // made `/app/chat` → `/app/chat/:id` a remount, and the surface resumes
+      // the last conversation on arrival, so every plain visit paid for one
+      // (2026-09-20 review B §C item 3).
+      { path: "chat/:sessionId?", element: <SessionRoute /> },
+      // The run ledger page was deleted on 2026-09-20: a run is read in the
+      // conversation it happened in. Its address survives because it is in
+      // notification mail, in Feishu cards and in people's bookmarks.
+      { path: "runs", element: <RunRedirect /> },
       // One file of one run in the reader: where the frame's 交付物 / 依据
       // tabs land (`open-artifact`, contract C9) and where a claim's preserved
       // source opens with its quotation marked.
@@ -77,7 +84,7 @@ export const routes: RouteObject[] = [
   // 404 that says nothing about where the page went.
   { path: "/live", element: <ChatRedirect /> },
   { path: "/live/:sessionId", element: <ChatRedirect /> },
-  { path: "/runs", element: <Navigate to="/app/runs" replace /> },
+  { path: "/runs", element: <RunRedirect /> },
   { path: "/files", element: <Navigate to="/app/files" replace /> },
   { path: "/sources", element: <Navigate to="/app/files?tab=sources" replace /> },
   { path: "/notebooks", element: <Navigate to="/app/files" replace /> },
@@ -87,10 +94,35 @@ export const routes: RouteObject[] = [
   { path: "*", element: <NotFound /> },
 ];
 
-/** `/live/:sessionId` → `/app/chat/:sessionId`, keeping the session. */
+/** `/live/:sessionId` → `/app/chat/:sessionId`, keeping the conversation. */
 function ChatRedirect() {
   const { sessionId } = useParams();
-  return <Navigate to={sessionId ? `/app/chat/${sessionId}` : "/app/chat"} replace />;
+  return <Navigate to={chatPath(sessionId)} replace />;
+}
+
+/**
+ * `/app/runs?run=<id>` → the conversation that run happened in.
+ *
+ * The ledger page is gone, but its address is what a Feishu card, a pushed
+ * notice and a bookmark carry, and a run id is not a conversation id — the
+ * ledger is the only thing that knows which conversation a run belongs to, and
+ * that run may be in another of the account's projects. So this resolves
+ * rather than rewrites, and lands on the bare surface when it cannot: a run
+ * nothing can be found for is not a 404 the reader can act on.
+ */
+function RunRedirect() {
+  const [params] = useSearchParams();
+  const runId = params.get("run") ?? "";
+  const [to, setTo] = useState<string | null>(runId ? null : "/app/chat");
+  useEffect(() => {
+    if (!runId) return;
+    let live = true;
+    void findRunSession(runId)
+      .then((sessionId) => { if (live) setTo(chatPath(sessionId)); })
+      .catch(() => { if (live) setTo("/app/chat"); });
+    return () => { live = false; };
+  }, [runId]);
+  return to ? <Navigate to={to} replace /> : <FrameSkeleton line="正在打开这次研究的对话…" />;
 }
 
 export const router = createBrowserRouter(routes);

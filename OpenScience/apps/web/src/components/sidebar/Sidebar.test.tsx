@@ -76,22 +76,22 @@ beforeEach(() => {
 describe("Sidebar navigation", () => {
   it("makes repeated new-task clicks distinct native requests even on the same route", async () => {
     renderSidebar();
-    await userEvent.click(screen.getByRole("link", { name: "新任务" }));
+    await userEvent.click(screen.getByRole("link", { name: "新对话" }));
     const first = JSON.parse(screen.getByTestId("intent").textContent!);
-    await userEvent.click(screen.getByRole("link", { name: "新任务" }));
+    await userEvent.click(screen.getByRole("link", { name: "新对话" }));
     const second = JSON.parse(screen.getByTestId("intent").textContent!);
     expect(first).toMatchObject({ kind: "create", projectId: "default" });
     expect(second.requestId).not.toBe(first.requestId);
     expect(second.sessionId).not.toBe(first.sessionId);
   });
 
-  // Six rows and one footer row. Ten rows with no grouping described the
+  // Five rows and one footer row. Ten rows with no grouping described the
   // implementation's modules, not the researcher's work (2026-09-15 walk, C8),
   // and three of them were views of one body of material.
   it("lists the workbench destinations in order and navigates to each", async () => {
     renderSidebar();
 
-    const order = ["新任务", "运行记录", "知识库", "记忆胶囊", "主动科研", "科研能力"];
+    const order = ["新对话", "科研工具", "知识库", "记忆胶囊", "主动科研"];
     const buttons = order.map((label) => screen.getByRole("link", { name: label }));
     for (let i = 1; i < buttons.length; i += 1) {
       expect(
@@ -102,7 +102,7 @@ describe("Sidebar navigation", () => {
     await userEvent.click(screen.getByRole("link", { name: "知识库" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/files");
 
-    await userEvent.click(screen.getByRole("link", { name: "科研能力" }));
+    await userEvent.click(screen.getByRole("link", { name: "科研工具" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/capabilities");
 
     await userEvent.click(screen.getByRole("link", { name: "账户与设置" }));
@@ -127,7 +127,7 @@ describe("Sidebar navigation", () => {
   // inbox is not in this list: it is still reachable, as the bell above.
   it("no longer offers a row for a view of another destination", async () => {
     renderSidebar();
-    for (const gone of ["资料整理", "科研笔记本", "科研记忆", "记忆胶囊", "能力模板", "设置", "账户与额度"]) {
+    for (const gone of ["资料整理", "科研笔记本", "科研记忆", "记忆胶囊", "能力模板", "设置", "账户与额度", "运行记录"]) {
       expect(screen.queryByRole("button", { name: gone })).not.toBeInTheDocument();
     }
   });
@@ -138,7 +138,7 @@ describe("Sidebar navigation", () => {
   // the list now — and so is the 「最近任务」 list of the current one only.
   it("puts the projects between the destinations and the account row, and no project dropdown above them", async () => {
     renderSidebar();
-    const lastRow = screen.getByRole("link", { name: "科研能力" });
+    const lastRow = screen.getByRole("link", { name: "主动科研" });
     const projects = screen.getByRole("region", { name: "项目" });
     const account = await screen.findByRole("link", { name: "账户与设置" });
     expect(lastRow.compareDocumentPosition(projects) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

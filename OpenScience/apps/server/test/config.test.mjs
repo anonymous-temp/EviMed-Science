@@ -146,7 +146,7 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_BACKUP_HEALTH_GRACE_SECONDS: ["eq", "backupHealthGraceSeconds", "alert grace"],
   OPEN_SCIENCE_SESSION_TTL_MS: ["lte", "sessionTtlMs", "a login's lifetime"],
   OPEN_SCIENCE_OIDC_FLOW_TTL_MS: ["lte", "oidcFlowTtlMs", "a sign-in flow's lifetime"],
-  OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS: ["lte", "runtimeUiFrameTtlMs", "compose makes a frame ticket five minutes; the frame renews it"],
+  OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS: ["lte", "runtimeUiFrameTtlMs", "compose makes a frame ticket thirty minutes; the frame renews it at half of what is left"],
   OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_MAX_AGE_MS: ["lte", "deepseekReleaseReceiptMaxAgeMs", "staleness bound"],
   OPEN_SCIENCE_POSTGRES_BACKUP_MAX_AGE_SECONDS: ["lte", "postgresBackupMaxAgeSeconds", "staleness bound"],
   // A feature module the hosted deployment turns on (the IM module, 2026-09-20):

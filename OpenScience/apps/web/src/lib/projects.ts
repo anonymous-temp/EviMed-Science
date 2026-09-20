@@ -11,7 +11,10 @@ import { warmWebRuntime } from "@/lib/runtimeWarm";
  * container, its own runs. Everything the shell shows is scoped to it, so the
  * shell keys its routed pages on `currentId` (AppShell): a switch remounts
  * every page under the new project, which cannot miss a page the way re-keying
- * each surface by hand would, and costs no document reload. It used to reload
+ * each surface by hand would, and costs no document reload. The conversation
+ * surface is the one exception — it lives above the router and is cached per
+ * project (`SessionFrameHost`), because each of its frames is a container
+ * document, a websocket and a kernel handshake. It used to reload
  * — `window.location.assign("/app/chat")` on every switch — and a reload is
  * the whole shell, its chunks and the kernel frame, fetched again to change one
  * header (2026-09-19, 「点一个切换的话就得重新刷新一遍」).

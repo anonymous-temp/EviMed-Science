@@ -4,7 +4,6 @@ import {
   Bot,
   Brain,
   Command,
-  FlaskConical,
   FolderTree,
   Orbit,
   PanelLeft,
@@ -31,26 +30,27 @@ interface NavItem {
 }
 
 /**
- * Six destinations, plus the account in the footer.
+ * Five destinations, plus the account in the footer.
  *
  * It was ten here and two in the footer, with no grouping and no hierarchy, and
  * three of the ten were the same body of material seen three ways while two
  * more differed by one word (2026-09-15 walk, C1/C3/C5/C8). Resource pages that
  * are views of one thing became tabs on that thing; the inbox became the bell
- * above, because one notification does not earn a permanent row.
+ * above, because one notification does not earn a permanent row. 「运行记录」
+ * left on 2026-09-20: it was the ledger's view of the same conversations the
+ * tree below already lists, under a third name for them.
  *
  * This is the only navigation in the product. The kernel's own left column,
- * which used to sit beside it inside the session frame, is occupied by nothing
- * in the hosted composition — two navigations for one workbench is what made
- * the session page read as three shells.
+ * which used to sit beside it inside the conversation frame, is occupied by
+ * nothing in the hosted composition — two navigations for one workbench is what
+ * made the conversation page read as three shells.
  */
 const NAV: NavItem[] = [
-  { to: "/app/chat", label: "新任务", icon: <SquarePen size={16} aria-hidden="true" /> },
-  { to: "/app/runs", label: "运行记录", icon: <FlaskConical size={16} aria-hidden="true" /> },
+  { to: "/app/chat", label: "新对话", icon: <SquarePen size={16} aria-hidden="true" /> },
+  { to: "/app/capabilities", label: "科研工具", icon: <Bot size={16} aria-hidden="true" /> },
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
   { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
   { to: "/app/autopilot", label: "主动科研", icon: <Orbit size={16} aria-hidden="true" /> },
-  { to: "/app/capabilities", label: "科研能力", icon: <Bot size={16} aria-hidden="true" /> },
 ];
 
 export function Sidebar() {
@@ -153,10 +153,10 @@ export function Sidebar() {
           ))}
         </nav>
 
-        {/* The projects and their tasks, in the kernel's own shape: every
-          * project a group, its tasks inside, any of them one click away and
-          * opened in place. It replaced a project dropdown here and a
-          * 「最近任务」 list of the current project below the rows above. */}
+        {/* The projects and their conversations, in the kernel's own shape: every
+          * project a group, its conversations inside, any of them one click
+          * away and opened in place. It replaced a project dropdown here and a
+          * list of the current project's recent work below the rows above. */}
         <ProjectBrowser />
 
         <div className="flex flex-col border-t border-border px-3 py-3">
@@ -236,7 +236,7 @@ export function Sidebar() {
  * people expect of navigation and a `<button>` has none of them, and assistive
  * technology gets `aria-current` for free (2026-09-16 review, U10). `active` is
  * still passed in rather than read from `NavLink`'s own matcher, because the
- * rows match by prefix — `/app/chat/:sessionId` is still 「新任务」.
+ * rows match by prefix — `/app/chat/:sessionId` is still 「新对话」.
  */
 function NavRow({
   to,
@@ -255,7 +255,7 @@ function NavRow({
   /**
    * Router state minted at the moment of the click, not at render.
    *
-   * 「新任务」 carries a `runtimeUiIntent` that must differ on every activation —
+   * 「新对话」 carries a `runtimeUiIntent` that must differ on every activation —
    * two clicks in a row are two requests for a new session, and a value read
    * once at render would make the second one a repeat of the first. Computed
    * here rather than passed as `state` for exactly that reason.

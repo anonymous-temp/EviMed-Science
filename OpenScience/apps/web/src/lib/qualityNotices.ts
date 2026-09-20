@@ -108,7 +108,7 @@ const LEGACY_NOTICE_GROUPS: ReadonlyArray<{ label: string; match: RegExp }> = Ob
   { label: "引文地址", match: /^The citation /i },
   { label: "证据矩阵主张", match: /^claims\[\d+\]/ },
   { label: "引文台账与参考文献", match: /^(?:citation-ledger\.csv|references\.bib|citation-audit\.md)/ },
-  { label: "检索日志与运行记录", match: /search log|clinical-evidence-(?:search|run)\.json/i },
+  { label: "检索日志与过程记录", match: /search log|clinical-evidence-(?:search|run)\.json/i },
   { label: "检索到的原文由子任务转述", match: /^Reading retrieved evidence was delegated/ },
   { label: "修复过程影响了报告篇幅", match: /^(?:The report was replaced|Repair reduced)/ },
   { label: "报告结构与表述", match: /^The (?:academic|deep-research) report/ },

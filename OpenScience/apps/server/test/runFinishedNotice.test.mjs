@@ -1,7 +1,7 @@
 // The inbox told the researcher to go and look somewhere else.
 //
-// Both run-finished bodies were fixed strings — "研究结果已准备好" and "研究运行已
-// 结束，请查看运行记录了解状态" — chosen only by `status === "succeeded"`. So a
+// Both run-finished bodies were fixed strings — "研究结果已准备好" and one that
+// sent the reader off to look up a ledger row — chosen only by `status === "succeeded"`. So a
 // package the delivery gate refused, a run a stall timer killed, and a run that
 // never started because a spend ceiling refused it all arrived under one
 // sentence, and the one fact the control plane held that the reader did not
@@ -32,7 +32,7 @@ test("a refused package and a platform stop do not share a sentence", () => {
   assert.notEqual(gated.body, stopped.body);
   // The distinction that matters to the reader: one is a statement about their
   // work, the other is a statement about the platform.
-  assert.match(gated.title, /核验/);
+  assert.match(gated.title, /未通过检查/);
   assert.match(stopped.title, /平台终止/);
 });
 
@@ -46,7 +46,7 @@ test("an unverified delivery is reported as delivered-but-check-it, not as a fai
   });
 
   assert.equal(notice.outcome, "qualified");
-  assert.match(notice.title, /待你复核/);
+  assert.match(notice.title, /已交付/);
   assert.match(notice.body, /依据/, "the body names where to check");
   // The files are the researcher's work whatever the verdict; a notice that
   // omits them reads as though the run produced nothing.
@@ -69,7 +69,7 @@ test("the body is counts and titles, and never a validator's sentence", () => {
       "MUST FIX — a legacy sentence from an older ledger",
     ],
   });
-  assert.equal(notice.body.split("\n")[0], "已交付。4 项自证未通过，其中 1 项涉及临床安全；引用前请在报告的「依据」里核对带 ⚠ 的结论。");
+  assert.equal(notice.body.split("\n")[0], "已交付。其中 4 条结论没能逐字核对，1 条涉及临床安全；引用前请在报告的「依据」里核对带 ⚠ 的结论。");
   assert.match(notice.body, /请先核对：命中临床安全规则，请核对；引文在所引来源中找不到原句（2 项）/);
   assert.doesNotMatch(notice.body, /[a-z]{5,}/, `an English sentence reached the body: ${notice.body}`);
   assert.equal(notice.severity, "safety", "clinical safety is the one class that interrupts");
@@ -156,12 +156,12 @@ test("a day's routine completions in a project are one item that says how many",
   assert.equal(item.severity, "attention", "one of them is waiting for review");
   assert.equal(item.silent, false);
   const lines = item.body.split("\n");
-  assert.equal(lines[0], "其中 1 项待你复核，2 项已完成。");
-  assert.equal(lines[1], "待复核的研究共有 1 项自证未通过；引用前请在报告的「依据」里核对带 ⚠ 的结论。");
+  assert.equal(lines[0], "其中 1 项有结论要核对，2 项已完成。");
+  assert.equal(lines[1], "这些研究里共有 1 条结论没能逐字核对；引用前请在报告的「依据」里核对带 ⚠ 的结论。");
   assert.deepEqual(lines.slice(2), [
     "· 阿司匹林一级预防：已完成",
     "· 问题 run-b：已完成",
-    "· 二甲双胍与乳酸酸中毒风险：待复核，1 项自证未通过",
+    "· 二甲双胍与乳酸酸中毒风险：已交付，1 条结论要核对",
   ]);
   assert.doesNotMatch(item.body, /MUST FIX|SAFETY|[a-z]{5,}/, "counts and titles only");
 });
@@ -182,7 +182,7 @@ test("the day is China's, a lone completion keeps its own words, and a long day 
     peers: Array.from({ length: 6 }, (_unused, index) => finished(`run-${index}`, `2026-09-18T0${index}:00:00.000Z`)),
   });
   assert.equal(many.title, "9月18日完成 7 项研究");
-  assert.equal(many.body.split("\n").at(-1), "另有 4 项，见运行记录。");
+  assert.equal(many.body.split("\n").at(-1), "另有 4 项。");
   assert.equal(many.severity, "info");
 });
 
@@ -193,7 +193,7 @@ test("a safety finding or a failure is never folded, and automated work is recor
   { peers: [finished("run-a", "2026-09-18T01:00:00.000Z")] });
   assert.equal(safety.groupKey, undefined);
   assert.equal(safety.severity, "safety");
-  assert.equal(safety.title, "研究已交付，待你复核");
+  assert.equal(safety.title, "研究已交付");
   const failed = runFinishedInboxItem(project, { ...finished("run-f", "2026-09-18T03:00:00.000Z"), status: "failed", errorCode: "verification_timeout" });
   assert.equal(failed.groupKey, undefined);
   assert.equal(failed.severity, "attention");
