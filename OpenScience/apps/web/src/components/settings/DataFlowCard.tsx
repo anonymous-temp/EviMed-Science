@@ -17,7 +17,7 @@ export function DataFlowCard({
   return (
     <section className="mt-5 rounded-card border border-border bg-surface">
       <header className="border-b border-border px-5 py-3">
-        <h2 className="font-serif text-body text-text">隐私与数据流向</h2>
+        <h2 className="text-body text-text">隐私与数据流向</h2>
         <p className="mt-0.5 text-caption text-muted">
           {hosted ? "项目工作区的存储与模型提供方流量。" : "哪些数据留在本机，以及究竟哪些会离开本机。"}
         </p>

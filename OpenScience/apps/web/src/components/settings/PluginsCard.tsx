@@ -116,7 +116,7 @@ function ProjectPluginsCard({ projectId }: { projectId: string }) {
     <Card className="mt-5" header={
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-serif text-body text-text">项目插件</h2>
+          <h2 className="text-body text-text">项目插件</h2>
           {/* The project's name, never its id: the id is the server's key. */}
           <p className="mt-0.5 text-ui text-muted">{projectName ? `作用于项目「${projectName}」` : "作用于当前项目"}</p>
         </div>

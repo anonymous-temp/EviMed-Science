@@ -112,7 +112,7 @@ export function QCodeView({ filename, text }: { filename: string; text: string }
           {doc.sources.map((s) => (
             <div key={s.id} className="mb-5">
               <div className="mb-1.5 text-ui font-medium text-text">{s.title ?? s.id}</div>
-              <p className="whitespace-pre-wrap font-serif text-ui leading-relaxed text-text">
+              <p className="whitespace-pre-wrap text-ui leading-relaxed text-text">
                 {segmentsFor(doc, s.id).map((seg, i) => {
                   if (seg.codes.length === 0) return <span key={i}>{seg.text}</span>;
                   const dim = active !== null && !seg.codes.includes(active);
