@@ -3,6 +3,7 @@ import { WebApiError, type WebAgentRun, type WebResearchAgent } from "@/lib/apiC
 
 const mocks = vi.hoisted(() => ({
   putWebResearchSession: vi.fn(),
+  listWebResearchSessions: vi.fn(),
   dispatchWebAgentRun: vi.fn(),
   cancelWebAgentRun: vi.fn(),
   calls: [] as string[],
@@ -11,11 +12,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   putWebResearchSession: mocks.putWebResearchSession,
+  listWebResearchSessions: mocks.listWebResearchSessions,
   dispatchWebAgentRun: mocks.dispatchWebAgentRun,
   cancelWebAgentRun: mocks.cancelWebAgentRun,
 }));
 
-import { dispatchResearch, minutesText, newResearchSessionId, rerouteRun, routeLineOf } from "./dispatch";
+import { bindConversationCapability, dispatchResearch, minutesText, newResearchSessionId, rerouteRun, routeLineOf } from "./dispatch";
 
 const SAFE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
@@ -158,5 +160,39 @@ describe("minutesText", () => {
     expect(minutesText(null)).toBeNull();
     expect(minutesText({ min: 0, max: 0 })).toBeNull();
     expect(minutesText({ min: Number.NaN, max: 3 })).toBeNull();
+  });
+});
+
+describe("conversation binding", () => {
+  it("keeps the conversation when it has no tool yet, and starts a fresh one when it already has another", async () => {
+    mocks.listWebResearchSessions.mockResolvedValue([
+      { sessionId: "web-bound", mode: "specialist", agentId: "peer-review", agentVersion: "1.0.0" },
+    ]);
+    mocks.putWebResearchSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
+
+    // An unbound conversation takes the tool where it is.
+    const kept = await bindConversationCapability("web-blank", { agentId: "adr-analysis", agentVersion: "1.0.0" });
+    expect(kept).toEqual({ sessionId: "web-blank", rebound: false });
+    expect(mocks.putWebResearchSession).toHaveBeenCalledWith("web-blank", { mode: "specialist", agentId: "adr-analysis", agentVersion: "1.0.0" });
+
+    // One that already runs another tool cannot be edited, so it is a new one.
+    const moved = await bindConversationCapability("web-bound", { agentId: "adr-analysis", agentVersion: "1.0.0" });
+    expect(moved.rebound).toBe(true);
+    expect(moved.sessionId).not.toBe("web-bound");
+
+    // Asking for the tool it already runs changes nothing.
+    mocks.putWebResearchSession.mockClear();
+    expect(await bindConversationCapability("web-bound", { agentId: "peer-review", agentVersion: "1.0.0" })).toEqual({ sessionId: "web-bound", rebound: false });
+    expect(mocks.putWebResearchSession).not.toHaveBeenCalled();
+  });
+
+  it("starts a clean conversation when the control plane refuses the change", async () => {
+    mocks.listWebResearchSessions.mockResolvedValue([]);
+    mocks.putWebResearchSession
+      .mockRejectedValueOnce(new WebApiError("conflict", { status: 409, code: "research_session_identity_conflict" }))
+      .mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
+    const result = await bindConversationCapability("web-old", { agentId: "adr-analysis", agentVersion: "1.0.0" });
+    expect(result.rebound).toBe(true);
+    expect(result.sessionId).not.toBe("web-old");
   });
 });
