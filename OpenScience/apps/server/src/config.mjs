@@ -1047,9 +1047,14 @@ export function loadConfig(overrides = {}) {
     // and that is the origin the page must name.
     runtimeUiPublicOrigin:
       overrides.runtimeUiPublicOrigin ?? process.env.OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN ?? "",
-    // Frame tickets cannot outlive the authenticated login that created them.
+    // Frame tickets cannot outlive the authenticated login that created them,
+    // and thirty minutes is what a ticket is for: the browser renews at half
+    // of what is left, so a five-minute ticket made a working conversation
+    // depend on a renewal every two and a half minutes, and one that threw
+    // locally covered it with an alert (2026-09-20 walk, fact 2 — all 52
+    // renewals that day reached the server and all 52 answered 200).
     runtimeUiFrameTtlMs: Number(overrides.runtimeUiFrameTtlMs ?? process.env.OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS
-      ?? overrides.sessionTtlMs ?? process.env.OPEN_SCIENCE_SESSION_TTL_MS ?? defaultSessionTtlMs),
+      ?? Math.min(1_800_000, Number(overrides.sessionTtlMs ?? process.env.OPEN_SCIENCE_SESSION_TTL_MS ?? defaultSessionTtlMs))),
     // Frame layer (S3, 2026-09-18): which bodies of the kernel page's EviMed
     // layer to switch off (`theme,panels,...`; the bridge is not switchable).
     // Each is off-able on its own, and the kernel's own conversation is what

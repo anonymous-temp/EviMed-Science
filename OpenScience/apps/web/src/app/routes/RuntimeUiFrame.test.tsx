@@ -2,6 +2,7 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SessionFrameHost } from "../layout/SessionFrameHost";
 import { SessionRoute } from "./SessionRoute";
 import { WebApiError } from "@/lib/apiClient";
 import { apply as applyNativeBridge } from "../../../../../packages/harness-port/src/runtimeUiBridge.mjs";
@@ -33,13 +34,20 @@ function PathProbe() {
   const location = useLocation();
   return <div><span data-testid="path">{location.pathname}</span><span data-testid="state">{JSON.stringify(location.state ?? null)}</span>
     <button onClick={() => navigate("/app/chat/session-b")}>Open B</button>
+    <button onClick={() => navigate("/app/files")}>Knowledge</button>
     <button onClick={() => navigate(-1)}>Back</button>
   </div>;
 }
+/**
+ * The shell as the conversation surface sees it: the frame host above the
+ * router (where `AppShell` puts it, so a route change cannot unmount it) and
+ * the chat route, which is a placeholder beside it.
+ */
 function mount(state: unknown = null, path = "/app/chat") {
-  return render(<MemoryRouter initialEntries={[{ pathname: path, state }]}><PathProbe /><Routes>
-    <Route path="/app/chat" element={<SessionRoute />} /><Route path="/app/chat/:sessionId" element={<SessionRoute />} />
+  return render(<MemoryRouter initialEntries={[{ pathname: path, state }]}><PathProbe /><SessionFrameHost /><Routes>
+    <Route path="/app/chat/:sessionId?" element={<SessionRoute />} />
     <Route path="/app/account" element={<div>account and usage</div>} />
+    <Route path="/app/files" element={<div>knowledge base</div>} />
     <Route path="/app/runs/:runId/files/*" element={<div>run file reader</div>} />
   </Routes></MemoryRouter>);
 }
@@ -101,20 +109,40 @@ describe("native frame identity and readiness", () => {
     expect(container.querySelector("iframe")).toBe(frame);
   });
 
-  it("shows renewal failure without dropping native state and keeps recovery single-flight", async () => {
+  // A renewal that fails is a network blip until the lease it renews is
+  // actually gone. On 2026-09-20 one local failure covered a working
+  // conversation with a blocking alert, while all 52 renewals that day reached
+  // the server and all 52 answered 200 (walk, fact 2).
+  it("retries a failed renewal silently, and says nothing while the lease still stands", async () => {
     const { container, frame } = await establishedClockFrame();
-    let rejectRenew!: (reason: Error) => void;
-    mocks.renew.mockImplementation(() => new Promise((_resolve, reject) => { rejectRenew = reject; }));
+    mocks.renew.mockRejectedValue(new Error("offline"));
     await act(async () => { window.dispatchEvent(new Event("online")); await vi.advanceTimersByTimeAsync(0); });
-    await act(async () => { window.dispatchEvent(new Event("online")); document.dispatchEvent(new Event("visibilitychange")); });
     expect(mocks.renew).toHaveBeenCalledTimes(1);
-    await act(async () => { rejectRenew(new Error("offline")); });
+    expect(screen.queryByRole("alert")).toBeNull();
+    // 1 s, 3 s, 10 s, 30 s — and the conversation is never covered meanwhile.
+    for (const [index, delay] of [1_000, 3_000, 10_000, 30_000].entries()) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(delay); });
+      expect(mocks.renew).toHaveBeenCalledTimes(index + 2);
+      expect(screen.queryByRole("alert")).toBeNull();
+    }
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(mocks.release).not.toHaveBeenCalled();
+  });
+
+  it("covers the conversation only once the lease has expired and a retry has failed, and clears itself", async () => {
+    const { container, frame } = await establishedClockFrame();
+    mocks.renew.mockRejectedValue(new Error("offline"));
+    await act(async () => { window.dispatchEvent(new Event("online")); await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.queryByRole("alert")).toBeNull();
+    // Past the five minutes this binding was minted for.
+    await act(async () => { await vi.advanceTimersByTimeAsync(300_000); });
     expect(screen.getByRole("alert")).toHaveTextContent("连接");
     expect(container.querySelector("iframe")).toBe(frame);
     expect(mocks.release).not.toHaveBeenCalled();
+    // The ladder is still running underneath: the next success clears it with
+    // no click, and the button is only there for someone who will not wait.
     mocks.renew.mockResolvedValue({ ...binding, expiresAt: Date.now() + 300_000 });
-    await act(async () => { screen.getByRole("button", { name: "重新连接" }).click(); await vi.advanceTimersByTimeAsync(0); });
-    expect(mocks.renew).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
     expect(screen.queryByRole("alert")).toBeNull();
     expect(container.querySelector("iframe")).toBe(frame);
   });
@@ -179,18 +207,18 @@ describe("native frame identity and readiness", () => {
     const frame = container.querySelector("iframe")!;
     expect(mocks.create).toHaveBeenCalledWith("default"); expect(frame.src).toBe(binding.frameUrl);
     act(() => frame.dispatchEvent(new Event("load")));
-    // The binding is here and the runtime is up; the interface is loading.
-    await waitFor(() => expect(screen.getByText("正在载入界面…")).toBeInTheDocument());
-    expect(screen.getByText("✓ 启动内核")).toBeInTheDocument();
+    // The runtime was already running, so this opening is a document load and
+    // gets the neutral skeleton, not the runtime's four moments (WP1).
+    await waitFor(() => expect(screen.getByText("正在打开对话…")).toBeInTheDocument());
+    expect(screen.queryByText("✓ 启动内核")).toBeNull();
     emit(frame, { type: "evimed.runtime-ui.ready" }, "https://evil.example");
     emit(frame, { type: "evimed.runtime-ui.ready" }, mocks.profile.uiOrigin, window);
     emit(frame, { type: "evimed.runtime-ui.ready", frameId: "frame-b" });
-    expect(screen.getByText("正在载入界面…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开对话…")).toBeInTheDocument();
     const post = vi.spyOn(frame.contentWindow!, "postMessage");
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("正在打开任务…")).toBeInTheDocument();
-    expect(screen.getByText("✓ 载入界面")).toBeInTheDocument();
+    expect(screen.getByText("正在打开对话…")).toBeInTheDocument();
     const command = post.mock.calls[0][0];
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: command.requestId, ok: true, sessionId: command.intent.sessionId });
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
@@ -232,7 +260,7 @@ describe("native frame identity and readiness", () => {
 
   it("offers retry on frame failure without silently switching dispatchers", async () => {
     mocks.create.mockRejectedValueOnce(new Error("Unavailable")); mount();
-    expect(await screen.findByRole("alert")).toHaveTextContent("研究会话暂时无法连接");
+    expect(await screen.findByRole("alert")).toHaveTextContent("对话暂时无法连接");
     // Focus lands on the one thing to do next (U8).
     await waitFor(() => expect(screen.getByRole("button", { name: "重试" })).toHaveFocus());
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
@@ -269,7 +297,7 @@ describe("native frame identity and readiness", () => {
     // The registry's `^runtime_` family sentence, reaching a pixel for the
     // first time: this build has held it since the registry existed.
     expect(alert).toHaveTextContent("运行时出现问题，稍后重试。");
-    expect(alert).not.toHaveTextContent("研究会话暂时无法连接");
+    expect(alert).not.toHaveTextContent("对话暂时无法连接");
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 
@@ -297,15 +325,15 @@ describe("native frame identity and readiness", () => {
     expect(post.mock.calls[0][0]).toMatchObject({ type: "evimed.runtime-ui.navigate", requestId: "request-a", frameId: "frame-a", intent: { sessionId: "session-new", draft: "Evidence brief" } });
     expect(post.mock.calls[0][1]).toBe(mocks.profile.uiOrigin);
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "wrong", ok: true, sessionId: "session-new" });
-    expect(screen.getByText("正在打开任务…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开对话…")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: "request-a", ok: true, sessionId: "session-canonical" });
-    await waitFor(() => expect(screen.queryByText("正在打开任务…")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("正在打开对话…")).toBeNull());
     expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-canonical");
   });
 
   it("shows an explicit unavailable state when the deployment has no native surface", async () => {
     mocks.profile.uiOrigin = ""; mount();
-    expect(await screen.findByRole("alert")).toHaveTextContent("研究会话暂时无法连接");
+    expect(await screen.findByRole("alert")).toHaveTextContent("对话暂时无法连接");
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it("opens deep links and back navigation in the same frame, and mirrors native session selection", async () => {
@@ -339,30 +367,35 @@ describe("native frame identity and readiness", () => {
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: false, error: "NAVIGATION_FAILED" });
-    expect(await screen.findByRole("alert")).toHaveTextContent("研究任务暂时无法打开");
+    expect(await screen.findByRole("alert")).toHaveTextContent("这条对话暂时无法打开");
     expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/unknown-session");
     // Retrying asks for the same task again; a new task is the other way out (U9).
-    await userEvent.click(screen.getByRole("button", { name: "新建任务" }));
+    await userEvent.click(screen.getByRole("button", { name: "新建对话" }));
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/chat$/));
   });
 
-  it("does not mount the frame, and so creates nothing, until it knows whether there is a task to resume", async () => {
+  it("opens no conversation until it knows whether there is one to resume, while the runtime warms underneath", async () => {
     // U9: the lookup and the frame used to race, and a frame that won created
-    // an empty task the lookup then navigated away from.
+    // an empty conversation the lookup then navigated away from. The frame is
+    // no longer withheld for it — the runtime it needs is the same either way,
+    // so warming under the lookup is free — but it is told to open nothing.
     let answer!: (runs: unknown[]) => void;
     mocks.listRuns.mockImplementation(() => new Promise(resolve => { answer = resolve; }));
     const { container } = mount();
-    expect(await screen.findByText("正在打开最近的任务…")).toBeInTheDocument();
-    expect(container.querySelector("iframe")).toBeNull();
-    expect(mocks.create).not.toHaveBeenCalled();
-    await act(async () => { answer([{ sessionId: "session-recent" }]); });
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-recent"));
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
     const frame = container.querySelector("iframe")!;
     const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    const navigations = () => post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.navigate");
     emit(frame, { type: "evimed.runtime-ui.ready" });
-    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    expect(post.mock.calls[0][0].intent).toEqual({ kind: "open", sessionId: "session-recent" });
+    await act(async () => {});
+    expect(navigations()).toHaveLength(0);
+    await act(async () => { answer([{ sessionId: "session-recent" }]); });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-recent"));
+    await waitFor(() => expect(navigations()).toHaveLength(1));
+    expect(navigations()[0][0].intent).toEqual({ kind: "open", sessionId: "session-recent" });
+    // The same document throughout: the lookup cost no rebuild.
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(mocks.create).toHaveBeenCalledTimes(1);
   });
 
   it("makes a task chosen inside the frame a history entry that Back returns from", async () => {
@@ -387,7 +420,7 @@ describe("native frame identity and readiness", () => {
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "wrong-session" });
-    expect(screen.getByText("正在打开任务…")).toBeInTheDocument();
+    expect(screen.getByText("正在打开对话…")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
     emit(frame, { type: "evimed.runtime-ui.error", seq: 4, error: "NATIVE_NOT_READY" });
     await waitFor(() => expect(mocks.renew).toHaveBeenCalledTimes(1));
@@ -675,7 +708,7 @@ describe("opening a task", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(screen.getByRole("status")).toHaveAttribute("data-open-step", "task");
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-    expect(screen.getByText(/正在读取这个任务的完整记录/)).toBeInTheDocument();
+    expect(screen.getByText(/正在读取这条对话的完整记录/)).toBeInTheDocument();
     const navigateCommand = post.mock.calls.find(([data]) => data.type === "evimed.runtime-ui.navigate")![0];
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: navigateCommand.requestId, ok: true, sessionId: "session-a" });
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
@@ -704,8 +737,11 @@ describe("opening a task", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("同时运行的研究环境已达本部署上限");
     expect(alert).not.toHaveTextContent(/冷启动|90 秒/);
-    expect(screen.getByRole("button", { name: "去运行记录" })).toBeInTheDocument();
+    // A concurrency ceiling: no quota page lifts it, so none is offered, and
+    // the run ledger it used to point at is gone. Freeing a slot is done in
+    // the conversation that holds it, which the sentence says.
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /额度/ })).toBeNull();
   });
 
   it("does not fail a retry on a refusal an earlier attempt left on the status", async () => {
@@ -745,7 +781,7 @@ describe("opening a task", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     // Nothing more for a whole minute: that moment has stalled.
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
-    expect(screen.getByRole("alert")).toHaveTextContent("会话界面 60 秒内没有载入完成");
+    expect(screen.getByRole("alert")).toHaveTextContent("对话界面 60 秒内没有载入完成");
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
     view.unmount();
   });
@@ -793,7 +829,7 @@ it("a new valid navigation recovers automatically after an unknown-session error
   emit(oldFrame, { type: "evimed.runtime-ui.ready" });
   await waitFor(() => expect(sent).toHaveBeenCalled());
   emit(oldFrame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: sent.mock.calls[0][0].requestId, ok: false });
-  expect(await screen.findByRole("alert")).toHaveTextContent("研究任务暂时无法打开");
+  expect(await screen.findByRole("alert")).toHaveTextContent("这条对话暂时无法打开");
   await userEvent.click(screen.getByRole("button", { name: "Open B" }));
   await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(container.querySelector("iframe")?.src).toBe(nextBinding.frameUrl));
@@ -805,4 +841,93 @@ it("a new valid navigation recovers automatically after an unknown-session error
   expect(command.intent).toMatchObject({ kind: "open", sessionId: "session-b" });
   emit(nextFrame, { type: "evimed.runtime-ui.ack", frameId: "frame-b", seq: 2, requestId: command.requestId, ok: true, sessionId: "session-b" });
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+});
+
+/**
+ * WP1: the conversation surface is mounted once, by the shell, and leaving it
+ * hides it. Production rebuilt it seven times in twenty-five minutes because
+ * it sat inside the route, and every rebuild is a container document, a
+ * websocket and a kernel handshake (2026-09-20 walk, fact 1).
+ */
+describe("the conversation surface outlives the route", () => {
+  /** An open conversation, and everything the test needs to watch it. */
+  async function openConversation(path = "/app/chat/session-a") {
+    const view = mount(null, path);
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    const command = post.mock.calls[0][0];
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: command.requestId, ok: true, sessionId: "session-a" });
+    return { ...view, frame, post };
+  }
+
+  it("keeps the same document and binding across a visit to another page", async () => {
+    const { container, frame } = await openConversation();
+    await userEvent.click(screen.getByText("Knowledge"));
+    await waitFor(() => expect(screen.getByText("knowledge base")).toBeInTheDocument());
+    // Hidden, not unmounted: same node, no release, no second binding.
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(container.querySelector("[data-session-surface]")).toHaveAttribute("data-session-surface", "hidden");
+    expect(mocks.release).not.toHaveBeenCalled();
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByText("Back"));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a"));
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(container.querySelector("[data-session-surface]")).toHaveAttribute("data-session-surface", "visible");
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  // `/app/chat` and `/app/chat/:id` were two route objects, so the redirect
+  // the surface performs on arrival cost a remount of its own (review B §C 3).
+  it("opens the resumed conversation on the same route, without a second binding", async () => {
+    mocks.me.mockResolvedValue({ lastSessionId: "session-last" });
+    const { container } = mount();
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-last"));
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  // One frame per project, two at most — the same ceiling a person has on
+  // running runtimes (`OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER`).
+  it("keeps one surface per project, at most two, and releases the least recently used", async () => {
+    const { useProjectStore } = await import("@/lib/projects");
+    const bindings = ["frame-a", "frame-b", "frame-c"].map((frameId) => ({
+      ...binding, frameId, frameUrl: `https://host.example:8443/__evimed/f/${frameId}/`,
+    }));
+    mocks.create.mockReset();
+    for (const value of bindings) mocks.create.mockResolvedValueOnce(value);
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelectorAll("iframe")).toHaveLength(1));
+    const first = container.querySelector("iframe")!;
+
+    await act(async () => { useProjectStore.setState({ currentId: "project-b" }); });
+    await waitFor(() => expect(container.querySelectorAll("iframe")).toHaveLength(2));
+    // The first project's surface is still there, holding its binding.
+    expect(container.querySelectorAll("iframe")[0]).toBe(first);
+    expect(mocks.release).not.toHaveBeenCalled();
+
+    await act(async () => { useProjectStore.setState({ currentId: "project-c" }); });
+    await waitFor(() => expect(mocks.release).toHaveBeenCalledWith("frame-a"));
+    expect(container.querySelectorAll("iframe")).toHaveLength(2);
+    expect(container.querySelector("iframe")).not.toBe(first);
+    useProjectStore.setState({ currentId: "default" });
+  });
+
+  // Switching conversation inside a live runtime is not a cold start, and
+  // saying so was the whole of 「每次点会话都要冷启动」.
+  it("shows no opening cover when only the conversation changes", async () => {
+    const { container, frame, post } = await openConversation();
+    expect(screen.queryByRole("status")).toBeNull();
+    await userEvent.click(screen.getByText("Open B"));
+    await waitFor(() => expect(post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.navigate")).toHaveLength(2));
+    expect(screen.queryByText("准备环境")).toBeNull();
+    expect(screen.queryByText("正在打开对话…")).toBeNull();
+    expect(container.querySelector("iframe")).toBe(frame);
+  });
 });

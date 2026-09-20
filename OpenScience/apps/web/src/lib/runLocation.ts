@@ -1,6 +1,63 @@
 import { getWebProjectId, listWebAgentRuns, listWebProjects, type WebProject } from "./apiClient";
 import { useProjectStore } from "./projects";
 
+/** A conversation id the shell is willing to put in an address. */
+const ADDRESSABLE_SESSION = /^[A-Za-z0-9_-]{1,160}$/;
+
+/** Where a conversation lives. One route, with or without the id. */
+export function chatPath(sessionId?: string | null): string {
+  return sessionId && ADDRESSABLE_SESSION.test(sessionId)
+    ? `/app/chat/${encodeURIComponent(sessionId)}`
+    : "/app/chat";
+}
+
+/**
+ * Whether an address is the conversation surface.
+ *
+ * The kernel frame is mounted above the router and hidden rather than
+ * unmounted off this surface, so this is what decides "hidden" — it is read on
+ * every navigation and must not depend on the route table being matched.
+ */
+export function isChatPath(pathname: string): boolean {
+  return pathname === "/app/chat" || pathname.startsWith("/app/chat/");
+}
+
+/** The conversation an address names, or null for the bare surface. */
+export function chatSessionId(pathname: string): string | null {
+  if (!pathname.startsWith("/app/chat/")) return null;
+  const raw = pathname.slice("/app/chat/".length);
+  if (!raw || raw.includes("/")) return null;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+  return ADDRESSABLE_SESSION.test(decoded) ? decoded : null;
+}
+
+/**
+ * The conversation a run happened in, for the links that name a run.
+ *
+ * Notifications, Feishu cards and old bookmarks name a run id — the ledger's
+ * name for it — and the product has one surface for a run now: the
+ * conversation it happened in. The ledger is still what knows which that is,
+ * so the id is resolved through it and never shown.
+ */
+export async function findRunSession(runId: string): Promise<string | null> {
+  const match = (runs: Awaited<ReturnType<typeof listWebAgentRuns>>) =>
+    runs.find((run) => run.id === runId || run.sessionId === runId) ?? null;
+  const here = match(await listWebAgentRuns().catch(() => []));
+  if (here) return ADDRESSABLE_SESSION.test(here.sessionId) ? here.sessionId : null;
+  // Another project of the same account may hold it; moving there is what makes
+  // the conversation readable, since a workspace is per project.
+  const projectId = await findRunProject(runId).catch(() => null);
+  if (!projectId) return null;
+  await useProjectStore.getState().select(projectId);
+  const found = match(await listWebAgentRuns().catch(() => []));
+  return found && ADDRESSABLE_SESSION.test(found.sessionId) ? found.sessionId : null;
+}
+
 /**
  * Which of the account's other projects holds a run a link names.
  *
@@ -31,9 +88,9 @@ export async function findRunProject(runId: string): Promise<string | null> {
 /**
  * Moves the shell to the project holding `runId`, when another one does.
  *
- * The page that asked unmounts with the move (AppShell keys every page on the
- * project) and mounts again at the same address, where its first read finds
- * the run. Resolves false when no other project has it; rejects when the
+ * The page that asked unmounts with the move (AppShell keys every routed page
+ * on the project) and mounts again at the same address, where its first read
+ * finds the run. Resolves false when no other project has it; rejects when the
  * project cannot be opened, and the shell stays where it was.
  */
 export async function openRunProject(runId: string): Promise<boolean> {

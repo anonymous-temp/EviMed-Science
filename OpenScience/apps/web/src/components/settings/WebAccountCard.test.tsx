@@ -51,7 +51,7 @@ describe("WebAccountCard", () => {
   it("exports the current hosted account archive", async () => {
     render(<WebAccountCard />);
 
-    expect(await screen.findByText("Alice")).toBeInTheDocument();
+    expect(await screen.findAllByText("Alice")).not.toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "导出账户归档" }));
 
     await waitFor(() => expect(mocks.exportWebAccount).toHaveBeenCalledTimes(1));
@@ -63,7 +63,7 @@ describe("WebAccountCard", () => {
     const onAccountDeleted = vi.fn();
     render(<WebAccountCard onAccountDeleted={onAccountDeleted} />);
 
-    expect(await screen.findByText("Alice")).toBeInTheDocument();
+    expect(await screen.findAllByText("Alice")).not.toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "打开账户删除" }));
 
     const confirmButton = screen.getByRole("button", { name: "确认删除账户" });
@@ -95,7 +95,7 @@ describe("WebAccountCard", () => {
     const onSignedOut = vi.fn();
     render(<WebAccountCard onSignedOut={onSignedOut} />);
 
-    expect(await screen.findByText("Alice")).toBeInTheDocument();
+    expect(await screen.findAllByText("Alice")).not.toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
 
     await waitFor(() => expect(mocks.logoutWeb).toHaveBeenCalledTimes(1));

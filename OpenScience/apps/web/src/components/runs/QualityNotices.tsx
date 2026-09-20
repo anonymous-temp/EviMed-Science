@@ -14,7 +14,8 @@ import { useOperator } from "@/lib/useOperator";
 const MUST_FIX_LINES = 4;
 
 /**
- * The gate's verdict on one delivered run, at three clearly different weights.
+ * What the quality check found in one delivered piece of work, at three
+ * clearly different weights.
  *
  * - SAFETY: the danger colour, a shield, a border, and never folded — the one
  *   class a clinical reader must not be able to miss (appendix C: 「SAFETY 类
@@ -47,25 +48,25 @@ export function QualityNotices({
   if (verification == null && summary.counts.total === 0) return null;
 
   const headline = verification === "unverified"
-    ? "已交付，但未完成核验"
+    ? "已交付，但有结论没能逐字核对"
     // Not the same statement, and it used to render as the absence of any
     // statement: a layer of the gate did not run, so nothing below says that
     // layer found the package sound.
     : verification === "unchecked"
       ? "已交付，但有一层没有检查过"
-      : "核验提示";
+      : "核对提示";
   const guidance = verification === "unverified"
     ? hasArtifacts
-      ? "产物可以照常下载和阅读；以下是本次分析未能自证的部分，引用前请核对。打开报告，句末的「依据」逐条标出哪些引文已在保存的原文中核对、哪些没有。"
-      : "本次没有文件产出；以下是本次分析未能自证的部分，引用前请核对。"
+      ? "产物可以照常下载和阅读；以下是这次分析没能逐字核对的部分，引用前请自行核对。打开报告，句末的「依据」逐条标出哪些引文已在保存的原文中核对过、哪些没有。"
+      : "本次没有文件产出；以下是这次分析没能逐字核对的部分，引用前请自行核对。"
     : verification === "unchecked"
-      ? `${hasArtifacts ? "产物可以照常下载和阅读；" : ""}本次交付有一层核验没有执行，没有发现问题不等于检查过。`
+      ? `${hasArtifacts ? "产物可以照常下载和阅读；" : ""}这次有一层检查没有执行，没有发现问题不等于检查过。`
       : null;
   const technical = [...summary.safety, ...summary.mustFix, ...summary.advice].flatMap((group) => group.technical);
   const counts = noticeCountsLine(summary);
 
   return (
-    <section aria-label="核验结果" className={cn("space-y-3", className)}>
+    <section aria-label="核对结果" className={cn("space-y-3", className)}>
       <header className="flex items-start gap-2">
         <ScrollText size={16} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" />
         <div className="min-w-0">

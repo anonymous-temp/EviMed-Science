@@ -58,7 +58,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
     if (mounted.current) { setExportPassword(""); setRefresh(value => value + 1); setNotice("加密快照已下载。请通过其他渠道告知接收者口令。"); }
   });
 
-  return <Card title="分享与导入" hint="默认只分享已采用的研究方法与工作偏好。原始来源文档、账户标识和运行记录不会随包导出。">
+  return <Card title="分享与导入" hint="默认只分享已采用的研究方法与工作偏好。原始来源文档、账户标识和对话记录不会随包导出。">
     {revoking && <ConfirmDialog
       title="撤销这份快照？"
       body={`撤销后，这份快照在本服务上不能再被导入，且无法恢复；已经下载到别处的离线副本收不回来。快照时间 ${new Date(revoking.createdAt).toLocaleString()}，共 ${revoking.entryCount} 条。`}
@@ -104,7 +104,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
         })}>解密并预览</Button>
         {preview && <div className="space-y-3 rounded-card border border-border p-3">
           <p className="text-ui text-text">{preview.issuerTrust === "verified" ? "来源身份已由本服务验证" : "作者身份未验证（外部自签名）"}</p>
-          <p className="text-ui text-muted">在线状态：{preview.hostedStatus === "revoked" ? "已撤销，无法导入" : preview.hostedStatus === "active" ? "有效" : "未知，无法核验外部撤销状态"} · {preview.entries.length} 条内容</p>
+          <p className="text-ui text-muted">在线状态：{preview.hostedStatus === "revoked" ? "已撤销，无法导入" : preview.hostedStatus === "active" ? "有效" : "未知，无法核对外部撤销状态"} · {preview.entries.length} 条内容</p>
           {preview.newerSnapshotId && <p className="text-ui text-warn">发布者已有更新快照，可向发布者索取新版本。</p>}
           {/* Whole-pack trust (plan §3.3 #4): the automatic scan, and what it
               would drop, are part of what is previewed. */}

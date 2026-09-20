@@ -31,9 +31,15 @@ vi.mock("@/lib/projects", () => ({ useProjectStore: mocks.useProjectStore }));
 vi.mock("@/lib/store", () => ({ useUiStore: mocks.useUiStore }));
 vi.mock("@/lib/apiClient", () => ({
   fetchWebMe: mocks.fetchWebMe,
+  getWebProjectId: () => "default",
+  listWebAgentRuns: vi.fn(),
+  listWebProjects: vi.fn(),
   WEB_SESSION_ENDED_EVENT: "open-science:web-session-ended",
   WEB_SESSION_STARTED_EVENT: "open-science:web-session-started",
 }));
+// The conversation surface the shell now hosts above the router has its own
+// tests (RuntimeUiFrame.test.tsx); this file is about the authentication gate.
+vi.mock("@/app/layout/SessionFrameHost", () => ({ SessionFrameHost: () => null }));
 vi.mock("@/components/sidebar/Sidebar", () => ({ Sidebar: () => <aside>Sidebar</aside> }));
 vi.mock("@/components/command-palette/CommandPalette", () => ({ CommandPalette: () => null }));
 vi.mock("@/components/ui/Toaster", () => ({ Toaster: () => null }));

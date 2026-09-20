@@ -16,12 +16,13 @@ export function severityOf(item: InboxItem): InboxSeverity {
 const RANK: Record<InboxSeverity, number> = { safety: 0, attention: 1, info: 2 };
 
 /**
- * The two titles the control plane gave a routine completion before it
- * merged them itself (a closed vocabulary: its own outcome table). Newer
- * items arrive merged with a `groupKey`; these are the per-run items written
- * before that, which a busy day turned into ten identical cards.
+ * The titles the control plane gave a routine completion before it merged them
+ * itself (a closed vocabulary: its own outcome table). Newer items arrive
+ * merged with a `groupKey`; these are the per-run items written before that,
+ * which a busy day turned into ten identical cards. 「研究已交付，待你复核」
+ * is the wording that ran until 2026-09-20 and is still on stored rows.
  */
-const LEGACY_ROUTINE_TITLES = new Set(["研究已完成", "研究已交付，待你复核"]);
+const LEGACY_ROUTINE_TITLES = new Set(["研究已完成", "研究已交付", "研究已交付，待你复核"]);
 
 export function isLegacyRoutineCompletion(item: InboxItem): boolean {
   return item.noticeType === "notify"

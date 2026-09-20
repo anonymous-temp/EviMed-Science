@@ -326,7 +326,7 @@ describe("CapabilitiesPage", () => {
     expect(mocks.putWebResearchSession.mock.calls[1][1]).toEqual({ mode: "open-domain" });
     // A new session: a binding cannot change once it exists.
     expect(mocks.putWebResearchSession.mock.calls[1][0]).not.toBe(mocks.putWebResearchSession.mock.calls[0][0]);
-    expect(await screen.findByText("已改为按「普通问答」处理；原来那次运行已停止。")).toBeInTheDocument();
+    expect(await screen.findByText("已改为按「普通问答」处理；原来那次研究已停止。")).toBeInTheDocument();
     expect(screen.getByText("普通问答", { selector: "strong" })).toBeInTheDocument();
   });
 

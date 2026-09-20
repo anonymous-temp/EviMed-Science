@@ -8,6 +8,14 @@ import { describe, expect, it, vi } from "vitest";
 // (2026-09-16 review, D5).
 vi.mock("./layout/AppShell", () => ({ AppShell: () => <Outlet /> }));
 
+// `/app/runs?run=<id>` is resolved through the ledger, which is a request; the
+// lookup is stubbed so this file stays about addresses.
+const findRunSession = vi.fn<(runId: string) => Promise<string | null>>();
+vi.mock("@/lib/runLocation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/runLocation")>()),
+  findRunSession: (runId: string) => findRunSession(runId),
+}));
+
 const { routes } = await import("./router");
 
 function Landed() {
@@ -21,7 +29,7 @@ function probed(list: RouteObject[]): RouteObject[] {
   return list.map((route) => {
     const element = route.element as ReactElement | undefined;
     const type = element?.type as { name?: string } | string | undefined;
-    const keep = element?.type === Navigate || (typeof type === "function" && ["ChatRedirect", "NotFound", "Outlet"].includes((type as { name: string }).name));
+    const keep = element?.type === Navigate || (typeof type === "function" && ["ChatRedirect", "RunRedirect", "NotFound", "Outlet"].includes((type as { name: string }).name));
     const replaced = route.children ? <Outlet /> : keep ? element : <Landed />;
     return route.children
       ? { ...route, element: replaced, children: probed(route.children) } as RouteObject
@@ -45,7 +53,10 @@ describe("every address people already have still arrives", () => {
     ["/app", "/app/chat"],
     ["/live", "/app/chat"],
     ["/live/session-42", "/app/chat/session-42"],
-    ["/runs", "/app/runs"],
+    // The run ledger page was deleted on 2026-09-20; its addresses resolve to
+    // the conversation the run happened in, or to the surface itself.
+    ["/runs", "/app/chat"],
+    ["/app/runs", "/app/chat"],
     ["/files", "/app/files"],
     ["/sources", "/app/files?tab=sources"],
     // The computational notebook was deleted on 2026-09-19; its addresses
@@ -70,5 +81,19 @@ describe("every address people already have still arrives", () => {
     landOn("/app/no-such-page");
     expect(await screen.findByText("页面不存在")).toBeInTheDocument();
     expect(screen.queryByTestId("landed")).toBeNull();
+  });
+
+  // What a Feishu card, a pushed notice and an old bookmark carry is a run id.
+  it("opens a link that names a run in the conversation that run happened in", async () => {
+    findRunSession.mockResolvedValue("ses_7");
+    landOn("/app/runs?run=run_1");
+    expect(await screen.findByTestId("landed")).toHaveTextContent("/app/chat/ses_7");
+    expect(findRunSession).toHaveBeenCalledWith("run_1");
+  });
+
+  it("lands a run nothing can be found for on the conversation surface", async () => {
+    findRunSession.mockResolvedValue(null);
+    landOn("/app/runs?run=run_gone");
+    expect(await screen.findByTestId("landed")).toHaveTextContent(/^\/app\/chat$/);
   });
 });

@@ -64,10 +64,12 @@ describe("AccountPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Alice")).toBeInTheDocument();
-    // 「tenant: alice」 was a runtime word and a raw id used as a label.
-    expect(screen.getByText("账号 alice")).toBeInTheDocument();
+    expect(await screen.findAllByText("Alice")).not.toHaveLength(0);
     expect(screen.queryByText(/^tenant:/)).not.toBeInTheDocument();
+    // The account id belongs to 「账户」 below — the card export and deletion
+    // act through — and is printed there once. This page used to print it too,
+    // which made four printings of a string nobody types (WP8, 2026-09-20).
+    expect(screen.queryByText(/alice/)).toBeNull();
     expect(screen.getByText("托管账户自助管理")).toBeInTheDocument();
     // What the account has spent belongs with the account.
     expect(screen.getByText("本月用量")).toBeInTheDocument();
@@ -82,7 +84,7 @@ describe("AccountPage", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText("Alice");
+    await screen.findAllByText("Alice");
     fireEvent.click(screen.getByRole("tab", { name: "数据源" }));
     expect(screen.getByText("数据源凭据")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "设置" }));
@@ -96,7 +98,7 @@ describe("AccountPage", () => {
         <AccountPage />
       </MemoryRouter>,
     );
-    await screen.findByText("Alice");
+    await screen.findAllByText("Alice");
     expect(screen.queryByRole("tab", { name: "手机与飞书" })).not.toBeInTheDocument();
     unmount();
 
@@ -119,7 +121,7 @@ describe("AccountPage", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText("Alice");
+    await screen.findAllByText("Alice");
     expect(screen.queryByRole("tab", { name: "运维台" })).not.toBeInTheDocument();
   });
 
@@ -200,7 +202,7 @@ describe("AccountPage budget ceilings", () => {
     );
 
     expect(await screen.findByText(
-      "本次会话中最近一次被额度拦下的请求。额度按滚动窗口计算：每笔支出分别在满 24 小时或满 7 天后自动腾出，不在固定时间重置。",
+      "本次登录中最近一次被额度拦下的请求。额度按滚动窗口计算：每笔支出分别在满 24 小时或满 7 天后自动腾出，不在固定时间重置。",
     )).toBeInTheDocument();
     expect(screen.queryByText(/次日重置|明天|每周一|本周额度|今日额度/)).not.toBeInTheDocument();
   });
@@ -227,7 +229,7 @@ describe("AccountPage budget ceilings", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText("账号 alice");
+    await screen.findAllByText("Alice");
     expect(screen.queryByText("额度已达上限")).not.toBeInTheDocument();
     expect(screen.queryByText(/已占用/)).not.toBeInTheDocument();
   });

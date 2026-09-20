@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { findRunProject, openRunProject } from "./runLocation";
+import { chatPath, chatSessionId, findRunProject, findRunSession, isChatPath, openRunProject } from "./runLocation";
 
 const mocks = vi.hoisted(() => ({
   listWebProjects: vi.fn(),
@@ -22,8 +22,9 @@ const PROJECTS = [
 ];
 
 function ledgers(byProject: Record<string, Array<{ id: string; sessionId: string }> | Error>) {
-  mocks.listWebAgentRuns.mockImplementation(async ({ projectId }: { projectId: string }) => {
-    const value = byProject[projectId] ?? [];
+  // Called without options for the tab's own project, and with one for another.
+  mocks.listWebAgentRuns.mockImplementation(async (options?: { projectId: string }) => {
+    const value = byProject[options?.projectId ?? "p-current"] ?? [];
     if (value instanceof Error) throw value;
     return value;
   });
@@ -72,5 +73,56 @@ describe("openRunProject", () => {
     ledgers({ "p-recent": [{ id: "run-x", sessionId: "ses-x" }] });
     mocks.select.mockRejectedValue(new Error("该项目当前不可用。"));
     await expect(openRunProject("run-x")).rejects.toThrow("该项目当前不可用。");
+  });
+});
+
+// One route for a conversation, with or without its id: two route objects made
+// `/app/chat` → `/app/chat/:id` a remount (2026-09-20 review B §C item 3).
+describe("the conversation's address", () => {
+  it("names a conversation, and falls back to the bare surface for anything unusable", () => {
+    expect(chatPath("ses-1")).toBe("/app/chat/ses-1");
+    expect(chatPath("ses 1")).toBe("/app/chat");
+    expect(chatPath(null)).toBe("/app/chat");
+    expect(chatPath("")).toBe("/app/chat");
+  });
+
+  it("recognises the surface, with and without a conversation, and nothing else", () => {
+    expect(isChatPath("/app/chat")).toBe(true);
+    expect(isChatPath("/app/chat/ses-1")).toBe(true);
+    expect(isChatPath("/app/chats")).toBe(false);
+    expect(isChatPath("/app/files")).toBe(false);
+  });
+
+  it("reads the conversation out of an address, and refuses one it did not write", () => {
+    expect(chatSessionId("/app/chat/ses-1")).toBe("ses-1");
+    expect(chatSessionId("/app/chat/" + encodeURIComponent("ses-1"))).toBe("ses-1");
+    expect(chatSessionId("/app/chat")).toBeNull();
+    expect(chatSessionId("/app/chat/a/b")).toBeNull();
+    expect(chatSessionId("/app/chat/%E2%80%")).toBeNull();
+    expect(chatSessionId("/app/files")).toBeNull();
+  });
+});
+
+// Notifications, Feishu cards and old bookmarks name a run; the product has
+// one surface for it now, and only the ledger knows which conversation it is.
+describe("findRunSession", () => {
+  it("answers from the tab's own project without asking another", async () => {
+    ledgers({ "p-current": [{ id: "run-x", sessionId: "ses-x" }] });
+    expect(await findRunSession("run-x")).toBe("ses-x");
+    expect(mocks.select).not.toHaveBeenCalled();
+  });
+
+  it("moves to the project that has it, and answers from there", async () => {
+    ledgers({ "p-current": [], "p-recent": [{ id: "run-y", sessionId: "ses-y" }] });
+    mocks.select.mockImplementation(async () => { ledgers({ "p-current": [{ id: "run-y", sessionId: "ses-y" }] }); });
+    expect(await findRunSession("run-y")).toBe("ses-y");
+    expect(mocks.select).toHaveBeenCalledWith("p-recent");
+  });
+
+  it("answers null for a run no project has, and for one with no addressable conversation", async () => {
+    ledgers({});
+    expect(await findRunSession("run-gone")).toBeNull();
+    ledgers({ "p-current": [{ id: "run-z", sessionId: "not a session id" }] });
+    expect(await findRunSession("run-z")).toBeNull();
   });
 });

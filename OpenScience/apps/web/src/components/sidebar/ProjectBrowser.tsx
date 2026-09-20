@@ -5,15 +5,17 @@ import { cn } from "@/lib/cn";
 import { webErrorMessage, type WebAgentRun, type WebProject } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { PROJECT_EXPLAINER, PROJECT_NAME_MAX, projectErrorMessage, projectNameProblem } from "@/lib/projectNames";
+import { chatPath } from "@/lib/runLocation";
 import { runMetaLine, runMoment, runState, runTitle } from "@/lib/runPresentation";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { warmWebRuntime } from "@/lib/runtimeWarm";
 import { RunStatusDot } from "@/components/runs/RunStatusDot";
 import { ConversationMatches } from "@/components/sidebar/ConversationMatches";
+import { ConversationMenu } from "@/components/sidebar/ConversationMenu";
 import { inputClasses } from "@/components/ui/Input";
 import { isRunning, useProjectRuns, type ProjectRuns } from "@/components/sidebar/useProjectRuns";
 
-/** Task rows a group shows before 「展开其余 N 个任务」 — the kernel's own
+/** Conversation rows a group shows before 「展开其余 N 条对话」 — the kernel's own
  *  workspace list folds at the same count (`COLLAPSED_SESSION_LIMIT`). */
 const COLLAPSED_TASK_ROWS = 5;
 
@@ -48,19 +50,20 @@ function writeExpanded(map: ExpandedMap): void {
 }
 
 /**
- * Where a task opens: back into its conversation, not into the ledger row
- * about it. A run with no addressable session still has its ledger entry,
- * which is where those go.
+ * Where a conversation opens, or null when there is none to open.
+ *
+ * A run whose session was never recorded has no conversation to go to. It used
+ * to link to its row on the run ledger; that page was deleted on 2026-09-20,
+ * and a link to a page that answers 「找不到」 is worse than a row that says so
+ * where it is.
  */
-function taskTarget(run: WebAgentRun): string {
-  return ADDRESSABLE_SESSION.test(run.sessionId)
-    ? `/app/chat/${encodeURIComponent(run.sessionId)}`
-    : `/app/runs?run=${encodeURIComponent(run.id)}`;
+function taskTarget(run: WebAgentRun): string | null {
+  return ADDRESSABLE_SESSION.test(run.sessionId) ? chatPath(run.sessionId) : null;
 }
 
-function isOpenTask(run: WebAgentRun, pathname: string, search: string): boolean {
-  if (ADDRESSABLE_SESSION.test(run.sessionId)) return pathname === `/app/chat/${encodeURIComponent(run.sessionId)}`;
-  return pathname === "/app/runs" && new URLSearchParams(search).get("run") === run.id;
+function isOpenTask(run: WebAgentRun, pathname: string): boolean {
+  const target = taskTarget(run);
+  return target != null && pathname === target;
 }
 
 function without<T>(map: Record<string, T>, key: string): Record<string, T> {
@@ -79,25 +82,25 @@ function taskKey(projectId: string, run: WebAgentRun): string {
 type Destination = () => { to: string; state?: unknown };
 
 /**
- * The sidebar's 「项目」 section: every project as a group, its tasks inside.
+ * The sidebar's 「项目」 section: every project as a group, its conversations inside.
  *
  * Modelled on the kernel's own workspace list (`WorkspaceBrowser` in
  * `@deepseek-ai/dsh-client-ui-workspace`), which is what the owner asked this
  * to look like (2026-09-19): collapsible groups with their sessions nested
- * under them, five rows before 「展开其余 N 个会话」, a header with a search
+ * under them, five rows before 「展开其余 N 条对话」, a header with a search
  * that replaces the tree with one flat result list, and per-group actions on
- * hover — new session there, rename. It replaces a project dropdown above a
- * 「最近任务」 list of the current project only, where reaching another
- * project's task was two menus and a document reload.
+ * hover — new conversation there, rename. It replaces a project dropdown above
+ * a list of the current project's recent work only, where reaching another
+ * project's conversation was two menus and a document reload.
  *
- * Opening another project's task, or a new task in it, switches the shell to
- * that project in place and lands on the task in the same render
+ * Opening another project's conversation, or a new one in it, switches the
+ * shell to that project in place and lands on it in the same render
  * (`useProjectStore.select`). Those rows are buttons, not links: the tab's
  * project is a header rather than part of the address, so the same path opened
  * in a new tab would open under the wrong project. Rows of the current
  * project stay links, as they always were.
  *
- * Tasks are read per project and only once a group is open
+ * Conversations are read per project and only once a group is open
  * (`useProjectRuns`); which groups are open survives a reload.
  */
 export function ProjectBrowser() {
@@ -185,7 +188,7 @@ export function ProjectBrowser() {
   }, [refocus, currentId, searchOpen]);
 
   /** Starts another project's runtime while the pointer or keyboard is on its
-   *  group, so opening one of its tasks does not wait for a cold start. Called
+   *  group, so opening one of its conversations does not wait for a cold start. Called
    *  on every hover: the rate is `warmWebRuntime`'s own to keep. */
   const warm = useCallback((projectId: string) => {
     if (projectId !== useProjectStore.getState().currentId) warmWebRuntime(projectId);
@@ -217,8 +220,10 @@ export function ProjectBrowser() {
   };
 
   const openTask = (projectId: string, run: WebAgentRun, row: HTMLElement | null) => {
+    const to = taskTarget(run);
+    if (!to) return;
     if (row && row === document.activeElement && projectId !== currentId) setRefocus({ projectId, key: taskKey(projectId, run) });
-    go(projectId, () => ({ to: taskTarget(run) }));
+    go(projectId, () => ({ to }));
   };
 
   const startTask = (projectId: string) => {
@@ -229,6 +234,11 @@ export function ProjectBrowser() {
   const toggle = (projectId: string) => {
     const open = !isExpanded(projectId);
     setExpanded((map) => ({ ...map, [projectId]: open }));
+    // Opening a group is the strongest signal short of a click that one of its
+    // conversations is about to be read, and a cold runtime takes about five
+    // seconds to come up (2026-09-19 measurement). `warmWebRuntime` keeps its
+    // own rate, so this can fire on every toggle.
+    if (open) warm(projectId);
     // Closing a group also folds its long list again, as the kernel's does.
     if (!open) {
       setShowAll((set) => {
@@ -310,9 +320,11 @@ export function ProjectBrowser() {
     const index = entry?.status === "ready" ? entry.runs.findIndex((candidate) => candidate.id === run.id) : -1;
     setExpanded((map) => ({ ...map, [project.id]: true }));
     if (index >= COLLAPSED_TASK_ROWS) setShowAll((set) => new Set(set).add(project.id));
+    const to = taskTarget(run);
+    if (!to) return;
     if (row && row === document.activeElement) setRefocus({ projectId: project.id, key: taskKey(project.id, run) });
     closeSearch(false);
-    go(project.id, () => ({ to: taskTarget(run) }));
+    go(project.id, () => ({ to }));
   };
 
   const iconButton = "grid h-7 w-7 shrink-0 place-items-center rounded-input text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text";
@@ -349,8 +361,8 @@ export function ProjectBrowser() {
               ref={searchInputRef}
               type="search"
               value={query}
-              aria-label="搜索任务"
-              placeholder="搜索任务"
+              aria-label="搜索对话"
+              placeholder="搜索对话"
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key !== "Escape") return;
@@ -374,8 +386,8 @@ export function ProjectBrowser() {
             <button
               ref={searchButtonRef}
               type="button"
-              aria-label="搜索任务"
-              title="搜索任务"
+              aria-label="搜索对话"
+              title="搜索对话"
               onClick={() => { setCreating(false); setSearchOpen(true); }}
               className={iconButton}
             >
@@ -425,7 +437,7 @@ export function ProjectBrowser() {
           />
           {createError
             ? <p role="alert" className="mt-1 px-2 text-caption text-error">{createError}</p>
-            : <p className="mt-1 px-2 text-caption text-muted">按 Enter 创建，并在新项目里开始第一个任务。{PROJECT_EXPLAINER}</p>}
+            : <p className="mt-1 px-2 text-caption text-muted">按 Enter 创建，并在新项目里开始第一条对话。{PROJECT_EXPLAINER}</p>}
         </form>
       )}
 
@@ -450,7 +462,7 @@ export function ProjectBrowser() {
                       projectId={project.id}
                       projectName={project.name}
                       current={project.id === currentId}
-                      active={project.id === currentId && isOpenTask(run, location.pathname, location.search)}
+                      active={project.id === currentId && isOpenTask(run, location.pathname)}
                       withProject
                       onOpen={(row) => openResult(project, run, row)}
                       onWarm={() => warm(project.id)}
@@ -459,11 +471,11 @@ export function ProjectBrowser() {
                 ))}
               </ul>
             )}
-            {results.length === 0 && !unsearchedLoading && <p className="px-2 py-2 text-caption text-muted">没有匹配的任务</p>}
+            {results.length === 0 && !unsearchedLoading && <p className="px-2 py-2 text-caption text-muted">没有匹配的对话</p>}
             {results.length > SEARCH_RESULTS_MAX && (
               <p className="px-2 py-1 text-caption text-muted">只列出最近的 {SEARCH_RESULTS_MAX} 条，换个更具体的词试试。</p>
             )}
-            {unsearchedLoading && <p role="status" className="px-2 py-1 text-caption text-muted">正在读取其余项目的任务…</p>}
+            {unsearchedLoading && <p role="status" className="px-2 py-1 text-caption text-muted">正在读取其余项目的对话…</p>}
             {!unsearchedLoading && unsearched.length > 0 && (
               <button
                 type="button"
@@ -496,7 +508,7 @@ export function ProjectBrowser() {
                     runs={byProject[project.id]}
                     switching={switching === project.id}
                     failure={failures[project.id] ?? null}
-                    isOpen={(run) => project.id === currentId && isOpenTask(run, location.pathname, location.search)}
+                    isOpen={(run) => project.id === currentId && isOpenTask(run, location.pathname)}
                     onToggle={() => toggle(project.id)}
                     onShowAll={() => toggleShowAll(project.id)}
                     onNewTask={() => startTask(project.id)}
@@ -518,7 +530,7 @@ export function ProjectBrowser() {
 }
 
 /**
- * One project: its header row, and its tasks when open.
+ * One project: its header row, and its conversations when open.
  *
  * The header is a disclosure button with its two actions beside it rather
  * than inside it — a control may not contain another. The actions show on
@@ -613,7 +625,7 @@ function ProjectGroup({
   const rows = runs?.status === "ready" ? runs.runs : [];
   const shown = showAll ? rows : rows.slice(0, COLLAPSED_TASK_ROWS);
   const hidden = rows.length - Math.min(rows.length, COLLAPSED_TASK_ROWS);
-  const status = [current && !standIn && "当前项目", switching && "正在切换", running && "有任务正在运行"].filter(Boolean).join("，");
+  const status = [current && !standIn && "当前项目", switching && "正在切换", running && "有对话正在运行"].filter(Boolean).join("，");
 
   return (
     // Hovering or focusing another project's group starts its runtime ahead of
@@ -680,13 +692,13 @@ function ProjectGroup({
           <span className="absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100 max-lg:opacity-100">
             <button
               type="button"
-              aria-label={`在「${project.name}」新建任务`}
-              title="在此项目新建任务"
+              aria-label={`在「${project.name}」新建对话`}
+              title="在此项目新建对话"
               onClick={onNewTask}
               className="grid h-6 w-6 place-items-center rounded-input text-muted hover:bg-surface hover:text-text"
             >
               {/* A plus, as the kernel's list has it: the pen-in-a-square of
-                * 「新任务」 sat beside the rename pencil as its near twin. */}
+                * 「新对话」 sat beside the rename pencil as its near twin. */}
               <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
             </button>
             {!standIn && (
@@ -706,18 +718,18 @@ function ProjectGroup({
       {renameError && <p role="alert" className="px-2 py-1 text-caption text-error">{renameError}</p>}
       {failure && <p role="alert" className="py-1 pl-7 pr-2 text-caption text-error">{failure}</p>}
       {expanded && (
-        <ul id={listId} aria-label={`「${project.name}」的任务`} className="mt-0.5 flex flex-col">
+        <ul id={listId} aria-label={`「${project.name}」的对话`} className="mt-0.5 flex flex-col">
           {(runs === undefined || runs.status === "loading") && (
             <li className="py-1 pl-11 pr-2 text-caption text-muted">正在读取…</li>
           )}
           {runs?.status === "failed" && (
             <li className="flex items-center gap-2 py-1 pl-11 pr-2 text-caption text-muted">
-              <span className="min-w-0 flex-1">这个项目的任务暂时读不到</span>
+              <span className="min-w-0 flex-1">这个项目的对话暂时读不到</span>
               <button type="button" onClick={onRetry} className="shrink-0 rounded px-1 text-link hover:underline">重试</button>
             </li>
           )}
           {runs?.status === "ready" && rows.length === 0 && (
-            <li className="py-1 pl-11 pr-2 text-caption text-muted">还没有任务</li>
+            <li className="py-1 pl-11 pr-2 text-caption text-muted">还没有对话</li>
           )}
           {shown.map((run) => (
             <li key={run.id}>
@@ -740,7 +752,7 @@ function ProjectGroup({
                 className="flex h-7 w-full items-center gap-2 rounded-input pl-7 pr-2 text-left text-caption text-muted hover:text-text"
               >
                 <span className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
-                {showAll ? "收起" : `展开其余 ${hidden} 个任务`}
+                {showAll ? "收起" : `展开其余 ${hidden} 条对话`}
               </button>
             </li>
           )}
@@ -751,11 +763,16 @@ function ProjectGroup({
 }
 
 /**
- * One task: two lines, not one longer one (appendix D §10.3). Twelve runs of
- * one capability share a first line whenever their question was not recorded;
- * the second — when, and how it came out — is what tells them apart, and it
- * says the state in words beside the dot's shape. In the search results the
- * second line leads with the project, because the results mix projects.
+ * One conversation: two lines, not one longer one (appendix D §10.3). Twelve
+ * runs of one capability share a first line whenever their question was not
+ * recorded; the second — when, and how it came out — is what tells them apart,
+ * and it says the state in words beside the dot's shape. In the search results
+ * the second line leads with the project, because the results mix projects.
+ *
+ * The 「…」 beside it carries what the run ledger page used to hold for one
+ * conversation: stop, rename, copy the identifiers (`ConversationMenu`). It is
+ * only offered for the project the shell is in, because every one of those acts
+ * on that project's runtime.
  */
 function TaskRow({
   run,
@@ -770,9 +787,9 @@ function TaskRow({
   run: WebAgentRun;
   projectId: string;
   projectName: string;
-  /** The task belongs to the project the shell is in. */
+  /** The conversation belongs to the project the shell is in. */
   current: boolean;
-  /** This task is the one on screen. */
+  /** This conversation is the one on screen. */
   active: boolean;
   withProject?: boolean;
   onOpen: (row: HTMLElement | null) => void;
@@ -780,6 +797,7 @@ function TaskRow({
 }) {
   const className = "flex w-full items-start gap-2 rounded-input py-1 pl-7 pr-2 text-left hover:bg-surface-2 aria-[current=page]:bg-accent-soft";
   const meta = withProject ? `${projectName} · ${runMetaLine(run)}` : runMetaLine(run);
+  const target = taskTarget(run);
   const content = (
     <>
       <RunStatusDot state={runState(run).key} labelled className="mt-1.5" />
@@ -789,27 +807,30 @@ function TaskRow({
       </span>
     </>
   );
-  if (current) {
-    return (
-      <Link
-        to={taskTarget(run)}
-        data-task-key={taskKey(projectId, run)}
-        aria-current={active ? "page" : undefined}
-        onClick={(event) => {
-          // A modified click is the browser's to handle — that is the whole
-          // point of this being a link.
-          if (event.defaultPrevented || event.button !== 0) return;
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-          event.preventDefault();
-          onOpen(event.currentTarget);
-        }}
-        className={className}
-      >
-        {content}
-      </Link>
-    );
-  }
-  return (
+  const row = !target ? (
+    // A run whose session was never recorded: shown, because it happened, but
+    // there is no conversation behind it to open.
+    <div data-task-key={taskKey(projectId, run)} title="这次研究没有留下可打开的对话" className={`${className} text-muted`}>
+      {content}
+    </div>
+  ) : current ? (
+    <Link
+      to={target}
+      data-task-key={taskKey(projectId, run)}
+      aria-current={active ? "page" : undefined}
+      onClick={(event) => {
+        // A modified click is the browser's to handle — that is the whole
+        // point of this being a link.
+        if (event.defaultPrevented || event.button !== 0) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        onOpen(event.currentTarget);
+      }}
+      className={className}
+    >
+      {content}
+    </Link>
+  ) : (
     <button
       type="button"
       data-task-key={taskKey(projectId, run)}
@@ -821,5 +842,14 @@ function TaskRow({
     >
       {content}
     </button>
+  );
+  if (!current) return row;
+  return (
+    <div className="group/task relative">
+      {row}
+      <span className="absolute inset-y-0 right-1 flex items-center opacity-0 group-hover/task:opacity-100 group-focus-within/task:opacity-100 max-lg:opacity-100">
+        <ConversationMenu run={run} />
+      </span>
+    </div>
   );
 }

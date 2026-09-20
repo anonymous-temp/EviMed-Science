@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebAgentRun } from "@/lib/apiClient";
-import { RunsPage } from "./routes/RunsPage";
+import { ProjectBrowser } from "@/components/sidebar/ProjectBrowser";
 
 /**
  * Runtime vocabulary must not reach the page (§23.2 rule 11).
@@ -14,18 +15,26 @@ import { RunsPage } from "./routes/RunsPage";
  * asked and the capability that answered it (D1/D2). Each was fixed by hand,
  * and a fix by hand is a fix that comes back.
  *
- * This is the regression: render the surface with a row carrying every one of
- * those shapes and assert none of them is visible prose. Identifiers are still
- * reachable — behind the row's own labelled disclosure — so the assertion is
- * about what the page *leads with*, and the test reads the row title and tag
- * rather than the whole document.
+ * This is the regression, now over the surface that survived: the run ledger
+ * page was deleted on 2026-09-20, and the list of a project's conversations in
+ * the sidebar is the one place those rows are drawn. Identifiers are still
+ * reachable — behind the row's own menu, as 「复制诊断信息」 — so the assertion
+ * is about what a row *leads with*.
  */
-const listWebAgentRuns = vi.fn();
+const mocks = vi.hoisted(() => ({
+  listWebProjects: vi.fn(),
+  listWebAgentRuns: vi.fn(),
+  fetchWebMe: vi.fn(),
+}));
+
 vi.mock("@/lib/apiClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   hasWebApi: true,
-  listWebAgentRuns: () => listWebAgentRuns(),
+  listWebProjects: mocks.listWebProjects,
+  listWebAgentRuns: mocks.listWebAgentRuns,
+  fetchWebMe: mocks.fetchWebMe,
 }));
+vi.mock("@/lib/runtimeWarm", () => ({ warmWebRuntime: vi.fn() }));
 
 /** The shapes §23.2 rule 11 forbids in prose, as the walk found them. */
 const FORBIDDEN = [
@@ -61,16 +70,26 @@ function leakyRun(): WebAgentRun {
   };
 }
 
+function renderBrowser() {
+  return render(<MemoryRouter initialEntries={["/app/chat"]}><ProjectBrowser /></MemoryRouter>);
+}
+
+beforeEach(() => {
+  mocks.listWebProjects.mockReset();
+  mocks.listWebAgentRuns.mockReset();
+  mocks.fetchWebMe.mockReset();
+  mocks.listWebProjects.mockResolvedValue([{ id: "default", name: "我的研究" }]);
+  mocks.fetchWebMe.mockResolvedValue({ project: { id: "default" } });
+});
+
 describe("runtime vocabulary never leads a surface", () => {
-  it("titles and tags a run without ids, model names or shouted capability keys", async () => {
-    listWebAgentRuns.mockResolvedValue([leakyRun()]);
-    render(<MemoryRouter initialEntries={["/app/runs"]}><RunsPage /></MemoryRouter>);
+  it("names a conversation without ids, model names or shouted capability keys", async () => {
+    mocks.listWebAgentRuns.mockResolvedValue([leakyRun()]);
+    renderBrowser();
 
     // Prove the walk happened before asserting what it did not see: an
     // assertion over an empty page passes forever.
-    // The row's own toggle (it carries `aria-expanded`); the rename control
-    // beside it names the run too, which is what a screen reader needs.
-    const row = await screen.findByRole("button", { name: /临床证据深度分析/, expanded: true });
+    const row = await screen.findByRole("link", { name: /临床证据深度分析/ });
     const visible = row.textContent ?? "";
     expect(visible.length).toBeGreaterThan(0);
 
@@ -79,30 +98,30 @@ describe("runtime vocabulary never leads a surface", () => {
         expect(word, `${word} matched ${pattern}`).not.toMatch(pattern);
       }
     }
-    // And the two positive facts the row must carry instead.
     expect(visible).toContain("临床证据深度分析");
-    expect(visible).toContain("开放域");
   });
 
   it("names the open-domain answer line in words, not by its id", async () => {
     // Seen at 390 px in the 2026-09-16 scripted walk: 「开放域 · open-domain-answer」.
-    listWebAgentRuns.mockResolvedValue([{ ...leakyRun(), effectiveAgentId: "open-domain-answer", effectiveRuntimeAgent: null }]);
-    render(<MemoryRouter initialEntries={["/app/runs"]}><RunsPage /></MemoryRouter>);
-    const row = await screen.findByRole("button", { name: /普通问答/, expanded: true });
+    mocks.listWebAgentRuns.mockResolvedValue([{ ...leakyRun(), effectiveAgentId: "open-domain-answer", effectiveRuntimeAgent: null }]);
+    renderBrowser();
+    const row = await screen.findByRole("link", { name: /普通问答/ });
     expect(row.textContent).not.toMatch(/open-domain-answer/);
   });
 
-  it("keeps the identifiers reachable, labelled, behind one disclosure", async () => {
-    listWebAgentRuns.mockResolvedValue([leakyRun()]);
-    render(<MemoryRouter initialEntries={["/app/runs"]}><RunsPage /></MemoryRouter>);
+  it("keeps the identifiers reachable, behind the row's own menu", async () => {
+    const written: string[] = [];
+    Object.assign(navigator, { clipboard: { writeText: (text: string) => { written.push(text); return Promise.resolve(); } } });
+    mocks.listWebAgentRuns.mockResolvedValue([leakyRun()]);
+    renderBrowser();
 
-    await screen.findByRole("button", { name: /临床证据深度分析/, expanded: true });
-    const details = screen.getByText("技术标识（供排查使用）").closest("details");
-    expect(details).not.toBeNull();
-    // Closed by default: support can open it, a reader never meets it.
-    expect(details).not.toHaveAttribute("open");
-    expect(details?.textContent).toContain("run_c657a9e0b079c8e9e401a19ed95f42e7");
-    expect(details?.textContent).toContain("ses_0722bc34fffeRehfLDGbxJn4I3");
-    expect(details?.textContent).toContain("deepseek/deepseek-v4-pro");
+    await screen.findByRole("link", { name: /临床证据深度分析/ });
+    await userEvent.click(screen.getByRole("button", { name: /的操作$/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "复制诊断信息" }));
+
+    await waitFor(() => expect(written).toHaveLength(1));
+    expect(written[0]).toContain("run_c657a9e0b079c8e9e401a19ed95f42e7");
+    expect(written[0]).toContain("ses_0722bc34fffeRehfLDGbxJn4I3");
+    expect(written[0]).toContain("deepseek/deepseek-v4-pro");
   });
 });
