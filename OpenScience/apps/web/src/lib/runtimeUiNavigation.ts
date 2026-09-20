@@ -9,9 +9,18 @@ export interface RuntimeUiIntent {
   draft?: string;
 }
 
-export function newRuntimeUiIntent(draft?: string): RuntimeUiIntent {
+/**
+ * A deliberate new conversation.
+ *
+ * `sessionId` is minted here, before the kernel exists, because the shell has
+ * to be able to bind that conversation to a research tool first — a binding is
+ * what makes the router honour the choice instead of re-deciding it. Pass one
+ * in when it was already bound.
+ */
+export function newRuntimeUiIntent(draft?: string, sessionId?: string): RuntimeUiIntent {
   return {
-    kind: "create", projectId: getWebProjectId(), requestId: crypto.randomUUID(), sessionId: crypto.randomUUID(),
+    kind: "create", projectId: getWebProjectId(), requestId: crypto.randomUUID(),
+    sessionId: sessionId && /^[A-Za-z0-9_-]{1,160}$/.test(sessionId) ? sessionId : crypto.randomUUID(),
     ...(draft === undefined ? {} : { draft }),
   };
 }

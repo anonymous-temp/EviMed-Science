@@ -90,6 +90,8 @@ const agents = [
 
 const mocks = vi.hoisted(() => ({
   listWebResearchAgents: vi.fn(),
+  listWebResearchSessions: vi.fn(),
+  putWebResearchSession: vi.fn(),
   hasWebApi: true,
 }));
 
@@ -102,6 +104,8 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
     return mocks.hasWebApi;
   },
   listWebResearchAgents: mocks.listWebResearchAgents,
+  listWebResearchSessions: mocks.listWebResearchSessions,
+  putWebResearchSession: mocks.putWebResearchSession,
   getWebProjectId: () => "default",
 }));
 
@@ -121,6 +125,10 @@ describe("CapabilitiesPage", () => {
   beforeEach(() => {
     mocks.listWebResearchAgents.mockReset();
     mocks.listWebResearchAgents.mockResolvedValue(agents);
+    mocks.listWebResearchSessions.mockReset();
+    mocks.listWebResearchSessions.mockResolvedValue([]);
+    mocks.putWebResearchSession.mockReset();
+    mocks.putWebResearchSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
     mocks.hasWebApi = true;
   });
 
@@ -196,9 +204,15 @@ describe("CapabilitiesPage", () => {
       </MemoryRouter>,
     );
     await userEvent.click(await screen.findByRole("button", { name: "用「药品安全性分析」开始一次对话" }));
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/chat");
+    // Bound before the conversation exists, so the router honours the choice
+    // rather than re-deciding it.
+    await waitFor(() => expect(mocks.putWebResearchSession).toHaveBeenCalledWith(
+      expect.stringMatching(/^web-/), { mode: "specialist", agentId: "adr-analysis", agentVersion: "1.0.0" }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
     expect(screen.getByTestId("capability")).toHaveTextContent("adr-analysis");
-    expect(JSON.parse(screen.getByTestId("intent").textContent!).kind).toBe("create");
+    const intent = JSON.parse(screen.getByTestId("intent").textContent!);
+    expect(intent.kind).toBe("create");
+    expect(intent.sessionId).toMatch(/^web-/);
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 

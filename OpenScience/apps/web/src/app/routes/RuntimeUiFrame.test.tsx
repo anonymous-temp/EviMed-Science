@@ -13,7 +13,7 @@ import { useUiStore } from "@/lib/store";
 import { useRuntimeSessionSearch } from "@/lib/runtimeUiBridge";
 import { renderHook } from "@testing-library/react";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources }));
 // The run's event stream, held by the test: the frame's run view follows it.
 vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/runEvents")>()), subscribeRunEvents: mocks.subscribe }));
@@ -28,6 +28,7 @@ vi.mock("@/lib/apiClient", async importOriginal => ({
   getWebProjectId: () => mocks.projectId, createWebRuntimeUiFrame: mocks.create, releaseWebRuntimeUiFrame: mocks.release,
   renewWebRuntimeUiFrame: mocks.renew, listWebAgentRuns: mocks.listRuns, warmWebRuntime: mocks.warm,
   startWebRuntime: mocks.start, fetchWebRuntimeStatus: mocks.status,
+  listWebResearchAgents: mocks.listAgents, listWebResearchSessions: mocks.listSessions, putWebResearchSession: mocks.putSession,
 }));
 const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
 function PathProbe() {
@@ -67,6 +68,9 @@ beforeEach(() => {
   // A warm runtime unless a test says otherwise: the usual opening.
   mocks.start.mockReset(); mocks.start.mockResolvedValue(undefined);
   mocks.status.mockReset(); mocks.status.mockResolvedValue({ running: true, provider: "docker", startStage: null, startError: null });
+  mocks.listAgents.mockReset(); mocks.listAgents.mockResolvedValue([{ id: "adr-analysis", version: "1.0.0" }]);
+  mocks.listSessions.mockReset(); mocks.listSessions.mockResolvedValue([]);
+  mocks.putSession.mockReset(); mocks.putSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -932,5 +936,35 @@ describe("the conversation surface outlives the route", () => {
     expect(screen.queryByText("准备环境")).toBeNull();
     expect(screen.queryByText("正在打开对话…")).toBeNull();
     expect(container.querySelector("iframe")).toBe(frame);
+  });
+});
+
+describe("which research tool a conversation runs", () => {
+  it("tells the frame what the control plane holds, and binds what the frame picks", async () => {
+    mocks.listSessions.mockResolvedValue([{ sessionId: "session-a", mode: "specialist", agentId: "adr-analysis", agentVersion: "1.0.0" }]);
+    const view = mount(null, "/app/chat/session-a");
+    await act(async () => { await Promise.resolve(); });
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.booted" });
+    emit(frame, { type: "evimed.runtime-ui.ready", seq: 2 });
+    const command = post.mock.calls.map(call => call[0]).find(data => data.type === "evimed.runtime-ui.navigate");
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: command.requestId, ok: true, sessionId: "session-a" });
+    // The bound tool reaches the frame, which is what draws the chip.
+    await waitFor(() => expect(post.mock.calls.map(call => call[0]).some(data =>
+      data.type === "evimed.runtime-ui.capability" && data.capabilityId === "adr-analysis")).toBe(true));
+
+    // The frame picking a different tool binds a fresh conversation, because a
+    // binding cannot change once its session has run — and the typed question
+    // travels with it.
+    emit(frame, { type: "evimed.runtime-ui.bind-capability", seq: 4, capabilityId: "adr-analysis", sessionId: "session-a", draft: "老年房颤该不该抗凝？" });
+    await waitFor(() => expect(mocks.listSessions).toHaveBeenCalled());
+    // A tool this deployment does not offer is refused rather than bound.
+    mocks.putSession.mockClear();
+    emit(frame, { type: "evimed.runtime-ui.bind-capability", seq: 5, capabilityId: "not-a-tool", sessionId: "session-a" });
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.putSession).not.toHaveBeenCalled();
+    view.unmount();
   });
 });

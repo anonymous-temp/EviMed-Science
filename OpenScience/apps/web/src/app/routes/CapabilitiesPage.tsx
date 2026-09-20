@@ -4,7 +4,7 @@ import { Clock3, FolderUp, RefreshCw, Search, ServerCrash } from "lucide-react";
 import { webErrorMessage, hasWebApi, listWebResearchAgents, type WebResearchAgent } from "@/lib/apiClient";
 import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
 import { capabilityIcon } from "@/lib/capabilityIcons";
-import { minutesText } from "@/lib/dispatch";
+import { bindConversationCapability, minutesText } from "@/lib/dispatch";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -66,9 +66,22 @@ export function CapabilitiesPage() {
     return [...byCategory.entries()].sort(([left], [right]) => left.localeCompare(right, "zh"));
   }, [visible]);
 
-  /** A tool is chosen by opening a conversation that runs it. */
-  const open = (id: string) => {
-    navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(), capabilityId: id } });
+  /**
+   * A tool is chosen by opening a conversation that runs it — bound before the
+   * conversation exists, because a binding is what makes the router honour the
+   * choice rather than re-decide it with a classifier.
+   */
+  const [opening, setOpening] = useState<string | null>(null);
+  const open = (agent: CapabilityUi) => {
+    if (opening) return;
+    setOpening(agent.id);
+    void bindConversationCapability(null, { agentId: agent.id, agentVersion: agent.version })
+      .then((bound) => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(undefined, bound.sessionId), capabilityId: agent.id } }))
+      // A binding the control plane refused must not strand the reader on a
+      // dead row: the conversation opens, and the router decides as it did
+      // before there were tools.
+      .catch(() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }))
+      .finally(() => setOpening(null));
   };
 
   return (
@@ -145,7 +158,7 @@ export function CapabilitiesPage() {
               </h2>
               <ul className="grid gap-2 xl:grid-cols-2">
                 {items.map((agent) => (
-                  <li key={agent.id}><CapabilityRow agent={agent} onOpen={() => open(agent.id)} /></li>
+                  <li key={agent.id}><CapabilityRow agent={agent} busy={opening === agent.id} onOpen={() => open(agent)} /></li>
                 ))}
               </ul>
             </section>
@@ -156,13 +169,14 @@ export function CapabilitiesPage() {
 }
 
 /** One compact row: icon, name, one line, how long. */
-function CapabilityRow({ agent, onOpen }: { agent: CapabilityUi; onOpen: () => void }) {
+function CapabilityRow({ agent, busy, onOpen }: { agent: CapabilityUi; busy: boolean; onOpen: () => void }) {
   const Icon = capabilityIcon(agent.id);
   const minutes = minutesText({ min: agent.estimatedMinutes[0], max: agent.estimatedMinutes[1] });
   return (
     <button
       type="button"
       onClick={onOpen}
+      disabled={busy}
       aria-label={`用「${agent.title}」开始一次对话`}
       className="group flex min-h-[4.75rem] w-full items-start gap-3 rounded-card border border-border bg-surface p-4 text-left transition-colors duration-fast hover:border-strong hover:bg-surface-2"
     >

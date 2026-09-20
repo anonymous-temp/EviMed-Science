@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
-import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
+import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebResearchAgents, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
 import { provideFrameSessionSearch, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
 import { Button } from "@/components/ui/Button";
 import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
@@ -273,6 +274,10 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // in a delegated child's view — that child's root task. The run bound to it
   // is what the frame's cards and panels draw.
   const [frameTask, setFrameTask] = useState<string | null>(null);
+  // The catalogue, for turning a capability id into the {id, version} pair a
+  // binding needs. Read once per surface; a tool the deployment does not offer
+  // is a choice this shell refuses rather than binds.
+  const capabilityAgents = useRef(new Map<string, { agentId: string; agentVersion: string }>());
   const theme = useUiStore((state) => state.theme);
   const [pending, setPending] = useState(false);
   const [navigated, setNavigated] = useState(false);
@@ -610,6 +615,26 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           (items) => postToFrame("kb-result", { requestId, ok: true, items }),
           () => postToFrame("kb-result", { requestId, ok: false, items: [] }),
         );
+      } else if (message.type === "evimed.runtime-ui.bind-capability") {
+        // The frame's tool grid, tool page or `/工具` command choosing which
+        // research tool this conversation runs. The frame shows the choice; the
+        // control plane is what makes it true — a bound session is the route
+        // the router does not re-decide. A binding cannot change once its
+        // session has run, so the answer may be a fresh conversation, and the
+        // draft the researcher had already typed travels with it.
+        incoming.current = message.seq;
+        const capabilityId = typeof message.capabilityId === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/.test(message.capabilityId)
+          ? message.capabilityId : null;
+        const draft = typeof message.draft === "string" && message.draft.length <= 100_000 ? message.draft : "";
+        const agent = capabilityId ? capabilityAgents.current.get(capabilityId) ?? null : null;
+        if (capabilityId && !agent) return;
+        const from = typeof message.sessionId === "string" && SESSION_ID.test(message.sessionId) ? message.sessionId : null;
+        void bindConversationCapability(from, agent)
+          .then((bound) => {
+            if (!bound.rebound) { postToFrame("capability", { capabilityId, sessionId: bound.sessionId }); return; }
+            navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(draft || undefined, bound.sessionId), capabilityId } });
+          })
+          .catch(() => { postToFrame("capability", { capabilityId: null, sessionId: from }); });
       } else if (message.type === "evimed.runtime-ui.ack") {
         const request = currentRequest.current;
         if (!request || message.requestId !== request.requestId || typeof message.ok !== "boolean"
@@ -719,6 +744,29 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // (C9 `run-state`, plus the claims and sources of its report). Only once the
   // frame's bridge is listening and a task is open; cleared when the task
   // changes or has no run.
+  useEffect(() => {
+    let active = true;
+    void listWebResearchAgents()
+      .then((agents) => {
+        if (!active) return;
+        capabilityAgents.current = new Map(agents.map((agent) => [agent.id, { agentId: agent.id, agentVersion: agent.version }]));
+      })
+      .catch(() => { /* a catalogue that did not load costs the tool chip, never the conversation */ });
+    return () => { active = false; };
+  }, []);
+
+  // Which tool the conversation on screen runs, as the control plane holds it.
+  // The frame draws the chip and the tool's page from this; it never decides it.
+  useEffect(() => {
+    if (!booted || error || !frameId) return undefined;
+    let active = true;
+    if (!frameTask) { postToFrame("capability", { capabilityId: null, sessionId: null }); return undefined; }
+    void conversationCapability(frameTask)
+      .then((capabilityId) => { if (active) postToFrame("capability", { capabilityId, sessionId: frameTask }); })
+      .catch(() => { /* the chip stays absent rather than wrong */ });
+    return () => { active = false; };
+  }, [booted, error, frameId, frameTask, postToFrame]);
+
   const postRunState = useCallback((state: object) => postToFrame("run-state", state), [postToFrame]);
   const postEvidence = useCallback((evidence: object | null) => postToFrame("evidence", evidence ?? { runId: null }), [postToFrame]);
   useFrameRunBinding({ sessionId: frameTask, enabled: booted > 0 && !error && Boolean(frameId), postRunState, postEvidence });
