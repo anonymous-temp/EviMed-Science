@@ -55,7 +55,7 @@ export function AccountPage() {
 
   const overview = (
     <div className="h-full overflow-y-auto bg-bg">
-      <div className="mx-auto max-w-content px-8 py-8">
+      <div className="mx-auto max-w-content px-6 py-6">
         {/* "个人租户边界" / "一期 SaaS 采用个人账号即租户" / "独立空间" were the
             design's words for the reader, not the reader's (2026-09-16 walk,
             U13). What a researcher needs to know is that their work is theirs
@@ -113,12 +113,12 @@ export function AccountPage() {
     { key: "account", label: "账户与额度", render: () => overview },
     { key: "connectors", label: "数据源", render: () => (
       <div className="h-full overflow-y-auto bg-bg">
-        <div className="mx-auto max-w-content px-8 py-8" id="connectors"><ConnectorsCard /></div>
+        <div className="mx-auto max-w-content px-6 py-6" id="connectors"><ConnectorsCard /></div>
       </div>
     ) },
     ...(phoneTab ? [{ key: "phone", label: "手机与飞书", render: () => (
       <div className="h-full overflow-y-auto bg-bg">
-        <div className="mx-auto max-w-content px-4 py-6 sm:px-8 sm:py-8"><FeishuCard /></div>
+        <div className="mx-auto max-w-content px-6 py-6"><FeishuCard /></div>
       </div>
     ) }] : []),
     { key: "settings", label: "设置", render: () => <SettingsPage embedded /> },

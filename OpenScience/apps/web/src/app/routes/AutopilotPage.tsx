@@ -415,7 +415,7 @@ export function AutopilotPage() {
       void mutate(() => scheduleAgenda(agenda.id, todayIn(agenda.payload.timeZone)));
     }}
   /> : null;
-  return <div className="h-full overflow-y-auto px-5 py-6"><div className="mx-auto max-w-content-wide space-y-5">
+  return <div className="h-full overflow-y-auto px-6 py-6"><div className="mx-auto max-w-content-wide space-y-5">
     {runDialog}
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div>
