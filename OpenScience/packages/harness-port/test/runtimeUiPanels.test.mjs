@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  apply, artifactKind, artifactModel, BODY, evidenceModel, panelTabs, progressModel, runStateText, runViewTab, sourcesModel,
+  apply, artifactKind, artifactModel, BODY, deliveryModel, evidenceModel, panelTabs, progressModel, runStateText, runViewTab, sourcesModel,
 } from '../src/runtimeUiPanels.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 
@@ -196,4 +196,34 @@ test('both surfaces render Chinese, with an honest empty state before anything e
   const column1 = renderStatic(files);
   assert.match(column1, /报告/);
   assert.match(column1, /打开/);
+});
+
+test('a finished run says so at the end of the turn that delivered it', () => {
+  const delivered = { ...LIVE, state: 'succeeded', verification: 'unverified',
+    artifacts: ['deliverables/evidence/clinical-evidence-report.md', 'deliverables/evidence/clinical-evidence-matrix.json'] };
+  const model = /** @type {any} */ (deliveryModel(delivered, EVIDENCE, 9_999_999_999, kit()));
+  assert.equal(model.state.text, '已交付 · 有结论未逐字核对');
+  assert.equal(model.title, '老年房颤抗凝');
+  assert.equal(model.reportPath, 'deliverables/evidence/clinical-evidence-report.md');
+  assert.equal(model.claims, '结论 3 条，已核对 1 条，2 条待核对');
+  assert.equal(model.fileCount, 2);
+  assert.equal(model.attention, 1);
+  assert.equal(model.elapsed, '5 分 00 秒');
+  assert.equal(model.cost, '约 ¥0.42');
+  assert.equal(deliveryModel(LIVE, EVIDENCE, 0, kit()), null, 'a running run has nothing to hand back yet');
+  assert.equal(deliveryModel({ ...LIVE, state: 'succeeded' }, null, 0, kit()), null, 'neither has one that produced nothing');
+});
+
+test('the card sits above the composer, once, and says nothing before there is anything to hand back', () => {
+  const f = column();
+  const entry = f.ctx.slots.registrations.find((/** @type {any} */ item) => item.name === 'conversation.input.dock' && item.options.id === 'evimed-delivery');
+  assert.ok(entry, 'one seat, in the list above the composer');
+  assert.equal(renderStatic(entry.component), '', 'a conversation with no finished run says nothing');
+  f.kit.hub.deliver('run-state', { ...LIVE, state: 'succeeded', artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
+  f.kit.hub.deliver('evidence', EVIDENCE);
+  const card = renderStatic(entry.component);
+  assert.match(card, /打开报告/);
+  assert.match(card, /结论 3 条，已核对 1 条/);
+  assert.match(card, /引用前请在报告里核对带 ⚠ 的结论/);
+  assert.match(card, /收起/);
 });

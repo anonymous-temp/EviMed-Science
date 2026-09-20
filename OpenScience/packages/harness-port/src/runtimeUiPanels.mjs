@@ -244,6 +244,44 @@ export function sourcesModel(evidence, live, kit) {
 }
 
 /**
+ * What a finished run hands back, in the six facts a reader acts on.
+ *
+ * This is the card at the end of the turn that delivered: today a delivered
+ * report announced itself only in whatever the model happened to write last,
+ * and on 2026-09-20 that was an English aside about frozen bytes — the reader
+ * was never told the report existed, let alone that thirteen of its
+ * conclusions carried an advisory.
+ *
+ * @param {any} live @param {any} evidence @param {number} now @param {any} kit
+ */
+export function deliveryModel(live, evidence, now, kit) {
+  const state = String(live?.state ?? '');
+  if (!live || !['succeeded', 'failed'].includes(state)) return null;
+  const files = artifactModel(live);
+  const report = files?.groups.flatMap((/** @type {any} */ group) => group.files).find((/** @type {any} */ file) => file.kind === 'report') ?? null;
+  const claims = evidenceModel(evidence, live);
+  const progress = live.progress && typeof live.progress === 'object' ? live.progress : {};
+  const counted = progress.claims && Number(progress.claims.total) > 0 ? progress.claims : null;
+  const total = claims?.claims.length || Number(counted?.total) || 0;
+  const verified = claims ? claims.claims.filter((/** @type {any} */ claim) => claim.tone === 'ok').length : Number(counted?.verified) || 0;
+  const started = typeof progress.startedAt === 'string' ? Date.parse(progress.startedAt) : NaN;
+  const ended = typeof progress.updatedAt === 'string' ? Date.parse(progress.updatedAt) : now;
+  const usage = progress.usage && typeof progress.usage === 'object' ? progress.usage : live.usage;
+  if (!report && !total) return null;
+  return {
+    runId: String(live.runId),
+    state: runStateText(live),
+    title: report ? (typeof live.title === 'string' && live.title.trim() ? live.title.trim() : report.name) : null,
+    reportPath: report ? report.path : null,
+    fileCount: files ? files.groups.reduce((sum, /** @type {any} */ group) => sum + group.files.length, 0) : 0,
+    claims: total ? `结论 ${total} 条，已核对 ${verified} 条${total > verified ? `，${total - verified} 条待核对` : ''}` : null,
+    attention: claims ? claims.attention : 0,
+    elapsed: Number.isFinite(started) && Number.isFinite(ended) && ended >= started ? kit.formatDuration(ended - started) : null,
+    cost: usage && Number.isFinite(usage.costCny) && usage.costCny > 0 ? `约 ¥${Number(usage.costCny).toFixed(2)}` : null,
+  };
+}
+
+/**
  * @param {any} ctx Native Cordis client context.
  * @param {any} [_config]
  * @param {any} target Browser global.
@@ -379,6 +417,38 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     return h('div', { style: pane, 'data-evimed-tab': 'files' }, h(FileGroups, { model }));
   }
 
+  /**
+   * What a finished run hands back, said in the conversation.
+   *
+   * Above the composer rather than under the turn that delivered: a turn tail
+   * exists for every completed turn and nothing in its props says which one the
+   * run belongs to, so a card there either repeats itself down the transcript
+   * or needs the occupants to agree among themselves which is newest. This seat
+   * renders once per session by construction, and it is where the reader's eye
+   * already is. It stays until the reader dismisses it or asks the next thing.
+   */
+  const DeliveryCard = () => {
+    const live = useLive();
+    const evidence = useEvidence();
+    const [dismissed, setDismissed] = React.useState(/** @type {string | null} */ (null));
+    const model = kit.guarded('delivery card', () => deliveryModel(live, evidence, Date.now(), kit));
+    if (!model || dismissed === model.runId) return null;
+    return h('div', { style: { ...card, margin: '0 0 6px' }, 'data-evimed-delivery': model.runId },
+      h('div', { style: line },
+        h('span', { style: pill(model.state.tone) }, model.state.text),
+        model.title ? h('span', { style: { ...title, flex: '1 1 auto', whiteSpace: 'normal' } }, model.title) : null,
+        model.reportPath
+          ? h('button', { type: 'button', style: button, onClick: () => openArtifact(model.runId, model.reportPath) }, '打开报告')
+          : null,
+        h('button', { type: 'button', 'aria-label': '收起这条', style: { ...button, marginLeft: 0 }, onClick: () => setDismissed(model.runId) }, '收起')),
+      h('div', { style: { ...quiet, whiteSpace: 'normal', marginTop: '2px' } },
+        [model.claims, model.fileCount ? `${model.fileCount} 个文件` : null, model.elapsed ? `用时 ${model.elapsed}` : null, model.cost].filter(Boolean).join(' · ')),
+      model.attention
+        ? h('div', { style: { ...quiet, whiteSpace: 'normal', color: 'var(--dsw-alias-state-warn-label)' } }, '引用前请在报告里核对带 ⚠ 的结论。')
+        : null);
+  };
+  kit.guarded('delivery card', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-delivery' }, DeliveryCard));
+
   kit.guarded('run view', () => kit.occupy({ slot: 'conversation.view', id: view.id, order: view.order, label: () => view.label }, RunView));
   for (const tab of tabs) {
     kit.guarded(`${tab.id} body`, () => kit.occupy({ slot: 'sidebar.right.pane.tab', key: tab.id }, FilesTab));
@@ -423,5 +493,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'panels',
   inject,
-  parts: Object.freeze([frameStyles, toolviewText, verdictText, liveRunFor, childLinkFor, panelTabs, runViewTab, runStateText, artifactKind, progressModel, artifactModel, evidenceModel, sourcesModel, apply]),
+  parts: Object.freeze([frameStyles, toolviewText, verdictText, liveRunFor, childLinkFor, panelTabs, runViewTab, runStateText, artifactKind, progressModel, artifactModel, evidenceModel, sourcesModel, deliveryModel, apply]),
 });
