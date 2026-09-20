@@ -356,7 +356,7 @@ export function WebProjectsCard({
       {pendingDelete && (
         <ConfirmDialog
           title={`删除项目「${pendingDelete.name}」？`}
-          body="这个项目的全部工作区文件、运行记录、研究运行时状态与日志都会删除，无法恢复。需要留底的话，先导出一份。"
+          body="这个项目的全部工作区文件、对话与产出、研究环境状态与日志都会删除，无法恢复。需要留底的话，先导出一份。"
           confirmLabel="删除项目"
           onConfirm={() => void confirmDeleteProject()}
           onCancel={() => setPendingDelete(null)}

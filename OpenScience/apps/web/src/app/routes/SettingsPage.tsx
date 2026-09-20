@@ -40,7 +40,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
 
   return (
     <div className="h-full overflow-y-auto bg-bg">
-      <div className="mx-auto max-w-content px-8 py-10">
+      <div className="mx-auto max-w-content px-6 py-6">
         {!embedded && (
           <PageHeader title="设置" description="项目、插件、数据边界与外观。" />
         )}

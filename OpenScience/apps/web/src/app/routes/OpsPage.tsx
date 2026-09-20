@@ -40,7 +40,7 @@ export function OpsPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   return (
     <div className="h-full overflow-y-auto bg-bg">
-      <div className="mx-auto max-w-content px-8 py-10">
+      <div className="mx-auto max-w-content px-6 py-6">
         {!embedded && (
           <PageHeader title="运维台" description="部署就绪、运行资源与三本运维账本。" />
         )}
