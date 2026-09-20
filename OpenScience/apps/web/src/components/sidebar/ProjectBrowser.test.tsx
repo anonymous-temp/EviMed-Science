@@ -406,12 +406,12 @@ describe("ProjectBrowser — task rows", () => {
 
     const clean = await screen.findByRole("link", { name: /干净的运行/ });
     expect(clean).toHaveTextContent("已交付");
-    expect(clean).not.toHaveTextContent("待复核");
+    expect(clean).not.toHaveTextContent("未逐字核对");
     expect(clean.querySelector("[data-run-state]")).toHaveAttribute("data-run-state", "done");
 
     for (const name of [/有待复核的运行/, /降级交付的运行/]) {
       const row = screen.getByRole("link", { name });
-      expect(row).toHaveTextContent("已交付，待复核");
+      expect(row).toHaveTextContent("已交付 · 有结论未逐字核对");
       expect(row.querySelector("[data-run-state]")).toHaveAttribute("data-run-state", "review");
     }
   });
@@ -429,7 +429,7 @@ describe("ProjectBrowser — task rows", () => {
     const text = links.map((link) => link.textContent ?? "");
     expect(text.some((line) => line.includes("未完成"))).toBe(true);
     expect(text.some((line) => line.includes("已取消"))).toBe(true);
-    expect(text.some((line) => line.includes("运行中"))).toBe(true);
+    expect(text.some((line) => line.includes("进行中"))).toBe(true);
   });
 
   it("titles a row with the ledger's title before its question", async () => {

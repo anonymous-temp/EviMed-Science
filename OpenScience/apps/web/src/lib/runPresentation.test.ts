@@ -43,7 +43,7 @@ describe("what a run is called", () => {
 
 describe("the state a run is shown in", () => {
   it("separates a clean delivery from one that still needs a person, in words as well as colour", () => {
-    expect(runState(run({ status: "running" }))).toEqual({ key: "running", label: "运行中" });
+    expect(runState(run({ status: "running" }))).toEqual({ key: "running", label: "进行中" });
     expect(runState(run({ status: "succeeded" }))).toEqual({ key: "done", label: "已交付" });
     expect(runState(run({ status: "succeeded", verification: "unverified" } as Partial<WebAgentRun>)).key).toBe("review");
     expect(runState(run({ status: "succeeded", phase: "degraded" } as Partial<WebAgentRun>)).key).toBe("review");
@@ -54,7 +54,7 @@ describe("the state a run is shown in", () => {
   it("dates a row by when it ended and says how it came out on the second line", () => {
     const now = Date.parse("2026-09-18T10:00:00Z");
     const finished = run({ startedAt: "2026-09-18T09:00:00Z", finishedAt: "2026-09-18T09:50:00Z", verification: "unverified" } as Partial<WebAgentRun>);
-    expect(runMetaLine(finished, now)).toBe("10 分钟前 · 已交付，待复核");
+    expect(runMetaLine(finished, now)).toBe("10 分钟前 · 已交付 · 有结论未逐字核对");
     expect(relativeTime(now - 30_000, now)).toBe("刚刚");
     expect(relativeTime(now - 3 * 3_600_000, now)).toBe("3 小时前");
     expect(relativeTime(0, now)).toBe("");
