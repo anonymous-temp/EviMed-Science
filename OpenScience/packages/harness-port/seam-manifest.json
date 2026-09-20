@@ -127,6 +127,15 @@
         "retainRatio": 0.16,
         "maxTokens": 8192
       }
+    },
+    "modelRequestHeaders": {
+      "package": "@deepseek-ai/dsh-llm-deepseek",
+      "headers": {
+        "x-deepseek-harness-session-id": "The session the request belongs to, stamped when the caller passes options.sessionId. The model gateway reads it to attribute a request's cost to the conversation that made it; a project's catch-all default runs several at once, and the rule it replaced could attribute only when exactly one was running."
+      },
+      "read": "unauthenticated hint",
+      "fallback": "the project's single active run, as before",
+      "verifiedAgainst": "0.1.5-rc.2, read in the shipped image at profiles/evimed-runtime/node_modules/.pnpm/@deepseek-ai+dsh-llm-deepseek@0.1.5-rc.2/.../lib/index.js"
     }
   },
   "promptSections": {
