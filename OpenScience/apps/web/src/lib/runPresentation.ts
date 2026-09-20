@@ -30,9 +30,12 @@ export interface RunStatePresentation {
 }
 
 export const RUN_STATE_LABEL: Record<RunStateKey, string> = {
-  running: "运行中",
+  running: "进行中",
   done: "已交付",
-  review: "已交付，待复核",
+  // One vocabulary for the verdict, the domain's `runVerdictText`: what is
+  // true is that some conclusions could not be matched word for word in their
+  // sources, not that a person owes the run a review.
+  review: "已交付 · 有结论未逐字核对",
   // Not 「失败」: a run the stall detector stopped, one refused for a missing
   // credential and one whose package the gate could not read all land here,
   // and none of those says the science failed.
