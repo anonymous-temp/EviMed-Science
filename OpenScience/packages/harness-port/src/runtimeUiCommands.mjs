@@ -209,10 +209,26 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   const currentSession = () => {
     try { return ctx.sessions?.list?.getSnapshot?.()?.current ?? null; } catch { return null; }
   };
-  /** @param {string | null} id */
+  /** The composer's own text, so choosing a tool never costs a typed question. */
+  /** @param {string | null} sessionId */
+  const draftOf = (sessionId) => {
+    try {
+      const scope = sessionId && typeof ctx.sessions?.scope === 'function' ? ctx.sessions.scope(sessionId) : null;
+      const state = scope && ctx.conversation?.input ? ctx.conversation.input.for(scope).state?.getSnapshot?.() : null;
+      return typeof state?.draft === 'string' ? state.draft.slice(0, 100_000) : '';
+    } catch { return ''; }
+  };
+  /**
+   * Choosing a tool is the control plane binding this conversation to it. A
+   * binding is fixed once the conversation has run something, so the shell may
+   * answer by opening a fresh conversation instead — which is why the draft
+   * travels with the request.
+   * @param {string | null} id
+   */
   const bind = (id) => {
     setTool(id);
-    kit.hub.send('bind-capability', { capabilityId: id, sessionId: currentSession() });
+    const sessionId = currentSession();
+    kit.hub.send('bind-capability', { capabilityId: id, sessionId, draft: draftOf(sessionId) });
   };
 
   // The shell's answer, and a conversation switch. A tool belongs to a

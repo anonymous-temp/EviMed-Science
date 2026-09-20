@@ -33,7 +33,10 @@ function frame({ commandUi = true, inputTriggers = true } = {}) {
       list: { getSnapshot: () => ({ current: 'session-a' }), subscribe: () => () => {} },
       scope: (/** @type {string} */ id) => (id === 'session-a' ? { id } : undefined),
     },
-    conversation: { input: { for: (/** @type {any} */ scope) => ({ setDraft: (/** @type {string} */ text) => drafts.push([scope.id, text]) }) } },
+    conversation: { input: { for: (/** @type {any} */ scope) => ({
+      setDraft: (/** @type {string} */ text) => drafts.push([scope.id, text]),
+      state: { getSnapshot: () => ({ draft: '老年房颤该不该抗凝？' }) },
+    }) } },
     ...(commandUi ? { commandUi: { register(/** @type {any} */ contribution) { commands.push(contribution); return () => {}; } } } : {}),
     ...(inputTriggers ? { inputTriggers: { registerSource(/** @type {any} */ source) { sources.push(source); return () => {}; } } } : {}),
   });
@@ -79,8 +82,9 @@ test('/工具 binds the conversation it was typed in, and writes nothing into th
   const options = await command.ui.options({ sessionId: 'session-a' }, new globalThis.AbortController().signal);
   assert.equal(options.length, 3, 'the internal capability is not offered');
   command.ui.onSelect(options[1], { sessionId: 'session-a' });
-  assert.deepEqual(f.sent.filter(([type]) => type === 'bind-capability').map(([, fields]) => [fields.capabilityId, fields.sessionId]),
-    [['comprehensive-drug-evaluation', 'session-a']]);
+  assert.deepEqual(f.sent.filter(([type]) => type === 'bind-capability').map(([, fields]) => [fields.capabilityId, fields.sessionId, fields.draft]),
+    [['comprehensive-drug-evaluation', 'session-a', '老年房颤该不该抗凝？']],
+    'the typed question travels with the choice: a binding may cost a fresh conversation');
   assert.deepEqual(f.drafts, [], 'the question stays the researcher\'s own words; the binding carries the tool');
   assert.equal(BODY.name, 'commands');
 });
