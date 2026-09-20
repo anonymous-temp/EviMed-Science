@@ -1,0 +1,30 @@
+{
+ "at": "2026-09-20T15:44:06.082Z",
+ "results": [
+  {
+   "name": "登录",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "全站无衬线",
+   "ok": false,
+   "detail": "2 处"
+  },
+  {
+   "name": "白底",
+   "ok": false,
+   "detail": "rgb(248, 248, 249)"
+  },
+  {
+   "name": "正文 14/22",
+   "ok": true,
+   "detail": "14px/22px"
+  },
+  {
+   "name": "控制台无错误",
+   "ok": true,
+   "detail": ""
+  }
+ ]
+}
