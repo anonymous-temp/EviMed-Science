@@ -53,7 +53,7 @@ export function apply(_ctx, _config, _target = globalThis, _require = undefined,
       style: { ...secondary, color: 'var(--dsw-alias-label-tertiary)', padding: '0 16px 0 20px', textAlign: 'right' },
     }, text)
     : null);
-  kit.guarded('busy hint', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-busy-hint' }, BusyHint));
+  kit.guarded('busy hint', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-busy-hint', order: 30 }, BusyHint));
 }
 
 /** The body as the socket's build composes it. */

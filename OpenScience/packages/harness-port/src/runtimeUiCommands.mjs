@@ -357,7 +357,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         model.minutes ? h('span', { style: quiet }, model.minutes) : null,
         h('button', { type: 'button', 'aria-label': `不再用「${model.title}」`, style: { ...button, marginLeft: 0 }, onClick: () => bind(null) }, '移除'));
     };
-    kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-tool' }, ToolChip));
+    kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-tool', order: 20 }, ToolChip));
   }
 
   // `@` knowledge-base references.

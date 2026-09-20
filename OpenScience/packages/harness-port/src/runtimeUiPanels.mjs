@@ -447,7 +447,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         ? h('div', { style: { ...quiet, whiteSpace: 'normal', color: 'var(--dsw-alias-state-warn-label)' } }, '引用前请在报告里核对带 ⚠ 的结论。')
         : null);
   };
-  kit.guarded('delivery card', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-delivery' }, DeliveryCard));
+  kit.guarded('delivery card', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-delivery', order: 10 }, DeliveryCard));
 
   kit.guarded('run view', () => kit.occupy({ slot: 'conversation.view', id: view.id, order: view.order, label: () => view.label }, RunView));
   for (const tab of tabs) {
