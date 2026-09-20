@@ -9,7 +9,7 @@ import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { AgentsSkeleton } from "@/components/cards/Skeletons";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
 
 /**
@@ -72,13 +72,11 @@ export function CapabilitiesPage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-content-wide px-6 py-8">
-        <PageHeader
-          title="科研工具"
-          description="选一项工具，直接进入对话开始提问；工具的说明、示例和它做不到的事都在对话上方。"
-        />
-
+    <PageShell
+      title="科研工具"
+      description="选一项工具，直接进入对话开始提问；工具的说明、示例和它做不到的事都在对话上方。"
+      width="wide"
+    >
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">搜索科研工具</span>
@@ -153,8 +151,7 @@ export function CapabilitiesPage() {
             </section>
           ))}
         </div>
-      </div>
-    </div>
+    </PageShell>
   );
 }
 

@@ -58,117 +58,22 @@ export const inject = [];
 export const THEME_LAYER_SOURCE = '@evimed/dsh-socket';
 
 /**
- * The layer, token name → `{ light, dark }`.
+ * The override layer's table, as the build inlined it.
+ *
+ * The values are `packages/domain/src/designTokens.mjs` — the one module the
+ * shell's stylesheet and Tailwind theme are generated from — carried here as
+ * data in the frame's vocabulary, because a body may import nothing. This
+ * function is the read, not the decision: it used to be a second copy of the
+ * ramp, and the shell and the frame drifted apart on three of its sixty rows.
+ *
+ * @param {any} [vocabulary] the frame kit's build-time table
  * @returns {Record<string, { light: string, dark: string }>}
  */
-export function evimedThemeTokens() {
-  /** @param {string} light @param {string} [dark] */
-  const both = (light, dark = light) => ({ light, dark });
-  // Direction A. Brand (OKLCH H=185), cold neutral (H=232), semantic (§7.3).
-  const brand = { 50: '#f0fbf9', 100: '#e1f7f3', 200: '#c3ece6', 300: '#98dbd2', 400: '#63c5b9', 500: '#26ac9f', 600: '#008f84', 700: '#00756b', 800: '#005e56', 900: '#004841' };
-  // `strong` is the control border. Appendix D's #8e969b is 2.83:1 on the
-  // page ground; #8b9195 clears 3:1 and is the value the shell ships (DESIGN.md).
-  const n = { 50: '#f8f8f9', 100: '#f0f1f2', 150: '#e9ebed', 200: '#dfe2e4', 300: '#c8cdcf', 400: '#acb2b5', 500: '#90979b', 600: '#767d81', 700: '#606669', 800: '#4c5154', 900: '#3a3e40', 950: '#242628', strong: '#8b9195' };
-  const dark = { bg: '#14181a', surface: '#1d2225', surface2: '#272d30', faint: '#292f32', border: '#3a4044', strong: '#646c71' };
-  const danger = { 300: '#ffb7ae', 400: '#ff8b7f', 600: '#cf463e', 700: '#af302b' };
-  const warn = { 50: '#fff7ef', 300: '#efc392', 600: '#ab6c00', 700: '#8c5700' };
-  const ok = { 50: '#f3fbf4', 300: '#aadbb3', 600: '#3a9052', 700: '#25773e' };
-  const info = { 300: '#aacfff', 400: '#79b4ff', 600: '#1f7ae0', 700: '#0362bf' };
-  const fontFamily = 'Inter, "SF Pro Text", system-ui, "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
-  // Conversation prose keeps the size the reader chose (12–17 px) and only the
-  // leading changes, to 1.75 (§7.6, §8): CJK body text needs more than Latin,
-  // and upstream's was a fixed 24 px — 1.71 at the default size, tighter above.
-  const proseLine = 'calc(var(--dsh-content-font-size, 14px) * 1.75)';
-  const prose = (/** @type {string} */ lead) => both(`${lead}var(--dsh-content-font-size, 14px) / ${proseLine} var(--dsw-font-family)`);
-  return {
-    // The ramp, by what still reads it (see the module note).
-    // 500 + 200: the working line is a lightness shimmer between the muted and
-    // the text colour, no hue (§6.3, §7.6); 500 also colours three file icons,
-    // which read as neutral glyphs.
-    '--dsw-static-deepseek-500': both(n[700], n[400]),
-    '--dsw-static-deepseek-200': both(n[950], n[100]),
-    // 450: the running dot is info blue (§7.5: 4.27:1 light, 7.48:1 dark; a
-    // graphic needs 3:1 — the brand's own 500 step would be 2.81:1).
-    '--dsw-static-deepseek-450': both(info[600], info[400]),
-    // No direct reader left; the brand steps, for anything added later.
-    '--dsw-static-deepseek-50': both(brand[50]),
-    '--dsw-static-deepseek-100': both(brand[100]),
-    '--dsw-static-deepseek-400': both(brand[400]),
-    // Accents.
-    '--dsw-alias-button-info-fill': both(brand[700]),
-    '--dsw-alias-button-info-hover': both(brand[800]),
-    '--dsw-alias-link': both(info[700], info[300]),
-    '--dsw-alias-state-business-primary': both(brand[700], brand[400]),
-    '--dsw-alias-state-business-tertiary': both(brand[100], brand[900]),
-    '--dsw-alias-markdown-citation': both(brand[700], brand[400]),
-    '--dsw-alias-bg-multi-select': both(brand[100], brand[900]),
-    '--dsw-alias-interactive-bg-hover-accent': both(brand[100], brand[900]),
-    // Surfaces: canvas, then layers (the light layers step down in lightness,
-    // the dark ones up).
-    '--dsw-alias-bg-base': both('#ffffff', dark.bg),
-    '--dsw-alias-bg-layer-1': both(n[50], dark.surface),
-    '--dsw-alias-bg-layer-2': both(n[100], dark.surface2),
-    '--dsw-alias-bg-layer-3': both(n[150], dark.faint),
-    '--dsw-alias-bg-module-platform': both(n[100], dark.surface2),
-    '--dsw-alias-bg-overlay': both(n[200], dark.border),
-    // Menus and pickers (the slash menu, the @ picker, the subagent menu)
-    // derive from layer 3 upstream; left there they would turn grey. They are
-    // the popover surface, as in the shell.
-    '--dsw-specific-menu': both('#ffffff', dark.surface2),
-    '--dsw-specific-bubble': both(brand[50], dark.surface2),
-    '--dsw-specific-bubble-highlight': both(brand[100], dark.border),
-    '--dsw-specific-input-major': both('#ffffff', dark.surface),
-    '--dsw-specific-selector': both(n[100], dark.surface2),
-    '--dsw-specific-tip': both(n[100], dark.surface2),
-    '--dsw-specific-sidebar-fill': both(n[50], dark.bg),
-    '--dsw-specific-sidebar-nav-item-active': both(brand[100], brand[900]),
-    '--dsw-specific-sidebar-nav-item-hover': both(n[100], dark.surface2),
-    // Its one reader is the 「推荐」 badge of a question card, whose text is
-    // the send button's fill; a light chip is the only ground that carries it
-    // in both schemes (5.00:1).
-    '--dsw-specific-sidebar-nav-item-active-accent': both(brand[100]),
-    // Text. One reading of §7.6, which maps tertiary to n-600: that is 4.18:1
-    // on white, below AA for the kernel's most-read text token (tool
-    // summaries, metadata, the transcript's secondary lines). Secondary and
-    // tertiary each sit one step darker than that row, so every text token but
-    // the caption clears 4.5:1 on every light surface, and tertiary equals the
-    // shell's own `--muted` (n-700).
-    '--dsw-alias-label-primary': both(n[950], n[100]),
-    '--dsw-alias-label-secondary': both(n[800], n[300]),
-    '--dsw-alias-label-tertiary': both(n[700], n[400]),
-    '--dsw-alias-label-caption': both(n[600], n[500]),
-    '--dsw-alias-label-dimmed': both(n[300], n[800]),
-    '--dsw-alias-label-primary-dimmed': both(n[900], n[200]),
-    '--dsw-alias-label-primary-bluish': both(brand[900], n[100]),
-    // Borders: hairline to control boundary (l4 backs every input and elevated
-    // stroke, and is the 3:1 control edge of §7.5).
-    '--dsw-alias-border-l1': both(n[150], dark.faint),
-    '--dsw-alias-border-l2': both(n[200], dark.border),
-    '--dsw-alias-border-l2-darkmode-thin': both(n[200], dark.faint),
-    '--dsw-alias-border-l3': both(n[300], n[800]),
-    '--dsw-alias-border-l4': both(n.strong, dark.strong),
-    // States. Red is spent on danger alone; warning is amber, success green.
-    '--dsw-alias-state-error-primary': both(danger[700], danger[300]),
-    '--dsw-alias-state-error-secondary': both(danger[600], danger[400]),
-    '--dsw-alias-state-warn-primary': both(warn[700], warn[300]),
-    '--dsw-alias-state-warn-secondary': both(warn[600], warn[300]),
-    '--dsw-alias-state-warn-tertiary': both(warn[50], '#27241f'),
-    '--dsw-alias-state-warn-label': both(warn[700], warn[300]),
-    '--dsw-alias-state-success-primary': both(ok[700], ok[300]),
-    '--dsw-alias-state-success-secondary': both(ok[600], ok[300]),
-    '--dsw-alias-state-success-tertiary': both(ok[50], '#233c2c'),
-    // Type: the shell's stack, and prose leading.
-    '--dsw-font-family': both(fontFamily),
-    '--dsw-font-markdown-base': prose(''),
-    '--dsw-font-markdown-base-strong': prose('600 '),
-    '--dsw-font-markdown-base-italic': prose('italic '),
-    '--dsw-font-markdown-base-strong-italic': prose('italic 600 '),
-    '--dsw-font-markdown-base-line-height': both(proseLine),
-    '--dsw-font-markdown-base-strong-line-height': both(proseLine),
-    '--dsw-font-markdown-base-italic-line-height': both(proseLine),
-    '--dsw-font-markdown-base-strong-italic-line-height': both(proseLine),
-  };
+export function evimedThemeTokens(vocabulary) {
+  const tokens = vocabulary && vocabulary.themeTokens;
+  return tokens && typeof tokens === 'object' ? tokens : {};
 }
+
 
 /**
  * @param {any} ctx Native Cordis client context.
@@ -179,7 +84,7 @@ export function evimedThemeTokens() {
  */
 export function apply(ctx, _config, target = globalThis, _require = undefined, kit = undefined) {
   if (!kit || !kit.ours) return;
-  const tokens = evimedThemeTokens();
+  const tokens = evimedThemeTokens(kit.vocabulary);
   const source = '@evimed/dsh-socket';
   const probe = '--dsw-static-deepseek-500';
   kit.withServices(['theme'], (/** @type {any} */ scope) => {
@@ -201,7 +106,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     scope.effect(() => scope.on('theme/change', (/** @type {any} */ snapshot) => {
       if (!live) return;
       const scheme = snapshot?.active?.colorScheme === 'dark' ? 'dark' : 'light';
-      if (snapshot?.active?.tokens?.[probe] === tokens[probe][scheme]) return;
+      if (!tokens[probe] || snapshot?.active?.tokens?.[probe] === tokens[probe][scheme]) return;
       if (restored >= 5) return;
       restored++;
       layer();
