@@ -1142,7 +1142,7 @@ describe("apiClient budget refusals", () => {
 
     const error = await client.fetchWebAccountUsage().catch((err: unknown) => err) as InstanceType<typeof client.WebApiError>;
     expect(error.retryAfterSeconds).toBeNull();
-    expect(client.webErrorMessage(error)).toBe("文件超过上限，请用本地代理处理。");
+    expect(client.webErrorMessage(error)).toBe("文件超过单次上传上限。请拆分后再传，或把它放进已接入的资料目录由知识库导入。");
   });
 
   // The declared-details table now lives in `@evimed/domain` and covers all

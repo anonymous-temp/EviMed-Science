@@ -826,7 +826,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   connector_rate_limited: '网盘限速，已排队稍后继续。',
   connector_unauthorized: '网盘授权已失效，请重新授权。',
   connector_unavailable: '网盘暂时连不上，已排队重试。',
-  source_too_large: '文件超过上限，请用本地代理处理。',
+  // No local agent ships, and none is planned: the connector id stayed a
+  // constant nothing registers, and the page that advertised it was corrected
+  // on 2026-09-07. This sentence was the last place still sending a researcher
+  // to look for it.
+  source_too_large: '文件超过单次上传上限。请拆分后再传，或把它放进已接入的资料目录由知识库导入。',
   source_duplicate: '这份资料已经存在。',
   source_missing: '原始库里找不到这份资料了，派生内容已保留。',
   credits_exhausted: '额度已用尽，充值后即可继续。',
