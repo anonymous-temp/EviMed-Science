@@ -26,7 +26,10 @@ const LIVE = {
       { id: 'brief', title: '临床决策简报', status: 'planned', attempts: 0 },
     ],
     phaseCounts: { search: 4, screen: 2, fulltext: 1, claims: 0, write: 0, deliver: 0 },
-    currentPhase: 'screen',
+    // What the control plane sends since it decides both: the phases reached,
+    // in order, and the furthest of them.
+    reachedPhases: ['search', 'screen', 'fulltext'],
+    currentPhase: 'fulltext',
     sources: { searched: 120, included: 18, fullText: 6 },
     claims: { total: 0, verified: 0 },
     children: [{ childSessionId: 'child-1', deliverableId: 'evidence', state: 'running', lastActivityAt: null }],
@@ -75,6 +78,9 @@ test('the run view reads the run: phases reached, counts, cost and each piece of
   // Only phases something happened in, and 「当前」 is the furthest reached —
   // not whichever labelled call happened to be last.
   assert.deepEqual(model.phases.map((/** @type {any} */ phase) => `${phase.label}${phase.count}${phase.current ? '*' : ''}`), ['检索4', '筛选2', '全文1*']);
+  // An older control plane sends neither; the counts say the same thing.
+  const legacy = /** @type {any} */ (progressModel({ ...LIVE, progress: { ...LIVE.progress, reachedPhases: undefined, currentPhase: null } }, 1_000_000 + 125_000, kit()));
+  assert.deepEqual(legacy.phases.map((/** @type {any} */ phase) => `${phase.label}${phase.count}${phase.current ? '*' : ''}`), ['检索4', '筛选2', '全文1*']);
   assert.equal(model.sources, '检索 120 次 · 纳入 18 篇 · 全文 6 篇');
   assert.equal(model.claims, null, 'no conclusions yet says nothing rather than 「结论 0 条」');
   assert.deepEqual(model.deliverables.map((/** @type {any} */ item) => [item.title, item.status, item.childState, item.attempts, item.verdict?.text ?? null, item.childSessionId]), [

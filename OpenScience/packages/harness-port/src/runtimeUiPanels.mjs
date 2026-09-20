@@ -103,9 +103,17 @@ export function progressModel(live, now, kit) {
   const vocabulary = kit.vocabulary || {};
   const phaseLabels = vocabulary.phaseLabels || {};
   const counts = progress.phaseCounts && typeof progress.phaseCounts === 'object' ? progress.phaseCounts : {};
+  // The control plane already decides both (`summarizeRunPhases`): which
+  // phases a run reached, in order, and the furthest of them. Deriving them a
+  // second time here is how the frame and the ledger came to disagree about
+  // what 「当前」 meant; an older control plane that sends neither still reads
+  // right, because the counts say the same thing.
   const order = Array.isArray(vocabulary.phases) ? vocabulary.phases : [];
-  const reached = order.filter((/** @type {string} */ key) => Number(counts[key]) > 0);
-  const furthest = reached.length ? reached[reached.length - 1] : null;
+  const reported = Array.isArray(progress.reachedPhases) ? progress.reachedPhases.filter((/** @type {string} */ key) => order.includes(key)) : null;
+  const reached = reported && reported.length ? reported : order.filter((/** @type {string} */ key) => Number(counts[key]) > 0);
+  const furthest = typeof progress.currentPhase === 'string' && reached.includes(progress.currentPhase)
+    ? progress.currentPhase
+    : (reached.length ? reached[reached.length - 1] : null);
   const phases = reached.map((/** @type {string} */ key) => ({
     key,
     label: phaseLabels[key] ?? key,
