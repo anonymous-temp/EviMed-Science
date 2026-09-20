@@ -801,7 +801,7 @@ function methodSection(input) {
  *
  * @param {{ manifest: Record<string, any>, item?: Record<string, any> | null, contractKind?: string,
  *   skillBodies: readonly { name: string, body: string }[], deferredSections?: readonly { name: string }[],
- *   capsuleMethods?: readonly { name: string, body: string }[] }} input
+ *   capsuleMethods?: readonly { name: string, body: string }[], reviewEnabled?: boolean }} input
  * @returns {string}
  */
 export function buildInlineMethod(input) {
@@ -821,7 +821,7 @@ export function buildInlineMethod(input) {
       ? outputs.map((/** @type {any} */ output) => `- \`deliverables/${input.item?.id}/${output.path}\`${output.required ? '（必需）' : '（可选）'}`)
       : ['- 计划里写下交付物之后，文件写在 `deliverables/<交付物 id>/` 下。']),
     '',
-    `写完调用 \`evimed_submit_deliverable\`：它会先整理编号与参考文献表，再跑门禁，再叫独立审查者，一次返回三者的结果。未通过就按 issues 修好再提交；本轮对话结束前文件都还能改。`,
+    `写完调用 \`evimed_submit_deliverable\`：它会先整理编号与参考文献表，再跑门禁${input.reviewEnabled ? '，再叫独立审查者，一次返回三者的结果' : '，一次返回裁定'}。未通过就按 issues 修好再提交；本轮对话结束前文件都还能改。`,
     '',
     '</evimed-method>',
   ].join('\n')

@@ -547,7 +547,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     // is worse than no method at all.
     const scope = rootScopes.get(agent)
     if (scope) applyRootNarrowing(agent, [...scope.allowed, ...delegationToolFilter(manifest, { allowBash: true, contractKind })])
-    const skillBodies = await readSkillBodies(ctx, config.skillsDir, manifest)
+    /** @type {{ name: string, body: string }[]} */
+    let skillBodies = []
+    try {
+      skillBodies = await readSkillBodies(ctx, config.skillsDir, manifest)
+    } catch (error) {
+      diagnostics(entry.sessionId)?.degrade?.(`capability method unreadable: ${errorMessage(error)}`)
+      return false
+    }
     const method = capSkillBodies(skillBodies, { skillsDir: config.skillsDir })
     try {
       injectContext(agent, buildInlineMethod({
@@ -557,6 +564,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         skillBodies: method.inline,
         deferredSections: method.deferred,
         capsuleMethods: ctx.get('evimedCapsuleMethods') ?? [],
+        reviewEnabled: config.reviewEnabled,
       }), name)
     } catch (error) {
       diagnostics(entry.sessionId)?.degrade?.(`inline capability method not injected: ${errorMessage(error)}`)
@@ -865,6 +873,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    * @returns {Promise<void>}
    */
   const finalizeTurn = async (entry) => {
+    try {
+      await sealTurn(entry)
+    } catch (error) {
+      diagnostics(entry.sessionId)?.degrade?.(`turn finalisation failed: ${errorMessage(error)}`)
+    }
+  }
+
+  /** @param {Record<string, any>} entry @returns {Promise<void>} */
+  const sealTurn = async (entry) => {
     const cwd = entry.cwd
     const partial = entry.items.some((/** @type {any} */ item) => item.status !== 'accepted')
     const check = completionCheck({
