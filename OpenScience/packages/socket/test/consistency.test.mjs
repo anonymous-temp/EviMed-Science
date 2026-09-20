@@ -233,6 +233,8 @@ test("a delegated child reads the child guidance instead of the orchestration gu
   assert.ok(presetSections.some((section) => section.name === "evimed:answer-persona" && section.text.includes("Answer first.")), "the persona is on the preset for the root");
   const orchestration = presetSections.find((section) => section.name === GUIDANCE_SECTION_NAME);
   assert.match(orchestration.text, /evimed_delegate/);
+  assert.doesNotMatch(orchestration.text, /先查记忆与胶囊/, "recall is a condition, not step one of a fixed order");
+  assert.match(orchestration.text, /需要用户既往的资料、口径或偏好时再查/);
 
   const start = (/** @type {any} */ agent) => { for (const handler of ctx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent, source: "startup" }); };
   /** @type {any[]} */
@@ -244,7 +246,7 @@ test("a delegated child reads the child guidance instead of the orchestration gu
   const child = childSections[0].text;
   assert.match(child, /<evimed-delegated>/);
   assert.doesNotMatch(child, /evimed_plan|evimed_delegate|evimed_complete_run|能力目录|契约种类/, "nothing about running a run the child cannot run");
-  for (const kept of ["## 检索顺序", "## 注入的上下文怎么用", "## 引文卫生", "## 安全", "evimed_capsule_recall"]) {
+  for (const kept of ["## 去哪里找证据", "## 注入的上下文怎么用", "## 引文卫生", "## 安全", "## 对用户说话", "evimed_capsule_recall"]) {
     assert.ok(child.includes(kept), `the child keeps ${kept}`);
   }
   // The shared rules are the root's own text, not a second copy to drift.
@@ -597,7 +599,9 @@ test("every plugin mounts against a registry with the harness's own precondition
   }
 
   const byPlugin = Object.fromEntries(mounted);
-  assert.deepEqual(byPlugin["run-policy"].sort(), ["evimed_await", "evimed_claim_upsert", "evimed_complete_run", "evimed_delegate", "evimed_package_check", "evimed_plan", "evimed_render_report", "evimed_revise_deliverable", "evimed_submit_deliverable"]);
+  // No completion tool: a conversation turn ending is the run ending, and
+  // nothing the model calls may be able to refuse it (2026-09-20).
+  assert.deepEqual(byPlugin["run-policy"].sort(), ["evimed_await", "evimed_claim_upsert", "evimed_delegate", "evimed_package_check", "evimed_plan", "evimed_render_report", "evimed_revise_deliverable", "evimed_submit_deliverable"]);
   assert.deepEqual(byPlugin.review, ["evimed_review_run"]);
   assert.deepEqual(byPlugin.screening, ["evimed_screen_batch"]);
   assert.deepEqual(byPlugin.capsule.sort(), ["evimed_capsule_note", "evimed_capsule_recall"]);
@@ -729,8 +733,8 @@ test("a root session is shown only its own research tools, in its own scope, onc
   assert.ok(degraded.some((line) => /found no research tools registered/.test(line)), `an empty narrowing is said out loud: ${JSON.stringify(degraded)}`);
 });
 
-/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number, structuralAttemptAllowance?: number, knowledge?: string[]|null }} [options] */
-async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, knowledge = null } = {}) {
+/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number, structuralAttemptAllowance?: number, knowledge?: string[]|null, skills?: Record<string, string>|null, registered?: string[]|null, reviewEnabled?: boolean }} [options] */
+async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, knowledge = null, skills = null, registered = null, reviewEnabled = false } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
   const rows = new Map();
@@ -739,7 +743,16 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   const files = new Map();
   /** @type {any[]} */
   const injected = [];
-  const agent = { id: "native-agent", session: { id: "native-session", header: { cwd: "/workspace", ...(child ? { origin: "subagent" } : {}) } }, inject: (/** @type {any} */ message) => injected.push(message) };
+  /** Every tool restriction this session was narrowed by, in order. @type {any[]} */
+  const filters = [];
+  const agent = {
+    id: "native-agent",
+    session: { id: "native-session", header: { cwd: "/workspace", ...(child ? { origin: "subagent" } : {}) } },
+    // The root's own scope, as the registry gives it: a restriction is a
+    // disposer, and widening it again is disposing and re-applying.
+    ctx: { tools: { restrict: (/** @type {any} */ filter) => { filters.push(filter); return () => { filter.disposed = true; }; } } },
+    inject: (/** @type {any} */ message) => injected.push(message),
+  };
   ctx.provide("agents", { get: () => agent });
   ctx.provide("evimedRun", {
     runMirror: { put: async (/** @type {string} */ key, /** @type {any} */ value) => rows.set(key, value) },
@@ -755,11 +768,20 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   /** @type {any} */ (ctx).subagents = { start: subagentStart ?? (() => { throw new Error("unexpected subagent start"); }) };
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
-    readText: async (/** @type {string} */ target) => target === "//runtime/revision-token" ? "test-workload-token" : target.endsWith(workspaceLayout.briefIndexFile) && briefId ? JSON.stringify({ runId: briefId }) : files.get(target) ?? null,
+    readText: async (/** @type {string} */ target) => {
+      if (target === "//runtime/revision-token") return "test-workload-token";
+      if (target.endsWith(workspaceLayout.briefIndexFile) && briefId) return JSON.stringify({ runId: briefId });
+      for (const [name, body] of Object.entries(skills ?? {})) {
+        if (target.endsWith(`/skills/${name}/SKILL.md`)) return body;
+      }
+      return files.get(target) ?? null;
+    },
     writeText: async (/** @type {string} */ target, /** @type {string} */ text) => { files.set(target, text); },
     listDir: async (/** @type {string} */ target) => (target === `/workspace/${workspaceLayout.knowledgeDir}` && knowledge ? knowledge.map((/** @type {string} */ name) => ({ name })) : []),
   });
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
+  if (registered) /** @type {any} */ (ctx.tools).schemas = () => registered.map((name) => ({ name }));
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000, skillsDir: "/skills", reviewEnabled });
+  const start = () => { for (const handler of ctx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent, source: "startup" }); };
   const step = async (/** @type {number} */ turn) => {
     for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) {
       const decision = await handler({ agent, turn, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] }));
@@ -767,7 +789,16 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     }
   };
   const execute = (/** @type {string} */ name, /** @type {any} */ args, /** @type {Record<string, any>} */ extra = {}) => ctx.tools.execute({ agent, name, callId: `call-${name}`, arguments: args, signal: AbortSignal.timeout(2000), ...extra });
-  return { ctx, rows, childRows, files, injected, agent, step, execute };
+  // The end of a turn is the end of the run (2026-09-20): the delivery summary
+  // is written here, the completeness findings become notices, and the accepted
+  // bytes are frozen. There is no completion tool to call.
+  const endTurn = async (/** @type {string} */ kind = "completed") => {
+    for (const handler of ctx.listeners.get(SEAMS.events.sessionEvent) ?? []) {
+      handler(agent.session, { type: "turn/end", seq: 9, data: { reason: { kind } } });
+    }
+    for (let tick = 0; tick < 20; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+  return { ctx, rows, childRows, files, injected, filters, agent, step, start, execute, endTurn };
 }
 
 test("each session-scoped dispatch revision is logged once before its model step", async () => {
@@ -917,7 +948,8 @@ test("a deliverable whose submissions are spent is not delegated again, and the 
   const again = await f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
   assert.equal(again.value.ok, false);
   assert.equal(again.value.code, "deliverable_attempts_spent");
-  assert.match(again.value.issues[0].message, /evimed_complete_run\{partial:true\}/);
+  assert.match(again.value.issues[0].message, /本轮到此为止/, "the advice is to finish the answer, not to call a tool");
+  assert.doesNotMatch(again.value.issues[0].message, /evimed_complete_run/);
   assert.match(again.value.issues[0].message, /按「未核验」交付/);
   assert.equal(children, 0, "no child is started for a deliverable that can no longer submit");
 });
@@ -1267,11 +1299,229 @@ test("a native root without a brief gets one stable isolated workflow id, while 
   assert.equal(child.rows.size, 0, "the root fallback must not mint child workflow identities");
 });
 
+test("a session that does the work itself is handed the capability's method, its tools and the skill receipt", async () => {
+  // Delegation is on demand (2026-09-20), so 「do it in this conversation」 is
+  // the default — and a session told to do the work without the capability's
+  // method is a session that works without a method. A child got the skill
+  // bodies, the persona and the manifest's tools; the root now gets the same
+  // three, through the same skill receipt the control plane's completion check
+  // reads.
+  const { MCP_TOOL_NAMES: mcpNames } = await import("@evimed/domain");
+  const method = "# 临床证据综合\n\n逐条记录主张，并对每条引文逐字核对。\n";
+  const f = await nativePolicyFixture({
+    briefId: "inline-owner",
+    registered: [...mcpNames, "bash", "read", "skill"],
+    skills: { "clinical-evidence-synthesis": method },
+    capabilities: [{
+      id: "clinical-evidence-synthesis",
+      skills: ["clinical-evidence-synthesis"],
+      tools: ["mcp__evimed__meta_analysis"],
+      persona: "你是循证医学分析师。",
+      produces: [{
+        contractKind: "clinical-evidence-report",
+        outputs: [{ path: "clinical-evidence-report.md", required: true }, { path: "clinical-evidence-matrix.json", required: true }],
+      }],
+    }],
+  });
+  /** @type {string[]} */
+  const injectedSkills = [];
+  f.ctx.provide("evimedDiagnostics", { degrade() {}, notice() {}, injectedSkill: (/** @type {string} */ name) => injectedSkills.push(name) });
+  f.start();
+  assert.equal(f.filters.length, 2, "the root is narrowed at session start, before its first request is assembled");
+  assert.ok(f.filters[1].deny.includes("mcp__evimed__meta_analysis"), "the capability's own tool starts out hidden from the root");
+
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["成人人群"],
+    deliverables: [{ id: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", title: "证据综合", dependsOn: [] }],
+  });
+
+  // The method, the persona and the files it owes, in the session itself.
+  const handed = f.injected.map((/** @type {any} */ message) => message.content?.[0]?.text ?? "").join("\n");
+  assert.match(handed, /<evimed-method capability="clinical-evidence-synthesis">/);
+  assert.ok(handed.includes(method), "the capability's own skill body, not a paraphrase of it");
+  assert.match(handed, /你是循证医学分析师。/, "and its persona");
+  assert.match(handed, /deliverables\/d1\/clinical-evidence-report\.md/, "and the files this deliverable owes");
+
+  // The tools a delegated child would have had. The claim tools come with the
+  // matrix in the contract; the capability's own research tool stops being
+  // denied. Widening is disposing the old restriction and applying a smaller
+  // one — the registry intersects them, so there is no other way.
+  assert.ok(f.filters.length > 2, "the narrowing must be re-applied, not added to");
+  assert.equal(f.filters[0].disposed, true);
+  assert.equal(f.filters[1].disposed, true);
+  const widened = f.filters.slice(2);
+  assert.equal(widened.length, 1, `only the research narrowing is left to apply: ${JSON.stringify(widened)}`);
+  assert.equal(
+    widened.some((/** @type {any} */ filter) => (filter.deny ?? []).includes("evimed_claim_upsert")),
+    false,
+    "an evidence matrix means the claim tools are this session's",
+  );
+  const researchDeny = widened[0].deny;
+  assert.ok(!researchDeny.includes("mcp__evimed__meta_analysis"), "the capability's tool is available where the work is done");
+  assert.ok(researchDeny.includes("mcp__evimed__comprehensive_drug_evaluation"), "and everything it did not ask for stays hidden");
+
+  // The receipt: the same channel a delegation writes, which is what the
+  // control plane's completion check reads out of the run-state projection.
+  assert.deepEqual(injectedSkills, ["clinical-evidence-synthesis"]);
+
+  // Once only, however many times the plan is rewritten.
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["成人人群"],
+    deliverables: [{ id: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", title: "证据综合（修订）", dependsOn: [] }],
+  });
+  assert.deepEqual(injectedSkills, ["clinical-evidence-synthesis"]);
+});
+
+test("two capabilities in one plan are delegations, not an inline method", async () => {
+  // What delegation is actually for: independent work that can run in
+  // parallel. A plan naming two capabilities is that case, and neither method
+  // is injected into the parent — the children get their own.
+  const method = "# 方法\n";
+  const f = await nativePolicyFixture({
+    briefId: "two-capability-owner",
+    skills: { alpha: method, beta: method },
+    capabilities: [
+      { id: "alpha", skills: ["alpha"], tools: [], persona: "A", produces: [{ contractKind: "research-brief", outputs: [{ path: "brief.md", required: true }] }] },
+      { id: "beta", skills: ["beta"], tools: [], persona: "B", produces: [{ contractKind: "research-brief", outputs: [{ path: "brief.md", required: true }] }] },
+    ],
+  });
+  f.start();
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["两件互不依赖"],
+    deliverables: [
+      { id: "d1", contractKind: "research-brief", capability: "alpha", title: "A", dependsOn: [] },
+      { id: "d2", contractKind: "research-brief", capability: "beta", title: "B", dependsOn: [] },
+    ],
+  });
+  const handed = f.injected.map((/** @type {any} */ message) => message.content?.[0]?.text ?? "").join("\n");
+  assert.doesNotMatch(handed, /<evimed-method/, "with two independent capabilities the work is delegated, and a child carries its own method");
+});
+
+test("submission renders the numbering before it judges anything", async () => {
+  // The numbering is a rendered artifact, not typed prose (principle 10c).
+  // `evimed_render_report` existed and the run did not call it: on 2026-09-20 a
+  // child renumbered its citations with three `bash` edits, and the delivered
+  // report's body ran one ahead of its reference list from [5] on. A step
+  // another step depends on is a data dependency, not a sentence.
+  const f = await nativePolicyFixture({
+    briefId: "render-owner",
+    capabilities: [{
+      id: "clinical-evidence-synthesis",
+      skills: [],
+      tools: [],
+      persona: "分析师",
+      produces: [{
+        contractKind: "clinical-evidence-report",
+        outputs: [{ path: "clinical-evidence-report.md", required: true }, { path: "clinical-evidence-matrix.json", required: true }],
+      }],
+    }],
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["成人人群"],
+    deliverables: [{ id: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", title: "证据综合", dependsOn: [] }],
+  });
+  const reportPath = "/workspace/deliverables/d1/clinical-evidence-report.md";
+  f.files.set(reportPath, [
+    "# 报告",
+    "",
+    "第一句结论 [2]。",
+    "",
+    "第二句结论 [1]。",
+    "",
+    "## 参考文献",
+    "",
+    "1. Alpha et al. Journal A. 2024. PMID: 11111111",
+    "2. Beta et al. Journal B. 2023. PMID: 22222222",
+    "",
+  ].join("\n"));
+  f.files.set("/workspace/deliverables/d1/clinical-evidence-matrix.json", JSON.stringify({ claims: [] }));
+
+  // The gate will reject this package for its content; what matters here is
+  // that the numbering was put in order first, on the files it then judged.
+  const submitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+  assert.equal(submitted.value.ok, false, "an empty matrix is not a deliverable package");
+  assert.equal(submitted.value.data.rendered.renumbered, true, `the submission reports what it rendered: ${JSON.stringify(submitted.value.data)}`);
+  const rewritten = f.files.get(reportPath);
+  assert.match(rewritten, /第一句结论 \[1\]/, "the first citation in reading order is [1]");
+  assert.match(rewritten, /第二句结论 \[2\]/);
+  assert.match(rewritten, /1\. Beta et al/, "and the reference list follows the body, not the other way round");
+});
+
+test("a submission brings back the gate's verdict and the independent review in one value", async () => {
+  // 「审查完再提交」 was a sentence in a 1,839-line method body, and the run
+  // that mattered skipped it: submission froze the package before anybody had
+  // looked at it. `contradicted` comes back as something to fix while the files
+  // are still editable; `weakened` comes back as advice; neither withholds the
+  // delivery (2026-09-17).
+  /** @type {any[]} */
+  const started = [];
+  const f = await nativePolicyFixture({
+    briefId: "review-owner",
+    reviewEnabled: true,
+    subagentStart: (/** @type {string} */ _provider, /** @type {any} */ options) => {
+      started.push(options);
+      return {
+        id: "review-child",
+        result: Promise.resolve({
+          stopReason: "completed",
+          structured: {
+            verdicts: [
+              { claimId: "CLM-001", verdict: "contradicted", grounds: "来源说的是相反方向。" },
+              { claimId: "CLM-002", verdict: "weakened", grounds: "样本量不支持这个强度。" },
+              { claimId: "CLM-003", verdict: "stands", grounds: "核对无误。" },
+            ],
+          },
+        }),
+      };
+    },
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded report"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }],
+  });
+  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA synthetic summary.\n");
+
+  const submitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+  assert.equal(submitted.value.ok, true, JSON.stringify(submitted.value));
+  assert.equal(submitted.value.data.review.status, "done");
+  assert.equal(submitted.value.data.review.mustFix, 1);
+  assert.equal(submitted.value.data.review.advice, 1);
+  const severities = submitted.value.issues.map((/** @type {any} */ issue) => [issue.code, issue.severity]);
+  assert.deepEqual(severities, [["review_contradicted", "required"], ["review_weakened", "advisory"]]);
+  assert.match(submitted.value.issues[0].message, /结论 CLM-001 与独立审查者查到的证据相矛盾：来源说的是相反方向。/, "the finding is a sentence a researcher reads");
+
+  // And the reviewer was pointed at this conversation's deliverables. One
+  // project's workspace holds every conversation that ran in it: a GEO run's
+  // review came back carrying another conversation's aspirin claims.
+  assert.equal(started.length, 1, "one review per submission that could be delivered");
+  const prompt = Array.isArray(started[0].prompt)
+    ? started[0].prompt.map((/** @type {any} */ part) => String(part?.text ?? "")).join("\n")
+    : String(started[0].prompt);
+  assert.match(prompt, /`deliverables\/d1\/`/);
+  assert.match(prompt, /这几个目录之外的文件不属于本次对话/);
+
+  // A rejected package is repaired first; nothing is reviewed until there is a
+  // version that could be delivered.
+  const rejected = await f.execute("evimed_submit_deliverable", { deliverableId: "nope" });
+  assert.equal(rejected.value.ok, false);
+  assert.equal(started.length, 1);
+});
+
 test("a completed native workflow may plan again and its receipt names actual workspace files", async () => {
   const f = await nativePolicyFixture({ briefId: "ordinary_owner" });
   await f.step(1);
   await f.execute("evimed_plan", { action: "write", clarifications: ["Direct answer"], deliverables: [], reason: "No file needed" });
-  assert.equal((await f.execute("evimed_complete_run", {})).value.ok, true);
+  await f.endTurn();
+  assert.ok(f.files.get(`/workspace/${workspaceLayout.deliverySummaryFile}`), "the turn ending writes the delivery summary the completion tool used to write");
   await f.step(2);
   await f.execute("evimed_plan", { action: "write", clarifications: ["A new report"], deliverables: [{ id: "d2", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }] });
   for (const handler of f.ctx.listeners.get(SEAMS.events.turnStopping) ?? []) await handler({ agent: f.agent, turn: 2 });
@@ -1333,6 +1583,9 @@ test("an accepted deliverable needs one control-plane authorization before a fre
   f.files.set(path, firstBytes);
   assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
   assert.equal((await f.execute("evimed_plan", { action: "status" })).value.data.items[0].status, "accepted");
+  // Inside the turn that wrote them the bytes are still editable; the freeze
+  // is the turn ending. From here on a change needs the control plane.
+  await f.endTurn();
 
   const opened = await f.execute("evimed_revise_deliverable", { deliverableId: "d1", reason: "Server gate requested a correction." });
 
@@ -1378,6 +1631,7 @@ test("a control-plane-authorized revision gets one submission after the ordinary
     const reportPath = "/workspace/deliverables/d1/brief.md";
     f.files.set(reportPath, "# Report\nFirst accepted version.\n");
     assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+    await f.endTurn();
 
     assert.equal((await f.execute("evimed_revise_deliverable", {
       deliverableId: "d1",
@@ -1417,6 +1671,7 @@ test("rewriting the plan invalidates an unused revision submission grant", async
     await f.execute("evimed_plan", { action: "write", clarifications: ["Initial plan"], deliverables });
     f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nAccepted bytes.\n");
     assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+    await f.endTurn();
     assert.equal((await f.execute("evimed_revise_deliverable", {
       deliverableId: "d1",
       reason: "The server gate requires one correction.",
@@ -1448,7 +1703,7 @@ test("a same-run control-plane repair gets one submission after an unaccepted ce
 
   const rejected = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
   assert.equal(rejected.value.ok, false, "the first package is unaccepted at the ordinary ceiling");
-  assert.equal((await f.execute("evimed_complete_run", { partial: true })).value.ok, true);
+  await f.endTurn();
 
   f.files.set(`${briefRoot}/index.json`, JSON.stringify({ runId: "repair-run", contextRevision: "request-server-repair" }));
   f.files.set(`${briefRoot}/context.md`, "<required-skills>research-brief</required-skills>\n<server-repair>repair the rejected package</server-repair>");
@@ -1473,6 +1728,7 @@ test("a model cannot open an accepted revision before the control plane authoriz
   });
   f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nAccepted bytes.\n");
   assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+  await f.endTurn();
 
   const denied = await f.execute("evimed_revise_deliverable", { deliverableId: "d1", reason: "Model chose to revise." });
 

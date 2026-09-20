@@ -104,7 +104,7 @@ export {
   transitionEvents,
 } from './src/states.mjs'
 
-// errorCodes — 22 exports
+// errorCodes — 23 exports
 export {
   ALL_ERROR_CODES,
   ANALYSIS_ERROR_CODES,
@@ -126,6 +126,7 @@ export {
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
   runOutcomeKind,
+  runVerdictText,
   terminalEvidenceSourceErrorCodes,
   turnEndErrorCode,
 } from './src/errorCodes.mjs'

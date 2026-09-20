@@ -16,8 +16,9 @@
 import { SOCKET_TOOL_NAMES, mcpToolBaseName } from './toolNames.mjs'
 import { DELIVERABLES_DIR } from './workspaceLayout.mjs'
 
-/** The phases, in the order a deep run usually passes through them. */
-export const RUN_ACTIVITY_PHASES = Object.freeze(['search', 'screen', 'fulltext', 'claims', 'write', 'deliver'])
+/** The phases, in the order a deep run usually passes through them.
+ *  @type {readonly RunActivityPhase[]} */
+export const RUN_ACTIVITY_PHASES = Object.freeze(/** @type {const} */ (['search', 'screen', 'fulltext', 'claims', 'write', 'deliver']))
 
 /** @typedef {'search'|'screen'|'fulltext'|'claims'|'write'|'deliver'} RunActivityPhase */
 
@@ -98,22 +99,31 @@ export function phaseOfToolCall(toolName, input = null) {
 }
 
 /**
- * Counts per phase over a sequence of calls, plus the phase of the most
- * recent labelled call.
+ * Counts per phase over a sequence of calls, the phases the run actually
+ * reached, and the furthest of them.
+ *
+ * `current` is the furthest phase reached, not the phase of the most recent
+ * labelled call. A run that delivered and then made one more checking call read
+ * 「核验」 for the rest of its life, and 「筛选」 read 0 on nearly every run
+ * because only two tools carry that label — so the line moved backwards while
+ * the run moved forwards. Phases are an order a deep run passes through, and a
+ * reader watching one wants to know how far it has got.
+ *
+ * `reached` is that answer without the gaps: only the phases with a call behind
+ * them, in order, so a surface can render what happened instead of six labels
+ * of which four are zero. The counts are unchanged — they are the evidence.
  *
  * @param {Iterable<{ tool: string, input?: Record<string, unknown> | null }>} calls
- * @returns {{ counts: Record<RunActivityPhase, number>, current: RunActivityPhase | null }}
+ * @returns {{ counts: Record<RunActivityPhase, number>, reached: RunActivityPhase[], current: RunActivityPhase | null }}
  */
 export function summarizeRunPhases(calls) {
   /** @type {Record<RunActivityPhase, number>} */
   const counts = { search: 0, screen: 0, fulltext: 0, claims: 0, write: 0, deliver: 0 }
-  /** @type {RunActivityPhase | null} */
-  let current = null
   for (const call of calls) {
     const phase = phaseOfToolCall(call.tool, call.input ?? null)
     if (!phase) continue
     counts[phase] += 1
-    current = phase
   }
-  return { counts, current }
+  const reached = RUN_ACTIVITY_PHASES.filter((phase) => counts[phase] > 0)
+  return { counts, reached: [...reached], current: reached.at(-1) ?? null }
 }

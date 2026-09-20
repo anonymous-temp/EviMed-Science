@@ -373,6 +373,7 @@ export const clinicalEvidenceCheckIds = Object.freeze([
   "practical-claim-anchor",
   "reference-list-duplication",
   "reference-number-unresolved",
+  "claim-reference-identity",
   "claim-inline-citation",
   "advisory-notes",
   // The structured appraisal a claim may carry (`appraisalStructure.mjs`):
@@ -1030,6 +1031,106 @@ export function referenceListBounds(text) {
 export function parseReferenceEntry(line) {
   const match = referenceEntryPattern.exec(String(line ?? ""));
   return match ? { number: Number(match[1] ?? match[2]), text: match[3].trim() } : null;
+}
+
+/**
+ * The numbered reference entries of a report, by number, read the way the
+ * closure check reads them: from the LAST reference heading, first entry per
+ * number wins.
+ * @param {unknown} reportText @returns {Map<number, string>}
+ */
+function referenceEntriesByNumber(reportText) {
+  const text = String(reportText ?? "");
+  const headings = [...text.matchAll(referenceHeadingPattern)];
+  /** @type {Map<number, string>} */
+  const entries = new Map();
+  if (!headings.length) return entries;
+  for (const line of text.slice(headings.at(-1)?.index ?? text.length).split("\n")) {
+    const entry = parseReferenceEntry(line);
+    if (!entry || entries.has(entry.number)) continue;
+    entries.set(entry.number, entry.text);
+  }
+  return entries;
+}
+
+/** Comparable form of a title or an entry: case, punctuation and spacing gone,
+ *  so 「Aspirin in the Primary Prevention…」 and its reference-list rendering
+ *  are one string.
+ *  @param {unknown} value @returns {string} */
+function comparableTitle(value) {
+  return String(value ?? "").toLowerCase().replace(/[^\p{Letter}\p{Number}]+/gu, "");
+}
+
+/** How much of a title has to be found in an entry before the two are the same
+ *  source. Reference lists abbreviate journals and drop subtitles; they do not
+ *  rewrite the opening of a title. */
+const referenceTitleProbeChars = 20;
+
+/**
+ * Whether reference `[n]` is the source that cites it.
+ *
+ * The gate already asks whether every number resolves to an entry
+ * (`claim-reference-number`, `reference-number-unresolved`) and whether the
+ * body line carrying a claim cites that claim's number (`claim-inline-citation`,
+ * `citation-closure`). Nothing asked the question in between: whether entry `n`
+ * is the paper the claim says it is. A run that renumbered its own citations by
+ * hand delivered a report whose body citations ran one ahead of the list from
+ * [5] on — every number resolved, every line paired — and the defect took a
+ * review model plus five shell calls to find, while it is decidable from two
+ * recorded fields.
+ *
+ * Advisory, and deliberately quiet: it speaks when the two sides carry
+ * identifiers that disagree, or — with no identifier on either side — when the
+ * entry does not carry the opening of the title the claim recorded. A claim
+ * with neither an identifier nor a title says nothing here.
+ *
+ * @param {unknown} reportText @param {readonly any[]} claims
+ * @returns {{ claimId: string, number: number, expected: string, entry: string }[]}
+ */
+function referenceIdentityFindings(reportText, claims) {
+  const entries = referenceEntriesByNumber(reportText);
+  /** @type {{ claimId: string, number: number, expected: string, entry: string }[]} */
+  const findings = [];
+  if (!entries.size) return findings;
+  for (const claim of Array.isArray(claims) ? claims : []) {
+    if (!claim || typeof claim !== "object") continue;
+    // A derived result carries no reference number of its own; its inputs do.
+    if ((claim.claimType ?? "direct") === "derived") continue;
+    const number = claim.referenceNumber;
+    if (!Number.isInteger(number)) continue;
+    const entry = entries.get(number);
+    // An unresolved number is somebody else's finding, and saying it twice
+    // makes one defect read as two.
+    if (entry === undefined) continue;
+    const claimId = String(claim.claimId ?? "");
+    const claimed = referenceIdentifiers([claim.identifier, claim.sourceUrl].filter((part) => typeof part === "string").join(" "));
+    const listed = referenceIdentifiers(entry);
+    if (claimed.size && listed.size) {
+      if ([...claimed].some((identifier) => listed.has(identifier))) continue;
+      findings.push({ claimId, number, expected: [...claimed].sort().join(" / "), entry: excerpt(entry) });
+      continue;
+    }
+    const title = comparableTitle(claim.sourceTitle);
+    // Too short to be distinctive: an eight-character title matches half a
+    // bibliography, and a finding that cannot be trusted is worse than none.
+    if (title.length < 8) continue;
+    if (comparableTitle(entry).includes(title.slice(0, referenceTitleProbeChars))) continue;
+    findings.push({ claimId, number, expected: String(claim.sourceTitle ?? "").trim(), entry: excerpt(entry) });
+  }
+  return findings;
+}
+// Attribution: the check every finding of this function is recorded under.
+checkedBy(referenceIdentityFindings, "claim-reference-identity");
+
+/**
+ * How many claims name a reference number whose entry is a different source.
+ * The counter behind the advisory check above: principle 4 asks for an observed
+ * distribution before anything may block, and this is the axis it is observed
+ * along.
+ * @param {unknown} reportText @param {readonly any[]} claims @returns {number}
+ */
+export function referenceIdentityMismatchCount(reportText, claims) {
+  return referenceIdentityFindings(reportText, claims).length;
 }
 
 /**
@@ -3729,6 +3830,14 @@ export function validateClinicalEvidencePackage({
   if (unresolved.length) {
     issues.push(`The numbered reference list has no entry for reference ${unresolved.join(", ")}.`);
   }
+  for (const finding of issues.from(referenceIdentityFindings, reportText, claims)) {
+    issues.push(
+      `结论 ${finding.claimId} 引的是参考文献 [${finding.number}]，但该条目是另一篇来源：`
+      + `账本记的是「${excerpt(finding.expected)}」，表里第 ${finding.number} 条写的是「${finding.entry}」。`
+      + "这通常是手工重排编号留下的整体错位。用 evimed_render_report 按正文首次出现重排并重建编号表，"
+      + "或把该结论的 referenceNumber 改成这篇来源实际所在的编号。",
+    );
+  }
   // The practical section's line range, so a mispaired anchor there is
   // blocking: that section is already the one place the gate refuses derived
   // claims and requires a marker on every action line.
@@ -3818,10 +3927,13 @@ checkedBy(runtimeLeakageLine, "runtime-leakage");
  * They are notices, not blocks: the thresholds that would make them blocking do
  * not exist yet, and a metric whose threshold nobody has calibrated is a coin
  * toss dressed as a gate.
- * @param {{ matrix?: any, citationLedgerText?: string, staleEvidenceCount?: number }} input
- * @returns {{ citationCoverage: number, confidenceMix: Record<string, number>, disputedShare: number, unresolved: number }}
+ * `referenceIdentityMismatches` rides along because principle 4 wants a
+ * distribution before a check may block: the reference-identity rule ships as a
+ * notice, and this is where its rate is read off.
+ * @param {{ matrix?: any, citationLedgerText?: string, staleEvidenceCount?: number, reportText?: string }} input
+ * @returns {{ citationCoverage: number, confidenceMix: Record<string, number>, disputedShare: number, unresolved: number, referenceIdentityMismatches: number }}
  */
-export function verificationGateMetrics({ matrix, citationLedgerText = "", staleEvidenceCount = 0 } = {}) {
+export function verificationGateMetrics({ matrix, citationLedgerText = "", staleEvidenceCount = 0, reportText = "" } = {}) {
   /** @type {Record<string, any>[]} */
   const claims = Array.isArray(matrix?.claims) ? matrix.claims : [];
   const total = claims.length;
@@ -3849,6 +3961,7 @@ export function verificationGateMetrics({ matrix, citationLedgerText = "", stale
     confidenceMix,
     disputedShare: total ? Number((disputed / total).toFixed(4)) : 0,
     unresolved: unresolvedRows + Math.max(0, Number(staleEvidenceCount) || 0),
+    referenceIdentityMismatches: referenceIdentityMismatchCount(reportText, claims),
   };
 }
 
