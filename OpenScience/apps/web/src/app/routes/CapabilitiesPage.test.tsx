@@ -87,28 +87,9 @@ const agents = [
   },
 ];
 
-function dispatchedRun(sessionId: string, text: string) {
-  return {
-    id: "run_dispatched",
-    sessionId,
-    status: "running",
-    mode: "specialist",
-    agentId: "adr-analysis",
-    effectiveAgentId: "adr-analysis",
-    question: text,
-    routeReason: "题面要一份可追溯的安全性证据报告",
-    estimatedMinutes: { min: 20, max: 40 },
-    artifacts: [],
-    createdAt: new Date().toISOString(),
-    startedAt: new Date().toISOString(),
-  };
-}
 
 const mocks = vi.hoisted(() => ({
   listWebResearchAgents: vi.fn(),
-  putWebResearchSession: vi.fn(),
-  dispatchWebAgentRun: vi.fn(),
-  cancelWebAgentRun: vi.fn(),
   hasWebApi: true,
 }));
 
@@ -121,9 +102,6 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
     return mocks.hasWebApi;
   },
   listWebResearchAgents: mocks.listWebResearchAgents,
-  putWebResearchSession: mocks.putWebResearchSession,
-  dispatchWebAgentRun: mocks.dispatchWebAgentRun,
-  cancelWebAgentRun: mocks.cancelWebAgentRun,
   getWebProjectId: () => "default",
 }));
 
@@ -225,7 +203,7 @@ describe("CapabilitiesPage", () => {
   });
 
   it("offers a retry when the catalogue could not be loaded, rather than a dead error line", async () => {
-    mocks.listWebResearchAgents.mockRejectedValueOnce(new WebApiError(503, "service_unavailable", "later"));
+    mocks.listWebResearchAgents.mockRejectedValueOnce(new WebApiError("later", { status: 503, code: "service_unavailable" }));
     render(
       <MemoryRouter>
         <CapabilitiesPage />
