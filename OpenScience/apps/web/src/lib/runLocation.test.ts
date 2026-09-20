@@ -91,6 +91,9 @@ describe("the conversation's address", () => {
     expect(isChatPath("/app/chat/ses-1")).toBe(true);
     expect(isChatPath("/app/chats")).toBe(false);
     expect(isChatPath("/app/files")).toBe(false);
+    // One segment too many is the 404 the route table gives it, not a frame
+    // hidden behind a page that says the address does not exist.
+    expect(isChatPath("/app/chat/ses-1/extra")).toBe(false);
   });
 
   it("reads the conversation out of an address, and refuses one it did not write", () => {

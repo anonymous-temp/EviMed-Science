@@ -16,10 +16,12 @@ export function chatPath(sessionId?: string | null): string {
  *
  * The kernel frame is mounted above the router and hidden rather than
  * unmounted off this surface, so this is what decides "hidden" — it is read on
- * every navigation and must not depend on the route table being matched.
+ * every navigation and must not depend on the route table being matched. It
+ * matches exactly the shapes `chat/:sessionId?` matches, so an address with a
+ * segment too many is the 404 it routes to and not a frame behind one.
  */
 export function isChatPath(pathname: string): boolean {
-  return pathname === "/app/chat" || pathname.startsWith("/app/chat/");
+  return pathname === "/app/chat" || /^\/app\/chat\/[^/]+$/.test(pathname);
 }
 
 /** The conversation an address names, or null for the bare surface. */
