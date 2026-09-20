@@ -105,13 +105,21 @@ test("a child cannot interrupt its parent's synthesis by choosing how its report
   }
 });
 
-test("a specialist deliverable is delegated before the parent retrieves its evidence", async () => {
+test("the work happens in the conversation, and delegation states what it is for", async () => {
+  // Delegation used to be ordered for every deliverable, and a single-child
+  // delegation buys neither parallelism nor a smaller context — it buys a
+  // researcher watching 「正在等待 1 个子任务…」 for twenty minutes. The rule
+  // is a judgement now, in one sentence, in the two places every session reads.
   const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
-  assert.match(preset, /把专业工作用 evimed_delegate 委派给能力目录中的能力/);
-  assert.match(preset, /先计划、立即委派，再由同一个能力子代理完成检索、原文阅读、证据台账与事实写作/);
-  assert.match(preset, /父代理不要在委派前调用检索或全文工具/);
+  assert.match(preset, /默认就在这次对话里把它做完/);
+  assert.match(preset, /只有同时有多件互相独立的活可以并行，或者一段附带工作会带回大量你不会再用的内容时，才用 evimed_delegate 委派/);
+  assert.doesNotMatch(preset, /立即委派/, "nothing orders a delegation any more");
+  assert.doesNotMatch(preset, /evimed_complete_run/, "the completion tool is gone");
 
   const policy = await readFile(new URL("../plugins/run-policy.mjs", import.meta.url), "utf8");
+  assert.match(policy, /默认不用它：一件交付物就在这次对话里做完/);
+  // Still true of a delegation that does happen: retrieving for a child you
+  // are about to start is work the child will do again in its own context.
   assert.match(policy, /委派前不要替子代理检索、读取来源或预写交付文件/);
 });
 
@@ -290,7 +298,8 @@ test("the budget refuses a step and the refusal names what to do next", () => {
   const exhausted = stepPolicy({ steps: 10, tokens: 10, children: 0 }, { maxSteps: 10, maxTokens: 100, maxChildren: 5 });
   assert.equal(exhausted.allow, false);
   assert.equal(exhausted.code, "budget_exhausted");
-  assert.match(exhausted.reason, /partial/);
+  assert.match(exhausted.reason, /本轮到此为止/, "the refusal names what to do next, and it is not a tool call");
+  assert.doesNotMatch(exhausted.reason, /evimed_complete_run/);
   assert.deepEqual(accumulateBudget(zeroBudget, { input: 10, output: 5, cacheHit: 8, cacheMiss: 2 }), { steps: 1, tokens: 15, children: 0 });
 });
 
@@ -519,15 +528,16 @@ test("an accepted deliverable is finished, and polishing it cannot cost the deli
   // had since overwritten. Two locks were missing and both are here.
   //
   // The receipt names its files by sha256, and that digest is the only thing
-  // the control plane can verify once the container is gone. So the files of an
-  // accepted deliverable are frozen: editing them does not improve the accepted
-  // package, it destroys it.
+  // the control plane can verify once the container is gone. So a delivered
+  // deliverable's files are frozen: editing them does not improve the delivered
+  // package, it destroys it. Delivery is the turn ending, not acceptance — the
+  // run policy passes the ids only once its turn has ended.
   const state = {
     budget: { steps: 1, tokens: 1, children: 0 },
     limits: { maxSteps: 0, maxTokens: 0, maxChildren: 30 },
     submitAttempts: 1,
     deliveryAttemptLimit: 7,
-    acceptedDeliverables: ["sxjw-longterm-evidence-review"],
+    frozenDeliverables: ["sxjw-longterm-evidence-review"],
   };
   // Both shapes, because only one of them is what a model actually writes.
   //
@@ -585,11 +595,12 @@ test("an accepted deliverable is finished, and polishing it cannot cost the deli
   // to the run. Stripping it there would make two different files compare equal.
   assert.equal(toolPolicy({ name: "write", args: { file_path: "workspace/scratch.md" } }, state).allow, true);
 
-  // And with nothing accepted yet, the deliverable is ordinary.
+  // And while the turn that wrote it is still going — which is every
+  // acceptance, until the turn ends — the deliverable is ordinary and editable.
   assert.equal(
     toolPolicy(
       { name: "write", args: { file_path: "deliverables/sxjw-longterm-evidence-review/clinical-evidence-report.md" } },
-      { ...state, acceptedDeliverables: [] },
+      { ...state, frozenDeliverables: [] },
     ).allow,
     true,
   );

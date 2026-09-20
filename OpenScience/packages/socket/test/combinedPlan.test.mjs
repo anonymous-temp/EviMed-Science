@@ -303,6 +303,8 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   const files = new Map();
   /** @type {any[]} */
   const gateRuns = [];
+  /** What the run told the control plane about itself. @type {string[]} */
+  const notices = [];
   /** @type {any[]} */
   const steered = [];
   const agent = { id: "root-agent", session: { id: "root-session", header: { cwd: "/workspace" } }, inject: () => {}, steer: (/** @type {any} */ message) => steered.push(message) };
@@ -355,7 +357,11 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
       sessionRuns,
       runIdForSession: (/** @type {string} */ sessionId) => sessionRuns.get(sessionId) ?? "",
     });
-    ctx.provide("evimedDiagnostics", { degrade() {}, notice() {} });
+    ctx.provide("evimedDiagnostics", {
+      degrade() {},
+      notice: (/** @type {string} */ line) => { notices.push(line); },
+      forSession: () => ({ degrade() {}, notice: (/** @type {string} */ line) => { notices.push(line); } }),
+    });
   }
   ctx.provide("evimedCapabilities", capabilities);
   /** @type {{ provider: any, options: any }[]} */
@@ -435,9 +441,19 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
     assert.ok(text, `no projection at ${target}; the workspace holds ${JSON.stringify([...files.keys()].filter((key) => key.includes(".evimed-run")))}`);
     return JSON.parse(text);
   };
+  // The end of a turn is the end of the run: the delivery summary is written,
+  // the completeness findings become notices and the delivered bytes freeze.
+  const endTurn = async (/** @type {string} */ kind = "completed") => {
+    for (const handler of ctx.listeners.get(SEAMS.events.sessionEvent) ?? []) {
+      handler(agent.session, { type: "turn/end", seq: 99, data: { reason: { kind } } });
+    }
+    for (let tick = 0; tick < 20; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  };
   return {
     ctx,
     steered,
+    notices,
+    endTurn,
     rows,
     // The real store owns its own `subagents` Map, so `childRows` has to be
     // that one under `projected` — handing back the unused stub Map would make
@@ -673,10 +689,12 @@ test("a plan spanning two capabilities delegates twice, and each child submits o
     ["deliverables/d-bib/bibliometric-analysis-report.md", "deliverables/d-bib/bibliometric-analysis-run.json"],
   );
 
-  // And the run may finish, because nothing is outstanding.
-  const completed = await f.execute("evimed_complete_run", {});
-  assert.equal(completed.value.ok, true, JSON.stringify(completed.value));
-  assert.equal(completed.concluded, true);
+  // And the run finishes when the turn does — there is no completion tool to
+  // call, and nothing the model calls may be able to refuse the end of a turn.
+  await f.endTurn();
+  const summary = f.files.get(`/workspace/${workspaceLayout.deliverySummaryFile}`);
+  assert.ok(summary, "the turn ending writes the delivery summary");
+  assert.match(summary, /完整交付/, "both deliverables were accepted");
 });
 
 test("a delegated child is handed its own capability's tools and skills, never the other's", async () => {
@@ -811,29 +829,17 @@ test("one capability's rejection leaves the other's acceptance standing, and par
   assert.equal(afterRejection["d-appraise"].status, "rejected");
   assert.deepEqual(f.receipt().entries.map((/** @type {any} */ entry) => entry.deliverableId), ["d-bib"]);
 
-  // A full completion is refused, and the refusal names the unfinished item —
-  // by id and by title — and says nothing about the accepted one.
-  const refused = await f.execute("evimed_complete_run", {});
-  assert.equal(refused.value.ok, false);
-  assert.equal(refused.value.code, "run_incomplete");
-  const blocking = refused.value.issues.filter((/** @type {any} */ issue) => issue.severity === "required");
-  assert.deepEqual(blocking.map((/** @type {any} */ issue) => [issue.code, issue.path]), [["deliverable_not_accepted", "d-appraise"]]);
-  assert.match(blocking[0].message, /证据评价表/, "the unfinished item is named as the researcher asked for it");
+  // The turn ends. Nothing is refused — the unfinished item is reported, the
+  // accepted one is delivered, and neither fact blocks the other.
+  await f.endTurn();
+  const reported = f.notices.filter((/** @type {string} */ line) => line.includes("deliverable_not_accepted"));
+  assert.equal(reported.length, 1, `the unfinished item is reported once: ${JSON.stringify(f.notices)}`);
+  assert.match(reported[0], /证据评价表/, "the unfinished item is named as the researcher asked for it");
   assert.equal(
-    refused.value.issues.some((/** @type {any} */ issue) => issue.path === "d-bib"),
+    f.notices.some((/** @type {string} */ line) => line.includes("d-bib")),
     false,
-    "an accepted deliverable must not appear in the reasons a run cannot finish",
+    "an accepted deliverable is not something the reader is warned about",
   );
-
-  // Partial delivery goes through, still saying which item is unfinished —
-  // downgraded to advisory, because that is what partial IS.
-  const partial = await f.execute("evimed_complete_run", { partial: true });
-  assert.equal(partial.value.ok, true, JSON.stringify(partial.value));
-  assert.equal(partial.concluded, true);
-  const carried = partial.value.data.issues.find((/** @type {any} */ issue) => issue.path === "d-appraise");
-  assert.ok(carried, `partial delivery must still report the unfinished item: ${JSON.stringify(partial.value.data.issues)}`);
-  assert.equal(carried.code, "deliverable_not_accepted");
-  assert.equal(carried.severity, "advisory");
 
   // And the summary the researcher reads distinguishes the two capabilities.
   const summary = f.files.get(`/workspace/${workspaceLayout.deliverySummaryFile}`);
@@ -852,10 +858,9 @@ test("one capability's rejection leaves the other's acceptance standing, and par
     ["d-appraise", "d-bib"],
     "repairing one item must add to the receipt, not replace it",
   );
-  assert.equal((await f.execute("evimed_complete_run", {})).value.ok, true);
 });
 
-test("an accepted item's files are frozen while the other capability's item is still being repaired", async () => {
+test("a delivered item's files are frozen; an accepted one inside its own turn is not", async () => {
   const f = await combinedFixture();
   // A real `write` in the registry, so the allowed case is a call that actually
   // ran rather than one the registry happened not to know about — those two
@@ -879,12 +884,31 @@ test("an accepted item's files are frozen while the other capability's item is s
   assert.equal(repairWrite.error, undefined, "an item under repair must remain writable");
   assert.deepEqual(written, ["deliverables/d-appraise/delivery-summary.md"]);
 
-  // The accepted one does not: its bytes are what the receipt names by sha256.
-  const frozenWrite = await f.execute("write", { path: "deliverables/d-bib/bibliometric-analysis-report.md", content: "# 改动\n" });
+  // So does the accepted one, inside the turn that wrote it: a reviewer's
+  // finding arrives while the package can still be repaired, and the receipt is
+  // written over the bytes as they finally stand (2026-09-20).
+  const acceptedWrite = await f.execute("write", { path: "deliverables/d-bib/bibliometric-analysis-report.md", content: "# 改动\n" });
+  assert.equal(acceptedWrite.error, undefined, "an accepted item is still this turn's to repair");
+  assert.equal(written.length, 2);
+  // The registered `write` above only records the call, so the repair itself
+  // goes through the fixture's writer — what matters here is that the policy
+  // let the call through and that the receipt follows the bytes.
+  f.writeFiles(new Map([["/workspace/deliverables/d-bib/bibliometric-analysis-report.md", "# 改动\n"]]));
+
+  // Once the turn has ended, those bytes are the delivery: the receipt names
+  // them by sha256, and the control plane re-hashes them after the container
+  // is gone.
+  await f.endTurn();
+  const frozenWrite = await f.execute("write", { path: "deliverables/d-bib/bibliometric-analysis-report.md", content: "# 再改\n" });
   assert.equal(frozenWrite.error?.code, "DENIED");
   assert.match(frozenWrite.content[0].text, /accepted_deliverable_frozen/);
   assert.match(frozenWrite.content[0].text, /d-bib/, "the refusal must name which deliverable is frozen");
-  assert.deepEqual(written, ["deliverables/d-appraise/delivery-summary.md"], "the frozen write must never reach the tool");
+  assert.equal(written.length, 2, "the frozen write must never reach the tool");
+  // And the receipt describes what was actually delivered, not the version
+  // that happened to be on disk when the gate first said ok.
+  const entry = f.receipt().entries.find((/** @type {any} */ row) => row.deliverableId === "d-bib");
+  const report = entry.files.find((/** @type {any} */ file) => file.path.endsWith("bibliometric-analysis-report.md"));
+  assert.equal(report.bytes, Buffer.byteLength("# 改动\n"), "the receipt is written over the repaired bytes");
 });
 
 test("the gate ledger records each capability's verdicts under its own deliverable", async () => {
@@ -1328,7 +1352,7 @@ test("a plan naming a capability the catalogue does not have is refused when it 
   assert.deepEqual(Object.keys(await f.status()), []);
 });
 
-test("a run does not complete while its children work; a partial completion cancels them and says so", async () => {
+test("a turn that ends while its children work does not deliver; the turn after their settlement does", async () => {
   const children = controllableChildren();
   const f = await combinedFixture({ subagentStart: children.subagentStart });
   await f.step(1);
@@ -1336,29 +1360,20 @@ test("a run does not complete while its children work; a partial completion canc
   await f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
   await f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
 
-  const refused = await f.execute("evimed_complete_run", {});
-  assert.equal(refused.value.code, "children_running");
-  assert.match(refused.value.issues[0].message, /d-bib（句柄 d-bib#1）/);
-  assert.equal(refused.concluded, false, "a refused completion does not end the turn");
-  for (const [, signal] of children.signals) assert.equal(signal.aborted, false, "a refusal cancels nothing");
+  // The kernel lets a parent end its turn while background children work, and
+  // our stopping reminder is bounded on purpose. What must not happen is the
+  // run being sealed underneath them: no summary, no freeze.
+  await f.endTurn();
+  assert.equal(f.files.get(`/workspace/${workspaceLayout.deliverySummaryFile}`), undefined, "a run with children still working has not delivered");
+  for (const [, signal] of children.signals) assert.equal(signal.aborted, false, "ending a turn cancels nothing");
 
-  const partial = await f.execute("evimed_complete_run", { partial: true });
-  assert.equal(partial.value.ok, true, JSON.stringify(partial.value));
-  assert.equal(partial.concluded, true);
-  assert.deepEqual([...partial.value.data.cancelledChildren].sort(), ["d-appraise#1", "d-bib#1"]);
-  for (const [id, signal] of children.signals) assert.equal(signal.aborted, true, `${id} was left running after a partial completion`);
-  const items = await f.status();
-  assert.equal(items["d-bib"].status, "failed");
-  assert.match(items["d-bib"].issues[0].message, /已取消/);
-  // The kernel ends a cancelled child as aborted; its settlement is recorded
-  // as a cancellation and never retried.
-  for (const [, settle] of children.settlers) settle({ stopReason: "aborted" });
-  const collected = await f.execute("evimed_await", {});
-  for (const result of collected.value.data.results) {
-    assert.equal(result.status, "failed");
-    assert.match(result.summary, /子代理已取消：运行以部分交付结束时它仍在工作/);
-  }
-  assert.equal(f.starts.length, 2, "a cancelled child is not retried");
+  // They settle, the root is woken with their results, and the turn that ends
+  // after that is the one that delivers.
+  for (const [, settle] of children.settlers) settle({ stopReason: "completed", output: "done" });
+  for (let tick = 0; tick < 20; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  await f.endTurn();
+  assert.ok(f.files.get(`/workspace/${workspaceLayout.deliverySummaryFile}`), "with nothing outstanding, the turn ending delivers");
+  assert.equal(f.starts.length, 2, "a settled child is not retried");
 });
 
 test("a cancelled root turn cancels the run's children, and a plan revision cancels the child whose deliverable it dropped", async () => {

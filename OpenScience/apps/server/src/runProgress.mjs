@@ -43,6 +43,7 @@ const maxTitle = 80;
  * @typedef {{
  *   deliverables: RunDeliverable[],
  *   phaseCounts: Record<string, number>,
+ *   reachedPhases: string[],
  *   currentPhase: string | null,
  *   sources: { searched: number, included: number, fullText: number },
  *   claims: { total: number, verified: number },
@@ -380,7 +381,7 @@ export function assembleRunProgress({ deliverables, calls, projection = null, ma
   // The domain's one implementation, over the parent's and the children's
   // calls together: a delegated run does its searching in a child, and a
   // count of the parent alone would say it never searched.
-  const { counts: phaseCounts, current: currentPhase } = summarizeRunPhases(list.map((call) => ({ tool: call.tool, input: call.input })));
+  const { counts: phaseCounts, reached: reachedPhases, current: currentPhase } = summarizeRunPhases(list.map((call) => ({ tool: call.tool, input: call.input })));
   const byStatus = projection?.evidence?.byStatus && typeof projection.evidence.byStatus === "object" ? projection.evidence.byStatus : {};
   /** @type {Map<string, { total: number, verified: number }>} */
   const upserts = new Map();
@@ -398,6 +399,11 @@ export function assembleRunProgress({ deliverables, calls, projection = null, ma
   return {
     deliverables,
     phaseCounts,
+    // The phases this run actually reached, in order. A surface that renders
+    // the six labels whatever happened tells a reader that 「筛选 0」 is a
+    // thing the run did; only two tools carry that label and most runs never
+    // call one.
+    reachedPhases,
     currentPhase,
     sources: {
       searched: phaseCounts.search ?? 0,
@@ -460,6 +466,9 @@ export function normalizeStoredProgress(value) {
   const raw = /** @type {Record<string, any>} */ (value);
   /** @type {Record<string, number>} */
   const phaseCounts = Object.fromEntries(RUN_ACTIVITY_PHASES.map((phase) => [phase, count(raw.phaseCounts?.[phase])]));
+  // Derived rather than trusted: a stored record from before this field exists
+  // still knows which phases it reached, because its counts say so.
+  const reachedPhases = RUN_ACTIVITY_PHASES.filter((phase) => phaseCounts[phase] > 0);
   const currentPhase = RUN_ACTIVITY_PHASES.includes(raw.currentPhase) ? raw.currentPhase : null;
   const children = (Array.isArray(raw.children) ? raw.children : []).slice(0, maxChildren).flatMap((/** @type {any} */ child) => {
     const id = text(child?.childSessionId, 200);
@@ -473,6 +482,7 @@ export function normalizeStoredProgress(value) {
   if (!updatedAt) return undefined;
   return {
     phaseCounts,
+    reachedPhases,
     currentPhase,
     sources: { searched: count(raw.sources?.searched), included: count(raw.sources?.included), fullText: count(raw.sources?.fullText) },
     claims: { total: count(raw.claims?.total), verified: count(raw.claims?.verified) },

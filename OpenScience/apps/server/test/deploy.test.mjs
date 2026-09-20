@@ -1779,10 +1779,15 @@ test("a capability's two skill copies never drift apart by more than their known
   // skill's evidence-matrix section says a claim may carry its appraisal in
   // parts (certainty, riskOfBias, a quoted PICO part) and that the platform
   // recomputes them.
+  // Raised by 3 and 2 on 2026-09-20, same direction: submission now renders the
+  // numbering, runs the gate and runs the independent reviewer in one call, and
+  // the freeze moved from acceptance to the end of the conversation turn, so
+  // the 「先审查再提交」 paragraph in clinical-evidence-synthesis and
+  // research-topic-selection was rewritten around what submission does.
   const knownDivergence = {
     "adr-analysis": 18,
     "bibliometric-analysis": 18,
-    "clinical-evidence-synthesis": 220,
+    "clinical-evidence-synthesis": 223,
     "comprehensive-drug-evaluation": 18,
     "dataset-research-scoping": 41,
     "drug-selection": 18,
@@ -1793,7 +1798,7 @@ test("a capability's two skill copies never drift apart by more than their known
     "meta-analysis": 18,
     "off-label-analysis": 18,
     "peer-review": 18,
-    "research-topic-selection": 42,
+    "research-topic-selection": 44,
   };
 
   const dshRoot = path.join(repoRoot, "capability-skills");

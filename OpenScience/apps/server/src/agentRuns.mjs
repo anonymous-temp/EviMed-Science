@@ -1011,7 +1011,6 @@ function firstUserText(run, history) {
 /** Only completed control tools in the owned turn may establish workflow provenance. */
 function nativeWorkflowEvidence(run, history) {
   let plan = null;
-  let completion = null;
   let kernelRunId = null;
   const submissions = new Map();
   const delegates = new Set();
@@ -1054,9 +1053,8 @@ function nativeWorkflowEvidence(run, history) {
       submissions.set(id, entry);
     }
     if (part.tool === "evimed_delegate" && result.ok && result.data?.deliverableId === args.deliverableId) delegates.add(args.deliverableId);
-    if (part.tool === "evimed_complete_run") completion = { ok: result.ok, notices: normalizeQualityNotices(result.issues ?? result.data?.issues ?? []), ...span };
   }
-  if (!plan && !submissions.size && !delegates.size && !completion) return null;
+  if (!plan && !submissions.size && !delegates.size) return null;
   const throughSeq = history.reduce((head, message) => Math.max(head,
     Number(messageId(message)?.replace(/^seq_/, "")) || 0,
     Number(message.info?.turnEnd?.seq) || 0,
@@ -1064,13 +1062,12 @@ function nativeWorkflowEvidence(run, history) {
   ), run.nativeTurn.startSeq);
   return { turnStartSeq: run.nativeTurn.startSeq, throughSeq, throughMessage: messageId(history.at(-1)), endTime: history.at(-1)?.info?.turnEnd?.time ?? null,
     ...(kernelRunId ? { kernelRunId } : {}),
-    plan, submissions: [...submissions.values()], delegates: [...delegates], completion };
+    plan, submissions: [...submissions.values()], delegates: [...delegates] };
 }
 
 function nativeWorkflowNotices(proof) {
   return normalizeQualityNotices([
     ...(proof?.submissions ?? []).flatMap((item) => [...(item.accepted?.notices ?? []), ...(item.rejected?.notices ?? [])]),
-    ...(proof?.completion?.notices ?? []),
   ]);
 }
 
@@ -1634,7 +1631,7 @@ function clinicalEvidenceRepairPrompt(issues, shrinkage = null, revisionRequired
     "The server-side clinical evidence gate rejected the current package.",
     "When a capability child wrote the package, this resumed root session is its authenticated repair successor. Continue from the existing files and preserved sources; do not delegate any file or source to another child.",
     ...measured,
-    ...(revisionRequired ? ["The local gate already accepted and froze this deliverable. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. The server has already retained the accepted bytes outside the runtime workspace; the tool opens a new revision, after which you must repair and resubmit the new bytes."] : []),
+    ...(revisionRequired ? ["This deliverable was delivered by an earlier turn and its bytes are frozen under a receipt. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. The server has already retained the delivered bytes outside the runtime workspace; the tool opens a new revision, after which you must repair and resubmit the new bytes."] : []),
     "Revise the named files in the existing academic package in place: clinical-evidence-report.md or clinical-evidence-matrix.json.",
     "Patch clinical-evidence-report.md with the edit tool, changing only the lines the issues name. Do not rewrite it with the write tool: replacing the whole file regenerates it from what you still hold in context, which after a long run is a compressed recollection, so the report comes back shorter and you cannot tell that it did. Measured across four production repairs, every whole-file rewrite lost content — one shed 1,863 characters and the next 4,125 — while targeted edits held the report steady and ended slightly longer.",
     "The same applies to the matrix: change what an issue names and leave the rest alone, preserving already valid evidence and source metadata. Rewriting it whole is warranted only when its structure is what the issue rejects, such as JSON that no longer parses.",
@@ -1704,7 +1701,7 @@ function specialistRepairPrompt(agent, issues, revisionRequired = false) {
   return [
     `The server-side delivery gate rejected this ${agent?.id ?? "capability"} package.`,
     "When a capability child wrote the package, this resumed root session is its authenticated repair successor. Continue from the existing files; do not delegate any file to another child.",
-    ...(revisionRequired ? ["The local gate already accepted and froze this deliverable. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. The server has already retained the accepted bytes outside the runtime workspace; the tool opens a new revision, after which you must repair and resubmit the new bytes."] : []),
+    ...(revisionRequired ? ["This deliverable was delivered by an earlier turn and its bytes are frozen under a receipt. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. The server has already retained the delivered bytes outside the runtime workspace; the tool opens a new revision, after which you must repair and resubmit the new bytes."] : []),
     ...(required.length ? [`Revise the existing package in place. Its required deliverables are: ${required.join(", ")}.`] : ["Revise the existing package in place."]),
     // Capability-independent, and measured: four production clinical repairs
     // showed every whole-file rewrite losing content (1,863 and 4,125
@@ -1726,7 +1723,7 @@ function clinicalEvidenceResubmitPrompt(deliverableIds) {
     "The server-side clinical evidence gate accepted the current bytes, but the run ended without a local delivery receipt.",
     "Do not edit, rewrite, rename, or delete any deliverable file. The package already passed on the bytes now on disk.",
     `Call evimed_submit_deliverable once for each of ${deliverableIds.join(", ")} so the run-side gate can write the missing receipt.`,
-    "If that submission accepts, call evimed_complete_run without partial mode and finish. If it rejects, follow only the returned issue and preserve the current files.",
+    "If that submission accepts, you are done: finish your reply. If it rejects, follow only the returned issue and preserve the current files.",
   ].join("\n");
 }
 
@@ -3822,26 +3819,38 @@ export class AgentRunStore {
   }
 
   /**
-   * The runs of a project that are still going, by id — what the model
-   * gateway asks to attribute an interactive runtime's request to its run
-   * (E §9.4). A fold with no phase walk, because it is asked per request.
-   * @param {any} project @returns {Promise<string[]>}
-   */
-  async activeRunIds(project) {
-    const runs = foldEvents(parseEvents(await readLedgerText(project, this.maxBytes)));
-    return [...runs.values()].filter((run) => run.status === "running").map((run) => run.id);
-  }
-
-  /**
    * The runs of a project that are still going, with the conversation each is
    * in — what the capsule gateway asks to know whose recall it is answering
-   * (an incognito conversation, a 「本次不用」). The same fold as
-   * `activeRunIds`, asked per recall.
+   * (an incognito conversation, a 「本次不用」), and what the model gateway
+   * attributes a request against. A fold with no phase walk, because it is
+   * asked per request.
    * @param {any} project @returns {Promise<{ id: string, sessionId: string }[]>}
    */
   async activeRuns(project) {
     const runs = foldEvents(parseEvents(await readLedgerText(project, this.maxBytes)));
     return [...runs.values()].filter((run) => run.status === "running").map((run) => ({ id: run.id, sessionId: run.sessionId }));
+  }
+
+  /**
+   * Which of these runs a kernel session belongs to.
+   *
+   * A run's own conversation is on its record; a subagent's session is not,
+   * and the only thing that knows about one is the live progress tracker the
+   * event pump feeds. Both are asked, in that order, and a session that
+   * matches neither is nobody's — never the first run in the list, because a
+   * wrong attribution is a charge against somebody else's conversation.
+   *
+   * @param {string | null | undefined} sessionId
+   * @param {readonly { id: string, sessionId: string }[]} candidates runs of one project
+   * @returns {string | null}
+   */
+  runIdForSession(sessionId, candidates) {
+    const id = typeof sessionId === "string" ? sessionId.trim() : "";
+    if (!id) return null;
+    const own = candidates.find((run) => run.sessionId === id);
+    if (own) return own.id;
+    const parent = candidates.find((run) => this.progressTrackers.get(run.id)?.children?.has(id));
+    return parent ? parent.id : null;
   }
 
   /**
@@ -5305,7 +5314,13 @@ export class AgentRunStore {
         const proof = run.nativeWorkflow;
         const requiresAcceptance = proof?.plan?.items?.length || proof?.submissions?.length;
         const currentReceipt = await readDeliveryReceipt(project, run);
-        const incomplete = proof?.completion?.ok === false || (requiresAcceptance && !currentReceipt);
+        // The receipt, and nothing else. A run used to also be failed for a
+        // completion tool that answered `ok:false` — a tool the model had to
+        // remember to call and that a rule could refuse, leaving three tool
+        // rows after the answer the researcher was meant to read (2026-09-20).
+        // A conversation turn ending is the run ending; what a run delivered is
+        // what its receipt names.
+        const incomplete = Boolean(requiresAcceptance && !currentReceipt);
         if (incomplete || (projection.state === "unattributed" && artifacts.length > 0 && !currentReceipt)) {
           unaccepted([...nativeWorkflowNotices(proof),
             ...(projection.state === "unattributed" ? [unattributedNotice()] : []),

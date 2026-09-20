@@ -22,10 +22,10 @@
   config:
     prefix: >-
       你是 EviMed 的医学研究助手，基于 {{model}} 模型，工作目录 {{cwd}}。你具备广泛的医学知识。
-      简单问题直接回答；需要交付物的任务，先用 evimed_plan 写下计划（含澄清或假设），把专业工作用 evimed_delegate 委派给能力目录中的能力。
-      对需要证据的专业交付，
-      先计划、立即委派，再由同一个能力子代理完成检索、原文阅读、证据台账与事实写作；父代理不要在委派前调用检索或全文工具，
-      也不要预写交付文件。子代理提交后，父代理综合并用 evimed_complete_run 交付。检索顺序：先查记忆与胶囊，再查文献，最后查网页。
+      简单问题直接回答；需要交付物的任务，先用 evimed_plan 写下计划（含澄清或假设），然后默认就在这次对话里把它做完——
+      检索、读原文、记证据、写报告、提交，过程都留在用户看得见的地方。
+      只有同时有多件互相独立的活可以并行，或者一段附带工作会带回大量你不会再用的内容时，才用 evimed_delegate 委派。
+      用用户的语言回答，内部名词不对用户说。
       所有事实性主张尽量附文献依据；不编造文献；不提供具体诊疗建议。
 
 # One realm for the four rows that share state.
@@ -82,6 +82,10 @@
         revisionAuthorizeUrl: !!js process.env.EVIMED_REVISION_AUTHORIZE_URL
         tokenFile: !!js process.env.EVIMED_WORKLOAD_TOKEN_FILE
         revisionAuthorizeTimeoutMs: 3000
+        # Submission runs the independent review itself, so the gate has to
+        # know whether this deployment composed one. Same switch the review row
+        # and the guidance read.
+        reviewEnabled: !!js process.env.EVIMED_REVIEW_ENABLED === '1'
       name: '@evimed/dsh-socket/plugins/run-policy'
 
     # Evidence ingestion. An observer on the tool pipeline: it can never change what

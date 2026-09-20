@@ -1247,6 +1247,38 @@ export function runOutcomeKind(run) {
 }
 
 /**
+ * The three words a finished run may be described with, anywhere it is
+ * described (plan §3.8 #5).
+ *
+ * 已交付 / 已交付 · N 条未能逐字核对 / 未完成 — and nothing else. The surfaces
+ * used to disagree on their own vocabulary: the inbox said 「待你复核」, the
+ * runs page 「已交付，待人工复核」, the in-container panel 「已交付 · 未核验」,
+ * and the notice body 「N 项自证未通过」. Four sentences for one fact, three of
+ * which ask the reader for work nobody can do — a package is delivered; what a
+ * reader may still want is which of its conclusions could not be matched to
+ * their source word for word.
+ *
+ * `qualified` is the only class that takes a number, and it takes it only when
+ * the run actually counted claims; a run that produced no matrix says the same
+ * thing without one.
+ *
+ * @param {{ status?: string | null, errorCode?: string | null, verification?: string | null,
+ *   claimSummary?: { total?: number | null, verified?: number | null, unverified?: number | null } | null }} run
+ * @returns {string}
+ */
+export function runVerdictText(run) {
+  const kind = runOutcomeKind(run)
+  if (kind === 'delivered') return '已交付'
+  if (kind !== 'qualified') return '未完成'
+  const summary = run?.claimSummary ?? null
+  const unverified = Number(summary?.unverified)
+  const counted = Number.isFinite(unverified)
+    ? Math.max(0, Math.trunc(unverified))
+    : Math.max(0, Math.trunc(Number(summary?.total) || 0) - Math.trunc(Number(summary?.verified) || 0))
+  return counted > 0 ? `已交付 · ${counted} 条未能逐字核对` : '已交付 · 部分结论未能逐字核对'
+}
+
+/**
  * What a refusal is allowed to tell the client beyond its code and sentence.
  *
  * Declared here, in the domain, because both ends need the same list: the

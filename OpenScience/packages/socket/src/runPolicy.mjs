@@ -75,14 +75,14 @@ const GATE_SOURCE_REFUSAL = '交付门禁的实现不在你的阅读范围内。
  *   limits: { maxSteps: number, maxTokens: number, maxChildren: number },
  *   submitAttempts: number,
  *   deliveryAttemptLimit: number,
- *   acceptedDeliverables?: readonly string[],
+ *   frozenDeliverables?: readonly string[],
  * }} state
  * @returns {{ allow: true } | { allow: false, code: string, reason: string }}
  */
 export function toolPolicy(call, state) {
   const name = String(call?.name ?? '')
   const args = /** @type {Record<string, any>} */ (call?.args ?? {})
-  const accepted = new Set(state.acceptedDeliverables ?? [])
+  const frozen = new Set(state.frozenDeliverables ?? [])
 
   const readFields = READ_ARG_TOOLS[/** @type {keyof typeof READ_ARG_TOOLS} */ (name)]
   if (readFields) {
@@ -99,23 +99,23 @@ export function toolPolicy(call, state) {
     for (const field of fields) {
       const value = args[field]
       if (typeof value !== 'string' || !value) continue
-      // An accepted deliverable is finished, and its files are the ones the
-      // receipt names by sha256 — the only thing the control plane can verify
-      // once the container is gone.
+      // A delivered deliverable's files are the ones the receipt names by
+      // sha256 — the only thing the control plane can verify once the container
+      // is gone, so once they are delivered they may not move under the
+      // receipt.
       //
-      // A run that keeps polishing after acceptance edits those files, and the
-      // digests stop matching: the accepted package no longer exists anywhere.
-      // On a seven-attempt budget one run passed at attempt 4, passed again at 5
-      // and 6 while trimming advisory notes, broke something on 7, and finished
-      // 部分交付 holding a receipt for a package it had overwritten. Advisory
-      // polish is worth having; it is not worth a delivered package.
-      if (accepted.has(String(deliverableIdOfPath(value) ?? ''))) {
+      // What counts as delivered moved on 2026-09-20: acceptance used to freeze
+      // them, which meant a reviewer's finding arrived at a package nobody could
+      // repair. The turn ending is the delivery now, and until then an accepted
+      // deliverable is edited and submitted again as often as the attempt budget
+      // allows — the receipt is written over the bytes as they finally stand.
+      if (frozen.has(String(deliverableIdOfPath(value) ?? ''))) {
         return {
           allow: false,
           code: 'accepted_deliverable_frozen',
-          reason: `交付物 ${deliverableIdOfPath(value)} 已通过校验并写入回执，其文件按 sha256 记录在案，不能再改动。`
+          reason: `交付物 ${deliverableIdOfPath(value)} 已在上一轮交付并写入回执，其文件按 sha256 记录在案，不能再改动。`
             + '回执认的就是这一版；改了文件，控制面核对散列时这一版就不存在了。'
-            + '余下的尝试次数请用在其他交付物上，剩余的都是 advisory，不影响交付。',
+            + '要改它，先调用 evimed_revise_deliverable。',
         }
       }
       if (isProtectedWritePath(value)) {
@@ -135,12 +135,12 @@ export function toolPolicy(call, state) {
     if (isGateImplementationPath(command)) {
       return { allow: false, code: 'gate_source_denied', reason: GATE_SOURCE_REFUSAL }
     }
-    const frozen = [...accepted].find((id) => new RegExp(`deliverables/${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`).test(command))
-    if (frozen && /(?:^|[|;&]\s*)(?:rm|mv|cp|sed\s+-i|tee|truncate|install|dd|ln)\b/.test(command)) {
+    const delivered = [...frozen].find((id) => new RegExp(`deliverables/${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`).test(command))
+    if (delivered && /(?:^|[|;&]\s*)(?:rm|mv|cp|sed\s+-i|tee|truncate|install|dd|ln)\b/.test(command)) {
       return {
         allow: false,
         code: 'accepted_deliverable_frozen',
-        reason: `交付物 ${frozen} 已通过校验并写入回执，其文件按 sha256 记录在案，不能再改动。`,
+        reason: `交付物 ${delivered} 已在上一轮交付并写入回执，其文件按 sha256 记录在案，不能再改动。`,
       }
     }
     const guarded = guardedBashTarget(command)
@@ -297,10 +297,10 @@ export function accumulateBudget(budget, usage) {
  */
 export function stepPolicy(budget, limits) {
   if (limits.maxSteps > 0 && budget.steps >= limits.maxSteps) {
-    return { allow: false, code: 'budget_exhausted', reason: `本次运行已用满 ${limits.maxSteps} 步。请用 evimed_complete_run{partial:true} 交付你已完成的部分。` }
+    return { allow: false, code: 'budget_exhausted', reason: `本次运行已用满 ${limits.maxSteps} 步。把已经写出的部分连同未决问题写给用户，本轮到此为止。` }
   }
   if (limits.maxTokens > 0 && budget.tokens >= limits.maxTokens) {
-    return { allow: false, code: 'budget_exhausted', reason: `本次运行已用满 ${limits.maxTokens} token。请用 evimed_complete_run{partial:true} 交付你已完成的部分。` }
+    return { allow: false, code: 'budget_exhausted', reason: `本次运行已用满 ${limits.maxTokens} token。把已经写出的部分连同未决问题写给用户，本轮到此为止。` }
   }
   return { allow: true }
 }
@@ -649,7 +649,7 @@ export function completionCheck(input) {
     for (const issue of issues) {
       if (issue.severity !== 'required') continue
       issue.severity = 'advisory'
-      issue.message = `${issue.message}（partial 交付下不阻断，将如实记录在交付摘要中。）`
+      issue.message = `${issue.message}（不阻断交付，已如实记录在交付摘要里。）`
     }
   }
   const blocking = issues.filter((issue) => issue.severity === 'required')
@@ -756,6 +756,97 @@ export function renderDeliverySummary(input) {
 }
 
 /**
+ * A capability's method, as it is handed to whoever does the work.
+ *
+ * One function, because the root doing the work itself and a delegated child
+ * doing it must read the same method. They did not: the method travelled only
+ * inside a delegation prompt, so 「do it here」 meant doing it without the
+ * method, and the control plane then marked the finished package 未核验 for a
+ * method the platform was holding all along.
+ *
+ * @param {{ skillBodies: readonly { name: string, body: string }[], deferredSections?: readonly { name: string }[],
+ *   capsuleMethods?: readonly { name: string, body: string }[] }} input
+ * @returns {string[]}
+ */
+function methodSection(input) {
+  const deferred = input.deferredSections?.length ?? 0
+  return [
+    '## 方法',
+    '',
+    ...(deferred
+      ? [
+          `方法正文超过 ${SKILL_BODY_MAX_CHARS} 字，较长的 ${deferred} 节没有随任务注入：它们在原处保留标题，标题下写着原文所在的文件与行号。做到哪一节之前，先用 \`read\` 按那几行读取它，内容与原文逐字相同。`,
+          '',
+        ]
+      : []),
+    ...input.skillBodies.flatMap((skill) => [`### ${skill.name}`, '', skill.body, '']),
+    ...(input.capsuleMethods?.length
+      ? ['## 用户自己的方法（优先于平台默认流程，但不能突破契约）', '', ...input.capsuleMethods.flatMap((method) => [`### ${method.name}`, '', method.body, ''])]
+      : []),
+  ]
+}
+
+/**
+ * The same method, persona and file list a delegated child would receive, as a
+ * block injected into the session that is doing the work itself.
+ *
+ * Delegation is on demand now (2026-09-20): one deliverable is one
+ * conversation, and the work happens where the researcher can see it. What a
+ * child used to get for free — the capability's skill bodies, its persona, the
+ * names of the files it owes — has to arrive here instead, or 「default to
+ * doing it yourself」 is an instruction to work without a method.
+ *
+ * `item` is optional: a session bound to a capability is given its method
+ * before there is a plan to name a deliverable id.
+ *
+ * @param {{ manifest: Record<string, any>, item?: Record<string, any> | null, contractKind?: string,
+ *   skillBodies: readonly { name: string, body: string }[], deferredSections?: readonly { name: string }[],
+ *   capsuleMethods?: readonly { name: string, body: string }[], reviewEnabled?: boolean }} input
+ * @returns {string}
+ */
+export function buildInlineMethod(input) {
+  const contractKind = String(input.contractKind ?? input.item?.contractKind ?? '')
+  const outputs = (input.manifest.produces ?? []).find((/** @type {any} */ entry) => entry.contractKind === contractKind)?.outputs ?? []
+  const persona = String(input.manifest.persona ?? '').trim()
+  return [
+    `<evimed-method capability="${input.manifest.id}">`,
+    '',
+    '这件能力的方法正文、人设与要写的文件如下——和委派给子代理时注入的内容相同。你自己做这件交付物时按它工作；要委派时，子代理会自己拿到一份。',
+    '',
+    ...(persona ? ['## 人设', '', persona, ''] : []),
+    ...methodSection(input),
+    '## 你要写出的文件',
+    '',
+    ...(input.item && outputs.length
+      ? outputs.map((/** @type {any} */ output) => `- \`deliverables/${input.item?.id}/${output.path}\`${output.required ? '（必需）' : '（可选）'}`)
+      : ['- 计划里写下交付物之后，文件写在 `deliverables/<交付物 id>/` 下。']),
+    '',
+    `写完调用 \`evimed_submit_deliverable\`：它会先整理编号与参考文献表，再跑门禁${input.reviewEnabled ? '，再叫独立审查者，一次返回三者的结果' : '，一次返回裁定'}。未通过就按 issues 修好再提交；本轮对话结束前文件都还能改。`,
+    '',
+    '</evimed-method>',
+  ].join('\n')
+}
+
+/**
+ * The capability ids a text names, matched against the catalogue.
+ *
+ * A closed vocabulary — the ids this deployment mounted — so this is a lookup,
+ * not a reading of language (principle 5). It exists because a session the
+ * control plane routed to one capability says so in its own context block, and
+ * the run side has no other structured way to learn what it was bound to.
+ *
+ * @param {string | null | undefined} text @param {readonly Record<string, any>[]} capabilities
+ * @returns {string[]}
+ */
+export function namedCapabilityIds(text, capabilities) {
+  const value = String(text ?? '')
+  if (!value) return []
+  return [...new Set((capabilities ?? [])
+    .map((manifest) => String(manifest?.id ?? ''))
+    .filter((id) => id && value.includes(id)))]
+}
+
+/**
  * The delegation request for one plan item.
  *
  * The child gets the deliverable's specification, the relevant part of the
@@ -796,20 +887,8 @@ export function renderDeliverySummary(input) {
  */
 export function buildDelegation(input) {
   const outputs = (input.manifest.produces ?? []).find((/** @type {any} */ entry) => entry.contractKind === input.item.contractKind)?.outputs ?? []
-  const deferred = input.deferredSections?.length ?? 0
   const prompt = [
-    '## 方法',
-    '',
-    ...(deferred
-      ? [
-          `方法正文超过 ${SKILL_BODY_MAX_CHARS} 字，较长的 ${deferred} 节没有随任务注入：它们在原处保留标题，标题下写着原文所在的文件与行号。做到哪一节之前，先用 \`read\` 按那几行读取它，内容与原文逐字相同。`,
-          '',
-        ]
-      : []),
-    ...input.skillBodies.flatMap((skill) => [`### ${skill.name}`, '', skill.body, '']),
-    ...(input.capsuleMethods?.length
-      ? ['## 用户自己的方法（优先于平台默认流程，但不能突破契约）', '', ...input.capsuleMethods.flatMap((method) => [`### ${method.name}`, '', method.body, ''])]
-      : []),
+    ...methodSection(input),
     '## 你的任务',
     '',
     `你负责一件交付物：${input.item.title ?? input.item.id}（契约种类 ${input.item.contractKind}）。`,

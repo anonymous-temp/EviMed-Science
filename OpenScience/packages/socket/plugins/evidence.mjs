@@ -15,7 +15,7 @@
  */
 
 import { errorMessage } from '../src/runPolicy.mjs'
-import { mcpToolBaseName } from '@evimed/domain'
+import { mcpToolBaseName, narrateToolCall } from '@evimed/domain'
 import { configSchema, onToolObserved } from '@evimed/harness-port'
 import { EVIDENCE_TOOL_BASE_NAMES, evidenceFromOutcome, mergeEvidence, sourceProbe } from '../src/evidenceIngest.mjs'
 import { advanceEvidence } from '../src/runMirror.mjs'
@@ -126,7 +126,11 @@ export async function apply(ctx, config) {
           // it in the same words as an ordinary empty search.
           const { reason } = sourceProbe(outcome?.structured)
           if (reason === 'empty-container') {
-            diagnostics?.notice?.(`${base} searched and returned no source`)
+            // A notice is read by the researcher — it travels through the run
+            // projection into the inbox, the card and the page — so it is
+            // written in their words, not in ours. This line used to read
+            // `literature_search searched and returned no source`.
+            diagnostics?.notice?.(`${narrateToolCall(call?.name ?? '', call?.args ?? {}).text}——这次检索没有找到可用来源。`)
           } else {
             diagnostics?.degrade?.(
               `evidence ingest cannot read a completed ${base} result: no recognised source container (${reason}, structured=${outcome?.structured === undefined ? 'absent' : typeof outcome.structured})`,
