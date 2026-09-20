@@ -116,8 +116,8 @@ it("opens the run a notice names, and keeps that link after the notice is handle
   // The inbox was the one surface that named a run and then offered no way to
   // reach it: the card rendered no control, so a reader who was told their
   // research had finished had to go and find it by hand in a list ordered by
-  // time. RunsPage has accepted `?run=` since the sidebar started linking to
-  // it; nothing was ever pointed at it from here.
+  // time. A notice names a run, and `?run=` is resolved to the conversation
+  // that run happened in (`RunRedirect`, router.tsx).
   const runNotice = { ...review, id: "run-finished", noticeType: "notify" as const,
     title: "交付物未通过质量门",
     body: "这次运行没有通过交付前的质量门。\n本次运行产出 8 个文件，仍在工作区里，可以直接打开。",
