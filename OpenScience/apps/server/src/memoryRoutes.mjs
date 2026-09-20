@@ -1,3 +1,5 @@
+import { recallAcrossMemory } from "./memoryRecall.mjs";
+import { MEMORY_KINDS, conversationTitlesIn } from "./researchMemory.mjs";
 import {
   HttpError,
   apiBaseFromRequest,
@@ -118,77 +120,20 @@ export function createMemoryRoutes({
       return true;
     }
 
-    if (pathname === "/api/memory/memos" && req.method === "GET") {
-      const ctx = await context(req, res);
-      const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
-      const state = url.searchParams.get("state") === "archived" ? "archived" : "normal";
-      sendJson(res, 200, { data: await researchMemory.list(ctx.user.id, { state }) });
-      return true;
-    }
-
-    if (pathname === "/api/memory/memos" && req.method === "POST") {
-      const ctx = await context(req, res);
-      const body = assertObject(await readJson(req, config.maxJsonBytes), "research memory");
-      const unknown = Object.keys(body).filter((field) => field !== "content");
-      if (unknown.length > 0) {
-        throw new HttpError(400, "memory_payload_invalid", `Unknown memory field(s): ${unknown.sort().join(", ")}.`);
-      }
-      const content = assertString(body.content, "content", { max: Math.min(config.maxJsonBytes, 100_000) }).trim();
-      if (!content) throw new HttpError(400, "memory_content_empty", "Memory content must not be empty.");
-      const memo = await researchMemory.create(ctx.user.id, content);
-      await audit(ctx, "memory.create", "completed", { target: memo.id });
-      sendJson(res, 201, { data: memo });
-      return true;
-    }
-
-    if (pathname.startsWith("/api/memory/memos/")) {
-      const rawMemoId = pathname.slice("/api/memory/memos/".length);
-      if (!rawMemoId || rawMemoId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
-      const memoId = decodeRouteComponent(rawMemoId, "memo id");
-      const ctx = await context(req, res);
-      if (req.method === "PATCH") {
-        const body = assertObject(await readJson(req, config.maxJsonBytes), "research memory update");
-        const unknown = Object.keys(body).filter((field) => !["content", "pinned", "state"].includes(field));
-        if (unknown.length > 0) {
-          throw new HttpError(400, "memory_payload_invalid", `Unknown memory field(s): ${unknown.sort().join(", ")}.`);
-        }
-        const update = {};
-        if (Object.hasOwn(body, "content")) {
-          const content = assertString(body.content, "content", { max: Math.min(config.maxJsonBytes, 100_000) }).trim();
-          if (!content) throw new HttpError(400, "memory_content_empty", "Memory content must not be empty.");
-          update.content = content;
-        }
-        if (Object.hasOwn(body, "pinned")) {
-          if (typeof body.pinned !== "boolean") throw new HttpError(400, "memory_pinned_invalid", "pinned must be a boolean.");
-          update.pinned = body.pinned;
-        }
-        if (Object.hasOwn(body, "state")) {
-          if (!["normal", "archived"].includes(body.state)) {
-            throw new HttpError(400, "memory_state_invalid", "state must be normal or archived.");
-          }
-          update.state = body.state;
-        }
-        const memo = await researchMemory.update(ctx.user.id, memoId, update);
-        await audit(ctx, "memory.update", "completed", { target: memo.id });
-        sendJson(res, 200, { data: memo });
-        return true;
-      }
-      if (req.method === "DELETE") {
-        await researchMemory.delete(ctx.user.id, memoId);
-        await audit(ctx, "memory.delete", "completed", { target: memoId });
-        sendJson(res, 200, { data: true });
-        return true;
-      }
-    }
+    // 「你写下的笔记」 and its three routes — GET/POST /api/memory/memos and
+    // PATCH/DELETE on one of them — were deleted on 2026-09-20 with the table
+    // behind them. A composer for what the extractor already writes is work
+    // asked of the researcher for nothing; what they want remembered they say
+    // in a conversation.
 
     if (pathname === "/api/memory/records" && req.method === "GET") {
       const ctx = await context(req, res);
       const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
       const allowedScopes = new Set(["user", "project", "session", "organization"]);
-      const allowedKinds = new Set([
-        "profile", "preference", "behavior", "project_fact", "analysis",
-        "decision", "correction", "follow_up", "run_summary",
-      ]);
+      // The whole stored vocabulary, not what extraction may write:
+      // `analysis` rows written before 2026-09-20 still exist and a reader has
+      // to be able to ask for them.
+      const allowedKinds = new Set(MEMORY_KINDS);
       const allowedStatuses = new Set(["active", "pending", "superseded", "archived"]);
       const readFilters = (name, allowed) => url.searchParams.getAll(name)
         .flatMap((value) => value.split(","))
@@ -222,7 +167,71 @@ export function createMemoryRoutes({
 
     if (pathname === "/api/memory/profile" && req.method === "GET") {
       const ctx = await context(req, res);
-      sendJson(res, 200, { data: await researchMemory.profile(ctx.user.id, { projectId: ctx.project.id }) });
+      const profile = await researchMemory.profile(ctx.user.id, { projectId: ctx.project.id });
+      const ids = profile.records.map((/** @type {any} */ record) => record.id);
+      sendJson(res, 200, { data: {
+        ...profile,
+        // What each memory came out of, and how often it has been used: the
+        // two things every row on the page says, resolved here rather than by
+        // the page, which would otherwise need the whole account to say them.
+        conversations: conversationTitlesIn(profile.records),
+        usage: typeof researchMemory.recordUsage === "function"
+          ? await researchMemory.recordUsage(ctx.user.id, ids).catch(() => ({}))
+          : {},
+      } });
+      return true;
+    }
+
+    /**
+     * The memory page's search box.
+     *
+     * Keyword and semantic, unioned server-side. The page's box used to be a
+     * `toLowerCase().includes` over the notes already loaded, so a researcher
+     * searching 「阿司匹林」 found it only if the row happened to be on screen.
+     * Keyword comes from the store, over everything the account holds
+     * including what recall never serves — an archived memory and a 「做过的
+     * 研究」 summary both have to be findable. Semantic comes from the recall
+     * index through the same port every recall uses, and only nominates: each
+     * hit is resolved back to the stored record, so a stale index cannot show
+     * stale text and cannot show a memory the reader is not entitled to.
+     *
+     * The keyword half is authoritative. An index that is down, off or
+     * unconfigured costs the search its semantic half and nothing else.
+     */
+    if (pathname === "/api/memory/search" && req.method === "GET") {
+      const ctx = await context(req, res);
+      const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
+      const query = (url.searchParams.get("q") ?? "").trim();
+      const found = await researchMemory.searchRecords(ctx.user.id, { query, projectId: ctx.project.id });
+      const items = [...found.items];
+      const seen = new Set(items.map((/** @type {any} */ record) => record.id));
+      let semantic = 0;
+      // `conversation` scope: the research-memory records, which is what this
+      // page lists. A capsule entry is a different row with a different editor
+      // and reaches the page through its own read.
+      if (query && memorySubstrate) {
+        const recalled = await recallAcrossMemory({ capsules: null, memorySubstrate }, ctx.user, {
+          query, projectId: ctx.project.id, limit: 25, scope: "conversation", countUsage: false,
+        }).catch(() => null);
+        for (const item of recalled?.items ?? []) {
+          const id = /^record:(.+)$/.exec(String(item.id ?? ""))?.[1];
+          if (!id || seen.has(id)) continue;
+          const record = await researchMemory.getRecord(ctx.user.id, id).catch(() => null);
+          if (!record) continue;
+          seen.add(id);
+          items.push(record);
+          semantic += 1;
+        }
+      }
+      sendJson(res, 200, { data: {
+        items,
+        query,
+        semantic,
+        conversations: { ...found.titles, ...conversationTitlesIn(items) },
+        usage: typeof researchMemory.recordUsage === "function"
+          ? await researchMemory.recordUsage(ctx.user.id, items.map((/** @type {any} */ record) => record.id)).catch(() => ({}))
+          : {},
+      } });
       return true;
     }
 

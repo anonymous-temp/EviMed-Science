@@ -164,17 +164,20 @@ test("publishes one account fires at once never starve another tenant's queries,
     id: SOURCE, project_id: "papers", revision: 1, payload: { status: "complete", fingerprint: { sha256 }, paths: ["knowledge-base/指南.pdf"] } } });
   const database = new ControlPlaneDatabase({ databaseUrl: "postgres://unused", databasePoolMax: POOL, databaseConnectionTimeoutMs: 400 }, { pool });
   await database.migrate();
-  const entry = { id: `library:${sha256}`, revision: 1, payload: { recordType: "library-item", sourceId: SOURCE, sha256, published: null } };
+  // The publication ledger is keyed by the document, not by a library entry:
+  // this happens to every document the platform reads, not only to the ones a
+  // researcher chose to keep across projects.
+  const entry = { id: `source-publication:${SOURCE}`, revision: 0, payload: { recordType: "source-publication", sourceId: SOURCE, entries: {} } };
   // Every read and write is a pooled statement, as ProductDocuments' are.
   const documents = {
     database,
-    async list(/** @type {string} */ userId, /** @type {string} */ _kind, /** @type {any} */ { filter }) {
+    async list() {
       await database.query("SELECT 1");
-      return { items: userId === "user-a" && filter.sourceId === entry.payload.sourceId ? [entry] : [], nextCursor: null };
+      return { items: [], nextCursor: null };
     },
     async get(/** @type {string} */ userId, /** @type {string} */ kind, /** @type {string} */ id) {
       await database.query("SELECT 1");
-      return userId === "user-a" && kind === "preferences" && id === entry.id ? entry : null;
+      return userId === "user-a" && kind === "preferences" && id === entry.id && entry.revision > 0 ? entry : null;
     },
     async put(/** @type {string} */ _userId, /** @type {string} */ _kind, /** @type {string} */ _id, /** @type {any} */ payload) {
       await database.query("SELECT 1");
@@ -187,8 +190,13 @@ test("publishes one account fires at once never starve another tenant's queries,
   let finishReading = () => {};
   const reading = new Promise((resolve) => { finishReading = () => resolve(undefined); });
   let understandingReads = 0;
-  /** @type {{ getUnderstanding: () => Promise<any> }} */
+  /** @type {{ get: (userId: string, id: string) => Promise<any>, getUnderstanding: () => Promise<any> }} */
   const sources = {
+    async get(userId, id) {
+      await database.query("SELECT 1");
+      if (userId !== "user-a" || id !== SOURCE) throw Object.assign(new Error("gone"), { code: "source_not_found" });
+      return { id: SOURCE, projectId: "papers", payload: { status: "complete", fingerprint: { sha256 }, paths: ["knowledge-base/指南.pdf"] } };
+    },
     async getUnderstanding() {
       understandingReads += 1;
       await reading;
@@ -205,22 +213,23 @@ test("publishes one account fires at once never starve another tenant's queries,
   };
   const library = new LibraryService({ documents, sources, capsules, libraryDir: () => "/nonexistent/library" });
   try {
-    const first = library.publishToCapsule("user-a", SOURCE);
+    const first = library.publishSourceUnderstanding("user-a", SOURCE);
     first.catch(() => {}); // awaited below; a failed assertion must not surface as its rejection instead
     for (let waited = 0; understandingReads === 0 && waited < 2_000; waited += 5) await new Promise((resolve) => setTimeout(resolve, 5));
     assert.equal(understandingReads, 1, "the first publication is under way");
     // The account fires a pool's worth more while its first one is running.
-    const more = await Promise.all(Array.from({ length: POOL }, () => within(library.publishToCapsule("user-a", SOURCE), 1_000)));
+    const more = await Promise.all(Array.from({ length: POOL }, () => within(library.publishSourceUnderstanding("user-a", SOURCE), 1_000)));
     assert.deepEqual(more.map((outcome) => outcome.status === "rejected" ? [outcome.reason.status, outcome.reason.code] : outcome.status),
       Array(POOL).fill([409, "library_publish_busy"]), "refused at once rather than waiting for the first");
-    // So are ids the account's library does not hold: refused by the lookup, before anything is held.
+    // A document this account does not have is refused, and so is a malformed
+    // id — both before anything is held.
     const strangers = await Promise.all([
-      ...Array.from({ length: POOL }, () => library.publishToCapsule("user-a", `src_${"0".repeat(32)}`)),
-      library.publishToCapsule("user-b", SOURCE),
-      library.publishToCapsule("user-a", "src_not-an-id"),
+      library.publishSourceUnderstanding("user-b", SOURCE),
+      library.publishSourceUnderstanding("user-a", "src_not-an-id"),
     ].map((attempt) => within(attempt, 1_000)));
     assert.deepEqual(strangers.map((outcome) => outcome.status === "rejected" ? outcome.reason.code : outcome.status),
-      [...Array(POOL + 1).fill("library_item_not_found"), "library_source_invalid"]);
+      ["library_source_removed", "library_payload_invalid"],
+      "another account has its own guard, and a document it does not hold is refused by the lookup");
     // Another tenant is served at once while the publication is still running.
     const tenant = await within(database.query("SELECT 1 -- another tenant"), 1_000);
     assert.equal(tenant.status, "fulfilled", tenant.reason?.message ?? tenant.status);
@@ -230,13 +239,13 @@ test("publishes one account fires at once never starve another tenant's queries,
     const result = await first;
     assert.deepEqual({ facts: result.facts, added: result.added }, { facts: 1, added: 1 });
     // The guard goes with the publication: the next one runs, and adds nothing twice.
-    const again = await library.publishToCapsule("user-a", SOURCE);
+    const again = await library.publishSourceUnderstanding("user-a", SOURCE);
     assert.deepEqual({ added: again.added, kept: again.kept }, { added: 0, kept: 1 });
     // A publication that fails releases it too.
     sources.getUnderstanding = async () => { throw Object.assign(new Error("understanding unreadable"), { code: "source_unreadable" }); };
-    await assert.rejects(library.publishToCapsule("user-a", SOURCE), { code: "source_unreadable" });
+    await assert.rejects(library.publishSourceUnderstanding("user-a", SOURCE), { code: "source_unreadable" });
     sources.getUnderstanding = async () => ({ current: null });
-    await assert.rejects(library.publishToCapsule("user-a", SOURCE), { code: "library_understanding_missing" });
+    await assert.rejects(library.publishSourceUnderstanding("user-a", SOURCE), { code: "library_understanding_missing" });
   } finally {
     finishReading();
     await within(pool.end(), 1_000);

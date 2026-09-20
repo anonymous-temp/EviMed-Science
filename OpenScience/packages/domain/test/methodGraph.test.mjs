@@ -176,26 +176,22 @@ test("tau decides who gets an evaluation, and it is about spending money", () =>
 
 /* --------------------------------------------------------- the promotion table */
 
-test("what a candidate still lacks is given as codes a page can put in the reader's language, line for line", () => {
-  // The sentences are English and written for the log; the methods page reads
-  // these instead of pattern-matching them (2026-09-16 review, P2 #15).
-  const unevaluated = promotionVerdict(method({ learning: threeSuccesses() }));
-  assert.equal(unevaluated.missingDetails.length, unevaluated.missing.length);
-  assert.deepEqual(unevaluated.missingDetails.map((detail) => detail.code), ["no_evaluation"]);
-
-  const young = promotionVerdict(method({ learning: emptyLearning(DIGEST_A) }));
-  assert.equal(young.missingDetails.length, young.missing.length);
-  assert.equal(young.missingDetails[0].code, "trajectories_needed");
-  assert.equal(young.missingDetails[0].have, 0);
-  assert.ok(Number(young.missingDetails[0].need) > 0);
-
-  const lost = promotionVerdict(method({
-    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "worse" }),
+test("what a method still lacks is given as codes a page can put in the reader's language, line for line", () => {
+  // The sentences are English and written for the log; the memory page reads
+  // these instead of pattern-matching them. Since 2026-09-20 there is one code
+  // left to report: an unresolved conflict is the only thing that blocks
+  // effect, because it is the only one no measurement repairs.
+  const conflicted = promotionVerdict(method({
+    learning: foldRelation(threeSuccesses(), { type: "conflicts_with", target: "m9", evidence: "opposite advice", proposedBy: "job_1" }),
   }));
-  assert.deepEqual(lost.missingDetails, [{ code: "evaluation_not_passing", verdict: "worse" }]);
+  assert.equal(conflicted.missingDetails.length, conflicted.missing.length);
+  assert.deepEqual(conflicted.missingDetails.map((detail) => detail.code), ["conflicts"]);
+  assert.equal(conflicted.missingDetails[0].count, 1);
 
-  const explicit = promotionVerdict(method({ provenance: { origin: "explicit" } }));
-  assert.deepEqual(explicit.missingDetails, []);
+  for (const record of [method({ learning: threeSuccesses() }), method({ learning: emptyLearning(DIGEST_A) }),
+    method({ provenance: { origin: "explicit" } })]) {
+    assert.deepEqual(promotionVerdict(record).missingDetails, [], "nothing else is a reason to withhold a method");
+  }
 });
 
 test("an explicitly taught method takes effect immediately", () => {
@@ -205,64 +201,75 @@ test("an explicitly taught method takes effect immediately", () => {
   assert.deepEqual(verdict.missing, []);
 });
 
-test("an inferred method needs the threshold, a passing evaluation on its own text, and a live baseline", () => {
-  const passing = foldEvaluation(threeSuccesses(), { report: "r.json", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "better" });
-  const good = promotionVerdict(method({ learning: passing }), { currentBaselineDigest: DIGEST_B });
-  assert.equal(good.status, "approved", good.missing.join("; "));
+test("a distilled method takes effect immediately too, whatever its evidence says", () => {
+  // The bar moved from promotion to demotion on 2026-09-20. An inferred method
+  // used to need three trajectories, two runs and a passing paired evaluation
+  // against a live baseline; production never once cleared it, because the
+  // evaluation runner defaults to empty and the job failed terminally by name.
+  // So: effective at once, and `retirementProposal` is what takes it away.
+  const fresh = promotionVerdict(method({ learning: emptyLearning(DIGEST_A) }));
+  assert.equal(fresh.status, "approved", fresh.missing.join("; "));
+  assert.match(fresh.reasons.join(" "), /takes effect immediately/);
 
-  for (const currentBaselineDigest of [undefined, "", "   "]) {
-    const unavailable = promotionVerdict(method({ learning: passing }), { currentBaselineDigest });
-    assert.equal(unavailable.status, "candidate", "omitting the live baseline must not bypass freshness");
-    assert.match(unavailable.missing.join(" "), /current baseline.*unavailable/);
+  // None of the old gates moves it, and none of them is read: no evaluation, a
+  // losing one, an inconclusive one, a stale baseline, a verdict about other
+  // text, and no baseline at all are all still effective.
+  const losing = foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "worse" });
+  for (const [name, learning, options] of [
+    ["no evaluation", threeSuccesses(), {}],
+    ["a losing one", losing, { currentBaselineDigest: DIGEST_B }],
+    ["an inconclusive one", foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "inconclusive" }), {}],
+    ["a moved baseline", foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "better" }), { currentBaselineDigest: DIGEST_C }],
+    ["no baseline at all", foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "better" }), {}],
+  ]) {
+    assert.equal(promotionVerdict(method({ learning }), options).status, "approved", `${name} must not withhold a method`);
   }
 
-  // No evaluation at all.
-  const unevaluated = promotionVerdict(method({ learning: threeSuccesses() }));
-  assert.equal(unevaluated.status, "candidate");
-  assert.match(unevaluated.missing.join(" "), /no paired evaluation/);
-
-  // Evaluated and lost.
-  const lost = promotionVerdict(method({
-    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "worse" }),
+  // What a verdict does do is show on the row, when it is about the text that
+  // would be mounted.
+  const measured = promotionVerdict(method({
+    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "better" }),
   }));
-  assert.equal(lost.status, "candidate");
-  assert.match(lost.missing.join(" "), /returned worse/);
+  assert.match(measured.reasons.join(" "), /evaluation better against/);
+  // A verdict about other text says nothing about what would be mounted.
+  const otherText = promotionVerdict(method({
+    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_C, verdict: "better" }),
+  }));
+  assert.doesNotMatch(otherText.reasons.join(" "), /evaluation better against/);
+});
 
-  // Inconclusive is not a pass. A confidence interval that spans the margin
-  // means we do not know, and "we do not know" must not promote.
-  const unclear = promotionVerdict(method({
+test("a measured-worse revision is retired at once, and only on the text it measured", () => {
+  const now = Date.now();
+  const worse = (candidateDigest) => foldEvaluation(threeSuccesses(), {
+    report: "r.json", baselineDigest: DIGEST_B, candidateDigest, verdict: "worse",
+  });
+  const measured = retirementProposal(method({ status: "approved", learning: worse(DIGEST_A) }), { nowMs: now });
+  assert.equal(measured.propose, true);
+  assert.equal(measured.immediate, true, "a measured harm does not wait for the next nightly pass");
+  assert.match(measured.reason, /worse than working without it/);
+
+  // About text this method no longer holds: says nothing about what is mounted.
+  const stale = retirementProposal(method({ status: "approved", learning: worse(DIGEST_C) }), { nowMs: now });
+  assert.equal(stale.propose, false);
+  const unnamed = retirementProposal(method({
+    status: "approved",
+    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, verdict: "worse" }),
+  }), { nowMs: now });
+  assert.equal(unnamed.propose, false, "a verdict that names no text describes nothing in particular");
+
+  // "We could not tell" is not a reason to take something away.
+  const unclear = retirementProposal(method({
+    status: "approved",
     learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "inconclusive" }),
-  }));
-  assert.equal(unclear.status, "candidate");
+  }), { nowMs: now });
+  assert.equal(unclear.propose, false);
 
-  // Won against a baseline that has since moved: the comparison is stale.
-  const stale = promotionVerdict(method({ learning: passing }), { currentBaselineDigest: DIGEST_C });
-  assert.equal(stale.status, "candidate");
-
-  // Won, but about text this method no longer holds. The verdict was real and
-  // it is not about what would be mounted, which is the same answer as never
-  // having been evaluated -- and the message has to say which of the two it is.
-  const otherText = promotionVerdict(
-    method({ learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_C, verdict: "better" }) }),
-    { currentBaselineDigest: DIGEST_B },
+  // And a safety method is never retired by a measurement either.
+  const safety = retirementProposal(
+    method({ status: "approved", learning: worse(DIGEST_A), provenance: { origin: "inferred", safetyRelated: true } }),
+    { nowMs: now },
   );
-  assert.equal(otherText.status, "candidate");
-  assert.match(otherText.missing.join(" "), /no longer holds/);
-  const unnamedText = promotionVerdict(
-    method({ learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, verdict: "better" }) }),
-    { currentBaselineDigest: DIGEST_B },
-  );
-  assert.match(unnamedText.missing.join(" "), /does not name the text it measured/);
-  assert.match(stale.missing.join(" "), /baseline that has since moved/);
-
-  // Not enough trajectories.
-  const thin = promotionVerdict(method({
-    learning: foldEvaluation(
-      foldObservation(emptyLearning(DIGEST_A), { runId: "r1", family: "f1", outcome: "accepted", at: daysAgo(1) }),
-      { report: "r", baselineDigest: DIGEST_B, verdict: "better" },
-    ),
-  }), { currentBaselineDigest: DIGEST_B });
-  assert.equal(thin.status, "candidate");
+  assert.equal(safety.propose, false);
 });
 
 test("an unresolved conflict blocks promotion from either origin", () => {

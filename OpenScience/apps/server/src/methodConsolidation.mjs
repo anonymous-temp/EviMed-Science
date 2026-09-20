@@ -8,9 +8,14 @@
  * no success gate, only a prompt line saying live feedback overrides the
  * generated skill. Its measured benefit is real but was obtained in game and
  * web environments at temperature zero, single run, no intervals. So the
- * structure is taken and the confidence is not: nothing an inferred pass
- * proposes becomes effective without a paired evaluation against a frozen
- * baseline (the plan's section 6.4 step 6, and the spec's own note at line 1812).
+ * structure is taken and the confidence is not — but since 2026-09-20 the
+ * paired evaluation against a frozen baseline sits on the other side of the
+ * decision. It was the gate, and under stock configuration it had never once
+ * opened: `learningEvaluationCommand` defaults to empty, so the evaluate job
+ * failed terminally by name and production held zero effective methods while
+ * the product said it learned. So a distilled method takes effect at once,
+ * marked new, and the same comparison runs afterwards as the thing that can
+ * retire it (`promotionVerdict`, `retirementProposal`).
  *
  * The two model steps are separate runs on purpose, and in that order:
  *
@@ -39,6 +44,7 @@ import {
   parseSkillFrontmatter,
   preservedSectionsIntact,
   reflectionDue,
+  retirementProposal,
   validateMethodGraph,
 } from "@evimed/domain";
 import { methodRecordFrom } from "./learningService.mjs";
@@ -249,34 +255,37 @@ export class MethodConsolidation {
     /** @type {string[]} */
     const queuedForEvaluation = [];
     for (const document of refreshed) {
-      if (document.payload?.status !== "candidate") continue;
+      if (document.payload?.status === "retired") continue;
       const record = methodRecordFrom(document);
       record.learning = { ...record.learning, level: levels.get(record.name) ?? 0 };
       const eligibility = evaluationEligible(record);
-      try {
-        const approvedDocument = await this.learning.approve(job.userId, document.id, { expectedRevision: document.revision });
-        promoted.push(approvedDocument.id);
-      } catch (error) {
-        // Not promotable is the ordinary outcome, and the reason is what the
-        // researcher is shown. A candidate that has earned the cost of an
-        // evaluation but has not had one gets queued for it here — that is the
-        // one thing a nightly pass can do about "we do not know yet".
-        if (error?.code !== "method_not_promotable") throw error;
-        const latest = document.payload.learning?.evaluations?.at(-1);
-        if (!latest) {
-          // A fresh candidate cannot earn observations until an isolated trial
-          // mounts it. Bootstrap buys a bounded trial, never an approval or a
-          // weaker promotion threshold.
-          await this.enqueueEvaluation(job, document, !eligibility.eligible);
+      if (document.payload?.status === "candidate") {
+        try {
+          const approvedDocument = await this.learning.approve(job.userId, document.id, { expectedRevision: document.revision });
+          promoted.push(approvedDocument.id);
+        } catch (error) {
+          // Not promotable now means one thing only: an unresolved conflict
+          // with another method, which no measurement repairs. The reason is
+          // what the researcher is shown.
+          if (error?.code !== "method_not_promotable") throw error;
+        }
+      }
+      // The measurement, which now decides retirement rather than effect.
+      // Queued for anything effective that has earned the cost and has no
+      // current verdict, and for a fresh method that has no observations yet —
+      // a bootstrap buys a bounded trial and never a status.
+      const latest = document.payload.learning?.evaluations?.at(-1);
+      if (!latest) {
+        await this.enqueueEvaluation(job, document, !eligibility.eligible);
+        queuedForEvaluation.push(document.id);
+      } else if (eligibility.eligible) {
+        // A changed library, or text this verdict never measured, needs a new
+        // comparison. An unchanged one is not re-run.
+        const baselineDigest = await this.learning.currentBaselineDigest(job.userId, document.projectId);
+        const stale = latest.candidateDigest !== document.payload.contentDigest;
+        if (baselineDigest && (stale || baselineDigest !== latest.baselineDigest)) {
+          await this.enqueueEvaluation(job, document, false, baselineDigest);
           queuedForEvaluation.push(document.id);
-        } else if (eligibility.eligible) {
-          // A changed library needs a new measurement. Keep the previous
-          // verdict intact, and do not retry an unchanged failed comparison.
-          const baselineDigest = await this.learning.currentBaselineDigest(job.userId, document.projectId);
-          if (baselineDigest && baselineDigest !== latest.baselineDigest) {
-            await this.enqueueEvaluation(job, document, false, baselineDigest);
-            queuedForEvaluation.push(document.id);
-          }
         }
       }
     }
@@ -387,7 +396,33 @@ export class MethodConsolidation {
       await this.audit?.(job, "method.evaluation.stale", { methodId, candidateDigest, verdict: report.verdict });
       return { action: "evaluate", methodId, verdict: report.verdict, report: report.report, stale: true };
     }
-    return { action: "evaluate", methodId, verdict: report.verdict, report: report.report };
+    // What the measurement now decides. A method that measured worse than
+    // working without it is retired here rather than on the next nightly pass:
+    // it is effective from the moment it was learned, so every night it keeps
+    // is another night of a harm we have already measured. Everything else the
+    // verdict does — the record, the reader's line on the row — is unchanged,
+    // and `retirementProposal` still refuses to touch a safety method.
+    const retired = await this.#demoteIfWorse(job, methodId);
+    return { action: "evaluate", methodId, verdict: report.verdict, report: report.report, ...(retired ? { retired } : {}) };
+  }
+
+  /**
+   * Retire a method its own latest evaluation says is worse. Returns the id
+   * when it did, so the job's result names it.
+   * @param {any} job @param {string} methodId
+   */
+  async #demoteIfWorse(job, methodId) {
+    const document = await this.learning.getMethod(job.userId, methodId).catch(() => null);
+    if (!document || document.payload?.status === "retired") return null;
+    const proposal = retirementProposal(methodRecordFrom(document), { nowMs: this.now().getTime() });
+    if (!proposal.propose || !proposal.immediate) return null;
+    const stopped = await this.learning.retire(job.userId, document.id, {
+      expectedRevision: document.revision,
+      reason: proposal.reason,
+    }).catch(() => null);
+    if (!stopped) return null;
+    await this.notice(job, document, `Retired automatically: ${proposal.reason}. One click restores it.`);
+    return document.id;
   }
 
   /**

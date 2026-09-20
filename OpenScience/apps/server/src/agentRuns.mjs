@@ -3821,9 +3821,9 @@ export class AgentRunStore {
   /**
    * The runs of a project that are still going, with the conversation each is
    * in — what the capsule gateway asks to know whose recall it is answering
-   * (an incognito conversation, a 「本次不用」), and what the model gateway
-   * attributes a request against. A fold with no phase walk, because it is
-   * asked per request.
+   * (a conversation trying someone else's capsule, and which run to record the
+   * recall on), and what the model gateway attributes a request against. A
+   * fold with no phase walk, because it is asked per request.
    * @param {any} project @returns {Promise<{ id: string, sessionId: string }[]>}
    */
   async activeRuns(project) {

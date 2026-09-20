@@ -150,13 +150,13 @@ test("a computed tool result can ground a memory, and a paraphrase of one cannot
       const toolSource = payload.sources.find((source) => source.role === "tool");
       return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [
         {
-          scope: "project", kind: "analysis", key: "project.analysis.adr_signal.metformin",
+          scope: "project", kind: "project_fact", key: "project.fact.adr_signal.metformin",
           value: "ROR 3.42 over 1843 cases", summary: "metformin / lactic acidosis disproportionality",
           origin: "system", confidence: 1, importance: 0.8, sensitive: false,
           sourceRef: toolSource.sourceRef, evidenceQuote: '"ror":3.42',
         },
         {
-          scope: "project", kind: "analysis", key: "project.analysis.paraphrased",
+          scope: "project", kind: "project_fact", key: "project.fact.paraphrased",
           value: "ROR was about 3.4", summary: "paraphrase", origin: "system",
           confidence: 1, importance: 0.8, sensitive: false,
           sourceRef: toolSource.sourceRef, evidenceQuote: "ROR was approximately 3.4",
@@ -328,13 +328,13 @@ test("memories are written in the researcher's language, and what has to stay ex
         }),
         // Chinese value, English quote: the quote belongs to its source.
         candidate({
-          scope: "project", kind: "analysis", key: "project.analysis.rocket_af.primary", origin: "system",
+          scope: "project", kind: "project_fact", key: "project.fact.rocket_af.primary", origin: "system",
           value: "ROCKET AF 主要终点 HR 0.88（0.75-1.03）", summary: "ROCKET AF 主要终点效应量",
           sourceRef: tool.sourceRef, evidenceQuote: '"hr":0.88',
         }),
         // The same source with its quote translated along with the value.
         candidate({
-          scope: "project", kind: "analysis", key: "project.analysis.rocket_af.count", origin: "system",
+          scope: "project", kind: "project_fact", key: "project.fact.rocket_af.count", origin: "system",
           value: "检索到 1 项试验", summary: "试验数",
           sourceRef: tool.sourceRef, evidenceQuote: "检索到 1 项试验",
         }),
@@ -353,14 +353,14 @@ test("memories are written in the researcher's language, and what has to stay ex
   // What the model wrote is what is stored, byte for byte.
   assert.equal(result.extracted, 3);
   assert.equal(result.rejected, 1);
-  assert.ok(result.rejectionReasons.some((reason) => /^evidence quote for "project\.analysis\.rocket_af\.count" is not verbatim/.test(reason)),
+  assert.ok(result.rejectionReasons.some((reason) => /^evidence quote for "project\.fact\.rocket_af\.count" is not verbatim/.test(reason)),
     result.rejectionReasons.join("; "));
   const byKey = (/** @type {string} */ key) => [...store.records.values()].find((record) => record.key === key);
   assert.equal(byKey("preference.evidence_table").value, "用表格对比证据强度，并标注 GRADE 等级。");
   assert.equal(byKey("preference.evidence_table").summary, "证据用表格对比，并标注 GRADE 等级");
   assert.equal(byKey("project.scope.index_trial").value, "只评价利伐沙班 20 mg qd 在 NCT00403767（ROCKET AF）中的结局");
-  assert.equal(byKey("project.analysis.rocket_af.primary").value, "ROCKET AF 主要终点 HR 0.88（0.75-1.03）");
-  assert.equal(byKey("project.analysis.rocket_af.primary").evidence[0].quote, '"hr":0.88');
+  assert.equal(byKey("project.fact.rocket_af.primary").value, "ROCKET AF 主要终点 HR 0.88（0.75-1.03）");
+  assert.equal(byKey("project.fact.rocket_af.primary").evidence[0].quote, '"hr":0.88');
   // The episode's summary is the question as it was asked, with no English
   // label in front of it.
   const episode = [...store.records.values()].find((record) => record.kind === "run_summary");
@@ -407,54 +407,55 @@ test("a researcher who paused learning, for the account or for this project, get
   }
 });
 
-test("an incognito conversation leaves nothing behind, and the rest of the project still learns", async () => {
-  // 2026-09-20: the conversation's own switch. Not even the run summary the
-  // timeline would show, and no model call.
+test("a conversation trying someone else's capsule leaves nothing behind, and the rest of the project still learns", async () => {
+  // 无痕 was read here too until 2026-09-20; the trial is what is left of a
+  // conversation that writes nothing. Not even the run summary, and no model
+  // call.
   const store = new MemoryStoreDouble();
   store.configured = true;
   store.settings = async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [] });
-  store.sessionState = async (_userId, _projectId, sessionId) => ({ incognito: sessionId === "session_1", excluded: [] });
+  store.sessionState = async (_userId, _projectId, sessionId) => ({ trialCapsuleId: sessionId === "session_1" ? "pack-1" : null });
   let modelCalls = 0;
   const intelligence = new MemoryIntelligence(config, store, {
     fetchImpl: async () => { modelCalls += 1; return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] }); },
   });
-  const result = await intelligence.recordRun(project(), run(), [message("user_1", "请记住：我偏好先看一手研究。")]);
-  assert.equal(result.source, "incognito");
-  assert.ok(MEMORY_WRITE_SKIPPED_SOURCES.has(result.source), "an incognito conversation is a choice, not an extraction that found nothing");
+  const trial = await intelligence.recordRun(project(), run(), [message("user_1", "请记住：我偏好先看一手研究。")]);
+  assert.equal(trial.source, "trial");
+  assert.ok(MEMORY_WRITE_SKIPPED_SOURCES.has(trial.source), "a trial is a choice, not an extraction that found nothing");
   assert.equal(store.records.size, 0);
   assert.equal(modelCalls, 0);
-
-  // A conversation trying someone else's capsule writes nothing either.
-  store.sessionState = async (_userId, _projectId, sessionId) => ({ incognito: false, excluded: [], trialCapsuleId: sessionId === "session_1" ? "pack-1" : null });
-  const trial = await intelligence.recordRun(project(), run("run_trial"), [message("user_1", "请记住：我偏好先看一手研究。")]);
-  assert.equal(trial.source, "trial");
-  assert.ok(MEMORY_WRITE_SKIPPED_SOURCES.has(trial.source));
-  assert.equal(store.records.size, 0);
+  assert.ok(!MEMORY_WRITE_SKIPPED_SOURCES.has("incognito"), "无痕 is not a skip source any more");
 
   const elsewhere = await intelligence.recordRun(project(), { ...run("run_2"), sessionId: "session_2" },
     [message("user_2", "SGLT2 抑制剂 对 CKD 的长期获益？")]);
-  assert.notEqual(elsewhere.source, "incognito");
+  assert.equal(elsewhere.source, "model");
   assert.ok(store.records.size > 0, "another conversation of the same project is recorded as before");
 });
 
-test("a question asked again updates its one run summary instead of adding another", async () => {
-  // 2026-09-16 review, M3: summaries were keyed by run, so every attempt at a
-  // question stayed a record of its own and all of them were recalled into the
-  // next attempt. Keyed by the question, the latest answer is served and the
-  // earlier ones are the record's revisions.
+test("one conversation leaves one 「做过的研究」 summary, however many times it is asked", async () => {
+  // Keyed by run once, so every attempt stayed a record of its own and all of
+  // them were recalled into the next attempt; then by the question's digest,
+  // which fixed that and still let one conversation leave several. A
+  // conversation is the unit the page links back to, so it is the key
+  // (2026-09-20 plan §3.9: 每次研究只留一条「做过的研究」摘要).
   const store = new MemoryStoreDouble();
   const intelligence = new MemoryIntelligence(config, store, { fetchImpl: modelFetch(() => []) });
   const summaries = () => [...store.records.values()].filter((record) => record.kind === "run_summary");
 
   await intelligence.recordRun(project(), run("run_1", "2026-07-22T01:01:00.000Z"), [message("user_1", "SGLT2 抑制剂 对 CKD 的长期获益？")]);
   await intelligence.recordRun(project(), run("run_2", "2026-07-22T02:01:00.000Z"), [message("user_2", "  SGLT2 抑制剂  对 CKD 的长期获益？\n")]);
-  assert.equal(summaries().length, 1, "the same question, differently spaced, is one summary");
-  assert.equal(JSON.parse(summaries()[0].value).runId, "run_2", "the latest attempt is what recall serves");
+  assert.equal(summaries().length, 1, "one conversation, one summary");
+  assert.equal(JSON.parse(summaries()[0].value).runId, "run_2", "the latest attempt is what the page shows");
   assert.equal(summaries()[0].revisions.length, 1, "the earlier attempt is kept as a revision, not dropped");
-  assert.match(summaries()[0].key, /^run\.question\.[0-9a-f]{16}$/);
+  assert.match(summaries()[0].key, /^run\.session\.[a-z0-9_-]+$/);
 
+  // A second question in the same conversation updates that one summary; a
+  // different conversation gets its own.
   await intelligence.recordRun(project(), run("run_3", "2026-07-22T03:01:00.000Z"), [message("user_3", "另一个问题：GLP-1 与体重")]);
-  assert.equal(summaries().length, 2, "a different question is its own summary");
+  assert.equal(summaries().length, 1, "still one, because it is still one conversation");
+  await intelligence.recordRun(project(), { ...run("run_4", "2026-07-22T04:01:00.000Z"), sessionId: "session_2" },
+    [message("user_4", "另一个问题：GLP-1 与体重")]);
+  assert.equal(summaries().length, 2, "another conversation is another summary");
 });
 
 test("an inference takes effect at once, stays labelled an inference, and fades unless it is seen again", async () => {
@@ -524,7 +525,7 @@ test("a sensitive memory is kept in force and flagged, never parked behind a con
   const client = new MemoryStoreDouble();
   const intelligence = new MemoryIntelligence(config, client, {
     fetchImpl: modelFetch((sources) => [{
-      scope: "project", kind: "analysis", key: "project.analysis.dedup_rule",
+      scope: "project", kind: "project_fact", key: "project.fact.dedup_rule",
       value: "按病历号去重", summary: "去重口径", origin: "explicit",
       importance: 0.8, sensitive: false,
       sourceRef: sources[0].sourceRef, evidenceQuote: "按病历号去重",
@@ -533,12 +534,12 @@ test("a sensitive memory is kept in force and flagged, never parked behind a con
   const result = await intelligence.recordRun(project(), run("run_sensitive"), [
     message("u1", "请记住：这批分析统一按病历号去重，不要按姓名。"),
   ]);
-  const stored = (await client.listRecords()).find((record) => record.key === "project.analysis.dedup_rule");
+  const stored = (await client.listRecords()).find((record) => record.key === "project.fact.dedup_rule");
   assert.equal(stored.status, "active");
   assert.equal(stored.sensitive, true);
   assert.equal(result.pending, 0);
   assert.equal(result.sensitive, 1, "the run can say how many it kept out of recall");
-  assert.doesNotMatch(client.reasons.find((entry) => entry.key === "project.analysis.dedup_rule").reason, /pending|held/);
+  assert.doesNotMatch(client.reasons.find((entry) => entry.key === "project.fact.dedup_rule").reason, /pending|held/);
 });
 
 test("the one checkpoint: a lasting preference naming a high-alert medicine waits for its owner, a project fact does not", async () => {
@@ -752,21 +753,21 @@ test("case and spacing are not a change of mind, and an unconfirmed guess is cor
   const episodic = new MemoryStoreDouble();
   const episodicInbox = notificationsDouble();
   await episodic.upsertRecord("user_1", {
-    scope: "project", scopeId: "project_1", kind: "analysis", key: "project.analysis.followup_window",
+    scope: "project", scopeId: "project_1", kind: "project_fact", key: "project.fact.followup_window",
     value: "随访窗口取 12 周", summary: "随访窗口", origin: "explicit", status: "active",
     confidence: 1, importance: 0.8, sensitive: false,
   }, null, {});
   await new MemoryIntelligence(config, episodic, {
     notifications: episodicInbox,
     fetchImpl: modelFetch((sources) => [{
-      scope: "project", kind: "analysis", key: "project.analysis.followup_window",
+      scope: "project", kind: "project_fact", key: "project.fact.followup_window",
       value: "随访窗口取 24 周", summary: "随访窗口", origin: "explicit",
       confidence: 1, importance: 0.8, sensitive: false,
       sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text,
     }]),
   }).recordRun(project(), run("run_episodic", "2026-07-28T01:01:00.000Z"), [message("u1", "随访窗口取 24 周")]);
   assert.equal(episodicInbox.attempts.length, 0);
-  assert.equal([...episodic.records.values()].find((record) => record.key === "project.analysis.followup_window").value, "随访窗口取 24 周");
+  assert.equal([...episodic.records.values()].find((record) => record.key === "project.fact.followup_window").value, "随访窗口取 24 周");
 });
 
 test("the notice's key names exactly what the notice says, so observing one change twice is one inbox item", async () => {

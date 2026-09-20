@@ -19,11 +19,15 @@
  * development ran memos on SQLite, hence the third driver.
  *
  * Ownership is the whole of the work. The retired service gave every EviMed
- * user one namespace (`evimed-science-<24 hex>`) for records and one hidden tag
- * (`#evimed-user-<24 hex>`) inside note text; both are digests of the user id,
- * with different salts. This inverts them against the account list, and
- * anything it cannot attribute is counted and left where it is — a memory
- * handed to the wrong account is worse than a memory not carried over.
+ * user one namespace (`evimed-science-<24 hex>`) for records, a digest of the
+ * user id. This inverts it against the account list, and anything it cannot
+ * attribute is counted and left where it is — a memory handed to the wrong
+ * account is worse than a memory not carried over.
+ *
+ * The free-text notes half is gone (2026-09-20). `evimed_memory.notes` was
+ * dropped with the composer that was its only writer, so there is nowhere left
+ * to carry a memo to; `--purge-source` therefore leaves the retired `memo`
+ * table alone rather than deleting rows nothing read.
  *
  * Output is counts. It never prints memory content, a note, a quote, a key or a
  * connection string.
@@ -36,16 +40,13 @@ import { ControlPlaneDatabase } from "../../apps/server/src/controlPlaneDatabase
 import {
   MEMORY_EVIDENCE_LIMIT,
   MEMORY_KINDS,
-  MEMORY_NOTE_CONTENT_LIMIT,
   MEMORY_ORIGINS,
   MEMORY_REVISION_LIMIT,
   MEMORY_SCOPES,
   MEMORY_STATUSES,
   boundedScore,
   evidenceFingerprint,
-  extractTags,
   memoryInstant,
-  normalizeNoteContent,
   validateRecordInput,
 } from "../../apps/server/src/researchMemory.mjs";
 import { migrateResearchMemory } from "../../apps/server/src/researchMemoryPersistence.mjs";
@@ -58,9 +59,6 @@ const pg = serverRequire("pg");
 
 const identifierPattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const memoryIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
-const internalTag = /#evimed-user-([a-f0-9]{24})/g;
-const internalTagLine = /^#evimed-user-[a-f0-9]{24}$/;
-const internalTagName = /^evimed-user-[a-f0-9]{24}$/;
 /** The fields a record's validation can name. A refusal is reported by field,
  *  never by the text that was refused. */
 const recordFields = Object.freeze(["memory", "scope", "scopeId", "kind", "key", "value", "summary",
@@ -96,7 +94,6 @@ function parseArguments(argv) {
 function userDigests(userId) {
   return {
     namespace: `evimed-science-${createHash("sha256").update(`evimed/memory-record/user/v1:${userId}`).digest("hex").slice(0, 24)}`,
-    tag: createHash("sha256").update(`evimed/memos/user/v1:${userId}`).digest("hex").slice(0, 24),
   };
 }
 
@@ -127,34 +124,6 @@ function parsePayload(payload) {
     const parsed = JSON.parse(String(payload));
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
   } catch { return null; }
-}
-
-/**
- * A note's tags, as the retired service computed them.
- *
- * usememos parsed every memo with goldmark on create and on update and stored
- * the result in `memo.payload.tags`, so that list — not a second reading of the
- * text — is what its UI filtered on. Re-deriving them here would change them:
- * goldmark hands a bare URL to the autolink extension and a link destination to
- * the link parser, so `https://doi.org/10.1000/xyz#section` carries no tag,
- * while a scanner that only knows about code spans reads `#section` as one.
- *
- * A payload that holds any field was computed by goldmark, so the absence of
- * `tags` in it is an answer — protojson omits an empty list. A payload that is
- * wholly empty is the column's own default and says nothing about whether it
- * ever ran, so that row, and only that row, is read from its text.
- * @param {unknown} payload @param {string} content
- */
-function noteTags(payload, content) {
-  const parsed = parsePayload(payload);
-  if (!parsed || Object.keys(parsed).length === 0) return extractTags(content);
-  const tags = [];
-  for (const value of Array.isArray(parsed.tags) ? parsed.tags : []) {
-    const tag = String(value ?? "").trim();
-    if (!tag || internalTagName.test(tag) || tags.includes(tag)) continue;
-    tags.push(tag);
-  }
-  return tags;
 }
 
 /**
@@ -205,17 +174,11 @@ function count(counts, outcome, reason = "") {
 async function readSource({ source, sourceSchema: schema }, database) {
   const recordColumns = "uid, namespace, scope_type, scope_id, kind, memory_key, value, summary, origin, status,"
     + " confidence, importance, sensitive, version, created_ts, updated_ts, last_confirmed_ts, expires_ts, payload";
-  const memoColumns = "uid, created_ts, updated_ts, row_status, content, pinned, payload";
   const recordQuery = `SELECT ${recordColumns} FROM "${schema}".memory_record ORDER BY id`;
-  const memoQuery = `SELECT ${memoColumns} FROM "${schema}".memo ORDER BY id`;
   if (source === "same") {
     // The production form: the memos tables sit in another schema of the target
     // database, so they are read through the connection already open.
-    return {
-      driver: "postgres",
-      records: (await database.query(recordQuery)).rows,
-      memos: (await database.query(memoQuery)).rows,
-    };
+    return { driver: "postgres", records: (await database.query(recordQuery)).rows };
   }
   if (source.startsWith("sqlite:")) {
     // Loaded only on the path that needs it: `node:sqlite` is newer than this
@@ -224,16 +187,12 @@ async function readSource({ source, sourceSchema: schema }, database) {
     const file = path.resolve(source.slice("sqlite:".length));
     const sqlite = new DatabaseSync(file, { readOnly: true });
     try {
-      return {
-        driver: "sqlite",
-        records: sqlite.prepare(`SELECT ${recordColumns} FROM memory_record ORDER BY id`).all(),
-        memos: sqlite.prepare(`SELECT ${memoColumns} FROM memo ORDER BY id`).all(),
-      };
+      return { driver: "sqlite", records: sqlite.prepare(`SELECT ${recordColumns} FROM memory_record ORDER BY id`).all() };
     } finally { sqlite.close(); }
   }
   const pool = new pg.Pool({ connectionString: source, max: 2, application_name: "evimed-research-memory-import" });
   try {
-    return { driver: "postgres", records: (await pool.query(recordQuery)).rows, memos: (await pool.query(memoQuery)).rows };
+    return { driver: "postgres", records: (await pool.query(recordQuery)).rows };
   } finally { await pool.end(); }
 }
 
@@ -314,48 +273,6 @@ async function importRecords(database, dryRun, owners, rows) {
 }
 
 /** @param {any} database @param {boolean} dryRun @param {Map<string,string>} owners @param {any[]} rows */
-async function importNotes(database, dryRun, owners, rows) {
-  const counts = tally();
-  for (const row of rows) {
-    counts.total += 1;
-    const raw = String(row.content ?? "");
-    // The owner comes only from the tag line the retired client appended. A tag
-    // sitting inline is a tag anybody could have typed: user ids are usernames
-    // and OIDC ids, so any account could compute another's digest, and a note
-    // carrying it appeared in that account's list, export and recall. Two
-    // distinct digests means exactly that, and such a note is not imported.
-    const digests = new Set([...raw.matchAll(internalTag)].map((match) => match[1]));
-    if (digests.size === 0) { count(counts, "unmapped", "no_owner_tag"); continue; }
-    if (digests.size > 1) { count(counts, "quarantined", "multiple_owner_tags"); continue; }
-    const trailing = raw.split("\n").map((line) => line.trim()).filter(Boolean).at(-1) ?? "";
-    if (!internalTagLine.test(trailing)) { count(counts, "quarantined", "owner_tag_not_trailing"); continue; }
-    const userId = owners.get(trailing.slice("#evimed-user-".length));
-    if (!userId) { count(counts, "unmapped", "unknown_owner"); continue; }
-    const id = String(row.uid ?? "");
-    if (!memoryIdPattern.test(id)) { count(counts, "quarantined", "invalid_id"); continue; }
-    const content = normalizeNoteContent(raw);
-    if (!content || content.length > MEMORY_NOTE_CONTENT_LIMIT) {
-      count(counts, "quarantined", "unstorable_content");
-      continue;
-    }
-    const createdAt = unixInstant(row.created_ts);
-    const updatedAt = unixInstant(row.updated_ts);
-    if (!createdAt || !updatedAt) { count(counts, "quarantined", "invalid_timestamps"); continue; }
-    const state = String(row.row_status ?? "") === "ARCHIVED" ? "archived" : "normal";
-    const values = [userId, id, content, state, Boolean(row.pinned), noteTags(row.payload, content), createdAt, updatedAt];
-    if (dryRun) {
-      const existing = await database.query("SELECT 1 FROM evimed_memory.notes WHERE user_id=$1 AND id=$2", [userId, id]);
-      count(counts, existing.rowCount ? "alreadyPresent" : "imported");
-      continue;
-    }
-    const inserted = await database.query(`INSERT INTO evimed_memory.notes
-      (user_id,id,content,state,pinned,tags,created_at,updated_at)
-      VALUES($1,$2,$3,$4,$5,$6::text[],$7,$8) ON CONFLICT DO NOTHING`, values);
-    count(counts, inserted.rowCount ? "imported" : "alreadyPresent");
-  }
-  return counts;
-}
-
 /**
  * Empty the retired service's tables, once their contents are demonstrably carried over.
  *
@@ -377,16 +294,19 @@ async function importNotes(database, dryRun, owners, rows) {
  * release is accepted.
  *
  * @param {any} database @param {string} schema
- * @param {ReturnType<typeof tally>} records @param {ReturnType<typeof tally>} notes
+ * @param {ReturnType<typeof tally>} records
  */
-async function purgeSource(database, schema, records, notes) {
-  const stranded = records.unmapped + records.quarantined + notes.unmapped + notes.quarantined;
+async function purgeSource(database, schema, records) {
+  const stranded = records.unmapped + records.quarantined;
   if (stranded > 0) {
-    throw new Error(`refusing to empty the retired tables: ${stranded} rows were not carried over`);
+    throw new Error(`refusing to empty the retired table: ${stranded} rows were not carried over`);
   }
   /** @type {Record<string, number>} */
   const purged = {};
-  for (const table of ["memory_record", "memo"]) {
+  // `memo` is deliberately not emptied: its destination table is gone, so
+  // nothing carried those rows over and deleting them would be a deletion with
+  // no import behind it.
+  for (const table of ["memory_record"]) {
     const result = await database.query(`DELETE FROM "${schema}"."${table}"`);
     purged[table] = Number(result.rowCount ?? 0);
   }
@@ -411,20 +331,14 @@ async function main() {
   try {
     await migrateResearchMemory(database);
     const users = (await database.query("SELECT id FROM evimed_control.users")).rows.map((row) => String(row.id));
-    /** namespace -> user id, and tag digest -> user id. */
+    /** namespace -> user id. */
     const namespaceOwners = new Map();
-    const tagOwners = new Map();
-    for (const userId of users) {
-      const digests = userDigests(userId);
-      namespaceOwners.set(digests.namespace, userId);
-      tagOwners.set(digests.tag, userId);
-    }
+    for (const userId of users) namespaceOwners.set(userDigests(userId).namespace, userId);
     const source = await readSource(options, database);
     const records = await importRecords(database, options.dryRun, namespaceOwners, source.records);
-    const notes = await importNotes(database, options.dryRun, tagOwners, source.memos);
-    const purged = options.purgeSource ? await purgeSource(database, options.sourceSchema, records, notes) : null;
+    const purged = options.purgeSource ? await purgeSource(database, options.sourceSchema, records) : null;
     process.stdout.write(`${JSON.stringify({
-      ok: true, dryRun: options.dryRun, driver: source.driver, accounts: users.length, records, notes,
+      ok: true, dryRun: options.dryRun, driver: source.driver, accounts: users.length, records,
       ...(purged ? { purged } : {}),
     })}\n`);
   } finally { await database.close(); }

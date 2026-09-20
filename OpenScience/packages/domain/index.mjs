@@ -603,13 +603,16 @@ export {
   sourceFormatRoute,
   sourcePageForOffset,
 } from './src/sourceDocuments.mjs'
-// memoryVocabulary — 5 exports: the tags the platform writes into a
-// conversation and the identifiers it calls its own machinery by, which a
-// memory write is checked against in code.
+// memoryVocabulary — 7 exports: the tags the platform writes into a
+// conversation, the identifiers it calls its own machinery by, and the words
+// and shapes a run uses to talk about its own bookkeeping — what a memory
+// write is checked against in code.
 export {
   PLATFORM_CONTEXT_TAGS,
+  PLATFORM_JARGON_ZH,
   carriesPlatformContext,
   platformIdentifiersIn,
+  runBookkeepingIn,
   stripPlatformTags,
   unwrapUserWrappers,
 } from './src/memoryVocabulary.mjs'

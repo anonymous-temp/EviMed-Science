@@ -29,9 +29,12 @@ import { sourceIndexDocument, sourceParserRevision } from "./sourceService.mjs";
  * - The records are account-level `preferences` product documents
  *   (`recordType: "library-item"`): every change is a revision, a removal can
  *   be restored, and an account export carries them.
- * - Publishing into the capsule is automatic and labelled (plan §3.3 #1): what
- *   a document says becomes a fact carrying its verbatim quotes and saying in
- *   its own words whose it is — never a preference, never an instruction. It
+ * - Publishing into the capsule is automatic and labelled (plan §3.10), and
+ *   keyed by the document rather than by a library entry: it happens to every
+ *   document the platform reads, whether or not the researcher chose to keep
+ *   that one across projects. What a document says becomes a fact carrying its
+ *   verbatim quotes and saying in its own words whose it is — never a
+ *   preference, never an instruction. It
  *   all lands in the capsule's `sources` layer, which no method mount and no
  *   share reads (`capsuleMethods.mjs`, `NEVER_SHARED_LAYERS`), so a method the
  *   document describes is a draft a recall can show, not a skill a run loads.
@@ -40,6 +43,15 @@ import { sourceIndexDocument, sourceParserRevision } from "./sourceService.mjs";
 
 const RECORD_KIND = "preferences";
 export const LIBRARY_RECORD_TYPE = "library-item";
+/** The other `preferences` record this service writes: what of one document's
+ *  understanding is already in the capsule. Keyed by the document so it exists
+ *  whether or not the researcher ever put that document in their library. */
+export const PUBLICATION_RECORD_TYPE = "source-publication";
+
+/** @param {string} sourceId */
+function publicationId(sourceId) {
+  return `source-publication:${sourceId}`;
+}
 const COPY_FILE = "index.md";
 const SOURCE_ID = /^src_[a-f0-9]{32}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -448,34 +460,42 @@ export class LibraryService {
   }
 
   /**
-   * Publish a document's current understanding into the researcher's own
-   * capsule: facts with their quotes, methods as labelled drafts, all in the
-   * `sources` layer and in effect at once (plan §3.3 #1 — no confirmation; a
-   * permanent label, a revision and the capsule's undo instead). Publishing
-   * again adds only what changed; what a re-read no longer says is retired —
-   * kept as "was said once", never deleted — unless the researcher has
-   * already corrected or retired it themselves.
+   * A document's current understanding, in the researcher's memory capsule:
+   * facts with their quotes, methods as labelled drafts, all in the `sources`
+   * layer and in effect at once.
+   *
+   * Called by the source worker when an understanding is published, never by a
+   * button. There was a button — 「放进胶囊」, once per document, beside
+   * 「加入资料库」 — and it asked the researcher to do by hand the one thing the
+   * platform had just finished doing: the understanding was already computed,
+   * already quote-anchored, already theirs. Both were deleted on 2026-09-20
+   * (owner ruling: everything takes effect automatically, labelled and
+   * reversible, with no per-item approval). The label is 「来自资料」, which the
+   * capsule row already derives from the source provenance each entry carries,
+   * and every entry can be edited, stopped or undone like any other.
+   *
+   * Publishing again adds only what changed; what a re-read no longer says is
+   * retired — kept as "was said once", never deleted — unless the researcher
+   * has already corrected or retired it themselves. Idempotent by that
+   * bookkeeping, so the worker may call it more than once for one generation.
+   *
    * @param {string} userId @param {unknown} sourceId
    */
-  async publishToCapsule(userId, sourceId) {
+  async publishSourceUnderstanding(userId, sourceId) {
     if (!this.capsules) throw new HttpError(503, "library_unavailable", "The memory capsule is unavailable on this deployment.");
-    // Named, and the caller's, before anything is held: a well-formed id the
-    // library does not hold is refused here and never reaches the guard.
-    const named = await this.#requireEntry(userId, sourceId);
+    const id = String(sourceId ?? "");
+    if (!/^src_[a-f0-9]{32}$/.test(id)) throw new HttpError(400, "library_payload_invalid", "That is not a document id.");
     return this.#exclusive(userId, async () => {
-      // Read again under the guard: a publication that finished since the
-      // lookup changed what this entry has published.
-      const record = await this.documents.get(userId, RECORD_KIND, named.id);
-      if (!record) throw new HttpError(404, "library_item_not_found", "This document is not in the personal library.");
-      const sha256 = record.payload.sha256;
-      const source = resolveSource((await this.#liveSources(userId, [sha256])).get(sha256) ?? [], record);
-      if (!source) throw new HttpError(409, "library_source_removed", "No project holds this document any more, and its understanding went with the last one.");
-      const understanding = (await this.sources.getUnderstanding(userId, source.id)).current;
+      const source = await this.sources.get(userId, id).catch(() => null);
+      if (!source) throw new HttpError(409, "library_source_removed", "That document is gone.");
+      const understanding = (await this.sources.getUnderstanding(userId, id)).current;
       if (!understanding) throw new HttpError(409, "library_understanding_missing", "The document has no understanding to publish yet.");
-      const entries = libraryCapsuleEntries({ title: describeLibrarySource(source).title, sourceId: record.payload.sourceId, understanding });
+      const entries = libraryCapsuleEntries({ title: describeLibrarySource(source).title, sourceId: id, understanding });
       const capsule = await this.#targetCapsule(userId);
+      const ledgerId = publicationId(id);
+      const ledger = await this.documents.get(userId, RECORD_KIND, ledgerId);
       /** @type {Record<string, string>} */
-      const previous = record.payload.published?.capsuleId === capsule.id ? record.payload.published.entries ?? {} : {};
+      const previous = ledger?.payload.capsuleId === capsule.id ? ledger.payload.entries ?? {} : {};
       /** @type {Record<string, string>} */
       const entryIds = {};
       let added = 0;
@@ -510,14 +530,16 @@ export class LibraryService {
       }
       const facts = entries.filter((entry) => entry.factKind === "project_fact").length;
       const methods = entries.length - facts;
-      const latest = await this.documents.get(userId, RECORD_KIND, record.id);
-      if (latest) {
-        await this.documents.put(userId, RECORD_KIND, record.id, { ...latest.payload, published: { capsuleId: capsule.id, sourceId: source.id,
-          generation: understanding.generation, at: this.now().toISOString(), facts, methods, entries: entryIds } },
-        { expectedRevision: latest.revision });
-      }
+      // The bookkeeping is keyed by the document, not by a library entry: the
+      // personal library is a place a researcher chooses to put something, and
+      // this happens to every document the platform reads.
+      const latest = await this.documents.get(userId, RECORD_KIND, ledgerId);
+      await this.documents.put(userId, RECORD_KIND, ledgerId, {
+        recordType: PUBLICATION_RECORD_TYPE, sourceId: id, capsuleId: capsule.id,
+        generation: understanding.generation, at: this.now().toISOString(), facts, methods, entries: entryIds,
+      }, { expectedRevision: latest?.revision ?? 0 });
       this.counters.published += 1;
-      return { sourceId: record.payload.sourceId, capsuleId: capsule.id, capsuleTitle: String(capsule.payload.title ?? ""),
+      return { sourceId: id, capsuleId: capsule.id, capsuleTitle: String(capsule.payload.title ?? ""),
         generation: understanding.generation, facts, methods, added, kept, retired };
     });
   }
@@ -716,7 +738,11 @@ async function addBody(req, limit) {
  *   GET    /api/library                                  → { items: [...], maxItems }
  *   POST   /api/library                { sourceId }      → 201 the new entry, 200 the entry it already was
  *   DELETE /api/library/:sourceId                        → { sourceId, removed: true }
- *   POST   /api/library/:sourceId/publish-to-capsule     → { capsuleId, facts, methods, added, kept, retired, … }
+ *
+ * The per-document 「放进胶囊」 route is gone (2026-09-20): a document's
+ * understanding reaches the capsule when it is understood, not when somebody
+ * presses a button per file. `publishSourceUnderstanding` is what the source
+ * worker calls instead.
  *
  * @param {{ store: any, service: LibraryService | null, maxJsonBytes: number }} dependencies
  */
@@ -738,13 +764,9 @@ export function createLibraryRoutes({ store, service, maxJsonBytes }) {
       sendJson(res, created ? 201 : 200, { data: item });
       return true;
     }
-    const match = /^\/api\/library\/(src_[a-f0-9]{32})(\/publish-to-capsule)?$/.exec(url.pathname);
-    if (match && !match[2] && method === "DELETE") {
+    const match = /^\/api\/library\/(src_[a-f0-9]{32})$/.exec(url.pathname);
+    if (match && method === "DELETE") {
       sendJson(res, 200, { data: await service.remove(user.id, match[1]) });
-      return true;
-    }
-    if (match && match[2] && method === "POST") {
-      sendJson(res, 200, { data: await service.publishToCapsule(user.id, match[1]) });
       return true;
     }
     throw new HttpError(404, "not_found", "Library route not found.");

@@ -313,28 +313,21 @@ test("a dispatch recalls memories with the switch on and asks nothing with it of
   }, { researchMemory: offMemory, memoryRecallEnabled: false });
 });
 
-test("an incognito conversation's dispatch recalls nothing, and a method set aside is named in that conversation's context", async () => {
-  // 2026-09-20. Both read from the conversation's own state, per dispatch.
+// 无痕 and 「本次不用」 used to be read here, per dispatch, from the
+// conversation's own state. Both were deleted on 2026-09-20 with the bar that
+// was their only control; what a conversation's state still carries is the
+// capsule it is trying (see memorySessions.test.mjs), and the account-level
+// recall switch above is what withholds memory now.
+test("a conversation's own state no longer withholds memory from its dispatch", async () => {
   const memory = {
     ...recordingMemory(),
-    async sessionState(_userId, _projectId, sessionId) {
-      return sessionId === "ses_incognito"
-        ? { incognito: true, excluded: [] }
-        : { incognito: false, excluded: [{ type: "method", id: "method-fact_1", label: "肾功能剂量核对" }] };
-    },
+    async sessionState() { return { trialCapsuleId: null }; },
   };
   await withApp(async ({ base, dataDir }) => {
-    await dispatchOnce(base, "ses_incognito");
-    assert.deepEqual(memory.asked, [], "an incognito conversation is handed no memory");
-    const [incognitoMemory] = (await findFiles(dataDir, "memory.md")).filter((file) => file.includes("ses_incognito"));
-    assert.equal(await readFile(incognitoMemory, "utf8"), "");
-    const [incognitoContext] = (await findFiles(dataDir, "context.md")).filter((file) => file.includes("ses_incognito"));
-    assert.doesNotMatch(await readFile(incognitoContext, "utf8"), /本次不用这些方法/);
-
-    await dispatchOnce(base, "ses_aside");
-    assert.equal(memory.asked.length, 1, "the other conversation is recalled as before");
-    const [asideContext] = (await findFiles(dataDir, "context.md")).filter((file) => file.includes("ses_aside"));
-    assert.match(await readFile(asideContext, "utf8"), /用户在本对话中选择本次不用这些方法：method-fact_1（肾功能剂量核对）/);
+    await dispatchOnce(base, "ses_plain");
+    assert.equal(memory.asked.length, 1, "an ordinary conversation is recalled into");
+    const [context] = (await findFiles(dataDir, "context.md")).filter((file) => file.includes("ses_plain"));
+    assert.doesNotMatch(await readFile(context, "utf8"), /本次不用这些方法/, "nothing is set aside any more");
   }, { researchMemory: memory });
 });
 

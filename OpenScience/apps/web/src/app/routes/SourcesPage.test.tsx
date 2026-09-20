@@ -408,26 +408,28 @@ describe("SourcesPage", () => {
     expect(screen.queryByText(/已与 Crossref/)).not.toBeInTheDocument();
   });
 
-  it("puts a parsed document into the personal library and takes it out again", async () => {
-    // The library names a document by every source holding it, so an entry
-    // added from another project is still this card's document.
+  it("marks a parsed document available to every project, and takes it back", async () => {
+    // 「加入资料库」 was a second noun for a thing that is just this document,
+    // readable from more than one project (plan §3.1). The store is unchanged
+    // and names a document by every source holding it, so an entry added from
+    // another project is still this card's document.
     const held = { items: [{ sourceId: "source-zero", title: "研究方案", kind: "research-protocol", addedAt: "2026-09-19T00:00:00Z",
       projects: ["project-one", "project-zero"], sourceIds: ["source-one", "source-zero"], status: "ready" }], maxItems: 1000 };
     mocks.listLibrary.mockResolvedValueOnce({ items: [], maxItems: 1000 }).mockResolvedValue(held);
     render(<SourcesPage />);
-    await userEvent.click(await screen.findByRole("button", { name: "加入资料库" }));
+    await userEvent.click(await screen.findByRole("button", { name: "所有项目可用" }));
     await waitFor(() => expect(mocks.addToLibrary).toHaveBeenCalledWith("source-one"));
-    await userEvent.click(await screen.findByRole("button", { name: "移出资料库" }));
+    await userEvent.click(await screen.findByRole("button", { name: "改为仅本项目" }));
     await waitFor(() => expect(mocks.removeFromLibrary).toHaveBeenCalledWith("source-one"));
     expect(mocks.addToLibrary).toHaveBeenCalledTimes(1);
   });
 
-  it("offers no library action when the library cannot be read, and none for a document that did not parse", async () => {
+  it("offers no cross-project action when the store cannot be read, and none for a document that did not parse", async () => {
     mocks.listLibrary.mockRejectedValue(new Error("library_unavailable"));
     const view = render(<SourcesPage />);
     expect(await screen.findByText("研究方案.docx")).toBeInTheDocument();
     await waitFor(() => expect(mocks.listLibrary).toHaveBeenCalled());
-    expect(screen.queryByRole("button", { name: "加入资料库" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "所有项目可用" })).not.toBeInTheDocument();
     view.unmount();
 
     mocks.listLibrary.mockResolvedValue({ items: [], maxItems: 1000 });
@@ -435,7 +437,7 @@ describe("SourcesPage", () => {
     render(<SourcesPage />);
     expect(await screen.findByText("研究方案.docx")).toBeInTheDocument();
     await waitFor(() => expect(mocks.listLibrary).toHaveBeenCalledTimes(2));
-    expect(screen.queryByRole("button", { name: "加入资料库" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "所有项目可用" })).not.toBeInTheDocument();
   });
 
   it("discards a previous project's late inventory response", async () => {

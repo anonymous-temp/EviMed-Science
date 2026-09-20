@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { METHOD_SKILL_SCHEMA, methodContribution, promotionVerdict, retirementProposal } from "@evimed/domain";
+import { METHOD_SKILL_SCHEMA, evaluationEligible, methodContribution, promotionVerdict, retirementProposal } from "@evimed/domain";
 
 import { selectLearnedMethods } from "../src/learnedMethodMount.mjs";
 import { LearningService, methodRecordFrom } from "../src/learningService.mjs";
@@ -145,10 +145,12 @@ async function foldRun(learning, finished, methods) {
   return derived;
 }
 
-test("a distilled candidate reaches effect through evidence, and nothing asserts a status", async () => {
+test("a distilled method takes effect at once, is measured afterwards, and one rollback undoes it", async () => {
   const { learning, distillation, notices } = harness();
 
-  // 1. A run that needed repair produced a proposal.
+  // 1. A run that needed repair produced a proposal, and it is effective from
+  //    the moment it is written (2026-09-20). Nothing asserted that status:
+  //    the store computed it from the record, as it does for every method.
   const applied = await distillation.applyCandidate(
     { userId: "u1", projectId: "p1", payload: {} },
     { id: "run_0" },
@@ -156,38 +158,32 @@ test("a distilled candidate reaches effect through evidence, and nothing asserts
   );
   const methodId = applied.methodId;
   let document = await learning.getMethod("u1", methodId);
-  assert.equal(document.payload.status, "candidate");
+  assert.equal(document.payload.status, "approved");
   assert.equal(document.payload.provenance.origin, "inferred");
+  assert.equal(document.payload.statusChangedAt, document.payload.createdAt, "what the row reads 「新」 from");
 
-  // 2. It is not mounted for anyone's real run.
-  const known = [{ id: methodId, name: "quote-first", digest: "" }];
-  assert.deepEqual(await selectLearnedMethods(learning, { userId: "u1", projectId: "p1" }), []);
+  // 2. So it mounts for real runs straight away, with no trial argument.
+  const mounted = await selectLearnedMethods(learning, { userId: "u1", projectId: "p1" });
+  assert.deepEqual(mounted.map((entry) => entry.name), ["quote-first"]);
+  assert.equal(mounted[0].trial, undefined);
+  const known = [{ id: methodId, name: "quote-first", digest: mounted[0].digest }];
 
-  // 3. The paired evaluation is the one caller that may put it in a run, and
-  //    the digest it gets mounted under is the one the ledger will compare.
-  const trial = await selectLearnedMethods(learning, { userId: "u1", projectId: "p1", trialMethodIds: [methodId] });
-  assert.deepEqual(trial.map((entry) => [entry.id, entry.trial]), [[methodId, true]]);
-  known[0].digest = trial[0].digest;
-
-  // 4. Three deliverables across two runs, all accepted.
+  // 3. Three deliverables across two runs, all accepted.
   await foldRun(learning, finishedRun("run_1", ["d1", "d2"], known[0]), known);
   await foldRun(learning, finishedRun("run_2", ["d1"], known[0]), known);
   document = await learning.getMethod("u1", methodId);
   assert.deepEqual(document.payload.learning.counts,
     { eligible: 0, loaded: 3, invoked: 0, succeeded: 3, validated: 0, read: 0 });
+  assert.equal(promotionVerdict(methodRecordFrom(document)).status, "approved");
+  // Nothing was sent to the inbox: a method the loop learned shows up in
+  // 最近变化 on the memory page, which is where the researcher is already
+  // looking, and a notification per learned method is the sort of chore the
+  // 2026-09-20 ruling deletes.
+  assert.deepEqual(notices, []);
 
-  // Still not promotable: the trajectories are in, the measurement is not.
-  let verdict = promotionVerdict(methodRecordFrom(document));
-  assert.equal(verdict.status, "candidate");
-  assert.match(verdict.missing.join(" "), /no paired evaluation/);
-  await assert.rejects(
-    () => learning.approve("u1", methodId, { expectedRevision: document.revision }),
-    (error) => error.code === "method_not_promotable",
-  );
-
-  // 5. The evaluation returns, against the baseline that is current, naming
-  // the candidate text it measured. Without that name the verdict describes
-  // nothing in particular and cannot support a promotion.
+  // 4. The paired evaluation runs afterwards. A passing verdict changes
+  //    nothing about its effect — it was already in force — and is on the
+  //    record for the reader.
   await learning.recordEvaluation("u1", methodId, {
     report: "evals/method-quality/reports/e1.json",
     baselineDigest: "sha256:" + "c".repeat(64),
@@ -195,49 +191,50 @@ test("a distilled candidate reaches effect through evidence, and nothing asserts
     verdict: "better",
   });
   document = await learning.getMethod("u1", methodId);
-  verdict = promotionVerdict(methodRecordFrom(document), { currentBaselineDigest: "sha256:" + "c".repeat(64) });
-  assert.equal(verdict.status, "approved", verdict.missing.join("; "));
+  assert.equal(document.payload.status, "approved");
+  assert.equal(promotionVerdict(methodRecordFrom(document)).status, "approved");
 
-  // 6. Promotion, and the researcher hears about it with a way back.
-  const approved = await learning.approve("u1", methodId, {
-    expectedRevision: document.revision,
-    currentBaselineDigest: "sha256:" + "c".repeat(64),
+  // 5. A verdict of `worse` on the text that is mounted is what takes it away.
+  await learning.recordEvaluation("u1", methodId, {
+    report: "evals/method-quality/reports/e2.json",
+    baselineDigest: "sha256:" + "c".repeat(64),
+    candidateDigest: document.payload.contentDigest,
+    verdict: "worse",
   });
-  assert.equal(approved.payload.status, "approved");
-  assert.match(notices.at(-1).body, /回滚|rollback/i);
+  document = await learning.getMethod("u1", methodId);
+  const proposal = retirementProposal(methodRecordFrom(document), { nowMs: Date.parse("2026-09-20T00:00:00.000Z") });
+  assert.equal(proposal.propose, true);
+  assert.equal(proposal.immediate, true, "a measured harm does not wait another night");
+  assert.match(proposal.reason, /worse than working without it/);
 
-  // 7. And now it mounts for real runs, with no trial argument anywhere.
-  const mounted = await selectLearnedMethods(learning, { userId: "u1", projectId: "p1" });
-  assert.deepEqual(mounted.map((entry) => entry.name), ["quote-first"]);
-  assert.equal(mounted[0].trial, undefined);
-  assert.equal(mounted[0].digest, known[0].digest, "the mount digest did not move across promotion");
-
-  // 8. One rollback undoes it, saving forward.
-  const rolled = await learning.rollback("u1", methodId, { expectedRevision: approved.revision, targetRevision: 1 });
-  assert.equal(rolled.payload.status, "candidate");
+  // 6. One rollback undoes an effective method, saving forward.
+  const rolled = await learning.rollback("u1", methodId, { expectedRevision: document.revision, targetRevision: 1 });
+  assert.equal(rolled.payload.status, "approved", "revision 1 was effective, so restoring it is effective");
+  assert.ok(rolled.revision > document.revision, "history is kept, never deleted");
+  const stopped = await learning.retire("u1", methodId, { expectedRevision: rolled.revision, reason: "在记忆页里停用" });
+  assert.equal(stopped.payload.status, "retired");
   assert.deepEqual(await selectLearnedMethods(learning, { userId: "u1", projectId: "p1" }), []);
-  assert.ok(rolled.revision > approved.revision, "history is kept, never deleted");
 });
 
-test("three trajectories inside one run are not enough, and the reason says which one is short", async () => {
+test("trajectories decide who is worth measuring, and the reason says which one is short", async () => {
+  // `evaluationEligible` is a budget, not a gate: it decides who earns the cost
+  // of a paired evaluation, and since 2026-09-20 nothing about effect hangs on
+  // it. Three deliverables inside one run are still one run.
   const { learning, distillation } = harness();
   const applied = await distillation.applyCandidate(
     { userId: "u1", projectId: "p1", payload: {} }, { id: "run_0" },
     { candidate: { operation: "create" }, skill: SKILL },
   );
-  const trial = await selectLearnedMethods(learning, { userId: "u1", projectId: "p1", trialMethodIds: [applied.methodId] });
-  const known = [{ id: applied.methodId, name: "quote-first", digest: trial[0].digest }];
+  const mounted = await selectLearnedMethods(learning, { userId: "u1", projectId: "p1" });
+  const known = [{ id: applied.methodId, name: "quote-first", digest: mounted[0].digest }];
 
   await foldRun(learning, finishedRun("run_1", ["d1", "d2", "d3"], known[0]), known);
-  await learning.recordEvaluation("u1", applied.methodId, {
-    report: "r.json", baselineDigest: "sha256:" + "c".repeat(64), verdict: "better",
-    candidateDigest: (await learning.getMethod("u1", applied.methodId)).payload.contentDigest,
-  });
   const document = await learning.getMethod("u1", applied.methodId);
   assert.equal(document.payload.learning.counts.succeeded, 3);
-  const verdict = promotionVerdict(methodRecordFrom(document), { currentBaselineDigest: "sha256:" + "c".repeat(64) });
-  assert.equal(verdict.status, "candidate");
-  assert.match(verdict.missing.join(" "), /came from 1 run/);
+  assert.equal(document.payload.status, "approved", "it is in use while the measurement waits");
+  const eligibility = evaluationEligible(methodRecordFrom(document));
+  assert.equal(eligibility.eligible, false);
+  assert.match(eligibility.reason, /came from 1 run/);
 });
 
 test("a rejected deliverable is evidence against, and amending the body starts the count over", async () => {

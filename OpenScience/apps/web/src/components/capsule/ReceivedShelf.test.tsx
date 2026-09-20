@@ -94,9 +94,13 @@ describe("收到的胶囊: trusted whole, one click each way", () => {
     shelf();
     expect(await screen.findByText(/还有 4 条未检查；第一次试用或启用时会自动检查/)).toBeInTheDocument();
     cleanup();
+    // Nothing at all is silent (2026-09-20): the way to get one is 「导入胶囊」
+    // at the foot of the memory page, and a permanent empty block above it
+    // would say so a second time.
     client.fetchReceivedCapsules.mockResolvedValueOnce([]);
     shelf();
-    expect(await screen.findByText(/还没有人分享胶囊给你/)).toBeInTheDocument();
+    await waitFor(() => expect(client.fetchReceivedCapsules).toHaveBeenCalled());
+    expect(screen.queryByRole("heading", { name: "收到的胶囊" })).toBeNull();
     const list = screen.queryByRole("list");
     expect(list && within(list).queryAllByRole("listitem")).toBeFalsy();
   });

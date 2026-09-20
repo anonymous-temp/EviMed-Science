@@ -491,12 +491,31 @@ export function evaluationEligible(method, options = {}) {
  */
 
 /**
- * Whether a candidate may become effective, and if not, exactly what is missing.
+ * Whether a method may be effective, and if not, exactly what is missing.
  *
  * Returns a verdict rather than performing anything: the caller writes the
- * revision, sends the notice, and keeps the rollback target. The `missing` list
- * is shown to the researcher verbatim, which is the difference between "the
- * system is not learning" and "it has two of the three run families it needs".
+ * revision, sends the notice, and keeps the rollback target.
+ *
+ * Hidden knowledge: until 2026-09-20 an inferred method also had to clear three
+ * trajectories, two independent runs and a passing paired evaluation against a
+ * live baseline before it took effect. In production it never once did:
+ * `OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND` defaults to empty, so the evaluate
+ * job failed terminally by name and every distilled method stayed `candidate`
+ * for good — `evimed_product.documents` held zero effective methods. A page
+ * that says "EviMed learns your way of working" and a gate that can never open
+ * are not a cautious product, they are a false claim, and the cost of being
+ * wrong here is one line in 最近变化 and one click to undo.
+ *
+ * So the evidence bar moved from promotion to demotion (owner ruling
+ * 2026-09-20): a distilled method takes effect at once, marked new, and the
+ * paired evaluation keeps running in the background as the thing that can take
+ * it away — see `retirementProposal`'s evaluation clause. What still blocks
+ * effect is the one thing no measurement can repair: an unresolved conflict
+ * with another method, where the library would be telling the run two
+ * incompatible things.
+ *
+ * `evaluationEligible` is untouched and still decides who is *worth* measuring;
+ * it is a budget, not a gate.
  * @param {MethodRecord} method
  * @param {PromotionOptions} [options]
  * @returns {{status: string, reasons: string[], missing: string[], missingDetails: PromotionDetail[]}}
@@ -518,34 +537,16 @@ export function promotionVerdict(method, options = {}) {
       { code: 'conflicts', count: conflicts.length, targets: conflicts.map((entry) => String(entry.target)) })
   }
 
-  if (method?.provenance?.origin === 'explicit') {
-    reasons.push('explicit origin: the researcher stated this, so it takes effect immediately and is rolled back by restoring the previous revision')
-    return { status: missing.length ? 'candidate' : 'approved', reasons, missing, missingDetails }
-  }
+  reasons.push(method?.provenance?.origin === 'explicit'
+    ? 'explicit origin: the researcher stated this, so it takes effect immediately and is rolled back by restoring the previous revision'
+    : 'learned from the researcher’s own work: it takes effect immediately, is marked new, and is retired by the paired evaluation or by one click')
 
-  const eligibility = evaluationEligible(method, options)
-  if (!eligibility.eligible) lack(eligibility.reason, eligibility.detail)
-  else reasons.push(eligibility.reason)
-
+  // Said for the reader, never as a condition. A method already carrying a
+  // measurement should show it on its row.
   const evaluations = learning.evaluations ?? []
   const latest = evaluations.length ? evaluations[evaluations.length - 1] : null
-  if (!latest) {
-    lack('no paired evaluation has been run against a frozen baseline', { code: 'no_evaluation' })
-  } else if (!METHOD_PASSING_VERDICTS.includes(latest.verdict)) {
-    lack(`the last evaluation returned ${latest.verdict}`, { code: 'evaluation_not_passing', verdict: String(latest.verdict) })
-  } else if (latest.candidateDigest !== learning.digest) {
-    // Either it names no candidate text at all, or it names text this method
-    // no longer holds. Both are the same fact for a promotion: this verdict is
-    // not about what would be mounted.
-    if (latest.candidateDigest) lack('the last evaluation measured a revision this method no longer holds', { code: 'evaluation_stale_revision' })
-    else lack('the last evaluation does not name the text it measured', { code: 'evaluation_unnamed_text' })
-  } else if (!options.currentBaselineDigest?.trim()) {
-    lack('the current baseline is unavailable; a fresh comparison is required before promotion', { code: 'baseline_unavailable' })
-  } else if (latest.baselineDigest !== options.currentBaselineDigest) {
-    lack('the last evaluation was measured against a baseline that has since moved', { code: 'baseline_moved' })
-  } else {
-    reasons.push(`evaluation ${latest.verdict} against ${latest.baselineDigest}`)
-  }
+  if (latest && latest.candidateDigest === learning.digest) reasons.push(`evaluation ${latest.verdict} against ${latest.baselineDigest}`)
+  void options
 
   return { status: missing.length ? 'candidate' : 'approved', reasons, missing, missingDetails }
 }
@@ -587,6 +588,29 @@ export function retirementProposal(method, options) {
   if (method?.status === 'retired') return { propose: false, immediate: false, reason: 'already retired', strength }
   if (method?.provenance?.safetyRelated) {
     return { propose: false, immediate: false, reason: 'safety-related: rarely invoked is what a working safety check looks like', strength }
+  }
+  // The measurement, now that it no longer gates effect (see `promotionVerdict`).
+  //
+  // A distilled method takes effect the night it is learned; the paired
+  // evaluation runs afterwards and this is what it is for. `worse` is the only
+  // verdict that acts: `inconclusive` means the comparison could not tell, and
+  // retiring on "we could not tell" would make the loop unable to keep
+  // anything. Immediate, because unlike disuse this is a measured harm and
+  // there is nothing to gain by carrying it another night.
+  //
+  // Bound to the text that was measured. A verdict about a revision this
+  // method no longer holds says nothing about what would be mounted — the same
+  // rule the promotion side used to apply to the passing verdicts, kept on the
+  // side that now decides something.
+  const evaluations = learning.evaluations ?? []
+  const measured = evaluations.length ? evaluations[evaluations.length - 1] : null
+  if (measured && measured.verdict === 'worse' && measured.candidateDigest && measured.candidateDigest === learning.digest) {
+    return {
+      propose: true,
+      immediate: true,
+      reason: `a paired evaluation against ${measured.baselineDigest} measured this revision as worse than working without it`,
+      strength,
+    }
   }
   // Outcome before recency. A method that is mounted constantly and whose
   // packages keep being refused has *high* strength, so every clause below this

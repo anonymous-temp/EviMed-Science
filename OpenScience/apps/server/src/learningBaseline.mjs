@@ -5,13 +5,20 @@ import { MAX_MOUNTED_LEARNED_METHODS, selectLearnedMethods } from "./learnedMeth
 /** The same owner/project snapshot defines the evaluation baseline and the
  * promotion-time comparison. Hash the selected mount, including capsule text
  * and method files, with the original frozen-arm representation.
- * @param {{learning: any, capsules: any, userId: string, projectId: string}} input
+ *
+ * `excludeMethodIds` keeps the method under evaluation out of its own control
+ * arm. Since 2026-09-20 a distilled method is effective from the night it is
+ * learned, so without this the baseline — built from the library as it stands —
+ * would mount the very method the candidate arm is there to add, and every
+ * comparison would be a thing measured against itself.
+ * @param {{learning: any, capsules: any, userId: string, projectId: string, excludeMethodIds?: readonly string[]}} input
  */
-export async function freezeLearningBaseline({ learning, capsules, userId, projectId }) {
+export async function freezeLearningBaseline({ learning, capsules, userId, projectId, excludeMethodIds = [] }) {
+  const withheld = new Set(excludeMethodIds.map(String));
   const approved = structuredClone([
     ...await learning.approvedMethods(userId, { projectId }),
     ...await learning.approvedMethods(userId, { projectId: null }),
-  ]);
+  ].filter((document) => !withheld.has(String(document.id))));
   const approvedMethods = async (_userId, scope) => approved.filter((document) => document.projectId === scope.projectId);
   const capsuleMethods = capsules ? structuredClone(await selectCapsuleMethods(capsules, { userId, projectId })) : [];
   const capsuleBytes = capsuleMethods.reduce((sum, method) => sum + method.bytes, 0);

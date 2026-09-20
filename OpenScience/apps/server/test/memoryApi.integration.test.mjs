@@ -55,39 +55,53 @@ async function fixture(t, extra = {}) {
   return { app, base, headers, user };
 }
 
-test("the memory dashboard's note lifecycle works end to end", options, async (t) => {
-  const { base, headers } = await fixture(t);
+test("the memory page reads its status, its rows and its search, and the note routes are gone", options, async (t) => {
+  const { app, base, headers, user } = await fixture(t);
 
   const status = await (await fetch(`${base}/api/memory/status`, { headers })).json();
   assert.deepEqual(status.data, { configured: true, connected: true, code: null, structured: true },
     "the status page reads these four fields; a store on the database answers all four");
 
-  const created = (await (await fetch(`${base}/api/memory/memos`, {
-    method: "POST", headers, body: JSON.stringify({ content: "长期研究偏好：优先核对系统综述。 #循证" }),
-  })).json()).data;
-  assert.equal(created.content, "长期研究偏好：优先核对系统综述。 #循证");
-  assert.deepEqual(created.tags, ["循证"], "a tag the researcher wrote must come back as a tag");
+  // 「你写下的笔记」 and its three routes went with `evimed_memory.notes` on
+  // 2026-09-20: a composer for exactly what the extractor already writes.
+  for (const [path, method] of [["/api/memory/memos", "GET"], ["/api/memory/memos", "POST"],
+    ["/api/memory/memos/note_1", "PATCH"], ["/api/memory/memos/note_1", "DELETE"]]) {
+    const gone = await fetch(`${base}${path}`, { method, headers, ...(method === "GET" ? {} : { body: "{}" }) });
+    assert.equal(gone.status, 404, `${method} ${path} is not a route any more`);
+  }
 
-  assert.equal((await (await fetch(`${base}/api/memory/memos`, { headers })).json()).data.length, 1);
-
-  const pinned = await fetch(`${base}/api/memory/memos/${created.id}`, {
-    method: "PATCH", headers, body: JSON.stringify({ pinned: true }),
+  await app.researchMemory.upsertRecord(user.id, {
+    scope: "user", scopeId: "", kind: "profile", key: "profile.who",
+    value: "临床药师，主攻抗凝治疗", summary: "临床药师，主攻抗凝治疗",
+    origin: "explicit", status: "active", confidence: 1, importance: 0.8, sensitive: false,
+  }, { sourceType: "conversation_message", sourceRef: "sessions/ses_9/messages/m1", quote: "我是临床药师",
+    observedAt: new Date().toISOString(), weight: 1 });
+  // A 「做过的研究」 summary, which recall never serves and the page must still
+  // be able to find: searching a drug name is how a person looks for one.
+  await app.researchMemory.upsertRecord(user.id, {
+    scope: "project", scopeId: "default", kind: "run_summary", key: "run.session.ses_9",
+    value: JSON.stringify({ sessionId: "ses_9", question: "阿司匹林一级预防还值得做吗" }),
+    summary: "阿司匹林一级预防还值得做吗", origin: "system", status: "active",
+    confidence: 1, importance: 0.5, sensitive: false,
   });
-  assert.equal(pinned.status, 200);
-  assert.equal((await pinned.json()).data.pinned, true);
 
-  await fetch(`${base}/api/memory/memos/${created.id}`, {
-    method: "PATCH", headers, body: JSON.stringify({ state: "archived" }),
-  });
-  const archived = (await (await fetch(`${base}/api/memory/memos?state=archived`, { headers })).json()).data;
-  assert.equal(archived.length, 1);
-  assert.equal(archived[0].state, "archived");
-  assert.deepEqual((await (await fetch(`${base}/api/memory/memos`, { headers })).json()).data, [],
-    "an archived note is out of the default list, not deleted");
+  const profile = (await (await fetch(`${base}/api/memory/profile`, { headers })).json()).data;
+  assert.equal(profile.conversations.ses_9, "阿司匹林一级预防还值得做吗", "what the row says as 「来自 …《…》」");
+  assert.deepEqual(profile.usage, {}, "a memory nothing has used has no usage row, and says so as an absence");
 
-  const removed = await fetch(`${base}/api/memory/memos/${created.id}`, { method: "DELETE", headers });
-  assert.equal(removed.status, 200);
-  assert.deepEqual((await (await fetch(`${base}/api/memory/memos?state=archived`, { headers })).json()).data, []);
+  const found = (await (await fetch(`${base}/api/memory/search?q=${encodeURIComponent("阿司匹林")}`, { headers })).json()).data;
+  assert.deepEqual(found.items.map((item) => item.key).sort(), ["profile.who", "run.session.ses_9"],
+    "the search reaches what recall never serves, and what came out of that conversation");
+  assert.equal(found.query, "阿司匹林");
+
+  // A memory handed to a run is counted, which is 「用过 N 次，上次 …」.
+  const recalled = await app.memorySubstrate.recall(user.id, "临床药师 抗凝", { projectId: "default" });
+  assert.ok(recalled.length > 0);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const counted = (await (await fetch(`${base}/api/memory/profile`, { headers })).json()).data;
+  const [usage] = Object.values(counted.usage);
+  assert.equal(usage?.count, 1);
+  assert.ok(usage?.lastUsedAt);
 });
 
 test("a pending inference is confirmed by the researcher, and a raced edit is refused", options, async (t) => {
@@ -174,9 +188,6 @@ test("the researcher's switches pause learning and recall without deleting, and 
   assert.deepEqual(await app.memorySubstrate.recall(user.id, "Chinese answers language", { projectId: "default" }), [],
     "paused recall holds for every project");
 
-  const note = await fetch(`${base}/api/memory/memos`, { method: "POST", headers, body: JSON.stringify({ content: "a note to be reset" }) });
-  assert.equal(note.status, 201);
-
   const unconfirmed = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({}) });
   assert.equal(unconfirmed.status, 400);
   assert.equal((await unconfirmed.json()).code, "memory_reset_confirmation_required");
@@ -184,9 +195,8 @@ test("the researcher's switches pause learning and recall without deleting, and 
 
   const reset = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({ confirm: "reset" }) });
   assert.equal(reset.status, 200);
-  assert.deepEqual((await reset.json()).data, { structured: 1, manual: 1 });
+  assert.deepEqual((await reset.json()).data, { structured: 1 });
   assert.equal((await app.researchMemory.listAllRecords(user.id)).length, 0);
-  assert.equal((await app.researchMemory.listAllMemos(user.id)).length, 0);
   const after = await read();
   assert.equal(after.learningPaused, true, "a reset is a clean slate, not a change to the switches");
   assert.equal(after.recallPaused, true);
@@ -209,8 +219,6 @@ test("deleting a project deletes its memory and leaves personal memory alone", o
     value: "tables over prose", summary: "", origin: "explicit", status: "active",
     confidence: 1, importance: 0.5, sensitive: false,
   });
-  await app.researchMemory.create(user.id, `# EviMed agent run\n- Project: ${projectId}\n#evimed-agent-run`);
-  await app.researchMemory.create(user.id, "a note the researcher wrote by hand");
 
   assert.equal((await fetch(`${base}/api/projects/${projectId}`, {
     method: "DELETE", headers, body: JSON.stringify({ confirm: projectId }),
@@ -219,7 +227,6 @@ test("deleting a project deletes its memory and leaves personal memory alone", o
   const exported = await app.researchMemory.exportUserMemory(user.id);
   assert.deepEqual(exported.records.map((record) => record.key), ["tone"],
     "the project's memory went with it and the account's did not");
-  assert.deepEqual(exported.manualMemos.map((memo) => memo.content), ["a note the researcher wrote by hand"]);
 });
 
 test("deleting an account takes every memory with it, counted for the audit", options, async (t) => {
@@ -229,7 +236,6 @@ test("deleting an account takes every memory with it, counted for the audit", op
     value: "tables over prose", summary: "", origin: "explicit", status: "active",
     confidence: 1, importance: 0.5, sensitive: false,
   });
-  await app.researchMemory.create(user.id, "a note that must not outlive the account");
 
   const deleted = await fetch(`${base}/api/account`, {
     method: "DELETE", headers, body: JSON.stringify({ confirm: user.id, password: "test-only-memory-password" }),
@@ -237,8 +243,9 @@ test("deleting an account takes every memory with it, counted for the audit", op
   assert.equal(deleted.status, 200, await deleted.text());
   const rows = await app.store.database.query(
     `SELECT (SELECT count(*)::integer FROM evimed_memory.records WHERE user_id=$1) AS records,
-            (SELECT count(*)::integer FROM evimed_memory.notes WHERE user_id=$1) AS notes`, [user.id]);
-  assert.deepEqual(rows.rows[0], { records: 0, notes: 0 });
+            (SELECT count(*)::integer FROM evimed_memory.record_usage WHERE user_id=$1) AS usage,
+            (SELECT count(*)::integer FROM evimed_memory.sessions WHERE user_id=$1) AS sessions`, [user.id]);
+  assert.deepEqual(rows.rows[0], { records: 0, usage: 0, sessions: 0 });
 });
 
 // Which of the two halves of a deletion goes first is decidable, and only one
@@ -352,7 +359,6 @@ test("an unreachable index fails an account deletion without emptying the accoun
     value: "tables over prose", summary: "", origin: "explicit", status: "active",
     confidence: 1, importance: 0.5, sensitive: false,
   });
-  await app.researchMemory.create(user.id, "a note that must survive a failed deletion");
 
   const refused = await fetch(`${base}/api/account`, {
     method: "DELETE", headers, body: JSON.stringify({ confirm: user.id, password: "test-only-memory-password" }),
@@ -361,7 +367,6 @@ test("an unreachable index fails an account deletion without emptying the accoun
 
   const exported = await app.researchMemory.exportUserMemory(user.id);
   assert.equal(exported.records.length, 1, "a deletion that failed must not have deleted anything");
-  assert.equal(exported.manualMemos.length, 1);
 });
 
 test("one click undoes an automatic write: an edit goes back, a creation goes away and stays away from inference", options, async (t) => {
