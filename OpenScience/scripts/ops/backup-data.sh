@@ -44,17 +44,23 @@ if [ "$strict_backup" = true ]; then
     echo "Backup file inventory failed." >&2
     exit 1
   fi
-elif ! node - "$DATA_DIR" "$manifest" <<'NODE'
+elif ! node - "$DATA_DIR" "$manifest" "$SCRIPT_DIR/../../apps/server/src/internalProjects.mjs" <<'NODE'
 const fs = require('node:fs');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const root = path.resolve(process.argv[2]);
 const entries = [];
+// One rule for both inventories (`backup-archive.mjs` reads the same module):
+// the platform's own background projects are scratch the store rebuilds, and
+// their continuous writes failed every backup on 2026-09-21.
+let isInternalProject = () => false;
 
 function collect(relative) {
   if (relative === '.open-science-backup-manifest.json') {
     throw new Error('Refusing a reserved backup manifest path in customer data.');
   }
   const parts = relative.split('/');
+  if (parts.length === 4 && parts[0] === 'users' && parts[2] === 'projects' && isInternalProject(parts[3])) return false;
   const managedRuntime = parts.length >= 6 && parts[0] === 'users' && parts[2] === 'projects'
     && parts[4] === 'runtime' && parts[5] === 'container-runtime';
   if (managedRuntime && ((parts.length >= 7 && parts[6] !== 'dsh-home')
@@ -82,13 +88,14 @@ function collect(relative) {
   return true;
 }
 
-try {
+import(pathToFileURL(process.argv[4]).href).then((module) => {
+  isInternalProject = module.isInternalProject;
   collect('');
   fs.writeFileSync(process.argv[3], JSON.stringify(entries), { mode: 0o600 });
-} catch (error) {
+}).catch((error) => {
   console.error(error.message);
   process.exitCode = 1;
-}
+});
 NODE
 then
   echo "Backup file inventory failed." >&2
