@@ -6,7 +6,7 @@ import net from "node:net";
 import path from "node:path";
 import { loadConfig } from "./config.mjs";
 import { assertDockerDataVolumeSupport } from "./dockerMounts.mjs";
-import { isInternalProject } from "./internalProjects.mjs";
+import { backgroundRuntimeLimit, isInternalProject } from "./internalProjects.mjs";
 import {
   RUNTIME_EXIT_OUTPUT_BYTES,
   appendTailOutput,
@@ -364,6 +364,20 @@ export function createRuntimeController(overrides = {}) {
         `Too many running runtimes for the server; limit is ${limits.maxGlobal}.`,
         { retryAfterSeconds: 5 },
       );
+    }
+    // Background work holds at most its share of the deployment, the same
+    // number the control plane computes (`backgroundRuntimeLimit`).
+    if (isInternalProject(project.id)) {
+      const background = [...inventory.values()].filter((owner) => isInternalProject(owner.projectId)).length;
+      const maxBackground = backgroundRuntimeLimit(limits.maxGlobal, limits.maxPerUser);
+      if (maxBackground != null && background >= maxBackground) {
+        throw controllerFailure(
+          429,
+          "runtime_limit_exceeded",
+          `Background work is holding its share of runtimes (${maxBackground}); it waits so researchers keep theirs.`,
+          { retryAfterSeconds: 60 },
+        );
+      }
     }
     // The platform's own background projects (learning, document
     // understanding, the paired evaluation) never take one of a researcher's

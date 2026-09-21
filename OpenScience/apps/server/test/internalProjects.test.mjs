@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "../src/internalProjects.mjs";
+import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, backgroundRuntimeLimit, isInternalProject } from "../src/internalProjects.mjs";
 import { createLearningRuntime } from "../src/learningRuntime.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
 
@@ -43,6 +43,18 @@ test("background work is not held to a researcher's ceiling, and never stops the
   manager.hasRunningRuns = async () => false;
   await manager.makeRoomFor({ userId: "u1", id: SOURCES_PROJECT_ID });
   assert.deepEqual(stopped, [], "a document's understanding waits for room rather than taking a researcher's runtime");
+});
+
+test("background work holds at most all but one researcher's share of the runtimes", () => {
+  assert.equal(backgroundRuntimeLimit(4, 2), 2);
+  assert.equal(backgroundRuntimeLimit(2, 2), 1, "never fewer than one");
+  assert.equal(backgroundRuntimeLimit(null, 2), null, "no ceiling, no share");
+  const manager = new RuntimeManager({ maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 4 });
+  manager.runtimes.set(`u1:${LEARNING_PROJECT_ID}`, {});
+  manager.runtimes.set(`u2:methodeval-${"ab".repeat(12)}`, {});
+  assert.throws(() => manager.enforceRuntimeCapacity({ userId: "u3", id: SOURCES_PROJECT_ID }), { code: "runtime_limit_exceeded" },
+    "a third background runtime waits");
+  assert.doesNotThrow(() => manager.enforceRuntimeCapacity({ userId: "u3", id: "paper1" }), "a researcher still opens a project");
 });
 
 test("a learning step runs in the account's learning project, made on first use, never the lesson's own project", async () => {

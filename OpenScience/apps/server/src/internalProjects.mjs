@@ -49,3 +49,22 @@ export function isInternalProject(projectId) {
   return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID
     || /^eval-method-[a-z0-9-]+$/.test(id) || EVALUATION_CELL_PROJECT.test(id);
 }
+
+/**
+ * How many of the deployment's runtimes the platform's own background work may
+ * hold at once: all but one researcher's full share, and never fewer than one.
+ *
+ * Background work now runs around the clock — learning, document
+ * understanding, paired evaluations of hours — and on 2026-09-21 it could hold
+ * every one of the four runtimes, so a researcher opening a project was
+ * refused. It waits for room instead; a researcher never waits for it. The
+ * runtime controller and the control plane compute the same number.
+ * @param {number | null | undefined} maxGlobal @param {number | null | undefined} maxPerUser
+ * @returns {number | null} null when the deployment sets no global ceiling
+ */
+export function backgroundRuntimeLimit(maxGlobal, maxPerUser) {
+  const global = Number(maxGlobal);
+  if (maxGlobal == null || !Number.isFinite(global) || global <= 0) return null;
+  const share = Number(maxPerUser);
+  return Math.max(1, global - (maxPerUser != null && Number.isFinite(share) && share > 0 ? share : 1));
+}
