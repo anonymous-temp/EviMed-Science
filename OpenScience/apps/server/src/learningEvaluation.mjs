@@ -68,6 +68,23 @@ export async function freezeLearningEvaluation({ learning, capsules, project, re
   };
 }
 
+/**
+ * One evaluation cell's usage, as the evaluator reads it.
+ *
+ * Settled cost once nothing is in flight. A call whose stream was cut is
+ * terminal with no bill to read (`uncertain`): it is counted beside the cost,
+ * never guessed into it, and never makes the whole cell unmeasurable. About
+ * three calls in a hundred end that way, so requiring none excluded all six
+ * cells of both evaluations on 2026-09-21 and every evaluation came back
+ * `invalid`.
+ * @param {any} summary `usageLedger.summaryRun`
+ */
+export function evaluationCellUsage(summary) {
+  const measurable = summary.settledCalls > 0 && !summary.reservedCalls && !summary.incompleteUsageCalls;
+  return { cost: measurable ? summary.actualCost : null, calls: summary.settledCalls, uncertainCalls: summary.uncertain ?? 0,
+    currency: summary.currency, openCost: summary.openCost };
+}
+
 /** The private API uses the existing bounded capability dispatcher and accounting.
  * @param {{config:any,store:any,learning:any,capsules:any,runtimeManager:any,agentRuns:any,
  * learningRuntime:any,commands:any,usageLedger:any,judge?: (cell:any,input:any)=>Promise<any>}} dependencies
@@ -152,11 +169,7 @@ export async function evaluateLearnedMethod(dependencies, request, options = {})
     },
     readArtifact: (cell, artifactPath) => commands.invoke("read_artifact", { path: artifactPath }, { config, project: cell.scoped }),
     readTranscript: (cell) => runtimeManager.sessionTranscript(cell.scoped, cell.sessionId, { wake: false }),
-    readUsage: async (cell) => {
-      const summary = await usageLedger.summaryRun(user.id, cell.dispatchId);
-      const complete = summary.settledCalls > 0 && !summary.reservedCalls && !summary.uncertain && !summary.incompleteUsageCalls;
-      return { cost: complete ? summary.actualCost : null, calls: summary.settledCalls, currency: summary.currency, openCost: summary.openCost };
-    },
+    readUsage: async (cell) => evaluationCellUsage(await usageLedger.summaryRun(user.id, cell.dispatchId)),
     cleanupCell,
     ...(dependencies.judge ? { judge: dependencies.judge } : {}),
   });

@@ -1562,3 +1562,20 @@ class DispatchIdentity(unittest.TestCase):
         self.assertIsNotNone(match, "the dispatch id no longer has the shape this test reads")
         self.assertIn("self.release_id", match.group(1),
                       "the dispatch id does not depend on the build, so a re-run silently rescores old runs")
+
+
+class PrivateGrantIdTests(unittest.TestCase):
+    """A retried private evaluation resumes the cells it already completed."""
+
+    def test_the_grant_suffix_ignores_when_the_grant_expires(self):
+        # 2026-09-21: `expiresAt` in the digest gave every retried job a new id,
+        # so one failed cell, or a restart, re-ran all six completed cells.
+        grant = {"userId": "u1", "projectId": "p1", "methodId": "method:learned:x", "candidateDigest": "sha256:" + "a" * 64,
+                 "mountedDigest": "sha256:" + "b" * 64, "snapshotDigest": "sha256:" + "c" * 64, "baselineDigest": "sha256:" + "d" * 64,
+                 "expectedMethods": {"baseline": [], "candidate": []}, "bootstrap": True, "maxCells": 12}
+        first = runner.grant_config_suffix({**grant, "expiresAt": "2026-09-21T15:00:00.000Z"})
+        second = runner.grant_config_suffix({**grant, "expiresAt": "2026-09-21T21:00:00.000Z"})
+        self.assertEqual(first, second)
+        self.assertNotEqual(first, runner.grant_config_suffix({**grant, "candidateDigest": "sha256:" + "e" * 64}),
+                            "a different candidate is a different experiment")
+        self.assertNotEqual(first, runner.grant_config_suffix({**grant, "bootstrap": False}))
