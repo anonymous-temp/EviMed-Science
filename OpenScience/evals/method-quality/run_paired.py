@@ -1544,6 +1544,19 @@ def read_cell_attempt(path: Path) -> int:
         return 1
 
 
+def grant_config_suffix(grant: dict[str, Any]) -> str:
+    """The part of a private evaluation's id its grant contributes.
+
+    Keyed on what the grant freezes, not on when it expires: with `expiresAt`
+    in the digest every retried job — after one failed cell, or a control-plane
+    restart mid-evaluation — got a new id and re-ran every cell it had already
+    completed (2026-09-21). A stored cell is still reused only if its arm and
+    brief digests match (`read_completed_cell`).
+    """
+    frozen = {key: value for key, value in grant.items() if key != "expiresAt"}
+    return digest_of({"grant": frozen, "bootstrap": grant.get("bootstrap")}).split(":")[-1][:16]
+
+
 def read_completed_cell(path: Path, arm_digest: str, brief_digest: str) -> dict[str, Any] | None:
     """A cell counts as done only if it finished AND was produced by this experiment.
 
@@ -2707,7 +2720,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 snapshot["trialMountedDigestById"] = {args.method: private_grant["mountedDigest"]} if arm_name == "candidate" else {}
                 snapshot["expectedMethods"] = private_grant["expectedMethods"][arm_name]
                 config[arm_name] = normalize_arm(block, arm_name)
-            config["id"] += "-" + digest_of({"grant": private_grant, "bootstrap": private_grant.get("bootstrap")}).split(":")[-1][:16]
+            config["id"] += "-" + grant_config_suffix(private_grant)
             config["digest"] = digest_of({key: value for key, value in config.items() if key != "digest"})
             if len(config["briefs"]) * config["repeats"] * 2 > private_grant["maxCells"]:
                 raise SystemExit("The configured evaluation exceeds its private job cell budget.")

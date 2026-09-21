@@ -101,3 +101,15 @@ test("private cells use bounded dispatch and retain billing atomically before de
   assert.equal(runtimeManager.evaluationMethodSnapshots.size, 0);
   assert.equal(statements.filter((entry) => entry.sql.startsWith("UPDATE")).length, 2);
 });
+
+test("a cell whose cut calls have no bill is still measured on what settled", async () => {
+  // 2026-09-21: about three calls in a hundred end with a cut stream
+  // (`uncertain`); requiring none excluded every cell and every evaluation
+  // came back invalid.
+  const { evaluationCellUsage } = await import("../src/learningEvaluation.mjs");
+  const settled = { settledCalls: 97, reservedCalls: 0, incompleteUsageCalls: 0, uncertain: 3, actualCost: 2.18, currency: "CNY", openCost: 0.4 };
+  assert.deepEqual(evaluationCellUsage(settled), { cost: 2.18, calls: 97, uncertainCalls: 3, currency: "CNY", openCost: 0.4 });
+  assert.equal(evaluationCellUsage({ ...settled, reservedCalls: 1 }).cost, null, "a call still in flight is not a measurement yet");
+  assert.equal(evaluationCellUsage({ ...settled, settledCalls: 0 }).cost, null, "nothing settled is nothing to measure");
+  assert.equal(evaluationCellUsage({ ...settled, incompleteUsageCalls: 1 }).cost, null);
+});
