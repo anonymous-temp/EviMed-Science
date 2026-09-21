@@ -200,6 +200,11 @@ test("the account payload names the conversation to reopen in the current projec
       { event: "finished", id: "run_b", status: "succeeded", errorCode: null, artifacts: [], finishedAt: "2026-09-12T02:00:00.000Z", durationMs: 1 },
       // A machine's work is newer and is not what the researcher reopens.
       started("run_eval", "ses_eval", "2026-09-18T01:00:00.000Z", { automated: true }),
+      // Nor is a lesson that ran in this project before background work had
+      // its own (2026-09-21: the chat page opened one).
+      ...[["run_lesson", "ses_lesson", "method-distillation"], ["run_source", "ses_source", "source-understanding"]].map(([id, session, agent], index) =>
+        started(id, session, `2026-09-19T0${index + 1}:00:00.000Z`, { mode: "specialist", agentId: agent, agentVersion: "1.0.0",
+          runtimeAgent: `evimed-${agent}`, effectiveAgentId: agent, effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: `evimed-${agent}` })),
     ].map((line) => JSON.stringify(line)).join("\n") + "\n", "utf8");
     assert.equal((await call("GET", "/api/me")).body.data.lastSessionId, "ses_older", "the run that moved last, not the one started last");
   });

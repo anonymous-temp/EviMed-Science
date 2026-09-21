@@ -375,7 +375,9 @@ export function createLearningRuntime({
             });
             promptAttempted = true;
             return await runtimeManager.dispatchPrompt(scoped, session.id, {
-              text: `${marker}\n${repairText || question}`,
+              // The question first: the kernel names a session after the start
+              // of its first message. The gateway finds the marker anywhere.
+              text: `${repairText || question}\n\n${marker}`,
               system: prepared.system,
               agent: selected.runtimeAgent,
               strictContext: true,

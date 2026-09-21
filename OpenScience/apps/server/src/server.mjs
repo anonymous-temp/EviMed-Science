@@ -2210,7 +2210,11 @@ export function createWebApiApp(overrides = {}) {
             runId: verification.verificationId, dailyLimit, weeklyLimit, runLimit,
           });
           return runtimeManager.dispatchPrompt(scoped, session.id, {
-            text: `<evimed-autopilot-verification>${verification.verificationId}</evimed-autopilot-verification>\n${budgetMarker}\n${prompt}`,
+            // The question first: the kernel names a session after the start
+            // of its first message, and a marker first named it
+            // 「<evimed-budget-scope>e…」 (2026-09-21 walk). The gateway finds
+            // and strips the markers wherever they are.
+            text: `${prompt}\n\n<evimed-autopilot-verification>${verification.verificationId}</evimed-autopilot-verification>\n${budgetMarker}`,
             system: prepared.system, memoryContext: prepared.memoryContext, agent: selected.runtimeAgent, strictContext: true,
             model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
             requestId: dispatchedRun.kernelRequestIds?.at(-1),
@@ -2299,7 +2303,8 @@ export function createWebApiApp(overrides = {}) {
               weeklyLimit, runLimit: Number(episode.budgetCny),
             });
             return runtimeManager.dispatchPrompt(project, session.id, {
-              text: `<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}\n${promptText}`,
+              // The question first, markers last (see the verification above).
+              text: `${promptText}\n\n<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}`,
               system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
               model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),

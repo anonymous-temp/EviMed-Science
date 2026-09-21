@@ -73,7 +73,7 @@ import {
 // Pharmacist-authored cautions, shown to the reader as SAFETY notices (S5,
 // 2026-09-18). Imported on a line of its own so the ledger's own import list
 // stays as it is.
-import { clinicalSafetyCautionHits } from "@evimed/domain";
+import { clinicalSafetyCautionHits, usagePurposeOfRun } from "@evimed/domain";
 // The evidence type stamped beside each preserved capture (C8), which a
 // claim's structured GRADE certainty is read against (S6, 2026-09-18). A line
 // of its own for the same reason as the one above.
@@ -3811,7 +3811,10 @@ export class AgentRunStore {
    * The conversation a researcher last worked in, in this project (C4 "me"
    * `lastSessionId`): the session of the run that moved most recently, so the
    * shell can reopen it instead of a blank page. Work a machine started —
-   * an evaluation, an autopilot episode — is not "last open".
+   * an evaluation, an autopilot episode, a lesson or a source being read — is
+   * not "last open": on 2026-09-21 the chat page opened a method distillation
+   * that had run in the researcher's own project that morning, titled
+   * 「<evimed-budget-scope>e…」 and full of the loop's English working.
    * @param {any} project @returns {Promise<string | null>}
    */
   async lastSessionId(project) {
@@ -3819,6 +3822,7 @@ export class AgentRunStore {
     let at = "";
     for (const run of foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()) {
       if (run.automated === true || String(run.effectiveRouteReason ?? "").startsWith("autopilot:")) continue;
+      if (usagePurposeOfRun(run) !== "kernel") continue;
       const moved = [run.lastProgressAt, run.finishedAt, run.startedAt].filter((value) => typeof value === "string").sort().at(-1) ?? "";
       if (moved > at) {
         at = moved;
