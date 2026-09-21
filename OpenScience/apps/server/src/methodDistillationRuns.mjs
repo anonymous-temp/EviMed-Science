@@ -51,7 +51,10 @@ export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "repair_accepte
 
 /** Bumped when the input shape or the cleaning rules change, so a re-run under
  *  new rules is a different job rather than a duplicate of the old one. */
-export const DISTILLATION_EXTRACTOR_VERSION = "1";
+// "2" since 2026-09-21: every version-1 dispatch ran without its method and
+// failed; a re-queued lesson must start a run of its own rather than adopt one
+// of those by identity.
+export const DISTILLATION_EXTRACTOR_VERSION = "2";
 
 /**
  * How many messages of context each trigger is worth.
