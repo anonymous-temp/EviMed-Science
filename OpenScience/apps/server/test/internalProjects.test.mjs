@@ -62,3 +62,14 @@ test("a learning step runs in the account's learning project, made on first use,
   assert.deepEqual(created, [LEARNING_PROJECT_ID]);
   assert.deepEqual(listed, [LEARNING_PROJECT_ID], "the ledger read is the learning project's, not the lesson's project");
 });
+
+test("the gateway marker of a learning step names the project its runtime belongs to", async () => {
+  // The first learning runs in the learning project failed in a second: the
+  // marker named the lesson's project, the runtime belonged to the learning
+  // project, and the gateway refused every call (model_gateway_budget_scope_invalid).
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../src/learningRuntime.mjs", import.meta.url), "utf8");
+  const marker = source.slice(source.indexOf("issueModelGatewayBudgetMarker({"), source.indexOf("issueModelGatewayBudgetMarker({") + 400);
+  assert.match(marker, /projectId: project\.id/);
+  assert.doesNotMatch(marker, /projectId: job\.projectId/);
+});

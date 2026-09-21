@@ -255,7 +255,9 @@ export function createLearningRuntime({
             await assertBoundedRunAffordable(usageLedger, job.userId, budget);
             const marker = issueModelGatewayBudgetMarker({
               secret: config.modelGatewaySigningSecret,
-              userId: job.userId, projectId: job.projectId, runId: dispatchId, ...budget.scope,
+              // The project the runtime belongs to, which the gateway checks the
+              // marker against: the learning project, not the lesson's.
+              userId: job.userId, projectId: project.id, runId: dispatchId, ...budget.scope,
             });
             promptAttempted = true;
             return await runtimeManager.dispatchPrompt(scoped, session.id, {
