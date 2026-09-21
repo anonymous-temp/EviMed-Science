@@ -5991,6 +5991,25 @@ export class AgentRunStore {
     return !stillByHistory || !stillByKernel;
   }
 
+  /**
+   * Whether the kernel's own session log shows that none of a run's prompts
+   * ever arrived. Only a history that was read counts: an unreadable one is
+   * not evidence either way.
+   * @param {any} project @param {any} run @returns {Promise<boolean>}
+   */
+  async promptNeverLanded(project, run) {
+    let history;
+    try {
+      history = await this.readSessionHistory(project, run.sessionId, { wake: false });
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(history)) return false;
+    const requests = new Set(run.kernelRequestIds ?? []);
+    if (!requests.size) return false;
+    return !history.some((message) => actualUserMessage(message) && requests.has(message.info?.sourceRequestId));
+  }
+
   scheduleMonitor(project, runId) {
     if (this.monitors.has(runId)) return;
     let canceled = false;
@@ -6044,6 +6063,18 @@ export class AgentRunStore {
         // holds.
         if (this.monitorStallPolls > 0 && idlePolls >= this.monitorStallPolls && !stallNoticed) {
           stallNoticed = true;
+          // A prompt the kernel never received is not a stalled run: there is
+          // no run. When the acceptance answer never came (`unknown`) and the
+          // kernel's own log of the session still holds no message carrying
+          // any of this run's request ids a whole stall threshold later, that
+          // is the kernel's record, not a guess about liveness. It held the
+          // learning project for a day's monitor budget with nothing running
+          // (2026-09-21: acceptance timed out on a host out of swap, no
+          // message ever landed, every later lesson waited behind it).
+          if (reconciled.dispatchStatus === "unknown" && await this.promptNeverLanded(project, reconciled)) {
+            await this.finishInternal(project, runId, { status: "failed", errorCode: "runtime_prompt_lost", artifacts: [] });
+            return;
+          }
           const minutes = Math.round((idlePolls * this.monitorIntervalMs) / 60_000);
           // Says what was measured and nothing else. It used to add 「工作区
           // 也没有变化」, which nothing here ever checks — and in F4 it was shown
