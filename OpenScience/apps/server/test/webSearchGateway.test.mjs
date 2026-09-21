@@ -158,6 +158,29 @@ test("a transient backend failure is retried once, then surfaced", async () => {
   assert.equal(failed.json().code, "web_search_upstream_error");
 });
 
+test("the endpoint the deployment writes is queried as it is, and a base URL gets search added", async () => {
+  // Production's .env names the endpoint (`…:8080/search`); the gateway
+  // appended `search` to it and asked `/search/search`, which SearXNG answers
+  // 404 — every open-web search failed (2026-09-21).
+  for (const [configured, expected] of [
+    ["http://open-science-web-search:8080/search", "/search"],
+    ["http://open-science-web-search:8080/search/", "/search"],
+    ["http://open-science-web-search:8080/", "/search"],
+    ["http://open-science-web-search:8080", "/search"],
+    ["http://proxy.internal/searxng/", "/searxng/search"],
+    ["http://proxy.internal/searxng/search", "/searxng/search"],
+  ]) {
+    let asked = null;
+    const res = await run({ ...configured === "" ? {} : { webSearchUrl: configured }, webSearchTimeoutMs: 5_000 }, async (url) => {
+      asked = new URL(String(url));
+      return searxngResponse({ results: [{ title: "t", url: "https://example.org/x", engine: "quark" }] });
+    }, { query: "SGLT2 HFpEF guideline" });
+    assert.equal(res.statusCode, 200, configured);
+    assert.equal(asked.pathname, expected, configured);
+    assert.equal(asked.searchParams.get("q"), "SGLT2 HFpEF guideline");
+  }
+});
+
 test("a backend refusal reaches the error ledger with the backend's own status", async () => {
   // 2026-09-21: 138 `web_search_upstream_error` in twelve hours, and not one
   // said what SearXNG had answered.
