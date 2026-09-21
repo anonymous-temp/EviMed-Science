@@ -101,12 +101,15 @@ async function acceptFixture(f) {
       files, acceptedAt: new Date().toISOString(), attempt: 1, notices: [],
     }],
   }));
-  const request = await f.app.usageLedger.reserveModel({ id: randomUUID(), userId: f.userId, projectId: f.project.id,
+  const request = await f.app.usageLedger.reserveModel({ id: randomUUID(), userId: f.userId, projectId: f.state.project.id,
     runId: f.state.scope.runId, model: f.app.config.deepseekModel, currency: "CNY", priceVersion: "fixture-price",
     requestFingerprint: "d".repeat(64), estimatedCost: 0.1, runLimit: 3, dailyLimit: 10, weeklyLimit: 50 });
   await f.app.usageLedger.settleModel(f.userId, request.id, { actualCost: 0.031, priced: true,
     usage: { cacheHitTokens: 7, cacheMissTokens: 123, completionTokens: 47 } });
-  const run = (await f.app.agentRuns.list(f.project))[0];
+  // The run lives in the account's sources project, never the source's own.
+  const run = (await f.app.agentRuns.list(f.state.project))[0];
+  assert.equal(f.state.project.id, "evimed-sources");
+  assert.equal((await f.app.agentRuns.list(f.project)).length, 0, "nothing ran in the researcher's project");
   await f.app.agentRuns.finishInternal(f.state.project, run.id, { status: "succeeded", artifacts: files.map(file => file.path) });
   return { input, output, run };
 }
@@ -160,9 +163,10 @@ test("the model gateway records a source understanding run's calls as source und
   await f.app.sourceWorker.tick();
   assert.ok(f.state.scope?.runId, "the source run was dispatched under a bounded scope");
   const jti = `fixture_${randomUUID()}`;
+  // The runtime that makes the call is the sources project's.
   const token = issueModelGatewayRuntimeToken({ secret: f.app.config.modelGatewaySigningSecret,
-    userId: f.userId, projectId: f.project.id, jti, budgetScope: f.state.scope });
-  f.app.runtimeManager.activateModelGatewayRuntime(f.project, { modelGatewayToken: token, modelGatewayTokenJti: jti });
+    userId: f.userId, projectId: f.state.project.id, jti, budgetScope: f.state.scope });
+  f.app.runtimeManager.activateModelGatewayRuntime(f.state.project, { modelGatewayToken: token, modelGatewayTokenJti: jti });
   const response = await fetch(`http://127.0.0.1:${f.app.server.address().port}/internal/model/v1/chat/completions`, {
     method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({ messages: [{ role: "user", content: "Read the frozen input." }] }),
@@ -222,7 +226,7 @@ test("a crash after the actual ledger append recovers the protected launch and t
   await f.app.store.database.query("UPDATE evimed_product.jobs SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", [job.id]);
   await f.app.sourceWorker.tick();
   await awaitBackgroundMonitor(Promise.all([...f.app.agentRuns.monitors.values()].map(monitor => monitor.promise)));
-  const recovered = (await f.app.agentRuns.list(f.project)).find(run => run.id === identity.runId);
+  const recovered = (await f.app.agentRuns.list(f.state.project)).find(run => run.id === identity.runId);
   assert.equal(recovered.dispatchStatus, "unknown");
   assert.notEqual(recovered.status, "running", "the recovered monitor must reach a bounded terminal state");
   await f.due();
@@ -249,7 +253,7 @@ test("wired durable cancellation stops only the bound source session and removes
   for (let index = 0; index < 3; index++) await f.app.sourceWorker.tick();
   assert.equal(f.calls.cancel, 1);
   assert.equal(f.calls.release.length, 1);
-  assert.equal((await f.app.agentRuns.list(f.project))[0].status, "canceled");
+  assert.equal((await f.app.agentRuns.list(f.state.project))[0].status, "canceled");
   await assert.rejects(stat(owned), { code: "ENOENT" });
   assert.equal(await readFile(path.join(f.project.baseDir, "knowledge-base/notes.txt"), "utf8"), "Record the outcome. Keep the original notes.");
 });

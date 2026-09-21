@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
-import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
+import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
@@ -3690,7 +3690,11 @@ export function createWebApiApp(overrides = {}) {
           : safeId(assertString(body.id, "id", { max: 64 }), "project id");
         // The learning loop's project is made by the loop; the paired
         // evaluation still makes its own through this route.
-        if (id === LEARNING_PROJECT_ID) throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
+        // Not `isInternalProject`: the paired evaluation makes its `eval-method-*`
+        // projects through this very route.
+        if (id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID) {
+          throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
+        }
         const name = projectDisplayName(body.name ?? id);
         // Counted before the create, and only for a project that is new: a
         // per-project storage quota and a per-user runtime limit bound nothing

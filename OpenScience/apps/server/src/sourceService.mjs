@@ -690,8 +690,10 @@ export class SourceService {
   /** Resolve the durable owner rather than trusting run route labels. Includes
    * tombstoned sources until their owned runtime and bytes are cleaned up. */
   async understandingRunForRun(userId, projectId, runId) {
+    // A null project asks across the account: an understanding run lives in the
+    // account's sources project, never in the project its source belongs to.
     const result = await this.documents.database.query(`SELECT payload,deleted_at FROM evimed_product.documents
-      WHERE user_id=$1 AND project_id=$2 AND kind='source' AND
+      WHERE user_id=$1 AND ($2::text IS NULL OR project_id=$2) AND kind='source' AND
         (payload->'analysis'->'run'->>'id'=$3 OR payload @> jsonb_build_object('pendingRunCancellations',jsonb_build_array(jsonb_build_object('id',$3::text))))`,
     [userId, projectId, runId]);
     const matches = result.rows.flatMap(row => [row.payload.analysis?.run, ...(row.payload.pendingRunCancellations ?? [])].filter(Boolean)
@@ -710,7 +712,7 @@ export class SourceService {
 
   async understandingLaunchForDispatch(userId, projectId, dispatchId) {
     const result = await this.documents.database.query(`SELECT payload,deleted_at FROM evimed_product.documents
-      WHERE user_id=$1 AND project_id=$2 AND kind='source' AND
+      WHERE user_id=$1 AND ($2::text IS NULL OR project_id=$2) AND kind='source' AND
         (payload->'analysis'->'launch'->>'dispatchId'=$3 OR payload @> jsonb_build_object('pendingRunCancellations',jsonb_build_array(jsonb_build_object('dispatchId',$3::text))))`,
     [userId, projectId, dispatchId]);
     const matches = result.rows.flatMap(row => [row.payload.analysis?.launch, ...(row.payload.pendingRunCancellations ?? []).filter(item => item.id == null)]

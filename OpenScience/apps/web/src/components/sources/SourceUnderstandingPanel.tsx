@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
 import { FileSearch, FileX2 } from "lucide-react";
 import { getWebProjectId } from "@/lib/apiClient";
 import { getSourceUnderstanding, listSourceUnderstandingHistory, sourceFailureMessage,
   type SourceAnchor, type SourceUnderstanding, type SourceUnderstandingResult } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
-import { Button, buttonClasses } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { MemorySkeleton } from "@/components/cards/Skeletons";
@@ -168,10 +167,10 @@ function UnderstandingContent({ understanding: item, historical }: { understandi
       {operator && (item.usage ? <p className="break-words text-ui text-muted">模型：{item.usage.modelId} · 提供方：{item.usage.providerId}
         {item.usage.inputTokens != null && ` · 输入 ${item.usage.inputTokens} tokens`}{item.usage.outputTokens != null && ` · 输出 ${item.usage.outputTokens} tokens`}</p>
         : <p className="text-ui text-muted">模型与用量尚未记录</p>)}
-      {/* A router link: the bare <a href> here reloaded the whole application. */}
-      {item.run && <div className="flex flex-wrap items-center gap-2"><Link className={buttonClasses({ variant: "ghost", size: "sm" })}
-        to={`/app/chat/${encodeURIComponent(item.run.sessionId)}`}>查看研究会话</Link>
-        {operator && <span className="break-all text-ui text-muted">运行：{item.run.id}</span>}</div>}
+      {/* No link to the run's conversation: understanding a document runs in the
+          account's background sources project, not in a conversation the
+          researcher can open (2026-09-21). Support still reads the run id. */}
+      {item.run && operator && <p className="break-all text-ui text-muted">运行：{item.run.id}</p>}
     </div>
     <OmissionAudit audit={item.omissionAudit} />
     <div className="space-y-3"><h3 className="font-medium">结构化理解</h3>

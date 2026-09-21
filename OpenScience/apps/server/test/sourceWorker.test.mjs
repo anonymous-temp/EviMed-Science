@@ -153,3 +153,20 @@ test("an unconfigured folder connector is retried, not written off", async () =>
   await worker.tick();
   assert.equal(calls.find((call) => call.method === "fail").args[4].retry, true);
 });
+
+test("a document waits for a runtime or budget instead of failing when none is free", async () => {
+  // 2026-09-21: a knowledge-base upload was marked failed in 21 s because the
+  // account's background work held every runtime slot.
+  for (const [code, delayMs] of [["runtime_limit_exceeded", 60_000], ["runtime_proxy_limit_exceeded", 60_000], ["usage_budget_exceeded", 3_600_000]]) {
+    const { calls, source, sources, worker } = fixture();
+    source.payload.depth = "structured";
+    sources.deferIngestion = async (...args) => { calls.push({ method: "deferIngestion", args }); return { deferred: true }; };
+    worker.understandingRuns = { execute: async () => { throw Object.assign(new Error("no room"), { code }); } };
+    await worker.tick();
+    const methods = calls.map((call) => call.method);
+    assert.ok(methods.includes("deferIngestion"), code);
+    assert.equal(calls.find((call) => call.method === "deferIngestion").args[2], delayMs, code);
+    assert.equal(methods.includes("recordFailure"), false, `${code}: the document is not failed`);
+    assert.equal(methods.includes("fail"), false, `${code}: the job is not spent`);
+  }
+});

@@ -1,7 +1,7 @@
 import { awaitBackgroundMonitor } from "./helpers/awaitBackgroundMonitor.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -14,6 +14,11 @@ async function fixture(t) {
   t.after(() => rm(root, { recursive: true, force: true }));
   const project = { id: "project-one", userId: "user-one", rootDir: root, baseDir: root,
     workspaceDir: root, metaDir: path.join(root, ".openscience"), activeWorkspace: "initial" };
+  // The account's sources project, where every understanding run happens.
+  const homeRoot = path.join(root, "evimed-sources");
+  const home = { id: "evimed-sources", userId: project.userId, rootDir: homeRoot, baseDir: path.join(homeRoot, "workspace"),
+    workspaceDir: path.join(homeRoot, "workspace"), metaDir: path.join(homeRoot, ".openscience"), activeWorkspace: "" };
+  await mkdir(home.baseDir, { recursive: true });
   const job = { id: "job-one", userId: project.userId, projectId: project.id, leaseToken: "lease-one",
     payload: { sourceId: `src_${"a".repeat(32)}`, sourceGeneration: 1, accountCreatedAt: "account-one" } };
   const source = { id: job.payload.sourceId, projectId: project.id, payload: { generation: 1, status: "parsing", analysis: {} } };
@@ -27,7 +32,8 @@ async function fixture(t) {
     deepseekModel: "deepseek-v4-pro", modelGatewaySigningSecret: "fixture-signing-secret-at-least-32-characters" };
   const dependencies = {
     config,
-    store: { userById: async () => ({ id: project.userId }), requireProject: async () => project },
+    store: { userById: async () => ({ id: project.userId }),
+      requireProject: async (_user, id) => (id === home.id ? home : project), createProject: async () => {} },
     sources: {
       get: async () => source,
       withAttemptCleanup: async (_job, operation) => operation(),
@@ -66,7 +72,8 @@ async function fixture(t) {
           run.dispatchStatus = error.definitivelyRejected ? "rejected" : "unknown";
           throw error;
         }
-        assert.equal(scoped.workspaceDir, path.join(project.baseDir, state.bound.artifactDirectory));
+        assert.equal(scoped.id, home.id, "the run is dispatched in the sources project");
+        assert.equal(scoped.workspaceDir, sourceRunProject(home, state.bound).workspaceDir);
         return run;
       },
       cancelSession: async (_project, sessionId) => { calls.push(`cancel-ledger:${sessionId}`); },
@@ -106,7 +113,7 @@ async function fixture(t) {
     },
     cleanup: async () => calls.push("cleanup"),
   };
-  return { project, job, request, input, source, state, dependencies, calls,
+  return { project, home, job, request, input, source, state, dependencies, calls,
     runtime: createSourceUnderstandingRuntime(dependencies) };
 }
 
@@ -134,8 +141,15 @@ test("actual dispatch freezes input, binds before preparation, rechecks lease an
   assert.equal(f.calls.filter(value => value === "prompt").length, 1);
   assert.ok(f.calls.indexOf("bind") < f.calls.indexOf("prepare"));
   assert.ok(f.calls.slice(f.calls.indexOf("prepare") + 1, f.calls.indexOf("prompt")).includes("lease"));
-  const scoped = sourceRunProject(f.project, f.state.bound);
+  const scoped = sourceRunProject(f.home, f.state.bound);
   assert.deepEqual(JSON.parse(await readFile(path.join(scoped.workspaceDir, "source-understanding-input.json"), "utf8")), f.input);
+  // One named workspace directly under the sources project's root — the only
+  // depth the runtime controller mounts — and nothing in the researcher's own
+  // project (2026-09-21: the old three-deep scope was never mounted).
+  assert.equal(path.dirname(scoped.workspaceDir), f.home.baseDir);
+  assert.equal(scoped.activeWorkspace, path.basename(scoped.workspaceDir));
+  assert.match(scoped.activeWorkspace, /^[a-zA-Z0-9][a-zA-Z0-9_. -]{0,127}$/);
+  await assert.rejects(readFile(path.join(f.project.baseDir, "knowledge-base", ".evimed-derived")), { code: "ENOENT" });
   assert.equal(f.state.scope.runId, f.request.dispatchId);
   // The run's own cap, and the account's daily cap beside it: the gateway
   // applies both to every request, so neither is folded into the other.
@@ -202,15 +216,20 @@ test("a late source completion or cancellation cannot release a newer scope", as
   await f.runtime.dispatch(f.request);
   f.state.scope = { runId: "new-autopilot-episode" };
   f.calls.length = 0;
-  assert.equal(await f.runtime.complete(f.project, f.state.runs[0]), true);
+  assert.equal(await f.runtime.complete(f.home, f.state.runs[0]), true);
   await f.runtime.cancel({ ...f.request, runId: "run-one", sessionId: "session-one" });
   assert.equal(f.calls.some(value => value.startsWith("release:") || value.startsWith("cancel-kernel:")), false);
   assert.ok(f.calls.includes("cancel-ledger:session-one"));
   f.state.owner = false;
   f.calls.length = 0;
+  // A run in a researcher's project is never an understanding run to release.
   assert.equal(await f.runtime.complete(f.project, f.state.runs[0]), false);
   assert.equal(await f.runtime.cancel({ ...f.request, runId: "run-one", sessionId: "session-one" }), false);
   assert.deepEqual(f.calls, []);
+  // The sources project's own run releases the runtime it holds, and only its own.
+  f.state.scope = { runId: f.request.dispatchId };
+  assert.equal(await f.runtime.complete(f.home, f.state.runs[0]), true);
+  assert.deepEqual(f.calls, [`release:${f.request.dispatchId}`]);
 });
 
 test("a protected launch without a run stops explicitly instead of spending again or waiting forever", async t => {
@@ -241,7 +260,7 @@ test("launch-only cancellation requires its protected session and cannot stop a 
 });
 
 async function acceptedFiles(f) {
-  const scoped = sourceRunProject(f.project, f.state.bound);
+  const scoped = sourceRunProject(f.home, f.state.bound);
   const directory = path.join(scoped.workspaceDir, "deliverables", "source-package");
   await mkdir(directory, { recursive: true });
   const output = { summary: "Actual accepted source result" };
@@ -303,48 +322,49 @@ test("a replaced source-directory ancestor cannot redirect a receipt read outsid
   const f = await fixture(t);
   await f.runtime.dispatch(f.request);
   const { scoped } = await acceptedFiles(f);
-  const sourceDirectory = path.dirname(scoped.workspaceDir);
-  const replacement = path.join(f.project.baseDir, "replacement-source-directory");
-  await rename(sourceDirectory, replacement);
-  await symlink(replacement, sourceDirectory);
+  // The run's own directory is the one component a replacement could swap.
+  const replacement = path.join(f.home.rootDir, "replacement-source-directory");
+  await rename(scoped.workspaceDir, replacement);
+  await symlink(replacement, scoped.workspaceDir);
   await assert.rejects(f.runtime.readResult({ ...f.request, runId: "run-one", sessionId: "session-one" }), { code: "path_forbidden" });
 });
 
 test("AgentRunStore recovery passes the durable source workspace into the actual monitor after restart", async t => {
   const f = await fixture(t);
   await f.runtime.dispatch(f.request);
-  await mkdir(f.project.metaDir, { recursive: true });
+  await mkdir(f.home.metaDir, { recursive: true });
   const session = { sessionId: "session-one", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
   const sessions = { get: async () => session };
   const first = new AgentRunStore(sessions, { model: "deepseek/deepseek-v4-pro", id: () => "run-one" });
-  await first.createRun(f.project, session, { dispatchId: f.request.dispatchId });
+  await first.createRun(f.home, session, { dispatchId: f.request.dispatchId });
   const observed = [];
   const recovered = new AgentRunStore(sessions, { model: "deepseek/deepseek-v4-pro", monitorMaxPolls: 1,
     monitorIntervalMs: 1, resolveRunProject: (project, run) => f.runtime.resolveRunProject(project, run),
     readSessionHistory: async project => { observed.push(project.workspaceDir); return []; },
   });
-  const changed = { ...f.project, activeWorkspace: "replacement", workspaceDir: path.join(f.project.baseDir, "replacement") };
+  const changed = { ...f.home, activeWorkspace: "replacement", workspaceDir: path.join(f.home.baseDir, "replacement") };
   await recovered.recover(changed);
   await awaitBackgroundMonitor(Promise.all([...recovered.monitors.values()].map(monitor => monitor.promise)));
   assert.ok(observed.length > 0);
-  assert.ok(observed.every(root => root === path.join(f.project.baseDir, f.state.bound.artifactDirectory)));
+  assert.ok(observed.every(root => root === sourceRunProject(f.home, f.state.bound).workspaceDir));
   assert.equal(await f.runtime.resolveRunProject(changed, { id: "unbound", agentId: "source-understanding" }), null);
   f.state.bound.sourceStatus = "canceled";
   assert.equal(await f.runtime.resolveRunProject(changed, f.state.runs[0]), null);
+  // A researcher's own project resolves to itself: none of its runs are understanding runs.
   const ordinary = { id: "ordinary", agentId: "clinical-evidence-synthesis" };
-  assert.equal(await f.runtime.resolveRunProject(changed, ordinary), changed);
+  assert.equal(await f.runtime.resolveRunProject(f.project, ordinary), f.project);
 });
 
 for (const entry of ["adoptRunningRuns", "existingDispatch", "adoptRuntimeTurns"]) {
   for (const denied of [false, true]) test(`${entry} ${denied ? "refuses denied source ownership" : "resumes the saved source workspace"}`, async t => {
     const f = await fixture(t);
     await f.runtime.dispatch(f.request);
-    await mkdir(f.project.metaDir, { recursive: true });
+    await mkdir(f.home.metaDir, { recursive: true });
     const session = { sessionId: "session-one", mode: "specialist", agentId: "source-understanding",
       agentVersion: "1.0.0", runtimeAgent: "evimed-source-understanding" };
     const sessions = { get: async () => session };
     const creator = new AgentRunStore(sessions, { model: "deepseek/deepseek-v4-pro", id: () => "run-one" });
-    await creator.reserveRun(f.project, session, { dispatchId: f.request.dispatchId, kernelRequestIds: ["request-one"] });
+    await creator.reserveRun(f.home, session, { dispatchId: f.request.dispatchId, kernelRequestIds: ["request-one"] });
     const observed = [];
     let resolutions = 0;
     const restarted = new AgentRunStore(sessions, { model: "deepseek/deepseek-v4-pro", monitorMaxPolls: 1,
@@ -354,7 +374,7 @@ for (const entry of ["adoptRunningRuns", "existingDispatch", "adoptRuntimeTurns"
       },
       readSessionHistory: async project => { observed.push(project.workspaceDir); return []; },
     });
-    const changed = { ...f.project, activeWorkspace: "replacement", workspaceDir: path.join(f.project.baseDir, "replacement") };
+    const changed = { ...f.home, activeWorkspace: "replacement", workspaceDir: path.join(f.home.baseDir, "replacement") };
     if (denied) {
       f.state.bound.sourceStatus = "canceled";
       f.state.bound.recoverable = false;
@@ -380,7 +400,25 @@ for (const entry of ["adoptRunningRuns", "existingDispatch", "adoptRuntimeTurns"
       assert.equal((await restarted.list(changed))[0].status, "running");
     } else {
       assert.ok(observed.length > 0);
-      assert.ok(observed.every(root => root === path.join(f.project.baseDir, f.state.bound.artifactDirectory)));
+      assert.ok(observed.every(root => root === sourceRunProject(f.home, f.state.bound).workspaceDir));
     }
   });
 }
+
+test("the sources project keeps a bounded number of finished runs' workspaces", async t => {
+  const f = await fixture(t);
+  for (let index = 0; index < 55; index += 1) {
+    const name = `src_${"c".repeat(32)}-g${index + 1}-${String(index).padStart(24, "0")}`;
+    await mkdir(path.join(f.home.baseDir, name), { recursive: true });
+    const at = new Date(Date.UTC(2026, 8, 1) + index * 60_000);
+    await utimes(path.join(f.home.baseDir, name), at, at);
+  }
+  await mkdir(path.join(f.home.baseDir, "unrelated"), { recursive: true });
+  await f.runtime.dispatch(f.request);
+  const entries = await readdir(f.home.baseDir);
+  const kept = entries.filter(name => name.startsWith("src_"));
+  assert.equal(kept.length, 50, "the newest finished ones and the run just started");
+  assert.ok(kept.includes(sourceRunProject(f.home, f.state.bound).activeWorkspace));
+  assert.equal(kept.includes(`src_${"c".repeat(32)}-g1-${"0".repeat(24)}`), false, "the oldest went first");
+  assert.ok(entries.includes("unrelated"), "nothing that is not a run workspace is touched");
+});

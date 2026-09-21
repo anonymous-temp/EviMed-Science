@@ -82,7 +82,7 @@ describe("SourceUnderstandingPanel", () => {
     expect(text()).not.toMatch(/遗漏尚未审计/);
   });
 
-  it("shows anchored slots, unknown reasons, draft methods, actual cost and the existing session route", async () => {
+  it("shows anchored slots, unknown reasons, draft methods and actual cost, and no route into the background run", async () => {
     render(<SourceUnderstandingPanel {...props} />);
     expect(await screen.findByText(understanding.summary)).toBeInTheDocument();
     expect(screen.getByText("明确纳入标准")).toBeInTheDocument();
@@ -92,7 +92,9 @@ describe("SourceUnderstandingPanel", () => {
     // id are engine internals a researcher never needs to read past.
     expect(screen.getByText(/费用 ¥0\.01/)).toBeInTheDocument();
     expect(screen.queryByText(/deepseek-v4-pro|run-one|CNY/)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看研究会话" })).toHaveAttribute("href", "/app/chat/session%20one");
+    // The run happened in the account's background sources project; there is
+    // no conversation of the researcher's to open.
+    expect(screen.queryByRole("link", { name: "查看研究会话" })).not.toBeInTheDocument();
     expect(screen.getByText("遗漏尚未审计")).toBeInTheDocument();
     expect(screen.queryByText(/遗漏.*0%/)).not.toBeInTheDocument();
     await userEvent.click(screen.getAllByText("查看原文依据（1）")[0]);

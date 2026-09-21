@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { LEARNING_PROJECT_ID, isInternalProject } from "../src/internalProjects.mjs";
+import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "../src/internalProjects.mjs";
 import { createLearningRuntime } from "../src/learningRuntime.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
 
@@ -11,6 +11,7 @@ import { RuntimeManager } from "../src/runtimeManager.mjs";
 
 test("the platform's background projects are named, and nothing else is", () => {
   assert.equal(isInternalProject(LEARNING_PROJECT_ID), true);
+  assert.equal(isInternalProject(SOURCES_PROJECT_ID), true, "where uploaded documents are understood");
   assert.equal(isInternalProject("eval-method-release"), true, "the paired evaluation's own project");
   for (const id of ["default", "0921a", "evimed-learning-notes", "eval-methods", "my-eval-method-release"]) {
     assert.equal(isInternalProject(id), false, id);
