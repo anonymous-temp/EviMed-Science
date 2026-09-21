@@ -2006,6 +2006,7 @@ export function createWebApiApp(overrides = {}) {
       enabled: config.learningEnabled,
       window: config.learningWindow,
       windowTimeZone: config.learningWindowTimeZone,
+      concurrency: Math.max(1, Math.min(8, Math.trunc(Number(config.learningConcurrency) || 1))),
       pollMs: config.learningPollMs,
       leaseMs: config.learningLeaseMs,
       resolveProject: async (job) => {
