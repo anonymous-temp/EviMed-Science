@@ -71,6 +71,8 @@ export const DEFERRED_LEARNING_ERRORS = new Map([
   ["runtime_limit_exceeded", 120_000],
   ["runtime_proxy_limit_exceeded", 120_000],
   ["usage_budget_exceeded", 3_600_000],
+  // One paired evaluation at a time (`LearningWorker`); the next asks again.
+  ["learning_evaluation_busy", 300_000],
 ]);
 
 /** @param {any} error @returns {boolean} */

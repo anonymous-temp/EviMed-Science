@@ -919,6 +919,15 @@ test("runtime controller never counts the platform's background projects against
     const client = new RuntimeControllerClient({ runtimeControllerSocket: socketPath, runtimeControllerTimeoutMs: 3_000 });
     await client.startRuntime(learning, 49152, "pw_abcdefghijklmnopqrstuvwxyz");
     await client.startRuntime(sources, 49153, "pw_abcdefghijklmnopqrstuvwxyz");
+    // Background work holds at most all but one researcher's share (4 - 1).
+    const evaluation = await projectTree(dataDir, "alice", `methodeval-${"cd".repeat(12)}`);
+    const busy = await projectTree(dataDir, "bob", "evimed-learning");
+    await client.startRuntime(evaluation, 49156, "pw_abcdefghijklmnopqrstuvwxyz");
+    await assert.rejects(
+      client.startRuntime(busy, 49157, "pw_abcdefghijklmnopqrstuvwxyz"),
+      (error) => error?.status === 429 && error?.code === "runtime_limit_exceeded",
+      "a fourth background runtime waits, whoever it belongs to",
+    );
     await client.startRuntime(paper, 49154, "pw_abcdefghijklmnopqrstuvwxyz");
     // The researcher's own ceiling still holds for their own projects…
     await assert.rejects(
@@ -927,6 +936,7 @@ test("runtime controller never counts the platform's background projects against
     );
     await client.cleanupRuntime(learning);
     await client.cleanupRuntime(sources);
+    await client.cleanupRuntime(evaluation);
     await client.cleanupRuntime(paper);
   } finally {
     await controller.close().catch(() => {});

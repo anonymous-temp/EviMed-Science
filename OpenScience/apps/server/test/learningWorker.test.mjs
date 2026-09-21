@@ -383,3 +383,30 @@ test("the configured concurrency is real: two lanes work at once, a third waits"
   assert.equal(instance.lanes.size, 0);
   assert.throws(() => new LearningWorker({ jobs, distillation: {}, consolidation: {}, concurrency: 0 }), /concurrency/);
 });
+
+test("one paired evaluation at a time: the next waits its turn without spending an attempt", async () => {
+  // 2026-09-21: two evaluations held both lanes and half the deployment's
+  // runtimes for hours.
+  /** @type {() => void} */
+  let release = () => {};
+  const holding = new Promise((resolve) => { release = () => resolve(undefined); });
+  const slow = { calls: [], async run(/** @type {any} */ request) { this.calls.push(request); await holding; return { action: "evaluate" }; } };
+  const { jobs, worker: instance } = worker({
+    consolidation: slow,
+    jobs: fakeJobs([
+      { id: "e1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "evaluate", methodId: "m1" } },
+      { id: "e2", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "evaluate", methodId: "m2" } },
+    ]),
+  });
+  instance.concurrency = 2;
+  const first = instance.tick();
+  await new Promise((resolve) => setImmediate(resolve));
+  await instance.tick();
+  const deferred = jobs.failed.find((entry) => entry.id === "e2");
+  assert.equal(deferred?.error.code, "learning_evaluation_busy");
+  assert.deepEqual({ retry: deferred.options.retry, refundAttempt: deferred.options.refundAttempt }, { retry: true, refundAttempt: true });
+  release();
+  await first;
+  await instance.close();
+  assert.deepEqual(jobs.finished.map((entry) => entry.id), ["e1"]);
+});

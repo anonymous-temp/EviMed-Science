@@ -1,4 +1,4 @@
-import { isInternalProject } from "./internalProjects.mjs";
+import { backgroundRuntimeLimit, isInternalProject } from "./internalProjects.mjs";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
@@ -4726,6 +4726,14 @@ export class RuntimeManager {
       });
     }
     const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
+    // Background work holds at most its share of the deployment, so a
+    // researcher opening a project always finds room (`backgroundRuntimeLimit`).
+    const maxBackground = isInternalProject(project.id) ? backgroundRuntimeLimit(maxGlobal, maxPerUser) : null;
+    if (maxBackground != null && this.backgroundRuntimeCount() - own >= maxBackground) {
+      throw new HttpError(429, "runtime_limit_exceeded", `Background work is holding its share of runtimes (${maxBackground}); it waits so researchers keep theirs.`, {
+        retryAfterSeconds: 60,
+      });
+    }
     // A background project is never one of the researcher's slots
     // (`runtimeCountForUser`), so it is not held to their ceiling either.
     if (maxPerUser != null && !isInternalProject(project.id) && this.runtimeCountForUser(project.userId) - own >= maxPerUser) {
@@ -4786,6 +4794,12 @@ export class RuntimeManager {
 
   runtimeCount() {
     return this.runtimes.size + this.starts.size;
+  }
+
+  /** Running and starting runtimes of the platform's own background projects. */
+  backgroundRuntimeCount() {
+    const background = (/** @type {string} */ key) => isInternalProject(key.slice(key.indexOf(":") + 1));
+    return [...this.runtimes.keys(), ...this.starts.keys()].filter(background).length;
   }
 
   runtimeCountForUser(userId) {
