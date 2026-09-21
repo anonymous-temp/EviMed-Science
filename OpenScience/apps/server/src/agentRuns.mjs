@@ -1863,7 +1863,13 @@ async function matrixClaimSummary(project, relativePaths, previousKey = null) {
   }
   const key = found.map(({ relative, file }) => `${relative}:${file.stat.size}:${file.stat.mtimeMs}`).join("|");
   if (previousKey !== null && key === previousKey) return null;
-  const totals = { key, total: 0, verified: 0, unverified: 0 };
+  const totals = { key, total: 0, verified: 0, unverified: 0, sources: 0 };
+  // The preserved sources the delivered claims actually cite and that exist:
+  // what a reader means by 「纳入」. The evidence ledger's own `ready` count
+  // read zero on a delegated run that cited twenty-eight preserved sources
+  // (2026-09-21, 0921a), because what a child preserved never reached it.
+  /** @type {Set<string>} */
+  const cited = new Set();
   for (const { file } of found) {
     let matrix;
     try { matrix = JSON.parse(file.text); } catch { continue; }
@@ -1877,7 +1883,10 @@ async function matrixClaimSummary(project, relativePaths, previousKey = null) {
       let relative;
       try { relative = normalizeWorkspaceRelativePath(artifactPath, "source artifact path"); } catch { continue; }
       const source = await openWorkspaceText(project, relative);
-      if (source) sourceArtifacts[artifactPath] = source.text;
+      if (source) {
+        sourceArtifacts[artifactPath] = source.text;
+        cited.add(artifactPath);
+      }
     }
     const summary = claimSummaryOf(claimVerification({ matrix, sourceArtifacts }));
     if (!summary) continue;
@@ -1885,6 +1894,7 @@ async function matrixClaimSummary(project, relativePaths, previousKey = null) {
     totals.verified += summary.verified;
     totals.unverified += summary.unverified;
   }
+  totals.sources = cited.size;
   return totals;
 }
 
