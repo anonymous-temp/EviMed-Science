@@ -322,6 +322,13 @@ export function createSourceUnderstandingRuntime({ config, store, sources, agent
         const file = files[0];
         const candidates = [file.path];
         if (checked.receipt.formatVersion <= 1 && file.path === name) candidates.push(`${workspaceLayout.deliverablesDir}/${entry.deliverableId}/${name}`);
+        // The other direction: the package holds the preserved input, and the
+        // run's artifact list names the same file at the workspace root, where
+        // the control plane froze it (the completion check takes a fresh root
+        // file first). The receipt's digest below is what binds the bytes read
+        // to the bytes accepted, whichever of the two is read (2026-09-21: a
+        // succeeded understanding was refused "not part of this run").
+        if (file.path === `${workspaceLayout.deliverablesDir}/${entry.deliverableId}/${name}`) candidates.push(name);
         const relative = candidates.find(candidate => artifacts.has(candidate));
         if (!relative) throw new HttpError(409, "source_understanding_receipt_invalid", "The accepted file is not part of this run.");
         const loaded = await readOwnedJson(project, relative, name === INPUT_FILE ? MAX_INPUT_BYTES : MAX_OUTPUT_BYTES);
