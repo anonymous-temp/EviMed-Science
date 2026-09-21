@@ -5,6 +5,10 @@ import { USAGE_PURPOSES } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { UsageLedger } from "../src/usageLedger.mjs";
 import { migrateUsageLedger, USAGE_PURPOSE_CHECK } from "../src/usagePersistence.mjs";
+import { migrateNotifications } from "../src/notificationPersistence.mjs";
+import { migrateProductStore } from "../src/productPersistence.mjs";
+import { relationalIntegrity } from "../src/relationalIntegrity.mjs";
+import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -522,6 +526,14 @@ test("spend outlives the project it was charged to, and the caps keep counting i
   assert.equal(rows.rows[0].project_id, null, "and carries no project, rather than one that no longer exists");
   assert.equal(rows.rows[0].status, "settled");
   assert.equal((await ledger.summary(orphaned, { since: at })).actualCost, 2, "the account's report still holds the spend");
+  // And readiness agrees that a row without a project is the design: the
+  // integrity audit counted it as an orphan until 2026-09-21, which would have
+  // held readiness red from the first project anyone deleted.
+  // The audit reads every schema it owns, so they are migrated here the way
+  // the ops command does rather than assumed from whichever file ran first.
+  for (const migrate of [migrateProductStore, migrateNotifications, migrateResearchMemory]) await migrate(database);
+  assert.equal((await relationalIntegrity(database)).counts.usage_model_requests_project, 0,
+    "a surviving row with no project is not an orphan");
   await assert.rejects(
     ledger.assertWithinLimits(orphaned, { dailyLimit: 1, weeklyLimit: 0, now }),
     (error) => error.code === "usage_budget_exceeded" && error.details?.window === "day",

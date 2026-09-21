@@ -12,7 +12,11 @@ const orphanChecks = Object.freeze([
   ["memory_settings_user", "SELECT count(*)::integer AS count FROM evimed_memory.settings s LEFT JOIN evimed_control.users u ON u.id=s.user_id WHERE u.id IS NULL"],
   ["memory_sessions_user", "SELECT count(*)::integer AS count FROM evimed_memory.sessions s LEFT JOIN evimed_control.users u ON u.id=s.user_id WHERE u.id IS NULL"],
   ["usage_model_requests_user", "SELECT count(*)::integer AS count FROM evimed_usage.model_requests r LEFT JOIN evimed_control.users u ON u.id=r.user_id WHERE u.id IS NULL"],
-  ["usage_model_requests_project", "SELECT count(*)::integer AS count FROM evimed_usage.model_requests r LEFT JOIN evimed_control.projects p ON p.user_id=r.user_id AND p.id=r.project_id WHERE p.id IS NULL"],
+  // A row whose project was deleted keeps its spend with `project_id` NULL
+  // (`ON DELETE SET NULL (project_id)`, 2026-09-20): that is the design, not an
+  // orphan. Counted as one, the first project a researcher deleted would have
+  // turned readiness red for good.
+  ["usage_model_requests_project", "SELECT count(*)::integer AS count FROM evimed_usage.model_requests r LEFT JOIN evimed_control.projects p ON p.user_id=r.user_id AND p.id=r.project_id WHERE r.project_id IS NOT NULL AND p.id IS NULL"],
 ]);
 
 const relationships = Object.freeze([
