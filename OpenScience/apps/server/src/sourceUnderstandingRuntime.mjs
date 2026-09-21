@@ -265,7 +265,8 @@ export function createSourceUnderstandingRuntime({ config, store, sources, agent
                 userId: job.userId, projectId: home.id, runId: dispatchId, ...budget.scope });
               promptAttempted = true;
               return runtimeManager.dispatchPrompt(scoped, session.id, {
-                text: `${marker}\n${repairText || question}`, system: prepared.system,
+                // The question first, the marker last (see learningRuntime).
+                text: `${repairText || question}\n\n${marker}`, system: prepared.system,
                 agent: selected.runtimeAgent, strictContext: true, model: `deepseek/${config.deepseekModel}`,
                 runId: dispatchedRun.id, allowBounded: true, requestId: dispatchedRun.kernelRequestIds?.at(-1),
               });
