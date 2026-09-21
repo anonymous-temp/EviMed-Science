@@ -14,6 +14,8 @@ Write `source-understanding.json` with:
 
 - `schemaVersion`, `sourceId`, `generation`, `docType`, `depth`: copy the input.
 - `summary`: a concise explanation of what this document says, bounded to 8,000 characters.
+  It is written for the researcher: say what the document says and what it leaves out,
+  never how it was read — no units, offsets, character counts, UTF-16 or parser details.
 - `slots`: exactly the keys in `input.schema.slots`. Each is either
   `{"state":"known","value":"...","evidence":[anchor]}` or
   `{"state":"unknown","reason":"..."}`. Missing evidence is a reason to leave
