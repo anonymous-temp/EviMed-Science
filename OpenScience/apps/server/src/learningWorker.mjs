@@ -28,7 +28,7 @@ export class LearningWorker {
   /**
    * @param {{jobs: any, distillation: any, consolidation: any, resolveProject?: (job: any) => Promise<any>,
    *          resolveRun?: (project: any, job: any) => Promise<any>, maintain?: () => Promise<void>,
-   *          enabled?: boolean, window?: string, windowTimeZone?: string,
+   *          enabled?: boolean, window?: string, windowTimeZone?: string, concurrency?: number,
    *          pollMs?: number, leaseMs?: number, reconcileMs?: number, now?: () => Date}} dependencies
    */
   constructor({
@@ -43,12 +43,18 @@ export class LearningWorker {
     // Which zone the window's numbers are written in. Empty means the process
     // clock, which is what this did before and is right for a local run.
     windowTimeZone = "",
+    // How many jobs run at once. `learningConcurrency` existed in the config
+    // and nothing read it (2026-09-21): the worker ran one job at a time, so a
+    // paired evaluation — six research runs, hours — held every lesson behind
+    // it. Each lane claims and finishes its own job.
+    concurrency = 1,
     pollMs = 5000,
     leaseMs = 900_000,
     reconcileMs = 300_000,
     now = () => new Date(),
   }) {
     if (!jobs || !distillation || !consolidation) throw new TypeError("LearningWorker dependencies are required.");
+    if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 8) throw new TypeError("Invalid learning concurrency.");
     /** @type {[string, number, number][]} */
     const intervals = [["poll", pollMs, 100], ["lease", leaseMs, 1000], ["reconcile", reconcileMs, 1000]];
     for (const [name, value, minimum] of intervals) {
@@ -84,7 +90,9 @@ export class LearningWorker {
     // a drain and nothing reports it.
     this.timer = null;
     this.reconcileTimer = null;
-    this.running = null;
+    this.concurrency = concurrency;
+    /** @type {Set<Promise<any>>} */
+    this.lanes = new Set();
     this.reconciling = null;
     this.lastError = null;
     this.lastCompletedAt = null;
@@ -107,13 +115,24 @@ export class LearningWorker {
     return null;
   }
 
+  /** Whether any lane is working. */
+  get running() {
+    return this.lanes.size > 0 ? [...this.lanes][0] : null;
+  }
+
+  /**
+   * Start one more lane if there is room, and return it; at capacity, return
+   * a lane already working. One claim per tick: the poll fills the lanes.
+   */
   async tick() {
-    if (this.running) return this.running;
-    this.running = this.#tick().catch((error) => {
+    if (this.lanes.size >= this.concurrency) return [...this.lanes][0];
+    /** @type {Promise<any>} */
+    const lane = this.#tick().catch((error) => {
       this.lastError = typeof error?.code === "string" ? error.code : "learning_worker_failed";
       return null;
-    }).finally(() => { this.running = null; });
-    return this.running;
+    }).finally(() => { this.lanes.delete(lane); });
+    this.lanes.add(lane);
+    return lane;
   }
 
   async #tick() {
@@ -233,7 +252,9 @@ export class LearningWorker {
 
   status() {
     return {
-      running: Boolean(this.running),
+      running: this.lanes.size > 0,
+      lanes: this.lanes.size,
+      concurrency: this.concurrency,
       enabled: this.enabled,
       lastError: this.lastError,
       lastCompletedAt: this.lastCompletedAt,
@@ -260,7 +281,7 @@ export class LearningWorker {
     if (this.reconcileTimer) clearInterval(this.reconcileTimer);
     this.timer = null;
     this.reconcileTimer = null;
-    await Promise.all([this.running, this.reconciling].filter(Boolean));
+    await Promise.all([...this.lanes, this.reconciling].filter(Boolean));
   }
 }
 

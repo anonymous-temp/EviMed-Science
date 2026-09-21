@@ -357,3 +357,29 @@ test("one night has one key in the window's zone, and the day before it names th
   // Beijing 2026-09-20 12:00: the next night to open is the 20th's.
   assert.equal(key("2026-09-20T04:00:00.000Z"), "2026-09-20");
 });
+
+test("the configured concurrency is real: two lanes work at once, a third waits", async () => {
+  // `learningConcurrency` existed and nothing read it; a paired evaluation that
+  // takes hours held every lesson behind it (2026-09-21).
+  /** @type {Array<() => void>} */
+  const releases = [];
+  const slow = { async run() { await new Promise((resolve) => releases.push(resolve)); return { action: "sleep" }; } };
+  const jobs = fakeJobs([
+    { id: "a", kind: "consolidate", userId: "u1", payload: { action: "evaluate" } },
+    { id: "b", kind: "consolidate", userId: "u1", payload: { action: "sleep" } },
+    { id: "c", kind: "consolidate", userId: "u1", payload: { action: "sleep" } },
+  ]);
+  const instance = new LearningWorker({ jobs, distillation: { async execute() { return {}; } }, consolidation: slow, concurrency: 2, now: () => new Date() });
+  const first = instance.tick();
+  const second = instance.tick();
+  await new Promise((resolve) => setImmediate(resolve));
+  const third = instance.tick();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(instance.lanes.size, 2);
+  assert.equal(jobs.queue.length, 1, "the third job is still queued");
+  assert.equal(instance.status().lanes, 2);
+  releases.forEach((release) => release());
+  await Promise.all([first, second, third]);
+  assert.equal(instance.lanes.size, 0);
+  assert.throws(() => new LearningWorker({ jobs, distillation: {}, consolidation: {}, concurrency: 0 }), /concurrency/);
+});
