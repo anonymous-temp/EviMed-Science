@@ -530,7 +530,7 @@ export class MethodConsolidation {
           + "You may only judge the pairs you are given — do not propose new ones.",
       });
       if (identity?.runId) {
-        result = await this.readResult({ ...identity, dispatchId, userId: job.userId, projectId: job.projectId });
+        result = await this.readResult({ dispatchId, ...identity, userId: job.userId, projectId: job.projectId });
       }
     } catch {
       // isolated: evimed_learning_screen_failed_total
@@ -576,7 +576,7 @@ export class MethodConsolidation {
         + "Say nothing rather than inventing a relation; an empty answer is correct when the methods are unrelated.",
     });
     if (!identity?.runId) return null;
-    const result = await this.readResult({ ...identity, dispatchId, userId: job.userId, projectId: job.projectId });
+    const result = await this.readResult({ dispatchId, ...identity, userId: job.userId, projectId: job.projectId });
     if (!result || result.status !== "succeeded") return null;
     return result.output ?? null;
   }
