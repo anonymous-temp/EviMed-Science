@@ -366,7 +366,7 @@ export function progressChildren({ projection = null, kernelChildren = [], ended
  *   deliverables: RunDeliverable[],
  *   calls: Iterable<ObservedCall>,
  *   projection?: Record<string, any> | null,
- *   matrixClaims?: { total: number, verified: number } | null,
+ *   matrixClaims?: { total: number, verified: number, sources?: number } | null,
  *   children: RunProgressChild[],
  *   usage?: RunUsage | null,
  *   startedAt: string | null,
@@ -407,7 +407,11 @@ export function assembleRunProgress({ deliverables, calls, projection = null, ma
     currentPhase,
     sources: {
       searched: phaseCounts.search ?? 0,
-      included: count(byStatus.ready) + count(byStatus.verified),
+      // The larger of the evidence ledger's readable sources and the preserved
+      // sources the delivered claims cite: a child's preservations never reach
+      // the parent's ledger, and 「纳入 0 篇」 under a report citing 28 read as
+      // a run that read nothing.
+      included: Math.max(count(byStatus.ready) + count(byStatus.verified), count(matrixClaims?.sources)),
       fullText: list.filter((call) => call.fullText).length,
     },
     claims,
