@@ -77,10 +77,13 @@ grep -E "^OPEN_SCIENCE_(RELEASE_ID|SOURCE_REVISION|BUILD_CREATED)=" "$ENVF"
 
 echo "=== build ==="
 cd "$DST/OpenScience"
+# The Tencent mirror, not Aliyun, for Alpine packages: on 2026-09-21 two `apk
+# add` steps sat nine minutes on one Aliyun CDN connection that sent nothing,
+# and the same packages came in seconds from the host's own cloud.
 docker build -f deploy/web/Dockerfile \
   --build-arg NODE_BASE_IMAGE="${EVIMED_NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:22.22.0-alpine}" \
   --build-arg NPM_REGISTRY="${EVIMED_NPM_REGISTRY:-https://registry.npmmirror.com}" \
-  --build-arg APK_MIRROR="${EVIMED_APK_MIRROR:-https://mirrors.aliyun.com/alpine}" \
+  --build-arg APK_MIRROR="${EVIMED_APK_MIRROR:-http://mirrors.cloud.tencent.com/alpine}" \
   --build-arg APP_VERSION="${EVIMED_APP_VERSION:-0.1.3}" \
   --build-arg RELEASE_ID="evimed-${NEW}-1" --build-arg SOURCE_REVISION="${REV}" --build-arg BUILD_CREATED="${CREATED}" \
   -t "open-science-web:${NEW}" . > "/tmp/build-web-${NEW}.log" 2>&1
