@@ -1968,6 +1968,8 @@ export function createWebApiApp(overrides = {}) {
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-relations" }),
       learning: learningService, jobs: productJobs, notifications: notificationService,
+      // A step waits for its run as long as the run monitor lets a run live.
+      stepWaitMs: config.agentRunMonitorTimeoutMs,
       // A paired evaluation dispatches hundreds of real runs, so it is opt-in:
       // with no command configured an `evaluate` job fails by name rather than
       // succeeding without having evaluated anything. When an operator does

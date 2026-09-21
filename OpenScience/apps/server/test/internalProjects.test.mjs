@@ -166,3 +166,78 @@ test("a finished bounded run is not held back by a request whose settlement will
     assert.doesNotMatch(source, /usage\.reservedCalls \|\| usage\.uncertain/, file);
   }
 });
+
+test("a finished step's result survives the next step's clear, outside the workspace the next run sees", async () => {
+  // 2026-09-21: a delivered lesson waited for its usage to settle, the next
+  // step emptied the one learning workspace, and the lesson was lost to ENOENT.
+  const { createHash } = await import("node:crypto");
+  const { mkdtemp, mkdir, writeFile, readdir, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const path = await import("node:path");
+  const { RECEIPT_FORMAT_VERSION } = await import("@evimed/domain");
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-learning-"));
+  try {
+    const workspaceDir = path.join(root, "workspace");
+    const project = { id: LEARNING_PROJECT_ID, userId: "u1", rootDir: root, baseDir: workspaceDir, workspaceDir,
+      metaDir: path.join(root, ".openscience"), quotaBytes: 10_000_000 };
+    await mkdir(project.metaDir, { recursive: true });
+    await mkdir(path.join(workspaceDir, "deliverables", "lesson"), { recursive: true });
+    const files = {
+      "deliverables/lesson/SKILL.md": "---\nname: lesson\n---\n\n## Purpose\nA lesson.\n",
+      "deliverables/lesson/method-candidate.json": JSON.stringify({ schemaVersion: 1, operation: "no_change", reason: "fixture" }),
+    };
+    for (const [relative, text] of Object.entries(files)) await writeFile(path.join(workspaceDir, relative), text);
+    await writeFile(path.join(workspaceDir, "delivery-receipt.json"), JSON.stringify({
+      formatVersion: RECEIPT_FORMAT_VERSION, runId: "run_a", bundleVersion: "b", domainVersion: "d",
+      entries: [{ deliverableId: "lesson", contractKind: "method-candidate", capability: "method-distillation",
+        files: Object.entries(files).map(([relative, text]) => ({
+          path: relative, bytes: Buffer.byteLength(text), sha256: createHash("sha256").update(text).digest("hex"),
+        })) }],
+    }));
+    /** @type {any[]} newest first, as `agentRuns.list` returns it */
+    const ledger = [{ id: "run_a", sessionId: "s_a", dispatchId: "method-distillation-aaaa", status: "succeeded",
+      startedAt: "2026-09-21T05:00:00Z", artifacts: Object.keys(files) }];
+    /** @type {string[]} */
+    const reserved = [];
+    const runtime = createLearningRuntime({
+      config: { maxProjectBytes: 10_000_000 },
+      store: { async userById(id) { return { id }; }, async requireProject() { return project; }, async createProject() {} },
+      agentRuns: { async list() { return ledger; }, async existingDispatch() {}, scheduleMonitor() {} },
+      runtimeManager: {
+        async reserveBoundedRuntimeSession(_scoped, scope) { reserved.push(scope.runId); throw Object.assign(new Error("stop"), { code: "fixture_stop" }); },
+        boundedRuntimeScope() { return null; },
+      },
+      researchSessions: {},
+      usageLedger: {
+        async assertWithinLimits() { return { allowed: true }; },
+        async summaryRun() { return { settledCalls: 3, reservedCalls: 0, incompleteUsageCalls: 0, modelId: "deepseek-v4-flash" }; },
+      },
+      registry: Promise.resolve(new Map([["method-distillation", { id: "method-distillation", version: "1.0.0", runtimeAgent: "evimed-method-distillation" }]])),
+      prepareContext: async () => ({}),
+    });
+    const step = (dispatchId) => ({ job: { userId: "u1", projectId: "default", payload: {} }, userId: "u1", projectId: "default",
+      dispatchId, capabilityId: "method-distillation", contractKind: "method-candidate", input: {}, question: "q" });
+
+    await assert.rejects(runtime.dispatch(step("method-distillation-bbbb")), { code: "fixture_stop" });
+    assert.deepEqual(await readdir(workspaceDir), ["distillation-input.json"], "the next step starts on an empty workspace");
+    const read = await runtime.readResult({ userId: "u1", projectId: "default", runId: "run_a", sessionId: "s_a",
+      dispatchId: "method-distillation-aaaa", capabilityId: "method-distillation" });
+    assert.equal(read.status, "succeeded", "the lesson is read from its archive");
+    assert.equal(read.output.candidate.operation, "no_change");
+
+    // A delivery emptied before the archive existed is run again, not adopted
+    // into ENOENT for every retry.
+    ledger.unshift({ id: "run_c", sessionId: "s_c", dispatchId: "method-distillation-cccc", status: "succeeded",
+      startedAt: "2026-09-21T05:30:00Z", artifacts: [] });
+    ledger.unshift({ id: "run_d", sessionId: "s_d", dispatchId: "method-distillation-dddd", status: "failed", startedAt: "2026-09-21T05:40:00Z" });
+    await assert.rejects(runtime.readResult({ userId: "u1", projectId: "default", runId: "run_c", sessionId: "s_c",
+      dispatchId: "method-distillation-cccc", capabilityId: "method-distillation" }), { code: "learning_result_missing" });
+    await assert.rejects(runtime.dispatch(step("method-distillation-cccc")), { code: "fixture_stop" });
+    assert.deepEqual(reserved, ["method-distillation-bbbb", "method-distillation-cccc-a2"]);
+    // …while one whose archive is there is still adopted, never paid for twice.
+    assert.deepEqual(await runtime.dispatch(step("method-distillation-aaaa")),
+      { runId: "run_a", sessionId: "s_a", dispatchId: "method-distillation-aaaa" });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

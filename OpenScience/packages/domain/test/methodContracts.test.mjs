@@ -228,6 +228,22 @@ test("the gate's method findings are validateMethodSkill's findings, code for co
   );
 });
 
+test("the scripts a candidate attaches are graded in the run exactly as the store grades them", () => {
+  // 2026-09-21: the control plane graded a candidate's attachments and the run
+  // never did, so a package could pass inside its run and be refused as
+  // method_invalid afterwards, where nothing could repair it.
+  const files = { "notes/extra.md": "not a script", "scripts/count.py": "print(1)\n" };
+  const parsed = parseSkillFrontmatter(methodSkillText());
+  const direct = validateMethodSkill({ frontmatter: parsed.frontmatter, body: parsed.body, files, requireProvenance: true });
+  const throughGate = gateCandidate({ candidate: candidateJson({ files }) });
+  assert.ok(direct.issues.some((entry) => entry.code === "method_files_prefix"));
+  assert.deepEqual(
+    throughGate.issues.filter((entry) => entry.check === "method-skill-rules").map((entry) => entry.code).sort(),
+    direct.issues.map((entry) => entry.code).sort(),
+  );
+  assert.equal(throughGate.ok, false);
+});
+
 test("a rewritten method inside a build is graded as the method it will become", () => {
   const verdict = gateRelations({
     schemaVersion: 1,

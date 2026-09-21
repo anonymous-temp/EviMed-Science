@@ -857,7 +857,9 @@ function pinsRevision(value) {
  * clinical gate already paid for three times.
  * @param {string} source   the SKILL.md text as delivered
  * @param {string} at       where it sat in the deliverable, for the finding
- * @param {{directoryName?: string}} [options]
+ * @param {{directoryName?: string, files?: Record<string, string>}} [options]
+ *   `files` are the scripts and tests the proposal attaches, graded with the
+ *   body exactly as the control plane grades them when it stores the method.
  * @returns {GateIssue[]}
  */
 function methodSkillIssues(source, at, options = {}) {
@@ -879,6 +881,7 @@ function methodSkillIssues(source, at, options = {}) {
     body: parsed.body,
     requireProvenance: true,
     ...(options.directoryName ? { directoryName: options.directoryName } : {}),
+    ...(options.files ? { files: options.files } : {}),
   })
   return [...parsed.issues, ...verdict.issues].map(asGateIssue)
 }
@@ -1142,7 +1145,10 @@ function validateMethodCandidatePackage(input) {
   if (skill == null || !skill.trim()) {
     issues.push(issue('required_output_missing', `${METHOD_SKILL_FILE} is missing.`, { path: METHOD_SKILL_FILE, check: 'required-output' }))
   } else {
-    issues.push(...methodSkillIssues(skill, METHOD_SKILL_FILE))
+    const attached = isRecord(candidate) && isRecord(candidate.files)
+      ? /** @type {Record<string, string>} */ (candidate.files)
+      : undefined
+    issues.push(...methodSkillIssues(skill, METHOD_SKILL_FILE, attached ? { files: attached } : {}))
   }
   const required = issues.filter((entry) => entry.severity === 'required')
   return { ok: !required.length, contractKind: input.contractKind, issues, metrics: {}, errorCode: required.length ? 'deliverable_rejected' : null }

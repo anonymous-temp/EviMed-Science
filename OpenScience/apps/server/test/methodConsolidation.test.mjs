@@ -379,3 +379,63 @@ test("a pass reads the researcher's whole library, whichever project its job is 
   for (const options of reads) assert.equal(Object.hasOwn(options, "projectId"), false, "no project filter on the library read");
   for (const options of proposals) assert.equal(Object.hasOwn(options, "projectId"), false);
 });
+
+test("a step whose run is still working is waited for, not counted as having no answer", async () => {
+  // 2026-09-21: every step read its result straight after dispatching, found
+  // the run still working, and the pass finished without it while the run
+  // carried on and was paid for.
+  const learning = fakeLearning([doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor")]);
+  /** @type {Map<string, number>} */
+  const reads = new Map();
+  /** @type {number[]} */
+  const waits = [];
+  const consolidation = new MethodConsolidation({
+    learning,
+    dispatch: async (request) => ({ runId: `run_${request.dispatchId}`, sessionId: "s1", dispatchId: request.dispatchId }),
+    readResult: async (identity) => {
+      const seen = (reads.get(identity.dispatchId) ?? 0) + 1;
+      reads.set(identity.dispatchId, seen);
+      if (seen < 3) return { status: seen === 1 ? "pending" : "running" };
+      return { status: "succeeded", output: { relations: [{ source: "m1", target: "m2", type: "shared_part", reason: "Both resolve a span." }] } };
+    },
+    pollMs: 7,
+    wait: async (ms) => { waits.push(ms); },
+    now: () => new Date("2026-09-21T00:00:00.000Z"),
+  });
+  const result = await consolidation.integrate({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "integrate", methodId: "m1" } } });
+  assert.equal(result.relations, 1, "the answer that arrived on the third look was applied");
+  assert.deepEqual([...reads.values()], [3]);
+  assert.deepEqual(waits, [7, 7]);
+});
+
+test("a step that cannot start defers the pass instead of finishing it without the step", async () => {
+  const learning = fakeLearning([doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor"), doc("m3", "resolve-claim-quote")]);
+  for (const busyAt of ["screen", "decide", "build"]) {
+    const consolidation = new MethodConsolidation({
+      learning,
+      dispatch: async (request) => {
+        if (request.input.action === busyAt) throw Object.assign(new Error("busy"), { code: "runtime_busy" });
+        return { runId: "r1", sessionId: "s1", dispatchId: request.dispatchId };
+      },
+      readResult: async (identity) => (String(identity.dispatchId).includes("screen")
+        ? { status: "succeeded", output: { pairs: [{ a: "m1", b: "m2" }] } }
+        : { status: "succeeded", output: { relations: [], assignments: [{ ASSIGNMENT: "g1", relationType: "merge", SKILLS: ["m1", "m2"] }] } }),
+      wait: async () => {},
+    });
+    await assert.rejects(consolidation.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } }),
+      { code: "runtime_busy" }, `busy at ${busyAt}: the worker defers the job and the pass resumes`);
+  }
+});
+
+test("a step is keyed on what it reads: an unchanged group reads its answer again, a changed method is a new question", async () => {
+  const ids = async (items) => {
+    const { instance, dispatched } = consolidation({ learning: fakeLearning(items) });
+    await instance.decideGroup({ id: "job_1", userId: "u1", projectId: "p1" }, items);
+    return dispatched.map((call) => call.dispatchId);
+  };
+  const first = await ids([doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor")]);
+  assert.deepEqual(await ids([doc("m2", "resolve-claim-anchor"), doc("m1", "resolve-claim-span")]), first, "order does not matter");
+  const changed = doc("m2", "resolve-claim-anchor");
+  changed.payload.contentDigest = `sha256:${"f".repeat(64)}`;
+  assert.notDeepEqual(await ids([doc("m1", "resolve-claim-span"), changed]), first);
+});

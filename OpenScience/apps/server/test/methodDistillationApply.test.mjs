@@ -13,8 +13,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { METHOD_SKILL_SCHEMA } from "@evimed/domain";
+import { METHOD_SKILL_SCHEMA, parseSkillFrontmatter, validateMethodSkill } from "@evimed/domain";
 
+import { decodeLearningOutput } from "../src/learningRuntime.mjs";
 import { MethodDistillationRuns } from "../src/methodDistillationRuns.mjs";
 
 const BODY = [
@@ -165,4 +166,40 @@ test("a create under a name the library already holds becomes that method's next
   assert.equal(learning.amended[0].expectedRevision, 3);
   assert.deepEqual(applied, { operation: "amend", methodId: "method:learned:do-the-thing" });
   assert.equal(enqueued[0].opts.idempotencyKey, "consolidate:integrate:method:learned:do-the-thing:4");
+});
+
+test("a delivered package is read as one method, not as a method whose scripts are its own files", async () => {
+  // 2026-09-21: the first two lessons production ever finished were refused as
+  // `method_invalid` — `applyCandidate` handed the store the whole delivered
+  // package as the method's attached scripts, and none of it lives under
+  // `scripts/` or `tests/`. Every test above passes a hand-built output; this
+  // one goes through the decoder the runtime reader uses.
+  const { distillation, learning } = runs();
+  const output = decodeLearningOutput({
+    "SKILL.md": SKILL,
+    "method-candidate.json": JSON.stringify({ schemaVersion: 1, operation: "create" }),
+    "distillation-notes.md": "What the run noticed.",
+  });
+  await distillation.applyCandidate(job, run, output);
+  assert.equal(learning.created.length, 1);
+  assert.equal(learning.created[0].files, undefined, "the package files are not attachments");
+  const parsed = parseSkillFrontmatter(SKILL);
+  const verdict = validateMethodSkill({
+    frontmatter: learning.created[0].frontmatter,
+    body: learning.created[0].body,
+    files: learning.created[0].files,
+    directoryName: parsed.frontmatter.name,
+    requireProvenance: true,
+  });
+  assert.deepEqual(verdict.issues, [], "what reaches the store passes the store's own rules");
+});
+
+test("scripts the proposal itself attaches still travel with it", async () => {
+  const { distillation, learning } = runs();
+  const files = { "scripts/count.py": "print(1)\n" };
+  await distillation.applyCandidate(job, run, decodeLearningOutput({
+    "SKILL.md": SKILL,
+    "method-candidate.json": JSON.stringify({ schemaVersion: 1, operation: "create", files }),
+  }));
+  assert.deepEqual(learning.created[0].files, files);
 });

@@ -248,7 +248,13 @@ export class MethodDistillationRuns {
       feedbackEventIds: job.payload?.feedbackEventIds ?? [],
       ...(candidate?.risk?.touchesSafety ? { safetyRelated: true } : {}),
     };
-    const files = candidate?.files ?? output.files;
+    // Only what the proposal itself attaches. `output.files` is the delivered
+    // package — SKILL.md, method-candidate.json, the notes — and reading it as
+    // the method's scripts made every candidate a method whose attachments sat
+    // outside `scripts/` and `tests/`: refused as `method_invalid`, terminally,
+    // after its run had passed the same rules (2026-09-21, the first two
+    // lessons production ever finished).
+    const files = candidate?.files;
     // A method's id is its name, account-wide (`learnedMethodId`). A `create`
     // under a name the library already holds is that method's next revision,
     // not a second method: without this it was refused as a revision conflict,
