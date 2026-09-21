@@ -178,7 +178,8 @@ test("the model gateway records a source understanding run's calls as source und
 
 test("wired source budget rejection happens before any runtime or paid request", options, async t => {
   const f = await fixture(t);
-  f.app.config.sourceUnderstandingRunLimitCny = 0;
+  // Zero is no cap since 2026-09-21; a nonsense cap is what is refused.
+  f.app.config.sourceUnderstandingRunLimitCny = -1;
   await f.app.sourceWorker.tick();
   assert.equal(f.calls.reserve, 0);
   assert.equal(f.calls.prompt, 0);

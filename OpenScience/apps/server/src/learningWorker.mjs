@@ -138,9 +138,12 @@ export class LearningWorker {
       // keeps its own identity, and re-claiming later adopts it by dispatch id
       // rather than starting a second one.
       if (result?.state === "pending") {
+        // Looking again is not another attempt. Every claim counts one, so a
+        // distillation still working at the third look — about a minute —
+        // used to fail as exhausted while its run carried on (2026-09-21).
         await this.jobs.fail(job.userId, job.id, job.leaseToken,
           { code: "learning_run_pending", message: "The bounded run has not finished." },
-          { retry: true, delayMs: 30_000 });
+          { retry: true, delayMs: 30_000, refundAttempt: true });
         return result;
       }
       // Re-check the lease immediately before the irreversible write. The
@@ -159,10 +162,13 @@ export class LearningWorker {
       this.lastError = typeof error?.code === "string" ? error.code : "learning_job_failed";
       if (!leaseLost && this.lastError !== "product_job_lease_lost") {
         const terminal = TERMINAL_LEARNING_ERRORS.has(this.lastError);
+        const deferral = DEFERRED_LEARNING_ERRORS.get(this.lastError);
         try {
           await this.jobs.fail(job.userId, job.id, job.leaseToken,
-            { code: this.lastError, message: "The learning job failed." },
-            { retry: !terminal, delayMs: terminal ? 0 : Math.min(300_000, 5000 * 2 ** Math.min(job.attempts, 6)) });
+            { code: this.lastError, message: deferral ? "The learning job is waiting." : "The learning job failed." },
+            deferral
+              ? { retry: true, delayMs: deferral, refundAttempt: true }
+              : { retry: !terminal, delayMs: terminal ? 0 : Math.min(300_000, 5000 * 2 ** Math.min(job.attempts, 6)) });
         } catch (failure) {
           if (failure?.code !== "product_job_lease_lost") throw failure;
         }
@@ -257,6 +263,21 @@ export class LearningWorker {
     await Promise.all([this.running, this.reconciling].filter(Boolean));
   }
 }
+
+/**
+ * Codes that mean the work never started, and how long to wait before asking
+ * again. A deferral costs no attempt (`refundAttempt`): the project was running
+ * someone's research, every runtime slot was taken, or a cap was reached, and
+ * none of that says anything about the lesson. They used to be ordinary
+ * retries, so a lesson queued while its researcher asked a follow-up question
+ * was spent in thirty seconds and never learnt (2026-09-20, three of three).
+ */
+const DEFERRED_LEARNING_ERRORS = new Map([
+  ["runtime_busy", 60_000],
+  ["runtime_limit_exceeded", 120_000],
+  ["runtime_proxy_limit_exceeded", 120_000],
+  ["usage_budget_exceeded", 3_600_000],
+]);
 
 /** Codes where another attempt would spend money to reach the same conclusion. */
 const TERMINAL_LEARNING_ERRORS = new Set([

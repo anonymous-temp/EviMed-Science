@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, readFile, rename, rm, symlink, writeFile } from "node:f
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { UNCAPPED_CNY } from "../src/boundedRunBudget.mjs";
 import { createSourceUnderstandingRuntime, sourceUnderstandingBudget, sourceRunProject } from "../src/sourceUnderstandingRuntime.mjs";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 
@@ -109,11 +110,21 @@ async function fixture(t) {
     runtime: createSourceUnderstandingRuntime(dependencies) };
 }
 
-test("source bounds use finite positive CNY limits and tighter account limits", () => {
+test("source understanding's own caps count its own spend; the account's caps cover everything", () => {
   const config = { sourceUnderstandingRunLimitCny: 3, sourceUnderstandingDailyLimitCny: 10,
     sourceUnderstandingWeeklyLimitCny: 50, userDailySpendLimit: 2, userWeeklySpendLimit: 20 };
-  assert.deepEqual(sourceUnderstandingBudget(config), { runLimit: 2, dailyLimit: 2, weeklyLimit: 20 });
-  for (const value of [0, -1, NaN, Infinity, "3"]) assert.throws(() => sourceUnderstandingBudget({ ...config, sourceUnderstandingRunLimitCny: value }), { code: "source_understanding_budget_invalid" });
+  assert.deepEqual(sourceUnderstandingBudget(config), {
+    own: { dailyLimit: 10, weeklyLimit: 50, purposes: ["source-understanding"] },
+    account: { dailyLimit: 2, weeklyLimit: 20 },
+    scope: { dailyLimit: 2, weeklyLimit: 20, runLimit: 3 },
+  });
+  // Zero is no cap — the default since 2026-09-21 — and crosses the signed
+  // boundary as a figure no run reaches.
+  const open = sourceUnderstandingBudget({});
+  assert.deepEqual(open.own, { dailyLimit: 0, weeklyLimit: 0, purposes: ["source-understanding"] });
+  assert.deepEqual(open.account, { dailyLimit: 0, weeklyLimit: 0 });
+  assert.deepEqual(open.scope, { dailyLimit: UNCAPPED_CNY, weeklyLimit: UNCAPPED_CNY, runLimit: UNCAPPED_CNY });
+  for (const value of [-1, NaN, Infinity, "3"]) assert.throws(() => sourceUnderstandingBudget({ ...config, sourceUnderstandingRunLimitCny: value }), { code: "source_understanding_budget_invalid" });
 });
 
 test("actual dispatch freezes input, binds before preparation, rechecks lease and uses the bounded gateway", async t => {
@@ -126,7 +137,10 @@ test("actual dispatch freezes input, binds before preparation, rechecks lease an
   const scoped = sourceRunProject(f.project, f.state.bound);
   assert.deepEqual(JSON.parse(await readFile(path.join(scoped.workspaceDir, "source-understanding-input.json"), "utf8")), f.input);
   assert.equal(f.state.scope.runId, f.request.dispatchId);
-  assert.equal(f.state.scope.runLimit, 2);
+  // The run's own cap, and the account's daily cap beside it: the gateway
+  // applies both to every request, so neither is folded into the other.
+  assert.equal(f.state.scope.runLimit, 3);
+  assert.equal(f.state.scope.dailyLimit, 2);
 });
 
 test("reclaimed and unknown dispatches never reserve or send a second request", async t => {

@@ -162,18 +162,28 @@ export class ProductJobs {
     return job(updated.rows[0]);
   }
 
-  /** @param {string} userId @param {string} id @param {string} leaseToken
-   * @param {{ code: string, message: string }} error @param {{ retry?: boolean, delayMs?: number }} options */
-  async fail(userId, id, leaseToken, error, { retry = false, delayMs = 5000 } = {}) {
+  /**
+   * @param {string} userId @param {string} id @param {string} leaseToken
+   * @param {{ code: string, message: string }} error
+   * @param {{ retry?: boolean, delayMs?: number, refundAttempt?: boolean }} [options]
+   *   `refundAttempt`: the job never started its work — the project was busy,
+   *   a runtime slot was taken, a cap was reached — so this claim does not
+   *   count against `max_attempts` and the job is always queued again. Without
+   *   it a learning job that met a busy project burnt its three attempts in
+   *   thirty seconds and the lesson was gone for good (2026-09-20).
+   */
+  async fail(userId, id, leaseToken, error, { retry = false, delayMs = 5000, refundAttempt = false } = {}) {
     productInteger(delayMs, 0, 86_400_000);
     const detail = productPayload({ code: productId(error.code, "error code"), message: String(error.message ?? "Job failed.").slice(0, 500) });
     await migrateProductStore(this.database);
+    const requeue = Boolean(retry && refundAttempt);
     const result = await this.withLease(userId, id, leaseToken, (client) => client.query(`UPDATE evimed_product.jobs SET
-      status=CASE WHEN $5::boolean AND attempts<max_attempts THEN 'queued' ELSE 'failed' END,
-      finished_at=CASE WHEN $5::boolean AND attempts<max_attempts THEN NULL ELSE clock_timestamp() END,
+      status=CASE WHEN $5::boolean AND ($7::boolean OR attempts<max_attempts) THEN 'queued' ELSE 'failed' END,
+      finished_at=CASE WHEN $5::boolean AND ($7::boolean OR attempts<max_attempts) THEN NULL ELSE clock_timestamp() END,
+      attempts=CASE WHEN $7::boolean THEN GREATEST(attempts-1,0) ELSE attempts END,
       run_after=clock_timestamp()+($6::integer*interval '1 millisecond'),error=$4::jsonb,updated_at=clock_timestamp(),lease_token=NULL,lease_expires_at=NULL
       WHERE user_id=$1 AND id=$2 AND lease_token=$3 AND status='running' AND lease_expires_at>clock_timestamp() RETURNING *`,
-    [userId, id, leaseToken, detail, retry, delayMs]));
+    [userId, id, leaseToken, detail, retry, delayMs, requeue]));
     if (!result?.rows[0]) throw new HttpError(409, "product_job_lease_lost", "This worker no longer owns the job.");
     return job(result.rows[0]);
   }

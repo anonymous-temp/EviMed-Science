@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { validateDeliveryReceipt, workspaceLayout } from "@evimed/domain";
+import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
 import { issueModelGatewayBudgetMarker } from "./modelGateway.mjs";
 import { sourceAttemptId } from "./sourceFiles.mjs";
 import { HttpError, assertProjectCapacity, normalizeWorkspaceRelativePath, openScopedFileNoFollow,
@@ -14,17 +15,15 @@ const OUTPUT_FILE = "source-understanding.json";
 
 /** @param {Record<string,any>} config */
 export function sourceUnderstandingBudget(config) {
-  const configured = [config.sourceUnderstandingRunLimitCny, config.sourceUnderstandingDailyLimitCny,
-    config.sourceUnderstandingWeeklyLimitCny];
-  if (configured.some(value => typeof value !== "number" || !Number.isFinite(value) || value <= 0)
-    || [config.userDailySpendLimit, config.userWeeklySpendLimit].some(value =>
-      typeof value !== "number" || !Number.isFinite(value) || value < 0)) {
-    throw new HttpError(503, "source_understanding_budget_invalid", "Source understanding requires finite positive CNY spending ceilings.");
-  }
-  const minimum = (...values) => Math.min(...values.filter(value => value > 0));
-  const dailyLimit = minimum(configured[1], config.userDailySpendLimit);
-  const weeklyLimit = minimum(configured[2], config.userWeeklySpendLimit);
-  return { dailyLimit, weeklyLimit, runLimit: minimum(configured[0], dailyLimit, weeklyLimit) };
+  // Its own caps count `source-understanding` spend only; zero means none, the
+  // default (`boundedRunBudget`).
+  return boundedRunBudget({
+    runLimitCny: config.sourceUnderstandingRunLimitCny,
+    dailyLimitCny: config.sourceUnderstandingDailyLimitCny,
+    weeklyLimitCny: config.sourceUnderstandingWeeklyLimitCny,
+    purpose: "source-understanding",
+    invalidCode: "source_understanding_budget_invalid",
+  }, config);
 }
 
 /** @param {any} project @param {any} binding */
@@ -135,7 +134,7 @@ export function createSourceUnderstandingRuntime({ config, store, sources, agent
       if (bytes.length > MAX_INPUT_BYTES) throw new HttpError(413, "source_understanding_input_too_large", "The frozen input exceeds the existing 8 MiB delivery-read limit; no model request was sent.");
       const budget = sourceUnderstandingBudget(config);
       if (!usageLedger) throw new HttpError(503, "source_understanding_usage_unavailable", "Source understanding requires gateway accounting.");
-      await usageLedger.assertWithinLimits(job.userId, budget);
+      await assertBoundedRunAffordable(usageLedger, job.userId, budget);
       const selected = (await registry).get(CAPABILITY);
       if (!selected) throw new HttpError(503, "source_understanding_unconfigured", "The source understanding capability is not installed.");
       await assertCurrent(job);
@@ -150,7 +149,7 @@ export function createSourceUnderstandingRuntime({ config, store, sources, agent
             await assertProjectCapacity(project, file, bytes.length, config);
             await writeFileAtomicNoFollow(project.baseDir, file, bytes, { mode: 0o600 });
           });
-          const value = await runtimeManager.reserveBoundedRuntimeSession(scoped, { runId: dispatchId, ...budget });
+          const value = await runtimeManager.reserveBoundedRuntimeSession(scoped, { runId: dispatchId, ...budget.scope });
           reserved = true;
           return value;
         });
@@ -175,10 +174,10 @@ export function createSourceUnderstandingRuntime({ config, store, sources, agent
               },
             });
             await assertCurrent(job);
-            await usageLedger.assertWithinLimits(job.userId, budget);
+            await assertBoundedRunAffordable(usageLedger, job.userId, budget);
             return await sources.withIngestionLease(job, async () => {
               const marker = issueModelGatewayBudgetMarker({ secret: config.modelGatewaySigningSecret,
-                userId: job.userId, projectId: job.projectId, runId: dispatchId, ...budget });
+                userId: job.userId, projectId: job.projectId, runId: dispatchId, ...budget.scope });
               promptAttempted = true;
               return runtimeManager.dispatchPrompt(scoped, session.id, {
                 text: `${marker}\n${repairText || question}`, system: prepared.system,

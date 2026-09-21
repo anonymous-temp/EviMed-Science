@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
-import { mountedMethodDigest, parseSkillFrontmatter, skillBodyDigest } from "@evimed/domain";
+import { LEARNING_EVALUATION_DISPATCH_PREFIX, mountedMethodDigest, parseSkillFrontmatter, skillBodyDigest } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { selectLearnedMethods } from "./learnedMethodMount.mjs";
 import { freezeLearningBaseline } from "./learningBaseline.mjs";
@@ -114,7 +114,7 @@ export async function evaluateLearnedMethod(dependencies, request, options = {})
       const projectId = `methodeval-${randomBytes(12).toString("hex")}`;
       await store.createProject(user, projectId, "Private method evaluation");
       const project = await store.requireProject(user, projectId);
-      const dispatchId = `methodeval_${randomBytes(12).toString("hex")}`;
+      const dispatchId = `${LEARNING_EVALUATION_DISPATCH_PREFIX}${randomBytes(12).toString("hex")}`;
       const scoped = project;
       const cell = { projectId, project, scoped, dispatchId, runId: "", sessionId: "", arm: input.arm, judgeCalls: 0 };
       created.set(projectId, cell);

@@ -283,3 +283,23 @@ test("an exhausted reconciliation job can be rearmed without creating a duplicat
   assert.equal(rearmed.attempts, 0);
   assert.equal(rearmed.error, null);
 });
+
+test("a deferral refunds its attempt, so a job that never started its work is never exhausted by waiting", options, async () => {
+  // 2026-09-20/21: a learning job that met a busy project, a reached cap, or a
+  // run still working spent an attempt on every look, and was failed as
+  // exhausted within a minute while nothing had gone wrong.
+  const row = await jobs.enqueue(owner, "consolidate", { action: "sleep" }, { idempotencyKey: randomUUID(), maxAttempts: 2 });
+  for (let look = 0; look < 5; look += 1) {
+    const claimed = await jobs.claim(["consolidate"], "worker-a", { leaseMs: 5000 });
+    assert.equal(claimed?.id, row.id, `look ${look + 1} still claims the job`);
+    assert.equal(claimed.attempts, 1, "each claim counts one, and each deferral gives it back");
+    await jobs.fail(owner, row.id, claimed.leaseToken, { code: "runtime_busy", message: "waiting" }, { retry: true, delayMs: 0, refundAttempt: true });
+    assert.equal((await jobs.get(owner, row.id)).status, "queued");
+  }
+  // A real failure still counts, and still ends the job at its limit.
+  const first = await jobs.claim(["consolidate"], "worker-a", { leaseMs: 5000 });
+  await jobs.fail(owner, row.id, first.leaseToken, { code: "learning_job_failed", message: "x" }, { retry: true, delayMs: 0 });
+  const second = await jobs.claim(["consolidate"], "worker-a", { leaseMs: 5000 });
+  await jobs.fail(owner, row.id, second.leaseToken, { code: "learning_job_failed", message: "x" }, { retry: true, delayMs: 0 });
+  assert.equal((await jobs.get(owner, row.id)).status, "failed");
+});

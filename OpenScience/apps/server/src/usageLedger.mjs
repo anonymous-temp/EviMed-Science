@@ -1,4 +1,4 @@
-import { USAGE_PURPOSES, usagePurpose } from "@evimed/domain";
+import { USAGE_PURPOSES, isUsagePurpose, usagePurpose } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 import { migrateUsageLedger } from "./usagePersistence.mjs";
@@ -516,11 +516,18 @@ export class UsageLedger {
   }
 
   /** Refuse a new interactive entry point that is already at its configured limit. */
-  async assertWithinLimits(userId, { dailyLimit = 0, weeklyLimit = 0, now = new Date() } = {}) {
+  async assertWithinLimits(userId, { dailyLimit = 0, weeklyLimit = 0, purposes = null, now = new Date() } = {}) {
     const user = productId(userId, "user");
     const dayLimit = money(dailyLimit, "daily limit");
     const weekLimit = money(weeklyLimit, "weekly limit");
     if (dayLimit <= 0 && weekLimit <= 0) return { allowed: true };
+    // A cap that belongs to one kind of work counts that work only. The
+    // learning caps used to be compared with everything the account spent, so
+    // a researcher's own research spent the learning budget (2026-09-20).
+    const only = purposes == null ? null : [...purposes].map((purpose) => {
+      if (!isUsagePurpose(purpose)) throw new HttpError(400, "usage_payload_invalid", "Invalid usage purpose.");
+      return purpose;
+    });
     const at = instant(now, "admission time");
     await migrateUsageLedger(this.database);
     return this.database.transaction(async (client) => {
@@ -530,8 +537,9 @@ export class UsageLedger {
         coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
         coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN reserved_cost ELSE 0 END),0) AS day_open,
         coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS week_open
-        FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($3::text[])`,
-      [user, at, [...UNCAPPED_USAGE_PURPOSES]]);
+        FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($3::text[])
+          AND ($4::text[] IS NULL OR purpose = ANY($4::text[]))`,
+      [user, at, [...UNCAPPED_USAGE_PURPOSES], only]);
       const day = Number(result.rows[0].day_settled) + Number(result.rows[0].day_open);
       const week = Number(result.rows[0].week_settled) + Number(result.rows[0].week_open);
       const exceeded = dayLimit > 0 && day >= dayLimit ? { window: "day", limit: dayLimit, committed: day }
