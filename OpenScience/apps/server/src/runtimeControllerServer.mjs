@@ -6,6 +6,7 @@ import net from "node:net";
 import path from "node:path";
 import { loadConfig } from "./config.mjs";
 import { assertDockerDataVolumeSupport } from "./dockerMounts.mjs";
+import { isInternalProject } from "./internalProjects.mjs";
 import {
   RUNTIME_EXIT_OUTPUT_BYTES,
   appendTailOutput,
@@ -157,25 +158,27 @@ function dockerManagedInventory(config, label) {
       "--filter",
       `label=${label}`,
       "--format",
-      '{{.Names}}|{{.Label "open-science.user"}}',
+      '{{.Names}}|{{.Label "open-science.user"}}|{{.Label "open-science.project"}}',
     ],
     { encoding: "utf8", timeout: 5_000 },
   );
   if (result.status !== 0) {
     throw controllerFailure(503, "runtime_inventory_unavailable", "Runtime controller could not inspect managed containers.");
   }
+  /** @type {Map<string, {userId: string, projectId: string}>} */
   const inventory = new Map();
   for (const line of result.stdout.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)) {
-    const separator = line.indexOf("|");
-    const containerName = separator < 1 ? "" : line.slice(0, separator);
-    const userId = separator < 1 ? "" : line.slice(separator + 1);
+    const [containerName = "", userId = "", projectId = ""] = line.split("|");
     if (
       !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(containerName) ||
-      !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(userId)
+      !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(userId) ||
+      // A container from before the project label reads empty here, and is
+      // counted as the user's own.
+      (projectId !== "" && !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(projectId))
     ) {
       throw controllerFailure(503, "runtime_inventory_invalid", "Runtime controller received invalid container inventory metadata.");
     }
-    inventory.set(containerName, userId);
+    inventory.set(containerName, { userId, projectId });
   }
   return inventory;
 }
@@ -351,8 +354,8 @@ export function createRuntimeController(overrides = {}) {
   function reserveRuntimeCapacity(project) {
     const limits = runtimeCapacityLimits(config);
     const inventory = dockerRuntimeInventory(config);
-    for (const [containerName, userId] of runtimeOwners) {
-      inventory.set(containerName, userId);
+    for (const [containerName, owner] of runtimeOwners) {
+      inventory.set(containerName, owner);
     }
     if (inventory.size >= limits.maxGlobal) {
       throw controllerFailure(
@@ -362,7 +365,14 @@ export function createRuntimeController(overrides = {}) {
         { retryAfterSeconds: 5 },
       );
     }
-    const userCount = [...inventory.values()].filter((userId) => userId === project.userId).length;
+    // The platform's own background projects (learning, document
+    // understanding, the paired evaluation) never take one of a researcher's
+    // slots — the control plane has not counted them since 2026-09-21, and
+    // this count disagreeing refused every upload's understanding run for an
+    // account whose learning and evaluation were running (reproduced live).
+    // The global ceiling above still counts every container.
+    const userCount = isInternalProject(project.id) ? 0 : [...inventory.values()]
+      .filter((owner) => owner.userId === project.userId && !isInternalProject(owner.projectId)).length;
     if (userCount >= limits.maxPerUser) {
       throw controllerFailure(
         429,
@@ -371,7 +381,7 @@ export function createRuntimeController(overrides = {}) {
         { retryAfterSeconds: 5 },
       );
     }
-    runtimeOwners.set(runtimeContainerName(project), project.userId);
+    runtimeOwners.set(runtimeContainerName(project), { userId: project.userId, projectId: project.id });
   }
 
   async function cleanupRuntime(project) {

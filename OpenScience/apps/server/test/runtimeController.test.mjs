@@ -97,6 +97,7 @@ fs.mkdirSync(stateRoot, { recursive: true });
 const nameAt = args.indexOf("--name");
 const name = nameAt >= 0 ? args[nameAt + 1] : "";
 const owner = args.find((arg) => arg.startsWith("open-science.user="))?.slice("open-science.user=".length) ?? "";
+const ownerProject = args.find((arg) => arg.startsWith("open-science.project="))?.slice("open-science.project=".length) ?? "";
 const stateFile = (containerName) => path.join(stateRoot, encodeURIComponent(containerName) + ".json");
 const readState = (containerName) => {
   try { return JSON.parse(fs.readFileSync(stateFile(containerName), "utf8")); } catch { return null; }
@@ -146,7 +147,7 @@ if (args[0] === "ps") {
     if (!selected || !state.pid || !state.containerName || !state.userId) continue;
     try {
       process.kill(state.pid, 0);
-      process.stdout.write(state.containerName + "|" + state.userId + "\\n");
+      process.stdout.write(state.containerName + "|" + state.userId + "|" + (state.projectId ?? "") + "\\n");
     } catch {}
   }
   process.exit(0);
@@ -212,7 +213,7 @@ if (process.env.FAKE_RUNTIME_VERIFY_TOKEN_FILES === "1") {
 }
 fs.mkdirSync(path.dirname(socketPath), { recursive: true });
 fs.rmSync(socketPath, { force: true });
-writeState(name, { pid: process.pid, state: "running", runtime: true, containerName: name, userId: owner });
+writeState(name, { pid: process.pid, state: "running", runtime: true, containerName: name, userId: owner, projectId: ownerProject });
 // A container that says something and dies, which is the only case whose
 // output is a diagnosis. Both streams, because the kernel's startup failures
 // come out on stdout as often as stderr.
@@ -882,6 +883,52 @@ test("runtime controller independently enforces global and per-user runtime limi
     );
   } finally {
     await mismatchedManager?.closeAll().catch(() => {});
+    await controller.close().catch(() => {});
+    delete process.env.FAKE_DOCKER_STATE;
+    delete process.env.FAKE_VOLUME_ROOT;
+    await removeTree(tmp);
+  }
+});
+
+test("runtime controller never counts the platform's background projects against a researcher's ceiling", async (t) => {
+  // 2026-09-21: the control plane had stopped counting learning, document
+  // understanding and the paired evaluation as a researcher's runtimes, and
+  // this count had not; with learning and an evaluation running, every
+  // upload's understanding run was refused, retried and refused again.
+  const tmp = await shortTempDir("osrb-");
+  const dataDir = path.join(tmp, "data");
+  const socketPath = path.join(tmp, "control", "controller.sock");
+  const dockerBin = await fakeDocker(tmp);
+  const learning = await projectTree(dataDir, "alice", "evimed-learning");
+  const sources = await projectTree(dataDir, "alice", "evimed-sources");
+  const paper = await projectTree(dataDir, "alice", "paper1");
+  const second = await projectTree(dataDir, "alice", "paper2");
+  if (await skipUnsupportedRuntimeSocket(t, paper)) {
+    await removeTree(tmp);
+    return;
+  }
+  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
+  process.env.FAKE_VOLUME_ROOT = dataDir;
+  const controller = createRuntimeController({
+    ...controllerConfig({ dataDir, socketPath, dockerBin }),
+    maxRunningRuntimes: 4,
+    maxRunningRuntimesPerUser: 1,
+  });
+  try {
+    await controller.listen();
+    const client = new RuntimeControllerClient({ runtimeControllerSocket: socketPath, runtimeControllerTimeoutMs: 3_000 });
+    await client.startRuntime(learning, 49152, "pw_abcdefghijklmnopqrstuvwxyz");
+    await client.startRuntime(sources, 49153, "pw_abcdefghijklmnopqrstuvwxyz");
+    await client.startRuntime(paper, 49154, "pw_abcdefghijklmnopqrstuvwxyz");
+    // The researcher's own ceiling still holds for their own projects…
+    await assert.rejects(
+      client.startRuntime(second, 49155, "pw_abcdefghijklmnopqrstuvwxyz"),
+      (error) => error?.status === 429 && error?.code === "runtime_limit_exceeded",
+    );
+    await client.cleanupRuntime(learning);
+    await client.cleanupRuntime(sources);
+    await client.cleanupRuntime(paper);
+  } finally {
     await controller.close().catch(() => {});
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;

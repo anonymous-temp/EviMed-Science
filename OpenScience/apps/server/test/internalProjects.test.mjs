@@ -28,6 +28,22 @@ test("a background runtime never takes one of the researcher's runtime slots", (
   assert.equal(manager.runtimeCount(), 3, "the global ceiling still counts them");
 });
 
+test("background work is not held to a researcher's ceiling, and never stops their idle runtime to start", async () => {
+  const manager = new RuntimeManager({ maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 8 });
+  const idle = { project: { userId: "u1", id: "paper1" } };
+  manager.runtimes.set("u1:paper1", idle);
+  manager.runtimes.set("u1:paper2", { project: { userId: "u1", id: "paper2" } });
+  assert.throws(() => manager.enforceRuntimeCapacity({ userId: "u1", id: "paper3" }), { code: "runtime_limit_exceeded" });
+  assert.doesNotThrow(() => manager.enforceRuntimeCapacity({ userId: "u1", id: SOURCES_PROJECT_ID }));
+  /** @type {string[]} */
+  const stopped = [];
+  manager.stopIdleRuntime = async (project) => { stopped.push(project.id); };
+  manager.runtimeBusy = async () => false;
+  manager.hasRunningRuns = async () => false;
+  await manager.makeRoomFor({ userId: "u1", id: SOURCES_PROJECT_ID });
+  assert.deepEqual(stopped, [], "a document's understanding waits for room rather than taking a researcher's runtime");
+});
+
 test("a learning step runs in the account's learning project, made on first use, never the lesson's own project", async () => {
   /** @type {string[]} */
   const created = [];

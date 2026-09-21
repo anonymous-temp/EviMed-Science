@@ -4726,7 +4726,9 @@ export class RuntimeManager {
       });
     }
     const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
-    if (maxPerUser != null && this.runtimeCountForUser(project.userId) - own >= maxPerUser) {
+    // A background project is never one of the researcher's slots
+    // (`runtimeCountForUser`), so it is not held to their ceiling either.
+    if (maxPerUser != null && !isInternalProject(project.id) && this.runtimeCountForUser(project.userId) - own >= maxPerUser) {
       throw new HttpError(429, "runtime_limit_exceeded", `Too many running runtimes for this user; limit is ${maxPerUser}.`, {
         retryAfterSeconds: 5,
       });
@@ -4749,6 +4751,9 @@ export class RuntimeManager {
    * @param {Record<string, any>} project
    */
   async makeRoomFor(project) {
+    // Background work waits for room; it never takes a researcher's idle
+    // runtime to make some. The capacity check refuses it and its job defers.
+    if (isInternalProject(project.id)) return;
     const maxGlobal = positiveLimit(this.config.maxRunningRuntimes);
     const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
     const own = this.key(project);
