@@ -109,16 +109,87 @@ export function learningRunProject(project, directory) {
   return { ...project, activeWorkspace: project.activeWorkspace ?? "", workspaceDir: resolveScopedPath(project.baseDir, relative) };
 }
 
+/** Where a finished step's accepted output is kept once the next step needs
+ *  the workspace: the project's own metadata directory, which no runtime mounts. */
+const RESULT_ARCHIVE_DIR = "learning-results";
+
+/** How many archived results one learning project keeps. A result is read
+ *  within minutes of its run finishing; this bounds the directory, not the loop. */
+const MAX_ARCHIVED_RESULTS = 200;
+
+/**
+ * One run's archived result, shaped as a project so `readOwnedFile` reads it
+ * with the same scoping and bounds as the workspace.
+ * @param {any} project @param {string} dispatchId
+ */
+function resultArchive(project, dispatchId) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(String(dispatchId ?? ""))) {
+    throw new HttpError(400, "learning_dispatch_invalid", "The learning dispatch id is invalid.");
+  }
+  return { ...project, baseDir: project.metaDir, workspaceDir: path.join(project.metaDir, RESULT_ARCHIVE_DIR, dispatchId) };
+}
+
+/** @param {any} root a project, or a `resultArchive` @returns {Promise<boolean>} */
+async function hasReceipt(root) {
+  const stat = await fs.lstat(path.join(root.workspaceDir, workspaceLayout.receiptFile)).catch(() => null);
+  return Boolean(stat?.isFile());
+}
+
+/**
+ * Whether a succeeded run's result can still be read: archived, or still in
+ * the workspace because no step has started since. Anything else was emptied
+ * before this archive existed, and the lesson has to be run again.
+ * @param {any} project @param {any[]} ledger newest first @param {any} run
+ */
+async function resultAvailable(project, ledger, run) {
+  if (await hasReceipt(resultArchive(project, run.dispatchId))) return true;
+  return ledger[0]?.id === run.id && hasReceipt(project);
+}
+
+/**
+ * Keep the latest run's accepted output before its workspace is emptied.
+ *
+ * Every step runs in the learning project's one workspace (the controller
+ * mounts a project's root), and a result is read only after its run's usage
+ * settles — so the next step's clear deleted a delivered lesson before its job
+ * read it (production, 2026-09-21: `source-ledger-closure`, lost to ENOENT).
+ * Only regular files the ledger names, read without following links; the
+ * receipt goes last, so an archive with a receipt is a complete one.
+ * @param {any} project @param {any[]} ledger newest first
+ */
+async function archiveLatestResult(project, ledger) {
+  const latest = ledger[0];
+  if (latest?.status !== "succeeded" || !latest.dispatchId) return;
+  const archive = resultArchive(project, latest.dispatchId);
+  if (await hasReceipt(archive) || !await hasReceipt(project)) return;
+  for (const relative of [...(latest.artifacts ?? []), workspaceLayout.receiptFile]) {
+    const loaded = await readOwnedFile(project, relative, MAX_OUTPUT_BYTES).catch(() => null);
+    if (!loaded) continue;
+    await writeFileAtomicNoFollow(archive.baseDir, resolveScopedPath(archive.workspaceDir, relative), loaded.bytes, { mode: 0o600 });
+  }
+  const root = path.join(project.metaDir, RESULT_ARCHIVE_DIR);
+  const kept = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  if (kept.length <= MAX_ARCHIVED_RESULTS) return;
+  const aged = await Promise.all(kept.filter((entry) => entry.isDirectory())
+    .map(async (entry) => ({ name: entry.name, at: (await fs.lstat(path.join(root, entry.name))).mtimeMs })));
+  aged.sort((left, right) => left.at - right.at);
+  for (const { name } of aged.slice(0, aged.length - MAX_ARCHIVED_RESULTS)) {
+    await fs.rm(path.join(root, name), { recursive: true, force: true });
+  }
+}
+
 /**
  * Empty the learning project's workspace before a step: nothing of the
  * researcher's lives there, and a step must not read the last one's files.
- * @param {any} project
+ * The last step's result is archived first (`archiveLatestResult`).
+ * @param {any} project @param {any[]} ledger newest first
  */
-async function clearLearningWorkspace(project) {
+async function clearLearningWorkspace(project, ledger) {
   if (project?.id !== LEARNING_PROJECT_ID) {
     throw new HttpError(409, "learning_workspace_refused", "Only the learning project's workspace is cleared.");
   }
   await withProjectStorageMutation(project, async () => {
+    await archiveLatestResult(project, ledger);
     const entries = await fs.readdir(project.workspaceDir, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
       await fs.rm(path.join(project.workspaceDir, entry.name), { recursive: true, force: true });
@@ -218,13 +289,16 @@ export function createLearningRuntime({
       // adopted — it is retried under the next attempt id. Adopting it made one
       // bad run a lesson lost for good: every re-queued job read the same
       // failure back (2026-09-21). How many attempts a lesson gets is the job's
-      // own limit.
+      // own limit. A delivery whose files a later step emptied before the
+      // archive existed is spent as well: adopting it read ENOENT forever.
       const ledger = await agentRuns.list(project);
       const attempts = ledger
         .filter((run) => run.dispatchId === baseDispatchId || String(run.dispatchId ?? "").startsWith(`${baseDispatchId}-a`))
         .sort((left, right) => String(left.startedAt ?? left.createdAt ?? "").localeCompare(String(right.startedAt ?? right.createdAt ?? "")));
       const latest = attempts.at(-1) ?? null;
-      const spent = latest && ["failed", "cancelled", "canceled"].includes(String(latest.status));
+      const lost = latest?.status === "succeeded" && request.isolatedProject !== true
+        && !await resultAvailable(project, ledger, latest);
+      const spent = latest && (lost || ["failed", "cancelled", "canceled"].includes(String(latest.status)));
       const existing = spent ? null : latest;
       const dispatchId = spent ? `${baseDispatchId}-a${attempts.length + 1}` : String(latest?.dispatchId ?? baseDispatchId);
       const directory = learningArtifactDirectory(capabilityId, dispatchId);
@@ -244,7 +318,7 @@ export function createLearningRuntime({
       // A step starts on an empty workspace: the previous step's input, its
       // deliverables and its receipt are not this step's to read. Only in the
       // learning project, which holds nothing of the researcher's.
-      if (request.isolatedProject !== true) await clearLearningWorkspace(project);
+      if (request.isolatedProject !== true) await clearLearningWorkspace(project, ledger);
 
       const bytes = Buffer.from(`${JSON.stringify(input)}\n`, "utf8");
       if (bytes.length > MAX_INPUT_BYTES) {
@@ -328,12 +402,14 @@ export function createLearningRuntime({
 
     /**
      * @param {{userId: string, projectId: string, runId: string, sessionId: string, dispatchId: string,
-     *          capabilityId?: string, contractKind?: string, outputs?: string[]}} identity
+     *          capabilityId?: string, contractKind?: string, outputs?: string[], isolatedProject?: boolean}} identity
      */
     async readResult(identity) {
-      const capabilityId = identity.capabilityId ?? identity.dispatchId.split("-").slice(0, -1).join("-");
+      const capabilityId = identity.capabilityId
+        ?? identity.dispatchId.replace(/-a\d+$/, "").split("-").slice(0, -1).join("-");
       const project = await runProject(identity);
-      const run = (await agentRuns.list(project)).find((item) => item.id === identity.runId
+      const ledger = await agentRuns.list(project);
+      const run = ledger.find((item) => item.id === identity.runId
         && item.sessionId === identity.sessionId && item.dispatchId === identity.dispatchId);
       if (!run) return { status: "pending", reason: "learning_run_ledger_unavailable" };
       if (run.status === "running") {
@@ -343,7 +419,15 @@ export function createLearningRuntime({
       }
       if (run.status !== "succeeded") return { status: run.status };
 
-      const receipt = await readOwnedFile(project, workspaceLayout.receiptFile, MAX_INPUT_BYTES);
+      // Archived once a later step needed the workspace; until then, still in
+      // it. A workspace a later step has already taken holds that step's files.
+      const archived = resultArchive(project, run.dispatchId);
+      const source = await hasReceipt(archived) ? archived
+        : identity.isolatedProject === true || ledger[0]?.id === run.id ? project : null;
+      if (!source || !await hasReceipt(source)) {
+        throw new HttpError(409, "learning_result_missing", "The learning run's delivered files are gone; its next attempt runs it again.");
+      }
+      const receipt = await readOwnedFile(source, workspaceLayout.receiptFile, MAX_INPUT_BYTES);
       const checked = validateDeliveryReceipt(JSON.parse(receipt.bytes.toString("utf8")));
       if (!checked.ok) throw new HttpError(409, "learning_receipt_invalid", "The learning delivery receipt is invalid.");
       const entries = checked.receipt.entries.filter((entry) => entry.capability === capabilityId);
@@ -357,7 +441,7 @@ export function createLearningRuntime({
           ? file.path
           : `${workspaceLayout.deliverablesDir}/${entry.deliverableId}/${path.posix.basename(file.path)}`;
         if (!artifacts.has(relative)) throw new HttpError(409, "learning_receipt_invalid", "An accepted file is not part of this run.");
-        const loaded = await readOwnedFile(project, relative, MAX_OUTPUT_BYTES);
+        const loaded = await readOwnedFile(source, relative, MAX_OUTPUT_BYTES);
         // The receipt's own digest is what proves the file did not change
         // between acceptance and this read. Without it a run could pass the
         // gate and then rewrite the artifact the loop is about to learn from.

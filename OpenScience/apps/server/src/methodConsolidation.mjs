@@ -1,6 +1,7 @@
 /**
- * The nightly pass over the method library: what relates to what, what may take
- * effect, what should stop.
+ * The pass over the method library — after every learned revision, and on the
+ * consolidation interval: what relates to what, what may take effect, what
+ * should stop.
  *
  * Hidden knowledge: this is SkillPyramid's analyser and builder, plus the
  * hold-out gate SkillPyramid does not have. The paper's abstract says its
@@ -53,6 +54,26 @@ import { HttpError } from "./security.mjs";
 /** What `consolidate` can be asked to do. There is no new job kind: the kinds
  *  are a DDL CHECK constraint, and `consolidate` was already one of them. */
 export const CONSOLIDATE_ACTIONS = Object.freeze(["sleep", "integrate", "evaluate", "optimize"]);
+
+/**
+ * Codes that mean a learning step never started, and how long its job waits
+ * before asking again (`LearningWorker`). A deferral costs no attempt: the
+ * project was running someone's research, every runtime slot was taken, or a
+ * cap was reached, and none of that says anything about the lesson. They used
+ * to be ordinary retries, so a lesson queued while its researcher asked a
+ * follow-up question was spent in thirty seconds and never learnt (2026-09-20,
+ * three of three). Here because a consolidation step must hand them to the
+ * worker instead of passing on without its answer.
+ */
+export const DEFERRED_LEARNING_ERRORS = new Map([
+  ["runtime_busy", 60_000],
+  ["runtime_limit_exceeded", 120_000],
+  ["runtime_proxy_limit_exceeded", 120_000],
+  ["usage_budget_exceeded", 3_600_000],
+]);
+
+/** @param {any} error @returns {boolean} */
+const deferred = (error) => DEFERRED_LEARNING_ERRORS.has(String(error?.code ?? ""));
 
 /** The capability's own action vocabulary, asserted here so a rename upstream is
  *  a load-time failure rather than a run that submits an action nobody accepts. */
@@ -175,9 +196,13 @@ export class MethodConsolidation {
   /**
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any,
    *          jobs?: any, notifications?: any, evaluate?: ((request: any) => Promise<any>) | null,
-   *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date}} dependencies
+   *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date,
+   *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>}} dependencies
    */
-  constructor({ dispatch, readResult, learning, jobs = null, notifications = null, evaluate = null, audit = null, now = () => new Date() }) {
+  constructor({
+    dispatch, readResult, learning, jobs = null, notifications = null, evaluate = null, audit = null, now = () => new Date(),
+    stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
     }
@@ -193,6 +218,51 @@ export class MethodConsolidation {
     // happened and not a step in it.
     this.audit = audit;
     this.now = now;
+    // How long one step's run may take before the pass gives up on it: the
+    // run monitor's own bound (`agentRunMonitorTimeoutMs`), which fails a run
+    // that outlives it, so this only ends a wait the monitor would end anyway.
+    this.stepWaitMs = stepWaitMs;
+    this.pollMs = pollMs;
+    this.wait = wait;
+  }
+
+  /**
+   * Dispatch one model step and wait for its answer.
+   *
+   * A step is a bounded run that takes minutes, and every step used to read
+   * its result straight after dispatching — so the read found the run still
+   * working, the step counted as having no answer, and the pass finished
+   * without it while the run carried on and was paid for (2026-09-21). A
+   * runtime the project cannot give right now propagates, so the worker defers
+   * the job instead of the pass finishing with the step skipped.
+   *
+   * The dispatch id is the step's inputs, contents included: a re-run of the
+   * same pass adopts the run it already started, an unchanged library reads the
+   * answer it already paid for, and a changed method is a new question.
+   * @param {any} job @param {{dispatchId: string, input: any, question: string}} step
+   * @returns {Promise<any>} the settled result, or null for a run that did not succeed
+   */
+  async #step(job, { dispatchId, input, question }) {
+    const identity = await this.dispatch({
+      userId: job.userId,
+      projectId: job.projectId,
+      dispatchId,
+      job,
+      capabilityId: "method-relations",
+      contractKind: "method-relations",
+      input,
+      question,
+    });
+    if (!identity?.runId) return null;
+    const deadline = this.now().getTime() + this.stepWaitMs;
+    for (;;) {
+      const result = await this.readResult({ dispatchId, ...identity, userId: job.userId, projectId: job.projectId });
+      if (result?.status !== "pending" && result?.status !== "running") return result?.status === "succeeded" ? result : null;
+      if (this.now().getTime() >= deadline) {
+        throw new HttpError(504, "learning_step_timeout", "A consolidation step's run outlived the run monitor's bound.");
+      }
+      await this.wait(this.pollMs);
+    }
   }
 
   /** @param {{job: any, project?: any}} request */
@@ -236,11 +306,14 @@ export class MethodConsolidation {
     for (const group of groups) {
       const members = group.map((id) => byId.get(id)).filter(Boolean);
       if (members.length < CONSOLIDATION_LIMITS.minGroupSize) continue;
-      const decided = await this.decideGroup(job, members).catch(() => null);
+      // One group's failure is not the pass's, but a step that could not start
+      // is not a failure: the worker defers the job and the pass resumes,
+      // adopting the steps it already ran.
+      const decided = await this.decideGroup(job, members).catch((error) => { if (deferred(error)) throw error; return null; });
       if (!decided) continue;
       relationCount += await this.applyRelations(job, members, decided);
       if (builds < CONSOLIDATION_LIMITS.maxBuilds) {
-        const built = await this.buildGroup(job, members, decided).catch(() => null);
+        const built = await this.buildGroup(job, members, decided).catch((error) => { if (deferred(error)) throw error; return null; });
         if (built?.applied) builds += 1;
       }
     }
@@ -502,17 +575,12 @@ export class MethodConsolidation {
     if (pairs.length < 2) return { pairs: [...pairs], screened: false, dropped: 0 };
     const byId = new Map(methods.map((method) => [method.id, method]));
     const shortlist = pairs.slice(0, CONSOLIDATION_LIMITS.maxScreenPairs);
-    const dispatchId = `method-relations-screen-${shortDigest(shortlist.map((pair) => `${pair.a} ${pair.b}`).join("\n"))}`;
+    const key = (/** @type {string} */ id) => `${id}@${byId.get(id)?.payload?.contentDigest ?? ""}`;
     /** @type {any} */
     let result = null;
     try {
-      const identity = await this.dispatch({
-        userId: job.userId,
-        projectId: job.projectId,
-        dispatchId,
-        job,
-        capabilityId: "method-relations",
-        contractKind: "method-relations",
+      result = await this.#step(job, {
+        dispatchId: `method-relations-screen-${shortDigest(shortlist.map((pair) => `${key(pair.a)} ${key(pair.b)}`).join("\n"))}`,
         input: {
           schemaVersion: 1,
           action: "screen",
@@ -529,10 +597,8 @@ export class MethodConsolidation {
           + "Keeping a pair costs a later, more expensive reading; keeping every pair is the same as not screening. "
           + "You may only judge the pairs you are given — do not propose new ones.",
       });
-      if (identity?.runId) {
-        result = await this.readResult({ dispatchId, ...identity, userId: job.userId, projectId: job.projectId });
-      }
-    } catch {
+    } catch (error) {
+      if (deferred(error)) throw error;
       // isolated: evimed_learning_screen_failed_total
     }
     if (!result || result.status !== "succeeded") return { pairs: [...pairs], screened: false, dropped: 0 };
@@ -549,15 +615,9 @@ export class MethodConsolidation {
    * @param {any} job @param {readonly any[]} members
    */
   async decideGroup(job, members) {
-    const ids = members.map((member) => member.id).sort();
-    const dispatchId = `method-relations-${shortDigest(ids.join(" "))}`;
-    const identity = await this.dispatch({
-      userId: job.userId,
-      projectId: job.projectId,
-      dispatchId,
-      job,
-      capabilityId: "method-relations",
-      contractKind: "method-relations",
+    const keys = members.map((member) => `${member.id}@${member.payload?.contentDigest ?? ""}`).sort();
+    const result = await this.#step(job, {
+      dispatchId: `method-relations-${shortDigest(keys.join(" "))}`,
       input: {
         schemaVersion: 1,
         action: "decide",
@@ -575,10 +635,7 @@ export class MethodConsolidation {
         + "shared_part is for a concrete shared sub-capability, never for vague topical similarity. "
         + "Say nothing rather than inventing a relation; an empty answer is correct when the methods are unrelated.",
     });
-    if (!identity?.runId) return null;
-    const result = await this.readResult({ dispatchId, ...identity, userId: job.userId, projectId: job.projectId });
-    if (!result || result.status !== "succeeded") return null;
-    return result.output ?? null;
+    return result?.output ?? null;
   }
 
   /**
@@ -593,13 +650,9 @@ export class MethodConsolidation {
   async buildGroup(job, members, decided) {
     const assignments = (decided?.assignments ?? []).filter((entry) => METHOD_RELATION_TYPES.includes(entry?.relationType));
     if (!assignments.length) return { applied: 0 };
-    const identity = await this.dispatch({
-      userId: job.userId,
-      projectId: job.projectId,
-      dispatchId: `method-relations-build-${shortDigest(JSON.stringify(assignments))}`,
-      job,
-      capabilityId: "method-relations",
-      contractKind: "method-relations",
+    const keys = members.map((member) => `${member.id}@${member.payload?.contentDigest ?? ""}`).sort();
+    const result = await this.#step(job, {
+      dispatchId: `method-relations-build-${shortDigest(`${keys.join(" ")}\n${JSON.stringify(assignments)}`)}`,
       input: {
         schemaVersion: 1,
         action: "build",
@@ -618,15 +671,17 @@ export class MethodConsolidation {
         + "Add reuse references only near the passages they affect. Invent no tools, scripts, files or dependencies. "
         + "Each rewritten method must still read as a standalone SKILL.md.",
     });
-    if (!identity?.runId) return { applied: 0 };
-    const result = await this.readResult({ ...identity, userId: job.userId, projectId: job.projectId });
-    if (!result || result.status !== "succeeded") return { applied: 0 };
+    if (!result) return { applied: 0 };
     let applied = 0;
     for (const rewrite of result.output?.methods ?? []) {
       const target = members.find((member) => member.id === rewrite.id);
       if (!target) continue;
       const parsed = parseSkillFrontmatter(String(rewrite.skill ?? ""));
       if (parsed.issues.length) continue;
+      // A rewrite the method already holds — the same answer read again when a
+      // deferred pass resumes — is not another revision.
+      if (parsed.body === target.payload.body
+        && JSON.stringify(parsed.frontmatter) === JSON.stringify(target.payload.frontmatter)) continue;
       const preserved = preservedSectionsIntact(target.payload.body, parsed.body);
       if (!preserved.ok) {
         // The builder dropped a check. The paper asks the model not to; this
@@ -677,7 +732,7 @@ export class MethodConsolidation {
     try {
       await this.notifications.create(job.userId, {
         noticeType: "notify",
-        title: `方法库夜间整理：${document.payload?.frontmatter?.name ?? document.id}`,
+        title: `方法库整理：${document.payload?.frontmatter?.name ?? document.id}`,
         body,
         ...(job.projectId ? { projectId: job.projectId } : {}),
         source: { type: "system", id: document.id },
