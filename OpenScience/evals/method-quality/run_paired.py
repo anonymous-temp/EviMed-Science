@@ -2781,7 +2781,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             release_id=release_id_of(environment),
             log=say,
         )
-        batch.execute(rerun=args.rerun, rerun_excluded=args.rerun_excluded)
+        # A private evaluation with an excluded cell is `invalid` by the rule
+        # below, so resuming onto one would repeat that verdict forever:
+        # re-measuring it there is not the operator's choice (2026-09-21).
+        batch.execute(rerun=args.rerun, rerun_excluded=args.rerun_excluded or bool(private_grant))
         say(f"cells: {batch.executed} executed, {batch.skipped} resumed from disk")
         cells = load_cells(args.results_dir, config["id"])
 
