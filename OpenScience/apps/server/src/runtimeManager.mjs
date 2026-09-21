@@ -5093,6 +5093,16 @@ export class RuntimeManager {
    * blur. The frame that asks has just been served by one of them, so there
    * is one; when there is not, the frame's own retry starts it.
    *
+   * Not every one of them can answer, though. A kernel serves only the plugin
+   * bundles it composed itself, and two runtimes of one account need not have
+   * composed the same one; a URL another kernel built is a 404 here. The
+   * request says nothing of which frame asked, and on 2026-09-21 asking only
+   * the most recently used runtime meant asking an evaluation cell's, busy
+   * every few seconds: every conversation of the account then stopped at
+   * 「对话界面 60 秒内没有载入完成」 on a 404 for its own plugin bundle. So
+   * each runtime is asked in turn — conversations first, background work
+   * last, most recently used first within each — until one has the file.
+   *
    * @param {string} userId
    * @param {string} suffix `/assets/<file>` or `/plugins/??<list>&rev=<rev>`, validated by the caller
    * @returns {Promise<{ status: number, contentType: string, body: Buffer, gzip: Buffer | null, immutable: boolean }>}
@@ -5107,32 +5117,44 @@ export class RuntimeManager {
       return cached;
     }
     const prefix = `${userId}:`;
-    let runtime = null;
-    let latestUse = -1;
-    for (const [key, candidate] of this.runtimes) {
-      const lastUseAt = Number(this.runtimeActivity.get(key)?.lastUseAt ?? 0);
-      if (!key.startsWith(prefix) || lastUseAt < latestUse) continue;
-      runtime = candidate;
-      latestUse = lastUseAt;
-    }
-    if (!runtime) throw new HttpError(503, "runtime_not_running", "No research runtime of this account is running.");
+    const candidates = [...this.runtimes]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, runtime]) => ({
+        runtime,
+        background: isInternalProject(key.slice(prefix.length)),
+        lastUseAt: Number(this.runtimeActivity.get(key)?.lastUseAt ?? 0),
+      }))
+      .sort((left, right) => Number(left.background) - Number(right.background) || right.lastUseAt - left.lastUseAt);
+    if (candidates.length === 0) throw new HttpError(503, "runtime_not_running", "No research runtime of this account is running.");
     const timeoutMs = positiveLimit(this.config.runtimeProxyRequestTimeoutMs) ?? 60_000;
-    const response = await requestRuntime(runtime, new URL(`${runtime.url}${suffix}`), {
-      method: "GET",
-      headers: { ...(runtime.cookie ? { cookie: runtime.cookie } : {}), "accept-encoding": "identity" },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    const body = response.body
-      ? await readRuntimeResponseBody(response.body, SHARED_UI_ASSET_MAX_BYTES)
-      : Buffer.alloc(0);
-    const contentType = response.headers.get("content-type") ?? "application/octet-stream";
-    const asset = {
-      status: response.status,
-      contentType,
-      body,
-      gzip: null,
-      immutable: immutable && response.status === 200,
-    };
+    /** @type {{ status: number, contentType: string, body: Buffer, gzip: Buffer | null, immutable: boolean } | null} */
+    let asset = null;
+    for (const { runtime } of candidates) {
+      const response = await requestRuntime(runtime, new URL(`${runtime.url}${suffix}`), {
+        method: "GET",
+        headers: { ...(runtime.cookie ? { cookie: runtime.cookie } : {}), "accept-encoding": "identity" },
+        signal: AbortSignal.timeout(timeoutMs),
+      }).catch((error) => {
+        // One runtime that cannot be reached is not an answer while another
+        // may still have the file; the last one's failure is.
+        if (runtime === candidates[candidates.length - 1].runtime) throw error;
+        return null;
+      });
+      if (!response) continue;
+      const body = response.body
+        ? await readRuntimeResponseBody(response.body, SHARED_UI_ASSET_MAX_BYTES)
+        : Buffer.alloc(0);
+      asset = {
+        status: response.status,
+        contentType: response.headers.get("content-type") ?? "application/octet-stream",
+        body,
+        gzip: null,
+        immutable: immutable && response.status === 200,
+      };
+      if (response.status !== 404) break;
+    }
+    if (!asset) throw new HttpError(503, "runtime_not_running", "No research runtime of this account answered.");
+    const { body, contentType } = asset;
     if (!asset.immutable) return asset;
     // Text compresses to about a quarter; fonts and images are already packed.
     if (body.length > 1024 && /^(?:text\/|application\/(?:javascript|json|wasm)|image\/svg)/i.test(contentType)) {
