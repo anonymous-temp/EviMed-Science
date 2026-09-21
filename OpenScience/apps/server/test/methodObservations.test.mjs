@@ -235,3 +235,18 @@ test("reading a mounted method's own file is a use of it, the same as calling it
   assert.deepEqual(derived.invokedWithoutMount, [{ id: "method:learned:triage", name: "triage" }]);
   assert.deepEqual(derived.eligible, ["method:learned:quoting"], "a file that is not a mounted method's names nothing");
 });
+
+test("a run that delegated nothing still records the methods its runtime carried, and chooses none of them by carrying", () => {
+  // 2026-09-21: with work done inline, no delegation receipt existed, so a
+  // run's `methodsLoaded` was empty and every paired-evaluation cell was
+  // excluded as `arm_not_applied`.
+  const derived = runMethodObservations({
+    run,
+    projection: { plan: { items: [] }, subagents: [], mountedMethods: [{ name: "triage", digest: DIGEST_A }, { name: "quoting", digest: DIGEST_B }] },
+    methods: METHODS,
+    sessions: [],
+  });
+  assert.deepEqual(derived.methodsLoaded, [{ name: "triage", digest: DIGEST_A }, { name: "quoting", digest: DIGEST_B }]);
+  assert.deepEqual(derived.observations, [], "carrying a method is not a verdict about it");
+  assert.deepEqual(derived.eligible, ["method:learned:triage", "method:learned:quoting"], "carried and never read is still passed over");
+});

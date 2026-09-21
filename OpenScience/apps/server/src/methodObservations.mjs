@@ -247,10 +247,23 @@ export function runMethodObservations(input) {
     .filter((method) => !used.has(method.name))
     .map((method) => method.id);
 
+  // The root session's own receipt: the methods the runtime put in front of
+  // every session, reported by the capsule plugin (`mountedMethods`). Part of
+  // what the run carried, so part of `methodsLoaded`; not a choice, so it
+  // moves neither an observation nor the denominator above. A run that did
+  // its work without delegating had no record of its methods at all, and every
+  // paired-evaluation cell was excluded as `arm_not_applied` (2026-09-21).
+  const carried = new Map(loaded);
+  for (const entry of Array.isArray(input.projection?.mountedMethods) ? input.projection.mountedMethods : []) {
+    const name = String(entry?.name ?? "");
+    const digest = String(entry?.digest ?? "");
+    if (name && digest && !carried.has(name)) carried.set(name, digest);
+  }
+
   return {
     observations,
     eligible,
-    methodsLoaded: [...loaded.entries()].map(([name, digest]) => ({ name, digest })),
+    methodsLoaded: [...carried.entries()].map(([name, digest]) => ({ name, digest })),
     methodsInvoked: [...invoked.entries()].map(([name, digest]) => ({ name, digest })),
     mismatched,
     invokedWithoutMount,
