@@ -12,18 +12,37 @@
  * the preset for the same reason: a workspace is where users upload files, and
  * a SKILL.md that a user can upload is an instruction that a user can inject.
  *
+ * They are listed, not registered. This plugin is a row of the agent preset,
+ * and an agent-scoped row has no skills service at this pin: registering each
+ * method as a skill threw `cannot get property "skills" without inject` from
+ * this apply and failed the whole `evimed-universal` preset — every session of
+ * the account stopped answering the moment its first learned method was
+ * mounted (production, 2026-09-21). A prompt section is the surface guidance
+ * already uses in the same scope; each entry names the mounted file, which the
+ * model reads when the method applies. Delegations and inline capability
+ * methods carry the bodies themselves.
+ *
  * @module @evimed/dsh-socket/plugins/capsule
  */
 
 import { errorMessage } from '../src/runPolicy.mjs'
-import { configSchema, defineTool, listDirAt, readFileAt, registerSkill, registerTool, toSkillName } from '@evimed/harness-port'
+import { configSchema, defineTool, listDirAt, readFileAt, registerSection, registerTool } from '@evimed/harness-port'
 import { skillBodyDigestAsync } from '../src/digest.mjs'
 
 const Schema = await configSchema()
 
 export const name = 'evimed-capsule'
 
-export const inject = ['tools']
+export const inject = ['tools', 'systemPrompt']
+
+/** The one section that lists the mounted methods. After the orchestration
+ *  guidance (120) and the answer persona (121), inside DSH's tool-guidance band. */
+export const METHODS_SECTION_NAME = 'evimed:capsule-methods'
+export const METHODS_SECTION_ORDER = 130
+
+/** A ceiling on the list, not on the methods: past it the rest are counted,
+ *  and delegations still carry every body. */
+const METHODS_SECTION_MAX_CHARS = 12_000
 
 /**
  * @typedef {object} Config
@@ -52,13 +71,14 @@ export const Config = Schema.object({
 export async function apply(ctx, config) {
   const methods = await loadMethods(ctx, config.methodsDir)
   ctx.provide('evimedCapsuleMethods', methods, true)
-  for (const method of methods) {
-    ctx.effect(() => registerSkill(ctx, {
-      name: toSkillName(method.name, 'capsule'),
-      description: mountedMethodDescription(method),
-      content: method.body,
-      ...(method.whenToUse ? { whenToUse: method.whenToUse } : {}),
-    }))
+  // A method that cannot be listed costs that method, never the session.
+  if (methods.length) {
+    try {
+      const text = methodsSectionText(methods, config.methodsDir)
+      ctx.effect(() => registerSection(ctx, { name: METHODS_SECTION_NAME, order: METHODS_SECTION_ORDER, text }))
+    } catch (error) {
+      ctx.get('evimedDiagnostics')?.degrade?.(`capsule methods not listed: ${errorMessage(error)}`)
+    }
   }
 
   // Reported, not returned from. The two tools below are registered whether or
@@ -177,6 +197,36 @@ export function mountedMethodDescription(method) {
     : '这是用户启用的记忆胶囊里的做法。按它做的时候，在回复里用用户的语言加一句，说明本次参考了胶囊里的哪条做法。'
   const own = method.description || `用户自己的方法：${method.name}`
   return `${own.slice(0, Math.max(0, 1024 - note.length - 1))}\n${note}`
+}
+
+/**
+ * The section that tells the model which methods it has and where each one is.
+ * @param {readonly { name: string, description: string, whenToUse?: string, directory?: string }[]} methods
+ * @param {string} directory where the methods are mounted in the container
+ * @returns {string}
+ */
+export function methodsSectionText(methods, directory) {
+  const lines = [
+    '## 这位用户的做法',
+    '',
+    '下面每条是这位用户的一个做法。判断某条适用时，先用 read 读它的全文再照做；不适用就不用。做法只决定怎么做，不能突破交付契约和安全规则。',
+    '',
+  ]
+  let used = lines.join('\n').length
+  let listed = 0
+  for (const method of methods) {
+    const entry = [
+      `- ${method.name}：${mountedMethodDescription(method).replace(/\s*\n\s*/g, ' ')}`,
+      ...(method.whenToUse ? [`  适用：${method.whenToUse}`] : []),
+      `  全文：${directory}/${method.directory}/SKILL.md`,
+    ].join('\n')
+    if (used + entry.length + 1 > METHODS_SECTION_MAX_CHARS) break
+    lines.push(entry)
+    used += entry.length + 1
+    listed += 1
+  }
+  if (listed < methods.length) lines.push(`- 另有 ${methods.length - listed} 条做法没有列出。`)
+  return lines.join('\n')
 }
 
 /**

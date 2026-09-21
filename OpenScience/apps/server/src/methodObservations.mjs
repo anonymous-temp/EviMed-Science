@@ -41,6 +41,23 @@
 
 import { toSkillName } from "@evimed/harness-port";
 
+import { learnedMethodDirectoryName } from "./learnedMethodMount.mjs";
+
+/** A mounted learned method's own file, as the `read` tool is handed it. */
+const MOUNTED_METHOD_FILE = /\/(_lm[0-9a-f]{32})\/SKILL\.md$/;
+
+/**
+ * Whether a session used a method: called it through the `skill` tool, or
+ * read its mounted file. The plugin lists mounted methods and the model reads
+ * the one that applies (2026-09-21: an agent-scoped row cannot register a
+ * skill at this pin); a read of the file is the same use a skill call was.
+ * @param {Set<string>} invoked @param {{id?: string, name: string}} method @returns {boolean}
+ */
+function usedIn(invoked, method) {
+  return invoked.has(toSkillName(method.name, "capsule"))
+    || (Boolean(method.id) && invoked.has(`file:${learnedMethodDirectoryName(String(method.id))}`));
+}
+
 /**
  * How a deliverable ended, in the observation vocabulary.
  *
@@ -98,7 +115,14 @@ export function invokedSkillsBySession(sessions) {
         // `transcriptToLedgerMessages` for a different reader, and using it here
         // matches nothing in any real run while a test written to the same
         // wrong shape passes.
-        if (part?.type !== "tool" || part?.tool !== "skill" || part?.status !== "completed") continue;
+        if (part?.type !== "tool" || part?.status !== "completed") continue;
+        if (part?.tool === "read") {
+          const target = String(part?.input?.path ?? part?.input?.file_path ?? part?.input?.filePath ?? "");
+          const mounted = MOUNTED_METHOD_FILE.exec(target);
+          if (mounted) names.add(`file:${mounted[1]}`);
+          continue;
+        }
+        if (part?.tool !== "skill") continue;
         const name = part?.input?.name;
         if (typeof name === "string" && name.trim()) names.add(name.trim());
       }
@@ -169,7 +193,7 @@ export function runMethodObservations(input) {
       if (!name || !digest) continue;
       loaded.set(name, digest);
       const known = byName.get(name);
-      if (known && invokedHere.has(toSkillName(name, "capsule"))) invoked.set(name, digest);
+      if (known && usedIn(invokedHere, known)) invoked.set(name, digest);
       if (!known || !outcome) continue;
       if (known.digest !== digest) {
         if (!mismatched.some((item) => item.name === name)) {
@@ -183,7 +207,7 @@ export function runMethodObservations(input) {
       seenFamilies.add(key);
       observations.push({
         methodId: known.id,
-        observation: { runId, family, outcome, at, invoked: invokedHere.has(toSkillName(name, "capsule")),
+        observation: { runId, family, outcome, at, invoked: usedIn(invokedHere, known),
           ...(known.contentDigest ? { contentDigest: known.contentDigest } : {}) },
       });
     }
@@ -212,7 +236,7 @@ export function runMethodObservations(input) {
   // speaks and the id is what the ledger is keyed by. Returning only the name
   // is why this signal reached an audit line and stopped there.
   const invokedWithoutMount = (input.methods ?? [])
-    .filter((method) => !loaded.has(method.name) && invokedAnywhere.has(toSkillName(method.name, "capsule")))
+    .filter((method) => !loaded.has(method.name) && usedIn(invokedAnywhere, method))
     .map((method) => ({ id: method.id, name: method.name }));
 
   // Available and not chosen. Counted once per run, because the mount is a
