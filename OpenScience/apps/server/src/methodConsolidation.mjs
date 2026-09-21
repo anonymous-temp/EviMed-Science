@@ -41,15 +41,13 @@ import {
   METHOD_RELATIONS_ACTIONS,
   METHOD_RELATION_TYPES,
   cleanMethodDisplay,
-  computeMethodLevels,
-  evaluationEligible,
   parseSkillFrontmatter,
   preservedSectionsIntact,
   reflectionDue,
   retirementProposal,
   validateMethodGraph,
 } from "@evimed/domain";
-import { methodRecordFrom } from "./learningService.mjs";
+import { methodLabel, methodRecordFrom } from "./learningService.mjs";
 import { HttpError } from "./security.mjs";
 
 /** What `consolidate` can be asked to do. There is no new job kind: the kinds
@@ -297,7 +295,7 @@ export class MethodConsolidation {
     const page = await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods });
     const methods = (page.items ?? []).filter((item) => item.payload?.status !== "retired");
     if (methods.length === 0) {
-      return { action: "sleep", methods: 0, groups: 0, relations: 0, builds: 0, screened: false, screenDropped: 0, promoted: [], queuedForEvaluation: [], retirements: [], graphIssues: [] };
+      return { action: "sleep", methods: 0, groups: 0, relations: 0, builds: 0, screened: false, screenDropped: 0, promoted: [], retirements: [], graphIssues: [] };
     }
     // Two methods is the floor for *comparing* them, and nothing else. It used
     // to return here, which also skipped promotion, evaluation queueing and
@@ -333,17 +331,11 @@ export class MethodConsolidation {
     const refreshed = (await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods })).items ?? [];
     const records = refreshed.map(methodRecordFrom);
     const graph = validateMethodGraph(records);
-    const levels = computeMethodLevels(records).levels;
 
     /** @type {string[]} */
     const promoted = [];
-    /** @type {string[]} */
-    const queuedForEvaluation = [];
     for (const document of refreshed) {
       if (document.payload?.status === "retired") continue;
-      const record = methodRecordFrom(document);
-      record.learning = { ...record.learning, level: levels.get(record.name) ?? 0 };
-      const eligibility = evaluationEligible(record);
       if (document.payload?.status === "candidate") {
         try {
           const approvedDocument = await this.learning.approve(job.userId, document.id, { expectedRevision: document.revision });
@@ -355,24 +347,15 @@ export class MethodConsolidation {
           if (error?.code !== "method_not_promotable") throw error;
         }
       }
-      // The measurement, which now decides retirement rather than effect.
-      // Queued for anything effective that has earned the cost and has no
-      // current verdict, and for a fresh method that has no observations yet —
-      // a bootstrap buys a bounded trial and never a status.
-      const latest = document.payload.learning?.evaluations?.at(-1);
-      if (!latest) {
-        await this.enqueueEvaluation(job, document, !eligibility.eligible);
-        queuedForEvaluation.push(document.id);
-      } else if (eligibility.eligible) {
-        // A changed library, or text this verdict never measured, needs a new
-        // comparison. An unchanged one is not re-run.
-        const baselineDigest = await this.learning.currentBaselineDigest(job.userId, document.projectId);
-        const stale = latest.candidateDigest !== document.payload.contentDigest;
-        if (baselineDigest && (stale || baselineDigest !== latest.baselineDigest)) {
-          await this.enqueueEvaluation(job, document, false, baselineDigest);
-          queuedForEvaluation.push(document.id);
-        }
-      }
+      // No paired evaluation is queued here any more (ruling of 2026-09-21).
+      // One ran for every method and every revision: a six-cell tier whose
+      // verdict the runner forces to `inconclusive`, about ¥10 and two and a
+      // half hours each time a method's text changed, and a 24-cell one that
+      // outlived its own six-hour limit and, simulated on the variance of our
+      // own cells, would have retired about one harmless method in six. The
+      // detector is now the method's own runs (`methodHarmTest`, read by
+      // `retirementProposal` below); the `evaluate` action stays for an
+      // evaluation someone asks for.
     }
 
     const retirements = await this.learning.retirementProposals(job.userId, { nowMs: this.now().getTime() });
@@ -380,11 +363,11 @@ export class MethodConsolidation {
       if (entry.proposal.immediate) {
         await this.learning.retire(job.userId, entry.document.id, {
           expectedRevision: entry.document.revision,
-          reason: entry.proposal.reason,
+          reason: retirementSentence(entry.proposal),
         }).catch(() => null);
         continue;
       }
-      await this.notice(job, entry.document, `Proposed for retirement: ${entry.proposal.reason}. One click restores it.`);
+      await this.notice(job, entry.document, retirementSentence(entry.proposal));
     }
 
     const importance = relationCount * 10 + promoted.length * 40 + retirements.length * 20;
@@ -414,7 +397,6 @@ export class MethodConsolidation {
       screened: screen.screened,
       screenDropped: screen.dropped,
       promoted,
-      queuedForEvaluation,
       retirements: retirements.map((entry) => entry.document.id),
       graphIssues: graph.issues.map((issue) => issue.code),
       described,
@@ -517,12 +499,13 @@ export class MethodConsolidation {
     if (!document || document.payload?.status === "retired") return null;
     const proposal = retirementProposal(methodRecordFrom(document), { nowMs: this.now().getTime() });
     if (!proposal.propose || !proposal.immediate) return null;
+    // `retire` tells the researcher itself; a second notice here said the same
+    // thing again, in English.
     const stopped = await this.learning.retire(job.userId, document.id, {
       expectedRevision: document.revision,
-      reason: proposal.reason,
+      reason: retirementSentence(proposal),
     }).catch(() => null);
     if (!stopped) return null;
-    await this.notice(job, document, `Retired automatically: ${proposal.reason}. One click restores it.`);
     return document.id;
   }
 
@@ -727,38 +710,13 @@ export class MethodConsolidation {
     return { applied };
   }
 
-  /** @param {any} job @param {any} document @param {boolean} [bootstrap] @param {string} [baselineDigest] */
-  async enqueueEvaluation(job, document, bootstrap = false, baselineDigest = "") {
-    if (!this.jobs) return;
-    // Include the superseded comparison so a completed job for an earlier
-    // visit to this baseline cannot swallow a later re-evaluation request.
-    const previousEvaluation = document.payload.learning?.evaluations?.at(-1);
-    const evaluationKey = baselineDigest
-      ? `consolidate:evaluate:${shortDigest(document.id)}:${shortDigest(JSON.stringify([document.payload.contentDigest, previousEvaluation]))}:paired:${baselineDigest}`
-      : `consolidate:evaluate:${document.id}:${document.payload.contentDigest}:${bootstrap ? "bootstrap" : "paired"}`;
-    try {
-      await this.jobs.enqueue(job.userId, "consolidate", {
-        action: "evaluate",
-        methodId: document.id,
-        candidateDigest: document.payload.contentDigest,
-        bootstrap,
-        ...(baselineDigest ? { baselineDigest } : {}),
-      }, {
-        idempotencyKey: evaluationKey,
-        projectId: job.projectId,
-      });
-    } catch {
-      // isolated: evimed_learning_evaluate_enqueue_failed_total
-    }
-  }
-
   /** @param {any} job @param {any} document @param {string} body */
   async notice(job, document, body) {
     if (!this.notifications) return;
     try {
       await this.notifications.create(job.userId, {
         noticeType: "notify",
-        title: `方法库整理：${document.payload?.frontmatter?.name ?? document.id}`,
+        title: `方法库整理：${methodLabel(document)}`,
         body,
         ...(job.projectId ? { projectId: job.projectId } : {}),
         source: { type: "system", id: document.id },
@@ -788,4 +746,26 @@ export class MethodConsolidation {
       // isolated: evimed_learning_notice_failed_total
     }
   }
+}
+
+/**
+ * Why a method was retired or is proposed for it, in the reader's words.
+ *
+ * `retirementProposal` names the branch that decided (`code`) and keeps its
+ * English sentence for the log; this is the one a researcher reads, in the
+ * inbox and on the method. The inbox used to carry the English one
+ * (「Proposed for retirement: … One click restores it.」).
+ * @param {{code?: string, immediate?: boolean, runs?: number, rejected?: number}} proposal
+ */
+export function retirementSentence(proposal) {
+  const why = {
+    incident: "它牵涉到一起已确认的问题",
+    evaluated_worse: "对照评测显示，用上它比不用更差",
+    harm: `用上它的 ${proposal.runs ?? "几"} 次研究里有 ${proposal.rejected ?? "多"} 次交付被退回，明显多于平常`,
+    contribution: `用上它的 ${proposal.runs ?? "多"} 次研究，整体结果偏差`,
+    superseded: "它已经很久没被用到，而且已有新的做法取代它",
+  }[String(proposal.code ?? "")] ?? "它最近没有帮上忙";
+  return proposal.immediate
+    ? `${why}，已先停用。觉得不对，可以在「记忆胶囊」里这条做法上点「回到上一版」恢复。`
+    : `${why}，建议停用。它仍在生效；要停用可以在「记忆胶囊」里操作。`;
 }

@@ -48,11 +48,12 @@ export const METHOD_INDUCTION_MIN_TRAJECTORIES = 3
  * How many trajectories a method needs before its contribution may retire it.
  *
  * The published recipe uses 100 trials before a skill is eligible for
- * outcome-driven retirement. Ours is lower on purpose: nothing reaches
- * `approved` here without a paired evaluation against a frozen baseline, so a
- * method arrives with evidence a library that admits on synthesis alone does
- * not have, and 100 more trajectories of a method that is actively hurting is a
- * hundred packages paying for the delay.
+ * outcome-driven retirement. Ours is lower on purpose: 100 more trajectories of
+ * a method that is actively hurting is a hundred packages paying for the
+ * delay. Since 2026-09-20 a method takes effect the night it is learned, and
+ * early harm is `METHOD_HARM_TEST`'s to catch within its first forty runs;
+ * this clause is the slow one, for a revision that went bad after that test had
+ * read it as clear.
  */
 export const METHOD_CONTRIBUTION_MIN_TRIALS = 20
 
@@ -65,6 +66,27 @@ export const METHOD_CONTRIBUTION_MIN_TRIALS = 20
  * would be inventing a number that looks like evidence.
  */
 export const METHOD_CONTRIBUTION_RETIRE_AT = -0.1
+
+/**
+ * The detector for a learned method that makes results worse: a capped
+ * sequential probability-ratio test over the runs that mounted it, each run
+ * bad when its deliverable was rejected (`methodHarmTest`).
+ *
+ * Ruling of 2026-09-21, from the research behind it (Anthropic "Adding Error
+ * Bars to Evals", Kohavi's online experiments, Netflix's sequential canary
+ * tests, the self-improving-agent literature): no published system gates each
+ * learned item on an offline A/B of full agent runs; they demote from
+ * production feedback. Our own offline check could not do the job — with three
+ * or four briefs no test reaches 95%, the six-cell tier was forced to
+ * `inconclusive`, and the 24-cell rule, simulated on the measured variance of
+ * our own cells, retired about one harmless method in six.
+ *
+ * Numbers: a 10% background rejection rate against a 40% harmful one, with a
+ * 5% false-alarm and 20% miss target, decided by 40 runs at most; that flags a
+ * 10%→40% change in about seven runs. Three runs at least, so a method's first
+ * two uses — often the very runs it was learned beside — cannot decide alone.
+ */
+export const METHOD_HARM_TEST = Object.freeze({ baseRate: 0.1, harmRate: 0.4, alpha: 0.05, beta: 0.2, minRuns: 3, maxRuns: 40 })
 
 /**
  * How many methods one account's library may hold as effective.

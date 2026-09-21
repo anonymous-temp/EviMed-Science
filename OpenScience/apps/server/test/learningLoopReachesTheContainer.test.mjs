@@ -215,13 +215,12 @@ test("a distilled method reaches a container, earns observations, is measured, a
   const job = { userId: USER, projectId: PROJECT, payload: { action: "sleep" } };
   const slept = await consolidation.sleep({ job });
   assert.equal(slept.methods, 1, "the pass must see the one method rather than returning early");
-  // Nothing to promote — it is already effective — but the pass has to queue
-  // the measurement that can retire it.
+  // Nothing to promote — it is already effective — and nothing to measure
+  // offline: the pass reads the method's own runs (`methodHarmTest`) and
+  // queues no paired evaluation (ruling of 2026-09-21).
   assert.deepEqual(slept.promoted, [], "an effective method is not promoted again");
-  assert.ok(
-    slept.queuedForEvaluation.length > 0 || enqueued.some((entry) => entry.payload?.action === "evaluate"),
-    "an eligible method must reach the evaluation queue; the pass used to return before this line",
-  );
+  assert.deepEqual(enqueued.filter((entry) => entry.payload?.action === "evaluate"), [],
+    "the nightly pass must not queue a paired evaluation");
 
   // --- 5. a verdict is credited to the text it measured (A5) ----------------
   // First the failure this replaced: a verdict that arrives for text the
@@ -287,7 +286,10 @@ test("a trial expires, and an expired one leaves only what stands on its own", a
   assert.equal((await launch(learning, project)).count, 0, "an expired trial mounts nothing of its own");
 });
 
-test("a fresh method is queued for bounded bootstrap evaluation without observations", async () => {
+test("a fresh method takes effect with nothing queued, and its own rejected runs are what retire it", async () => {
+  // Ruling of 2026-09-21: production is the detector. No paired evaluation is
+  // queued for a new method or a new revision; the runs that mount it decide,
+  // through a sequential test (`methodHarmTest`).
   const learning = new LearningService({ documents: fakeDocuments() });
   const created = await learning.createCandidate(USER, {
     projectId: PROJECT, frontmatter: frontmatter("bootstrap-method"), body: BODY,
@@ -299,29 +301,32 @@ test("a fresh method is queued for bounded bootstrap evaluation without observat
     jobs: { enqueue: async (_userId, _kind, payload) => { queued.push(payload); } },
   });
   await consolidation.sleep({ job: { userId: USER, projectId: PROJECT, payload: { action: "sleep" } } });
-  assert.equal(queued.length, 1);
-  assert.equal(queued[0].bootstrap, true);
-  assert.equal(queued[0].candidateDigest, created.payload.contentDigest);
-  assert.equal((await learning.getMethod(USER, created.id)).payload.status, "approved",
-    "queueing a measurement is not what decides effect");
-  consolidation.evaluate = async () => ({ verdict: "better", report: "bootstrap-report.json", candidateDigest: created.payload.contentDigest });
-  await consolidation.evaluateCandidate({ job: { userId: USER, projectId: PROJECT, payload: queued[0] } });
-  assert.equal((await learning.getMethod(USER, created.id)).payload.learning.evaluations.length, 0,
-    "a favorable bootstrap result is not a full paired evaluation");
+  assert.deepEqual(queued, [], "nothing is queued to measure a fresh method");
+  assert.equal((await learning.getMethod(USER, created.id)).payload.status, "approved", "it takes effect the night it is learned");
+
+  // Three of its runs rejected in a row: the harm boundary, and it is retired
+  // by the next pass with a reason the researcher can read.
   for (let i = 0; i < 3; i += 1) {
-    await learning.recordObservation(USER, created.id, { runId: `trial-${i}`, family: `trial-${i}:d1`, outcome: "accepted", contentDigest: created.payload.contentDigest });
+    await learning.recordObservation(USER, created.id, { runId: `trial-${i}`, family: `trial-${i}:d1`, outcome: "rejected",
+      at: `2026-09-2${i}T00:00:00.000Z`, contentDigest: created.payload.contentDigest });
   }
   await consolidation.sleep({ job: { userId: USER, projectId: PROJECT, payload: { action: "sleep" } } });
-  assert.equal(queued[1].bootstrap, false, "observations unlock the full evaluation, which is about retirement now");
-  assert.equal((await learning.getMethod(USER, created.id)).payload.status, "approved");
+  assert.deepEqual(queued, [], "and still nothing queued: the runs decided");
+  const retired = await learning.getMethod(USER, created.id);
+  assert.equal(retired.payload.status, "retired");
+  assert.match(retired.payload.statusReason, /用上它的 3 次研究里有 3 次交付被退回/);
+  assert.match(retired.payload.statusReason, /回到上一版/);
 
-  // And the full evaluation is what can take it away. A `worse` verdict on the
-  // text that is mounted retires it in the same job, rather than waiting for
-  // the next nightly pass to notice.
-  consolidation.evaluate = async () => ({ verdict: "worse", report: "paired.json", candidateDigest: created.payload.contentDigest });
-  const measured = await consolidation.evaluateCandidate({ job: { userId: USER, projectId: PROJECT, payload: queued[1] } });
-  assert.equal(measured.retired, created.id);
-  const after = await learning.getMethod(USER, created.id);
+  // An evaluation someone asks for can still retire a method, on its `worse`.
+  const other = await learning.createCandidate(USER, {
+    projectId: PROJECT, frontmatter: frontmatter("measured-method"), body: `${BODY}\n\nOne more line.`,
+    provenance: { origin: "inferred", runId: "run_seed_2" },
+  });
+  consolidation.evaluate = async () => ({ verdict: "worse", report: "paired.json", candidateDigest: other.payload.contentDigest });
+  const measured = await consolidation.evaluateCandidate({ job: { userId: USER, projectId: PROJECT,
+    payload: { action: "evaluate", methodId: other.id, candidateDigest: other.payload.contentDigest } } });
+  assert.equal(measured.retired, other.id);
+  const after = await learning.getMethod(USER, other.id);
   assert.equal(after.payload.status, "retired");
-  assert.match(after.payload.statusReason, /worse than working without it/);
+  assert.match(after.payload.statusReason, /对照评测显示，用上它比不用更差/);
 });

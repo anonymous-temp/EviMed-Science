@@ -210,7 +210,10 @@ test("the three model steps run as separate bounded runs, in order, with the cap
     "the pairs the screen dropped never reached the expensive step");
 });
 
-test("a candidate that has earned an evaluation is queued for one instead of being promoted", async () => {
+test("the nightly pass queues no paired evaluation, whatever a method has earned", async () => {
+  // Ruling of 2026-09-21: one was queued for every method and every revision —
+  // a six-cell tier that can only answer `inconclusive` and a 24-cell one that
+  // retired about one harmless method in six. The method's own runs decide now.
   const passing = doc("m1", "resolve-claim-span");
   passing.payload.learning = {
     digest: passing.payload.contentDigest,
@@ -228,10 +231,8 @@ test("a candidate that has earned an evaluation is queued for one instead of bei
   });
   const summary = await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
   assert.deepEqual(summary.promoted, []);
-  assert.ok(summary.queuedForEvaluation.includes("m1"));
-  assert.equal(enqueued[0].kind, "consolidate");
-  assert.equal(enqueued[0].payload.action, "evaluate");
-  assert.match(enqueued[0].options.idempotencyKey, /^consolidate:evaluate:m1:sha256:/);
+  assert.equal("queuedForEvaluation" in summary, false);
+  assert.deepEqual(enqueued.filter((entry) => entry.payload?.action === "evaluate"), []);
 });
 
 test("an evaluate job without a runner fails by name rather than quietly succeeding", async () => {

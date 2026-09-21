@@ -325,35 +325,8 @@ test("an unchanged inconclusive evaluation is not rerun by every nightly pass", 
   });
   const slept = await consolidation.sleep({ job: { id: "night", userId: "u1", projectId: "p1" } });
   assert.deepEqual(slept.promoted, []);
-  assert.deepEqual(slept.queuedForEvaluation, []);
+  assert.equal("queuedForEvaluation" in slept, false, "the nightly pass queues no evaluation (ruling of 2026-09-21)");
   assert.deepEqual(enqueued, []);
-});
-
-test("a baseline that returns after another comparison can receive a fresh evaluation job", async () => {
-  let baselineDigest = `sha256:${"b".repeat(64)}`;
-  const { learning } = service({ resolveBaselineDigest: async () => baselineDigest });
-  const candidate = await evaluatedCandidate(learning);
-  const recorded = (report) => learning.recordEvaluation("u1", candidate.id, {
-    report, baselineDigest: `sha256:${"a".repeat(64)}`,
-    candidateDigest: candidate.payload.contentDigest, verdict: "inconclusive",
-  });
-  const keys = new Set();
-  const consolidation = new MethodConsolidation({ learning,
-    jobs: { enqueue: async (_userId, _kind, _payload, options) => { keys.add(options.idempotencyKey); return { id: options.idempotencyKey }; } },
-    dispatch: async () => { throw new Error("no model calls"); }, readResult: async () => ({}),
-  });
-  const job = { id: "night", userId: "u1", projectId: "p1" };
-  await recorded("first-a.json");
-  await consolidation.sleep({ job });
-  await consolidation.sleep({ job });
-  assert.equal(keys.size, 1, "one pending comparison per unchanged old verdict and current baseline");
-  await learning.recordEvaluation("u1", candidate.id, { report: "b.json", baselineDigest,
-    candidateDigest: candidate.payload.contentDigest, verdict: "inconclusive" });
-  baselineDigest = `sha256:${"a".repeat(64)}`;
-  await recorded("second-a.json");
-  baselineDigest = `sha256:${"b".repeat(64)}`;
-  await consolidation.sleep({ job });
-  assert.equal(keys.size, 2, "a previously completed comparison must not absorb a new evaluation request");
 });
 
 test("an explicitly taught method takes effect at once, which is the other half of the bargain", async () => {
@@ -371,7 +344,9 @@ test("an explicitly taught method takes effect at once, which is the other half 
   // And the nightly path still works on it without complaint.
   const approved = await learning.approve("u1", created.id, { expectedRevision: created.revision });
   assert.equal(approved.payload.status, "approved");
-  assert.match(notices.at(-1).body, /immediately|回滚|rollback/i);
+  assert.match(notices.at(-1).body, /已生效/);
+  assert.match(notices.at(-1).body, /回到上一版/, "the notice names the way back");
+  assert.doesNotMatch(notices.at(-1).body, /[A-Za-z]{6,}/, "no English sentence reaches the inbox");
 });
 
 test("a caller cannot assert a status, an origin or a verdict of its own", async () => {
