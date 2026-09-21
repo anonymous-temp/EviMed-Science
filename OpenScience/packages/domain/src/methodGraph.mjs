@@ -585,7 +585,7 @@ export function promotionVerdict(method, options = {}) {
 
   reasons.push(method?.provenance?.origin === 'explicit'
     ? 'explicit origin: the researcher stated this, so it takes effect immediately and is rolled back by restoring the previous revision'
-    : 'learned from the researcher’s own work: it takes effect immediately, is marked new, and is retired by the paired evaluation or by one click')
+    : 'learned from the researcher’s own work: it takes effect immediately, is marked new, and is retired when its own runs show it making results worse, or by one click')
 
   // Said for the reader, never as a condition. A method already carrying a
   // measurement should show it on its row.

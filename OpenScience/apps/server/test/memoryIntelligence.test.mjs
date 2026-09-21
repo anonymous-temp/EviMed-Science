@@ -1250,6 +1250,22 @@ test("extraction enabled still writes the run summary for a conversation with no
   assert.ok([...client.records.values()].some((record) => record.kind === "run_summary"));
 });
 
+test("a run with no user message leaves no episode, rather than an English status line", async () => {
+  // 2026-09-21 walk: 「Run run_a5965c92… finished with status canceled; 0
+  // artifact(s) recorded.」 on the memory page, for runs whose prompt never
+  // landed. The run stays on the timeline from the run ledger.
+  const client = new MemoryStoreDouble();
+  const intelligence = new MemoryIntelligence(config, client, {
+    fetchImpl: async () => Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] }),
+  });
+  const assistantOnly = { info: { id: "a1", role: "assistant" }, parts: [{ type: "text", text: "Working on it." }] };
+  const result = await intelligence.recordRun(project(), run("run_no_prompt"), [assistantOnly]);
+  assert.equal(result.runSummary, null);
+  assert.equal([...client.records.values()].some((record) => record.kind === "run_summary"), false);
+  const empty = await intelligence.recordRun(project(), run("run_empty"), []);
+  assert.equal(empty.runSummary, null);
+});
+
 // ---------------------------------------------------------------------------
 // Write-side hygiene (2026-09-20). On the acceptance account on 2026-09-19, 30
 // of 54 memories were about the platform, 42 came from the system rather than

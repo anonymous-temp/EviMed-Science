@@ -65,6 +65,11 @@ test("runs, methods and the researcher's own acts are events; the platform's own
   const method = { id: "mth_1", createdAt: "2026-09-10T00:00:00Z",
     payload: { status: "approved", statusChangedAt: "2026-09-16T00:00:00Z", frontmatter: { name: "证据矩阵先行" }, origin: "inferred" } };
   assert.deepEqual(methodEvents(method).map((event) => [event.change, event.name]), [["learned", "证据矩阵先行"], ["approved", "证据矩阵先行"]]);
+  // Why it started is the rule, the same for every method, and was stored as
+  // the rule's English sentence; why it stopped is worth its line.
+  const reasoned = (status, statusReason) => methodEvents({ ...method, payload: { ...method.payload, status, statusReason } }).at(-1).reason;
+  assert.equal(reasoned("approved", "learned from the researcher’s own work: it takes effect immediately"), undefined);
+  assert.equal(reasoned("retired", "用上它的 3 次研究里有 3 次交付被退回，明显多于平常，已先停用。"), "用上它的 3 次研究里有 3 次交付被退回，明显多于平常，已先停用。");
 
   assert.deepEqual(feedbackTimelineEvents({ id: "f1", trigger: "memory-rejected", occurredAt: "2026-09-12T00:00:00Z", detail: { reason: "deleted", kind: "preference" } })
     .map((event) => event.change), ["memory-deleted"]);
