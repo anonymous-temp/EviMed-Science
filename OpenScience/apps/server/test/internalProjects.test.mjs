@@ -73,3 +73,38 @@ test("the gateway marker of a learning step names the project its runtime belong
   assert.match(marker, /projectId: project\.id/);
   assert.doesNotMatch(marker, /projectId: job\.projectId/);
 });
+
+test("a learning step writes its input at the learning project's root, on a workspace cleared of the last step", async () => {
+  // The runtime controller mounts a project's workspace root; a step scoped to
+  // a subdirectory never found its own input (2026-09-21).
+  const { mkdtemp, mkdir, writeFile, readdir, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const path = await import("node:path");
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-learning-"));
+  try {
+    const workspaceDir = path.join(root, "workspace");
+    await mkdir(path.join(workspaceDir, "deliverables", "method-candidate"), { recursive: true });
+    await writeFile(path.join(workspaceDir, "deliverables", "method-candidate", "SKILL.md"), "the last step's method");
+    await writeFile(path.join(workspaceDir, "distillation-input.json"), "{}");
+    const project = { id: LEARNING_PROJECT_ID, userId: "u1", rootDir: root, baseDir: root, workspaceDir, quotaBytes: 10_000_000 };
+    const runtime = createLearningRuntime({
+      config: { maxProjectBytes: 10_000_000 },
+      store: { async userById(id) { return { id }; }, async requireProject() { return project; }, async createProject() {} },
+      agentRuns: { async list() { return []; } },
+      runtimeManager: { async reserveBoundedRuntimeSession() { throw Object.assign(new Error("stop here"), { code: "fixture_stop" }); } },
+      researchSessions: {}, usageLedger: { async assertWithinLimits() { return { allowed: true }; } },
+      registry: Promise.resolve(new Map([["method-distillation", { id: "method-distillation", version: "1.0.0", runtimeAgent: "evimed-method-distillation" }]])),
+      prepareContext: async () => ({}),
+    });
+    await assert.rejects(runtime.dispatch({
+      job: { userId: "u1", projectId: "default", payload: {} }, userId: "u1", projectId: "default",
+      dispatchId: "method-distillation-0123abcd", capabilityId: "method-distillation", contractKind: "method-candidate",
+      input: { schemaVersion: 1, trigger: "delivered" }, question: "q",
+    }), { code: "fixture_stop" });
+    assert.deepEqual((await readdir(workspaceDir)).sort(), ["distillation-input.json"], "the last step's files are gone");
+    const { readFile } = await import("node:fs/promises");
+    assert.match(await readFile(path.join(workspaceDir, "distillation-input.json"), "utf8"), /"trigger":"delivered"/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

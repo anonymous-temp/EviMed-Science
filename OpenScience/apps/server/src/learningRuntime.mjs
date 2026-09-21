@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import fs from "node:fs/promises";
 import path from "node:path";
 
 import { validateDeliveryReceipt, workspaceLayout } from "@evimed/domain";
@@ -109,6 +110,23 @@ export function learningRunProject(project, directory) {
 }
 
 /**
+ * Empty the learning project's workspace before a step: nothing of the
+ * researcher's lives there, and a step must not read the last one's files.
+ * @param {any} project
+ */
+async function clearLearningWorkspace(project) {
+  if (project?.id !== LEARNING_PROJECT_ID) {
+    throw new HttpError(409, "learning_workspace_refused", "Only the learning project's workspace is cleared.");
+  }
+  await withProjectStorageMutation(project, async () => {
+    const entries = await fs.readdir(project.workspaceDir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      await fs.rm(path.join(project.workspaceDir, entry.name), { recursive: true, force: true });
+    }
+  });
+}
+
+/**
  * A bounded read that cannot grow past its limit after the initial stat.
  * @param {any} project @param {string} relative @param {number} limit
  */
@@ -183,10 +201,15 @@ export function createLearningRuntime({
       const project = await runProject({ userId: request.userId ?? job.userId, projectId: request.projectId ?? job.projectId,
         isolatedProject: request.isolatedProject === true });
       const directory = learningArtifactDirectory(capabilityId, dispatchId);
-      // A private evaluation allocates the entire project for one cell. Using
-      // its root also preserves isolation through the runtime controller, whose
-      // launch contract carries project identity rather than an arbitrary path.
-      const scoped = request.isolatedProject === true ? project : learningRunProject(project, directory);
+      // The whole project is the run's workspace — the learning project for a
+      // learning step, the cell's own project for an evaluation. The runtime
+      // controller mounts a project's workspace root by identity and ignores a
+      // subdirectory: a learning step scoped under `.evimed-learning/…` saw the
+      // root as /workspace, went looking for its own input, and the run policy
+      // found no dispatch index and treated it as a plain conversation, with no
+      // method (production, 2026-09-21). One learning project, one run at a
+      // time (below), so the root is safe to give it.
+      const scoped = project;
 
       // An existing dispatch is adopted, never repeated. A durable record of a
       // request that was already paid for is not permission to pay again.
@@ -205,6 +228,10 @@ export function createLearningRuntime({
       if (ledger.some((run) => run.status === "running")) {
         throw new HttpError(409, "runtime_busy", "The project has an unfinished run; the learning job will wait.");
       }
+      // A step starts on an empty workspace: the previous step's input, its
+      // deliverables and its receipt are not this step's to read. Only in the
+      // learning project, which holds nothing of the researcher's.
+      if (request.isolatedProject !== true) await clearLearningWorkspace(project);
 
       const bytes = Buffer.from(`${JSON.stringify(input)}\n`, "utf8");
       if (bytes.length > MAX_INPUT_BYTES) {
@@ -292,8 +319,7 @@ export function createLearningRuntime({
      */
     async readResult(identity) {
       const capabilityId = identity.capabilityId ?? identity.dispatchId.split("-").slice(0, -1).join("-");
-      const base = await runProject(identity);
-      const project = learningRunProject(base, learningArtifactDirectory(capabilityId, identity.dispatchId));
+      const project = await runProject(identity);
       const run = (await agentRuns.list(project)).find((item) => item.id === identity.runId
         && item.sessionId === identity.sessionId && item.dispatchId === identity.dispatchId);
       if (!run) return { status: "pending", reason: "learning_run_ledger_unavailable" };
@@ -341,9 +367,8 @@ export function createLearningRuntime({
       if (!run?.dispatchId?.startsWith?.("method-")) return false;
       const capabilityId = run.effectiveAgentId ?? run.agentId;
       if (!capabilityId) return false;
-      const scoped = learningRunProject(project, learningArtifactDirectory(capabilityId, run.dispatchId));
       if (runtimeManager.boundedRuntimeScope(project)?.runId === run.dispatchId) {
-        await runtimeManager.endBoundedRuntime(scoped, run.dispatchId);
+        await runtimeManager.endBoundedRuntime(project, run.dispatchId);
       }
       return true;
     },
