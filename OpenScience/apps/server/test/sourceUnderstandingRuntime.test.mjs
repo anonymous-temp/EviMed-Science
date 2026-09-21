@@ -1,7 +1,7 @@
 import { awaitBackgroundMonitor } from "./helpers/awaitBackgroundMonitor.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -61,6 +61,7 @@ async function fixture(t) {
       scheduleMonitor: () => calls.push("monitor"),
       dispatch: async (scoped, args, send) => {
         calls.push("dispatch");
+        state.dispatchStartedAt = Date.now();
         const run = { id: "run-one", sessionId: args.sessionId, dispatchId: args.dispatchId,
           status: "running", dispatchStatus: "dispatching", artifacts: [], kernelRequestIds: ["request-one"] };
         state.runs.push(run);
@@ -421,4 +422,15 @@ test("the sources project keeps a bounded number of finished runs' workspaces", 
   assert.ok(kept.includes(sourceRunProject(f.home, f.state.bound).activeWorkspace));
   assert.equal(kept.includes(`src_${"c".repeat(32)}-g1-${"0".repeat(24)}`), false, "the oldest went first");
   assert.ok(entries.includes("unrelated"), "nothing that is not a run workspace is touched");
+});
+
+test("the frozen input is written once the run exists, so its preserved copy is this run's own", async t => {
+  // 2026-09-21: written before the run began, the verbatim copy the package
+  // must carry kept the original's time, and every understanding failed
+  // specialist_required_output_stale with byte-identical files.
+  const f = await fixture(t);
+  await f.runtime.dispatch(f.request);
+  const scoped = sourceRunProject(f.home, f.state.bound);
+  const written = await stat(path.join(scoped.workspaceDir, "source-understanding-input.json"));
+  assert.ok(written.mtimeMs + 5 >= f.state.dispatchStartedAt, `${written.mtimeMs} < ${f.state.dispatchStartedAt}`);
 });
