@@ -75,9 +75,12 @@ export function UsageCard() {
           {(usage.reservedCalls ?? 0) > 0 && (
             <p className="mt-3 text-caption text-muted">另有 {usage.reservedCalls} 次调用已预留额度，等待完成。</p>
           )}
+          {/* Nothing reconciles these later: the provider's count is the last
+              thing a stream carries, and a call cut before it has none. The
+              card used to promise 「核对后自动更正」, which no code did. */}
           {(usage.uncertainCalls ?? 0) > 0 && (
             <p className="mt-3 text-caption text-warn">
-              {usage.uncertainCalls} 次调用的实际用量还在核对，先按预估的 {Number(usage.reservedCost ?? 0).toFixed(2)} {usage.currency} 计入额度，核对后自动更正。
+              {usage.uncertainCalls} 次调用在回答结束前中断，模型供应商没有回报它们的用量；它们按预留上限（共 {Number(usage.uncertainCost ?? usage.reservedCost ?? 0).toFixed(2)} {usage.currency}）计入最近 7 天的额度，不计入上面的折算金额。
             </p>
           )}
           <p className="mt-3 text-caption text-muted">折算金额仅用于额度保护和成本透明，不是账单，也不会触发收款。</p>

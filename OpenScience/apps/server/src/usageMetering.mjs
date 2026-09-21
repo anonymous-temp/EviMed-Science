@@ -90,6 +90,10 @@ function safeJson(text) {
   }
 }
 
+/** A complete SSE `[DONE]` event: the data line and the blank line that
+ *  dispatches it to the reader. */
+const SSE_DONE_EVENT = /(?:^|\n)data: ?\[DONE\][ \t]*\r?\n\r?\n/;
+
 /**
  * Keeps the tail of a response body so its usage frame can be read once the
  * body has been forwarded.
@@ -102,6 +106,7 @@ function safeJson(text) {
  */
 export function createUsageTail(maxBytes = 16 * 1024, { stream = false } = {}) {
   let tail = "";
+  let finished = false;
   const envelope = stream ? null : createTopLevelReceipt(maxBytes);
   return {
     /** @param {Uint8Array | string} chunk */
@@ -110,6 +115,14 @@ export function createUsageTail(maxBytes = 16 * 1024, { stream = false } = {}) {
       tail += value;
       if (tail.length > maxBytes) tail = tail.slice(tail.length - maxBytes);
       envelope?.observe(value);
+      // Only the new bytes and the few before them can complete the sentinel,
+      // so a long answer is not re-scanned once per chunk.
+      if (stream && !finished) finished = SSE_DONE_EVENT.test(tail.slice(-(value.length + 32)));
+    },
+    /** Whether a stream has delivered its `[DONE]` event, blank line included:
+     *  everything after it is the provider closing the connection. */
+    finished() {
+      return finished;
     },
     usage() {
       return envelope ? envelope.usage() : parseModelUsage(tail);

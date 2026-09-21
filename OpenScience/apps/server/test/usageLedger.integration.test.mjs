@@ -97,6 +97,7 @@ test("released, uncertain and settled calls are distinguished in durable summari
   assert.ok(summary.releasedCalls >= 1);
   assert.ok(summary.uncertainCalls >= 1);
   assert.ok(summary.reservedCost >= 0.75);
+  assert.ok(summary.uncertainCost > 0 && summary.uncertainCost <= summary.reservedCost, "the uncertain calls' own ceilings, apart from open reservations");
   assert.equal(summary.currency, "CNY");
   assert.ok(summary.byModel.some((item) => item.model === "deepseek-v4-flash"));
   assert.deepEqual(summary.priceVersions, ["evimed-reference-2026-09-05"]);

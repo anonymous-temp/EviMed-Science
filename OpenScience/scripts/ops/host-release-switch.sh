@@ -99,13 +99,26 @@ if printf '%s\n' "${changed[@]:-}" | grep -qx "open-science-backup"; then
     sleep 5
   done
 fi
-docker restart "$RECEIPT_CONTAINER" >/dev/null
-# Eight minutes: long enough for the backup scheduler's own five-minute retry,
-# should its start-up cycle have failed on the first mint attempt after all.
-for _ in $(seq 1 80); do
-  ready=$(docker exec "$WEB_CONTAINER" node -e "fetch('http://127.0.0.1:8787/api/ready').then(r=>r.json()).then(j=>{const c=j.data.checks;const bad=Object.keys(c).filter(k=>c[k]&&c[k].ok===false);console.log((j.data.ok?'ok ':'notok ')+Object.keys(c).length+' '+bad.join(','))}).catch(()=>console.log('unreachable'))" 2>/dev/null || echo unreachable)
-  case "$ready" in ok*) break ;; esac
-  sleep 6
+# Two mints at most. The receipt is a live kernel chain against the provider,
+# and one chain can fail for a reason that is not the release: on 2026-09-21
+# two of three releases needed the receipt container restarted by hand, each
+# time because a call the kernel had read whole was booked `uncertain` (the
+# gateway waited for DeepSeek to close a body the kernel had already dropped;
+# fixed in modelGateway.mjs). A second mint is what a person did then; a
+# second failure is a real one and stops the switch before retention.
+for mint in 1 2; do
+  docker restart "$RECEIPT_CONTAINER" >/dev/null
+  # Eight minutes: long enough for the backup scheduler's own five-minute retry,
+  # should its start-up cycle have failed on the first mint attempt after all.
+  for _ in $(seq 1 80); do
+    ready=$(docker exec "$WEB_CONTAINER" node -e "fetch('http://127.0.0.1:8787/api/ready').then(r=>r.json()).then(j=>{const c=j.data.checks;const bad=Object.keys(c).filter(k=>c[k]&&c[k].ok===false);console.log((j.data.ok?'ok ':'notok ')+Object.keys(c).length+' '+bad.join(','))}).catch(()=>console.log('unreachable'))" 2>/dev/null || echo unreachable)
+    case "$ready" in ok*) break ;; esac
+    sleep 6
+  done
+  # Only the receipt (`modelGateway`) earns the second mint; anything else
+  # failing is not something minting again can change.
+  case "$ready" in "notok "*" modelGateway") [ "$mint" -eq 1 ] && echo "receipt did not mint (${ready}); minting once more" && continue ;; esac
+  break
 done
 echo "readiness: ${ready}"
 
