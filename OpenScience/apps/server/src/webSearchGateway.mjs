@@ -57,7 +57,7 @@ function sendError(res, error, onFailure) {
   const message = error instanceof WebSearchGatewayError ? error.message : "Web search failed.";
   // See the note in modelGateway.sendError.
   if (typeof onFailure === "function") {
-    onFailure({ code, status, truncated: res.headersSent && !res.writableEnded });
+    onFailure({ code, status, truncated: res.headersSent && !res.writableEnded, upstream: error?.upstream ?? null });
   }
   sendJson(res, status, { error: message, code });
 }
@@ -234,11 +234,14 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
           });
           if (upstream.ok) break;
           await upstream.body?.cancel().catch(() => {});
-          lastError = gatewayError(
+          // The backend's own status goes to the error ledger: 138 of these in
+          // twelve hours on 2026-09-21 were recorded without it, and every
+          // replayed query answered 200.
+          lastError = Object.assign(gatewayError(
             upstream.status === 429 ? 429 : 502,
             upstream.status === 429 ? "web_search_rate_limited" : "web_search_upstream_error",
             `The web-search backend returned HTTP ${upstream.status}.`,
-          );
+          ), { upstream: { host: endpoint.hostname, status: upstream.status } });
           upstream = null;
         } catch (error) {
           if (controller.signal.reason?.name === "TimeoutError") {

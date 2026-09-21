@@ -59,7 +59,7 @@ function searxngResponse(payload, { status = 200 } = {}) {
 async function run(config, fetchImpl, body, options) {
   const handler = createWebSearchGatewayHandler(config, options?.runtimeManager ?? runtimeManager, { fetchImpl });
   const res = response();
-  await handler(request(body, options), res);
+  await handler(request(body, options), res, options?.onFailure);
   return res;
 }
 
@@ -156,6 +156,17 @@ test("a transient backend failure is retried once, then surfaced", async () => {
   assert.equal(attempts, 2);
   assert.equal(failed.statusCode, 502);
   assert.equal(failed.json().code, "web_search_upstream_error");
+});
+
+test("a backend refusal reaches the error ledger with the backend's own status", async () => {
+  // 2026-09-21: 138 `web_search_upstream_error` in twelve hours, and not one
+  // said what SearXNG had answered.
+  const failures = [];
+  const failed = await run(configured, async () => searxngResponse({}, { status: 503 }), { query: "x" },
+    { onFailure: (failure) => failures.push(failure) });
+  assert.equal(failed.statusCode, 502);
+  assert.deepEqual(failures.map((failure) => [failure.code, failure.upstream]),
+    [["web_search_upstream_error", { host: "open-science-web-search", status: 503 }]]);
 });
 
 test("a non-JSON backend response is not passed through as a result set", async () => {

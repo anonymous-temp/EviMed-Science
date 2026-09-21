@@ -169,6 +169,22 @@ test("public-source gateway authenticates the runtime and forwards bounded offic
   }
 });
 
+test("an official source's refusal reaches the error ledger with its host and status, never its URL", async (t) => {
+  // 2026-09-21: 202 `public_source_gateway_upstream_error` in twelve hours,
+  // none of which said which source had refused or how.
+  const failures = [];
+  const handler = createPublicSourceGatewayHandler({ publicSourceGatewayTimeoutMs: 1_000 }, runtimeManager(), {
+    fetchImpl: async () => new Response("busy", { status: 503, headers: { "content-type": "text/plain" } }),
+  });
+  const server = createServer((req, res) => handler(req, res, (failure) => failures.push(failure)));
+  const base = await listen(server);
+  t.after(() => close(server));
+  const response = await gatewayRequest(base, { url: "https://api.crossref.org/works?query=observed&mailto=x", accept: ["application/json"] });
+  assert.equal(response.status, 502);
+  assert.deepEqual(failures.map((failure) => [failure.code, failure.upstream]),
+    [["public_source_gateway_upstream_error", { host: "api.crossref.org", status: 503 }]]);
+});
+
 test("the API mode reads APIs only: web pages are the web-read mode's", async (t) => {
   // Until 2026-09-20 seventeen official hosts' HTML paths were fetched here as
   // raw HTML — unpaced, robots.txt unread, never rendered. Pages now go
