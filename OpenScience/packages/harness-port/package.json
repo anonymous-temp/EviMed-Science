@@ -30,7 +30,7 @@
     "./runtime-ui-controls": "./src/runtimeUiControls.mjs"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs",
+    "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/*.test.mjs",
     "lint": "eslint src test index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

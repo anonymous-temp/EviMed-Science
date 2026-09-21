@@ -47,7 +47,7 @@
     }
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs",
+    "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/*.test.mjs",
     "lint": "eslint plugins src test scripts client.mjs index.mjs --ext .mjs --max-warnings 0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepack": "node scripts/build-client.mjs && node ../../scripts/build/generate-capability-manifests.mjs --out packages/socket/capabilities && node -e \"require('node:fs').cpSync('../../capability-skills','capability-skills',{recursive:true})\"",
