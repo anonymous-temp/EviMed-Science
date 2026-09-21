@@ -6,7 +6,7 @@ import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget
 import { SOURCES_PROJECT_ID, SOURCES_PROJECT_NAME } from "./internalProjects.mjs";
 import { issueModelGatewayBudgetMarker } from "./modelGateway.mjs";
 import { sourceAttemptId } from "./sourceFiles.mjs";
-import { HttpError, assertProjectCapacity, normalizeWorkspaceRelativePath, openScopedFileNoFollow,
+import { HttpError, assertProjectCapacity, normalizeWorkspaceRelativePath, openScopedDirectoryNoFollow, openScopedFileNoFollow,
   resolveScopedPath, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
 const MAX_INPUT_BYTES = 8 * 1024 * 1024;
@@ -214,12 +214,15 @@ export function createSourceUnderstandingRuntime({ config, store, sources, agent
       const scoped = sourceRunProject(home, binding);
       let reserved = false;
       try {
+        const file = resolveScopedPath(scoped.workspaceDir, INPUT_FILE);
         const session = await sources.withIngestionLease(job, async () => {
-          const file = resolveScopedPath(scoped.workspaceDir, INPUT_FILE);
+          // The directory now, the input once the run exists (below): the
+          // controller mounts only a workspace that is already there.
           await withProjectStorageMutation(home, async () => {
             await pruneRunWorkspaces(home, scoped.activeWorkspace);
             await assertProjectCapacity(home, file, bytes.length, config);
-            await writeFileAtomicNoFollow(home.baseDir, file, bytes, { mode: 0o600 });
+            const opened = await openScopedDirectoryNoFollow(home.baseDir, scoped.workspaceDir, { create: true });
+            await opened.handle.close();
           });
           const value = await runtimeManager.reserveBoundedRuntimeSession(scoped, { runId: dispatchId, ...budget.scope });
           reserved = true;
@@ -236,6 +239,14 @@ export function createSourceUnderstandingRuntime({ config, store, sources, agent
           let promptAttempted = false;
           try {
             await sources.bindUnderstandingRun(job, { runId: dispatchedRun.id, sessionId: session.id, dispatchId, ...binding });
+            // The frozen input is part of this run, so it is written once the
+            // run exists. The package must carry it back verbatim, and a copy
+            // keeps its original's time: written before the run began, the
+            // preserved input was judged "a previous run's file" and every
+            // understanding failed `specialist_required_output_stale`
+            // (production, 2026-09-21, byte-identical copies).
+            await sources.withIngestionLease(job, () => withProjectStorageMutation(home, () =>
+              writeFileAtomicNoFollow(home.baseDir, file, bytes, { mode: 0o600 })));
             await assertCurrent(job);
             // Only this source's owned directory is context for this run; do
             // not recursively synchronize the parent knowledge base into it.
