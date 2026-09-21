@@ -13,6 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
+import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
@@ -1591,6 +1592,18 @@ export function createWebApiApp(overrides = {}) {
           });
         });
       }
+      // A finished learning step lets go of the runtime it held. `complete`
+      // existed and nothing called it, so a distillation's bounded scope
+      // outlived its run and the project answered 423 until someone stopped
+      // the container by hand (2026-09-21, the first live distillations).
+      if (learningRuntime) {
+        await learningRuntime.complete(project, run).catch(async (error) => {
+          await securityAudit(config, "learning.runtime.release", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
+          });
+        });
+      }
       // An independent verification is not an episode: it owns its own bounded
       // runtime scope and folds into one claim, not into a digest fold.
       //
@@ -1770,6 +1783,13 @@ export function createWebApiApp(overrides = {}) {
       // Evaluation receipts feed only the measured method. They must not
       // recursively distil benchmark answers or seed the researcher's memory.
       if (evaluationRun) return;
+      // Nor does the platform's own background work: a distillation, a
+      // relations pass or a source being understood reads excerpts of the
+      // researcher's runs, and extracting memory from it paid a model call to
+      // re-read what was already extracted (the first live distillation,
+      // 2026-09-21: 206 messages read, an empty-extraction notice on the run).
+      const agentId = String(run.effectiveAgentId ?? run.agentId ?? "");
+      if (agentId && (await agentRegistry)?.get?.(agentId)?.visibility === "internal") return;
       // Queue the lessons this run is evidence for — a finished delivery, a
       // correction, a repeated routine (learningTriggers.mjs). After the
       // memory write when there is one, because the extractor is what says the
@@ -2610,7 +2630,7 @@ export function createWebApiApp(overrides = {}) {
     void (async () => {
       const user = await store.userById(String(userId));
       if (!user) return;
-      const listed = (await store.listProjects(user)).filter((entry) => !entry.archivedAt);
+      const listed = (await store.listProjects(user)).filter((entry) => !entry.archivedAt && !isInternalProject(entry.id));
       await runtimeManager.warmMostRecent(await Promise.all(listed.map((entry) => store.requireProject(user, entry.id))));
     })().catch(() => {
       // isolated: a warm start is a head start, never a precondition.
@@ -2941,7 +2961,7 @@ export function createWebApiApp(overrides = {}) {
             user: store.publicUser(user),
             tenant: { id: user.tenantId ?? user.id, model: "individual-account", role: "owner" },
             project: { id: project.id, name: project.name },
-            projects: await store.listProjects(user),
+            projects: (await store.listProjects(user)).filter((item) => !isInternalProject(item.id)),
             // The conversation to reopen in this project (C4), or null when
             // the researcher has not worked here yet — or the ledger cannot be
             // read, which is not a reason the shell should fail to render.
@@ -3130,6 +3150,12 @@ export function createWebApiApp(overrides = {}) {
       if (pathname === "/api/agent-runs" && req.method === "GET") {
         const ctx = await context(req, res);
         let runs = await agentRuns.withPlanProgress(ctx.project, await agentRuns.recover(ctx.project));
+        // The platform's own background runs — a source being understood, a
+        // method being distilled — are not the researcher's conversations;
+        // listed, they read as conversations nobody started (2026-09-21, the
+        // first live distillations appeared in 「我的研究」).
+        const registry = await agentRegistry;
+        runs = runs.filter((run) => registry?.get?.(String(run.effectiveAgentId ?? run.agentId ?? ""))?.visibility !== "internal");
         // Runs adopted before their first message could be read learn it in
         // the background; this answer does not wait for that (C3).
         agentRuns.backfillQuestions(ctx.project, runs);
@@ -3633,7 +3659,9 @@ export function createWebApiApp(overrides = {}) {
         // With how much each has been used (C4): runs and the last moment
         // anything happened in one. A ledger that cannot be read is reported
         // as unknown activity for that row, never as a failed list.
-        const projects = await store.listProjects(user);
+        // The platform's own background projects are not the researcher's
+        // (`internalProjects.mjs`).
+        const projects = (await store.listProjects(user)).filter((item) => !isInternalProject(item.id));
         const data = await Promise.all(projects.map(async (item) => {
           try {
             return { ...item, ...(await agentRuns.activitySummary(await store.requireProject(user, item.id))) };
@@ -3653,11 +3681,14 @@ export function createWebApiApp(overrides = {}) {
         // A name in any language, and an id the researcher never has to see
         // (C4): the id is a path segment under projects/, so it stays ASCII
         // and is derived; a caller that still sends one keeps it.
-        const existing = await store.listProjects(user);
+        const existing = (await store.listProjects(user)).filter((project) => !isInternalProject(project.id));
         if (body.id == null && body.name == null) throw new HttpError(400, "invalid_payload", "A project needs a name.");
         const id = body.id == null
           ? projectIdFromName(String(body.name), new Set(existing.map((project) => project.id)))
           : safeId(assertString(body.id, "id", { max: 64 }), "project id");
+        // The learning loop's project is made by the loop; the paired
+        // evaluation still makes its own through this route.
+        if (id === LEARNING_PROJECT_ID) throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
         const name = projectDisplayName(body.name ?? id);
         // Counted before the create, and only for a project that is new: a
         // per-project storage quota and a per-user runtime limit bound nothing
