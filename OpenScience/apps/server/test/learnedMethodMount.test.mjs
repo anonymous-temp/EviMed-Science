@@ -46,8 +46,12 @@ const payloadFor = (name, extra = {}) => ({
 /** @param {any[]} documents */
 function fakeLearning(documents) {
   return {
-    async approvedMethods(_userId, { projectId } = {}) {
-      return documents.filter((document) => (projectId === null ? document.projectId === null : document.projectId === projectId));
+    /** @type {any[]} */
+    calls: [],
+    async approvedMethods(_userId, options = {}) {
+      this.calls.push(options);
+      // The service's own rule: no project named reads the whole library.
+      return options.projectId === undefined ? documents : documents.filter((document) => document.projectId === options.projectId);
     },
   };
 }
@@ -85,13 +89,16 @@ test("a directory name can never collide with the capsule half's", () => {
   assert.notEqual(learnedMethodDirectoryName("method:learned:quoting"), name);
 });
 
-test("project methods come before account-wide ones and nothing is listed twice", async () => {
-  const shared = doc("method:learned:shared", "shared", { projectId: null });
-  const learning = fakeLearning([doc("method:learned:local", "local"), shared]);
+test("a researcher's methods follow them: every project's are mounted, none twice", async () => {
+  // 2026-09-21: a method learnt in one project reached no other, because the
+  // mount read this project's methods plus account-wide ones and nothing ever
+  // wrote an account-wide one.
+  const elsewhere = doc("method:learned:elsewhere", "elsewhere", { projectId: "p2" });
+  const learning = fakeLearning([doc("method:learned:local", "local"), elsewhere]);
   const selected = await selectLearnedMethods(learning, { userId: "u1", projectId: "p1" });
-  assert.deepEqual(selected.map((method) => method.id), ["method:learned:local", "method:learned:shared"],
-    "same createdAt, so the tie breaks on id and the project scope was read first");
+  assert.deepEqual(selected.map((method) => method.id).sort(), ["method:learned:elsewhere", "method:learned:local"]);
   assert.equal(new Set(selected.map((method) => method.id)).size, selected.length);
+  assert.deepEqual(learning.calls, [{}], "one read of the whole library, not one per scope");
 });
 
 test("the most recently made effective survives truncation", async () => {

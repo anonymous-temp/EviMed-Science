@@ -113,13 +113,10 @@ function methodFileBytes(payload) {
 }
 
 /**
- * The approved learned methods this project's runs should mount.
- *
- * Project-scoped methods first, then account-wide ones, deduplicated by id —
- * the same ordering rule the capsule half uses for activations, and for the
- * same reason: what a run reads and what a run recalls must not come from
- * different places. Within each scope the most recently approved comes first,
- * so what survives truncation is the most recent thing that passed a gate.
+ * The approved learned methods a run should mount: the researcher's whole
+ * library, whichever project each was learnt in. The most recently approved
+ * comes first, so what survives truncation is the most recent thing that
+ * passed a gate.
  *
  * `statusChangedAt` is the field `#setStatus` stamps on every promotion, and it
  * is also what `createCandidate` stamps on a method that was effective from
@@ -167,12 +164,15 @@ export async function selectLearnedMethods(learning, scope) {
     documents.push(document);
     trials.add(String(document.id));
   }
-  for (const projectId of [scope.projectId, null]) {
-    const page = await learning.approvedMethods(scope.userId, { projectId });
-    for (const document of page ?? []) {
-      if (documents.some((existing) => existing.id === document.id)) continue;
-      documents.push(document);
-    }
+  // The whole library, not this project's: how a researcher works follows
+  // them, and a method learnt in one project is theirs in the next (owner's
+  // capsule vision — one capsule per person; 2026-09-21). It used to read this
+  // project's methods plus account-wide ones, and nothing ever wrote an
+  // account-wide one, so a method learnt in 「我的研究」 never reached a new
+  // project at all.
+  for (const document of await learning.approvedMethods(scope.userId) ?? []) {
+    if (documents.some((existing) => existing.id === document.id)) continue;
+    documents.push(document);
   }
 
   /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, approvedAt: number, trial?: boolean}[]} */

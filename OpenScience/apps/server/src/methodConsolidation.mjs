@@ -208,11 +208,13 @@ export class MethodConsolidation {
   }
 
   /**
-   * One night's pass over a researcher's whole library.
+   * One pass over a researcher's whole library — every project's methods,
+   * because they follow the researcher (`selectLearnedMethods`). The job's
+   * project is only where its model steps run.
    * @param {{job: any}} request
    */
   async sleep({ job }) {
-    const page = await this.learning.listMethods(job.userId, { projectId: job.projectId, limit: CONSOLIDATION_LIMITS.maxMethods });
+    const page = await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods });
     const methods = (page.items ?? []).filter((item) => item.payload?.status !== "retired");
     if (methods.length === 0) {
       return { action: "sleep", methods: 0, groups: 0, relations: 0, builds: 0, screened: false, screenDropped: 0, promoted: [], queuedForEvaluation: [], retirements: [], graphIssues: [] };
@@ -245,7 +247,7 @@ export class MethodConsolidation {
 
     // Levels are recomputed after the builder has had its turn, because the
     // builder is the only thing that adds a dependency.
-    const refreshed = (await this.learning.listMethods(job.userId, { projectId: job.projectId, limit: CONSOLIDATION_LIMITS.maxMethods })).items ?? [];
+    const refreshed = (await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods })).items ?? [];
     const records = refreshed.map(methodRecordFrom);
     const graph = validateMethodGraph(records);
     const levels = computeMethodLevels(records).levels;
@@ -290,7 +292,7 @@ export class MethodConsolidation {
       }
     }
 
-    const retirements = await this.learning.retirementProposals(job.userId, { projectId: job.projectId, nowMs: this.now().getTime() });
+    const retirements = await this.learning.retirementProposals(job.userId, { nowMs: this.now().getTime() });
     for (const entry of retirements) {
       if (entry.proposal.immediate) {
         await this.learning.retire(job.userId, entry.document.id, {
@@ -329,7 +331,7 @@ export class MethodConsolidation {
     const methodId = String(job.payload?.methodId ?? "");
     if (!methodId) throw new HttpError(400, "consolidate_payload_invalid", "An integrate job must name a method.");
     const subject = await this.learning.getMethod(job.userId, methodId);
-    const page = await this.learning.listMethods(job.userId, { projectId: job.projectId, limit: CONSOLIDATION_LIMITS.maxMethods });
+    const page = await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods });
     const neighbours = (page.items ?? []).filter((item) => item.id !== methodId && item.payload?.status !== "retired");
     const pairs = candidatePairs([subject, ...neighbours]).filter((pair) => pair.a === methodId || pair.b === methodId);
     const group = [subject, ...pairs.slice(0, CONSOLIDATION_LIMITS.maxGroupSize - 1)

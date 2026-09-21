@@ -14,7 +14,7 @@
   "concurrency": 1,
   "margin": 0.02,
   "bootstrapSamples": 2000,
-  "timeoutMinutes": 45,
+  "timeoutMinutes": 120,
   "pollSeconds": 5,
   "budget": {
     "costCap": 12.0,

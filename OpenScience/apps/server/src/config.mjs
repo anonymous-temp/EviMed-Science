@@ -713,8 +713,11 @@ export function loadConfig(overrides = {}) {
     ),
     // A systematic review screens and extracts hundreds of records, so the run
     // monitor has to outlast the specialist rather than the other way round.
+    // Twenty-four hours since 2026-09-21 (was four): the owner ruled that no
+    // time or money ceiling may stop the product from being exercised while
+    // it is being tested; this one only ever ended runs that were working.
     agentRunMonitorTimeoutMs: Number(
-      overrides.agentRunMonitorTimeoutMs ?? process.env.OPEN_SCIENCE_AGENT_RUN_MONITOR_TIMEOUT_MS ?? 4 * 60 * 60_000,
+      overrides.agentRunMonitorTimeoutMs ?? process.env.OPEN_SCIENCE_AGENT_RUN_MONITOR_TIMEOUT_MS ?? 24 * 60 * 60_000,
     ),
     maxRuntimeProxyConnections: Number(
       overrides.maxRuntimeProxyConnections ?? process.env.OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS ?? 64,
@@ -1238,12 +1241,16 @@ export function loadConfig(overrides = {}) {
     sourceIngestionLeaseMs: Number(
       overrides.sourceIngestionLeaseMs ?? process.env.OPEN_SCIENCE_SOURCE_INGESTION_LEASE_MS ?? 900_000,
     ),
+    // Source understanding's own caps, counted over `source-understanding`
+    // spend only (`boundedRunBudget.mjs`). Zero means no cap, the default since
+    // 2026-09-21; they were ¥3 a source, ¥10 a day, ¥50 a week, and compared
+    // with everything the account spent.
     sourceUnderstandingRunLimitCny: Number(overrides.sourceUnderstandingRunLimitCny
-      ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_RUN_LIMIT_CNY ?? 3),
+      ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_RUN_LIMIT_CNY ?? 0),
     sourceUnderstandingDailyLimitCny: Number(overrides.sourceUnderstandingDailyLimitCny
-      ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_DAILY_LIMIT_CNY ?? 10),
+      ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_DAILY_LIMIT_CNY ?? 0),
     sourceUnderstandingWeeklyLimitCny: Number(overrides.sourceUnderstandingWeeklyLimitCny
-      ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_WEEKLY_LIMIT_CNY ?? 50),
+      ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_WEEKLY_LIMIT_CNY ?? 0),
     // Knowledge-base search (`kb_search`, 2026-09-20). One switch for the tool
     // and the index behind it: off, the gateway answers `kb_search_disabled`,
     // nothing is indexed or embedded, and a run reads the files as before.
@@ -1292,22 +1299,24 @@ export function loadConfig(overrides = {}) {
     // deployment has run with it on. A knob that must be found and set before
     // any evidence accumulates is a knob that produces no evidence.
     //
-    // Three things bound what being on costs. The worker declines outside
-    // `learningWindow`, where model calls are half price; `learningConcurrency`
-    // is 2; and a run is only queued for distillation when it needed at least
-    // one repair round and then succeeded, which is a small fraction of runs.
-    // Setting `OPEN_SCIENCE_LEARNING_ENABLED=false` still turns it off.
+    // What bounds it now is `learningConcurrency` alone. The off-peak window
+    // and the three CNY caps were removed as defaults on 2026-09-21 (owner:
+    // 「所有的时间预算和资金预算全部先取消」): the loop had never completed a
+    // single lesson in production, and a loop that may only run at night
+    // under a budget it shares with the researcher cannot be tested at all.
+    // Both remain settable; setting `OPEN_SCIENCE_LEARNING_ENABLED=false`
+    // still turns the loop off.
     learningEnabled: overrides.learningEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_ENABLED", true),
     learningPollMs: Number(overrides.learningPollMs ?? process.env.OPEN_SCIENCE_LEARNING_POLL_MS ?? 5_000),
     learningLeaseMs: Number(overrides.learningLeaseMs ?? process.env.OPEN_SCIENCE_LEARNING_LEASE_MS ?? 900_000),
     // Two, because the learning worker shares a 15 GB machine with the
     // production control plane and every job it claims starts a container.
     learningConcurrency: Number(overrides.learningConcurrency ?? process.env.OPEN_SCIENCE_LEARNING_CONCURRENCY ?? 2),
-    // The off-peak window, which is an economic argument rather than a
-    // scheduling preference: `priceUsage` halves a model call outside peak
-    // hours, so a loop that only ever runs at night costs half as much as the
-    // same loop run whenever a job happens to be queued.
-    learningWindow: String(overrides.learningWindow ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW ?? "22:00-09:00"),
+    // An optional off-peak window, `HH:MM-HH:MM`. Empty — the default — means
+    // any time: a lesson is distilled as soon as its run has finished, and the
+    // consolidation after it runs within the hour. The window is an economic
+    // lever (`priceUsage` halves a call off peak), not a correctness one.
+    learningWindow: String(overrides.learningWindow ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW ?? ""),
     // Which zone the window above is written in.
     //
     // It used to be whatever the process's clock said, and the web container
@@ -1321,12 +1330,21 @@ export function loadConfig(overrides = {}) {
     // back in the working day. An empty value reads the process clock.
     learningWindowTimeZone: String(overrides.learningWindowTimeZone
       ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE ?? "Asia/Shanghai"),
+    // The learning loop's own caps, counted over `learning` spend only
+    // (`boundedRunBudget.mjs`). Zero means no cap, the default.
     learningDailyLimitCny: Number(overrides.learningDailyLimitCny
-      ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 5),
+      ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 0),
     learningWeeklyLimitCny: Number(overrides.learningWeeklyLimitCny
-      ?? process.env.OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY ?? 20),
+      ?? process.env.OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY ?? 0),
     learningRunLimitCny: Number(overrides.learningRunLimitCny
-      ?? process.env.OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY ?? 1),
+      ?? process.env.OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY ?? 0),
+    // How often the consolidation pass is queued for each researcher with a
+    // method library. Hourly, and once as soon as a new method lands: it was
+    // once a night inside the window, so a method learned today could not be
+    // related, checked or retired until tomorrow — and in production it never
+    // ran at all.
+    learningConsolidationIntervalMs: Number(overrides.learningConsolidationIntervalMs
+      ?? process.env.OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS ?? 3_600_000),
     // How the nightly job runs a paired evaluation, if a deployment wants it to.
     //
     // Empty by default, and an `evaluate` job then fails by name rather than
