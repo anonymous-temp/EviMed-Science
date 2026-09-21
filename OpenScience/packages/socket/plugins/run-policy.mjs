@@ -79,7 +79,7 @@ import {
   awaitSelection,
   buildDelegation,
   buildInlineMethod,
-  namedCapabilityIds,
+  namedCapabilityIds, routedCapabilityOf,
   childReport,
   completionCheck,
   contentTriggerIssues,
@@ -537,8 +537,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (entry.inlineCapabilities.has(capabilityId)) return false
     const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === capabilityId)
     // An internal capability is dispatched by its own background workflow and
-    // is not something a conversation takes on.
-    if (!manifest || manifest.visibility === 'internal') return false
+    // is not something a conversation takes on — except in that workflow's own
+    // run, which the control plane routed to it in the context it wrote. That
+    // run does the work here now that delegation is on demand, and refusing it
+    // its method failed every distillation, relation and source-understanding
+    // run as `specialist_required_skill_missing` (production, 2026-09-21: the
+    // distiller loaded a prose-polishing skill instead and wrote no method).
+    if (!manifest) return false
+    if (manifest.visibility === 'internal' && routedCapabilityOf(entry.contextText) !== capabilityId) return false
     const item = options.item ?? null
     const kind = resolveContractKind(manifest, options.contractKind ?? item?.contractKind ?? '')
     const contractKind = kind.ok ? kind.contractKind : ''
@@ -2040,6 +2046,16 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
    */
   const reviewSubmission = async (entry, call) => {
     if (!config.reviewEnabled) return null
+    // A report's claims are what the reviewer reads. A method candidate, a
+    // relations verdict or a source digest is the platform's own bookkeeping
+    // for its background work, and a reviewer set on one reads it as a report:
+    // on the first live distillation it raised four 「contradictions」 against
+    // a SKILL.md and the run spent twelve minutes searching the literature to
+    // answer them, then delivered nothing (2026-09-21).
+    const capabilities = ctx.get('evimedCapabilities') ?? []
+    const internal = entry.items.length > 0 && entry.items.every((/** @type {any} */ item) =>
+      capabilities.find((/** @type {any} */ manifest) => manifest.id === String(item.capability ?? ''))?.visibility === 'internal')
+    if (internal) return null
     const parent = ctx.get('agents')?.get?.(call.agentId)
     const cwd = entry.cwd || call.cwd
     const result = await runReview(ctx, {

@@ -2257,3 +2257,49 @@ test("a gate run records the check that raised each issue, not only the issue", 
   );
   assert.ok(row.severities.includes("required"), "the fixture was rejected, so at least one finding must be required");
 });
+
+test("an internal capability's own dispatched run receives its method; a conversation naming it does not", async () => {
+  // 2026-09-21, production: delegation is on demand, so the distillation run
+  // does its work in its own session — and the inline activation refused every
+  // internal capability. The distiller loaded a prose-polishing skill instead,
+  // wrote no method, and the run failed as specialist_required_skill_missing.
+  // The control plane's routing line in the context it wrote is what says the
+  // session is that capability's run.
+  const capability = { id: "method-distillation", visibility: "internal", skills: ["method-distillation"], tools: [], persona: "Method distiller",
+    produces: [{ contractKind: "method-candidate", outputs: [{ path: "SKILL.md", required: true }, { path: "method-candidate.json", required: true }] }] };
+  const plan = { action: "write", clarifications: ["A frozen distillation input"],
+    deliverables: [{ id: "method-candidate", contractKind: "method-candidate", capability: "method-distillation", title: "Method candidate", dependsOn: [] }] };
+  const body = "---\nname: method-distillation\ndescription: Distils one method.\n---\n\n# Method distillation\nRead distillation-input.json first.\n";
+
+  const routed = await nativePolicyFixture({ briefId: "learning_run", capabilities: [capability], skills: { "method-distillation": body } });
+  routed.files.set(`/workspace/${workspaceLayout.briefContextFile}`, "平台已根据当前问题确定性路由到专项能力：method-distillation（evimed-method-distillation）。\n");
+  await routed.step(1);
+  assert.equal((await routed.execute("evimed_plan", plan)).value.ok, true);
+  await routed.step(2);
+  assert.ok(routed.injected.some((message) => JSON.stringify(message).includes("Read distillation-input.json first.")),
+    "the routed run is handed its method");
+
+  const conversation = await nativePolicyFixture({ briefId: "conversation_run", capabilities: [capability], skills: { "method-distillation": body } });
+  conversation.files.set(`/workspace/${workspaceLayout.briefContextFile}`, "本轮未命中确定性专项路由，由开放域答问主路处理。 method-distillation\n");
+  await conversation.step(1);
+  await conversation.execute("evimed_plan", plan);
+  await conversation.step(2);
+  assert.ok(!conversation.injected.some((message) => JSON.stringify(message).includes("Read distillation-input.json first.")),
+    "a conversation that merely names an internal capability is not given it");
+});
+
+test("submitting internal background work does not call the report reviewer", async () => {
+  // The reviewer reads a report's claims; set on a method candidate it raised
+  // four contradictions against a SKILL.md and the run spent twelve minutes
+  // answering them (2026-09-21).
+  let reviews = 0;
+  const f = await nativePolicyFixture({ reviewEnabled: true,
+    capabilities: [{ id: "source-understanding", visibility: "internal", skills: [], tools: [], persona: "Source analyst",
+      produces: [{ contractKind: "source-understanding", outputs: [{ path: "source-understanding.json", required: true }] }] }],
+    subagentStart: () => { reviews++; return { id: "review-child", result: Promise.resolve({ stopReason: "completed", output: "[]" }) }; } });
+  await f.step(1);
+  await f.execute("evimed_plan", { action: "write", clarifications: ["Frozen source"],
+    deliverables: [{ id: "source-result", contractKind: "source-understanding", capability: "source-understanding", title: "Source", dependsOn: [] }] });
+  await f.execute("evimed_submit_deliverable", { deliverableId: "source-result" });
+  assert.equal(reviews, 0);
+});
