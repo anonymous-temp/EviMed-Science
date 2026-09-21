@@ -9,6 +9,17 @@ test("OpenList calls only the pinned list, get and link contracts", async (t) =>
   const server = createServer(async (req, res) => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
+    // node --test runs files in parallel processes, and another file's poller
+    // can reach an ephemeral port this server now holds (a stray GET / broke
+    // this assertion once in test:web). A request that is neither this
+    // client's nor on a contract path is not the client's; one on a contract
+    // path without the token still lands in `calls` and fails below.
+    const url = String(req.url ?? "");
+    if (req.headers.authorization !== "test-only-openlist-token" && !url.startsWith("/api/") && !url.startsWith("/p/")) {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
     calls.push({ method: req.method, url: req.url, authorization: req.headers.authorization,
       body: chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : null });
     if (req.url === "/p/research/%E8%AE%BA%E6%96%87.pdf") {

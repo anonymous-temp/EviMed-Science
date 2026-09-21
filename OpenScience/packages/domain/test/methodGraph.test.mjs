@@ -215,13 +215,15 @@ test("a distilled method takes effect immediately too, whatever its evidence say
   // losing one, an inconclusive one, a stale baseline, a verdict about other
   // text, and no baseline at all are all still effective.
   const losing = foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "worse" });
-  for (const [name, learning, options] of [
+  /** @type {[string, any, any][]} */
+  const cases = [
     ["no evaluation", threeSuccesses(), {}],
     ["a losing one", losing, { currentBaselineDigest: DIGEST_B }],
     ["an inconclusive one", foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "inconclusive" }), {}],
     ["a moved baseline", foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "better" }), { currentBaselineDigest: DIGEST_C }],
     ["no baseline at all", foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "better" }), {}],
-  ]) {
+  ];
+  for (const [name, learning, options] of cases) {
     assert.equal(promotionVerdict(method({ learning }), options).status, "approved", `${name} must not withhold a method`);
   }
 
@@ -240,7 +242,7 @@ test("a distilled method takes effect immediately too, whatever its evidence say
 
 test("a measured-worse revision is retired at once, and only on the text it measured", () => {
   const now = Date.now();
-  const worse = (candidateDigest) => foldEvaluation(threeSuccesses(), {
+  const worse = (/** @type {string} */ candidateDigest) => foldEvaluation(threeSuccesses(), {
     report: "r.json", baselineDigest: DIGEST_B, candidateDigest, verdict: "worse",
   });
   const measured = retirementProposal(method({ status: "approved", learning: worse(DIGEST_A) }), { nowMs: now });
