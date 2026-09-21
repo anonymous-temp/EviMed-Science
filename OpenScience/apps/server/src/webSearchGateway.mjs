@@ -140,6 +140,17 @@ function searchEndpoint(config) {
   if (base.protocol !== "http:" && base.protocol !== "https:") {
     throw gatewayError(503, "web_search_endpoint_invalid", "The configured web-search endpoint is invalid.");
   }
+  // The deployment writes the search endpoint itself
+  // (`http://open-science-web-search:8080/search`), and this appended
+  // `search` to it: every query went to `/search/search`, which SearXNG's
+  // router answers 404, and every open-web search on production failed as
+  // `web_search_upstream_error` — 138 in twelve hours on 2026-09-21, found the
+  // day the error ledger began recording the upstream's status. A base URL
+  // still gets `search` added; an endpoint that already names it is used as
+  // it is.
+  base.search = "";
+  base.hash = "";
+  if (/\/search\/?$/.test(base.pathname)) return new URL(base.pathname.replace(/\/$/, ""), base);
   return new URL("search", base.pathname.endsWith("/") ? base : new URL(`${base.pathname}/`, base));
 }
 
