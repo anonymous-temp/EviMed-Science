@@ -3325,6 +3325,70 @@ test("every project's frames load the kernel application from one shared address
   }
 });
 
+test("a plugin bundle comes from whichever of the account's runtimes composed it", async (t) => {
+  // 2026-09-21: an evaluation cell's runtime, used every few seconds, was the
+  // account's most recently used one, and it had not composed the bundle the
+  // conversation's frame asked for: a 404, and every conversation of the
+  // account stopped at 「对话界面 60 秒内没有载入完成」.
+  const f = await uiSurfaceFixture(t);
+  const combo = "/plugins/??@deepseek-ai/dsh-client-ui-chat/client.js,@evimed/dsh-socket/client.js&rev=0123456789ab";
+  const other = "/plugins/??@deepseek-ai/dsh-client-ui-chat/client.js,@evimed/dsh-socket/client.js&rev=ba9876543210";
+  /** @param {string} name @param {string} serves */
+  const kernel = async (name, serves) => {
+    const seen = [];
+    const server = createServer((req, res) => {
+      seen.push(req.url);
+      if (req.url !== serves) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+      res.end(`window.from = "${name}";`);
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return { seen, server, url: `http://127.0.0.1:${server.address().port}` };
+  };
+  const conversation = await kernel("conversation", combo);
+  const evaluation = await kernel("evaluation", other);
+  const manager = f.app.runtimeManager;
+  const user = await f.app.store.devUser();
+  const conversationKey = `${user.id}:default`;
+  const evaluationKey = `${user.id}:methodeval-0123456789abcdef01234567`;
+  try {
+    manager.runtimes.set(conversationKey, { url: conversation.url, cookie: "native=internal", project: { id: "default", userId: user.id }, close: async () => {} });
+    manager.runtimes.set(evaluationKey, { url: evaluation.url, cookie: "native=internal", project: { id: "methodeval-0123456789abcdef01234567", userId: user.id }, close: async () => {} });
+    manager.runtimeActivity.set(conversationKey, { lastUseAt: 1_000 });
+    manager.runtimeActivity.set(evaluationKey, { lastUseAt: 9_000 });
+    const origin = new URL(f.uiBase).origin;
+    const headers = { cookie: f.loginCookie, "accept-encoding": "identity" };
+
+    const mine = await fetch(`${origin}/__evimed/k${combo}`, { headers });
+    assert.equal(mine.status, 200);
+    assert.equal(await mine.text(), 'window.from = "conversation";');
+    assert.deepEqual(evaluation.seen, [], "a conversation's runtime is asked before background work's, however recently that was used");
+
+    // The bundle only background work composed is still found, after the
+    // conversation's runtime said it has no such file.
+    const theirs = await fetch(`${origin}/__evimed/k${other}`, { headers });
+    assert.equal(theirs.status, 200);
+    assert.equal(await theirs.text(), 'window.from = "evaluation";');
+    assert.deepEqual(conversation.seen, [combo, other]);
+
+    const nobody = "/plugins/??@evimed/dsh-socket/client.js&rev=ffffffffffff";
+    const missing = await fetch(`${origin}/__evimed/k${nobody}`, { headers });
+    assert.equal(missing.status, 404, "a file no runtime composed is a 404, not a hang");
+    const again = await fetch(`${origin}/__evimed/k${nobody}`, { headers });
+    assert.equal(again.status, 404);
+    assert.equal(conversation.seen.filter((url) => url === nobody).length, 2, "a 404 is never kept");
+  } finally {
+    manager.runtimes.delete(conversationKey);
+    manager.runtimes.delete(evaluationKey);
+    manager.runtimeActivity.delete(conversationKey);
+    manager.runtimeActivity.delete(evaluationKey);
+    for (const { server } of [conversation, evaluation]) {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+});
+
 test("only a file whose URL names its content counts as immutable", async () => {
   const { isImmutableRuntimeUiAsset } = await import("../src/runtimeManager.mjs");
   for (const suffix of ["/assets/index-Df-65__b.js", "/assets/vendor-BNsW4eBh.css", "/assets/inter-latin-400-3a4b5c6d.woff2", "/plugins/??@evimed/dsh-socket/client.js&rev=0123456789ab"]) {

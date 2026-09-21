@@ -15,8 +15,15 @@
  * SVGs without aria-hidden, console errors and HTTP errors — the things that
  * need a person to judge.
  *
- * Read-only: it logs in, reads pages and logs out. It never opens the chat
- * page, because a frame bound to a live session would start a runtime.
+ * Read-only: it logs in, reads pages and logs out. It opens the chat page only
+ * when asked (`OPEN_SCIENCE_WALK_CHAT=1`), because a frame bound to a live
+ * session starts the account's default runtime — and it should be asked after
+ * every release: on 2026-09-21 every page here walked clean while no
+ * conversation of the acceptance account could load at all (its kernel frame
+ * fetched a plugin bundle from a runtime that had not composed it, a 404, and
+ * stopped at 「对话界面 60 秒内没有载入完成」). With it the walk waits for the
+ * frame's composer, fails on any 4xx for a kernel application file, and
+ * records whether the kernel's session statistics line is on screen.
  *
  * Nothing is added to package.json: a browser automation dependency would
  * change the lockfile, and a changed lockfile makes the next release a full
@@ -28,6 +35,7 @@
  *   OPEN_SCIENCE_PLAYWRIGHT_CORE=/path/to/node_modules/playwright-core \
  *   [OPEN_SCIENCE_WALK_CHROMIUM=/path/to/chrome] \
  *   [OPEN_SCIENCE_WALK_OUT=/tmp/ui-walk] \
+ *   [OPEN_SCIENCE_WALK_CHAT=1] \
  *   node scripts/ops/ui-walk.mjs
  *
  * Exit 0 when every assertion holds, 1 when one does not (the report names
@@ -172,6 +180,21 @@ async function main() {
         }
       }
     }
+    if (process.env.OPEN_SCIENCE_WALK_CHAT === "1") {
+      current = "chat@desktop";
+      await page.setViewportSize(VIEWPORTS[0][1]);
+      const kernelMisses = [];
+      page.on("response", (response) => {
+        if (response.status() >= 400 && /\/__evimed\/[ka]\//.test(new URL(response.url()).pathname)) {
+          kernelMisses.push(`${response.status()} ${new URL(response.url()).pathname.slice(0, 60)}`);
+        }
+      });
+      const chat = await walkChat(page, base).catch((error) => ({ loaded: false, error: String(error).slice(0, 160) }));
+      await page.screenshot({ path: path.join(out, `${current}.png`) }).catch(() => {});
+      report.pages[current] = { route: "/app/chat", ...chat, kernelMisses, consoleErrors: consoleErrors[current] ?? [] };
+      if (!chat.loaded) failures.push(`${current}: the conversation frame did not load (${chat.error ?? chat.state ?? "no composer"})`);
+      if (kernelMisses.length) failures.push(`${current}: kernel application files answered ${kernelMisses.join(", ")}`);
+    }
     await context.request.post(`${base}/api/auth/logout`).catch(() => {});
   } finally {
     await browser.close();
@@ -181,6 +204,29 @@ async function main() {
   for (const failure of failures) console.log(`FAIL ${failure}`);
   console.log(`${Object.keys(report.pages).length} page views walked, ${failures.length} failure(s); report and screenshots in ${out}`);
   return failures.length ? 1 : 0;
+}
+
+/**
+ * Open the conversation page and wait for the kernel frame's composer.
+ * @param {any} page @param {string} base
+ */
+async function walkChat(page, base) {
+  await page.goto(`${base}/app/chat`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    await page.waitForTimeout(3_000);
+    for (const frame of page.frames()) {
+      if (!frame.url().includes("/__evimed/f/")) continue;
+      const seen = await frame.evaluate(() => ({
+        composer: document.querySelectorAll("textarea, [contenteditable='true']").length > 0,
+        stats: [...document.querySelectorAll("[data-composer-stats]")].map((node) => node.textContent?.trim() ?? ""),
+      })).catch(() => null);
+      if (seen?.composer) return { loaded: true, statsLine: seen.stats.join(" | ") || null };
+    }
+    const shell = await page.evaluate(() => document.body.innerText).catch(() => "");
+    if (/秒内没有载入完成|无法载入|载入失败/.test(shell)) return { loaded: false, state: shell.split("\n").find((line) => /载入/.test(line))?.slice(0, 80) };
+  }
+  return { loaded: false, state: "no composer within two minutes" };
 }
 
 main().then((code) => process.exit(code), (error) => {
