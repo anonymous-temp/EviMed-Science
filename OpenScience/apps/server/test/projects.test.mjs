@@ -162,6 +162,27 @@ test("the project ceiling is refused with its reason, in the reader's language, 
   }, { maxProjectsPerUser: 2 });
 });
 
+test("the platform's own learning project is never listed, never counted, and never the researcher's to create", async () => {
+  // 2026-09-21: learning steps moved into a project of their own so they stop
+  // locking the researcher's conversations; the researcher must not see it,
+  // run out of projects because of it, or take its id.
+  await withApp(async ({ call, app }) => {
+    await call("GET", "/api/me");
+    const user = await app.store.userById("dev");
+    assert.ok(user, "the development user exists once it has made a request");
+    await app.store.createProject(user, "evimed-learning", "EviMed 学习");
+    const listed = (await call("GET", "/api/projects")).body.data.map((item) => item.id);
+    assert.ok(!listed.includes("evimed-learning"), listed.join(","));
+    const me = (await call("GET", "/api/me")).body.data.projects.map((item) => item.id);
+    assert.ok(!me.includes("evimed-learning"));
+    const one = await call("POST", "/api/projects", { name: "One" });
+    assert.equal(one.status, 200, "the hidden project does not use up the ceiling of two");
+    const reserved = await call("POST", "/api/projects", { id: "evimed-learning", name: "Mine" });
+    assert.equal(reserved.status, 409);
+    assert.equal(reserved.body.code, "project_id_reserved");
+  }, { maxProjectsPerUser: 2 });
+});
+
 test("the account payload names the conversation to reopen in the current project", async () => {
   await withApp(async ({ call, dataDir }) => {
     assert.equal((await call("GET", "/api/me")).body.data.lastSessionId, null, "nothing to reopen yet");

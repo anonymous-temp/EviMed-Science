@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { validateDeliveryReceipt, workspaceLayout } from "@evimed/domain";
 import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
+import { LEARNING_PROJECT_ID, LEARNING_PROJECT_NAME } from "./internalProjects.mjs";
 import { issueModelGatewayBudgetMarker } from "./modelGateway.mjs";
 import {
   HttpError,
@@ -147,6 +148,28 @@ export function createLearningRuntime({
     if (!user) throw new HttpError(404, "learning_account_unavailable", "The learning account is unavailable.");
     return store.requireProject(user, identity.projectId);
   };
+  /**
+   * Where a learning step runs: the account's own learning project, made on
+   * first use (`internalProjects.mjs`). Never the researcher's project — a
+   * bounded run holds its project's runtime, and a lesson distilled in the
+   * project it came from locked that conversation for minutes (2026-09-21).
+   * @param {string} userId
+   */
+  const learningProject = async (userId) => {
+    const user = await store.userById(userId);
+    if (!user) throw new HttpError(404, "learning_account_unavailable", "The learning account is unavailable.");
+    try {
+      return await store.requireProject(user, LEARNING_PROJECT_ID);
+    } catch (error) {
+      if (error?.code !== "project_not_found" && error?.status !== 404) throw error;
+      await store.createProject(user, LEARNING_PROJECT_ID, LEARNING_PROJECT_NAME);
+      return store.requireProject(user, LEARNING_PROJECT_ID);
+    }
+  };
+  /** @param {{userId: string, projectId: string, isolatedProject?: boolean}} identity */
+  const runProject = (identity) => (identity.isolatedProject === true
+    ? resolveProject(identity)
+    : learningProject(identity.userId));
   /** @param {any} run @returns {{runId: string, sessionId: string, dispatchId: string}} */
   const identityOf = (run) => ({ runId: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId });
 
@@ -157,7 +180,8 @@ export function createLearningRuntime({
      */
     async dispatch(request) {
       const { job, dispatchId, capabilityId, input, question } = request;
-      const project = await resolveProject({ userId: request.userId ?? job.userId, projectId: request.projectId ?? job.projectId });
+      const project = await runProject({ userId: request.userId ?? job.userId, projectId: request.projectId ?? job.projectId,
+        isolatedProject: request.isolatedProject === true });
       const directory = learningArtifactDirectory(capabilityId, dispatchId);
       // A private evaluation allocates the entire project for one cell. Using
       // its root also preserves isolation through the runtime controller, whose
@@ -266,7 +290,7 @@ export function createLearningRuntime({
      */
     async readResult(identity) {
       const capabilityId = identity.capabilityId ?? identity.dispatchId.split("-").slice(0, -1).join("-");
-      const base = await resolveProject(identity);
+      const base = await runProject(identity);
       const project = learningRunProject(base, learningArtifactDirectory(capabilityId, identity.dispatchId));
       const run = (await agentRuns.list(project)).find((item) => item.id === identity.runId
         && item.sessionId === identity.sessionId && item.dispatchId === identity.dispatchId);

@@ -1,3 +1,4 @@
+import { isInternalProject } from "./internalProjects.mjs";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
@@ -4784,12 +4785,17 @@ export class RuntimeManager {
 
   runtimeCountForUser(userId) {
     const prefix = `${userId}:`;
+    // The platform's own background projects (`internalProjects.mjs`) do not
+    // take one of the researcher's slots: a lesson being distilled must never
+    // be why they cannot open a second project. The global ceiling still
+    // counts them.
+    const counted = (/** @type {string} */ key) => key.startsWith(prefix) && !isInternalProject(key.slice(prefix.length));
     let count = 0;
     for (const key of this.runtimes.keys()) {
-      if (key.startsWith(prefix)) count++;
+      if (counted(key)) count++;
     }
     for (const key of this.starts.keys()) {
-      if (key.startsWith(prefix)) count++;
+      if (counted(key)) count++;
     }
     return count;
   }
