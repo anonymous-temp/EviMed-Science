@@ -78,7 +78,10 @@ test("a Feishu message runs through the real dispatch path and comes back as a c
     await eventually(() => fake.callsTo("card.update").length > 0, "the card to close");
     const closed = JSON.parse(fake.callsTo("card.update").at(-1).args.data.card.data);
     assert.match(closed.body.elements[0].content, /研究已完成/);
-    assert.match(closed.body.elements[2].behaviors[0].default_url, /^https:\/\/science\.example\.com\/app\/runs\?run=/);
+    // The conversation, not the run ledger page, which was deleted on
+    // 2026-09-20: the card knows the session it answered in.
+    assert.equal(closed.body.elements[2].behaviors[0].default_url,
+      `https://science.example.com/app/chat/${encodeURIComponent(run.sessionId)}`);
     const status = (await (await fetch(`${base}/api/im/channels`, { headers })).json()).data;
     assert.equal(status.feishu.chats.length, 1);
     assert.equal(status.feishu.chats[0].chatType, "p2p");
