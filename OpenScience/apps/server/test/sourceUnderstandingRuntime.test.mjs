@@ -434,3 +434,22 @@ test("the frozen input is written once the run exists, so its preserved copy is 
   const written = await stat(path.join(scoped.workspaceDir, "source-understanding-input.json"));
   assert.ok(written.mtimeMs + 5 >= f.state.dispatchStartedAt, `${written.mtimeMs} < ${f.state.dispatchStartedAt}`);
 });
+
+test("a preserved input the artifact list names at the root is read there, and bound to the receipt's bytes", async t => {
+  // 2026-09-21: the package held deliverables/<id>/source-understanding-input.json,
+  // the completion check listed the fresh root copy the control plane froze,
+  // and a succeeded understanding was refused "not part of this run".
+  const f = await fixture(t);
+  await f.runtime.dispatch(f.request);
+  const { output } = await acceptedFiles(f);
+  const scoped = sourceRunProject(f.home, f.state.bound);
+  const inputBytes = await readFile(path.join(scoped.workspaceDir, "deliverables/source-package/source-understanding-input.json"));
+  await writeFile(path.join(scoped.workspaceDir, "source-understanding-input.json"), inputBytes);
+  f.state.runs[0].artifacts = ["source-understanding-input.json", "deliverables/source-package/source-understanding.json"];
+  const identity = { ...f.request, runId: "run-one", sessionId: "session-one" };
+  const result = await f.runtime.readResult(identity);
+  assert.equal(result.status, "succeeded");
+  assert.deepEqual(result.output, output);
+  await writeFile(path.join(scoped.workspaceDir, "source-understanding-input.json"), Buffer.concat([inputBytes, Buffer.from(" ")]));
+  await assert.rejects(f.runtime.readResult(identity), { code: "source_understanding_receipt_changed" });
+});
