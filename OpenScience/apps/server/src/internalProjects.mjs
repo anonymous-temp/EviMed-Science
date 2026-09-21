@@ -35,8 +35,17 @@ export const SOURCES_PROJECT_ID = "evimed-sources";
 /** What that project is called where an operator lists everything. */
 export const SOURCES_PROJECT_NAME = "EviMed 资料";
 
+/**
+ * The paired evaluation's cells, one short-lived project each
+ * (`learningEvaluation.mjs`). Missing from this list until 2026-09-21, so
+ * while an evaluation ran its 「Private method evaluation」 projects sat in the
+ * researcher's project list and held their runtime slots.
+ */
+const EVALUATION_CELL_PROJECT = /^methodeval-[a-f0-9]{24}$/;
+
 /** @param {unknown} projectId @returns {boolean} */
 export function isInternalProject(projectId) {
   const id = String(projectId ?? "");
-  return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || /^eval-method-[a-z0-9-]+$/.test(id);
+  return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID
+    || /^eval-method-[a-z0-9-]+$/.test(id) || EVALUATION_CELL_PROJECT.test(id);
 }

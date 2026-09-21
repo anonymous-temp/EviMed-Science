@@ -6,6 +6,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
+import { isInternalProject } from "../../apps/server/src/internalProjects.mjs";
 import { openScopedDirectoryNoFollow, openScopedFileNoFollow } from "../../apps/server/src/security.mjs";
 
 const arguments_ = process.argv.slice(2);
@@ -72,6 +73,13 @@ async function createInventory() {
   async function collect(relative) {
     if (relative === integrityManifestName) throw new Error("Refusing a reserved backup manifest path in customer data.");
     const parts = relative ? relative.split("/") : [];
+    // The platform's own background projects (learning, document
+    // understanding, the paired evaluation's cells) are scratch: what they
+    // produce is kept in the product database, and the store rebuilds their
+    // trees on first use. Their files change whenever that work is running —
+    // most of the time once it runs around the clock — and one changed file
+    // failed the whole strict backup (2026-09-21, every cycle for hours).
+    if (parts.length === 4 && parts[0] === "users" && parts[2] === "projects" && isInternalProject(parts[3])) return false;
     const decision = managedRuntimeDecision(parts);
     if (!decision.included) return false;
     const name = parts.at(-1) ?? "";

@@ -257,3 +257,38 @@ test("numeric-owner restore is explicit, root-gated, and leaves the target untou
   const original = await stat(path.join(data, "payload.txt"));
   assert.deepEqual([restored.uid, restored.gid, restored.mode & 0o7777], [original.uid, original.gid, original.mode & 0o7777]);
 });
+
+for (const strict of ["false", "true"]) test(`the platform's background projects are left out, so their work never fails a backup (strict=${strict})`, async (t) => {
+  // 2026-09-21: learning, document understanding and the paired evaluation
+  // write continuously, and one changed file in their scratch trees failed
+  // every strict backup for hours. What they produce lives in the database.
+  const { backups, data, root } = await fixture(t);
+  const scratch = path.join(data, "users", "u1", "projects", "evimed-learning", "workspace");
+  const researcher = path.join(data, "users", "u1", "projects", "paper1", "workspace");
+  await mkdir(scratch, { recursive: true });
+  await mkdir(researcher, { recursive: true });
+  await writeFile(path.join(scratch, "distillation-input.json"), "{}\n", { mode: 0o600 });
+  await writeFile(path.join(researcher, "notes.md"), "kept\n", { mode: 0o600 });
+  const bin = path.join(root, "busy-bin");
+  await mkdir(bin);
+  const wrapper = path.join(bin, "node");
+  // Between inventory and archive, the learning loop writes again.
+  await writeFile(wrapper, `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == */backup-archive.mjs && "\${2:-}" != inventory ]]; then
+  printf '{"step":2}\\n' > "$EVIMED_TEST_SCRATCH"
+fi
+exec "$EVIMED_TEST_REAL_NODE" "$@"
+`);
+  await chmod(wrapper, 0o700);
+  const archive = await capture(data, backups, {
+    ...cleanEnvironment,
+    OPEN_SCIENCE_BACKUP_STRICT: strict,
+    PATH: `${bin}:${process.env.PATH}`,
+    EVIMED_TEST_SCRATCH: path.join(scratch, "distillation-input.json"),
+    EVIMED_TEST_REAL_NODE: process.execPath,
+  });
+  const entries = tarEntries(await readFile(archive));
+  assert.ok(entries.has("users/u1/projects/paper1/workspace/notes.md"), "a researcher's project is backed up");
+  assert.equal([...entries.keys()].some((name) => name.includes("evimed-learning")), false, "a background project is not");
+});
