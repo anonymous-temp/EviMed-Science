@@ -540,3 +540,35 @@ test("spend outlives the project it was charged to, and the caps keep counting i
     "deleting the project did not clear the day's spend",
   );
 });
+
+test("a cap that belongs to one kind of work counts only that work", options, async () => {
+  // 2026-09-20: the learning caps were compared with everything the account
+  // spent; ¥6.24 of the researcher's own research refused every lesson.
+  const learner = `usage_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Learner','development')", [learner]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Learner',1048576)", [learner]);
+  try {
+    const at = new Date("2035-07-07T00:00:00.000Z");
+    const now = new Date("2035-07-07T01:00:00.000Z");
+    const settle = (purpose, actualCost, tag) => ledger.recordSettled({
+      id: `engine_${randomUUID().replaceAll("-", "")}`, userId: learner, projectId: "default", runId: null, purpose,
+      model: "deepseek-flash", priceVersion: "evimed-reference-2026-09-10", currency: "CNY",
+      requestFingerprint: createHash("sha256").update(tag).digest("hex"),
+      usage: { cacheHitTokens: 0, cacheMissTokens: 1_000, completionTokens: 100 }, actualCost, priced: true,
+      providerRequestId: `kernel:${tag}`, now: at,
+    });
+    await settle("kernel", 6.24, "research-spend");
+    await settle("learning", 0.5, "learning-spend");
+    // The learning cap reads ¥0.50, not ¥6.74.
+    assert.deepEqual(await ledger.assertWithinLimits(learner, { dailyLimit: 5, purposes: ["learning"], now }), { allowed: true });
+    await assert.rejects(ledger.assertWithinLimits(learner, { dailyLimit: 0.4, purposes: ["learning"], now }),
+      (error) => error.code === "usage_budget_exceeded" && error.details?.committed === 0.5);
+    // The account's own cap still sees everything.
+    await assert.rejects(ledger.assertWithinLimits(learner, { dailyLimit: 5, now }),
+      (error) => error.code === "usage_budget_exceeded" && error.details?.committed === 6.74);
+    await assert.rejects(ledger.assertWithinLimits(learner, { dailyLimit: 5, purposes: ["not-a-purpose"], now }),
+      (error) => error.code === "usage_payload_invalid");
+  } finally {
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [learner]);
+  }
+});

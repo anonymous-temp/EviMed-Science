@@ -15,7 +15,7 @@
  * `other` — bookkeeping never fails a model call.
  */
 
-/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'other'} UsagePurpose */
+/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'other'} UsagePurpose */
 
 /** Every purpose, in report order. */
 export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.freeze([
@@ -27,6 +27,7 @@ export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.fre
   'capsule-scan',
   'channel-intent',
   'source-understanding',
+  'learning',
   'other',
 ]))
 
@@ -40,6 +41,7 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   'capsule-scan': '胶囊扫描',
   'channel-intent': '渠道意图',
   'source-understanding': '资料理解',
+  learning: '学习做法',
   other: '其他',
 }))
 
@@ -67,9 +69,30 @@ export function usagePurpose(value) {
  * `kernel` would hide the price of the knowledge base inside the price of
  * research.
  *
- * @param {{ effectiveAgentId?: string | null } | null | undefined} run
+ * Learning is the second exception, for the same reason and one more: the
+ * loop's own runs — distilling a method, relating methods, the paired
+ * evaluation that can retire one — are not a researcher's work, and the
+ * learning caps must be able to count exactly them. Until 2026-09-21 they were
+ * `kernel`, so a learning cap could only be compared with everything the
+ * account spent: a researcher's own day of research used the learning budget
+ * up, and every lesson from that day was refused (production, 2026-09-20: three
+ * of three distillations, `usage_budget_exceeded`).
+ *
+ * @param {{ effectiveAgentId?: string | null, dispatchId?: string | null } | null | undefined} run
  * @returns {UsagePurpose}
  */
 export function usagePurposeOfRun(run) {
-  return run?.effectiveAgentId === 'source-understanding' ? 'source-understanding' : 'kernel'
+  const agent = run?.effectiveAgentId
+  if (agent === 'source-understanding') return 'source-understanding'
+  if (LEARNING_AGENT_IDS.includes(String(agent ?? ''))) return 'learning'
+  // The paired evaluation dispatches ordinary capability runs; its dispatch ids
+  // are the one thing that says whose they are (`learningEvaluation.mjs`).
+  if (String(run?.dispatchId ?? '').startsWith(LEARNING_EVALUATION_DISPATCH_PREFIX)) return 'learning'
+  return 'kernel'
 }
+
+/** The learning loop's two internal capabilities. */
+export const LEARNING_AGENT_IDS = Object.freeze(['method-distillation', 'method-relations'])
+
+/** What every paired-evaluation dispatch id starts with. */
+export const LEARNING_EVALUATION_DISPATCH_PREFIX = 'methodeval_'

@@ -142,6 +142,38 @@ test("a bounded run that has not finished is retried later, not failed", async (
   assert.deepEqual(jobs.finished, [], "a pending run must not be recorded as a finished job");
   assert.equal(jobs.failed[0].error.code, "learning_run_pending");
   assert.equal(jobs.failed[0].options.retry, true);
+  // Looking again is not another attempt: every claim counts one, so a
+  // distillation still working at the third look used to fail as exhausted
+  // while its run carried on (2026-09-21).
+  assert.equal(jobs.failed[0].options.refundAttempt, true);
+});
+
+test("a busy project, a full runtime pool or a reached cap defers the lesson without spending an attempt", async () => {
+  // 2026-09-20: three lessons met `usage_budget_exceeded`, retried at 10 s and
+  // 20 s, and were failed for good inside thirty seconds.
+  for (const [code, minimum] of [["runtime_busy", 30_000], ["runtime_limit_exceeded", 60_000], ["usage_budget_exceeded", 600_000]]) {
+    const refusing = { async execute() { const error = new Error(code); /** @type {any} */ (error).code = code; throw error; } };
+    const { jobs, worker: instance } = worker({
+      distillation: refusing,
+      jobs: fakeJobs([{ id: "j1", kind: "distill", userId: "u1", projectId: "p1", payload: { runId: "run_1" } }]),
+    });
+    await instance.tick();
+    assert.equal(jobs.failed[0].error.code, code);
+    assert.deepEqual({ retry: jobs.failed[0].options.retry, refundAttempt: jobs.failed[0].options.refundAttempt }, { retry: true, refundAttempt: true }, code);
+    assert.ok(jobs.failed[0].options.delayMs >= minimum, `${code} waits long enough to change`);
+  }
+});
+
+test("with no window configured the worker claims at any hour", async () => {
+  const consolidator = { calls: [], async run(request) { this.calls.push(request); return { action: "sleep" }; } };
+  const { worker: instance } = worker({
+    window: "",
+    now: () => new Date("2026-09-21T11:00:00+08:00"),
+    consolidation: consolidator,
+    jobs: fakeJobs([{ id: "j1", kind: "consolidate", userId: "u1", payload: { action: "sleep" } }]),
+  });
+  await instance.tick();
+  assert.equal(consolidator.calls.length, 1, "11:00 Beijing, a working-day hour the old window refused");
 });
 
 test("a shape error ends the job and a transient one backs off", async () => {

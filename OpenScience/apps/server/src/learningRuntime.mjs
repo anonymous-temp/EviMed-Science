@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 
 import { validateDeliveryReceipt, workspaceLayout } from "@evimed/domain";
+import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
 import { issueModelGatewayBudgetMarker } from "./modelGateway.mjs";
 import {
   HttpError,
@@ -65,18 +66,19 @@ export function learningInputFile(capabilityId) {
   return LEARNING_INPUT_FILES[/** @type {keyof typeof LEARNING_INPUT_FILES} */ (capabilityId)] ?? "learning-input.json";
 }
 
-/** @param {Record<string, any>} config @returns {{dailyLimit: number, weeklyLimit: number, runLimit: number}} */
+/**
+ * The learning loop's spend, as its own caps and the account's (`boundedRunBudget`).
+ * Its own caps count `learning` spend only; zero means none, the default.
+ * @param {Record<string, any>} config
+ */
 export function learningBudget(config) {
-  const configured = [config.learningRunLimitCny, config.learningDailyLimitCny, config.learningWeeklyLimitCny];
-  if (configured.some((value) => typeof value !== "number" || !Number.isFinite(value) || value <= 0)
-    || [config.userDailySpendLimit, config.userWeeklySpendLimit].some((value) =>
-      typeof value !== "number" || !Number.isFinite(value) || value < 0)) {
-    throw new HttpError(503, "learning_budget_invalid", "The learning loop requires finite positive CNY spending ceilings.");
-  }
-  const minimum = (/** @type {number[]} */ ...values) => Math.min(...values.filter((value) => value > 0));
-  const dailyLimit = minimum(configured[1], config.userDailySpendLimit);
-  const weeklyLimit = minimum(configured[2], config.userWeeklySpendLimit);
-  return { dailyLimit, weeklyLimit, runLimit: minimum(configured[0], dailyLimit, weeklyLimit) };
+  return boundedRunBudget({
+    runLimitCny: config.learningRunLimitCny,
+    dailyLimitCny: config.learningDailyLimitCny,
+    weeklyLimitCny: config.learningWeeklyLimitCny,
+    purpose: "learning",
+    invalidCode: "learning_budget_invalid",
+  }, config);
 }
 
 /**
@@ -186,7 +188,7 @@ export function createLearningRuntime({
       }
       if (!usageLedger) throw new HttpError(503, "learning_usage_unavailable", "The learning loop requires gateway accounting.");
       const budget = learningBudget(config);
-      await usageLedger.assertWithinLimits(job.userId, budget);
+      await assertBoundedRunAffordable(usageLedger, job.userId, budget);
       const selected = (await registry).get(capabilityId);
       if (!selected) throw new HttpError(503, "learning_capability_unconfigured", `The ${capabilityId} capability is not installed.`);
 
@@ -197,7 +199,7 @@ export function createLearningRuntime({
           await assertProjectCapacity(project, file, bytes.length, config);
           await writeFileAtomicNoFollow(project.baseDir, file, bytes, { mode: 0o600 });
         });
-        const session = await runtimeManager.reserveBoundedRuntimeSession(scoped, { runId: dispatchId, ...budget });
+        const session = await runtimeManager.reserveBoundedRuntimeSession(scoped, { runId: dispatchId, ...budget.scope });
         reserved = true;
         await researchSessions.put(scoped, session.id, { mode: "specialist", agentId: selected.id, agentVersion: selected.version });
         const run = await agentRuns.dispatch(scoped, {
@@ -226,10 +228,10 @@ export function createLearningRuntime({
                 companionSkills: selected.companionSkills,
               },
             });
-            await usageLedger.assertWithinLimits(job.userId, budget);
+            await assertBoundedRunAffordable(usageLedger, job.userId, budget);
             const marker = issueModelGatewayBudgetMarker({
               secret: config.modelGatewaySigningSecret,
-              userId: job.userId, projectId: job.projectId, runId: dispatchId, ...budget,
+              userId: job.userId, projectId: job.projectId, runId: dispatchId, ...budget.scope,
             });
             promptAttempted = true;
             return await runtimeManager.dispatchPrompt(scoped, session.id, {
