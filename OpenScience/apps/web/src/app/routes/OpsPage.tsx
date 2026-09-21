@@ -40,7 +40,9 @@ export function OpsPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   return (
     <div className="h-full overflow-y-auto bg-bg">
-      <div className="mx-auto max-w-content px-6 py-6">
+      {/* The account page's box and gutter (`WorkbenchTabBody`), so this tab
+          starts where the page title does; the reading measure is kept. */}
+      <div className="mx-auto w-full max-w-content-wide px-6 py-6"><div className="max-w-content">
         {!embedded && (
           <PageHeader title="运维台" description="部署就绪、运行资源与三本运维账本。" />
         )}
@@ -58,7 +60,7 @@ export function OpsPage({ embedded = false }: { embedded?: boolean } = {}) {
         <WebAuditCard key={`audit-${projectId}`} />
         <WebErrorsCard key={`errors-${projectId}`} />
         <WebSecurityCard key={`security-${projectId}`} />
-      </div>
+      </div></div>
     </div>
   );
 }

@@ -55,8 +55,11 @@ export function WorkbenchTabs({
   return (
     <div className="flex h-full min-h-0 flex-col bg-bg">
       <PageTitle page={title} section={active.label} />
-      <div className="shrink-0 border-b border-border px-6 pt-6">
-        <div className="mx-auto flex max-w-content-wide flex-wrap items-end justify-between gap-3">
+      {/* The gutter inside the named box, as `PageShell` has it: with `px-6`
+          outside, this title sat 24 px left of every other page's (2026-09-21
+          acceptance: 416 against 440). */}
+      <div className="shrink-0 border-b border-border pt-6">
+        <div className="mx-auto flex w-full max-w-content-wide flex-wrap items-end justify-between gap-3 px-6">
           <div>
             <h1 className={PAGE_TITLE_CLASS}>{title}</h1>
             {description && <p className="mt-2 text-ui text-muted">{description}</p>}
@@ -66,7 +69,7 @@ export function WorkbenchTabs({
         {/* WAI tabs: one stop in the tab order, arrows move between the tabs,
             Home/End jump to the ends. Without it a keyboard had to tab through
             every view's name to reach the content (2026-09-16 walk, U10). */}
-        <div ref={strip} className="mx-auto mt-6 flex h-11 max-w-content-wide items-stretch gap-1" role="tablist" aria-label={title}>
+        <div ref={strip} className="mx-auto mt-6 flex h-11 w-full max-w-content-wide items-stretch gap-1 px-6" role="tablist" aria-label={title}>
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -109,6 +112,24 @@ export function WorkbenchTabs({
         tabIndex={0}
       >
         {active.render()}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A tab's body in the header's box.
+ *
+ * The account tabs centred a 748 px column under a 1000 px header, so the page
+ * title stood at 416 px and the first card at 566 (2026-09-21 acceptance). The
+ * reading measure stays — forms and cards do not need the full width — but it
+ * is held against the header's left edge instead of centred away from it.
+ */
+export function WorkbenchTabBody({ children, id }: { children: ReactNode; id?: string }) {
+  return (
+    <div className="h-full overflow-y-auto bg-bg">
+      <div className="mx-auto w-full max-w-content-wide px-6 py-6" id={id}>
+        <div className="max-w-content">{children}</div>
       </div>
     </div>
   );

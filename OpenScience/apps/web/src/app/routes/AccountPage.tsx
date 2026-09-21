@@ -8,7 +8,7 @@ import { ConnectorsCard } from "@/components/settings/ConnectorsCard";
 import { FeishuCard } from "@/components/settings/FeishuCard";
 import { fetchImStatus } from "@/lib/imClient";
 import { Card } from "@/components/ui/Card";
-import { WorkbenchTabs, type WorkbenchTab } from "@/components/layout/WorkbenchTabs";
+import { WorkbenchTabBody, WorkbenchTabs, type WorkbenchTab } from "@/components/layout/WorkbenchTabs";
 import { SettingsPage } from "./SettingsPage";
 import { OpsPage } from "./OpsPage";
 
@@ -54,73 +54,63 @@ export function AccountPage() {
   const leaveHostedSession = () => navigate("/login", { replace: true });
 
   const overview = (
-    <div className="h-full overflow-y-auto bg-bg">
-      <div className="mx-auto max-w-content px-6 py-6">
-        {/* "个人租户边界" / "一期 SaaS 采用个人账号即租户" / "独立空间" were the
-            design's words for the reader, not the reader's (2026-09-16 walk,
-            U13). What a researcher needs to know is that their work is theirs
-            and that projects do not see each other. */}
-        {/* The account id is printed once on this page, in 「账户」 below,
-            where it is the thing export and deletion act on. It used to be
-            here as well, and twice more in that card — four printings of a
-            string a researcher never types (WP8, 2026-09-20). */}
-        <Card title="你的账号与项目" hint="每个账号的数据彼此独立；同一账号下的项目也各自隔离，互相看不到对方的文件与对话。">
-          <div className="flex items-center gap-4">
-            <div className="grid h-11 w-11 place-items-center rounded-full bg-surface-2 text-accent">
-              <UserRound size={20} aria-hidden="true" />
+    <WorkbenchTabBody>
+      {/* "个人租户边界" / "一期 SaaS 采用个人账号即租户" / "独立空间" were the
+          design's words for the reader, not the reader's (2026-09-16 walk,
+          U13). What a researcher needs to know is that their work is theirs
+          and that projects do not see each other. */}
+      {/* The account id is printed once on this page, in 「账户」 below,
+          where it is the thing export and deletion act on. It used to be
+          here as well, and twice more in that card — four printings of a
+          string a researcher never types (WP8, 2026-09-20). */}
+      <Card title="你的账号与项目" hint="每个账号的数据彼此独立；同一账号下的项目也各自隔离，互相看不到对方的文件与对话。">
+        <div className="flex items-center gap-4">
+          <div className="grid h-11 w-11 place-items-center rounded-full bg-surface-2 text-accent">
+            <UserRound size={20} aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-body font-medium text-text">{identity.name || "EviMed 用户"}</div>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-full bg-ok-soft px-2.5 py-1 text-caption font-medium text-ok">
+            <ShieldCheck size={13} aria-hidden="true" /> 数据独立
+          </div>
+        </div>
+      </Card>
+
+      {/* The ledger measures spend over rolling windows (`created_at >= now
+          - interval '24 hours' / '7 days'`), so nothing resets at midnight:
+          each charge frees its own share once it ages past its window. A
+          hint promising a reset tomorrow would be a claim the ledger cannot
+          support. */}
+      {budgetRefusal && (
+        <Card
+          className="mt-5"
+          title="额度已达上限"
+          hint="本次登录中最近一次被额度拦下的请求。额度按滚动窗口计算：每笔支出分别在满 24 小时或满 7 天后自动腾出，不在固定时间重置。"
+        >
+          <div className="flex items-start gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warn-soft text-warn">
+              <WalletMinimal size={17} aria-hidden="true" />
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-body font-medium text-text">{identity.name || "EviMed 用户"}</div>
-            </div>
-            <div className="flex items-center gap-1.5 rounded-full bg-ok-soft px-2.5 py-1 text-caption font-medium text-ok">
-              <ShieldCheck size={13} aria-hidden="true" /> 数据独立
+            <div className="min-w-0">
+              <p className="text-ui text-text">{describeWebUsageBudget(budgetRefusal)}</p>
+              <p className="mt-1 text-caption text-muted">
+                记录于 {new Date(budgetRefusal.observedAt).toLocaleString("zh-CN")}
+              </p>
             </div>
           </div>
         </Card>
+      )}
 
-        {/* The ledger measures spend over rolling windows (`created_at >= now
-            - interval '24 hours' / '7 days'`), so nothing resets at midnight:
-            each charge frees its own share once it ages past its window. A
-            hint promising a reset tomorrow would be a claim the ledger cannot
-            support. */}
-        {budgetRefusal && (
-          <Card
-            className="mt-5"
-            title="额度已达上限"
-            hint="本次登录中最近一次被额度拦下的请求。额度按滚动窗口计算：每笔支出分别在满 24 小时或满 7 天后自动腾出，不在固定时间重置。"
-          >
-            <div className="flex items-start gap-3">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warn-soft text-warn">
-                <WalletMinimal size={17} aria-hidden="true" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-ui text-text">{describeWebUsageBudget(budgetRefusal)}</p>
-                <p className="mt-1 text-caption text-muted">
-                  记录于 {new Date(budgetRefusal.observedAt).toLocaleString("zh-CN")}
-                </p>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        <UsageCard />
-        <WebAccountCard onAccountDeleted={leaveHostedSession} onSignedOut={leaveHostedSession} />
-      </div>
-    </div>
+      <UsageCard />
+      <WebAccountCard onAccountDeleted={leaveHostedSession} onSignedOut={leaveHostedSession} />
+    </WorkbenchTabBody>
   );
 
   const tabs: WorkbenchTab[] = [
     { key: "account", label: "账户与额度", render: () => overview },
-    { key: "connectors", label: "数据源", render: () => (
-      <div className="h-full overflow-y-auto bg-bg">
-        <div className="mx-auto max-w-content px-6 py-6" id="connectors"><ConnectorsCard /></div>
-      </div>
-    ) },
-    ...(phoneTab ? [{ key: "phone", label: "手机与飞书", render: () => (
-      <div className="h-full overflow-y-auto bg-bg">
-        <div className="mx-auto max-w-content px-6 py-6"><FeishuCard /></div>
-      </div>
-    ) }] : []),
+    { key: "connectors", label: "数据源", render: () => <WorkbenchTabBody id="connectors"><ConnectorsCard /></WorkbenchTabBody> },
+    ...(phoneTab ? [{ key: "phone", label: "手机与飞书", render: () => <WorkbenchTabBody><FeishuCard /></WorkbenchTabBody> }] : []),
     { key: "settings", label: "设置", render: () => <SettingsPage embedded /> },
     ...(identity.operator ? [{ key: "ops", label: "运维台", render: () => <OpsPage embedded /> }] : []),
   ];

@@ -157,7 +157,7 @@ export function MemoryHubPage() {
   return (
     <div className="h-full overflow-y-auto bg-bg">
       <PageTitle page="记忆胶囊" />
-      <div className="mx-auto w-full max-w-content-wide space-y-6 px-6 py-8">
+      <div className="mx-auto w-full max-w-content-wide space-y-6 px-6 py-6">
         <PageHeader title="记忆胶囊" description={DEFINITION} />
 
         <MemoryControls onReset={reload} />
