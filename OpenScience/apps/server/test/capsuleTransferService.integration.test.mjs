@@ -8,6 +8,7 @@ import { ProductDocuments } from "../src/productStore.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
+import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost"].includes(parsed.hostname)); assert.match(parsed.pathname,/evimed_test/); }
@@ -20,6 +21,9 @@ before(async()=>{
   if(!url)return;
   directory=await mkdtemp("/tmp/evimed-transfer-");
   database=new ControlPlaneDatabase({databaseUrl:url,databasePoolMax:4,databaseConnectionTimeoutMs:2000});
+  // An export reads the research-memory records too (what the researcher said
+  // about how they work), so that schema is part of the fixture.
+  await migrateResearchMemory(database);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Transfer owner','development'),($2,'Transfer recipient','development')",[owner,recipient]);
   documents=new ProductDocuments(database);capsules=new CapsuleService(documents);
   identities=new CapsuleIdentityStore(directory);transfers=new CapsuleTransferService({documents,capsules,identities,dataDir:directory});
@@ -227,4 +231,39 @@ test("a sharer's runtime note never becomes a method in a recipient's runs, and 
   await recipientCapsules.prepareTrial(recipient,second.id,{projectId:"reading"});
   assert.deepEqual(await mounted(),[method]);
   assert.equal((await documents.get(recipient,"capsule",second.id)).payload.scan.model,"ok");
+});
+
+test("a pack carries the researcher's learned methods and what they said about how they work, never an inferred note",options,async()=>{
+  // 2026-09-21: with the authoring forms gone nothing an ordinary user did made
+  // a capsule entry, so every export was empty while the learnt methods and the
+  // stated preferences sat in two other stores.
+  const sharer=`transfer_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Method sharer','development')",[sharer]);
+  try{
+    const capsule=await capsules.create(sharer,{title:"Empty capsule"});
+    await assert.rejects(transfers.export(sharer,capsule.id,{password}),{code:"capsule_export_empty"},"nothing to share yet is still said by name");
+    await documents.put(sharer,"method","method:learned:grade-first",{recordType:"learned-method",status:"approved",
+      frontmatter:{name:"grade-first",description:"Reports GRADE certainty before effect sizes.",whenToUse:"When writing an evidence synthesis."},
+      body:"## Workflow\n1. State the GRADE certainty.\n2. Then the effect size."},{expectedRevision:0});
+    await documents.put(sharer,"method","method:learned:still-candidate",{recordType:"learned-method",status:"candidate",
+      frontmatter:{name:"still-candidate",description:"Not effective yet."},body:"## Workflow\n1. Wait."},{expectedRevision:0});
+    const record=(id,values)=>database.query(`INSERT INTO evimed_memory.records(user_id,id,scope,scope_id,kind,key,value,summary,origin,status,confidence,importance,sensitive)
+      VALUES($1,$2,'user','',$3,$4,$5,$5,$6,'active',1,0.8,$7)`,[sharer,id,...values]);
+    await record("said",["preference","report.order","先给结论，再给证据。","explicit",false]);
+    await record("guessed",["preference","report.length","Prefers short reports.","inferred",false]);
+    await record("private",["preference","contact.channel","Private contact canary","explicit",true]);
+    const result=await transfers.export(sharer,capsule.id,{password});
+    for(const value of ["Prefers short reports.","Private contact canary","Not effective yet.",sharer])assert.ok(!result.archive.includes(value));
+    const preview=await transfers.preview(recipient,{archive:result.archive,password});
+    const byKind=Object.fromEntries(preview.entries.map((entry)=>[entry.factKind,entry]));
+    assert.deepEqual(preview.entries.map((entry)=>entry.factKind).sort(),["method_preference","preference"]);
+    assert.match(byKind.method_preference.path,/^methods\/.+\/SKILL\.md$/);
+    assert.match(byKind.method_preference.content,/^# grade-first/);
+    assert.match(byKind.method_preference.content,/State the GRADE certainty/);
+    assert.equal(byKind.method_preference.origin,"system","a learnt method arrives as the pack's own, mountable once scanned");
+    assert.equal(byKind.preference.content,"先给结论，再给证据。");
+    assert.equal(byKind.preference.origin,"explicit");
+  }finally{
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1",[sharer]);
+  }
 });

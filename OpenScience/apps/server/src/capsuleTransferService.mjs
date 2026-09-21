@@ -51,6 +51,20 @@ function renderedFiles(snapshotId, entries) {
   result["provenance.json"] = JSON.stringify({ format: "evimed-capsule-transfer", version: 1, snapshotId, entries });
   return result;
 }
+/**
+ * A learned method as shared text: its name, what it is for, and its body.
+ * The recipient mounts it as a capsule method (`renderCapsuleMethod`), so the
+ * sharer's frontmatter is not carried — its digest and learning counters
+ * describe the sharer's library, not the recipient's.
+ * @param {any} payload
+ */
+function learnedMethodText(payload) {
+  const front = payload?.frontmatter ?? {};
+  const head = [`# ${String(front.name ?? "method")}`, String(front.description ?? "").trim(),
+    front.whenToUse ? `适用：${String(front.whenToUse).trim()}` : ""].filter(Boolean).join("\n\n");
+  return `${head}\n\n${String(payload?.body ?? "").trim()}`.slice(0, 20_000);
+}
+
 function decodeBase64(value, maxBytes) {
   if (typeof value !== "string" || value.length > Math.ceil(maxBytes / 3) * 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) throw invalid();
   const decoded = Buffer.from(value, "base64");
@@ -129,7 +143,31 @@ export class CapsuleTransferService {
         AND (payload->>'origin' IS DISTINCT FROM 'inferred' OR payload->>'curatedAt' IS NOT NULL OR payload->>'correctedAt' IS NOT NULL
           OR payload->'provenance' @> '[{"type":"user"}]'::jsonb)
         ORDER BY id LIMIT 101`, [userId, JSON.stringify({ capsuleId, status: "approved" }), kinds]);
-      return { revision: capsule.rows[0].revision, facts: facts.rows };
+      // 「我是怎么干活的」 is assembled here from what the platform actually
+      // holds (spec §19.15, build spec §9.1), not only from capsule entries: once
+      // the authoring forms were deleted (2026-09-20) nothing an ordinary user
+      // did produced one, and every export answered `capsule_export_empty`
+      // while the researcher's learnt methods and stated preferences sat in two
+      // other stores. So a pack also carries
+      //   - every effective learned method, as the method it is; and
+      //   - what the researcher said about how they work (`explicit` or edited
+      //     by them, account-level, never sensitive).
+      // Inferred notes still do not leave — the defence against a page talking
+      // a run into writing one stands — and the recipient's import scans the
+      // whole pack before any of it can mount.
+      const methods = await client.query(`SELECT id,revision,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='method'
+        AND deleted_at IS NULL AND payload->>'recordType'='learned-method' AND payload->>'status'='approved'
+        ORDER BY updated_at DESC,id LIMIT 50`, [userId]);
+      const stated = await client.query(`SELECT id,version,kind,value,summary FROM evimed_memory.records WHERE user_id=$1
+        AND scope='user' AND status='active' AND NOT sensitive AND origin IN ('explicit','manual') AND kind=ANY($2::text[])
+        ORDER BY updated_at DESC,id LIMIT 50`, [userId, kinds]);
+      return { revision: capsule.rows[0].revision, facts: [
+        ...facts.rows,
+        ...methods.rows.map((row) => ({ id: row.id, revision: row.revision, payload: {
+          factKind: "method_preference", origin: "system", content: learnedMethodText(row.payload) } })),
+        ...stated.rows.map((row) => ({ id: row.id, revision: row.version, payload: {
+          factKind: row.kind, origin: "explicit", content: String(row.summary || row.value) } })),
+      ] };
     });
     if (!source.facts.length) throw new HttpError(400, "capsule_export_empty", "No approved entries are eligible for these share scopes.");
     if (source.facts.length > MAX_ENTRIES) throw new HttpError(413, "capsule_transfer_too_large", "A snapshot supports at most 100 approved entries.");
