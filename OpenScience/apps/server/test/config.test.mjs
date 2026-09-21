@@ -500,7 +500,20 @@ test("opt-in local auto configuration loads mode-600 EviMed service secrets", as
 });
 
 test("the agent run monitor outlasts a systematic review by default", () => {
-  assert.equal(loadConfig({ dataDir: "/tmp/os-config-monitor" }).agentRunMonitorTimeoutMs, 4 * 60 * 60_000);
+  // A day since 2026-09-21: no time ceiling may end a run that is working
+  // while the product is being tested (owner ruling).
+  assert.equal(loadConfig({ dataDir: "/tmp/os-config-monitor" }).agentRunMonitorTimeoutMs, 24 * 60 * 60_000);
+});
+
+test("no learning or source-understanding money cap and no learning window by default", () => {
+  const config = loadConfig({ dataDir: "/tmp/os-config-budgets" });
+  assert.equal(config.learningWindow, "", "a lesson is distilled whenever its run has finished");
+  for (const key of ["learningRunLimitCny", "learningDailyLimitCny", "learningWeeklyLimitCny",
+    "sourceUnderstandingRunLimitCny", "sourceUnderstandingDailyLimitCny", "sourceUnderstandingWeeklyLimitCny",
+    "userRunSpendLimit", "userDailySpendLimit", "userWeeklySpendLimit"]) {
+    assert.equal(config[key], 0, `${key} is no cap`);
+  }
+  assert.equal(config.learningConsolidationIntervalMs, 3_600_000, "the library is consolidated hourly, not nightly");
 });
 
 test("the agent run monitor timeout is configurable", () => {

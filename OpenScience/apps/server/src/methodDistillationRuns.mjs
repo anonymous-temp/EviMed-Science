@@ -33,6 +33,7 @@ import { createHash } from "node:crypto";
 
 import { METHOD_OPERATIONS, parseSkillFrontmatter, SKILL_AUTHORING_LIMITS } from "@evimed/domain";
 import { readRunTranscript, transcriptExcerpt } from "./runTranscripts.mjs";
+import { learnedMethodId } from "./learningService.mjs";
 import { HttpError } from "./security.mjs";
 
 /** The file the run reads its frozen input from. */
@@ -157,7 +158,9 @@ export class MethodDistillationRuns {
   async execute({ job, project, run, feedback = [], repairIssues = [] }) {
     const trigger = String(job.payload?.trigger ?? "");
     const transcript = await readRunTranscript(project, run.id).catch(() => null);
-    const related = await this.learning.listMethods(job.userId, { projectId: job.projectId, limit: 20 })
+    // The researcher's whole library: a method learnt in another project is
+    // the one to amend, not a near-duplicate to write beside it.
+    const related = await this.learning.listMethods(job.userId, { limit: 20 })
       .then((page) => page.items ?? [])
       .catch(() => []);
     const peerRunIds = trigger === "routine" && Array.isArray(job.payload?.peerRunIds)
@@ -240,7 +243,14 @@ export class MethodDistillationRuns {
       ...(candidate?.risk?.touchesSafety ? { safetyRelated: true } : {}),
     };
     const files = candidate?.files ?? output.files;
-    if (operation === "create") {
+    // A method's id is its name, account-wide (`learnedMethodId`). A `create`
+    // under a name the library already holds is that method's next revision,
+    // not a second method: without this it was refused as a revision conflict,
+    // retried, and lost (the same name learnt in two projects).
+    const existing = operation === "create"
+      ? await this.learning.getMethod(job.userId, learnedMethodId(String(parsed.frontmatter?.name ?? ""))).catch(() => null)
+      : null;
+    if (operation === "create" && !existing) {
       const created = await this.learning.createCandidate(job.userId, {
         projectId: job.projectId,
         frontmatter: parsed.frontmatter,
@@ -249,10 +259,10 @@ export class MethodDistillationRuns {
         provenance,
         dependencies: candidate?.dependencies ?? [],
       });
-      await this.#enqueueIntegrate(job, created.id);
+      await this.#enqueueIntegrate(job, created.id, created.revision);
       return { operation, methodId: created.id };
     }
-    const targetId = String(candidate?.targetMethodId ?? "");
+    const targetId = existing ? String(existing.id) : String(candidate?.targetMethodId ?? "");
     if (!targetId) throw new HttpError(422, "method_candidate_invalid", "An amend or merge must name the method it changes.");
     const target = await this.learning.getMethod(job.userId, targetId);
     const amended = await this.learning.amendMethod(job.userId, targetId, {
@@ -263,20 +273,34 @@ export class MethodDistillationRuns {
       provenance,
       dependencies: candidate?.dependencies ?? target.payload.dependencies ?? [],
     });
-    await this.#enqueueIntegrate(job, amended.id);
-    return { operation, methodId: amended.id };
+    await this.#enqueueIntegrate(job, amended.id, amended.revision);
+    return { operation: existing ? "amend" : operation, methodId: amended.id };
   }
 
-  /** @param {any} job @param {string} methodId */
-  async #enqueueIntegrate(job, methodId) {
+  /**
+   * Relate the new text to the library, then consolidate: a method written now
+   * is consolidated now, not at the next hourly pass. Keyed on the revision, so
+   * each change gets its own pass and a retried distillation does not queue a
+   * second one.
+   * @param {any} job @param {string} methodId @param {number} [revision]
+   */
+  async #enqueueIntegrate(job, methodId, revision = 0) {
     if (!this.jobs) return;
     try {
       await this.jobs.enqueue(job.userId, "consolidate", { action: "integrate", methodId }, {
-        idempotencyKey: `consolidate:integrate:${methodId}`,
+        idempotencyKey: `consolidate:integrate:${methodId}:${revision}`,
         projectId: job.projectId,
       });
     } catch {
       // isolated: evimed_learning_integrate_enqueue_failed_total
+    }
+    try {
+      await this.jobs.enqueue(job.userId, "consolidate", { action: "sleep", date: new Date().toISOString(), after: methodId }, {
+        idempotencyKey: `consolidate:sleep:after:${methodId}:${revision}`,
+        projectId: job.projectId,
+      });
+    } catch {
+      // isolated: the hourly pass consolidates it instead
     }
   }
 }

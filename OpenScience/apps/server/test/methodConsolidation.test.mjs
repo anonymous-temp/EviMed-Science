@@ -356,3 +356,26 @@ test("a screen that could not run leaves the shortlist alone rather than emptyin
   });
   assert.equal((await tiny.screenPairs({ userId: "u1" }, [{ a: "m1", b: "m2", overlap: 9 }], methods)).screened, false);
 });
+
+test("a pass reads the researcher's whole library, whichever project its job is filed under", async () => {
+  // Methods follow the researcher (2026-09-21); a pass filed under one project
+  // that read only that project's methods would never relate, promote or
+  // retire the rest.
+  /** @type {any[]} */
+  const reads = [];
+  /** @type {any[]} */
+  const proposals = [];
+  const consolidation = new MethodConsolidation({
+    learning: {
+      async listMethods(_userId, options) { reads.push(options); return { items: [] }; },
+      async retirementProposals(_userId, options) { proposals.push(options); return []; },
+    },
+    dispatch: async () => { throw new Error("an empty library dispatches nothing"); },
+    readResult: async () => null,
+    jobs: { async enqueue() { return { id: "j" }; } },
+  });
+  await consolidation.run({ job: { id: "j1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
+  assert.ok(reads.length >= 1);
+  for (const options of reads) assert.equal(Object.hasOwn(options, "projectId"), false, "no project filter on the library read");
+  for (const options of proposals) assert.equal(Object.hasOwn(options, "projectId"), false);
+});

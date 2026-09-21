@@ -489,6 +489,7 @@ services:
       OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY:
       OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY:
+      OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS:
       OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-key
       OPEN_SCIENCE_EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
       # The remaining public-source credentials the server resolves. Without

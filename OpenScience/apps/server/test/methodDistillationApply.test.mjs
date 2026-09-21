@@ -44,17 +44,22 @@ const SKILL = [
   "",
 ].join("\n");
 
-/** A learning service that records what it was asked to write. */
-function fakeLearning() {
+/** A learning service that records what it was asked to write.
+ *  @param {string[]} [existing] method ids the library already holds */
+function fakeLearning(existing = []) {
   /** @type {any[]} */
   const created = [];
   /** @type {any[]} */
   const amended = [];
+  const held = new Set(existing);
   return {
     created, amended,
-    async createCandidate(userId, input) { created.push({ userId, ...input }); return { id: "method:learned:do-the-thing" }; },
-    async amendMethod(userId, methodId, input) { amended.push({ userId, methodId, ...input }); return { id: methodId }; },
-    async getMethod() { return { id: "method:learned:do-the-thing", revision: 3, payload: { dependencies: [] } }; },
+    async createCandidate(userId, input) { created.push({ userId, ...input }); return { id: "method:learned:do-the-thing", revision: 1 }; },
+    async amendMethod(userId, methodId, input) { amended.push({ userId, methodId, ...input }); return { id: methodId, revision: 4 }; },
+    async getMethod(_userId, methodId) {
+      if (!held.has(methodId)) throw Object.assign(new Error("not found"), { code: "method_not_found" });
+      return { id: methodId, revision: 3, payload: { dependencies: [] } };
+    },
   };
 }
 
@@ -92,7 +97,7 @@ test("a distillation run cannot mint an explicit method, however it labels its o
 });
 
 test("the same refusal holds for an amendment, which is the other way into an existing method", async () => {
-  const { distillation, learning } = runs();
+  const { distillation, learning } = runs(fakeLearning(["method:learned:do-the-thing"]));
   await distillation.applyCandidate(job, run, {
     candidate: { operation: "amend", origin: "explicit", targetMethodId: "method:learned:do-the-thing" },
     skill: SKILL,
@@ -139,11 +144,25 @@ test("an unknown operation and an unparseable skill are both refused before the 
   assert.equal(learning.amended.length, 0);
 });
 
-test("a written method is queued for integration, so it is compared against what exists", async () => {
+test("a written method is integrated and then consolidated at once, not at the next nightly pass", async () => {
   const { distillation, enqueued } = runs();
   await distillation.applyCandidate(job, run, { candidate: { operation: "create" }, skill: SKILL });
-  assert.equal(enqueued.length, 1);
-  assert.equal(enqueued[0].kind, "consolidate");
-  assert.equal(enqueued[0].payload.action, "integrate");
+  assert.deepEqual(enqueued.map((entry) => [entry.kind, entry.payload.action]), [["consolidate", "integrate"], ["consolidate", "sleep"]]);
   assert.equal(enqueued[0].payload.methodId, "method:learned:do-the-thing");
+  assert.equal(enqueued[0].opts.idempotencyKey, "consolidate:integrate:method:learned:do-the-thing:1",
+    "keyed on the revision: each change gets its own pass, a retry does not queue a second");
+  assert.equal(enqueued[1].opts.idempotencyKey, "consolidate:sleep:after:method:learned:do-the-thing:1");
+});
+
+test("a create under a name the library already holds becomes that method's next revision", async () => {
+  // 2026-09-21: the id is the name, account-wide, so a second project learning
+  // the same method was refused as a revision conflict and the lesson lost.
+  const { distillation, learning, enqueued } = runs(fakeLearning(["method:learned:do-the-thing"]));
+  const applied = await distillation.applyCandidate(job, run, { candidate: { operation: "create" }, skill: SKILL });
+  assert.equal(learning.created.length, 0);
+  assert.equal(learning.amended.length, 1);
+  assert.equal(learning.amended[0].methodId, "method:learned:do-the-thing");
+  assert.equal(learning.amended[0].expectedRevision, 3);
+  assert.deepEqual(applied, { operation: "amend", methodId: "method:learned:do-the-thing" });
+  assert.equal(enqueued[0].opts.idempotencyKey, "consolidate:integrate:method:learned:do-the-thing:4");
 });

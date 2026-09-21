@@ -42,16 +42,18 @@ const TASK_TYPE_LABELS: ReadonlyArray<{ value: string; label: string }> = [
 /**
  * What the platform picks when the researcher says nothing about it.
  *
- * ¥2 a turn, ¥10 a day, ¥50 a week is the ordered triple the service accepts
- * and roughly half a deep run's measured cost (¥3.4, 2026-09-20 benchmark), so
- * an agenda left alone costs less in a week than two deep runs. 07:00 is
- * before a working day in the researcher's own zone.
+ * ¥100 a turn, ¥500 a day, ¥3,000 a week: an ordered triple the service
+ * accepts and far above what any turn has cost (a deep run measured ¥3.4–5.5),
+ * because the owner ruled on 2026-09-21 that no money ceiling may stop the
+ * product from being exercised while it is being tested. It was ¥2/¥10/¥50,
+ * below one deep run. 07:00 is before a working day in the researcher's own
+ * zone.
  */
 const AGENDA_DEFAULTS = {
   taskTypes: ["literature-sentinel"],
-  maxEpisodeCny: "2",
-  dailyBudgetCny: "10",
-  weeklyBudgetCny: "50",
+  maxEpisodeCny: "100",
+  dailyBudgetCny: "500",
+  weeklyBudgetCny: "3000",
   scheduleHour: "7",
 } as const;
 

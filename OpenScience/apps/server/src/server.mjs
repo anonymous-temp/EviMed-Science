@@ -895,8 +895,11 @@ export function createWebApiApp(overrides = {}) {
     if (!learningService || !config.learningEnabled) return;
     const projection = await agentRuns.runWorkflowProjection(project, run);
     if (!projection) return;
-    const approved = await learningService.approvedMethods(project.userId, { projectId: project.id });
-    const accountWide = await learningService.approvedMethods(project.userId, { projectId: null });
+    // The whole library: a researcher's methods follow them across projects
+    // (`selectLearnedMethods`), so a use is attributed wherever it happens.
+    const approved = await learningService.approvedMethods(project.userId);
+    /** @type {any[]} */
+    const accountWide = [];
     // The candidates this project is mounting under trial, which are the whole
     // reason the trial exists: a candidate is promoted on observed
     // trajectories, and reading only the approved list meant a mounted
@@ -4228,38 +4231,38 @@ export function createWebApiApp(overrides = {}) {
    * call `sleep` directly. A producer nobody writes is invisible to unit tests
    * by construction: there is no assertion to fail.
    *
-   * Enqueued whenever the day turns over, not on a schedule of its own. The
-   * spending window is `LearningWorker`'s to enforce — it declines to claim
-   * outside it — so a job queued at noon simply waits for the evening rather
-   * than being dropped, and a deployment whose window never opens accumulates
-   * exactly one job per project per day instead of losing the day entirely.
+   * One pass per researcher per `learningConsolidationIntervalMs` (an hour),
+   * plus the one distillation queues after every method it writes. It was
+   * once a night per project, inside the learning window, and in production
+   * it never ran: a method learnt at noon could not be related, promoted or
+   * retired until the next night (2026-09-21, owner: 「你当然得触发整理呀」).
    *
-   * Per project rather than per user, because `sleep` reads and writes one
-   * project's library: `listMethods`, `approve` and `retirementProposals` are
-   * all scoped by `job.projectId`, so a single account-wide job would
-   * consolidate whichever project it happened to name and silently skip the
-   * rest.
+   * Per researcher rather than per project, since a researcher's methods follow
+   * them across projects (`selectLearnedMethods`): `sleep` reads the whole
+   * library. The job is filed under the project whose method changed last,
+   * which is where its model steps run.
    */
   const scheduleConsolidation = async () => {
     if (!learningService || !productJobs || !config.learningEnabled || consolidationScheduleRun) {
       return consolidationScheduleRun;
     }
     const schedule = async () => {
-      // Projects holding at least one method that is not already retired. A
-      // library of nothing has nothing to consolidate, and enqueueing for it
-      // would put a job on every project in the deployment every night.
-      const result = await productDatabase.query(`SELECT DISTINCT user_id,project_id FROM evimed_product.documents
+      // Researchers holding at least one method that is not already retired,
+      // each with the project whose method changed last. A library of nothing
+      // has nothing to consolidate, and enqueueing for it would put a job on
+      // every account in the deployment every hour.
+      const result = await productDatabase.query(`SELECT DISTINCT ON (user_id) user_id,project_id FROM evimed_product.documents
         WHERE kind='method' AND deleted_at IS NULL AND project_id IS NOT NULL
           AND payload->>'status' IS DISTINCT FROM 'retired'
-        ORDER BY user_id,project_id LIMIT 200`);
-      // The night this pass belongs to, in the window's own zone — not the
-      // UTC date, which turns over at 08:00 Beijing, inside the window.
-      const date = learningWorker?.nightKey?.(new Date()) ?? new Date().toISOString().slice(0, 10);
+        ORDER BY user_id,updated_at DESC LIMIT 200`);
+      const interval = Math.max(60_000, Number(config.learningConsolidationIntervalMs) || 3_600_000);
+      const period = Math.floor(Date.now() / interval);
+      const date = new Date(period * interval).toISOString();
       for (const row of result.rows) {
         try {
           await productJobs.enqueue(row.user_id, "consolidate", { action: "sleep", date }, {
-            // One pass per project per day however often this timer fires.
-            idempotencyKey: `consolidate:sleep:${row.project_id}:${date}`,
+            // One pass per researcher per interval however often this timer fires.
+            idempotencyKey: `consolidate:sleep:${interval}:${period}`,
             projectId: row.project_id,
           });
         } catch (error) {
@@ -4355,10 +4358,11 @@ export function createWebApiApp(overrides = {}) {
         autopilotScheduleTimer = setInterval(() => { void scheduleAutopilot(); }, 60_000);
         autopilotScheduleTimer.unref();
       }
-      // Hourly, not minutely: the job it enqueues is idempotent per project per
-      // day, so the only thing a faster tick buys is 60 times the queries.
+      // Once per consolidation interval: the job it enqueues is idempotent per
+      // researcher per interval, so a faster tick buys only queries.
       if (learningWorker && !consolidationScheduleTimer) {
-        consolidationScheduleTimer = setInterval(() => { void scheduleConsolidation(); }, 3_600_000);
+        consolidationScheduleTimer = setInterval(() => { void scheduleConsolidation(); },
+          Math.max(60_000, Number(config.learningConsolidationIntervalMs) || 3_600_000));
         consolidationScheduleTimer.unref();
         void scheduleConsolidation();
       }
