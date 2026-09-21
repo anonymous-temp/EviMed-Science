@@ -14,6 +14,10 @@ export interface WebMethod {
   name: string;
   description: string;
   whenToUse: string;
+  /** What the researcher reads: a title and one sentence in their language.
+   *  `name` and `description` are written for the model. Null until written. */
+  title?: string | null;
+  summary?: string | null;
   status: "candidate" | "approved" | "retired" | string;
   statusReason: string | null;
   origin: "inferred" | "explicit" | string;
@@ -28,6 +32,11 @@ export interface WebMethod {
   trajectories?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/** The name a researcher reads for a method: its own line, else its name. */
+export function methodTitle(method: Pick<WebMethod, "title" | "name">): string {
+  return method.title || method.name;
 }
 
 export function listMethods(status?: string, cursor?: string | null) {

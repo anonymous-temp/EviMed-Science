@@ -59,6 +59,37 @@ export const METHOD_STATUSES = Object.freeze(['candidate', 'approved', 'retired'
  *  most common one — a loop that must always produce something produces noise. */
 export const METHOD_OPERATIONS = Object.freeze(['create', 'amend', 'merge', 'no_change'])
 
+/**
+ * How long the researcher-facing name and sentence of a method may be.
+ *
+ * A method's own name and description are the model's (kebab-case, English,
+ * written for routing), and the memory page printed them as they were —
+ * 「claim-verdict-audit：Re-verifies the statements of…」 to a Chinese reader
+ * (2026-09-21). `display` is the line a person reads, kept on the record and
+ * never in SKILL.md, whose bytes are the digest a method is attributed by.
+ */
+export const METHOD_DISPLAY_LIMITS = Object.freeze({ title: 40, summary: 200 })
+
+/**
+ * The researcher-facing title and sentence, cleaned to the one shape the page
+ * shows, or null when either is missing or too long.
+ * @param {unknown} value
+ * @returns {{title: string, summary: string} | null}
+ */
+export function cleanMethodDisplay(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = /** @type {Record<string, unknown>} */ (value)
+  /** @param {unknown} text */
+  const clean = (text) => (typeof text === 'string'
+    ? [...text].map((char) => (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? ' ' : char)).join('').replace(/\s+/g, ' ').trim()
+    : '')
+  const title = clean(record.title)
+  const summary = clean(record.summary)
+  if (!title || !summary) return null
+  if ([...title].length > METHOD_DISPLAY_LIMITS.title || [...summary].length > METHOD_DISPLAY_LIMITS.summary) return null
+  return { title, summary }
+}
+
 /** SkillPyramid's section template, which the distiller writes and the
  *  consolidation builder must preserve. */
 export const METHOD_BODY_SECTIONS = Object.freeze([

@@ -390,6 +390,8 @@ export {
   METHOD_SKILL_ISSUE_CODES,
   METHOD_SKILL_SCHEMA,
   METHOD_STATUSES,
+  METHOD_DISPLAY_LIMITS,
+  cleanMethodDisplay,
   formatDependsOn,
   isMethodDigest,
   methodBodySections,

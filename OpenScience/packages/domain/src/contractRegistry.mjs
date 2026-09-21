@@ -21,7 +21,7 @@ import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
 import { validateSourceUnderstanding, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTANDING_INPUT_FILE } from './sourceUnderstanding.mjs'
 import { SKILL_AUTHORING_LIMITS } from './constants.mjs'
-import { METHOD_OPERATIONS, isMethodDigest, parseSkillFrontmatter, validateMethodSkill } from './methodSkill.mjs'
+import { METHOD_DISPLAY_LIMITS, METHOD_OPERATIONS, cleanMethodDisplay, isMethodDigest, parseSkillFrontmatter, validateMethodSkill } from './methodSkill.mjs'
 import { METHOD_RELATION_TYPES } from './methodGraph.mjs'
 
 /**
@@ -941,6 +941,9 @@ function checkMethodCandidate(value) {
     }
   }
   if (operation === 'no_change') return errors
+  if (value.display != null && !cleanMethodDisplay(value.display)) {
+    errors.push(`display, when given, carries a title of at most ${METHOD_DISPLAY_LIMITS.title} characters and a summary of at most ${METHOD_DISPLAY_LIMITS.summary}, both in the researcher's language.`)
+  }
   if (!nonEmptyText(value.applicability)) errors.push('applicability must state the situation this method is for.')
   if (!Array.isArray(value.counterexamples)) errors.push('counterexamples[] must be an array; write [] only when none is known.')
   const risk = isRecord(value.risk) ? value.risk : null

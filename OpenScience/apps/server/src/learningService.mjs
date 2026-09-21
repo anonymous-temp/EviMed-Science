@@ -38,6 +38,7 @@ import { createHash } from "node:crypto";
 
 import {
   METHOD_STATUSES,
+  cleanMethodDisplay,
   emptyLearning,
   foldEligible,
   foldEvaluation,
@@ -172,7 +173,7 @@ export class LearningService {
    * decided its own output is good enough to mount; what decides is the verdict
    * below, over the record's own fields.
    * @param {string} userId
-   * @param {{projectId?: string|null, frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], mountedTools?: readonly string[]}} input
+   * @param {{projectId?: string|null, frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown}} input
    */
   async createCandidate(userId, input) {
     const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
@@ -190,6 +191,9 @@ export class LearningService {
       contentDigest: digest,
       learning: emptyLearning(digest),
       provenance,
+      // The researcher's line for the method (`cleanMethodDisplay`); outside
+      // the digest, like everything else on the record that is not SKILL.md.
+      ...(cleanMethodDisplay(input.display) ? { display: cleanMethodDisplay(input.display) } : {}),
       createdAt: this.now().toISOString(),
     };
     // A method takes effect now — the researcher's own, and since 2026-09-20 a
@@ -228,7 +232,7 @@ export class LearningService {
    * they knew.
    * @param {string} userId
    * @param {string} methodId
-   * @param {{expectedRevision: number, frontmatter: any, body: string, files?: any, provenance?: any, dependencies?: any[], mountedTools?: readonly string[]}} input
+   * @param {{expectedRevision: number, frontmatter: any, body: string, files?: any, provenance?: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown}} input
    */
   async amendMethod(userId, methodId, input) {
     const current = await this.getMethod(userId, methodId);
@@ -244,10 +248,27 @@ export class LearningService {
       contentDigest: digest,
       learning,
       provenance: { ...current.payload.provenance, ...input.provenance },
+      // A new line when the revision brought one; otherwise the old one stands.
+      ...(cleanMethodDisplay(input.display) ? { display: cleanMethodDisplay(input.display) } : {}),
       updatedAt: this.now().toISOString(),
     };
     if (payload.files === undefined) delete payload.files;
     await this.documents.put(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
+    return this.getMethod(userId, methodId);
+  }
+
+  /**
+   * Give a method the line its researcher reads, and nothing else: not a
+   * revision of the method (the digest, status and counters are untouched).
+   * @param {string} userId @param {string} methodId @param {unknown} display
+   */
+  async setDisplay(userId, methodId, display) {
+    const cleaned = cleanMethodDisplay(display);
+    if (!cleaned) throw new HttpError(422, "method_display_invalid", "A method's display needs a title and a summary within their limits.");
+    const document = await this.getMethod(userId, methodId);
+    await this.documents.put(userId, "method", document.id, { ...document.payload, display: cleaned }, {
+      expectedRevision: document.revision,
+    });
     return this.getMethod(userId, methodId);
   }
 

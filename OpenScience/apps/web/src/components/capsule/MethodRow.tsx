@@ -3,7 +3,7 @@ import { RotateCcw } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { announceMemoryChanged } from "@/lib/memoryClient";
 import { memoryExcerpt } from "@/lib/memoryText";
-import { retireMethod, rollbackMethod, type WebMethod } from "@/lib/methodsClient";
+import { methodTitle, retireMethod, rollbackMethod, type WebMethod } from "@/lib/methodsClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
@@ -69,17 +69,21 @@ export function MethodRow({ method, onChanged }: { method: WebMethod; onChanged:
   };
   const stop = () => run(async () => {
     await retireMethod(method, "在记忆页里停用");
-    toast.success(`已停用「${method.name}」，之后的研究不会再用它。`);
+    toast.success(`已停用「${methodTitle(method)}」，之后的研究不会再用它。`);
   });
   const rollback = () => run(async () => {
     await rollbackMethod(method, method.revision - 1);
-    toast.success(`「${method.name}」已回到上一版。`);
+    toast.success(`「${methodTitle(method)}」已回到上一版。`);
   });
 
   return (
     <li className="px-4 py-3" data-method-id={method.id}>
       <p className="text-ui text-text">
-        {method.description ? `${method.name}：${memoryExcerpt(method.description, 120)}` : method.name}
+        {/* The researcher's own line when it exists; the model's name and
+            description otherwise, which are English and written for routing. */}
+        {method.title && method.summary
+          ? `${method.title}：${method.summary}`
+          : method.description ? `${method.name}：${memoryExcerpt(method.description, 120)}` : method.name}
         <span className="text-muted">（{methodEvidence(method)}）</span>
       </p>
       <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">

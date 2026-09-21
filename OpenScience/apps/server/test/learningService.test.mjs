@@ -424,3 +424,20 @@ test("a rendered method round-trips through the store without moving its digest"
   assert.match(rendered, /^---\n/);
   assert.match(rendered, /## Verification/);
 });
+
+test("the researcher's line is kept beside the method: never in its digest, never a revision of what it does", async () => {
+  const { learning } = service();
+  const display = { title: "先做一件事", summary: "需要做这件事时，先按固定的输入把它做完。" };
+  const created = await create(learning, { display: { ...display, title: `  ${display.title}\n` } });
+  assert.deepEqual(created.payload.display, display, "cleaned on the way in");
+  assert.equal(created.payload.contentDigest, methodContentDigest({ frontmatter: frontmatter(), body: BODY }, sha256), "not part of the digest");
+
+  const plain = await create(learning, { frontmatter: frontmatter({ name: "another-thing" }) });
+  assert.equal(plain.payload.display, undefined);
+  const named = await learning.setDisplay("u1", plain.id, display);
+  assert.deepEqual(named.payload.display, display);
+  assert.equal(named.payload.status, plain.payload.status);
+  assert.equal(named.payload.contentDigest, plain.payload.contentDigest);
+  assert.deepEqual(named.payload.learning, plain.payload.learning, "nothing measured about it resets");
+  await assert.rejects(learning.setDisplay("u1", plain.id, { title: "只有标题" }), { code: "method_display_invalid" });
+});

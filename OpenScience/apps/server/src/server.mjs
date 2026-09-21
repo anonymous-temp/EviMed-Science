@@ -95,6 +95,7 @@ import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
 import { createSourceUnderstandingRuntime } from "./sourceUnderstandingRuntime.mjs";
+import { MethodDescriber } from "./methodDisplay.mjs";
 import { removeSourceCopies, sourceAttemptId } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { createWebRenderer } from "./agentbay/browser.mjs";
@@ -1953,6 +1954,7 @@ export function createWebApiApp(overrides = {}) {
     },
   });
   if (learningService && productJobs && config.learningEnabled) {
+    const methodDescriber = new MethodDescriber(config, { usageLedger });
     learningRuntime = createLearningRuntime({
       config, store, agentRuns, runtimeManager, researchSessions,
       registry: agentRegistry, usageLedger, prepareContext: prepareResearchContext,
@@ -1970,6 +1972,8 @@ export function createWebApiApp(overrides = {}) {
       learning: learningService, jobs: productJobs, notifications: notificationService,
       // A step waits for its run as long as the run monitor lets a run live.
       stepWaitMs: config.agentRunMonitorTimeoutMs,
+      // The line a researcher reads for a method that came without one.
+      describe: (document, owner) => methodDescriber.describe(document, owner),
       // A paired evaluation dispatches hundreds of real runs, so it is opt-in:
       // with no command configured an `evaluate` job fails by name rather than
       // succeeding without having evaluated anything. When an operator does
