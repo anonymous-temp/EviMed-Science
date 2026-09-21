@@ -68,6 +68,11 @@ export async function freezeLearningEvaluation({ learning, capsules, project, re
   };
 }
 
+/** How long a finished cell's in-flight calls get to settle before its usage is
+ *  read: settlement follows the stream by seconds, and a reservation that
+ *  never settles is released by the ledger's own sweeper. */
+export const EVALUATION_SETTLE_WAIT_MS = 60_000;
+
 /**
  * One evaluation cell's usage, as the evaluator reads it.
  *
@@ -169,7 +174,18 @@ export async function evaluateLearnedMethod(dependencies, request, options = {})
     },
     readArtifact: (cell, artifactPath) => commands.invoke("read_artifact", { path: artifactPath }, { config, project: cell.scoped }),
     readTranscript: (cell) => runtimeManager.sessionTranscript(cell.scoped, cell.sessionId, { wake: false }),
-    readUsage: async (cell) => evaluationCellUsage(await usageLedger.summaryRun(user.id, cell.dispatchId)),
+    readUsage: async (cell) => {
+      // The run is over, but its last calls may still be settling: the gateway
+      // writes a receipt after the stream ends, and the evaluator reads usage
+      // the moment the run is terminal. Read that early, a cell counted as
+      // unmeasurable on 2026-09-21 whose calls all settled within seconds.
+      let summary = await usageLedger.summaryRun(user.id, cell.dispatchId);
+      for (let waited = 0; summary.reservedCalls && waited < EVALUATION_SETTLE_WAIT_MS; waited += 2_000) {
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+        summary = await usageLedger.summaryRun(user.id, cell.dispatchId);
+      }
+      return evaluationCellUsage(summary);
+    },
     cleanupCell,
     ...(dependencies.judge ? { judge: dependencies.judge } : {}),
   });

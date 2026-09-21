@@ -1579,3 +1579,11 @@ class PrivateGrantIdTests(unittest.TestCase):
         self.assertNotEqual(first, runner.grant_config_suffix({**grant, "candidateDigest": "sha256:" + "e" * 64}),
                             "a different candidate is a different experiment")
         self.assertNotEqual(first, runner.grant_config_suffix({**grant, "bootstrap": False}))
+
+
+class PrivateResumeTests(unittest.TestCase):
+    def test_a_private_evaluation_re_measures_an_excluded_cell_instead_of_resuming_it(self):
+        # An excluded cell makes a private report invalid; resuming onto it
+        # repeated `invalid` on every retry (2026-09-21).
+        source = (pathlib.Path(__file__).resolve().parent / "run_paired.py").read_text(encoding="utf-8")
+        self.assertIn("rerun_excluded=args.rerun_excluded or bool(private_grant)", source)
