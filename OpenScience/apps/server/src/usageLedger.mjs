@@ -400,6 +400,7 @@ export class UsageLedger {
       count(*) FILTER (WHERE status='uncertain')::integer AS uncertain_calls,
       coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0) AS actual_cost,
       coalesce(sum(reserved_cost) FILTER (WHERE status IN ('reserved','uncertain')),0) AS reserved_cost,
+      coalesce(sum(reserved_cost) FILTER (WHERE status='uncertain'),0) AS uncertain_cost,
       coalesce(sum(cache_hit_tokens) FILTER (WHERE status='settled'),0) AS cache_hit_tokens,
       coalesce(sum(cache_miss_tokens) FILTER (WHERE status='settled'),0) AS cache_miss_tokens,
       coalesce(sum(output_tokens) FILTER (WHERE status='settled'),0) AS output_tokens,
@@ -412,7 +413,10 @@ export class UsageLedger {
     return {
       since: at, totalCalls: row.total_calls, reservedCalls: row.reserved_calls, settledCalls: row.settled_calls,
       releasedCalls: row.released_calls, uncertainCalls: row.uncertain_calls,
-      actualCost: Number(row.actual_cost), reservedCost: Number(row.reserved_cost), currency: "CNY",
+      actualCost: Number(row.actual_cost), reservedCost: Number(row.reserved_cost),
+      // What the uncertain calls alone hold of the account's limits: their
+      // reserved ceilings, since the provider never reported what they used.
+      uncertainCost: Number(row.uncertain_cost), currency: "CNY",
       cacheHitTokens: Number(row.cache_hit_tokens), cacheMissTokens: Number(row.cache_miss_tokens),
       completionTokens: Number(row.output_tokens), unpricedCalls: row.unpriced_calls,
       byModel: row.by_model.map((item) => ({ model: item.model, calls: item.calls, cost: Number(item.cost) })),

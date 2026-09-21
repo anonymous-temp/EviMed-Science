@@ -44,17 +44,18 @@ function ledger(events, { reject = false } = {}) {
   };
 }
 
-async function call(t, upstreamHandler, usageLedger, requestBody, runtimeManager = manager()) {
+async function call(t, upstreamHandler, usageLedger, requestBody, runtimeManager = manager(), signal = undefined) {
   const upstream = createServer(upstreamHandler);
   const upstreamBase = await listen(upstream);
-  t.after(() => new Promise((resolve) => upstream.close(resolve)));
+  t.after(() => new Promise((resolve) => { upstream.closeAllConnections(); upstream.close(resolve); }));
   const gateway = createServer(createModelGatewayHandler(config(upstreamBase), runtimeManager, { usageLedger }));
   const gatewayBase = await listen(gateway);
-  t.after(() => new Promise((resolve) => gateway.close(resolve)));
+  t.after(() => new Promise((resolve) => { gateway.closeAllConnections(); gateway.close(resolve); }));
   return fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
     method: "POST",
     headers: { authorization: "Bearer runtime", "content-type": "application/json" },
     body: JSON.stringify(requestBody),
+    signal,
   });
 }
 
@@ -126,6 +127,106 @@ test("an ambiguous connection loss after dispatch stays uncertain for reconcilia
   assert.deepEqual(events.map((event) => event.type), ["reserve", "uncertain"]);
   assert.equal(events[1].code, "provider_response_incomplete");
 });
+
+const USAGE_FRAME = 'data: {"id":"provider-late","choices":[],"usage":{"prompt_tokens":40,"completion_tokens":5,"prompt_cache_hit_tokens":32,"prompt_cache_miss_tokens":8}}\n\n';
+
+/**
+ * Read a gateway stream the way the kernel does (`parseSse` in
+ * dsh-llm-deepseek): up to `stopAt`, then drop the connection at once.
+ * @param {Response} response @param {AbortController} controller @param {string} stopAt
+ */
+async function readLikeTheKernel(response, controller, stopAt) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return { text, ended: true };
+    text += decoder.decode(value, { stream: true });
+    if (text.includes(stopAt)) {
+      controller.abort();
+      await reader.cancel().catch(() => {});
+      return { text, ended: false };
+    }
+  }
+}
+
+test("an answer the kernel read to [DONE] is settled however late the provider closes its body", async (t) => {
+  // 2026-09-21: about 3% of calls — more at peak hours — were booked
+  // `uncertain` at their reserved cost although the whole answer and its usage
+  // frame had reached the kernel. The kernel stops at `[DONE]` and drops the
+  // connection; the gateway was still waiting for the provider to close.
+  const events = [];
+  let providerClosed = null;
+  const controller = new AbortController();
+  const response = await call(t, async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write('data: {"id":"provider-late","choices":[{"index":0,"delta":{"content":"ok"}}]}\n\n');
+    res.write(`${USAGE_FRAME}data: [DONE]\n\n`);
+    // The body's end arrives in a later packet, after the kernel has gone.
+    setTimeout(() => { providerClosed = Date.now(); res.end(); }, 400);
+  }, ledger(events), { messages: [{ role: "user", content: "Answer briefly." }], stream: true }, manager(), controller.signal);
+  assert.equal(response.status, 200);
+  const read = await readLikeTheKernel(response, controller, "data: [DONE]\n\n");
+  assert.ok(read.text.includes('"usage"'));
+  await waitFor(() => events.some((event) => event.type !== "reserve"));
+  assert.deepEqual(events.map((event) => event.type), ["reserve", "settle"]);
+  assert.deepEqual(events[1].input.usage, { cacheHitTokens: 32, cacheMissTokens: 8, completionTokens: 5 });
+  assert.equal(events[1].input.providerRequestId, "provider-late");
+  assert.ok(providerClosed !== null, "the rest of the provider's body was read, so its connection can be reused");
+});
+
+test("a reader that waits for the end of the stream gets it at [DONE], not at the provider's close", async (t) => {
+  const events = [];
+  let providerClosedAt = null;
+  const response = await call(t, async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write(`${USAGE_FRAME}data: [DONE]\n\n`);
+    setTimeout(() => { providerClosedAt = Date.now(); res.end(); }, 600);
+  }, ledger(events), { messages: [{ role: "user", content: "Answer briefly." }], stream: true });
+  const text = await response.text();
+  const endedAt = Date.now();
+  assert.ok(text.endsWith("data: [DONE]\n\n"));
+  assert.equal(providerClosedAt, null, "the answer ended before the provider closed its body");
+  await waitFor(() => events.some((event) => event.type === "settle"));
+  assert.ok(Date.now() >= endedAt);
+});
+
+test("a caller that leaves after the usage frame leaves a settled call; one that leaves before it, an uncertain one", async (t) => {
+  for (const [label, stopAt, expected] of [
+    ["after usage, before [DONE]", '"usage"', "settle"],
+    ["mid-answer, before usage", '"content":"part"', "uncertain"],
+  ]) {
+    const events = [];
+    const controller = new AbortController();
+    const response = await call(t, async (req, res) => {
+      for await (const _chunk of req) { /* consume */ }
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write('data: {"id":"provider-late","choices":[{"index":0,"delta":{"content":"part"}}]}\n\n');
+      setTimeout(() => {
+        if (res.destroyed) return;
+        res.write(USAGE_FRAME);
+        setTimeout(() => { if (!res.destroyed) res.end("data: [DONE]\n\n"); }, 300);
+      }, 150);
+    }, ledger(events), { messages: [{ role: "user", content: "Answer." }], stream: true }, manager(), controller.signal);
+    await readLikeTheKernel(response, controller, stopAt);
+    await waitFor(() => events.some((event) => event.type !== "reserve"));
+    assert.deepEqual(events.map((event) => event.type), ["reserve", expected], label);
+    if (expected === "uncertain") assert.equal(events[1].code, "provider_response_incomplete", label);
+    else assert.deepEqual(events[1].input.usage, { cacheHitTokens: 32, cacheMissTokens: 8, completionTokens: 5 }, label);
+  }
+});
+
+/** @param {() => boolean} predicate */
+async function waitFor(predicate, timeoutMs = 3_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error("timed out waiting for the ledger");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 
 test("a signed session marker attributes only that request and is removed before the provider", async (t) => {
   const events = [];

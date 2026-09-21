@@ -41,10 +41,11 @@ describe("UsageCard", () => {
   });
 
   it("distinguishes active reservations from calls awaiting reconciliation", async () => {
-    mocks.fetchWebAccountUsage.mockResolvedValue({ ...summary, reservedCalls: 2, uncertainCalls: 1, reservedCost: 0.75 });
+    mocks.fetchWebAccountUsage.mockResolvedValue({ ...summary, reservedCalls: 2, uncertainCalls: 1, reservedCost: 1.25, uncertainCost: 0.75 });
     render(<UsageCard />);
     expect(await screen.findByText(/2 次调用已预留额度/)).toBeInTheDocument();
-    expect(screen.getByText(/1 次调用的实际用量还在核对，先按预估的 0\.75 CNY 计入额度/)).toBeInTheDocument();
+    expect(screen.getByText(/1 次调用在回答结束前中断，模型供应商没有回报它们的用量；它们按预留上限（共 0\.75 CNY）计入最近 7 天的额度/)).toBeInTheDocument();
+    expect(screen.queryByText(/核对后自动更正/)).not.toBeInTheDocument();
   });
 
   // A zero cost that means "free" and one that means "we have no price for

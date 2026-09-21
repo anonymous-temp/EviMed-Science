@@ -1703,6 +1703,8 @@ export interface WebUsageSummary {
   reservedCalls?: number;
   uncertainCalls?: number;
   reservedCost?: number;
+  /** The reserved ceilings of the uncertain calls alone. */
+  uncertainCost?: number;
   priceVersions?: string[];
 }
 

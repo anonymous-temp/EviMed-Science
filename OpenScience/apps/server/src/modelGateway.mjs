@@ -502,14 +502,28 @@ function waitForDrain(res, signal) {
 
 /** @param {any} body @param {any} res @param {any} signal @param {number} maxBytes
  *  @param {((chunk: Uint8Array) => void) | null} onChunk called per delivered
- *  chunk, before it is written on */
-export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk = null) {
+ *  chunk, before it is written on
+ *  @param {(() => boolean) | null} finished whether what was delivered is the
+ *  whole answer (a stream's `[DONE]`), asked after each chunk is written */
+export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk = null, finished = null) {
   const reader = body.getReader();
   let total = 0;
   try {
     for (;;) {
-      if (signal.aborted) throw signal.reason;
-      const { done, value } = await reader.read();
+      // Once the whole answer is out, nothing that happens to the rest of the
+      // provider's body — the idle deadline, a reset — makes it less delivered.
+      if (signal.aborted) {
+        if (res.writableEnded) break;
+        throw signal.reason;
+      }
+      let step;
+      try {
+        step = await reader.read();
+      } catch (error) {
+        if (res.writableEnded) break;
+        throw error;
+      }
+      const { done, value } = step;
       if (done) break;
       // A stream that is still delivering is not a stalled request. Without
       // this the deadline set before the call kept running through the
@@ -520,9 +534,25 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
       if (total > maxBytes) {
         throw gatewayError(502, "model_gateway_response_too_large", "The model provider response exceeded the gateway limit.");
       }
-      if (!res.write(Buffer.from(value))) await waitForDrain(res, signal);
+      // What follows the whole answer is the provider closing its body; it is
+      // read, so the connection can serve the next call, and not forwarded.
+      if (res.writableEnded) continue;
+      const drained = res.write(Buffer.from(value));
+      // The answer ends at `[DONE]`, not when the provider gets round to
+      // closing its body, and the kernel knows it: it reads up to the
+      // sentinel and drops the connection at once. Waiting for the provider's
+      // close before ending lost that race whenever the close came in a later
+      // packet — about 3% of calls on 2026-09-21, more at peak hours, each an
+      // answer delivered whole and booked as `uncertain` at its reserved cost,
+      // and each able to fail the release receipt. The response now ends in
+      // the same tick as its last byte.
+      if (finished?.()) {
+        res.end();
+        continue;
+      }
+      if (!drained) await waitForDrain(res, signal);
     }
-    res.end();
+    if (!res.writableEnded) res.end();
     return total;
   } catch (error) {
     await reader.cancel(error).catch(() => {});
@@ -557,7 +587,26 @@ export function createModelGatewayHandler(config, runtimeManager, {
     let providerDisposition = "not-dispatched";
     let usageTerminal = false;
     let providerRequestId = null;
+    /** @type {ReturnType<typeof createUsageTail> | null} */
+    let usageTail = null;
+    let deliveredBytes = 0;
+    let modelName = null;
     const requestStartedAt = new Date();
+    /** Book the provider's own count against the reservation. */
+    const settleExact = async (exactUsage) => {
+      const actual = priceUsage({
+        resourceType: "model", model: modelName, cacheHit: exactUsage.cacheHitTokens,
+        cacheMiss: exactUsage.cacheMissTokens, output: exactUsage.completionTokens, peak: isPeak(requestStartedAt),
+      });
+      await usageLedger.settleModel(reservationUserId, reservation.id, {
+        usage: {
+          cacheHitTokens: exactUsage.cacheHitTokens,
+          cacheMissTokens: exactUsage.cacheMissTokens,
+          completionTokens: exactUsage.completionTokens,
+        },
+        actualCost: actual.cost, priced: actual.priced, providerRequestId,
+      });
+    };
     const timeoutMs = Math.max(1, Number(config.modelGatewayTimeoutMs) || 300_000);
     // The limit is now idle time, not total time. It was total, and set before
     // the request: a reasoning model that streamed an answer for longer than
@@ -600,6 +649,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
       let normalized = normalizedRequest(body, config);
       const scoped = consumeBudgetScope(normalized, caller, config);
       normalized = scoped.request;
+      modelName = normalized.model;
       if (config.requireDurableUsageLedger === true && !usageLedger) {
         throw gatewayError(503, "usage_ledger_unavailable", "Durable usage accounting is unavailable.");
       }
@@ -701,30 +751,21 @@ export function createModelGatewayHandler(config, runtimeManager, {
       // this is the one place they pass through. The tail is kept rather than
       // the body: `usage` is last in both shapes, and holding a whole response
       // would undo the reason this is a stream.
-      const usageTail = createUsageTail(16 * 1024, { stream: normalized.stream });
+      const tail = createUsageTail(16 * 1024, { stream: normalized.stream });
+      usageTail = tail;
       await pipeModelGatewayBody(upstream.body, res, abortController.signal, responseLimit, (chunk) => {
         armIdleDeadline();
-        usageTail.observe(chunk);
-      });
-      providerRequestId = usageTail.providerRequestId();
-      const exactUsage = usageTail.usage();
+        deliveredBytes += chunk.byteLength;
+        tail.observe(chunk);
+      }, normalized.stream ? () => tail.finished() : null);
+      providerRequestId = tail.providerRequestId();
+      const exactUsage = tail.usage();
       // After the body, never before: a call that failed halfway is not a call
       // to bill, and awaiting a ledger write before the last byte would put
       // the accounting in the answer's way.
       if (usageLedger && reservation) {
         if (exactUsage) {
-          const actual = priceUsage({
-            resourceType: "model", model: normalized.model, cacheHit: exactUsage.cacheHitTokens,
-            cacheMiss: exactUsage.cacheMissTokens, output: exactUsage.completionTokens, peak: isPeak(requestStartedAt),
-          });
-          const settledUsage = {
-            cacheHitTokens: exactUsage.cacheHitTokens,
-            cacheMissTokens: exactUsage.cacheMissTokens,
-            completionTokens: exactUsage.completionTokens,
-          };
-          await usageLedger.settleModel(caller.userId, reservation.id, {
-            usage: settledUsage, actualCost: actual.cost, priced: actual.priced, providerRequestId,
-          });
+          await settleExact(exactUsage);
         } else {
           await usageLedger.markUncertain(caller.userId, reservation.id, "response_usage_missing", { providerRequestId });
         }
@@ -734,9 +775,16 @@ export function createModelGatewayHandler(config, runtimeManager, {
           model: normalized.model, usage: exactUsage, at: requestStartedAt });
       }
     } catch (error) {
+      // The provider's own count is the last thing it sends. Once it has
+      // arrived the call is known exactly, whoever hung up after it: booking it
+      // `uncertain` at its reserved cost would bill an estimate for a call
+      // whose price is on the wire.
+      const seenUsage = usageTail?.usage() ?? null;
       if (usageLedger && reservation && reservationUserId && !usageTerminal) {
         try {
-          if (["dispatched", "accepted"].includes(providerDisposition)) {
+          providerRequestId = usageTail?.providerRequestId() ?? providerRequestId;
+          if (seenUsage) await settleExact(seenUsage);
+          else if (["dispatched", "accepted"].includes(providerDisposition)) {
             await usageLedger.markUncertain(reservationUserId, reservation.id, "provider_response_incomplete", { providerRequestId });
           }
           else await usageLedger.release(reservationUserId, reservation.id, "provider_not_accepted");
@@ -750,10 +798,14 @@ export function createModelGatewayHandler(config, runtimeManager, {
       // Once the stream has started, sendError can no longer set a status: the
       // response is truncated and the caller sees an incomplete answer with no
       // reason anywhere. Say so on the way out, because a silent truncation is
-      // indistinguishable from a model that simply stopped talking.
+      // indistinguishable from a model that simply stopped talking. What had
+      // been delivered, and for how long, tells a cancelled turn (seconds, no
+      // usage) from a stalled provider (the idle deadline) from a slow close.
       if (res.headersSent && !res.writableEnded) {
+        const seconds = ((Date.now() - requestStartedAt.getTime()) / 1000).toFixed(1);
         process.stderr.write(
-          `model gateway stream truncated after ${res.getHeader?.("content-type") ?? "stream"}: ${abortReason?.name ?? (error instanceof Error ? error.message : String(error))}\n`,
+          `model gateway stream truncated after ${res.getHeader?.("content-type") ?? "stream"}: ${abortReason?.name ?? (error instanceof Error ? error.message : String(error))}`
+          + ` (${deliveredBytes} bytes in ${seconds}s, usage ${seenUsage ? "received" : "not received"}, [DONE] ${usageTail?.finished() ? "received" : "not received"})\n`,
         );
       }
       if (abortReason?.name === "TimeoutError") {
