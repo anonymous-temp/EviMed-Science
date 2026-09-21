@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
 
+/** Codes that mean no runtime or budget was available yet, and how long a
+ *  document waits before asking again. */
+const CAPACITY_DEFERRALS = new Map([
+  ["runtime_limit_exceeded", 60_000],
+  ["runtime_proxy_limit_exceeded", 60_000],
+  ["usage_budget_exceeded", 3_600_000],
+]);
+
 const TERMINAL_ERRORS = new Set([
   "source_job_invalid", "source_path_invalid", "source_digest_invalid", "source_format_unsupported",
   "source_generation_stale", "source_state_conflict", "source_changed", "openlist_source_changed",
@@ -184,6 +192,16 @@ export class SourceIngestionWorker {
       this.lastError = code;
       if (processing && ["project_runtime_busy", "runtime_busy", "runtime_session_busy", "source_understanding_busy"].includes(code) && !leaseLost) {
         await this.sources.deferIngestion(job);
+        this.lastError = null;
+        return { deferred: true };
+      }
+      // Every runtime slot taken, or a spending cap reached, says nothing about
+      // the document either: it waits for room instead of being marked failed.
+      // A knowledge-base upload failed in 21 s this way while the account's
+      // background work held the slots (2026-09-21).
+      const capacityWait = CAPACITY_DEFERRALS.get(code);
+      if (processing && capacityWait && !leaseLost) {
+        await this.sources.deferIngestion(job, null, capacityWait);
         this.lastError = null;
         return { deferred: true };
       }
