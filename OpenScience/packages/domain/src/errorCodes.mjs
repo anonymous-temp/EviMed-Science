@@ -596,6 +596,7 @@ export const RUN_VERDICT_ERROR_CODES = Object.freeze([
   'runtime_monitor_timeout',
   'runtime_monitor_failed',
   'runtime_prompt_rejected',
+  'runtime_prompt_lost',
   // Manufactured by `sanitizeErrorCode` for a code that is not a well-formed
   // identifier. The system invents it for itself, so it has to be able to
   // explain it: it used to reach the browser's table, miss, and be reported as
@@ -860,6 +861,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // the gateway did or did not charge, and a sentence that promises it would be
   // one more thing the product says without guaranteeing.
   runtime_prompt_rejected: '运行时拒绝了这次提问，任务没有开始。稍后重试；反复出现请联系管理员。',
+  runtime_prompt_lost:
+    '这次提问没有送达运行时：等了很久，运行时的记录里始终没有它，任务从未开始。'
+    + '这不是质量问题，也没有产出任何内容；稍后重试即可。',
   runtime_error: '运行以一个本版本无法识别的原因结束，已记录待排查。这不是对成果的质量判断。',
   superseded_by_dispatch:
     '这次运行被你随后发出的新任务取代，已按取消收尾。'
