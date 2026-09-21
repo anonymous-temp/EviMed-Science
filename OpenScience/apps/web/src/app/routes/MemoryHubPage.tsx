@@ -16,7 +16,7 @@ import {
   type OwnCapsuleEntry,
   type TimelineEvent,
 } from "@/lib/memoryClient";
-import { listMethods, type WebMethod } from "@/lib/methodsClient";
+import { listMethods, methodTitle, type WebMethod } from "@/lib/methodsClient";
 import type { CapsuleRecord } from "@/lib/productClient";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageTitle } from "@/components/layout/PageTitle";
@@ -128,7 +128,7 @@ export function MemoryHubPage() {
   const timeline: TimelineEvent[] = data?.timeline?.items ?? [];
 
   const lines = useMemo(
-    () => portraitLines(data?.profile.records ?? [], methods.filter((method) => method.status === "approved").map((method) => method.name)),
+    () => portraitLines(data?.profile.records ?? [], methods.filter((method) => method.status === "approved").map((method) => methodTitle(method))),
     [data, methods],
   );
 

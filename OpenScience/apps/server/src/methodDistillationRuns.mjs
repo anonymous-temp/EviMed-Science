@@ -270,6 +270,9 @@ export class MethodDistillationRuns {
         ...(files ? { files } : {}),
         provenance,
         dependencies: candidate?.dependencies ?? [],
+        // The researcher's line, cleaned by the service; a candidate without
+        // one is named on the next consolidation pass.
+        ...(candidate?.display ? { display: candidate.display } : {}),
       });
       await this.#enqueueIntegrate(job, created.id, created.revision);
       return { operation, methodId: created.id };
@@ -284,6 +287,7 @@ export class MethodDistillationRuns {
       ...(files ? { files } : {}),
       provenance,
       dependencies: candidate?.dependencies ?? target.payload.dependencies ?? [],
+      ...(candidate?.display ? { display: candidate.display } : {}),
     });
     await this.#enqueueIntegrate(job, amended.id, amended.revision);
     return { operation: existing ? "amend" : operation, methodId: amended.id };

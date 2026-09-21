@@ -40,6 +40,7 @@ import { createHash } from "node:crypto";
 import {
   METHOD_RELATIONS_ACTIONS,
   METHOD_RELATION_TYPES,
+  cleanMethodDisplay,
   computeMethodLevels,
   evaluationEligible,
   parseSkillFrontmatter,
@@ -95,6 +96,8 @@ export const CONSOLIDATION_LIMITS = Object.freeze({
   // an uncapped screen would grow with the square of the library and stop being
   // the cheap step.
   maxScreenPairs: 40,
+  // How many methods one pass gives the researcher's line to (`describe`).
+  maxDescriptions: 10,
 });
 
 /** @param {string} value @returns {string} */
@@ -197,11 +200,13 @@ export class MethodConsolidation {
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any,
    *          jobs?: any, notifications?: any, evaluate?: ((request: any) => Promise<any>) | null,
    *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date,
-   *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>}} dependencies
+   *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>,
+   *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null}} dependencies
    */
   constructor({
     dispatch, readResult, learning, jobs = null, notifications = null, evaluate = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    describe = null,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
@@ -224,6 +229,9 @@ export class MethodConsolidation {
     this.stepWaitMs = stepWaitMs;
     this.pollMs = pollMs;
     this.wait = wait;
+    // Optional: the line a researcher reads for a method that came without one
+    // (`methodDisplay.mjs`). A pass without it still consolidates.
+    this.describe = describe;
   }
 
   /**
@@ -380,6 +388,21 @@ export class MethodConsolidation {
     const importance = relationCount * 10 + promoted.length * 40 + retirements.length * 20;
     if (reflectionDue(importance)) await this.reflect(job, { relationCount, promoted, retirements });
 
+    // Last, so no write above races these revisions: every method a researcher
+    // would read without a line of their own gets one — those that predate
+    // `display`, and any candidate that came without it.
+    const described = [];
+    if (this.describe) {
+      const current = (await this.learning.listMethods(job.userId, { limit: CONSOLIDATION_LIMITS.maxMethods })).items ?? [];
+      for (const document of current) {
+        if (described.length >= CONSOLIDATION_LIMITS.maxDescriptions) break;
+        if (document.payload?.status === "retired" || cleanMethodDisplay(document.payload?.display)) continue;
+        const display = await this.describe(document, { userId: job.userId, projectId: job.projectId ?? null }).catch(() => null);
+        if (!display) continue;
+        if (await this.learning.setDisplay(job.userId, document.id, display).catch(() => null)) described.push(document.id);
+      }
+    }
+
     return {
       action: "sleep",
       methods: refreshed.length,
@@ -392,6 +415,7 @@ export class MethodConsolidation {
       queuedForEvaluation,
       retirements: retirements.map((entry) => entry.document.id),
       graphIssues: graph.issues.map((issue) => issue.code),
+      described,
     };
   }
 

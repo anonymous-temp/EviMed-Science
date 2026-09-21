@@ -174,7 +174,8 @@ body — a method is mounted into every later run of the project.
  "applicability": "the situation this method is for",
  "counterexamples": ["a situation it must not be loaded into"],
  "risk": {"touchesSafety": false, "widensTools": false},
- "testScenarios": [{"id": "...", "runId": "...", "situation": "...", "expected": "..."}]}
+ "testScenarios": [{"id": "...", "runId": "...", "situation": "...", "expected": "..."}],
+ "display": {"title": "...", "summary": "..."}}
 ```
 
 Every `quote` is verbatim from the excerpt at `seqRange` in the run named by
@@ -185,6 +186,14 @@ population, contraindication or dose-handling step, and `risk.widensTools` when
 it asks for a tool the source runs did not use. Give at least
 `authoringLimits.minTestScenarios` test scenarios, and take each one from a run
 in this input — a scenario you invented tests nothing that happened.
+
+`display` is what the researcher reads on their memory page, beside the method
+you wrote for the model: a short title (at most 40 characters) and one sentence
+(at most 200) in the researcher's own language — the language of the run's
+conversation, Simplified Chinese unless that conversation was in another. Say
+what they do differently in their work and when, not how the method is
+implemented; no tool names, file names or kebab-case. It is never part of
+SKILL.md. Leave it out for `no_change`.
 
 Nothing you write may set a status of `approved`, and nothing may claim an
 evaluation verdict. The contract rejects both.

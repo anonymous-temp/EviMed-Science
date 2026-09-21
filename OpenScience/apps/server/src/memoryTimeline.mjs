@@ -16,6 +16,8 @@
  * @module memoryTimeline
  */
 
+import { cleanMethodDisplay } from "@evimed/domain";
+
 import { HttpError, sendJson } from "./security.mjs";
 
 /** The kinds of event a timeline shows. */
@@ -137,7 +139,9 @@ export function runEvents(run) {
  */
 export function methodEvents(document) {
   const payload = document?.payload ?? {};
-  const name = excerpt(payload.frontmatter?.name ?? document.id, 80);
+  // The researcher's line when the method has one (`cleanMethodDisplay`);
+  // otherwise its own name, which is written for the model.
+  const name = excerpt(cleanMethodDisplay(payload.display)?.title ?? payload.frontmatter?.name ?? document.id, 80);
   const base = { type: "method", methodId: String(document.id), name, origin: payload.origin ?? payload.provenance?.origin ?? null };
   /** @type {any[]} */
   const events = [];

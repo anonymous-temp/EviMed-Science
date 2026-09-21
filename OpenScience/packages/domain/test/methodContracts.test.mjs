@@ -244,6 +244,14 @@ test("the scripts a candidate attaches are graded in the run exactly as the stor
   assert.equal(throughGate.ok, false);
 });
 
+test("a candidate's researcher-facing line is optional, and bounded when given", () => {
+  assert.equal(gateCandidate({ candidate: candidateJson({ display: { title: "先报证据等级", summary: "结论先给 GRADE 等级，再给效应量。" } }) }).ok, true)
+  const long = gateCandidate({ candidate: candidateJson({ display: { title: "标".repeat(41), summary: "说明" } }) })
+  assert.equal(long.ok, false)
+  assert.ok(long.issues.some((entry) => /display/.test(entry.message)))
+  assert.equal(gateCandidate({ candidate: candidateJson({ display: { title: "只有标题" } }) }).ok, false)
+})
+
 test("a rewritten method inside a build is graded as the method it will become", () => {
   const verdict = gateRelations({
     schemaVersion: 1,

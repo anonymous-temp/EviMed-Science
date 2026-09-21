@@ -439,3 +439,26 @@ test("a step is keyed on what it reads: an unchanged group reads its answer agai
   changed.payload.contentDigest = `sha256:${"f".repeat(64)}`;
   assert.notDeepEqual(await ids([doc("m1", "resolve-claim-span"), changed]), first);
 });
+
+test("a method without the researcher's line gets one at the end of the pass, and one that has it is left alone", async () => {
+  // 2026-09-21: the memory page printed the model's English name and routing
+  // description to a Chinese reader.
+  const named = doc("m2", "resolve-claim-anchor", { display: { title: "先锚定再改写", summary: "修报告前先把每条主张对回原文位置。" } });
+  const learning = fakeLearning([doc("m1", "resolve-claim-span"), named]);
+  /** @type {any[]} */
+  const written = [];
+  /** @type {any} */ (learning).setDisplay = async (_userId, id, display) => { written.push({ id, display }); return { id }; };
+  /** @type {string[]} */
+  const asked = [];
+  const consolidation = new MethodConsolidation({
+    learning,
+    dispatch: async (request) => ({ runId: "r1", sessionId: "s1", dispatchId: request.dispatchId }),
+    readResult: async () => ({ status: "succeeded", output: { pairs: [] } }),
+    describe: async (document) => { asked.push(document.id); return { title: "按原文锚定主张", summary: "交付前逐条把主张对回来源原文的确切位置。" }; },
+    wait: async () => {},
+  });
+  const result = await consolidation.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
+  assert.deepEqual(asked, ["m1"], "only the method without a line is described");
+  assert.deepEqual(written, [{ id: "m1", display: { title: "按原文锚定主张", summary: "交付前逐条把主张对回来源原文的确切位置。" } }]);
+  assert.deepEqual(result.described, ["m1"]);
+});

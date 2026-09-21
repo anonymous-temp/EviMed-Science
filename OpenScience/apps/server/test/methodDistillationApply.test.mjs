@@ -203,3 +203,14 @@ test("scripts the proposal itself attaches still travel with it", async () => {
   }));
   assert.deepEqual(learning.created[0].files, files);
 });
+
+test("the researcher's line a candidate carries travels to the store beside the method, never inside it", async () => {
+  const { distillation, learning } = runs();
+  const display = { title: "先报 GRADE 再报效应量", summary: "Meta 分析的结论先给证据等级，再给效应量和区间。" };
+  await distillation.applyCandidate(job, run, decodeLearningOutput({
+    "SKILL.md": SKILL,
+    "method-candidate.json": JSON.stringify({ schemaVersion: 1, operation: "create", display }),
+  }));
+  assert.deepEqual(learning.created[0].display, display);
+  assert.doesNotMatch(learning.created[0].body, /GRADE 再报/, "the line is not part of SKILL.md");
+});

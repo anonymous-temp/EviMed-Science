@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mountedMethodDigest, parseSkillFrontmatter, promotionVerdict, successfulFamilies } from "@evimed/domain";
+import { cleanMethodDisplay, mountedMethodDigest, parseSkillFrontmatter, promotionVerdict, successfulFamilies } from "@evimed/domain";
 import { methodRecordFrom } from "./learningService.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
@@ -62,6 +62,11 @@ export function methodView(document) {
     name: payload.frontmatter?.name ?? "",
     description: payload.frontmatter?.description ?? "",
     whenToUse: payload.frontmatter?.whenToUse ?? "",
+    // What the researcher reads: the method's own name and description are
+    // written for the model (`cleanMethodDisplay`). Null until a distillation
+    // or a consolidation pass has written one.
+    title: cleanMethodDisplay(payload.display)?.title ?? null,
+    summary: cleanMethodDisplay(payload.display)?.summary ?? null,
     role: payload.frontmatter?.metadata?.role ?? "functional",
     status: payload.status ?? "candidate",
     statusReason: payload.statusReason ?? null,
