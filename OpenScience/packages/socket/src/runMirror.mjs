@@ -150,6 +150,7 @@ export function advanceEvidence(record, event, patch = {}) {
  * @property {Record<string, any>[]} gateRuns
  * @property {Record<string, any>[]} subagents
  * @property {string[]} injectedSkills
+ * @property {{ name: string, digest: string }[]} mountedMethods
  * @property {string[]} qualityNotices
  * @property {string[]} degraded
  */
@@ -168,6 +169,7 @@ export const RUN_STATE_FORMAT_VERSION = 1
  *   gateRuns?: readonly Record<string, any>[],
  *   subagents?: readonly Record<string, any>[],
  *   injectedSkills?: readonly string[],
+ *   mountedMethods?: readonly { name: string, digest: string }[],
  *   qualityNotices?: readonly string[],
  *   degraded?: readonly string[],
  *   now: string,
@@ -214,6 +216,15 @@ export function projectRunState(input) {
     // in front of the model, and a section of the system prompt is as in front
     // of it as a tool result is.
     injectedSkills: [...(input.injectedSkills ?? [])],
+    // The methods the runtime put in front of every session — the user's
+    // capsule and learned methods, by name and body digest. The delegation
+    // receipt records what a child carried; this is the root's own receipt,
+    // and without it a run that did its work without delegating had no record
+    // that its methods were there at all (2026-09-21: every paired-evaluation
+    // cell was excluded as `arm_not_applied`).
+    mountedMethods: (input.mountedMethods ?? [])
+      .filter((entry) => entry && typeof entry.name === 'string' && entry.name && typeof entry.digest === 'string' && entry.digest)
+      .map((entry) => ({ name: entry.name, digest: entry.digest })),
     qualityNotices: [...(input.qualityNotices ?? [])],
     degraded: [...(input.degraded ?? [])],
   }

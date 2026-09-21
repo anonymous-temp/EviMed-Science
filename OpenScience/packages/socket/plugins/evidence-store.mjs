@@ -80,6 +80,14 @@ export async function apply(ctx, config) {
      */
     injectedSkills: new Set(),
     /**
+     * The methods mounted into this runtime, by name and body digest — the
+     * root session's own receipt of them (`evimed-capsule` reports it). One
+     * set for the runtime, like `injectedSkills`: every session reads the same
+     * directory.
+     * @type {Map<string, string>}
+     */
+    mountedMethods: new Map(),
+    /**
      * What a run-level tool may look at, per root session: the deliverables
      * this conversation planned, and a resolver for the claim ids they carry.
      *
@@ -136,6 +144,19 @@ export async function apply(ctx, config) {
       const skill = String(skillName ?? '').trim()
       if (skill) store.injectedSkills.add(skill)
     },
+    /**
+     * Record the methods this runtime mounted, by name and body digest.
+     * Reached by `evimed-capsule`, from inside the agent preset, for the same
+     * reason as `injectedSkill`.
+     * @param {readonly { name: string, digest: string }[]} methods
+     */
+    mountedMethods(methods) {
+      for (const method of methods ?? []) {
+        const methodName = String(method?.name ?? '').trim()
+        const digest = String(method?.digest ?? '').trim()
+        if (methodName && digest) store.mountedMethods.set(methodName, digest)
+      }
+    },
     /** @param {string} runId */
     forRun(runId) { return runId ? scopedDiagnostics(runId) : this },
     /** @param {string} sessionId */
@@ -165,6 +186,7 @@ export async function apply(ctx, config) {
       // which the gate reads as "the model had to load it itself", exactly as
       // it did before this existed.
       injectedSkills: [...store.injectedSkills],
+      mountedMethods: [...store.mountedMethods].map(([methodName, digest]) => ({ name: methodName, digest })),
       qualityNotices: [...store.qualityNotices, ...(store.runQualityNotices.get(run.runId) ?? [])],
       degraded: [...store.degraded, ...(store.runDegraded.get(run.runId) ?? [])],
       now: new Date().toISOString(),

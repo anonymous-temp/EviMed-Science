@@ -71,6 +71,9 @@ export const Config = Schema.object({
 export async function apply(ctx, config) {
   const methods = await loadMethods(ctx, config.methodsDir)
   ctx.provide('evimedCapsuleMethods', methods, true)
+  // The root session's receipt of what it carries, in the run-state
+  // projection beside the delegation receipts (`evidence-store`).
+  if (methods.length) ctx.get('evimedDiagnostics')?.mountedMethods?.(methods.map((method) => ({ name: method.name, digest: method.digest })))
   // A method that cannot be listed costs that method, never the session.
   if (methods.length) {
     try {

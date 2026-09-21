@@ -69,7 +69,11 @@ test('applying the plugin with a method mounted reaches no service it does not i
     tools: { register: () => () => {} },
     skills: { register: () => () => {} },
   }
-  const ctx = new Proxy({ effect: (/** @type {any} */ fn) => fn(), provide: () => {}, get: (/** @type {string} */ key) => (key === 'fs' ? fs : undefined) }, {
+  /** @type {any[]} */
+  const reported = []
+  const diagnostics = { mountedMethods: (/** @type {any[]} */ methods) => { reported.push(...methods) } }
+  const ctx = new Proxy({ effect: (/** @type {any} */ fn) => fn(), provide: () => {},
+    get: (/** @type {string} */ key) => (key === 'fs' ? fs : key === 'evimedDiagnostics' ? diagnostics : undefined) }, {
     get(target, key) {
       if (typeof key === 'string' && key in services) {
         if (!declared.has(key)) throw new Error(`cannot get property "${key}" without inject`)
@@ -83,4 +87,7 @@ test('applying the plugin with a method mounted reaches no service it does not i
   assert.equal(sections[0].name, METHODS_SECTION_NAME)
   assert.equal(sections[0].order, METHODS_SECTION_ORDER)
   assert.match(sections[0].text, new RegExp(`/runtime/capsule-methods/${directory}/SKILL\\.md`))
+  // The root session's receipt of what it carries, by name and body digest.
+  assert.deepEqual(reported.map((method) => method.name), ['claim-verdict-audit'])
+  assert.match(reported[0].digest, /^sha256:[0-9a-f]{64}$/)
 })
