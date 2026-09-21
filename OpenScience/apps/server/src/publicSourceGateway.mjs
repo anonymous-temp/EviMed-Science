@@ -264,7 +264,7 @@ function sendError(res, error, onFailure) {
   // wave of upstream 502s leaves a trace on this side and not only in the
   // container that asked.
   if (typeof onFailure === "function") {
-    onFailure({ code, status, truncated: res.headersSent && !res.writableEnded });
+    onFailure({ code, status, truncated: res.headersSent && !res.writableEnded, upstream: error?.upstream ?? null });
   }
   if (res.headersSent || res.destroyed) {
     if (!res.destroyed) res.destroy();
@@ -698,11 +698,11 @@ async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl
       signal,
     });
     if (!response.ok) {
-      throw gatewayError(
+      throw Object.assign(gatewayError(
         mappedUpstreamStatus(response.status),
         response.status === 404 ? "public_source_pdf_not_open_access" : "public_source_gateway_upstream_error",
         `Unpaywall returned HTTP ${response.status} for this DOI.`,
-      );
+      ), { upstream: { host: lookup.hostname, status: response.status } });
     }
     record = JSON.parse(new TextDecoder().decode(await readBoundedBody(response.body, 2 * 1024 * 1024)));
   } catch (error) {
@@ -987,11 +987,15 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
       }
       if (!upstream.ok) {
         await upstream.body?.cancel().catch(() => {});
-        throw gatewayError(
+        // Which source said no, and how: 202 of these in twelve hours on
+        // 2026-09-21 read only 「upstream_error」, which named neither. The
+        // host and the status, never the URL — a credential can ride in its
+        // query string.
+        throw Object.assign(gatewayError(
           mappedUpstreamStatus(upstream.status),
           upstream.status === 429 ? "public_source_gateway_rate_limited" : "public_source_gateway_upstream_error",
           `The official public source returned HTTP ${upstream.status}.`,
-        );
+        ), { upstream: { host: request.url.hostname, status: upstream.status } });
       }
       const contentType = String(upstream.headers.get("content-type") ?? "").split(";", 1)[0].trim().toLowerCase();
       if (!request.accept.includes(contentType)) {

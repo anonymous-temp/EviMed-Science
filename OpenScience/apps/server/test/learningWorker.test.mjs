@@ -164,6 +164,43 @@ test("a busy project, a full runtime pool or a reached cap defers the lesson wit
   }
 });
 
+test("an evaluation the platform's own restart ends is handed back with its attempt refunded", async () => {
+  // Every release stops the web process and aborts the evaluation running in
+  // it; counted as an attempt, three releases failed an evaluation for good
+  // (`product_job_attempts_exhausted`) whatever it had measured.
+  let abort = null;
+  const evaluating = {
+    async run() {
+      await new Promise((_resolve, reject) => { abort = () => reject(new Error("The operation was aborted.")); });
+    },
+  };
+  const { jobs, worker: instance } = worker({
+    consolidation: evaluating,
+    jobs: fakeJobs([{ id: "e1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "evaluate", methodId: "m1" } }]),
+  });
+  const lane = instance.tick();
+  await new Promise((resolve) => setImmediate(resolve));
+  instance.interrupt();
+  abort();
+  await lane;
+  assert.equal(jobs.failed.length, 1);
+  assert.equal(jobs.failed[0].error.code, "learning_interrupted_by_restart");
+  assert.deepEqual({ retry: jobs.failed[0].options.retry, refundAttempt: jobs.failed[0].options.refundAttempt }, { retry: true, refundAttempt: true });
+  assert.equal(await instance.tick().then(() => jobs.failed.length), 1, "an interrupted worker claims nothing more");
+  await instance.close();
+});
+
+test("the same failure outside a restart still counts as an attempt", async () => {
+  const failing = { async run() { throw new Error("The operation was aborted."); } };
+  const { jobs, worker: instance } = worker({
+    consolidation: failing,
+    jobs: fakeJobs([{ id: "e1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "evaluate", methodId: "m1" } }]),
+  });
+  await instance.tick();
+  assert.equal(jobs.failed[0].error.code, "learning_job_failed");
+  assert.equal(jobs.failed[0].options.refundAttempt, undefined);
+});
+
 test("with no window configured the worker claims at any hour", async () => {
   const consolidator = { calls: [], async run(request) { this.calls.push(request); return { action: "sleep" }; } };
   const { worker: instance } = worker({

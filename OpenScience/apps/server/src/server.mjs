@@ -1672,7 +1672,13 @@ export function createWebApiApp(overrides = {}) {
             : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
         }),
       }, project, run);
-      if (notificationService && !evaluationRun && runFinishedNotifies(run)) {
+      // Background work is not a person's research: a lesson, a source being
+      // read and an evaluation cell run in the account's internal projects,
+      // and each reports where it belongs (「方法库整理」, the knowledge base's
+      // own row). On 2026-09-21 their runs were 20 of the acceptance account's
+      // 24 unread items — 「9月21日完成 8 项研究：从已完成运行中提炼可复用方法」,
+      // 「研究运行已被平台终止」 for a lesson nobody asked for.
+      if (notificationService && !evaluationRun && !isInternalProject(project.id) && runFinishedNotifies(run)) {
         try {
           // Say what happened, in the notice itself. The mapping lives in
           // `notificationService.runFinishedInboxItem` so it is a tested pure
@@ -1783,7 +1789,10 @@ export function createWebApiApp(overrides = {}) {
       })());
       // Evaluation receipts feed only the measured method. They must not
       // recursively distil benchmark answers or seed the researcher's memory.
-      if (evaluationRun) return;
+      // The project says so as well as the runtime: `evaluationRun` is read
+      // from memory the web process loses on every release, and a cell that
+      // finishes after one would otherwise be read as the researcher's own run.
+      if (evaluationRun || isInternalProject(project.id)) return;
       // Nor does the platform's own background work: a distillation, a
       // relations pass or a source being understood reads excerpts of the
       // researcher's runs, and extracting memory from it paid a model call to
@@ -2683,6 +2692,7 @@ export function createWebApiApp(overrides = {}) {
         code: operationErrorCode,
         requestId,
         truncated: failure?.truncated === true,
+        upstream: failure?.upstream ?? null,
       });
     };
     const gateway = pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)
@@ -4501,6 +4511,9 @@ export function createWebApiApp(overrides = {}) {
       return address;
     },
     async close() {
+      // First, so the evaluation the abort below ends is handed back as a
+      // restart and not counted against its three attempts.
+      learningWorker?.interrupt();
       for (const controller of evaluationAbortControllers) controller.abort();
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
@@ -5111,7 +5124,7 @@ function safeLogId(value) {
   return typeof value === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(value) ? value : null;
 }
 
-async function appendErrorRecord(config, req, pathname, { status, code, requestId = null, truncated = false }) {
+async function appendErrorRecord(config, req, pathname, { status, code, requestId = null, truncated = false, upstream = null }) {
   const projectHeader = req.headers["x-open-science-project"];
   const projectId = safeLogId(Array.isArray(projectHeader) ? projectHeader[0] : projectHeader);
   const record = {
@@ -5126,6 +5139,11 @@ async function appendErrorRecord(config, req, pathname, { status, code, requestI
     // tell from success, so it is recorded as a property of the record rather
     // than left to be inferred from the status.
     ...(truncated ? { truncated: true } : {}),
+    // Which outside service refused, for a gateway failure that was one: its
+    // host and HTTP status, checked here because a ledger line is forever.
+    ...(upstream && typeof upstream.host === "string" && /^[a-z0-9.-]{1,253}$/i.test(upstream.host)
+      && Number.isSafeInteger(upstream.status)
+      ? { upstream: { host: upstream.host.toLowerCase(), status: upstream.status } } : {}),
   };
   const file = path.join(config.dataDir, ".openscience", "errors.jsonl");
   await trackLedgerWrite(

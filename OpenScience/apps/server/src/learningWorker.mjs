@@ -98,6 +98,9 @@ export class LearningWorker {
     // a lane and a background runtime for hours, and two of them held both
     // lanes and half the deployment's runtimes on 2026-09-21.
     this.evaluating = 0;
+    // Set when the process is shutting down (`interrupt`): a job that ends now
+    // ended because the platform is restarting, not because of anything in it.
+    this.closing = false;
     this.reconciling = null;
     this.lastError = null;
     this.lastCompletedAt = null;
@@ -184,6 +187,19 @@ export class LearningWorker {
       return result;
     } catch (error) {
       this.lastError = typeof error?.code === "string" ? error.code : "learning_job_failed";
+      if (this.closing && !leaseLost && this.lastError !== "product_job_lease_lost") {
+        // A restart is not the job's failure. Every release stops the web
+        // process, and with it an evaluation that runs for hours; counted as an
+        // attempt, three releases in one evaluation's lifetime failed it for
+        // good as `product_job_attempts_exhausted`. Handed back with the
+        // attempt refunded, it resumes after the restart and reuses the cells
+        // it had finished.
+        this.lastError = "learning_interrupted_by_restart";
+        await this.jobs.fail(job.userId, job.id, job.leaseToken,
+          { code: "learning_interrupted_by_restart", message: "The platform restarted; the job resumes after it." },
+          { retry: true, delayMs: 30_000, refundAttempt: true }).catch(() => null);
+        return null;
+      }
       if (!leaseLost && this.lastError !== "product_job_lease_lost") {
         const terminal = TERMINAL_LEARNING_ERRORS.has(this.lastError);
         const deferral = DEFERRED_LEARNING_ERRORS.get(this.lastError);
@@ -298,7 +314,19 @@ export class LearningWorker {
     return windowNightKey(this.window, now, this.windowTimeZone);
   }
 
+  /**
+   * The process is going down: claim nothing more, and hand back whatever
+   * ends from here on (see `#tick`). Called before the evaluations are
+   * aborted, so the abort is read as the restart it is.
+   */
+  interrupt() {
+    this.closing = true;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+
   async close() {
+    this.closing = true;
     if (this.timer) clearInterval(this.timer);
     if (this.reconcileTimer) clearInterval(this.reconcileTimer);
     this.timer = null;

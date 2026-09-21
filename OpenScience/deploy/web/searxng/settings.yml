@@ -5,20 +5,21 @@
 # port. That is why the bot limiter is off: it exists to stop anonymous public
 # abuse, and here the only client already authenticated with a runtime token.
 #
-# The engine list is a measurement, and measurements expire. Asked from inside
-# the deployment rather than probed at the hosts, this is what answers:
+# The engine list is a measurement, and measurements expire. Re-measured on
+# 2026-09-21 from inside the deployment, one engine at a time (`engines=<name>`),
+# on an English and a Chinese clinical query:
 #
-#   general  — 360search and Baidu only. Google, DuckDuckGo, Brave, Startpage,
-#              Wikipedia, Wiby, Yep, Encyclosearch and Tusksearch return nothing
-#              or do not resolve; Mojeek answers 403 to datacenter addresses;
-#              Sogou serves a CAPTCHA and then suspends itself for an hour; Bing
-#              answers the host but serves markup the parser extracts nothing
-#              from. The general channel is therefore Chinese-language-skewed.
-#   science  — arXiv, OpenAIRE publications and datasets, PubMed, PDBe. This is
-#              the productive category from here: 46 results in 4.5 s on a
-#              pharmacology query, and OpenAIRE carries EU project, funding and
-#              dataset records that no bibliographic connector in this platform
-#              reaches.
+#   general  — only Quark answers (8–9 rows, ~1 s). The list measured before it
+#              had gone dark underneath the channel: 360search and Bing return
+#              no rows, Baidu, Sogou and ChinaSo serve a CAPTCHA and suspend
+#              themselves for an hour, and Google, DuckDuckGo, Brave, Startpage,
+#              Yahoo, Wikipedia and Mojeek time out or refuse this address.
+#   science  — PubMed (20 rows on English, none on Chinese) and Crossref (20
+#              rows on both) answer, in 3–4 s, which the three-second default
+#              cut off. arXiv times out (and answered 406 before that), OpenAIRE
+#              and PDBe time out, Semantic Scholar answers 403.
+#   news     — Sogou WeChat (10 rows on both languages, WeChat public-account
+#              articles); every other news engine timed out.
 #
 # Everything measured dead is disabled rather than left to spend the request
 # timeout: `google cse` alone cost ten seconds on every search before it was.
@@ -99,20 +100,53 @@ engines:
   # Answers with a CAPTCHA and then suspends itself for an hour.
   - name: sogou
     disabled: true
-  # bing.com answers this host directly, but the parser extracts nothing from
-  # what it serves here. Kept because it costs one request and may start
-  # working; do not count it as a channel until it returns rows.
+  - name: baidu
+    disabled: true
+  - name: chinaso
+    disabled: true
+  - name: presearch
+    disabled: true
+  # Answer this host with no rows (2026-09-21). Bing costs one fast request and
+  # may start parsing again; 360search carries a 20-second engine timeout, and
+  # an engine that can hold the whole query that long for nothing is off.
   - name: bing
     disabled: false
-
-  # Verified returning parsed results.
   - name: 360search
-    disabled: false
-  - name: baidu
-    disabled: false
+    disabled: true
+  - name: yahoo
+    disabled: true
+  # Time out or refuse this host (2026-09-21).
   - name: arxiv
-    disabled: false
+    disabled: true
   - name: openairepublications
-    disabled: false
+    disabled: true
   - name: openairedatasets
+    disabled: true
+  - name: pdbe
+    disabled: true
+  - name: semantic scholar
+    disabled: true
+  - name: duckduckgo news
+    disabled: true
+  - name: startpage news
+    disabled: true
+  - name: wikinews
+    disabled: true
+  - name: brave.news
+    disabled: true
+
+  # Verified returning parsed results on 2026-09-21. The bibliographic two need
+  # longer than the three-second default — they answered in three to four —
+  # and `max_request_timeout` above caps the whole search at six anyway.
+  - name: quark
     disabled: false
+    timeout: 5.0
+  - name: pubmed
+    disabled: false
+    timeout: 6.0
+  - name: crossref
+    disabled: false
+    timeout: 6.0
+  - name: sogou wechat
+    disabled: false
+    timeout: 5.0

@@ -103,7 +103,25 @@ test("the lessons are queued from the terminal hook by themselves, after the mem
   const noMemory = hook.indexOf("if (!researchMemory.configured) {");
   assert.ok(hook.indexOf("await queueLessons(null);", noMemory) > noMemory,
     "a deployment without a memory store still learns from its runs");
-  assert.ok(hook.indexOf("if (evaluationRun) return;") < noMemory, "an evaluation cell never queues a lesson");
+  const evaluationGuard = hook.indexOf("if (evaluationRun || isInternalProject(project.id)) return;");
+  assert.ok(evaluationGuard > 0 && evaluationGuard < noMemory,
+    "an evaluation cell, or any run in an internal project, never queues a lesson or seeds memory");
+});
+
+test("background work in an internal project never reaches the inbox as a person's research", () => {
+  // 2026-09-21: 20 of the acceptance account's 24 unread items were lessons,
+  // sources and their failures — 「9月21日完成 8 项研究：从已完成运行中提炼可复用方法」.
+  const hook = /onRunFinished: async \(project, run\) => \{[\s\S]*?\n    \},/.exec(serverSource)[0];
+  assert.match(hook, /if \(notificationService && !evaluationRun && !isInternalProject\(project\.id\) && runFinishedNotifies\(run\)\) \{/);
+});
+
+test("a shutdown tells the learning worker before it aborts the evaluations", () => {
+  // Otherwise the abort reads as the evaluation's own failure and costs one of
+  // its three attempts — one per release.
+  const close = /async close\(\) \{[\s\S]*?\n    \},/.exec(serverSource.slice(serverSource.indexOf("runtimeUi.listen();")))?.[0] ?? "";
+  const interrupt = close.indexOf("learningWorker?.interrupt();");
+  const abort = close.indexOf("for (const controller of evaluationAbortControllers) controller.abort();");
+  assert.ok(interrupt > 0 && abort > interrupt, "interrupt() must come before the evaluation abort in close()");
 });
 
 test("the counters have a producer, which is the whole difference between wired and working", () => {
