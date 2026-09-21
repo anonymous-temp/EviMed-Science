@@ -828,6 +828,19 @@ export function buildInlineMethod(input) {
 }
 
 /**
+ * The capability the control plane routed this session to, read from the
+ * context file it wrote before the first prompt (`researchContext.mjs`'s
+ * routing line, 「平台已根据当前问题确定性路由到专项能力：<id>（<agent>）」). A
+ * sentence of ours in a file the run cannot pre-write, parsed for one
+ * closed-vocabulary id — not a judgement about language.
+ * @param {unknown} text @returns {string | null}
+ */
+export function routedCapabilityOf(text) {
+  const match = /确定性路由到专项能力：([a-z0-9][a-z0-9-]{0,63})（/.exec(String(text ?? ''))
+  return match ? match[1] : null
+}
+
+/**
  * The capability ids a text names, matched against the catalogue.
  *
  * A closed vocabulary — the ids this deployment mounted — so this is a lookup,
