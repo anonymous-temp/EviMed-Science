@@ -68,6 +68,18 @@ export async function freezeLearningEvaluation({ learning, capsules, project, re
   };
 }
 
+/**
+ * The evaluation judge's bounds, per cell.
+ *
+ * Calls: the evaluator retries an unreadable verdict (`JUDGE_ATTEMPTS` in
+ * `evals/method-quality/run_paired.py`), and a cap below its retries refused the
+ * last attempt of every cell whose first two came back cut — as 400 "exhausted",
+ * excluding the cell (2026-09-21). Tokens: a verdict is a few hundred tokens of
+ * JSON after the model's reasoning, and 4096 cut both judge answers of that
+ * cell mid-reasoning. Time: under the evaluator's own 420 s for the call.
+ */
+export const EVALUATION_JUDGE_LIMITS = Object.freeze({ calls: 3, maxTokens: 16_384, timeoutMs: 400_000 });
+
 /** How long a finished cell's in-flight calls get to settle before its usage is
  *  read: settlement follows the stream by seconds, and a reservation that
  *  never settles is released by the ledger's own sweeper. */

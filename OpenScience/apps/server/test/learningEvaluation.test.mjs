@@ -113,3 +113,17 @@ test("a cell whose cut calls have no bill is still measured on what settled", as
   assert.equal(evaluationCellUsage({ ...settled, settledCalls: 0 }).cost, null, "nothing settled is nothing to measure");
   assert.equal(evaluationCellUsage({ ...settled, incompleteUsageCalls: 1 }).cost, null);
 });
+
+test("the judge allows at least as many calls per cell as the evaluator retries, and room to finish a verdict", async () => {
+  // 2026-09-21: the evaluator retries three times, the control plane allowed
+  // two, and both answers were cut at 4096 tokens: the cell was excluded.
+  const { EVALUATION_JUDGE_LIMITS } = await import("../src/learningEvaluation.mjs");
+  const { readFile } = await import("node:fs/promises");
+  const harness = await readFile(new URL("../../../evals/method-quality/run_paired.py", import.meta.url), "utf8");
+  const attempts = Number(/^JUDGE_ATTEMPTS = (\d+)$/m.exec(harness)?.[1]);
+  const harnessTimeoutSeconds = Number(/^JUDGE_TIMEOUT_SECONDS = (\d+)$/m.exec(harness)?.[1]);
+  assert.ok(attempts >= 1 && harnessTimeoutSeconds >= 1, "the scan found the evaluator's constants");
+  assert.ok(EVALUATION_JUDGE_LIMITS.calls >= attempts);
+  assert.ok(EVALUATION_JUDGE_LIMITS.timeoutMs < harnessTimeoutSeconds * 1000, "the control plane answers before the evaluator gives up");
+  assert.ok(EVALUATION_JUDGE_LIMITS.maxTokens > 4096);
+});

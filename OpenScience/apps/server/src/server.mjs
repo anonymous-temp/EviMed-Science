@@ -21,7 +21,7 @@ import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
 import { LearningTriggers } from "./learningTriggers.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
-import { evaluateLearnedMethod } from "./learningEvaluation.mjs";
+import { EVALUATION_JUDGE_LIMITS, evaluateLearnedMethod } from "./learningEvaluation.mjs";
 import { freezeLearningBaseline } from "./learningBaseline.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation } from "./methodConsolidation.mjs";
@@ -1987,7 +1987,7 @@ export function createWebApiApp(overrides = {}) {
           config, store, learning: learningService, capsules: capsuleService, runtimeManager,
           agentRuns, learningRuntime, commands, usageLedger,
           judge: async (cell, input) => {
-            if (cell.judgeCalls >= 2 || typeof input?.system !== "string" || typeof input?.user !== "string") {
+            if (cell.judgeCalls >= EVALUATION_JUDGE_LIMITS.calls || typeof input?.system !== "string" || typeof input?.user !== "string") {
               throw new HttpError(400, "method_evaluation_judge_invalid", "Invalid or exhausted evaluation judge request.");
             }
             cell.judgeCalls += 1;
@@ -1998,9 +1998,9 @@ export function createWebApiApp(overrides = {}) {
             }
             const response = await fetch(`http://127.0.0.1:${address.port}${MODEL_GATEWAY_PATH}`, {
               method: "POST", headers: { authorization: `Bearer ${runtime.modelGatewayToken}`, "content-type": "application/json" },
-              body: JSON.stringify({ model: config.deepseekModel, stream: false, max_tokens: 4096,
+              body: JSON.stringify({ model: config.deepseekModel, stream: false, max_tokens: EVALUATION_JUDGE_LIMITS.maxTokens,
                 messages: [{ role: "system", content: input.system }, { role: "user", content: input.user }] }),
-              signal: AbortSignal.timeout(120_000),
+              signal: AbortSignal.timeout(EVALUATION_JUDGE_LIMITS.timeoutMs),
             });
             if (!response.ok) throw new HttpError(502, "method_evaluation_judge_failed", "The bounded evaluation judge failed.");
             const payload = /** @type {any} */ (await response.json());
