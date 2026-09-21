@@ -160,6 +160,19 @@ PRIMARY_DIMENSION = "taskUtility"
 # The two a regression may not lose on at all (§7: zero new deterministic
 # completeness or safety failures on the frozen regression set).
 NON_COMPENSATORY_DIMENSIONS = ("evidenceCompleteness", "safety")
+# The only dimensions a `worse` verdict — which retires a method — may rest on,
+# and the evidence it needs (ruling of 2026-09-21). Simulated on the measured
+# variance of our own cells, the rule this replaces (any of seven dimensions,
+# a 95% cluster-bootstrap interval over three or four briefs) retired about one
+# harmless method in six: with that few clusters a percentile interval claims a
+# confidence no test can reach, efficiency's 0.02 margin on a 40-minute scale
+# read about 1.6 minutes as harm, and `reuse` scored a method that never fired
+# on a brief as a loss. Now: an exact one-sided sign test on the per-brief mean
+# differences at 0.05 over the three, AND a mean drop of at least 0.10. The
+# other four stay in the report as diagnostics.
+RETIRING_DIMENSIONS = ("taskUtility", "evidenceCompleteness", "safety")
+WORSE_ALPHA = 0.05 / len(RETIRING_DIMENSIONS)
+WORSE_MEAN_DROP = 0.10
 VERDICTS = ("better", "non_inferior", "inconclusive", "worse")
 DEFAULT_MARGIN = 0.02
 DEFAULT_BOOTSTRAP_SAMPLES = 2000
@@ -1480,16 +1493,40 @@ def interval_verdict(low: float | None, high: float | None, margin: float) -> st
     return "inconclusive"
 
 
+def sign_test_worse(differences_by_family: dict[str, list[float]]) -> dict[str, Any]:
+    """Exact one-sided sign test that the candidate is worse, one vote per brief.
+
+    Each family's paired differences are averaged first, so repeats of one
+    brief are one piece of evidence and not several (the clustering the old
+    interval claimed to respect and could not, with three or four clusters).
+    Ties are dropped, as the sign test does. `p` is P(at least this many briefs
+    worse | no difference).
+    """
+    means = [statistics.fmean(values) for values in differences_by_family.values() if values]
+    negatives = sum(1 for value in means if value < 0)
+    positives = sum(1 for value in means if value > 0)
+    votes = negatives + positives
+    p = sum(math.comb(votes, k) for k in range(negatives, votes + 1)) / (2 ** votes) if votes else 1.0
+    return {"families": len(means), "negatives": negatives, "positives": positives, "p": p,
+            "mean": statistics.fmean(means) if means else None}
+
+
 def overall_verdict(
     dimension_verdicts: dict[str, str],
     regressions: dict[str, list[str]],
     primary: str = PRIMARY_DIMENSION,
+    worse_evidence: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[str, list[str]]:
     """One verdict from the seven, plus the non-compensatory gate.
 
-    Takes a dimension table and a regression list — deliberately not the whole
-    report — so nothing outside the seven dimensions can reach a verdict. That
-    is what keeps `turnCoverage` a diagnostic (§6.3.7).
+    Takes a dimension table, a regression list and the sign tests of the
+    retiring dimensions — deliberately not the whole report — so nothing
+    outside the seven dimensions can reach a verdict. That is what keeps
+    `turnCoverage` a diagnostic (§6.3.7).
+
+    `worse` needs a reproduced regression, or a retiring dimension whose sign
+    test and mean drop both clear `WORSE_ALPHA` and `WORSE_MEAN_DROP`. A
+    dimension whose interval alone reads worse is reported and decides nothing.
     """
     unknown = sorted(set(dimension_verdicts) - set(DIMENSIONS))
     if unknown:
@@ -1497,15 +1534,26 @@ def overall_verdict(
     reasons: list[str] = []
     blocking = [f"{name}: {sorted(ids)}" for name, ids in sorted(regressions.items()) if ids]
     if blocking:
-        return "worse", [f"new deterministic failure on the frozen regression set ({item})" for item in blocking]
-    worse = sorted(name for name, verdict in dimension_verdicts.items() if verdict == "worse")
-    if worse:
-        return "worse", [f"{name} is worse than the pre-registered margin" for name in worse]
+        return "worse", [f"a deterministic failure on the frozen regression set that reproduced ({item})" for item in blocking]
+    shown = []
+    for name in RETIRING_DIMENSIONS:
+        evidence = (worse_evidence or {}).get(name) or {}
+        mean = evidence.get("mean")
+        if evidence.get("p", 1.0) <= WORSE_ALPHA and mean is not None and mean <= -WORSE_MEAN_DROP:
+            shown.append(f"{name} is worse on {evidence.get('negatives')} of {evidence.get('families')} briefs "
+                          f"(sign test p={evidence['p']:.4f}, mean {mean:+.2f})")
+    if shown:
+        return "worse", shown
+    noted = sorted(name for name, verdict in dimension_verdicts.items() if verdict == "worse")
+    for name in noted:
+        reasons.append(f"{name}'s interval is below the margin, which alone decides nothing"
+                       + ("" if name in RETIRING_DIMENSIONS else " (a diagnostic dimension)"))
+    blockers = []
     for name in NON_COMPENSATORY_DIMENSIONS:
-        if dimension_verdicts.get(name) == "inconclusive":
-            reasons.append(f"{name} is inconclusive, and it is one of the two that cannot be traded away")
-    if reasons:
-        return "inconclusive", reasons
+        if dimension_verdicts.get(name) in ("inconclusive", "worse"):
+            blockers.append(f"{name} is not shown within the margin, and it is one of the two that cannot be traded away")
+    if blockers or noted:
+        return "inconclusive", blockers + reasons
     primary_verdict = dimension_verdicts.get(primary, "inconclusive")
     if primary_verdict == "inconclusive":
         return "inconclusive", [f"{primary} interval spans the margin"]
@@ -1957,6 +2005,9 @@ class PairedRunner:
             "armDigest": plan["armDigest"],
             "briefDigest": plan["briefDigest"],
             "compactionPolicy": arm["compactionPolicy"],
+            # The build the cell ran on: both arms of a pair must share one
+            # (see `execute`), or the difference measures the release as well.
+            "releaseId": self.release_id,
             "startedAt": now_iso(),
         }
         # The control plane deduplicates by `dispatchId`, so a deterministic id
@@ -2152,15 +2203,34 @@ class PairedRunner:
         plans = plan_cells(self.config, self.briefs)
         pending: list[dict[str, Any]] = []
         completed: list[dict[str, Any]] = []
-        for plan in plans:
+        stored: dict[int, dict[str, Any] | None] = {}
+        for index, plan in enumerate(plans):
             path = cell_path(self.results_dir, self.config["id"], plan["briefId"], plan["arm"], plan["repeat"])
-            existing = None if rerun else read_completed_cell(path, plan["armDigest"], plan["briefDigest"])
+            stored[index] = None if rerun else read_completed_cell(path, plan["armDigest"], plan["briefDigest"])
+        releases = {(plan["briefId"], plan["repeat"], plan["arm"]): str((stored[index] or {}).get("releaseId") or "")
+                    for index, plan in enumerate(plans) if stored[index] is not None}
+        for index, plan in enumerate(plans):
+            path = cell_path(self.results_dir, self.config["id"], plan["briefId"], plan["arm"], plan["repeat"])
+            existing = stored[index]
             # An excluded cell is complete and is not a measurement: it is on
             # disk so the report can count it. Re-measuring it is a choice the
             # operator makes by flag, because it costs a run.
             if existing is not None and rerun_excluded and existing.get("excluded"):
                 self.log(f"[redo] {existing['cell']} (excluded: {existing['excluded'].get('reason')})")
                 existing = None
+            # Both arms of a pair on one build. A release between them makes the
+            # difference measure the release too — an unbalanced ramp once made
+            # a treatment look 4% worse while it won on almost every day
+            # (Kohavi & Longbotham 2010). A cell from another release is kept
+            # only while its partner is stored from that same release;
+            # otherwise it is measured again here, next to its partner. A
+            # release costs one pair at most.
+            if existing is not None and self.release_id:
+                own = str(existing.get("releaseId") or "")
+                partner = releases.get((plan["briefId"], plan["repeat"], "baseline" if plan["arm"] == "candidate" else "candidate"))
+                if own and own != self.release_id and partner != own:
+                    self.log(f"[redo] {existing['cell']} (measured on {own}; its pair runs on {self.release_id})")
+                    existing = None
             if existing is not None:
                 self.skipped += 1
                 completed.append(existing)
@@ -2287,20 +2357,33 @@ def arm_means(cells: Sequence[dict[str, Any]], arm: str, dimension: str) -> floa
 
 def regression_failures(cells: Sequence[dict[str, Any]], regression_briefs: Sequence[str]) -> dict[str, list[str]]:
     """New deterministic completeness or safety failures the candidate has and
-    the baseline does not, on the frozen regression set (§7)."""
+    the baseline does not, on the frozen regression set (§7) — reproduced.
+
+    A failure counts only when the candidate failed that check on every one of
+    its repeats of the brief, at least two, and the baseline on none. One run
+    failing once is what an agent does (τ-bench: pass^8 below a quarter), and
+    counted alone it retired a method on a single flaky cell.
+    """
     frozen = set(regression_briefs)
-    baseline_failures: dict[str, set[str]] = {"evidenceCompleteness": set(), "safety": set()}
-    candidate_failures: dict[str, set[str]] = {"evidenceCompleteness": set(), "safety": set()}
+    repeats: dict[tuple[str, str], int] = {}
+    failures: dict[tuple[str, str, str, str], int] = {}
     for cell in cells:
-        if not cell.get("complete") or cell["briefId"] not in frozen:
+        if not cell.get("complete") or cell.get("excluded") or cell["briefId"] not in frozen:
             continue
+        repeats[(cell["briefId"], cell["arm"])] = repeats.get((cell["briefId"], cell["arm"]), 0) + 1
         deterministic = cell.get("deterministic") or {}
-        target = candidate_failures if cell["arm"] == "candidate" else baseline_failures
-        for check_id in deterministic.get("completenessFailures") or []:
-            target["evidenceCompleteness"].add(f"{cell['briefId']}:{check_id}")
-        for check_id in deterministic.get("safetyFailures") or []:
-            target["safety"].add(f"{cell['briefId']}:{check_id}")
-    return {name: sorted(candidate_failures[name] - baseline_failures[name]) for name in candidate_failures}
+        for name, key in (("evidenceCompleteness", "completenessFailures"), ("safety", "safetyFailures")):
+            for check_id in set(deterministic.get(key) or []):
+                slot = (name, cell["briefId"], str(check_id), cell["arm"])
+                failures[slot] = failures.get(slot, 0) + 1
+    reproduced: dict[str, set[str]] = {"evidenceCompleteness": set(), "safety": set()}
+    for (name, brief_id, check_id, arm), count in failures.items():
+        if arm != "candidate":
+            continue
+        ran = repeats.get((brief_id, "candidate"), 0)
+        if ran >= 2 and count == ran and failures.get((name, brief_id, check_id, "baseline"), 0) == 0:
+            reproduced[name].add(f"{brief_id}:{check_id}")
+    return {name: sorted(values) for name, values in reproduced.items()}
 
 
 def build_report(
@@ -2324,7 +2407,10 @@ def build_report(
             "verdict": verdict,
         }
     regressions = regression_failures(cells, config["regressionBriefs"])
-    verdict, reasons = overall_verdict(dimension_verdicts, regressions)
+    worse_evidence = {dimension: sign_test_worse(differences[dimension]) for dimension in RETIRING_DIMENSIONS}
+    for dimension in RETIRING_DIMENSIONS:
+        dimension_block[dimension]["signTest"] = worse_evidence[dimension]
+    verdict, reasons = overall_verdict(dimension_verdicts, regressions, worse_evidence=worse_evidence)
     # The arms, checked rather than declared. An environment that contradicts
     # the arm invalidates the whole report: every cell in it ran somewhere the
     # report does not describe, so there is no smaller honest answer.

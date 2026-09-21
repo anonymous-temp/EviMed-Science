@@ -427,9 +427,12 @@ export class LearningService {
       throw new HttpError(409, "method_not_promotable", `The method is not eligible: ${verdict.missing.join("; ")}`);
     }
     const updated = await this.#setStatus(userId, methodId, "approved", input.expectedRevision, document);
+    // The reader's words: the method's own title and what now happens. The
+    // verdict's reasons are the log's, in English, and read in an inbox as
+    // 「claim-verdict-audit：no unresolved conflicts」.
     await this.#notify(userId, document, {
       title: "已启用一条学到的方法",
-      body: `${document.payload.frontmatter?.name}：${verdict.reasons.join("；")}。可随时回滚到上一版本。`,
+      body: `「${methodLabel(document)}」已生效，之后同类的研究会用上它。觉得不对，可以在「记忆胶囊」里停用或回到上一版。`,
     });
     return updated;
   }
@@ -450,7 +453,7 @@ export class LearningService {
     const updated = await this.#setStatus(userId, methodId, "retired", input.expectedRevision, document, input.reason);
     await this.#notify(userId, document, {
       title: "已停用一条学到的方法",
-      body: `${document.payload.frontmatter?.name}：${input.reason ?? "不再使用"}。`,
+      body: `「${methodLabel(document)}」：${String(input.reason ?? "不再使用").replace(/[。.]+$/, "")}。`,
     });
     return updated;
   }
@@ -637,4 +640,13 @@ export class LearningService {
       // isolated: evimed_learning_notice_failed_total
     }
   }
+}
+
+/**
+ * What a researcher calls a method: its own Chinese line when it has one, its
+ * machine name until then.
+ * @param {any} document
+ */
+export function methodLabel(document) {
+  return cleanMethodDisplay(document?.payload?.display)?.title ?? document?.payload?.frontmatter?.name ?? String(document?.id ?? "");
 }

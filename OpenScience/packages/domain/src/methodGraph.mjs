@@ -38,6 +38,7 @@ import {
   MEMORY_STRENGTH_TAU_DAYS,
   METHOD_CONTRIBUTION_MIN_TRIALS,
   METHOD_CONTRIBUTION_RETIRE_AT,
+  METHOD_HARM_TEST,
   METHOD_INDUCTION_MIN_TRAJECTORIES,
 } from './constants.mjs'
 import { isMethodDigest } from './methodSkill.mjs'
@@ -359,6 +360,51 @@ export function methodStrength(observations, nowMs, tauDays = MEMORY_STRENGTH_TA
 }
 
 /**
+ * Whether the runs that mounted a method show it making results worse.
+ *
+ * Wald's sequential probability-ratio test, capped: the runs are read in the
+ * order they happened, each bad when its deliverable was rejected, and the
+ * log-likelihood ratio of "harmful rate" against "background rate" is summed
+ * until it crosses a boundary or the cap is reached. `harm` when it crosses the
+ * upper one, `clear` when it crosses the lower one or reaches the cap without
+ * crossing, `watching` before either. Only runs of the text the method holds
+ * now count (`learning.digest`); an amendment starts a new test.
+ *
+ * This is the production detector of the 2026-09-21 ruling
+ * (`METHOD_HARM_TEST`), and it is the only statistic here that retires an
+ * inferred method: the runs are real work the researcher already paid for, and
+ * a sequential test keeps its false-alarm rate however often it is read.
+ *
+ * @param {MethodLearning} learning
+ * @param {Partial<typeof METHOD_HARM_TEST>} [options]
+ * @returns {{state: 'harm'|'clear'|'watching', runs: number, bad: number, llr: number}}
+ */
+export function methodHarmTest(learning, options = {}) {
+  const { baseRate, harmRate, alpha, beta, minRuns, maxRuns } = { ...METHOD_HARM_TEST, ...options }
+  const upper = Math.log((1 - beta) / alpha)
+  const lower = Math.log(beta / (1 - alpha))
+  const badStep = Math.log(harmRate / baseRate)
+  const goodStep = Math.log((1 - harmRate) / (1 - baseRate))
+  const observations = [...(learning?.observations ?? [])]
+    .filter((observation) => METHOD_OBSERVATION_OUTCOMES.includes(observation?.outcome))
+    .sort((left, right) => String(left.at ?? '').localeCompare(String(right.at ?? '')))
+  let llr = 0
+  let runs = 0
+  let bad = 0
+  for (const observation of observations) {
+    if (runs >= maxRuns) break
+    runs += 1
+    const rejected = observation.outcome === 'rejected'
+    if (rejected) bad += 1
+    llr += rejected ? badStep : goodStep
+    // A small tolerance: two exact log steps must reach a boundary they sum to.
+    if (runs >= minRuns && llr >= upper - 1e-9) return { state: 'harm', runs, bad, llr }
+    if (llr <= lower + 1e-9) return { state: 'clear', runs, bad, llr }
+  }
+  return { state: runs >= maxRuns ? 'clear' : 'watching', runs, bad, llr }
+}
+
+/**
  * How much a method is worth having, from outcomes alone.
  *
  * `(successes - failures) / trials`, where a trial is a trajectory the method
@@ -577,17 +623,19 @@ export function promotionVerdict(method, options = {}) {
  * silent deletion, and never a deletion at all — retirement is a status.
  * @param {MethodRecord} method
  * @param {RetirementOptions} options
- * @returns {{propose: boolean, immediate: boolean, reason: string, strength: number, contribution?: number}}
+ * @returns {{propose: boolean, immediate: boolean, code: string, reason: string, strength: number, contribution?: number, runs?: number, rejected?: number, replacement?: string}}
+ *   `code` names the branch that decided, for a sentence in the reader's language;
+ *   `reason` is the log's.
  */
 export function retirementProposal(method, options) {
   const learning = method?.learning ?? emptyLearning(method?.digest ?? '')
   const strength = methodStrength(learning.observations, options.nowMs, options.tauDays)
   if (method?.provenance?.incident) {
-    return { propose: true, immediate: true, reason: 'implicated in a confirmed incident', strength }
+    return { propose: true, immediate: true, code: 'incident', reason: 'implicated in a confirmed incident', strength }
   }
-  if (method?.status === 'retired') return { propose: false, immediate: false, reason: 'already retired', strength }
+  if (method?.status === 'retired') return { propose: false, immediate: false, code: 'already_retired', reason: 'already retired', strength }
   if (method?.provenance?.safetyRelated) {
-    return { propose: false, immediate: false, reason: 'safety-related: rarely invoked is what a working safety check looks like', strength }
+    return { propose: false, immediate: false, code: 'safety_related', reason: 'safety-related: rarely invoked is what a working safety check looks like', strength }
   }
   // The measurement, now that it no longer gates effect (see `promotionVerdict`).
   //
@@ -608,7 +656,25 @@ export function retirementProposal(method, options) {
     return {
       propose: true,
       immediate: true,
+      code: 'evaluated_worse',
       reason: `a paired evaluation against ${measured.baselineDigest} measured this revision as worse than working without it`,
+      strength,
+    }
+  }
+  // The production detector (`methodHarmTest`). An inferred method whose own
+  // runs cross the harm boundary is retired now, like a measured `worse`: it
+  // is effective from the moment it was learned, and each further run is
+  // another deliverable carrying the harm. A method the researcher stated
+  // themselves is an instruction, so it is only proposed.
+  const harm = learning.digest === method?.digest ? methodHarmTest(learning) : null
+  if (harm?.state === 'harm') {
+    return {
+      propose: true,
+      immediate: method?.provenance?.origin !== 'explicit',
+      code: 'harm',
+      runs: harm.runs,
+      rejected: harm.bad,
+      reason: `${harm.bad} of the ${harm.runs} runs that mounted this revision were rejected, which the sequential test reads as worse than working without it`,
       strength,
     }
   }
@@ -626,6 +692,8 @@ export function retirementProposal(method, options) {
     return {
       propose: true,
       immediate: false,
+      code: 'contribution',
+      runs: Number(learning.counts.loaded),
       reason: `${learning.counts.loaded} trajectories at a contribution of ${contribution.toFixed(2)}, at or below ${retireAt}`,
       strength,
       contribution,
@@ -635,7 +703,7 @@ export function retirementProposal(method, options) {
   const replacement = superseded.find((relation) => !options.isApproved || options.isApproved(relation.target))
   const minStrength = options.minStrength ?? 0.5
   if (strength >= minStrength) {
-    return { propose: false, immediate: false, reason: `still in use (strength ${strength.toFixed(2)})`, strength }
+    return { propose: false, immediate: false, code: 'in_use', reason: `still in use (strength ${strength.toFixed(2)})`, strength }
   }
   // Read lately, with nothing to show for it.
   //
@@ -661,14 +729,15 @@ export function retirementProposal(method, options) {
     return {
       propose: false,
       immediate: false,
+      code: 'recently_read',
       reason: `read ${readDays.toFixed(1)} days ago by a run that delegated nothing, so it has no outcomes and a strength of 0 without being idle`,
       strength,
     }
   }
   if (!replacement) {
-    return { propose: false, immediate: false, reason: 'unused, but nothing validated replaces it; retiring it would remove a capability rather than a duplicate', strength }
+    return { propose: false, immediate: false, code: 'no_replacement', reason: 'unused, but nothing validated replaces it; retiring it would remove a capability rather than a duplicate', strength }
   }
-  return { propose: true, immediate: false, reason: `unused (strength ${strength.toFixed(2)}) and superseded by ${replacement.target}`, strength }
+  return { propose: true, immediate: false, code: 'superseded', replacement: replacement.target, reason: `unused (strength ${strength.toFixed(2)}) and superseded by ${replacement.target}`, strength }
 }
 
 /* -------------------------------------------------------------- the graph */

@@ -21,6 +21,7 @@ import {
   foldRelation,
   libraryEvictions,
   methodContribution,
+  methodHarmTest,
   methodLevel,
   methodStrength,
   promotionVerdict,
@@ -421,6 +422,55 @@ const record = (loaded, succeeded, ageDays = 1) => {
   return learning;
 };
 
+/** Runs in the order given, a day apart: "r" rejected, anything else accepted.
+ * @param {string} pattern @param {string} [digest] */
+const runs = (pattern, digest = DIGEST_A) => {
+  let learning = emptyLearning(digest);
+  [...pattern].forEach((mark, index) => {
+    learning = foldObservation(learning, {
+      runId: `run_${index}`, family: `fam_${index}`, outcome: mark === "r" ? "rejected" : "accepted",
+      at: daysAgo(pattern.length - index),
+    });
+  });
+  return learning;
+};
+
+test("the harm test reads the runs in order and stops at a boundary", () => {
+  // Three rejections in a row cross the harm boundary; two cannot decide alone.
+  assert.equal(methodHarmTest(runs("rr")).state, "watching");
+  assert.deepEqual({ ...methodHarmTest(runs("rrr")), llr: undefined }, { state: "harm", runs: 3, bad: 3, llr: undefined });
+  // Two early rejections, then work that holds up: not harm.
+  assert.equal(methodHarmTest(runs("rra")).state, "watching");
+  // Four accepted runs are enough to call it clear, and later runs are not read.
+  assert.deepEqual({ ...methodHarmTest(runs("aaaarrrr")), llr: undefined }, { state: "clear", runs: 4, bad: 0, llr: undefined });
+  // A background-rate mix that never crosses is clear at the cap.
+  const mixed = "aaaaaaaaar".repeat(5);
+  const capped = methodHarmTest(runs(mixed), { minRuns: 3 });
+  assert.equal(capped.state, "clear");
+  // A 40% rate is caught well before the cap.
+  const harmful = methodHarmTest(runs("aarararrar"));
+  assert.equal(harmful.state, "harm");
+  assert.ok(harmful.runs <= 10, `caught after ${harmful.runs} runs`);
+  assert.equal(methodHarmTest(emptyLearning(DIGEST_A)).state, "watching");
+  assert.equal(methodHarmTest(/** @type {any} */ (undefined)).state, "watching");
+});
+
+test("a harmful revision is retired now; a stated one is only proposed; another revision's runs do not count", () => {
+  const now = NOW;
+  const harmful = retirementProposal(method({ status: "approved", learning: runs("rrrr") }), { nowMs: now });
+  assert.equal(harmful.propose, true);
+  assert.equal(harmful.immediate, true);
+  assert.match(harmful.reason, /3 of the 3 runs that mounted this revision were rejected/, "decided at the third run, not read further");
+  const stated = retirementProposal(method({ status: "approved", learning: runs("rrrr"), provenance: { origin: "explicit" } }), { nowMs: now });
+  assert.deepEqual({ propose: stated.propose, immediate: stated.immediate }, { propose: true, immediate: false });
+  // Observations recorded against a revision this method no longer holds.
+  const amended = retirementProposal(method({ status: "approved", digest: DIGEST_B, learning: runs("rrrr", DIGEST_A) }), { nowMs: now });
+  assert.equal(amended.immediate, false);
+  // Safety methods keep their own rule: never retired on outcomes.
+  const safety = retirementProposal(method({ status: "approved", learning: runs("rrrr"), provenance: { origin: "inferred", safetyRelated: true } }), { nowMs: now });
+  assert.equal(safety.propose, false);
+});
+
 test("contribution is outcomes over trials, and silence is not neutrality", () => {
   assert.equal(methodContribution(record(10, 10)), 1);
   assert.equal(methodContribution(record(10, 5)), 0);
@@ -498,8 +548,12 @@ test("a method that is used constantly and hurts is proposed, which decay alone 
 });
 
 test("the contribution clause waits for enough trials, and never fires on a safety method", () => {
-  // Same ratio, too few trajectories to say anything.
-  const early = method({ status: "approved", learning: record(6, 2) });
+  // A bad ratio, but too few trajectories for this clause to say anything.
+  // Four good runs first, so the harm test has already read this revision as
+  // clear and it is the contribution clause alone that is being asked (a run
+  // of early rejections is the harm test's to decide; see above).
+  const early = method({ status: "approved", learning: runs("aaaarrrrrr") });
+  assert.equal(methodContribution(early.learning), -0.2);
   assert.equal(retirementProposal(early, { nowMs: NOW }).propose, false);
   assert.equal(retirementProposal(early, { nowMs: NOW, minTrials: 5 }).propose, true, "the floor is a parameter, and it bites");
 

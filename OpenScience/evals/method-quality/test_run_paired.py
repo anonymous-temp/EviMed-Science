@@ -311,6 +311,34 @@ class ResumeTests(unittest.TestCase):
         self.assertEqual(second.skipped, 0)
         self.assertEqual(len(healthy.dispatches), len(self.brief_ids) * 2)
 
+    def test_a_pair_split_by_a_release_is_measured_again_on_one_build(self):
+        # A release between the two arms of a pair would make their difference
+        # measure the release as well. A whole pair from an older release is
+        # still one experiment and is reused; a lone cell from it is not.
+        plans = runner.plan_cells(self.harness.config, self.harness.briefs)
+        old = FakeBackend(self.harness.briefs, self.outcomes)
+        first = self.harness.make_runner(old)
+        first.release_id = "evimed-old-1"
+        client = first.client_factory()
+        runtime_url = client.start_runtime()
+        whole = [plan for plan in plans if plan["briefId"] == self.brief_ids[0]]
+        lone = [plan for plan in plans if plan["briefId"] == self.brief_ids[1] and plan["arm"] == "baseline"]
+        for plan in whole + lone:
+            runner.write_json_atomic(
+                runner.cell_path(self.harness.results_dir, "unit", plan["briefId"], plan["arm"], plan["repeat"]),
+                first.run_cell(client, runtime_url, plan),
+            )
+        later = FakeBackend(self.harness.briefs, self.outcomes)
+        second = self.harness.make_runner(later)
+        second.release_id = "evimed-new-1"
+        cells = second.execute()
+        self.assertEqual(second.skipped, 2, "the whole pair from the old release is kept")
+        self.assertEqual(len(later.dispatches), len(self.brief_ids) * 2 - 2)
+        releases = {(cell["briefId"], cell["arm"]): cell.get("releaseId") for cell in cells}
+        self.assertEqual(releases[(self.brief_ids[0], "candidate")], "evimed-old-1")
+        self.assertEqual(releases[(self.brief_ids[1], "baseline")], "evimed-new-1", "the lone cell ran again beside its partner")
+        self.assertEqual(releases[(self.brief_ids[1], "candidate")], "evimed-new-1")
+
     def test_a_changed_arm_invalidates_every_cell_measured_under_the_old_one(self):
         first = FakeBackend(self.harness.briefs, self.outcomes)
         self.harness.make_runner(first).execute()
@@ -397,12 +425,58 @@ class VerdictTests(unittest.TestCase):
     def test_a_missing_interval_is_inconclusive_rather_than_a_silent_pass(self):
         self.assertEqual(runner.interval_verdict(None, None, 0.02), "inconclusive")
 
-    def test_one_worse_dimension_makes_the_whole_comparison_worse(self):
+    def test_a_worse_interval_alone_decides_nothing(self):
+        # Ruling of 2026-09-21: with three or four briefs a percentile interval
+        # claims a confidence no test reaches, and the rule it fed retired about
+        # one harmless method in six.
         verdicts = {dimension: "better" for dimension in runner.DIMENSIONS}
         verdicts["safety"] = "worse"
         verdict, reasons = runner.overall_verdict(verdicts, {"evidenceCompleteness": [], "safety": []})
-        self.assertEqual(verdict, "worse")
+        self.assertEqual(verdict, "inconclusive")
         self.assertTrue(any("safety" in reason for reason in reasons))
+
+    def test_a_retiring_dimension_worse_by_sign_test_and_mean_is_worse(self):
+        verdicts = {dimension: "better" for dimension in runner.DIMENSIONS}
+        evidence = {"safety": {"families": 7, "negatives": 7, "positives": 0, "p": 1 / 128, "mean": -0.25}}
+        verdict, reasons = runner.overall_verdict(verdicts, {"evidenceCompleteness": [], "safety": []}, worse_evidence=evidence)
+        self.assertEqual(verdict, "worse")
+        self.assertIn("safety is worse on 7 of 7 briefs", reasons[0])
+
+    def test_significance_without_a_real_drop_or_a_drop_without_significance_is_not_worse(self):
+        verdicts = {dimension: "non_inferior" for dimension in runner.DIMENSIONS}
+        small = {"taskUtility": {"families": 7, "negatives": 7, "positives": 0, "p": 1 / 128, "mean": -0.05}}
+        self.assertNotEqual(runner.overall_verdict(verdicts, {"evidenceCompleteness": [], "safety": []}, worse_evidence=small)[0], "worse")
+        few = {"taskUtility": {"families": 4, "negatives": 4, "positives": 0, "p": 1 / 16, "mean": -0.4}}
+        self.assertNotEqual(runner.overall_verdict(verdicts, {"evidenceCompleteness": [], "safety": []}, worse_evidence=few)[0], "worse",
+                            "four briefs cannot reach 0.05/3 whatever they say")
+
+    def test_a_diagnostic_dimension_can_never_retire(self):
+        verdicts = {dimension: "non_inferior" for dimension in runner.DIMENSIONS}
+        evidence = {"efficiency": {"families": 10, "negatives": 10, "positives": 0, "p": 1 / 1024, "mean": -0.9}}
+        verdict, _reasons = runner.overall_verdict(verdicts, {"evidenceCompleteness": [], "safety": []}, worse_evidence=evidence)
+        self.assertNotEqual(verdict, "worse")
+
+    def test_the_sign_test_counts_one_vote_per_brief(self):
+        result = runner.sign_test_worse({"a": [-0.2, -0.4], "b": [-0.1], "c": [0.3], "d": [0.0]})
+        self.assertEqual((result["families"], result["negatives"], result["positives"]), (4, 2, 1))
+        self.assertAlmostEqual(result["p"], 4 / 8)  # P(X >= 2 | n = 3)
+        self.assertEqual(runner.sign_test_worse({})["p"], 1.0)
+        six = runner.sign_test_worse({str(index): [-0.5] for index in range(6)})
+        self.assertAlmostEqual(six["p"], 1 / 64)
+        self.assertLess(six["p"], runner.WORSE_ALPHA, "six briefs, all worse, is the fewest that can retire")
+
+    def test_a_regression_counts_only_when_it_reproduces(self):
+        def cell(arm, repeat, failures):
+            return {"complete": True, "briefId": "reg-1", "arm": arm, "repeat": repeat,
+                    "deterministic": {"completenessFailures": failures, "safetyFailures": []}}
+        once = [cell("candidate", 0, ["artifact:report.md"]), cell("candidate", 1, []), cell("baseline", 0, []), cell("baseline", 1, [])]
+        self.assertEqual(runner.regression_failures(once, ["reg-1"])["evidenceCompleteness"], [], "one flaky cell is not a regression")
+        single = [cell("candidate", 0, ["artifact:report.md"]), cell("baseline", 0, [])]
+        self.assertEqual(runner.regression_failures(single, ["reg-1"])["evidenceCompleteness"], [], "one repeat cannot reproduce")
+        twice = [cell("candidate", 0, ["artifact:report.md"]), cell("candidate", 1, ["artifact:report.md"]), cell("baseline", 0, []), cell("baseline", 1, [])]
+        self.assertEqual(runner.regression_failures(twice, ["reg-1"])["evidenceCompleteness"], ["reg-1:artifact:report.md"])
+        shared = twice + [cell("baseline", 2, ["artifact:report.md"])]
+        self.assertEqual(runner.regression_failures(shared, ["reg-1"])["evidenceCompleteness"], [], "the baseline fails it too")
 
     def test_a_new_regression_failure_outranks_every_improvement(self):
         verdicts = {dimension: "better" for dimension in runner.DIMENSIONS}
