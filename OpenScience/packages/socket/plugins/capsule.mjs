@@ -55,7 +55,7 @@ export async function apply(ctx, config) {
   for (const method of methods) {
     ctx.effect(() => registerSkill(ctx, {
       name: toSkillName(method.name, 'capsule'),
-      description: method.description || `用户自己的方法：${method.name}`,
+      description: mountedMethodDescription(method),
       content: method.body,
       ...(method.whenToUse ? { whenToUse: method.whenToUse } : {}),
     }))
@@ -131,11 +131,11 @@ export async function apply(ctx, config) {
  * method whose digest differed between them would reset its own counters on
  * every run and could never cross the threshold that earns it an evaluation.
  * @param {any} ctx @param {string} directory
- * @returns {Promise<{ name: string, description: string, whenToUse: string, body: string, digest: string }[]>}
+ * @returns {Promise<{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string }[]>}
  */
 async function loadMethods(ctx, directory) {
   if (!directory) return []
-  /** @type {{ name: string, description: string, whenToUse: string, body: string, digest: string }[]} */
+  /** @type {{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string }[]} */
   const methods = []
   for (const entry of await listDirAt(ctx, directory, '.')) {
     if (!entry.directory) continue
@@ -148,9 +148,35 @@ async function loadMethods(ctx, directory) {
       whenToUse: String(front.whenToUse ?? ''),
       body,
       digest: await skillBodyDigestAsync(body),
+      directory: entry.name,
     })
   }
   return methods
+}
+
+/** How a learned method's directory is named (`learnedMethodDirectoryName`). */
+const LEARNED_METHOD_DIRECTORY = /^_lm[0-9a-f]{32}$/
+
+/**
+ * What the model is told a mounted method is, and the one sentence it owes the
+ * researcher when it uses one.
+ *
+ * The sentence is the review (spec §19.7: 「本次按你的新方法 X 执行，如不对请说」):
+ * a method takes effect without anyone approving it, and since the in-chat
+ * background panel was removed (owner, 2026-09-20) nothing else tells the
+ * researcher that their learnt way of working was applied. Added here, at
+ * registration, and never to the file: the file's bytes are the digest the
+ * receipt and the usage counters attribute by.
+ *
+ * @param {{ name: string, description: string, directory?: string }} method
+ * @returns {string}
+ */
+export function mountedMethodDescription(method) {
+  const note = LEARNED_METHOD_DIRECTORY.test(String(method.directory ?? ''))
+    ? '这是 EviMed 从这位用户以往的研究里学到的做法。按它做的时候，在回复里用用户的语言加一句，概括本次按用户的哪条做法做了什么（不要念技能名），并说不对可以直接告诉你。'
+    : '这是用户启用的记忆胶囊里的做法。按它做的时候，在回复里用用户的语言加一句，说明本次参考了胶囊里的哪条做法。'
+  const own = method.description || `用户自己的方法：${method.name}`
+  return `${own.slice(0, Math.max(0, 1024 - note.length - 1))}\n${note}`
 }
 
 /**

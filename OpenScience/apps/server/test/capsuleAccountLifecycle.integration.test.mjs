@@ -13,13 +13,14 @@ import { CapsuleService } from "../src/capsuleService.mjs";
 import { generateCapsuleIdentity } from "../src/capsuleContainer.mjs";
 import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
+import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
 const run=promisify(execFile);
 const repoRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../../..");
 const url=process.env.OPEN_SCIENCE_TEST_POSTGRES_URL??"";
 if(url){const parsed=new URL(url);assert.ok(["127.0.0.1","localhost"].includes(parsed.hostname));assert.match(parsed.pathname,/evimed_test/);}
 const options={skip:!url};const password="test-only-lifecycle-passphrase";
 let root,db,documents,capsules,identities,transfers;const users=[];
-before(async()=>{if(!url)return;root=await fs.realpath(await fs.mkdtemp("/tmp/evimed-capsule-lifecycle-"));db=new ControlPlaneDatabase({databaseUrl:url,databasePoolMax:6,databaseConnectionTimeoutMs:2000});documents=new ProductDocuments(db);capsules=new CapsuleService(documents);identities=new CapsuleIdentityStore(root);transfers=new CapsuleTransferService({documents,capsules,identities,dataDir:root});});
+before(async()=>{if(!url)return;root=await fs.realpath(await fs.mkdtemp("/tmp/evimed-capsule-lifecycle-"));db=new ControlPlaneDatabase({databaseUrl:url,databasePoolMax:6,databaseConnectionTimeoutMs:2000});await migrateResearchMemory(db);documents=new ProductDocuments(db);capsules=new CapsuleService(documents);identities=new CapsuleIdentityStore(root);transfers=new CapsuleTransferService({documents,capsules,identities,dataDir:root});});
 after(async()=>{if(db){await db.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])",[users]);await db.close();}if(root)await fs.rm(root,{recursive:true,force:true});});
 async function account(){const id=`lifecycle_${randomUUID()}`;users.push(id);await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Lifecycle fixture','development')",[id]);return id;}
 async function source(owner){const capsule=await capsules.create(owner,{title:"Lifecycle methods"});await capsules.addEntry(owner,capsule.id,{factKind:"method_preference",layer:"methods",content:"Retain study uncertainty."});return capsule;}

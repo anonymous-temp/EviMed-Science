@@ -58,7 +58,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
     if (mounted.current) { setExportPassword(""); setRefresh(value => value + 1); setNotice("加密快照已下载。请通过其他渠道告知接收者口令。"); }
   });
 
-  return <Card title="分享与导入" hint="默认只分享已采用的研究方法与工作偏好。原始来源文档、账户标识和对话记录不会随包导出。">
+  return <Card title="分享与导入" hint="分享 EviMed 从你的研究里学到的做法，和你说过的工作偏好。原始资料、账户标识和对话记录不会随包导出。">
     {revoking && <ConfirmDialog
       title="撤销这份快照？"
       body={`撤销后，这份快照在本服务上不能再被导入，且无法恢复；已经下载到别处的离线副本收不回来。快照时间 ${new Date(revoking.createdAt).toLocaleString()}，共 ${revoking.entryCount} 条。`}
