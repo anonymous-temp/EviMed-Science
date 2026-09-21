@@ -216,3 +216,22 @@ test("a run that ends early still counts every verdict it reached, and invents n
     );
   }
 });
+
+test("reading a mounted method's own file is a use of it, the same as calling it through the skill tool", async () => {
+  // 2026-09-21: the capsule plugin lists mounted methods in a prompt section
+  // and the model reads the one that applies, because an agent-scoped row
+  // cannot register a skill at this pin. Counting only `skill` calls would
+  // have called every read method idle.
+  const { learnedMethodDirectoryName } = await import("../src/learnedMethodMount.mjs");
+  const directory = learnedMethodDirectoryName("method:learned:triage");
+  const readSession = {
+    sessionId: "root",
+    transcript: { messages: [{ role: "tool", turn: 0, parts: [
+      { type: "tool", tool: "read", callId: "c0", status: "completed", input: { path: `/runtime/capsule-methods/${directory}/SKILL.md` }, output: "", error: null },
+      { type: "tool", tool: "read", callId: "c1", status: "completed", input: { path: "/workspace/notes/SKILL.md" }, output: "", error: null },
+    ] }] },
+  };
+  const derived = runMethodObservations({ run, projection: { plan: { items: [] }, subagents: [] }, methods: METHODS, sessions: [readSession] });
+  assert.deepEqual(derived.invokedWithoutMount, [{ id: "method:learned:triage", name: "triage" }]);
+  assert.deepEqual(derived.eligible, ["method:learned:quoting"], "a file that is not a mounted method's names nothing");
+});

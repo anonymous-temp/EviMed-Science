@@ -53,7 +53,10 @@ export const name = 'evimed-compaction'
 // how the handles are read from the projection rather than from workspace files:
 // a second reader of the same tables cannot go stale against them, and a file
 // read could.
-export const inject = ['storageDomain']
+// 'tools' for the compact tool below, registered on any policy but `basic`:
+// undeclared, the first deployment to choose another policy would have failed
+// the whole agent preset at mount (the capsule plugin did, 2026-09-21).
+export const inject = ['storageDomain', 'tools']
 
 /**
  * @typedef {object} Config
