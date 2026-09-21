@@ -1051,6 +1051,13 @@ export class MemoryIntelligence {
     const lastUser = [...sources].reverse().find((source) => source.role === "user") ?? null;
     const lastAssistant = [...sources].reverse().find((source) => source.role === "assistant") ?? null;
     const question = lastUser?.text.slice(0, 4_000) ?? "";
+    // No question, no episode. A run whose transcript holds no user message —
+    // a prompt that never landed, a transcript the runtime took with it, work
+    // the platform dispatched — has nothing a researcher asked, and its record
+    // read 「Run run_a5965c92… finished with status canceled; 0 artifact(s)
+    // recorded.」 on the memory page (2026-09-21 walk). The run itself stays on
+    // the timeline, from the run ledger.
+    if (!question) return null;
     const answer = lastAssistant?.text.slice(0, 8_000) ?? "";
     const sensitive = sensitivePattern.test(`${question}\n${answer}`);
     // One summary per conversation (2026-09-20). It was keyed by run once, so
@@ -1096,12 +1103,8 @@ export class MemoryIntelligence {
       // The question, in the words and the language it was asked in. It used to
       // be labelled 「Conversation about: …」, which put English into every
       // Chinese researcher's episode record and into what the agent-memory
-      // API hands out; the kind (运行摘要) already says what the record is. A
-      // run with no user message has no language to follow and keeps the
-      // status line.
-      summary: question
-        ? question.slice(0, 240)
-        : `Run ${run.id} finished with status ${run.status}; ${run.artifacts.length} artifact(s) recorded.`,
+      // API hands out; the kind (运行摘要) already says what the record is.
+      summary: question.slice(0, 240),
       origin: "system",
       // Active and, when the screen matched, flagged: a run summary belongs to
       // the timeline, is never recalled into a prompt (`memoryRecallPolicy`),
@@ -1121,7 +1124,7 @@ export class MemoryIntelligence {
     }, {
       sourceType: lastUser ? "conversation_message" : "agent_run",
       sourceRef: lastUser?.sourceRef ?? `runs/${run.id}`,
-      quote: question || `Run ${run.id} finished with status ${run.status}.`,
+      quote: question,
       observedAt: run.finishedAt,
       weight: 1,
     }, {

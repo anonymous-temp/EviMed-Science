@@ -149,8 +149,12 @@ export function methodEvents(document) {
   if (created) events.push({ ...base, id: `method:${document.id}:created`, at: created, change: "learned" });
   const moved = instant(payload.statusChangedAt);
   if (moved && ["approved", "retired"].includes(payload.status) && moved !== created) {
+    // Why it stopped is worth a line; why it started is the promotion rule,
+    // the same for every method, and it was stored as that rule's English
+    // sentence (「learned from the researcher's own work: it takes effect…」
+    // under every 「一条做法开始生效」, 2026-09-21 walk).
     events.push({ ...base, id: `method:${document.id}:${payload.status}`, at: moved, change: payload.status,
-      ...(payload.statusReason ? { reason: excerpt(payload.statusReason, 120) } : {}) });
+      ...(payload.status === "retired" && payload.statusReason ? { reason: excerpt(payload.statusReason, 120) } : {}) });
   }
   return events;
 }

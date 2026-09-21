@@ -210,7 +210,10 @@ export class LearningService {
     const verdict = promotionVerdict(methodRecordFrom({ id, payload }));
     if (verdict.status === "approved") {
       payload.status = "approved";
-      payload.statusReason = verdict.reasons[0] ?? "";
+      // The reader's sentence; `verdict.reasons` are the log's.
+      payload.statusReason = payload.provenance?.origin === "explicit"
+        ? "你亲口定下的做法，已直接生效；回到上一版即可撤销。"
+        : "从你自己的研究里学到，已直接生效；用上它的研究若明显更常被退回，会自动停用，你也可以随时停用。";
       // The same field `#setStatus` stamps, so "when did this become effective"
       // has one answer however it became effective.
       payload.statusChangedAt = payload.createdAt;
