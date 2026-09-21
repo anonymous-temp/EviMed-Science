@@ -33,7 +33,7 @@ export function KnowledgePage() {
   return (
     <div className="h-full overflow-y-auto bg-bg">
       <PageTitle page="知识库" />
-      <div className="mx-auto w-full max-w-content-wide space-y-5 px-6 py-8">
+      <div className="mx-auto w-full max-w-content-wide space-y-5 px-6 py-6">
         <PageHeader title="知识库" description={DEFINITION} />
         {notice && (
           <p role="status" className="rounded-card border border-border bg-surface px-4 py-3 text-ui text-text">{notice}</p>

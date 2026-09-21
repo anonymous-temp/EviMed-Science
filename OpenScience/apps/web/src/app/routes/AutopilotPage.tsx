@@ -415,7 +415,7 @@ export function AutopilotPage() {
       void mutate(() => scheduleAgenda(agenda.id, todayIn(agenda.payload.timeZone)));
     }}
   /> : null;
-  return <div className="h-full overflow-y-auto px-6 py-6"><div className="mx-auto max-w-content-wide space-y-5">
+  return <div className="h-full overflow-y-auto bg-bg"><div className="mx-auto w-full max-w-content-wide space-y-5 px-6 py-6">
     {runDialog}
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div>
@@ -437,7 +437,7 @@ export function AutopilotPage() {
       * there was no board either — the page offered 开始 / 停止 / 立即运行 over
       * a list that could only ever be empty (walk, B4/C4). */}
     <section className="space-y-3" aria-label="晨间简报">
-      <h2 className="font-serif text-body text-text">晨间简报</h2>
+      <h2 className="text-body font-semibold text-text">晨间简报</h2>
       {agendas === null ? <MemorySkeleton />
         : visibleDigests.length === 0
           ? <EmptyState icon={CalendarClock} title="还没有简报" description={firstRunHint} />
@@ -466,7 +466,7 @@ export function AutopilotPage() {
       * are here because a decision the loop is waiting on is what blocks
       * tonight's work; the inbox is still where they are resolved. */}
     {decisions.length > 0 && <section className="space-y-2" aria-label="需要你决定">
-      <h2 className="font-serif text-body text-text">需要你决定</h2>
+      <h2 className="text-body font-semibold text-text">需要你决定</h2>
       {decisions.map((item) => <Card key={item.id} title={item.title} hint={item.noticeType === "review" ? "需要审阅" : "等待回答"}>
         <InboxBody body={item.body} />
         <Button className="mt-2" size="sm" variant="ghost" onClick={() => navigate("/app/inbox")}>去收件箱处理</Button>
@@ -474,7 +474,7 @@ export function AutopilotPage() {
     </section>}
 
     <section className="space-y-3" aria-label="研究议程">
-      <h2 className="font-serif text-body text-text">研究议程</h2>
+      <h2 className="text-body font-semibold text-text">研究议程</h2>
       {agendas === null ? <MemorySkeleton /> : agendas.length === 0
         ? <EmptyState icon={CalendarClock} title="还没有主动科研议程" description="用右上角的「新建议程」写一句想持续跟进的方向就行，其余由平台给默认值。议程创建后默认暂停，只有你主动开始才会运行和产生费用。" />
         : agendas.map((agenda) => <Card key={agenda.id} title={agenda.payload.title}

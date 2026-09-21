@@ -40,7 +40,9 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
 
   return (
     <div className="h-full overflow-y-auto bg-bg">
-      <div className="mx-auto max-w-content px-6 py-6">
+      {/* The account page's box and gutter (`WorkbenchTabBody`), so this tab
+          starts where the page title does; the reading measure is kept. */}
+      <div className="mx-auto w-full max-w-content-wide px-6 py-6"><div className="max-w-content">
         {!embedded && (
           <PageHeader title="设置" description="项目、插件、数据边界与外观。" />
         )}
@@ -52,7 +54,7 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
         <Card className="mt-5" title="外观" hint="主题保存在本浏览器中，跟随系统会随系统明暗自动切换。">
           <ThemeSegmentedControl />
         </Card>
-      </div>
+      </div></div>
     </div>
   );
 }
