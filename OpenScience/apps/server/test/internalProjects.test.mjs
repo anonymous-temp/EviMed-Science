@@ -108,3 +108,61 @@ test("a learning step writes its input at the learning project's root, on a work
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a failed learning dispatch is retried under the next attempt id; a working one is adopted", async () => {
+  // Adopting a failed dispatch read the same failure back to every re-queued
+  // job: one bad run was a lesson lost for good (2026-09-21).
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const path = await import("node:path");
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-learning-"));
+  try {
+    const project = { id: LEARNING_PROJECT_ID, userId: "u1", rootDir: root, baseDir: root, workspaceDir: path.join(root, "workspace"), quotaBytes: 10_000_000 };
+    /** @param {any[]} ledger */
+    const runtimeWith = (ledger) => {
+      /** @type {string[]} */
+      const reserved = [];
+      const runtime = createLearningRuntime({
+        config: { maxProjectBytes: 10_000_000 },
+        store: { async userById(id) { return { id }; }, async requireProject() { return project; }, async createProject() {} },
+        agentRuns: { async list() { return ledger; }, async existingDispatch() {}, scheduleMonitor() {} },
+        runtimeManager: {
+          async reserveBoundedRuntimeSession(_scoped, scope) { reserved.push(scope.runId); throw Object.assign(new Error("stop"), { code: "fixture_stop" }); },
+          boundedRuntimeScope() { return null; },
+        },
+        researchSessions: {}, usageLedger: { async assertWithinLimits() { return { allowed: true }; } },
+        registry: Promise.resolve(new Map([["method-distillation", { id: "method-distillation", version: "1.0.0", runtimeAgent: "evimed-method-distillation" }]])),
+        prepareContext: async () => ({}),
+      });
+      return { runtime, reserved };
+    };
+    const request = { job: { userId: "u1", projectId: "default", payload: {} }, userId: "u1", projectId: "default",
+      dispatchId: "method-distillation-0123abcd", capabilityId: "method-distillation", contractKind: "method-candidate", input: {}, question: "q" };
+
+    const failed = runtimeWith([{ id: "run_old", sessionId: "s0", dispatchId: "method-distillation-0123abcd", status: "failed", startedAt: "2026-09-21T04:00:00Z" }]);
+    await assert.rejects(failed.runtime.dispatch(request), { code: "fixture_stop" });
+    assert.deepEqual(failed.reserved, ["method-distillation-0123abcd-a2"], "a fresh run under the next attempt id");
+
+    const working = runtimeWith([
+      { id: "run_old", sessionId: "s0", dispatchId: "method-distillation-0123abcd", status: "failed", startedAt: "2026-09-21T04:00:00Z" },
+      { id: "run_new", sessionId: "s1", dispatchId: "method-distillation-0123abcd-a2", status: "running", startedAt: "2026-09-21T04:10:00Z" },
+    ]);
+    const adopted = await working.runtime.dispatch(request);
+    assert.deepEqual(adopted, { runId: "run_new", sessionId: "s1", dispatchId: "method-distillation-0123abcd-a2" });
+    assert.deepEqual(working.reserved, [], "a working attempt is never started twice");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a finished bounded run is not held back by a request whose settlement will never arrive", async () => {
+  // The first successful distillation had 48 settled calls and one `uncertain`
+  // (its stream was cut); both readers waited for the uncertain one to settle,
+  // which it never does, so the lesson could never land (2026-09-21).
+  const { readFile } = await import("node:fs/promises");
+  for (const file of ["../src/learningRuntime.mjs", "../src/sourceUnderstandingRuntime.mjs"]) {
+    const source = await readFile(new URL(file, import.meta.url), "utf8");
+    assert.match(source, /if \(usage\.reservedCalls\) return \{ status: "pending"/, file);
+    assert.doesNotMatch(source, /usage\.reservedCalls \|\| usage\.uncertain/, file);
+  }
+});

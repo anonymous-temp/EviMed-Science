@@ -197,10 +197,11 @@ export function createLearningRuntime({
      *          userId: string, projectId: string, isolatedProject?: boolean}} request
      */
     async dispatch(request) {
-      const { job, dispatchId, capabilityId, input, question } = request;
+      const { job, capabilityId, input, question } = request;
+      const baseDispatchId = request.dispatchId;
       const project = await runProject({ userId: request.userId ?? job.userId, projectId: request.projectId ?? job.projectId,
         isolatedProject: request.isolatedProject === true });
-      const directory = learningArtifactDirectory(capabilityId, dispatchId);
+      learningArtifactDirectory(capabilityId, baseDispatchId);
       // The whole project is the run's workspace — the learning project for a
       // learning step, the cell's own project for an evaluation. The runtime
       // controller mounts a project's workspace root by identity and ignores a
@@ -211,10 +212,22 @@ export function createLearningRuntime({
       // time (below), so the root is safe to give it.
       const scoped = project;
 
-      // An existing dispatch is adopted, never repeated. A durable record of a
-      // request that was already paid for is not permission to pay again.
+      // A dispatch that is working, or that delivered, is adopted and never
+      // repeated: a durable record of a request already paid for is not
+      // permission to pay again. One that failed or was cancelled is not
+      // adopted — it is retried under the next attempt id. Adopting it made one
+      // bad run a lesson lost for good: every re-queued job read the same
+      // failure back (2026-09-21). How many attempts a lesson gets is the job's
+      // own limit.
       const ledger = await agentRuns.list(project);
-      const existing = ledger.find((run) => run.dispatchId === dispatchId);
+      const attempts = ledger
+        .filter((run) => run.dispatchId === baseDispatchId || String(run.dispatchId ?? "").startsWith(`${baseDispatchId}-a`))
+        .sort((left, right) => String(left.startedAt ?? left.createdAt ?? "").localeCompare(String(right.startedAt ?? right.createdAt ?? "")));
+      const latest = attempts.at(-1) ?? null;
+      const spent = latest && ["failed", "cancelled", "canceled"].includes(String(latest.status));
+      const existing = spent ? null : latest;
+      const dispatchId = spent ? `${baseDispatchId}-a${attempts.length + 1}` : String(latest?.dispatchId ?? baseDispatchId);
+      const directory = learningArtifactDirectory(capabilityId, dispatchId);
       if (existing) {
         await agentRuns.existingDispatch(scoped, existing);
         if (existing.status === "running") agentRuns.scheduleMonitor(scoped, existing.id);
@@ -355,7 +368,11 @@ export function createLearningRuntime({
       }
 
       const usage = await usageLedger.summaryRun(identity.userId, identity.dispatchId);
-      if (usage.reservedCalls || usage.uncertain) return { status: "pending", reason: "learning_usage_unsettled" };
+      // Wait only for a request still in flight. An `uncertain` one is a request
+      // whose settlement will never arrive — the stream was cut — and waiting on
+      // it held the first successful distillation back for good (2026-09-21: 48
+      // settled calls, 1 uncertain). Its reserved cost still counts where caps do.
+      if (usage.reservedCalls) return { status: "pending", reason: "learning_usage_unsettled" };
       if (!usage.settledCalls || !usage.modelId || usage.incompleteUsageCalls) {
         throw new HttpError(409, "learning_usage_invalid", "The learning run has no unambiguous settled model receipt.");
       }

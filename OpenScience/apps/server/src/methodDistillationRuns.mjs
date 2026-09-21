@@ -193,7 +193,10 @@ export class MethodDistillationRuns {
     if (!identity?.runId || !identity?.sessionId) {
       throw new HttpError(502, "method_distillation_run_invalid", "The bounded run has no durable identity.");
     }
-    const identityRecord = { runId: identity.runId, sessionId: identity.sessionId, dispatchId, userId: job.userId, projectId: job.projectId };
+    // The dispatch that actually ran: a failed attempt is retried under the
+    // next attempt id (`learningRuntime.dispatch`).
+    const identityRecord = { runId: identity.runId, sessionId: identity.sessionId, dispatchId: identity.dispatchId ?? dispatchId,
+      userId: job.userId, projectId: job.projectId };
     const result = await this.readResult(identityRecord);
     if (!result || result.status === "running" || result.status === "pending") return { state: "pending", ...identityRecord };
     if (result.status !== "succeeded") {
