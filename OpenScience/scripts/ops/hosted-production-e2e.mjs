@@ -212,12 +212,10 @@ async function main() {
   const auth = await authenticate(base);
   const marker = randomBytes(12).toString("hex");
   const knowledgeMarker = `KB_${marker}`;
-  const memoryMarker = `MEM_${marker}`;
   const preferenceMarker = `PREF_${marker}`;
   const projectId = `e2e-${marker}`;
   const initialProfile = await jsonFetch(`${base}/api/memory/profile`, { headers: auth });
   const initialRecordIds = new Set((initialProfile.body?.data?.records ?? []).map((record) => record.id));
-  let memoId = null;
   let projectCreated = false;
   let scoped = null;
   let runtimeStarted = false;
@@ -231,13 +229,11 @@ async function main() {
     projectCreated = true;
     scoped = { ...auth, "X-Open-Science-Project": projectId };
 
-    const memo = await jsonFetch(`${base}/api/memory/memos`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...auth },
-      body: JSON.stringify({ content: `Production memory evidence marker ${memoryMarker}` }),
-    });
-    memoId = memo.body?.data?.id ?? null;
-    if (!memoId) throw failure("hosted_e2e_memory_create_failed", "The research-memory store did not return a persisted note id.");
+    // There is no hand-written memory to seed any more: the notes composer and
+    // its routes were deleted on 2026-09-20, and what a researcher wants
+    // remembered they say in a conversation. So memory is proven the way it is
+    // now written — the preference this run states is extracted, then found
+    // again by the same search the memory page uses (below).
 
     await jsonFetch(`${base}/api/files/upload`, {
       method: "POST",
@@ -304,11 +300,11 @@ async function main() {
           "Call drug_safety_analysis with action=capabilities, then action=start, then poll status with waitSeconds=45 until terminal.",
           "Use the managed specialist data and artifacts; do not synthesize signal values or substitute model knowledge for FAERS statistics.",
           "Write the required safety-report.md and signals.csv files. Preserve source scope, analysis period, suspect binding, counts, and signal metrics, and state spontaneous-reporting limitations.",
-          `Use the automatically retrieved knowledge marker ${knowledgeMarker} and memory marker ${memoryMarker}.`,
+          `Use the automatically retrieved knowledge marker ${knowledgeMarker}.`,
           `请记住：我的长期回答偏好是先呈现证据确定性，再给建议；偏好校验码是 ${preferenceMarker}。`,
-          `Use the write tool to create exactly ${artifactPath} as valid JSON with keys marker, knowledge, memory, agent, and model.`,
-          `The values must be exactly ${marker}, ${knowledgeMarker}, ${memoryMarker}, evimed-adr-analysis, and ${certifiedModel}.`,
-          "Do not invent or transform either evidence marker.",
+          `Use the write tool to create exactly ${artifactPath} as valid JSON with keys marker, knowledge, agent, and model.`,
+          `The values must be exactly ${marker}, ${knowledgeMarker}, evimed-adr-analysis, and ${certifiedModel}.`,
+          "Do not invent or transform the evidence marker.",
         ].join("\n"),
       }),
     }, 202);
@@ -357,7 +353,7 @@ async function main() {
     }
     let evidence;
     try { evidence = JSON.parse(artifactText); } catch { throw failure("hosted_e2e_artifact_invalid", "The production artifact is not valid JSON."); }
-    assertExact(evidence, { marker, knowledge: knowledgeMarker, memory: memoryMarker, agent: "evimed-adr-analysis", model: certifiedModel });
+    assertExact(evidence, { marker, knowledge: knowledgeMarker, agent: "evimed-adr-analysis", model: certifiedModel });
 
     const safetyReport = await command(base, "read_artifact", { path: "safety-report.md" }, scoped);
     const reportText = safetyReport.body?.data?.data;
@@ -435,6 +431,12 @@ async function main() {
           `The structured preference memory is not explicit, evidenced and active: ${memoryFaults.join("; ")}.`,
         );
       }
+      // Written is half of it; a memory nobody can find again is not one. The
+      // search the memory page uses, over the same records recall reads.
+      const found = await jsonFetch(`${base}/api/memory/search?q=${encodeURIComponent(preferenceMarker)}`, { headers: scoped });
+      if (!(found.body?.data?.items ?? []).some((item) => item?.id === memoryRecord.id)) {
+        throw failure("hosted_e2e_memory_not_found", "The extracted preference memory was written but its own marker does not find it.");
+      }
     }
 
     // The kernel identity is printed, not just asserted: "which kernel did the
@@ -449,12 +451,6 @@ async function main() {
     if (runtimeStarted && scoped) {
       await command(base, "stop_runtime", {}, scoped).catch(() => {});
     }
-    if (memoId) {
-      await jsonFetch(`${base}/api/memory/memos/${encodeURIComponent(memoId)}`, {
-        method: "DELETE",
-        headers: auth,
-      }).catch(() => {});
-    }
     if (scoped) {
       const profile = await jsonFetch(`${base}/api/memory/profile`, { headers: scoped }).catch(() => null);
       for (const record of profile?.body?.data?.records ?? []) {
@@ -464,16 +460,6 @@ async function main() {
           method: "DELETE",
           headers: scoped,
         }).catch(() => {});
-      }
-      for (const state of ["normal", "archived"]) {
-        const memos = await jsonFetch(`${base}/api/memory/memos?state=${state}`, { headers: auth }).catch(() => null);
-        for (const memo of memos?.body?.data ?? []) {
-          if (!memo.content?.split("\n").includes(`- Project: ${projectId}`)) continue;
-          await jsonFetch(`${base}/api/memory/memos/${encodeURIComponent(memo.id)}`, {
-            method: "DELETE",
-            headers: auth,
-          }).catch(() => {});
-        }
       }
     }
     if (projectCreated) {

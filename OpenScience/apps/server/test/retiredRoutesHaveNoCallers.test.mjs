@@ -92,3 +92,20 @@ test("the e2e waits longer than the work it is waiting for", async () => {
     `the e2e waits ${waited}ms for an extraction the server gives ${budget}ms; a slow success would be reported as no memory at all`,
   );
 });
+
+// The same failure one layer over. 2026-09-20 deleted 「你写下的笔记」 and its
+// routes with the table behind them, and the hosted e2e — a release-gate tool
+// nobody runs on a dev box — still opened by writing a note to
+// `/api/memory/memos`, so it would have failed on its first write against the
+// release it exists to certify.
+test("nothing calls the deleted memory-notes routes", async () => {
+  const roots = ["apps/web/src", "evals", "scripts", "packages"].map((rel) => path.join(repoRoot, rel));
+  for (const root of roots) await stat(root);
+  const files = (await Promise.all(roots.map((root) => sourceFiles(root)))).flat();
+  assert.ok(files.length > 200, `only ${files.length} source files scanned; the walk, not the repo, is wrong`);
+  const offenders = [];
+  for (const file of files) {
+    if (/\/api\/memory\/memos\b/.test(await readFile(file, "utf8"))) offenders.push(path.relative(repoRoot, file));
+  }
+  assert.deepEqual(offenders.sort(), [], "memory is written by a conversation now; there is no notes route to call");
+});
