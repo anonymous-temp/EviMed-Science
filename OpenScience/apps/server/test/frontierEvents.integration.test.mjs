@@ -195,7 +195,8 @@ test("a bridge merges: the older event survives, the absorbed id redirects for g
 });
 
 test("a daily column joins one event and links the others; a second work is asked about, not joined", options, async () => {
-  const events = layer({ editor: stubEditor({ verdict: "no" }) });
+  const editor = stubEditor({ verdict: "no" });
+  const events = layer({ editor });
   const capital = await insertComposedItem(database, { sourceId: "fda", sourceType: "regulator", title: "Novo capital markets day",
     registryIds: ["NCT08000001"], entityKeys: ["drug:semaglutide"], vector: vectorAt(1), visibleAt: hoursAgo(6), timelineAt: hoursAgo(6) });
   // 0.68 to the capital-markets item: close enough to be asked about (the stub says no), not to join.
@@ -217,6 +218,21 @@ test("a daily column joins one event and links the others; a second work is aske
   const edges = (await database.query(`SELECT count(*)::integer AS n FROM evimed_frontier.event_links
     WHERE (from_event_id = $1 AND to_event_id = $2) OR (from_event_id = $2 AND to_event_id = $1)`, [capitalEvent.id, adhdEvent.id])).rows[0].n;
   assert.equal(edges, 1, "the event it also covered becomes an edge");
+
+  // Two protocols of one collaboration, one topic, different DOIs: the cosine proposes, the model decides.
+  await insertSource(database, "cochrane", { name: "Cochrane", owner_entity: "cochrane" });
+  await insertSource(database, "pubmed-sr", { name: "PubMed SR stream", owner_entity: "nlm" });
+  const first = await insertComposedItem(database, { sourceId: "pubmed-sr", title: "Protocol: monitoring lipid-lowering therapy",
+    doi: "10.1002/14651858.CD016386", entityKeys: ["drug:statin"], vector: vectorAt(1, 2), visibleAt: hoursAgo(4), timelineAt: hoursAgo(4) });
+  await events.clusterPending();
+  const second = await insertComposedItem(database, { sourceId: "cochrane", title: "Protocol: service delivery for lipid testing",
+    doi: "10.1002/14651858.CD016382", clusterKeys: [], entityKeys: ["drug:statin"], vector: vectorAt(0.99, 2),
+    visibleAt: hoursAgo(2), timelineAt: hoursAgo(2) });
+  const judged = editor.calls.judge.length;
+  await events.clusterPending();
+  assert.notEqual(String((await eventOf(database, second.id)).id), String((await eventOf(database, first.id)).id),
+    "a cosine of 0.99 does not make two works one event");
+  assert.equal(editor.calls.judge.length, judged + 1, "it was asked about instead");
 });
 
 test("the hot list: the eligible by decayed heat, a snapshot every run, hot_version only when the list moved, settled after 72 h", options, async () => {

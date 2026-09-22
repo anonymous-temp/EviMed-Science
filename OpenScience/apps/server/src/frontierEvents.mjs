@@ -463,7 +463,7 @@ export class FrontierEvents {
           OR EXISTS (SELECT 1 FROM evimed_frontier.item_vectors v WHERE v.item_id = i.id AND v.model_key = $${values.push(modelKey)}))` : "";
     const rows = (await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.lang,
         i.source_type, i.evidence_type, i.identity_key, i.registry_ids, i.entity_keys, i.published_at, i.timeline_at, i.visible_at,
-        s.name AS source_name, s.owner_entity AS owner_entity
+        i.doi AS doi, i.pmid AS pmid, s.name AS source_name, s.owner_entity AS owner_entity
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE i.state = 'published' AND i.event_id IS NULL AND i.visible_at >= $1::timestamptz
         AND NOT ('digest' = ANY(i.flags)) AND (i.verification <> 'pending' OR i.visible_at < $2::timestamptz) ${vectorWait}
