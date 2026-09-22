@@ -25,16 +25,16 @@ test('the shell requires only the slot registry', () => {
   assert.deepEqual(inject, ['slots']);
 });
 
-test('the left column, the three brand slots, the hero workspace picker and the attachment strip are occupied below the kernel, nothing else', () => {
+test('the left column, the three brand slots and the hero workspace picker are occupied below the kernel, nothing else', () => {
   const f = fixture();
   apply(f.ctx, {}, f.target, undefined, f.kit);
   const occupants = f.occupants();
   assert.deepEqual(Object.keys(occupants).sort(), [
-    'conversation.hero.brand.mark', 'conversation.hero.workspace', 'conversation.input.attachments', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name',
+    'conversation.hero.brand.mark', 'conversation.hero.workspace', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name',
   ]);
-  // Uploads are refused on this surface; the strip of chips that would be
-  // refused at send renders nothing.
-  assert.equal(renderStatic(occupants['conversation.input.attachments'].component), '');
+  // The draft's attachment strip is the kernel's own: occupied by nothing, it
+  // hid every attached file once uploads were allowed (2026-09-22).
+  assert.equal(occupants['conversation.input.attachments'], undefined);
   for (const entry of Object.values(occupants)) assert.ok(entry.options.priority < 0, `${entry.name} sits at or above the kernel's own occupant`);
   // The mark honours the size its host asks for and names the product.
   const mark = renderStatic(occupants['sidebar.brand.mark'].component, { size: 34, className: 'fish' });
@@ -95,7 +95,7 @@ test('a slot the kernel refuses costs that slot, never the rest of the body', ()
     return register(options, component);
   };
   assert.doesNotThrow(() => apply(f.ctx, {}, f.target, undefined, f.kit));
-  assert.deepEqual(Object.keys(f.occupants()).sort(), ['conversation.hero.brand.mark', 'conversation.input.attachments', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name']);
+  assert.deepEqual(Object.keys(f.occupants()).sort(), ['conversation.hero.brand.mark', 'sidebar', 'sidebar.brand.mark', 'sidebar.brand.name']);
 });
 
 test('without React the brand is left to the kernel fallback and the stylesheet still applies', () => {

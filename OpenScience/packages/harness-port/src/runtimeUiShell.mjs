@@ -231,11 +231,10 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     // The picker is a popup the chip opens; an occupant that renders nothing
     // removes the choice (the chip itself is hidden by the stylesheet).
     kit.guarded('workspace picker', () => kit.occupy({ slot: 'conversation.hero.workspace', priority: below }, Nothing));
-    // The draft's attachment strip, for the same reason as the paperclip: a
-    // file pasted or dropped into the composer cannot be uploaded here, and a
-    // strip of chips that will be refused at send is a promise the page does
-    // not keep.
-    kit.guarded('attachment strip', () => kit.occupy({ slot: 'conversation.input.attachments', priority: below }, Nothing));
+    // The draft's attachment strip (`conversation.input.attachments`) is the
+    // kernel's own again: it was occupied by nothing here while uploads were
+    // refused, and with them allowed it hid every attached file — the upload
+    // landed and the composer showed nothing, nor sent (2026-09-22).
   }
 
   const doc = target.document;
