@@ -240,6 +240,191 @@
           }
         }
       ]
+    },
+    {
+      "name": "evimed-frontier",
+      "rules": [
+        {
+          "alert": "FrontierNoSuccessfulCollection",
+          "expr": "open_science_frontier_plugin_last_ok_fetch_timestamp_seconds > 0 and time() - open_science_frontier_plugin_last_ok_fetch_timestamp_seconds > 3600",
+          "for": "5m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The knowledge plugin has read nothing for an hour",
+            "description": "No fetch of any source through any exit has read something (ok, not-modified or empty) for 60 minutes (plan 10.5.8)."
+          }
+        },
+        {
+          "alert": "FrontierTierOneHealthLow",
+          "expr": "sum(open_science_frontier_sources_by_tier{tier=\"P0\",health=~\"healthy|new\"}) / clamp_min(sum(open_science_frontier_sources_by_tier{tier=\"P0\",health!=\"disabled\"}), 1) < 0.95",
+          "for": "2h",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Fewer than 95% of the first-tier sources are healthy",
+            "description": "The P0 sources' health rate has been under 95% for two hours; the sources page names the unhealthy ones (plan 10.5.8)."
+          }
+        },
+        {
+          "alert": "FrontierHostRateLimited",
+          "expr": "open_science_frontier_plugin_rate_limited_1h > 10",
+          "for": "5m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "One host answered the knowledge plugin with 429 more than ten times in an hour",
+            "description": "The plugin pauses a host on every 429; more than ten in an hour means its spacing for that host is too tight (plan 10.5.8)."
+          }
+        },
+        {
+          "alert": "FrontierBacklogOld",
+          "expr": "(open_science_frontier_oldest_owed_timestamp_seconds > 0 and time() - open_science_frontier_oldest_owed_timestamp_seconds > 21600) or open_science_frontier_plugin_backlog_oldest_due_seconds > 21600",
+          "for": "15m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The oldest owed frontier work is more than six hours old",
+            "description": "An entry due, an item promoted and not published, an edit owed, or a source due in the plugin has waited more than six hours (plan 10.5.8)."
+          }
+        },
+        {
+          "alert": "FrontierIngestBelowBaseline",
+          "expr": "sum(increase(open_science_frontier_ingest_entries_total{outcome=\"inserted\"}[24h])) < 0.5 * sum(increase(open_science_frontier_ingest_entries_total{outcome=\"inserted\"}[24h] offset 7d))",
+          "for": "1h",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Fewer than half the usual entries arrived in the last day",
+            "description": "Entries inserted in the last 24 hours are below half of the same weekday a week earlier (plan 10.5.8's weekday and weekend baselines)."
+          }
+        },
+        {
+          "alert": "FrontierFirstPassLow",
+          "expr": "sum(increase(open_science_frontier_edit_calls_total{kind=\"call\"}[24h])) > 20 and 1 - sum(increase(open_science_frontier_edit_calls_total{kind=\"rewrite\"}[24h])) / clamp_min(sum(increase(open_science_frontier_edit_calls_total{kind=\"call\"}[24h])), 1) < 0.85",
+          "for": "1h",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Under 85% of the frontier edits pass the number check first time",
+            "description": "More than 15% of the day's edit answers were sent back for a rewrite; the first-pass failure counters name the field (plan 10.5.8)."
+          }
+        },
+        {
+          "alert": "FrontierTitleOnlyHigh",
+          "expr": "sum(open_science_frontier_verification_today) > 20 and sum(open_science_frontier_verification_today{outcome=\"title-only\"}) / clamp_min(sum(open_science_frontier_verification_today), 1) > 0.05",
+          "for": "1h",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "More than 5% of today's items were published title-only",
+            "description": "Items whose edit failed the number check twice are published with their original title only (plan 10.5.8)."
+          }
+        },
+        {
+          "alert": "FrontierBudgetNearLimit",
+          "expr": "open_science_frontier_budget_limit_cny > 0 and open_science_frontier_budget_spent_cny / open_science_frontier_budget_limit_cny >= 0.8",
+          "for": "5m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The frontier module has spent 80% of today's model budget",
+            "description": "At the budget new entries are collected only and published items wait for their edit (plan 10.5.8)."
+          }
+        },
+        {
+          "alert": "FrontierFewSelectedByNoon",
+          "expr": "open_science_frontier_items_selected_today < 5 and on() ((hour() >= 4) and (hour() < 16))",
+          "for": "10m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Fewer than five items are selected by noon in Beijing",
+            "description": "Between 12:00 and 24:00 Beijing time the day has fewer than five selected items (plan 10.5.8)."
+          }
+        },
+        {
+          "alert": "FrontierEdgeRelayDown",
+          "expr": "open_science_frontier_plugin_egress_state{egress=\"relay\",state=\"down\"} == 1",
+          "for": "30m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The knowledge plugin's Tokyo exit is failing",
+            "description": "Every recent request through the relay exit failed for thirty minutes; the relay sources read nothing (plan 10.5.8)."
+          }
+        },
+        {
+          "alert": "FrontierEdgeProxyCertificateExpiring",
+          "expr": "(probe_ssl_earliest_cert_expiry{job=\"edge-proxy-tls\"} - time()) / 86400 < 1",
+          "for": "30m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The Tokyo proxy's certificate expires within a day",
+            "description": "The node's IP certificate lives six days and renews twice a day, so under a day left means renewal has stopped (plan 10.5.8 said three days, written for an ordinary certificate)."
+          }
+        },
+        {
+          "alert": "FrontierPluginPullStale",
+          "expr": "open_science_frontier_enabled == 1 and time() - open_science_frontier_last_pull_ok_timestamp_seconds > 1800",
+          "for": "30m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The frontier module has not pulled from the knowledge plugin for 30 minutes",
+            "description": "No stream pull has succeeded for thirty minutes; readiness shows the plugin's state (plan 10.5.8)."
+          }
+        },
+        {
+          "alert": "FrontierPluginLagHigh",
+          "expr": "open_science_frontier_plugin_lag_entries > 2000",
+          "for": "15m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The platform is more than 2,000 entries behind the knowledge plugin",
+            "description": "The plugin's latest seq minus the platform's cursor has exceeded 2,000 (plan 10.5.8)."
+          }
+        },
+        {
+          "alert": "FrontierDailyMissing",
+          "expr": "open_science_frontier_daily_missing == 1",
+          "for": "5m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Today's frontier daily issue is missing past 07:45",
+            "description": "The 07:30 issue has not been written by its alert time (plan 10.5.8)."
+          }
+        },
+        {
+          "alert": "FrontierApiSlow",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(open_science_http_request_duration_seconds_bucket{route=~\"/api/frontier/.*\"}[10m]))) > 0.3",
+          "for": "15m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The frontier pages' API answers slower than 300 ms at the 95th percentile",
+            "description": "Reader routes under /api/frontier/ are slow; the 304 share is in open_science_frontier_http_answers_total (plan 10.5.8)."
+          }
+        }
+      ]
     }
   ]
 }

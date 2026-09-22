@@ -91,6 +91,9 @@ export interface FrontierItemState {
   read: boolean;
 }
 
+/** One enrichment fact: a word, a number, a yes/no, a list, or a small record of those. */
+export type FrontierFact = string | number | boolean | string[] | Record<string, string | number | boolean>;
+
 /** One published item, as `GET /api/frontier/items` returns it (build spec B.6). */
 export interface FrontierItem {
   id: string;
@@ -127,6 +130,12 @@ export interface FrontierItem {
   /** The four dimensions in words. The numbers behind them never leave the server. */
   levels: { authority: FrontierLevel | null; impact: FrontierLevel | null; novelty: FrontierLevel | null; relevance: FrontierLevel | null };
   openAccess: { status: string; pdfUrl: string | null } | null;
+  /**
+   * The plugin's enrichment as facts, by the plugin's own keys — the ones this
+   * build names get a Chinese label, any other is shown by its key (plan
+   * §14.6: a new field reaches the card without a release).
+   */
+  facts: Record<string, FrontierFact>;
   alsoReportedBy: Array<{ sourceId: string; sourceName: string; url: string }>;
   event: { id: string; title: string } | null;
   state: FrontierItemState;
@@ -367,6 +376,44 @@ function labelled(value: unknown, fallback: Readonly<Record<string, string>>, ma
 
 const LEVELS = ["high", "medium", "low"] as const;
 
+const FACT_KEY = /^[a-z][a-z0-9_]{1,39}$/;
+
+/** A fact's scalar: a non-empty word, a finite number, a yes/no. */
+function factScalar(value: unknown): string | number | boolean | undefined {
+  if (typeof value === "string") return value.trim() ? value.trim().slice(0, 300) : undefined;
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  return typeof value === "boolean" ? value : undefined;
+}
+
+/** The card's facts, bounded as the server bounds them: at most twelve, lists of twenty, records of ten. */
+export function parseFacts(value: unknown): Record<string, FrontierFact> {
+  const raw = record(value);
+  const facts: Record<string, FrontierFact> = {};
+  if (!raw) return facts;
+  for (const [key, entry] of Object.entries(raw)) {
+    if (Object.keys(facts).length >= 12) break;
+    if (!FACT_KEY.test(key)) continue;
+    if (Array.isArray(entry)) {
+      const list = strings(entry, 20);
+      if (list.length > 0) facts[key] = list;
+      continue;
+    }
+    const nested = record(entry);
+    if (nested) {
+      const flat: Record<string, string | number | boolean> = {};
+      for (const [name, part] of Object.entries(nested).slice(0, 10)) {
+        const scalar = factScalar(part);
+        if (FACT_KEY.test(name) && scalar !== undefined) flat[name] = scalar;
+      }
+      if (Object.keys(flat).length > 0) facts[key] = flat;
+      continue;
+    }
+    const scalar = factScalar(entry);
+    if (scalar !== undefined) facts[key] = scalar;
+  }
+  return facts;
+}
+
 /**
  * One item, or null when it lacks what a card cannot do without (an id, a
  * title, a link to the original, the source's name, a time). Only the fields
@@ -432,6 +479,7 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
       relevance: orNull(levels?.relevance, LEVELS),
     },
     openAccess: openAccess ? { status: text(openAccess.status) ?? "unknown", pdfUrl: safeLink(openAccess.pdfUrl) } : null,
+    facts: parseFacts(raw.facts),
     alsoReportedBy: (Array.isArray(raw.alsoReportedBy) ? raw.alsoReportedBy : []).flatMap((entry) => {
       const mention = record(entry);
       const name = text(mention?.sourceName);

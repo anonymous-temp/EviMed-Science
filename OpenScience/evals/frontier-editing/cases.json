@@ -1,0 +1,322 @@
+{
+ "about": "Incidents of the frontier feed's editing calls, each a real item from production (2026-09-22). Screen and edit: which lane a mixed source's item goes to. Same event: whether two reports are one event (acceptance record 2026-09-22T1405Z, F1, F3, F9). Run with run_eval.mjs; it calls the live model.",
+ "lane": [
+  {
+   "id": "food-recall-flour",
+   "public_id": "13fc0093a7641909",
+   "expect_not": [
+    "safety"
+   ],
+   "why": "a food allergen recall is public health, not drug safety (F3)",
+   "screen": {
+    "title": "GF Blends Recalls Truly AIP All Purpose Flour and Bread Mix, and EAT G.A.N.G.S.T.E.R. Flat Bread Pizza Mix Due to Potential Undeclared Wheat Gluten",
+    "sourceName": "美国FDA 召回与安全警示 Recalls/Safety Alerts",
+    "excerpt": "GF Blends is recalling Truly AIP All Purpose Flour and Bread Mix and EAT G.A.N.G.S.T.E.R. Flat Bread Pizza Mix listed below due to potential undeclared wheat gluten. People who have celiac disease or a severe gluten intolerance run the risk of adverse health effects or allergic reactions if they con"
+   },
+   "edit": {
+    "titleRaw": "GF Blends Recalls Truly AIP All Purpose Flour and Bread Mix, and EAT G.A.N.G.S.T.E.R. Flat Bread Pizza Mix Due to Potential Undeclared Wheat Gluten",
+    "sourceName": "美国FDA 召回与安全警示 Recalls/Safety Alerts",
+    "sourceTypeLabel": "监管机构",
+    "publishedAt": "2026-09-18T21:48:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "GF Blends is recalling Truly AIP All Purpose Flour and Bread Mix and EAT G.A.N.G.S.T.E.R. Flat Bread Pizza Mix listed below due to potential undeclared wheat gluten. People who have celiac disease or a severe gluten intolerance run the risk of adverse health effects or allergic reactions if they con",
+    "glossary": []
+   }
+  },
+  {
+   "id": "food-recall-chips",
+   "public_id": "b137f41ef9109931",
+   "expect_not": [
+    "safety"
+   ],
+   "why": "F3",
+   "screen": {
+    "title": "Saratoga Potato Chips Issues Allergy Alert on Undeclared Soy in J. HIGGS Loaded Bacon and Cheddar Potato Chips",
+    "sourceName": "美国FDA 召回与安全警示 Recalls/Safety Alerts",
+    "excerpt": "Saratoga Potato Chips of Fort Wayne, IN, is recalling two Best if USED BY codes of 7.75-ounce packages of J. HIGGS Loaded Bacon and Cheddar Potato Chips because they may contain undeclared soy allergen. People who have an allergy or severe sensitivity to soy run the risk of serious or life-threateni"
+   },
+   "edit": {
+    "titleRaw": "Saratoga Potato Chips Issues Allergy Alert on Undeclared Soy in J. HIGGS Loaded Bacon and Cheddar Potato Chips",
+    "sourceName": "美国FDA 召回与安全警示 Recalls/Safety Alerts",
+    "sourceTypeLabel": "监管机构",
+    "publishedAt": "2026-09-16T15:21:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Saratoga Potato Chips of Fort Wayne, IN, is recalling two Best if USED BY codes of 7.75-ounce packages of J. HIGGS Loaded Bacon and Cheddar Potato Chips because they may contain undeclared soy allergen. People who have an allergy or severe sensitivity to soy run the risk of serious or life-threateni",
+    "glossary": []
+   }
+  },
+  {
+   "id": "food-recall-dessert",
+   "public_id": "886997bb9c320ae5",
+   "expect_not": [
+    "safety"
+   ],
+   "why": "F3",
+   "screen": {
+    "title": "So Delicious Dairy Free® Issues Voluntary Recall of Salted Caramel Cluster Non-Dairy Frozen Dessert Pints Due to Potential Presence of Foreign Material",
+    "sourceName": "美国FDA 召回与安全警示 Recalls/Safety Alerts",
+    "excerpt": "WHITE PLAINS, N.Y. and LOUISVILLE, Colo., September 15, 2026 – Danone USA is issuing a voluntary recall of So Delicious Dairy Free® Salted Caramel Cluster Non-Dairy Frozen Dessert pints with best-by dates on and before April 3, 2028 due to the potential presence of foreign materials, such as small"
+   },
+   "edit": {
+    "titleRaw": "So Delicious Dairy Free® Issues Voluntary Recall of Salted Caramel Cluster Non-Dairy Frozen Dessert Pints Due to Potential Presence of Foreign Material",
+    "sourceName": "美国FDA 召回与安全警示 Recalls/Safety Alerts",
+    "sourceTypeLabel": "监管机构",
+    "publishedAt": "2026-09-15T20:31:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "WHITE PLAINS, N.Y. and LOUISVILLE, Colo., September 15, 2026 – Danone USA is issuing a voluntary recall of So Delicious Dairy Free® Salted Caramel Cluster Non-Dairy Frozen Dessert pints with best-by dates on and before April 3, 2028 due to the potential presence of foreign materials, such as small",
+    "glossary": []
+   }
+  },
+  {
+   "id": "food-recall-pasta",
+   "public_id": "d1cd85f72fcc2f24",
+   "expect_not": [
+    "safety"
+   ],
+   "why": "F3",
+   "screen": {
+    "title": "Gias Foods, Inc. Recalls Bettergoods Authentic Italian Lemon Alfredo Fettuccine Because of Possible Health Risk",
+    "sourceName": "美国FDA 召回与安全警示 Recalls/Safety Alerts",
+    "excerpt": "Gias Foods of New York, NY is recalling 2 Lots of bettergoods Authentic Italian Lemon Alfredo Fettuccine, because it has the potential to be contaminated with Listeria monocytogenes, an organism which can cause serious and sometimes fatal infections in young children, frail or elderly people, and ot"
+   },
+   "edit": {
+    "titleRaw": "Gias Foods, Inc. Recalls Bettergoods Authentic Italian Lemon Alfredo Fettuccine Because of Possible Health Risk",
+    "sourceName": "美国FDA 召回与安全警示 Recalls/Safety Alerts",
+    "sourceTypeLabel": "监管机构",
+    "publishedAt": "2026-09-15T18:52:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Gias Foods of New York, NY is recalling 2 Lots of bettergoods Authentic Italian Lemon Alfredo Fettuccine, because it has the potential to be contaminated with Listeria monocytogenes, an organism which can cause serious and sometimes fatal infections in young children, frail or elderly people, and ot",
+    "glossary": []
+   }
+  },
+  {
+   "id": "toxic-supplement-recall",
+   "public_id": "dd13ae20616cc68d",
+   "expect": [
+    "safety"
+   ],
+   "why": "a supplement with a poisonous ingredient is a drug-safety notice",
+   "screen": {
+    "title": "Global Mix Inc. Recalls Niwali Tejocote Capsules and Niwali Tejocote Pieces Because of Possible Health Risk",
+    "sourceName": "美国FDA 召回与安全警示 Recalls/Safety Alerts",
+    "excerpt": "Global Mix Inc. of Middle Village, New York, is recalling niwali Tejocote Capsules (90 capsules, Herbal Supplement) and niwali Tejocote Pieces (90 Day Supply, Herbal Supplement) because FDA analysis has determined that the products appear to be Thevetia peruviana, or yellow oleander. All parts of th"
+   },
+   "edit": {
+    "titleRaw": "Global Mix Inc. Recalls Niwali Tejocote Capsules and Niwali Tejocote Pieces Because of Possible Health Risk",
+    "sourceName": "美国FDA 召回与安全警示 Recalls/Safety Alerts",
+    "sourceTypeLabel": "监管机构",
+    "publishedAt": "2026-09-21T19:40:00+00:00",
+    "datePrecision": "instant",
+    "isChinese": false,
+    "summary": "Global Mix Inc. of Middle Village, New York, is recalling niwali Tejocote Capsules (90 capsules, Herbal Supplement) and niwali Tejocote Pieces (90 Day Supply, Herbal Supplement) because FDA analysis has determined that the products appear to be Thevetia peruviana, or yellow oleander. All parts of th",
+    "glossary": []
+   }
+  }
+ ],
+ "same_event": [
+  {
+   "id": "ema-opinions-two-medicines",
+   "new": "2adaa1069ac33f45",
+   "earlier": "e4577ad2ff84c38e",
+   "expect": [
+    "no"
+   ],
+   "why": "Sogroya and Anzupgo: two products' CHMP opinions (F1)",
+   "report": {
+    "sourceName": "欧洲药品管理局 全站更新 EMA What's New",
+    "titleRaw": "Summary of opinion: Sogroya, 17/09/2026 Positive",
+    "titleZh": "EMA对Sogroya给出正面意见",
+    "summaryZh": null,
+    "publishedAt": "2026-09-18T10:00:00+00:00"
+   },
+   "candidates": [
+    {
+     "sourceName": "欧洲药品管理局 全站更新 EMA What's New",
+     "titleRaw": "Summary of opinion: Anzupgo, 17/09/2026 Positive",
+     "titleZh": "EMA对Anzupgo给出正面意见",
+     "summaryZh": null,
+     "publishedAt": "2026-09-18T10:05:00+00:00"
+    }
+   ]
+  },
+  {
+   "id": "ema-opinions-cosentyx-pradaxa",
+   "new": "1a4b1bf78bc1048d",
+   "earlier": "412d0788e637d495",
+   "expect": [
+    "no"
+   ],
+   "why": "F1",
+   "report": {
+    "sourceName": "欧洲药品管理局 全站更新 EMA What's New",
+    "titleRaw": "Summary of opinion: Pradaxa, 17/09/2026 Positive",
+    "titleZh": "EMA对Pradaxa给出正面意见",
+    "summaryZh": null,
+    "publishedAt": "2026-09-18T10:00:00+00:00"
+   },
+   "candidates": [
+    {
+     "sourceName": "欧洲药品管理局 全站更新 EMA What's New",
+     "titleRaw": "Summary of opinion: Cosentyx Positive",
+     "titleZh": "EMA对Cosentyx给出正面意见",
+     "summaryZh": null,
+     "publishedAt": "2026-09-18T10:05:00+00:00"
+    }
+   ]
+  },
+  {
+   "id": "ema-epar-two-biosimilars",
+   "new": "c83047763b0ed467",
+   "earlier": "4c732c47a7bfa7c0",
+   "expect": [
+    "no"
+   ],
+   "why": "two ustekinumab biosimilars' routine EPAR revisions (F1)",
+   "report": {
+    "sourceName": "欧洲药品管理局 全站更新 EMA What's New",
+    "titleRaw": "Human medicines European public assessment report (EPAR): Steqeyma, ustekinumab, Date of authorisation: 22/08/2024, Revision: 10, Status: Authorised",
+    "titleZh": "Steqeyma（ustekinumab）欧洲公共评估报告更新至第10版",
+    "summaryZh": null,
+    "publishedAt": "2026-09-18T14:38:08+00:00"
+   },
+   "candidates": [
+    {
+     "sourceName": "欧洲药品管理局 全站更新 EMA What's New",
+     "titleRaw": "Human medicines European public assessment report (EPAR): Wezenla, ustekinumab, Date of authorisation: 20/06/2024, Revision: 10, Status: Authorised",
+     "titleZh": "Wezenla（ustekinumab）欧洲公共评估报告更新至第10版",
+     "summaryZh": null,
+     "publishedAt": "2026-09-16T14:58:00+00:00"
+    }
+   ]
+  },
+  {
+   "id": "chp-two-mpox-cases",
+   "new": "3710f5c7b1730210",
+   "earlier": "ec43dc371b83b6cf",
+   "expect": [
+    "no"
+   ],
+   "why": "two cases two days apart (F1)",
+   "report": {
+    "sourceName": "香港卫生防护中心 新闻公报",
+    "titleRaw": "CHP investigates imported Mpox case",
+    "titleZh": "香港卫生防护中心调查一例输入性猴痘病例",
+    "summaryZh": null,
+    "publishedAt": "2026-09-20T16:00:00+00:00"
+   },
+   "candidates": [
+    {
+     "sourceName": "香港卫生防护中心 新闻公报",
+     "titleRaw": "CHP investigates confirmed Mpox case",
+     "titleZh": "香港卫生防护中心调查确诊猴痘病例",
+     "summaryZh": null,
+     "publishedAt": "2026-09-18T16:00:00+00:00"
+    }
+   ]
+  },
+  {
+   "id": "nejm-trial-and-its-editorial",
+   "new": "9f329aeb96637552",
+   "earlier": "35f81473bf11cb3e",
+   "expect": [
+    "yes"
+   ],
+   "why": "an editorial on the trial joins its event as background (F9)",
+   "report": {
+    "sourceName": "新英格兰医学杂志 NEJM",
+    "titleRaw": "When More Is Not Better — Colonoscopy Surveillance after High-Risk Adenomas",
+    "titleZh": "高危腺瘤切除后结肠镜监测：更多未必更好",
+    "summaryZh": null,
+    "publishedAt": "2026-09-16T21:00:16+00:00"
+   },
+   "candidates": [
+    {
+     "sourceName": "新英格兰医学杂志 NEJM",
+     "titleRaw": "Colonoscopy Intervals and Colorectal Cancer Incidence after Adenoma Removal",
+     "titleZh": "高危腺瘤切除后结肠镜监测间隔5年不劣于3年",
+     "summaryZh": "这项在欧洲8国开展的非劣效性试验纳入10,799例高危腺瘤患者，随机接受息肉切除后5年或3年首次结肠镜监测。5年随访时结直肠癌累积发生率分别为0.77%和0.82%，差异-0.05个百分点，99.12%置信区间上限0.68，达到非劣效标准。",
+     "publishedAt": "2026-09-16T21:00:16+00:00"
+    }
+   ]
+  },
+  {
+   "id": "nejm-blinatumomab-editorial",
+   "new": "718b6df3971181eb",
+   "earlier": "3c5ed55875c6e953",
+   "expect": [
+    "yes"
+   ],
+   "why": "the same pair the vector joined, now the model's call",
+   "report": {
+    "sourceName": "新英格兰医学杂志 NEJM",
+    "titleRaw": "Blinatumomab — A New Standard of Care in Acute Lymphoblastic Leukemia",
+    "titleZh": "Blinatumomab 成为急性淋巴细胞白血病新的标准治疗",
+    "summaryZh": null,
+    "publishedAt": "2026-09-16T21:00:16+00:00"
+   },
+   "candidates": [
+    {
+     "sourceName": "新英格兰医学杂志 NEJM",
+     "titleRaw": "Blinatumomab for Replacing Chemotherapy in Pediatric Acute Lymphoblastic Leukemia",
+     "titleZh": "贝林妥欧单抗替代化疗改善儿童高危B细胞急淋无事件生存",
+     "summaryZh": "768例合格患儿中709例随机分组，贝林妥欧单抗组358例、化疗组351例。中位随访2.9年时，4年无事件生存率分别为83.0%与70.3%，治疗相关感染发生率分别为23.9%与69.4%。",
+     "publishedAt": "2026-09-16T21:00:16+00:00"
+    }
+   ]
+  },
+  {
+   "id": "ema-sodium-oxybate-referral-and-news",
+   "new": "9e32f0ff1fdf6f36",
+   "earlier": "ba233b549b2f8c71",
+   "expect": [
+    "yes"
+   ],
+   "why": "one CHMP referral outcome, its procedure page and its press release",
+   "report": {
+    "sourceName": "欧洲药品管理局 全站更新 EMA What's New",
+    "titleRaw": "Benefits of sodium oxybate continue to outweigh risks in people with alcohol dependency",
+    "titleZh": "EMA：羟丁酸钠用于酒精依赖的获益仍大于风险",
+    "summaryZh": null,
+    "publishedAt": "2026-09-18T10:00:00+00:00"
+   },
+   "candidates": [
+    {
+     "sourceName": "欧洲药品管理局 全站更新 EMA What's New",
+     "titleRaw": "Referral: Sodium oxybate-containing syrup and oral solution for alcohol dependence, sodium oxybate Article 31 referrals CHMP opinion, 17/09/2026, 18/09/2026",
+     "titleZh": "EMA对含羟丁酸钠口服溶液用于酒精依赖的转介程序发布CHMP意见",
+     "summaryZh": null,
+     "publishedAt": "2026-09-18T10:00:00+00:00"
+    }
+   ]
+  },
+  {
+   "id": "cochrane-review-and-news",
+   "new": "9ca9ae017f667fba",
+   "earlier": "91145bbd31825ca2",
+   "expect": [
+    "yes"
+   ],
+   "why": "one Cochrane review, its PubMed record and its press release",
+   "report": {
+    "sourceName": "Cochrane 新闻",
+    "titleRaw": "Mifepristone more effective than other common emergency contraception methods",
+    "titleZh": "Cochrane 综述：米非司酮紧急避孕效果优于左炔诺孕酮",
+    "summaryZh": "该综述纳入 87 项随机对照试验、约 3.6 万名育龄女性，多数研究在中国开展。与左炔诺孕酮相比，低剂量（低于 25 mg）和中剂量（25-50 mg）米非司酮均能预防更多妊娠且总体副作用更少；与铜宫内节育器比较的证据仅来自 2 项试验，尚不足以得出结论。",
+    "publishedAt": "2026-09-21T00:00:00+00:00"
+   },
+   "candidates": [
+    {
+     "sourceName": "PubMed 检索流 · 核心循证期刊系统综述/Meta 分析",
+     "titleRaw": "Mifepristone versus other interventions for the prevention of pregnancy in reproductive-age women using emergency contraception.",
+     "titleZh": "Cochrane 系统综述：米非司酮用于紧急避孕优于左炔诺孕酮",
+     "summaryZh": "纳入 87 项研究、约 3.6 万名受试者，其中 79 项在中国开展。与左炔诺孕酮相比，中剂量与低剂量米非司酮均减少妊娠，但延迟月经风险升高；与 Yuzpe 方案相比妊娠减少更明显。",
+     "publishedAt": "2026-09-21T00:00:00+00:00"
+    }
+   ]
+  }
+ ]
+}

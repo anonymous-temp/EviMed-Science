@@ -28,7 +28,7 @@ export function rawFrontierItem(overrides: Record<string, unknown> = {}): Record
     timelineAt: "2026-09-22T06:30:00.000Z", visibleAt: "2026-09-22T06:30:00.000Z",
     selected: true, selectedRule: "threshold", safetyAlert: false, verification: "passed",
     levels: { authority: "high", impact: "high", novelty: "medium", relevance: "low" },
-    openAccess: null, alsoReportedBy: [], event: null,
+    openAccess: null, facts: {}, alsoReportedBy: [], event: null,
     state: { starred: false, hidden: false, read: false },
     // Never on the wire by contract; here to prove they could not leak if they were.
     scoreTotal: 87, scores: { impact: 29, novelty: 17, relevance: 13 }, editorModel: "deepseek-flash",

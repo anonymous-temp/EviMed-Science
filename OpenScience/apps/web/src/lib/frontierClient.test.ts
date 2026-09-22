@@ -15,6 +15,7 @@ import {
   listFrontierFollows,
   listFrontierItems,
   operateFrontierItem,
+  parseFacts,
   parseFrontierItem,
   saveFrontierItemToLibrary,
   setFrontierDigestSwitch,
@@ -246,3 +247,15 @@ describe("follows and operator actions", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ reason: "来源更正" });
   });
 });
+
+describe("the card's facts on the wire", () => {
+  it("keeps words, numbers, yes/no, lists and small records, and drops what a card cannot show", () => {
+    expect(parseFacts({
+      journal: "NEJM", impact_factor: 78.5, open: true, tags: ["a", "", 3, "b"], trial_facts: { phase: "PHASE3", nested: { x: 1 }, enrollment: 500 },
+      "Bad Key": "x", empty: "  ", infinite: Number.POSITIVE_INFINITY, deep: [["x"]],
+    })).toEqual({ journal: "NEJM", impact_factor: 78.5, open: true, tags: ["a", "b"], trial_facts: { phase: "PHASE3", enrollment: 500 } });
+    expect(parseFacts(null)).toEqual({});
+    expect(Object.keys(parseFacts(Object.fromEntries(Array.from({ length: 20 }, (_, index) => [`key_${index}`, index])))).length).toBe(12);
+  });
+});
+

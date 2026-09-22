@@ -259,3 +259,31 @@ test("the enrichment whitelist is the contract's, key for key", async () => {
   // The domain's list is the same list (package E holds that against the YAML too).
   assert.deepEqual([...FRONTIER_ENRICHMENT_KEYS].filter((key) => !contractKeys.includes(key)), []);
 });
+
+test("a key a later plugin declares passes through within bounds; an undeclared one never does", () => {
+  const raw = {
+    journal: "NEJM", evidence_grade: "B", guideline_count: 3, listed: true, sources: ["a", "b"], guide_url: "https://example.org/g",
+    trial_registry: { id: "ChiCTR2600000001", phase: 3, open: false, deep: { x: 1 } },
+    bad_url: "javascript:alert(1)", mixed: ["a", 1], nan: Number.NaN, blank: "  ", nested: [["x"]], contact_email: "someone@example.org",
+  };
+  const declared = ["journal", "evidence_grade", "guideline_count", "listed", "sources", "guide_url", "trial_registry", "bad_url", "mixed", "nan", "blank", "nested"];
+  assert.deepEqual(validateEnrichment(raw, { declared }), {
+    journal: "NEJM", evidence_grade: "B", guideline_count: 3, listed: true, sources: ["a", "b"], guide_url: "https://example.org/g",
+    trial_registry: { id: "ChiCTR2600000001", phase: 3, open: false },
+  });
+  assert.deepEqual(validateEnrichment(raw), { journal: "NEJM" }, "before the manifest is read, only the contract's keys");
+  const keys = Array.from({ length: 30 }, (_, index) => `new_key_${index}`);
+  const many = validateEnrichment(Object.fromEntries(keys.map((key, index) => [key, index])), { declared: keys });
+  assert.equal(Object.keys(many).length, 12, "at most twelve keys this build does not know");
+  assert.equal(validateEnrichment({ long_text: "x".repeat(900) }, { declared: ["long_text"] }).long_text.length, 500, "cut, not refused");
+});
+
+test("the text step keeps what the manifest declared", async () => {
+  const answer = { entry_id: "e1", revision: 1, status: "available", text_kind: "abstract", abstract: "An abstract.",
+    enrichment: { journal: "NEJM", evidence_grade: "B", contact_email: "someone@example.org" } };
+  const manifest = { ...manifestBody("1.1.0"), fields: { entry: ["summary"], enrichment: ["journal", "evidence_grade"] } };
+  const { plugin } = client([{ body: answer }, { body: manifest }, { body: answer }]);
+  assert.deepEqual((await plugin.text("e1")).enrichment, { journal: "NEJM" }, "before the manifest is read");
+  await plugin.manifest();
+  assert.deepEqual((await plugin.text("e1")).enrichment, { journal: "NEJM", evidence_grade: "B" });
+});

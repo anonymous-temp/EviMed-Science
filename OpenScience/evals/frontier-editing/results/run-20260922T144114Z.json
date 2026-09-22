@@ -1,0 +1,212 @@
+{
+ "at": "2026-09-22T14:41:14.405Z",
+ "editor": "frontierEditor.mjs",
+ "editorVersion": "frontier-editor-1.b6ed2b84920c",
+ "model": "deepseek-flash",
+ "runs": 3,
+ "passed": 39,
+ "total": 39,
+ "results": [
+  {
+   "kind": "lane",
+   "id": "food-recall-flour",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    }
+   ],
+   "why": "a food allergen recall is public health, not drug safety (F3)"
+  },
+  {
+   "kind": "lane",
+   "id": "food-recall-chips",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    }
+   ],
+   "why": "F3"
+  },
+  {
+   "kind": "lane",
+   "id": "food-recall-dessert",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    }
+   ],
+   "why": "F3"
+  },
+  {
+   "kind": "lane",
+   "id": "food-recall-pasta",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    },
+    {
+     "screen": "public-health",
+     "edit": "public-health"
+    }
+   ],
+   "why": "F3"
+  },
+  {
+   "kind": "lane",
+   "id": "toxic-supplement-recall",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    {
+     "screen": "safety",
+     "edit": "safety"
+    },
+    {
+     "screen": "safety",
+     "edit": "safety"
+    },
+    {
+     "screen": "safety",
+     "edit": "safety"
+    }
+   ],
+   "why": "a supplement with a poisonous ingredient is a drug-safety notice"
+  },
+  {
+   "kind": "same-event",
+   "id": "ema-opinions-two-medicines",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "no",
+    "no",
+    "no"
+   ],
+   "why": "Sogroya and Anzupgo: two products' CHMP opinions (F1)"
+  },
+  {
+   "kind": "same-event",
+   "id": "ema-opinions-cosentyx-pradaxa",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "no",
+    "no",
+    "no"
+   ],
+   "why": "F1"
+  },
+  {
+   "kind": "same-event",
+   "id": "ema-epar-two-biosimilars",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "no",
+    "no",
+    "no"
+   ],
+   "why": "two ustekinumab biosimilars' routine EPAR revisions (F1)"
+  },
+  {
+   "kind": "same-event",
+   "id": "chp-two-mpox-cases",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "no",
+    "no",
+    "no"
+   ],
+   "why": "two cases two days apart (F1)"
+  },
+  {
+   "kind": "same-event",
+   "id": "nejm-trial-and-its-editorial",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "yes",
+    "yes",
+    "yes"
+   ],
+   "why": "an editorial on the trial joins its event as background (F9)"
+  },
+  {
+   "kind": "same-event",
+   "id": "nejm-blinatumomab-editorial",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "yes",
+    "yes",
+    "yes"
+   ],
+   "why": "the same pair the vector joined, now the model's call"
+  },
+  {
+   "kind": "same-event",
+   "id": "ema-sodium-oxybate-referral-and-news",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "yes",
+    "yes",
+    "yes"
+   ],
+   "why": "one CHMP referral outcome, its procedure page and its press release"
+  },
+  {
+   "kind": "same-event",
+   "id": "cochrane-review-and-news",
+   "passed": 3,
+   "runs": 3,
+   "answers": [
+    "yes",
+    "yes",
+    "yes"
+   ],
+   "why": "one Cochrane review, its PubMed record and its press release"
+  }
+ ]
+}

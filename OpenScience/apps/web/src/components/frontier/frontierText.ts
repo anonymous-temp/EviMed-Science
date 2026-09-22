@@ -214,16 +214,41 @@ export function hotMeta(event: Pick<FrontierHotEvent, "sourceCount72h" | "report
 
 export type ResearchIntent = "reliability" | "my-project" | "synthesis" | "own";
 
-/** The three prepared questions and the free one (plan §4.7), in menu order. */
-export const RESEARCH_INTENTS: ReadonlyArray<{ key: ResearchIntent; label: string }> = Object.freeze([
-  { key: "reliability", label: "这项研究可靠吗" },
-  { key: "my-project", label: "对我的课题意味着什么" },
-  { key: "synthesis", label: "围绕这个问题做一份证据综合" },
-  { key: "own", label: "自己写问题" },
-]);
+/** What the first question asks about: a study's design, a guideline's grounds, a decision's grounds, or a claim's. */
+type Grounds = "study" | "guideline" | "decision" | "claim";
 
-const RESEARCH_ASKS: Readonly<Record<Exclude<ResearchIntent, "own">, string>> = Object.freeze({
-  reliability: "这项研究可靠吗？请读原文，评估研究设计、样本、对照和偏倚风险，说明结论能不能用于临床决策。",
+const STUDY_TYPES: ReadonlySet<string> = new Set(["rct", "systematic-review", "observational", "real-world"]);
+
+/**
+ * The first question follows what the item is: 「这项研究可靠吗」 on a policy
+ * reading or a recall asks after a design it does not have (acceptance
+ * 2026-09-22, F13).
+ */
+function groundsOf(item: Pick<FrontierItem, "evidenceType" | "sourceType">): Grounds {
+  if ((item.evidenceType && STUDY_TYPES.has(item.evidenceType)) || item.sourceType === "preprint") return "study";
+  if (item.evidenceType === "guideline") return "guideline";
+  if (item.evidenceType === "regulatory-decision" || item.evidenceType === "safety-notice") return "decision";
+  return "claim";
+}
+
+const FIRST_QUESTION: Readonly<Record<Grounds, { label: string; ask: string }>> = Object.freeze({
+  study: { label: "这项研究可靠吗", ask: "这项研究可靠吗？请读原文，评估研究设计、样本、对照和偏倚风险，说明结论能不能用于临床决策。" },
+  guideline: { label: "这份指南的推荐依据是什么", ask: "这份指南的推荐依据是什么？请读原文，列出主要推荐、各自的证据等级和所依据的研究，说明与现行做法有什么不同。" },
+  decision: { label: "这项决定依据什么", ask: "这项决定依据什么？请读原文，说明决定的内容、所依据的数据，涉及哪些药品、器械或患者，临床上需要怎么做。" },
+  claim: { label: "这条消息的依据是什么", ask: "这条消息的依据是什么？请读原文，找出它所依据的研究、数据或文件，说明哪些说法有证据支持、哪些还没有。" },
+});
+
+/** The three prepared questions and the free one (plan §4.7), in menu order; the first one fits the item. */
+export function researchIntents(item: Pick<FrontierItem, "evidenceType" | "sourceType">): ReadonlyArray<{ key: ResearchIntent; label: string }> {
+  return [
+    { key: "reliability", label: FIRST_QUESTION[groundsOf(item)].label },
+    { key: "my-project", label: "对我的课题意味着什么" },
+    { key: "synthesis", label: "围绕这个问题做一份证据综合" },
+    { key: "own", label: "自己写问题" },
+  ];
+}
+
+const RESEARCH_ASKS: Readonly<Record<Exclude<ResearchIntent, "own" | "reliability">, string>> = Object.freeze({
   "my-project": "这条进展对我的课题意味着什么？请结合我在做的研究，说明它带来的新证据、需要调整的地方和值得跟进的问题。",
   synthesis: "围绕这条进展涉及的临床问题做一份证据综合：检索相关的随机对照试验、系统评价和指南，给出结论和证据确定性。",
 });
@@ -253,7 +278,8 @@ export function itemBrief(item: FrontierItem): string {
  */
 export function researchDraft(item: FrontierItem, intent: ResearchIntent): string {
   if (intent === "own") return `关于这条动态：\n${itemBrief(item)}\n\n我的问题：`;
-  return `${RESEARCH_ASKS[intent]}\n\n${itemBrief(item)}`;
+  const ask = intent === "reliability" ? FIRST_QUESTION[groundsOf(item)].ask : RESEARCH_ASKS[intent];
+  return `${ask}\n\n${itemBrief(item)}`;
 }
 
 /** 「深入研究这个事件」: the event with its first-hand sources, for the composer. */
