@@ -36,6 +36,7 @@ import source_catalog
 import geo_probe
 import web_search
 import kb_search
+import frontier_search
 
 
 SERVER_NAME = "evimed-research"
@@ -831,6 +832,9 @@ TOOL_DEFINITIONS = [
 # one is configured, and all eight hosts are on its allowlist.
 TOOL_DEFINITIONS.extend(science_connectors.tool_definitions())
 TOOL_DEFINITIONS.extend(kb_search.tool_definitions())
+# The feed of recent medical developments (「前沿动态」, 2026-09-22): leads a
+# model may look up when a question is about what is new, never evidence.
+TOOL_DEFINITIONS.extend(frontier_search.tool_definitions())
 
 
 TOOLS = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
@@ -903,7 +907,10 @@ def disabled_tools():
 # web_read: reading arbitrary public pages has one switch of its own,
 # `OPEN_SCIENCE_WEB_READ_ENABLED` (plan §3.5); a deployment that turns it off
 # still answers from the bibliographic and regulatory APIs (2026-09-20).
-OPTIONAL_TOOLS = frozenset({"patent_search", "web_read"})
+# frontier_search: 「前沿动态」 is a module a deployment may not run at all
+# (`OPEN_SCIENCE_FRONTIER_ENABLED`, off by default), and its results were only
+# ever leads; without it every question is still answered (2026-09-22).
+OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search"})
 
 
 def list_tools():
@@ -1866,6 +1873,24 @@ def _dispatch(name, arguments):
                     else "Read or grep the knowledge-base files under .evimed-knowledge/ instead.",
                 ],
             )
+        result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
+        return result
+    if name == "frontier_search":
+        try:
+            result = frontier_search.search(arguments)
+        except frontier_search.FrontierSearchError as error:
+            # Three different next steps: a malformed call is the run's to fix,
+            # an outage may pass, and a feed this conversation does not have is
+            # simply not there -- the answer goes on without it (principle 12).
+            if error.code.endswith("_invalid"):
+                stop_reason, next_action = "invalid_input", "Correct the named field and call again, or answer without the feed."
+            elif error.retryable:
+                stop_reason, next_action = "retry", "Retry once, then answer without the feed."
+            else:
+                stop_reason, next_action = "unsupported", (
+                    "Answer without the feed: use the literature, guideline and regulatory tools, or settled knowledge."
+                )
+            return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
     if name == "geo_visibility_probe":

@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { postgresBackupReadiness } from "../src/postgresBackupReadiness.mjs";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { POSTGRES_BACKUP_DERIVED_TABLES, postgresBackupReadiness } from "../src/postgresBackupReadiness.mjs";
 import { readinessBackup } from "../src/server.mjs";
 
 async function fixture(t) {
@@ -81,6 +84,73 @@ for (const [name, patch, code] of [
     await assert.rejects(() => postgresBackupReadiness(config, database), { code });
   });
 }
+
+// Plan §10.4.6, review item 1: the frontier feed's vectors are rebuilt, not
+// backed up. The host script dumps `evimed_frontier.item_vectors` without its
+// rows, holds it at zero in the inventory the drill verifies, and names it in
+// the receipt; this check must accept exactly that and nothing looser.
+const DERIVED = { schema: "evimed_frontier", table: "item_vectors", sourceRows: "4812", rebuild: "pnpm rebuild:frontier-index" };
+
+/** A healthy receipt whose inventory holds the vectors at `rows`, and the exclusions it names. */
+function withExclusions(healthy, excludedTableData, rows = "0") {
+  const tables = [...healthy.tables, { schema: "evimed_frontier", table: "item_vectors", rows }]
+    .sort((a, b) => `${a.schema}.${a.table}`.localeCompare(`${b.schema}.${b.table}`));
+  const sha = createHash("sha256").update(JSON.stringify(tables.map(row => ({ rows: row.rows, schema: row.schema, table: row.table })))).digest("hex");
+  return { ...healthy, tables, expectedTablesSha256: sha, restoredTablesSha256: sha, excludedTableData };
+}
+
+test("a receipt whose dump left the derived vectors out is verified, and says what a restore must rebuild", async (t) => {
+  const { file, healthy, config, database } = await fixture(t);
+  await writeFile(file, JSON.stringify(withExclusions(healthy, [DERIVED])));
+  const result = await postgresBackupReadiness(config, database);
+  assert.equal(result.restoreVerified, true);
+  assert.deepEqual(result.rebuildAfterRestore, ["pnpm rebuild:frontier-index"]);
+  assert.equal(JSON.stringify(result).includes("item_vectors"), false, "the public answer names commands, not the inventory");
+
+  // A receipt from a runner that predates exclusions, and one from a database
+  // without the frontier schema, read exactly as they did before.
+  await writeFile(file, JSON.stringify(healthy));
+  assert.equal("rebuildAfterRestore" in await postgresBackupReadiness(config, database), false);
+  await writeFile(file, JSON.stringify({ ...healthy, excludedTableData: [] }));
+  assert.equal("rebuildAfterRestore" in await postgresBackupReadiness(config, database), false);
+});
+
+for (const [name, receiptOf] of [
+  ["rows restored into an excluded table", (healthy) => withExclusions(healthy, [DERIVED], "4812")],
+  ["an excluded table the inventory does not hold", (healthy) => ({ ...healthy, excludedTableData: [DERIVED] })],
+  ["the data of a table that is not derived", (healthy) => ({ ...healthy, tables: [{ ...healthy.tables[0], rows: "0" }],
+    ...(() => { const sha = createHash("sha256").update(JSON.stringify([{ rows: "0", schema: "evimed_control", table: "users" }])).digest("hex");
+      return { expectedTablesSha256: sha, restoredTablesSha256: sha }; })(),
+    excludedTableData: [{ ...DERIVED, schema: "evimed_control", table: "users" }] })],
+  ["the same table twice", (healthy) => withExclusions(healthy, [DERIVED, DERIVED])],
+  ["another rebuild command", (healthy) => withExclusions(healthy, [{ ...DERIVED, rebuild: "true" }])],
+  ["a source count that is not a count", (healthy) => withExclusions(healthy, [{ ...DERIVED, sourceRows: "-1" }])],
+  ["an unknown member", (healthy) => withExclusions(healthy, [{ ...DERIVED, note: "x" }])],
+  ["an exclusion list that is not a list", (healthy) => withExclusions(healthy, DERIVED)],
+  ["a null exclusion list", (healthy) => withExclusions(healthy, null)],
+]) {
+  test(`PostgreSQL backup readiness rejects ${name}`, async (t) => {
+    const { file, healthy, config, database } = await fixture(t);
+    await writeFile(file, JSON.stringify(receiptOf(healthy)));
+    await assert.rejects(() => postgresBackupReadiness(config, database), { code: "postgres_backup_unverified" });
+  });
+}
+
+test("the readiness check and the host backup script exclude the same tables", async () => {
+  // Two languages, one list. The script decides what the dump leaves out and
+  // this module decides what a receipt may leave out; if they drift, either
+  // every healthy backup reads as unverified or a table's data goes missing
+  // from the archive with a green check beside it.
+  const script = fileURLToPath(new URL("../../../scripts/ops/postgres-backup.py", import.meta.url));
+  const { stdout } = await promisify(execFile)("python3", ["-c", `import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("postgres_backup", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+print(json.dumps([{"schema": schema, "table": table, "rebuild": rebuild} for (schema, table), rebuild in sorted(module.DERIVED_TABLE_DATA.items())]))`, script]);
+  const fromScript = JSON.parse(stdout);
+  assert.ok(fromScript.length >= 1, "the script's list was read, not an empty default");
+  assert.deepEqual(fromScript, POSTGRES_BACKUP_DERIVED_TABLES.map((row) => ({ ...row })));
+});
 
 test("PostgreSQL backup readiness rejects linked status and preserves non-PostgreSQL local mode", async (t) => {
   const { file, healthy, config, database } = await fixture(t);

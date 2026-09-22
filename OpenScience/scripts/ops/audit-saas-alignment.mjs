@@ -22,6 +22,7 @@ const requiredModules = new Set([
   "artifacts-and-provenance",
   "hosted-notebooks",
   "research-memory",
+  "frontier-feed",
   "account-self-service-and-operations",
   "security-and-isolation",
   "release-and-observability",
@@ -162,6 +163,15 @@ requireBoundary(/OPEN_SCIENCE_DEPLOYMENT_PROFILE: \$\{OPEN_SCIENCE_DEPLOYMENT_PR
 // ability to declare a different one, and readinessSaasProfile still reports
 // external-recovery as unmet when they do.
 requireBoundary(/OPEN_SCIENCE_DEPLOYMENT_PROFILE: individual-saas/.test(saasOverlay) && /OPEN_SCIENCE_BACKUP_MODE: \$\{OPEN_SCIENCE_BACKUP_MODE:-external\}/.test(saasOverlay), "compose_saas", "SaaS overlay must select individual-saas and default to external recovery.");
+// The frontier feed (「前沿动态」) is conditional, and its claim holds only while
+// both of its conditions stay stated in code: it ships switched off, and the
+// knowledge-source plugin it reads is reachable on the compose network alone —
+// the control plane is the plugin's only caller, and the plugin never calls
+// anything of the platform (plan §14.2).
+const knowledgeOverlay = await read("deploy/web/docker-compose.knowledge.yml");
+requireBoundary(/boolEnv\("OPEN_SCIENCE_FRONTIER_ENABLED", false\)/.test(config), "frontier_default_off", "The frontier feed must ship switched off.");
+requireBoundary(/^ {2}evimed-knowledge-plugin:$/m.test(knowledgeOverlay) && !/^\s+ports:/m.test(knowledgeOverlay), "frontier_plugin_internal",
+  "The knowledge-source plugin must publish no port: the control plane is its only caller.");
 requireBoundary(rootPackage.scripts?.["audit:saas-alignment"]?.includes("audit-saas-alignment.mjs"), "audit_script", "Root package lacks the SaaS alignment audit.");
 requireBoundary(rootPackage.scripts?.["ci:web"]?.includes("audit:saas-alignment"), "audit_ci", "SaaS alignment audit is not release-gated.");
 requireBoundary(Object.keys(curated.policy?.delivery?.executable ?? {}).length === 38, "curated_38", "All 38 curated skills must have executable delivery contracts.");

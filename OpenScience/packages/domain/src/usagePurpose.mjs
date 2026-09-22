@@ -15,9 +15,13 @@
  * `other` — bookkeeping never fails a model call.
  */
 
-/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'other'} UsagePurpose */
+/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'frontier'|'other'} UsagePurpose */
 
-/** Every purpose, in report order. */
+/** Every purpose, in report order. `frontier` is the frontier feed reading
+ *  the literature for everyone (screening, editing, the daily issue): one
+ *  line of its own, charged to the operator's internal `evimed-frontier`
+ *  project and governed by the module's own daily budget, so what the feed
+ *  costs is never folded into a researcher's spend. */
 export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.freeze([
   'kernel',
   'memory-extraction',
@@ -28,6 +32,7 @@ export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.fre
   'channel-intent',
   'source-understanding',
   'learning',
+  'frontier',
   'other',
 ]))
 
@@ -42,6 +47,7 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   'channel-intent': '渠道意图',
   'source-understanding': '资料理解',
   learning: '学习做法',
+  frontier: '前沿动态',
   other: '其他',
 }))
 

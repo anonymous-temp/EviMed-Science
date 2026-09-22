@@ -5,7 +5,7 @@
   "type": "module",
   "description": "One directory per tracked upstream dependency: the assertions that must pass before its pin may move.",
   "scripts": {
-    "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test dsh/*.test.mjs openlist/*.test.mjs evimed-extract/*.test.mjs openviking/*.test.mjs pgvector/*.test.mjs"
+    "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test dsh/*.test.mjs openlist/*.test.mjs evimed-extract/*.test.mjs openviking/*.test.mjs pgvector/*.test.mjs knowledge-plugin/*.test.mjs"
   },
   "engines": {
     "node": ">=22.22.0"

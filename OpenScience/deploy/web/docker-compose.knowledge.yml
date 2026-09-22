@@ -1,0 +1,217 @@
+# The knowledge-source plugin (「前沿动态」, plan §14; contract
+# knowledge-plugin-openapi.yaml v1).
+#
+# Added with -f when a deployment runs the frontier feed. The plugin is the
+# plugin team's own service — registry, scheduling, fetching, normalisation,
+# enrichment — and the one thing here that reads the outside world for the
+# feed: the control plane only ever pulls from it (`knowledgePluginClient.mjs`),
+# and the plugin never calls the control plane.
+#
+# - Reachable on the compose network and nowhere else: no published port. The
+#   control plane is its only caller, over `default`, where the database it
+#   needs also is; the runtime containers are on `runtime-internal` and never
+#   reach it.
+# - One bearer token, one host file, bound read-only into both containers:
+#   root:10002 0440, so the web container (root, no capabilities) reads it as
+#   its owner and the plugin (uid:gid 10002) through the group. `/dev/null`
+#   when unset, so compose still resolves; the plugin then refuses every
+#   request and readiness names the unreadable token. The shared files the
+#   plugin also reads (the EviMed key, the Tokyo credentials) get the same
+#   group bit, which adds a reader and takes none away.
+# - Its database is a second database on the same PostgreSQL, owned by its own
+#   role (`evimed_knowledge`), connectable to that database only, and backed
+#   up on the plugin team's schedule; the platform's pool never touches it.
+#   `scripts/ops/host-knowledge-plugin-setup.sh` makes the role, the database,
+#   the token and the password file once (idempotent, nothing printed).
+# - Optional upstream keys (NCBI, openFDA, the EviMed API) and the Tokyo proxy's
+#   credentials bind /dev/null when absent; the plugin then reads at the
+#   anonymous, conservative rate. The EviMed key and the proxy credentials are
+#   the platform's own files unless a plugin-specific file is named: one key,
+#   one credential, two readers (plan 14.2).
+# - Batch 2 exits: `relay` sends the sources Beijing cannot read through the
+#   Tokyo TLS forward proxy (OPEN_SCIENCE_EDGE_PROXY_URL, the same node the
+#   platform uses); `browser` renders the regulators' script-drawn lists in
+#   `frontier-browser`, the runtime image's Chromium. The browser shares one
+#   internal network with the plugin and nothing else — the control plane, the
+#   database and the runtimes are not on it — and reaches the internet over a
+#   network of its own. Every request a page makes is checked against the
+#   source's allowed hosts by the plugin (route interception), so a page's
+#   script cannot aim the browser anywhere else.
+services:
+  open-science-web:
+    environment:
+      # The frontier module's switch stays in .env (value-less in the base
+      # file); this file only says where the plugin is and how to prove who
+      # is asking.
+      OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL: ${OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL:-http://evimed-knowledge-plugin:8080}
+      OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE: ${OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE:-/run/secrets/knowledge-plugin-token}
+    volumes:
+      - type: bind
+        source: ${OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_HOST_FILE:-/dev/null}
+        target: /run/secrets/knowledge-plugin-token
+        read_only: true
+
+  evimed-knowledge-plugin:
+    # Pinned by digest in the deployment's .env; there is no default, because
+    # an unpinned plugin is a registry and an adapter set nobody reviewed.
+    image: ${EVIMED_KNOWLEDGE_PLUGIN_IMAGE:?set EVIMED_KNOWLEDGE_PLUGIN_IMAGE to the plugin image pinned by digest}
+    user: "10002:10002"
+    environment:
+      KNOWLEDGE_PLUGIN_DATABASE_URL: postgresql://evimed_knowledge@evimed-postgres:5432/evimed_knowledge
+      KNOWLEDGE_PLUGIN_DATABASE_PASSWORD_FILE: /run/secrets/knowledge-plugin-db-password
+      KNOWLEDGE_PLUGIN_TOKEN_FILE: /run/secrets/knowledge-plugin-token
+      # The contact address in the crawler's User-Agent and the one the
+      # bibliographic APIs are told: the deployment's Unpaywall contact.
+      KNOWLEDGE_PLUGIN_CONTACT_EMAIL: ${OPEN_SCIENCE_UNPAYWALL_EMAIL:-}
+      KNOWLEDGE_PLUGIN_NCBI_KEY_FILE: /run/secrets/ncbi-api-key
+      KNOWLEDGE_PLUGIN_OPENFDA_KEY_FILE: /run/secrets/openfda-api-key
+      KNOWLEDGE_PLUGIN_EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
+      KNOWLEDGE_PLUGIN_EDGE_PROXY_CREDENTIALS_FILE: /run/secrets/edge-proxy-credentials
+      KNOWLEDGE_PLUGIN_EDGE_PROXY_URL: ${OPEN_SCIENCE_EDGE_PROXY_URL:-}
+      # Chromium's DevTools endpoint answers an IP Host only; the plugin resolves
+      # this name itself and connects by address.
+      KNOWLEDGE_PLUGIN_BROWSER_CDP_URL: ${KNOWLEDGE_PLUGIN_BROWSER_CDP_URL:-http://frontier-browser:9222}
+      # 0 serves the stream without crawling (a restore drill, a paused registry).
+      KNOWLEDGE_PLUGIN_CRAWL: ${KNOWLEDGE_PLUGIN_CRAWL:-1}
+    volumes:
+      - type: bind
+        source: ${OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_HOST_FILE:-/dev/null}
+        target: /run/secrets/knowledge-plugin-token
+        read_only: true
+      - type: bind
+        source: ${KNOWLEDGE_PLUGIN_DB_PASSWORD_HOST_FILE:-/dev/null}
+        target: /run/secrets/knowledge-plugin-db-password
+        read_only: true
+      - type: bind
+        source: ${KNOWLEDGE_PLUGIN_NCBI_KEY_HOST_FILE:-/dev/null}
+        target: /run/secrets/ncbi-api-key
+        read_only: true
+      - type: bind
+        source: ${KNOWLEDGE_PLUGIN_OPENFDA_KEY_HOST_FILE:-/dev/null}
+        target: /run/secrets/openfda-api-key
+        read_only: true
+      - type: bind
+        source: ${KNOWLEDGE_PLUGIN_EVIMED_API_KEY_HOST_FILE:-${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:-/dev/null}}
+        target: /run/secrets/evimed-api-key
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_HOST_FILE:-/dev/null}
+        target: /run/secrets/edge-proxy-credentials
+        read_only: true
+    depends_on:
+      evimed-postgres:
+        condition: service_healthy
+    networks:
+      - default
+      - knowledge-browser-internal
+    healthcheck:
+      # `/v1/health` takes no credential and answers from the process itself;
+      # an upstream being down never makes this container unhealthy.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/v1/health', timeout=3).read()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # 768 MB: the Python service plus the Playwright driver (a Node process) that
+    # talks to frontier-browser; the pages themselves render over there.
+    mem_limit: 768m
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=64m
+    restart: unless-stopped
+
+  # The headless Chromium of the `browser` exit (plan 10.2.6): the platform's
+  # runtime image, which already carries /usr/bin/chromium (Debian's package),
+  # started with a clean profile under /tmp. New-headless Chromium ignores
+  # --remote-debugging-address and listens on 127.0.0.1 only, so a small
+  # supervisor starts it on loopback 9223, forwards 0.0.0.0:9222 to it, and
+  # exits when Chromium does (restart: unless-stopped brings both back).
+  # --no-sandbox because the container has no capabilities to build one; the
+  # container is the sandbox (no capabilities, read-only root, its own networks,
+  # 1 GB). No published port.
+  frontier-browser:
+    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26}
+    user: "10003:10003"
+    entrypoint: ["python3", "-c"]
+    command:
+      - |
+        import asyncio, subprocess, sys
+        CHROMIUM = ["/usr/bin/chromium", "--headless", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+                    "--remote-debugging-port=9223", "--user-data-dir=/tmp/chromium-profile",
+                    "--disk-cache-dir=/tmp/chromium-cache", "--crash-dumps-dir=/tmp", "--no-first-run",
+                    "--no-default-browser-check", "--disable-background-networking", "--disable-sync",
+                    "--disable-component-update", "--disable-features=Translate,MediaRouter,OptimizationHints",
+                    "about:blank"]
+        async def pipe(reader, writer):
+            try:
+                while data := await reader.read(65536):
+                    writer.write(data)
+                    await writer.drain()
+            except (ConnectionError, OSError):
+                pass
+            finally:
+                writer.close()
+        async def forward(reader, writer):
+            try:
+                up_reader, up_writer = await asyncio.open_connection("127.0.0.1", 9223)
+            except OSError:
+                writer.close()
+                return
+            await asyncio.gather(pipe(reader, up_writer), pipe(up_reader, writer))
+        async def main():
+            chromium = subprocess.Popen(CHROMIUM)
+            server = await asyncio.start_server(forward, "0.0.0.0", 9222)
+            loop = asyncio.get_running_loop()
+            code = await loop.run_in_executor(None, chromium.wait)
+            server.close()
+            print(f"chromium exited with {code}", file=sys.stderr, flush=True)
+            sys.exit(1)
+        asyncio.run(main())
+    environment:
+      HOME: /tmp
+      XDG_CONFIG_HOME: /tmp/xdg-config
+      XDG_CACHE_HOME: /tmp/xdg-cache
+      XDG_DATA_HOME: /tmp/xdg-data
+      XDG_STATE_HOME: /tmp/xdg-state
+    networks:
+      - knowledge-browser-internal
+      - knowledge-browser-egress
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9223/json/version', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    mem_limit: 1g
+    pids_limit: 512
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      # the image declares /workspace and /runtime as volumes; tmpfs over them
+      # keeps compose from creating anonymous volumes for a browser
+      - /tmp:rw,nosuid,nodev,size=384m
+      - /workspace:rw,nosuid,nodev,noexec,size=1m
+      - /runtime:rw,nosuid,nodev,noexec,size=1m
+    restart: unless-stopped
+
+networks:
+  # The plugin and its browser, and nobody else.
+  knowledge-browser-internal:
+    internal: true
+  # The browser's route to the pages it renders. Its own network, so being able
+  # to reach the browser never means being able to reach the internet with it.
+  knowledge-browser-egress:

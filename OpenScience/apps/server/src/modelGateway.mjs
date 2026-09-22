@@ -875,9 +875,17 @@ export function createModelGatewayHandler(config, runtimeManager, {
  * `USAGE_PURPOSES`; the ledger records one it does not know, or none, as
  * `other`, because a missing label must never cost the call it labels.
  *
+ * `call.limits` replaces the account's daily and weekly caps for this one call
+ * (0 = none). Absent, the deployment's per-user caps apply as they always
+ * have. It exists for background work that carries a budget of its own and is
+ * charged to an operator's internal project — the frontier feed, whose daily
+ * budget the pipeline reads from this same ledger by purpose: an operator's
+ * personal cap must not stop the feed for everyone, and the feed's spend must
+ * not be refused by a limit that was set for a person.
+ *
  * @param {{ config: any, usageLedger: any, fetchImpl?: typeof fetch }} deps
  * @param {{ userId: string, projectId: string, runId?: string | null, purpose?: string, body: any,
- *           signal?: AbortSignal, at?: Date }} call
+ *           signal?: AbortSignal, at?: Date, limits?: { daily?: number, weekly?: number } }} call
  * @returns {Promise<any>} the provider's parsed JSON response
  */
 export async function callModelForControlPlane({ config, usageLedger, fetchImpl = fetch }, call) {
@@ -898,8 +906,8 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
       priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency,
       requestFingerprint: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
       estimatedCost: estimate.cost,
-      dailyLimit: Number(config.userDailySpendLimit) || 0,
-      weeklyLimit: Number(config.userWeeklySpendLimit) || 0,
+      dailyLimit: call.limits?.daily !== undefined ? Number(call.limits.daily) : Number(config.userDailySpendLimit) || 0,
+      weeklyLimit: call.limits?.weekly !== undefined ? Number(call.limits.weekly) : Number(config.userWeeklySpendLimit) || 0,
       runLimit: 0,
       now: at,
     });

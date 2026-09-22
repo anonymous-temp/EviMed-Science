@@ -21,8 +21,12 @@ const openCostWindowValues = new Set(Object.values(openCostWindows));
  *  is its flat per-job one. It also lands after the job has ended, on the run
  *  its project was running at that moment — good enough for a report, and the
  *  wrong input for a limit that refuses the next dispatch or stops a run
- *  mid-way. Bound as a query parameter, never spliced. */
-export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine"]);
+ *  mid-way. The frontier feed's rows (`frontier`) are the platform editing a
+ *  public feed on its own schedule, billed to an operator's internal project
+ *  and held by the module's own daily budget: counted against that operator's
+ *  caps, the feed would spend their research allowance, and their research
+ *  would starve the feed. Bound as a query parameter, never spliced. */
+export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier"]);
 const placeholderPattern = /^\$[1-9][0-9]*$/;
 
 /** Cost a new call must respect on top of settled spend: a reservation counts

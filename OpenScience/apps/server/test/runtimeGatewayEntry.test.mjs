@@ -107,6 +107,7 @@ test("a remote runtime is offered exactly the gateways a local one is, at the pu
   assert.equal(urls?.revision, "");
   assert.equal(urls?.geoProbe, "");
   assert.equal(urls?.kbSearch, "", "knowledge-base search is off here, so it is not offered there");
+  assert.equal(urls?.frontier, "", "「前沿动态」 is off here, so its search is not offered there");
   assert.deepEqual(urls?.adapters, { meta: "https://evimed.example/runtime-gateway/specialist/meta" });
   const withKb = publicRuntimeGatewayUrls({
     runtimeGatewayPublicUrl: "https://evimed.example/runtime-gateway",
@@ -114,6 +115,13 @@ test("a remote runtime is offered exactly the gateways a local one is, at the pu
   });
   assert.equal(withKb?.kbSearch, "https://evimed.example/runtime-gateway/kb/v1/search");
   assert.deepEqual(resolveRuntimeGatewayPath("/runtime-gateway/kb/v1/search"), { kind: "internal", url: "/internal/kb/v1/search" });
+  const withFrontier = publicRuntimeGatewayUrls({
+    runtimeGatewayPublicUrl: "https://evimed.example/runtime-gateway",
+    frontierEnabled: true, modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1",
+  });
+  assert.equal(withFrontier?.frontier, "https://evimed.example/runtime-gateway/frontier/v1/search");
+  assert.deepEqual(resolveRuntimeGatewayPath("/runtime-gateway/frontier/v1/search"), { kind: "internal", url: "/internal/frontier/v1/search" });
+  assert.equal(resolveRuntimeGatewayPath("/runtime-gateway/frontier/%2e%2e/%2e%2e/api/me"), null);
 });
 
 test("only an active runtime's token passes, and the request goes on to its gateway", async (t) => {

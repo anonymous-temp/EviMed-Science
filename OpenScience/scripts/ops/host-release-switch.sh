@@ -60,8 +60,12 @@ readlink -f "${ROOT}/current"
 cd "${ROOT}/current/OpenScience/deploy/web"
 COMPOSE=(docker compose -p "$PROJECT"
   -f docker-compose.yml -f docker-compose.ingestion.yml -f docker-compose.local-auth.yml
-  -f docker-compose.backup.yml -f docker-compose.receipt.yml -f docker-compose.monitoring.yml
-  -f "$OVERRIDE")
+  -f docker-compose.backup.yml -f docker-compose.receipt.yml -f docker-compose.monitoring.yml)
+# The knowledge-source plugin (plan ch.14) runs only where the deployment names
+# its image. Read off `.env` with grep for the reason given above; before the
+# private override, which stays last.
+if grep -qE '^EVIMED_KNOWLEDGE_PLUGIN_IMAGE=.+' .env; then COMPOSE+=(-f docker-compose.knowledge.yml); fi
+COMPOSE+=(-f "$OVERRIDE")
 
 echo "=== which services differ from what is running ==="
 # Captured first: a composition that does not resolve must stop the switch

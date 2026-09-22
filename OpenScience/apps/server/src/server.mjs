@@ -90,6 +90,8 @@ import { KB_RERANK_INSTRUCT, KnowledgeBaseIndex } from "./kbIndex.mjs";
 import { createLibrary } from "./libraryService.mjs";
 import { KbEmbedder } from "./kbEmbedding.mjs";
 import { KB_SEARCH_GATEWAY_PATH, createKbSearchGatewayHandler } from "./kbSearchGateway.mjs";
+// 「前沿动态」 search for the runtime's `frontier_search` tool (2026-09-22).
+import { FRONTIER_GATEWAY_PATH, createFrontierGatewayHandler } from "./frontierGateway.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
@@ -109,6 +111,24 @@ import { AutopilotService, VERIFICATION_ARTIFACT, VERIFICATION_ROUTE_REASON, par
   verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
+// 「前沿动态」, the frontier feed (plan 2026-09-21 §7): the plugin client, the
+// ingest, package E's editor and pipeline, the reader's service and routes, and
+// the worker that turns them.
+import { KnowledgePluginClient } from "./knowledgePluginClient.mjs";
+import { FrontierIngest } from "./frontierIngest.mjs";
+import { FrontierEditor } from "./frontierEditor.mjs";
+import { FrontierPipeline } from "./frontierPipeline.mjs";
+import { FrontierService, frontierAudienceAllows, frontierDomainVocabulary, frontierMetricFamilies, frontierMetricsSnapshot,
+  frontierReadiness } from "./frontierService.mjs";
+import { createFrontierRoutes, frontierRoutePattern } from "./frontierRoutes.mjs";
+import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
+// Its second wave: events and the hot list, the daily and its push, 与你相关,
+// the two reader actions, and the composer the worker ticks.
+import { FrontierEvents } from "./frontierEvents.mjs";
+import { FrontierDaily } from "./frontierDaily.mjs";
+import { FrontierProfiles } from "./frontierProfiles.mjs";
+import { FrontierActions } from "./frontierActions.mjs";
+import { FrontierComposer } from "./frontierComposer.mjs";
 import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
@@ -456,6 +476,7 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/files/preview/")) return "/api/files/preview/:path";
   if (pathname.startsWith("/api/files/download/")) return "/api/files/download/:path";
   if (pathname === "/api/files/upload") return pathname;
+  if (pathname === "/api/frontier" || pathname.startsWith("/api/frontier/")) return frontierRoutePattern(pathname);
   if (pathname.startsWith("/api/")) return "/api/:route";
   // The internal gateways carry the runtime's entire outbound traffic —
   // every model call, every source fetch, every search, every probe. They used
@@ -471,7 +492,8 @@ function routePattern(pathname) {
     pathname === REVISION_GATEWAY_PATH ||
     pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH ||
     pathname === ENGINE_USAGE_PATH ||
-    pathname === KB_SEARCH_GATEWAY_PATH
+    pathname === KB_SEARCH_GATEWAY_PATH ||
+    pathname === FRONTIER_GATEWAY_PATH
   ) return pathname;
   return pathname === "/" ? "/" : "/static";
 }
@@ -1068,6 +1090,31 @@ export function createWebApiApp(overrides = {}) {
       return registered;
     },
   };
+  /**
+   * Write one file into a project the way an upload writes it — the one path
+   * `/api/files/upload` and 「前沿动态」's 存入知识库 (frontierActions.mjs) share,
+   * so a saved item is a source like any upload: the size limit, the knowledge
+   * base's format admission, the project's capacity, an atomic no-follow
+   * write, the mirror into a running runtime, the audit line, and the source
+   * registration that parses and indexes it. Returns the registration, or null
+   * outside `knowledge-base/`.
+   * @param {{ config: any, user: any, project: any }} ctx @param {{ root: string, rel: string, buffer: Buffer }} file
+   */
+  const writeProjectUpload = async (ctx, { root, rel, buffer }) => {
+    if (buffer.length > config.maxFileBytes) throw new HttpError(413, "file_too_large", "file is too large.");
+    const base = root === "base" ? ctx.project.baseDir : ctx.project.workspaceDir;
+    const full = resolveScopedPath(base, rel);
+    const knowledge = knowledgeBaseUploads.covers(root, rel);
+    if (knowledge) knowledgeBaseUploads.admit(rel);
+    await withProjectStorageMutation(ctx.project, async () => {
+      await assertProjectCapacity(ctx.project, full, buffer.length, config);
+      await writeFileAtomicNoFollow(base, full, buffer, { mode: 0o600 });
+    });
+    // rt: a running remote runtime sees the upload now (plan §3.1 #4).
+    await runtimeManager.mirrorWorkspaceUpload(ctx.project, full, buffer);
+    await audit(ctx, "file.upload", "completed", { target: root === "base" ? `${root}:${rel}` : rel, bytes: buffer.length });
+    return knowledge ? knowledgeBaseUploads.register(ctx, rel, buffer) : null;
+  };
   const sourceProject = async (job) => {
     const user = await store.userById(job.userId);
     if (!user) throw new HttpError(404, "source_account_unavailable", "Source account is unavailable.");
@@ -1201,6 +1248,68 @@ export function createWebApiApp(overrides = {}) {
     capsules: capsuleService,
   }) : null;
   const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, maxJsonBytes: config.maxJsonBytes });
+  // 「前沿动态」 (frontierService.mjs): composed only when switched on and a
+  // product database exists; otherwise its routes answer 404
+  // `frontier_not_enabled` and nothing of it runs. Its model calls are billed
+  // to the first operator's internal project, which the worker makes before
+  // its first batch and hands to the editor then.
+  /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
+   *   composer: FrontierComposer, actions: FrontierActions } | null} */
+  let frontier = null;
+  if (config.frontierEnabled && productDatabase) {
+    const client = new KnowledgePluginClient({
+      baseUrl: config.knowledgePluginUrl, tokenFile: config.knowledgePluginTokenFile, timeoutMs: config.knowledgePluginTimeoutMs,
+      minContract: config.knowledgePluginMinContract, fetchImpl: overrides.knowledgePluginFetch ?? globalThis.fetch,
+    });
+    const vocabulary = frontierDomainVocabulary();
+    // The knowledge base's embedder, model and width: one key and one price
+    // cover both, and the vectors are comparable with the pin's.
+    const embedder = overrides.frontierEmbedder ?? new KbEmbedder({
+      apiKey: config.dashscopeApiKey, model: config.kbEmbeddingModel, dimension: config.kbEmbeddingDimension,
+      apiBase: config.kbEmbeddingApiBase, timeoutMs: config.kbEmbeddingTimeoutMs,
+    }, { fetchImpl: overrides.kbEmbeddingFetch ?? globalThis.fetch });
+    const ingest = new FrontierIngest({ database: productDatabase, plugin: client, vocabulary,
+      dimension: config.kbEmbeddingDimension, pollMs: config.knowledgePluginPollMs });
+    const editor = new FrontierEditor(config, { usageLedger, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch });
+    const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config,
+      workerId: randomId("frontier-") });
+    // One implementation of "today's spend": the pipeline's, which it gates on.
+    const budget = typeof pipeline.budget === "function" ? () => pipeline.budget(new Date()) : null;
+    // The second wave (build spec D): events and the hot list, the daily and
+    // its push, 与你相关, and the two reader actions — every model call the
+    // editor's, under the pipeline's budget; the worker's compose hook ticks them.
+    const events = new FrontierEvents({ database: productDatabase, editor, embedder, config, budget });
+    const daily = new FrontierDaily({ database: productDatabase, jobs: productJobs, notifications: notificationService, editor, events, config,
+      owner: () => editor.owner, budget, workerId: randomId("frontier-daily-") });
+    const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget });
+    const actions = new FrontierActions({ database: productDatabase, editor, config, budget,
+      // 存入知识库 writes the way an upload writes (`writeProjectUpload`).
+      library: sourceService ? {
+        project: (user, projectId) => store.requireProject(user, projectId),
+        save: ({ user, project, rel, buffer }) => writeProjectUpload({ config, user, project }, { root: "base", rel, buffer }),
+      } : null,
+      ...(overrides.frontierPdfTransport ? { pdfTransport: overrides.frontierPdfTransport } : {}) });
+    const service = new FrontierService({ database: productDatabase, config, vocabulary, ingest, embedder,
+      dimension: config.kbEmbeddingDimension, budget, events, daily, profiles, actions });
+    const composer = new FrontierComposer({ events, daily, profiles,
+      canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
+      report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
+    const worker = new FrontierWorker({
+      ingest, pipeline, composer, database: productDatabase,
+      ensureOwner: async () => {
+        const owner = await ensureFrontierProject({ store, config });
+        editor.owner = owner;
+        return owner;
+      },
+      pollMs: config.frontierPollMs, leaseMs: config.frontierLeaseMs, pluginPollMs: config.knowledgePluginPollMs,
+      concurrency: config.frontierProcessConcurrency,
+      canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
+      report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`),
+    });
+    frontier = { client, ingest, editor, pipeline, service, worker, composer, actions };
+  }
+  const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
+    audit: (event, status, details) => securityAudit(config, event, status, details) });
   let autopilotWorker = null;
   let autopilotScheduleTimer = null;
   let autopilotScheduleRun = null;
@@ -2443,7 +2552,13 @@ export function createWebApiApp(overrides = {}) {
     fetchImpl: overrides.sourceUpdatesFetch ?? globalThis.fetch,
   });
   const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex });
-  const commands = createCommandRegistry({ config, runtimeManager, sourceUpdates, knowledgeBaseUploads });
+  // `frontier_search`: the page's own list, read for the runtime's account;
+  // with the module off it answers `frontier_disabled` (frontierGateway.mjs).
+  const frontierGatewayHandler = createFrontierGatewayHandler(config, runtimeManager, {
+    service: frontier?.service ?? null,
+    report: (code) => process.stderr.write(`frontier search: ${code}\n`),
+  });
+  const commands =createCommandRegistry({ config, runtimeManager, sourceUpdates, knowledgeBaseUploads });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx), {
     claimAllowed: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
   });
@@ -2490,6 +2605,7 @@ export function createWebApiApp(overrides = {}) {
           sourceWorker?.status?.().running,
           autopilotWorker?.status?.().running,
           learningWorker?.status?.().running,
+          frontier?.worker.status().running,
         ].filter(Boolean).length;
         return {
           activeCommands,
@@ -2736,7 +2852,9 @@ export function createWebApiApp(overrides = {}) {
             ? geoProbeGatewayHandler
             : pathname === KB_SEARCH_GATEWAY_PATH
               ? kbSearchGatewayHandler
-              : null;
+              : pathname === FRONTIER_GATEWAY_PATH
+                ? frontierGatewayHandler
+                : null;
     if (gateway) {
       try {
         await gateway(req, res, recordGatewayFailure);
@@ -2806,6 +2924,7 @@ export function createWebApiApp(overrides = {}) {
       if (await sourceRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
+      if (await frontierRoutes(req, res)) return;
       if (await im.routes(req, res)) return;
 
       if (pathname === "/api/health") {
@@ -2824,7 +2943,7 @@ export function createWebApiApp(overrides = {}) {
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate);
+        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -2850,6 +2969,7 @@ export function createWebApiApp(overrides = {}) {
           webReader,
           sourceUpdates,
           edgeProxy,
+          frontier,
         });
         return;
       }
@@ -3047,6 +3167,9 @@ export function createWebApiApp(overrides = {}) {
             // and every route the page calls keeps its own authorization, so a
             // browser that sets this to true by hand gains a link, not access.
             operator: config.operatorUsers.includes(user.id),
+            // Which optional modules this account sees. Presentation too: the
+            // module's own routes answer 404 to anyone it does not.
+            features: { frontier: Boolean(frontier) && frontierAudienceAllows(config, user) },
             runtime: {
               kernel: RUNTIME_KERNEL_NAME,
               // Where the kernel's own browser application is served. Empty
@@ -4174,22 +4297,7 @@ export function createWebApiApp(overrides = {}) {
         const data = assertString(args.data, "data", { max: Math.ceil(config.maxFileBytes * 1.4) });
         const encoding = args.encoding === "base64" ? "base64" : "utf8";
         const buffer = encoding === "base64" ? Buffer.from(data, "base64") : Buffer.from(data, "utf8");
-        if (buffer.length > config.maxFileBytes) throw new HttpError(413, "file_too_large", "file is too large.");
-        const base = root === "base" ? ctx.project.baseDir : ctx.project.workspaceDir;
-        const full = resolveScopedPath(base, rel);
-        const knowledge = knowledgeBaseUploads.covers(root, rel);
-        if (knowledge) knowledgeBaseUploads.admit(rel);
-        await withProjectStorageMutation(ctx.project, async () => {
-          await assertProjectCapacity(ctx.project, full, buffer.length, config);
-          await writeFileAtomicNoFollow(base, full, buffer, { mode: 0o600 });
-        });
-        // rt: a running remote runtime sees the upload now (plan §3.1 #4).
-        await runtimeManager.mirrorWorkspaceUpload(ctx.project, full, buffer);
-        await audit(ctx, "file.upload", "completed", {
-          target: root === "base" ? `${root}:${rel}` : rel,
-          bytes: buffer.length,
-        });
-        const registered = knowledge ? await knowledgeBaseUploads.register(ctx, rel, buffer) : null;
+        const registered = await writeProjectUpload(ctx, { root, rel, buffer });
         sendJson(res, 200, { data: { path: rel, ...(registered
           ? { ...registered, source: projectSourceManifestRecord(registered.source) } : {}) } });
         return;
@@ -4438,7 +4546,7 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex]) {
+    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -4471,6 +4579,7 @@ export function createWebApiApp(overrides = {}) {
       autopilotWorker?.start();
       learningWorker?.start();
       im.worker?.start();
+      frontier?.worker.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
       if (capsuleTransferService && !capsuleCleanupTimer) {
@@ -4551,6 +4660,10 @@ export function createWebApiApp(overrides = {}) {
     // `app.learningWorker`, got `undefined`, filtered it out and passed on an
     // empty list — a test of a collision that could not see either side of it.
     learningWorker,
+    // 「前沿动态」: null when the module is off or there is no product database.
+    frontier,
+    frontierService: frontier?.service ?? null,
+    frontierWorker: frontier?.worker ?? null,
     capsuleService,
     pluginService,
     pluginApplyWorker,
@@ -4567,6 +4680,13 @@ export function createWebApiApp(overrides = {}) {
     async listen(port = config.port, host = config.host) {
       await agentRegistry;
       if (productDatabase) await migrateProductStore(productDatabase);
+      // Optional module: a failed migration is named here and turns the
+      // `frontier` readiness check red; it does not stop the control plane.
+      if (frontier) {
+        await frontier.service.ready().catch((error) => {
+          process.stderr.write(`frontier migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "frontier_migration_failed"}\n`);
+        });
+      }
       await connectorCredentials?.migrate();
       await maintenanceService?.initialize();
       await retryCapsuleCleanup();
@@ -4597,6 +4717,7 @@ export function createWebApiApp(overrides = {}) {
       await autopilotWorker?.close();
       await learningWorker?.close();
       await im.worker?.close();
+      await frontier?.worker.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;
       if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
@@ -5371,8 +5492,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate);
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -5593,6 +5714,11 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
     addMetric(lines, "open_science_im_events_total", "IM module events by kind (Feishu inbound, dispatches, card updates, pushes).",
       "counter", imMetrics());
   }
+  // 「前沿动态」: pull results, lag, entries by state, today's items, the
+  // number check's outcomes, the budget, unknown vocabulary, the plugin's
+  // contract (frontierService.mjs `frontierMetricFamilies`).
+  const frontierSnapshot = frontier ? await frontierMetricsSnapshot(frontier) : null;
+  for (const family of frontierMetricFamilies(Boolean(frontier), frontierSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
 
   return `${lines.join("\n")}\n`;
 }
@@ -5699,7 +5825,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null) {
+async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -5729,6 +5855,9 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     resources: await readinessCheck(() => readinessResources(config)),
     backup: await readinessCheck(async () => readinessBackup(config, productDatabase)),
     runtime: await readinessCheck(async () => readinessRuntime(config, runtimeManager)),
+    // 「前沿动态」: red only for the module's own invariants; a plugin outside
+    // the platform that cannot be reached is a warning on a green check.
+    frontier: await readinessCheck(async () => frontierReadiness({ config, frontier, database: productDatabase })),
   };
   checks.saasProfile = await readinessCheck(() => readinessSaasProfile(config, checks));
   return {

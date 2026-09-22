@@ -67,6 +67,16 @@ export const RULES = [
     why: "the frames were recorded off this exact binary; re-dating them claims evidence from a kernel they never saw",
   },
   {
+    // A contract directory's recordings: response bodies kept byte for byte
+    // off a live upstream, most of them one JSON line each. The knowledge
+    // plugin's carry whatever the crawled sources said — an AI-news title can
+    // name the kernel and a prerelease in the same line — so a version found
+    // there is what a service answered, not something this repository wrote.
+    kind: "provenance",
+    where: /^OpenScience\/packages\/contracts\/[^/]+\/fixtures\/[^/]+\.json$/,
+    why: "a response recorded verbatim off a live upstream, named with its time in the directory's provenance.json; rewriting a version in it claims a recording that never happened",
+  },
+  {
     kind: "provenance",
     where: /^OpenScience\/apps\/server\/src\/(dshMux|dshRuntimeAdapter|mockDshRuntime)\.mjs$/,
     why: "the wire these modules implement was read off the running kernel named here",

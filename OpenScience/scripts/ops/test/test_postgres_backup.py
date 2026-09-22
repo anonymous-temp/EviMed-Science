@@ -1,5 +1,6 @@
 import importlib.util
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -520,6 +521,241 @@ class PostgresBackupTests(unittest.TestCase):
             self.assertEqual(target.stat().st_mode & 0o777, 0o644)
             self.assertEqual(json.loads(target.read_text())["status"], "failed")
             self.assertEqual([p.name for p in target.parent.iterdir()], ["state.json"])
+
+    # --- Derived tables: rows left out of the dump, expected empty after restore.
+    #
+    # Plan section 10.4.6 and review item 1: the frontier feed's vectors are
+    # rebuilt rather than backed up, and the drill that compares row counts
+    # before and after a restore must read that as the zero it is, while every
+    # other difference still fails the backup and turns readiness red.
+
+    USERS = {"schema": "evimed_control", "table": "users", "rows": "2"}
+    VECTORS = {"schema": "evimed_frontier", "table": "item_vectors", "rows": "12"}
+
+    def run_timer_backup(self, root, source_rows, restored_rows):
+        """Run the timer's `backup()` with every external tool faked, and return
+        what it produced, the pg_dump arguments it used and the state file."""
+        directory = Path(root).resolve()
+        backups = directory / "backups"
+        backups.mkdir()
+        passphrase = directory / "passphrase"
+        passphrase.write_text("synthetic-timer-passphrase\n")
+        passphrase.chmod(0o400)
+        identity = {"database": "evimed", "databaseOid": "16384", "systemIdentifier": "12345"}
+        dumps = []
+
+        class Session:
+            def __init__(self, _base, _role, database):
+                self.database = database
+
+            def query(self, sql):
+                if sql.startswith("BEGIN"):
+                    return []
+                if sql == MODULE.SOURCE_IDENTITY_SQL:
+                    return [json.dumps(identity)]
+                if "pg_export_snapshot" in sql:
+                    return ["0001-0001-1"]
+                if sql == MODULE.COUNTS_SQL:
+                    rows = source_rows if self.database == "evimed" else restored_rows
+                    return [json.dumps(row) for row in rows]
+                raise AssertionError(sql)
+
+            def close(self):
+                pass
+
+        def command(args, *, source=None, target=None, timeout=900, capture=False):
+            tool = args[args.index("exec") + 3] if "exec" in args else args[0]
+            if args[-1:] == ["--version"]:
+                return f"{tool} (PostgreSQL) 16.14"
+            if tool == "pg_dump":
+                dumps.append(args)
+                target.write(b"synthetic custom-format dump")
+                return ""
+            if tool == "openssl":
+                shutil.copyfile(args[args.index("-in") + 1], args[args.index("-out") + 1])
+                return ""
+            if tool in {"pg_restore", "createdb", "dropdb"}:
+                return ""
+            if tool == "psql":
+                sql = args[-1]
+                if sql == MODULE.SOURCE_IDENTITY_SQL:
+                    return json.dumps(identity)
+                if "count(*) FROM pg_database" in sql:
+                    return "0\n"
+            raise AssertionError(args)
+
+        state_file = backups / "status/state.json"
+        environment = {"EVIMED_POSTGRES_PASSPHRASE_FILE": str(passphrase), "EVIMED_POSTGRES_CONTAINER": "synthetic-postgres",
+                       "EVIMED_POSTGRES_DATABASE": "evimed", "EVIMED_POSTGRES_USER": "evimed"}
+        with patch.dict(os.environ, environment, clear=False), \
+                patch.object(MODULE, "PsqlSession", Session), patch.object(MODULE, "command", side_effect=command):
+            try:
+                result = MODULE.backup(backups, state_file, {})
+            except MODULE.BackupError as error:
+                result = error
+        return result, dumps, json.loads(state_file.read_text())
+
+    def test_a_drill_with_an_excluded_derived_table_passes_and_names_what_to_rebuild(self):
+        with tempfile.TemporaryDirectory() as root:
+            restored = [self.USERS, {**self.VECTORS, "rows": "0"}]
+            result, dumps, state = self.run_timer_backup(root, [self.USERS, self.VECTORS], restored)
+            self.assertNotIsInstance(result, MODULE.BackupError)
+            self.assertEqual(state["status"], "healthy")
+            self.assertTrue(state["restoreVerified"])
+            self.assertIn("--exclude-table-data=evimed_frontier.item_vectors", dumps[0])
+            # The inventory is what the archive holds: the vectors at zero, the
+            # source count beside the command that brings them back.
+            self.assertEqual(state["tables"], [self.USERS, {**self.VECTORS, "rows": "0"}])
+            self.assertEqual(state["excludedTableData"], [{"schema": "evimed_frontier", "table": "item_vectors",
+                                                           "sourceRows": "12", "rebuild": "pnpm rebuild:frontier-index"}])
+            self.assertEqual(state["expectedTablesSha256"], state["restoredTablesSha256"])
+            self.assertEqual(state["expectedTablesSha256"], MODULE.table_digest(state["tables"]))
+
+    def test_a_real_mismatch_still_fails_beside_an_excluded_table(self):
+        for label, restored in [
+            ("an application table lost a row", [{**self.USERS, "rows": "1"}, {**self.VECTORS, "rows": "0"}]),
+            # Rows in the excluded table after a restore mean the exclusion did
+            # not happen: the zero is a check, not a waiver.
+            ("the excluded table came back with rows", [self.USERS, self.VECTORS]),
+            ("the excluded table is missing from the restore", [self.USERS]),
+        ]:
+            with self.subTest(label), tempfile.TemporaryDirectory() as root:
+                result, _dumps, state = self.run_timer_backup(root, [self.USERS, self.VECTORS], restored)
+                self.assertIsInstance(result, MODULE.BackupError)
+                self.assertEqual(result.code, "restore_application_mismatch")
+                self.assertEqual(state["status"], "failed")
+                self.assertEqual(state["errorCode"], "restore_application_mismatch")
+                self.assertFalse(any(path.name.endswith(".dump.enc") for path in (Path(root) / "backups").iterdir()))
+
+    def test_a_database_without_the_frontier_schema_is_backed_up_exactly_as_before(self):
+        with tempfile.TemporaryDirectory() as root:
+            result, dumps, state = self.run_timer_backup(root, [self.USERS], [self.USERS])
+            self.assertNotIsInstance(result, MODULE.BackupError)
+            self.assertEqual(state["status"], "healthy")
+            self.assertEqual(dumps[0][dumps[0].index("pg_dump"):], [
+                "pg_dump", "--format=custom", "--compress=9", "--no-owner", "--no-acl", "--lock-wait-timeout=30000",
+                "--snapshot=0001-0001-1", "-U", "evimed", "-d", "evimed"])
+            self.assertEqual(state["tables"], [self.USERS])
+            self.assertEqual(state["excludedTableData"], [])
+
+    def test_receipt_exclusions_are_a_closed_list_held_at_zero_rows(self):
+        tables = [self.USERS, {**self.VECTORS, "rows": "0"}]
+        valid = {"schema": "evimed_frontier", "table": "item_vectors", "sourceRows": "12", "rebuild": "pnpm rebuild:frontier-index"}
+        self.assertEqual(MODULE.validate_exclusions([valid], tables), [valid])
+        self.assertEqual(MODULE.validate_exclusions(None, [self.USERS]), [], "a receipt from before exclusions excluded nothing")
+        self.assertEqual(MODULE.validate_exclusions([], tables), [])
+        for label, value, inventory in [
+            ("a table that is not derived", [{**valid, "schema": "evimed_control", "table": "users"}], [{**self.USERS, "rows": "0"}]),
+            ("rows restored for an excluded table", [valid], [self.USERS, self.VECTORS]),
+            ("an excluded table missing from the inventory", [valid], [self.USERS]),
+            ("the same table twice", [valid, valid], tables),
+            ("another rebuild command", [{**valid, "rebuild": "rm -rf /"}], tables),
+            ("a count that is not a count", [{**valid, "sourceRows": "-1"}], tables),
+            ("a unicode digit", [{**valid, "sourceRows": "²"}], tables),
+            ("an unknown member", [{**valid, "note": "x"}], tables),
+            ("not a list", {"schema": "evimed_frontier"}, tables),
+        ]:
+            with self.subTest(label), self.assertRaises((ValueError, TypeError, KeyError)):
+                MODULE.validate_exclusions(value, inventory)
+
+    def test_restore_clone_verifies_the_empty_derived_table_and_tells_the_operator_to_rebuild(self):
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root).resolve()
+            output = directory / "member"
+            output.mkdir()
+            archive = output / "postgres.dump.enc"
+            archive.write_bytes(b"synthetic encrypted archive")
+            archive.with_name(archive.name + ".sha256").write_text(f"{MODULE.digest(archive)}  {archive.name}\n")
+            expected = [self.USERS, {**self.VECTORS, "rows": "0"}]
+            excluded = [{"schema": "evimed_frontier", "table": "item_vectors", "sourceRows": "12",
+                         "rebuild": "pnpm rebuild:frontier-index"}]
+            identity = {"database": "evimed", "databaseOid": "16384", "systemIdentifier": "12345"}
+            capture = {"schemaVersion": 1, "status": "captured", "archive": archive.name,
+                       "archiveSha256": MODULE.digest(archive), "database": "evimed",
+                       "encryption": "aes-256-cbc-pbkdf2-sha256-250000", "snapshotId": "0001-0001-1",
+                       "sourceIdentity": identity, "tables": expected, "tablesSha256": MODULE.table_digest(expected),
+                       "excludedTableData": excluded}
+            receipt_path = archive.with_name(archive.name + ".capture.json")
+            target = "evimed_restore_20260922T120000Z_0123456789ab"
+            ownership_marker = {"value": ""}
+
+            class Session:
+                def __init__(self, _base, _role, database):
+                    if database != target:
+                        raise AssertionError(database)
+
+                def query(self, _sql):
+                    return [json.dumps(row) for row in expected]
+
+                def close(self):
+                    pass
+
+            def command(args, *, source=None, target=None, timeout=900, capture=False):
+                tool = args[args.index("exec") + 3] if "exec" in args else args[0]
+                if args[-1:] == ["--version"]:
+                    return f"{tool} (PostgreSQL) 16.14"
+                if tool == "psql":
+                    sql = args[-1]
+                    if "count(*) FROM pg_database" in sql:
+                        return "0\n"
+                    if sql == MODULE.SOURCE_IDENTITY_SQL:
+                        return json.dumps(identity)
+                    if "SELECT oid::text" in sql:
+                        return "24680\n"
+                    if sql.startswith("COMMENT ON DATABASE"):
+                        ownership_marker["value"] = sql.split(" IS '", 1)[1][:-2]
+                        return ""
+                    if "shobj_description" in sql:
+                        return ownership_marker["value"]
+                if tool == "openssl":
+                    target.write(b"synthetic plain dump")
+                    return ""
+                if tool in {"createdb", "pg_restore"}:
+                    return ""
+                raise AssertionError(args)
+
+            arguments = ["restore-clone", "--archive", str(archive), "--target-database", target,
+                         "--receipt", str(directory / "restore.json")]
+            with patch.dict(os.environ, self.recovery_environment(root), clear=False), \
+                    patch.object(MODULE, "PsqlSession", Session), patch.object(MODULE, "command", side_effect=command):
+                receipt_path.write_text(json.dumps({**capture, "excludedTableData": [{**excluded[0], "table": "items"}]}))
+                with self.assertRaises(MODULE.BackupError) as refused:
+                    MODULE.restore_clone(archive, target, directory / "refused.json")
+                self.assertEqual(refused.exception.code, "postgres_capture_receipt_invalid",
+                                 "a receipt that left out a table the list does not name restores nothing")
+                receipt_path.write_text(json.dumps(capture))
+                with patch("sys.stdout", new_callable=io.StringIO) as printed:
+                    self.assertEqual(MODULE.main(arguments), 0)
+            summary = json.loads(printed.getvalue())
+            self.assertEqual(summary["status"], "verified")
+            self.assertEqual(summary["rebuildAfterRestore"], ["pnpm rebuild:frontier-index"])
+            durable = json.loads((directory / "restore.json").read_text())
+            self.assertEqual(durable["excludedTableData"], excluded)
+            self.assertEqual(durable["rebuildAfterRestore"], ["pnpm rebuild:frontier-index"])
+            self.assertEqual(durable["expectedTablesSha256"], durable["restoredTablesSha256"])
+
+    def test_capture_member_leaves_derived_rows_out_and_records_them(self):
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root).resolve() / "member"
+            output.mkdir()
+            commands = []
+            session, command, _identity = self.fake_snapshot_session(commands)
+
+            class WithVectors(session):
+                def query(self, sql):
+                    if sql == MODULE.COUNTS_SQL:
+                        return [json.dumps(PostgresBackupTests.USERS), json.dumps(PostgresBackupTests.VECTORS)]
+                    return super().query(sql)
+
+            with patch.dict(os.environ, self.recovery_environment(root), clear=False), \
+                    patch.object(MODULE, "PsqlSession", WithVectors), patch.object(MODULE, "command", side_effect=command):
+                MODULE.capture_member(output)
+            receipt = json.loads((output / "postgres.dump.enc.capture.json").read_text())
+            dump = next(call for call in commands if "pg_dump" in call and "--version" not in call)
+            self.assertIn("--exclude-table-data=evimed_frontier.item_vectors", dump)
+            self.assertEqual(receipt["tables"], [self.USERS, {**self.VECTORS, "rows": "0"}])
+            self.assertEqual(receipt["excludedTableData"][0]["sourceRows"], "12")
+            self.assertEqual(receipt["tablesSha256"], MODULE.table_digest(receipt["tables"]))
 
     def test_inventory_rejects_duplicate_or_non_numeric_counts(self):
         row = json.dumps({"schema": "public", "table": "memo", "rows": "0"})

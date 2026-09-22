@@ -35,6 +35,8 @@ Retrieve, read, refine — do not stop at one query:
 4. Refine: if results miss the point, rewrite the query (synonyms, population, outcome, study design) and search again. Stop when two consecutive refined queries add no new relevant source, or after three iterations.
 5. Deduplicate with `mcp__evimed__evidence_deduplicate` before synthesizing when the result set is large.
 
+When the question is about what is new — recent trials, approvals, safety notices, guideline updates, 「最近有什么进展」 — `mcp__evimed__frontier_search` returns the platform's screened feed of the last days to weeks; a question about settled knowledge does not need it. Its items are leads, not evidence: read the original through the returned DOI or link and cite that original, and say 「尚未经同行评议」 whenever you use a preprint.
+
 ## Evidence honesty (non-negotiable)
 
 - Never fabricate studies, authors, journals, years, DOIs, PMIDs, effect sizes, or URLs. Every numbered citation must correspond to a source you actually retrieved in this turn or to established textbook knowledge stated without a fake citation.

@@ -152,6 +152,20 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "kb_search_response_too_large",
   "kb_search_gateway_token_missing",
   "kb_search_gateway_token_invalid",
+  // 「前沿动态」 search not answering — the module off or not open to this
+  // account, an outage, a slow list. Its results were only ever leads; the
+  // answer goes on with the literature, guideline and regulatory tools, which
+  // is what the tool's own failure tells the run (frontier_search.py).
+  "frontier_disabled",
+  "frontier_search_unconfigured",
+  "frontier_search_unavailable",
+  "frontier_search_timeout",
+  "frontier_search_rate_limited",
+  "frontier_search_upstream_error",
+  "frontier_search_response_invalid",
+  "frontier_search_response_too_large",
+  "frontier_search_gateway_token_missing",
+  "frontier_search_gateway_token_invalid",
   // Host configuration the run cannot do anything about.
   "public_source_gateway_unconfigured",
   "public_source_dataset_unconfigured",
@@ -388,6 +402,15 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "kb_search_source_ids_invalid",
   "kb_search_request_invalid",
   "kb_search_request_too_large",
+  // And for a frontier search: a filter outside its closed vocabulary.
+  "frontier_search_query_invalid",
+  "frontier_search_lane_invalid",
+  "frontier_search_specialty_invalid",
+  "frontier_search_window_invalid",
+  "frontier_search_mode_invalid",
+  "frontier_search_limit_invalid",
+  "frontier_search_request_invalid",
+  "frontier_search_request_too_large",
   // Malformed calls into the specialist workers and the science connectors:
   // a bad action, an id that is not one, a path outside the workspace, an
   // argument the schema rejects. The run rewrites the call.
@@ -1051,6 +1074,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   // and what the card's own button does about it.
   [/^source_parser_/, '文档解析这次没有完成，稍后再重新分析。'],
   [/^kb_search_/, '资料库检索这次没能完成；运行会直接读取知识库里的文件继续。'],
+  [/^frontier_(?:disabled$|search_)/, '前沿动态检索这次没能完成；回答会改用文献、指南和监管来源继续。'],
 ])
 
 /**

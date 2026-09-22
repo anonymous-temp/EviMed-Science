@@ -10,6 +10,10 @@ for the answer prose itself: direct, readable, useful, correct, honest.
   reaches the heavy report pipeline). Adversarial cases: metadata-only
   evidence (q-synthesis-07), a nonexistent drug (q-synthesis-08), high-risk
   速效救心丸 safety framing (q-synthesis-06), one English question (q-direct-10).
+- `questions-frontier-cases.yaml` — four 「最近有什么进展」 questions for the
+  `frontier_search` tool plus one plain control that must still take zero tool
+  calls (`toolCalls` in the answers file). Run it with `--questions … --rerun`
+  once with the 前沿动态 module on and once off, same model, more than once.
 - `run_eval.py` — collects answers (live mode) or normalizes pre-collected
   ones (offline mode) into `results/answers-<timestamp>.json`.
 - `judge.py` — DeepSeek judge, scores 0-5 on directness, readability,

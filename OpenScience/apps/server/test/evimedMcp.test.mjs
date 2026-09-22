@@ -21,7 +21,10 @@ import {
   verifyEviMedWorkloadToken,
   verifyModelGatewayRuntimeToken,
 } from "../src/runtimeManager.mjs";
-import { MCP_SERVER_NAME, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX } from "@evimed/domain";
+import { FRONTIER_LANES, FRONTIER_SPECIALTIES, MCP_SERVER_NAME, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX } from "@evimed/domain";
+import { FRONTIER_SEARCH_DEFAULT_LIMIT, FRONTIER_SEARCH_MAX_LIMIT, FRONTIER_SEARCH_MAX_QUERY_LENGTH, FRONTIER_SEARCH_MODES } from "../src/frontierGateway.mjs";
+import { FRONTIER_WINDOWS } from "../src/frontierService.mjs";
+import { dshProfileInput } from "../src/runtimeManager.mjs";
 
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -246,6 +249,12 @@ test("every optional evidence channel the platform configures reaches the runtim
       geoProbeUrl: "http://geo-probe.internal:9999",
       geoProbeGatewayInternalUrl: "https://gateway.internal/internal/geo-probe/v1",
       publicSourceCredentials: { unpaywall: "evimed@example.test" },
+      // The two server-side searches ride the same runtime token and reach
+      // the MCP by one variable each.
+      kbSearchEnabled: true,
+      kbSearchGatewayInternalUrl: "https://gateway.internal/internal/kb/v1/search",
+      frontierEnabled: true,
+      frontierAudience: "all",
     });
     await syncRuntimeDshProfile(config, project, plan, { nowSeconds: 1_000, jti: "mgw-first" });
     const first = await readPatch(plan);
@@ -267,11 +276,48 @@ test("every optional evidence channel the platform configures reaches the runtim
     );
     assert.equal(environment.EVIMED_UNPAYWALL_EMAIL, "evimed@example.test");
     assert.equal(environment.EVIMED_LITERATURE_SEARCH_URL, "https://evidence.internal/literature");
+    assert.equal(environment.EVIMED_KB_SEARCH_GATEWAY_URL, "https://gateway.internal/internal/kb/v1/search");
+    assert.equal(
+      environment.EVIMED_FRONTIER_GATEWAY_URL,
+      "http://127.0.0.1:8787/internal/frontier/v1/search",
+      "the frontier gateway is the model gateway's own server",
+    );
 
     // The second start is where it broke. Nothing in the patch may depend on
     // whether one has been written before.
     await syncRuntimeDshProfile(config, project, plan, { nowSeconds: 2_000, jti: "mgw-second" });
     assert.equal(await readPatch(plan), first);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// 「前沿动态」 is a module a deployment may run for its operators only for a
+// week (the dry run) before it opens to everyone. A runtime of an account it
+// is not open to is given no route, so `frontier_search` answers
+// `frontier_disabled` without asking to be refused.
+test("「前沿动态」 search reaches a runtime only where the module is on and open to its account", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-frontier-mcp-"));
+  try {
+    const { project, plan } = await fixture(tmp);
+    const route = (overrides) => dshProfileInput(dshConfig({
+      publicSourceGatewayInternalUrl: "https://gateway.internal/internal/sources/v1/fetch",
+      frontierEnabled: true, frontierAudience: "all", operatorUsers: [], frontierPreviewUsers: [], ...overrides,
+    }), project, plan, "deepseek-v4-pro", "/runtime/dsh-home/evimed-workload-token").mcpEnvironment.EVIMED_FRONTIER_GATEWAY_URL;
+    const url = "http://127.0.0.1:8787/internal/frontier/v1/search";
+    assert.equal(route({}), url);
+    assert.equal(route({ frontierEnabled: false }), undefined, "off: no route");
+    assert.equal(route({ frontierAudience: "operators" }), undefined, "operators only, and user-1 is none");
+    assert.equal(route({ frontierAudience: "operators", operatorUsers: ["user-1"] }), url);
+    assert.equal(route({ frontierAudience: "operators", frontierPreviewUsers: ["user-1"] }), url);
+    assert.equal(route({ publicSourceGatewayInternalUrl: "" }), undefined,
+      "the tool authenticates with the token the source gateway's row names; without that row it has none");
+    const remote = { ...plan, gateways: { model: "https://evimed.example/runtime-gateway/model/v1", publicSource: "https://evimed.example/runtime-gateway/sources/v1/fetch",
+      frontier: "https://evimed.example/runtime-gateway/frontier/v1/search", adapters: {} } };
+    const remoteRoute = dshProfileInput(dshConfig({ frontierEnabled: true, frontierAudience: "all" }), project, remote, "deepseek-v4-pro",
+      "/runtime/dsh-home/evimed-workload-token")
+      .mcpEnvironment.EVIMED_FRONTIER_GATEWAY_URL;
+    assert.equal(remoteRoute, "https://evimed.example/runtime-gateway/frontier/v1/search", "a remote session is given the public prefix");
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
@@ -306,6 +352,8 @@ test("the generated patch mounts the research MCP and hands it a token, never a 
     assert.match(patch, /^ {8}failOnStartupError: true$/m);
 
     assert.deepEqual(mcpEnvironment(patch), {
+      // The frontier module is off here, so its search tool is not offered.
+      EVIMED_DISABLED_TOOLS: "frontier_search",
       EVIMED_MODEL_GATEWAY_MODEL: "deepseek-v4-pro",
       EVIMED_MODEL_GATEWAY_TOKEN_FILE: `/runtime/dsh-home/${modelGatewayTokenFileName}`,
       EVIMED_MODEL_GATEWAY_URL: "http://127.0.0.1:8787/internal/model/v1",
@@ -930,6 +978,27 @@ test("the MCP server publishes exactly the tools the vocabulary names", async ()
     assert.equal(name.startsWith("evimed_"), false, `${name} repeats the server name that the kernel already prefixes`);
     assert.equal(name.startsWith(MCP_TOOL_PREFIX), false, `${name} hard-codes a kernel's presentation prefix`);
   }
+});
+
+// The tool's schema is written in Python and its vocabularies are the
+// domain's; the gateway checks the same fields again. Asking the server for
+// the schema is what keeps the three from drifting apart: a lane added to the
+// domain and not to the tool would be a filter the model is never offered, and
+// a limit the tool allows past the gateway's would be a call refused as
+// malformed.
+test("frontier_search offers exactly the domain's lanes and specialties, and the gateway's own bounds", async () => {
+  const script = "import json,sys; sys.path.insert(0, '.'); import server; print(json.dumps(server.TOOLS['frontier_search']))";
+  const { stdout } = await execFile("python3", ["-c", script], { cwd: path.join(repoRoot, "runtime/mcp/evimed-research") });
+  const { inputSchema: schema, description } = JSON.parse(stdout);
+  assert.deepEqual(schema.properties.lane.enum, [...FRONTIER_LANES]);
+  assert.deepEqual(schema.properties.specialty.enum, [...FRONTIER_SPECIALTIES]);
+  assert.deepEqual(schema.properties.window.enum, Object.keys(FRONTIER_WINDOWS));
+  assert.deepEqual(schema.properties.mode.enum, [...FRONTIER_SEARCH_MODES]);
+  assert.equal(schema.properties.limit.maximum, FRONTIER_SEARCH_MAX_LIMIT);
+  assert.equal(schema.properties.limit.default, FRONTIER_SEARCH_DEFAULT_LIMIT);
+  assert.equal(schema.properties.q.maxLength, FRONTIER_SEARCH_MAX_QUERY_LENGTH);
+  assert.equal(schema.required, undefined, "no field is required: without q the tool lists the newest items");
+  assert.match(description, /leads, not evidence/);
 });
 
 // The other half: what an agent package may ask for has to be something the
