@@ -44,7 +44,7 @@
 | `tools/frontier-schema.sql`、`frontier-schema-smoke.sql`、`check_schema.sh` | `evimed_frontier` 的完整建表语句、样例数据与关键查询、在本机 PostgreSQL 上的校验脚本 |
 | `tools/wechat_article.py` | 公众号文章页 → 标准记录的纯函数解析器（11.4） |
 | `tools/wechat_trial.py` | 100 个号的试跑：免登录的种子与搜狗测量、Wechat2RSS 的订阅、读取与健康检查、微信读书登录备用；可续跑，原始页面缓存在状态目录 |
-| `research/edge-acceptance-2026-09-22.md` 及同日的 `probe-edge*`、`probe-prod-honest-ua`、`edge-browser`、`search-compare`、`push-latency-*`、`wechat-search-engines` | 海外节点验收：两种标识的两地探测、推送延迟、东京无头浏览器、两地搜索对比、搜索引擎找公众号链接（10.2.5） |
+| `research/edge-acceptance-2026-09-22.md` 及同日的 `probe-edge*`、`probe-prod-honest-ua`、`edge-browser`、`search-compare`、`push-latency-*`、`wechat-search-engines` | 东京服务器验收：两种标识的两地探测、往返延迟、东京无头浏览器、两地搜索对比、搜索引擎找公众号链接（10.2.5） |
 | `tools/browser_probe.mjs`、`research/regulator-browser-2026-09-22.md` | 用自有无头浏览器打开监管站列表页的测试脚本与两地实测记录（10.2.6） |
 | `tools/evimed_api_freshness.py` | EviMed 资料检索接口的索引新鲜度测量；9 月 22 日在生产机上跑过一次，记录在 `research/evimed-freshness-2026-09-22.jsonl`（12.2） |
 | `research/wechat-accounts-100.jsonl`、`wechat-trial-2026-09-21.json`、`wechat-routes-2026-09-21.md` | 100 个号的清单、试跑统计、各条路的实测与出处 |
