@@ -264,18 +264,38 @@ export function frontierRankHot(events) {
 /**
  * The keys that tie an item to others of one trial: `reg:<ID>` for each
  * registry id, and the bare id of an event-level `reg:` identity.
- * @param {{ registry_ids?: unknown, identity_key?: unknown }} item @returns {string[]}
+ * @param {{ registry_ids?: unknown, identity_key?: unknown, source_type?: unknown }} item @returns {string[]}
  */
 export function frontierClusterKeys(item) {
   const keys = new Set();
-  for (const id of Array.isArray(item?.registry_ids) ? item.registry_ids : []) {
-    const value = String(id ?? "").trim().toUpperCase();
-    if (value) keys.add(`reg:${value}`);
-  }
+  const registered = (Array.isArray(item?.registry_ids) ? item.registry_ids : [])
+    .map((id) => String(id ?? "").trim().toUpperCase()).filter(Boolean);
+  // A story that names several trials is writing *about* them: its registry
+  // ids are mentions, not its identity. One column naming five NCT numbers
+  // pulled a results posting of an unrelated trial into it by identifier
+  // (2026-09-22, `f765b9db907eba1d`). A registry's own entry, a journal's
+  // paper or a regulator's notice keeps every id it states.
+  const mentions = MENTION_SOURCE_TYPES.has(String(item?.source_type ?? "")) && registered.length >= 2;
+  if (!mentions) for (const value of registered) keys.add(`reg:${value}`);
   const identity = /^reg:([^:]+):/.exec(String(item?.identity_key ?? ""));
   if (identity) keys.add(`reg:${identity[1].trim().toUpperCase()}`);
   return [...keys];
 }
+
+/**
+ * Whether two items state their own, different, work identities (a DOI or a
+ * PMID each). @param {any} item @param {any} other
+ */
+export function otherWork(item, other) {
+  const value = (/** @type {unknown} */ raw) => String(raw ?? "").trim().toLowerCase();
+  const doi = [value(item?.doi), value(other?.doi)];
+  const pmid = [value(item?.pmid), value(other?.pmid)];
+  if (doi[0] && doi[1] && doi[0] !== doi[1]) return true;
+  return Boolean(pmid[0] && pmid[1] && pmid[0] !== pmid[1]);
+}
+
+/** Source types whose items write about registrations rather than being one. */
+const MENTION_SOURCE_TYPES = new Set(["media", "company"]);
 
 /** An item's entity keys that make candidates. @param {unknown} keys @returns {string[]} */
 export function frontierClusterEntities(keys) {
@@ -286,7 +306,7 @@ export function frontierClusterEntities(keys) {
  * The vector step's reading of the candidates: which events are the same by
  * cosine alone, and which pairs to ask about (the best candidate of each
  * other event in the band, or above it from the same publisher; at most three).
- * @param {Array<{ eventId: string, cosine: number, samePublisher?: boolean }>} candidates
+ * @param {Array<{ eventId: string, cosine: number, samePublisher?: boolean, otherWork?: boolean }>} candidates
  * @returns {{ strong: string[], ask: Array<{ eventId: string, cosine: number, index: number }> }}
  */
 export function frontierVectorReading(candidates) {
@@ -298,7 +318,13 @@ export function frontierVectorReading(candidates) {
   // cosine because the template is most of the text; the vector joined them
   // into single events in production (2026-09-22, 4 wrong merges of 25). Two
   // notices of one publisher are the same event only if the model says so.
-  const joins = (/** @type {any} */ candidate) => candidate.cosine >= FRONTIER_CLUSTER_JOIN_COSINE && candidate.samePublisher !== true;
+  // Two works that each state their own identity — a DOI, a PMID — and state
+  // different ones are two works: a paper and the editorial on it belong to
+  // one event, two Cochrane protocols on one topic do not, and only the model
+  // can tell those apart (2026-09-22, `246a1c2a0b4df84f`). Identity decides
+  // before similarity does; the cosine only proposes.
+  const joins = (/** @type {any} */ candidate) => candidate.cosine >= FRONTIER_CLUSTER_JOIN_COSINE
+    && candidate.samePublisher !== true && candidate.otherWork !== true;
   const strong = [...new Set(ordered.filter(joins).map((candidate) => candidate.eventId))];
   const ask = [];
   const seen = new Set(strong);
@@ -315,11 +341,17 @@ export function frontierVectorReading(candidates) {
  * Where an item goes: the events it is the same as (by identifier, by cosine,
  * by the model's `yes`), the one of them that survives — the oldest — and the
  * events it is only related to.
+ *
+ * Only a first-hand item folds two events into one. A daily column covers
+ * several stories in one piece — Novo's capital-markets day, an ADHD
+ * read-out, a depression trial's results — and matching all three, it used to
+ * fuse them (2026-09-22, `f765b9db907eba1d`). Reporting on several events is
+ * what a report does: it joins the oldest of them and the rest become edges.
  * @param {{ identifier: string[], strong: string[], yes: string[], related: string[],
- *           events: Map<string, { firstAt: Date | string, id: string }> }} input
+ *           events: Map<string, { firstAt: Date | string, id: string }>, role?: string }} input
  * @returns {{ target: string | null, merge: string[], related: string[], joinedBy: "identifier" | "vector" | "model" | null }}
  */
-export function frontierClusterDecision({ identifier, strong, yes, related, events }) {
+export function frontierClusterDecision({ identifier, strong, yes, related, events, role = "primary" }) {
   const same = [...new Set([...identifier, ...strong, ...yes])].filter((id) => events.has(id));
   if (!same.length) return { target: null, merge: [], related: [...new Set(related)].filter((id) => events.has(id)), joinedBy: null };
   same.sort((left, right) => {
@@ -327,11 +359,14 @@ export function frontierClusterDecision({ identifier, strong, yes, related, even
     const b = /** @type {any} */ (events.get(right));
     return new Date(a.firstAt).getTime() - new Date(b.firstAt).getTime() || Number(a.id) - Number(b.id);
   });
-  const [target, ...merge] = same;
+  const [target, ...rest] = same;
+  const merge = role === "primary" ? rest : [];
+  const alsoRelated = role === "primary" ? [] : rest;
   // How the item itself was matched, by its strongest evidence: an item that
   // bridged a vector match into an older identifier match joined by identifier.
   const joinedBy = identifier.some((id) => events.has(id)) ? "identifier" : strong.some((id) => events.has(id)) ? "vector" : "model";
-  return { target, merge, related: [...new Set(related)].filter((id) => events.has(id) && !same.includes(id)), joinedBy };
+  return { target, merge,
+    related: [...new Set([...related, ...alsoRelated])].filter((id) => events.has(id) && id !== target && !merge.includes(id)), joinedBy };
 }
 
 /** @param {unknown} error */
@@ -458,7 +493,7 @@ export class FrontierEvents {
     const identifier = await this.#identifierEvents(item);
     const candidates = modelKey ? await this.#vectorCandidates(item, modelKey, now) : [];
     const reading = frontierVectorReading(candidates.map((candidate) => ({ eventId: candidate.eventId, cosine: candidate.cosine,
-      samePublisher: candidate.samePublisher })));
+      samePublisher: candidate.samePublisher, otherWork: candidate.otherWork })));
     /** @type {string[]} */
     const yes = [];
     /** @type {string[]} */
@@ -505,7 +540,7 @@ export class FrontierEvents {
     if (!entities.length) return [];
     const since = new Date(new Date(item.timeline_at).getTime() - FRONTIER_CLUSTER_WINDOW_MS);
     const rows = (await this.database.query(`SELECT i.id, i.event_id, i.title_raw, i.title_zh, i.summary_zh, i.published_at, s.name AS source_name,
-        s.owner_entity AS owner_entity, 1 - (v.embedding <=> own.embedding) AS cosine
+        s.owner_entity AS owner_entity, i.doi AS doi, i.pmid AS pmid, 1 - (v.embedding <=> own.embedding) AS cosine
       FROM evimed_frontier.items i
       JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       JOIN evimed_frontier.item_vectors v ON v.item_id = i.id AND v.model_key = $2
@@ -516,6 +551,7 @@ export class FrontierEvents {
     return rows.map((row) => ({
       itemId: String(row.id), eventId: String(row.event_id), cosine: Number(row.cosine),
       samePublisher: Boolean(item.owner_entity) && row.owner_entity === item.owner_entity,
+      otherWork: otherWork(item, row),
       sourceName: row.source_name, titleRaw: row.title_raw, titleZh: row.title_zh, summaryZh: row.summary_zh, publishedAt: iso(row.published_at),
     }));
   }
@@ -535,14 +571,15 @@ export class FrontierEvents {
       const named = [...new Set([...found.identifier, ...found.strong, ...found.yes, ...found.related])];
       const events = await this.#resolveEvents(client, named);
       const survivorOf = (/** @type {string} */ id) => events.get(id)?.id ?? null;
+      const role = frontierEventRole({ sourceType: item.source_type, evidenceType: item.evidence_type });
       const decision = frontierClusterDecision({
+        role,
         identifier: found.identifier.map(survivorOf).filter(/** @returns {id is string} */ (id) => Boolean(id)),
         strong: found.strong.map(survivorOf).filter(/** @returns {id is string} */ (id) => Boolean(id)),
         yes: found.yes.map(survivorOf).filter(/** @returns {id is string} */ (id) => Boolean(id)),
         related: found.related.map(survivorOf).filter(/** @returns {id is string} */ (id) => Boolean(id)),
         events: new Map([...events.values()].map((event) => [event.id, event])),
       });
-      const role = frontierEventRole({ sourceType: item.source_type, evidenceType: item.evidence_type });
       let target = decision.target;
       let outcome = /** @type {"created" | "joined" | "merged"} */ ("joined");
       if (!target) {
