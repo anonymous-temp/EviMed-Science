@@ -86,9 +86,13 @@ test('/工具 binds the conversation it was typed in, and writes nothing into th
 
 test('the blank conversation is the headline and the composer; a chosen tool is a chip under the composer, with its starters', () => {
   const f = frame();
-  // Nothing between the headline and the composer, and no page of the tool
-  // above it (2026-09-22: it stretched the composer to the frame's edge).
-  assert.equal(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset'), false);
+  // Nothing between the headline and the composer until a tool is chosen,
+  // and no page of the tool then either (2026-09-22: it stretched the
+  // composer to the frame's edge): the hero seat carries the same chip and
+  // starters the composer dock does, held to the composer's width.
+  const hero = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset');
+  assert.equal(hero.options.priority, -1);
+  assert.equal(renderStatic(hero.component), '', 'nothing between the headline and the composer');
   assert.equal(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.input.dock'), false);
   const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
   const starters = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool-starters');
@@ -103,8 +107,14 @@ test('the blank conversation is the headline and the composer; a chosen tool is 
   assert.match(drawn, /约 20–40 分钟/);
   assert.match(drawn, /围绕一个临床问题检索并综合证据/, "the summary is the chip's tooltip, not a block above the composer");
   assert.doesNotMatch(drawn, /你会拿到|做不到/);
-  // The conversation is blank (no session on the hub yet): the starters show.
+  // The conversation is blank (no session on the hub yet): the starters show,
+  // and the hero seat draws the chip and the starters within the composer's width.
   assert.match(renderStatic(starters.component), /≥70 岁人群阿司匹林一级预防/);
+  const heroDrawn = renderStatic(hero.component);
+  assert.match(heroDrawn, /max-width:var\(--dsh-composer-card-max-width, ?952px\)/);
+  assert.match(heroDrawn, /临床证据深度分析/);
+  assert.match(heroDrawn, /≥70 岁人群阿司匹林一级预防/);
+  assert.doesNotMatch(heroDrawn, /flex:1 1 100%|你会拿到/);
   // Something asked: the starters go, the chip stays.
   f.kit.hub.deliver('session', { sessionId: 'session-a', running: true });
   f.kit.hub.deliver('capability', { capabilityId: 'clinical-evidence-synthesis', sessionId: 'session-a' });
@@ -159,4 +169,5 @@ test('without the command or trigger services the rest still stands', () => {
   assert.equal(f.sources.length, 0);
   assert.ok(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool'));
   assert.ok(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool-starters'));
+  assert.ok(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset'));
 });

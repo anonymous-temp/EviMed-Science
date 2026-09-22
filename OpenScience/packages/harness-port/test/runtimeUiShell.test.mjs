@@ -76,6 +76,8 @@ test('the stylesheet removes the left column, keeps the right panel resizable, a
   assert.doesNotMatch(css, /添加附件|Add attachment/, 'the paperclip is not hidden');
   // One hosted permission preset: the access-mode chip chooses nothing.
   assert.ok(css.includes('button[aria-label^="访问模式"],button[aria-label^="Access mode"]{display:none'));
+  // The reading width is the kernel's formula, not a width a stray drag set.
+  assert.ok(css.includes('.wSkVaW_root{--dsh-chat-content-width:clamp(680px,calc(var(--dsh-conversation-column-width,0px) * .64),920px) !important}'));
   assert.match(css, /aria-label="添加工作区"/);
   assert.match(css, /_previewBadge"\]:empty/);
   // The hero's workspace chip is hidden as a button — not the whole row, whose

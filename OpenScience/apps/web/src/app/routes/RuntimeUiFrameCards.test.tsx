@@ -171,8 +171,17 @@ describe("the tools on a blank conversation", () => {
     const sent: Array<[string, Record<string, unknown>]> = [];
     kit.hub.attach((type: string, fields: Record<string, unknown>) => { sent.push([type, fields]); });
     applyCommands(ctx, {}, target, undefined, kit);
-    // No page above the composer: the hero seat is left to the kernel.
-    expect(components.has("conversation.hero.agentPreset")).toBe(false);
+    // The hero seat carries the chip and the starters within the composer's
+    // width; no page of the tool above the composer.
+    const Hero = components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
+    const heroView = render(<Hero />);
+    expect(heroView.container.textContent).toBe("");
+    act(() => kit.hub.deliver("capability", { capabilityId: "clinical-evidence-synthesis", sessionId: "session-a" }));
+    expect(heroView.container.querySelector("[data-evimed-hero-tools]")).not.toBeNull();
+    expect(heroView.container.querySelector("[data-evimed-tool-page]")).toBeNull();
+    expect(heroView.getByText("临床证据深度分析")).toBeInTheDocument();
+    heroView.unmount();
+    act(() => kit.hub.deliver("session", { sessionId: "session-b" }));
     const Chip = components.get("evimed-tool") as (props: Record<string, unknown>) => React.ReactElement;
     const Starters = components.get("evimed-tool-starters") as (props: Record<string, unknown>) => React.ReactElement;
     const view = render(<><Chip /><Starters /></>);

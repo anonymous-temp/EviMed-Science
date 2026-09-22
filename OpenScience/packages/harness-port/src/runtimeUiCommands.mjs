@@ -318,6 +318,26 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         }, h('span', { style: starterText }, starter))));
     };
     kit.guarded('tool starters', () => kit.occupy({ slot: 'conversation.composer.dock', id: 'evimed-tool-starters', order: 20 }, Starters));
+
+    /**
+     * The same chip and starters on the blank conversation. The composer dock
+     * renders only inside a session (`variant === "composer" && sessionId`),
+     * so on the hero — where a tool chosen on 科研工具 lands — the seat under
+     * the headline carries them instead, held to the composer's width and
+     * centred, so nothing there can stretch the composer again. The hero
+     * seat renders only while the conversation is blank, so the two never
+     * show at once.
+     */
+    const HeroTools = () => {
+      const id = useTool();
+      const model = id ? toolPageModel(catalogue, id) : null;
+      if (!model) return null;
+      return h('div', {
+        'data-evimed-hero-tools': model.id,
+        style: { width: '100%', maxWidth: 'var(--dsh-composer-card-max-width, 952px)', margin: '4px auto 0', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '6px', minWidth: 0 },
+      }, h(ToolChip), h(Starters));
+    };
+    kit.guarded('hero tools', () => kit.occupy({ slot: 'conversation.hero.agentPreset', priority: -1 }, HeroTools));
   }
 
   // `@` knowledge-base references.
