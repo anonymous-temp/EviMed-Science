@@ -242,9 +242,19 @@ test("a safety alert is a safety feed's item, or a regulator's own notice the ed
   // (2026-09-22: a 参比制剂目录 announcement was shown red), so there the
   // evidence type decides — and never for a journal or a news site.
   assert.equal(frontierSafetyAlert({ source: { safety_feed: true, source_type: "regulator" }, evidenceType: "regulatory-decision" }), true);
-  assert.equal(frontierSafetyAlert({ source: { safety_feed: false, source_type: "regulator" }, evidenceType: "safety-notice" }), true);
-  assert.equal(frontierSafetyAlert({ source: { safety_feed: false, source_type: "regulator" }, evidenceType: "regulatory-decision" }), false);
-  assert.equal(frontierSafetyAlert({ source: { safety_feed: false, source_type: "media" }, evidenceType: "safety-notice" }), false);
+  assert.equal(frontierSafetyAlert({ source: { safety_feed: false, source_type: "regulator" }, evidenceType: "safety-notice", lane: "safety" }), true);
+  // A mixed feed's food recall (FDA's recall feed, first production hour): the
+  // edit files it under 公共卫生, so it is not a drug-safety alert.
+  assert.equal(frontierSafetyAlert({ source: { safety_feed: false, source_type: "regulator" }, evidenceType: "safety-notice", lane: "public-health" }), false);
+  // Recalls: the regulator's own class decides, whatever the feed says.
+  const recalls = { safety_feed: true, source_type: "regulator" };
+  assert.equal(frontierSafetyAlert({ source: recalls, evidenceType: "safety-notice", facts: { recall_class: "Class I" } }), true);
+  assert.equal(frontierSafetyAlert({ source: recalls, evidenceType: "safety-notice", facts: { recall_class: "Class II" } }), false);
+  assert.equal(frontierSafetyAlert({ source: recalls, evidenceType: "safety-notice", facts: { recall_class: "Class III" } }), false);
+  assert.equal(frontierSafetyAlert({ source: recalls, evidenceType: "safety-notice", facts: { recall_class: "Not Yet Classified" } }), false);
+  assert.equal(frontierSafetyAlert({ source: { safety_feed: false, source_type: "media" }, evidenceType: "safety-notice", facts: { recall_class: "Class I" } }), false);
+  assert.equal(frontierSafetyAlert({ source: { safety_feed: false, source_type: "regulator" }, evidenceType: "regulatory-decision", lane: "safety" }), false);
+  assert.equal(frontierSafetyAlert({ source: { safety_feed: false, source_type: "media" }, evidenceType: "safety-notice", lane: "safety" }), false);
   assert.equal(frontierSafetyAlert({ source: { safety_feed: false, source_type: "journal" }, evidenceType: "safety-notice" }), false);
   assert.equal(frontierSafetyAlert({ source: null, evidenceType: null }), false);
 });

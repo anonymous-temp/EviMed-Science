@@ -310,18 +310,27 @@ export function frontierTimelineAt(visibleAt, publishedAt) {
 
 /**
  * Whether an item is a safety alert: shown red, never scored out, straight
- * into 精选 (plan §4.3, §6.3). An official safety feed says so by its registry
- * row (§10.3.8). A regulator's mixed column cannot be marked whole — NMPA's
- * 药品其他公告通告 carries ADR bulletins beside reference-product catalogues and
- * customs pilots — so there the edit's evidence type decides, and only a
- * regulator's own notice can become one. Found on the first live run
- * (2026-09-22): with that column marked as a safety feed, a 参比制剂目录
- * announcement and a 进口药品通关 pilot were shown as 安全警示.
- * @param {{ source: any, evidenceType: string | null | undefined }} input
+ * into 精选 (plan §4.3, §6.3).
+ *
+ * - A recall carries the regulator's own severity scale, and only Class I —
+ *   a reasonable probability of serious harm or death — is an alert; Class II
+ *   and III are scored like any regulatory decision. openFDA's enforcement
+ *   feed held 59 Class II recalls to 4 Class I in its first production week
+ *   (2026-09-22); marked whole, 精选 would have been a recall list.
+ * - An official safety feed says so by its registry row (§10.3.8).
+ * - A regulator's mixed column cannot be marked whole — NMPA's 药品其他公告通告
+ *   carries ADR bulletins beside reference-product catalogues and customs
+ *   pilots, FDA's recall feed carries pasta and potato chips beside drugs and
+ *   devices — so there the edit decides: a notice it types `safety-notice` and
+ *   files under 药物安全. Both were found on the first live runs, shown red.
+ * @param {{ source: any, evidenceType: string | null | undefined, lane?: string | null, facts?: any }} input
  */
-export function frontierSafetyAlert({ source, evidenceType }) {
+export function frontierSafetyAlert({ source, evidenceType, lane = null, facts = null }) {
+  const regulatorOrFeed = source?.safety_feed === true || source?.source_type === "regulator";
+  const recallClass = typeof facts?.recall_class === "string" ? facts.recall_class.trim() : "";
+  if (recallClass) return regulatorOrFeed && /^class\s+i$/i.test(recallClass);
   if (source?.safety_feed === true) return true;
-  return source?.source_type === "regulator" && evidenceType === "safety-notice";
+  return source?.source_type === "regulator" && evidenceType === "safety-notice" && lane === "safety";
 }
 
 /**
@@ -1306,7 +1315,8 @@ export class FrontierPipeline {
         evidenceType, evidenceBasis, JSON.stringify(fields.entities), fields.entityKeys, flags,
         scoreAuthority, scores?.impact ?? null, scores?.novelty ?? null, scores?.relevance ?? null,
         scores ? scoreAuthority + scores.impact + scores.novelty + scores.relevance : null,
-        frontierSafetyAlert({ source, evidenceType }), fields.verification, fields.editorVersion, fields.editorModel, context.now]);
+        frontierSafetyAlert({ source, evidenceType, lane: fields.lane, facts: entry?.facts }), fields.verification, fields.editorVersion,
+        fields.editorModel, context.now]);
       if (output) {
         await client.query("UPDATE evimed_frontier.item_texts SET model_input = $2, model_input_sha256 = $3 WHERE item_id = $1",
           [item.id, result.modelInput, result.modelInputSha256]);
