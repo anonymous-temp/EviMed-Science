@@ -272,16 +272,6 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const starterStyle = { ...chipStyle, cursor: 'pointer', font: 'inherit', maxWidth: '100%' };
     const starterText = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
-    /** Which conversation is open, and whether anything has been said in it. */
-    const useBlank = () => {
-      const session = kit.useFrameState((/** @type {any} */ state) => state.session);
-      const runState = kit.useFrameState((/** @type {any} */ state) => state.runState);
-      // No session yet is the hero; a session the shell has no run for and
-      // that is not running has not been asked anything.
-      if (!session || !session.sessionId) return true;
-      return !session.running && !runState?.runId;
-    };
-
     /**
      * The chip under the composer: which tool this conversation runs, and the
      * way out of it. In a session the hero is gone, so this is the only place
@@ -303,30 +293,31 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.composer.dock', id: 'evimed-tool', order: 10 }, ToolChip));
 
     /**
-     * The tool's example questions, as pills the reader can start from, only
-     * while the conversation is blank: once something has been asked they
-     * would be three more things under every reply.
+     * The tool's example questions, as pills the reader can start from. Drawn
+     * on the hero only (below): the hero is the blank conversation by the
+     * kernel's own definition, and once something has been asked three more
+     * pills under every reply would be noise — measured on
+     * evimed-6af04c41d3f5-1, where a guess at "blank" from the run state left
+     * them under the first answer.
      */
     const Starters = () => {
       const id = useTool();
-      const blank = useBlank();
-      const model = id && blank ? toolPageModel(catalogue, id) : null;
+      const model = id ? toolPageModel(catalogue, id) : null;
       if (!model || !model.starters.length) return null;
       return h('span', { 'data-evimed-tool-starters': model.id, style: { display: 'contents' } },
         model.starters.slice(0, 3).map((/** @type {string} */ starter) => h('button', {
           key: starter, type: 'button', title: starter, style: starterStyle, onClick: () => fill(starter),
         }, h('span', { style: starterText }, starter))));
     };
-    kit.guarded('tool starters', () => kit.occupy({ slot: 'conversation.composer.dock', id: 'evimed-tool-starters', order: 20 }, Starters));
 
     /**
-     * The same chip and starters on the blank conversation. The composer dock
+     * The chip and the starters on the blank conversation. The composer dock
      * renders only inside a session (`variant === "composer" && sessionId`),
      * so on the hero — where a tool chosen on 科研工具 lands — the seat under
-     * the headline carries them instead, held to the composer's width and
-     * centred, so nothing there can stretch the composer again. The hero
-     * seat renders only while the conversation is blank, so the two never
-     * show at once.
+     * the headline carries the chip instead, with the starters beside it,
+     * held to the composer's width and centred, so nothing there can stretch
+     * the composer again. The hero seat renders only while the conversation
+     * is blank, so the chip never shows twice.
      */
     const HeroTools = () => {
       const id = useTool();
