@@ -132,7 +132,7 @@ const marker = (title, name) => new RegExp(`\\[${name}:([a-z0-9-]+)\\]`).exec(ti
 /**
  * An editor whose judgement is written into the titles: [offtopic], [notnews],
  * [lane:x], [score:n] (the model's share of the total), [pending],
- * [edit-throws], [screen-error].
+ * [edit-throws], [screen-error], [digest] (a piece covering several stories).
  */
 function fakeEditor() {
   /** @type {{ screen: string[][], edit: string[] }} */
@@ -150,7 +150,7 @@ function fakeEditor() {
         verdicts.set(input.key, {
           medical: !input.title.includes("[offtopic]"), news: !input.title.includes("[notnews]"),
           lane: wanted && input.allowedLanes.includes(wanted) ? wanted : input.allowedLanes[0],
-          specialties: ["cardiology"], language: "en",
+          specialties: ["cardiology"], language: "en", digest: input.title.includes("[digest]"),
         });
       }
       return { verdicts, errors, calls: 1 };
@@ -239,12 +239,20 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   const backfill = await deliver({ source_id: "m-stat", title: "An old story", backfill: true });
   const chinese = await deliver({ source_id: "m-cn", title: "国家药监局批准一款新药上市", summary: "国".repeat(100) });
   const company = await deliver({ source_id: "c-novo", title: "Novo Nordisk announces topline results", summary: "N".repeat(100) });
+  const column = await deliver({ source_id: "m-stat", title: "Pharmalittle: two read-outs, a recall, and more [digest]", summary: "P".repeat(200),
+    registry_ids: ["NCT07000001", "NCT03574597"] });
   for (const id of [safety, registered, results, chinese, company]) {
     plugin.texts.set(id.pluginEntryId, { entry_id: id.pluginEntryId, revision: 1, status: "unavailable", abstract: null, body_excerpt: null, enrichment: {} });
   }
 
   const first = await pipeline.processBatch();
-  assert.equal(first.claimed, 10, "the backfill entry is never claimed");
+  assert.equal(first.claimed, 11, "the backfill entry is never claimed");
+  // A piece covering several stories is marked by screening, and the trials it
+  // names are mentions: no cluster key of its own is written for them.
+  const columnItem = await item(Number((await entry(column.id)).item_id));
+  assert.ok(columnItem.flags.includes("digest"));
+  assert.deepEqual((await database.query("SELECT key FROM evimed_frontier.item_keys WHERE item_id=$1 AND key LIKE 'reg:%'", [columnItem.id])).rows, [],
+    "a story that names two trials states mentions, not identity");
   assert.equal((await entry(backfill.id)).state, "backfill");
   assert.deepEqual([(await entry(masthead.id)).state, (await entry(masthead.id)).state_reason], ["dropped", "masthead"]);
   assert.deepEqual([(await entry(offtopic.id)).state, (await entry(offtopic.id)).state_reason], ["screened-out", "not-medical"]);

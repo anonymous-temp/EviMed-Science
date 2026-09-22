@@ -42,6 +42,7 @@ export function sourceTypeTone(sourceType: string): ChipTone {
  */
 export const CARD_FLAG_KEYS: ReadonlySet<string> = new Set([
   "preprint", "press-release", "retracted", "corrected", "expression-of-concern", "published-version", "registry-unpublished", "data-updated",
+  "digest",
 ]);
 
 /** At most this many specialties on a card; the rest are one filter away. */

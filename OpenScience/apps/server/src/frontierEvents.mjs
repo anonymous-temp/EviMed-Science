@@ -70,6 +70,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { FRONTIER_MENTION_REGISTRY_IDS, FRONTIER_MENTION_SOURCE_TYPES } from "@evimed/domain";
 import { bumpFrontierVersion, FRONTIER_META_KEYS, migrateFrontier } from "./frontierPersistence.mjs";
 
 const MINUTE = 60_000;
@@ -275,7 +276,8 @@ export function frontierClusterKeys(item) {
   // pulled a results posting of an unrelated trial into it by identifier
   // (2026-09-22, `f765b9db907eba1d`). A registry's own entry, a journal's
   // paper or a regulator's notice keeps every id it states.
-  const mentions = MENTION_SOURCE_TYPES.has(String(item?.source_type ?? "")) && registered.length >= 2;
+  const mentions = FRONTIER_MENTION_SOURCE_TYPES.includes(String(item?.source_type ?? ""))
+    && registered.length >= FRONTIER_MENTION_REGISTRY_IDS;
   if (!mentions) for (const value of registered) keys.add(`reg:${value}`);
   const identity = /^reg:([^:]+):/.exec(String(item?.identity_key ?? ""));
   if (identity) keys.add(`reg:${identity[1].trim().toUpperCase()}`);
@@ -293,9 +295,6 @@ export function otherWork(item, other) {
   if (doi[0] && doi[1] && doi[0] !== doi[1]) return true;
   return Boolean(pmid[0] && pmid[1] && pmid[0] !== pmid[1]);
 }
-
-/** Source types whose items write about registrations rather than being one. */
-const MENTION_SOURCE_TYPES = new Set(["media", "company"]);
 
 /** An item's entity keys that make candidates. @param {unknown} keys @returns {string[]} */
 export function frontierClusterEntities(keys) {
@@ -442,6 +441,12 @@ export class FrontierEvents {
   /**
    * One bounded round of clustering: published items without an event, oldest
    * first, each placed in an event (made when none fits).
+   *
+   * A 「多事汇总」 — a daily column, a week's round-up — is left out and is no
+   * candidate for anyone else. It is not one event's report, and as a member
+   * it made its event a magnet for every story it mentioned: one event held
+   * Novo's capital-markets day, an ADHD read-out and a depression trial at
+   * once (2026-09-22). It stays a card of its own in the feed.
    * @param {{ limit?: number }} [options]
    */
   async clusterPending({ limit = 25 } = {}) {
@@ -461,7 +466,7 @@ export class FrontierEvents {
         s.name AS source_name, s.owner_entity AS owner_entity
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE i.state = 'published' AND i.event_id IS NULL AND i.visible_at >= $1::timestamptz
-        AND (i.verification <> 'pending' OR i.visible_at < $2::timestamptz) ${vectorWait}
+        AND NOT ('digest' = ANY(i.flags)) AND (i.verification <> 'pending' OR i.visible_at < $2::timestamptz) ${vectorWait}
       ORDER BY i.visible_at, i.id LIMIT $3`, values)).rows ?? [];
     if (!rows.length) return summary;
     const allowModel = await this.#modelAllowed();
@@ -545,7 +550,7 @@ export class FrontierEvents {
       JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       JOIN evimed_frontier.item_vectors v ON v.item_id = i.id AND v.model_key = $2
       CROSS JOIN (SELECT embedding FROM evimed_frontier.item_vectors WHERE item_id = $1 AND model_key = $2) own
-      WHERE i.state = 'published' AND i.id <> $1 AND i.event_id IS NOT NULL
+      WHERE i.state = 'published' AND i.id <> $1 AND i.event_id IS NOT NULL AND NOT ('digest' = ANY(i.flags))
         AND i.timeline_at >= $3::timestamptz AND i.timeline_at <= $4::timestamptz AND i.entity_keys && $5::text[]
       ORDER BY i.timeline_at DESC, i.id DESC LIMIT ${VECTOR_CANDIDATES}`, [item.id, modelKey, since, now, entities])).rows ?? [];
     return rows.map((row) => ({

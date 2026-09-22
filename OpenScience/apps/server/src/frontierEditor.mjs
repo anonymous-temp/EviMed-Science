@@ -95,12 +95,13 @@ export const FRONTIER_SCREEN_INSTRUCTIONS = [
   "3. lane：从该条目的 lanes 里选一个最合适的栏目；lanes 只有一个值时就填这个值。",
   "4. specialties：从专科词表里选 0 到 3 个最相关的专科，按相关程度排列；没有明确的专科就给空数组。",
   "5. language：条目文字的语言，中文填 \"zh\"，英文填 \"en\"，其他语言填 ISO 639-1 的两字母代码。",
+  "6. digest：这条是不是一篇把多件事放在一起讲的汇总——日报、周报、每日专栏、多条简讯的合集、股市/行业动态综述。只讲一件事（一项研究、一个决定、一份文件、一起事件）的报道填 false。",
   "",
   `栏目词表：${LANE_LINE}。`,
   "栏目说明：safety 药物安全只收药品、疫苗、生物制品、医疗器械和膳食补充剂的安全信息（不良反应、警示、召回、说明书安全性修订）；普通食品的召回和过敏原未标注属于 public-health 公共卫生。",
   `专科词表：${SPECIALTY_LINE}。`,
   "",
-  "输出格式：{\"items\":[{\"id\":\"1\",\"medical\":true,\"news\":true,\"lane\":\"evidence\",\"specialties\":[\"cardiology\"],\"language\":\"en\"}]}",
+  "输出格式：{\"items\":[{\"id\":\"1\",\"medical\":true,\"news\":true,\"lane\":\"evidence\",\"specialties\":[\"cardiology\"],\"language\":\"en\",\"digest\":false}]}",
   "items 的条数必须与收到的条目数相同；id 原样照抄，每个 id 恰好出现一次；只能使用词表里的英文键；不要输出任何解释。",
 ].join("\n");
 
@@ -542,7 +543,7 @@ export function verifyEdit(answer, item, modelInput) {
 
 /**
  * @typedef {{ key: string, title: string, sourceName: string, excerpt?: string | null, allowedLanes: string[] }} ScreenInput
- * @typedef {{ medical: boolean, news: boolean, lane: string, specialties: string[], language: string }} ScreenVerdict
+ * @typedef {{ medical: boolean, news: boolean, lane: string, specialties: string[], language: string, digest: boolean }} ScreenVerdict
  * @typedef {{ verification: "passed" | "repaired" | "title-only" | "pending", output: FrontierEditOutput | null,
  *             modelInput: string, modelInputSha256: string, attempts: number, issues: string[],
  *             numbers: { checked: number, missing: Array<{ field: string, raw: string }>, unitMismatches: Array<{ field: string, raw: string }> } | null,
@@ -571,7 +572,7 @@ export function validateScreen(batch, answer) {
     const language = typeof entry.language === "string" ? entry.language.trim().toLowerCase() : "";
     if (!/^([a-z]{2,3}|und)$/.test(language)) return null;
     verdicts.set(input.key, {
-      medical: entry.medical, news: entry.news, lane: entry.lane,
+      medical: entry.medical, news: entry.news, lane: entry.lane, digest: entry.digest === true,
       specialties: [...new Set(/** @type {string[]} */ (entry.specialties))].slice(0, FRONTIER_MAX_SPECIALTIES),
       language,
     });
