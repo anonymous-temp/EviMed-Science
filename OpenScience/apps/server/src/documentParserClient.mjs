@@ -18,9 +18,14 @@ import { HttpError } from "./security.mjs";
  *   current branch, but the deployed test build answered a request with no file
  *   with `data: null` and no code at all (recorded 2026-09-19), so every
  *   decision here is keyed on the HTTP status first and the error code second.
- * - A request with no `Authorization` header came back as HTTP 500 with
- *   `'AttributeError' object has no attribute 'message'` — their bug. A 500 is
- *   therefore retried once and then named, not retried like an outage.
+ * - No key is needed. Measured 2026-09-22 against the configured server: both
+ *   `/api/v1/parse/file` and `/api/v1/extract/text/file` answer 200 with the
+ *   full text for a PDF and a .docx sent with no `Authorization` header. A
+ *   Bearer header is sent only when the deployment's key file holds one (the
+ *   service's API.md describes keys; this deployment of it does not ask).
+ *   Earlier on 2026-09-19 the same server answered HTTP 500 with `'AttributeError'
+ *   object has no attribute 'message'` — their bug, so a 500 is retried once and
+ *   then named, not retried like an outage.
  * - On `develop`, `DocumentMetadataExtractor.__init__` names an undefined
  *   `chat_client`, so every metadata extraction would fail upstream and answer
  *   502 `upstream_error`. The text itself does not need that model call, so a
@@ -454,7 +459,7 @@ export class DocumentParserClient {
         throw parserError(503, status === "draining" ? "source_parser_draining" : "source_parser_unavailable",
           "Document parser health check failed.");
       }
-      return { configured: true, status, authenticated: Boolean(this.token), revision: this.revision,
+      return { configured: true, status, credential: this.token ? "file" : "none", revision: this.revision,
         ...(typeof envelope.data.environment === "string" ? { environment: envelope.data.environment.slice(0, 40) } : {}) };
     } catch (error) {
       if (error instanceof HttpError) throw error;

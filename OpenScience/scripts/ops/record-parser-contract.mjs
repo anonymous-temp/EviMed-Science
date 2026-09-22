@@ -9,9 +9,11 @@
  * the contract test replays is a verbatim answer from the server, recorded here.
  *
  * Without a key it records the two answers that need none (health and the
- * missing-file refusal). With the service-issued key it also records a success
- * from both endpoints and the 415, 422 and 401 refusals — two credits of quota,
- * since refusals are not charged.
+ * missing-file refusal). With a key it also records a success from both
+ * endpoints and the 415, 422 and 401 refusals. The deployed service has
+ * answered without any key since at least 2026-09-22, so a keyless success is
+ * the normal case in production; the key path stays for a server that turns
+ * authentication on.
  *
  * The key is read from the file `OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE` names
  * and never printed, logged or written: a recording that contains it is refused

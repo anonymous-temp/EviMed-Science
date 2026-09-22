@@ -289,10 +289,30 @@ test("health reads the service's own answer, and sends it no credential", async 
     { status: 503, body: envelope(503, { status: "draining", accepting_requests: false }) },
   ]);
   const parser = client(baseUrl, { token: "sk-never-sent" });
-  assert.deepEqual(await parser.health(), { configured: true, status: "healthy", authenticated: true, revision: REVISION, environment: "test" });
+  // `credential` says what a parse sends, `file` or `none` -- never whether the
+  // service accepted anything: this service answers without a key.
+  assert.deepEqual(await parser.health(), { configured: true, status: "healthy", credential: "file", revision: REVISION, environment: "test" });
   await assert.rejects(parser.health(), { code: "source_parser_draining" });
   assert.equal(seen.every((request) => request.headers.authorization === undefined), true);
   assert.deepEqual(await new DocumentParserClient().health(), { configured: false });
+});
+
+test("without a key file a parse sends no Authorization header and still gets its text", async (t) => {
+  // The parser team's service answers without a key (measured 2026-09-22);
+  // an empty key file must not stop a document from being parsed.
+  const { baseUrl, seen } = await withParser(t, [
+    { status: 200, body: envelope(200, { content: "EviMed parser probe: aspirin 100 mg daily.\n" }) },
+  ]);
+  const root = await mkdtemp(path.join("/tmp", "evimed-parser-nokey-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const file = path.join(root, "probe.pdf");
+  await writeFile(file, PDF);
+  const parser = client(baseUrl);
+  const result = await parser.parse({ path: file, mimeType: "application/pdf", sha256: sha(PDF), sourceId: "src" });
+  assert.equal(result.text, "EviMed parser probe: aspirin 100 mg daily.\n");
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].headers.authorization, undefined);
+  assert.equal((await client(baseUrl, { fetchImpl: async () => new Response(envelope(200, { status: "healthy" }), { status: 200 }) }).health()).credential, "none");
 });
 
 test("a DOI is kept in its bare form only when it has a DOI's shape", () => {
