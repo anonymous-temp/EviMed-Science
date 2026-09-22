@@ -1,0 +1,54 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<style>
+.st{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.st .node{position:relative;padding-top:30px}
+.st .node .no{position:absolute;left:12px;top:9px;font-size:11.5px;color:var(--t3);font-family:"DejaVu Sans Mono",monospace}
+.st .node .who{position:absolute;right:10px;top:8px;font-size:11px;border-radius:6px;padding:0 7px;border:1px solid var(--line);background:var(--s1);color:var(--t2)}
+.st .node.vi .who{background:#fff;border-color:#dcd6f7;color:var(--violet)}
+.st .node b{font-size:13.5px}.st .node span{font-size:12px}
+.st .node em{display:block;font-style:normal;margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);color:var(--brand);font-size:11.5px;font-weight:600}
+.fn{display:grid;grid-template-columns:repeat(6,1fr);gap:0;margin-top:4px}
+.fn div{text-align:center;padding:8px 4px;border-right:1px solid var(--line)}.fn div:last-child{border-right:0}
+.fn b{display:block;font-size:20px;line-height:1.2}.fn span{font-size:11.5px;color:var(--t3)}
+</style>
+<div id="shot" class="dg">
+  <div class="lane"><h3>入库前 —— 全部是程序：把「信源给的东西」变成「一条干净、不重复、信息齐全的记录」</h3>
+    <div class="st">
+      <div class="node"><i class="no">01</i><i class="who">程序</i><b>解析</b><span>九种读法各一个纯函数：原始响应 → 归一化条目。只取白名单字段，联系人邮箱电话之类在这一步就丢掉。</span><em>首发实测 479 条/天</em></div>
+      <div class="node"><i class="no">02</i><i class="who">程序</i><b>归一</b><span>规范化链接；抽 DOI、PMID、NCT 等注册号；日期统一成 UTC 并记下精度（时刻 / 只有日 / 推断）；转码、去标签、判语种。</span><em>1.3% 的订阅源条目没有日期</em></div>
+      <div class="node hl"><i class="no">03</i><i class="who">程序</i><b>去残缺</b><span>没标题没链接的丢；勘误、目录、编委会不当新闻；订阅源里的陈年旧条目标为「回填」不进时间轴；缺摘要的挂起等补全。</span><em>订阅源返回的条目 79% 是 30 天前的旧货</em></div>
+      <div class="node"><i class="no">04</i><i class="who">程序</i><b>去重</b><span>同一 DOI、PMID、注册号、规范链接只留一条，其余记为「另一来路」。先去重后花钱：重复的条目不会走到模型。</span><em>3.3% 的 DOI 从不止一路进来</em></div>
+      <div class="node"><i class="no">05</i><i class="who">程序</i><b>补全</b><span>期刊条目去 PubMed、Europe PMC 取摘要与文献类型；公告和新闻取正文；试验注册号取分期与状态；查开放获取。</span><em>Crossref 自带摘要的只有 44%</em></div>
+    </div>
+  </div>
+  <div class="down">↓</div>
+  <div class="lane" style="border-color:#dcd6f7;background:#fbfaff"><h3>入库时 —— 模型只出现在紫色的两步，每条目一生只花一次钱；程序紧跟着复核</h3>
+    <div class="st">
+      <div class="node vi"><i class="no">06</i><i class="who">小模型 · 20 条一批</i><b>初筛</b><span>是不是医学或医学相关的 AI？是不是新闻？归哪一栏、哪几个专科？只看标题和前三百字。</span><em>预计挡下约七成</em></div>
+      <div class="node vi"><i class="no">07</i><i class="who">小模型 · 逐条</i><b>翻译 + 导读 + 打分</b><span>一次调用同时给出：中文标题、两三句导读、为什么值得看、专科、实体、三项分数。药名按术语表统一译法。</span><em>每条约 0.4 分钱</em></div>
+      <div class="node hl"><i class="no">08</i><i class="who">程序</i><b>复核</b><span>导读里每个数字必须在原文里逐字找到；栏目、专科、证据类型必须在词表里；不合格带着具体问题重写一次，再不行只出标题。</span><em>目标：一次通过 ≥ 90%</em></div>
+      <div class="node"><i class="no">09</i><i class="who">程序</i><b>标签</b><span>来源类型取自登记表；证据类型模型先判、PubMed 文献类型到了由程序确认或改正；权威分由程序给；预印本、新闻稿、无摘要、涉华、已撤稿等标记。</span><em>能由程序定的标签不问模型</em></div>
+      <div class="node"><i class="no">10</i><i class="who">程序</i><b>向量与检索词</b><span>中文标题加导读加原标题做嵌入；用平台自己的分词器写全文检索词列。此刻条目对读者可见。</span><em>发布</em></div>
+    </div>
+  </div>
+  <div class="down">↓</div>
+  <div class="lane" style="margin-bottom:8px"><h3>入库后 —— 把散条目编成成品；结果都是预先算好的，页面只读</h3>
+    <div class="st">
+      <div class="node"><i class="no">11</i><i class="who">程序 + 拿不准时问模型</i><b>事件聚类</b><span>标识号相同直接并；同实体、7 天内、向量相近的并；相似度落在中间地带的成对问一次模型。</span></div>
+      <div class="node vi"><i class="no">12</i><i class="who">小模型</i><b>事件综述</b><span>从成员条目综合「事实说明」；来了新的一手来源就重写，旧版留痕。</span></div>
+      <div class="node"><i class="no">13</i><i class="who">程序</i><b>精选与热度</b><span>过线进精选、每源上限、每栏保底、安全通告直进；热点榜每 10 分钟重算一次。</span></div>
+      <div class="node"><i class="no">14</i><i class="who">程序</i><b>撤稿与更正传播</b><span>撤稿、更正、关注声明按 DOI 找到原条目，自动挂上「已撤稿 / 已更正」，收藏过的人收到提醒。</span></div>
+      <div class="node vi"><i class="no">15</i><i class="who">小模型 · 每天一次</i><b>日报</b><span>北京时间 07:30 定稿，之后不再变；随后按每个人的推送钟点送达。</span></div>
+    </div>
+  </div>
+  <div class="fn">
+    <div><b>479</b><span>首发信源每天采到（实测）</span></div>
+    <div><b>约 450</b><span>去残缺、去重之后</span></div>
+    <div><b>约 150</b><span>过初筛、进入打分</span></div>
+    <div><b>15–30</b><span>每天精选</span></div>
+    <div><b>约 1.4 元</b><span>首发每天模型花费</span></div>
+    <div><b>≤ 45 分钟</b><span>安全警示从发布到可见</span></div>
+  </div>
+  <div class="note">实测口径：2026-09-21 对首发 267 个信源中的 259 个做了一次采集干跑（另 8 个是列表页，未计）。信源全量上线后约为每天 1,000–1,200 条、过初筛约 300 条、模型花费约 2.8 元，每日预算上限 10 元不变。</div>
+</div>
+<div class="cap">图 12 · 处理与入库：十五步，模型只出现在四步（设计稿，数字为干跑实测与估算）</div>

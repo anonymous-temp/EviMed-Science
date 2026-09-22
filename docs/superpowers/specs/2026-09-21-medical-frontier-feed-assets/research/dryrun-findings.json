@@ -1,0 +1,8 @@
+{
+  "_about": "Corrections the 2026-09-21 ingestion dry run (tools/dryrun_ingest.py) forced on the registry. classify_registry.py applies them after the reachability rules: a source that answers is not yet a source that publishes.",
+  "chinagp": {
+    "max_tier": "P1",
+    "reason": "订阅源可读但内容停在 2021–2022 年（两个订阅源都是），改读期刊网站的列表页",
+    "note": "2026-09-21 干跑实测：rss_first 与 rss_dqml 两个订阅源都返回 200 且有条目，但条目的 DOI 年份是 2021、2022，订阅源早已停更；探测工具因条目不带日期而没有发现。"
+  }
+}

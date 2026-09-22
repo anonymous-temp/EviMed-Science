@@ -1,0 +1,47 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<style>
+.eg{display:grid;grid-template-columns:1.25fr 1fr 1.25fr 1fr;gap:12px}
+.eg .node{display:flex;flex-direction:column}
+.eg .node .n{font-size:22px;font-weight:700;color:var(--t1);line-height:1.2;margin:2px 0 4px}
+.eg .node .n small{font-size:12px;font-weight:400;color:var(--t3);margin-left:6px}
+.eg .node ul{margin:6px 0 0;padding-left:16px;color:var(--t2);font-size:12.5px;line-height:1.55}
+.eg .node span.tag,.tag{display:inline-block;font-size:11.5px;border-radius:6px;padding:1px 7px;margin-right:4px;background:var(--s1);color:var(--t2);border:1px solid var(--line)}
+.tag.g{background:var(--brand-soft);border-color:var(--brand200);color:var(--brand)}
+.tag.r{background:var(--danger-soft);border-color:#f0cfcc;color:var(--danger)}
+.wire{display:grid;grid-template-columns:1.25fr 1fr 1.25fr 1fr;gap:12px;text-align:center;color:var(--t3);font-size:12px;margin:4px 0}
+</style>
+<div id="shot" class="dg">
+  <div class="lane"><h3>调度 —— 只有一个，在北京控制面的 frontierWorker 里</h3>
+    <div class="flow">
+      <div class="node"><b>信源登记表</b><span>753 行数据：读法、地址、节奏、出口、梯队。运行态（下次轮询时间、ETag、连续失败数）在库表 sources 里。</span></div><div class="arr">→</div>
+      <div class="node hl"><b>调度器</b><span>每 5 秒取到期的信源；安全与监管优先；每个主机一个令牌桶（Crossref、NCBI 串行）；节奏随信源的实际产出自动快慢。</span></div><div class="arr">→</div>
+      <div class="node"><b>任务账本 frontier-collect</b><span>平台现成的租约式任务：领取、续租、失败退避、至少一次。任务按出口分给下面四个采集器。</span></div>
+    </div>
+  </div>
+  <div class="wire"><div>↓ 进程内</div><div>↓ 北京主机上的浏览器容器</div><div>↑ 节点自己来领任务（只有出站连接）</div><div>↓ 当成普通订阅源读</div></div>
+  <div class="eg">
+    <div class="node hl"><b>A · 北京直连采集器</b><div class="n">559<small>个信源 · 首发 267</small></div>
+      <span>跑在控制面进程里，不另起服务。</span>
+      <ul><li>Crossref、PubMed、Europe PMC、openFDA、ClinicalTrials.gov、EMA、WHO</li><li>医保局、政府网、疾控局、科学网等国内站</li><li>约 2,700 次请求/天（首发），带条件请求，多数返回 304</li></ul></div>
+    <div class="node"><b>B · 无头浏览器</b><div class="n">67<small>个 · 第二阶段先上 12</small></div>
+      <span>北京主机上自己的 Chromium 容器渲染，按同一套列表选择器解析；AgentBay 只作后备。</span>
+      <ul><li>国家药监局、药审中心、器审中心、卫健委（瑞数防护）</li><li>脚本绘制的境内外页面</li><li>安全栏目 30 分钟一轮，其余 2 小时</li></ul></div>
+    <div class="node am"><b>C · 海外采集节点</b><div class="n">67<small>个 · 有了服务器就提到第二阶段</small></div>
+      <span>一台境外轻量云主机，跑<b style="display:inline;font-size:12.5px">同一份适配器代码</b>的边缘入口。</span>
+      <ul><li>FDA 官网各栏目、NICE、NIH、Fierce、BBC、卫报、Substack 专栏</li><li>抓取、解析、归一都在境外做完，只把几 KB 的条目批量推回</li><li>本地只有 7 天缓冲目录</li></ul>
+      <div style="margin-top:8px"><span class="tag r">不放数据库</span><span class="tag r">不放模型密钥</span><span class="tag r">没有用户数据</span></div></div>
+    <div class="node"><b>D · 公众号桥</b><div class="n">100<small>个 · 第二阶段</small></div>
+      <span>北京主机上的 Wechat2RSS 容器给出「这个号发了什么」，采集器 A 当普通订阅源读；全文从北京直接读文章页（第 11 章）。</span>
+      <ul><li>丁香园矩阵、医学界、监管与学会的官方号等</li><li>两个专用微信号，互为备份</li></ul></div>
+  </div>
+  <div class="wire"><div>↓</div><div>↓</div><div>↓ HTTPS 443 · 签名 · 批次幂等 · 只认登记过的主机名</div><div>↓</div></div>
+  <div class="lane" style="margin-bottom:0;border-color:#c3ece6;background:#f7fdfc"><h3>入口 —— 四路进来的东西长得一样</h3>
+    <div class="flow">
+      <div class="node hl"><b>归一化条目</b><span>信源、外部键、链接、标识号、原标题、原文摘要、发布时间、抓取时间。按「信源 + 外部键」幂等写入 entries。</span></div><div class="arr">→</div>
+      <div class="node"><b>处理与入库管线（图 12）</b><span>去残缺、去重、补全、初筛、导读与打分、复核、标签、向量、事件。全部在北京，模型调用全部记在平台用量账本上。</span></div><div class="arr">→</div>
+      <div class="node"><b>生产 PostgreSQL · evimed_frontier</b><span>唯一的数据库。页面、对话工具、日报、推送都只读它。</span></div>
+    </div>
+  </div>
+  <div class="note">全量 753 个信源、424 个主机名，一天约 7,000 次请求——单进程就够。分成四路不是为了吞吐，是为了<b>从读得到的那个网络位置去读</b>。海外节点停机，只影响它那一路；首发的 267 个信源全部走 A，不依赖任何境外设施。</div>
+</div>
+<div class="cap">图 11 · 采集：一个调度，四个出口（设计稿）</div>

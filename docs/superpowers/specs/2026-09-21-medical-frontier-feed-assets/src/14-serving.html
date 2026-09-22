@@ -1,0 +1,44 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<style>
+.sv{display:grid;grid-template-columns:1fr 1.5fr 1.1fr;gap:14px;align-items:stretch}
+.sv .lane{margin:0;display:flex;flex-direction:column;gap:8px}
+.sv .lane>h3{margin-bottom:2px}
+.ms{float:right;font-size:11.5px;color:var(--brand);font-weight:600;font-family:"DejaVu Sans Mono",monospace}
+.deg{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.deg .node b{font-size:13px}.deg .node span{font-size:12px}
+.x{color:var(--danger);font-weight:700;margin-right:4px}
+</style>
+<div id="shot" class="dg">
+  <div class="sv">
+    <div class="lane"><h3>谁在读</h3>
+      <div class="node am"><b>「前沿动态」页面</b><span>打开即出列表；每 2 分钟带着上次的版本号问一次「有新的吗」，没有就是一个空的 304。</span></div>
+      <div class="node am"><b>对话里的工具 frontier_search</b><span>运行时容器 → 内部网关（运行令牌）。每次至多 8 条、约 6 KB，5 秒超时；失败返回具名状态，对话继续。</span></div>
+      <div class="node am"><b>收件箱与飞书</b><span>日报定稿后，按每个用户的推送钟点各发一条；只发给近 14 天用过这个页面或有关注项的人。</span></div>
+      <div class="node am"><b>其他模块</b><span>存入知识库、深入研究、主动科研议程：都是从条目出发的一次普通接口调用。</span></div>
+    </div>
+    <div class="lane" style="border-color:#c3ece6;background:#f7fdfc"><h3>控制面 frontierService —— 读路径上只有这三层</h3>
+      <div class="node hl"><b>① 版本号与 304<span class="ms">&lt; 1 ms</span></b><span>每次有条目发布、热点重算、日报定稿，对应视图的版本号加一。请求带着旧版本号来，版本没变就直接回 304，不查库。</span></div>
+      <div class="node hl"><b>② 进程内缓存（公共内容，全体用户共用一份）<span class="ms">&lt; 2 ms</span></b><span>按「视图 + 栏目 + 专科 + 时间窗 + 游标」缓存 60 秒，版本号一变即失效。精选、热点、日报、信源页这四样是工人算好的成品，读的时候不再计算。</span></div>
+      <div class="node"><b>③ PostgreSQL · evimed_frontier<span class="ms">2–8 ms</span></b><span>列表走「时间轴时间 + id」的键集分页，只读窄表 items；搜索三条腿（分词全文、三元组、向量）各取 50 条做倒数排名融合，向量腿挂了就只用前两条。</span></div>
+      <div class="node"><b>叠加个人状态<span class="ms">1 次索引查询</span></b><span>收藏、隐藏、已读按「用户 + 这一页的条目 id」一次取回，在服务端合并。公共内容缓存一份，个人状态不进缓存。</span></div>
+      <div class="node vi"><b>与你相关<span class="ms">缓存 6 小时</span></b><span>画像每天算一次；候选先用专科和实体标签在库里筛到 32 条以内，再调一次重排。重排不可用时退回按标签排序，并在界面上如实说明。</span></div>
+    </div>
+    <div class="lane"><h3>读路径上永远不出现的</h3>
+      <div class="never"><span class="x">✕</span><b>大模型调用</b><br>导读、打分、事件综述、日报都是入库前算好的。唯一的例外是「中文摘要」：首次有人点开时生成一次，之后全平台共用缓存。</div>
+      <div class="never"><span class="x">✕</span><b>跨境请求</b><br>海外节点只往回推数据，页面从不向它要东西。它停机，用户看到的只是那几个境外信源不再更新。</div>
+      <div class="never"><span class="x">✕</span><b>访问原站</b><br>列表和事件页只读自己的库。原文在原站，点标题才跳过去。</div>
+      <div class="never"><span class="x">✕</span><b>按用户重复计算内容</b><br>内容全平台一份，内容的模型花费不随用户数变；个性化只是在成品上重新排序。用户数涨十倍，模型花费不变。</div>
+    </div>
+  </div>
+  <div class="lane" style="margin:14px 0 0"><h3>哪一块坏了，用户看到什么</h3>
+    <div class="deg">
+      <div class="node"><b>采集停了</b><span>列表照常，顶部一行「最近更新于 10:42」。超过 60 分钟无成功采集触发告警。</span></div>
+      <div class="node"><b>模型不可用或当日预算用完</b><span>新条目只有原标题和来源，进「全部」不进「精选」；恢复后按优先级补做。</span></div>
+      <div class="node"><b>嵌入或重排不可用</b><span>聚类退回只按 DOI、注册号与实体；搜索退回两条腿；「与你相关」按标签排。</span></div>
+      <div class="node"><b>海外节点或无头浏览器停了</b><span>对应信源在信源页标为「暂时读不到」，其余不受影响。首发 267 个信源与这两者无关。</span></div>
+      <div class="node"><b>整个模块关掉</b><span>导航那一行消失，工具不再挂载；对话、运行、交付与关掉之前逐项一致。</span></div>
+    </div>
+  </div>
+  <div class="note">图中的耗时是设计目标，不是实测。容量：一万日活、每人每天打开三次、每次翻两页，是平均每秒不到 1 次、高峰每秒十来次列表请求；每 2 分钟一次的版本轮询几乎全是 304。按现在的单实例控制面和单库，到十万日活之前不需要为这个模块加任何机器。</div>
+</div>
+<div class="cap">图 14 · 线上读取：三层、四个「永不」、五种降级（设计稿）</div>

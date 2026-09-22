@@ -1,0 +1,155 @@
+journal-general	general	The New England Journal of Medicine	新英格兰医学杂志 NEJM
+journal-general	general	NEJM Evidence	NEJM Evidence
+journal-general	general	The Lancet	柳叶刀 The Lancet
+journal-general	general	EClinicalMedicine	eClinicalMedicine（柳叶刀子刊）
+journal-general	general	EBioMedicine	eBioMedicine（柳叶刀子刊）
+journal-general	general	The Lancet Regional Health - Western Pacific	柳叶刀-区域健康（西太平洋）
+journal-general	general	The Lancet Global Health	柳叶刀-全球健康
+journal-general	general	The Lancet Public Health	柳叶刀-公共卫生
+journal-general	general	JAMA	美国医学会杂志 JAMA
+journal-general	general	JAMA Network Open	JAMA Network Open
+journal-general	general	JAMA Internal Medicine	JAMA 内科学
+journal-general	general	JAMA Health Forum	JAMA Health Forum
+journal-general	general	BMJ	英国医学杂志 The BMJ
+journal-general	general	BMJ Medicine	BMJ Medicine
+journal-general	general	BMJ Open	BMJ Open
+journal-general	general	Annals of Internal Medicine	内科学年鉴 Annals of Internal Medicine
+journal-general	general	Nature Medicine	自然-医学 Nature Medicine
+journal-general	general	Nature	自然 Nature
+journal-general	general	Science	科学 Science
+journal-general	general	Science Translational Medicine	科学-转化医学
+journal-general	general	Cell	细胞 Cell
+journal-general	general	Cell Reports Medicine	Cell Reports Medicine
+journal-general	general	Med	Med（Cell Press）
+journal-general	general	PLoS Medicine	PLOS Medicine
+journal-general	general	Canadian Medical Association Journal	加拿大医学会杂志 CMAJ
+journal-general	general	The Medical Journal of Australia	澳大利亚医学杂志 MJA
+journal-general	general	Nature Communications	自然-通讯
+journal-general	general	Proceedings of the National Academy of Sciences	美国国家科学院院刊 PNAS
+journal-general	general	eLife	eLife
+journal-general	general	Journal of Clinical Investigation	临床研究杂志 JCI
+journal-general	general	Mayo Clinic Proceedings	Mayo Clinic Proceedings
+journal-general	china-based	Chinese Medical Journal	中华医学杂志英文版 CMJ
+journal-general	china-based	Signal Transduction and Targeted Therapy	信号转导与靶向治疗 STTT
+journal-general	china-based	Cell Research	细胞研究 Cell Research
+journal-general	china-based	National Science Review	国家科学评论 NSR
+journal-general	china-based	Science Bulletin	科学通报（英文版）
+journal-general	china-based	Military Medical Research	军事医学研究 MMR
+journal-general	china-based	The Innovation	The Innovation
+journal-general	drug-rd	Nature Reviews Drug Discovery	自然综述-药物发现
+journal-general	drug-rd	Nature Biotechnology	自然-生物技术
+journal-ai-med	ai-med	NEJM AI	NEJM AI
+journal-ai-med	ai-med	The Lancet Digital Health	柳叶刀-数字健康
+journal-ai-med	ai-med	npj Digital Medicine	npj 数字医学
+journal-ai-med	ai-med	Nature Machine Intelligence	自然-机器智能
+journal-ai-med	ai-med	Nature Biomedical Engineering	自然-生物医学工程
+journal-ai-med	ai-med	Journal of the American Medical Informatics Association	美国医学信息学会杂志 JAMIA
+journal-ai-med	ai-med	Journal of Medical Internet Research	医学互联网研究杂志 JMIR
+journal-ai-med	ai-med	JMIR Medical Informatics	JMIR Medical Informatics
+journal-ai-med	ai-med	JMIR AI	JMIR AI
+journal-ai-med	ai-med	Radiology Artificial Intelligence	Radiology: Artificial Intelligence
+journal-ai-med	ai-med	PLOS Digital Health	PLOS Digital Health
+journal-ai-med	ai-med	BMJ Health & Care Informatics	BMJ Health & Care Informatics
+journal-ai-med	ai-med	Journal of Biomedical Informatics	生物医学信息学杂志 JBI
+journal-ai-med	ai-med	Artificial Intelligence in Medicine	医学人工智能 AIM
+journal-ai-med	ai-med	Patterns	Patterns（Cell Press）
+journal-ai-med	ai-med	Communications Medicine	Communications Medicine
+journal-ai-med	ai-med	Health Data Science	Health Data Science
+journal-specialty	oncology	The Lancet Oncology	柳叶刀-肿瘤学
+journal-specialty	oncology	Journal of Clinical Oncology	临床肿瘤学杂志 JCO
+journal-specialty	oncology	JAMA Oncology	JAMA 肿瘤学
+journal-specialty	oncology	Annals of Oncology	肿瘤学年鉴
+journal-specialty	oncology	CA A Cancer Journal for Clinicians	CA：临床医师癌症杂志
+journal-specialty	oncology	Cancer Cell	Cancer Cell
+journal-specialty	oncology	Nature Reviews Clinical Oncology	自然综述-临床肿瘤学
+journal-specialty	oncology	Cancer Discovery	Cancer Discovery
+journal-specialty	cardiology	Circulation	循环 Circulation
+journal-specialty	cardiology	Journal of the American College of Cardiology	美国心脏病学会杂志 JACC
+journal-specialty	cardiology	European Heart Journal	欧洲心脏杂志 EHJ
+journal-specialty	cardiology	JAMA Cardiology	JAMA 心脏病学
+journal-specialty	cardiology	Nature Reviews Cardiology	自然综述-心脏病学
+journal-specialty	endocrine	The Lancet Diabetes & Endocrinology	柳叶刀-糖尿病与内分泌学
+journal-specialty	endocrine	Diabetes Care	糖尿病护理 Diabetes Care
+journal-specialty	endocrine	Cell Metabolism	Cell Metabolism
+journal-specialty	endocrine	Nature Reviews Endocrinology	自然综述-内分泌学
+journal-specialty	neurology	The Lancet Neurology	柳叶刀-神经病学
+journal-specialty	neurology	JAMA Neurology	JAMA 神经病学
+journal-specialty	neurology	Neurology	神经病学 Neurology
+journal-specialty	neurology	Brain	Brain
+journal-specialty	neurology	Stroke	卒中 Stroke
+journal-specialty	psychiatry	The Lancet Psychiatry	柳叶刀-精神病学
+journal-specialty	psychiatry	JAMA Psychiatry	JAMA 精神病学
+journal-specialty	psychiatry	World Psychiatry	World Psychiatry
+journal-specialty	infectious	The Lancet Infectious Diseases	柳叶刀-感染病学
+journal-specialty	infectious	Clinical Infectious Diseases	临床感染病 CID
+journal-specialty	infectious	The Lancet Microbe	柳叶刀-微生物
+journal-specialty	infectious	The Lancet HIV	柳叶刀-HIV
+journal-specialty	respiratory	The Lancet Respiratory Medicine	柳叶刀-呼吸医学
+journal-specialty	respiratory	American Journal of Respiratory and Critical Care Medicine	美国呼吸与危重症医学杂志 AJRCCM
+journal-specialty	respiratory	CHEST Journal	CHEST
+journal-specialty	critical-care	Intensive Care Medicine	重症医学 ICM
+journal-specialty	critical-care	Critical Care	Critical Care
+journal-specialty	gi-hepatology	Gastroenterology	胃肠病学 Gastroenterology
+journal-specialty	gi-hepatology	Gut	Gut
+journal-specialty	gi-hepatology	The Lancet Gastroenterology & Hepatology	柳叶刀-胃肠病学与肝病学
+journal-specialty	gi-hepatology	Journal of Hepatology	肝病学杂志 J Hepatol
+journal-specialty	gi-hepatology	Hepatology	肝病学 Hepatology
+journal-specialty	nephrology	Journal of the American Society of Nephrology	美国肾脏病学会杂志 JASN
+journal-specialty	nephrology	Kidney International	Kidney International
+journal-specialty	rheumatology	Annals of the Rheumatic Diseases	风湿病年鉴 ARD
+journal-specialty	rheumatology	The Lancet Rheumatology	柳叶刀-风湿病学
+journal-specialty	hematology	Blood	Blood
+journal-specialty	hematology	The Lancet Haematology	柳叶刀-血液病学
+journal-specialty	pediatrics	JAMA Pediatrics	JAMA 儿科学
+journal-specialty	pediatrics	PEDIATRICS	Pediatrics
+journal-specialty	pediatrics	The Lancet Child & Adolescent Health	柳叶刀-儿童青少年健康
+journal-specialty	obgyn	American Journal of Obstetrics and Gynecology	美国妇产科杂志 AJOG
+journal-specialty	geriatrics	The Lancet Healthy Longevity	柳叶刀-健康长寿
+journal-specialty	surgery	JAMA Surgery	JAMA 外科学
+journal-specialty	surgery	Annals of Surgery	外科学年鉴
+journal-specialty	anesthesia	Anesthesiology	麻醉学 Anesthesiology
+journal-specialty	radiology	Radiology	放射学 Radiology
+journal-specialty	dermatology	JAMA Dermatology	JAMA 皮肤病学
+journal-specialty	ophthalmology	Ophthalmology	眼科学 Ophthalmology
+journal-specialty	ophthalmology	JAMA Ophthalmology	JAMA 眼科学
+journal-methods	epidemiology	International Journal of Epidemiology	国际流行病学杂志 IJE
+journal-methods	epidemiology	American Journal of Epidemiology	美国流行病学杂志 AJE
+journal-methods	epidemiology	Epidemiology	Epidemiology
+journal-methods	methods	Journal of Clinical Epidemiology	临床流行病学杂志 JCE
+journal-methods	methods	Research Synthesis Methods	Research Synthesis Methods
+journal-methods	methods	Systematic Reviews	Systematic Reviews（BMC）
+journal-methods	methods	BMC Medical Research Methodology	BMC 医学研究方法学
+journal-methods	methods	Statistics in Medicine	医学统计学 Statistics in Medicine
+journal-methods	evidence	Cochrane Database of Systematic Reviews	Cochrane 系统评价数据库 CDSR
+journal-methods	evidence	JBI Evidence Synthesis	JBI Evidence Synthesis
+journal-methods	evidence	Journal of Evidence-Based Medicine	循证医学杂志 JEBM
+journal-methods	evidence	BMJ Evidence-Based Medicine	BMJ 循证医学
+journal-tcm	tcm	Journal of Ethnopharmacology	民族药理学杂志
+journal-tcm	tcm	Phytomedicine	Phytomedicine
+journal-tcm	tcm	Chinese Medicine	Chinese Medicine（BMC）
+journal-tcm	tcm	Chinese Journal of Integrative Medicine	中国结合医学杂志（英文版）CJIM
+journal-tcm	tcm	Journal of Integrative Medicine	结合医学学报（英文版）JIM
+journal-tcm	tcm	Journal of Traditional Chinese Medicine	中医杂志（英文版）JTCM
+journal-tcm	tcm	World Journal of Traditional Chinese Medicine	世界中医药杂志（英文版）
+journal-tcm	tcm	Acupuncture in Medicine	Acupuncture in Medicine
+journal-tcm	tcm	Frontiers in Pharmacology	Frontiers in Pharmacology
+journal-tcm	tcm	Pharmacological Research	Pharmacological Research
+journal-tcm	tcm	Journal of Traditional and Complementary Medicine	Journal of Traditional and Complementary Medicine
+journal-tcm	tcm	Integrative Medicine Research	Integrative Medicine Research
+journal-tcm	tcm	Chinese Herbal Medicines	中草药（英文版）CHM
+journal-tcm	tcm	Acupuncture and Herbal Medicine	针灸和草药（英文）
+journal-pharmacy	clinical-pharmacology	Clinical Pharmacology & Therapeutics	临床药理学与治疗学 CPT
+journal-pharmacy	clinical-pharmacology	British Journal of Clinical Pharmacology	英国临床药理学杂志 BJCP
+journal-pharmacy	drug-safety	Drug Safety	Drug Safety
+journal-pharmacy	drug-safety	Pharmacoepidemiology and Drug Safety	药物流行病学与药物安全 PDS
+journal-pharmacy	drug-safety	Expert Opinion on Drug Safety	Expert Opinion on Drug Safety
+journal-pharmacy	clinical-pharmacy	Annals of Pharmacotherapy	药物治疗年鉴
+journal-pharmacy	clinical-pharmacy	American Journal of Health-System Pharmacy	美国卫生系统药学杂志 AJHP
+journal-pharmacy	clinical-pharmacy	International Journal of Clinical Pharmacy	国际临床药学杂志
+journal-pharmacy	clinical-pharmacology	Clinical Pharmacokinetics	临床药代动力学
+journal-pharmacy	clinical-pharmacology	Drugs	Drugs
+journal-pharmacy	clinical-pharmacology	European Journal of Clinical Pharmacology	欧洲临床药理学杂志
+journal-pharmacy	pharmacoeconomics	PharmacoEconomics	药物经济学 PharmacoEconomics
+journal-pharmacy	pharmacoeconomics	Value in Health	Value in Health
+journal-pharmacy	china-based	Acta Pharmacologica Sinica	中国药理学报 APS
+journal-pharmacy	china-based	Acta Pharmaceutica Sinica B	药学学报（英文版）APSB

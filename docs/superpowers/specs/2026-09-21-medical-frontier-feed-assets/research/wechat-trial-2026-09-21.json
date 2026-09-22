@@ -1,0 +1,190 @@
+{
+ "generated_at": "2026-09-21T16:15:22Z",
+ "network": "dev box (Taipei ISP line, AS3462)",
+ "accounts": 100,
+ "accounts_with_seed_url": 25,
+ "accounts_with_biz": 69,
+ "accounts_with_structured_article": 69,
+ "accounts_name_matches_page": 65,
+ "fetches": 74,
+ "status": {
+  "deleted": 1,
+  "migrated": 1,
+  "ok": 72
+ },
+ "articles_structured": 72,
+ "articles_per_account": {
+  "n": 69,
+  "median": 1,
+  "p90": 1,
+  "max": 2
+ },
+ "via": {
+  "seed": 25,
+  "sogou": 47
+ },
+ "fields_present": {
+  "biz": {
+   "n": 72,
+   "of": 72,
+   "share": 1.0
+  },
+  "mid": {
+   "n": 72,
+   "of": 72,
+   "share": 1.0
+  },
+  "sn": {
+   "n": 25,
+   "of": 72,
+   "share": 0.3472
+  },
+  "chksm": {
+   "n": 24,
+   "of": 72,
+   "share": 0.3333
+  },
+  "gh_id": {
+   "n": 72,
+   "of": 72,
+   "share": 1.0
+  },
+  "title": {
+   "n": 72,
+   "of": 72,
+   "share": 1.0
+  },
+  "digest": {
+   "n": 72,
+   "of": 72,
+   "share": 1.0
+  },
+  "author": {
+   "n": 40,
+   "of": 72,
+   "share": 0.5556
+  },
+  "published_at": {
+   "n": 72,
+   "of": 72,
+   "share": 1.0
+  },
+  "original": {
+   "n": 22,
+   "of": 72,
+   "share": 0.3056
+  },
+  "source_url": {
+   "n": 21,
+   "of": 72,
+   "share": 0.2917
+  },
+  "ip_region": {
+   "n": 52,
+   "of": 72,
+   "share": 0.7222
+  },
+  "cover": {
+   "n": 72,
+   "of": 72,
+   "share": 1.0
+  }
+ },
+ "show_types": {
+  "article": 72
+ },
+ "original_true": {
+  "n": 20,
+  "of": 72,
+  "share": 0.2778
+ },
+ "text_chars": {
+  "n": 72,
+  "median": 1937.5,
+  "p90": 5543,
+  "max": 17847
+ },
+ "images": {
+  "n": 72,
+  "median": 7.0,
+  "p90": 15,
+  "max": 33
+ },
+ "short_text_under_200": {
+  "n": 2,
+  "of": 72,
+  "share": 0.0278
+ },
+ "with_identifier_refs": {
+  "n": 3,
+  "of": 72,
+  "share": 0.0417
+ },
+ "with_journal_mention": {
+  "n": 14,
+  "of": 72,
+  "share": 0.1944
+ },
+ "age_days": {
+  "n": 72,
+  "median": 896.0,
+  "p90": 2591,
+  "max": 3685
+ },
+ "published_within_7d": {
+  "n": 18,
+  "of": 72,
+  "share": 0.25
+ },
+ "transfer_bytes_per_page": {
+  "n": 74,
+  "median": 784704.0,
+  "p90": 801683,
+  "max": 838209
+ },
+ "lanes": {
+  "news": {
+   "accounts": 22,
+   "with_article": 21
+  },
+  "pipeline": {
+   "accounts": 19,
+   "with_article": 16
+  },
+  "evidence": {
+   "accounts": 13,
+   "with_article": 6
+  },
+  "guideline": {
+   "accounts": 6,
+   "with_article": 3
+  },
+  "regulatory": {
+   "accounts": 10,
+   "with_article": 3
+  },
+  "safety": {
+   "accounts": 4,
+   "with_article": 1
+  },
+  "public-health": {
+   "accounts": 4,
+   "with_article": 2
+  },
+  "research": {
+   "accounts": 14,
+   "with_article": 11
+  },
+  "ai": {
+   "accounts": 8,
+   "with_article": 6
+  }
+ },
+ "sogou": {
+  "accounts_queried": 103,
+  "blocked": 0,
+  "with_results_by_the_account": 68,
+  "with_a_post_within_7d": 5,
+  "note": "Sogou article search without a time filter (the filter needs login); 25-40 s between requests"
+ }
+}

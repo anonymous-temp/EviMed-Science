@@ -1,0 +1,10 @@
+import fs from "node:fs"; import path from "node:path"; import { pathToFileURL } from "node:url";
+const store = "/home/coder/workspace/EviMedScience/OpenScience/node_modules/.pnpm";
+const find = (pkg) => { const dir = fs.readdirSync(store).find((d) => d.startsWith(pkg + "@")); return pathToFileURL(path.join(store, dir, "node_modules", pkg, "index.js")).href; };
+const { micromark } = await import(find("micromark")); const { gfm, gfmHtml } = await import(find("micromark-extension-gfm"));
+const md = fs.readFileSync(process.argv[2], "utf8");
+const html = micromark(md, { extensions: [gfm()], htmlExtensions: [gfmHtml()] });
+const text = html.replace(/<pre>[\s\S]*?<\/pre>/g, "").replace(/<code>[\s\S]*?<\/code>/g, "");
+const hits = [...text.matchAll(/.{0,30}\*\*.{0,30}/g)].map((m) => m[0]);
+console.log("leftover ** :", hits.length); hits.slice(0, 20).forEach((h) => console.log("  ", h.replace(/\n/g, " ")));
+console.log("images:", (html.match(/<img /g) || []).length, "tables:", (html.match(/<table>/g) || []).length, "h1:", (html.match(/<h1>/g) || []).length);
