@@ -1771,6 +1771,34 @@ test("readiness validates local production backup settings without exposing path
   }
 });
 
+test("a required document parser is ready when it answers healthy, with or without a key", async () => {
+  // The parser team's service answers without a key (measured 2026-09-22).
+  // Readiness used to refuse a required parser with document_parser_token_missing,
+  // so production switched the check off and the parser's health went unwatched.
+  const { createServer } = await import("node:http");
+  const health = [];
+  const parser = createServer((request, response) => {
+    health.push({ url: request.url, authorization: request.headers.authorization });
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ code: 200, message: "success", uuid: "u", timestamp: 1, elapsed_ms: 1, data: { status: "healthy", environment: "test" } }));
+  });
+  await new Promise((resolve) => parser.listen(0, "127.0.0.1", resolve));
+  try {
+    const documentParserUrl = `http://127.0.0.1:${parser.address().port}`;
+    await withApp(async ({ base }) => {
+      const check = (await (await fetch(`${base}/api/ready`)).json()).data.checks.documentParser;
+      assert.equal(check.ok, true, JSON.stringify(check));
+      assert.equal(check.required, true);
+      assert.equal(check.status, "healthy");
+      assert.equal(check.credential, "none");
+      assert.equal("authenticated" in check, false, "no field that reads as \"cannot parse\"");
+    }, { requireDocumentParser: true, documentParserUrl, documentParserToken: "" });
+    assert.ok(health.length >= 1 && health.every((request) => request.url === "/health" && request.authorization === undefined));
+  } finally {
+    await new Promise((resolve) => parser.close(resolve));
+  }
+});
+
 test("readiness rejects unsafe local production backup directories", async () => {
   const baseConfig = {
     production: true,

@@ -5671,17 +5671,21 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
   };
 }
 
-/** The parser is an external metered service. Required means configured,
- *  holding its key, and answering healthy; not required still reports what is
- *  configured, because an ingestion that cannot parse anything but text is a
- *  fact an operator should see on the readiness page, not in a source card. */
+/** The parser is the parser team's own service. Required means configured and
+ *  answering healthy. A key is not part of it: the service answers without one
+ *  (measured 2026-09-22 — parse and extract both 200 with no Authorization
+ *  header), and one is sent only if the deployment has a key file with
+ *  something in it. Until then readiness demanded a key the service does not
+ *  ask for, so production switched the check off and the parser's health went
+ *  unwatched, and `authenticated: false` read as "cannot parse" — it never
+ *  meant that. `credential` says what is sent, `none` or `file`. */
 async function readinessDocumentParser(config, parser) {
+  const credential = config.documentParserToken ? "file" : "none";
   if (!config.requireDocumentParser) {
-    return { required: false, configured: Boolean(config.documentParserUrl), authenticated: Boolean(config.documentParserToken) };
+    return { required: false, configured: Boolean(config.documentParserUrl), credential };
   }
   if (config.documentParserTokenError) throw readinessFailure(config.documentParserTokenError);
   if (!config.documentParserUrl || !parser) throw readinessFailure("document_parser_unconfigured");
-  if (!config.documentParserToken) throw readinessFailure("document_parser_token_missing");
   return { required: true, ...(await parser.health()) };
 }
 

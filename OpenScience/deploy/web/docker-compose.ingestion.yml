@@ -2,11 +2,12 @@ services:
   open-science-web:
     environment:
       OPEN_SCIENCE_SOURCE_INGESTION_ENABLED: "true"
-      # The in-house parsing API is a metered external service reached over
-      # HTTP with a key its own console issues; nothing of it runs here. The
-      # address defaults to the parser team's test server, the only one given.
-      # Required means readiness fails unless the key is present and the
-      # service answers healthy; CI holds no key and switches it off.
+      # The in-house parsing API is the parser team's own service, reached over
+      # HTTP; nothing of it runs here. The address defaults to the parser team's
+      # test server, the only one given. It needs no key (measured 2026-09-22:
+      # parse and extract answer 200 with no Authorization header). Required
+      # means readiness fails unless the service answers healthy; CI has no
+      # parser to reach and switches it off.
       OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER: ${OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER:-true}
       OPEN_SCIENCE_DOCUMENT_PARSER_URL: ${OPEN_SCIENCE_DOCUMENT_PARSER_URL:-http://123.57.56.88:9011}
       OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE: /run/secrets/document-parser-token
@@ -23,9 +24,9 @@ services:
       OPEN_SCIENCE_AUTOPILOT_LEASE_MS: ${OPEN_SCIENCE_AUTOPILOT_LEASE_MS:-300000}
       OPEN_SCIENCE_REQUIRE_INBOX: "true"
     volumes:
-      # Owner-only on the host. An empty file is a deployment without the key
-      # yet: text formats still parse here and every other format is refused
-      # with a stated reason instead of the container failing to start.
+      # Owner-only on the host, and optional in content: an empty file sends no
+      # Authorization header, which is what the service expects today. A key
+      # goes here only if the parser team ever turns authentication on.
       - type: bind
         source: ${OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE:?set OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE}
         target: /run/secrets/document-parser-token
