@@ -98,10 +98,18 @@ export function contractCompatible(served, minimum) {
 }
 
 /**
- * The bearer token, read the way every secret file of this deployment is read:
- * a regular file, not a link, owner-only, bounded, one line. The value is
- * returned only to the caller that sends it; the error names what is wrong
+ * The bearer token: a regular file, not a link, bounded, one line. The value
+ * is returned only to the caller that sends it; the error names what is wrong
  * with the file, never its content.
+ *
+ * Owner and group may read it; nobody may write it through the group, and
+ * nobody else may touch it. Unlike this deployment's other secrets it has two
+ * readers by design — the control plane (root, no capabilities) and the plugin
+ * (uid:gid 10002) — so the host file is root:10002 0440 and the plugin reads
+ * it through the group (host-knowledge-plugin-setup.sh). Owner-only refused
+ * exactly that file on the first production start (2026-09-22,
+ * `frontier_plugin_token_unreadable`), and the alternative, a second copy of
+ * the token for the plugin, is a rotation that half happens.
  * @param {string} file
  * @returns {Promise<{ value: string, error: string | null }>}
  */
@@ -113,7 +121,7 @@ export async function readKnowledgePluginToken(file) {
     const stat = await handle.stat();
     if (!stat.isFile()) return { value: "", error: "token_file_not_regular" };
     if (stat.size > MAX_TOKEN_BYTES + 2) return { value: "", error: "token_file_too_large" };
-    if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) return { value: "", error: "token_file_permissions" };
+    if (process.platform !== "win32" && (stat.mode & 0o037) !== 0) return { value: "", error: "token_file_permissions" };
     const value = (await handle.readFile("utf8")).replace(/\r?\n$/, "");
     if (!value) return { value: "", error: "token_file_empty" };
     // It becomes an HTTP header value: anything outside visible ASCII would be
