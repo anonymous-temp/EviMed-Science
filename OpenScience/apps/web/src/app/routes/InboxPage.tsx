@@ -229,6 +229,11 @@ function actionHref(item: InboxItem, action: InboxAction): string | null {
   if (action.id !== "open" || !item.source) return null;
   // `Link`, not `<a href>`: a bare anchor inside the shell reloaded the whole
   // application to move between two of its own pages (U10).
+  // A digest is either an autopilot briefing or the frontier daily of a day;
+  // the daily names itself `frontier-daily:<YYYY-MM-DD>`, the key it is pushed
+  // under, and opens on that issue.
+  const frontierDay = item.source.type === "digest" ? /^frontier-daily:(\d{4}-\d{2}-\d{2})$/.exec(item.source.id)?.[1] : undefined;
+  if (frontierDay) return `/app/frontier?view=daily&day=${frontierDay}`;
   if (item.source.type === "digest") return `/app/autopilot?digest=${encodeURIComponent(item.source.id)}`;
   // A notice names a run, and a run is read in the conversation it happened in.
   // Only the ledger knows which conversation that is, so this stays the run's

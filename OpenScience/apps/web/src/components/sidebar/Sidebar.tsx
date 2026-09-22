@@ -4,6 +4,7 @@ import {
   Bot,
   Brain,
   FolderTree,
+  Newspaper,
   Orbit,
   PanelLeft,
   SquarePen,
@@ -14,6 +15,7 @@ import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { InboxBell } from "@/components/sidebar/InboxBell";
 import { ProjectBrowser } from "@/components/sidebar/ProjectBrowser";
 import { useConnectorAttention } from "@/lib/connectorAttention";
+import { useFrontierFeature } from "@/lib/frontierClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EviMedMark } from "@/components/brand/EviMedMark";
 
@@ -55,6 +57,14 @@ const NAV: NavItem[] = [
   { to: "/app/autopilot", label: "主动科研", icon: <Orbit size={16} aria-hidden="true" /> },
 ];
 
+/**
+ * 「前沿动态」, right after 「新对话」 — and only where `/api/me` offers the
+ * module to this account (`features.frontier`; a server that says nothing
+ * about it has not got it). A row that led to 「还没有开放」 would be a
+ * destination that is not one.
+ */
+const FRONTIER_NAV: NavItem = { to: "/app/frontier", label: "前沿动态", icon: <Newspaper size={16} aria-hidden="true" /> };
+
 export function Sidebar() {
   const location = useLocation();
   const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar } = useUiStore();
@@ -63,6 +73,8 @@ export function Sidebar() {
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const dragging = dragWidth !== null;
   const connectorAttention = useConnectorAttention();
+  const frontier = useFrontierFeature() === "on";
+  const rows = frontier ? [NAV[0], FRONTIER_NAV, ...NAV.slice(1)] : NAV;
 
   const onDividerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -127,7 +139,7 @@ export function Sidebar() {
         </div>
 
         <nav className="flex flex-col px-3">
-          {NAV.map((item) => (
+          {rows.map((item) => (
             <NavRow
               key={item.to}
               to={item.to}

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,10 +7,12 @@ import { Sidebar } from "./Sidebar";
 const mocks = vi.hoisted(() => ({
   fetchInboxUnreadCount: vi.fn(),
   fetchWebConnectors: vi.fn(),
+  fetchWebMe: vi.fn(),
 }));
 
 vi.mock("@/lib/apiClient", () => ({
   fetchWebConnectors: mocks.fetchWebConnectors,
+  fetchWebMe: mocks.fetchWebMe,
   getWebProjectId: () => "default",
 }));
 
@@ -69,6 +71,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 0, safetyUnread: 0 });
   mocks.fetchWebConnectors.mockResolvedValue([]);
+  // A control plane that says nothing about 前沿动态 has not got it.
+  mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [] });
 });
 
 describe("Sidebar navigation", () => {
@@ -107,6 +111,34 @@ describe("Sidebar navigation", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/app/account");
   });
 
+  // 「前沿动态」 is a row only where `/api/me` offers it to this account; a
+  // row that led to 「还没有开放」 would be a destination that is not one.
+  it("has no 前沿动态 row unless the account is offered the module", async () => {
+    renderSidebar();
+    await screen.findByRole("link", { name: "账户与设置" });
+    await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
+    expect(screen.queryByRole("link", { name: "前沿动态" })).not.toBeInTheDocument();
+  });
+
+  it("puts 前沿动态 right after 新对话 when the account is offered it", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true } });
+    renderSidebar();
+    const row = await screen.findByRole("link", { name: "前沿动态" });
+    expect(row).toHaveAttribute("href", "/app/frontier");
+    const rows = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(rows.indexOf("前沿动态")).toBe(rows.indexOf("新对话") + 1);
+    await userEvent.click(row);
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/frontier");
+    expect(row).toHaveAttribute("aria-current", "page");
+  });
+
+  it("keeps the row out when /api/me cannot be read", async () => {
+    mocks.fetchWebMe.mockRejectedValue(new Error("offline"));
+    renderSidebar();
+    await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
+    expect(screen.queryByRole("link", { name: "前沿动态" })).not.toBeInTheDocument();
+  });
+
   // The credentials banner used to sit across the top of seven pages. The
   // fact it stated is now a quiet count on the account row.
   it("counts the data sources nothing serves on the account row instead of a banner", async () => {
@@ -128,6 +160,10 @@ describe("Sidebar navigation", () => {
     for (const gone of ["资料整理", "科研笔记本", "科研记忆", "记忆胶囊", "能力模板", "设置", "账户与额度", "运行记录"]) {
       expect(screen.queryByRole("button", { name: gone })).not.toBeInTheDocument();
     }
+    // Let the bell and the account's feature answer land inside the test.
+    await waitFor(() => expect(mocks.fetchInboxUnreadCount).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
+    await screen.findByRole("link", { name: "账户与设置" });
   });
 
   // The kernel's column, top to bottom: brand, the destinations, the

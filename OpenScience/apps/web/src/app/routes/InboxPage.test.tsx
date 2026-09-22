@@ -31,6 +31,19 @@ it("opens the exact digest without resolving its notice or hiding an already-rea
   expect(api.markInboxRead).not.toHaveBeenCalled();
 });
 
+it("opens the frontier daily a notice names on its own issue", async () => {
+  // The daily is pushed as a digest under `frontier-daily:<day>` (build spec D.3);
+  // it opens 前沿动态 on that day's issue, not an autopilot briefing.
+  const daily = { ...review, id: "frontier-daily-notice", noticeType: "notify" as const,
+    title: "今日前沿 · 18 条精选", body: "头条：口服 PCSK9 抑制剂拿到硬终点证据",
+    source: { type: "digest" as const, id: "frontier-daily:2026-09-21" },
+    actions: [{ id: "open", label: "打开日报", style: "neutral" as const }] };
+  vi.mocked(api.listInbox).mockResolvedValue({ items: [daily], nextCursor: null });
+  render(<MemoryRouter><InboxPage /></MemoryRouter>);
+  const link = await screen.findByRole("link", { name: "打开日报" });
+  expect(link).toHaveAttribute("href", "/app/frontier?view=daily&day=2026-09-21");
+});
+
 it("shows blocking reviews first and resolves a selected action", async () => {
   vi.mocked(api.resolveInboxItem).mockResolvedValue({ ...review, revision: 2, resolvedAt: "2026-09-06T00:01:00Z", resolution: { actionId: "adopt" } });
   render(<MemoryRouter><InboxPage /></MemoryRouter>);

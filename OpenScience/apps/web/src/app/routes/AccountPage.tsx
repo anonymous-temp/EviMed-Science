@@ -7,6 +7,7 @@ import { PasswordCard } from "@/components/settings/PasswordCard";
 import { UsageCard } from "@/components/settings/UsageCard";
 import { ConnectorsCard } from "@/components/settings/ConnectorsCard";
 import { FeishuCard } from "@/components/settings/FeishuCard";
+import { FrontierDigestCard } from "@/components/settings/FrontierDigestCard";
 import { ThemeSegmentedControl } from "@/components/settings/ThemeSegmentedControl";
 import { isMacPlatform } from "@/lib/platform";
 import { fetchImStatus } from "@/lib/imClient";
@@ -104,6 +105,8 @@ export function AccountPage() {
             <p className="text-ui text-muted">暂不可用</p>
           </Card>
         )}
+      {/* The 「前沿动态」 daily's own switch; absent where the feed is not offered. */}
+      <FrontierDigestCard />
     </WorkbenchTabBody>
   );
 
