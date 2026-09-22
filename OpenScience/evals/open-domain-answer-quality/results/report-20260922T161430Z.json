@@ -1,0 +1,478 @@
+{
+  "schemaVersion": 1,
+  "judgePromptVersion": 1,
+  "judgeModel": "deepseek-v4-pro",
+  "answersFile": "/home/coder/workspace/EviMedScience/OpenScience/evals/open-domain-answer-quality/results/answers-20260922T161110Z.json",
+  "generatedAt": "2026-09-22T16:14:30Z",
+  "cases": [
+    {
+      "id": "frontier-case-1",
+      "tier": "synthesis",
+      "domain": "cardiology",
+      "question": "最近三个月 GLP-1 受体激动剂在心衰方面有什么新证据？",
+      "run": {
+        "runId": "run_d275ee9931ec8e10d9f70ea98a5cdd64",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 119637,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [20] is listed but never cited in the text."
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「semaglutide heart failure obesity random…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索指南：「GLP-1 receptor agonist heart failure HFp…」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 5,
+        "sessionId": "session-75511764-df46-4cde-bda3-ce4c058866ea",
+        "toolCalls": 17,
+        "tools": [
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__drug_term_normalize",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__guideline_search",
+          "cite_lookup",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search"
+        ],
+        "frontierToolCalls": 3,
+        "artifacts": [],
+        "assistantChars": 9441,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 5,
+        "uncertainty_calibration": 5
+      },
+      "overall": 5.0,
+      "issues": [],
+      "rationale": "开头即给出涵盖近三个月的时间范围与结论，结构清晰，按人群/证据强度分层，临床可操作性强。引用均为期刊/PubMed格式且时间合理，未引用EviMed条目页；预印本或企业稿未作为确定结论。显著呈现了Meta分析间分歧、摘要级证据限制、真实世界偏倚及人群异质性，不过度断言，安全与随访时间框架恰当。"
+    },
+    {
+      "id": "frontier-case-2",
+      "tier": "synthesis",
+      "domain": "pharmacy-safety",
+      "question": "最近一个月国内外有没有新的药品安全警示或说明书修订？",
+      "run": {
+        "runId": "run_f7640c6a40b1d8d9ff608cee920070aa",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 285765,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [18] is listed but never cited in the text."
+          },
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [19] is listed but never cited in the text."
+          },
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [20] is listed but never cited in the text."
+          },
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [21] is listed but never cited in the text."
+          },
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [22] is listed but never cited in the text."
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-14a95bf4-01da-4bc2-8a6b-c665c38f9c2d",
+        "toolCalls": 41,
+        "tools": [
+          "bash",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search"
+        ],
+        "frontierToolCalls": 6,
+        "artifacts": [],
+        "assistantChars": 9351,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 4,
+        "uncertainty_calibration": 5
+      },
+      "overall": 4.8,
+      "issues": [
+        "PMDA 品种数量前后不一致：结论称“9 个品种”，正文仅列出 6 个",
+        "部分引文 URL 存在截断/不完整迹象，如 FDA Kybella 与 Injectafer 的链接",
+        "替尔泊肽“本次只改【临床成绩】项”与后文“副作用频率数据也一并更新”存在轻微矛盾"
+      ],
+      "rationale": "回答直接给出结论，结构清晰，临床提示具体，并明确检索时间窗与覆盖局限，符合 synthesis 层级。主要扣分项为 PMDA 数量前后不一致及部分引文链接疑似截断/不完整，此外个别“只改临床成绩”的表述与副作用更新略矛盾。但整体证据组织充分，未把未检到说成没有，风险与不确定性交代良好。"
+    },
+    {
+      "id": "frontier-case-3",
+      "tier": "synthesis",
+      "domain": "neurology",
+      "question": "阿尔茨海默病的抗体类新药最近有什么进展？",
+      "run": {
+        "runId": "run_7089344ae3e2e1e0478665fe16c9af81",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 289418,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「remternetug trontinemab anti-tau antibod…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「trontinemab Brainshuttle phase 1b/2a amy…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「lecanemab-irmb subcutaneous injection」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「subcutaneous lecanemab autoinjector main…」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-fa76fdce-5209-4ab6-8473-db96264508b1",
+        "toolCalls": 50,
+        "tools": [
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__open_access_full_text",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__frontier_search"
+        ],
+        "frontierToolCalls": 6,
+        "artifacts": [],
+        "assistantChars": 8335,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 4,
+        "uncertainty_calibration": 5
+      },
+      "overall": 4.8,
+      "issues": [
+        "Remternetug 的注册状态表述自相矛盾：'处于在招募但已停止入组状态'，应明确为 active/not recruiting 等状态。",
+        "将 EMA 的特别警告称为'黑框警告'，EMA 体系中没有 boxed warning，术语欠准确。"
+      ],
+      "rationale": "首段即给出结论并按审批、剂型、安全性、下一代管线分层展开，结构清晰、证据分级明确，对 ARIA 风险和证据局限的校准很诚实。参考文献标识规范、日期与编号未见明显不可能项。扣分主要在个别内部矛盾表述（Remternetug 注册状态）和 EMA 术语误用，整体临床与科学内容可靠。"
+    },
+    {
+      "id": "frontier-case-4",
+      "tier": "synthesis",
+      "domain": "general",
+      "question": "这一周医学界有什么值得关注的新研究或新政策？",
+      "run": {
+        "runId": "run_17be1757d34c8bfc837ec8d3a1bf3709",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 232368,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「calcium vitamin D supplementation fractu…」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-c558a183-737b-4fbf-ae96-2388d28c1adb",
+        "toolCalls": 33,
+        "tools": [
+          "bash",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__open_access_full_text",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__frontal_placeholder",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__open_access_full_text",
+          "mcp__evimed__open_access_full_text",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__web_read"
+        ],
+        "frontierToolCalls": 7,
+        "artifacts": [],
+        "assistantChars": 9264,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 3,
+        "uncertainty_calibration": 5
+      },
+      "overall": 4.6,
+      "issues": [
+        "Reference 14 is internally inconsistent: it cites a 'Childhood Obesity' article with DOI 10.1177/..., but Childhood Obesity is a Mary Ann Liebert journal (normally 10.1089), so the citation appears malformed or fabricated."
+      ],
+      "rationale": "Opens with a direct weighted conclusion, groups curated items by actionability, includes source/date/links and evidence types, and carefully states limits (official vs abstract vs media, time window, non-coverage). One citation is internally inconsistent, which undermines correctness; otherwise the content is plausible and well-calibrated."
+    },
+    {
+      "id": "frontier-control-1",
+      "tier": "direct",
+      "domain": "clinical-pharmacology",
+      "question": "华法林与维生素K相互作用的机制是什么？",
+      "run": {
+        "runId": "run_48bb999c2f74c27980fb3b6582081621",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 82316,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「vitamin K antagonism warfarin VKORC1 mec…」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-a1d5682d-c97a-43eb-9371-03b749fd7bf0",
+        "toolCalls": 6,
+        "tools": [
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__drug_label_search"
+        ],
+        "frontierToolCalls": 0,
+        "artifacts": [],
+        "assistantChars": 3728,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 2,
+        "correctness": 5,
+        "uncertainty_calibration": 5
+      },
+      "overall": 4.4,
+      "issues": [
+        "答案远超直接层级的简洁要求，包含系统评价、多项研究数据和文献检索说明，属于报告式冗长，显著降低对简单机制问题的实用性。"
+      ],
+      "rationale": "首段直接给出华法林抑制VKORC1、维生素K摄入变化影响INR的机制，内容正确，语言清晰，局限性交代充分。但问题为直接机制提问，答案却扩展为带临床证据和参考文献的长报告，加入检索过程叙述，违背简洁聚焦的预期；机制部分和安全性表述可靠。"
+    }
+  ],
+  "summary": {
+    "expectedQuestions": 5,
+    "judgedCases": 5,
+    "failedCases": 0,
+    "missingAnswers": 0,
+    "dimensions": {
+      "directness": 5.0,
+      "readability": 5.0,
+      "usefulness": 4.4,
+      "correctness": 4.2,
+      "uncertainty_calibration": 5.0
+    },
+    "overallMean": 4.720000000000001,
+    "byTier": {
+      "direct": {
+        "cases": 1,
+        "judged": 1,
+        "dimensions": {
+          "directness": 5.0,
+          "readability": 5.0,
+          "usefulness": 2.0,
+          "correctness": 5.0,
+          "uncertainty_calibration": 5.0
+        },
+        "overallMean": 4.4
+      },
+      "synthesis": {
+        "cases": 4,
+        "judged": 4,
+        "dimensions": {
+          "directness": 5.0,
+          "readability": 5.0,
+          "usefulness": 5.0,
+          "correctness": 4.0,
+          "uncertainty_calibration": 5.0
+        },
+        "overallMean": 4.8
+      },
+      "report": {
+        "cases": 0,
+        "judged": 0,
+        "dimensions": {
+          "directness": NaN,
+          "readability": NaN,
+          "usefulness": NaN,
+          "correctness": NaN,
+          "uncertainty_calibration": NaN
+        },
+        "overallMean": NaN
+      }
+    }
+  }
+}

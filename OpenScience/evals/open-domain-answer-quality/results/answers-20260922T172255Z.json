@@ -1,0 +1,369 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-09-22T17:22:55Z",
+  "mode": "live",
+  "baseUrl": "https://82.156.128.153",
+  "label": "off-1",
+  "project": "eval-frontier-off-1",
+  "answers": [
+    {
+      "id": "frontier-case-1",
+      "tier": "synthesis",
+      "question": "最近三个月 GLP-1 受体激动剂在心衰方面有什么新证据？",
+      "answer": "## 结论\n\n近三个月（2026-06-22 至 2026-09-22）GLP-1 类药物在心衰领域最实质的新证据不是又一项大型 RCT，而是 **2026-08-28 同期刊出的两部 ESC 指南首次把这类药写进心衰管理路径**，同时几项汇总分析把「获益集中在肥胖相关 HFpEF、HFrEF 基本无获益」这一表型特异性基本定型：\n\n- **HFpEF（LVEF ≥45%）合并 BMI ≥30 kg/m²**：司美格鲁肽或替尔泊肽为 **IIa / B1** 推荐（不论有无糖尿病），落点是减重、改善运动能力和生活质量 [1]；合并 CKD 者另有等同行文（eGFR ≥15）[2]。\n- **2 型糖尿病合并至少一项额外心血管危险因素**：GLP-1 RA 为 **IIa / A** 推荐，用于降低心衰或心血管死亡风险 [1]。\n- **HFrEF**：本窗口内随机证据仍为中性（恶化性心衰 HR 1.23），只有观察性队列提示死亡降低，不能据此改变实践 [4][11]。\n\n关键提醒：这些推荐以症状、体重和生活质量为终点；硬终点下降主要来自二级汇总而非单个专病试验。用药决策（是否启用、剂量、监测）请由主管医师或药师结合个体情况判断。\n\n## 关键证据\n\n**1. 指南更新（本窗口最重要的变化）**\n\n2026 ESC 心衰指南（08-28）[1] 在肥胖推荐中写明：*Semaglutide or tirzepatide should be considered for patients with symptomatic HF, LVEF ≥45%, and BMI ≥30 kg/m², regardless of diabetes status, to reduce body weight, and improve exercise capacity and QoL*（IIa/B1）；预防部分写明：*A GLP-1 RA should be considered in patients with T2DM and at least one other additional CV risk factor to reduce the risk of HF or CV death*（IIa/A）。该指南同时改了分型：**HFrEF 扩至 LVEF <50%、取消 HFmrEF、HFpEF 为 ≥50%**，而肥胖推荐用的是 ≥45%，即覆盖原 HFmrEF 区间——这是为什么推荐文字与分型定义看似不一致。\n\n2026 ESC 心血管疾病与慢性肾病指南（同日）[2]：HFpEF 合并 CKD、eGFR ≥15、LVEF ≥45% 的肥胖患者，司美格鲁肽或替尔泊肽 IIa/B1；2 型糖尿病合并 CKD 在特定 eGFR/uACR 区间，司美格鲁肽 1.0 mg/周作为「CKD 附加治疗」为 I 类推荐。\n\n**2. 汇总分析：获益有多大、多久出现、给谁**\n\n- **4 项 RCT、4149 例，重建个体数据的荟萃分析**：恶化性心衰或心血管死亡 HR 0.59（0.45–0.78，中等确定性）；恶化性心衰事件 HR 0.33（0.20–0.54，高确定性）。获益在约 **126 天**首次达统计学显著、**162–183 天后持续显著**——即临床上不应期待数周见效 [3]。\n- **8 项 RCT、11234 例的表型分歧分析**：HFpEF 恶化事件 HR 0.67（高确定性）、复合终点 HR 0.76（0.64–0.90）；**HFrEF 恶化事件 HR 1.23（0.89–1.69），无获益**；因胃肠道反应停药 RR 3.12 [4]。\n- **14 项研究、18184 例的跨射血分数汇总**：主要复合终点 HR 0.86（0.73–1.01）未达显著；全因死亡 HR 0.86 主要由心血管结局试验的亚组驱动，而心衰专病试验方向相反——这一分歧是当前最大的内部不一致 [5]。\n- **HFpEF/HFmrEF 且与糖尿病状态无关**：11 项研究，RCT 汇总心衰住院/事件 HR 0.68（0.52–0.88），交互检验提示 T2D 不修饰效应 [6]。\n- **单药汇总**：司美格鲁肽（6 项 RCT、4216 例）NT-proBNP −119.7 pg/mL、KCCQ +8.27 分、心衰住院 OR 0.81 [7]；替尔泊肽（5 项研究、47710 例，含观察性）心血管死亡+恶化心衰 HR 0.50，与司美格鲁肽直接比较未见差异 [8]。\n\n**3. 真实世界与特殊人群（均属观察性）**\n\n- 房颤合并 HFpEF，起始 incretin 类 vs SGLT2i（各 7624 例匹配）：1 年全因死亡 5.3% vs 7.3%（HR 0.72），住院 HR 0.74，MACE HR 0.71 [9]。\n- 透析依赖 ESKD 合并心衰，GLP-1 RA vs DPP-4i：复合缺血事件+心衰恶化 HR 0.72，心衰恶化 HR 0.76，全因死亡 HR 0.68 [10]。\n- HFrEF 合并 T2D，在完整 GDMT 基础上加 GLP-1 RA（各 3158 例匹配）：全因死亡 10.5% vs 14.4%（HR 0.71），住院无差异（HR 1.05）[11]。\n- T2D 合并心衰，替尔泊肽 vs DPP-4i：死亡 HR 0.32、住院 HR 0.53——效应量大得不合常理，提示残余混杂，只可作假设 [12]。\n\n**4. 机制与安全性信号**\n\n- 器械传感器数据（666 例，其中 HFrEF 80 例）：启动 GLP-1 RA 后夜间心率 +2.12 bpm、日间 +1.46 bpm、胸阻抗 +0.66 Ω，心率随剂量每级上调约 +2.5 bpm；未见充血恶化信号 [13]。这是本窗口关于 HFrEF 用药后生理变化最直接的数据。\n- 替尔泊肽前瞻真实世界超声队列（50 例，约 6 个月）：左室质量 −12.4 g、E/e′ −1.45、KCCQ +13.1 分、6 分钟步行 +43 m [14]。\n- 遗传学（孟德尔随机化）：GLP1R 表达升高与心衰风险降低相关（OR 0.93，95% CI 0.87–0.998），部分由 MMP-1 下降介导（约 21%–28%）[15]。\n\n**5. 经济性：结论高度依赖价格与医保视角**\n\n美国视角下替尔泊肽用于 HFpEF+肥胖 ICER 为 70,297 美元/QALY（成本效果概率仅 51%）[16]；德国视角下替尔泊肽为 252,611 欧元/QALY，被认为不具成本效果 [17]，而司美格鲁肽为 30,443 欧元/QALY、但预算影响显著 [18]。同一类药物在不同支付方下结论相反，选药时不宜直接跨研究比较。\n\n## 不确定性与证据层级\n\n- **推荐等级的分量**：IIa/B1 的目标是减重、运动能力与生活质量；硬终点（心衰住院/心血管死亡）的下降来自汇总分析，不是单个专病试验的确定性结论 [1][3]。\n- **HFrEF**：随机证据中性甚至方向不利 [4][5]，唯一支持性数据是观察性队列 [11] 与器械传感器研究 [13]，不能排除残余混杂与适应证偏倚。\n- **内部不一致**：心衰专病试验与心血管结局试验亚组在死亡方向上相反，属间接性问题，应降低对「全因死亡下降」的信任度 [5]。\n- **窗口内没有新的心衰专病 III 期 RCT 结果发表**，指南推荐建立在既往专病试验（如 STEP-HFpEF、SUMMIT）之上；本回答引用的指南推荐文字取自 ESC 官方指南幻灯集（据 2026-08-28 指南改编），条款细节请以正式全文为准 [1][2]。\n- 本轮**未能核对最新说明书文本**（说明书数据源未连通），因此不对说明书中的适应证或警告状态作任何陈述。\n- **什么会推翻上述结论**：以硬终点为主要终点的 HFrEF 专项 RCT 出结果并显示获益；或肥胖 HFpEF 的长期硬终点试验削弱现有症状获益的临床意义。\n\n如需把这些证据整理成一份带检索式、逐条可溯源的可交付证据报告，我可以按该流程出一份。\n\n## 参考文献\n\n1. 2026 ESC Guidelines for the management of heart failure（ESC 官方指南页，2026-08-28）— https://www.escardio.org/guidelines/clinical-practice-guidelines/all-esc-practice-guidelines/heart-failure/ （全文：Eur Heart J, doi:10.1093/eurheartj/ehag100）\n2. 2026 ESC Guidelines for the management of cardiovascular disease and chronic kidney disease（ESC 官方指南页，2026-08-28）— https://www.escardio.org/guidelines/clinical-practice-guidelines/all-esc-practice-guidelines/cvd-chronic-kidney-disease/ （全文：Eur Heart J, doi:10.1093/eurheartj/ehag098）\n3. Time to Benefit of Incretin-Based Therapies in Adiposity-Related HFmrEF/HFpEF — https://pubmed.ncbi.nlm.nih.gov/42401228/\n4. Divergent Efficacy of GLP-1 Receptor Agonists in HFpEF Versus HFrEF — https://pubmed.ncbi.nlm.nih.gov/42069283/\n5. GLP-1 Receptor Agonists Across the Heart Failure Spectrum — https://pubmed.ncbi.nlm.nih.gov/42292722/\n6. GLP-1 RA Improve Cardiovascular Outcomes in HFpEF, Independent of Diabetes — https://pubmed.ncbi.nlm.nih.gov/42327438/\n7. Semaglutide for Obesity-Driven HFpEF — https://pubmed.ncbi.nlm.nih.gov/42342009/\n8. Efficacy and Safety of Tirzepatide in HFpEF — https://pubmed.ncbi.nlm.nih.gov/41862384/\n9. GLP-1 RA or Dual GLP-1/GIP RA vs SGLT2i in AF and HFpEF — https://pubmed.ncbi.nlm.nih.gov/42452454/\n10. GLP-1 RA vs DPP-4i in ESKD with Heart Failure — https://pubmed.ncbi.nlm.nih.gov/42669711/\n11. GLP-1 RA with Guideline-Directed Medical Therapy in HFrEF and T2D — https://pubmed.ncbi.nlm.nih.gov/42385946/\n12. Comparative Effectiveness of Tirzepatide and DPP-4 Inhibitors in T2D with HF — https://pubmed.ncbi.nlm.nih.gov/42420805/\n13. Hemodynamic Changes in Response to GLP-1 Treatment in ICD and CRT Patients — https://pubmed.ncbi.nlm.nih.gov/41990363/\n14. Tirzepatide, Reverse Cardiac Remodeling and Diastolic Function in Obesity-Related HFpEF — https://pubmed.ncbi.nlm.nih.gov/42710812/\n15. GLP-1 Receptor Activation, Inflammation and Heart Failure: Genetic Analysis — https://pubmed.ncbi.nlm.nih.gov/42727531/\n16. Cost-Effectiveness of Tirzepatide for HFpEF and Obesity (US) — https://pubmed.ncbi.nlm.nih.gov/42012431/\n17. Cost-effectiveness of Tirzepatide in HFpEF and Obesity (Germany) — https://pubmed.ncbi.nlm.nih.gov/42155673/\n18. Cost-Effectiveness and Budget-Impact of Semaglutide in HFpEF and Obesity (Germany) — https://pubmed.ncbi.nlm.nih.gov/42228345/\n19. GLP-1-Based Therapies and Heart Failure Outcomes: Scoping Review of Contemporary RCTs — https://pubmed.ncbi.nlm.nih.gov/42569733/\n20. Incretin Analogues as Cardiovascular Agents: State-of-the-Art Review — https://pubmed.ncbi.nlm.nih.gov/42568490/",
+      "run": {
+        "runId": "run_42833ddbe5f683efe9c01988b956d7a9",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 332801,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [19] is listed but never cited in the text."
+          },
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [20] is listed but never cited in the text."
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索指南：「heart failure GLP-1 receptor agonist obe…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「semaglutide obesity HFpEF SUMMIT STEP-HF…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「2026 ESC guidelines cardiovascular disea…」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-be102b22-3e72-4c3c-a34b-5faad2a33518",
+        "toolCalls": 39,
+        "tools": [
+          "bash",
+          "mcp__evimed__drug_term_normalize",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__guideline_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__guideline_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__open_access_full_text",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "grep",
+          "read",
+          "read",
+          "grep",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "grep",
+          "read",
+          "read",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__drug_label_search"
+        ],
+        "frontierToolCalls": 0,
+        "artifacts": [],
+        "assistantChars": 6011,
+        "reportArtifactChars": 0
+      },
+      "error": null
+    },
+    {
+      "id": "frontier-case-2",
+      "tier": "synthesis",
+      "question": "最近一个月国内外有没有新的药品安全警示或说明书修订？",
+      "answer": "",
+      "run": {
+        "status": "error"
+      },
+      "error": "run run_0f0b75a5bada57b45d91b47fd66df4b8 did not reach a terminal state within 20 minutes"
+    },
+    {
+      "id": "frontier-case-3",
+      "tier": "synthesis",
+      "question": "阿尔茨海默病的抗体类新药最近有什么进展？",
+      "answer": "## 结论\n\n2025–2026 年抗体类抗淀粉样蛋白（Aβ）药物的进展集中在三处：**已上市的两个药从\"能不能获批\"转入\"怎么用、谁来用\"**——给药方式出现皮下自动注射剂型，欧盟则把标签收窄到 ApoE4 非携带者或杂合子；**疗效证据被 2026 年 Cochrane 系统评价重新压低**，随之出现公开争论，长期随访数据信号互相矛盾；**下一代更强脑内递送的抗体（trontinemab）与面向症状前人群的抗体（remternetug）进入 Ⅲ 期**。安全性焦点仍是 ARIA（淀粉样蛋白相关影像异常），ApoE4 纯合子风险最高。\n\n## 一、已上市抗体的标签与用法变化\n\n- **仑卡奈单抗（lecanemab/乐意保）**：欧盟 2025 年 4 月 15 日获批，适应证限于**仅携带一个或不携带 ApoE4 拷贝**的早期 AD 患者，用法为每 2 周静脉输注，需在第 5、7、14 剂前复查 MRI；未控制出血性疾病、抗凝治疗、治疗前 MRI 提示微出血>4 处或浅表铁质沉着等为禁忌 [2]。美国说明书（2026-07-21 版）已纳入**皮下自动注射器**：起始 500 mg 每周一次，维持 360 mg 每周一次；静脉方案为起始 10 mg/kg 每 2 周、18 个月后 10 mg/kg 每 4 周维持 [3]。欧盟公开的用药概览目前仍描述为静脉输注 [2]。\n- **多奈单抗（donanemab/记能达）**：欧盟走了一段弯路——2025 年 3 月先被拒，重新审查后于 7 月 24 日转为正面意见，9 月 24 日正式获批，同样**限于 ApoE4 杂合子或非携带者**，每 4 周静脉输注，且明确**治疗不超过 18 个月** [4]。\n- **中国**：仑卡奈单抗 2024 年已在国内投入使用（中国多中心真实世界研究即以其为对象）[6]，国产药品注册信息为\"国药准字 SJ20240001\"，说明书写\"AD 引起的轻度认知障碍和 AD 轻度痴呆\" [7]；多奈单抗 2024 年 12 月 18 日获国家药监局批准，用于 AD 引起的 MCI 与轻度痴呆 [5][8]。\n- 第一代的阿杜那单抗（aducanumab）因疗效信号混杂已退市，当前临床问题是 lecanemab 与 donanemab 的取舍 [21]。\n\n## 二、疗效证据在 2026 年被重新校准（这是本轮最实质的\"进展\"）\n\n2026 年发表的 Cochrane 系统评价（17 项 RCT、20 342 例，检索至 2025 年 8 月）给出的结论相当冷峻：18 个月时，抗 Aβ 单抗在 ADAS-Cog 上\"可能几乎没有差异\"（SMD −0.11，中等确定性），在 CDR-SB 上\"可能几乎没有差异\"（SMD −0.12，低确定性），功能量表最多算小幅改善；作者的原话是认知与痴呆严重度获益\"微不足道（trivial）\"，并认为清除淀粉样蛋白并未带来临床意义明确的获益 [1]。\n\n反对意见同样发表在 2026 年：把单体选择性抗体与靶向斑块的第二代抗体合并分析会产生\"稀释效应\"，掩盖 lecanemab/donanemab 的认知保护作用，且低估了维持独立生活能力与减轻照护负担的意义 [11]。平行证据也分成两派：\n\n- 支持长期获益：TRAILBLAZER-ALZ 2 的 3 年长期延展（双盲延展＋ADNI 外部对照）显示早期起始组 CDR-SB 较加权外部对照慢 1.2 分，CDR-Global 进展风险 HR 0.73，>75% 受试者 76 周时达淀粉样蛋白清除，且支持\"有限疗程、达标停药\" [9]。\n- 质疑长期获益：一项基于 Clarity-AD 与 TRAILBLAZER-ALZ 2 的模拟分析发现，两药在开放延展期的年化衰退速度反而**快于双盲期**（CDR-SB 斜率差 lecanemab 0.53、donanemab 0.66），接近安慰剂组水平 [10]。外部对照设计的偏倚风险是该类结论的软肋。\n- 伞式综述（11 项系统评价）的汇总量级：CDR-SB 平均效应约 −0.485，多数落在临床意义阈值之下或附近；ARIA-E 的 OR 8.32–12.26，ARIA-H 的 OR 2–5.77，APOE ε4 携带者更高 [12]。\n\n**给临床/研究读者的实操含义**：疗效叙事应从\"延缓 30%\"转向\"效应量在 MCID 附近、个体异质性强\"，并把讨论重心放到选择标准、监测负担与成本上。一项记忆门诊人群的终身模型显示，成本效果高度依赖 18 个月后疗效是否维持：不衰减时 ICER 约 €39 745/QALY，每年衰减 20% 时升至 €151 016/QALY（预印本，未同行评议）[34]。\n\n## 三、安全性：ARIA 的量化与风险管理更新\n\n- 汇总证据：lecanemab 的 ARIA 合并发生率 19%（症状性 3%），输注相关反应 26%，因 ARIA 停药 5%；ApoE4 基因剂量效应明确（杂合子 RR 1.45、纯合子 3.54）[14]。\n- 真实世界普遍**低于**关键试验：美国队列 lecanemab 11.2%、donanemab 13.3%，且改良滴定方案把 ARIA 从 28.6% 降到 8.1%，监测 MRI 捕获了 95.2% 的事件 [15]；中国 21 中心 261 例中 ARIA 9.2%（症状性 1.6%）、输注反应 11.1% [6]；日本 120 例 ARIA 20%、无 1 例症状性 ARIA [17]；意大利 29 例治疗疗程中 ARIA 少见、输注反应 21% [16]。\n- 规范层面：Alzheimer's Association ARIA 工作组 2026 年更新强调，真实世界需要严格按方案进行 MRI 监测与风险分层，且缺少预测重症 ARIA 的临床与病理数据 [13]。美国说明书将 ARIA 列为**黑框警告**，并提示治疗中若出现疑似 ARIA 的局灶神经症状，在给予溶栓前必须先考虑 ARIA-E [3]。\n- 安全提示：治疗期间如出现新发剧烈头痛、意识或行为急剧变化、抽搐、局灶无力等，需**立即就医评估**，不要等待下一次随访或自行处理。我不提供针对具体患者的用药或停药建议。\n\n## 四、下一代抗体（进展最前沿）\n\n- **trontinemab（罗氏，Brainshuttle 抗 Aβ／转铁蛋白受体双功能抗体）**：通过受体介导的跨血脑屏障转运提高脑内暴露，是\"脑内递送增强\"路线的主要候选 [19][20]。两项关键 Ⅲ 期 **TRONTIER 1（NCT07170150）与 TRONTIER 2（NCT07169578）正在招募**，另有针对认知未受损高风险人群的研究（NCT07717411）[22][23][24]；2025 年 CTAD 会议已公布该药剂量扩展部分与影像学生物标志物的会议摘要（会议摘要，未经同行评议全文）[25][26]。\n- **remternetug（礼来，抗 N3pG Aβ）**：路线转向**症状前/二级预防**。Ⅲ 期 TRAILRUNNER-ALZ 3 在早期 AD 中进行（NCT06653153），显性遗传 AD 的 DIAN-TU 平台中也在招募（NCT06647498）[27][28]。Cochrane 检索（至 2025 年 8 月）尚无其符合条件的三期结果可纳入 [1]。\n- **抗 tau 联合**：E2814 联合 lecanemab 治疗早期 AD 的试验在进行中（NCT06602258）；单纯抗 tau 抗体迄今未复制 Aβ 抗体的成功 [29]。\n- **临床前/早期干预**：lecanemab 的 AHEAD 3-45 在前临床 AD 中进行，尚未读出 [30]。\n\n## 五、谁能真正用上（可及性）\n\n资格研究一致偏窄：法国记忆门诊按 CLARITY AD 标准仅 28.6% 的经生物标志物确诊者符合，按法国 AUR 降到 23.8%（排除 A+T− 与 ApoE4 纯合子），占全部来源人群仅 2.9%，且随访中 34.5% 因 MMSE 进展而失去资格 [32]；荷兰三级记忆门诊为 8%（严格排除后 6%）[33]；英国 AUR 把资格筛查、ApoE4 咨询与影像监测全部前移到专科中心 [31]。这解释了为什么\"获批\"与\"可及\"之间的落差是 2026 年的主要议题之一。\n\n## 不确定性与证据层级\n\n- 监管标签、剂量与禁忌来自药监机构文件与美国说明书，**层级最高、可直接引用** [2][3][4][7][8]。\n- Cochrane、伞式综述、安全性 meta 为同行评议的系统评价，本次读到的是**摘要级证据**（Cochrane 全文结论段已核对）；关键试验、长期延展与真实世界数据同样为摘要级，未逐篇核对全文。\n- Ⅲ 期试验信息来自试验注册记录，只能说明**设计与状态，不能说明疗效**；trontinemab 的阶段性结果目前只有**会议摘要**，未经同行评议 [25][26]。\n- 尚未被现有证据回答的关键问题：谁真正获益（tau 负荷、ApoE 基因型之外的生物标志物分层）、18 个月疗程结束后该如何处理、\"有限疗程\"与\"停药后斑块再沉积（约 2.4–2.8 Centiloid/年）\"的净效应 [9]。**会推翻上述判断的证据**：AHEAD 3-45、TRAILRUNNER-ALZ 3 与 TRONTIER 1/2 的读出结果，任何 lecanemab 与 donanemab 的头对头随机比较，以及显示开放延展期获益为真实而非选择偏倚的长期随访。\n\n## 参考文献\n\n1. Amyloid-beta-targeting monoclonal antibodies for people with mild cognitive impairment or mild dementia due to Alzheimer's disease. Cochrane Database Syst Rev. 2026. https://pubmed.ncbi.nlm.nih.gov/41985900/\n2. Leqembi — European Medicines Agency（欧盟用药概览、适应证与安全性条件）. https://www.ema.europa.eu/en/medicines/human/EPAR/leqembi\n3. LEQEMBI（lecanemab-irmb，含 LEQEMBI IQLIK 自动注射器）美国处方信息. https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=9d1ff786-e577-410a-a273-c4d7d0e4e975\n4. Kisunla — European Medicines Agency（欧盟用药概览、ApoE4 限定与 18 个月上限）. https://www.ema.europa.eu/en/medicines/human/EPAR/kisunla\n5. 礼来阿尔茨海默病疗法记能达®（多奈单抗注射液）在中国获批. 新华网, 2024-12-18. http://www.xinhuanet.com/digital/20241218/539ccc3e3ee443bd8d27c8ece5ccc307/c.html\n6. Liao W, et al. Effectiveness, safety, and biomarker dynamics of lecanemab in Chinese Alzheimer's disease population: a multicenter real-world study. Alzheimers Dement. 2026. https://pubmed.ncbi.nlm.nih.gov/41823189/\n7. 仑卡奈单抗注射液（乐意保）中国药品说明书索引快照，国药准字 SJ20240001. https://www.315jiage.cn/mn519796.aspx\n8. 多奈单抗注射液（记能达）中国药品说明书索引快照，国药准字 SJ20240047. https://www.315jiage.cn/mn564949.aspx\n9. Donanemab in early symptomatic Alzheimer's disease: results from the TRAILBLAZER-ALZ 2 long-term extension. J Prev Alzheimers Dis. 2026. https://pubmed.ncbi.nlm.nih.gov/41330788/\n10. Comparison of double-blind and open-label decline rates in lecanemab and donanemab trials in Alzheimer's disease. BMJ Neurol Open. 2026. https://pubmed.ncbi.nlm.nih.gov/42602524/\n11. Beyond the Cochrane review: Re-evaluating anti-amyloid therapy in Alzheimer's disease. Alzheimers Dement. 2026. https://pubmed.ncbi.nlm.nih.gov/42625495/\n12. Anti-Amyloid Antibodies in the Treatment of Alzheimer's Disease: An Umbrella Review. J Clin Med. 2026. https://pubmed.ncbi.nlm.nih.gov/42739787/\n13. van Etten ES, et al. ARIA in anti-amyloid therapies: an update from the Alzheimer's Association ARIA workgroup. Alzheimers Dement. 2026. https://pubmed.ncbi.nlm.nih.gov/42015334/\n14. Qi L, et al. Safety profiles of lecanemab: a systematic review and meta-analysis of RCTs and real-world evidence. J Prev Alzheimers Dis. 2026. https://pubmed.ncbi.nlm.nih.gov/41478817/\n15. Hakim R, et al. Real-world evidence for amyloid-targeted therapies: lecanemab and donanemab. Alzheimers Dement (Amst). 2026. https://pubmed.ncbi.nlm.nih.gov/42661728/\n16. Agosta F, et al. Real-world implementation of lecanemab and donanemab in an Italian memory center: a 1-year experience. Alzheimers Res Ther. 2026. https://pubmed.ncbi.nlm.nih.gov/41857623/\n17. Amyloid-related imaging abnormalities in Japanese patients with Alzheimer's disease treated with lecanemab: a real-world study. J Prev Alzheimers Dis. 2026. https://pubmed.ncbi.nlm.nih.gov/41936348/\n18. Evaluating emerging amyloid-β centric drugs for the treatment of Alzheimer's disease. Expert Opin Emerg Drugs. 2026. https://pubmed.ncbi.nlm.nih.gov/42322185/\n19. Recent Advances in Antibody Therapy for Alzheimer's Disease: Focus on Bispecific Antibodies. Int J Mol Sci. 2025. https://pubmed.ncbi.nlm.nih.gov/40650049/\n20. Kim BH, et al. Second-generation anti-amyloid monoclonal antibodies for Alzheimer's disease. Transl Neurodegener. 2025. https://pubmed.ncbi.nlm.nih.gov/39865265/\n21. Alkhalifa AE, et al. Anti-Amyloid Monoclonal Antibodies for Alzheimer's Disease: Evidence, ARIA Risk, and Precision Patient Selection. J Pers Med. 2025. https://pubmed.ncbi.nlm.nih.gov/41003140/\n22. TRONTIER 1：trontinemab 早期症状性 AD 关键试验（NCT07170150）. https://clinicaltrials.gov/study/NCT07170150\n23. TRONTIER 2：trontinemab 早期症状性 AD 关键试验（NCT07169578）. https://clinicaltrials.gov/study/NCT07169578\n24. Trontinemab 用于认知未受损的高风险人群（NCT07717411）. https://clinicaltrials.gov/study/NCT07717411\n25. TRONTIER 1 and TRONTIER 2: Pivotal trials of trontinemab in early symptomatic Alzheimer's disease（会议摘要）. https://europepmc.org/article/PMC/PMC12741723\n26. Latest results from the dose-expansion part (Part 2) of the Brainshuttle AD study of trontinemab（会议摘要）. https://europepmc.org/article/PMC/PMC12740976\n27. TRAILRUNNER-ALZ 3：remternetug 早期 AD Ⅲ 期（NCT06653153）. https://clinicaltrials.gov/study/NCT06653153\n28. DIAN-TU：remternetug 显性遗传 AD 试验（NCT06647498）. https://clinicaltrials.gov/study/NCT06647498\n29. E2814 联合 lecanemab 治疗早期 AD（NCT06602258）. https://clinicaltrials.gov/study/NCT06602258\n30. AHEAD 3-45：lecanemab 用于前临床 AD（NCT04468659）. https://clinicaltrials.gov/study/NCT04468659\n31. Lecanemab appropriate use recommendations for clinical practice in the UK. J Neurol Neurosurg Psychiatry. 2026. https://pubmed.ncbi.nlm.nih.gov/41390238/\n32. Vrillon A, et al. Eligibility for lecanemab treatment in a French memory clinic setting. J Neurol. 2026. https://pubmed.ncbi.nlm.nih.gov/41872339/\n33. \"Real-world\" eligibility for anti-amyloid treatment in a tertiary memory clinic setting. Alzheimers Dement. 2025. https://pubmed.ncbi.nlm.nih.gov/40506692/\n34. Cost-effectiveness of amyloid-targeting therapies in a memory clinic population: a simulation study（预印本，未经同行评议）. https://europepmc.org/article/PPR/PPR1290534\n\n如果你希望把其中某一条线展开（例如专做两药的安全性信号对比、或把 trontinemab/remternetug 的在研格局整理成一份带检索策略的报告），告诉我方向，我可以按完整交付物的形式做。",
+      "run": {
+        "runId": "run_df312aa081563660c9955f64a6ced027",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 711692,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [18] is listed but never cited in the text."
+          },
+          {
+            "code": "citation_plain_http",
+            "severity": "advice",
+            "title": "引用使用了未加密的链接",
+            "text": "The citation http://www.xinhuanet.com/digital/20241218/539ccc3e3ee443bd8d27c8ece5ccc307/c.html is served over plain HTTP. The source is reachable and the claim stands; prefer the HTTPS address where the publisher offers one."
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「trontinemab Brainshuttle amyloid clearan…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「subcutaneous lecanemab autoinjector main…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「anti-tau antibody Alzheimer randomized t…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「bepranemab anti-tau antibody phase 2 Alz…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「bepranemab」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「remternetug TRAILRUNNER」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「Chinese expert consensus lecanemab donan…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「trontinemab phase 1b 2a results amyloid …」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「remternetug N3pG antibody Alzheimer」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-f8208952-cbab-4a2f-be91-0e1c9b16ca2a",
+        "toolCalls": 49,
+        "tools": [
+          "bash",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__web_search",
+          "read",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__open_access_full_text",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__web_read"
+        ],
+        "frontierToolCalls": 0,
+        "artifacts": [],
+        "assistantChars": 9154,
+        "reportArtifactChars": 0
+      },
+      "error": null
+    },
+    {
+      "id": "frontier-case-4",
+      "tier": "synthesis",
+      "question": "这一周医学界有什么值得关注的新研究或新政策？",
+      "answer": "## 结论\n\n本周（2026-09-15 至 09-22）最值得关注的是**三个可能改变临床决策的结果**：高风险腺瘤患者的结肠镜监测可以推迟到 5 年、儿童高危 B-ALL 用双特异性抗体替代两轮化疗显著改善无事件生存、以及危重代谢性酸中毒患者使用碳酸氢钠未能获益（阴性）。监管侧，美国 FDA 本周批准了两个\"首个\"（Sanfilippo A 型基因治疗、A-T 共济失调治疗）并启动了加速首次人体试验的试点，对早期临床开发流程有实际影响。中文监管/医保口径本周我未能取得可核验的官方原文（相关站点阻止自动访问），故不作为证据列出。\n\n---\n\n## 一、最可能改变实践的三项\n\n**1. 高风险腺瘤切除后，首次监测结肠镜可以等到 5 年（NEJM，EPoS II 中期分析）**\n10 799 例高风险腺瘤患者随机分为 5 年组与 3 年组（现行指南推荐 3 年）。5 年累积结直肠癌发生率 0.77% vs 0.82%，差异 −0.05 个百分点，99.12% CI 上界 0.68 个百分点，落在预设非劣效界值 0.7 之内；两组肿瘤分期分布无明显差异 [1]。**但要克制**：这是 10 年试验的**中期分析（随访 5.5 年）**，主要终点是 10 年累积发病率，最终结论尚未产生；对具体患者不应据此自行改监测间隔。\n\n**2. 儿童高危 B-ALL：用 blinatumomab 替换两轮化疗（NEJM，AIEOP-BFM ALL 2017）**\n709 例随机，4 年无事件生存 83.0% vs 70.3%（HR 0.51，95% CI 0.35–0.73，P=0.0002）；与治疗相关的感染 23.9% vs 69.4%（P<0.001）；但**神经毒性事件更多**（12.0% vs 3.2%，P<0.001），细胞因子释放综合征（≥2 级）1.1% [2]。对儿科血液科来说，这是今年最实质的一次\"减毒增效\"证据。\n\n**3. 危重代谢性酸中毒 + 升压药：碳酸氢钠无获益（NEJM，SODa-BIC）**\n7 国 55 个 ICU、500 例，30 天主要肾脏不良事件（死亡、肾脏替代治疗、持续肾功能障碍）40.2% vs 39.4%，校正差异 1.2 个百分点（95% CI −7.1 至 9.4，P=0.78）[3]。这是一个务实的阴性结果，会削弱\"见到酸中毒就补碱\"的做法。\n\n## 二、其他值得看一眼的\n\n- **肾移植分配**：国际目标试验模拟（64 036 例等待名单患者）显示，标准供肾获益随年龄一致存在；而扩大标准供肾——尤其循环死亡后捐献（DCD）——的生存优势随受者年龄上升而消失。75 岁受者 ECD-DCD 移植 5 年生存 59% vs 继续透析 55%（HR 0.97，0.70–1.33），且移植后早期死亡风险约三倍 [4]。对老年受者是否接受边缘供肾，这条证据比既往更具体。\n- **前列腺癌放疗（NRG-GU005，JAMA）**：SBRT（5 次）在中重度泌尿/肠道生活质量部分维度更好、3–4 级泌尿毒性更低（0.6% vs 2.5%），但 3 年无病生存 88.6% vs 中度大分割 IMRT 92.1%，**未显示优于** IMRT [5]。\n- **麻醉方式（JAMA）**：英国 49 家医院、2508 例老年大型非心脏手术，全静脉麻醉与吸入麻醉在\"30 天在家存活天数\"上无差异（22.5 vs 22.4 天）[6]——此前回顾性证据所提示的 TIVA 优势未获随机验证。\n- **阿尔茨海默病新药挫折**：口服 OGA 抑制剂 ceperognastat 在早期症状性 AD 的 2 期试验中未显示有临床意义的获益 [7]——tau 相关靶点的又一次失败。\n- **血液标志物风险分层（JAMA）**：2684 名认知未受损老年人中，基线血浆 p-tau217 每升高 1 SD，进展为认知障碍的风险 HR 1.38（校正后 1.32）；高水平组 5 年绝对风险 24%，极高水平组 38% [8]。把相对风险变成了可沟通的绝对风险。\n- **方法学与 AI**：Nature Medicine 报告 38 个按性别分层的器官衰老时钟，提示性别合并建模会掩盖性别依赖的遗传与分子信号 [9]；另一项研究报告可在院内本地部署的临床 AI agent，其\"诊断行为一致性\"信号在阈值 0.90 时可保留 49.4% 病例、准确率 98.9%，并把其余病例转人工复核 [10]——这是\"选择性自主\"的一个可操作框架。\n- **机制与领域证据**：肠道 5-HT–迷走 5HT3a 通路被证明是微生物群影响血压的关键环节，为顽固性高血压提供新靶点 [11]；SELECT 预设二次分析显示司美格鲁肽使 hsCRP 下降约 37.8%（104 周）且早于体重下降出现，提示抗炎可能部分参与其 MACE 获益（探索性结论）[12]；全国性队列提示 CT-FFR ≤0.7 与心梗风险独立相关，最佳风险阈值 0.67 [13]；心肌梗死存活者中 8 种健康膳食模式均与更低全因死亡相关（HR 约 0.66–0.77）[14]。\n- **疾病负担**：GBD 2023 非洲癌症分析显示，2023 年 154 万新发、92.3 万死亡、3390 万 DALY，其中 31.6% 的 DALY 与 33.1% 的癌症死亡可归因于 88 个可改变危险因素 [15]。\n\n## 三、监管与指南\n\n- **FDA 9 月 17 日**批准 Fayuvi（rebisufligene etisparvovec-hopf），首个用于儿童 MPS IIIA（Sanfilippo A 型）的基因治疗；证据来自开放标签单臂研究（认知评分对比未治疗历史队列），安全警告包括血栓性微血管病，以及 AAV 载体基因整合的远期致瘤潜在风险；给药前起用糖皮质激素并至少持续 8 周 [16]。\n- **FDA 9 月 18 日**批准 Aqneursa（levacetylleucine）用于共济失调毛细血管扩张症患者的共济失调，为首个该类适应证药物；支持证据是 73 例、两周期交叉的随机双盲安慰剂对照研究，fSARA 评分改善；常见不良反应为跌倒、皮肤裂伤、尿路感染 [17]。\n- **FDA 9 月 15 日**启动 Expedited IND 试点（Operation TrialBlazer 的一部分），通过\"申办方—合格研究机构\"配对、对 IND 组分滚动审评来缩短至首次人体试验的时间；申请截止 2026-10-30，首批预计 8–10 对入选 [18]。9 月 21 日另发布推进动物试验替代方法的法规更新 [19]。\n- **临床指南**：本周上线的包括 CMAJ 的《减少疫苗注射相关痛苦：2026 临床实践指南更新》（基于 GRADE、按\"5P\"框架组织，覆盖流程、操作、体位活动、药物与心理干预）[20]，以及一份新的圆锥角膜诊断、治疗与随访循证指南（多数推荐为条件性推荐，反映多个领域证据确定性低或极低）[21]。\n\n## 四、证据边界\n\n- 以上文献类结论**全部基于 PubMed 摘要层级**，我未逐篇读取全文；摘要通常不报告完整的安全性数据、亚组与随访细节，个别数字（如绝对风险、亚组 HR）可能随全文公布而调整。\n- 检索范围是 NEJM、Lancet 系列、JAMA、BMJ、Nature Medicine、Circulation 等期刊在 2026-09-15 至 09-22 的收录记录，加 FDA 官方发布页；这**不是**穷尽式周报，其他专科期刊与预印本平台的重要工作可能未覆盖。在你关注的 HFpEF/incretin 方向上，本周在我的检索范围内没有新的高影响力证据（上一轮的 ESC 2026 心衰与 CKD 指南发布于 8 月 28 日，不属本周）。\n- 中国监管与医保侧：本周网上有若干政策相关消息流传，但我**未能读到官方原文**（相关站点拒绝自动化访问），因此这里不作陈述，以免把未核实内容当作证据。需要的话我可以单独做一次中文政策核查。\n- 这些都是群体层面的研究结论，不构成对具体患者的用药、麻醉方式、监测间隔或移植决策建议；涉及个体处置请与主治团队确认。\n\n**参考文献**\n\n1. Colonoscopy Intervals and Colorectal Cancer Incidence after Adenoma Removal. N Engl J Med, 2026. https://pubmed.ncbi.nlm.nih.gov/42748427/\n2. Blinatumomab for Replacing Chemotherapy in Pediatric Acute Lymphoblastic Leukemia. N Engl J Med, 2026. https://pubmed.ncbi.nlm.nih.gov/42748428/\n3. Sodium Bicarbonate for Critically Ill Adults with Metabolic Acidosis and Shock. N Engl J Med, 2026. https://pubmed.ncbi.nlm.nih.gov/42283370/\n4. Survival benefit of deceased donor kidney transplantation versus continued dialysis. BMJ, 2026. https://pubmed.ncbi.nlm.nih.gov/42759976/\n5. Stereotactic Body Radiotherapy vs Moderately Hypofractionated IMRT for Localized Intermediate-Risk Prostate Cancer (NRG-GU005). JAMA, 2026. https://pubmed.ncbi.nlm.nih.gov/42593775/\n6. Total Intravenous vs Volatile Inhalational Anesthesia for Major Noncardiac Surgery. JAMA, 2026. https://pubmed.ncbi.nlm.nih.gov/42584898/\n7. Ceperognastat in Early Symptomatic Alzheimer Disease: A Randomized Clinical Trial. JAMA, 2026. https://pubmed.ncbi.nlm.nih.gov/42441396/\n8. Prognostic Value of Blood-Based P-Tau217 Levels for Progression to Cognitive Impairment. JAMA, 2026. https://pubmed.ncbi.nlm.nih.gov/42449500/\n9. Sex-specific biological aging clocks across organs and omics. Nat Med, 2026. https://pubmed.ncbi.nlm.nih.gov/42749890/\n10. On-premise medical AI agents for reliable clinical decision-making. Nat Med, 2026. https://pubmed.ncbi.nlm.nih.gov/42744896/\n11. Intestinal Serotonergic Vagal Signaling as a Mediator of Microbiota-Induced Hypertension. Circulation, 2026. https://pubmed.ncbi.nlm.nih.gov/42741853/\n12. Effect of Semaglutide on hsCRP in Patients With Established Cardiovascular Disease and Overweight or Obesity in SELECT. Circulation, 2026. https://pubmed.ncbi.nlm.nih.gov/42610271/\n13. Prognostic Value of Coronary CTA-Derived Fractional Flow Reserve From a Large Nationwide Cohort. Circulation, 2026. https://pubmed.ncbi.nlm.nih.gov/42770221/\n14. Association of Adherence to Various Dietary Patterns With Mortality Among Survivors of Myocardial Infarction. Circulation, 2026. https://pubmed.ncbi.nlm.nih.gov/42639679/\n15. Burden of cancer in Africa, 1990-2023: GBD 2023. Lancet Oncol, 2026. https://pubmed.ncbi.nlm.nih.gov/42743938/\n16. FDA Approves First Gene Therapy for Pediatric Patients with Sanfilippo Syndrome Type A（2026-09-17）. https://www.fda.gov/news-events/press-announcements/fda-approves-first-gene-therapy-pediatric-patients-sanfilippo-syndrome-type\n17. FDA Approves Therapy to Treat Ataxia in Patients with Ataxia-Telangiectasia（2026-09-18）. https://www.fda.gov/drugs/news-events-human-drugs/fda-approves-therapy-treat-ataxia-patients-ataxia-telangiectasia-rare-genetic-disorder\n18. FDA Launches Expedited IND Pilot, Begins Accepting Applications（2026-09-15）. https://www.fda.gov/news-events/press-announcements/fda-launches-expedited-ind-pilot-begins-accepting-applications\n19. FDA Press Announcements（2026-09-21 条目标题与日期）. https://www.fda.gov/news-events/fda-newsroom/press-announcements\n20. Reducing distress during vaccine injections: 2026 clinical practice guideline update. CMAJ, 2026. https://pubmed.ncbi.nlm.nih.gov/42767684/\n21. Evidence-Based Clinical Practice Guideline for Diagnosis, Treatment, and Follow-Up of Keratoconus Patients. Clin Ophthalmol, 2026. https://pubmed.ncbi.nlm.nih.gov/42763659/\n\n需要的话，我可以把其中任何一条（例如结肠镜间隔或 blinatumomab）做成一份带检索记录、逐条可追溯的证据综述，或者专门核查一遍中文监管与医保政策本周的官方发布。",
+      "run": {
+        "runId": "run_db20994fa4e48d32d89a22da16d897e9",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 130890,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [],
+        "narrationMessages": 0,
+        "sessionId": "session-550caaf4-37ec-4383-bc27-a5ce62b93c88",
+        "toolCalls": 25,
+        "tools": [
+          "bash",
+          "mcp__evimed__web_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__guideline_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "bash",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "bash",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "bash",
+          "mcp__evimed__web_read",
+          "cite_lookup",
+          "cite_lookup",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search"
+        ],
+        "frontierToolCalls": 0,
+        "artifacts": [],
+        "assistantChars": 6853,
+        "reportArtifactChars": 0
+      },
+      "error": null
+    },
+    {
+      "id": "frontier-control-1",
+      "tier": "direct",
+      "question": "华法林与维生素K相互作用的机制是什么？",
+      "answer": "## 结论\n\n华法林与维生素 K 之间不是药代动力学的\"代谢性\"相互作用，而是**在同一靶点上的直接药理拮抗**：华法林抑制维生素 K 环氧化物还原酶（VKORC1），切断维生素 K 的再生循环；维生素 K 则从这条通路的下游把凝血因子的活化重新\"接通\"。因此，维生素 K 的摄入量变化会直接改变 INR——它既能削弱华法林的抗凝作用，也是华法林过量与出血的解毒剂。对正在服用华法林的人，关键提示是：不要自行大幅增减富含维生素 K 的食物或添加维生素 K 补充剂；若出现呕血、黑便、持续头痛伴呕吐、意识改变或无法解释的瘀斑，应立即就医，不必等 INR 结果。\n\n## 机制\n\n**1. 正常的维生素 K 循环（相互作用发生的舞台）**\n\n食物来源的维生素 K（叶绿醌 K1、甲萘醌类 MK-n）以醌型存在，需先还原为氢醌（KH₂）。γ-谷氨酰羧化酶以 KH₂ 为底物，把凝血因子 Ⅱ、Ⅶ、Ⅸ、Ⅹ 及蛋白 C、S、Z 前体上的谷氨酸残基羧化为 γ-羧基谷氨酸，使这些蛋白能结合钙离子与磷脂膜而具备促凝/抗凝活性；在这一步中 KH₂ 被氧化为维生素 K 2,3-环氧化物。VKORC1 再把环氧化物还原回去，循环得以持续 [1,2]。VKORC1 所催化的这一步是维生素 K 依赖因子生物合成的**限速环节**，这是华法林能\"四两拨千斤\"的前提 [2]。\n\n**2. 华法林阻断的位置**\n\n4-羟基香豆素类（华法林）抑制 VKORC1，循环中断、KH₂ 耗竭，羧化酶失去底物，分泌入血的是未羧化的因子（如 PIVKA-Ⅱ），功能活性很低，PT/INR 因此延长 [1,2]。\n\n**3. 维生素 K 从三个层面与之相互作用**\n\n- **底物补充与旁路还原（核心机制）**：外源维生素 K 提供的是醌型底物，而醌→氢醌的还原并非只能由 VKORC1 完成。普遍接受的机制解释是，还存在华法林不敏感的还原途径（NAD(P)H:醌氧化还原酶 NQO1 等），可在 VKORC1 被抑制的情况下继续生成 KH₂，从而绕开被阻断的环氧化物还原步骤，恢复羧化、逆转抗凝。这是维生素 K 用作解毒剂、以及小剂量口服维生素 K 能稳定 INR 的机制基础。需要说明：**这一旁路环节本轮两次针对性检索均返回 0 条**，属教科书级机制解释而非本轮检索到的文献结论，置信度中等。\n- **剂量与波动决定方向**：相互作用呈浓度依赖。一项 50 例前瞻队列中，每日维生素 K 摄入 ≥250 μg 者达到治疗 INR 所需华法林更多、敏感性更低（维持剂量 5.7±1.7 vs 3.5±1.0 mg/d）[5]。但汇总 2 项膳食干预试验与 9 项观察性研究的系统评价结论是：各研究结果互相冲突，**不应当限制富含维生素 K 的食物**，真正该做的是保持摄入习惯稳定、避免剧烈波动；其中位数摄入在 76–217 μg/d，效应可能只在较高摄入（>150 μg/d）时才显现 [4]。纳豆（富含 MK-7，半衰期长）与含维生素 K 的复合维生素、肠内营养配方变更，属于影响更持久的情形（成熟临床认识）。\n- **时间学**：华法林起效慢，因为要等体内已有功能性因子被清除——因子 Ⅶ 半衰期最短，故 INR 先升，随后是 Ⅸ、Ⅹ、Ⅱ；这也是华法林初始治疗需与肝素类重叠、并可出现华法林致皮肤坏死（蛋白 C 先降）的原因。反方向上，补充维生素 K 后 INR 于数小时内开始回落（同样先补上半衰期短的因子 Ⅶ），但凝血功能的完全恢复滞后于 INR 的改善，因此严重出血时不能只靠维生素 K，需要凝血酶原复合物等促凝措施，具体方案由临床医生决定 [6]。\n\n**4. 常被混为一谈、但机制不同的通路**：CYP2C9 抑制剂/诱导剂（胺碘酮、甲硝唑、利福平等）改变的是华法林的**代谢清除**；抗生素影响肠道菌群合成甲萘醌类、脂肪吸收障碍影响 K1 吸收，属间接途径。这些都不是维生素 K 本身的拮抗机制。\n\n## 不确定性与证据层级\n\n- VKORC1 是华法林的分子靶点、维生素 K 循环是其作用核心：有多篇综述支持，属成熟共识；但本轮读到的是**摘要级**（未读全文）[1,2,3]。\n- 膳食维生素 K 与 INR 的关系：证据不一致、效应阈值不明确，系统评价明确反对限制饮食 [4]；单队列的剂量-反应数据来自 1999 年、样本 50 例 [5]。\n- 个体差异的大头在遗传：VKORC1 启动子多态性（rs9923231）是华法林剂量的主要**药效学**决定因素，CYP2C9 变异影响代谢，二者加年龄可解释维持剂量个体差异的 50% 以上 [1,3]——这也是\"同样的维生素 K 摄入，不同人 INR 反应差别很大\"的原因。\n- 能推翻或修正上述机制的：若人体肝脏中醌→氢醌的华法林不敏感还原途径被证伪，则维生素 K 的解毒效应需改用其他解释（如环氧化物还原的部分竞争性恢复、VKORC1 突变型残余活性）。\n- 本文综述证据与机制，不构成针对具体患者的用药或饮食处方；实际剂量调整与维生素 K 给药须由主管医生决定。\n\n## 参考文献\n\n1. Oldenburg J, Watzka M, Rost S, Müller CR. VKORC1: molecular target of coumarins. *J Thromb Haemost.* 2007. https://pubmed.ncbi.nlm.nih.gov/17635701/\n2. Wallin R, Wajih N, Hutson SM. VKORC1: a warfarin-sensitive enzyme in vitamin K metabolism and biosynthesis of vitamin K-dependent blood coagulation factors. *Vitam Horm.* 2008. https://pubmed.ncbi.nlm.nih.gov/18374197/\n3. Siguret V, Pautas E, Gouin-Thibault I. Warfarin therapy: influence of pharmacogenetic and environmental factors on the anticoagulant response to warfarin. *Vitam Horm.* 2008. https://pubmed.ncbi.nlm.nih.gov/18374198/\n4. Violi F, Lip GYH, Pignatelli P, Pastori D. Interaction Between Dietary Vitamin K Intake and Anticoagulation by Vitamin K Antagonists: Is It Really True? A Systematic Review. *Medicine.* 2016. https://pubmed.ncbi.nlm.nih.gov/26962786/\n5. Lubetsky A, Dekel-Stern E, Chetrit A, Lubin F, Halkin H. Vitamin K intake and sensitivity to warfarin in patients consuming regular diets. *Thromb Haemost.* 1999. https://pubmed.ncbi.nlm.nih.gov/10102468/\n6. Hanley JP. Warfarin reversal. *J Clin Pathol.* 2004. https://pubmed.ncbi.nlm.nih.gov/15509671/\n7. Warfarin Sodium — FDA 说明书（含黑框警告：可致大出血；药物与饮食变化会影响 INR）。https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=1244c338-9140-425a-bf2a-9da6b4ac0287",
+      "run": {
+        "runId": "run_0e7b2bdfe967bacccf363e0b963c7719",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 60474,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [7] is listed but never cited in the text."
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「NAD(P)H quinone oxidoreductase NQO1 vita…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「vitamin K1 phylloquinone bypass warfarin…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「vitamin K antagonist reversal phytonadio…」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-49586abb-804a-4c48-8e85-6d27830cf737",
+        "toolCalls": 13,
+        "tools": [
+          "mcp__evimed__literature_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search"
+        ],
+        "frontierToolCalls": 0,
+        "artifacts": [],
+        "assistantChars": 3402,
+        "reportArtifactChars": 0
+      },
+      "error": null
+    }
+  ]
+}

@@ -1,0 +1,459 @@
+{
+  "schemaVersion": 1,
+  "judgePromptVersion": 1,
+  "judgeModel": "deepseek-v4-pro",
+  "answersFile": "/home/coder/workspace/EviMedScience/OpenScience/evals/open-domain-answer-quality/results/answers-20260922T172255Z.json",
+  "generatedAt": "2026-09-22T17:25:36Z",
+  "cases": [
+    {
+      "id": "frontier-case-1",
+      "tier": "synthesis",
+      "domain": "cardiology",
+      "question": "最近三个月 GLP-1 受体激动剂在心衰方面有什么新证据？",
+      "run": {
+        "runId": "run_42833ddbe5f683efe9c01988b956d7a9",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 332801,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [19] is listed but never cited in the text."
+          },
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [20] is listed but never cited in the text."
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索指南：「heart failure GLP-1 receptor agonist obe…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「semaglutide obesity HFpEF SUMMIT STEP-HF…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「2026 ESC guidelines cardiovascular disea…」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-be102b22-3e72-4c3c-a34b-5faad2a33518",
+        "toolCalls": 39,
+        "tools": [
+          "bash",
+          "mcp__evimed__drug_term_normalize",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__guideline_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__guideline_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__open_access_full_text",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "grep",
+          "read",
+          "read",
+          "grep",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "grep",
+          "read",
+          "read",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__drug_label_search"
+        ],
+        "frontierToolCalls": 0,
+        "artifacts": [],
+        "assistantChars": 6011,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 5,
+        "uncertainty_calibration": 5
+      },
+      "overall": 5.0,
+      "issues": [],
+      "rationale": "答案首段直接给出近三个月结论与日期范围，并按指南、汇总分析、真实世界、机制、经济性分层。引用均为ESC官方页或PubMed，未发现内部矛盾、捏造引用，或把预印本/新闻稿当作确证。证据等级和不确定性校准良好，信息可操作且符合synthesis要求。"
+    },
+    {
+      "id": "frontier-case-2",
+      "tier": "synthesis",
+      "domain": "pharmacy-safety",
+      "question": "最近一个月国内外有没有新的药品安全警示或说明书修订？",
+      "missingAnswer": true,
+      "collectionError": "run run_0f0b75a5bada57b45d91b47fd66df4b8 did not reach a terminal state within 20 minutes"
+    },
+    {
+      "id": "frontier-case-3",
+      "tier": "synthesis",
+      "domain": "neurology",
+      "question": "阿尔茨海默病的抗体类新药最近有什么进展？",
+      "run": {
+        "runId": "run_df312aa081563660c9955f64a6ced027",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 711692,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [18] is listed but never cited in the text."
+          },
+          {
+            "code": "citation_plain_http",
+            "severity": "advice",
+            "title": "引用使用了未加密的链接",
+            "text": "The citation http://www.xinhuanet.com/digital/20241218/539ccc3e3ee443bd8d27c8ece5ccc307/c.html is served over plain HTTP. The source is reachable and the claim stands; prefer the HTTPS address where the publisher offers one."
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「trontinemab Brainshuttle amyloid clearan…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「subcutaneous lecanemab autoinjector main…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「anti-tau antibody Alzheimer randomized t…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「bepranemab anti-tau antibody phase 2 Alz…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「bepranemab」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「remternetug TRAILRUNNER」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「Chinese expert consensus lecanemab donan…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「trontinemab phase 1b 2a results amyloid …」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「remternetug N3pG antibody Alzheimer」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-f8208952-cbab-4a2f-be91-0e1c9b16ca2a",
+        "toolCalls": 49,
+        "tools": [
+          "bash",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__web_search",
+          "read",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__open_access_full_text",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__web_read"
+        ],
+        "frontierToolCalls": 0,
+        "artifacts": [],
+        "assistantChars": 9154,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 5,
+        "uncertainty_calibration": 5
+      },
+      "overall": 5.0,
+      "issues": [],
+      "rationale": "首段即给出按主题区分的直接结论；全文按审批、证据、安全性、在研药物、可及性展开，日期、试验注册号与文献引用齐全。明确区分监管文件、系统评价、会议摘要与预印本的证据等级，反复强调ARIA风险与疗效不确定性，未夸大。结构清晰，无内部矛盾或格式泄漏。"
+    },
+    {
+      "id": "frontier-case-4",
+      "tier": "synthesis",
+      "domain": "general",
+      "question": "这一周医学界有什么值得关注的新研究或新政策？",
+      "run": {
+        "runId": "run_db20994fa4e48d32d89a22da16d897e9",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 130890,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [],
+        "narrationMessages": 0,
+        "sessionId": "session-550caaf4-37ec-4383-bc27-a5ce62b93c88",
+        "toolCalls": 25,
+        "tools": [
+          "bash",
+          "mcp__evimed__web_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__guideline_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "bash",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "bash",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "bash",
+          "mcp__evimed__web_read",
+          "cite_lookup",
+          "cite_lookup",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search"
+        ],
+        "frontierToolCalls": 0,
+        "artifacts": [],
+        "assistantChars": 6853,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 5,
+        "correctness": 5,
+        "uncertainty_calibration": 5
+      },
+      "overall": 5.0,
+      "issues": [
+        "Reference 19 is a generic FDA press page rather than a direct link to the cited regulatory update; several journal references omit exact publication dates."
+      ],
+      "rationale": "The answer opens with a clear weighted conclusion, then curates key studies with names, data, and clinical relevance. It honestly scopes the retrieval window and database, flags abstract-level evidence and unverifiable Chinese sources, and notes limitations for interim and negative results. A citation detail is minor only."
+    },
+    {
+      "id": "frontier-control-1",
+      "tier": "direct",
+      "domain": "clinical-pharmacology",
+      "question": "华法林与维生素K相互作用的机制是什么？",
+      "run": {
+        "runId": "run_0e7b2bdfe967bacccf363e0b963c7719",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 60474,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [7] is listed but never cited in the text."
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「NAD(P)H quinone oxidoreductase NQO1 vita…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「vitamin K1 phylloquinone bypass warfarin…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「vitamin K antagonist reversal phytonadio…」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-49586abb-804a-4c48-8e85-6d27830cf737",
+        "toolCalls": 13,
+        "tools": [
+          "mcp__evimed__literature_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search"
+        ],
+        "frontierToolCalls": 0,
+        "artifacts": [],
+        "assistantChars": 3402,
+        "reportArtifactChars": 0
+      },
+      "scores": {
+        "directness": 5,
+        "readability": 5,
+        "usefulness": 3,
+        "correctness": 5,
+        "uncertainty_calibration": 5
+      },
+      "overall": 4.6,
+      "issues": [
+        "回答远超 direct 层期望的简洁性，包含报告式参考文献和检索过程说明，影响实用性。",
+        "对 VKORC1 为限速环节和 NQO1 旁路的机制描述存在简化，但已标注置信度。"
+      ],
+      "rationale": "结论段直接回答华法林抑制 VKORC1、维生素 K 摄入变化影响 INR，机制准确，安全性提示恰当，证据局限性也如实标注。主要缺陷是内容过长、带检索叙述和文献列表，不符合 direct 层简洁聚焦的要求，故实用性降分。"
+    }
+  ],
+  "summary": {
+    "expectedQuestions": 5,
+    "judgedCases": 4,
+    "failedCases": 0,
+    "missingAnswers": 1,
+    "dimensions": {
+      "directness": 5.0,
+      "readability": 5.0,
+      "usefulness": 4.5,
+      "correctness": 5.0,
+      "uncertainty_calibration": 5.0
+    },
+    "overallMean": 4.9,
+    "byTier": {
+      "direct": {
+        "cases": 1,
+        "judged": 1,
+        "dimensions": {
+          "directness": 5.0,
+          "readability": 5.0,
+          "usefulness": 3.0,
+          "correctness": 5.0,
+          "uncertainty_calibration": 5.0
+        },
+        "overallMean": 4.6
+      },
+      "synthesis": {
+        "cases": 4,
+        "judged": 3,
+        "dimensions": {
+          "directness": 5.0,
+          "readability": 5.0,
+          "usefulness": 5.0,
+          "correctness": 5.0,
+          "uncertainty_calibration": 5.0
+        },
+        "overallMean": 5.0
+      },
+      "report": {
+        "cases": 0,
+        "judged": 0,
+        "dimensions": {
+          "directness": NaN,
+          "readability": NaN,
+          "usefulness": NaN,
+          "correctness": NaN,
+          "uncertainty_calibration": NaN
+        },
+        "overallMean": NaN
+      }
+    }
+  }
+}
