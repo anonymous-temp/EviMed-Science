@@ -527,6 +527,15 @@ services:
       OPEN_SCIENCE_WEB_SEARCH_URL: ${OPEN_SCIENCE_WEB_SEARCH_URL:-}
       OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/search/v1/query}
       OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS: ${OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS:-30000}
+      # The Tokyo node (apps/server/src/edgeProxy.mjs). Empty URL = no node; the
+      # credentials file is bound below (/dev/null where there is none).
+      OPEN_SCIENCE_EDGE_PROXY_URL: ${OPEN_SCIENCE_EDGE_PROXY_URL:-}
+      OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_FILE: /run/secrets/edge-proxy-credentials
+      OPEN_SCIENCE_EDGE_PROXY_HOSTS: ${OPEN_SCIENCE_EDGE_PROXY_HOSTS:-gtexportal.org,api.omim.org,api.materialsproject.org}
+      OPEN_SCIENCE_EDGE_PROXY_CONNECT_TIMEOUT_MS: ${OPEN_SCIENCE_EDGE_PROXY_CONNECT_TIMEOUT_MS:-10000}
+      OPEN_SCIENCE_WEB_SEARCH_EDGE_URL: ${OPEN_SCIENCE_WEB_SEARCH_EDGE_URL:-}
+      OPEN_SCIENCE_WEB_SEARCH_BAILIAN_ENABLED: ${OPEN_SCIENCE_WEB_SEARCH_BAILIAN_ENABLED:-false}
+      OPEN_SCIENCE_WEB_SEARCH_BAILIAN_MODEL: ${OPEN_SCIENCE_WEB_SEARCH_BAILIAN_MODEL:-qwen-plus}
       # Knowledge-base search (`kb_search`) and the index behind it. Off, the
       # tool answers "disabled", nothing is indexed or embedded, and a run reads
       # the knowledge-base files as before.
@@ -641,6 +650,8 @@ services:
       OPEN_SCIENCE_WEB_READ_CONCURRENCY: ${OPEN_SCIENCE_WEB_READ_CONCURRENCY:-8}
       OPEN_SCIENCE_WEB_READ_RUNTIME_CONCURRENCY: ${OPEN_SCIENCE_WEB_READ_RUNTIME_CONCURRENCY:-3}
       OPEN_SCIENCE_WEB_READ_HOST_INTERVAL_MS: ${OPEN_SCIENCE_WEB_READ_HOST_INTERVAL_MS:-1000}
+      OPEN_SCIENCE_WEB_READ_EDGE_FALLBACK: ${OPEN_SCIENCE_WEB_READ_EDGE_FALLBACK:-true}
+      OPEN_SCIENCE_WEB_READ_DIRECT_TIMEOUT_MS: ${OPEN_SCIENCE_WEB_READ_DIRECT_TIMEOUT_MS:-12000}
       OPEN_SCIENCE_WEB_READ_TIMEOUT_MS: ${OPEN_SCIENCE_WEB_READ_TIMEOUT_MS:-150000}
       OPEN_SCIENCE_WEB_RENDER_ENABLED: ${OPEN_SCIENCE_WEB_RENDER_ENABLED:-false}
       OPEN_SCIENCE_WEB_RENDER_CONCURRENCY: ${OPEN_SCIENCE_WEB_RENDER_CONCURRENCY:-2}
@@ -720,6 +731,12 @@ services:
       - type: bind
         source: ${OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE}
         target: /run/secrets/dashscope-api-key
+        read_only: true
+      # The Tokyo node's proxy credentials (user:password, 0400). Optional: a
+      # deployment without a node binds /dev/null, which config.mjs reads as none.
+      - type: bind
+        source: ${OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_HOST_FILE:-/dev/null}
+        target: /run/secrets/edge-proxy-credentials
         read_only: true
     depends_on:
       evimed-postgres:

@@ -203,3 +203,117 @@ test("a non-JSON backend response is not passed through as a result set", async 
   assert.equal(res.statusCode, 502);
   assert.equal(res.json().code, "web_search_response_invalid");
 });
+
+function bailianResponse(results, { status = 200 } = {}) {
+  return searxngResponse({ output: { search_info: { search_results: results } }, usage: { input_tokens: 3000 } }, { status });
+}
+
+const withBailian = { ...configured, webSearchBailianEnabled: true, dashscopeApiKey: "sk-test-key-not-real" };
+
+test("Qwen's web search is merged with SearXNG's, interleaved, deduplicated, and the key never leaves in the answer", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).startsWith("https://dashscope.aliyuncs.com/")) {
+      return bailianResponse([
+        { title: "口服司美格鲁肽「说明书」更新", url: "https://mp.weixin.qq.com/s?__biz=MjM5&mid=1&idx=2&sn=abc", site_name: "腾讯网" },
+        { title: "the same page again", url: "https://example.org/a?utm=x", site_name: "example" },
+      ]);
+    }
+    return searxngResponse({ results: [
+      { url: "https://example.org/a", title: "A", content: "first", engine: "bing" },
+      { url: "https://example.org/b", title: "B", content: "second", engine: "google" },
+    ] });
+  };
+  const res = await run(withBailian, fetchImpl, { query: "司美格鲁肽 说明书 修订" });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data;
+  assert.deepEqual(data.results.map((row) => row.url), [
+    "https://example.org/a",
+    "https://mp.weixin.qq.com/s?__biz=MjM5&mid=1&idx=2&sn=abc",
+    "https://example.org/b",
+  ]);
+  assert.deepEqual(data.engines, ["bailian", "bing", "google"]);
+  assert.equal(data.results[1].snippet, "腾讯网", "the site name stands in for the snippet Bailian does not return");
+  const bailian = calls.find((call) => call.url.startsWith("https://dashscope.aliyuncs.com/"));
+  assert.equal(bailian.init.method, "POST");
+  assert.equal(bailian.init.headers.authorization, "Bearer sk-test-key-not-real");
+  const body = JSON.parse(bailian.init.body);
+  assert.equal(body.model, "qwen-plus");
+  assert.equal(body.input.messages[0].content, "司美格鲁肽 说明书 修订");
+  assert.equal(body.parameters.enable_search, true);
+  assert.deepEqual(body.parameters.search_options, { forced_search: true, enable_source: true, search_strategy: "turbo" });
+  assert.ok(body.parameters.max_tokens <= 16, "the model's own answer is dropped, so it is kept to a few tokens");
+  assert.ok(!res.body.includes("sk-test-key-not-real"));
+});
+
+test("Bailian is off unless the deployment switches it on, even with a DashScope key present", async () => {
+  const urls = [];
+  const res = await run({ ...configured, dashscopeApiKey: "sk-test-key-not-real" }, async (url) => {
+    urls.push(String(url));
+    return searxngResponse({ results: [{ url: "https://example.org/a", title: "A", engine: "bing" }] });
+  }, { query: "semaglutide" });
+  assert.equal(res.statusCode, 200);
+  assert.ok(urls.every((url) => !url.startsWith("https://dashscope.aliyuncs.com/")));
+});
+
+test("one source failing is a thinner answer that names it; both failing is a refused search", async () => {
+  const bailianOnly = await run(withBailian, async (url) => (String(url).startsWith("https://dashscope.aliyuncs.com/")
+    ? bailianResponse([{ title: "国家药监局公告", url: "https://www.nmpa.gov.cn/x.html", site_name: "国家药监局" }])
+    : searxngResponse({ error: "down" }, { status: 502 })), { query: "国家药监局 公告" });
+  assert.equal(bailianOnly.statusCode, 200);
+  assert.deepEqual(bailianOnly.json().data.results.map((row) => row.url), ["https://www.nmpa.gov.cn/x.html"]);
+  assert.ok(bailianOnly.json().data.unresponsiveEngines.includes("searxng"));
+
+  const searxOnly = await run(withBailian, async (url) => (String(url).startsWith("https://dashscope.aliyuncs.com/")
+    ? bailianResponse([], { status: 401 })
+    : searxngResponse({ results: [{ url: "https://example.org/a", title: "A", engine: "bing" }] })), { query: "semaglutide" });
+  assert.equal(searxOnly.statusCode, 200);
+  assert.ok(searxOnly.json().data.unresponsiveEngines.includes("bailian"));
+
+  const neither = await run(withBailian, async (url) => (String(url).startsWith("https://dashscope.aliyuncs.com/")
+    ? bailianResponse([], { status: 500 })
+    : searxngResponse({ error: "down" }, { status: 502 })), { query: "semaglutide" });
+  assert.equal(neither.statusCode, 502);
+
+  const bailianAlone = await run({ webSearchTimeoutMs: 5_000, webSearchBailianEnabled: true, dashscopeApiKey: "sk-test-key-not-real" },
+    async () => bailianResponse([{ title: "t", url: "https://example.org/only", site_name: "s" }]), { query: "semaglutide" });
+  assert.equal(bailianAlone.statusCode, 200, "Bailian alone is a configured search");
+});
+
+test("the node's SearXNG is searched first, and this host's answers when the node cannot", async () => {
+  const edgeUrl = "http://127.0.0.1:8888/search";
+  const config = { ...configured, webSearchEdgeUrl: edgeUrl };
+  const local = [];
+  const localFetch = async (url) => {
+    local.push(String(url));
+    return searxngResponse({ results: [{ url: "https://example.org/local", title: "local", engine: "quark" }] });
+  };
+  const viaNode = [];
+  const edgeFetchImpl = async (url) => {
+    viaNode.push(String(url));
+    return searxngResponse({ results: [{ url: "https://example.org/tokyo", title: "tokyo", engine: "google" }] });
+  };
+  const handler = createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl: localFetch, edge: { hosts: new Set() }, edgeFetchImpl });
+  let res = response();
+  await handler(request({ query: "semaglutide heart failure" }), res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json().data.results.map((row) => row.url), ["https://example.org/tokyo"]);
+  assert.equal(local.length, 0, "a node that answers leaves this host's SearXNG alone");
+  assert.ok(viaNode[0].startsWith(`${edgeUrl}?q=semaglutide+heart+failure`));
+
+  const downNode = createWebSearchGatewayHandler(config, runtimeManager, {
+    fetchImpl: localFetch,
+    edge: { hosts: new Set() },
+    edgeFetchImpl: async () => { throw new Error("node down"); },
+  });
+  res = response();
+  await downNode(request({ query: "semaglutide" }), res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json().data.results.map((row) => row.url), ["https://example.org/local"]);
+
+  const noNode = createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl: localFetch, edgeFetchImpl });
+  res = response();
+  await noNode(request({ query: "semaglutide" }), res);
+  assert.deepEqual(res.json().data.results.map((row) => row.url), ["https://example.org/local"], "no node configured, the edge URL is ignored");
+});

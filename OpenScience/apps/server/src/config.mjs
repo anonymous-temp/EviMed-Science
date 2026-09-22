@@ -390,6 +390,20 @@ export function loadConfig(overrides = {}) {
     codePrefix: "materials_project_api_key",
     defaultFile: localSecretFile("materials-project.api-key"),
   });
+  // The Tokyo node's proxy credentials (`user:password`, edgeProxy.mjs). Compose
+  // binds /dev/null where a deployment has no node, which reads as none rather
+  // than as a broken secret.
+  const edgeProxySecret = (() => {
+    const loaded = preferredFileSecret(overrides, {
+      overrideValue: "edgeProxyCredentials",
+      overrideFile: "edgeProxyCredentialsFile",
+      valueEnv: "OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS",
+      fileEnv: "OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_FILE",
+      codePrefix: "edge_proxy_credentials",
+      defaultFile: localSecretFile("edge-proxy.credentials"),
+    });
+    return loaded.error === "edge_proxy_credentials_file_not_regular" ? { value: "", source: "none", error: null } : loaded;
+  })();
   const publicSourceCredentialSpecs = {
     evimedEvidence: ["evimedApiKey", "OPEN_SCIENCE_EVIMED_API_KEY", "evimed.api-key"],
     semanticScholar: ["semanticScholarApiKey", "OPEN_SCIENCE_SEMANTIC_SCHOLAR_API_KEY", "semantic-scholar.api-key"],
@@ -1043,6 +1057,29 @@ export function loadConfig(overrides = {}) {
     webSearchTimeoutMs: Number(
       overrides.webSearchTimeoutMs ?? process.env.OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS ?? 30_000,
     ),
+    // The Tokyo node (edgeProxy.mjs): a TLS forward proxy for the upstreams this
+    // host cannot reach. No URL or no credentials means no node, and every
+    // request goes direct exactly as before.
+    edgeProxyUrl: String(overrides.edgeProxyUrl ?? process.env.OPEN_SCIENCE_EDGE_PROXY_URL ?? "").trim(),
+    edgeProxyCredentials: edgeProxySecret.value,
+    edgeProxyCredentialsError: edgeProxySecret.error,
+    // The bibliographic hosts sent through the node. Measured 2026-09-22 from the
+    // production host: these three answer through it and not directly; the other
+    // 72 answer directly and pay 1–2 s more through it, so they stay direct.
+    edgeProxyHosts: String(
+      overrides.edgeProxyHosts ?? process.env.OPEN_SCIENCE_EDGE_PROXY_HOSTS ?? "gtexportal.org,api.omim.org,api.materialsproject.org",
+    ),
+    // How long a connection to the node may take before the request goes direct.
+    edgeProxyConnectTimeoutMs: Math.max(1_000, Number(
+      overrides.edgeProxyConnectTimeoutMs ?? process.env.OPEN_SCIENCE_EDGE_PROXY_CONNECT_TIMEOUT_MS ?? 10_000,
+    )),
+    // The node's own SearXNG, as the node sees it (http://127.0.0.1:8888/search).
+    // Searched first when the node is configured; this host's is the fallback.
+    webSearchEdgeUrl: String(overrides.webSearchEdgeUrl ?? process.env.OPEN_SCIENCE_WEB_SEARCH_EDGE_URL ?? "").trim(),
+    // Qwen's web search on Bailian as a second engine, with the DashScope key the
+    // reranker already uses; its results are merged with SearXNG's.
+    webSearchBailianEnabled: overrides.webSearchBailianEnabled ?? boolEnv("OPEN_SCIENCE_WEB_SEARCH_BAILIAN_ENABLED", false),
+    webSearchBailianModel: String(overrides.webSearchBailianModel ?? process.env.OPEN_SCIENCE_WEB_SEARCH_BAILIAN_MODEL ?? "qwen-plus").trim(),
     // The GEO probe origin: an internal service this platform runs, not a
     // public source. Empty means the deployment has no measured-visibility
     // channel, and the tool says so instead of the runtime silently getting
@@ -1601,6 +1638,13 @@ export function loadConfig(overrides = {}) {
     // from the runtime and refuses the gateway's web-read mode; the native
     // conversation is untouched (principle 11).
     webReadEnabled: overrides.webReadEnabled ?? boolEnv("OPEN_SCIENCE_WEB_READ_ENABLED", true),
+    // A page refused from Beijing (403/429/451/503, no connection, or no answer
+    // within the direct attempt's own deadline) is read once more through the
+    // Tokyo node when one is configured.
+    webReadEdgeFallback: overrides.webReadEdgeFallback ?? boolEnv("OPEN_SCIENCE_WEB_READ_EDGE_FALLBACK", true),
+    webReadDirectTimeoutMs: Math.max(1_000, Number(
+      overrides.webReadDirectTimeoutMs ?? process.env.OPEN_SCIENCE_WEB_READ_DIRECT_TIMEOUT_MS ?? 12_000,
+    )),
     // Reads in flight at once, every site together. Each may hold a 16 MiB
     // body and, for HTML, a parsed DOM ten times its size; eight bound the
     // worst case on a shared host. Counted in

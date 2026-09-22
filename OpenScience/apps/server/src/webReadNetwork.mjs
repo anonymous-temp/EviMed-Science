@@ -23,6 +23,7 @@ import http from "node:http";
 import https from "node:https";
 import zlib from "node:zlib";
 import { lookup as dnsLookup } from "node:dns/promises";
+import { edgeRequest, edgeStats } from "./edgeProxy.mjs";
 
 /** True when a literal IPv4 address is one this server must never be sent to. */
 export function privateIpv4Address(host) {
@@ -299,6 +300,94 @@ export function nodeWebTransport({ resolveImpl = dnsLookup } = {}) {
       request.on("error", fail);
       request.end();
     });
+  };
+}
+
+/**
+ * The same GET through the Tokyo node (edgeProxy.mjs), for pages Beijing is
+ * refused. The node resolves the name and its proxy refuses every private
+ * destination, so on this path the address checks this module makes for a
+ * direct socket are the node's to make; the reader still validates every hop's
+ * URL before asking.
+ *
+ * @param {NonNullable<ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>>} edge
+ * @returns {WebTransport}
+ */
+export function edgeWebTransport(edge) {
+  return async ({ url, headers, signal, maxBytes }) => {
+    let response;
+    try {
+      response = await edgeRequest(edge, url, { method: "GET", headers: { ...headers, "accept-encoding": "gzip, deflate, br" }, signal });
+    } catch {
+      if (signal?.aborted) {
+        throw signal.reason?.name === "TimeoutError"
+          ? webReadError(504, "web_read_timeout", "The web page did not answer in time.", { retryable: true })
+          : webReadError(499, "web_read_aborted", "The web read was abandoned.");
+      }
+      throw webReadError(502, "web_read_upstream_unavailable", "The web page could not be reached.", { retryable: true });
+    }
+    const declared = Number(response.headers["content-length"] ?? 0);
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      response.destroy();
+      throw webReadError(502, "web_read_response_too_large", "The web page exceeded the gateway's size limit.");
+    }
+    /** @type {Buffer[]} */
+    const chunks = [];
+    let total = 0;
+    try {
+      for await (const chunk of response) {
+        total += chunk.length;
+        if (total > maxBytes) {
+          response.destroy();
+          throw webReadError(502, "web_read_response_too_large", "The web page exceeded the gateway's size limit.");
+        }
+        chunks.push(chunk);
+      }
+    } catch (error) {
+      if (error instanceof WebReadError) throw error;
+      throw webReadError(502, "web_read_upstream_unavailable", "The web page could not be reached.", { retryable: true });
+    }
+    const body = decodedBody(Buffer.concat(chunks, total), String(response.headers["content-encoding"] ?? ""), maxBytes);
+    return { status: Number(response.statusCode) || 0, headers: response.headers, body };
+  };
+}
+
+/**
+ * Direct first; once more through the node when Beijing cannot connect, runs
+ * out of its own time, or is answered with the statuses a regional or
+ * datacentre block gives. Measured 2026-09-22: NICE and Fierce answer Beijing
+ * 403 and Tokyo 200; BBC and The Guardian never connect from Beijing. The
+ * direct attempt gets its own deadline so an unroutable host does not spend
+ * the read's whole budget before the node is tried. If the node fails too, the
+ * direct answer (when there was one) stands.
+ *
+ * @param {WebTransport} direct @param {WebTransport} edge
+ * @param {{ directTimeoutMs?: number, fallbackStatuses?: number[] }} [options]
+ * @returns {WebTransport}
+ */
+export function webTransportWithEdgeFallback(direct, edge, { directTimeoutMs = 12_000, fallbackStatuses = [403, 429, 451, 503] } = {}) {
+  const retryOn = new Set(fallbackStatuses);
+  return async (request) => {
+    const own = AbortSignal.timeout(Math.max(1_000, directTimeoutMs));
+    const signal = request.signal ? AbortSignal.any([request.signal, own]) : own;
+    /** @type {TransportResponse | null} */
+    let response = null;
+    try {
+      response = await direct({ ...request, signal });
+    } catch (error) {
+      if (request.signal?.aborted) throw error;
+      const networkFailure = error instanceof WebReadError
+        && (error.code === "web_read_upstream_unavailable" || error.code === "web_read_timeout" || error.code === "web_read_aborted");
+      if (!networkFailure && !own.aborted) throw error;
+    }
+    if (response && !retryOn.has(response.status)) return response;
+    edgeStats.webReadFallbacks += 1;
+    try {
+      return await edge(request);
+    } catch (error) {
+      if (response) return response;
+      throw error;
+    }
   };
 }
 

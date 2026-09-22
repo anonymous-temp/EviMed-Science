@@ -15,13 +15,23 @@
 //
 // The runtime never names the search host, exactly as it never names a
 // bibliographic host: it posts a query and the server builds the request.
+//
+// Two sources since 2026-09-22, when this host's SearXNG answered 1 of 20
+// medical queries (Quark suspended by CAPTCHA, the rest unreachable from
+// Beijing) and the same SearXNG on the Tokyo node answered 20 of 20 through
+// Bing and Google: the node's SearXNG, reached through the edge proxy
+// (edgeProxy.mjs), with this host's as the fallback; and Qwen's own web search
+// on Bailian, asked in parallel, which reaches the Chinese web — 公众号 articles
+// and this year's news — that no SearXNG engine reaches from either place.
 import { setTimeout as delay } from "node:timers/promises";
+import { edgeFetch, edgeStats } from "./edgeProxy.mjs";
 
 const gatewayPath = "/internal/search/v1/query";
 const maxQueryLength = 512;
 const maxResults = 25;
 const maxSnippetLength = 700;
 const maxResponseBytes = 4 * 1024 * 1024;
+const bailianUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation";
 // SearXNG passes `categories` straight to its engine selection; only the ones
 // this platform has a use for are accepted, so a runtime cannot reach an
 // engine set the deployment did not intend.
@@ -121,9 +131,9 @@ function validatedRequest(body) {
   return { query, limit: limitValue, categories, language, timeRange };
 }
 
-/** @returns {URL} The SearXNG endpoint this deployment is configured with. */
-function searchEndpoint(config) {
-  const raw = String(config.webSearchUrl ?? "").trim();
+/** @param {string} value @returns {URL} A SearXNG endpoint: this host's, or the node's as the node sees it. */
+function searchEndpoint(value) {
+  const raw = String(value ?? "").trim();
   if (!raw) {
     throw gatewayError(
       503,
@@ -154,37 +164,48 @@ function searchEndpoint(config) {
   return new URL("search", base.pathname.endsWith("/") ? base : new URL(`${base.pathname}/`, base));
 }
 
-/** Trim SearXNG's per-result payload to what a reader of the report needs.
- *  Raw responses carry parsed engine internals, per-engine scores, and repeated
- *  metadata; passing that through would spend the run's context on bookkeeping. */
-function normalizeResults(payload, limit) {
-  const rows = Array.isArray(payload?.results) ? payload.results : [];
+/** Trim one result to what a reader of the report needs. Raw SearXNG results
+ *  carry parsed engine internals, per-engine scores, and repeated metadata;
+ *  passing that through would spend the run's context on bookkeeping.
+ *  @returns {{ title: string, url: string, snippet: string, engine: string | null, publishedDate: string | null } | null} */
+function normalizedRow(row) {
+  const url = typeof row?.url === "string" ? row.url.trim() : "";
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  const snippet = String(row?.content ?? "").replace(/\s+/g, " ").trim();
+  return {
+    title: String(row?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 300) || url,
+    url,
+    snippet: snippet.length > maxSnippetLength ? `${snippet.slice(0, maxSnippetLength)}…` : snippet,
+    engine: String(row?.engine ?? "").trim() || null,
+    publishedDate: typeof row?.publishedDate === "string" ? row.publishedDate : null,
+  };
+}
+
+/** Interleave the sources' results, first-come per URL, up to `limit`: neither
+ *  source's ranking outranks the other's, and a page both found appears once. */
+function mergedResults(lists, limit) {
   const seen = new Set();
   const results = [];
-  for (const row of rows) {
-    const url = typeof row?.url === "string" ? row.url.trim() : "";
-    if (!url || !/^https?:\/\//i.test(url)) continue;
-    const key = url.replace(/[#?].*$/, "").toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const snippet = String(row?.content ?? "").replace(/\s+/g, " ").trim();
-    results.push({
-      title: String(row?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 300) || url,
-      url,
-      snippet: snippet.length > maxSnippetLength ? `${snippet.slice(0, maxSnippetLength)}…` : snippet,
-      engine: String(row?.engine ?? "").trim() || null,
-      publishedDate: typeof row?.publishedDate === "string" ? row.publishedDate : null,
-    });
-    if (results.length >= limit) break;
+  const queues = lists.map((rows) => rows.map(normalizedRow).filter(Boolean));
+  for (let index = 0; results.length < limit && queues.some((queue) => index < queue.length); index += 1) {
+    for (const queue of queues) {
+      const row = queue[index];
+      if (!row) continue;
+      const key = row.url.replace(/[#?].*$/, "").toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      results.push(row);
+      if (results.length >= limit) break;
+    }
   }
-  // Which engines actually answered is part of the finding, not diagnostics: a
-  // result set assembled from one engine that happened to be up is a different
-  // claim about the web than one assembled from four.
-  const engines = [...new Set(results.map((row) => row.engine).filter(Boolean))].sort();
-  const unresponsive = Array.isArray(payload?.unresponsive_engines)
+  return results;
+}
+
+/** @param {any} payload */
+function unresponsiveEnginesOf(payload) {
+  return Array.isArray(payload?.unresponsive_engines)
     ? payload.unresponsive_engines.map((entry) => (Array.isArray(entry) ? String(entry[0]) : String(entry))).filter(Boolean)
     : [];
-  return { results, engines, unresponsiveEngines: [...new Set(unresponsive)].sort() };
 }
 
 async function readBoundedJson(response, maxBytes) {
@@ -204,7 +225,89 @@ async function readBoundedJson(response, maxBytes) {
   }
 }
 
-export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl = fetch } = {}) {
+/** One SearXNG query, with the single retry an aggregator needs: one slow
+ *  engine takes the whole response with it, and a second try recovers the
+ *  common case without turning a dead backend into a minutes-long stall. */
+async function searxngSearch(endpoint, request, fetcher, signal) {
+  endpoint.searchParams.set("q", request.query);
+  endpoint.searchParams.set("format", "json");
+  endpoint.searchParams.set("categories", request.categories.join(","));
+  if (request.language) endpoint.searchParams.set("language", request.language);
+  if (request.timeRange) endpoint.searchParams.set("time_range", request.timeRange);
+  let upstream = null;
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (attempt > 0) await delay(500);
+    try {
+      upstream = await fetcher(endpoint, {
+        method: "GET",
+        headers: { accept: "application/json", "user-agent": "EviMed-Research/1.2 (server web-search gateway)" },
+        redirect: "error",
+        signal,
+      });
+      if (upstream.ok) break;
+      await upstream.body?.cancel().catch(() => {});
+      // The backend's own status goes to the error ledger: 138 of these in
+      // twelve hours on 2026-09-21 were recorded without it, and every
+      // replayed query answered 200.
+      lastError = Object.assign(gatewayError(
+        upstream.status === 429 ? 429 : 502,
+        upstream.status === 429 ? "web_search_rate_limited" : "web_search_upstream_error",
+        `The web-search backend returned HTTP ${upstream.status}.`,
+      ), { upstream: { host: endpoint.hostname, status: upstream.status } });
+      upstream = null;
+    } catch (error) {
+      if (signal.reason?.name === "TimeoutError") {
+        throw gatewayError(504, "web_search_timeout", "The web-search backend timed out.");
+      }
+      lastError = gatewayError(502, "web_search_unavailable", "The web-search backend is temporarily unavailable.");
+    }
+  }
+  if (!upstream) throw lastError ?? gatewayError(502, "web_search_unavailable", "The web-search backend is temporarily unavailable.");
+  return readBoundedJson(upstream, maxResponseBytes);
+}
+
+/** Qwen's web search on Bailian as a second engine. Measured 2026-09-22 from
+ *  the production host: 3–4 s and 8–9 sourced results a query, 公众号 articles
+ *  and 2026 Chinese news among them. The model call only carries the search:
+ *  `max_tokens` keeps its answer to a few tokens and the answer is dropped;
+ *  what is kept is `search_info.search_results` (title, url, site name). The
+ *  key is the deployment's DashScope key the reranker already uses. */
+async function bailianSearch(config, request, fetcher, signal) {
+  const key = String(config.dashscopeApiKey ?? "").trim();
+  const response = await fetcher(bailianUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json", authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model: String(config.webSearchBailianModel ?? "").trim() || "qwen-plus",
+      input: { messages: [{ role: "user", content: request.query }] },
+      parameters: {
+        result_format: "message",
+        enable_search: true,
+        max_tokens: 8,
+        search_options: { forced_search: true, enable_source: true, search_strategy: "turbo" },
+      },
+    }),
+    redirect: "error",
+    signal,
+  });
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => {});
+    throw Object.assign(gatewayError(502, "web_search_upstream_error", `The Bailian search returned HTTP ${response.status}.`), {
+      upstream: { host: "dashscope.aliyuncs.com", status: response.status },
+    });
+  }
+  const payload = await readBoundedJson(response, maxResponseBytes);
+  const rows = Array.isArray(payload?.output?.search_info?.search_results) ? payload.output.search_info.search_results : [];
+  return rows.map((row) => ({ url: row?.url, title: row?.title, content: String(row?.site_name ?? "").trim(), engine: "bailian" }));
+}
+
+/**
+ * @param {any} config @param {any} runtimeManager
+ * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null }} [options]
+ */
+export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl = fetch, edge = null, edgeFetchImpl = null } = {}) {
+  const throughEdge = edgeFetchImpl ?? ((url, init) => edgeFetch(/** @type {any} */ (edge), /** @type {URL} */ (url), /** @type {any} */ (init)));
   return async function webSearchGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
@@ -222,49 +325,54 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
         throw gatewayError(401, "web_search_gateway_token_invalid", "Web search authentication failed.");
       }
       const request = validatedRequest(await readJsonBody(req, 8 * 1024));
-      const endpoint = searchEndpoint(config);
-      endpoint.searchParams.set("q", request.query);
-      endpoint.searchParams.set("format", "json");
-      endpoint.searchParams.set("categories", request.categories.join(","));
-      if (request.language) endpoint.searchParams.set("language", request.language);
-      if (request.timeRange) endpoint.searchParams.set("time_range", request.timeRange);
-
-      // Aggregators answer from many upstreams at once, and one slow engine
-      // takes the whole response with it. A single retry recovers the common
-      // case without turning a dead backend into a minutes-long stall.
-      let upstream = null;
-      let lastError = null;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        if (attempt > 0) await delay(500);
-        try {
-          upstream = await fetchImpl(endpoint, {
-            method: "GET",
-            headers: { accept: "application/json", "user-agent": "EviMed-Research/1.2 (server web-search gateway)" },
-            redirect: "error",
-            signal: controller.signal,
-          });
-          if (upstream.ok) break;
-          await upstream.body?.cancel().catch(() => {});
-          // The backend's own status goes to the error ledger: 138 of these in
-          // twelve hours on 2026-09-21 were recorded without it, and every
-          // replayed query answered 200.
-          lastError = Object.assign(gatewayError(
-            upstream.status === 429 ? 429 : 502,
-            upstream.status === 429 ? "web_search_rate_limited" : "web_search_upstream_error",
-            `The web-search backend returned HTTP ${upstream.status}.`,
-          ), { upstream: { host: endpoint.hostname, status: upstream.status } });
-          upstream = null;
-        } catch (error) {
-          if (controller.signal.reason?.name === "TimeoutError") {
-            throw gatewayError(504, "web_search_timeout", "The web-search backend timed out.");
-          }
-          lastError = gatewayError(502, "web_search_unavailable", "The web-search backend is temporarily unavailable.");
-        }
+      const localUrl = String(config.webSearchUrl ?? "").trim();
+      const edgeUrl = edge ? String(config.webSearchEdgeUrl ?? "").trim() : "";
+      const bailianOn = config.webSearchBailianEnabled === true && Boolean(String(config.dashscopeApiKey ?? "").trim());
+      if (!localUrl && !edgeUrl && !bailianOn) {
+        throw gatewayError(
+          503,
+          "web_search_unconfigured",
+          "Open-web search is not configured for this deployment. The bibliographic channels remain available.",
+        );
       }
-      if (!upstream) throw lastError ?? gatewayError(502, "web_search_unavailable", "The web-search backend is temporarily unavailable.");
-
-      const payload = await readBoundedJson(upstream, maxResponseBytes);
-      const { results, engines, unresponsiveEngines } = normalizeResults(payload, request.limit);
+      const searx = localUrl || edgeUrl ? (async () => {
+        if (edgeUrl) {
+          edgeStats.requests += 1;
+          try {
+            return await searxngSearch(searchEndpoint(edgeUrl), request, throughEdge, controller.signal);
+          } catch (error) {
+            edgeStats.failures += 1;
+            if (!localUrl || controller.signal.reason?.name === "TimeoutError") throw error;
+            edgeStats.directFallbacks += 1;
+          }
+        }
+        return searxngSearch(searchEndpoint(localUrl), request, fetchImpl, controller.signal);
+      })() : Promise.resolve(null);
+      const bailian = bailianOn ? bailianSearch(config, request, fetchImpl, controller.signal) : Promise.resolve(null);
+      const [searxOutcome, bailianOutcome] = await Promise.allSettled([searx, bailian]);
+      const bailianAnswered = bailianOn && bailianOutcome.status === "fulfilled";
+      // One source failing is a thinner answer, not a failed search; only when
+      // nothing answered is the search itself refused, with the first reason.
+      if (searxOutcome.status === "rejected" && !bailianAnswered) {
+        const error = searxOutcome.reason;
+        if (controller.signal.reason?.name === "TimeoutError" && !(error instanceof WebSearchGatewayError)) {
+          throw gatewayError(504, "web_search_timeout", "The web-search backend timed out.");
+        }
+        throw error;
+      }
+      const payload = searxOutcome.status === "fulfilled" ? searxOutcome.value : null;
+      if (!payload && bailianOutcome.status === "rejected") throw bailianOutcome.reason;
+      const bailianRows = bailianAnswered ? bailianOutcome.value ?? [] : [];
+      const results = mergedResults([Array.isArray(payload?.results) ? payload.results : [], bailianRows], request.limit);
+      // Which engines actually answered is part of the finding, not
+      // diagnostics: a result set assembled from one engine that happened to be
+      // up is a different claim about the web than one assembled from four.
+      const engines = [...new Set(results.map((row) => row.engine).filter(Boolean))].sort();
+      const unresponsiveEngines = [...new Set([
+        ...unresponsiveEnginesOf(payload),
+        ...(searxOutcome.status === "rejected" ? ["searxng"] : []),
+        ...(bailianOn && bailianOutcome.status === "rejected" ? ["bailian"] : []),
+      ])].sort();
       sendJson(res, 200, {
         data: {
           query: request.query,
