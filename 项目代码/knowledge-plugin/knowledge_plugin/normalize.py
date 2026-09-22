@@ -300,6 +300,36 @@ class Prepared:
     notes: list[str] = field(default_factory=list)
 
 
+BOILERPLATE_SUMMARY_REPEATS = 3
+
+
+def drop_boilerplate_summaries(prepared: list[Prepared]) -> int:
+    """Clear the summaries a page repeats: a blurb carried by every entry is the feed's, not an entry's.
+
+    STAT's channels put 「Want to stay on top of the science and politics driving biotech today? Sign
+    up …」 on every item; the reader's edit then wrote one item's story under another item's title
+    (2026-09-22, item `792d971ebe2ca336` — a piece about a senator's letter came out as an FDA pilot).
+    Exact repetition inside one poll is decidable here, so it is decided here rather than by whoever
+    reads the text later; the entry keeps its title and is marked ``no-summary``.
+    """
+    counts: dict[str, int] = {}
+    for item in prepared:
+        if item.summary:
+            counts[item.summary] = counts.get(item.summary, 0) + 1
+    blurbs = {text for text, seen in counts.items() if seen >= BOILERPLATE_SUMMARY_REPEATS}
+    if not blurbs:
+        return 0
+    dropped = 0
+    for item in prepared:
+        if item.summary in blurbs:
+            item.summary = None
+            item.defects = [defect for defect in item.defects if defect not in ("short-summary", "truncated-summary", "oversize-truncated")]
+            if "no-summary" not in item.defects:
+                item.defects.append("no-summary")
+            dropped += 1
+    return dropped
+
+
 class Rejected(ValueError):
     """The adapter emitted something that cannot become an entry (no title, no usable link)."""
 

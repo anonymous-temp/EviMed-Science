@@ -270,3 +270,18 @@ def test_registry_ids_keep_their_canonical_case():
     from knowledge_plugin.normalize import normalize_registry_ids
     assert normalize_registry_ids(["chictr2600132031", "ChiCTR2600132031", "nct01234567", " ISRCTN12345678 "]) == [
         "ChiCTR2600132031", "NCT01234567", "ISRCTN12345678"]
+
+
+def test_a_blurb_repeated_across_a_page_is_not_any_entry_s_summary():
+    from knowledge_plugin.normalize import drop_boilerplate_summaries
+
+    blurb = "Want to stay on top of the science and politics driving biotech today? Sign up."
+    made = lambda key, summary: prepare(entry(external_key=key, url=f"https://statnews.com/{key}", summary=summary), source(id="stat-biotech"))
+    page = [made(f"story-{index}", blurb) for index in range(3)]
+    own = made("own", "Its own hundred-character summary of what the piece actually says, with the detail a reader needs.")
+    assert drop_boilerplate_summaries(page + [own]) == 3
+    assert [item.summary for item in page] == [None, None, None]
+    assert all("no-summary" in item.defects and "short-summary" not in item.defects for item in page)
+    assert own.summary is not None and "no-summary" not in own.defects
+    twice = [made(f"pair-{index}", blurb) for index in range(2)]
+    assert drop_boilerplate_summaries(twice) == 0, "two entries are not yet a pattern"
