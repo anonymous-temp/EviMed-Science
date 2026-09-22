@@ -405,6 +405,10 @@ class ProtectedFetcher:
                 out[egress] = stats.status(now) if stats else None
         return out
 
+    def rate_limited_last_hour(self) -> tuple[str | None, int]:
+        """The host with the most 429 answers in the last hour, and the count."""
+        return self._budget.rate_limited_last_hour()
+
     def evimed_status(self) -> str:
         """The team's EviMed API: unconfigured without a key; else by the last answer it gave."""
         if not self._settings.secret("evimed_api_key"):

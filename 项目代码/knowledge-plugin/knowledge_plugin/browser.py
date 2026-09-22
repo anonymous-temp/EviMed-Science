@@ -27,6 +27,14 @@ How it is wired:
   html-list parser.
 - Concurrency 1: one page at a time (the container has 1 GB; the plan's 240 pages a day take ten
   minutes in total).
+- An open API read through the browser (``RequestSpec.api``), and a feed a challenge page turns
+  into once its script has run, answer with the response itself — its bytes and its own content type
+  — not the page Chromium wraps a JSON document or an XML feed in. Fastly's "Client Challenge" (MIT
+  News, CIDRAP) is one a real browser passes by running it. ClinicalTrials.gov
+  sits behind a Google load balancer whose bot rule refused the crawler's HTTP client every time (403
+  to httpx 10 of 10 from Beijing, 2026-09-22, and to hand-built Python requests with any header set),
+  while curl and Chromium passed every time; a real browser with the honest identity is how the
+  crawler reads it.
 """
 
 from __future__ import annotations
@@ -216,11 +224,16 @@ class BrowserFetcher:
                 if "ERR_NAME_NOT_RESOLVED" in message:
                     raise FetchError("http-error", "dns_failed") from None
                 raise FetchError("http-error", "navigation_failed") from None
+            if spec.api and not text:
+                return await self._raw_answer(documents, page)
             if text:
                 body = (await self._settled_text(page, urlsplit(spec.url).hostname)).encode("utf-8")
                 state = RENDER_NO_SELECTOR
             else:
                 html, found = await self._settled_content(page, wait_for, urlsplit(spec.url).hostname)
+                if documents and not _is_html(documents[-1].headers.get("content-type", "")):
+                    # A feed the page became once a challenge's script had run: the XML as sent.
+                    return await self._raw_answer(documents, page)
                 body = html.encode("utf-8")
                 state = RENDER_NO_SELECTOR if not wait_for else (RENDER_SELECTOR_FOUND if found else RENDER_SELECTOR_MISSING)
             last = documents[-1] if documents else None
@@ -236,6 +249,24 @@ class BrowserFetcher:
         finally:
             await context.close()
 
+
+    @staticmethod
+    async def _raw_answer(documents: list[Any], page) -> tuple[int, dict, bytes, str]:
+        """A document that is not a page, as the server sent it: the last main-frame response's own
+        bytes and headers (Chromium would hand a JSON answer to the parser wrapped in ``<pre>``, and a
+        feed as its XML viewer)."""
+        last = documents[-1] if documents else None
+        if last is None:
+            raise FetchError("http-error", "navigation_failed")
+        try:
+            body = await last.body()
+        except Exception as error:  # the body of a response the browser already let go of
+            log.info("api body unreadable (%s)", type(error).__name__)
+            raise FetchError("http-error", "browser_body_unreadable") from None
+        headers = {k.lower(): v for k, v in last.headers.items()
+                   if k.lower() not in ("content-length", "content-encoding", "transfer-encoding")}
+        headers[RENDER_HEADER] = RENDER_NO_SELECTOR
+        return last.status, headers, body, page.url
 
     @staticmethod
     async def _settle(page, wait_for: str | None) -> bool:
@@ -298,6 +329,12 @@ class BrowserFetcher:
                 log.debug("final selector check on %s: %s", host, type(error).__name__)
                 found = False
         return html, found
+
+
+def _is_html(content_type: str) -> bool:
+    """Whether a response is a page to read as rendered (no content type: treat it as one)."""
+    kind = content_type.split(";")[0].strip().lower()
+    return kind in ("", "text/html", "application/xhtml+xml")
 
 
 _SCRIPTS = re.compile(r"<(script|style|noscript)[^>]*>.*?</\1\s*>", re.I | re.S)

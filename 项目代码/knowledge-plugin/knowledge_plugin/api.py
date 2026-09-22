@@ -1,4 +1,4 @@
-"""The HTTP face: ``contract/knowledge-plugin-openapi.yaml`` (v1.1.0), served exactly.
+"""The HTTP face: ``contract/knowledge-plugin-openapi.yaml`` (v1.2.0), served exactly.
 
 Rules the handlers keep:
 
@@ -404,6 +404,9 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
                                 "egress": {"direct": "ok", "api": "ok", "browser": "unconfigured",
                                            "relay": "unconfigured", "bridge": "unconfigured"},
                                 "model_calls_24h": 0, "sources": {}}
+        fetcher = state.get("fetcher")
+        host, count = fetcher.rate_limited_last_hour() if fetcher is not None else (None, 0)
+        body["rate_limited_1h"] = {"max": count, "host": host}
         pool = state["pool"]
         if pool is None:
             body["status"] = "down"
@@ -416,6 +419,8 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
                 body["sources"] = {row["health"]: row["n"] for row in rows}
                 stats = await (await conn.execute(
                     """SELECT (SELECT max(fetched_at) FROM evimed_knowledge.fetches) AS last_fetch_at,
+                              (SELECT max(fetched_at) FROM evimed_knowledge.fetches
+                                WHERE outcome IN ('ok', 'not-modified', 'empty')) AS last_ok_fetch_at,
                               (SELECT max(last_new_entry_at) FROM evimed_knowledge.sources) AS last_new_entry_at,
                               (SELECT coalesce(max(seq), 0) FROM evimed_knowledge.entries) AS latest_seq,
                               (SELECT count(*) FROM evimed_knowledge.sources WHERE enabled AND retired_at IS NULL
@@ -436,6 +441,8 @@ def create_app(settings: Settings, *, pool=None, crawler=None, lifespan_hooks: d
                 )).fetchall()
             body["egress"] = egress_health(state.get("fetcher"), egress_rows, now)
             body["last_fetch_at"] = stats["last_fetch_at"].isoformat().replace("+00:00", "Z") if stats["last_fetch_at"] else None
+            body["last_ok_fetch_at"] = (stats["last_ok_fetch_at"].isoformat().replace("+00:00", "Z")
+                                        if stats["last_ok_fetch_at"] else None)
             body["last_new_entry_at"] = stats["last_new_entry_at"].isoformat().replace("+00:00", "Z") if stats["last_new_entry_at"] else None
             body["latest_seq"] = int(stats["latest_seq"])
             body["backlog"] = {"due_sources": int(stats["due_sources"]), "pending_texts": int(stats["pending_texts"]),

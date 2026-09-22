@@ -220,9 +220,9 @@
  "endpoints-news-ai": {
   "source_type": "media",
   "authority": 3,
-  "egress": "relay",
+  "egress": "browser",
   "enabled": true,
-  "_why": "HTTP 403 to the honest EviMedBot identity from Beijing and from the dev box (2026-09-22): read through the Tokyo node; not in that day's node acceptance probe, so live verification is the controller's on production"
+  "_why": "HTTP 403 to plain requests from Beijing and through the Tokyo node (every poll of 2026-09-22); the headless Chromium read the feed the same day (endpts.com redirects to endpoints.news)"
  },
  "biopharmatrend": {
   "source_type": "media",
@@ -320,6 +320,7 @@
   }
  },
  "pubmed-trending-page": {
+  "egress": "browser",
   "config": {
    "selectors": {
     "item": "article.full-docsum",
@@ -328,7 +329,8 @@
     "doi": "span.docsum-journal-citation.full-journal-citation"
    },
    "max_items": 10
-  }
+  },
+  "_why": "HTTP 403 to the crawler's HTTP client from Beijing on every poll of 2026-09-22; the headless Chromium read the page"
  },
  "ndcpa-notices": {
   "config": {
@@ -495,9 +497,9 @@
   "_why_config": "P2: item links carry ?rss=1"
  },
  "endpoints-news": {
-  "egress": "relay",
+  "egress": "browser",
   "enabled": true,
-  "_why": "HTTP 403 to the honest EviMedBot identity from Beijing and from the dev box (2026-09-22): read through the Tokyo node; not in that day's node acceptance probe, so live verification is the controller's on production"
+  "_why": "HTTP 403 to plain requests from Beijing and through the Tokyo node (every poll of 2026-09-22); the headless Chromium read the feed the same day (endpts.com redirects to endpoints.news)"
  },
  "pubmed-rss-created-headlessly": {
   "enabled": false,
@@ -801,5 +803,55 @@
   "_why_safety": "controller 2026-09-22, first production hour: FDA's Recalls, Market Withdrawals & Safety Alerts feed carries foods and cosmetics beside drugs and devices, and pasta, potato-chip and dessert recalls reached readers as red 安全警示 at the top of 精选. The platform makes a regulator item a safety alert when its edit types it safety-notice and files it under 药物安全 (frontierSafetyAlert), which a drug or device recall is and a food recall is not.",
   "lane": "mixed",
   "_why_lane": "the same defect, lane side: with lane safety every food recall would be filed under 药物安全; mixed lets the screening model file a food recall under 公共卫生 and a drug or device recall under 药物安全"
+ },
+ "ctgov-phase3-new-registrations": {
+  "egress": "browser",
+  "_why": "ClinicalTrials.gov's Google load balancer refused the crawler's HTTP client every time from Beijing (403 to httpx 10 of 10, 2026-09-22; 45 of 45 polls that day) while Chromium with the honest identity passed 3 of 3: read through the browser, which answers an API with its own bytes"
+ },
+ "ctgov-results-first-posted": {
+  "egress": "browser",
+  "_why": "ClinicalTrials.gov's Google load balancer refused the crawler's HTTP client every time from Beijing (403 to httpx 10 of 10, 2026-09-22; 45 of 45 polls that day) while Chromium with the honest identity passed 3 of 3: read through the browser, which answers an API with its own bytes"
+ },
+ "ctgov-china-interventional": {
+  "egress": "browser",
+  "_why": "ClinicalTrials.gov's Google load balancer refused the crawler's HTTP client every time from Beijing (403 to httpx 10 of 10, 2026-09-22; 45 of 45 polls that day) while Chromium with the honest identity passed 3 of 3: read through the browser, which answers an API with its own bytes"
+ },
+ "ctgov-tcm-interventions": {
+  "egress": "browser",
+  "_why": "ClinicalTrials.gov's Google load balancer refused the crawler's HTTP client every time from Beijing (403 to httpx 10 of 10, 2026-09-22; 45 of 45 polls that day) while Chromium with the honest identity passed 3 of 3: read through the browser, which answers an API with its own bytes"
+ },
+ "ctgov-stopped-phase3": {
+  "egress": "browser",
+  "_why": "ClinicalTrials.gov's Google load balancer refused the crawler's HTTP client every time from Beijing (403 to httpx 10 of 10, 2026-09-22; 45 of 45 polls that day) while Chromium with the honest identity passed 3 of 3: read through the browser, which answers an API with its own bytes"
+ },
+ "cidrap-news": {
+  "egress": "browser",
+  "enabled": true,
+  "_why": "Fastly's 'Client Challenge' page (a script to run) answered plain requests from Beijing and from Tokyo; the headless Chromium ran it and read the feed, 2026-09-22"
+ },
+ "mit-news-ai": {
+  "egress": "browser",
+  "enabled": true,
+  "_why": "Fastly's 'Client Challenge' page (a script to run) answered plain requests from Beijing and from Tokyo; the headless Chromium ran it and read the feed, 2026-09-22"
+ },
+ "google-deepmind-blog": {
+  "egress": "relay",
+  "enabled": true,
+  "_why": "Beijing's TLS to Google's blogs is reset or times out (curl exit 35, 2026-09-22); the Tokyo node read the feed with the honest identity the same day"
+ },
+ "google-keyword-ai": {
+  "egress": "relay",
+  "enabled": true,
+  "_why": "Beijing's TLS to Google's blogs is reset or times out (curl exit 35, 2026-09-22); the Tokyo node read the feed with the honest identity the same day"
+ },
+ "aga-clinical-guidance": {
+  "enabled": false,
+  "disabled_reason": "robots_disallow",
+  "_why": "the site's robots.txt disallows the feed for crawlers (every poll of 2026-09-22 ended robots_disallow); robots governs site feeds (plan 6.1)"
+ },
+ "health-affairs-journal": {
+  "enabled": false,
+  "disabled_reason": "robots_disallow",
+  "_why": "the site's robots.txt disallows the feed for crawlers (every poll of 2026-09-22 ended robots_disallow); robots governs site feeds (plan 6.1)"
  }
 }

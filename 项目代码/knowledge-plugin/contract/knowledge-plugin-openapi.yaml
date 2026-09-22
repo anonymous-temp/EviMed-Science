@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: EviMed Knowledge Source Plugin
-  version: "1.1.0"
+  version: "1.2.0"
   summary: The one interface through which the EviMed platform reads knowledge sources.
   description: |
     The plugin owns everything between the outside world and the platform for *knowledge*
@@ -402,7 +402,14 @@ components:
           description: Per egress, whether the last attempt through it succeeded.
           additionalProperties: { type: string, enum: [ok, degraded, down, unconfigured] }
         last_fetch_at: { type: [string, "null"], format: date-time }
+        last_ok_fetch_at: { type: [string, "null"], format: date-time, description: "The last fetch that read something (ok, not-modified or empty). Added in 1.2.0: 'no success for 60 minutes' is an alert line (plan 10.5.8)." }
         last_new_entry_at: { type: [string, "null"], format: date-time }
+        rate_limited_1h:
+          type: object
+          description: "The host that answered 429 most often in the last hour, and how often — this process's count, restarted with it. Added in 1.2.0 for the alert line 'any host over 10 in an hour' (plan 10.5.8)."
+          properties:
+            max: { type: integer, minimum: 0 }
+            host: { type: [string, "null"] }
         backlog:
           type: object
           properties:

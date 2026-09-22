@@ -1,7 +1,7 @@
 """The shared vocabulary and the reader interfaces of the knowledge-source plugin.
 
 Everything another module needs to agree on lives here, once: the closed vocabularies of the HTTP
-contract (``contract/knowledge-plugin-openapi.yaml`` v1.1.0, whose enums these tuples copy value
+contract (``contract/knowledge-plugin-openapi.yaml`` v1.2.0, whose enums these tuples copy value
 for value), the whitelists that decide which adapter facts and enrichment fields exist past the
 adapter (contract rule 4), and the dataclasses that pass between the scheduler, the protected
 fetch, the adapters (package P2) and the store.
@@ -32,7 +32,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
-CONTRACT_VERSION = "1.1.0"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliation_countries
+CONTRACT_VERSION = "1.2.0"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliation_countries;
+                             # 1.2.0 (2026-09-22): Health.last_ok_fetch_at, Health.rate_limited_1h
 PLUGIN_NAME = "evimed-knowledge-plugin"
 
 # ---------------------------------------------------------------------------------------------

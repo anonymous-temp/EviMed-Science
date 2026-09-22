@@ -67,6 +67,21 @@ async def test_pause_refuses_the_whole_host():
     assert fresh.paused_until("www.example.org") is not None
 
 
+async def test_429_answers_are_counted_per_host_for_the_last_hour():
+    time = FakeTime()
+    now = [NOW]
+    budget = HostBudget(MemoryCounterStore(), {}, clock=lambda: now[0], monotonic=time.monotonic, sleep=time.sleep)
+    assert budget.rate_limited_last_hour() == (None, 0)
+    for _ in range(3):
+        await budget.pause("api.crossref.org", 60, "http_429")
+    await budget.pause("www.ebi.ac.uk", 60, "http_429")
+    await budget.pause("www.ebi.ac.uk", 60, "http_503")               # a 503 is not a 429
+    assert budget.rate_limited_last_hour() == ("api.crossref.org", 3)
+    now[0] = NOW + timedelta(minutes=61)
+    await budget.pause("www.ebi.ac.uk", 60, "http_429")
+    assert budget.rate_limited_last_hour() == ("www.ebi.ac.uk", 1)     # the hour has passed for the others
+
+
 async def test_long_wait_is_refused_as_host_busy():
     time = FakeTime()
     budget = budget_with({"slow.example.org": HostRule(0.0, None)}, time, max_wait_s=60)
@@ -85,7 +100,7 @@ def test_rules_follow_the_optional_keys():
     assert anonymous["eutils.ncbi.nlm.nih.gov"].min_interval_s == 0.4 and keyed["eutils.ncbi.nlm.nih.gov"].min_interval_s == 0.15
     assert anonymous["api.fda.gov"].daily_cap == 300 and keyed["api.fda.gov"].daily_cap == 800
     assert anonymous["api.crossref.org"] == HostRule(1.2, 3000)
-    assert anonymous["api.medrxiv.org"].timeout_s == 30.0
+    assert anonymous["api.medrxiv.org"].timeout_s == 120.0
 
 
 @pytest.mark.db
