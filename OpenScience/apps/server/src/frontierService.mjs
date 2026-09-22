@@ -281,12 +281,56 @@ function followText(value, max) {
 }
 
 /** The columns every item answer is built from. */
+/**
+ * Enrichment keys a card does not list as facts: long texts and lists (the
+ * MeSH terms, the label excerpt), what another part of the card already says
+ * (PubMed's types become the evidence type; open access is the 免费全文 link;
+ * a preprint's other version is a flag), and nothing else — every other key,
+ * including one a later plugin adds, is a fact on the card (plan §14.6).
+ */
+const CARD_HIDDEN_ENRICHMENT = Object.freeze(["mesh", "publication_types", "drug_label_excerpt", "oa_pdf_url", "open_access",
+  "preprint_of_doi", "published_version_doi"]);
+/** At most this many facts on one card. */
+const CARD_FACTS_MAX = 12;
+
+/**
+ * The card's facts from a snapshot's enrichment, bounded again (the snapshot
+ * may predate a bound): strings, finite numbers, booleans, lists of strings,
+ * flat objects of those.
+ * @param {unknown} raw @returns {Record<string, unknown>}
+ */
+export function frontierCardFacts(raw) {
+  /** @type {Record<string, unknown>} */
+  const facts = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return facts;
+  /** @param {unknown} value @returns {unknown} */
+  const scalar = (value) => (typeof value === "string" ? (value.trim() ? value.trim().slice(0, 300) : undefined)
+    : (typeof value === "number" && Number.isFinite(value)) || typeof value === "boolean" ? value : undefined);
+  for (const [key, value] of Object.entries(/** @type {Record<string, unknown>} */ (raw))) {
+    if (Object.keys(facts).length >= CARD_FACTS_MAX) break;
+    if (CARD_HIDDEN_ENRICHMENT.includes(key) || !/^[a-z][a-z0-9_]{1,39}$/.test(key)) continue;
+    let kept;
+    if (Array.isArray(value)) {
+      const list = value.filter((entry) => typeof entry === "string" && entry.trim()).map((entry) => entry.trim().slice(0, 120)).slice(0, 20);
+      kept = list.length ? list : undefined;
+    } else if (value && typeof value === "object") {
+      const flat = Object.fromEntries(Object.entries(value).map(([name, entry]) => [name, scalar(entry)])
+        .filter(([name, entry]) => entry !== undefined && /^[a-z][a-z0-9_]{1,39}$/.test(String(name))).slice(0, 10));
+      kept = Object.keys(flat).length ? flat : undefined;
+    } else {
+      kept = scalar(value);
+    }
+    if (kept !== undefined) facts[key] = kept;
+  }
+  return facts;
+}
+
 const ITEM_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.reason_zh, i.lang, i.lane, i.source_type,
   i.evidence_type, i.evidence_basis, i.specialties, i.entities, i.flags, i.doi, i.pmid, i.registry_ids, i.canonical_url,
   i.published_at, i.date_precision, i.timeline_at, i.visible_at, i.selected, i.selected_rule, i.safety_alert, i.verification,
   i.score_authority, i.score_impact, i.score_novelty, i.score_relevance, i.primary_source_id,
   s.name AS source_name, s.homepage AS source_homepage,
-  t.open_access, t.enrichment->>'oa_pdf_url' AS oa_pdf_url,
+  t.open_access, t.enrichment->>'oa_pdf_url' AS oa_pdf_url, t.enrichment - '{${CARD_HIDDEN_ENRICHMENT.join(",")}}'::text[] AS card_enrichment,
   CASE WHEN e.report_count > 1 THEN e.public_id END AS event_public_id, e.title_zh AS event_title,
   (SELECT coalesce(jsonb_agg(jsonb_build_object('sourceId', r.source_id, 'sourceName', r.name, 'url', r.url) ORDER BY r.rank), '[]'::jsonb)
      FROM (SELECT d.source_id, d.name, d.url, row_number() OVER (ORDER BY d.published_at DESC NULLS LAST, d.source_id) AS rank
@@ -440,6 +484,7 @@ export class FrontierService {
         relevance: frontierScoreLevel("relevance", row.score_relevance),
       },
       openAccess,
+      facts: frontierCardFacts(row.card_enrichment),
       alsoReportedBy: Array.isArray(row.mentions) ? row.mentions.slice(0, 5) : [],
       event: row.event_public_id ? { id: row.event_public_id, title: row.event_title } : null,
     };
@@ -1223,6 +1268,19 @@ export class FrontierService {
       const items = (await client.query(`SELECT verification, count(*)::integer AS n, count(*) FILTER (WHERE selected)::integer AS selected
         FROM evimed_frontier.items WHERE state='published' AND visible_at >= $1::timestamptz GROUP BY verification`, [start.toISOString()])).rows;
       const lastPublished = (await client.query(`SELECT max(visible_at) AS at FROM evimed_frontier.items WHERE state='published'`)).rows[0]?.at;
+      const tiers = (await client.query(`SELECT launch_tier AS tier, plugin_health AS health, count(*)::integer AS n
+        FROM evimed_frontier.sources WHERE retired_at IS NULL AND enabled GROUP BY launch_tier, plugin_health`)).rows;
+      // The oldest work each stage has been owed (plan §10.5.8, "最老一条超过 6 小时"):
+      // an entry due and not taken (a hold that has not come due is waiting,
+      // not owed), an item screened and not yet published, a published item
+      // whose edit is owed.
+      const oldest = (await client.query(`SELECT
+          (SELECT min(greatest(received_at, coalesce(hold_until, received_at))) FROM evimed_frontier.entries
+            WHERE state IN ('received', 'held') AND (hold_until IS NULL OR hold_until <= now())) AS entries,
+          (SELECT min(updated_at) FROM evimed_frontier.items WHERE state IN ('screened', 'scored')
+            AND EXISTS (SELECT 1 FROM evimed_frontier.item_texts t WHERE t.item_id = items.id)) AS items,
+          (SELECT min(visible_at) FROM evimed_frontier.items WHERE state = 'published' AND editor_version IS NULL
+            AND timeline_at > now() - interval '7 days') AS edits`)).rows[0] ?? {};
       return {
         entriesByState: Object.fromEntries(entries.map((/** @type {any} */ row) => [row.state, row.n])),
         publishedToday: items.reduce((/** @type {number} */ sum, /** @type {any} */ row) => sum + row.n, 0),
@@ -1230,6 +1288,8 @@ export class FrontierService {
         verificationToday: Object.fromEntries(items.map((/** @type {any} */ row) => [row.verification, row.n])),
         lastPublishedAt: iso(lastPublished),
         sources: await this.#sourceCounts(client),
+        sourcesByTier: tiers.map((/** @type {any} */ row) => ({ tier: String(row.tier ?? "unknown"), health: String(row.health ?? "unknown"), n: row.n })),
+        oldestOwed: { entries: iso(oldest.entries), items: iso(oldest.items), edits: iso(oldest.edits) },
       };
     });
     this.metricsCache = { at: this.now().getTime(), value };
@@ -1338,6 +1398,27 @@ export function frontierMetricFamilies(enabled, snapshot) {
   add("plugin_lag_entries", "Entries the plugin holds that the platform has not pulled yet.", "gauge", [{ value: plugin.lag ?? 0 }]);
   add("last_pull_ok_timestamp_seconds", "When the stream was last read successfully (0 = never in this process).", "gauge", [{ value: seconds(plugin.lastPullOkAt) }]);
   add("mirror_timestamp_seconds", "When the registry was last mirrored (0 = never in this process).", "gauge", [{ value: seconds(plugin.lastMirrorAt) }]);
+  // What the plugin's own /v1/health said at the last pull (plan §10.5.8):
+  // each exit's state, its backlog, its last fetch that read something, and
+  // the host that answered 429 most often in the last hour.
+  const pluginHealth = plugin.pluginHealthDetail;
+  if (pluginHealth) {
+    add("plugin_egress_state", "Each plugin exit's state as the plugin reports it (1 = current).", "gauge",
+      Object.entries(pluginHealth.egress ?? {}).flatMap(([egress, current]) => ["ok", "degraded", "down", "unconfigured"]
+        .map((state) => ({ labels: { egress, state }, value: current === state ? 1 : 0 }))));
+    add("plugin_last_ok_fetch_timestamp_seconds", "The plugin's last fetch that read something (0 = none reported).", "gauge",
+      [{ value: seconds(pluginHealth.lastOkFetchAt) }]);
+    add("plugin_last_new_entry_timestamp_seconds", "When a source last brought the plugin a new entry (0 = none reported).", "gauge",
+      [{ value: seconds(pluginHealth.lastNewEntryAt) }]);
+    add("plugin_backlog", "The plugin's own backlog: sources due for a poll, texts pending.", "gauge", [
+      { labels: { kind: "due_sources" }, value: Number(pluginHealth.backlog?.due_sources ?? 0) },
+      { labels: { kind: "pending_texts" }, value: Number(pluginHealth.backlog?.pending_texts ?? 0) },
+    ]);
+    add("plugin_backlog_oldest_due_seconds", "How long the plugin's most overdue source has been due.", "gauge",
+      [{ value: Number(pluginHealth.backlog?.oldest_due_s ?? 0) }]);
+    add("plugin_rate_limited_1h", "429 answers from the plugin's worst host in the last hour.", "gauge",
+      [{ labels: { host: String(pluginHealth.rateLimited?.host ?? "none") }, value: Number(pluginHealth.rateLimited?.max ?? 0) }]);
+  }
   add("cursor_gaps_total", "Times the cursor fell behind what the plugin still holds.", "counter", [{ value: plugin.gaps.count }]);
   add("cursor_gap_entries_total", "Entries skipped because the plugin had purged them before they were pulled.", "counter", [{ value: plugin.gaps.entries }]);
   add("ingest_entries_total", "Entries received from the plugin by what became of them.", "counter", [
@@ -1365,6 +1446,10 @@ export function frontierMetricFamilies(enabled, snapshot) {
     add("last_published_timestamp_seconds", "When the last item was published.", "gauge", [{ value: seconds(tables.lastPublishedAt) }]);
     add("sources", "Mirrored sources by what the reader sees (planned = loaded, not yet read).", "gauge",
       Object.entries(tables.sources).map(([health, value]) => ({ labels: { health }, value: Number(value) })));
+    add("sources_by_tier", "Enabled mirrored sources by launch tier and the plugin's health word.", "gauge",
+      (tables.sourcesByTier ?? []).map((/** @type {any} */ row) => ({ labels: { tier: row.tier, health: row.health }, value: Number(row.n) })));
+    add("oldest_owed_timestamp_seconds", "When the oldest work each stage owes became due (0 = none owed).", "gauge",
+      Object.entries(tables.oldestOwed ?? {}).map(([stage, at]) => ({ labels: { stage }, value: seconds(/** @type {string | null} */ (at)) })));
   }
   add("budget_spent_cny", "Today's frontier model spend (settled and still reserved).", "gauge", [{ value: Number(budget.spentCny ?? 0) }]);
   add("budget_limit_cny", "The day's frontier budget.", "gauge", [{ value: Number(budget.budgetCny ?? 0) }]);

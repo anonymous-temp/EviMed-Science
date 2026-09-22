@@ -477,6 +477,9 @@ export const PUBMED_NON_RESEARCH_TYPES = Object.freeze({
   'expression of concern': Object.freeze({ evidenceType: /** @type {FrontierEvidenceType} */ ('other'), demote: true }),
 })
 
+/** The evidence types that are a research design (what a research letter is). */
+const RESEARCH_DESIGN_TYPES = Object.freeze(['rct', 'systematic-review', 'observational', 'real-world'])
+
 /** Types every indexed article carries, which say nothing about its design. */
 const GENERIC_PUBLICATION_TYPES = Object.freeze(['journal article', 'english abstract', 'preprint'])
 
@@ -493,10 +496,18 @@ function isGenericPublicationType(type) {
  * non-research one, that type's entry; then it replaces the model's pick.
  * `demote` is true when the article is only a letter, comment, editorial, …:
  * it is shown in 「全部」 and never selected.
+ *
+ * A bare `Letter` is the one type PubMed gives both correspondence and a
+ * journal's research letters (a JAMA secondary analysis of an RCT, a kidney
+ * journal's genetics letters — 2026-09-22): the design is in the text, not in
+ * the type. So it decides only once the model has read the article
+ * (`modelType`) and found no research design there; before that, or when the
+ * model found one, it decides nothing.
  * @param {unknown} publicationTypes
+ * @param {{ modelType?: string | null }} [reading]
  * @returns {{ evidenceType: FrontierEvidenceType | null, matched: string | null, demote: boolean }}
  */
-export function frontierEvidenceFromPublicationTypes(publicationTypes) {
+export function frontierEvidenceFromPublicationTypes(publicationTypes, { modelType = null } = {}) {
   const types = [...new Set((Array.isArray(publicationTypes) ? publicationTypes : [])
     .filter((type) => typeof type === 'string')
     .map((type) => type.trim().toLowerCase().replace(/\s+/g, ' '))
@@ -505,6 +516,9 @@ export function frontierEvidenceFromPublicationTypes(publicationTypes) {
     if (types.includes(name)) return { evidenceType, matched: name, demote: false }
   }
   const specific = types.filter((type) => !isGenericPublicationType(type))
+  if (specific.length === 1 && specific[0] === 'letter' && (!modelType || RESEARCH_DESIGN_TYPES.includes(modelType))) {
+    return { evidenceType: null, matched: null, demote: false }
+  }
   if (specific.length && specific.every((type) => Object.hasOwn(PUBMED_NON_RESEARCH_TYPES, type))) {
     const decisive = specific.find((type) => !PUBMED_NON_RESEARCH_TYPES[type].demote) ?? specific[0]
     return {

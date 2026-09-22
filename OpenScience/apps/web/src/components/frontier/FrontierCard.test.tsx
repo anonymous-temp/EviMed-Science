@@ -104,6 +104,12 @@ describe("its actions", () => {
     expect(screen.getByRole("button", { name: "已收藏" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("lists the plugin's facts under the title, a key it has never seen by its own name", () => {
+    renderCard(frontierItem({ sourceType: "media", facts: { impact_factor: 12.34, affiliation_countries: ["CN"], evidence_grade: "B" } }));
+    const facts = screen.getByRole("list", { name: "补充信息" });
+    expect(within(facts).getAllByRole("listitem").map((entry) => entry.textContent)).toEqual(["影响因子：12.3", "作者单位：中国", "evidence grade：B"]);
+  });
+
   it("hides 存入知识库 where the page does not offer it", () => {
     renderCard(frontierItem(), { onSave: undefined });
     expect(screen.queryByRole("button", { name: "存入知识库" })).not.toBeInTheDocument();

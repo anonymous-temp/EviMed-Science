@@ -7,16 +7,17 @@ import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { FrontierChip } from "./FrontierChip";
+import { cardFacts } from "./frontierFacts";
 import {
   CARD_FLAG_KEYS,
   CARD_MAX_TOPICS,
   LEVEL_DIMENSIONS,
   LEVEL_WORDS,
-  RESEARCH_INTENTS,
   evidenceBasisSentence,
   flagTone,
   itemWhen,
   researchDraft,
+  researchIntents,
   selectedRuleSentence,
   sourceTypeTone,
   verificationSentence,
@@ -68,6 +69,7 @@ export function FrontierCard({ item, markSelected = false, onStar, onHide, onSav
   const evidence = item.evidenceType && item.evidenceType !== "other" ? item.evidenceTypeLabel : null;
   const pdf = item.openAccess?.pdfUrl && item.openAccess.pdfUrl !== item.url ? item.openAccess.pdfUrl : null;
   const starred = item.state.starred;
+  const facts = cardFacts(item);
   return (
     <article
       aria-labelledby={titleId}
@@ -89,6 +91,11 @@ export function FrontierCard({ item, markSelected = false, onStar, onHide, onSav
       {/* The Chinese title is for reading, the original for finding (plan §10.3.6). */}
       {item.titleZh && item.titleRaw !== item.titleZh && (
         <p className="mt-0.5 text-caption text-muted" lang={item.lang !== "und" ? item.lang : undefined}>{item.titleRaw}</p>
+      )}
+      {facts.length > 0 && (
+        <ul aria-label="补充信息" className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-caption text-muted">
+          {facts.map((fact) => <li key={fact.key}><span className="text-text-2">{fact.label}</span>：{fact.text}</li>)}
+        </ul>
       )}
       {item.summary && <p className="mt-2 text-ui text-text-2">{item.summary}</p>}
       {item.reason && (
@@ -309,7 +316,7 @@ export function ResearchMenu({ item }: { item: FrontierItem }) {
         // eslint-disable-next-line jsx-a11y/interactive-supports-focus -- roving focus lives on the menu items, not the container (WAI menu pattern).
         <div id={menuId} role="menu" aria-label="深入研究" onKeyDown={onMenuKey}
           className="absolute left-0 z-30 mt-1 min-w-56 rounded-card border border-border bg-surface p-1 shadow-pop">
-          {RESEARCH_INTENTS.map((intent) => (
+          {researchIntents(item).map((intent) => (
             <button key={intent.key} type="button" role="menuitem" onClick={() => choose(intent.key)}
               className="flex w-full items-center rounded px-2 py-1.5 text-left text-ui text-text hover:bg-surface-2 focus-visible:bg-surface-2">
               {intent.label}

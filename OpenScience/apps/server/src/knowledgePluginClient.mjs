@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
+import { FRONTIER_ENRICHMENT_KEYS } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -337,25 +338,89 @@ function validateHealth(raw) {
       if (/^[a-z][a-z0-9-]{0,39}$/.test(state) && integer(count, 0, 1_000_000) !== undefined) sources[state] = count;
     }
   }
+  /** @type {Record<string, "ok" | "degraded" | "down" | "unconfigured">} */
+  const egress = {};
+  if (isObject(value.egress)) {
+    for (const [name, state] of Object.entries(value.egress).slice(0, 12)) {
+      if (/^[a-z][a-z0-9-]{0,23}$/.test(name) && ["ok", "degraded", "down", "unconfigured"].includes(/** @type {string} */ (state))) {
+        egress[name] = /** @type {"ok" | "degraded" | "down" | "unconfigured"} */ (state);
+      }
+    }
+  }
+  const backlog = isObject(value.backlog) ? {
+    due_sources: integer(value.backlog.due_sources, 0, 1_000_000) ?? null,
+    pending_texts: integer(value.backlog.pending_texts, 0, 100_000_000) ?? null,
+    oldest_due_s: integer(value.backlog.oldest_due_s, 0, Number.MAX_SAFE_INTEGER) ?? null,
+  } : null;
+  // Contract 1.2.0: the last fetch that read something, and the host with the
+  // most 429 answers in the last hour (plan §10.5.8's two alert lines).
+  const rateLimited = isObject(value.rate_limited_1h) ? {
+    max: integer(value.rate_limited_1h.max, 0, 1_000_000) ?? 0,
+    host: text(value.rate_limited_1h.host, 253) ?? null,
+  } : null;
   return {
     status: ["ok", "degraded", "down"].includes(value.status) ? value.status : "degraded",
     contract,
     uptime_s: integer(value.uptime_s, 0, Number.MAX_SAFE_INTEGER) ?? null,
     sources,
+    egress,
+    backlog,
     last_fetch_at: isoTime(value.last_fetch_at),
+    last_ok_fetch_at: isoTime(value.last_ok_fetch_at),
     last_new_entry_at: isoTime(value.last_new_entry_at),
+    rate_limited_1h: rateLimited,
     model_calls_24h: integer(value.model_calls_24h, 0, 10_000_000) ?? null,
     latest_seq: integer(value.latest_seq, 0, Number.MAX_SAFE_INTEGER) ?? null,
   };
 }
 
+/** The enrichment keys the contract names, each checked for its own type below. */
+const KNOWN_ENRICHMENT_KEYS = new Set(FRONTIER_ENRICHMENT_KEYS);
+/** How many keys this build does not know one text may carry. */
+const MAX_NEW_ENRICHMENT_KEYS = 12;
+const ENRICHMENT_KEY = /^[a-z][a-z0-9_]{1,39}$/;
+
+/** A trimmed string cut to `max`, or undefined. @param {unknown} value @param {number} max */
+function clip(value, max) {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
+
 /**
- * `EntryText.enrichment`, whitelisted and typed: these facts are snapshotted
- * into the platform's own tables and shown on cards, so nothing the contract
- * does not name survives, and every URL is http(s).
- * @param {unknown} raw
+ * A value under a key this build does not know, bounded to what a card can
+ * show: a string, a number, a boolean, a list of strings, or a flat object of
+ * those; a `*_url` must be http(s). Anything else is dropped, never refused.
+ * @param {string} key @param {unknown} raw
  */
-export function validateEnrichment(raw) {
+function newEnrichmentValue(key, raw) {
+  if (key.endsWith("_url")) return httpUrl(raw);
+  if (typeof raw === "string") return clip(raw, 500);
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : undefined;
+  if (typeof raw === "boolean") return raw;
+  if (Array.isArray(raw)) return raw.every((entry) => typeof entry === "string") ? textList(raw, 20, 120) : undefined;
+  if (!isObject(raw)) return undefined;
+  /** @type {Record<string, string | number | boolean>} */
+  const flat = {};
+  for (const [name, entry] of Object.entries(/** @type {Record<string, unknown>} */ (raw)).slice(0, 10)) {
+    if (!ENRICHMENT_KEY.test(name)) continue;
+    if (typeof entry === "string") { const kept = clip(entry, 200); if (kept !== undefined) flat[name] = kept; }
+    else if ((typeof entry === "number" && Number.isFinite(entry)) || typeof entry === "boolean") flat[name] = entry;
+  }
+  return Object.keys(flat).length ? flat : undefined;
+}
+
+/**
+ * `EntryText.enrichment`, typed: these facts are snapshotted into the
+ * platform's own tables and shown on cards. The keys the contract names are
+ * checked one by one. A key a later plugin adds (plan §14.6: "新字段平台不发版，
+ * 镜像与 manifest 自动带出") passes only once the plugin's manifest declares it
+ * (`fields.enrichment`) — a key nobody declared, a stray `contact_email`, is
+ * dropped — within the bounds of `newEnrichmentValue`, at most
+ * `MAX_NEW_ENRICHMENT_KEYS` of them; every URL is http(s).
+ * @param {unknown} raw @param {{ declared?: readonly string[] }} [manifest]
+ */
+export function validateEnrichment(raw, { declared = [] } = {}) {
   if (!isObject(raw)) return {};
   const value = /** @type {Record<string, any>} */ (raw);
   /** @type {Record<string, any>} */
@@ -393,11 +458,20 @@ export function validateEnrichment(raw) {
       .map((code) => code.trim().toUpperCase()).filter((code) => /^[A-Z]{2}$/.test(code)))].slice(0, 50);
     if (countries.length) enrichment.affiliation_countries = countries;
   }
+  let added = 0;
+  for (const [key, entry] of Object.entries(value)) {
+    if (added >= MAX_NEW_ENRICHMENT_KEYS) break;
+    if (KNOWN_ENRICHMENT_KEYS.has(key) || !ENRICHMENT_KEY.test(key) || !declared.includes(key)) continue;
+    const kept = newEnrichmentValue(key, entry);
+    if (kept === undefined) continue;
+    enrichment[key] = kept;
+    added += 1;
+  }
   return enrichment;
 }
 
-/** @param {unknown} raw */
-function validateEntryText(raw) {
+/** @param {unknown} raw @param {{ declared?: readonly string[] }} [manifest] */
+function validateEntryText(raw, manifest = {}) {
   if (!isObject(raw)) throw pluginError(502, "knowledge_plugin_response_invalid", "The plugin text answer is not an object.");
   const value = /** @type {Record<string, any>} */ (raw);
   const entryId = text(value.entry_id, 200);
@@ -417,7 +491,7 @@ function validateEntryText(raw) {
     fetched_from: text(value.fetched_from, 40) ?? null,
     fetched_at: isoTime(value.fetched_at),
     next_attempt_at: isoTime(value.next_attempt_at),
-    enrichment: validateEnrichment(value.enrichment),
+    enrichment: validateEnrichment(value.enrichment, manifest),
   };
 }
 
@@ -481,6 +555,8 @@ export class KnowledgePluginClient {
     this.lastError = null;
     /** Observable counters (principle 15). */
     this.counters = { requests: 0, failures: 0, retries: 0, skippedEntries: 0, skippedSources: 0 };
+    /** @type {readonly string[]} The manifest's `fields.enrichment`, once read. */
+    this.declaredEnrichment = [];
   }
 
   get configured() { return Boolean(this.baseUrl); }
@@ -500,6 +576,9 @@ export class KnowledgePluginClient {
   /** What this build delivers, with its contract verdict. The caller decides what an incompatible one costs. */
   async manifest() {
     const manifest = validateManifest(await this.#request("GET", "/v1/manifest"));
+    // The enrichment keys the plugin declares: what a text may carry beyond
+    // the ones this build names (the ingest reads the manifest hourly).
+    this.declaredEnrichment = manifest.fields.enrichment;
     return { ...manifest, compatible: this.compatible(manifest.contract.version) };
   }
 
@@ -602,7 +681,7 @@ export class KnowledgePluginClient {
 
   /** The abstract, excerpt and enrichment of one entry, or `pending`. @param {string} entryId */
   async text(entryId) {
-    return validateEntryText(await this.#request("GET", `/v1/entries/${this.#segment(entryId)}/text`));
+    return validateEntryText(await this.#request("GET", `/v1/entries/${this.#segment(entryId)}/text`), { declared: this.declaredEnrichment });
   }
 
   /** The on-demand capabilities this build offers (an empty list in batch 1). */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { frontierItem } from "./__fixtures__/frontierItems";
-import { groupByDay, hotMeta, itemWhen, researchDraft, verificationSentence } from "./frontierText";
+import { groupByDay, hotMeta, itemWhen, researchDraft, researchIntents, verificationSentence } from "./frontierText";
+import type { FrontierItem } from "@/lib/frontierClient";
 
 // Local noon, so "today" and "yesterday" do not depend on the test machine's zone.
 const NOW = new Date(2026, 8, 22, 12, 0, 0).getTime();
@@ -62,5 +63,17 @@ describe("the 深入研究 draft", () => {
 
   it("leaves the reader's own question for last", () => {
     expect(researchDraft(frontierItem(), "own").endsWith("我的问题：")).toBe(true);
+  });
+
+  it("asks the first question the item can answer: a design for a study, grounds for the rest", () => {
+    const first = (fields: Partial<FrontierItem>) => researchIntents(frontierItem(fields))[0]?.label;
+    expect(first({ evidenceType: "rct" })).toBe("这项研究可靠吗");
+    expect(first({ evidenceType: null, sourceType: "preprint" })).toBe("这项研究可靠吗");
+    expect(first({ evidenceType: "guideline" })).toBe("这份指南的推荐依据是什么");
+    expect(first({ evidenceType: "safety-notice", sourceType: "regulator" })).toBe("这项决定依据什么");
+    expect(first({ evidenceType: "other", sourceType: "media" })).toBe("这条消息的依据是什么");
+    const policy = frontierItem({ evidenceType: "other", sourceType: "media" });
+    expect(researchDraft(policy, "reliability").startsWith("这条消息的依据是什么？")).toBe(true);
+    expect(researchIntents(policy).map((intent) => intent.key)).toEqual(["reliability", "my-project", "synthesis", "own"]);
   });
 });

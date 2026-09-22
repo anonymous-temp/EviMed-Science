@@ -214,6 +214,18 @@ test("an article that is only a letter, comment or editorial is demoted; a journ
   assert.deepEqual(frontierEvidenceFromPublicationTypes(["Comment", "News"]), { evidenceType: "other", matched: "news", demote: false });
 });
 
+test("a bare Letter decides only after the model read the article and found no research design", () => {
+  const undecided = { evidenceType: null, matched: null, demote: false };
+  const letter = { evidenceType: "review-opinion", matched: "letter", demote: true };
+  assert.deepEqual(frontierEvidenceFromPublicationTypes(["Letter"]), undecided, "before the edit: the model reads it first");
+  assert.deepEqual(frontierEvidenceFromPublicationTypes(["Letter", "Research Support, Non-U.S. Gov't"], { modelType: "rct" }), undecided,
+    "a research letter (JAMA's secondary analysis of an RCT) keeps the design the model read");
+  assert.deepEqual(frontierEvidenceFromPublicationTypes(["Letter"], { modelType: "observational" }), undecided);
+  assert.deepEqual(frontierEvidenceFromPublicationTypes(["Letter"], { modelType: "review-opinion" }), letter, "correspondence stays demoted");
+  assert.deepEqual(frontierEvidenceFromPublicationTypes(["Letter"], { modelType: "other" }), letter);
+  assert.deepEqual(frontierEvidenceFromPublicationTypes(["Letter", "Comment"], { modelType: "rct" }), letter, "a letter that comments is correspondence");
+});
+
 test("the authority score is the grade times the evidence coefficient, discounted for a preprint", () => {
   assert.equal(frontierAuthorityScore({ authority: 5, evidenceType: "rct" }), 30);
   assert.equal(frontierAuthorityScore({ authority: 5, evidenceType: "observational" }), 24);

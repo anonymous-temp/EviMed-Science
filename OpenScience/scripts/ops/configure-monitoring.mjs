@@ -217,10 +217,24 @@ async function writeTlsTargets() {
     }
     targets.push(url.toString());
   }
+  // The Tokyo proxy's IP certificate (plan §10.5.8): a TLS handshake only,
+  // as host:port, in a second group its own scrape job keeps. It lives six
+  // days and renews twice a day, so its alert line is a day, not three.
+  const edge = [];
+  const edgeRaw = process.env.OPEN_SCIENCE_EDGE_PROXY_URL ?? "";
+  if (edgeRaw) {
+    let url;
+    try { url = new URL(edgeRaw); } catch {
+      fail("edge_proxy_url_invalid", "OPEN_SCIENCE_EDGE_PROXY_URL is not a URL.");
+    }
+    if (url.protocol !== "https:") fail("edge_proxy_url_insecure", "OPEN_SCIENCE_EDGE_PROXY_URL must be an https URL.");
+    edge.push(`${url.hostname}:${url.port || "443"}`);
+  }
   await assertNoSymlinkPath(targetsDir, { allowMissingTail: true });
   await fsp.mkdir(targetsDir, { recursive: true, mode: 0o755 });
   await assertNoSymlinkPath(targetsDir);
-  await fsp.writeFile(tlsTargetsFile, `${JSON.stringify([{ targets, labels: { probe: "public-tls" } }], null, 2)}\n`, { mode: 0o644 });
+  await fsp.writeFile(tlsTargetsFile, `${JSON.stringify([{ targets, labels: { probe: "public-tls" } },
+    { targets: edge, labels: { probe: "edge-proxy-tls" } }], null, 2)}\n`, { mode: 0o644 });
   // `mode` on writeFile applies only when the file is created, so a file that
   // already exists keeps whatever mode it had — and this one is checked in, so
   // on a host whose umask is 002 the checkout is group-writable and `check()`

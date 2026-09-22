@@ -284,15 +284,15 @@ export function frontierTextPendingHold(nextAttemptAt, now) {
  * database actions a regulatory decision, safety feeds safety notices,
  * company newsrooms press releases — all by the registry (`registry`); an
  * explicit PubMed research type replaces the model (`pubmed-types`).
- * @param {{ source: any, identityKey: string, publicationTypes: unknown }} input
+ * @param {{ source: any, identityKey: string, publicationTypes: unknown, modelType?: string | null }} input
  * @returns {{ fixed: { type: string, basis: "registry" | "pubmed-types" } | null, demote: boolean }}
  */
-export function frontierEvidenceDecision({ source, identityKey, publicationTypes }) {
+export function frontierEvidenceDecision({ source, identityKey, publicationTypes, modelType = null }) {
   if (/^reg:/.test(identityKey)) return { fixed: { type: "other", basis: "registry" }, demote: false };
   if (/^fda:/.test(identityKey)) return { fixed: { type: "regulatory-decision", basis: "registry" }, demote: false };
   if (source?.safety_feed === true) return { fixed: { type: "safety-notice", basis: "registry" }, demote: false };
   if (source?.source_type === "company") return { fixed: { type: "press-release", basis: "registry" }, demote: false };
-  const types = frontierEvidenceFromPublicationTypes(publicationTypes);
+  const types = frontierEvidenceFromPublicationTypes(publicationTypes, { modelType });
   if (types.evidenceType) return { fixed: { type: types.evidenceType, basis: "pubmed-types" }, demote: types.demote };
   return { fixed: null, demote: false };
 }
@@ -1069,7 +1069,8 @@ export class FrontierPipeline {
       if (item.state === "published") {
         // Text that arrives after publication: code-decided labels move now,
         // and the item owes one re-edit (review #11).
-        const evidence = frontierEvidenceDecision({ source, identityKey: item.identity_key, publicationTypes: texts.publication_types });
+        const evidence = frontierEvidenceDecision({ source, identityKey: item.identity_key, publicationTypes: texts.publication_types,
+          modelType: item.evidence_type });
         const linkFlags = await this.#linkFlags(client, item);
         const flags = frontierItemFlags({ source, entry, item, text: texts, modelFlags: item.flags.includes("press-release") && source?.source_type !== "company" ? ["press-release"] : [], linkFlags });
         const evidenceType = evidence.fixed?.type ?? item.evidence_type;
@@ -1310,7 +1311,8 @@ export class FrontierPipeline {
    */
   async #score(item, { texts, source, entry, result, context }) {
     const output = result && result.verification !== "pending" ? result.output : null;
-    const evidence = frontierEvidenceDecision({ source, identityKey: item.identity_key, publicationTypes: texts?.publication_types });
+    const evidence = frontierEvidenceDecision({ source, identityKey: item.identity_key, publicationTypes: texts?.publication_types,
+      modelType: output?.evidenceType ?? item.evidence_type ?? null });
     const evidenceType = evidence.fixed?.type ?? output?.evidenceType ?? (item.state === "published" ? item.evidence_type : null);
     const evidenceBasis = evidence.fixed?.basis ?? (output?.evidenceType ? "model" : item.state === "published" ? item.evidence_basis : null);
     const isChinese = isChineseTitle(item.title_raw);
@@ -1402,7 +1404,7 @@ export class FrontierPipeline {
       const timelineAt = frontierTimelineAt(now, item.published_at);
       const decision = frontierSelectionDecision({
         safetyAlert: item.safety_alert, verification: item.verification, scoreTotal: item.score_total,
-        demoted: frontierEvidenceFromPublicationTypes(texts?.publication_types).demote, flags, source,
+        demoted: frontierEvidenceFromPublicationTypes(texts?.publication_types, { modelType: item.evidence_type }).demote, flags, source,
         selectedToday: await this.#selectedToday(client, item.primary_source_id, timelineAt), threshold: this.threshold,
       });
       if (decision.capped) this.counters.capped += 1;
@@ -1432,7 +1434,7 @@ export class FrontierPipeline {
       const texts = (await client.query("SELECT publication_types FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId])).rows[0];
       const decision = frontierSelectionDecision({
         safetyAlert: item.safety_alert, verification: item.verification, scoreTotal: item.score_total,
-        demoted: frontierEvidenceFromPublicationTypes(texts?.publication_types).demote, flags: item.flags, source,
+        demoted: frontierEvidenceFromPublicationTypes(texts?.publication_types, { modelType: item.evidence_type }).demote, flags: item.flags, source,
         selectedToday: await this.#selectedToday(client, item.primary_source_id, new Date(item.timeline_at)), threshold: this.threshold,
       });
       if (!decision.selected) return;
@@ -1454,8 +1456,8 @@ export class FrontierPipeline {
     const { start, end } = frontierDayWindow(now, this.timeZone);
     await this.database.transaction(async (/** @type {any} */ client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [SELECT_LOCK]);
-      const candidates = await client.query(`SELECT ranked.id, ranked.lane, t.publication_types FROM (
-          SELECT i.id, i.lane, row_number() OVER (PARTITION BY i.lane ORDER BY i.score_total DESC, i.id) AS rank
+      const candidates = await client.query(`SELECT ranked.id, ranked.lane, ranked.evidence_type, t.publication_types FROM (
+          SELECT i.id, i.lane, i.evidence_type, row_number() OVER (PARTITION BY i.lane ORDER BY i.score_total DESC, i.id) AS rank
           FROM evimed_frontier.items i
           WHERE i.state = 'published' AND i.timeline_at >= $1 AND i.timeline_at < $2 AND i.score_total >= $3
             AND i.verification IN ('passed', 'repaired') AND NOT i.selected AND NOT ('retracted' = ANY(i.flags))
@@ -1465,7 +1467,7 @@ export class FrontierPipeline {
         WHERE ranked.rank <= 5 ORDER BY ranked.lane, ranked.rank`, [start, end, FRONTIER_LANE_FLOOR_SCORE]);
       const chosen = new Map();
       for (const row of candidates.rows) {
-        if (chosen.has(row.lane) || frontierEvidenceFromPublicationTypes(row.publication_types).demote) continue;
+        if (chosen.has(row.lane) || frontierEvidenceFromPublicationTypes(row.publication_types, { modelType: row.evidence_type }).demote) continue;
         chosen.set(row.lane, Number(row.id));
       }
       for (const id of chosen.values()) {

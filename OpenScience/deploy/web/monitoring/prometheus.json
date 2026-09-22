@@ -84,6 +84,56 @@
       "relabel_configs": [
         {
           "source_labels": [
+            "probe"
+          ],
+          "regex": "public-tls",
+          "action": "keep"
+        },
+        {
+          "source_labels": [
+            "__address__"
+          ],
+          "target_label": "__param_target"
+        },
+        {
+          "source_labels": [
+            "__param_target"
+          ],
+          "target_label": "instance"
+        },
+        {
+          "target_label": "__address__",
+          "replacement": "blackbox-exporter:9115"
+        }
+      ],
+      "file_sd_configs": [
+        {
+          "files": [
+            "/etc/prometheus/targets/tls.json"
+          ],
+          "refresh_interval": "5m"
+        }
+      ]
+    },
+    {
+      "job_name": "edge-proxy-tls",
+      "metrics_path": "/probe",
+      "scrape_interval": "5m",
+      "params": {
+        "module": [
+          "tls_connect"
+        ]
+      },
+      "relabel_configs": [
+        {
+          "source_labels": [
+            "probe"
+          ],
+          "regex": "edge-proxy-tls",
+          "action": "keep"
+        },
+        {
+          "source_labels": [
             "__address__"
           ],
           "target_label": "__param_target"

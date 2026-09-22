@@ -4,5 +4,11 @@
     "labels": {
       "probe": "public-tls"
     }
+  },
+  {
+    "targets": [],
+    "labels": {
+      "probe": "edge-proxy-tls"
+    }
   }
 ]

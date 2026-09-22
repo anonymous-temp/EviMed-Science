@@ -20,6 +20,17 @@
           "insecure_skip_verify": false
         }
       }
+    },
+    "tls_connect": {
+      "prober": "tcp",
+      "timeout": "10s",
+      "tcp": {
+        "tls": true,
+        "preferred_ip_protocol": "ip4",
+        "tls_config": {
+          "insecure_skip_verify": false
+        }
+      }
     }
   }
 }

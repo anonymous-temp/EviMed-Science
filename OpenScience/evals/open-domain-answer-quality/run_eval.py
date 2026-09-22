@@ -182,11 +182,17 @@ def start_runtime(base: str, headers: dict[str, str], opener: urllib.request.Ope
     return runtime_url.rstrip("/")
 
 
+def message_role(message: dict[str, Any]) -> str | None:
+    """A message's role: top-level in the DeepSeek Harness transcript, under `info` before it."""
+    info = message.get("info") if isinstance(message.get("info"), dict) else {}
+    return message.get("role") or info.get("role")
+
+
 def message_texts(messages: list[dict[str, Any]], role: str) -> list[str]:
     """Return one entry per message, in order, for the given role."""
     texts: list[str] = []
     for message in messages:
-        if not isinstance(message, dict) or message.get("info", {}).get("role") != role:
+        if not isinstance(message, dict) or message_role(message) != role:
             continue
         parts = [
             part["text"].strip()
@@ -222,14 +228,39 @@ def message_text(messages: list[dict[str, Any]], role: str) -> str:
     return "\n\n".join(texts[start:])
 
 
-def tool_call_count(messages: list[dict[str, Any]]) -> int:
-    return sum(
-        1
+def tool_names(messages: list[dict[str, Any]]) -> list[str]:
+    """Every tool call of the conversation, by name, in order."""
+    return [
+        str(part.get("tool") or "")
         for message in messages
         if isinstance(message, dict)
         for part in message.get("parts") or []
         if isinstance(part, dict) and part.get("type") == "tool"
+    ]
+
+
+def tool_call_count(messages: list[dict[str, Any]]) -> int:
+    return len(tool_names(messages))
+
+
+def session_messages(
+    base: str, session_id: str, headers: dict[str, str], opener: urllib.request.OpenerDirector
+) -> list[dict[str, Any]]:
+    """The session's messages as the control plane reads them from the kernel.
+
+    Since the DeepSeek Harness migration (2026-09-01) the browser-side runtime
+    routes are gone; the control plane serves the transcript itself.
+    """
+    transcript = unwrap(
+        http_json(opener, "GET", f"{base}/api/runtime/sessions/{urllib.parse.quote(session_id)}/transcript", headers=headers),
+        "session transcript",
     )
+    if not isinstance(transcript, dict):
+        return []
+    messages = transcript.get("messages")
+    if not isinstance(messages, list):
+        messages = transcript.get("records") if isinstance(transcript.get("records"), list) else []
+    return [message for message in messages if isinstance(message, dict)]
 
 
 def wait_for_run(
@@ -276,8 +307,8 @@ def collect_one(
     opener: urllib.request.OpenerDirector,
     timeout_minutes: int,
 ) -> dict[str, Any]:
-    session = http_json(opener, "POST", f"{runtime_url}/session", {}, headers=headers)
-    session_id = session.get("id")
+    session = unwrap(http_json(opener, "POST", f"{runtime_url}/sessions", {}, headers=headers), "runtime session")
+    session_id = session.get("id") if isinstance(session, dict) else None
     if not isinstance(session_id, str) or not session_id:
         raise EvalError(f"runtime did not return a session id: {str(session)[:200]}")
     http_json(
@@ -300,10 +331,7 @@ def collect_one(
     )
     run_id = unwrap(dispatched, "dispatch").get("id")
     terminal = wait_for_run(base, headers, opener, run_id, timeout_minutes)
-    messages_payload = http_json(
-        opener, "GET", f"{runtime_url}/session/{urllib.parse.quote(session_id)}/message", headers=headers
-    )
-    messages = messages_payload if isinstance(messages_payload, list) else []
+    messages = session_messages(base, session_id, headers, opener)
     assistant_messages = message_texts(messages, "assistant")
     assistant_text = assistant_messages[-1] if assistant_messages else ""
     artifacts = capture_artifacts(base, headers, opener, terminal.get("artifacts") or [])
@@ -341,6 +369,8 @@ def collect_one(
             "narrationMessages": max(0, len(assistant_messages) - 1),
             "sessionId": session_id,
             "toolCalls": tool_call_count(messages),
+            "tools": tool_names(messages),
+            "frontierToolCalls": sum(1 for name in tool_names(messages) if name.endswith("frontier_search")),
             "artifacts": [item.get("path", "") for item in artifacts],
             "assistantChars": len(assistant_text),
             "reportArtifactChars": len(artifact_text),
@@ -408,8 +438,15 @@ def collect_live(questions: list[dict[str, Any]], args: argparse.Namespace) -> l
             print(f"[error] {question['id']} {error}")
 
     workers = max(1, min(args.workers, 3))
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-        list(executor.map(worker, pending))
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            list(executor.map(worker, pending))
+    finally:
+        # A collection against a shared deployment leaves no signed-in session behind.
+        try:
+            http_json(opener, "POST", f"{base}/api/auth/logout", {}, headers=headers)
+        except Exception as error:  # the answers are collected; a failed logout is only reported
+            print(f"[warn] logout failed: {error}")
 
     return [entry for entry in results if entry is not None]
 
@@ -469,6 +506,7 @@ def main() -> int:
     parser.add_argument("--timeout-minutes", type=int, default=30, help="per-run terminal-state timeout")
     parser.add_argument("--rerun", action="store_true", help="ignore previously collected answers")
     parser.add_argument("--judge-workers", type=int, default=2)
+    parser.add_argument("--label", default="", help="the arm this collection belongs to, recorded in the answers file")
     args = parser.parse_args()
 
     questions = judge.load_questions(args.questions)
@@ -499,7 +537,8 @@ def main() -> int:
     collected = sum(1 for entry in entries if entry["answer"].strip())
     failed = len(entries) - collected
     base = os.environ.get("OPEN_SCIENCE_EVAL_BASE_URL", DEFAULT_BASE_URL).strip().rstrip("/")
-    output_path = write_answers(entries, {"mode": "live", "baseUrl": base})
+    output_path = write_answers(entries, {"mode": "live", "baseUrl": base, "label": args.label,
+                                          "project": os.environ.get("OPEN_SCIENCE_EVAL_PROJECT", DEFAULT_PROJECT_ID)})
     print(f"collected {collected}/{len(entries)} answers ({failed} failed)")
     if collected == 0:
         print("No answers collected; not judging. Fix the errors above and re-run.", file=sys.stderr)

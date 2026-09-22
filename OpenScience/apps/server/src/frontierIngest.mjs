@@ -196,6 +196,8 @@ export class FrontierIngest {
     this.latestSeq = null;
     /** @type {string | null} */
     this.pluginHealth = null;
+    /** @type {{ egress: Record<string, string>, backlog: any, lastOkFetchAt: string | null, lastNewEntryAt: string | null, rateLimited: { max: number, host: string | null } | null, at: string } | null} */
+    this.pluginHealthDetail = null;
     this.lastPullAt = null;
     this.lastPullOkAt = null;
     /** @type {string | null} */
@@ -503,6 +505,8 @@ export class FrontierIngest {
         const health = await this.plugin.health();
         this.latestSeq = health.latest_seq;
         this.pluginHealth = health.status;
+        this.pluginHealthDetail = { egress: health.egress, backlog: health.backlog, lastOkFetchAt: health.last_ok_fetch_at,
+          lastNewEntryAt: health.last_new_entry_at, rateLimited: health.rate_limited_1h, at: this.now().toISOString() };
         if (!health.compatible) {
           // Upgraded under us: the manifest is the authority, read it now.
           await this.mirrorManifest();
@@ -513,6 +517,7 @@ export class FrontierIngest {
         }
       } catch {
         this.pluginHealth = null;
+        this.pluginHealthDetail = null;
       }
       let cursor = await this.#resyncIfPurged(await this.#storedCursor());
       let remirrored = false;
@@ -583,6 +588,7 @@ export class FrontierIngest {
       version: this.compatibility.version,
       compatibility: this.compatibility.state,
       pluginHealth: this.pluginHealth,
+      pluginHealthDetail: this.pluginHealthDetail ?? null,
       lastPullAt: this.lastPullAt,
       lastPullOkAt: this.lastPullOkAt,
       lastError: this.lastError,
