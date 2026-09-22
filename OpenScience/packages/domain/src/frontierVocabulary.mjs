@@ -312,7 +312,18 @@ export const FRONTIER_ITEM_FLAGS = /** @type {readonly FrontierItemFlag[]} */ (O
   'china',
   'registry-unpublished',
   'data-updated',
+  'digest',
 ]))
+
+/**
+ * Source types whose items write *about* registrations rather than being one:
+ * a story that names two or more trials states mentions, not its own identity
+ * (2026-09-22: a column's fifth NCT number pulled an unrelated results posting
+ * into it).
+ */
+export const FRONTIER_MENTION_SOURCE_TYPES = Object.freeze(['media', 'company'])
+/** From this many registry ids on, such an item's ids are mentions. */
+export const FRONTIER_MENTION_REGISTRY_IDS = 2
 
 export const FRONTIER_ITEM_FLAG_LABELS_ZH = /** @type {Readonly<Record<FrontierItemFlag, string>>} */ (Object.freeze({
   preprint: '未经同行评议',
@@ -326,6 +337,7 @@ export const FRONTIER_ITEM_FLAG_LABELS_ZH = /** @type {Readonly<Record<FrontierI
   china: '涉华',
   'registry-unpublished': '注册，未发表结果',
   'data-updated': '数据已更新',
+  digest: '多事汇总',
 }))
 
 /** The flags the editor model may propose; every other flag is code's. */

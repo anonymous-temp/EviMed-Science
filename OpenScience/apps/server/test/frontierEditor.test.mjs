@@ -53,7 +53,7 @@ test("a screening call is metered as frontier, thinking off, JSON, temperature 0
   const editor = new FrontierEditor(config, { owner, callModel });
   const result = await editor.screen(batch(3));
   assert.equal(result.verdicts.size, 3);
-  assert.deepEqual(result.verdicts.get("e2"), { medical: true, news: false, lane: "evidence", specialties: ["cardiology"], language: "en" });
+  assert.deepEqual(result.verdicts.get("e2"), { medical: true, news: false, lane: "evidence", digest: false, specialties: ["cardiology"], language: "en" });
   const [call] = calls;
   assert.equal(call.purpose, "frontier");
   assert.equal(call.userId, "operator");
@@ -108,6 +108,15 @@ test("a spent budget is not asked again, and an editor without an owner makes no
   ownerless.owner = owner;
   assert.equal(ownerless.available, true, "the owner may be assigned once the internal project exists");
   assert.equal(new FrontierEditor({ ...config, deepseekApiKey: "" }, { owner }).available, false);
+});
+
+test("screening says whether a piece covers several stories, and it defaults to one", () => {
+  const batch = [{ key: "a", title: "Pharmalittle: two read-outs and more", sourceName: "STAT", allowedLanes: ["evidence", "pipeline"] }];
+  const digest = validateScreen(batch, { items: [{ id: "1", medical: true, news: true, lane: "pipeline", specialties: [], language: "en", digest: true }] });
+  assert.equal(digest?.get("a")?.digest, true);
+  const single = validateScreen(batch, { items: [{ id: "1", medical: true, news: true, lane: "pipeline", specialties: [], language: "en" }] });
+  assert.equal(single?.get("a")?.digest, false, "an answer without the field is one story");
+  assert.match(FRONTIER_SCREEN_INSTRUCTIONS, /digest/);
 });
 
 test("screening validation: same count, every id once, lanes within the entry's own, booleans, a language code", () => {

@@ -63,6 +63,8 @@ import {
   FRONTIER_SOURCE_TYPE_LABELS_ZH,
   doiOf,
   frontierAuthorityScore,
+  FRONTIER_MENTION_REGISTRY_IDS,
+  FRONTIER_MENTION_SOURCE_TYPES,
   frontierEvidenceFromPublicationTypes,
   isFrontierMastheadTitle,
   isPeak,
@@ -199,10 +201,13 @@ function urlKey(canonicalUrl) {
 /**
  * Every key an entry is known by: `dedupe` keys are looked up and claimed,
  * `cluster` keys (bare registry ids) are written for event clustering only.
- * An event-level identity (`reg:`/`fda:`) dedupes by itself alone.
- * @param {any} entry @returns {{ dedupe: string[], cluster: string[] }}
+ * An event-level identity (`reg:`/`fda:`) dedupes by itself alone. A story
+ * that names two or more trials writes no cluster key at all: its registry
+ * ids are what it mentions, and a key written here is what another item finds
+ * later (2026-09-22: a results posting joined a column's event by one).
+ * @param {any} entry @param {any} [source] @returns {{ dedupe: string[], cluster: string[] }}
  */
-export function entryKeys(entry) {
+export function entryKeys(entry, source = null) {
   const identity = String(entry.identity_key);
   const dedupe = new Set([identity]);
   if (!/^(reg|fda):/.test(identity)) {
@@ -212,9 +217,14 @@ export function entryKeys(entry) {
     if (entry.canonical_url) dedupe.add(urlKey(entry.canonical_url));
   }
   const cluster = new Set();
-  for (const id of Array.isArray(entry.registry_ids) ? entry.registry_ids : []) {
-    const key = `reg:${String(id).trim().toUpperCase()}`;
-    if (key.length > 4 && !dedupe.has(key)) cluster.add(key);
+  const registered = Array.isArray(entry.registry_ids) ? entry.registry_ids : [];
+  const mentions = FRONTIER_MENTION_SOURCE_TYPES.includes(String(source?.source_type ?? ""))
+    && registered.length >= FRONTIER_MENTION_REGISTRY_IDS;
+  if (!mentions) {
+    for (const id of registered) {
+      const key = `reg:${String(id).trim().toUpperCase()}`;
+      if (key.length > 4 && !dedupe.has(key)) cluster.add(key);
+    }
   }
   return { dedupe: [...dedupe], cluster: [...cluster] };
 }
@@ -305,6 +315,8 @@ export function frontierEvidenceDecision({ source, identityKey, publicationTypes
  */
 export function frontierItemFlags({ source, entry, item, text, modelFlags = [], linkFlags = [] }) {
   const flags = new Set(linkFlags);
+  // What screening decided about the item itself stays on it.
+  if ((Array.isArray(item?.flags) ? item.flags : []).includes("digest")) flags.add("digest");
   const preprint = source?.source_type === "preprint";
   if (preprint) flags.add("preprint");
   const paper = Boolean(item?.doi || item?.pmid);
@@ -743,7 +755,7 @@ export class FrontierPipeline {
   async #dedupe(entries, sources, context) {
     const { now, summary } = context;
     if (!entries.length) return [];
-    const keysOf = new Map(entries.map((entry) => [entry.id, entryKeys(entry)]));
+    const keysOf = new Map(entries.map((entry) => [entry.id, entryKeys(entry, sources.get(entry.source_id))]));
     const all = [...new Set([...keysOf.values()].flatMap((keys) => keys.dedupe))];
     const found = await this.database.query(`SELECT k.key, i.id, i.state FROM evimed_frontier.item_keys k
       JOIN evimed_frontier.items i ON i.id = k.item_id WHERE k.key = ANY($1::text[])`, [all]);
@@ -836,7 +848,7 @@ export class FrontierPipeline {
    */
   async #revision(entry, earlier, source, context) {
     const { summary } = context;
-    const keys = entryKeys(entry);
+    const keys = entryKeys(entry, source);
     if (earlier.state === "merged") {
       await this.database.transaction(async (/** @type {any} */ client) => {
         await client.query(`UPDATE evimed_frontier.item_mentions SET entry_id = $3, url = $4, published_at = $5
@@ -932,12 +944,12 @@ export class FrontierPipeline {
    * per key by advisory locks, so two batches cannot create one work twice;
    * a title that is a near duplicate of a published item of the same lane in
    * the last seven days is merged instead (plan §10.3.3).
-   * @param {any} entry @param {any} source @param {{ lane: string, specialties: string[], language: string }} verdict @param {any} context
+   * @param {any} entry @param {any} source @param {{ lane: string, specialties: string[], language: string, digest?: boolean }} verdict @param {any} context
    * @returns {Promise<{ itemId: number | null, merged: boolean, waiting: boolean }>}
    */
   async #createItem(entry, source, verdict, context) {
     const { now, capabilities } = context;
-    const keys = entryKeys(entry);
+    const keys = entryKeys(entry, source);
     return this.database.transaction(async (/** @type {any} */ client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext(key)) FROM (SELECT DISTINCT unnest($1::text[]) AS key ORDER BY 1) AS keys", [keys.dedupe]);
       const hit = (await client.query(`SELECT i.id, i.state FROM evimed_frontier.item_keys k JOIN evimed_frontier.items i ON i.id = k.item_id
@@ -968,12 +980,16 @@ export class FrontierPipeline {
       const isChinese = isChineseTitle(entry.title_raw);
       const inserted = await client.query(`INSERT INTO evimed_frontier.items (public_id, primary_source_id, canonical_url, identity_key,
           doi, pmid, registry_ids, title_raw, title_zh, lang, lane, source_type, specialties, published_at, date_precision,
-          first_seen_at, timeline_at, state, safety_alert)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16, 'screened', $17)
+          first_seen_at, timeline_at, state, safety_alert, flags)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16, 'screened', $17, $18)
         RETURNING id`, [randomBytes(8).toString("hex"), entry.source_id, entry.canonical_url, entry.identity_key,
         entry.doi, entry.pmid, entry.registry_ids ?? [], entry.title_raw, isChinese ? String(entry.title_raw).slice(0, 200) : null,
         isChinese ? "zh" : verdict.language || entry.lang || "und", verdict.lane, source?.source_type ?? "media", verdict.specialties,
-        entry.published_at, entry.date_precision, entry.first_seen_at, source?.safety_feed === true]);
+        entry.published_at, entry.date_precision, entry.first_seen_at, source?.safety_feed === true,
+        // 「多事汇总」 is the screening model's call and the item keeps it: a
+        // daily column is not one event's report, and the event layer leaves
+        // it out of clustering (2026-09-22).
+        verdict.digest === true ? ["digest"] : []]);
       const itemId = Number(inserted.rows[0].id);
       await client.query(`INSERT INTO evimed_frontier.item_keys (key, item_id) SELECT key, $2 FROM unnest($1::text[]) AS key
         ON CONFLICT (key) DO NOTHING`, [[...keys.dedupe, ...keys.cluster], itemId]);

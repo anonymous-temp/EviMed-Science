@@ -125,7 +125,7 @@ test("the eight reader lanes are the contract's lanes without mixed, and every f
   assert.ok(FRONTIER_HEALTH_STATES.includes(FRONTIER_VOCABULARY_FALLBACKS.health));
   assert.equal(FRONTIER_SPECIALTIES.length, 21);
   assert.equal(FRONTIER_EVIDENCE_TYPES.length, 10);
-  assert.equal(FRONTIER_ITEM_FLAGS.length, 11);
+  assert.equal(FRONTIER_ITEM_FLAGS.length, 12);
   for (const flag of FRONTIER_MODEL_FLAGS) assert.ok(FRONTIER_ITEM_FLAGS.includes(flag));
 });
 
