@@ -400,12 +400,11 @@ test("a kernel route that is not a method is refused by path, and ordinary asset
   }
 });
 
-test("the file-read and file-write namespaces 0.1.5 added are refused on both transports", { timeout: 5000 }, async (t) => {
+test("the file-read and feedback namespaces 0.1.5 added are refused on both transports", { timeout: 5000 }, async (t) => {
   // `workspaceFiles/{read,readAll,readBytes,stat}` resolve an absolute path
   // against the workspace as cwd and never confine it -- upstream's own
   // parameter docs say "files outside it are allowed" -- so unrefused they are
-  // an arbitrary read of the runtime container from a browser. `fileUploads`
-  // and the raw-byte `session/uploadFileBinary` are the write half, and
+  // an arbitrary read of the runtime container from a browser.
   // `sessionFeedback/record` is `messageFeedback` under its session-scoped name.
   const f = await fixture(t);
   const c = f.connect({ Origin: SHELL_ORIGIN });
@@ -414,8 +413,7 @@ test("the file-read and file-write namespaces 0.1.5 added are refused on both tr
   f.manager.proxy = async (req, res) => { arrived.push(new URL(req.url, "http://ui.local").pathname); res.writeHead(200); res.end("{}"); };
   const endpoints = [
     "workspaceFiles/read", "workspaceFiles/readAll", "workspaceFiles/readBytes", "workspaceFiles/readRelated",
-    "workspaceFiles/stat", "workspaceFiles/list", "workspaceFiles/changes",
-    "fileUploads/upload", "session/uploadFileBinary", "sessionFeedback/record",
+    "workspaceFiles/stat", "workspaceFiles/list", "workspaceFiles/changes", "sessionFeedback/record",
   ];
   for (const [index, endpoint] of endpoints.entries()) {
     const response = await fetch(`${f.base}/api/${endpoint}`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
@@ -426,6 +424,52 @@ test("the file-read and file-write namespaces 0.1.5 added are refused on both tr
   }
   assert.deepEqual(arrived, []);
   assert.deepEqual(f.received, []);
+});
+
+test("a composer attachment reaches the kernel on both transports, held to the file ceiling", { timeout: 5000 }, async (t) => {
+  // The paperclip (2026-09-22): the raw-byte route the upload Worker posts to,
+  // and the Remote fallback the client uses for exact bytes. Both were refused
+  // until then, which left the conversation with no way to hand over a file.
+  const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 });
+  const c = f.connect({ Origin: SHELL_ORIGIN });
+  assert.equal(await c.opened, 101);
+  const arrived = [];
+  f.manager.proxy = async (req, res, _project, suffix, options) => {
+    arrived.push({ path: new URL(req.url, "http://ui.local").pathname, suffix, maxBodyBytes: options?.maxBodyBytes ?? null });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end('{"ok":true}');
+  };
+  const response = await fetch(`${f.base}/api/session/uploadFileBinary`, {
+    method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "content-type": "application/octet-stream" }, body: Buffer.alloc(2048, 1),
+  });
+  assert.equal(response.status, 200);
+  assert.equal(arrived.length, 1);
+  assert.equal(arrived[0].suffix, "/api/session/uploadFileBinary");
+  assert.equal(arrived[0].maxBodyBytes, 4096, "a file is held to the file ceiling, not the JSON one");
+  // Every other method keeps the JSON ceiling.
+  await fetch(`${f.base}/api/session/list`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN }, body: "{}" });
+  assert.equal(arrived[1].maxBodyBytes, null);
+  c.send(open("upload", "fileUploads/upload", { request: { sessionId: "s1" } }));
+  assert.deepEqual((await c.next()).value, { reached: "fileUploads/upload" });
+});
+
+test("the proxy refuses an attachment past the file ceiling before a byte reaches the kernel", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 });
+  const manager = new RuntimeManager(f.config);
+  const project = await f.store.requireProject(f.user, "default");
+  const started = [];
+  manager.start = async () => { started.push(true); return { url: "http://kernel.local", cookie: "k=1" }; };
+  const server = createServer((req, res) => {
+    void manager.proxy(req, res, project, "/api/session/uploadFileBinary", { surface: "ui", maxBodyBytes: 4096 })
+      .catch((error) => { res.writeHead(error.status ?? 500, { "content-type": "application/json" }); res.end(JSON.stringify({ code: error.code })); });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const { port } = server.address();
+  const response = await fetch(`http://127.0.0.1:${port}/`, { method: "POST", body: Buffer.alloc(5000, 1) });
+  assert.equal(response.status, 413);
+  assert.equal((await response.json()).code, "runtime_proxy_body_too_large");
+  assert.deepEqual(started, [], "refused before the runtime is started");
 });
 
 test("HTTP rejects revoked and malformed session cookies without dev-session minting", { timeout: 5000 }, async (t) => {

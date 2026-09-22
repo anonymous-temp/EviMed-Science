@@ -252,8 +252,8 @@ export const COMPACTION_ENV_KEYS = Object.freeze({
  *
  * The token threshold is not the only wall. Every model request leaves the
  * container through the control plane's model gateway, which refuses a body
- * over `OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES` (2 MiB by default) with a
- * 413 and no retry — so a run whose context grows faster in bytes than in
+ * over `OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES` (12 MiB by default, 2 MiB
+ * until attached images began travelling inline) with a 413 and no retry — so a run whose context grows faster in bytes than in
  * tokens, or a deployment that declares a larger context window, dies at the
  * gateway before pressure compaction would ever fire (review appendix E §3.1).
  * The guard forces one compaction when the next request would pass a share of
@@ -261,7 +261,7 @@ export const COMPACTION_ENV_KEYS = Object.freeze({
  * system prompt and the provider envelope.
  */
 export const REQUEST_BYTES_GUARD = Object.freeze({
-  gatewayMaxBodyBytes: 2 * 1024 * 1024,
+  gatewayMaxBodyBytes: 12 * 1024 * 1024,
   ratio: 0.75,
 })
 

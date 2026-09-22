@@ -1650,6 +1650,65 @@ test("an idle runtime yields its slot to the same user's next project, unless th
   }
 });
 
+test("a full deployment takes another researcher's runtime only once it has idled past the yield age", async () => {
+  // Runtimes stay warm for hours (2026-09-22). At the global ceiling a start
+  // may retire another user's runtime, but only one idle past
+  // runtimeIdleYieldAfterMs, least recently used first; a fresher one keeps
+  // its owner's warm start, and the ceiling refuses as before.
+  for (const [idleMinutes, yields] of [[45, true], [10, false]]) {
+    const manager = new RuntimeManager({
+      runtimeMode: "kernel",
+      runtimeSandboxMode: "docker",
+      maxRunningRuntimes: 1,
+      maxRunningRuntimesPerUser: 1,
+      runtimeIdleYieldAfterMs: 30 * 60_000,
+    }, { hasRunningRuns: async () => false });
+    manager.startKernel = async (currentProject) => ({ ...fakeRuntime(`${currentProject.userId}-${currentProject.id}`, currentProject.workspaceDir), project: currentProject });
+    manager.runtimeBusy = async () => false;
+    const stopped = [];
+    manager.stopIdleRuntime = async (stopping, options) => {
+      stopped.push({ user: stopping.userId, id: stopping.id, event: options?.event });
+      manager.runtimes.delete(manager.key(stopping));
+    };
+    const bobProject = { ...project, userId: "bob", id: "paper9", workspaceDir: "/srv/open-science/users/bob/projects/paper9/workspace" };
+    await manager.start(project);
+    manager.activityFor(manager.key(project)).lastUseAt = Date.now() - idleMinutes * 60_000;
+    if (yields) {
+      const started = await manager.start(bobProject);
+      assert.equal(started.url, "http://127.0.0.1/bob-paper9");
+      assert.deepEqual(stopped, [{ user: "alice", id: "paper1", event: "yielded" }]);
+    } else {
+      await assert.rejects(() => manager.start(bobProject), (err) => err.code === "runtime_limit_exceeded");
+      assert.deepEqual(stopped, [], "a runtime used ten minutes ago keeps its owner's warm start");
+    }
+    await manager.closeAll();
+  }
+});
+
+test("another researcher's idle runtime never pays for this researcher's own ceiling", async () => {
+  const manager = new RuntimeManager({
+    runtimeMode: "kernel",
+    runtimeSandboxMode: "docker",
+    maxRunningRuntimes: 10,
+    maxRunningRuntimesPerUser: 1,
+    runtimeIdleYieldAfterMs: 30 * 60_000,
+  }, { hasRunningRuns: async () => false });
+  manager.startKernel = async (currentProject) => ({ ...fakeRuntime(`${currentProject.userId}-${currentProject.id}`, currentProject.workspaceDir), project: currentProject });
+  manager.runtimeBusy = async () => true;
+  const stopped = [];
+  manager.stopIdleRuntime = async (stopping) => { stopped.push(stopping.userId); manager.runtimes.delete(manager.key(stopping)); };
+  const bobProject = { ...project, userId: "bob", id: "paper9", workspaceDir: "/srv/open-science/users/bob/projects/paper9/workspace" };
+  await manager.start(bobProject);
+  manager.activityFor(manager.key(bobProject)).lastUseAt = Date.now() - 5 * 60 * 60_000;
+  await manager.start(project);
+  // Alice's own runtime is working, so her second project is refused; Bob's
+  // long-idle runtime is not hers to spend on her per-user ceiling.
+  await assert.rejects(() => manager.start({ ...project, id: "paper2", workspaceDir: "/srv/open-science/users/alice/projects/paper2/workspace" }),
+    (err) => err.code === "runtime_limit_exceeded");
+  assert.deepEqual(stopped, []);
+  await manager.closeAll();
+});
+
 test("the kernel names the entrypoint, the socket and the authority — and nothing about the isolation", () => {
   // This used to build two plans, one per kernel, and assert that only the
   // entrypoint differed. There is one kernel, so the comparison has no second

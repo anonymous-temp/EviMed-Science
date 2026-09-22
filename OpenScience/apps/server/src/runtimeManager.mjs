@@ -4744,7 +4744,7 @@ export class RuntimeManager {
   }
 
   /**
-   * Room for this project's runtime, made from the same user's own idle ones.
+   * Room for this project's runtime, made from idle runtimes nothing needs.
    *
    * A project is a container, so a researcher who moves between three
    * projects meets the per-user ceiling on the third and used to be refused
@@ -4754,8 +4754,14 @@ export class RuntimeManager {
    * retire the least recently used runtime of the same user that nothing
    * needs: no open connection (a tab still showing it), no session mid-turn
    * (the kernel is asked, as the idle sweep does), no bounded run holding it.
-   * Another user's runtime is never touched, and when nothing qualifies the
-   * ceiling refuses exactly as before.
+   *
+   * Since runtimes stay warm for hours (`runtimeIdleTimeoutMs`, 2026-09-22),
+   * a deployment at its global ceiling is also asked of other researchers'
+   * runtimes, but only those idle past `runtimeIdleYieldAfterMs` — the
+   * thirty minutes the idle reaper used to wait anyway — least recently used
+   * first. A warm runtime is a convenience to its owner, never a reason
+   * another researcher cannot start. When nothing qualifies the ceiling
+   * refuses exactly as before.
    * @param {Record<string, any>} project
    */
   async makeRoomFor(project) {
@@ -4767,14 +4773,39 @@ export class RuntimeManager {
     const own = this.key(project);
     // This project's own pending start is not one of the others.
     const self = () => (this.starts.has(own) ? 1 : 0);
-    const full = () => (maxGlobal != null && this.runtimeCount() - self() >= maxGlobal)
-      || (maxPerUser != null && this.runtimeCountForUser(project.userId) - self() >= maxPerUser);
+    const globalFull = () => maxGlobal != null && this.runtimeCount() - self() >= maxGlobal;
+    const userFull = () => maxPerUser != null && this.runtimeCountForUser(project.userId) - self() >= maxPerUser;
+    const full = () => globalFull() || userFull();
     if (!full()) return;
     const prefix = `${project.userId}:`;
-    const candidates = [...this.runtimes.entries()]
-      .filter(([key, runtime]) => key !== own && key.startsWith(prefix) && runtime.project && !runtime.modelGatewayScope)
-      .sort(([a], [b]) => Number(this.runtimeActivity.get(a)?.lastUseAt ?? 0) - Number(this.runtimeActivity.get(b)?.lastUseAt ?? 0));
-    for (const [key, runtime] of candidates) {
+    const lastUse = (/** @type {string} */ key) => Number(this.runtimeActivity.get(key)?.lastUseAt ?? 0);
+    // Unset, the thirty minutes `loadConfig` defaults to: a manager built from
+    // a partial config must not read "no age" as "any age".
+    const configuredYield = Number(this.config.runtimeIdleYieldAfterMs);
+    const yieldAfterMs = this.config.runtimeIdleYieldAfterMs != null && Number.isFinite(configuredYield)
+      ? Math.max(0, configuredYield) : 30 * 60_000;
+    /** @param {[string, any]} entry */
+    const eligible = ([key, runtime]) => key !== own && Boolean(runtime.project) && !runtime.modelGatewayScope
+      && !isInternalProject(key.slice(key.indexOf(":") + 1));
+    /** @param {[string, any]} left @param {[string, any]} right */
+    const byAge = ([a], [b]) => lastUse(a) - lastUse(b);
+    const mine = [...this.runtimes.entries()].filter((entry) => eligible(entry) && entry[0].startsWith(prefix)).sort(byAge);
+    // Idle since its last recorded use, else since it started; a runtime this
+    // manager knows neither of is not known to be idle, and keeps its slot.
+    /** @param {[string, any]} entry */
+    const idleSince = ([key, runtime]) => {
+      const used = Number(this.runtimeActivity.get(key)?.lastUseAt ?? 0);
+      if (used > 0) return used;
+      const started = Date.parse(String(runtime?.startedAt ?? ""));
+      return Number.isFinite(started) ? started : Date.now();
+    };
+    const others = [...this.runtimes.entries()]
+      .filter((entry) => eligible(entry) && !entry[0].startsWith(prefix) && Date.now() - idleSince(entry) >= yieldAfterMs)
+      .sort((left, right) => idleSince(left) - idleSince(right));
+    for (const [key, runtime] of [...mine, ...others]) {
+      // Another researcher's runtime makes room only for the global ceiling;
+      // the per-user one is this researcher's own to spend.
+      if (!key.startsWith(prefix) && !globalFull()) return;
       if ((this.runtimeActivity.get(key)?.activeProxies ?? 0) > 0) continue;
       let busy;
       try {
@@ -5233,12 +5264,13 @@ export class RuntimeManager {
   /**
    * @param {any} req @param {any} res @param {Record<string, any>} project @param {string} suffix
    * @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void>, uiAssetPrefix?: string | null,
-   *           immutable?: boolean, rebaseDocument?: boolean }} [options]
+   *           immutable?: boolean, rebaseDocument?: boolean, maxBodyBytes?: number | null }} [options]
    *   `uiAssetPrefix` is the project's stable path for build assets the document
    *   is rewritten to reference; `immutable` marks a URL that names its content;
-   *   `rebaseDocument: false` serves bytes as they are (an asset route).
+   *   `rebaseDocument: false` serves bytes as they are (an asset route);
+   *   `maxBodyBytes` replaces the JSON ceiling for a request that carries a file.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true } = {}) {
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, maxBodyBytes = null } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -5254,7 +5286,9 @@ export class RuntimeManager {
       proxyActive = true;
       if (surface === "ui") this.enforceUiProxyEnabled();
       else this.enforceProxyAllowlist(req, suffix);
-      await bufferProxyRequestBody(req, method, this.config.maxJsonBytes);
+      // `maxBodyBytes`: a caller that forwards a file (the composer's
+      // attachment route) names the file ceiling; everything else is JSON.
+      await bufferProxyRequestBody(req, method, Number(maxBodyBytes) > 0 ? Number(maxBodyBytes) : this.config.maxJsonBytes);
       requestBytes = Buffer.isBuffer(req.__openScienceProxyBody) ? req.__openScienceProxyBody.length : requestBytes;
       await this.enforcePreStartProxyPolicy(req, suffix);
       const noWake = this.noWakeProxyControlResult(project, method, suffix);

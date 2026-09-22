@@ -1,4 +1,4 @@
-/* global EventTarget, Event, MessageEvent, Response, AbortController, setImmediate */
+/* global EventTarget, Event, MessageEvent, Response, AbortController, Blob, setImmediate */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import vm from 'node:vm';
@@ -54,6 +54,27 @@ test('a revisioned bundle loads from the path every frame shares; anything else 
   await hooks.fetch(new URL('https://app.example:8443/api/session/list'), {});
   assert.equal(calls[2][0], 'https://app.example:8443/__evimed/f/frame-a/api/session/list', 'methods never leave the frame');
   assert.throws(() => installRuntimeUiTransport({ ...frame, assets: '/elsewhere/' }, browser().target), /Invalid runtime frame/);
+});
+
+test('a composer attachment is carried to this frame, and the carrier takes nothing else', async () => {
+  // dsh-client-file-upload posts from a Worker of its own to the origin's root
+  // unless `__DSH_FILE_UPLOAD__` names a carrier before boot; unscoped, the
+  // request reaches no project and the file is lost.
+  const { target, calls } = browser();
+  const hooks = installRuntimeUiTransport(frame, target);
+  const carrier = target.__DSH_FILE_UPLOAD__;
+  assert.equal(typeof carrier.fetch, 'function');
+  const body = new Blob(['%PDF-1.7']);
+  await carrier.fetch(new URL('https://app.example:8443/api/session/uploadFileBinary'), { method: 'POST', body, headers: { 'x-session': 's1' } });
+  assert.equal(calls[0][0], 'https://app.example:8443/__evimed/f/frame-a/api/session/uploadFileBinary');
+  assert.equal(calls[0][1].body, body, 'the bytes are passed through, not read on the page');
+  assert.equal(calls[0][1].credentials, 'same-origin');
+  assert.equal(calls[0][1].redirect, 'error');
+  await assert.rejects(carrier.fetch(new URL('https://app.example:8443/api/session/list'), {}), /Unscoped runtime URL/);
+  await assert.rejects(carrier.fetch(new URL('https://evil.example/api/session/uploadFileBinary'), {}), /Foreign runtime URL/);
+  hooks.dispose();
+  await assert.rejects(carrier.fetch(new URL('https://app.example:8443/api/session/uploadFileBinary'), {}), /Runtime frame disposed/);
+  assert.equal(calls.length, 1);
 });
 
 test('a stream asked of a disposed frame says the frame is gone, not that capacity ran out', async () => {

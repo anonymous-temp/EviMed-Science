@@ -446,3 +446,35 @@ test("a refused control-plane call carries the provider's own status, not only t
   // test "a provider that refuses ..." holds the reason).
   assert.deepEqual(events.map((event) => event.type), ["reserve", "uncertain"]);
 });
+
+test("an attached image is reserved by its pixels, not by the length of its base64", async (t) => {
+  // A composer attachment reaches the provider inline. Read as text, one
+  // normalized image was hundreds of thousands of "tokens" and reserved a
+  // conversation's worth of spend for a picture.
+  const answer = async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end('{"id":"provider-image","choices":[],"usage":{"prompt_tokens":400,"completion_tokens":1}}');
+  };
+  const pixels = Buffer.alloc(36 * 1024, 7).toString("base64");
+  const image = [];
+  await (await call(t, answer, ledger(image), { messages: [{ role: "user", content: [
+    { type: "text", text: "What does this table say?" },
+    { type: "image_url", image_url: { url: `data:image/jpeg;base64,${pixels}` } },
+  ] }] })).text();
+  const asText = [];
+  await (await call(t, answer, ledger(asText), { messages: [{ role: "user", content: [
+    { type: "text", text: "What does this table say?" },
+    { type: "text", text: pixels },
+  ] }] })).text();
+  const alone = [];
+  await (await call(t, answer, ledger(alone), { messages: [{ role: "user", content: [
+    { type: "text", text: "What does this table say?" },
+  ] }] })).text();
+  // The output ceiling is reserved alike for all three; what differs is the prompt.
+  const cost = (events) => events.find((event) => event.type === "reserve").input.estimatedCost;
+  const forImage = cost(image) - cost(alone);
+  const forText = cost(asText) - cost(alone);
+  assert.ok(forImage > 0, "an image still costs something");
+  assert.ok(forImage * 5 < forText, `an image added ${forImage}, the same bytes as text ${forText}`);
+});

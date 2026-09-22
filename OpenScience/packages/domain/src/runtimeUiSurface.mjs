@@ -71,8 +71,8 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   // more than one written after it ships.
   "cordis",
   "messageFeedback",
-  // Arrived together in 0.1.5, all three reachable before anyone had an opinion
-  // about them, because this is a deny list and silence is consent:
+  // Arrived together in 0.1.5 with `fileUploads`, reachable before anyone had
+  // an opinion about them, because this is a deny list and silence is consent:
   //
   // - `workspaceFiles` reads files. Its own documentation says "absolute path
   //   or path relative to the workspace root; files outside it are allowed",
@@ -82,20 +82,24 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   //   then re-enters `readAll` from a resolved dirname. That is the
   //   `directoryPicker` ban under another name, and this container's `DSH_HOME`
   //   is a writable volume.
-  // - `fileUploads` writes them. Knowledge enters a project through
-  //   `sourceService`, content-addressed and recorded per source; a second
-  //   intake reaching the workspace directly is unledgered by construction.
   // - `sessionFeedback` is `messageFeedback` renamed for the session scope --
   //   the same upstream channel, banned for the same reason.
   //
-  // The rows behind the first two stay mounted: booting with `file-upload`
-  // disabled fails with `dsh-api-session-controller: pending (waiting for
-  // service: fileUploads)`, taking the deliverables panel down after it, and
-  // `dsh-client-ui-deliverables` requires `workspaceFiles` the same way. So
-  // for these there is no composition-level answer and this list is the whole
-  // of the defence -- which is the case it was written for.
+  // The row behind the first stays mounted: `dsh-client-ui-deliverables`
+  // requires `workspaceFiles`, so there is no composition-level answer and this
+  // list is the whole of the defence -- which is the case it was written for.
+  //
+  // `fileUploads` was the third until 2026-09-22 and is the composer's
+  // paperclip: a file attached to a message. It writes nowhere a browser can
+  // name -- the bytes go to the attachment store under `DSH_HOME` (the
+  // project's own data volume, so they count against its quota and leave with
+  // it), content-addressed, and the message carries the reference -- which is
+  // the ledger a chat attachment needs. The knowledge base stays the intake for
+  // material a whole project should cite. Refusing it left the one surface
+  // where researchers type with no way to hand over a file (2026-09-22,
+  // 「文件上传不了」). The raw route's size is held by the proxy
+  // (`maxFileBytes`), not here.
   "workspaceFiles",
-  "fileUploads",
   "sessionFeedback",
 ]);
 
@@ -127,13 +131,8 @@ export const RUNTIME_UI_DENIED_METHODS = Object.freeze([
   "workspace/archiveSession",
   "workspace/insertBefore",
   "workspace/insertSessionBefore",
-  // `@deepseek-ai/dsh-client-file-upload` registers a raw-byte POST at
-  // `/api/session/uploadFileBinary` on the connection's own fetch registry,
-  // beside the mux rather than inside it. By path shape it reads as a method in
-  // the `session` namespace, which is the product's namespace and cannot be
-  // closed wholesale -- so it is named here. Denying `fileUploads/upload`
-  // without this one would close the receipt and leave the bytes.
-  "session/uploadFileBinary",
+  // `session/uploadFileBinary` stood here until 2026-09-22: the raw-byte half
+  // of `fileUploads` (see the namespace list), open again with it.
 ]);
 
 /**

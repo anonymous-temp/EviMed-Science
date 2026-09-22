@@ -22,7 +22,6 @@ vi.mock("@/lib/inboxClient", () => ({
 const store = vi.hoisted(() => ({
   setSidebarWidth: vi.fn(),
   toggleSidebar: vi.fn(),
-  setPaletteOpen: vi.fn(),
 }));
 
 vi.mock("@/lib/store", () => ({
@@ -34,7 +33,6 @@ vi.mock("@/lib/store", () => ({
     setSidebarCollapsed: vi.fn(),
     setSidebarWidth: store.setSidebarWidth,
     toggleSidebar: store.toggleSidebar,
-    setPaletteOpen: store.setPaletteOpen,
   }),
 }));
 
@@ -176,11 +174,11 @@ describe("Sidebar chrome", () => {
     expect(store.toggleSidebar).toHaveBeenCalled();
   });
 
-  it("shows the command palette's shortcut where it can be seen, and opens it", async () => {
+  it("has no quick-jump palette: the five destinations are the navigation", async () => {
+    // Removed 2026-09-22 (「快速跳转有必要吗，就这几个板块」).
     renderSidebar();
-    const open = await screen.findByRole("button", { name: /快速跳转/ });
-    expect(open).toHaveTextContent(/K/);
-    await userEvent.click(open);
-    expect(store.setPaletteOpen).toHaveBeenCalledWith(true);
+    await screen.findByRole("link", { name: "科研工具" });
+    expect(screen.queryByRole("button", { name: /快速跳转/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ctrl K|⌘K/)).not.toBeInTheDocument();
   });
 });

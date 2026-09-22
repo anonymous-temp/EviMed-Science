@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from "react-router";
 import {
   Bot,
   Brain,
-  Command,
   FolderTree,
   Orbit,
   PanelLeft,
@@ -17,7 +16,6 @@ import { ProjectBrowser } from "@/components/sidebar/ProjectBrowser";
 import { useConnectorAttention } from "@/lib/connectorAttention";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { EviMedMark } from "@/components/brand/EviMedMark";
-import { isMacPlatform } from "@/lib/platform";
 
 /** Dragging the divider below this pointer x collapses the sidebar; dragging
  *  back past it re-expands. Sits below SIDEBAR_MIN so there is a clear "snap". */
@@ -40,6 +38,10 @@ interface NavItem {
  * left on 2026-09-20: it was the ledger's view of the same conversations the
  * tree below already lists, under a third name for them.
  *
+ * No 「快速跳转」 above them (removed 2026-09-22): a Ctrl K palette over five
+ * rows that are always on screen was a second way to reach the same five
+ * places, and neither ChatGPT, Claude nor Gemini opens one for navigation.
+ *
  * This is the only navigation in the product. The kernel's own left column,
  * which used to sit beside it inside the conversation frame, is occupied by
  * nothing in the hosted composition — two navigations for one workbench is what
@@ -55,8 +57,7 @@ const NAV: NavItem[] = [
 
 export function Sidebar() {
   const location = useLocation();
-  const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar, setPaletteOpen } =
-    useUiStore();
+  const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar } = useUiStore();
   // While dragging, the live width lives here; the store (and localStorage)
   // are only written on pointer-up.
   const [dragWidth, setDragWidth] = useState<number | null>(null);
@@ -123,21 +124,6 @@ export function Sidebar() {
               <PanelLeft size={16} strokeWidth={1.75} aria-hidden="true" />
             </button>
           </div>
-        </div>
-
-        {/* ⌘K made visible (appendix D §4): the palette reaches every view by
-          * name, and a shortcut nobody can see is a shortcut nobody uses. */}
-        <div className="px-3 pb-2">
-          <button
-            type="button"
-            onClick={() => setPaletteOpen(true)}
-            aria-keyshortcuts="Meta+K Control+K"
-            className="flex h-8 w-full items-center gap-2 rounded-input px-2.5 text-ui text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text"
-          >
-            <Command size={15} strokeWidth={1.75} aria-hidden="true" />
-            <span className="flex-1 text-left">快速跳转</span>
-            <kbd className="rounded border border-border px-1 font-sans text-caption text-muted">{isMacPlatform() ? "⌘K" : "Ctrl K"}</kbd>
-          </button>
         </div>
 
         <nav className="flex flex-col px-3">

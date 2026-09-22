@@ -2095,7 +2095,10 @@ export function createWebApiApp(overrides = {}) {
     service: autopilotService,
     pollMs: config.autopilotPollMs,
     leaseMs: config.autopilotLeaseMs,
-    busyDelayMs: Math.min(86_400_000, Math.max(5 * 60_000, Number(config.runtimeIdleTimeoutMs) + 60_000)),
+    // A busy runtime is a researcher at work; the episode asks again once a
+    // runtime idle that long would yield its slot. Not the idle timeout: that
+    // is how long a runtime stays warm (twelve hours), not how long work lasts.
+    busyDelayMs: Math.min(86_400_000, Math.max(5 * 60_000, Number(config.runtimeIdleYieldAfterMs) + 60_000)),
     cancelDispatched: async ({ userId, projectId, sessionId, episodeId }) => {
       const user = await store.userById(userId);
       if (!user) return;
@@ -6276,6 +6279,7 @@ function readinessResources(config) {
     "runtimeControllerTimeoutMs",
     "runtimeControllerPollMs",
     "runtimeIdleTimeoutMs",
+    "runtimeIdleYieldAfterMs",
     "runtimeQuotaCheckIntervalMs",
     "maxRuntimeProxyConnections",
     "maxRuntimeProxyConnectionsPerProject",

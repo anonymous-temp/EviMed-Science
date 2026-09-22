@@ -273,10 +273,11 @@ test('the shell shortcuts pressed inside the frame are forwarded, and only those
   };
   const forwarded = () => f.sent.filter(row => row.message.type === 'evimed.runtime-ui.shell-shortcut').map(row => row.message.shortcut);
 
-  assert.equal(press({ key: 'k', metaKey: true }).prevented, true);
-  press({ key: 'B', ctrlKey: true });
+  // Ctrl K opened the shell's palette until 2026-09-22; it is the kernel's now.
+  assert.equal(press({ key: 'k', metaKey: true }).prevented, false);
+  assert.equal(press({ key: 'B', ctrlKey: true }).prevented, true);
   press({ key: '?' });
-  assert.deepEqual(forwarded(), ['command-palette', 'sidebar', 'shortcuts']);
+  assert.deepEqual(forwarded(), ['sidebar', 'shortcuts']);
 
   press({ key: 'k', metaKey: true, defaultPrevented: true });
   press({ key: '?', target: { tagName: 'TEXTAREA', isContentEditable: false } });
@@ -284,7 +285,7 @@ test('the shell shortcuts pressed inside the frame are forwarded, and only those
   press({ key: 'k', metaKey: true, shiftKey: true });
   press({ key: 'b', altKey: true, metaKey: true });
   press({ key: 'x', metaKey: true });
-  assert.deepEqual(forwarded(), ['command-palette', 'sidebar', 'shortcuts'], 'a handled key, typed text and other chords stay in the frame');
+  assert.deepEqual(forwarded(), ['sidebar', 'shortcuts'], 'a handled key, typed text and other chords stay in the frame');
   assert.ok(f.sent.every(row => row.origin === 'https://app.example'));
 
   f.ctx.dispose();

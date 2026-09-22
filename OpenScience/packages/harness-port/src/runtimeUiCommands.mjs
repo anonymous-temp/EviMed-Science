@@ -1,15 +1,16 @@
 /**
- * The research tools, offered where the typing happens: a grid on the blank
- * conversation, a page for the one you picked above that same composer, a
- * `/工具` command in the kernel's own slash menu, and `@` references to the
- * researcher's knowledge base.
+ * The research tools, offered where the typing happens: a page for the one you
+ * picked (on 科研工具, or with `/工具`) above the composer, a `/工具` command in
+ * the kernel's own slash menu, and `@` references to the researcher's
+ * knowledge base.
  *
- * The shape is the one every comparable product settled on (Manus, Kimi,
- * ChatGPT's GPTs, 豆包, Genspark): pick a tool under the composer, the tool
- * becomes a removable chip in that same composer, and its examples appear
- * above it. Nobody opens a drawer with a second input box, which is what this
- * replaced — and what sent a researcher who had already typed their question
- * to a different page to type it again.
+ * The blank conversation is the kernel's own: a headline and one composer, as
+ * in DeepSeek, ChatGPT, Claude and Gemini. It carried a grid of eight tool
+ * cards until 2026-09-22 — the whole first screen, with the composer pushed to
+ * the bottom — and the tools live on 科研工具 instead (「就一个输入框，其余的工具
+ * 都放到科研工具去」). A tool chosen there opens a conversation whose hero is
+ * that tool's page, the way a GPT or a Gem opens with its own description and
+ * starters, and becomes a removable chip in the same composer.
  *
  * Hidden knowledge, read off the pinned 0.1.5-rc.2 client:
  *
@@ -76,25 +77,6 @@ export function capabilityOptions(capabilities) {
       label: String(entry.title),
       detail: [entry.category, entry.summary, toolMinutes(entry)].filter((part) => typeof part === 'string' && part).join(' · '),
     }));
-}
-
-/**
- * The blank conversation's grid: every public tool, grouped by category in
- * catalogue order.
- * @param {any[]} capabilities
- * @returns {{ category: string, tools: any[] }[]}
- */
-export function toolGroups(capabilities) {
-  /** @type {Map<string, any[]>} */
-  const groups = new Map();
-  for (const entry of Array.isArray(capabilities) ? capabilities : []) {
-    if (!entry || entry.internal || !entry.id || !entry.title) continue;
-    const category = String(entry.category || '其他');
-    const list = groups.get(category) ?? [];
-    list.push({ id: String(entry.id), title: String(entry.title), summary: String(entry.summary || ''), minutes: toolMinutes(entry) });
-    groups.set(category, list);
-  }
-  return [...groups.entries()].map(([category, tools]) => ({ category, tools }));
 }
 
 /**
@@ -183,7 +165,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   if (!kit || !kit.ours || !kit.h) return;
   const h = kit.h;
   const React = kit.react;
-  const { card, line, title, quiet, pill, button, section, secondary } = frameStyles();
+  const { card, line, title, quiet, pill, button, secondary } = frameStyles();
   const catalogue = kit.frame.capabilities.filter((/** @type {any} */ entry) => !entry.internal);
   const knowledgeDir = String(kit.vocabulary?.knowledgeDir || '.evimed-knowledge');
 
@@ -272,53 +254,6 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   });
 
   if (React && catalogue.length) {
-    const groups = toolGroups(catalogue);
-    const total = groups.reduce((sum, group) => sum + group.tools.length, 0);
-
-    /** @param {{ tool: any, onPick: (id: string) => void }} props */
-    const ToolCard = ({ tool: entry, onPick }) => h('button', {
-      type: 'button',
-      'data-evimed-tool': entry.id,
-      onClick: () => onPick(entry.id),
-      title: entry.summary,
-      style: {
-        ...secondary,
-        textAlign: 'left', font: 'inherit', cursor: 'pointer', minWidth: 0,
-        border: '0.5px solid var(--dsw-alias-border-l4)', borderRadius: '12px',
-        background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-secondary)',
-        padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '2px',
-      },
-    },
-    h('span', { style: { color: 'var(--dsw-alias-label-primary)', fontWeight: 600 } }, entry.title),
-    h('span', { style: { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } }, entry.summary),
-    entry.minutes ? h('span', { style: { color: 'var(--dsw-alias-label-tertiary)' } }, entry.minutes) : null);
-
-    /**
-     * The grid, on a conversation with no tool chosen: the first two of each
-     * category, so every category is represented, and the rest one click away.
-     * A flat budget spent in catalogue order left the last category out
-     * entirely and showed one of the one before it.
-     */
-    const PER_CATEGORY = 2;
-    const ToolGrid = () => {
-      const [all, setAll] = React.useState(false);
-      return h('div', {
-        'data-evimed-tools': '',
-        style: { flex: '1 1 100%', margin: '12px 0 4px', display: 'flex', flexDirection: 'column', gap: '10px' },
-      },
-      groups.map((group) => {
-        const shown = all ? group.tools : group.tools.slice(0, PER_CATEGORY);
-        if (!shown.length) return null;
-        return h('div', { key: group.category },
-          h('div', { style: { ...section, margin: '0 0 4px' } }, group.category),
-          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' } },
-            shown.map((entry) => h(ToolCard, { key: entry.id, tool: entry, onPick: bind }))));
-      }),
-      groups.some((group) => group.tools.length > PER_CATEGORY) ? h('button', {
-        type: 'button', style: { ...button, marginLeft: 0, alignSelf: 'flex-start' }, onClick: () => setAll(!all),
-      }, all ? '收起' : `全部 ${total} 个工具`) : null);
-    };
-
     /** The page of the chosen tool, above the same composer. */
     /** @param {{ id: string }} props */
     const ToolPage = ({ id }) => {
@@ -343,9 +278,11 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         }, starter))) : null);
     };
 
+    // Nothing until a tool is chosen: the blank conversation is the headline
+    // and the composer.
     const HeroTools = () => {
       const id = useTool();
-      return id ? h(ToolPage, { id }) : h(ToolGrid, null);
+      return id ? h(ToolPage, { id }) : null;
     };
     kit.guarded('hero tools', () => kit.occupy({ slot: 'conversation.hero.agentPreset', priority: -1 }, HeroTools));
 
@@ -402,5 +339,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'commands',
   inject,
-  parts: Object.freeze([frameStyles, toolMinutes, capabilityOptions, toolGroups, toolPageModel, knowledgeCandidates, knowledgeReference, knowledgeSerialization, apply]),
+  parts: Object.freeze([frameStyles, toolMinutes, capabilityOptions, toolPageModel, knowledgeCandidates, knowledgeReference, knowledgeSerialization, apply]),
 });

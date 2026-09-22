@@ -19,6 +19,9 @@ import { IMMUTABLE_UI_CACHE, SHARED_UI_ASSET_PREFIX, isImmutableRuntimeUiAsset }
  */
 export const RUNTIME_UI_SPENDING_METHODS = new Set(["session/prompt"]);
 
+/** The composer's raw-byte attachment route (`dsh-client-file-upload`). */
+export const RUNTIME_UI_UPLOAD_METHOD = "session/uploadFileBinary";
+
 /** Browser cookies are accepted only from these explicit deployment origins.
  * Origin-less automation must use the control plane's authenticated API; this
  * browser surface deliberately has no implicit internal-client exception.
@@ -453,6 +456,9 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // content is kept by the browser, across sessions and projects.
       uiAssetPrefix: SHARED_UI_ASSET_PREFIX,
       immutable: isImmutableRuntimeUiAsset(frame.suffix),
+      // A composer attachment is a file, not an RPC: it is held to the
+      // deployment's file ceiling rather than the JSON one.
+      ...(method === RUNTIME_UI_UPLOAD_METHOD ? { maxBodyBytes: Number(config.maxFileBytes) } : {}),
     });
     const forwardPrompt = async () => {
       await authorizePromptSession(project, promptBody?.payload);

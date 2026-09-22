@@ -18,9 +18,9 @@ describe("ShortcutHelp", () => {
 
     const dialog = screen.getByRole("dialog", { name: "键盘快捷键" });
     expect(dialog).toBeInTheDocument();
-    expect(screen.getByText("⌘K")).toBeInTheDocument();
     expect(screen.getByText("⌘B")).toBeInTheDocument();
-    expect(screen.getByText("打开命令面板")).toBeInTheDocument();
+    // The palette is gone (2026-09-22), so its key is not listed.
+    expect(screen.queryByText("⌘K")).not.toBeInTheDocument();
     // The retired composer's keys are not listed as the shell's (U8).
     expect(screen.queryByText("Shift+Enter")).not.toBeInTheDocument();
     expect(screen.getByText(/由对话界面自己处理/)).toBeInTheDocument();

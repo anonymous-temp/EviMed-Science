@@ -48,7 +48,6 @@ interface UiState {
   inspectorMaximized: boolean;
   sidebarCollapsed: boolean;
   sidebarWidth: number;
-  paletteOpen: boolean;
   /** One-shot text placed into the composer by another surface (e.g. the
    *  provenance Reproduce action) — consumed on the next composer render. */
   setTheme: (theme: Theme) => void;
@@ -59,7 +58,6 @@ interface UiState {
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
-  setPaletteOpen: (open: boolean) => void;
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
@@ -68,7 +66,6 @@ export const useUiStore = create<UiState>((set, get) => ({
   sidebarCollapsed:
     typeof window !== "undefined" && window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1",
   sidebarWidth: initialSidebarWidth(),
-  paletteOpen: false,
   setTheme: (theme) => {
     if (typeof window !== "undefined") window.localStorage.setItem(THEME_KEY, theme);
     set({ theme });
@@ -101,5 +98,4 @@ export const useUiStore = create<UiState>((set, get) => ({
       window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
     set({ sidebarWidth });
   },
-  setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
 }));

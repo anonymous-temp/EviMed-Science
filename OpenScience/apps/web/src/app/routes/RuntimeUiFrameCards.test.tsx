@@ -151,7 +151,7 @@ describe("the right column's tabs", () => {
 describe("the tools on a blank conversation", () => {
   afterEach(() => { cleanup(); });
 
-  it("bind the conversation to the tool, and carry the question already typed", () => {
+  it("show nothing but the composer until a tool is chosen, then that tool's page, which can be left", () => {
     const components = new Map<string, (props: Record<string, unknown>) => unknown>();
     const ctx: Record<string, unknown> = {
       slots: { inject: (_name: string, setup: () => unknown) => setup(),
@@ -173,12 +173,18 @@ describe("the tools on a blank conversation", () => {
     applyCommands(ctx, {}, target, undefined, kit);
     const Hero = components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
     const view = render(<Hero />);
-    fireEvent.click(screen.getByRole("button", { name: /临床证据深度分析/ }));
-    expect(sent).toEqual([["bind-capability", { capabilityId: "clinical-evidence-synthesis", sessionId: "session-a", draft: "老年房颤该不该抗凝？" }]]);
-    // The hero becomes that tool's page: what it does, what you get, and
-    // questions to start from — above the same composer.
+    // The blank conversation is the headline and the composer (2026-09-22): no
+    // grid of tool cards between them — the tools are on 科研工具.
+    expect(view.container).toBeEmptyDOMElement();
+    expect(screen.queryByRole("button", { name: /临床证据深度分析/ })).toBeNull();
+    // A tool chosen on 科研工具 (or with /工具) is bound by the shell, and the
+    // hero becomes that tool's page: what it does, what you get, and questions
+    // to start from — above the same composer.
+    act(() => { kit.hub.deliver("capability", { capabilityId: "clinical-evidence-synthesis", sessionId: "session-a" }); });
     view.rerender(<Hero />);
     expect(screen.getByText(/你会拿到：证据综述报告/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /≥70 岁人群阿司匹林一级预防/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "换一个工具" }));
+    expect(sent).toEqual([["bind-capability", { capabilityId: null, sessionId: "session-a", draft: "老年房颤该不该抗凝？" }]]);
   });
 });
