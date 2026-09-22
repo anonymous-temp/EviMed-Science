@@ -18,6 +18,7 @@ import {
   frontierPrimaryKind,
   frontierRankHot,
   frontierVectorReading,
+  otherWork,
 } from "../src/frontierEvents.mjs";
 
 const NOW = new Date("2026-09-22T04:00:00Z");
@@ -119,6 +120,25 @@ test("cluster keys: every registry id, and the bare id of an event-level registr
   assert.deepEqual(frontierClusterKeys({ registry_ids: null, identity_key: "fda:NDA123:SUPPL-4" }), []);
   assert.deepEqual(frontierClusterEntities(["drug:semaglutide", "disease:obesity", "trial:select", "org:fda", 7]), ["drug:semaglutide", "trial:select", "org:fda"],
     "a disease alone is too broad to make two items candidates");
+  // A column that names several trials is writing about them.
+  const roundup = { source_type: "media", registry_ids: ["NCT05376150", "NCT06000001"], identity_key: "url:x" };
+  assert.deepEqual(frontierClusterKeys(roundup), []);
+  assert.deepEqual(frontierClusterKeys({ ...roundup, registry_ids: ["NCT05376150"] }), ["reg:NCT05376150"], "one trial is what the piece is about");
+  assert.deepEqual(frontierClusterKeys({ ...roundup, source_type: "journal" }), ["reg:NCT05376150", "reg:NCT06000001"], "a paper states every trial it reports");
+  assert.deepEqual(frontierClusterKeys({ ...roundup, identity_key: "reg:NCT05376150:results-posted:2026-09-22" }), ["reg:NCT05376150"],
+    "a registry's own entry keeps its own id");
+});
+
+test("two works that state different identities are asked about, never joined by cosine alone", () => {
+  assert.equal(otherWork({ doi: "10.1/a" }, { doi: "10.1/B" }), true);
+  assert.equal(otherWork({ doi: "10.1/a" }, { doi: " 10.1/A " }), false);
+  assert.equal(otherWork({ doi: null, pmid: "1" }, { doi: "10.1/b", pmid: "2" }), true);
+  assert.equal(otherWork({ doi: "10.1/a" }, { doi: null, pmid: "2" }), false, "nothing to compare is not a difference");
+  const reading = frontierVectorReading([
+    { eventId: "1", cosine: 0.95, otherWork: true }, { eventId: "2", cosine: 0.9 }, { eventId: "3", cosine: 0.93, samePublisher: true },
+  ]);
+  assert.deepEqual(reading.strong, ["2"]);
+  assert.deepEqual(reading.ask.map((pair) => pair.eventId), ["1", "3"]);
 });
 
 test("the vectors: at or above 0.82 is the same event; the band below it is asked, one pair per event, at most three", () => {
@@ -150,6 +170,13 @@ test("where an item goes: the oldest of the events it is the same as survives th
   assert.equal(frontierClusterDecision({ identifier: [], strong: ["12"], yes: [], related: [], events }).joinedBy, "vector");
   assert.equal(frontierClusterDecision({ identifier: ["404"], strong: [], yes: [], related: [], events }).target, null,
     "an event that no longer exists is no match");
+  // A report covers several events; it joins the oldest and links the rest.
+  const reported = frontierClusterDecision({ identifier: ["10"], strong: ["11"], yes: ["12"], related: [], events, role: "report" });
+  assert.equal(reported.target, "11");
+  assert.deepEqual(reported.merge, [], "only a first-hand item folds two events into one");
+  assert.deepEqual(reported.related.sort(), ["10", "12"]);
+  const background = frontierClusterDecision({ identifier: ["10", "12"], strong: [], yes: [], related: [], events, role: "background" });
+  assert.deepEqual([background.target, background.merge, background.related], ["10", [], ["12"]]);
 });
 
 test("a regulator's notice is hot on its own only when it is major: a top-band score", () => {

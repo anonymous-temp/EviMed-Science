@@ -160,8 +160,9 @@ test("a bridge merges: the older event survives, the absorbed id redirects for g
   const [e0, e1, e2, e3] = await Promise.all([oldest, trialPaper, coverage, elsewhere].map((item) => eventOf(database, item.id)));
   await database.query(`INSERT INTO evimed_frontier.event_links (from_event_id, to_event_id, relation, asserted_by) VALUES ($1, $2, 'related', 'model')`, [e2.id, e3.id]);
 
-  // One item that is the trial (registry id) and the coverage (vector): E1 and E2 are one event, and E1 is older.
-  const bridge = await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: "X trial and its coverage", registryIds: ["NCT09000001"],
+  // One first-hand item that is the trial (registry id) and the coverage (vector): E1 and E2 are one
+  // event, and E1 is older. First-hand because only a first-hand item folds two events into one.
+  const bridge = await insertComposedItem(database, { sourceId: "nejm", sourceType: "journal", title: "X trial and its coverage", registryIds: ["NCT09000001"],
     clusterKeys: [], entityKeys: ["drug:x"], vector: vectorAt(0.95), visibleAt: hoursAgo(3), timelineAt: hoursAgo(3) });
   assert.equal((await events.clusterPending()).merged, 1);
   const survivor = await eventOf(database, bridge.id);
@@ -176,7 +177,7 @@ test("a bridge merges: the older event survives, the absorbed id redirects for g
   assert.deepEqual(await events.read(e2.public_id), { redirect: e1.public_id });
 
   // A second merge flattens the chain: E1 folds into the older E0, and E2's old id now goes straight to E0.
-  const second = await insertComposedItem(database, { sourceId: "reuters", sourceType: "media", title: "FDA and the trial", registryIds: ["NCT07000001", "NCT09000001"],
+  const second = await insertComposedItem(database, { sourceId: "fda", sourceType: "regulator", title: "FDA and the trial", registryIds: ["NCT07000001", "NCT09000001"],
     clusterKeys: [], visibleAt: hoursAgo(1), timelineAt: hoursAgo(1) });
   await layer({ embedder: null }).clusterPending();
   assert.equal((await eventOf(database, second.id)).id, e0.id);
@@ -191,6 +192,31 @@ test("a bridge merges: the older event survives, the absorbed id redirects for g
   assert.deepEqual(page.related.map((link) => [link.id, link.relation]), [[e3.public_id, "related"]]);
   assert.equal(await events.read("f0f0f0f0f0f0f0f0"), null);
   assert.equal(await events.read("../etc"), null);
+});
+
+test("a daily column joins one event and links the others; a second work is asked about, not joined", options, async () => {
+  const events = layer({ editor: stubEditor({ verdict: "no" }) });
+  const capital = await insertComposedItem(database, { sourceId: "fda", sourceType: "regulator", title: "Novo capital markets day",
+    registryIds: ["NCT08000001"], entityKeys: ["drug:semaglutide"], vector: vectorAt(1), visibleAt: hoursAgo(6), timelineAt: hoursAgo(6) });
+  // 0.68 to the capital-markets item: close enough to be asked about (the stub says no), not to join.
+  const adhd = await insertComposedItem(database, { sourceId: "nejm", sourceType: "journal", title: "An orexin agonist in ADHD",
+    registryIds: ["NCT08000002"], clusterKeys: [], entityKeys: ["drug:semaglutide", "drug:orexin"], vector: vectorAt(0.68, 1),
+    visibleAt: hoursAgo(5), timelineAt: hoursAgo(5) });
+  await events.clusterPending();
+  const capitalEvent = await eventOf(database, capital.id);
+  const adhdEvent = await eventOf(database, adhd.id);
+  assert.notEqual(capitalEvent.id, adhdEvent.id);
+  // The column names both trials: its registry ids are mentions, and what it matches it reports on.
+  const column = await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: "Pharmalittle: Novo's plans, early ADHD data, and more",
+    registryIds: ["NCT08000001", "NCT08000002"], clusterKeys: [], entityKeys: ["drug:semaglutide", "drug:orexin"],
+    vector: vectorAt(0.9, 1), visibleAt: hoursAgo(1), timelineAt: hoursAgo(1) });
+  const summary = await events.clusterPending();
+  assert.equal(summary.merged, 0, "a report never folds two events into one");
+  assert.equal(String((await eventOf(database, column.id)).id), String(capitalEvent.id), "it joins the oldest it matched");
+  assert.equal(String((await eventOf(database, adhd.id)).id), String(adhdEvent.id), "the other event stands");
+  const edges = (await database.query(`SELECT count(*)::integer AS n FROM evimed_frontier.event_links
+    WHERE (from_event_id = $1 AND to_event_id = $2) OR (from_event_id = $2 AND to_event_id = $1)`, [capitalEvent.id, adhdEvent.id])).rows[0].n;
+  assert.equal(edges, 1, "the event it also covered becomes an edge");
 });
 
 test("the hot list: the eligible by decayed heat, a snapshot every run, hot_version only when the list moved, settled after 72 h", options, async () => {
