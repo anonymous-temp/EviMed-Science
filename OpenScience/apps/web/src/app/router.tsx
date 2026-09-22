@@ -72,7 +72,7 @@ export const routes: RouteObject[] = [
       { path: "sources", element: <Navigate to="/app/files?tab=sources" replace /> },
       { path: "notebooks", element: <Navigate to="/app/files" replace /> },
       { path: "capsules", element: <Navigate to="/app/memory?tab=capsules" replace /> },
-      { path: "settings", element: <Navigate to="/app/account?tab=settings" replace /> },
+      { path: "settings", element: <Navigate to="/app/account?tab=appearance" replace /> },
       { path: "ops", element: <Navigate to="/app/account?tab=ops" replace /> },
       { path: "*", element: <NotFound /> },
     ],
@@ -90,7 +90,7 @@ export const routes: RouteObject[] = [
   { path: "/notebooks", element: <Navigate to="/app/files" replace /> },
   { path: "/memory", element: <Navigate to="/app/memory" replace /> },
   { path: "/agents", element: <Navigate to="/app/capabilities" replace /> },
-  { path: "/settings", element: <Navigate to="/app/account?tab=settings" replace /> },
+  { path: "/settings", element: <Navigate to="/app/account?tab=appearance" replace /> },
   { path: "*", element: <NotFound /> },
 ];
 

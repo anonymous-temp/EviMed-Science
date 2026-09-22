@@ -13,6 +13,12 @@ export interface DigestClaim { id: string; statement: string;
 export interface DigestPayload { date: string; costCny: number; headlines: DigestClaim[]; leads: DigestClaim[];
   openedAt?: string | null;
   decisions: Array<{ action: string; claimId: string; note: string; memory?: { status: string; reason?: string; code?: string } }> }
+/** One scheduled run of an agenda: the conversation it ran in and the briefing it fed. */
+export interface EpisodePayload { agendaId: string; taskType: string; date: string; budgetCny: number;
+  status: "queued" | "running" | "merged" | "failed" | "canceled" | string;
+  runId: string | null; sessionId?: string | null; digestId?: string | null;
+  error?: { code: string } | null; createdAt: string; updatedAt: string }
+export type EpisodeRecord = ProductRecord<EpisodePayload> & { projectId: string };
 export type AgendaRecord = ProductRecord<AgendaPayload> & { projectId: string };
 export type DigestRecord = ProductRecord<DigestPayload> & { projectId: string };
 
@@ -21,6 +27,9 @@ export function createAgenda(input: Record<string, unknown>) { return productReq
 export function startAgenda(id: string, revision: number) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/start`, "POST", { expectedRevision: revision }); }
 export function stopAgenda(id: string, revision: number) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/stop`, "POST", { expectedRevision: revision }); }
 export function scheduleAgenda(id: string, date: string) { return productRequest<{ episode: { id: string } }>(`/autopilot/agendas/${encodeURIComponent(id)}/schedule`, "POST", { date }); }
+export function listEpisodes(projectId: string, agendaId?: string) {
+  return productRequest<ProductPage<EpisodeRecord>>(`/autopilot/episodes?projectId=${encodeURIComponent(projectId)}${agendaId ? `&agendaId=${encodeURIComponent(agendaId)}` : ""}`);
+}
 export function listDigests(projectId: string) { return productRequest<ProductPage<DigestRecord>>(`/autopilot/digests?projectId=${encodeURIComponent(projectId)}`); }
 export function getDigest(id: string) { return productRequest<DigestRecord>(`/autopilot/digests/${encodeURIComponent(id)}`); }
 export function markDigestOpened(id: string) { return productRequest<DigestRecord>(`/autopilot/digests/${encodeURIComponent(id)}/opened`, "POST", {}); }

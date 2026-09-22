@@ -10,6 +10,7 @@ vi.mock("@/lib/apiClient", async (original) => ({
   ...api,
   hasWebApi: true,
 }));
+vi.mock("@/components/settings/ArchivedConversationsCard", () => ({ ArchivedConversationsCard: () => null }));
 vi.mock("@/components/settings/PluginsCard", () => ({ PluginsCard: ({ projectId }: { projectId: string }) => <div>Plugin project: {projectId}</div> }));
 vi.mock("@/components/settings/WebProjectsCard", () => ({ WebProjectsCard: () => null }));
 vi.mock("@/components/settings/WebReadinessCard", () => ({ WebReadinessCard: () => null }));

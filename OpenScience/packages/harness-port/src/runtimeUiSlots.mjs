@@ -89,6 +89,10 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
   'conversation.view': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // Above the composer card: `main.conversation`'s children table.
   'conversation.input.dock': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
+  // Below the composer card, one centred 13 px pill row: `ui-chat` holds the
+  // session statistics there (`stats`, order 0); an entry of ours sits
+  // beside them. Declared by the composer bar's own children table.
+  'conversation.composer.dock': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // The composer: `conversation.composer.bar`'s children table.
   'conversation.input.attachments': Object.freeze({ kind: 'single', scope: 'session-maybe', declaredBy: 'ui-conversation' }),
   'conversation.input.right': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),

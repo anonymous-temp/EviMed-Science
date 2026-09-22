@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import { KnowledgePage } from "./KnowledgePage";
 import type { SourceProgress } from "./SourcesPage";
 
-vi.mock("./FilesPage", () => ({ FilesPage: () => <p>文件视图</p> }));
 vi.mock("./SourcesPage", () => ({
   SourcesPage: ({ onProgress }: { onProgress?: (progress: SourceProgress) => void }) => {
     onProgress?.(progress);
@@ -24,18 +23,20 @@ function open(next: SourceProgress = { needsAttention: 0, working: 0 }) {
 }
 
 describe("知识库", () => {
-  // It was two tabs over one body of material — 文件 and 整理进度 — and a third,
-  // the computational notebook, deleted on 2026-09-19. One page now: the
-  // documents are the list, each row carries its own state, and the raw folder
-  // is underneath rather than beside it.
-  it("is one page with the two nouns printed under its title, and no tabs at all", () => {
+  // It was two tabs over one body of material, then one list of cards over a
+  // second view of the same folder as a file tree beside a preview pane
+  // (「上传与浏览原始文件」), so an empty knowledge base showed three empty
+  // states at once (2026-09-22). One page, one list: the documents are the
+  // list, each row carries its own state and opens its own preview.
+  it("is one page with the two nouns printed under its title, one list and no second view of the folder", () => {
     open();
     expect(screen.getByRole("heading", { name: "知识库", level: 1 })).toBeInTheDocument();
     expect(screen.getByText(/你放进来的资料/)).toBeInTheDocument();
     expect(screen.getByText(/它自己记下的内容在「记忆胶囊」/)).toBeInTheDocument();
     expect(screen.queryAllByRole("tab")).toEqual([]);
     expect(screen.getByText("资料清单")).toBeInTheDocument();
-    expect(screen.getByText("上传与浏览原始文件")).toBeInTheDocument();
+    expect(screen.queryByText("上传与浏览原始文件")).toBeNull();
+    expect(screen.queryByText("个人知识库")).toBeNull();
     expect(screen.queryByText(/笔记本/)).toBeNull();
   });
 

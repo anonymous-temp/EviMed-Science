@@ -307,7 +307,7 @@ describe("ProjectBrowser — the projects and their tasks", () => {
 
   it("links to the account page for exporting and deleting projects", async () => {
     renderBrowser();
-    expect(await screen.findByRole("link", { name: "管理项目" })).toHaveAttribute("href", "/app/account?tab=settings");
+    expect(await screen.findByRole("link", { name: "管理项目" })).toHaveAttribute("href", "/app/account?tab=projects");
   });
 });
 

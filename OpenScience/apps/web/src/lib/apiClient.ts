@@ -729,6 +729,10 @@ export interface WebAgentRun {
   /** The finer code under `errorCode`, when the ledger recorded one. */
   errorSubCode?: string | null;
   dispatchStatus: "dispatching" | "accepted" | "unknown" | "rejected";
+  /** Put away by the researcher; the lists leave it out. */
+  archived?: boolean;
+  /** Removed by the researcher; nothing lists it again. */
+  deleted?: boolean;
   sessionId: string;
   mode: "open-domain" | "specialist";
   agentId: string | null;
@@ -1196,6 +1200,22 @@ export async function logoutWeb(): Promise<void> {
   notifyWebSessionEnded();
 }
 
+/**
+ * The account's own password, changed by the account. Refused with
+ * `invalid_credentials` when the current one is wrong, `weak_password` under
+ * eight characters, and `auth_method_disabled` for an account that signs in
+ * another way. The session making the change stays signed in.
+ */
+export async function changeWebPassword(currentPassword: string, newPassword: string): Promise<void> {
+  if (!hasWebApi) throw new BackendUnavailableError("auth.password");
+  const res = await fetchWithWebAuth(apiUrl("/auth/password"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  await parseApiResponse<boolean>(res);
+}
+
 export async function fetchWebAuthMethods(): Promise<WebAuthMethods> {
   if (!hasWebApi) throw new BackendUnavailableError("auth.methods");
   const res = await fetch(apiUrl("/auth/methods"), {
@@ -1573,9 +1593,10 @@ export async function putWebResearchSession(
  * the control plane picks a project — so the override names it on this one
  * request and leaves the tab's selection where it is.
  */
-export async function listWebAgentRuns({ projectId }: { projectId?: string } = {}): Promise<WebAgentRun[]> {
+export async function listWebAgentRuns({ projectId, archived = false }: { projectId?: string; archived?: boolean } = {}): Promise<WebAgentRun[]> {
   if (!hasWebApi) throw new BackendUnavailableError("agentRuns.list");
-  const res = await fetchWithWebAuth(apiUrl("/agent-runs"), projectId ? { headers: { "X-Open-Science-Project": projectId } } : {});
+  // The shelf (`archived=1`) instead of the desk: what the researcher put away.
+  const res = await fetchWithWebAuth(apiUrl(archived ? "/agent-runs?archived=1" : "/agent-runs"), projectId ? { headers: { "X-Open-Science-Project": projectId } } : {});
   return parseApiResponse<WebAgentRun[]>(res);
 }
 
@@ -1599,6 +1620,31 @@ export async function cancelWebAgentRun(runId: string): Promise<WebAgentRun> {
  * automatic title may overwrite it afterwards — the lesson of every product
  * whose auto-rename kept undoing its users (appendix C, A3).
  */
+/**
+ * Put a conversation away, or take it back out. Out of the lists, still in
+ * the ledger: what it spent and wrote stays readable by id.
+ */
+export async function archiveWebAgentRun(runId: string, archived = true): Promise<WebAgentRun> {
+  if (!hasWebApi) throw new BackendUnavailableError("agentRuns.archive");
+  const res = await fetchWithWebAuth(apiUrl(`/agent-runs/${encodeURIComponent(runId)}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ archived }),
+  });
+  return parseApiResponse<WebAgentRun>(res);
+}
+
+/** Remove a conversation from every list, for good. A running one is stopped first. */
+export async function deleteWebAgentRun(runId: string): Promise<WebAgentRun> {
+  if (!hasWebApi) throw new BackendUnavailableError("agentRuns.delete");
+  const res = await fetchWithWebAuth(apiUrl(`/agent-runs/${encodeURIComponent(runId)}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deleted: true }),
+  });
+  return parseApiResponse<WebAgentRun>(res);
+}
+
 export async function renameWebAgentRun(runId: string, title: string): Promise<WebAgentRun> {
   if (!hasWebApi) throw new BackendUnavailableError("agentRuns.rename");
   const res = await fetchWithWebAuth(apiUrl(`/agent-runs/${encodeURIComponent(runId)}`), {

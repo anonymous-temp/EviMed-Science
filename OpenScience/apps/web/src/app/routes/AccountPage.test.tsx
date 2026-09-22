@@ -37,6 +37,7 @@ vi.mock("@/components/settings/ConnectorsCard", () => ({
 // The other two tabs are whole pages with their own tests. Mocked so this file
 // tests the account destination, not everything reachable from it.
 vi.mock("./SettingsPage", () => ({ SettingsPage: () => <div>项目与插件设置</div> }));
+vi.mock("@/components/settings/PasswordCard", () => ({ PasswordCard: () => <div>登录密码</div> }));
 // The Feishu card has its own test; here only whether its tab exists.
 vi.mock("@/components/settings/FeishuCard", () => ({ FeishuCard: () => <div>飞书机器人</div> }));
 vi.mock("@/lib/imClient", () => ({ fetchImStatus: mocks.fetchImStatus }));
@@ -71,13 +72,14 @@ describe("AccountPage", () => {
     // which made four printings of a string nobody types (WP8, 2026-09-20).
     expect(screen.queryByText(/alice/)).toBeNull();
     expect(screen.getByText("托管账户自助管理")).toBeInTheDocument();
-    // What the account has spent belongs with the account.
-    expect(screen.getByText("本月用量")).toBeInTheDocument();
+    // The password is the account's, so it is on the account tab.
+    expect(screen.getByText("登录密码")).toBeInTheDocument();
   });
 
-  // One destination, four views. Credentials and settings were two more
-  // top-level rows pointing at the same thing (2026-09-15 walk, C7/C8).
-  it("gathers usage, data sources and settings as tabs of one destination", async () => {
+  // One destination, the tabs every product's settings have (2026-09-22:
+  // 「该有的常规的设置项咋一个都没有」): account, appearance, notifications,
+  // usage, data sources, projects.
+  it("keeps the conventional settings as tabs of one destination", async () => {
     render(
       <MemoryRouter>
         <AccountPage />
@@ -85,31 +87,37 @@ describe("AccountPage", () => {
     );
 
     await screen.findAllByText("Alice");
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["账户", "外观", "通知", "用量与额度", "数据源", "项目"]);
+    fireEvent.click(screen.getByRole("tab", { name: "外观" }));
+    expect(screen.getByRole("radiogroup", { name: "外观主题" })).toBeInTheDocument();
+    expect(screen.getByText("简体中文")).toBeInTheDocument();
+    expect(screen.getByText("键盘快捷键")).toBeInTheDocument();
+    expect(screen.getByText("收起 / 展开侧边栏")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "通知" }));
+    expect(screen.getByText("站内通知")).toBeInTheDocument();
+    // No IM module: the phone card says so instead of offering a scan.
+    expect(screen.getByText("手机通知")).toBeInTheDocument();
+    expect(screen.queryByText("飞书机器人")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "用量与额度" }));
+    expect(screen.getByText("本月用量")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "数据源" }));
     expect(screen.getByText("数据源凭据")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "设置" }));
+    fireEvent.click(screen.getByRole("tab", { name: "项目" }));
     expect(screen.getByText("项目与插件设置")).toBeInTheDocument();
   });
 
   // A page for a switched-off subsystem would offer a scan that cannot work.
-  it("offers the phone tab only where the deployment runs the IM module", async () => {
-    const { unmount } = render(
-      <MemoryRouter>
-        <AccountPage />
-      </MemoryRouter>,
-    );
-    await screen.findAllByText("Alice");
-    expect(screen.queryByRole("tab", { name: "手机与飞书" })).not.toBeInTheDocument();
-    unmount();
-
+  it("offers the Feishu binding under 通知 only where the deployment runs the IM module", async () => {
     mocks.fetchImStatus.mockResolvedValue({ enabled: true, available: true, channels: [], feishu: { bound: false }, registration: null });
     render(
       <MemoryRouter>
         <AccountPage />
       </MemoryRouter>,
     );
-    fireEvent.click(await screen.findByRole("tab", { name: "手机与飞书" }));
-    expect(screen.getByText("飞书机器人")).toBeInTheDocument();
+    await screen.findAllByText("Alice");
+    fireEvent.click(screen.getByRole("tab", { name: "通知" }));
+    expect(await screen.findByText("飞书机器人")).toBeInTheDocument();
+    expect(screen.queryByText("手机通知")).not.toBeInTheDocument();
   });
 
   // Presentation only — every route the page calls authorizes itself — but an
@@ -180,7 +188,7 @@ describe("AccountPage budget ceilings", () => {
   ] as const)("names the %s ceiling and the amounts behind it", async (window, sentence) => {
     mocks.lastWebUsageBudgetRefusal.mockReturnValue({ ...refusal, window });
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/app/account?tab=usage"]}>
         <AccountPage />
       </MemoryRouter>,
     );
@@ -196,7 +204,7 @@ describe("AccountPage budget ceilings", () => {
   // frees up, and a rule the ledger does not implement is worse than none.
   it("states the rolling window instead of a calendar reset", async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/app/account?tab=usage"]}>
         <AccountPage />
       </MemoryRouter>,
     );
@@ -212,7 +220,7 @@ describe("AccountPage budget ceilings", () => {
   it("leaves out the requested amount when the refusal named none", async () => {
     mocks.lastWebUsageBudgetRefusal.mockReturnValue({ ...refusal, requested: undefined });
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/app/account?tab=usage"]}>
         <AccountPage />
       </MemoryRouter>,
     );
@@ -224,12 +232,12 @@ describe("AccountPage budget ceilings", () => {
     mocks.lastWebUsageBudgetRefusal.mockReturnValue(null);
     mocks.fetchImStatus.mockResolvedValue({ enabled: false, available: true, channels: [], feishu: null, registration: null });
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/app/account?tab=usage"]}>
         <AccountPage />
       </MemoryRouter>,
     );
 
-    await screen.findAllByText("Alice");
+    await screen.findByText("本月用量");
     expect(screen.queryByText("额度已达上限")).not.toBeInTheDocument();
     expect(screen.queryByText(/已占用/)).not.toBeInTheDocument();
   });

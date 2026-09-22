@@ -228,31 +228,25 @@ test("every row the patch overrides is a row the image's own composition has", a
   }
 });
 
-test("the trajectory panel is an operator's, and a researcher's runtime does not mount it", async () => {
+test("the trajectory panel is everyone's: a researcher's runtime mounts it, labelled by the language pack", async () => {
   // It renders the assembled system prompt, the `<system-reminder>` blocks, the
-  // injected run context and every tool call's raw JSON. Until 2026-09-16 every
-  // account got it, in a tab labelled 「轨迹」.
+  // injected run context and every tool call's raw JSON. From 2026-09-16 to
+  // 2026-09-22 it was operator-only for that reason; the owner's ruling is that
+  // the kernel's process view — the timing overview over the per-step ledger —
+  // is what a researcher reads a run by, and the pairing test had already
+  // recorded that hiding it was cosmetic. So nothing is operator-only now, and
+  // the row is mounted whichever flag the profile carries.
   const researcher = renderProfilePatch({ ...input, flags: { ...input.flags, hosted: true, operator: false } });
   const operator = renderProfilePatch({ ...input, flags: { ...input.flags, hosted: true, operator: true } });
-  assert.ok(OPERATOR_ONLY_BROWSER_PANELS.length > 0, "nothing is operator-only, so this test walked nothing");
-  for (const id of OPERATOR_ONLY_BROWSER_PANELS) {
-    assert.match(researcher, new RegExp(`- id: ${id}\\n  disabled: true`), `${id} is still mounted for a researcher`);
-    assert.doesNotMatch(operator, new RegExp(`- id: ${id}\\n  disabled: true`), `${id} is what an operator diagnoses a run with`);
+  assert.deepEqual([...OPERATOR_ONLY_BROWSER_PANELS], []);
+  for (const rendered of [researcher, operator]) {
+    assert.doesNotMatch(rendered, /- id: ui-trajectory\n {2}disabled: true/, "the trajectory view is the product's 运行 tab");
+    // The kernel's file tree and document previews are back with it: the
+    // proxy holds their reads to the workspace path by path instead.
+    assert.doesNotMatch(rendered, /- id: ui-sidebar-files\n {2}disabled: true/);
+    assert.doesNotMatch(rendered, /- id: ui-sidebar-documentpreview\n {2}disabled: true/);
   }
-
-  // The row ids are the composition's, not ours. A renamed row upstream must
-  // fail here rather than quietly stop disabling anything.
-  const baselinePath = new URL("../../../deploy/runtime-dsh/dump-config.baseline.json", import.meta.url);
-  let baseline;
-  try {
-    baseline = await readFile(baselinePath, "utf8");
-  } catch {
-    return; // recorded in the image; see the acceptance step in docs/WEB_DEPLOYMENT.md
-  }
-  const composed = new Set([...baseline.matchAll(/^- id: (\S+)/gm)].map((match) => match[1]));
-  for (const id of OPERATOR_ONLY_BROWSER_PANELS) {
-    assert.ok(composed.has(id), `the patch disables "${id}", which the composition does not have`);
-  }
+  assert.equal(researcher, operator, "with nothing operator-only, the two profiles are one patch");
 });
 
 test("an inserted row names the plugin it inserts", () => {

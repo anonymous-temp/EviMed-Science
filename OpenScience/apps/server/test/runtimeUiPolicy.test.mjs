@@ -349,8 +349,7 @@ test("every deployment method uses the same denial policy on HTTP and mux", { ti
   const f = await fixture(t);
   const c = f.connect({ Origin: SHELL_ORIGIN });
   assert.equal(await c.opened, 101);
-  const methods = [...RUNTIME_UI_DENIED_METHODS, ...RUNTIME_UI_DENIED_NAMESPACES.map((namespace) => `${namespace}/update`),
-    "workspaceFiles/read", "workspaceFiles/readBytes", "workspaceFiles/readAll", "workspaceFiles/readRelated", "workspaceFiles/stat"];
+  const methods = [...RUNTIME_UI_DENIED_METHODS, ...RUNTIME_UI_DENIED_NAMESPACES.map((namespace) => `${namespace}/update`)];
   for (const [index, endpoint] of methods.entries()) {
     const response = await fetch(`${f.base}/api/${endpoint}`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
     assert.equal((await response.json()).error?.code, "runtime_ui_method_denied", endpoint);
@@ -400,30 +399,61 @@ test("a kernel route that is not a method is refused by path, and ordinary asset
   }
 });
 
-test("the file-read and feedback namespaces 0.1.5 added are refused on both transports", { timeout: 5000 }, async (t) => {
-  // `workspaceFiles/{read,readAll,readBytes,stat}` resolve an absolute path
+test("a workspace-file read is held to the workspace on both transports, and the feedback namespace stays refused", { timeout: 5000 }, async (t) => {
+  // `workspaceFiles/{read,readAll,readBytes,stat,readRelated}` resolve a path
   // against the workspace as cwd and never confine it -- upstream's own
-  // parameter docs say "files outside it are allowed" -- so unrefused they are
-  // an arbitrary read of the runtime container from a browser.
-  // `sessionFeedback/record` is `messageFeedback` under its session-scoped name.
+  // parameter docs say "files outside it are allowed". Until 2026-09-22 the
+  // whole namespace was refused, which took the kernel's file tree and
+  // previews with it; now the proxy refuses the path, not the method
+  // (`runtimeUiWorkspacePathRefusal`). `sessionFeedback/record` is
+  // `messageFeedback` under its session-scoped name and stays refused.
   const f = await fixture(t);
   const c = f.connect({ Origin: SHELL_ORIGIN });
   assert.equal(await c.opened, 101);
   const arrived = [];
-  f.manager.proxy = async (req, res) => { arrived.push(new URL(req.url, "http://ui.local").pathname); res.writeHead(200); res.end("{}"); };
-  const endpoints = [
-    "workspaceFiles/read", "workspaceFiles/readAll", "workspaceFiles/readBytes", "workspaceFiles/readRelated",
-    "workspaceFiles/stat", "workspaceFiles/list", "workspaceFiles/changes", "sessionFeedback/record",
+  f.manager.proxy = async (req, res) => { arrived.push([new URL(req.url, "http://ui.local").pathname, req.__openScienceProxyBody?.toString("utf8") ?? null]); res.writeHead(200); res.end("{}"); };
+  const root = f.manager.runtimeWorkspaceRoot(await f.store.requireProject(f.user, "default"));
+  assert.ok(root.startsWith("/"), "the fixture's workspace root is absolute");
+  const call = (endpoint, args) => fetch(`${f.base}/api/${endpoint}`, {
+    method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "r1", method: endpoint, payload: { args } }),
+  });
+  const inside = [
+    ["workspaceFiles/read", { workspaceFileScopeId: "s", path: `${root}/deliverables/report.md`, range: {} }],
+    ["workspaceFiles/readAll", { workspaceFileScopeId: "s", path: "deliverables/report.md" }],
+    ["workspaceFiles/list", { workspaceFileScopeId: "s", path: root }],
+    ["workspaceFiles/readRelated", { workspaceFileScopeId: "s", path: `${root}/a.html`, relativePath: "img/b.png" }],
   ];
-  for (const [index, endpoint] of endpoints.entries()) {
-    const response = await fetch(`${f.base}/api/${endpoint}`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
+  for (const [index, [endpoint, args]] of inside.entries()) {
+    assert.equal((await call(endpoint, args)).status, 200, `${endpoint} inside the workspace is forwarded`);
+    c.send(open(`in${index}`, endpoint, args));
+    assert.deepEqual((await c.next()).value, { reached: endpoint });
+  }
+  assert.equal(arrived.length, inside.length);
+  assert.ok(arrived.every(([, body]) => body && body.includes("workspaceFiles")), "the body read for the check is the body forwarded");
+  const outside = [
+    ["workspaceFiles/read", { workspaceFileScopeId: "s", path: "/etc/passwd" }],
+    ["workspaceFiles/readBytes", { workspaceFileScopeId: "s", path: `${root}/../secret` }],
+    ["workspaceFiles/stat", { workspaceFileScopeId: "s", path: `${root}2/x` }],
+    ["workspaceFiles/readRelated", { workspaceFileScopeId: "s", path: `${root}/a.html`, relativePath: "/etc/hosts" }],
+    ["workspaceFiles/read", {}],
+    ["workspaceFiles/read", { workspaceFileScopeId: "s", path: `${root}/a\\b` }],
+  ];
+  for (const [index, [endpoint, args]] of outside.entries()) {
+    const response = await call(endpoint, args);
+    assert.equal(response.status, 403, `${endpoint} ${JSON.stringify(args)}`);
     assert.equal((await response.json()).error?.code, "runtime_ui_method_denied", endpoint);
-    c.send(open(String(index), endpoint));
+    c.send(open(`out${index}`, endpoint, args));
     assert.equal((await c.next()).error?.code, "runtime_ui_method_denied", endpoint);
     assert.equal((await c.next()).type, "end");
   }
-  assert.deepEqual(arrived, []);
-  assert.deepEqual(f.received, []);
+  const feedback = await fetch(`${f.base}/api/sessionFeedback/record`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
+  assert.equal((await feedback.json()).error?.code, "runtime_ui_method_denied");
+  c.send(open("fb", "sessionFeedback/record"));
+  assert.equal((await c.next()).error?.code, "runtime_ui_method_denied");
+  assert.equal((await c.next()).type, "end");
+  assert.equal(arrived.length, inside.length, "nothing outside the workspace reached the runtime");
+  assert.equal(f.received.filter((frame) => frame.type === "open").length, inside.length);
 });
 
 test("a composer attachment reaches the kernel on both transports, held to the file ceiling", { timeout: 5000 }, async (t) => {

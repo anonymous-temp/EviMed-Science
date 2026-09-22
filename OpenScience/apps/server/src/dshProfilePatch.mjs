@@ -326,23 +326,20 @@ function hostedBrowserPanelRows(input) {
 /**
  * Panels a researcher account does not get and an operator does.
  *
- * One row so far. The kernel's trajectory tab renders the assembled system
- * prompt, the `<system-reminder>` blocks, the injected run context and every
- * tool call's raw JSON, and it rendered them for everybody (2026-09-16 walk,
- * U5). For an operator diagnosing a run that is the most useful surface the
- * kernel has; for a researcher it is the product's prompts, in English, in a
- * tab labelled 「轨迹」.
+ * None since 2026-09-22. The kernel's trajectory tab was the one row here: it
+ * renders the assembled system prompt and every tool call's raw JSON, and it
+ * did so for everybody (2026-09-16 walk, U5). The owner's ruling on 09-22 is
+ * that the process view is the kernel's own (「运行那部分咋没有用 dsh 那种
+ * 有图的那种呢」): the timing overview, the per-step ledger and the record
+ * inspector are what a researcher reads a run by, and the pairing test had
+ * already recorded that hiding the tab was cosmetic — the frames reach the
+ * browser over the session socket whether or not a tab draws them. So the tab
+ * is offered to everyone, labelled 「运行」 by the product's language pack.
  *
- * Say plainly what this does and does not do: it removes the affordance, not
- * the data. The kernel streams those frames to the browser over the session
- * socket whether or not a tab draws them, so someone who opens devtools still
- * sees them. Stopping that means the kernel not sending them, which is upstream
- * of this codebase. This is the accidental-exposure half, and the pairing test
- * records it as exactly that rather than as a boundary.
+ * Kept as a list, empty, because the patch and three tests read it: the
+ * operator distinction stays a thing the profile can express.
  */
-export const OPERATOR_ONLY_BROWSER_PANELS = Object.freeze([
-  "ui-trajectory",
-]);
+export const OPERATOR_ONLY_BROWSER_PANELS = Object.freeze([]);
 
 /**
  * The row ids of those panels, as the composition names them.
@@ -373,14 +370,18 @@ export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
   "ui-goal",
   "ui-cordis",
   "ui-brand-official",
-  // Arrived in 0.1.5. Leaves, all three: nothing injects `documentPreview`,
-  // `sidebarFiles` is injected only by the tab type itself, and the "Open In..."
-  // split button is a session-header row. The right sidebar that docks them
-  // (`ui-sidebar-right`) stays, because `dsh-client-ui-chat` requires it -- the
-  // `ui-workspace` lesson, checked rather than recalled.
+  // Arrived in 0.1.5. A leaf: the "Open In..." split button is a
+  // session-header row that launches applications on the machine running the
+  // kernel. Its two neighbours, `ui-sidebar-files` and
+  // `ui-sidebar-documentpreview`, stood here until 2026-09-22: they are the
+  // kernel's own file tree and document previews (Markdown, code, images,
+  // PDF, HTML), and the owner asked where the preview had gone. They read
+  // through `workspaceFiles`, which the proxy now holds to the workspace path
+  // by path (`runtimeUiWorkspacePathRefusal`) instead of refusing outright.
+  // The right sidebar that docks them (`ui-sidebar-right`) stays, because
+  // `dsh-client-ui-chat` requires it -- the `ui-workspace` lesson, checked
+  // rather than recalled.
   "ui-open-in-app",
-  "ui-sidebar-files",
-  "ui-sidebar-documentpreview",
   // Not a panel: the browser half of dynamic Cordis packages. Its node half is
   // an empty `apply` (the row exists only so the page loads the client half),
   // its one consumer is `ui-cordis` above, and every method it calls lives in

@@ -46,6 +46,11 @@ export function createAutopilotRoutes({ store, service, maxJsonBytes }) {
         return reply(await service.schedule(user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["date"])));
       }
     }
+    if (parts[0] === "episodes" && parts.length === 1 && method === "GET") {
+      const projectId = url.searchParams.get("projectId");
+      if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
+      return reply(await service.listEpisodes(user.id, { projectId: await requireProject(projectId), agendaId: url.searchParams.get("agendaId") }));
+    }
     if (parts[0] === "digests" && parts.length === 1 && method === "GET") {
       const projectId = url.searchParams.get("projectId");
       if (!projectId) throw new HttpError(400, "project_required", "A project is required.");

@@ -184,15 +184,9 @@
   disabled: true
 - id: ui-open-in-app
   disabled: true
-- id: ui-sidebar-files
-  disabled: true
-- id: ui-sidebar-documentpreview
-  disabled: true
 - id: cordis-client-runner
   disabled: true
 - id: command-feedback
   disabled: true
 - id: session-log-download
-  disabled: true
-- id: ui-trajectory
   disabled: true

@@ -333,7 +333,7 @@ export {
   validateAgendaClaim,
 } from './src/agenda.mjs'
 
-// runtimeUiSurface — 6 exports
+// runtimeUiSurface — 9 exports
 export {
   RUNTIME_UI_DENIED_HOST_ROUTES,
   RUNTIME_UI_DENIED_METHODS,
@@ -341,6 +341,9 @@ export {
   isDeniedRuntimeUiHostRoute,
   isDeniedRuntimeUiMethod,
   runtimeUiMethodFromPath,
+  RUNTIME_UI_WORKSPACE_PATH_METHODS,
+  isRuntimeUiWorkspacePath,
+  runtimeUiWorkspacePathRefusal,
 } from './src/runtimeUiSurface.mjs'
 
 // Types are re-exported separately because they are not runtime bindings: a

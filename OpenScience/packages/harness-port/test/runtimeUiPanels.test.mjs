@@ -1,11 +1,13 @@
-// The 运行 view and the right column's single 文件 tab: what each draws from
-// the shell's run state and evidence, how they register, and when the column
-// opens on its own.
+// The delivery card above the composer and the right column opening on the
+// kernel's own file tree: what the card draws from the shell's run state and
+// evidence, where it sits, and when the column opens on its own. The product's
+// own 运行 view and 文件 tab left on 2026-09-22 for the kernel's trajectory
+// view and file tree.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  apply, artifactKind, artifactModel, BODY, deliveryModel, evidenceModel, panelTabs, progressModel, runStateText, runViewTab, sourcesModel,
+  apply, artifactKind, artifactModel, BODY, composerColumnStyle, deliveryModel, evidenceModel, KERNEL_FILES_TAB, runStateText,
 } from '../src/runtimeUiPanels.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 
@@ -53,9 +55,8 @@ const EVIDENCE = {
   ],
 };
 
-test('one tab type, because a second guide entry replaces the column with the kernel compass', () => {
-  assert.deepEqual(panelTabs().map((tab) => tab.title), ['文件']);
-  assert.deepEqual(runViewTab(), { id: 'evimed-run', label: '运行', order: 5 });
+test('the run is read in the words every surface uses for it', () => {
+  assert.equal(KERNEL_FILES_TAB, 'files', "the kernel's own file-tree tab, which stays the column's only guide entry");
   assert.deepEqual(runStateText({ state: 'running' }), { text: '进行中', tone: 'active' });
   assert.deepEqual(runStateText({ state: 'succeeded', verification: 'unverified' }), { text: '已交付 · 有结论未逐字核对', tone: 'warn' });
   assert.deepEqual(runStateText({ state: 'canceled' }), { text: '已停止', tone: 'muted' });
@@ -67,30 +68,6 @@ test('a delivered file is named by what the contract calls it', () => {
   assert.equal(artifactKind('deliverables/evidence/revision-notes.md').label, '修订说明');
   assert.equal(artifactKind('deliverables/brief/summary.docx').label, '文档');
   assert.equal(artifactKind('deliverables/brief/data.csv').label, '文件');
-});
-
-test('the run view reads the run: phases reached, counts, cost and each piece of work', () => {
-  const model = /** @type {any} */ (progressModel(LIVE, 1_000_000 + 125_000, kit()));
-  assert.equal(model.title, '老年房颤抗凝');
-  assert.equal(model.state.text, '进行中');
-  assert.equal(model.elapsed, '2 分 05 秒');
-  assert.equal(model.cost, '约 ¥0.42');
-  // Only phases something happened in, and 「当前」 is the furthest reached —
-  // not whichever labelled call happened to be last.
-  assert.deepEqual(model.phases.map((/** @type {any} */ phase) => `${phase.label}${phase.count}${phase.current ? '*' : ''}`), ['检索4', '筛选2', '全文1*']);
-  // An older control plane sends neither; the counts say the same thing.
-  const legacy = /** @type {any} */ (progressModel({ ...LIVE, progress: { ...LIVE.progress, reachedPhases: undefined, currentPhase: null } }, 1_000_000 + 125_000, kit()));
-  assert.deepEqual(legacy.phases.map((/** @type {any} */ phase) => `${phase.label}${phase.count}${phase.current ? '*' : ''}`), ['检索4', '筛选2', '全文1*']);
-  assert.equal(model.sources, '检索 120 次 · 纳入 18 篇 · 全文 6 篇');
-  assert.equal(model.claims, null, 'no conclusions yet says nothing rather than 「结论 0 条」');
-  assert.deepEqual(model.deliverables.map((/** @type {any} */ item) => [item.title, item.status, item.childState, item.attempts, item.verdict?.text ?? null, item.childSessionId]), [
-    ['老年房颤抗凝证据综述', '需修改', '进行中', 2, '⚠ 3 项需核对', 'child-1'],
-    ['临床决策简报', '待开始', null, 0, null, null],
-  ]);
-  assert.equal(progressModel(null, 0, kit()), null);
-  // A finished run's duration stops at its last update.
-  const done = /** @type {any} */ (progressModel({ ...LIVE, state: 'succeeded' }, 9_999_999_999, kit()));
-  assert.equal(done.elapsed, '5 分 00 秒');
 });
 
 test('the files group by the piece of work that wrote them, and say which were not checked', () => {
@@ -117,14 +94,6 @@ test('each conclusion carries what the check found, and only for the run on scre
   assert.equal(evidenceModel({ ...EVIDENCE, runId: 'run-0' }, LIVE), null, 'evidence of an earlier run is not this run');
 });
 
-test('the cited sources carry their type and only web links', () => {
-  const model = sourcesModel(EVIDENCE, LIVE, kit());
-  assert.deepEqual(model.sources.map((/** @type {any} */ source) => [source.title, source.type, source.identifier, source.url]), [
-    ['ROCKET AF', 'RCT', 'PMID:21830957', 'https://pubmed.ncbi.nlm.nih.gov/21830957/'],
-    ['2023 ACC/AHA 房颤指南', '指南', null, null],
-  ]);
-});
-
 /** A frame with the right column's two services. */
 function column({ failFirstOpen = false } = {}) {
   /** @type {any[]} */
@@ -145,29 +114,24 @@ function column({ failFirstOpen = false } = {}) {
   return { ctx, target, kit: frameKit, definitions, opened };
 }
 
-test("运行 registers in the view ring beside 对话, and 文件 is the column's only guide entry", () => {
+test("nothing of the product's is registered in the view ring or as a column tab: both are the kernel's", () => {
   const f = column();
-  assert.deepEqual(f.definitions.map((definition) => [definition.id, definition.kind, definition.priority, definition.title(), definition.guide[0].title()]), [
-    ['evimed-files', 'evimed-files', 'extension', '文件', '文件'],
-  ]);
-  assert.equal(f.definitions.reduce((sum, definition) => sum + definition.guide.length, 0), 1,
-    'exactly one guide entry: zero or several make the column open the kernel 「开始」 compass instead');
-  const bodies = f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'sidebar.right.pane.tab');
-  assert.deepEqual(bodies.map((/** @type {any} */ entry) => entry.options.key), ['evimed-files']);
-  const views = f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'conversation.view');
-  assert.deepEqual(views.map((/** @type {any} */ entry) => [entry.options.id, entry.options.order, entry.options.label()]), [['evimed-run', 5, '运行']]);
+  assert.deepEqual(f.definitions, [], 'no tab type: a second guide entry would turn the column into the kernel 「开始」 compass');
+  assert.deepEqual(f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'sidebar.right.pane.tab'), []);
+  assert.deepEqual(f.ctx.slots.registrations.filter((/** @type {any} */ entry) => entry.name === 'conversation.view'), [],
+    "the kernel's trajectory view is the 运行 tab (relabelled by the language pack)");
   assert.deepEqual(f.target.warnings, []);
   assert.equal(BODY.name, 'panels');
 });
 
-test('文件 opens when a report appears while the reader watches, not on a visit to a finished task', () => {
+test("the kernel's file tree opens when a report appears while the reader watches, not on a visit to a finished task", () => {
   const watching = column();
   watching.kit.hub.deliver('run-state', { ...LIVE, state: 'running', progress: { ...LIVE.progress, children: [], deliverables: [] } });
   assert.deepEqual(watching.opened, []);
   watching.kit.hub.deliver('run-state', { ...LIVE, state: 'succeeded', artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
-  assert.deepEqual(watching.opened, ['evimed-files']);
+  assert.deepEqual(watching.opened, ['files']);
   watching.kit.hub.deliver('run-state', { ...LIVE, state: 'succeeded', updatedAt: 'later', artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
-  assert.deepEqual(watching.opened, ['evimed-files'], 'once per run');
+  assert.deepEqual(watching.opened, ['files'], 'once per run');
   const visiting = column();
   visiting.kit.hub.deliver('run-state', { ...LIVE, state: 'succeeded', artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
   assert.deepEqual(visiting.opened, [], 'a finished task already has its files; the column does not jump out');
@@ -180,28 +144,7 @@ test('the column retries its open while no seat is mounted', () => {
   f.kit.hub.deliver('run-state', { ...LIVE, artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
   assert.deepEqual(f.opened, [], 'the first open had no seat');
   f.kit.hub.deliver('run-state', { ...LIVE, updatedAt: 'later', artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
-  assert.deepEqual(f.opened, ['evimed-files']);
-});
-
-test('both surfaces render Chinese, with an honest empty state before anything exists', () => {
-  const f = column();
-  const view = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.view').component;
-  const files = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'sidebar.right.pane.tab').component;
-  assert.match(renderStatic(view), /这次对话还没有研究任务/);
-  assert.match(renderStatic(files), /还没有产出文件/);
-  f.kit.hub.deliver('run-state', { ...LIVE, artifacts: ['deliverables/evidence/clinical-evidence-report.md'] });
-  f.kit.hub.deliver('evidence', EVIDENCE);
-  const run = renderStatic(view);
-  assert.match(run, /老年房颤抗凝证据综述/);
-  assert.match(run, /筛选 2/);
-  assert.match(run, /查看子任务/);
-  assert.match(run, /3 条结论：✓ 1 条已核对，⚠ 1 条待核对/);
-  assert.match(run, /ROCKET AF/);
-  assert.doesNotMatch(run, /javascript:/);
-  assert.doesNotMatch(run, /核验 0|撰写 0|交付 0/, 'a phase nothing happened in is not a row');
-  const column1 = renderStatic(files);
-  assert.match(column1, /报告/);
-  assert.match(column1, /打开/);
+  assert.deepEqual(f.opened, ['files']);
 });
 
 test('a finished run says so at the end of the turn that delivered it', () => {
@@ -232,4 +175,11 @@ test('the card sits above the composer, once, and says nothing before there is a
   assert.match(card, /结论 3 条，已核对 1 条/);
   assert.match(card, /引用前请在报告里核对带 ⚠ 的结论/);
   assert.match(card, /收起/);
+  assert.doesNotMatch(card, /javascript:/);
+  // The seat above the composer spans the frame; the card holds itself to
+  // the composer's own centred width, as the kernel's queue dock does, or it
+  // sits at the left edge beside a centred composer (2026-09-22).
+  assert.match(card, /max-width:calc\(var\(--dsh-composer-card-max-width, ?952px\) - 2 \* var\(--dsh-composer-dock-inset, ?8px\)\)/);
+  assert.match(card, /margin:0 auto/);
+  assert.equal(composerColumnStyle().margin, '0 auto');
 });

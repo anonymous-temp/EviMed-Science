@@ -621,10 +621,20 @@ function foldEvents(events) {
       const labelled = title && titleSource && titleSource !== "question"
         && (current.titleSource !== "user" || titleSource === "user");
       const question = current.question == null && typeof event.question === "string" ? questionPreview(event.question) : null;
+      // Put away or removed from the lists, by the researcher (2026-09-22:
+      // 「项目会话，删除 归档啥的咋都没有」). Both are flags on the run, never
+      // a removal from the ledger: what a run spent, wrote and was told stays
+      // readable by everything that reads the ledger, and only the
+      // conversation lists leave it out. Archiving is undone by another
+      // notice; deletion is not, because the word promises it.
+      const archived = typeof event.archived === "boolean" ? event.archived : null;
+      const deleted = event.deleted === true;
       runs.set(id, Object.freeze({
         ...current,
         ...(labelled ? { title, titleSource } : {}),
         ...(question ? { question } : {}),
+        ...(archived === null ? {} : { archived }),
+        ...(deleted ? { deleted: true } : {}),
         verification: event.verification === "unchecked" && current.verification === null
           ? "unchecked"
           : current.verification,
@@ -4242,13 +4252,15 @@ export class AgentRunStore {
    * replaces theirs, and a question is filled once: this returns the run
    * unchanged, without writing, when there is nothing it may change.
    * @param {any} project @param {string} rawRunId
-   * @param {{ title?: string, titleSource?: 'auto'|'user', question?: string }} labels
+   * @param {{ title?: string, titleSource?: 'auto'|'user', question?: string, archived?: boolean, deleted?: boolean }} labels
    */
-  async recordRunLabels(project, rawRunId, { title, titleSource, question } = {}) {
+  async recordRunLabels(project, rawRunId, { title, titleSource, question, archived, deleted } = {}) {
     const runId = safeId(rawRunId, "agent run id");
     const named = title === undefined ? null : normalizeRunTitle(title);
     if (title !== undefined && !named) throw new HttpError(400, "invalid_payload", `A run title is one line of 1 to ${maxRunTitle} characters.`);
     if (named && titleSource !== "auto" && titleSource !== "user") throw invalid("A run title needs its source.");
+    if (archived !== undefined && typeof archived !== "boolean") throw new HttpError(400, "invalid_payload", "archived must be a boolean.");
+    if (deleted !== undefined && deleted !== true) throw new HttpError(400, "invalid_payload", "deleted can only be set.");
     const asked = question === undefined ? null : questionPreview(question);
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
@@ -4257,7 +4269,9 @@ export class AgentRunStore {
       const retitle = named && (current.titleSource !== "user" || titleSource === "user")
         && !(current.title === named && current.titleSource === titleSource);
       const fill = asked && current.question == null;
-      if (!retitle && !fill) return current;
+      const shelve = archived !== undefined && Boolean(current.archived) !== archived;
+      const remove = deleted === true && !current.deleted;
+      if (!retitle && !fill && !shelve && !remove) return current;
       const event = {
         event: "notice",
         id: runId,
@@ -4265,6 +4279,8 @@ export class AgentRunStore {
         qualityNotices: [],
         ...(retitle ? { title: named, titleSource } : {}),
         ...(fill ? { question: asked } : {}),
+        ...(shelve ? { archived } : {}),
+        ...(remove ? { deleted: true } : {}),
       };
       const text = serializeNext(events, event, this.maxBytes);
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });

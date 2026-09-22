@@ -5,6 +5,7 @@ import { SettingsPage } from "./SettingsPage";
 
 const api = vi.hoisted(() => ({ fetchWebMe: vi.fn(), getWebProjectId: vi.fn() }));
 vi.mock("@/lib/apiClient", () => api);
+vi.mock("@/components/settings/ArchivedConversationsCard", () => ({ ArchivedConversationsCard: () => null }));
 vi.mock("@/components/settings/PluginsCard", () => ({ PluginsCard: ({ projectId }: { projectId: string }) => <div>Plugin project: {projectId}</div> }));
 vi.mock("@/components/settings/WebProjectsCard", () => ({ WebProjectsCard: ({ onProjectChange }: { onProjectChange: (project: { id: string }) => void }) => <div>托管项目自助管理<button onClick={() => onProjectChange({ id: "beta" })}>Switch project</button></div> }));
 
@@ -19,12 +20,11 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("keeps the researcher's surface: project, plugins, data flow and appearance", async () => {
+  it("is the projects tab: projects, plugins and data flow, with appearance on the account page", async () => {
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
     expect(await screen.findByText("托管项目自助管理")).toBeInTheDocument();
     expect(screen.getByText("隐私与数据流向")).toBeInTheDocument();
-    expect(screen.getByText("外观")).toBeInTheDocument();
-    expect(screen.getByRole("radiogroup", { name: "外观主题" })).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "外观主题" })).not.toBeInTheDocument();
   });
 
   // The deployment console left for `/app/ops` on 2026-09-15. A researcher who
