@@ -1,0 +1,70 @@
+{
+ "case": "html-list/nhsa-consultations",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:20+00:00",
+ "note": null,
+ "source": {
+  "id": "nhsa-consultations",
+  "name": "国家医保局 征求意见",
+  "homepage": "http://www.nhsa.gov.cn/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "国家医疗保障局",
+  "launch_tier": "P0",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "http://www.nhsa.gov.cn/col/col113/index.html",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.nhsa.gov.cn"
+   ],
+   "mode": "script-cdata",
+   "selectors": {
+    "item": "li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span:last-child"
+   },
+   "date_regex": "(20\\d{2}-\\d{2}-\\d{2})(?!\\d)",
+   "max_items": 40
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:18+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "http://www.nhsa.gov.cn/col/col113/index.html",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "http://www.nhsa.gov.cn/col/col113/index.html",
+   "headers": {
+    "content-type": "text/html",
+    "last-modified": "Thu, 30 Jul 2026 01:42:05 GMT",
+    "etag": "\"9df6-657ca2de11540-gzip\""
+   },
+   "fetched_at": "2026-09-22T09:21:19+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 40438,
+   "sha256": "c6c1578defd152d7d74c047a3e2e5d392e07538bd80a84270ee830f1cd4df97b"
+  }
+ ]
+}

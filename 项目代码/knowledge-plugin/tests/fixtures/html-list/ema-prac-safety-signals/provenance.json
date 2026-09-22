@@ -1,0 +1,68 @@
+{
+ "case": "html-list/ema-prac-safety-signals",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:13+00:00",
+ "note": null,
+ "source": {
+  "id": "ema-prac-safety-signals",
+  "name": "欧洲EMA PRAC 安全信号建议",
+  "homepage": "https://www.ema.europa.eu/en/committees/pharmacovigilance-risk-assessment-committee-prac",
+  "lane": "safety",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": true,
+  "owner_entity": "European Medicines Agency",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "EU",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "https://www.ema.europa.eu/en/human-regulatory-overview/post-authorisation/pharmacovigilance-post-authorisation/signal-management/prac-recommendations-safety-signals",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.ema.europa.eu"
+   ],
+   "selectors": {
+    "item": "div[data-ema-document-type=\"prac-recommendation\"]",
+    "title": "p.file-title",
+    "link": "a.standalone@href",
+    "date": "time@datetime"
+   },
+   "max_items": 20
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:10+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.ema.europa.eu/en/human-regulatory-overview/post-authorisation/pharmacovigilance-post-authorisation/signal-management/prac-recommendations-safety-signals",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ema.europa.eu/en/human-regulatory-overview/post-authorisation/pharmacovigilance-post-authorisation/signal-management/prac-recommendations-safety-signals",
+   "headers": {
+    "content-type": "text/html; charset=UTF-8",
+    "last-modified": "Tue, 22 Sep 2026 09:09:56 GMT",
+    "etag": "\"1790068196-gzip\""
+   },
+   "fetched_at": "2026-09-22T09:21:12+00:00",
+   "file": "01.html.gz",
+   "gzip": true,
+   "bytes": 2540949,
+   "sha256": "f6f069da81ed91605dd1ed06090523ebb9e95fa8adf6c06fddf42aed00eca602"
+  }
+ ]
+}

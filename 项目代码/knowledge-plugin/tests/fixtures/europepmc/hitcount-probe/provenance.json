@@ -1,0 +1,60 @@
+{
+ "case": "europepmc/hitcount-probe",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:20:49+00:00",
+ "note": "the same small request repeated (>= 1.5 s apart) until Europe PMC answered 200 without hitCount, or 12 tries",
+ "tries": 1,
+ "source": {
+  "id": "europepmc-medrxiv-preprints",
+  "name": "Europe PMC · medRxiv 预印本流",
+  "homepage": "https://europepmc.org/",
+  "lane": "evidence",
+  "source_type": "preprint",
+  "access": "europepmc",
+  "egress": "direct",
+  "authority": 2,
+  "safety_feed": false,
+  "owner_entity": "EMBL-EBI Europe PMC",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "EU",
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 129600,
+  "config": {
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22medRxiv%22)%20AND%20FIRST_IDATE:%5B{since:%Y-%m-%d}%20TO%20{today:%Y-%m-%d}%5D&format=json&resultType=core&pageSize=100&cursorMark={cursor}",
+   "cursor_start": "*",
+   "page_size": 100,
+   "max_pages": 5,
+   "lookback_days": 7,
+   "overlap_days": 1,
+   "incremental": true,
+   "allowed_hosts": [
+    "europepmc.org",
+    "www.ebi.ac.uk"
+   ]
+  }
+ },
+ "state": null,
+ "now": "2026-09-22T09:20:49+00:00",
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=SRC%3APPR%20AND%20PUBLISHER%3A%22medRxiv%22&format=json&resultType=lite&pageSize=1",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=SRC%3APPR%20AND%20PUBLISHER%3A%22medRxiv%22&format=json&resultType=lite&pageSize=1",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:20:47+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 17,
+   "sha256": "6417c45aae878ff7fe9b70ad452ac5020cc93d25347839763dd9a6efe69e0f76"
+  }
+ ]
+}

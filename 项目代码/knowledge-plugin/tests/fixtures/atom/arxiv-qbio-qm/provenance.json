@@ -1,0 +1,60 @@
+{
+ "case": "atom/arxiv-qbio-qm",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:20:24+00:00",
+ "note": null,
+ "source": {
+  "id": "arxiv-qbio-qm",
+  "name": "arXiv · q-bio.QM 定量生物学方法",
+  "homepage": "https://arxiv.org/",
+  "lane": "evidence",
+  "source_type": "preprint",
+  "access": "atom",
+  "egress": "direct",
+  "authority": 2,
+  "safety_feed": false,
+  "owner_entity": "arXiv",
+  "launch_tier": "P1",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 129600,
+  "config": {
+   "url": "https://export.arxiv.org/api/query?search_query=cat:q-bio.QM&sortBy=submittedDate&sortOrder=descending&max_results=100",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "arxiv.org",
+    "export.arxiv.org"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:20:20+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=cat:q-bio.QM&sortBy=submittedDate&sortOrder=descending&max_results=100",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://export.arxiv.org/api/query?search_query=cat:q-bio.QM&sortBy=submittedDate&sortOrder=descending&max_results=100",
+   "headers": {
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T09:20:23+00:00",
+   "file": "01.xml.gz",
+   "gzip": true,
+   "bytes": 265627,
+   "sha256": "310d5bcb7080bac9890fc2aa2e981d94cf79c3bb80daad77a09312f798cc04f6"
+  }
+ ]
+}

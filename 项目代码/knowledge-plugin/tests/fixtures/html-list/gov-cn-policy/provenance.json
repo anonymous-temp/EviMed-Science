@@ -1,0 +1,66 @@
+{
+ "case": "html-list/gov-cn-policy",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:14+00:00",
+ "note": null,
+ "source": {
+  "id": "gov-cn-policy",
+  "name": "中国政府网 最新政策",
+  "homepage": "https://www.gov.cn/zhengce/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "国务院办公厅 中国政府网",
+  "launch_tier": "P0",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "https://www.gov.cn/zhengce/",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.gov.cn"
+   ],
+   "selectors": {
+    "item": "div.item03 div.list li",
+    "title": "a",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 20
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:13+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.gov.cn/zhengce/",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.gov.cn/zhengce/",
+   "headers": {
+    "content-type": "text/html"
+   },
+   "fetched_at": "2026-09-22T09:21:14+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 40196,
+   "sha256": "c32c3c119c3e39c911d68677169fe3c27b2d44727bcd4ee50c9fa8fab19a7972"
+  }
+ ]
+}

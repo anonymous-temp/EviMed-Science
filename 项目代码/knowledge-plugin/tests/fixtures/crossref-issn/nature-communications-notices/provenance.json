@@ -1,0 +1,105 @@
+{
+ "case": "crossref-issn/nature-communications-notices",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:20:46+00:00",
+ "note": "first 3 pages of a 7-day window with >200 works: cursor chain + Author Correction notices",
+ "source": {
+  "id": "j-2041-1723",
+  "name": "自然-通讯",
+  "homepage": "http://www.nature.com/ncomms/index.html",
+  "lane": "evidence",
+  "source_type": "journal",
+  "access": "crossref-issn",
+  "egress": "direct",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "Springer Nature",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "INT",
+  "poll_floor_s": 10800,
+  "poll_ceiling_s": 64800,
+  "config": {
+   "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+   "issn": "2041-1723",
+   "issns": [
+    "2041-1723"
+   ],
+   "cursor_start": "*",
+   "page_size": 100,
+   "max_pages": 5,
+   "lookback_days": 7,
+   "overlap_days": 1,
+   "incremental": true,
+   "allowed_hosts": [
+    "api.crossref.org",
+    "www.nature.com"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:20:34+00:00",
+ "request_budget": 3,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/journals/2041-1723/works?filter=from-created-date:2026-09-15,type:journal-article&sort=created&order=desc&cursor=*&select=DOI,title,created,published,type,update-to,abstract,author,container-title&rows=100",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/journals/2041-1723/works?filter=from-created-date:2026-09-15,type:journal-article&sort=created&order=desc&cursor=*&select=DOI,title,created,published,type,update-to,abstract,author,container-title&rows=100",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:20:34+00:00",
+   "file": "01.json.gz",
+   "gzip": true,
+   "bytes": 326872,
+   "sha256": "a8798f80e1ccf39d41ccdc3f432be70a8b3642da72069c7e5396a75539f02f23"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/journals/2041-1723/works?filter=from-created-date:2026-09-15,type:journal-article&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&rows=100&cursor=MTc4OTY1NDQwMDAwMCwxMC4xMDM4JTJGczQxNDY3LTAyNi03NzgwNS01",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/journals/2041-1723/works?filter=from-created-date:2026-09-15,type:journal-article&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&rows=100&cursor=MTc4OTY1NDQwMDAwMCwxMC4xMDM4JTJGczQxNDY3LTAyNi03NzgwNS01",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:20:37+00:00",
+   "file": "02.json.gz",
+   "gzip": true,
+   "bytes": 295738,
+   "sha256": "bd5d33e7369dc23a783cba29861b6c248efaad999503490b2a05101b1698730c"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/journals/2041-1723/works?filter=from-created-date:2026-09-15,type:journal-article&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&rows=100&cursor=MTc4OTQ3MjA4MjAwMCwxMC4xMDM4JTJGczQxNDY3LTAyNi03Nzc1Ny13",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/journals/2041-1723/works?filter=from-created-date:2026-09-15,type:journal-article&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&rows=100&cursor=MTc4OTQ3MjA4MjAwMCwxMC4xMDM4JTJGczQxNDY3LTAyNi03Nzc1Ny13",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:20:42+00:00",
+   "file": "03.json",
+   "gzip": false,
+   "bytes": 35316,
+   "sha256": "0d03e05131b50abe3f3284f90ab0c7724102c61da5bb912735cc331f893fb22f"
+  }
+ ]
+}

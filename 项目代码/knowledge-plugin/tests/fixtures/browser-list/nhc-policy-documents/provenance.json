@@ -1,0 +1,95 @@
+{
+ "case": "browser-list/nhc-policy-documents",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:26:09+00:00",
+ "note": null,
+ "source": {
+  "id": "nhc-policy-documents",
+  "name": "国家卫生健康委 政策文件与诊疗规范",
+  "homepage": "https://www.nhc.gov.cn/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "browser-list",
+  "egress": "browser",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "国家卫生健康委员会",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://www.nhc.gov.cn/wjw/gfxwjj/list.shtml",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.nhc.gov.cn"
+   ],
+   "selectors": {
+    "item": "ul.zxxx_list li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span.ml"
+   },
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:25:47+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.nhc.gov.cn/wjw/gfxwjj/list.shtml",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "egress": "browser",
+   "wait_for": "ul.zxxx_list li",
+   "render": "dom",
+   "status": 200,
+   "final_url": "https://www.nhc.gov.cn/wjw/gfxwjj/list.shtml",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T11:25:50+00:00",
+   "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+   "browser_version": "145.0.7632.6",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 22551,
+   "sha256": "17a68367b75902a3e0e0c10b8cf49f70545a89ee7c1bf749f81d0342c63f41b2"
+  }
+ ],
+ "robots": [
+  {
+   "method": "GET",
+   "url": "https://www.nhc.gov.cn/robots.txt",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "egress": "browser",
+   "wait_for": null,
+   "render": "text",
+   "status": 404,
+   "final_url": "https://www.nhc.gov.cn/robots.txt",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T11:25:48+00:00",
+   "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+   "browser_version": "145.0.7632.6",
+   "bytes": 19,
+   "sha256": "cd6c552d454ec0a0cc201ec47834bba196b94685669eb11c34f42a54a653906c",
+   "text": "404 Not Found\nnginx"
+  }
+ ]
+}

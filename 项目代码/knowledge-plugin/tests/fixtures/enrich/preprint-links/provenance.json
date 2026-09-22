@@ -1,0 +1,186 @@
+{
+ "case": "enrich/preprint-links",
+ "recorded_by": "tests/fixtures/record_enrich.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:34:57+00:00",
+ "rows": [
+  {
+   "entry_id": "europepmc-medrxiv-preprints:2195351dcf3fbfbbdef9ebef74339c4e",
+   "revision": 1,
+   "source_id": "europepmc-medrxiv-preprints",
+   "external_key": "PPR:PPR1324244",
+   "identity_key": "doi:10.64898/2026.09.18.26363418",
+   "url": "https://doi.org/10.64898/2026.09.18.26363418",
+   "canonical_url": "https://doi.org/10.64898/2026.09.18.26363418",
+   "doi": "10.64898/2026.09.18.26363418",
+   "pmid": null,
+   "registry_ids": [],
+   "title": "Differential Associations of Postoperative Plasma and Cerebrospinal Fluid Albumin Changes with Delirium Following Non-Cardiac Surgery",
+   "summary": "BACKGROUND: Postoperative increases in cerebrospinal fluid (CSF) to plasma albumin ratio (CPAR), a blood-brain barrier dysfunction marker, have been associated with postoperative delirium (POD) and prolonged hospital stay. However, the contributions of plasma versus CSF albumin changes remain unclear. AIM: To determine whether 24-hour postoperative changes in plasma and CSF albumin are independently associated with POD and hospital length of stay. METHODS: Plasma and CSF albumin concentrations were measured before and 24-hours postoperatively in older non-cardiac surgery patients. Multivariable logistic and negative binomial regression models evaluated associations between albumin changes and POD or hospital length of stay, adjusting for age, baseline cognition, surgery type, and fluid administration. RESULTS: Of 240 patients, 31 (13.3%) developed POD. From before to 24-hours after surgery, both plasma albumin (median 3.95 to 3.43 g/dL, p<0.001) and CSF albumin decreased (median 22.68 to 20.43 mg/dL, p<0.001). Greater plasma albumin decreases (per 0.43 g/dL) were independently associated with POD (OR 2.14, 95% CI 1.28-3.58; p=0.004) and longer hospital stay (mean ratio 1.44, 95% CI 1.26-1.64; p<0.001). In contrast, CSF albumin changes (per 5.8 mg/dL higher) were not associated with POD (OR 0.97, 95% CI 0.60-1.58; p=0.91) but were modestly associated with longer hospital stay (mean ratio 1.17, 95% CI 1.04-1.32; p=0.01). CONCLUSIONS: Plasma and CSF albumin decreased postoperatively, but only plasma decreases were associated with POD. These results suggest that associations between CPAR increases and POD may be due to postoperative plasma albumin decreases and highlight limitations of CPAR as a standalone marker of postoperative BBB dysfunction.",
+   "lang": "en",
+   "published_at": "2026-09-21T00:00:00+00:00",
+   "facts": {
+    "journal": "medRxiv",
+    "author_count": 21
+   },
+   "first_seen_at": "2026-09-22T09:22:51+00:00",
+   "source_access": "europepmc",
+   "source_egress": "direct",
+   "source_type": "preprint",
+   "source_config": {
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22medRxiv%22)%20AND%20FIRST_IDATE:%5B{since:%Y-%m-%d}%20TO%20{today:%Y-%m-%d}%5D&format=json&resultType=core&pageSize=100&cursorMark={cursor}",
+    "cursor_start": "*",
+    "page_size": 50,
+    "max_pages": 5,
+    "lookback_days": 7,
+    "overlap_days": 1,
+    "incremental": true,
+    "allowed_hosts": [
+     "europepmc.org",
+     "www.ebi.ac.uk"
+    ]
+   },
+   "attempts": 0
+  },
+  {
+   "entry_id": "europepmc-medrxiv-preprints:2195351dcf3fbfbbdef9ebef74339c4e",
+   "revision": 1,
+   "source_id": "europepmc-medrxiv-preprints",
+   "external_key": "PPR:PPR1308905",
+   "identity_key": "doi:10.64898/2026.09.18.26363418",
+   "url": "https://doi.org/10.64898/2026.08.25.26361362",
+   "canonical_url": "https://doi.org/10.64898/2026.09.18.26363418",
+   "doi": "10.64898/2026.08.25.26361362",
+   "pmid": null,
+   "registry_ids": [],
+   "title": "medRxiv preprint PPR1308905",
+   "summary": null,
+   "lang": "en",
+   "published_at": "2026-09-21T00:00:00+00:00",
+   "facts": {
+    "journal": "medRxiv",
+    "author_count": 21
+   },
+   "first_seen_at": "2026-09-22T09:22:51+00:00",
+   "source_access": "europepmc",
+   "source_egress": "direct",
+   "source_type": "preprint",
+   "source_config": {
+    "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22medRxiv%22)%20AND%20FIRST_IDATE:%5B{since:%Y-%m-%d}%20TO%20{today:%Y-%m-%d}%5D&format=json&resultType=core&pageSize=100&cursorMark={cursor}",
+    "cursor_start": "*",
+    "page_size": 50,
+    "max_pages": 5,
+    "lookback_days": 7,
+    "overlap_days": 1,
+    "incremental": true,
+    "allowed_hosts": [
+     "europepmc.org",
+     "www.ebi.ac.uk"
+    ]
+   },
+   "attempts": 0
+  }
+ ],
+ "results_at_recording": [
+  {
+   "status": "available",
+   "text_kind": "abstract",
+   "fetched_from": "europepmc",
+   "enrichment_keys": [
+    "authors_short",
+    "journal",
+    "oa_pdf_url",
+    "open_access",
+    "publication_types"
+   ],
+   "notes": []
+  },
+  {
+   "status": "available",
+   "text_kind": "abstract",
+   "fetched_from": "europepmc",
+   "enrichment_keys": [
+    "authors_short",
+    "journal",
+    "open_access",
+    "publication_types",
+    "published_version_doi"
+   ],
+   "notes": []
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.64898%2F2026.08.25.26361362%22%20OR%20DOI%3A%2210.64898%2F2026.09.18.26363418%22&format=json&resultType=core&pageSize=25",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.64898%2F2026.08.25.26361362%22%20OR%20DOI%3A%2210.64898%2F2026.09.18.26363418%22&format=json&resultType=core&pageSize=25",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:34:04+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 9926,
+   "sha256": "685d089df7b61482c108b74bcee5cd87cd27b2212a127acef8981e5a4dbd7d98"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.unpaywall.org/v2/10.64898/2026.09.18.26363418",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.unpaywall.org/v2/10.64898/2026.09.18.26363418",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:34:26+00:00",
+   "file": "02.json",
+   "gzip": false,
+   "bytes": 5822,
+   "sha256": "9728df335aa2ece2126ecac98791d3712128e3433fc09784bd1f67cee3370c73"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A42709691%20AND%20SRC%3AMED&format=json&resultType=core&pageSize=1",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A42709691%20AND%20SRC%3AMED&format=json&resultType=core&pageSize=1",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:34:27+00:00",
+   "file": "03.json",
+   "gzip": false,
+   "bytes": 7988,
+   "sha256": "4879c2a83459d91bb0d95bb15f5e4221be703d2ba18431fb36fe975b7639a382"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.unpaywall.org/v2/10.64898/2026.08.25.26361362",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.unpaywall.org/v2/10.64898/2026.08.25.26361362",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:34:56+00:00",
+   "file": "04.json",
+   "gzip": false,
+   "bytes": 2438,
+   "sha256": "b389b8f931f78f04b4e873d366bd23db80d370060ddfc6f04e4816ef175f4eeb"
+  }
+ ]
+}

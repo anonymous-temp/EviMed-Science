@@ -1,0 +1,63 @@
+{
+ "case": "rss/zgyxzz-undated",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:22:32+00:00",
+ "note": null,
+ "source": {
+  "id": "zgyxzz-pharm",
+  "name": "中国药学杂志",
+  "homepage": "http://journal11.magtechjournal.com/Jwk_zgyxzz/CN/volumn/current.shtml",
+  "lane": "evidence",
+  "source_type": "journal",
+  "access": "rss",
+  "egress": "direct",
+  "authority": 3,
+  "safety_feed": false,
+  "owner_entity": "中国药学会",
+  "launch_tier": "P0",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 10800,
+  "poll_ceiling_s": 64800,
+  "config": {
+   "url": "http://journal11.magtechjournal.com/Jwk_zgyxzz/CN/rss_dqml_1001-2494.xml",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "journal11.magtechjournal.com"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:22:30+00:00",
+ "request_budget": 1,
+ "parse_notes": [
+  "feed_bozo"
+ ],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "http://journal11.magtechjournal.com/Jwk_zgyxzz/CN/rss_dqml_1001-2494.xml",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://journal11.magtechjournal.com/Jwk_zgyxzz/CN/rss_dqml_1001-2494.xml",
+   "headers": {
+    "content-type": "text/html;charset=UTF-8",
+    "etag": "W/\"18959-1701322253868\"",
+    "last-modified": "Thu, 30 Nov 2023 05:30:53 GMT"
+   },
+   "fetched_at": "2026-09-22T09:22:31+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 18959,
+   "sha256": "f450616d1323e198bd2dbafe0c4a3c87f97d609c3fdd83695eddb81015b34759"
+  }
+ ]
+}

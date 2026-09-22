@@ -1,0 +1,96 @@
+{
+ "case": "browser-list/nmpa-innovative-approvals",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:25:07+00:00",
+ "note": null,
+ "source": {
+  "id": "nmpa-innovative-approvals",
+  "name": "国家药监局 创新药械审批信息专题",
+  "homepage": "https://www.nmpa.gov.cn/zhuanti/cxylqx/index.html",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "browser-list",
+  "egress": "browser",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "国家药品监督管理局",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://www.nmpa.gov.cn/zhuanti/cxylqx/index.html",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.nmpa.gov.cn"
+   ],
+   "selectors": {
+    "item": "div.text-list li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:25:01+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.nmpa.gov.cn/zhuanti/cxylqx/index.html",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "egress": "browser",
+   "wait_for": "div.text-list li",
+   "render": "dom",
+   "status": 200,
+   "final_url": "https://www.nmpa.gov.cn/zhuanti/cxylqx/index.html",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T11:25:04+00:00",
+   "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+   "browser_version": "145.0.7632.6",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 19462,
+   "sha256": "6fab8a7133c702cdbac9c7d1a660505014f39d1898feee8d79fc2815ca913149"
+  }
+ ],
+ "robots": [
+  {
+   "method": "GET",
+   "url": "https://www.nmpa.gov.cn/robots.txt",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "egress": "browser",
+   "wait_for": null,
+   "render": "text",
+   "status": 404,
+   "final_url": "https://www.nmpa.gov.cn/robots.txt",
+   "headers": {
+    "content-type": "text/html",
+    "etag": "\"655590bb-e36\""
+   },
+   "fetched_at": "2026-09-22T11:25:01+00:00",
+   "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+   "browser_version": "145.0.7632.6",
+   "bytes": 156,
+   "sha256": "f46b2eb8d881c6baaa3c3ba00826e50349af88705c3fada96cc4f08013e628d3",
+   "text": "国家药品监督管理局网站地址已变更为\nhttps://www.nmpa.gov.cn/\n请您访问新的地址，谢谢！\n\n3秒后自动跳转首页 \n\n\n返回首页"
+  }
+ ]
+}

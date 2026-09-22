@@ -1,0 +1,68 @@
+{
+ "case": "crossref-issn/select-refused",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:20:47+00:00",
+ "note": "negative case: select=subtype on the journal route (Crossref answers 400 select-not-available)",
+ "tries": 1,
+ "source": {
+  "id": "j-0028-4793",
+  "name": "新英格兰医学杂志 NEJM",
+  "homepage": null,
+  "lane": "evidence",
+  "source_type": "journal",
+  "access": "crossref-issn",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "Massachusetts Medical Society",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "INT",
+  "poll_floor_s": 10800,
+  "poll_ceiling_s": 64800,
+  "config": {
+   "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+   "issn": "0028-4793",
+   "issns": [
+    "0028-4793",
+    "1533-4406"
+   ],
+   "cursor_start": "*",
+   "page_size": 100,
+   "max_pages": 5,
+   "lookback_days": 7,
+   "overlap_days": 1,
+   "incremental": true,
+   "allowed_hosts": [
+    "api.crossref.org"
+   ]
+  }
+ },
+ "state": null,
+ "now": "2026-09-22T09:20:47+00:00",
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/journals/0028-4793/works?filter=from-created-date:2026-09-15,type:journal-article&rows=5&select=DOI,title,subtype",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 400,
+   "final_url": "https://api.crossref.org/journals/0028-4793/works?filter=from-created-date:2026-09-15,type:journal-article&rows=5&select=DOI,title,subtype",
+   "headers": {
+    "content-type": "application/json;charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T09:20:46+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 897,
+   "sha256": "23e8cec22c35d8fc87758887609186809bde51c2b3dce235fffb7f04f1517904",
+   "error": {
+    "outcome": "http-error",
+    "detail": "http_400"
+   }
+  }
+ ]
+}

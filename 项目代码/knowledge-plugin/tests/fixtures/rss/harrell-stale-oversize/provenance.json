@@ -1,0 +1,60 @@
+{
+ "case": "rss/harrell-stale-oversize",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:22:26+00:00",
+ "note": null,
+ "source": {
+  "id": "statistical-thinking-harrell",
+  "name": "Statistical Thinking（Frank Harrell）",
+  "homepage": "https://www.fharrell.com/",
+  "lane": "research",
+  "source_type": "media",
+  "access": "rss",
+  "egress": "direct",
+  "authority": 3,
+  "safety_feed": false,
+  "owner_entity": "Frank E. Harrell Jr., Vanderbilt University",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 3600,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://www.fharrell.com/index.xml",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.fharrell.com"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:22:20+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.fharrell.com/index.xml",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.fharrell.com/index.xml",
+   "headers": {
+    "content-type": "application/xml",
+    "etag": "\"d275a63119cd157e22a42a252abc38ef-ssl-df\""
+   },
+   "fetched_at": "2026-09-22T09:22:21+00:00",
+   "file": "01.xml.gz",
+   "gzip": true,
+   "bytes": 2295573,
+   "sha256": "9ef7b50bf2e46fff481abda7fe97861622a1ea78881bc1ab940d2b4c9a44155c"
+  }
+ ]
+}

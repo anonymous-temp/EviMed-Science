@@ -1,0 +1,96 @@
+{
+ "case": "enrich/evimed-journal-facts",
+ "recorded_by": "tests/fixtures/record_enrich.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:06:00+00:00",
+ "asked": [
+  {
+   "title": "A systematic review of Mendelian randomization evidence on alcohol-related phenotypes and multiple human diseases.",
+   "journal": "Drug and alcohol dependence"
+  },
+  {
+   "title": "传承雪域藏医药经典名方精华，创新驱动民族药现代化高质量发展",
+   "journal": "中国现代应用药学"
+  },
+  {
+   "title": "Trial of a Maternal Diet Rich in Eggs and Peanuts to Reduce Infant Allergy.",
+   "journal": "The New England journal of medicine"
+  }
+ ],
+ "answers_at_recording": [
+  {},
+  {},
+  {
+   "impact_factor": 78.5,
+   "core_journal_tags": [
+    "MEDICINE, GENERAL & INTERNAL - SCIE(Q1)"
+   ]
+  }
+ ],
+ "notes_at_recording": [
+  "evimed_literature_no_match",
+  "evimed_literature_no_match"
+ ],
+ "exchanges": [
+  {
+   "method": "POST",
+   "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide",
+   "api": true,
+   "conditional": false,
+   "request_body": "{\"query\": \"A systematic review of Mendelian randomization evidence on alcohol-related phenotypes and multiple human diseases.\", \"type\": \"literature\", \"count\": 10}",
+   "request_headers": {
+    "Content-Type": "application/json"
+   },
+   "status": 200,
+   "final_url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T11:05:49+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 28997,
+   "sha256": "5191a6232a492de4666d4184e2213071751e599b9d9ceae15e1556f14c681863"
+  },
+  {
+   "method": "POST",
+   "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide",
+   "api": true,
+   "conditional": false,
+   "request_body": "{\"query\": \"传承雪域藏医药经典名方精华，创新驱动民族药现代化高质量发展\", \"type\": \"literature\", \"count\": 10}",
+   "request_headers": {
+    "Content-Type": "application/json"
+   },
+   "status": 200,
+   "final_url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T11:05:53+00:00",
+   "file": "02.json",
+   "gzip": false,
+   "bytes": 507,
+   "sha256": "13a6e841479f319a675533c72456f8df697d3ef344c54cc57c96ee0eace30949"
+  },
+  {
+   "method": "POST",
+   "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide",
+   "api": true,
+   "conditional": false,
+   "request_body": "{\"query\": \"Trial of a Maternal Diet Rich in Eggs and Peanuts to Reduce Infant Allergy.\", \"type\": \"literature\", \"count\": 10}",
+   "request_headers": {
+    "Content-Type": "application/json"
+   },
+   "status": 200,
+   "final_url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T11:05:56+00:00",
+   "file": "03.json",
+   "gzip": false,
+   "bytes": 27113,
+   "sha256": "baf5b8d7f98fe9b5bbe58c399b8c3bc2f8064231aa2f0545d08a6802ebe29c9b"
+  }
+ ]
+}

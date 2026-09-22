@@ -1,0 +1,69 @@
+{
+ "case": "json-api/openfda-drugsfda",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:49+00:00",
+ "note": "first page only (the chain continues by skip)",
+ "source": {
+  "id": "openfda-drugsfda-api",
+  "name": "openFDA Drugs@FDA 审批数据库 API",
+  "homepage": "https://open.fda.gov/apis/drug/drugsfda/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "U.S. Food and Drug Administration",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 86400,
+  "config": {
+   "url": "https://api.fda.gov/drug/drugsfda.json?search=submissions.submission_status_date:%5B{since:%Y%m%d}+TO+{today:%Y%m%d}%5D&limit=100&sort=submissions.submission_status_date:desc",
+   "family": "openfda-drugsfda",
+   "date_field": "submissions.submission_status_date",
+   "date_format": "%Y%m%d",
+   "id_field": "application_number",
+   "page_size": 100,
+   "max_pages": 3,
+   "lookback_days": 30,
+   "overlap_days": 1,
+   "incremental": false,
+   "allowed_hosts": [
+    "api.fda.gov",
+    "open.fda.gov"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:48+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://api.fda.gov/drug/drugsfda.json?search=submissions.submission_status_date:%5B20260823+TO+20260922%5D&limit=100&sort=submissions.submission_status_date:desc",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.fda.gov/drug/drugsfda.json?search=submissions.submission_status_date:%5B20260823+TO+20260922%5D&limit=100&sort=submissions.submission_status_date:desc",
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "etag": "W/\"8c4c1-Dj+dikWXvYAyIGPnO9eY47ute3M\""
+   },
+   "fetched_at": "2026-09-22T09:21:48+00:00",
+   "file": "01.json.gz",
+   "gzip": true,
+   "bytes": 574657,
+   "sha256": "39f1c76c742d11cf6e40233e9afd630d4df13034e9c9c5cca66ca5df80d8beb2"
+  }
+ ]
+}

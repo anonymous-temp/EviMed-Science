@@ -1,0 +1,137 @@
+{
+ "case": "eutils-query/mendelian-randomization-backward-pages",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:02+00:00",
+ "note": null,
+ "source": {
+  "id": "pubmed-mendelian-randomization",
+  "name": "PubMed 检索流 · 孟德尔随机化",
+  "homepage": "https://pubmed.ncbi.nlm.nih.gov/",
+  "lane": "evidence",
+  "source_type": "journal",
+  "access": "eutils-query",
+  "egress": "direct",
+  "authority": 3,
+  "safety_feed": false,
+  "owner_entity": "U.S. National Library of Medicine",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 10800,
+  "poll_ceiling_s": 64800,
+  "config": {
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=100&sort=pub%20date&term=(%22mendelian%20randomization%22%5Btiab%5D%20OR%20%22mendelian%20randomisation%22%5Btiab%5D%20OR%20%22Mendelian%20Randomization%20Analysis%22%5Bmh%5D)&datetype=edat&mindate={since:%Y/%m/%d}&maxdate={today:%Y/%m/%d}",
+   "datetype": "edat",
+   "page_size": 25,
+   "max_pages": 6,
+   "lookback_days": 7,
+   "overlap_days": 1,
+   "incremental": true,
+   "allowed_hosts": [
+    "eutils.ncbi.nlm.nih.gov",
+    "pubmed.ncbi.nlm.nih.gov"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:20:51+00:00",
+ "request_budget": 6,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=(%22mendelian%20randomization%22%5Btiab%5D%20OR%20%22mendelian%20randomisation%22%5Btiab%5D%20OR%20%22Mendelian%20Randomization%20Analysis%22%5Bmh%5D)&datetype=edat&mindate=2026/09/15&maxdate=2026/09/22&usehistory=y&retmax=0",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=(%22mendelian%20randomization%22%5Btiab%5D%20OR%20%22mendelian%20randomisation%22%5Btiab%5D%20OR%20%22Mendelian%20Randomization%20Analysis%22%5Bmh%5D)&datetype=edat&mindate=2026/09/15&maxdate=2026/09/22&usehistory=y&retmax=0",
+   "headers": {
+    "content-type": "application/json; charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:20:51+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 399,
+   "sha256": "6c05bfc6fc853c31a6a78acecbcdf2e88950e87ced85174d776b9ee48edd75e6"
+  },
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6ab24873500337a84f0a111b&retstart=75&retmax=15",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6ab24873500337a84f0a111b&retstart=75&retmax=15",
+   "headers": {
+    "content-type": "text/xml; charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:20:53+00:00",
+   "file": "02.xml.gz",
+   "gzip": true,
+   "bytes": 356980,
+   "sha256": "ea4afcdfe68998bb47e2caa5b86187b48af43010402feb86d71617dea4ab576e"
+  },
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6ab24873500337a84f0a111b&retstart=50&retmax=25",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6ab24873500337a84f0a111b&retstart=50&retmax=25",
+   "headers": {
+    "content-type": "text/xml; charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:20:55+00:00",
+   "file": "03.xml.gz",
+   "gzip": true,
+   "bytes": 638020,
+   "sha256": "24bb0509a260fa277cba0ed37fba33790a573bf6ae82bbfa566cd79e9814849c"
+  },
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6ab24873500337a84f0a111b&retstart=25&retmax=25",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6ab24873500337a84f0a111b&retstart=25&retmax=25",
+   "headers": {
+    "content-type": "text/xml; charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:20:59+00:00",
+   "file": "04.xml.gz",
+   "gzip": true,
+   "bytes": 454774,
+   "sha256": "ef2876b63d1805a61a6bd3dfdcef32b1f226d1260a56425aa57362cf5ff83b38"
+  },
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6ab24873500337a84f0a111b&retstart=0&retmax=25",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6ab24873500337a84f0a111b&retstart=0&retmax=25",
+   "headers": {
+    "content-type": "text/xml; charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:21:00+00:00",
+   "file": "05.xml.gz",
+   "gzip": true,
+   "bytes": 462449,
+   "sha256": "bbc5428306e034cb679fa90e4989ba08415f602a8586357e12fb6303b95baa8a"
+  }
+ ]
+}

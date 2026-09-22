@@ -1,0 +1,59 @@
+{
+ "case": "rss/cdc-eid-ahead-of-print",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:22:13+00:00",
+ "note": null,
+ "source": {
+  "id": "cdc-eid-journal",
+  "name": "新发传染病杂志 Emerging Infectious Diseases (CDC EID)",
+  "homepage": "https://wwwnc.cdc.gov/eid/",
+  "lane": "public-health",
+  "source_type": "journal",
+  "access": "rss",
+  "egress": "direct",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "U.S. Centers for Disease Control and Prevention",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "https://wwwnc.cdc.gov/eid/rss/ahead-of-print.xml",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "wwwnc.cdc.gov"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:22:11+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://wwwnc.cdc.gov/eid/rss/ahead-of-print.xml",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://wwwnc.cdc.gov/eid/rss/ahead-of-print.xml",
+   "headers": {
+    "content-type": "text/xml; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T09:22:13+00:00",
+   "file": "01.xml",
+   "gzip": false,
+   "bytes": 15111,
+   "sha256": "8cb7dd2f2c00cbffd55881c7fd41c3172d7a7b05f1f064682fba3317e7b15823"
+  }
+ ]
+}

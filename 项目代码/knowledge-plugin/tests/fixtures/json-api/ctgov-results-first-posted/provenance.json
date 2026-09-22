@@ -1,0 +1,86 @@
+{
+ "case": "json-api/ctgov-results-first-posted",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:40+00:00",
+ "note": null,
+ "source": {
+  "id": "ctgov-results-first-posted",
+  "name": "ClinicalTrials.gov · 首次公布结果的试验",
+  "homepage": "https://clinicaltrials.gov/",
+  "lane": "pipeline",
+  "source_type": "regulator",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "U.S. National Library of Medicine",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 129600,
+  "config": {
+   "url": "https://clinicaltrials.gov/api/v2/studies?filter.advanced=AREA%5BResultsFirstPostDate%5DRANGE%5B{since:%Y-%m-%d},MAX%5D&sort=ResultsFirstPostDate:desc&pageSize=50&format=json&countTotal=true",
+   "family": "ctgov",
+   "date_field": "ResultsFirstPostDate",
+   "trial_event": "results-posted",
+   "page_size": 50,
+   "max_pages": 5,
+   "lookback_days": 7,
+   "overlap_days": 1,
+   "incremental": true,
+   "allowed_hosts": [
+    "clinicaltrials.gov"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:39+00:00",
+ "request_budget": 2,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://clinicaltrials.gov/api/v2/studies?filter.advanced=AREA%5BResultsFirstPostDate%5DRANGE%5B2026-09-15,MAX%5D&sort=ResultsFirstPostDate:desc&pageSize=50&format=json&countTotal=true&fields=NCTId,BriefTitle,OfficialTitle,Acronym,OverallStatus,WhyStopped,Phase,StudyType,LeadSponsorName,StudyFirstPostDate,ResultsFirstPostDate,LastUpdatePostDate,BriefSummary,EnrollmentCount,Condition,InterventionName,HasResults",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://clinicaltrials.gov/api/v2/studies?filter.advanced=AREA%5BResultsFirstPostDate%5DRANGE%5B2026-09-15,MAX%5D&sort=ResultsFirstPostDate:desc&pageSize=50&format=json&countTotal=true&fields=NCTId,BriefTitle,OfficialTitle,Acronym,OverallStatus,WhyStopped,Phase,StudyType,LeadSponsorName,StudyFirstPostDate,ResultsFirstPostDate,LastUpdatePostDate,BriefSummary,EnrollmentCount,Condition,InterventionName,HasResults",
+   "headers": {
+    "content-type": "application/json",
+    "etag": "\"0/0.34.1/mub0ld6w-gzip\""
+   },
+   "fetched_at": "2026-09-22T09:21:39+00:00",
+   "file": "01.json.gz",
+   "gzip": true,
+   "bytes": 77967,
+   "sha256": "978bb60e075a9252b6a8b1a12bd320a7b10926273383c469bc00989a1c2d9473"
+  },
+  {
+   "method": "GET",
+   "url": "https://clinicaltrials.gov/api/v2/studies?filter.advanced=AREA%5BResultsFirstPostDate%5DRANGE%5B2026-09-15,MAX%5D&sort=ResultsFirstPostDate:desc&pageSize=50&format=json&countTotal=true&fields=NCTId,BriefTitle,OfficialTitle,Acronym,OverallStatus,WhyStopped,Phase,StudyType,LeadSponsorName,StudyFirstPostDate,ResultsFirstPostDate,LastUpdatePostDate,BriefSummary,EnrollmentCount,Condition,InterventionName,HasResults&pageToken=ZVNj7o2Elu8o3lpwXomnt-numpOQJJxuYvms2PcamD6SuP08FCfCF_DV99pL1SI",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://clinicaltrials.gov/api/v2/studies?filter.advanced=AREA%5BResultsFirstPostDate%5DRANGE%5B2026-09-15,MAX%5D&sort=ResultsFirstPostDate:desc&pageSize=50&format=json&countTotal=true&fields=NCTId,BriefTitle,OfficialTitle,Acronym,OverallStatus,WhyStopped,Phase,StudyType,LeadSponsorName,StudyFirstPostDate,ResultsFirstPostDate,LastUpdatePostDate,BriefSummary,EnrollmentCount,Condition,InterventionName,HasResults&pageToken=ZVNj7o2Elu8o3lpwXomnt-numpOQJJxuYvms2PcamD6SuP08FCfCF_DV99pL1SI",
+   "headers": {
+    "content-type": "application/json",
+    "etag": "\"0/0.34.1/mub0ld6w-gzip\""
+   },
+   "fetched_at": "2026-09-22T09:21:40+00:00",
+   "file": "02.json",
+   "gzip": false,
+   "bytes": 27298,
+   "sha256": "394a97e7be1bd30e8efdef08015d66cd483b4fa120c4fd171f2042ffc8a6a6f4"
+  }
+ ]
+}

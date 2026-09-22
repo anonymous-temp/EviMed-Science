@@ -1,0 +1,61 @@
+{
+ "case": "json-api/federalregister-fda",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:41+00:00",
+ "note": "not a registry row: the FDA-agency query the P2 relay rows name as endpoint_alt",
+ "source": {
+  "id": "federalregister-fda-documents",
+  "name": "Federal Register · FDA documents",
+  "homepage": null,
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "US Office of the Federal Register",
+  "launch_tier": "P2",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 3600,
+  "poll_ceiling_s": 86400,
+  "config": {
+   "url": "https://www.federalregister.gov/api/v1/documents.json?conditions[agencies][]=food-and-drug-administration&conditions[publication_date][gte]={since:%Y-%m-%d}&order=newest&per_page=20",
+   "family": "federalregister",
+   "lookback_days": 7,
+   "max_pages": 2,
+   "allowed_hosts": [
+    "www.federalregister.gov"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:41+00:00",
+ "request_budget": 2,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.federalregister.gov/api/v1/documents.json?conditions[agencies][]=food-and-drug-administration&conditions[publication_date][gte]=2026-09-15&order=newest&per_page=20",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.federalregister.gov/api/v1/documents.json?conditions[agencies][]=food-and-drug-administration&conditions[publication_date][gte]=2026-09-15&order=newest&per_page=20",
+   "headers": {
+    "content-type": "application/json; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T09:21:41+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 33851,
+   "sha256": "a1d566630ea8064318700975d69c0cfcfd5c24665b410e8b3d36a0b63952932d"
+  }
+ ]
+}

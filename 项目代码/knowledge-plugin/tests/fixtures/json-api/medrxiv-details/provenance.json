@@ -1,0 +1,83 @@
+{
+ "case": "json-api/medrxiv-details",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:48+00:00",
+ "note": null,
+ "source": {
+  "id": "medrxiv-api-details",
+  "name": "medRxiv Details API（按日期窗口全量拉取）",
+  "homepage": "https://api.medrxiv.org/",
+  "lane": "evidence",
+  "source_type": "preprint",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 2,
+  "safety_feed": false,
+  "owner_entity": "medRxiv",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 129600,
+  "config": {
+   "url": "https://api.medrxiv.org/details/medrxiv/{since:%Y-%m-%d}/{today:%Y-%m-%d}/{cursor}/json",
+   "family": "biorxiv",
+   "cursor_start": "0",
+   "page_size": 100,
+   "max_pages": 10,
+   "lookback_days": 7,
+   "overlap_days": 1,
+   "incremental": true,
+   "allowed_hosts": [
+    "api.medrxiv.org"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": "2026-09-21T09:21:44+00:00",
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:44+00:00",
+ "request_budget": 3,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://api.medrxiv.org/details/medrxiv/2026-09-20/2026-09-22/0/json",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.medrxiv.org/details/medrxiv/2026-09-20/2026-09-22/0/json",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:21:44+00:00",
+   "file": "01.json.gz",
+   "gzip": true,
+   "bytes": 271286,
+   "sha256": "e9ebd801923dc34c7c5fbd0def8ee6721625a026d711ee127121d9bbbf985dd0"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.medrxiv.org/details/medrxiv/2026-09-20/2026-09-22/100/json",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.medrxiv.org/details/medrxiv/2026-09-20/2026-09-22/100/json",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:21:47+00:00",
+   "file": "02.json.gz",
+   "gzip": true,
+   "bytes": 104432,
+   "sha256": "a6e89a3c50073fc117721abed949c1913e6a3685897d6779541429bbe71c78bd"
+  }
+ ]
+}

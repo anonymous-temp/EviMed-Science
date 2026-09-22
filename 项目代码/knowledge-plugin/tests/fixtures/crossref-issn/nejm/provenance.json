@@ -1,0 +1,69 @@
+{
+ "case": "crossref-issn/nejm",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:20:00+00:00",
+ "note": null,
+ "source": {
+  "id": "j-0028-4793",
+  "name": "新英格兰医学杂志 NEJM",
+  "homepage": null,
+  "lane": "evidence",
+  "source_type": "journal",
+  "access": "crossref-issn",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "Massachusetts Medical Society",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "INT",
+  "poll_floor_s": 10800,
+  "poll_ceiling_s": 64800,
+  "config": {
+   "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+   "issn": "0028-4793",
+   "issns": [
+    "0028-4793",
+    "1533-4406"
+   ],
+   "cursor_start": "*",
+   "page_size": 100,
+   "max_pages": 5,
+   "lookback_days": 7,
+   "overlap_days": 1,
+   "incremental": true,
+   "allowed_hosts": [
+    "api.crossref.org"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:19:57+00:00",
+ "request_budget": 5,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/journals/0028-4793/works?filter=from-created-date:2026-09-15,type:journal-article&sort=created&order=desc&cursor=*&select=DOI,title,created,published,type,update-to,abstract,author,container-title&rows=100",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/journals/0028-4793/works?filter=from-created-date:2026-09-15,type:journal-article&sort=created&order=desc&cursor=*&select=DOI,title,created,published,type,update-to,abstract,author,container-title&rows=100",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:19:57+00:00",
+   "file": "01.json.gz",
+   "gzip": true,
+   "bytes": 58572,
+   "sha256": "191a1889e46c5d4e6279af3fbca51657af78fa5a1c595354d7db1ed8be0869a3"
+  }
+ ]
+}

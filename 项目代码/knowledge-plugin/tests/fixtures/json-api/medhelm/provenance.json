@@ -1,0 +1,83 @@
+{
+ "case": "json-api/medhelm",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:44+00:00",
+ "note": null,
+ "source": {
+  "id": "stanford-medhelm",
+  "name": "Stanford MedHELM 医学大模型评测",
+  "homepage": "https://crfm.stanford.edu/helm/medhelm/latest/",
+  "lane": "ai",
+  "source_type": "evidence-body",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 3,
+  "safety_feed": false,
+  "owner_entity": "Stanford University",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 86400,
+  "poll_ceiling_s": 259200,
+  "config": {
+   "url": "https://crfm.stanford.edu/helm/medhelm/latest/config.js",
+   "family": "medhelm",
+   "max_pages": 2,
+   "allowed_hosts": [
+    "crfm.stanford.edu",
+    "storage.googleapis.com"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:41+00:00",
+ "request_budget": 2,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://crfm.stanford.edu/helm/medhelm/latest/config.js",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://crfm.stanford.edu/helm/medhelm/latest/config.js",
+   "headers": {
+    "content-type": "application/javascript; charset=utf-8",
+    "last-modified": "Wed, 22 Jul 2026 06:59:34 GMT",
+    "etag": "\"6a606a56-aa\""
+   },
+   "fetched_at": "2026-09-22T09:21:41+00:00",
+   "file": "01.js",
+   "gzip": false,
+   "bytes": 170,
+   "sha256": "bdc097a9d2b790508ef6824e17d06f83b3256d929e66c378871493a0c54c3194"
+  },
+  {
+   "method": "GET",
+   "url": "https://storage.googleapis.com/crfm-helm-public/medhelm/benchmark_output/releases/v4.0.0/summary.json",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://storage.googleapis.com/crfm-helm-public/medhelm/benchmark_output/releases/v4.0.0/summary.json",
+   "headers": {
+    "content-type": "application/json",
+    "last-modified": "Wed, 10 Jun 2026 22:13:25 GMT",
+    "etag": "\"f68c53c37a5b95eb948309c4c67b3fb2\""
+   },
+   "fetched_at": "2026-09-22T09:21:43+00:00",
+   "file": "02.json",
+   "gzip": false,
+   "bytes": 81,
+   "sha256": "a215509b9d8f529b5655783173ea7b311883c013d41310427ccd72f66db4edd1"
+  }
+ ]
+}

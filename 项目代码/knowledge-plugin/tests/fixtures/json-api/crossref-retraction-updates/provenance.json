@@ -1,0 +1,61 @@
+{
+ "case": "json-api/crossref-retraction-updates",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:30+00:00",
+ "note": null,
+ "source": {
+  "id": "crossref-retraction-updates",
+  "name": "Crossref · 撤稿更新流",
+  "homepage": "https://www.crossref.org/",
+  "lane": "research",
+  "source_type": "journal",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 3,
+  "safety_feed": false,
+  "owner_entity": "Crossref",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "INT",
+  "poll_floor_s": 10800,
+  "poll_ceiling_s": 64800,
+  "config": {
+   "url": "https://api.crossref.org/works?filter=update-type%3Aretraction%2Ctype%3Ajournal-article&sort=deposited&order=desc&rows=20",
+   "family": "crossref-works",
+   "max_pages": 3,
+   "allowed_hosts": [
+    "api.crossref.org",
+    "www.crossref.org"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:27+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/works?filter=update-type%3Aretraction%2Ctype%3Ajournal-article&sort=deposited&order=desc&rows=20",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/works?filter=update-type%3Aretraction%2Ctype%3Ajournal-article&sort=deposited&order=desc&rows=20",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:21:27+00:00",
+   "file": "01.json.gz",
+   "gzip": true,
+   "bytes": 126679,
+   "sha256": "968111e73beb80b87946577c2d7d934089a33b6199e4dec81b45d80f6f27b625"
+  }
+ ]
+}

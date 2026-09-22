@@ -1,0 +1,61 @@
+{
+ "case": "json-api/who-disease-outbreak-news",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:22:00+00:00",
+ "note": null,
+ "source": {
+  "id": "who-disease-outbreak-news",
+  "name": "世界卫生组织 疾病暴发新闻 WHO Disease Outbreak News",
+  "homepage": "https://www.who.int/emergencies/disease-outbreak-news",
+  "lane": "public-health",
+  "source_type": "regulator",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "World Health Organization",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "INT",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "https://www.who.int/api/news/diseaseoutbreaknews?$orderby=PublicationDateAndTime%20desc&$top=20",
+   "family": "who-odata",
+   "max_pages": 3,
+   "link_base": "https://www.who.int",
+   "allowed_hosts": [
+    "www.who.int"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:59+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.who.int/api/news/diseaseoutbreaknews?$orderby=PublicationDateAndTime%20desc&$top=20",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.who.int/api/news/diseaseoutbreaknews?$orderby=PublicationDateAndTime%20desc&$top=20",
+   "headers": {
+    "content-type": "application/json; odata.metadata=minimal; odata.streaming=true"
+   },
+   "fetched_at": "2026-09-22T09:21:59+00:00",
+   "file": "01.json.gz",
+   "gzip": true,
+   "bytes": 604509,
+   "sha256": "6a40f7051dd764d8dbc621ba641379e80ec74392835737754b57d41b64fbb745"
+  }
+ ]
+}

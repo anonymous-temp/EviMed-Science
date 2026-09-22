@@ -1,0 +1,68 @@
+{
+ "case": "json-api/openfda-shortages",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:55+00:00",
+ "note": null,
+ "source": {
+  "id": "openfda-drug-shortages-api",
+  "name": "美国FDA 药品短缺（openFDA shortages）API",
+  "homepage": "https://open.fda.gov/apis/drug/shortages/",
+  "lane": "safety",
+  "source_type": "regulator",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "U.S. Food and Drug Administration",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 86400,
+  "config": {
+   "url": "https://api.fda.gov/drug/shortages.json?sort=update_date:desc&limit=100",
+   "family": "openfda-shortages",
+   "date_field": "update_date",
+   "date_format": "%m/%d/%Y",
+   "page_size": 100,
+   "max_pages": 1,
+   "allowed_hosts": [
+    "api.fda.gov",
+    "open.fda.gov"
+   ],
+   "incremental": false
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:54+00:00",
+ "request_budget": 1,
+ "parse_notes": [
+  "openfda_shortages_outside_window=99"
+ ],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://api.fda.gov/drug/shortages.json?sort=update_date:desc&limit=100",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.fda.gov/drug/shortages.json?sort=update_date:desc&limit=100",
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "etag": "W/\"2e617-9V948V6dz4zdcXQ6GMrGmb8VCUs\""
+   },
+   "fetched_at": "2026-09-22T09:21:54+00:00",
+   "file": "01.json.gz",
+   "gzip": true,
+   "bytes": 189975,
+   "sha256": "b70e98ee4b3fe17e8492ad7a1105ab513944817eb5c75526bdbf65250daf4958"
+  }
+ ]
+}

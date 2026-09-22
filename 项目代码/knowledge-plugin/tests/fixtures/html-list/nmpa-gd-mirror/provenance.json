@@ -1,0 +1,66 @@
+{
+ "case": "html-list/nmpa-gd-mirror",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:32:25+00:00",
+ "note": null,
+ "source": {
+  "id": "nmpa-gd-mirror",
+  "name": "广东省药监局 通知公告（NMPA 转载镜像）",
+  "homepage": "https://mpa.gd.gov.cn/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "广东省药品监督管理局",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "https://mpa.gd.gov.cn/xwdt/tzgg/index.html",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "mpa.gd.gov.cn"
+   ],
+   "selectors": {
+    "item": "ul.infoList li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span.time"
+   },
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:32:21+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://mpa.gd.gov.cn/xwdt/tzgg/index.html",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://mpa.gd.gov.cn/xwdt/tzgg/index.html",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T11:32:23+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 32194,
+   "sha256": "2017390e2a8b0872c2bec01144803436e9c900063959e923f1768c7ffb73d029"
+  }
+ ]
+}

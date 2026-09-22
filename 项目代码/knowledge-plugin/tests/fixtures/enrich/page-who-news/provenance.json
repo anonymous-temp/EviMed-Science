@@ -1,0 +1,69 @@
+{
+ "case": "enrich/page-who-news",
+ "recorded_by": "tests/fixtures/record_enrich.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:34:59+00:00",
+ "rows": [
+  {
+   "entry_id": "who-news-api:89af6f3fea416d271eddd445f3642c7f",
+   "revision": 1,
+   "source_id": "who-news-api",
+   "external_key": "d8ded62d-c7b7-4de1-b3f8-1c546ad22234",
+   "identity_key": null,
+   "url": "https://www.who.int/news/item/21-09-2026-who-welcomes-strong-health-commitments-at-the-2026-brics-summit",
+   "canonical_url": "https://www.who.int/news/item/21-09-2026-who-welcomes-strong-health-commitments-at-the-2026-brics-summit",
+   "doi": null,
+   "pmid": null,
+   "registry_ids": [],
+   "title": "WHO welcomes strong health commitments at the 2026 BRICS Summit",
+   "summary": null,
+   "lang": "en",
+   "published_at": "2026-09-21T16:00:00+00:00",
+   "facts": {},
+   "first_seen_at": "2026-09-22T09:22:00+00:00",
+   "source_access": "json-api",
+   "source_egress": "direct",
+   "source_type": "regulator",
+   "source_config": {
+    "url": "https://www.who.int/api/news/newsitems?$orderby=PublicationDateAndTime%20desc&$top=20",
+    "family": "who-odata",
+    "max_pages": 3,
+    "link_base": "https://www.who.int",
+    "allowed_hosts": [
+     "www.who.int"
+    ]
+   },
+   "attempts": 0
+  }
+ ],
+ "results_at_recording": [
+  {
+   "status": "available",
+   "text_kind": "excerpt",
+   "fetched_from": "page",
+   "enrichment_keys": [],
+   "notes": []
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.who.int/news/item/21-09-2026-who-welcomes-strong-health-commitments-at-the-2026-brics-summit",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.who.int/news/item/21-09-2026-who-welcomes-strong-health-commitments-at-the-2026-brics-summit",
+   "headers": {
+    "content-type": "text/html; charset=utf-8",
+    "last-modified": "Mon, 21 Sep 2026 17:04:23 GMT"
+   },
+   "fetched_at": "2026-09-22T09:34:59+00:00",
+   "file": "01.html.gz",
+   "gzip": true,
+   "bytes": 94199,
+   "sha256": "6ef23037cee611d870ef42e6f73e2a4dab1181fdf8ca3c72c068edf9b1105423"
+  }
+ ]
+}

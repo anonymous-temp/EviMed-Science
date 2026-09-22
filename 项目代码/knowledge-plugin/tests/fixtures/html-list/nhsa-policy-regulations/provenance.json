@@ -1,0 +1,70 @@
+{
+ "case": "html-list/nhsa-policy-regulations",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:32:32+00:00",
+ "note": null,
+ "source": {
+  "id": "nhsa-policy-regulations",
+  "name": "国家医保局 政策法规",
+  "homepage": "http://www.nhsa.gov.cn/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "国家医疗保障局",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "http://www.nhsa.gov.cn/col/col104/index.html",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.nhsa.gov.cn"
+   ],
+   "mode": "script-cdata",
+   "selectors": {
+    "item": "li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span:last-child"
+   },
+   "date_regex": "(20\\d{2}-\\d{2}-\\d{2})(?!\\d)",
+   "max_items": 40
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:32:31+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "http://www.nhsa.gov.cn/col/col104/index.html",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "http://www.nhsa.gov.cn/col/col104/index.html",
+   "headers": {
+    "content-type": "text/html",
+    "last-modified": "Tue, 15 Sep 2026 02:01:26 GMT",
+    "etag": "\"9e6a-65b7bed9f2980-gzip\""
+   },
+   "fetched_at": "2026-09-22T11:32:32+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 40554,
+   "sha256": "529edce3ae23d04eeced073478ef24c2c7ed425d84988873a53a00ca1025fdca"
+  }
+ ]
+}

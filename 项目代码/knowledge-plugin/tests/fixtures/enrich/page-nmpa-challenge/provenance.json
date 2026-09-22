@@ -1,0 +1,83 @@
+{
+ "case": "enrich/page-nmpa-challenge",
+ "recorded_by": "tests/fixtures/record_enrich.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:35:02+00:00",
+ "rows": [
+  {
+   "entry_id": "cdr-adr-safety-warnings:8b1ecf479fb87b048709ec7203fa3747",
+   "revision": 1,
+   "source_id": "cdr-adr-safety-warnings",
+   "external_key": "https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypshmshxdgg/20260904163246192.html",
+   "identity_key": null,
+   "url": "https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypshmshxdgg/20260904163246192.html",
+   "canonical_url": "https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypshmshxdgg/20260904163246192.html",
+   "doi": null,
+   "pmid": null,
+   "registry_ids": [],
+   "title": "国家药监局关于修订肌苷注射剂说明书的公告（2026年第87号）",
+   "summary": null,
+   "lang": "zh",
+   "published_at": "2026-09-09T00:00:00+00:00",
+   "facts": {},
+   "first_seen_at": "2026-09-22T09:21:08+00:00",
+   "source_access": "html-list",
+   "source_egress": "direct",
+   "source_type": "regulator",
+   "source_config": {
+    "url": "https://www.cdr-adr.org.cn/drug_1/aqjs_1/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.cdr-adr.org.cn"
+    ],
+    "selectors": {
+     "item": "ul.First_wj_101",
+     "title": "li.liS1 a@title",
+     "link": "li.liS1 a@href",
+     "date": "li.liS2"
+    },
+    "max_items": 30,
+    "link_hosts": [
+     "www.cdr-adr.org.cn",
+     "www.nmpa.gov.cn"
+    ]
+   },
+   "attempts": 0
+  }
+ ],
+ "results_at_recording": [
+  {
+   "status": "unavailable",
+   "text_kind": "none",
+   "fetched_from": null,
+   "enrichment_keys": [],
+   "notes": [
+    "page_challenge:ruishu"
+   ]
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypshmshxdgg/20260904163246192.html",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 412,
+   "final_url": "https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypshmshxdgg/20260904163246192.html",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T09:35:02+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 2674,
+   "sha256": "594b6f92746f5d79dd0a79bd8c4fe193caebf7591b4ecde7bf3dfe4945ff0bb4",
+   "error": {
+    "outcome": "challenge",
+    "detail": "ruishu"
+   }
+  }
+ ]
+}
