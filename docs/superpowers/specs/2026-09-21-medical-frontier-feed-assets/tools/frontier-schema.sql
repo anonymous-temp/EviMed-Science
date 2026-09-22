@@ -1,4 +1,7 @@
--- evimed_frontier: design draft of the frontier-feed schema (2026-09-21).
+-- evimed_frontier: design draft of the frontier-feed schema (2026-09-21; split 2026-09-22).
+-- Collection (registry runtime, fetch log, dedupe memory, raw texts) lives in the knowledge-source plugin's own
+-- database (tools/knowledge-plugin-schema.sql). This schema holds what the platform receives from the plugin and
+-- everything it makes of it: screening, editing, events, dailies, and the reader's own state.
 -- Validated on PostgreSQL 16 + pgvector 0.8 + pg_trgm (see tools/check_schema.sh). In the product this text lives in
 -- apps/server/src/frontierPersistence.mjs and runs the way kbPersistence.mjs does: inside one transaction, behind
 -- pg_advisory_xact_lock(hashtext('evimed-frontier-v1')), every statement idempotent, the two extension-backed
@@ -9,70 +12,44 @@ CREATE SCHEMA IF NOT EXISTS evimed_frontier;
 
 -- ───────────────────────── collection side ─────────────────────────
 
--- Runtime mirror of the registry file. The file is the truth for what a source IS; this table is the truth for
--- what happened to it. A row missing from the file is retired, never deleted (entries keep pointing at it).
+-- Mirror of the plugin's registry (GET /v1/sources), refreshed hourly. Items point at it, the public sources page
+-- reads it, and `enabled` is the platform's own display override. A source the plugin retires stays here, retired.
 CREATE TABLE IF NOT EXISTS evimed_frontier.sources (
-  id                   text PRIMARY KEY CHECK (char_length(id) BETWEEN 1 AND 120),
-  name                 text NOT NULL,
-  lane                 text NOT NULL,
-  source_type          text NOT NULL,
-  access               text NOT NULL,
-  egress               text NOT NULL CHECK (egress IN ('direct', 'browser', 'relay', 'bridge')),  -- the registry's values; 'none' rows are not loaded
-  authority            smallint NOT NULL DEFAULT 2 CHECK (authority BETWEEN 1 AND 5),
-  bypass_scoring       boolean NOT NULL DEFAULT false,          -- official safety-alert feeds only
-  launch_tier          text NOT NULL CHECK (launch_tier IN ('P0', 'P1', 'P2')),
-  registry_sha256      text NOT NULL CHECK (registry_sha256 ~ '^[a-f0-9]{64}$'),
-  enabled              boolean NOT NULL DEFAULT true,            -- operator override; survives a registry reload
-  retired_at           timestamptz(3),
-  poll_interval_s      integer NOT NULL CHECK (poll_interval_s BETWEEN 300 AND 604800),
-  poll_floor_s         integer NOT NULL CHECK (poll_floor_s >= 300),
-  poll_ceiling_s       integer NOT NULL CHECK (poll_ceiling_s <= 604800),
-  next_poll_at         timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
-  lease_owner          text,
-  lease_until          timestamptz(3),
-  etag                 text,
-  last_modified        text,
-  last_content_sha256  text,
-  last_ok_at           timestamptz(3),
-  last_new_entry_at    timestamptz(3),
-  last_error_code      text,
-  consecutive_failures integer NOT NULL DEFAULT 0 CHECK (consecutive_failures >= 0),
-  health               text NOT NULL DEFAULT 'new'
-                       CHECK (health IN ('new', 'healthy', 'degraded', 'unreadable', 'drifted', 'disabled')),
-  entries_7d           integer NOT NULL DEFAULT 0,
-  selected_30d         integer NOT NULL DEFAULT 0,
-  updated_at           timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+  id                 text PRIMARY KEY CHECK (char_length(id) BETWEEN 1 AND 120),
+  name               text NOT NULL,
+  homepage           text,
+  lane               text NOT NULL,                       -- 'mixed' = the screening model decides per item
+  source_type        text NOT NULL,
+  access             text NOT NULL,
+  egress             text NOT NULL,
+  authority          smallint NOT NULL DEFAULT 2 CHECK (authority BETWEEN 1 AND 5),
+  safety_feed        boolean NOT NULL DEFAULT false,      -- official safety-alert feeds only: entries bypass scoring
+  owner_entity       text NOT NULL,                       -- heat counts independent entities, not feeds
+  launch_tier        text NOT NULL,
+  language           text,
+  region             text,
+  enabled            boolean NOT NULL DEFAULT true,       -- platform-side override (hide from readers); the plugin has its own
+  retired_at         timestamptz(3),
+  plugin_health      text NOT NULL DEFAULT 'new',         -- as reported; unknown values are kept verbatim and shown as degraded
+  last_ok_at         timestamptz(3),
+  last_new_entry_at  timestamptz(3),
+  entries_7d         integer NOT NULL DEFAULT 0,
+  selected_30d       integer NOT NULL DEFAULT 0,          -- the platform's own count
+  registry_sha256    text,
+  mirrored_at        timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
--- The collection queue IS this index: due, enabled, not leased. No job row per poll.
-CREATE INDEX IF NOT EXISTS frontier_sources_due_idx
-  ON evimed_frontier.sources (egress, next_poll_at) WHERE enabled AND retired_at IS NULL;
+CREATE INDEX IF NOT EXISTS frontier_sources_lane_idx ON evimed_frontier.sources (lane) WHERE retired_at IS NULL;
 
--- One row per poll. Source health, selector drift and the public sources page read this; kept 14 days.
-CREATE TABLE IF NOT EXISTS evimed_frontier.fetches (
-  id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  source_id      text NOT NULL REFERENCES evimed_frontier.sources(id) ON DELETE CASCADE,
-  fetched_at     timestamptz(3) NOT NULL,
-  egress         text NOT NULL,
-  node           text,
-  http_status    integer,
-  outcome        text NOT NULL CHECK (outcome IN ('ok', 'not-modified', 'empty', 'challenge', 'blocked', 'timeout',
-                   'http-error', 'parse-error', 'robots-denied', 'host-budget', 'too-large')),
-  bytes          integer CHECK (bytes >= 0),
-  duration_ms    integer CHECK (duration_ms >= 0),
-  content_sha256 text,
-  entries_seen   integer NOT NULL DEFAULT 0,
-  entries_new    integer NOT NULL DEFAULT 0,
-  error_detail   text CHECK (char_length(error_detail) <= 500)
-);
-CREATE INDEX IF NOT EXISTS frontier_fetches_source_idx ON evimed_frontier.fetches (source_id, fetched_at DESC);
-CREATE INDEX IF NOT EXISTS frontier_fetches_retention_idx ON evimed_frontier.fetches (fetched_at);
-
--- Every sighting of every thing, as the source gave it. The processing queue is the partial index below.
+-- What the plugin delivered, one row per (entry_id, revision) received, with the platform's processing state. The
+-- processing queue is the partial index below. Rows that produced nothing are purged after 30 days; rows behind a
+-- published item stay (they are the item's provenance).
 CREATE TABLE IF NOT EXISTS evimed_frontier.entries (
   id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  plugin_entry_id text NOT NULL CHECK (char_length(plugin_entry_id) BETWEEN 3 AND 200),
+  plugin_seq      bigint NOT NULL,           -- the cursor position this row came from
+  revision        integer NOT NULL DEFAULT 1,
   source_id       text NOT NULL REFERENCES evimed_frontier.sources(id),
-  external_key    text NOT NULL CHECK (char_length(external_key) BETWEEN 1 AND 512),
-  dedupe_key      text NOT NULL,            -- doi:… | pmid:… | reg:… | wx:<biz>:<mid>:<idx> | url:<sha256 of the canonical url>
+  identity_key    text NOT NULL,             -- doi: | pmid: | wx:<biz>:<mid>:<idx> | reg:<id>:<event>:<date> | fda:<app>:<suppl> | url:<sha256>
   url             text NOT NULL CHECK (char_length(url) <= 2048),
   canonical_url   text NOT NULL CHECK (char_length(canonical_url) <= 2048),
   doi             text,
@@ -80,46 +57,31 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.entries (
   registry_ids    text[] NOT NULL DEFAULT '{}',
   title_raw       text NOT NULL CHECK (char_length(title_raw) BETWEEN 1 AND 1000),
   summary_raw     text CHECK (char_length(summary_raw) <= 20000),
-  extra           jsonb NOT NULL DEFAULT '{}'::jsonb,   -- adapter facts: crossref type, update-to, trial phase, …
+  facts           jsonb NOT NULL DEFAULT '{}'::jsonb,   -- the contract's whitelisted adapter facts, as received
   lang            text NOT NULL DEFAULT 'und',
+  lane_hint       text,
   published_at    timestamptz(3),
   date_precision  text NOT NULL DEFAULT 'instant' CHECK (date_precision IN ('instant', 'day', 'inferred')),
-  first_seen_at   timestamptz(3) NOT NULL,   -- the collector's clock
+  first_seen_at   timestamptz(3) NOT NULL,   -- the plugin's clock
   received_at     timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   content_sha256  text NOT NULL CHECK (content_sha256 ~ '^[a-f0-9]{64}$'),
-  revision        integer NOT NULL DEFAULT 1,
+  backfill        boolean NOT NULL DEFAULT false,
   defects         text[] NOT NULL DEFAULT '{}',
-  state           text NOT NULL DEFAULT 'collected' CHECK (state IN
-                    ('collected', 'held', 'merged', 'screened-out', 'promoted', 'dropped', 'backfill', 'failed')),
+  state           text NOT NULL DEFAULT 'received' CHECK (state IN
+                    ('received', 'held', 'merged', 'screened-out', 'promoted', 'dropped', 'backfill', 'failed')),
   state_reason    text,
   hold_until      timestamptz(3),
   attempts        smallint NOT NULL DEFAULT 0,
   lease_owner     text,
   lease_until     timestamptz(3),
   item_id         bigint,
-  UNIQUE (source_id, external_key)
+  UNIQUE (plugin_entry_id, revision)
 );
 CREATE INDEX IF NOT EXISTS frontier_entries_queue_idx
-  ON evimed_frontier.entries (state, hold_until, id) WHERE state IN ('collected', 'held');
-CREATE INDEX IF NOT EXISTS frontier_entries_dedupe_idx ON evimed_frontier.entries (dedupe_key);
+  ON evimed_frontier.entries (state, hold_until, id) WHERE state IN ('received', 'held');
+CREATE INDEX IF NOT EXISTS frontier_entries_identity_idx ON evimed_frontier.entries (identity_key);
 CREATE INDEX IF NOT EXISTS frontier_entries_retention_idx
   ON evimed_frontier.entries (received_at) WHERE state IN ('screened-out', 'dropped', 'backfill', 'failed');
-
--- What a source has shown us, kept far longer than entries (400 days): without it a 30-day purge makes deep feeds
--- (MMWR back to 2019) and undated items come back as new.
-CREATE TABLE IF NOT EXISTS evimed_frontier.seen_keys (
-  source_id      text NOT NULL,
-  key_sha256     text NOT NULL CHECK (key_sha256 ~ '^[a-f0-9]{64}$'),
-  content_sha256 text,
-  first_seen_at  timestamptz(3) NOT NULL,
-  last_seen_at   timestamptz(3) NOT NULL,
-  PRIMARY KEY (source_id, key_sha256)
-);
-CREATE INDEX IF NOT EXISTS frontier_seen_keys_retention_idx ON evimed_frontier.seen_keys (last_seen_at);
-
--- No edge tables: since 2026-09-22 the overseas sources are read by this same
--- worker through the Tokyo node's TLS proxy (apps/server/src/edgeProxy.mjs), so
--- there is no node identity, no batch and no spool to record.
 
 -- ───────────────────────── content side ─────────────────────────
 
@@ -194,6 +156,9 @@ CREATE INDEX IF NOT EXISTS frontier_items_specialties_idx ON evimed_frontier.ite
 CREATE INDEX IF NOT EXISTS frontier_items_entity_keys_idx ON evimed_frontier.items USING gin (entity_keys);
 CREATE INDEX IF NOT EXISTS frontier_items_lexemes_idx ON evimed_frontier.items USING gin (lexemes);
 CREATE INDEX IF NOT EXISTS frontier_items_event_idx ON evimed_frontier.items (event_id) WHERE event_id IS NOT NULL;
+-- The second time axis (by=published): "what did NEJM publish this week" reads this, the default lists read timeline_at.
+CREATE INDEX IF NOT EXISTS frontier_items_published_idx
+  ON evimed_frontier.items (published_at DESC, id DESC) WHERE state = 'published' AND published_at IS NOT NULL;
 
 -- Every key an item is known by (doi:, pmid:, wx:, url:, reg:<id> for clustering). Dedupe looks an entry's keys up here,
 -- so a PMID-only arrival finds the item first seen by DOI.
@@ -208,6 +173,8 @@ CREATE INDEX IF NOT EXISTS frontier_items_queue_idx
 CREATE INDEX IF NOT EXISTS frontier_items_title_trgm_idx
   ON evimed_frontier.items USING gin ((title_raw || ' ' || coalesce(title_zh, '')) gin_trgm_ops);
 
+-- The platform's own snapshot of what it published from: the plugin purges its copy after 30-90 days, the reader
+-- and the number check need this for ever.
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_texts (
   item_id            bigint PRIMARY KEY REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,
   abstract_raw       text,
@@ -220,7 +187,8 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.item_texts (
   mesh               text[] NOT NULL DEFAULT '{}',
   journal            text,
   authors_short      text,
-  open_access        text                      -- gold | green | bronze | closed | unknown
+  open_access        text,                     -- gold | green | bronze | closed | unknown
+  enrichment         jsonb NOT NULL DEFAULT '{}'::jsonb   -- impact_factor, core_journal_tags, trial_facts, … as the plugin gave them
 );
 
 -- Derived, rebuildable, excluded from the backup. A model change touches this table and nothing else.
@@ -282,15 +250,42 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.events (
   lane            text NOT NULL,
   status          text NOT NULL DEFAULT 'developing' CHECK (status IN ('developing', 'settled')),
   entity_keys     text[] NOT NULL DEFAULT '{}',
-  source_count    integer NOT NULL DEFAULT 1,
+  source_count_72h integer NOT NULL DEFAULT 1,             -- independent owner entities reporting in the last 72 h
+  report_count    integer NOT NULL DEFAULT 1,              -- every report over the event's life
+  entity_count    integer NOT NULL DEFAULT 1,              -- distinct owner entities over the event's life
   has_primary     boolean NOT NULL DEFAULT false,
-  heat            double precision NOT NULL DEFAULT 0,
+  heat            double precision NOT NULL DEFAULT 0,     -- decayed sum (half-life 36 h); no age cut-off, the decay is the window
+  heat_updated_at timestamptz(3),
   first_at        timestamptz(3) NOT NULL,
   last_at         timestamptz(3) NOT NULL,
+  digest_state    text NOT NULL DEFAULT 'none' CHECK (digest_state IN ('none', 'written', 'stale')),  -- written only once on the hot list or with a primary
   digest_revision integer NOT NULL DEFAULT 0,
+  merged_into     bigint REFERENCES evimed_frontier.events(id) ON DELETE SET NULL,  -- the old id keeps resolving: 308 to the survivor
+  merged_at       timestamptz(3),
   updated_at      timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
-CREATE INDEX IF NOT EXISTS frontier_events_recent_idx ON evimed_frontier.events (last_at DESC);
+CREATE INDEX IF NOT EXISTS frontier_events_recent_idx ON evimed_frontier.events (last_at DESC) WHERE merged_into IS NULL;
+CREATE INDEX IF NOT EXISTS frontier_events_hot_idx ON evimed_frontier.events (heat DESC) WHERE merged_into IS NULL AND status = 'developing';
+
+-- Every public id an event has ever had. A merge adds the absorbed event's id here; the event page and the tool answer
+-- the old id with a permanent redirect, so inbox links, stars, Feishu cards and saved drafts never break.
+CREATE TABLE IF NOT EXISTS evimed_frontier.event_aliases (
+  public_id text PRIMARY KEY,
+  event_id  bigint NOT NULL REFERENCES evimed_frontier.events(id) ON DELETE CASCADE
+);
+
+-- Edges between events: the chain a medical story actually follows (signal -> PRAC review -> label change -> withdrawal;
+-- preprint -> publication -> retraction). Flat events cannot show this and it cannot be added cheaply later.
+CREATE TABLE IF NOT EXISTS evimed_frontier.event_links (
+  from_event_id bigint NOT NULL REFERENCES evimed_frontier.events(id) ON DELETE CASCADE,
+  to_event_id   bigint NOT NULL REFERENCES evimed_frontier.events(id) ON DELETE CASCADE,
+  relation      text NOT NULL CHECK (relation IN ('follows', 'supersedes', 'preprint-of', 'retracted-by', 'corrected-by', 'related')),
+  asserted_by   text NOT NULL CHECK (asserted_by IN ('identifier', 'model', 'operator')),
+  linked_at     timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (from_event_id, to_event_id, relation),
+  CHECK (from_event_id <> to_event_id)
+);
+CREATE INDEX IF NOT EXISTS frontier_event_links_to_idx ON evimed_frontier.event_links (to_event_id);
 CREATE INDEX IF NOT EXISTS frontier_events_entity_idx ON evimed_frontier.events USING gin (entity_keys);
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.event_items (
@@ -319,6 +314,8 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.hot_snapshots (
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.dailies (
   day          date PRIMARY KEY,                    -- the Asia/Shanghai day it covers
+  window_start timestamptz(3) NOT NULL,             -- the cut the issue actually used (07:00 the day before …
+  window_end   timestamptz(3) NOT NULL,             -- … to 07:00), stored so an issue can be audited against itself
   lead         jsonb NOT NULL,
   sections     jsonb NOT NULL,
   safety       jsonb NOT NULL DEFAULT '[]'::jsonb,
@@ -327,8 +324,20 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.dailies (
   item_ids     bigint[] NOT NULL,
   model        text NOT NULL,
   cost_cny     numeric(10, 4),
+  generated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   finalized_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
+
+-- Change log for downstream copies: knowledge-base saves, Feishu cards, and any future public feed learn about
+-- withdrawals and corrections from here (a time window cannot express "remove"). Kept 90 days.
+CREATE TABLE IF NOT EXISTS evimed_frontier.item_changes (
+  seq        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  item_id    bigint NOT NULL,
+  op         text NOT NULL CHECK (op IN ('upsert', 'remove')),
+  reason     text NOT NULL,                          -- published | rescored | selected | withdrawn | retracted | corrected
+  changed_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS frontier_item_changes_retention_idx ON evimed_frontier.item_changes (changed_at);
 
 -- View versions (the ETag source), budget state, last daily: a handful of rows.
 CREATE TABLE IF NOT EXISTS evimed_frontier.meta (
