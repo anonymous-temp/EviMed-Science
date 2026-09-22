@@ -26,6 +26,8 @@ const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
 const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ default: m.AccountPage })));
 const RunFilePage = lazy(() => import("./routes/RunFilePage").then((m) => ({ default: m.RunFilePage })));
+const FrontierPage = lazy(() => import("./routes/FrontierPage").then((m) => ({ default: m.FrontierPage })));
+const FrontierEventPage = lazy(() => import("./routes/FrontierEventPage").then((m) => ({ default: m.FrontierEventPage })));
 
 /**
  * One prefix for the workbench, so that everything outside it — the login
@@ -48,6 +50,10 @@ export const routes: RouteObject[] = [
       // the last conversation on arrival, so every plain visit paid for one
       // (2026-09-20 review B §C item 3).
       { path: "chat/:sessionId?", element: <SessionRoute /> },
+      // 「前沿动态」: the feed, and one event of it. Both answer for themselves
+      // when the module is off here — a bookmark gets one sentence, not a 404.
+      { path: "frontier", element: <FrontierPage /> },
+      { path: "frontier/events/:eventId", element: <FrontierEventPage /> },
       // The run ledger page was deleted on 2026-09-20: a run is read in the
       // conversation it happened in. Its address survives because it is in
       // notification mail, in Feishu cards and in people's bookmarks.

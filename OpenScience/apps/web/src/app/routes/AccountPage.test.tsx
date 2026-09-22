@@ -40,6 +40,8 @@ vi.mock("./SettingsPage", () => ({ SettingsPage: () => <div>项目与插件设�
 vi.mock("@/components/settings/PasswordCard", () => ({ PasswordCard: () => <div>登录密码</div> }));
 // The Feishu card has its own test; here only whether its tab exists.
 vi.mock("@/components/settings/FeishuCard", () => ({ FeishuCard: () => <div>飞书机器人</div> }));
+// The daily's switch decides for itself whether it is shown (its own test); here only its place.
+vi.mock("@/components/settings/FrontierDigestCard", () => ({ FrontierDigestCard: () => <div>前沿动态日报</div> }));
 vi.mock("@/lib/imClient", () => ({ fetchImStatus: mocks.fetchImStatus }));
 vi.mock("./OpsPage", () => ({ OpsPage: () => <div>部署运维台</div> }));
 
@@ -98,6 +100,8 @@ describe("AccountPage", () => {
     // No IM module: the phone card says so instead of offering a scan.
     expect(screen.getByText("手机通知")).toBeInTheDocument();
     expect(screen.queryByText("飞书机器人")).not.toBeInTheDocument();
+    // The 「前沿动态」 daily's own switch lives with the other notifications.
+    expect(screen.getByText("前沿动态日报")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "用量与额度" }));
     expect(screen.getByText("本月用量")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "数据源" }));

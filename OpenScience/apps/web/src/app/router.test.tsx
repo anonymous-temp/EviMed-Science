@@ -72,6 +72,11 @@ describe("every address people already have still arrives", () => {
     ["/app/ops", "/app/account?tab=ops"],
     ["/app/chat/session-7", "/app/chat/session-7"],
     ["/app/inbox", "/app/inbox"],
+    // 前沿动态 and one of its events, with the view in the address (a daily
+    // notification links to `?view=daily&day=…`).
+    ["/app/frontier", "/app/frontier"],
+    ["/app/frontier?view=daily&day=2026-09-21", "/app/frontier?view=daily&day=2026-09-21"],
+    ["/app/frontier/events/ev1", "/app/frontier/events/ev1"],
   ])("%s lands on %s", async (from, to) => {
     landOn(from);
     expect(await screen.findByTestId("landed")).toHaveTextContent(new RegExp(`^${to.replace(/[?]/g, "\\?")}$`));
