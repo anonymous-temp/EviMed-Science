@@ -196,3 +196,29 @@ async def test_a_page_that_passed_is_read_even_with_the_vendor_script_still_in_i
         assert (stuck.value.outcome, stuck.value.detail) == ("challenge", "ruishu")
     finally:
         await fetcher.aclose()
+
+
+async def test_text_capture_rides_out_a_navigation_and_otherwise_fails_by_name():
+    """Ruishu's self-reload destroys the execution context under evaluate (production, NMPA's
+    robots.txt, 2026-09-22): the text is captured on the next settled document, and a page
+    that never settles is a named FetchError, never the driver's exception."""
+    from knowledge_plugin.browser import BrowserFetcher
+
+    class Page:
+        def __init__(self, failures):
+            self.failures = failures
+
+        async def wait_for_load_state(self, *_args, **_kwargs):
+            return None
+
+        async def evaluate(self, _script):
+            if self.failures:
+                self.failures -= 1
+                raise RuntimeError("Execution context was destroyed, most likely because of a navigation")
+            return "User-agent: *"
+
+    fetcher = BrowserFetcher("http://127.0.0.1:9", user_agent_suffix="test")
+    assert await fetcher._settled_text(Page(1), "www.nmpa.gov.cn") == "User-agent: *"
+    with pytest.raises(FetchError) as caught:
+        await fetcher._settled_text(Page(5), "www.nmpa.gov.cn")
+    assert (caught.value.outcome, caught.value.detail) == ("http-error", "navigation_interrupted")

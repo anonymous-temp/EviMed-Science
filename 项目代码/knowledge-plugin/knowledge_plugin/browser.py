@@ -171,6 +171,13 @@ class BrowserFetcher:
                     return await self._render_in_context(browser, spec, allowed, wait_for, text)
             except TimeoutError:
                 raise FetchError("timeout", "timeout") from None
+            except FetchError:
+                raise
+            except Exception as error:
+                # Whatever else the driver throws is a failed poll with a name, not an exception that
+                # ends the caller (the production probe died on one, 2026-09-22).
+                log.warning("browser render failed on %s: %s", urlsplit(spec.url).hostname, type(error).__name__)
+                raise FetchError("http-error", "browser_render_failed") from None
 
     async def _render_in_context(self, browser, spec: RequestSpec, allowed: list[str], wait_for: str | None,
                                  text: bool) -> tuple[int, dict, bytes, str]:
@@ -210,8 +217,7 @@ class BrowserFetcher:
                     raise FetchError("http-error", "dns_failed") from None
                 raise FetchError("http-error", "navigation_failed") from None
             if text:
-                await self._settle(page, None)
-                body = (await page.evaluate("document.body ? document.body.innerText : ''")).encode("utf-8")
+                body = (await self._settled_text(page, urlsplit(spec.url).hostname)).encode("utf-8")
                 state = RENDER_NO_SELECTOR
             else:
                 html, found = await self._settled_content(page, wait_for, urlsplit(spec.url).hostname)
@@ -252,6 +258,20 @@ class BrowserFetcher:
         except Exception as error:
             log.debug("load: %s", type(error).__name__)
         return found
+
+    async def _settled_text(self, page, host: str | None) -> str:
+        """The page's visible text once it has settled — the robots.txt of a Ruishu site among them.
+        The same self-reload that ``_settled_content`` rides out destroys the execution context under
+        ``evaluate``; in production (2026-09-22, NMPA's robots.txt) that escaped as an exception and
+        ended the poll. Three tries, then a named failure, never an exception from the driver."""
+        for _ in range(3):
+            await self._settle(page, None)
+            try:
+                return await page.evaluate("document.body ? document.body.innerText : ''")
+            except Exception as error:          # "execution context was destroyed": a navigation won
+                log.debug("text during navigation on %s: %s", host, type(error).__name__)
+                await asyncio.sleep(1.0)
+        raise FetchError("http-error", "navigation_interrupted")
 
     async def _settled_content(self, page, wait_for: str | None, host: str | None) -> tuple[str, bool]:
         """The rendered DOM once it has settled. Ruishu serves a script page first and reloads once
