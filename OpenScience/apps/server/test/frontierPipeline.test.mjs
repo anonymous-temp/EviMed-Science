@@ -167,6 +167,9 @@ test("flags are code's: registry facts, defects, identifiers, affiliations and l
   assert.deepEqual(flags({ source: chinese }), ["china"]);
   assert.deepEqual(flags({ text: { ...text, enrichment: { affiliation_countries: ["US", "CN"] } } }), ["china"], "contract 1.1.0 affiliations");
   assert.deepEqual(flags({ entry: { ...entry, identity_key: "reg:NCT1:registered:2026-09-20", facts: { trial_event: "registered" } } }), ["registry-unpublished"]);
+  // A guideline registration (PREPARE) shares the reg: identity but has no trial
+  // event: it is not "results not published" (production, 2026-09-22).
+  assert.deepEqual(flags({ entry: { ...entry, identity_key: "reg:PREPARE-2026CN123:registered:2026-09-20", facts: {} } }), []);
   assert.deepEqual(flags({ entry: { ...entry, identity_key: "reg:NCT1:results-posted:2026-09-20", facts: { trial_event: "results-posted" } } }), []);
   assert.deepEqual(flags({ entry: { ...entry, identity_key: "reg:NCT1:updated:2026-09-20", facts: { trial_event: "updated" } } }), ["registry-unpublished", "data-updated"]);
   assert.deepEqual(flags({ linkFlags: ["corrected", "retracted"] }), ["retracted", "corrected"], "in the vocabulary's order");
