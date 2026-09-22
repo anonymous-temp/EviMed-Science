@@ -5264,13 +5264,14 @@ export class RuntimeManager {
   /**
    * @param {any} req @param {any} res @param {Record<string, any>} project @param {string} suffix
    * @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void>, uiAssetPrefix?: string | null,
-   *           immutable?: boolean, rebaseDocument?: boolean, maxBodyBytes?: number | null }} [options]
+   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean }} [options]
    *   `uiAssetPrefix` is the project's stable path for build assets the document
    *   is rewritten to reference; `immutable` marks a URL that names its content;
    *   `rebaseDocument: false` serves bytes as they are (an asset route);
-   *   `maxBodyBytes` replaces the JSON ceiling for a request that carries a file.
+   *   `fileBody` says the request carries a file, not an RPC: it is held to
+   *   `maxFileBytes` instead of the JSON ceiling, and never parsed as JSON.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, maxBodyBytes = null } = {}) {
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -5286,11 +5287,11 @@ export class RuntimeManager {
       proxyActive = true;
       if (surface === "ui") this.enforceUiProxyEnabled();
       else this.enforceProxyAllowlist(req, suffix);
-      // `maxBodyBytes`: a caller that forwards a file (the composer's
-      // attachment route) names the file ceiling; everything else is JSON.
-      await bufferProxyRequestBody(req, method, Number(maxBodyBytes) > 0 ? Number(maxBodyBytes) : this.config.maxJsonBytes);
+      // A file (the composer's attachment route) is held to the file ceiling
+      // and passed through as bytes; everything else is JSON.
+      await bufferProxyRequestBody(req, method, fileBody ? Number(this.config.maxFileBytes) : this.config.maxJsonBytes);
       requestBytes = Buffer.isBuffer(req.__openScienceProxyBody) ? req.__openScienceProxyBody.length : requestBytes;
-      await this.enforcePreStartProxyPolicy(req, suffix);
+      await this.enforcePreStartProxyPolicy(req, suffix, { fileBody });
       const noWake = this.noWakeProxyControlResult(project, method, suffix);
       if (noWake) {
         status = noWake.status;
@@ -6133,13 +6134,20 @@ export class RuntimeManager {
     }
   }
 
-  async enforcePreStartProxyPolicy(req, suffix) {
+  /**
+   * @param {any} req @param {string} suffix
+   * @param {{ fileBody?: boolean }} [options] `fileBody`: the body is a file's
+   *   bytes. Every POST was parsed as a JSON RPC here, so the composer's first
+   *   attachment was refused as `invalid_runtime_proxy_payload` (2026-09-22).
+   */
+  async enforcePreStartProxyPolicy(req, suffix, { fileBody = false } = {}) {
     const method = req.method ?? "GET";
     if (method === "POST" && /^\/session\/[^/]+\/shell$/.test(suffix)) {
       if (!this.config.allowDirectShell) {
         throw new HttpError(403, "direct_shell_disabled", "Direct browser shell execution is disabled on the server.");
       }
     }
+    if (fileBody) return;
     const body = validateRuntimeProxyPayload(req, suffix);
     if (method === "POST" && /^\/permission\/[^/]+\/reply$/.test(suffix)) {
       if (body?.reply === "always" && !this.config.allowPersistentApprovals) {

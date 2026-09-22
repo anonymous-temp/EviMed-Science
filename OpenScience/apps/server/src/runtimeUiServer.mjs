@@ -456,9 +456,9 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // content is kept by the browser, across sessions and projects.
       uiAssetPrefix: SHARED_UI_ASSET_PREFIX,
       immutable: isImmutableRuntimeUiAsset(frame.suffix),
-      // A composer attachment is a file, not an RPC: it is held to the
-      // deployment's file ceiling rather than the JSON one.
-      ...(method === RUNTIME_UI_UPLOAD_METHOD ? { maxBodyBytes: Number(config.maxFileBytes) } : {}),
+      // A composer attachment is a file, not an RPC: held to the deployment's
+      // file ceiling rather than the JSON one, and forwarded as bytes.
+      ...(method === RUNTIME_UI_UPLOAD_METHOD ? { fileBody: true } : {}),
     });
     const forwardPrompt = async () => {
       await authorizePromptSession(project, promptBody?.payload);
