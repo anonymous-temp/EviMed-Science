@@ -1479,6 +1479,10 @@ export function frontierMetricFamilies(enabled, snapshot) {
     ]);
     add("edit_first_pass_failures_total", "First answers that failed a check, by the field that failed.", "counter",
       Object.entries(editor.counters.firstPassFailures ?? {}).map(([field, value]) => ({ labels: { field }, value: Number(value) })));
+    add("edit_number_check_total", "First edit answers by whether every number was found in the source (plan §10.5.8's first-pass rate).", "counter", [
+      { labels: { outcome: "first-pass" }, value: Number(editor.counters.numberCheck?.first ?? 0) - Number(editor.counters.numberCheck?.firstFailed ?? 0) },
+      { labels: { outcome: "first-fail" }, value: Number(editor.counters.numberCheck?.firstFailed ?? 0) },
+    ]);
   }
   add("seen_marks_total", "Readers' last-seen marks written, and marks that failed (the push audience reads them).", "counter", [
     { labels: { outcome: "written" }, value: Number(service.seenMarks ?? 0) },
