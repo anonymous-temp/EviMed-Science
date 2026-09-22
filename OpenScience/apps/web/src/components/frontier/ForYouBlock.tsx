@@ -37,12 +37,14 @@ export function ForYouBlock({ forYou }: { forYou: FrontierForYou | null }) {
                 : item.evidenceTypeLabel
                   ? <FrontierChip tone="outline">{item.evidenceTypeLabel}</FrontierChip>
                   : item.sourceTypeLabel && <FrontierChip tone={sourceTypeTone(item.sourceType)}>{item.sourceTypeLabel}</FrontierChip>}
-              <a href={item.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 text-ui text-text hover:underline">
+              {/* A basis, not flex-1 alone: with a long reason the title shrank to one
+                  character a line (2026-09-22); now the reason wraps below it instead. */}
+              <a href={item.url} target="_blank" rel="noopener noreferrer" className="min-w-0 grow basis-64 text-ui text-text hover:underline">
                 {item.title}
               </a>
               {reason.memoryId
-                ? <Link to={`/app/memory?record=${encodeURIComponent(reason.memoryId)}`} className="text-caption text-accent-strong hover:underline">{because}</Link>
-                : <span className="text-caption text-accent-strong">{because}</span>}
+                ? <Link to={`/app/memory?record=${encodeURIComponent(reason.memoryId)}`} className="min-w-0 text-caption text-accent-strong hover:underline">{because}</Link>
+                : <span className="min-w-0 text-caption text-accent-strong">{because}</span>}
             </li>
           );
         })}
