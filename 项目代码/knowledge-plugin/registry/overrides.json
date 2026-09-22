@@ -795,5 +795,11 @@
    "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/clinical-trial"
   },
   "_why_config": "P2: the sponsor fact is only in v1: v2/clinical-trial records have 13 fields and no sponsor (300 of 300 recorded); v1 review/api/clinical-trial records carry primarySponsor (100 of 100) and the registry's own registrationNo, but no interventions. Measured 11:41Z on 肿瘤: v1 and v2 each return 100 of ~600 records of 2026, ranked by relevance, 4 of them registered within 14 days each, only 1 in common — identity (reg:<id>:registered:<date>) and external key are the same for both versions, so switching creates no duplicates (one revision per entry at the switch). Fixture tests/fixtures/evimed-api/chictr-v1. The adapter's default endpoint is v1 now; your row names v2 explicitly, hence this block."
+ },
+ "fda-recalls-safety-alerts": {
+  "safety_feed": false,
+  "_why_safety": "controller 2026-09-22, first production hour: FDA's Recalls, Market Withdrawals & Safety Alerts feed carries foods and cosmetics beside drugs and devices, and pasta, potato-chip and dessert recalls reached readers as red 安全警示 at the top of 精选. The platform makes a regulator item a safety alert when its edit types it safety-notice and files it under 药物安全 (frontierSafetyAlert), which a drug or device recall is and a food recall is not.",
+  "lane": "mixed",
+  "_why_lane": "the same defect, lane side: with lane safety every food recall would be filed under 药物安全; mixed lets the screening model file a food recall under 公共卫生 and a drug or device recall under 药物安全"
  }
 }

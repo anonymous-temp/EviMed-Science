@@ -78,7 +78,11 @@ def test_the_plan_decisions_hold(document):
     assert other["safety_feed"] is False and other["enabled"] and other["poll_floor_s"] == 1800
     assert other["lane"] == "mixed"               # a safety lane would pin its 参比制剂目录 notices to 药物安全
     assert by_id["nmpa-label-revision-announcements"]["safety_feed"] is True
-    assert sum(1 for s in sources if s["safety_feed"]) == 21
+    # production, first hour: FDA's recall feed mixes foods and cosmetics with drugs and devices,
+    # so it is mixed too; 20 pure safety feeds remain
+    recalls = by_id["fda-recalls-safety-alerts"]
+    assert recalls["safety_feed"] is False and recalls["lane"] == "mixed"
+    assert sum(1 for s in sources if s["safety_feed"]) == 20
     assert by_id["evimed-chictr"]["config"]["url"].endswith("/ai-api/review/api/clinical-trial")   # v1: sponsor present
     for sid in ("natcm-notices", "most-tztg", "nmpa-gd-mirror", "csco-news", "gd-pharm-society-notifications", "cntcm-news",
                 "nhsa-policy-regulations", "cdr-adr-notices", "zhongguokexuebao", "chinacdc-notifiable-disease", "china-cdc-news"):
