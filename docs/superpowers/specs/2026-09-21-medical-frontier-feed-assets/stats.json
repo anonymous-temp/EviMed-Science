@@ -1,0 +1,195 @@
+{
+ "total": 753,
+ "tier": {
+  "P0": 267,
+  "P1": 246,
+  "P2": 240
+ },
+ "egress": {
+  "direct": 559,
+  "relay": 67,
+  "browser": 67,
+  "none": 32,
+  "bridge": 28
+ },
+ "access": {
+  "Crossref + PubMed": 155,
+  "订阅源": 176,
+  "开放接口": 56,
+  "列表页": 325,
+  "仅邮件": 3,
+  "需登录": 3,
+  "付费接口": 7,
+  "公众号": 28
+ },
+ "tier_by_group": {
+  "evidence": {
+   "P0": 140,
+   "P2": 7,
+   "P1": 26
+  },
+  "guideline": {
+   "P0": 9,
+   "P2": 27,
+   "P1": 26
+  },
+  "regulatory": {
+   "P2": 33,
+   "P0": 13,
+   "P1": 34
+  },
+  "safety": {
+   "P0": 24,
+   "P2": 15,
+   "P1": 13
+  },
+  "pipeline": {
+   "P0": 12,
+   "P2": 42,
+   "P1": 35
+  },
+  "public-health": {
+   "P0": 9,
+   "P1": 8,
+   "P2": 4
+  },
+  "research": {
+   "P0": 24,
+   "P1": 25,
+   "P2": 18
+  },
+  "ai": {
+   "P0": 31,
+   "P1": 36,
+   "P2": 34
+  },
+  "news": {
+   "P0": 4,
+   "P2": 51,
+   "P1": 19
+  },
+  "conference": {
+   "P2": 9,
+   "P1": 24,
+   "P0": 1
+  }
+ },
+ "egress_by_tier": {
+  "P0": {
+   "direct": 267
+  },
+  "P1": {
+   "direct": 234,
+   "browser": 12
+  },
+  "P2": {
+   "relay": 67,
+   "browser": 55,
+   "direct": 58,
+   "none": 32,
+   "bridge": 28
+  }
+ },
+ "prod_verdict": {
+  "api-ok": 207,
+  "failed": 74,
+  "feed-ok": 128,
+  "blocked": 85,
+  "page-ok": 231,
+  "未探测": 28
+ },
+ "dev_verdict": {
+  "api-ok": 207,
+  "feed-ok": 161,
+  "page-ok": 263,
+  "blocked": 57,
+  "failed": 37,
+  "未探测": 28
+ },
+ "p0_weekly_volume": 6672,
+ "p0_access": {
+  "Crossref + PubMed": 154,
+  "开放接口": 36,
+  "订阅源": 69,
+  "列表页": 8
+ },
+ "blocked_from_prod_ok_from_dev": [
+  "2 Minute Medicine",
+  "Ai2 博客（Semantic Scholar 母体）",
+  "BBC 健康新闻",
+  "BioSpace",
+  "CancerNetwork（《Oncology》期刊网站）",
+  "Cochrane 临床答案 Cochrane Clinical Answers",
+  "DDW 消化疾病周",
+  "Drugs.com 新药批准与FDA警示",
+  "Epistemonikos 证据数据库（L·OVE）",
+  "European Pharmaceutical Review",
+  "Fierce Biotech",
+  "Fierce Healthcare",
+  "Fierce Pharma",
+  "GEN（基因工程与生物技术新闻）",
+  "GINA 哮喘全球倡议",
+  "GlobeNewswire 临床研究主题流",
+  "Google Research 博客",
+  "Ground Truths（Eric Topol）",
+  "ICPE 国际药物流行病学大会（ISPE）",
+  "ISMP Canada 用药安全公报",
+  "Import AI（Jack Clark）",
+  "In the Pipeline（Derek Lowe 专栏）",
+  "LMArena（原 Chatbot Arena）文本榜",
+  "MIT Jameel Clinic（健康 AI）",
+  "MIT News · 人工智能专题",
+  "Mayo Clinic Platform 资源与博客",
+  "Mistral AI 官方新闻",
+  "Open Medical-LLM Leaderboard",
+  "OpenEvidence 公告",
+  "PharmaTimes",
+  "The Conversation 健康板块",
+  "scite 博客",
+  "《健康事务》Health Affairs",
+  "《科学》新闻 Science News / ScienceInsider",
+  "再鼎医药 Zai Lab",
+  "加拿大 健康产品通讯 Health Product InfoWatch",
+  "加拿大 召回与安全警示（健康产品）",
+  "加拿大卫生部 新闻 Health Canada News",
+  "卫报 医学研究",
+  "台湾疾病管制署 新闻稿",
+  "台湾食药署 本署公告 TFDA",
+  "微软官方博客 The Official Microsoft Blog",
+  "梅奥诊所 新闻网络 Mayo Clinic News Network",
+  "澳大利亚PBAC 评审结果 PBAC Outcomes",
+  "澳大利亚TGA 安全警示 Safety alerts",
+  "澳大利亚TGA 新闻 TGA News",
+  "美国CDC 健康警报网络 Health Alert Network (HAN)",
+  "美国CMS 新闻中心 CMS Newsroom",
+  "美国FDA FAERS/AEMS 季度数据文件",
+  "美国FDA FAERS/AEMS 季度潜在风险信号",
+  "美国FDA MedWatch 安全警示 MedWatch Safety Alerts",
+  "美国FDA 人工智能医疗器械清单 AI-Enabled Medical Devices",
+  "美国FDA 医疗器械新闻与活动 CDRH News & Events",
+  "美国FDA 召回与安全警示 Recalls/Safety Alerts",
+  "美国FDA 年度新分子实体批准 Novel Drug Approvals",
+  "美国FDA 指导原则检索 FDA Guidance Documents",
+  "美国FDA 新闻发布 FDA Press Announcements",
+  "美国FDA 生物制品动态 What's New for Biologics (CBER)",
+  "美国FDA 药品动态 What's New: Drugs",
+  "美国FDA 药物安全通讯 Drug Safety Communications",
+  "美国FDA 说明书安全性修订数据库 SrLC",
+  "美国FDA 顾问委员会日程 Advisory Committee Calendar",
+  "美国胃肠病协会 AGA",
+  "美国胃肠病学院 ACG 指南",
+  "英国NICE 已发布指南与质量标准",
+  "英国NICE 征求意见中的指南",
+  "英国NICE 新闻",
+  "英国NICE 新闻 NICE News",
+  "药智新闻",
+  "阿斯利康 AstraZeneca 新闻稿（RSS）"
+ ],
+ "ok_from_prod_not_dev": [
+  "OpenAlex · 医学领域最新论文",
+  "OpenAlex · 近 30 天医学高被引",
+  "上海阳光医药采购网 / 国家组织药品联合采购办公室",
+  "医师报",
+  "澎湃新闻 · 健康/科学"
+ ]
+}

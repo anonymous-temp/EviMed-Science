@@ -1,0 +1,88 @@
+SOURCE RESEARCH PROTOCOL — EviMed 医学前沿动态 (medical frontier feed), 2026-09-21
+
+Context
+  We are building a medical-domain counterpart of AIHOT (aihot.news — an AI news aggregator that polls
+  ~170-210 sources, filters with an LLM and publishes a curated feed, a hot list and a daily digest).
+  Readers: Chinese clinicians, clinical pharmacists and medical researchers (evidence-based medicine,
+  drug evaluation, pharmacovigilance, meta-analysis, TCM). A crawler will poll every source on a
+  schedule, so each source needs ONE machine-pollable endpoint: RSS / Atom / JSON API preferred,
+  an HTML list page as the fallback.
+
+Tools
+  - WebSearch and WebFetch are deferred tools: load them first with ToolSearch, query
+    "select:WebSearch,WebFetch".
+  - Verifier (mandatory for every row):
+      python3 /home/coder/workspace/EviMedScience/docs/superpowers/specs/2026-09-21-medical-frontier-feed-assets/tools/verify_feed.py <url> [<url> ...]
+    It prints one JSON line per URL: http, content_type, kind (rss|atom|jsonfeed|json|html), items,
+    latest, age_days, dated_last_7d, anti_bot, advertised_feeds, verdict
+    (feed-ok | api-ok | page-ok | blocked | failed). Copy that JSON (minus "url") into the row's
+    "verified" field. Several URLs per call is fine.
+
+Method, per source
+  1. Find the publisher's own feed page (search "<name> RSS feed", open the site's RSS/alerts page, or
+     run the verifier on the homepage and read "advertised_feeds").
+  2. Prefer the feed that carries NEW content as it appears (online first / latest articles / news)
+     over a "current issue" feed, when both exist. Put the other one in endpoint_alt.
+  3. Probe it. A row is verified only when verdict is feed-ok, api-ok or page-ok TODAY.
+     - feed answers 200 but items=0, or latest is older than 60 days -> treat as dead, look for the
+       replacement, say so in "note".
+     - blocked (403/412/Cloudflare/瑞数) -> keep the row, keep the blocked verdict, and fill
+       "fallback" with a realistic route (an official mirror feed, a PubMed/E-utilities journal query,
+       an RSSHub route, a cloud-browser render of the list page, an e-mail alert).
+  4. Never guess a URL into the file unprobed. Never log in, solve a captcha or get round a paywall.
+  5. Politeness: at most 1 request per second per host, at most 3 probes per URL.
+
+Hints for publisher URL patterns (hints only — still probe)
+  Nature portfolio      https://www.nature.com/<code>.rss            (nm, nature, nrd, nbt, natmachintell, npjdigitalmed …)
+  JAMA Network          https://jamanetwork.com/rss/site_<n>/<m>.xml (numbers are on each journal's RSS page)
+  BMJ journals          https://www.bmj.com/rss/recent.xml ; https://<journal>.bmj.com/rss/current.xml | ahead.xml
+  Lancet family         index at https://www.thelancet.com/content/rss
+  Cell Press            https://www.cell.com/<journal>/inpress.rss | current.rss
+  ScienceDirect         https://rss.sciencedirect.com/publication/science/<ISSN without dash>
+  Wiley                 https://onlinelibrary.wiley.com/feed/<eISSN without dash>/most-recent
+  Atypon sites          https://<host>/action/showFeed?type=etoc&feed=rss&jc=<code>   (ahajournals, acpjournals, ascopubs, science.org, nejm …)
+  Oxford Academic       https://academic.oup.com/rss/site_<id>/advanceAccess_<id>.xml
+  BMC / SpringerOpen    https://<journal>.biomedcentral.com/articles/most-recent/rss.xml
+  PLOS                  https://journals.plos.org/<journal>/feed/atom
+  Frontiers             https://www.frontiersin.org/journals/<slug>/rss
+  JMIR                  https://<journal>.jmir.org/feed/atom
+  LWW                   https://journals.lww.com/<code>/_layouts/15/OAKS.Journals/feed.aspx?FeedType=MostPopularArticles|CurrentIssue|LatestArticles
+  Universal fallback for any PubMed-indexed journal (JSON, no key needed):
+      https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=50&sort=pub+date&datetype=edat&reldate=14&term="<Journal Title Abbrev>"[jour]
+
+Output — JSON Lines, one object per line, UTF-8, exactly these keys
+  {
+    "id":           "kebab-case-unique",
+    "name":         "display name, Chinese when one is in common use (e.g. 新英格兰医学杂志 NEJM)",
+    "org":          "publisher or owner",
+    "category":     "<given in your task>",
+    "subcategory":  "free short tag, e.g. oncology / regulator-cn / safety-alert",
+    "lang":         "en | zh | multi",
+    "region":       "CN | US | EU | UK | INT | JP | CA | AU | …",
+    "homepage":     "https://…",
+    "access":       "rss | atom | json-api | html-list | email-only | wechat | x | paid-api",
+    "endpoint":     "the exact URL the crawler polls",
+    "endpoint_alt": ["other useful feeds of the same source"],
+    "cadence":      "realtime | daily | weekly | monthly | irregular",
+    "volume_per_week": 0,
+    "signal":       "这条信源提供什么（一句中文，如：原始研究、述评、安全警示、审批公告）",
+    "why":          "对 EviMed 用户的价值（一句中文）",
+    "tier":         "P0 | P1 | P2",
+    "anti_bot":     "none | cloudflare | ruishu | login | paywall | rate-limit | other",
+    "fallback":     "empty string when not needed",
+    "note":         "anything a maintainer must know (dead feed replaced, feed is abstracts only, …)",
+    "verified":     { …the verifier's JSON for `endpoint`, minus "url"… }
+  }
+  tier: P0 = pollable today without a browser or a login, and clearly valuable to the readers above;
+        P1 = valuable but needs HTML parsing, a cloud browser, or has low/irregular volume;
+        P2 = needs a bridge (WeChat / X), a paid API, or a login.
+
+Rules
+  - Write ONLY your own output file under …/2026-09-21-medical-frontier-feed-assets/research/.
+    Touch nothing else in the repository. No git commands. Do not open .env files or anything under
+    a secrets directory.
+  - Quality over quantity: every row probed today; no duplicates inside your file.
+  - Append rows to your file as you go (so an interruption loses nothing). If your file already
+    exists, read it first and continue from there instead of starting over.
+  - Final answer to the caller: at most 15 lines — counts per verdict and per tier, sources with no
+    pollable endpoint, and surprises (dead feeds, walls). Do not paste the file.

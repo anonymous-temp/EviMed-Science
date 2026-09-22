@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<div id="shot" class="dg" style="width:1000px">
+<div class="lane"><h3>生产机在北京腾讯云：同一张登记表，从两个地方各读一遍（2026-09-21 实测）</h3>
+<div class="grid2" style="gap:16px">
+<div class="node"><b>从生产机读得到的</b><span>Crossref、PubMed、Europe PMC、openFDA、ClinicalTrials.gov、Federal Register、medRxiv 接口；JAMA、BMJ、Nature 的订阅源；EMA、英国政府站、WHO 接口；医保局、疾控局、中国政府网、科学网；国内媒体；OpenAI、DeepMind、MIT 科技评论、量子位等 AI 信源。</span></div>
+<div class="node am"><b>从生产机读不到的</b><span>被 Cloudflare 按机房 IP 拒绝：NEJM、柳叶刀、Cell、Science、Wiley、牛津、AHA、ASCO、LWW 等出版商站，Cochrane Library、NICE、NIH、Medscape、Fierce。被判为滥用来源：FDA 官网。网络不可达：X、Substack、纽约时报、HuggingFace。带瑞数脚本质询（在哪都一样）：国家药监局、药审中心、器审中心、卫健委。</span></div>
+</div></div>
+<div class="muted" style="text-align:center;font-size:14px;margin:4px 0 10px">↓ 四个出口，各管一类</div>
+<div class="flow">
+<div class="node hl"><b>① 直连 · 559 个</b><span>生产机直接读。第一梯队 267 个全部在这里。</span></div><div class="arr"> </div>
+<div class="node hl"><b>② 用开放接口替代网站</b><span>155 种期刊不碰出版商网站：Crossref 发现，PubMed 与 Europe PMC 补摘要和文献类型。FDA 用 openFDA 与 Federal Register 替代官网。已计入直连。</span></div><div class="arr"> </div>
+<div class="node vi"><b>③ 无头浏览器 · 67 个</b><span>北京主机上自己的 Chromium 容器，9 月 22 日实测能过瑞数，每页 1–5 秒；AgentBay 只作后备。最要紧的 12 个（国家药监局、药审中心、器审中心、卫健委的各栏目）第二阶段上线，其余带质询或脚本绘制列表的站按需。</span></div><div class="arr"> </div>
+<div class="node am"><b>④ 海外中继 · 67 个</b><span>生产机连不上或被按 IP 拒绝、境外可读的信源，经一个只认登记表地址、带签名的中继读取。第三阶段上线。</span></div>
+</div>
+<div class="note">另有公众号桥接 28 个（第三阶段）、暂无可行读法 32 个（需登录、付费或两地都读不到）。中继是一个可替换的接口：Cloudflare Worker 或一台境外轻量云主机都行，换哪种不影响管线其余部分。</div>
+</div><div class="cap">图 10 · 出口策略：先用接口替代，再用浏览器，最后才用中继（设计稿，数字为实测）</div>

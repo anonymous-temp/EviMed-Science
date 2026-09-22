@@ -1,0 +1,38 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<div id="shot" class="dg">
+  <div class="lane"><h3>① 读 —— 程序的事：定时、守规矩、不漏不重</h3>
+    <div class="flow">
+      <div class="node"><b>信源登记表</b><span>一行一个信源：怎么读、多久读一次、走哪个出口、属于哪一栏。是数据不是代码，运营可以增删。</span></div><div class="arr">→</div>
+      <div class="node"><b>采集</b><span>按信源节奏轮询；带 ETag 只取变化；遵守 robots 和每站限速；四种读法：订阅源、开放接口、列表页、无头浏览器。</span></div><div class="arr">→</div>
+      <div class="node"><b>归一与去重</b><span>抽出 DOI、PMID、注册号、规范链接；同一篇论文从期刊、PubMed、媒体三路进来，只留一条，其余挂为「报道」。</span></div><div class="arr">→</div>
+      <div class="node"><b>补全</b><span>期刊条目用 DOI 去 PubMed / Europe PMC 取摘要和文献类型；公告和新闻取正文。取不到摘要的先挂起，5 天内重试。</span></div>
+    </div>
+  </div>
+  <div class="down">↓</div>
+  <div class="lane"><h3>② 选 —— 模型判断价值，程序复核能复核的部分</h3>
+    <div class="flow">
+      <div class="node vi"><b>初筛（小模型，批量）</b><span>是不是医学或医学相关的 AI？是不是新闻（不是勘误、来信、招聘、广告）？归到哪一栏、哪个专科？约七成在这里被挡下。</span></div><div class="arr">→</div>
+      <div class="node vi"><b>打分 + 写导读</b><span>四个维度：来源权威与证据强度、实践影响、新颖性、与国内读者的相关性。前一项由程序按信源等级和文献类型给出，后三项由模型判断。</span></div><div class="arr">→</div>
+      <div class="node hl"><b>数字复核</b><span>导读里出现的每个数字，必须能在原文摘要或正文里逐字找到。找不到：重写一次；还不行：只出标题，不出导读。</span></div><div class="arr">→</div>
+      <div class="node"><b>精选</b><span>过线才进精选；同一信源每天有上限，八个栏目各有保底；安全警示不看分数，直接进。</span></div>
+    </div>
+  </div>
+  <div class="down">↓</div>
+  <div class="lane"><h3>③ 编 —— 把散的条目编成读者要的三种东西</h3>
+    <div class="flow">
+      <div class="node"><b>事件聚类</b><span>同一件事的论文、公告、新闻稿和媒体报道并成一个事件。先用 DOI、注册号、药名加时间窗做候选，再用向量相似度，拿不准的交给模型裁决。一手来源置顶。</span></div><div class="arr">→</div>
+      <div class="node"><b>热点榜</b><span>近 72 小时 Top 10。热度 = 报道它的独立信源数 × 信源权威 × 时间衰减，中英文都报道的加权。一次发布只占一个位置。</span></div><div class="arr">→</div>
+      <div class="node"><b>日报 / 周报</b><span>每天 07:30（北京时间）定稿：头条、分栏目、安全警示、AI 一分钟。周报每周一出。</span></div><div class="arr">→</div>
+      <div class="node hl"><b>与你相关</b><span>读记忆胶囊里的专科、研究方向和知识库主题，给每个人排出自己的那几条。记忆关掉时，这一段不出现，其余照常。</span></div>
+    </div>
+  </div>
+  <div class="down">↓</div>
+  <div class="flow">
+    <div class="node am"><b>「前沿动态」页面</b><span>精选 · 热点 · 日报 · 全部</span></div><div class="arr"> </div>
+    <div class="node am"><b>收件箱 + 飞书</b><span>每天一条日报；命中你关注药物的安全警示即时提醒</span></div><div class="arr"> </div>
+    <div class="node am"><b>对话里的工具</b><span>问「最近 X 有什么新进展」，模型可以查这个库并引用原文</span></div><div class="arr"> </div>
+    <div class="node am"><b>往下接的动作</b><span>深入研究 · 存入知识库 · 加入主动科研议程</span></div>
+  </div>
+  <div class="note">整条管线全平台只跑一份，和用户数无关；个性化只是在成品上为每个人重新排序（画像每人每天一次小模型调用），不重复调用大模型。</div>
+</div>
+<div class="cap">图 5 · 从信源到读者：读、选、编三段（设计稿）</div>

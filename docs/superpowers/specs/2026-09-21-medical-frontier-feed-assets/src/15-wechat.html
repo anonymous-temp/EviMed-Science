@@ -1,0 +1,42 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<style>
+.wx{display:grid;grid-template-columns:1fr 1.25fr;gap:16px;align-items:start}
+.rt{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.rt .r{display:grid;grid-template-columns:22px 1fr 1.15fr;gap:8px;padding:7px 12px;border-top:1px solid var(--line2);font-size:12.5px;align-items:baseline}
+.rt .r:first-child{border-top:0}
+.rt .r b{font-size:12.5px}.rt .r span{color:var(--t2)}
+.s{font-weight:700;text-align:center}.s.no{color:var(--danger)}.s.mid{color:var(--warn)}.s.yes{color:var(--brand)}
+.stack .node{margin-bottom:8px}.stack .node:last-child{margin-bottom:0}
+.tagline{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.node .tagline span.tg,.tg{display:inline-block;white-space:nowrap;font-size:11.5px;border-radius:6px;padding:1px 7px;background:var(--s1);border:1px solid var(--line);color:var(--t2)}
+</style>
+<div id="shot" class="dg">
+  <div class="wx">
+    <div class="lane" style="margin:0"><h3>2026 年 9 月 21 日实测：哪些路还通</h3>
+      <div class="rt">
+        <div class="r"><i class="s no">✕</i><b>公众号后台的「选择其他公众号」文章列表</b><span>7 月 30 日起关闭：号能搜到，列表为空</span></div>
+        <div class="r"><i class="s no">✕</i><b>搜狗微信·公众号搜索</b><span>「暂无相关的官方认证订阅号」</span></div>
+        <div class="r"><i class="s no">✕</i><b>搜狗微信·文章搜索</b><span>按时间筛选要登录；28 个号近 7 天命中 0 篇</span></div>
+        <div class="r"><i class="s no">✕</i><b>必应 · 360 · 百度 · 平台联网搜索</b><span>忽略 site: / 未找到 / 验证码</span></div>
+        <div class="r"><i class="s no">✕</i><b>RSSHub 公众号路由</b><span>feeddd、uread、data258 已死</span></div>
+        <div class="r"><i class="s mid">△</i><b>微信读书（自己接）</b><span>列表接口时好时坏；兜底只给最新一篇；登录态约一天要续</span></div>
+        <div class="r"><i class="s mid">△</i><b>商业数据接口（极致了）</b><span>可用；当天发文每号每次 0.14 元</span></div>
+        <div class="r"><i class="s yes">✓</i><b>Wechat2RSS 私有部署</b><span>在维护；单号带 400+ 个号，平均 6 小时，带全文</span></div>
+        <div class="r"><i class="s yes">✓</i><b>文章页本身（不登录）</b><span>北京与家用线路都通，链接必须带 chksm</span></div>
+      </div>
+      <div class="note">✕ 拿不到新文章　△ 能用但有明显缺口或按次付费　✓ 采用</div>
+    </div>
+    <div class="lane" style="margin:0;border-color:#c3ece6;background:#f7fdfc"><h3>我们的做法：列表、全文、结构化三层分开</h3>
+      <div class="stack">
+        <div class="node am"><b>① 列表：Wechat2RSS（生产机上一个容器，不开公网端口）</b><span>两个专用微信小号，开通微信读书，互为备份。登记表里的 100 个号由对账任务自动订阅、退订。采集器每 60 分钟读一次每个号的本地订阅源。</span>
+          <div class="tagline"><span class="tg">每年 150 元</span><span class="tg">平均 6 小时</span><span class="tg">风控自动退避</span><span class="tg">告警 → 运营飞书</span></div></div>
+        <div class="node hl"><b>② 全文：从北京直接读文章页</b><span>只读过了初筛的条目（约每天 100 篇、78 MB）；每 3–5 秒一次；遇验证码暂停。原创标记、原文链接、发布地、帖子类型都从这里取。</span></div>
+        <div class="node hl"><b>③ 结构化：我们自己的解析器</b><span>账号键 biz、文章编号、完整链接、标题、摘要、作者、秒级发布时间、正文、图片视频数、文中的 DOI / NCT / 期刊名。去重键 wx:biz:mid:idx。</span></div>
+        <div class="node"><b>④ 接进主管线</b><span>独立来源按运营主体算（丁香园系、医学界系各算一个）；转载计到原作者；带论文 DOI 的解读挂到论文事件下；推广与招聘由初筛模型判断。</span></div>
+        <div class="node"><b>后备</b><span>Wechat2RSS 停摆超过 24 小时 → 商业接口「当天发文」临时顶上（约 14 元/天）；运营方网站的列表页；公开的合集页。</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note" style="margin-top:12px">试跑：100 个号的清单完成，其中 69 个号已拿到账号键并完整结构化了至少一篇真实文章（免登录）；拿到 Wechat2RSS 授权码并扫一次码后，一条命令跑完 100 个号的列表、全文与结构化。</div>
+</div>
+<div class="cap">图 15 · 公众号：九条路的实测结果，以及我们的三层做法（设计稿）</div>

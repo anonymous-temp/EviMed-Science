@@ -1,0 +1,37 @@
+{
+ "sources": 211,
+ "items": 2772,
+ "selected": 80,
+ "by_type": {
+  "X 账号": {
+   "sources": 116,
+   "items": 1479,
+   "selected": 17
+  },
+  "RSS": {
+   "sources": 43,
+   "items": 857,
+   "selected": 24
+  },
+  "微信公众号": {
+   "sources": 17,
+   "items": 46,
+   "selected": 8
+  },
+  "网页": {
+   "sources": 29,
+   "items": 299,
+   "selected": 25
+  },
+  "API": {
+   "sources": 1,
+   "items": 3,
+   "selected": 3
+  },
+  "GitHub / HF": {
+   "sources": 5,
+   "items": 88,
+   "selected": 3
+  }
+ }
+}
