@@ -435,7 +435,7 @@ test("a composer attachment reaches the kernel on both transports, held to the f
   assert.equal(await c.opened, 101);
   const arrived = [];
   f.manager.proxy = async (req, res, _project, suffix, options) => {
-    arrived.push({ path: new URL(req.url, "http://ui.local").pathname, suffix, maxBodyBytes: options?.maxBodyBytes ?? null });
+    arrived.push({ path: new URL(req.url, "http://ui.local").pathname, suffix, fileBody: options?.fileBody ?? false });
     res.writeHead(200, { "content-type": "application/json" });
     res.end('{"ok":true}');
   };
@@ -445,31 +445,54 @@ test("a composer attachment reaches the kernel on both transports, held to the f
   assert.equal(response.status, 200);
   assert.equal(arrived.length, 1);
   assert.equal(arrived[0].suffix, "/api/session/uploadFileBinary");
-  assert.equal(arrived[0].maxBodyBytes, 4096, "a file is held to the file ceiling, not the JSON one");
-  // Every other method keeps the JSON ceiling.
+  assert.equal(arrived[0].fileBody, true, "a file is forwarded as a file, not as an RPC");
+  // Every other method stays an RPC.
   await fetch(`${f.base}/api/session/list`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN }, body: "{}" });
-  assert.equal(arrived[1].maxBodyBytes, null);
+  assert.equal(arrived[1].fileBody, false);
   c.send(open("upload", "fileUploads/upload", { request: { sessionId: "s1" } }));
   assert.deepEqual((await c.next()).value, { reached: "fileUploads/upload" });
 });
 
-test("the proxy refuses an attachment past the file ceiling before a byte reaches the kernel", { timeout: 5000 }, async (t) => {
+test("an attachment's bytes reach the kernel as they are, and one past the file ceiling reaches nothing", { timeout: 5000 }, async (t) => {
+  // Every POST used to be parsed as a JSON RPC before it was forwarded, so the
+  // first file anyone attached was refused as invalid_runtime_proxy_payload
+  // (production, 2026-09-22). A file is bytes: ceilinged, never parsed.
   const f = await fixture(t, { maxJsonBytes: 1024, maxFileBytes: 4096 });
+  const received = [];
+  const kernel = createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      received.push({ path: req.url, type: req.headers["content-type"], body: Buffer.concat(chunks) });
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end('{"ok":true,"receipt":"r1"}');
+    });
+  });
+  await new Promise((resolve) => kernel.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => kernel.close(resolve)));
   const manager = new RuntimeManager(f.config);
   const project = await f.store.requireProject(f.user, "default");
   const started = [];
-  manager.start = async () => { started.push(true); return { url: "http://kernel.local", cookie: "k=1" }; };
+  manager.start = async () => { started.push(true); return { url: `http://127.0.0.1:${kernel.address().port}`, cookie: "k=1" }; };
   const server = createServer((req, res) => {
-    void manager.proxy(req, res, project, "/api/session/uploadFileBinary", { surface: "ui", maxBodyBytes: 4096 })
+    void manager.proxy(req, res, project, "/api/session/uploadFileBinary?sessionId=s1&name=a.docx", { surface: "ui", fileBody: true })
       .catch((error) => { res.writeHead(error.status ?? 500, { "content-type": "application/json" }); res.end(JSON.stringify({ code: error.code })); });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const { port } = server.address();
-  const response = await fetch(`http://127.0.0.1:${port}/`, { method: "POST", body: Buffer.alloc(5000, 1) });
-  assert.equal(response.status, 413);
-  assert.equal((await response.json()).code, "runtime_proxy_body_too_large");
-  assert.deepEqual(started, [], "refused before the runtime is started");
+  // A .docx is a zip: not JSON, and past the JSON ceiling.
+  const docx = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(2000, 7)]);
+  const ok = await fetch(`http://127.0.0.1:${port}/`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: docx });
+  assert.equal(ok.status, 200, await ok.clone().text());
+  assert.equal(received.length, 1);
+  assert.equal(received[0].path, "/api/session/uploadFileBinary?sessionId=s1&name=a.docx");
+  assert.ok(received[0].body.equals(docx), "the bytes arrive unchanged");
+  const tooBig = await fetch(`http://127.0.0.1:${port}/`, { method: "POST", body: Buffer.alloc(5000, 1) });
+  assert.equal(tooBig.status, 413);
+  assert.equal((await tooBig.json()).code, "runtime_proxy_body_too_large");
+  assert.equal(received.length, 1, "refused before a byte reached the kernel");
+  assert.equal(started.length, 1, "and before the runtime was even asked for");
 });
 
 test("HTTP rejects revoked and malformed session cookies without dev-session minting", { timeout: 5000 }, async (t) => {
