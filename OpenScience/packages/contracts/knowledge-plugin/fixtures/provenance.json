@@ -1,21 +1,21 @@
 {
-  "contractVersion": "1.1.0",
+  "contractVersion": "1.2.0",
   "plugin": {
     "name": "evimed-knowledge-plugin",
     "version": "0.1.0",
-    "build": "dev-p1-20260922T1153",
-    "started_at": "2026-09-22T11:53:04.100718Z"
+    "build": "dev-record-20260922T1457",
+    "started_at": "2026-09-22T14:57:25.046598Z"
   },
   "server": "http://127.0.0.1:18080",
   "serverRole": "the live development instance of 项目代码/knowledge-plugin (crawler on, database evimed_knowledge_dev), not a production plugin",
-  "recordedAt": "2026-09-22T12:00:10.544Z",
+  "recordedAt": "2026-09-22T14:57:30.155Z",
   "healthAtRecording": {
-    "latest_seq": 13733,
+    "latest_seq": 13775,
     "sources": {
-      "disabled": 404,
-      "degraded": 8,
-      "healthy": 277,
-      "new": 31
+      "disabled": 406,
+      "degraded": 12,
+      "healthy": 273,
+      "new": 29
     }
   },
   "recorder": "packages/contracts/knowledge-plugin/fixtures/record.mjs",
@@ -32,11 +32,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "428",
+        "content-length": "542",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:28 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:09.548Z"
+      "recordedAt": "2026-09-22T14:57:29.200Z"
     },
     "manifest.json": {
       "request": {
@@ -49,11 +49,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "1553",
+        "content-length": "1570",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:28 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:09.555Z"
+      "recordedAt": "2026-09-22T14:57:29.294Z"
     },
     "sources-page-1.json": {
       "request": {
@@ -66,11 +66,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "6296",
+        "content-length": "6297",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:09.561Z"
+      "recordedAt": "2026-09-22T14:57:29.300Z"
     },
     "sources-page-2.json": {
       "request": {
@@ -85,9 +85,9 @@
       "headers": {
         "content-length": "5614",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:09.567Z"
+      "recordedAt": "2026-09-22T14:57:29.306Z"
     },
     "entries-page-1.json": {
       "request": {
@@ -102,9 +102,9 @@
       "headers": {
         "content-length": "2750",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:09.575Z"
+      "recordedAt": "2026-09-22T14:57:29.314Z"
     },
     "entries-page-2.json": {
       "request": {
@@ -119,14 +119,14 @@
       "headers": {
         "content-length": "3085",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:09.579Z"
+      "recordedAt": "2026-09-22T14:57:29.319Z"
     },
     "entries-tail.json": {
       "request": {
         "method": "GET",
-        "path": "/v1/entries?after=13733&limit=3",
+        "path": "/v1/entries?after=13775&limit=3",
         "headers": {
           "accept": "application/json"
         },
@@ -136,9 +136,9 @@
       "headers": {
         "content-length": "94",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:09.590Z"
+      "recordedAt": "2026-09-22T14:57:29.330Z"
     },
     "identity-doi-pmid-registry.json": {
       "request": {
@@ -153,9 +153,9 @@
       "headers": {
         "content-length": "3296",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:10.485Z"
+      "recordedAt": "2026-09-22T14:57:30.093Z"
     },
     "identity-doi.json": {
       "request": {
@@ -170,9 +170,9 @@
       "headers": {
         "content-length": "973",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:10.488Z"
+      "recordedAt": "2026-09-22T14:57:30.096Z"
     },
     "identity-pmid.json": {
       "request": {
@@ -185,11 +185,11 @@
       },
       "status": 200,
       "headers": {
-        "content-length": "2712",
+        "content-length": "2715",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:10.493Z"
+      "recordedAt": "2026-09-22T14:57:30.100Z"
     },
     "identity-reg.json": {
       "request": {
@@ -204,9 +204,9 @@
       "headers": {
         "content-length": "1608",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:10.499Z"
+      "recordedAt": "2026-09-22T14:57:30.107Z"
     },
     "identity-fda.json": {
       "request": {
@@ -221,9 +221,9 @@
       "headers": {
         "content-length": "1030",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:10.501Z"
+      "recordedAt": "2026-09-22T14:57:30.110Z"
     },
     "identity-url.json": {
       "request": {
@@ -238,9 +238,9 @@
       "headers": {
         "content-length": "935",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:10.503Z"
+      "recordedAt": "2026-09-22T14:57:30.112Z"
     },
     "text-available.json": {
       "request": {
@@ -255,14 +255,14 @@
       "headers": {
         "content-length": "3127",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:10.525Z"
+      "recordedAt": "2026-09-22T14:57:30.133Z"
     },
     "text-pending.json": {
       "request": {
         "method": "GET",
-        "path": "/v1/entries/j-0028-4793%3A80ed6c51d6fbfc5120ab9eaa1c4e0460/text",
+        "path": "/v1/entries/j-0028-4793%3A3436b2545a0e4cea3ee63aa6d1dcab6b/text",
         "headers": {
           "accept": "application/json"
         },
@@ -272,9 +272,9 @@
       "headers": {
         "content-length": "212",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:10.530Z"
+      "recordedAt": "2026-09-22T14:57:30.139Z"
     },
     "lookups.json": {
       "request": {
@@ -289,9 +289,9 @@
       "headers": {
         "content-length": "14",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:10.533Z"
+      "recordedAt": "2026-09-22T14:57:30.141Z"
     },
     "lookup-unavailable.json": {
       "request": {
@@ -308,9 +308,9 @@
       "headers": {
         "content-length": "111",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:10.537Z"
+      "recordedAt": "2026-09-22T14:57:30.146Z"
     },
     "error-unauthorized.json": {
       "request": {
@@ -325,10 +325,10 @@
       "headers": {
         "content-length": "83",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT",
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT",
         "www-authenticate": "Bearer"
       },
-      "recordedAt": "2026-09-22T12:00:10.539Z"
+      "recordedAt": "2026-09-22T14:57:30.149Z"
     },
     "error-not-found.json": {
       "request": {
@@ -343,9 +343,9 @@
       "headers": {
         "content-length": "64",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:10.542Z"
+      "recordedAt": "2026-09-22T14:57:30.152Z"
     },
     "error-invalid-cursor.json": {
       "request": {
@@ -360,9 +360,9 @@
       "headers": {
         "content-length": "120",
         "content-type": "application/json",
-        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+        "date": "Tue, 22 Sep 2026 14:57:29 GMT"
       },
-      "recordedAt": "2026-09-22T12:00:10.543Z"
+      "recordedAt": "2026-09-22T14:57:30.154Z"
     }
   }
 }

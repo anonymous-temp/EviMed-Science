@@ -123,6 +123,8 @@ async def test_health_needs_no_token(client):
     assert body["contract"] == SPEC["info"]["version"]
     assert body["model_calls_24h"] == 0 and body["latest_seq"] >= 5
     assert body["sources"]["disabled"] > 0 and body["egress"]["relay"] == "unconfigured"
+    assert body["rate_limited_1h"] == {"max": 0, "host": None}             # contract 1.2.0
+    assert "last_ok_fetch_at" in body
 
 
 async def test_every_other_path_needs_the_token(client):

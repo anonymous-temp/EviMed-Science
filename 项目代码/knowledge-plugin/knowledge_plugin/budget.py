@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -65,8 +66,10 @@ def host_rules(*, ncbi_key: bool, openfda_key: bool) -> dict[str, HostRule]:
         "api.fda.gov": HostRule(1.0, 800 if openfda_key else 300),
         "clinicaltrials.gov": HostRule(1.5, 500),
         "www.federalregister.gov": HostRule(1.5, 200),
-        "api.medrxiv.org": HostRule(2.0, 300, timeout_s=30.0),
-        "api.biorxiv.org": HostRule(2.0, 300, timeout_s=30.0),
+        # The details API answers at once and then trickles: 270 KB took 31 s from Beijing (first byte
+        # 1.6 s, 2026-09-22), so a 30 s deadline failed every first-contact week.
+        "api.medrxiv.org": HostRule(2.0, 300, timeout_s=120.0),
+        "api.biorxiv.org": HostRule(2.0, 300, timeout_s=120.0),
         "connect.medrxiv.org": HostRule(2.0, 300, timeout_s=30.0),
         "connect.biorxiv.org": HostRule(2.0, 300, timeout_s=30.0),
         "export.arxiv.org": HostRule(3.0, 100),
@@ -180,6 +183,8 @@ class HostBudget:
         self._locks: dict[str, asyncio.Semaphore] = {}
         self._crawl_delay: dict[str, float] = {}
         self._paused: dict[str, datetime] = {}
+        # When each host answered 429, the last hour of it (plan 10.5.8: "any host over 10 in an hour").
+        self._rate_limited: dict[str, deque[datetime]] = {}
 
     async def load(self) -> None:
         self._paused.update(await self._store.load_pauses())
@@ -205,11 +210,28 @@ class HostBudget:
 
     async def pause(self, host: str, seconds: float, reason: str) -> datetime:
         seconds = min(max(1.0, float(seconds)), MAX_PAUSE_S)
+        if reason == "http_429":
+            self._rate_limited.setdefault(host, deque()).append(self._clock())
         until = self._clock() + timedelta(seconds=seconds)
         self._paused[host] = max(until, self._paused.get(host, until))
         await self._store.pause(host, self._paused[host], reason)
         log.warning("host %s paused for %.0f s (%s)", host, seconds, reason)
         return self._paused[host]
+
+    def rate_limited_last_hour(self) -> tuple[str | None, int]:
+        """The host that answered 429 most often in the last hour, and how often (this process's
+        view: a restart starts the count again)."""
+        cut = self._clock() - timedelta(hours=1)
+        worst: tuple[str | None, int] = (None, 0)
+        for host in list(self._rate_limited):
+            stamps = self._rate_limited[host]
+            while stamps and stamps[0] <= cut:
+                stamps.popleft()
+            if not stamps:
+                del self._rate_limited[host]
+            elif len(stamps) > worst[1]:
+                worst = (host, len(stamps))
+        return worst
 
     @asynccontextmanager
     async def slot(self, host: str, *, robots: bool = False) -> AsyncIterator[None]:

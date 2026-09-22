@@ -9,6 +9,7 @@ beacon — which route interception must abort before they leave the browser.
 from __future__ import annotations
 
 import http.server
+import json
 import os
 import shutil
 import socket
@@ -53,6 +54,13 @@ RUISHU_PAGE = """<!doctype html><html><head><title>R</title>
 </body></html>"""
 
 
+FEED = b"""<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>News</title>
+<item><title>A feed item behind a challenge</title><link>http://list.test/item/9</link></item></channel></rss>"""
+
+CHALLENGE_PAGE = b"""<!doctype html><html><head><title>Client Challenge</title></head><body>
+<script>document.cookie = "passed=1; path=/"; setTimeout(() => location.reload(), 200);</script></body></html>"""
+
+
 def free_port() -> int:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
@@ -80,6 +88,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             draw = "true" if self.path == "/ruishu-passed" else "false"
             page = (RUISHU_PAGE.replace("DRAW", draw)).encode()
             self._send(200, "text/html; charset=utf-8", page)
+        elif host == "list.test" and self.path == "/feed":
+            if "passed=1" in (self.headers.get("Cookie") or ""):
+                self._send(200, "application/rss+xml", FEED)
+            else:   # a client challenge: script sets a cookie and reloads
+                self._send(200, "text/html; charset=utf-8", CHALLENGE_PAGE)
+        elif host == "list.test" and self.path.startswith("/api/v2/studies"):
+            self._send(200, "application/json", b'{"studies": [{"protocolSection": {"identificationModule": {"nctId": "NCT07000001"}}}]}')
         elif host == "list.test" and self.path == "/robots.txt":
             self._send(200, "text/plain", b"User-agent: *\nDisallow: /private\n")
         elif host == "list.test" and self.path == "/private":
@@ -222,3 +237,32 @@ async def test_text_capture_rides_out_a_navigation_and_otherwise_fails_by_name()
     with pytest.raises(FetchError) as caught:
         await fetcher._settled_text(Page(5), "www.nmpa.gov.cn")
     assert (caught.value.outcome, caught.value.detail) == ("http-error", "navigation_interrupted")
+
+
+async def test_an_open_api_read_through_the_browser_answers_with_its_own_bytes(chrome, site, plain_settings):
+    settings = replace(plain_settings, browser_cdp_url=chrome, browser_timeout_s=30.0)
+    fetcher = ProtectedFetcher(settings, HostBudget(MemoryCounterStore(), {}, sleep=NoSleep()))
+    port = site.server_address[1]
+    try:
+        result = await fetcher.fetch(RequestSpec(url=f"http://list.test:{port}/api/v2/studies?pageSize=1", api=True),
+                                     source_id="ctgov-like", egress="browser", allowed_hosts=["list.test"])
+    finally:
+        await fetcher.aclose()
+    assert result.status == 200
+    assert result.headers["content-type"] == "application/json"
+    assert json.loads(result.body)["studies"][0]["protocolSection"]["identificationModule"]["nctId"] == "NCT07000001"
+    assert not result.body.startswith(b"<html")                                       # not the page Chromium wraps it in
+
+
+async def test_a_feed_behind_a_script_challenge_is_read_as_the_xml_it_becomes(chrome, site, plain_settings):
+    settings = replace(plain_settings, browser_cdp_url=chrome, browser_timeout_s=30.0)
+    fetcher = ProtectedFetcher(settings, HostBudget(MemoryCounterStore(), {}, sleep=NoSleep()))
+    port = site.server_address[1]
+    try:
+        result = await fetcher.fetch(RequestSpec(url=f"http://list.test:{port}/feed"), source_id="mit-like", egress="browser",
+                                     allowed_hosts=["list.test"])
+    finally:
+        await fetcher.aclose()
+    assert result.status == 200
+    assert result.headers["content-type"] == "application/rss+xml"
+    assert result.body.startswith(b"<?xml") and b"A feed item behind a challenge" in result.body

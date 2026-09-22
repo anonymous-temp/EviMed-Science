@@ -46,14 +46,17 @@ def test_the_plan_decisions_hold(document):
     assert {s["lane"] for s in sources} <= set(model.LANES) and "news" not in {s["lane"] for s in sources}
     accepted = {json.loads(line)["id"] for line in (ROOT / "registry/research/probe-edge-honest-ua-2026-09-22.jsonl")
                 .read_text(encoding="utf-8").splitlines() if line.strip() and json.loads(line)["verdict"] in ("feed-ok", "api-ok", "page-ok")}
+    # read on production on the evening of 2026-09-22 after their first polls failed: the two Google
+    # blogs through the Tokyo node, MIT News's AI feed through the browser
+    verified_on_production = {"google-deepmind-blog", "google-keyword-ai", "mit-news-ai"}
     for s in sources:
         if s["enabled"]:
             assert s["egress"] in model.IMPLEMENTED_EGRESSES and s["access"] in model.IMPLEMENTED_ACCESSES
             # batch 2: P0; lists and EviMed scans of P1; relay only what the Tokyo node read on 2026-09-22
-            assert (s["launch_tier"] == "P0" or s["egress"] == "relay"
+            assert (s["launch_tier"] == "P0" or s["egress"] == "relay" or s["id"] in verified_on_production
                     or (s["launch_tier"] == "P1" and s["access"] in ("html-list", "browser-list", "evimed-api")))
-            if s["egress"] == "relay" and s["id"] not in ("endpoints-news", "endpoints-news-ai"):
-                assert s["id"] in accepted
+            if s["egress"] == "relay":
+                assert s["id"] in accepted or s["id"] in verified_on_production
         else:
             assert s["disabled_reason"]
     by_id = {s["id"]: s for s in sources}
@@ -62,9 +65,18 @@ def test_the_plan_decisions_hold(document):
     assert by_id["eyjlr"]["access"] == "wechat-bridge"
     assert "{since" in by_id["openfda-drugsfda-api"]["config"]["url"]
     # the controller's batch-2 decisions (2026-09-22)
-    assert by_id["endpoints-news"]["egress"] == by_id["endpoints-news-ai"]["egress"] == "relay"
-    for sid in ("pubmed-rss-created-headlessly", "the-decoder"):
+    for sid in ("pubmed-rss-created-headlessly", "the-decoder", "aga-clinical-guidance", "health-affairs-journal"):
         assert by_id[sid]["enabled"] is False and by_id[sid]["disabled_reason"] == "robots_disallow"
+    # production, first evening: sources that answer a browser and refuse the crawler's HTTP client —
+    # ClinicalTrials.gov's API (a Google load balancer's bot rule), Endpoints (refused through Tokyo
+    # too), Fastly's client challenge on CIDRAP and MIT News, PubMed's trending page
+    browser_read = ("ctgov-phase3-new-registrations", "ctgov-results-first-posted", "ctgov-china-interventional",
+                    "ctgov-tcm-interventions", "ctgov-stopped-phase3", "endpoints-news", "endpoints-news-ai",
+                    "cidrap-news", "mit-news-ai", "pubmed-trending-page")
+    for sid in browser_read:
+        assert by_id[sid]["egress"] == "browser" and by_id[sid]["enabled"], sid
+    for sid in ("google-deepmind-blog", "google-keyword-ai"):
+        assert by_id[sid]["egress"] == "relay" and by_id[sid]["enabled"], sid
     star = by_id["star-guideline-rating-cn"]
     assert star["poll_floor_s"] == 86400 and star["config"]["max_pages"] == 3           # a daily poll reads 3 pages
     assert star["config"]["full_walk_every_s"] == 604800 and star["config"]["full_walk_max_pages"] == 160
