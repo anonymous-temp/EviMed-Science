@@ -260,14 +260,22 @@ def read(arguments: dict) -> dict:
         }
         if page == 1 and snapshot["links"]:
             data["links"] = snapshot["links"]
+        # Exactly the provenance fields the server's ToolResult contract admits
+        # (`_validated_sources`). `official` sat here from 2026-09-19 and failed
+        # every successful read as "sources[0] has an invalid shape" -- the tool
+        # worked in this module's tests and never once through the server. The
+        # official flag is in `data`; the preserved page is the artifact a
+        # claim quotes, so its path travels on the source like a guideline's.
         source = {
             "id": snapshot["sourceId"],
-            "title": receipt.get("title"),
             "url": receipt.get("finalUrl") or receipt.get("url"),
             "source": "web-page",
-            "official": receipt.get("official") is True,
             "retrievedAt": receipt.get("fetchedAt"),
+            "artifactPath": snapshot["markdownPath"],
         }
+        title = str(receipt.get("title") or "").strip()
+        if title:
+            source["title"] = title
         result = {
             "status": "success",
             "summary": "Read %s and preserved it (page %d of %d)." % (receipt.get("site") or "the page", page, total),

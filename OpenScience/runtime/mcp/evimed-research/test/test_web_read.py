@@ -118,13 +118,31 @@ class WebReadTests(unittest.TestCase):
         self.assertEqual(data["artifactSha256s"], {path: hashlib.sha256(snapshot).hexdigest()})
         self.assertEqual(result["artifacts"], [path])
         self.assertEqual(result["sources"][0]["id"], "web-page:" + sha[:16])
-        self.assertEqual(result["sources"][0]["official"], True)
+        self.assertEqual(result["sources"][0]["artifactPath"], path)
+        self.assertNotIn("official", result["sources"][0], "the official flag is data, not provenance")
         page = snapshot.decode("utf-8")
         for line in ("# 公告通告", "- Source: " + url, "- Official source: yes", "- Rendered in a browser before reading: yes", "- SHA-256: " + sha):
             self.assertIn(line + "\n", page)
         self.assertIn(text, page)
         # No retrieval time in the snapshot: the same bytes are the same capture.
         self.assertNotIn("2026-09-20T02:00", page)
+
+    def test_a_read_passes_the_servers_own_tool_result_contract(self):
+        # The tool is called through `call_tool`, which validates provenance.
+        # This module's tests used to call `web_read.read` directly, so a source
+        # field the contract refuses failed every production read and no test.
+        url = "https://www.chictr.org.cn/showproj.html?proj=1"
+        sha = hashlib.sha256(b"registry page").hexdigest()
+        server = load_server()
+        for title in ("公告通告", "", None):
+            web_read._SNAPSHOTS.clear()
+            Gateway.answers[url] = (200, {"receipt": receipt(url, sha, title=title), "text": "注册题目：推拿治疗小儿疳积", "links": []})
+            with self.subTest(title=title):
+                result = server.call_tool("web_read", {"url": url})
+                self.assertEqual(result["status"], "success", result)
+                self.assertEqual(result["sources"][0]["source"], "web-page")
+                self.assertTrue(result["sources"][0]["artifactPath"].startswith(".evimed-sources/web-pages/"))
+                self.assertEqual("title" in result["sources"][0], bool(title))
 
     def test_long_text_is_paged_from_one_snapshot(self):
         url = "https://www.escardio.org/Guidelines/hf.pdf"
