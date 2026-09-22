@@ -180,18 +180,20 @@ describe("the tools on a blank conversation", () => {
     expect(heroView.container.querySelector("[data-evimed-hero-tools]")).not.toBeNull();
     expect(heroView.container.querySelector("[data-evimed-tool-page]")).toBeNull();
     expect(heroView.getByText("临床证据深度分析")).toBeInTheDocument();
+    // A starter goes into the composer of the open session.
+    fireEvent.click(heroView.getByRole("button", { name: "≥70 岁人群阿司匹林一级预防的获益与出血风险。" }));
     heroView.unmount();
     act(() => kit.hub.deliver("session", { sessionId: "session-b" }));
+    // In a session the chip alone sits under the composer; the starters stay on the hero.
+    expect(components.has("evimed-tool-starters")).toBe(false);
     const Chip = components.get("evimed-tool") as (props: Record<string, unknown>) => React.ReactElement;
-    const Starters = components.get("evimed-tool-starters") as (props: Record<string, unknown>) => React.ReactElement;
-    const view = render(<><Chip /><Starters /></>);
+    const view = render(<Chip />);
     expect(view.container.textContent).toBe("");
     act(() => kit.hub.deliver("capability", { capabilityId: "clinical-evidence-synthesis", sessionId: "session-a" }));
     expect(screen.getByText("临床证据深度分析")).toBeInTheDocument();
     expect(screen.getByText("约 30–70 分钟")).toBeInTheDocument();
     expect(screen.queryByText(/你会拿到/)).toBeNull();
-    // A starter goes into the composer of the open session.
-    fireEvent.click(screen.getByRole("button", { name: "≥70 岁人群阿司匹林一级预防的获益与出血风险。" }));
+    expect(screen.queryByRole("button", { name: "≥70 岁人群阿司匹林一级预防的获益与出血风险。" })).toBeNull();
     // Leaving the tool is the chip's ×: the shell is told, with the draft.
     fireEvent.click(screen.getByRole("button", { name: "不再用「临床证据深度分析」" }));
     expect(sent.at(-1)).toEqual(["bind-capability", { capabilityId: null, sessionId: "session-a", draft: "老年房颤该不该抗凝？" }]);
