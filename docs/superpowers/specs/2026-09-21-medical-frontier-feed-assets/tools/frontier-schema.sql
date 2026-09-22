@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.entries (
   lang            text NOT NULL DEFAULT 'und',
   published_at    timestamptz(3),
   date_precision  text NOT NULL DEFAULT 'instant' CHECK (date_precision IN ('instant', 'day', 'inferred')),
-  first_seen_at   timestamptz(3) NOT NULL,   -- the collector's clock, so a late edge batch keeps its real time
+  first_seen_at   timestamptz(3) NOT NULL,   -- the collector's clock
   received_at     timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   content_sha256  text NOT NULL CHECK (content_sha256 ~ '^[a-f0-9]{64}$'),
   revision        integer NOT NULL DEFAULT 1,
@@ -117,27 +117,9 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.seen_keys (
 );
 CREATE INDEX IF NOT EXISTS frontier_seen_keys_retention_idx ON evimed_frontier.seen_keys (last_seen_at);
 
-CREATE TABLE IF NOT EXISTS evimed_frontier.edge_nodes (
-  id            text PRIMARY KEY CHECK (id ~ '^[a-z0-9-]{3,40}$'),
-  region        text NOT NULL,
-  key_id        text NOT NULL,              -- which key file entry signs for this node; never the key itself
-  enabled       boolean NOT NULL DEFAULT true,
-  software      text,
-  last_seen_at  timestamptz(3),
-  last_batch_at timestamptz(3),
-  spool_depth   integer NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS evimed_frontier.edge_batches (
-  batch_id     text PRIMARY KEY CHECK (batch_id ~ '^[A-Za-z0-9_-]{16,64}$'),   -- a repeat is acknowledged, not re-applied
-  node_id      text NOT NULL REFERENCES evimed_frontier.edge_nodes(id) ON DELETE CASCADE,
-  sent_at      timestamptz(3) NOT NULL,
-  received_at  timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
-  results      integer NOT NULL,
-  entries      integer NOT NULL,
-  rejected     integer NOT NULL DEFAULT 0,
-  bytes        integer NOT NULL
-);
-CREATE INDEX IF NOT EXISTS frontier_edge_batches_retention_idx ON evimed_frontier.edge_batches (received_at);
+-- No edge tables: since 2026-09-22 the overseas sources are read by this same
+-- worker through the Tokyo node's TLS proxy (apps/server/src/edgeProxy.mjs), so
+-- there is no node identity, no batch and no spool to record.
 
 -- ───────────────────────── content side ─────────────────────────
 

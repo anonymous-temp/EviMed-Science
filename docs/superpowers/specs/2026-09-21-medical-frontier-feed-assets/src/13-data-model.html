@@ -20,7 +20,6 @@
       <div class="tb"><b>fetches<small>约 7,000 行/天 · 留 14 天</small></b><p>信源 · 时间 · 出口 · 状态码 · 字节数 · 内容哈希 · 条目数 · 错误<br><i>信源健康与选择器漂移的依据</i></p></div>
       <div class="tb"><b>entries<small>约 1,000 行/天 · 落选的留 30 天</small></b><p><span class="k">(source_id, external_key)</span> 唯一 · 链接 · DOI / PMID / 注册号 · 原标题 · 原摘要 · 发布与抓取时间 · 残缺标记 · 状态 · → item<br><i>每个信源看到的每一条，原样记下</i></p></div>
       <div class="tb"><b>seen_keys<small>留 400 天</small></b><p>信源 · 键的哈希 · 内容哈希 · 首末见到时间<br><i>去重的记忆：条目清掉了，旧条目也不会被当成新的</i></p></div>
-      <div class="tb"><b>edge_nodes · edge_batches<small>留 30 天</small></b><p>海外节点的身份、心跳；批次号唯一，重复推送只认第一次</p></div>
     </div>
     <div class="grp" style="border-color:#c3ece6;background:#f7fdfc"><h3>内容侧 · 长期保留，页面读的就是它</h3>
       <div class="tb hl"><b>items<small>约 300 行/天 · 一年约 11 万行</small></b><p><span class="k">id</span> · 公开编号 · <span class="k">doi 唯一</span> · 规范链接唯一 · 中文标题 · 原标题 · 导读 · 为什么值得看 · 栏目 · 来源类型 · 证据类型 · 专科[] · 实体 · 标记[]（预印本、新闻稿、无摘要、已撤稿、涉华）· 四维分与总分 · 精选 · 安全通告 · 复核结果 · 时间轴时间 · 发布时间 · 状态 · 编辑版本 · 全文检索词列 · → event</p></div>
@@ -49,4 +48,4 @@
   </div>
   <div class="note" style="margin-top:12px">全部在生产 PostgreSQL 16（已装 pgvector 0.8.6 与 pg_trgm）的独立库表 <b>evimed_frontier</b> 里，迁移内联在模块中、带咨询锁、可重复执行。现在整个生产库只有 23 MB；这个模块一年约增加 2 GB，不需要分区，不需要第二个数据库。</div>
 </div>
-<div class="cap">图 13 · 数据模型：四组二十三张表（设计稿）</div>
+<div class="cap">图 13 · 数据模型：四组二十一张表（设计稿）</div>

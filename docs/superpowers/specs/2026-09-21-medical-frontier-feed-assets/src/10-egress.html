@@ -10,7 +10,7 @@
 <div class="node hl"><b>① 直连 · 559 个</b><span>生产机直接读。第一梯队 267 个全部在这里。</span></div><div class="arr"> </div>
 <div class="node hl"><b>② 用开放接口替代网站</b><span>155 种期刊不碰出版商网站：Crossref 发现，PubMed 与 Europe PMC 补摘要和文献类型。FDA 用 openFDA 与 Federal Register 替代官网。已计入直连。</span></div><div class="arr"> </div>
 <div class="node vi"><b>③ 无头浏览器 · 67 个</b><span>北京主机上自己的 Chromium 容器，9 月 22 日实测能过瑞数，每页 1–5 秒；AgentBay 只作后备。最要紧的 12 个（国家药监局、药审中心、器审中心、卫健委的各栏目）第二阶段上线，其余带质询或脚本绘制列表的站按需。</span></div><div class="arr"> </div>
-<div class="node am"><b>④ 海外中继 · 67 个</b><span>生产机连不上或被按 IP 拒绝、境外可读的信源，经一个只认登记表地址、带签名的中继读取。第三阶段上线。</span></div>
+<div class="node am"><b>④ 海外中继 · 67 个</b><span>生产机连不上或被按 IP 拒绝、境外可读的信源，由北京的采集器经东京的加密代理读取（9 月 22 日已接通，平台的联网搜索也走它）。第二阶段上线。</span></div>
 </div>
 <div class="note">另有公众号桥接 28 个（第三阶段）、暂无可行读法 32 个（需登录、付费或两地都读不到）。中继是一个可替换的接口：Cloudflare Worker 或一台境外轻量云主机都行，换哪种不影响管线其余部分。</div>
 </div><div class="cap">图 10 · 出口策略：先用接口替代，再用浏览器，最后才用中继（设计稿，数字为实测）</div>

@@ -18,7 +18,7 @@
 | 5–6 防腐层与 socket | **不动** | —— |
 | 7 运行时镜像 | MCP 服务多一个只读工具 `frontier_search` | 预设、技能根 |
 | 8 能力包 | `open-domain-answer` 的可选工具加一项；评测集加至少 3 个「最近有什么进展」类问题 | 十八个能力包的交付关卡 |
-| 10 外部服务 | Crossref、NCBI、Europe PMC、openFDA 等都是匿名开放接口，无新凭据；第二阶段加一台境外采集节点、北京主机上的无头浏览器与 Wechat2RSS 两个容器 | —— |
+| 10 外部服务 | Crossref、NCBI、Europe PMC、openFDA 等都是匿名开放接口，无新凭据；第二阶段复用已上线的东京代理，并加北京主机上的无头浏览器与 Wechat2RSS 两个容器 | —— |
 
 为什么不是能力包：能力包是「一次运行产出一份交付物」的单位，前沿动态是常驻的后台管线加一个页面，属于第 2 层功能模块——平台给这类东西规定的形状就是「服务 + 路由 + 租约工人 + 一个开关 + 自己的迁移」。以后要是做「围绕某个专题出一份前沿简报」这样的文件交付，那才是一个新的能力包，数据就从这个模块读。
 
@@ -36,8 +36,7 @@
 | `frontierEditor.mjs` | 初筛、打分、数字复核、聚类裁决、日报；所有模型调用走 `callModelForControlPlane`，用途 `frontier` |
 | `frontierRoutes.mjs` | `createFrontierRoutes({ store, service, maxJsonBytes })`，浏览器接口 |
 | `frontierGateway.mjs` | `createFrontierGatewayHandler(config, runtimeManager, { service })`，运行时工具的内部接口 |
-| `frontierEdgeGateway.mjs` | 海外采集节点的两个签名入口（领任务、交批次）：验签、校验主机名、幂等入库；照 `engineUsage.mjs` 的验签写法 |
-| `frontierEdgeIndex.mjs` | 控制面的第三个入口，只在境外主机上跑：只引入抓取、robots、限速、正文提取与适配器，依赖图由测试钉住 |
+| `edgeProxy.mjs`（平台已有，9 月 22 日上线） | 采集器对出口为 `relay` 的信源经它发请求：HTTPS 走东京代理的 CONNECT 隧道，端到端加密；代理不可用时只是这些信源暂停 |
 
 **新增（其他）**
 
@@ -49,7 +48,6 @@
 | `apps/web/src/components/frontier/*` | 卡片、与你相关、热点侧栏、日报、信源表、骨架屏 |
 | `apps/web/src/lib/frontierClient.ts` | 接口客户端 |
 | `runtime/mcp/evimed-research/frontier_search.py` | 只读工具，照 `kb_search.py` 的样子写 |
-| `deploy/frontier-edge/`、`scripts/ops/deploy-frontier-edge.sh` | 境外节点的镜像、compose 与部署脚本 |
 | `deploy/web/docker-compose.frontier.yml` | 北京主机上的两个容器：Wechat2RSS 与无头浏览器 `frontier-browser`（固定版本的 Chromium，内存封顶 1 GB，不开公网端口，只准访问登记表里的监管站域名） |
 | `scripts/ops/seed-frontier-glossary.mjs` | 从药学基础数据生成术语表种子 |
 | 对应测试 | `frontier*.test.mjs`、`frontier*.integration.test.mjs`、`FrontierPage.test.tsx`、`test_frontier_search.py` |
@@ -62,14 +60,13 @@
 | `apps/server/src/server.mjs` | `createWebApiApp` 里构造与注册；`startRecurringWork` / `pauseRecurringWork` 里加工人；内部网关路径加入分发与 `routeLabel`；`/api/me` 增加 `features.frontier`；就绪检查加 `frontier` 一项 |
 | `apps/server/src/runtimeManager.mjs` | 开关打开时向容器注入 `EVIMED_FRONTIER_GATEWAY_URL` |
 | `apps/server/src/productPersistence.mjs` | 任务种类加两项（`frontier-daily`、`frontier-rebuild`），各配一个约束迁移块 |
-| `scripts/ops/postgres-backup.py` | 对 `item_vectors`、`fetches`、`edge_batches` 只导结构不导数据（10.4.6） |
+| `scripts/ops/postgres-backup.py` | 对 `item_vectors`、`fetches` 只导结构不导数据（10.4.6） |
 | `packages/domain/src/usagePurpose.mjs` | 用途加 `frontier`（约束名随词表变化，迁移自动替换） |
 | `apps/server/src/notificationService.mjs`、`imService.mjs` | 通知开关加 `frontier` 一项；日报通知的来源类型用现成的 `digest`，推送时机走现成的简报时间与 `pushNotBefore` 分支，不新增来源类型 |
 | `apps/server/src/internalProjects.mjs` | `isInternalProject` 认 `evimed-frontier`，模型花费记在运营账户的这个内部项目下 |
 | `apps/server/src/runtimeGatewayEntry.mjs` | `RUNTIME_GATEWAY_NAMES` 与 `publicRuntimeGatewayUrls` 加 `frontier`，AgentBay 上的会话才能用 `frontier_search` |
 | `apps/server/src/server.mjs`（维护期） | 模块自己的领取语句也检查维护租约（`maintenanceAllowsClaims`），工人登记进维护期的后台活动清单（`inspectActivity`），维护窗口会等它写完 |
-| `deploy/web/Caddyfile`、主机 nginx | `/internal/*` 对公网一律 404，所以海外节点走一个单独的公开前缀 `/edge/frontier/v1/`，在进程内验签（照 `/runtime-gateway/` 的先例），nginx 只对节点 IP 放行这个前缀 |
-| `scripts/ops/configure-production-state.mjs`、compose `secrets:` | 生成海外节点的签名密钥文件与 Wechat2RSS 的服务密码文件 |
+| `scripts/ops/configure-production-state.mjs`、compose `secrets:` | 生成 Wechat2RSS 的服务密码文件 |
 | `apps/server/src/sourceService.mjs` | 连接器类型加 `web`（存入知识库用，第二阶段） |
 | `apps/web/src/app/router.tsx`、`components/sidebar/Sidebar.tsx`、`app/routes/InboxPage.tsx`、`components/cards/Skeletons.tsx` | 路由、导航一行、收件箱跳转、骨架屏 |
 | `packages/domain/src/toolNames.mjs`、`narration.mjs` | 工具名与旁白「查前沿动态：……」 |
@@ -116,7 +113,7 @@ frontier_search(q, lane?, specialty?, window = "30d", mode = "selected", limit =
 | `OPEN_SCIENCE_FRONTIER_DAILY_TIME` / `_TIMEZONE` | `07:30` / `Asia/Shanghai` | 日报定稿时间 |
 | `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY` | 10 | 每日模型预算，超出只采集不打分 |
 | `OPEN_SCIENCE_FRONTIER_CONTACT` | 无（必填） | 联系邮箱，写进爬虫标识与 Crossref、NCBI 的礼貌参数 |
-| `OPEN_SCIENCE_FRONTIER_EDGE_ENABLED` / `_EDGE_KEY_FILE` | 关 / 空 | 海外采集节点的签名入口与密钥文件；关则出口为海外的信源不启用 |
+| `OPEN_SCIENCE_EDGE_PROXY_*`（平台已有） | 生产已配置 | 前沿动态复用平台的东京代理；出口为 `relay` 的信源经它读，不另设海外开关与密钥 |
 | `OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY` | 2 | 同时处理的条目批数 |
 | `OPEN_SCIENCE_FRONTIER_OFFPEAK` | 开 | 非紧急条目攒到模型半价时段处理 |
 
