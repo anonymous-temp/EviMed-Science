@@ -1,0 +1,66 @@
+{
+ "case": "html-list/cntcm-news",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:32:31+00:00",
+ "note": null,
+ "source": {
+  "id": "cntcm-news",
+  "name": "中国中医药报 · 中国中医药网",
+  "homepage": "https://www.cntcm.com.cn/",
+  "lane": "mixed",
+  "source_type": "media",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 2,
+  "safety_feed": false,
+  "owner_entity": "中国中医药报社",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 3600,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://www.cntcm.com.cn/col2120.html",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.cntcm.com.cn"
+   ],
+   "selectors": {
+    "item": "div.nlist02 ul.mb15 li",
+    "title": "a",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 40
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:32:29+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.cntcm.com.cn/col2120.html",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.cntcm.com.cn/col2120.html",
+   "headers": {
+    "content-type": "text/html"
+   },
+   "fetched_at": "2026-09-22T11:32:30+00:00",
+   "file": "01.html.gz",
+   "gzip": true,
+   "bytes": 71975,
+   "sha256": "53c1ec0eb2d5d667cd2bb9568eba4053e3b673ae8f98604217a431961802bcdb"
+  }
+ ]
+}

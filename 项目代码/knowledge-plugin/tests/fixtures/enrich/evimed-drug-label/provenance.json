@@ -1,0 +1,61 @@
+{
+ "case": "enrich/evimed-drug-label",
+ "recorded_by": "tests/fixtures/record_enrich.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:06:04+00:00",
+ "asked": [
+  [
+   "肌苷注射剂"
+  ],
+  [
+   "Domperidone"
+  ]
+ ],
+ "answers_at_recording": [
+  "【药品】肌苷注射液（山西国润制药有限公司，2 mL：0.1 g）\n【禁忌】对本品过敏者禁用。\n【不良反应】静脉注射偶有恶心、颜面潮红。\n【注意事项】1. 不能与乳清酸、氯霉素、双密达莫、硫喷妥钠等注射液配伍。2. 如遇变色、结晶、浑浊、异物应禁用。\n【孕妇及哺乳期妇女用药】目前孕妇及哺乳期妇女用药的安全性尚未确定。\n【说明书】https://www.evimed.com/drug-details?source=nmpa&name=0310a194928d3fb3b35e62849c2c759a.pdf",
+  "【药品】多潘立酮片（丹东宏业制药有限公司，10 mg）\n【禁忌】1. 机械性消化道梗阻，消化道出血、穿孔患者禁用。\n【不良反应】1. 偶见口干、头痛、失眠、神经过敏、头晕、嗜睡、倦怠、腹部痉挛、腹泻、反流、恶心、胃灼热感、皮疹、瘙痒、荨麻疹、口腔炎、结膜炎等。\n【注意事项】1. 本品用药 3 天，如症状未缓解，请咨询医师或药师。药物使用时间一般不得超过 1 周。\n【药物相互作用】1. 不宜与唑类抗真菌药如酮康唑、伊曲康唑，大环内酯类抗生素如红霉素，HIV 蛋白酶抑制剂类抗艾滋病药物及奈法唑酮等合用。\n【说明书】https://www.evimed.com/drug-details?source=nmpa&name=a4d02e628aee1669f2e9be86cc1fb783.pdf"
+ ],
+ "notes_at_recording": [],
+ "exchanges": [
+  {
+   "method": "POST",
+   "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/instruction",
+   "api": true,
+   "conditional": false,
+   "request_body": "{\"query\": \"肌苷注射剂\", \"count\": 5, \"source\": [\"nmpa\"]}",
+   "request_headers": {
+    "Content-Type": "application/json"
+   },
+   "status": 200,
+   "final_url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/instruction",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T11:06:00+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 9855,
+   "sha256": "a87a218944dbbc7bba1dc627bb960f75a00874fb8205559f4533f19d6bac89a0"
+  },
+  {
+   "method": "POST",
+   "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/instruction",
+   "api": true,
+   "conditional": false,
+   "request_body": "{\"query\": \"Domperidone\", \"count\": 5, \"source\": [\"nmpa\"]}",
+   "request_headers": {
+    "Content-Type": "application/json"
+   },
+   "status": 200,
+   "final_url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/instruction",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T11:06:02+00:00",
+   "file": "02.json",
+   "gzip": false,
+   "bytes": 14895,
+   "sha256": "e31d539a2eaa6dde614670c15c41447c4e87a7d9efed1f78cb598310e0e21652"
+  }
+ ]
+}

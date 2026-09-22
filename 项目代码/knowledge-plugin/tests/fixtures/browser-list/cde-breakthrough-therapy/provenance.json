@@ -1,0 +1,113 @@
+{
+ "case": "browser-list/cde-breakthrough-therapy",
+ "recorded_by": "P2 (render helper output stored by a one-off import, see note)",
+ "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:37:08.035261+00:00",
+ "note": "Rendered 2026-09-22T11:11:15Z by P1's helper `python -m knowledge_plugin.browser render <url> --cdp http://127.0.0.1:9222` (BrowserFetcher.render: one fresh context, local Chrome for Testing 145.0.7632.6, the Chrome UA plus the EviMedBot/1.0 suffix; the helper logged 'status 200, 194945 bytes, final <url>'; whether a wait selector was given was not logged, so wait_for is null). robots.txt was not asked for that render; asked through the browser at 11:25Z it answered 403 (4xx = no rules). From ~11:13Z this box is refused by 药审中心's WAF (403 '请不要使用非法的URL地址访问' page) for every page: every later attempt (the recorder through ProtectedFetcher three times, the helper once) is listed under later_attempts. The body is the helper's bytes, unchanged.",
+ "source": {
+  "id": "cde-breakthrough-therapy",
+  "name": "药审中心 突破性治疗公示",
+  "homepage": "https://www.cde.org.cn/main/xxgk/listpage/da6efd086c099b7fc949121166f0130c",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "browser-list",
+  "egress": "browser",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "国家药品监督管理局",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://www.cde.org.cn/main/xxgk/listpage/da6efd086c099b7fc949121166f0130c",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.cde.org.cn"
+   ],
+   "selectors": {
+    "item": "tbody#breakIncludePriorityTbody tr[ondblclick]",
+    "id": "td:nth-child(2)",
+    "title": "td:nth-child(3)",
+    "summary": "td:nth-child(4)",
+    "date": "td:nth-child(7)"
+   },
+   "link_template": "https://www.cde.org.cn/main/xxgk/listpage/da6efd086c099b7fc949121166f0130c?acceptid={id}&date={date}",
+   "title_template": "纳入突破性治疗品种名单：{title}（{id}）",
+   "summary_template": "注册申请人：{summary}",
+   "min_title_chars": 2
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:11:15+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.cde.org.cn/main/xxgk/listpage/da6efd086c099b7fc949121166f0130c",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "egress": "browser",
+   "wait_for": null,
+   "render": "dom",
+   "status": 200,
+   "final_url": "https://www.cde.org.cn/main/xxgk/listpage/da6efd086c099b7fc949121166f0130c",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T11:11:15+00:00",
+   "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+   "browser_version": "145.0.7632.6",
+   "file": "01.html.gz",
+   "gzip": true,
+   "bytes": 194945,
+   "sha256": "75bfdcdb72aff6f4f504e3989ffe447bb16b3e469b691a532c4adb7fa49be4a7"
+  }
+ ],
+ "later_attempts": [
+  {
+   "at": "2026-09-22T11:25Z",
+   "via": "tests/fixtures/record.py (ProtectedFetcher + browser egress; robots.txt 403 first)",
+   "status": 403,
+   "error": {
+    "outcome": "blocked",
+    "detail": "http_403"
+   }
+  },
+  {
+   "at": "2026-09-22T11:27:48Z",
+   "via": "tests/fixtures/record.py",
+   "status": 403,
+   "error": {
+    "outcome": "blocked",
+    "detail": "http_403"
+   }
+  },
+  {
+   "at": "2026-09-22T11:33:13Z",
+   "via": "tests/fixtures/record.py",
+   "status": 403,
+   "error": {
+    "outcome": "blocked",
+    "detail": "http_403"
+   }
+  },
+  {
+   "at": "2026-09-22T11:33Z",
+   "via": "python -m knowledge_plugin.browser render (the helper)",
+   "status": 403,
+   "error": {
+    "outcome": "blocked",
+    "detail": "http_403"
+   }
+  }
+ ]
+}

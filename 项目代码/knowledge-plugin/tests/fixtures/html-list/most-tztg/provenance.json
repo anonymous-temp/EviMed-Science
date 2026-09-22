@@ -1,0 +1,68 @@
+{
+ "case": "html-list/most-tztg",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:32:21+00:00",
+ "note": null,
+ "source": {
+  "id": "most-tztg",
+  "name": "科技部 通知通告",
+  "homepage": "https://www.most.gov.cn/",
+  "lane": "research",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "中华人民共和国科学技术部",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 129600,
+  "config": {
+   "url": "https://www.most.gov.cn/tztg/",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.most.gov.cn"
+   ],
+   "selectors": {
+    "item": "ul.info_list2 li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span.date"
+   },
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:32:20+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.most.gov.cn/tztg/",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.most.gov.cn/tztg/",
+   "headers": {
+    "etag": "W/\"16024-1789459307000\"",
+    "last-modified": "Tue, 15 Sep 2026 08:01:47 GMT",
+    "content-type": "text/html"
+   },
+   "fetched_at": "2026-09-22T11:32:21+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 16024,
+   "sha256": "42ba6b52b8c82c55ee52433fa4b877054eaaea4b5245fc11ed156154449cb140"
+  }
+ ]
+}

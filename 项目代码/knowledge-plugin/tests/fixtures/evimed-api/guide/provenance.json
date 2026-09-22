@@ -1,0 +1,94 @@
+{
+ "case": "evimed-api/guide",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:08:13+00:00",
+ "note": "the first 2 of the 4 queries of the weekly guideline scan",
+ "source": {
+  "id": "evimed-guides",
+  "name": "EviMed 指南库 · 新收录的指南与共识",
+  "homepage": "https://www.evimed.com/",
+  "lane": "guideline",
+  "source_type": "evidence-body",
+  "access": "evimed-api",
+  "egress": "api",
+  "authority": 3,
+  "safety_feed": false,
+  "owner_entity": "EviMed",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 604800,
+  "poll_ceiling_s": 604800,
+  "config": {
+   "family": "guide",
+   "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide",
+   "queries": [
+    "指南",
+    "专家共识",
+    "临床实践指南",
+    "诊疗规范"
+   ],
+   "type": "guide",
+   "count": 100,
+   "new_within_days": 30,
+   "max_pages": 35,
+   "allowed_hosts": [
+    "www.evimed.com"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:08:06+00:00",
+ "request_budget": 2,
+ "parse_notes": [
+  "evimed_guide_outside_window=100",
+  "evimed_guide_outside_window=100"
+ ],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "POST",
+   "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide",
+   "api": true,
+   "conditional": false,
+   "request_body": "{\"query\": \"指南\", \"type\": \"guide\", \"count\": 100, \"startYear\": 2026}",
+   "request_headers": {
+    "Content-Type": "application/json"
+   },
+   "status": 200,
+   "final_url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T11:08:06+00:00",
+   "file": "01.json.gz",
+   "gzip": true,
+   "bytes": 163267,
+   "sha256": "016b87fefd705a5ceebde052e00ecb25513574e521fb2594d175d39c0a4d1792"
+  },
+  {
+   "method": "POST",
+   "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide",
+   "api": true,
+   "conditional": false,
+   "request_body": "{\"query\": \"专家共识\", \"type\": \"guide\", \"count\": 100, \"startYear\": 2026}",
+   "request_headers": {
+    "Content-Type": "application/json"
+   },
+   "status": 200,
+   "final_url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T11:08:10+00:00",
+   "file": "02.json.gz",
+   "gzip": true,
+   "bytes": 148333,
+   "sha256": "98752fc92b99b8ed4586222ef7ea849085b0cb3de1f53e19394e2d8812bb5234"
+  }
+ ]
+}

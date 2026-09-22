@@ -1,0 +1,69 @@
+{
+ "case": "json-api/openfda-enforcement",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:50+00:00",
+ "note": null,
+ "source": {
+  "id": "openfda-drug-enforcement-api",
+  "name": "openFDA 药品召回（enforcement）API",
+  "homepage": "https://open.fda.gov/apis/drug/enforcement/",
+  "lane": "safety",
+  "source_type": "regulator",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": true,
+  "owner_entity": "U.S. Food and Drug Administration",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 3600,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://api.fda.gov/drug/enforcement.json?search=report_date:%5B{since:%Y%m%d}+TO+{today:%Y%m%d}%5D&sort=report_date:desc&limit=100",
+   "family": "openfda-enforcement",
+   "date_field": "report_date",
+   "date_format": "%Y%m%d",
+   "id_field": "recall_number",
+   "page_size": 100,
+   "max_pages": 3,
+   "lookback_days": 30,
+   "overlap_days": 1,
+   "incremental": false,
+   "allowed_hosts": [
+    "api.fda.gov",
+    "open.fda.gov"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:49+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://api.fda.gov/drug/enforcement.json?search=report_date:%5B20260823+TO+20260922%5D&sort=report_date:desc&limit=100",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.fda.gov/drug/enforcement.json?search=report_date:%5B20260823+TO+20260922%5D&sort=report_date:desc&limit=100",
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "etag": "W/\"29ab8-2ZpzphGn4nUTu8uRBfzktBcgPCA\""
+   },
+   "fetched_at": "2026-09-22T09:21:49+00:00",
+   "file": "01.json.gz",
+   "gzip": true,
+   "bytes": 170680,
+   "sha256": "a1a0bc9d2dd9ca706c7f1561b9b7ba5b6eaa50aabff9a4fce2b5b2df77819d8b"
+  }
+ ]
+}

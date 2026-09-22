@@ -1,0 +1,73 @@
+{
+ "case": "json-api/prepare-registry",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:57+00:00",
+ "note": null,
+ "source": {
+  "id": "prepare-guideline-registry",
+  "name": "国际实践指南注册与透明化平台 PREPARE",
+  "homepage": "https://www.guidelines-registry.cn/",
+  "lane": "guideline",
+  "source_type": "evidence-body",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "国际实践指南注册与透明化平台",
+  "launch_tier": "P0",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 86400,
+  "poll_ceiling_s": 259200,
+  "config": {
+   "url": "https://www.guidelines-registry.cn/api/registration/guide/?page=1&page_size=20",
+   "family": "prepare-registry",
+   "max_pages": 3,
+   "allowed_hosts": [
+    "www.guidelines-registry.cn"
+   ],
+   "exclude_stages": [
+    "draft"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:55+00:00",
+ "request_budget": 1,
+ "parse_notes": [
+  "prepare_skipped_stage=3"
+ ],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.guidelines-registry.cn/api/registration/guide/?page=1&page_size=20",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.guidelines-registry.cn/api/registration/guide/?page=1&page_size=20",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:21:55+00:00",
+   "file": "01.json.gz",
+   "gzip": true,
+   "bytes": 93429,
+   "sha256": "e031aa64bea694fa1df38a1c07359ae23e08a42ed44a7e332d6bda3e39a28d63",
+   "redacted_keys": [
+    "contact_address",
+    "contact_email",
+    "contact_name",
+    "contact_phone",
+    "contact_wechat"
+   ],
+   "original_sha256": "d5afdf83e225eda06604a47f2c6774cc790cfd838fb63d0905dcf4eaafe1b9a8"
+  }
+ ]
+}

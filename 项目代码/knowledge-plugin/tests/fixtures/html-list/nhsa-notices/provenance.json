@@ -1,0 +1,70 @@
+{
+ "case": "html-list/nhsa-notices",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:21+00:00",
+ "note": null,
+ "source": {
+  "id": "nhsa-notices",
+  "name": "国家医保局 通知公告（含目录调整与集采）",
+  "homepage": "http://www.nhsa.gov.cn/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "国家医疗保障局",
+  "launch_tier": "P0",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "http://www.nhsa.gov.cn/col/col109/index.html",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.nhsa.gov.cn"
+   ],
+   "mode": "script-cdata",
+   "selectors": {
+    "item": "li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span:last-child"
+   },
+   "date_regex": "(20\\d{2}-\\d{2}-\\d{2})(?!\\d)",
+   "max_items": 40
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:20+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "http://www.nhsa.gov.cn/col/col109/index.html",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "http://www.nhsa.gov.cn/col/col109/index.html",
+   "headers": {
+    "content-type": "text/html",
+    "last-modified": "Sun, 20 Sep 2026 11:00:01 GMT",
+    "etag": "\"925d-65be808f3ce40-gzip\""
+   },
+   "fetched_at": "2026-09-22T09:21:21+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 37469,
+   "sha256": "42751090c3cdf75dbb7af899ded797b097be0ea28051a711e9d3b07e88a9bf88"
+  }
+ ]
+}

@@ -1,0 +1,82 @@
+{
+ "case": "evimed-api/no-key",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:08:14+00:00",
+ "note": "negative case: the request sent without the Authorization header",
+ "tries": 1,
+ "source": {
+  "id": "evimed-chictr",
+  "name": "中国临床试验注册中心 ChiCTR（经 EviMed 接口）",
+  "homepage": "https://www.chictr.org.cn/",
+  "lane": "pipeline",
+  "source_type": "regulator",
+  "access": "evimed-api",
+  "egress": "api",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "中国临床试验注册中心",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 86400,
+  "poll_ceiling_s": 172800,
+  "config": {
+   "family": "chictr",
+   "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/clinical-trial",
+   "queries": [
+    "肿瘤",
+    "心血管",
+    "糖尿病",
+    "神经",
+    "精神",
+    "感染",
+    "呼吸",
+    "重症",
+    "消化",
+    "肝病",
+    "肾脏",
+    "风湿免疫",
+    "血液",
+    "儿科",
+    "妇产",
+    "老年",
+    "外科",
+    "麻醉",
+    "中医药",
+    "药物"
+   ],
+   "registry": 0,
+   "count": 100,
+   "new_within_days": 14,
+   "max_pages": 25,
+   "allowed_hosts": [
+    "www.evimed.com"
+   ]
+  }
+ },
+ "state": null,
+ "now": "2026-09-22T11:08:14+00:00",
+ "exchanges": [
+  {
+   "method": "POST",
+   "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/clinical-trial",
+   "api": true,
+   "conditional": false,
+   "request_body": "{\"query\": \"肿瘤\", \"count\": 1, \"registry\": 0, \"startYear\": 2026}",
+   "request_headers": {
+    "Content-Type": "application/json"
+   },
+   "status": 200,
+   "final_url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/clinical-trial",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T11:08:13+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 43,
+   "sha256": "02b2cec001e5578a66ebe36cfd03b16103f9708f05763e68cc282f5a6d619e66"
+  }
+ ]
+}

@@ -1,0 +1,59 @@
+{
+ "case": "rss/chinjmap-double-escaped",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:22:17+00:00",
+ "note": null,
+ "source": {
+  "id": "chinjmap",
+  "name": "中国现代应用药学",
+  "homepage": "http://www.chinjmap.com/",
+  "lane": "evidence",
+  "source_type": "journal",
+  "access": "rss",
+  "egress": "direct",
+  "authority": 3,
+  "safety_feed": false,
+  "owner_entity": "中国药学会",
+  "launch_tier": "P0",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 10800,
+  "poll_ceiling_s": 64800,
+  "config": {
+   "url": "http://www.chinjmap.com/rss/current.xml",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.chinjmap.com"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:22:13+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "http://www.chinjmap.com/rss/current.xml",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "http://www.chinjmap.com/rss/current.xml",
+   "headers": {
+    "content-type": "text/xml;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:22:15+00:00",
+   "file": "01.xml.gz",
+   "gzip": true,
+   "bytes": 100398,
+   "sha256": "3b6845602b51ef17578e6154e6274050c81de971d603443c453022a3b17fecad"
+  }
+ ]
+}

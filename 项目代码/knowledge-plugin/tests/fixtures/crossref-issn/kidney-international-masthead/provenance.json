@@ -1,0 +1,70 @@
+{
+ "case": "crossref-issn/kidney-international-masthead",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:25:18+00:00",
+ "note": "a week with an 'Editorial Board' work (found by a Crossref title query on 2026-09-22)",
+ "source": {
+  "id": "j-0085-2538",
+  "name": "Kidney International",
+  "homepage": "https://www.sciencedirect.com/journal/kidney-international",
+  "lane": "evidence",
+  "source_type": "journal",
+  "access": "crossref-issn",
+  "egress": "direct",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "Elsevier",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "INT",
+  "poll_floor_s": 10800,
+  "poll_ceiling_s": 64800,
+  "config": {
+   "url": "https://api.crossref.org/journals/{issn}/works?filter=from-created-date:{since:%Y-%m-%d},type:journal-article&rows=100&sort=created&order=desc&select=DOI,title,created,published,type,update-to,abstract,author,container-title&cursor={cursor}",
+   "issn": "0085-2538",
+   "issns": [
+    "0085-2538",
+    "1523-1755"
+   ],
+   "cursor_start": "*",
+   "page_size": 100,
+   "max_pages": 5,
+   "lookback_days": 7,
+   "overlap_days": 1,
+   "incremental": true,
+   "allowed_hosts": [
+    "api.crossref.org",
+    "www.sciencedirect.com"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:25:16+00:00",
+ "request_budget": 5,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/journals/0085-2538/works?filter=from-created-date:2026-09-15,type:journal-article&sort=created&order=desc&cursor=*&select=DOI,title,created,published,type,update-to,abstract,author,container-title&rows=100",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/journals/0085-2538/works?filter=from-created-date:2026-09-15,type:journal-article&sort=created&order=desc&cursor=*&select=DOI,title,created,published,type,update-to,abstract,author,container-title&rows=100",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:25:16+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 37886,
+   "sha256": "0f5dfcab5f849585ac296dc25f223e1a00920daaa4ad5e5b5b95ab7546365e83"
+  }
+ ]
+}

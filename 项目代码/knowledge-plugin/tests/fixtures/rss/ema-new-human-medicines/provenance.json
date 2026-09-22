@@ -1,0 +1,61 @@
+{
+ "case": "rss/ema-new-human-medicines",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:22:20+00:00",
+ "note": null,
+ "source": {
+  "id": "ema-new-human-medicines",
+  "name": "欧洲药品管理局 新药与CHMP意见 New Medicines: Human",
+  "homepage": "https://www.ema.europa.eu/en/medicines",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "rss",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "European Medicines Agency",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "EU",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "https://www.ema.europa.eu/en/new-human-medicine-new.xml",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.ema.europa.eu"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:22:17+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.ema.europa.eu/en/new-human-medicine-new.xml",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ema.europa.eu/en/new-human-medicine-new.xml",
+   "headers": {
+    "content-type": "application/rss+xml; charset=utf-8",
+    "last-modified": "Tue, 22 Sep 2026 09:10:11 GMT",
+    "etag": "\"1790068211-gzip\""
+   },
+   "fetched_at": "2026-09-22T09:22:19+00:00",
+   "file": "01.xml",
+   "gzip": false,
+   "bytes": 8202,
+   "sha256": "e8cb8b07494e7c76090a89e2338cf8e3a3d7f82f33d74014b7abe9c11ee03211"
+  }
+ ]
+}

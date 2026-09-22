@@ -1,0 +1,70 @@
+{
+ "case": "html-list/ndcpa-epidemic-info",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:16+00:00",
+ "note": null,
+ "source": {
+  "id": "ndcpa-epidemic-info",
+  "name": "国家疾控局 疫情信息",
+  "homepage": "https://www.ndcpa.gov.cn/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "国家疾病预防控制局",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "https://www.ndcpa.gov.cn/jbkzzx/c100016/second/list.html",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.ndcpa.gov.cn"
+   ],
+   "mode": "script-json",
+   "script_var": "itemObj",
+   "fields": {
+    "title": "aT",
+    "link": "aU.common",
+    "date": "aPd",
+    "summary": "saT",
+    "id": "id"
+   },
+   "link_base": "https://www.ndcpa.gov.cn/",
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:14+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.ndcpa.gov.cn/jbkzzx/c100016/second/list.html",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ndcpa.gov.cn/jbkzzx/c100016/second/list.html",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T09:21:16+00:00",
+   "file": "01.html.gz",
+   "gzip": true,
+   "bytes": 82052,
+   "sha256": "e0fa47e85cd42f0f1eba00e86cc0374ac6868188eeb4cbda305e6bdd77d2b007"
+  }
+ ]
+}

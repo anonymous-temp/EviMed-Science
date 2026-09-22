@@ -1,0 +1,73 @@
+{
+ "case": "enrich/page-gov-cn",
+ "recorded_by": "tests/fixtures/record_enrich.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:35:00+00:00",
+ "rows": [
+  {
+   "entry_id": "gov-cn-policy:3469cd4acd2bb13da1515e66ed676c6f",
+   "revision": 1,
+   "source_id": "gov-cn-policy",
+   "external_key": "https://www.gov.cn/zhengce/202609/content_7081587.htm",
+   "identity_key": null,
+   "url": "https://www.gov.cn/zhengce/202609/content_7081587.htm",
+   "canonical_url": "https://www.gov.cn/zhengce/202609/content_7081587.htm",
+   "doi": null,
+   "pmid": null,
+   "registry_ids": [],
+   "title": "中共中央办公厅 国务院办公厅印发《关于分类推进高校改革的意见》",
+   "summary": null,
+   "lang": "zh",
+   "published_at": "2026-09-20T00:00:00+00:00",
+   "facts": {},
+   "first_seen_at": "2026-09-22T09:21:13+00:00",
+   "source_access": "html-list",
+   "source_egress": "direct",
+   "source_type": "regulator",
+   "source_config": {
+    "url": "https://www.gov.cn/zhengce/",
+    "max_pages": 1,
+    "allowed_hosts": [
+     "www.gov.cn"
+    ],
+    "selectors": {
+     "item": "div.item03 div.list li",
+     "title": "a",
+     "link": "a@href",
+     "date": "span"
+    },
+    "max_items": 20
+   },
+   "attempts": 0
+  }
+ ],
+ "results_at_recording": [
+  {
+   "status": "available",
+   "text_kind": "excerpt",
+   "fetched_from": "page",
+   "enrichment_keys": [],
+   "notes": []
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.gov.cn/zhengce/202609/content_7081587.htm",
+   "api": false,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.gov.cn/zhengce/202609/content_7081587.htm",
+   "headers": {
+    "content-type": "text/html"
+   },
+   "fetched_at": "2026-09-22T09:35:00+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 26196,
+   "sha256": "a86773272989dae29998da56329946d52dbb40b76f447e0eff63bd0cea933be1"
+  }
+ ]
+}

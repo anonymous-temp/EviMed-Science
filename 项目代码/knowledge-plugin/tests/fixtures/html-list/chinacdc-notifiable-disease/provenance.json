@@ -1,0 +1,69 @@
+{
+ "case": "html-list/chinacdc-notifiable-disease",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:32:38+00:00",
+ "note": null,
+ "source": {
+  "id": "chinacdc-notifiable-disease",
+  "name": "中国疾控中心 全国法定传染病疫情",
+  "homepage": "https://www.chinacdc.cn/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "中国疾病预防控制中心",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "https://www.chinacdc.cn/jksj/jksj01/",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.chinacdc.cn"
+   ],
+   "selectors": {
+    "item": "ul.xw_list li",
+    "title": "dd > a",
+    "link": "dd > a@href",
+    "date": "dd > a > span",
+    "summary": "p.zy"
+   },
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:32:36+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.chinacdc.cn/jksj/jksj01/",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.chinacdc.cn/jksj/jksj01/",
+   "headers": {
+    "content-type": "text/html; charset=utf-8",
+    "last-modified": "Fri, 18 Sep 2026 13:03:50 GMT",
+    "etag": "W/\"6aad36b6-7a5f\""
+   },
+   "fetched_at": "2026-09-22T11:32:38+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 31327,
+   "sha256": "32b2a88b601f48f16d74d0d506c331d8fa81148d64e42629079ccb73ea36c3b2"
+  }
+ ]
+}

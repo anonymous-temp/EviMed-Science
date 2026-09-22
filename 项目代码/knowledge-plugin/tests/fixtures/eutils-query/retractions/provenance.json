@@ -1,0 +1,83 @@
+{
+ "case": "eutils-query/retractions",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:06+00:00",
+ "note": null,
+ "source": {
+  "id": "pubmed-retractions",
+  "name": "PubMed 检索流 · 撤稿与关注声明",
+  "homepage": "https://pubmed.ncbi.nlm.nih.gov/",
+  "lane": "evidence",
+  "source_type": "journal",
+  "access": "eutils-query",
+  "egress": "direct",
+  "authority": 3,
+  "safety_feed": false,
+  "owner_entity": "U.S. National Library of Medicine",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 10800,
+  "poll_ceiling_s": 64800,
+  "config": {
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=100&sort=pub%20date&term=(%22Retracted%20Publication%22%5Bpt%5D%20OR%20%22Retraction%20of%20Publication%22%5Bpt%5D%20OR%20%22Expression%20of%20Concern%22%5Bpt%5D)&datetype=edat&mindate={since:%Y/%m/%d}&maxdate={today:%Y/%m/%d}",
+   "datetype": "edat",
+   "page_size": 30,
+   "max_pages": 6,
+   "lookback_days": 30,
+   "overlap_days": 1,
+   "incremental": true,
+   "allowed_hosts": [
+    "eutils.ncbi.nlm.nih.gov",
+    "pubmed.ncbi.nlm.nih.gov"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": "2026-09-21T09:21:04+00:00",
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:04+00:00",
+ "request_budget": 3,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=(%22Retracted%20Publication%22%5Bpt%5D%20OR%20%22Retraction%20of%20Publication%22%5Bpt%5D%20OR%20%22Expression%20of%20Concern%22%5Bpt%5D)&datetype=edat&mindate=2026/09/20&maxdate=2026/09/22&usehistory=y&retmax=0",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=(%22Retracted%20Publication%22%5Bpt%5D%20OR%20%22Retraction%20of%20Publication%22%5Bpt%5D%20OR%20%22Expression%20of%20Concern%22%5Bpt%5D)&datetype=edat&mindate=2026/09/20&maxdate=2026/09/22&usehistory=y&retmax=0",
+   "headers": {
+    "content-type": "application/json; charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:21:04+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 464,
+   "sha256": "ed912218602249883dd8612c6718bf622b71a7b56e6857ea9911975b52d0f768"
+  },
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6ab2488113dd67ef050f0e7d&retstart=0&retmax=2",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6ab2488113dd67ef050f0e7d&retstart=0&retmax=2",
+   "headers": {
+    "content-type": "text/xml; charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:21:06+00:00",
+   "file": "02.xml",
+   "gzip": false,
+   "bytes": 5014,
+   "sha256": "f882ae4a1be3eb2abc96c6997af012cc3e1af549f6102ad0aa6b5e01940bc94a"
+  }
+ ]
+}

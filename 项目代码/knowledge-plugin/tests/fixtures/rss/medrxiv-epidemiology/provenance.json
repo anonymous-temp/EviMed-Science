@@ -1,0 +1,63 @@
+{
+ "case": "rss/medrxiv-epidemiology",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:22:28+00:00",
+ "note": null,
+ "source": {
+  "id": "medrxiv-epidemiology",
+  "name": "medRxiv · 流行病学",
+  "homepage": "https://www.medrxiv.org/",
+  "lane": "evidence",
+  "source_type": "preprint",
+  "access": "rss",
+  "egress": "direct",
+  "authority": 2,
+  "safety_feed": false,
+  "owner_entity": "medRxiv",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 129600,
+  "config": {
+   "url": "https://connect.medrxiv.org/medrxiv_xml.php?subject=Epidemiology",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "connect.medrxiv.org",
+    "www.medrxiv.org"
+   ],
+   "strip_params": [
+    "rss"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:22:26+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://connect.medrxiv.org/medrxiv_xml.php?subject=Epidemiology",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://connect.medrxiv.org/medrxiv_xml.php?subject=Epidemiology",
+   "headers": {
+    "content-type": "application/xml;\")"
+   },
+   "fetched_at": "2026-09-22T09:22:27+00:00",
+   "file": "01.xml.gz",
+   "gzip": true,
+   "bytes": 89573,
+   "sha256": "075a6996a1f2377dbff5485cb68a101a7380358f9161f90c2f04674a15915b9a"
+  }
+ ]
+}

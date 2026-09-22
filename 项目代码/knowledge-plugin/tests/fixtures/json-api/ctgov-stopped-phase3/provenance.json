@@ -1,0 +1,67 @@
+{
+ "case": "json-api/ctgov-stopped-phase3",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:41+00:00",
+ "note": null,
+ "source": {
+  "id": "ctgov-stopped-phase3",
+  "name": "ClinicalTrials.gov · 终止/暂停/撤回的 3 期试验",
+  "homepage": "https://clinicaltrials.gov/",
+  "lane": "pipeline",
+  "source_type": "regulator",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "U.S. National Library of Medicine",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 129600,
+  "config": {
+   "url": "https://clinicaltrials.gov/api/v2/studies?filter.advanced=AREA%5BPhase%5DPHASE3%20AND%20AREA%5BLastUpdatePostDate%5DRANGE%5B{since:%Y-%m-%d},MAX%5D&filter.overallStatus=TERMINATED%7CSUSPENDED%7CWITHDRAWN&sort=LastUpdatePostDate:desc&pageSize=50&format=json&countTotal=true",
+   "family": "ctgov",
+   "date_field": "LastUpdatePostDate",
+   "trial_event": "status",
+   "page_size": 50,
+   "max_pages": 5,
+   "lookback_days": 7,
+   "overlap_days": 1,
+   "incremental": true,
+   "allowed_hosts": [
+    "clinicaltrials.gov"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:40+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://clinicaltrials.gov/api/v2/studies?filter.advanced=AREA%5BPhase%5DPHASE3%20AND%20AREA%5BLastUpdatePostDate%5DRANGE%5B2026-09-15,MAX%5D&filter.overallStatus=TERMINATED%7CSUSPENDED%7CWITHDRAWN&sort=LastUpdatePostDate:desc&pageSize=50&format=json&countTotal=true&fields=NCTId,BriefTitle,OfficialTitle,Acronym,OverallStatus,WhyStopped,Phase,StudyType,LeadSponsorName,StudyFirstPostDate,ResultsFirstPostDate,LastUpdatePostDate,BriefSummary,EnrollmentCount,Condition,InterventionName,HasResults",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://clinicaltrials.gov/api/v2/studies?filter.advanced=AREA%5BPhase%5DPHASE3%20AND%20AREA%5BLastUpdatePostDate%5DRANGE%5B2026-09-15,MAX%5D&filter.overallStatus=TERMINATED%7CSUSPENDED%7CWITHDRAWN&sort=LastUpdatePostDate:desc&pageSize=50&format=json&countTotal=true&fields=NCTId,BriefTitle,OfficialTitle,Acronym,OverallStatus,WhyStopped,Phase,StudyType,LeadSponsorName,StudyFirstPostDate,ResultsFirstPostDate,LastUpdatePostDate,BriefSummary,EnrollmentCount,Condition,InterventionName,HasResults",
+   "headers": {
+    "content-type": "application/json",
+    "etag": "\"0/0.34.1/mub0ld6w-gzip\""
+   },
+   "fetched_at": "2026-09-22T09:21:40+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 16074,
+   "sha256": "49c52640e1b7550eccb3377b37df6ddeaf7cdd60624ca9163f51983d8a037439"
+  }
+ ]
+}

@@ -1,0 +1,68 @@
+{
+ "case": "html-list/cdr-adr-pv-newsletter",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:08+00:00",
+ "note": null,
+ "source": {
+  "id": "cdr-adr-pv-newsletter",
+  "name": "药物警戒快讯（月刊）",
+  "homepage": "https://www.cdr-adr.org.cn/drug_1/aqjs_1/",
+  "lane": "safety",
+  "source_type": "regulator",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": true,
+  "owner_entity": "国家药品监督管理局",
+  "launch_tier": "P0",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "https://www.cdr-adr.org.cn/drug_1/aqjs_1/drug_aqjs_jjkx/",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.cdr-adr.org.cn"
+   ],
+   "selectors": {
+    "item": "ul.First_wj_101",
+    "title": "li.liS1 a@title",
+    "link": "li.liS1 a@href",
+    "date": "li.liS2"
+   },
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:06+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.cdr-adr.org.cn/drug_1/aqjs_1/drug_aqjs_jjkx/",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.cdr-adr.org.cn/drug_1/aqjs_1/drug_aqjs_jjkx/",
+   "headers": {
+    "content-type": "text/html; charset=utf-8",
+    "last-modified": "Tue, 22 Sep 2026 08:52:34 GMT",
+    "etag": "W/\"6ab241d2-b8db\""
+   },
+   "fetched_at": "2026-09-22T09:21:08+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 47323,
+   "sha256": "2706b7feb0162c9fa25713e8f4e208b259c35540e9198a2a05e6c4339e2460b2"
+  }
+ ]
+}

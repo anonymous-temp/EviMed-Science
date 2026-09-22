@@ -1,0 +1,799 @@
+{
+ "_about": "Hand-kept runtime fields keyed by source id; they win over what tools/build_registry.py derives. 'config' merges key by key. Keys starting with '_' are comments. Edit, then run tools/build_registry.py.",
+ "j-0028-4793": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)",
+  "owner_entity": "Massachusetts Medical Society"
+ },
+ "j-2766-5526": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)",
+  "owner_entity": "Massachusetts Medical Society"
+ },
+ "j-0140-6736": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-0098-7484": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)",
+  "owner_entity": "American Medical Association"
+ },
+ "j-2168-6106": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-1756-1833": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)",
+  "owner_entity": "BMJ"
+ },
+ "j-0003-4819": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-1078-8956": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-0028-0836": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-0036-8075": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-0092-8674": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-1470-2045": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-0732-183x": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-0007-9235": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-0009-7322": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-0735-1097": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-0195-668x": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-2213-8587": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-1474-4422": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-1473-3099": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-2213-2600": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-0016-5085": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)"
+ },
+ "j-0006-4971": {
+  "authority": 5,
+  "_why": "top journal (plan 10.3.4: never waits for an abstract)",
+  "owner_entity": "American Society of Hematology"
+ },
+ "j-2666-6340": {
+  "owner_entity": "Elsevier",
+  "_why": "publisher missing in the probe registry"
+ },
+ "j-2095-9273": {
+  "owner_entity": "Science China Press",
+  "_why": "publisher missing in the probe registry"
+ },
+ "j-0012-3692": {
+  "owner_entity": "Elsevier",
+  "_why": "publisher missing in the probe registry"
+ },
+ "j-2468-1253": {
+  "owner_entity": "Elsevier",
+  "_why": "publisher missing in the probe registry"
+ },
+ "j-0031-4005": {
+  "owner_entity": "American Academy of Pediatrics",
+  "_why": "publisher missing in the probe registry"
+ },
+ "j-0003-3022": {
+  "owner_entity": "Wolters Kluwer",
+  "_why": "publisher missing in the probe registry"
+ },
+ "j-0033-8419": {
+  "owner_entity": "Radiological Society of North America",
+  "_why": "publisher missing in the probe registry"
+ },
+ "j-0161-6420": {
+  "owner_entity": "Elsevier",
+  "_why": "publisher missing in the probe registry"
+ },
+ "j-2352-4642": {
+  "owner_entity": "Elsevier",
+  "_why": "publisher missing in the probe registry"
+ },
+ "openfda-drugsfda-api": {
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 86400,
+  "_why": "Drugs@FDA refreshes weekly; the anonymous openFDA budget is 300/day shared with research runs",
+  "config": {
+   "incremental": false
+  },
+  "_why_config": "P2: openFDA record dates lag publication (drugsfda last_updated 2026-09-16 held approvals dated to 09-14); read the whole look-back window every poll"
+ },
+ "openfda-drug-enforcement-api": {
+  "poll_floor_s": 3600,
+  "poll_ceiling_s": 21600,
+  "_why": "enforcement reports publish weekly; hourly keeps a recall same-day without spending the openFDA cap",
+  "config": {
+   "incremental": false
+  },
+  "_why_config": "P2: openFDA record dates lag publication (drugsfda last_updated 2026-09-16 held approvals dated to 09-14); read the whole look-back window every poll"
+ },
+ "openfda-drug-event-faers-api": {
+  "poll_floor_s": 86400,
+  "poll_ceiling_s": 604800,
+  "_why": "FAERS refreshes quarterly; only meta.last_updated is news",
+  "config": {
+   "incremental": false
+  },
+  "_why_config": "P2: openFDA record dates lag publication (drugsfda last_updated 2026-09-16 held approvals dated to 09-14); read the whole look-back window every poll"
+ },
+ "openfda-drug-shortages-api": {
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 86400,
+  "_why": "shortage records change daily at most",
+  "config": {
+   "incremental": false
+  },
+  "_why_config": "P2: openFDA record dates lag publication (drugsfda last_updated 2026-09-16 held approvals dated to 09-14); read the whole look-back window every poll"
+ },
+ "ema-prac-safety-signals": {
+  "safety_feed": true,
+  "_why": "PRAC signal recommendations are official EU safety communications",
+  "config": {
+   "selectors": {
+    "item": "div[data-ema-document-type=\"prac-recommendation\"]",
+    "title": "p.file-title",
+    "link": "a.standalone@href",
+    "date": "time@datetime"
+   },
+   "max_items": 20
+  }
+ },
+ "dailymed-label-updates": {
+  "safety_feed": false,
+  "_why": "every SPL update, not safety-specific"
+ },
+ "retraction-watch": {
+  "source_type": "media",
+  "authority": 3
+ },
+ "pubpeer": {
+  "source_type": "media",
+  "authority": 2
+ },
+ "crossref-retractions": {
+  "source_type": "journal",
+  "_why": "retraction notices are journal publications"
+ },
+ "crossref-retraction-updates": {
+  "source_type": "journal"
+ },
+ "cdc-eid-journal": {
+  "source_type": "journal",
+  "authority": 4
+ },
+ "jama-guide-statistics-methods": {
+  "source_type": "journal"
+ },
+ "nlm-pubmed-news": {
+  "source_type": "regulator",
+  "authority": 4
+ },
+ "zgylbx-china-health-insurance": {
+  "source_type": "media",
+  "authority": 2,
+  "_why": "a magazine, not the agency"
+ },
+ "endpoints-news-ai": {
+  "source_type": "media",
+  "authority": 3,
+  "egress": "relay",
+  "enabled": true,
+  "_why": "HTTP 403 to the honest EviMedBot identity from Beijing and from the dev box (2026-09-22): read through the Tokyo node; not in that day's node acceptance probe, so live verification is the controller's on production"
+ },
+ "biopharmatrend": {
+  "source_type": "media",
+  "authority": 2
+ },
+ "drugtimes-09": {
+  "source_type": "media",
+  "authority": 2
+ },
+ "openai-healthbench": {
+  "source_type": "company",
+  "authority": 2
+ },
+ "who-news-api": {
+  "source_type": "regulator",
+  "authority": 5,
+  "poll_floor_s": 3600,
+  "poll_ceiling_s": 21600,
+  "_why": "WHO newsroom: an official body's announcements, not a society page"
+ },
+ "nhsa-notices": {
+  "config": {
+   "mode": "script-cdata",
+   "selectors": {
+    "item": "li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span:last-child"
+   },
+   "date_regex": "(20\\d{2}-\\d{2}-\\d{2})(?!\\d)",
+   "max_items": 40
+  }
+ },
+ "nhsa-consultations": {
+  "config": {
+   "mode": "script-cdata",
+   "selectors": {
+    "item": "li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span:last-child"
+   },
+   "date_regex": "(20\\d{2}-\\d{2}-\\d{2})(?!\\d)",
+   "max_items": 40
+  }
+ },
+ "nhsa-policy-interpretation": {
+  "config": {
+   "mode": "script-cdata",
+   "selectors": {
+    "item": "li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span:last-child"
+   },
+   "date_regex": "(20\\d{2}-\\d{2}-\\d{2})(?!\\d)",
+   "max_items": 40
+  }
+ },
+ "gov-cn-policy": {
+  "config": {
+   "selectors": {
+    "item": "div.item03 div.list li",
+    "title": "a",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 20
+  }
+ },
+ "cdr-adr-safety-warnings": {
+  "config": {
+   "selectors": {
+    "item": "ul.First_wj_101",
+    "title": "li.liS1 a@title",
+    "link": "li.liS1 a@href",
+    "date": "li.liS2"
+   },
+   "max_items": 30,
+   "link_hosts": [
+    "www.cdr-adr.org.cn",
+    "www.nmpa.gov.cn"
+   ]
+  }
+ },
+ "cdr-adr-pv-newsletter": {
+  "config": {
+   "selectors": {
+    "item": "ul.First_wj_101",
+    "title": "li.liS1 a@title",
+    "link": "li.liS1 a@href",
+    "date": "li.liS2"
+   },
+   "max_items": 30
+  }
+ },
+ "pubmed-trending-page": {
+  "config": {
+   "selectors": {
+    "item": "article.full-docsum",
+    "title": "a.docsum-title",
+    "link": "a.docsum-title@href",
+    "doi": "span.docsum-journal-citation.full-journal-citation"
+   },
+   "max_items": 10
+  }
+ },
+ "ndcpa-notices": {
+  "config": {
+   "mode": "script-json",
+   "script_var": "itemObj",
+   "fields": {
+    "title": "aT",
+    "link": "aU.common",
+    "date": "aPd",
+    "summary": "saT",
+    "id": "id"
+   },
+   "link_base": "https://www.ndcpa.gov.cn/",
+   "max_items": 30
+  }
+ },
+ "ndcpa-epidemic-info": {
+  "config": {
+   "mode": "script-json",
+   "script_var": "itemObj",
+   "fields": {
+    "title": "aT",
+    "link": "aU.common",
+    "date": "aPd",
+    "summary": "saT",
+    "id": "id"
+   },
+   "link_base": "https://www.ndcpa.gov.cn/",
+   "max_items": 30
+  }
+ },
+ "sciencenet-news": {
+  "config": {
+   "url": "https://news.sciencenet.cn/topnews.aspx",
+   "selectors": {
+    "item": "tr[onmouseover]",
+    "title": "a",
+    "link": "a@href",
+    "date": "td:nth-child(3)"
+   },
+   "max_items": 40
+  },
+  "_why_config": "P2: the homepage has no dated list; topnews.aspx is the dated headline table (2026-09-22)"
+ },
+ "prepare-guideline-registry": {
+  "config": {
+   "family": "prepare-registry",
+   "exclude_stages": [
+    "draft"
+   ]
+  },
+  "_why_config": "P2: list is ordered by submitted_at desc and mixes unsubmitted drafts; records carry contact PII the mapping drops"
+ },
+ "star-guideline-rating-cn": {
+  "config": {
+   "family": "star-rating",
+   "method": "POST",
+   "body": {
+    "page": 1,
+    "limit": 40
+   },
+   "max_pages": 3,
+   "full_walk_every_s": 604800,
+   "full_walk_max_pages": 160
+  },
+  "_why_config": "P2: POST only; 40 per page whatever 'limit' says; ordered by star rating, not date (152 pages on 2026-09-22), so new ratings are only found by a full walk. Aligned 11:4xZ with P1's merged form (daily cap 3 + weekly full walk of up to 160 pages), replacing my earlier max_pages 160 so a re-merge cannot turn the daily poll into a 160-page walk",
+  "poll_floor_s": 86400,
+  "poll_ceiling_s": 86400,
+  "_why": "ordered by rating, not date: the daily poll reads 3 pages; a new rating is only found by the weekly full walk of ~152 pages (config.full_walk_*), retried at most once a day when it fails"
+ },
+ "stanford-medhelm": {
+  "config": {
+   "family": "medhelm",
+   "url": "https://crfm.stanford.edu/helm/medhelm/latest/config.js",
+   "allowed_hosts": [
+    "crfm.stanford.edu",
+    "storage.googleapis.com"
+   ],
+   "max_pages": 2
+  },
+  "_why_config": "P2: the pinned releases/v4.0.0/summary.json never changes; config.js names the current release (window.RELEASE) and the adapter chains to its summary.json",
+  "poll_floor_s": 86400,
+  "poll_ceiling_s": 259200,
+  "_why": "a benchmark release changes a few times a year; config.js is checked daily"
+ },
+ "medrxiv-epidemiology": {
+  "config": {
+   "strip_params": [
+    "rss"
+   ]
+  },
+  "_why_config": "P2: item links carry ?rss=1"
+ },
+ "medrxiv-infectious-diseases": {
+  "config": {
+   "strip_params": [
+    "rss"
+   ]
+  },
+  "_why_config": "P2: item links carry ?rss=1"
+ },
+ "medrxiv-oncology": {
+  "config": {
+   "strip_params": [
+    "rss"
+   ]
+  },
+  "_why_config": "P2: item links carry ?rss=1"
+ },
+ "medrxiv-cardiovascular-medicine": {
+  "config": {
+   "strip_params": [
+    "rss"
+   ]
+  },
+  "_why_config": "P2: item links carry ?rss=1"
+ },
+ "medrxiv-health-informatics": {
+  "config": {
+   "strip_params": [
+    "rss"
+   ]
+  },
+  "_why_config": "P2: item links carry ?rss=1"
+ },
+ "medrxiv-pharmacology-and-therapeutics": {
+  "config": {
+   "strip_params": [
+    "rss"
+   ]
+  },
+  "_why_config": "P2: item links carry ?rss=1"
+ },
+ "medrxiv-public-and-global-health": {
+  "config": {
+   "strip_params": [
+    "rss"
+   ]
+  },
+  "_why_config": "P2: item links carry ?rss=1"
+ },
+ "medrxiv-psychiatry-and-clinical-psychology": {
+  "config": {
+   "strip_params": [
+    "rss"
+   ]
+  },
+  "_why_config": "P2: item links carry ?rss=1"
+ },
+ "biorxiv-pharmacology-toxicology": {
+  "config": {
+   "strip_params": [
+    "rss"
+   ]
+  },
+  "_why_config": "P2: item links carry ?rss=1"
+ },
+ "biorxiv-all-subjects": {
+  "config": {
+   "strip_params": [
+    "rss"
+   ]
+  },
+  "_why_config": "P2: item links carry ?rss=1"
+ },
+ "endpoints-news": {
+  "egress": "relay",
+  "enabled": true,
+  "_why": "HTTP 403 to the honest EviMedBot identity from Beijing and from the dev box (2026-09-22): read through the Tokyo node; not in that day's node acceptance probe, so live verification is the controller's on production"
+ },
+ "pubmed-rss-created-headlessly": {
+  "enabled": false,
+  "disabled_reason": "robots_disallow",
+  "_why": "PubMed's robots.txt disallows /rss for crawlers ('Disallow: /rss', read 2026-09-22); the E-utilities query streams read PubMed under NCBI's API rules instead"
+ },
+ "the-decoder": {
+  "enabled": false,
+  "disabled_reason": "robots_disallow",
+  "_why": "the-decoder.com's robots.txt disallows its feed for crawlers (read 2026-09-22); robots governs site feeds (plan 6.1)"
+ },
+ "nmpa-label-revision-announcements": {
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "_why_cadence": "a drug-safety column of NMPA: every 30 minutes through the browser (plan 10.2.6)",
+  "config": {
+   "selectors": {
+    "item": "div.list ul li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 30
+  },
+  "_why_config": "P2: same NMPA list template; 20 items, the newest 2026-09-04 (国家药监局关于修订…说明书的公告 — the titles the /text drug-label lookup reads)"
+ },
+ "nmpa-other-drug-announcements": {
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "_why_cadence": "NMPA's drug 公告通告 column, which carries the ADR bulletins: every 30 minutes through the browser (plan 10.2.6)",
+  "config": {
+   "url": "https://www.nmpa.gov.cn/yaopin/ypggtg/index.html",
+   "selectors": {
+    "item": "div.list ul li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 30
+  },
+  "_why_config": "P2: the registry URL …/ypggtg/ypqtggtg/index.html answers 404 in a real browser (and …/ypggtg/index.html too, 2026-09-22); the drug column's 公告通告 list /yaopin/ypggtg/index.html renders 200 with 20 items whose links are the ypqtggtg (其他公告通告), zhybhpzh and ypshmshxdgg notices",
+  "safety_feed": false,
+  "_why_safety": "controller 2026-09-22: since P2's URL fix this is NMPA's general 药品公告通告 list, a mixed column (参比制剂目录, 进口药品通关试点 …) that reached readers as red 安全警示 and bypassed scoring; the platform makes a regulator item a safety alert when its edit types it safety-notice (frontierSafetyAlert), so ADR bulletins here are still caught. The 30-minute cadence stays for those bulletins.",
+  "lane": "mixed",
+  "_why_lane": "same defect, lane side: the platform pins a source's items to its own lane (allowedLanes), so lane safety would still file 参比制剂目录 and 通关试点 notices under 药物安全; mixed (SPEC: the screening model decides per item) puts them under 审批监管 and ADR bulletins under 药物安全"
+ },
+ "nmpa-ggtg": {
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "_why_cadence": "regulator list read through the browser: every 2 hours (plan 10.2.6)",
+  "config": {
+   "selectors": {
+    "item": "div.list ul li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 30
+  },
+  "_why_config": "P2: rendered through local Chromium 2026-09-22 11:10Z: 200, 20 dated items (div.list > ul > li; a@title is the untruncated title, the date is '(2026-09-22)' in a span); links are relative (../../xxgk/…) and resolve against the page URL"
+ },
+ "nmpa-innovative-approvals": {
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "_why_cadence": "regulator list read through the browser: every 2 hours (plan 10.2.6)",
+  "config": {
+   "selectors": {
+    "item": "div.text-list li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 30
+  },
+  "_why_config": "P2: rendered 200: two blocks (创新药 cxypxx / 创新医疗器械 cxylqxlm) in div.text-list, 14 dated items"
+ },
+ "cde-guidance-principles": {
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "_why_cadence": "regulator list read through the browser: every 2 hours (plan 10.2.6)",
+  "config": {}
+ },
+ "cde-breakthrough-therapy": {
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "_why_cadence": "regulator list read through the browser: every 2 hours (plan 10.2.6)",
+  "config": {
+   "selectors": {
+    "item": "tbody#breakIncludePriorityTbody tr[ondblclick]",
+    "id": "td:nth-child(2)",
+    "title": "td:nth-child(3)",
+    "summary": "td:nth-child(4)",
+    "date": "td:nth-child(7)"
+   },
+   "link_template": "https://www.cde.org.cn/main/xxgk/listpage/da6efd086c099b7fc949121166f0130c?acceptid={id}&date={date}",
+   "title_template": "纳入突破性治疗品种名单：{title}（{id}）",
+   "summary_template": "注册申请人：{summary}",
+   "min_title_chars": 2
+  },
+  "_why_config": "P2: rendered 200 (2026-09-22): the default tab is 纳入突破性治疗品种名单, 10 rows (序号, 受理号, 药品名称, 注册申请人, 申请日期, 公示日期, 公示截止日期, 罕见病). A row has no link (ondblclick opens an in-page layer through list.js, which answered 403 to this box), so the link — and the key — is the list page with ?acceptid=<受理号>&date=<公示截止日期> (link-derived): a #fragment would collapse every row into one canonical URL, and one acceptance number is listed twice (CXSL2300094 SYS6010: 2026-08-31 and 2026-09-14, one inclusion per indication). The date is 公示截止日期: a row joins the inclusion list only after its publicity closes. The 拟突破性治疗品种 tab loads on click and is not read"
+ },
+ "cde-marketed-drug-info": {
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "_why_cadence": "regulator list read through the browser: every 2 hours (plan 10.2.6)",
+  "config": {}
+ },
+ "cmde-guidance": {
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "_why_cadence": "regulator list read through the browser: every 2 hours (plan 10.2.6)",
+  "config": {
+   "selectors": {
+    "item": "div.list ul li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 30
+  },
+  "_why_config": "P2: rendered 200: 20 items (征求意见稿 zqyjg and 指导原则文本库 zdyzwbk), same NMPA-family template"
+ },
+ "nhc-policy-documents": {
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "_why_cadence": "regulator list read through the browser: every 2 hours (plan 10.2.6)",
+  "config": {
+   "url": "https://www.nhc.gov.cn/wjw/gfxwjj/list.shtml",
+   "selectors": {
+    "item": "ul.zxxx_list li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span.ml"
+   },
+   "max_items": 30
+  },
+  "_why_config": "P2: the registry URL /wjw/index.shtml is the portal home page (no dated list); /wjw/gfxwjj/list.shtml (规范性文件) renders 200 with 24 dated items from every department — policy notices and the 印发…指南/规范/规程 notices (e.g. 孤独症谱系障碍儿童干预康复指南（2026年版）, 血站技术操作规程（2026版）)"
+ },
+ "evimed-guides": {
+  "config": {
+   "queries": [
+    "指南",
+    "专家共识",
+    "临床实践指南",
+    "诊疗规范"
+   ],
+   "max_pages": 4
+  },
+  "_why_config": "P2: plan 12.2 measured the publishers filter as a no-op (30 calls returned the same set); four query words, one request each (already merged by P1 at 11:16Z from the log line)"
+ },
+ "natcm-notices": {
+  "config": {
+   "selectors": {
+    "item": "ul.lbbt li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 30
+  },
+  "_why_config": "P2: 2026-09-22: 25 dated items (td > ul.lbbt > li; a@title is the full title)"
+ },
+ "most-tztg": {
+  "config": {
+   "selectors": {
+    "item": "ul.info_list2 li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span.date"
+   },
+   "max_items": 30
+  },
+  "_why_config": "P2: 2026-09-22: 20 dated items (ul.info_list2 > li; the date is printed twice, span.date mhide/pchide, the first is read)"
+ },
+ "nmpa-gd-mirror": {
+  "config": {
+   "selectors": {
+    "item": "ul.infoList li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span.time"
+   },
+   "max_items": 30
+  },
+  "_why_config": "P2: 2026-09-22: 20 items; the first is pinned (2026-01-14), the rest newest first; dates as '[ 2026-09-11 ]'"
+ },
+ "csco-news": {
+  "config": {
+   "selectors": {
+    "item": "ul.newlist li",
+    "title": "a i",
+    "link": "a@href",
+    "date": "span.time"
+   },
+   "max_items": 30
+  },
+  "_why_config": "P2: 2026-09-22: 15 items (ul.dotlist.newlist > li; the title is the <i> inside the link, the date '[2026-08-17]'); 4 of the 15 link to the society's WeChat posts (mp.weixin.qq.com) and are dropped by the host rule"
+ },
+ "gd-pharm-society-notifications": {
+  "config": {
+   "selectors": {
+    "item": "div.list-item",
+    "title": "h3.list-title a",
+    "link": "h3.list-title a@href",
+    "summary": "p.list-summary",
+    "date": "span.list-time"
+   },
+   "date_regex": "(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})",
+   "max_items": 30
+  },
+  "_why_config": "P2: 2026-09-22: 10 items with a list summary (cut with ...) and '发布时间：2026-09-18 10:27:55 | 浏览：328' (Beijing time)"
+ },
+ "cntcm-news": {
+  "config": {
+   "selectors": {
+    "item": "div.nlist02 ul.mb15 li",
+    "title": "a",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 40
+  },
+  "_why_config": "P2: 2026-09-22: the 40-item headline list (div.nlist02 > ul.mb15 > li: span date, then the link); the plain ul below it is an older topic list"
+ },
+ "nhsa-policy-regulations": {
+  "config": {
+   "mode": "script-cdata",
+   "selectors": {
+    "item": "li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span:last-child"
+   },
+   "date_regex": "(20\\d{2}-\\d{2}-\\d{2})(?!\\d)",
+   "max_items": 40
+  },
+  "_why_config": "P2: the Hanweb template of nhsa-notices (the list is inside <script type=text/xml> CDATA records)"
+ },
+ "cdr-adr-notices": {
+  "config": {
+   "selectors": {
+    "item": "td.divStyle",
+    "title": "div.liS1 a@title",
+    "link": "div.liS1 a@href",
+    "date": "div.liS2"
+   },
+   "max_items": 30,
+   "link_hosts": [
+    "www.cdr-adr.org.cn",
+    "www.nmpa.gov.cn"
+   ]
+  },
+  "_why_config": "P2: 2026-09-22: 20 items (td.divStyle: div.liS1 link, div.liS2 date); like the safety column it lists NMPA pages too (www.nmpa.gov.cn innovative-drug approvals)"
+ },
+ "zhongguokexuebao": {
+  "config": {
+   "selectors": {
+    "item": "tr[onmouseover]",
+    "title": "a",
+    "link": "a@href",
+    "date": "td:nth-child(3)"
+   },
+   "max_items": 40
+  },
+  "_why_config": "P2: 2026-09-22: todaynews.aspx has the table template of sciencenet-news (30 rows; date '2026/9/22 19:00:35', Beijing time)"
+ },
+ "chinacdc-notifiable-disease": {
+  "config": {
+   "selectors": {
+    "item": "ul.xw_list li",
+    "title": "dd > a",
+    "link": "dd > a@href",
+    "date": "dd > a > span",
+    "summary": "p.zy"
+   },
+   "max_items": 30
+  },
+  "_why_config": "P2: 2026-09-22: 12 items; the date span sits inside the title link (stripped from the title by the reader), p.zy is the report's opening paragraph"
+ },
+ "china-cdc-news": {
+  "config": {
+   "selectors": {
+    "item": "ul.xw_list li",
+    "title": "dd > a",
+    "link": "dd > a@href",
+    "date": "dd > a > span",
+    "summary": "p.zy"
+   },
+   "max_items": 30
+  },
+  "_why_config": "P2: 2026-09-22: 12 items, the chinacdc-notifiable-disease template; long titles are cut with ... by the site (the page excerpt has the full text)"
+ },
+ "evimed-chictr": {
+  "config": {
+   "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/clinical-trial"
+  },
+  "_why_config": "P2: the sponsor fact is only in v1: v2/clinical-trial records have 13 fields and no sponsor (300 of 300 recorded); v1 review/api/clinical-trial records carry primarySponsor (100 of 100) and the registry's own registrationNo, but no interventions. Measured 11:41Z on 肿瘤: v1 and v2 each return 100 of ~600 records of 2026, ranked by relevance, 4 of them registered within 14 days each, only 1 in common — identity (reg:<id>:registered:<date>) and external key are the same for both versions, so switching creates no duplicates (one revision per entry at the switch). Fixture tests/fixtures/evimed-api/chictr-v1. The adapter's default endpoint is v1 now; your row names v2 explicitly, hence this block."
+ }
+}

@@ -1,0 +1,60 @@
+{
+ "case": "atom/mhra-drug-safety-update",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:20:26+00:00",
+ "note": null,
+ "source": {
+  "id": "mhra-drug-safety-update",
+  "name": "英国MHRA 药物安全通报 Drug Safety Update",
+  "homepage": "https://www.gov.uk/drug-safety-update",
+  "lane": "safety",
+  "source_type": "regulator",
+  "access": "atom",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": true,
+  "owner_entity": "Medicines and Healthcare products Regulatory Agency",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "UK",
+  "poll_floor_s": 1800,
+  "poll_ceiling_s": 7200,
+  "config": {
+   "url": "https://www.gov.uk/drug-safety-update.atom",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.gov.uk"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:20:24+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.gov.uk/drug-safety-update.atom",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.gov.uk/drug-safety-update.atom",
+   "headers": {
+    "content-type": "application/atom+xml; charset=utf-8",
+    "etag": "W/\"f18fd7805fbdcf0920f54dd0d1931ee0\""
+   },
+   "fetched_at": "2026-09-22T09:20:26+00:00",
+   "file": "01.xml",
+   "gzip": false,
+   "bytes": 39229,
+   "sha256": "f18fd7805fbdcf0920f54dd0d1931ee0cfd2ac24a6483130d7910d090d531971"
+  }
+ ]
+}

@@ -1,0 +1,60 @@
+{
+ "case": "eutils-query/datetype-misspelled",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:20:51+00:00",
+ "note": "negative case: datetype=edta (misspelled); PubMed answers 200 count 0 with the dates read as words",
+ "tries": 1,
+ "source": {
+  "id": "pubmed-rct-core-journals",
+  "name": "PubMed 检索流 · 核心临床期刊 RCT",
+  "homepage": "https://pubmed.ncbi.nlm.nih.gov/",
+  "lane": "evidence",
+  "source_type": "journal",
+  "access": "eutils-query",
+  "egress": "direct",
+  "authority": 3,
+  "safety_feed": false,
+  "owner_entity": "U.S. National Library of Medicine",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 10800,
+  "poll_ceiling_s": 64800,
+  "config": {
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=100&sort=pub%20date&term=(randomized%20controlled%20trial%5Bpt%5D)%20AND%20(%22N%20Engl%20J%20Med%22%5Bjour%5D%20OR%20%22Lancet%22%5Bjour%5D%20OR%20%22JAMA%22%5Bjour%5D%20OR%20%22BMJ%22%5Bjour%5D%20OR%20%22Ann%20Intern%20Med%22%5Bjour%5D%20OR%20%22Nat%20Med%22%5Bjour%5D%20OR%20%22JAMA%20Intern%20Med%22%5Bjour%5D%20OR%20%22Lancet%20Oncol%22%5Bjour%5D%20OR%20%22J%20Clin%20Oncol%22%5Bjour%5D%20OR%20%22Circulation%22%5Bjour%5D%20OR%20%22Eur%20Heart%20J%22%5Bjour%5D%20OR%20%22J%20Am%20Coll%20Cardiol%22%5Bjour%5D%20OR%20%22Gastroenterology%22%5Bjour%5D%20OR%20%22Gut%22%5Bjour%5D%20OR%20%22Blood%22%5Bjour%5D%20OR%20%22Diabetes%20Care%22%5Bjour%5D%20OR%20%22Lancet%20Diabetes%20Endocrinol%22%5Bjour%5D%20OR%20%22Am%20J%20Respir%20Crit%20Care%20Med%22%5Bjour%5D%20OR%20%22Lancet%20Respir%20Med%22%5Bjour%5D%20OR%20%22JAMA%20Oncol%22%5Bjour%5D%20OR%20%22Lancet%20Infect%20Dis%22%5Bjour%5D%20OR%20%22Lancet%20Neurol%22%5Bjour%5D%20OR%20%22JAMA%20Psychiatry%22%5Bjour%5D%20OR%20%22Ann%20Rheum%20Dis%22%5Bjour%5D%20OR%20%22Kidney%20Int%22%5Bjour%5D%20OR%20%22Intensive%20Care%20Med%22%5Bjour%5D)&datetype=edat&mindate={since:%Y/%m/%d}&maxdate={today:%Y/%m/%d}",
+   "datetype": "edat",
+   "page_size": 100,
+   "max_pages": 6,
+   "lookback_days": 7,
+   "overlap_days": 1,
+   "incremental": true,
+   "allowed_hosts": [
+    "eutils.ncbi.nlm.nih.gov",
+    "pubmed.ncbi.nlm.nih.gov"
+   ]
+  }
+ },
+ "state": null,
+ "now": "2026-09-22T09:20:51+00:00",
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=0&usehistory=y&datetype=edta&mindate=2026/09/15&maxdate=2026/09/22&term=(randomized%20controlled%20trial%5Bpt%5D)",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=0&usehistory=y&datetype=edta&mindate=2026/09/15&maxdate=2026/09/22&term=(randomized%20controlled%20trial%5Bpt%5D)",
+   "headers": {
+    "content-type": "application/json; charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:20:50+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 482,
+   "sha256": "4753558ef3f88761f3c4aa4dc4b1c07129324260e0245e837bd458e8c013857d"
+  }
+ ]
+}

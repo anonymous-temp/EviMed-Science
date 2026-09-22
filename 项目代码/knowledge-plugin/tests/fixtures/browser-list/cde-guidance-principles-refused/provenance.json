@@ -1,0 +1,98 @@
+{
+ "case": "browser-list/cde-guidance-principles-refused",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:26:17+00:00",
+ "note": "negative case: 药审中心's guidance list answers a real Chromium on this box with a 403 WAF page",
+ "source": {
+  "id": "cde-guidance-principles",
+  "name": "药审中心 指导原则（发布与征求意见）",
+  "homepage": "https://www.cde.org.cn/zdyz/index",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "browser-list",
+  "egress": "browser",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "国家药品监督管理局",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://www.cde.org.cn/zdyz/index",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.cde.org.cn"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:26:09+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [
+  {
+   "step": "fetch",
+   "outcome": "blocked",
+   "detail": "http_403"
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.cde.org.cn/zdyz/index",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "egress": "browser",
+   "wait_for": null,
+   "render": "dom",
+   "status": 403,
+   "final_url": "https://www.cde.org.cn/zdyz/index",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T11:26:11+00:00",
+   "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+   "browser_version": "145.0.7632.6",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 1706,
+   "sha256": "823a34815a8c4fe8c65e426e548e96539deb53ed95942036c571d49d5ed3f0c4",
+   "error": {
+    "outcome": "blocked",
+    "detail": "http_403"
+   }
+  }
+ ],
+ "robots": [
+  {
+   "method": "GET",
+   "url": "https://www.cde.org.cn/robots.txt",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "egress": "browser",
+   "wait_for": null,
+   "render": "text",
+   "status": 403,
+   "final_url": "https://www.cde.org.cn/robots.txt",
+   "headers": {
+    "content-type": "text/html"
+   },
+   "fetched_at": "2026-09-22T11:26:09+00:00",
+   "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+   "browser_version": "145.0.7632.6",
+   "bytes": 192,
+   "sha256": "f8d6ae5658f78ed96cdac41cf56a4703a04e1c52fd9ffb0c9f075ce23b920d72",
+   "text": "403\nForbidden\n\n请不要使用非法的URL地址访问\n\n最可能的原因是：\n\n· 您正在试图非法攻击\n\n· 您访问的URL地址不被允许\n\n返回\nRequest ID: 7688319616827176573"
+  }
+ ]
+}

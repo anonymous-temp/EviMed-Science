@@ -1,0 +1,124 @@
+{
+ "case": "enrich/crossref-abstract",
+ "recorded_by": "tests/fixtures/record_enrich.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:33:56+00:00",
+ "rows": [
+  {
+   "entry_id": "j-1663-9812:4b6f05b2ff3d291556b2fbc85b493735",
+   "revision": 1,
+   "source_id": "j-1663-9812",
+   "external_key": "10.3389/fphar.2026.1747506",
+   "identity_key": "doi:10.3389/fphar.2026.1747506",
+   "url": "https://doi.org/10.3389/fphar.2026.1747506",
+   "canonical_url": "https://doi.org/10.3389/fphar.2026.1747506",
+   "doi": "10.3389/fphar.2026.1747506",
+   "pmid": null,
+   "registry_ids": [],
+   "title": "Association between post procedural parenteral anticoagulation therapy and clinical outcomes in ST-elevation myocardial infarction patients with high thrombotic risk",
+   "summary": null,
+   "lang": "en",
+   "published_at": "2026-09-22T08:05:05+00:00",
+   "facts": {
+    "crossref_type": "journal-article",
+    "author_count": 14,
+    "journal": "Frontiers in Pharmacology",
+    "issn": "1663-9812"
+   },
+   "first_seen_at": "2026-09-22T09:20:26+00:00",
+   "source_access": "rss",
+   "source_egress": "direct",
+   "source_type": "journal",
+   "source_config": {
+    "url": "https://example.invalid/feed"
+   },
+   "attempts": 0
+  }
+ ],
+ "results_at_recording": [
+  {
+   "status": "available",
+   "text_kind": "abstract",
+   "fetched_from": "crossref",
+   "enrichment_keys": [
+    "journal",
+    "open_access"
+   ],
+   "notes": []
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.3389%2Ffphar.2026.1747506%22%5Bdoi%5D",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=200&term=%2210.3389%2Ffphar.2026.1747506%22%5Bdoi%5D",
+   "headers": {
+    "content-type": "application/json; charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:33:47+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 330,
+   "sha256": "9b0eaf2db2c9e8547bd3d6b1af35d6e23958443b64328a486fd13e66ab5ae43e"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.3389%2Ffphar.2026.1747506%22&format=json&resultType=core&pageSize=25",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI%3A%2210.3389%2Ffphar.2026.1747506%22&format=json&resultType=core&pageSize=25",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:33:48+00:00",
+   "file": "02.json",
+   "gzip": false,
+   "bytes": 197,
+   "sha256": "a7e46a2fcdbd2538cef0b4b138c4ed906223f7853d522aed24cb133c5c137117"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.crossref.org/works/10.3389/fphar.2026.1747506",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.crossref.org/works/10.3389/fphar.2026.1747506",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:33:54+00:00",
+   "file": "03.json",
+   "gzip": false,
+   "bytes": 19003,
+   "sha256": "f81769c2918c357cad792324995583d4def7c4c83dd2303034ec237afe175056"
+  },
+  {
+   "method": "GET",
+   "url": "https://api.unpaywall.org/v2/10.3389/fphar.2026.1747506",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 404,
+   "final_url": "https://api.unpaywall.org/v2/10.3389/fphar.2026.1747506",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T09:33:55+00:00",
+   "file": "04.html",
+   "gzip": false,
+   "bytes": 207,
+   "sha256": "e9639e3c4681ce85f852fbac48e2eeee5ba51296dbfec57c200d59b76237ab80"
+  }
+ ]
+}

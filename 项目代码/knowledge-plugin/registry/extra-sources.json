@@ -1,0 +1,183 @@
+{
+ "_about": "Hand-kept runtime rows that are not in the probe registry (tools/build_registry.py appends them; enabled is decided by the same rule as every other row). The EviMed API scans of plan 12.2: request shapes as measured on 2026-09-22 (tools/evimed_api_freshness.py in the plan's assets): 20 ChiCTR terms, 30 guideline publisher groups. The key is injected by the fetcher from KNOWLEDGE_PLUGIN_EVIMED_API_KEY_FILE.",
+ "sources": [
+  {
+   "id": "evimed-chictr",
+   "name": "中国临床试验注册中心 ChiCTR（经 EviMed 资料检索接口）",
+   "homepage": "https://www.chictr.org.cn/",
+   "lane": "pipeline",
+   "source_type": "regulator",
+   "access": "evimed-api",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "中国临床试验注册中心",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 86400,
+   "poll_ceiling_s": 172800,
+   "category": "trial-registry",
+   "config": {
+    "family": "chictr",
+    "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/clinical-trial",
+    "terms": [
+     "肿瘤",
+     "心血管",
+     "糖尿病",
+     "神经",
+     "精神",
+     "感染",
+     "呼吸",
+     "重症",
+     "消化",
+     "肝病",
+     "肾脏",
+     "风湿免疫",
+     "血液",
+     "儿科",
+     "妇产",
+     "老年",
+     "外科",
+     "麻醉",
+     "中医药",
+     "药物"
+    ],
+    "registry": 0,
+    "count": 100,
+    "new_within_days": 14,
+    "max_pages": 25,
+    "allowed_hosts": [
+     "www.evimed.com"
+    ]
+   }
+  },
+  {
+   "id": "evimed-guides",
+   "name": "EviMed 指南索引（每周复查）",
+   "homepage": "https://www.evimed.com/",
+   "lane": "guideline",
+   "source_type": "evidence-body",
+   "access": "evimed-api",
+   "egress": "api",
+   "authority": 4,
+   "safety_feed": false,
+   "owner_entity": "EviMed",
+   "launch_tier": "P1",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 604800,
+   "poll_ceiling_s": 604800,
+   "category": "guideline",
+   "config": {
+    "family": "guide",
+    "url": "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/v2/literature-guide",
+    "query": "指南 共识",
+    "type": "guide",
+    "publisher_groups": [
+     [
+      "中华医学会"
+     ],
+     [
+      "中国医师协会"
+     ],
+     [
+      "中国临床肿瘤学会",
+      "CSCO"
+     ],
+     [
+      "中国抗癌协会"
+     ],
+     [
+      "中华医学会心血管病学分会"
+     ],
+     [
+      "中华医学会内分泌学分会",
+      "中华医学会糖尿病学分会"
+     ],
+     [
+      "中华医学会呼吸病学分会"
+     ],
+     [
+      "中华医学会消化病学分会"
+     ],
+     [
+      "中华医学会神经病学分会"
+     ],
+     [
+      "中华医学会感染病学分会"
+     ],
+     [
+      "中华医学会儿科学分会"
+     ],
+     [
+      "中华医学会妇产科学分会"
+     ],
+     [
+      "中华医学会重症医学分会",
+      "中华医学会急诊医学分会"
+     ],
+     [
+      "中华医学会肾脏病学分会"
+     ],
+     [
+      "中华医学会风湿病学分会"
+     ],
+     [
+      "中国药学会"
+     ],
+     [
+      "中华中医药学会"
+     ],
+     [
+      "中国中西医结合学会"
+     ],
+     [
+      "国家卫生健康委员会"
+     ],
+     [
+      "国家药品监督管理局药品审评中心"
+     ],
+     [
+      "NCCN"
+     ],
+     [
+      "ESC"
+     ],
+     [
+      "ACC",
+      "AHA"
+     ],
+     [
+      "ADA"
+     ],
+     [
+      "WHO"
+     ],
+     [
+      "NICE"
+     ],
+     [
+      "ESMO"
+     ],
+     [
+      "ASCO"
+     ],
+     [
+      "KDIGO"
+     ],
+     [
+      "GOLD",
+      "GINA"
+     ]
+    ],
+    "count": 100,
+    "new_within_days": 30,
+    "max_pages": 35,
+    "allowed_hosts": [
+     "www.evimed.com"
+    ]
+   }
+  }
+ ]
+}

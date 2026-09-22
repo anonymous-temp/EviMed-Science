@@ -1,0 +1,87 @@
+{
+ "case": "json-api/star-rating",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:59+00:00",
+ "note": "first two pages of the 152-page walk",
+ "source": {
+  "id": "star-guideline-rating-cn",
+  "name": "STAR 指南评级平台",
+  "homepage": "https://www.star-guidelines.cn/",
+  "lane": "guideline",
+  "source_type": "evidence-body",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "STAR",
+  "launch_tier": "P0",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 604800,
+  "poll_ceiling_s": 604800,
+  "config": {
+   "url": "https://www.star-guidelines.cn/server/api/getAllArticleList",
+   "family": "star-rating",
+   "max_pages": 160,
+   "allowed_hosts": [
+    "www.star-guidelines.cn"
+   ],
+   "method": "POST",
+   "body": {
+    "page": 1,
+    "limit": 40
+   }
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:57+00:00",
+ "request_budget": 2,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "POST",
+   "url": "https://www.star-guidelines.cn/server/api/getAllArticleList",
+   "api": true,
+   "conditional": false,
+   "request_body": "{\"page\": 1, \"limit\": 40}",
+   "request_headers": {
+    "Content-Type": "application/json"
+   },
+   "status": 200,
+   "final_url": "https://www.star-guidelines.cn/server/api/getAllArticleList",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:21:57+00:00",
+   "file": "01.json.gz",
+   "gzip": true,
+   "bytes": 84459,
+   "sha256": "9058fe21aab76ee69028a506b635be48ac3174df5849c692bf0dce5156e07f3c"
+  },
+  {
+   "method": "POST",
+   "url": "https://www.star-guidelines.cn/server/api/getAllArticleList",
+   "api": true,
+   "conditional": false,
+   "request_body": "{\"page\": 2, \"limit\": 40}",
+   "request_headers": {
+    "Content-Type": "application/json"
+   },
+   "status": 200,
+   "final_url": "https://www.star-guidelines.cn/server/api/getAllArticleList",
+   "headers": {
+    "content-type": "application/json"
+   },
+   "fetched_at": "2026-09-22T09:21:59+00:00",
+   "file": "02.json.gz",
+   "gzip": true,
+   "bytes": 82429,
+   "sha256": "0a0d2d75e643033581dd00770c8f8630edf9c82188ace4811d460c5c80152658"
+  }
+ ]
+}

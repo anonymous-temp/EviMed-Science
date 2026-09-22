@@ -1,0 +1,107 @@
+{
+ "case": "europepmc/medrxiv-preprints",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:22:56+00:00",
+ "note": null,
+ "source": {
+  "id": "europepmc-medrxiv-preprints",
+  "name": "Europe PMC · medRxiv 预印本流",
+  "homepage": "https://europepmc.org/",
+  "lane": "evidence",
+  "source_type": "preprint",
+  "access": "europepmc",
+  "egress": "direct",
+  "authority": 2,
+  "safety_feed": false,
+  "owner_entity": "EMBL-EBI Europe PMC",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "EU",
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 129600,
+  "config": {
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22medRxiv%22)%20AND%20FIRST_IDATE:%5B{since:%Y-%m-%d}%20TO%20{today:%Y-%m-%d}%5D&format=json&resultType=core&pageSize=100&cursorMark={cursor}",
+   "cursor_start": "*",
+   "page_size": 50,
+   "max_pages": 5,
+   "lookback_days": 7,
+   "overlap_days": 1,
+   "incremental": true,
+   "allowed_hosts": [
+    "europepmc.org",
+    "www.ebi.ac.uk"
+   ]
+  }
+ },
+ "state": {
+  "last_ok_at": "2026-09-21T09:22:51+00:00",
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:22:51+00:00",
+ "request_budget": 2,
+ "parse_notes": [],
+ "errors": [
+  {
+   "step": "parse",
+   "outcome": "http-error",
+   "detail": "europepmc_missing_hitcount"
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22medRxiv%22)%20AND%20FIRST_IDATE:%5B2026-09-20%20TO%202026-09-22%5D&format=json&resultType=core&cursorMark=*&pageSize=50",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22medRxiv%22)%20AND%20FIRST_IDATE:%5B2026-09-20%20TO%202026-09-22%5D&format=json&resultType=core&cursorMark=*&pageSize=50",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:22:51+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 17,
+   "sha256": "6417c45aae878ff7fe9b70ad452ac5020cc93d25347839763dd9a6efe69e0f76"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22medRxiv%22)%20AND%20FIRST_IDATE:%5B2026-09-20%20TO%202026-09-22%5D&format=json&resultType=core&cursorMark=*&pageSize=50",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22medRxiv%22)%20AND%20FIRST_IDATE:%5B2026-09-20%20TO%202026-09-22%5D&format=json&resultType=core&cursorMark=*&pageSize=50",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:22:54+00:00",
+   "file": "02.json.gz",
+   "gzip": true,
+   "bytes": 196812,
+   "sha256": "44c147655b321846243c6da41913e6200dbad6479373c92b19f59923e9822f29"
+  },
+  {
+   "method": "GET",
+   "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22medRxiv%22)%20AND%20FIRST_IDATE:%5B2026-09-20%20TO%202026-09-22%5D&format=json&resultType=core&pageSize=50&cursorMark=AoIIQDbB0Cg1NjQ2MDE5OQ%3D%3D",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22medRxiv%22)%20AND%20FIRST_IDATE:%5B2026-09-20%20TO%202026-09-22%5D&format=json&resultType=core&pageSize=50&cursorMark=AoIIQDbB0Cg1NjQ2MDE5OQ%3D%3D",
+   "headers": {
+    "content-type": "application/json;charset=UTF-8"
+   },
+   "fetched_at": "2026-09-22T09:22:56+00:00",
+   "file": "03.json.gz",
+   "gzip": true,
+   "bytes": 198066,
+   "sha256": "b91a0babf6bd31309498968dbaf44d3240768e36e99cb2f7f97cf77aed26525a"
+  }
+ ]
+}

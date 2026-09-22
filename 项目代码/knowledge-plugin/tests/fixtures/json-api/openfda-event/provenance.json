@@ -1,0 +1,65 @@
+{
+ "case": "json-api/openfda-event",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:54+00:00",
+ "note": null,
+ "source": {
+  "id": "openfda-drug-event-faers-api",
+  "name": "openFDA 不良事件（FAERS/AEMS）API",
+  "homepage": "https://open.fda.gov/apis/drug/event/",
+  "lane": "safety",
+  "source_type": "regulator",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "U.S. Food and Drug Administration",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 86400,
+  "poll_ceiling_s": 604800,
+  "config": {
+   "url": "https://api.fda.gov/drug/event.json?limit=1",
+   "family": "openfda-event",
+   "date_field": "meta.last_updated",
+   "date_format": "%Y-%m-%d",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "api.fda.gov",
+    "open.fda.gov"
+   ],
+   "incremental": false
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:50+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://api.fda.gov/drug/event.json?limit=1",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://api.fda.gov/drug/event.json?limit=1",
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "etag": "W/\"71b-8SXz1rJAVwtil9VCdNfty01KDA8\""
+   },
+   "fetched_at": "2026-09-22T09:21:50+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 1819,
+   "sha256": "a8ab241ddac8640cb3562e5a3dfc4d16a01c6443eaab38995601586537827f08"
+  }
+ ]
+}

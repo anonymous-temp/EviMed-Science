@@ -1,0 +1,68 @@
+{
+ "case": "html-list/gd-pharm-society-notifications",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:32:29+00:00",
+ "note": null,
+ "source": {
+  "id": "gd-pharm-society-notifications",
+  "name": "广东省药学会 通知公告（超说明书用药目录）",
+  "homepage": "http://www.sinopharmacy.com.cn/",
+  "lane": "safety",
+  "source_type": "evidence-body",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "广东省药学会",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 86400,
+  "poll_ceiling_s": 259200,
+  "config": {
+   "url": "http://www.sinopharmacy.com.cn/notification",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.sinopharmacy.com.cn"
+   ],
+   "selectors": {
+    "item": "div.list-item",
+    "title": "h3.list-title a",
+    "link": "h3.list-title a@href",
+    "summary": "p.list-summary",
+    "date": "span.list-time"
+   },
+   "date_regex": "(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})",
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:32:27+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "http://www.sinopharmacy.com.cn/notification",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "http://www.sinopharmacy.com.cn/notification",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T11:32:28+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 19607,
+   "sha256": "1bca12a74e0b3bb0a15e64cd820fd2dd2316cda49249aa577d6f47707020d0cb"
+  }
+ ]
+}

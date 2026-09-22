@@ -1,0 +1,83 @@
+{
+ "case": "enrich/trial",
+ "recorded_by": "tests/fixtures/record_enrich.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:34:57+00:00",
+ "rows": [
+  {
+   "entry_id": "ctgov-results-first-posted:a5f166e0f290b4370061a8b0e30e42df",
+   "revision": 1,
+   "source_id": "ctgov-results-first-posted",
+   "external_key": "NCT07110077:results-posted:2026-09-21",
+   "identity_key": "reg:NCT07110077:results-posted:2026-09-21",
+   "url": "https://clinicaltrials.gov/study/NCT07110077",
+   "canonical_url": "https://clinicaltrials.gov/study/NCT07110077",
+   "doi": null,
+   "pmid": null,
+   "registry_ids": [
+    "NCT07110077"
+   ],
+   "title": "Results posted: Pre and Post-Implementation of Injury/Trauma First Aid Training Among Early Secondary School Students in Fako, Cameroon",
+   "summary": "To save lives, alleviate pain, and prevent injuries from worsening before medical assistance can be summoned, first aid is essential. These fundamental skills are accessible to everyone, including young people. Worldwide, first aid training has consistently improved outcomes and reduced injury-related complications. Although first aid training for adults is widely available, it is equally important to equip young people in schools with these skills so they can defend themselves and support their communities. 'Young First Aiders' (YoFA) is a youth-specific first aid program that is the subject of this study, to be conducted in the Fako Division, Cameroon. Its primary goals are to: * Determine how stakeholders view the YoFA program. * Assess whether YoFA enhances the knowledge, attitudes, and practices (KAP) of first aid among secondary school pupils. * Determine the difficulties in providing this age group with first aid training. * Assess the program's overall usefulness and efficacy. The investigator will use a mixed-methods approach for the study in the Tiko and Buea health districts. It entails gathering extensive data via: Focused group discussions, surveys, interviews, and scenario observations. To enable a direct comparison of results, one district will act as the intervention group and receive the YoFA training, while the other will act as the control group. To obtain a variety of viewpoints on the program, researchers will interview a large number of participants, including parents, educators, students, and administrators. Participants will complete customized surveys, which will be analyzed using Dedoose and R software to examine qualitative data from observations and interviews. Expectations of this study include: Identifying barriers to making first aid instruction for children 10 to 14 years old successful, creating solutions to deal with these issues that have been identified. Moreover, to see if YoFA participants' first aid skills have improved, including their capacity to stay safe in an emergency, call for help, and offer prompt assistance (such as halting potentially fatal bleeding). All this, to increase youth access to first aid training, which will help them develop a culture of readiness and self-assurance in managing crises as they get older; hence building a growing first aid culture to handle prehospital care. Conditions: Trauma/Injury Problem. Interventions: Young First Aiders Traing of Early Secondry School children. Enrollment: 166.",
+   "lang": "en",
+   "published_at": "2026-09-21T00:00:00+00:00",
+   "facts": {
+    "trial_phase": "NA",
+    "trial_status": "COMPLETED",
+    "trial_event": "results-posted",
+    "sponsor": "University of Buea"
+   },
+   "first_seen_at": "2026-09-22T09:21:39+00:00",
+   "source_access": "json-api",
+   "source_egress": "direct",
+   "source_type": "regulator",
+   "source_config": {
+    "url": "https://clinicaltrials.gov/api/v2/studies?filter.advanced=AREA%5BResultsFirstPostDate%5DRANGE%5B{since:%Y-%m-%d},MAX%5D&sort=ResultsFirstPostDate:desc&pageSize=50&format=json&countTotal=true",
+    "family": "ctgov",
+    "date_field": "ResultsFirstPostDate",
+    "trial_event": "results-posted",
+    "page_size": 50,
+    "max_pages": 5,
+    "lookback_days": 7,
+    "overlap_days": 1,
+    "incremental": true,
+    "allowed_hosts": [
+     "clinicaltrials.gov"
+    ]
+   },
+   "attempts": 0
+  }
+ ],
+ "results_at_recording": [
+  {
+   "status": "available",
+   "text_kind": "excerpt",
+   "fetched_from": null,
+   "enrichment_keys": [
+    "trial_facts"
+   ],
+   "notes": []
+  }
+ ],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://clinicaltrials.gov/api/v2/studies/NCT07110077?fields=NCTId,OverallStatus,Phase,EnrollmentCount,LeadSponsorName,BriefSummary,DetailedDescription",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://clinicaltrials.gov/api/v2/studies/NCT07110077?fields=NCTId,OverallStatus,Phase,EnrollmentCount,LeadSponsorName,BriefSummary,DetailedDescription",
+   "headers": {
+    "content-type": "application/json",
+    "etag": "\"0/0.34.1/mub0ld6w-gzip\""
+   },
+   "fetched_at": "2026-09-22T09:34:57+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 8850,
+   "sha256": "da5a78438e7defe24b95020be84f8aec827cce0fcf147c06b55b3d0983231cfb"
+  }
+ ]
+}

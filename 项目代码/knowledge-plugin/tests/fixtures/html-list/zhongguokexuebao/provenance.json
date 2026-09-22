@@ -1,0 +1,67 @@
+{
+ "case": "html-list/zhongguokexuebao",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:32:36+00:00",
+ "note": null,
+ "source": {
+  "id": "zhongguokexuebao",
+  "name": "中国科学报",
+  "homepage": "https://news.sciencenet.cn/",
+  "lane": "research",
+  "source_type": "media",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 2,
+  "safety_feed": false,
+  "owner_entity": "中国科学报社",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 3600,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://news.sciencenet.cn/todaynews.aspx",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "news.sciencenet.cn"
+   ],
+   "selectors": {
+    "item": "tr[onmouseover]",
+    "title": "a",
+    "link": "a@href",
+    "date": "td:nth-child(3)"
+   },
+   "max_items": 40
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:32:34+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://news.sciencenet.cn/todaynews.aspx",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://news.sciencenet.cn/todaynews.aspx",
+   "headers": {
+    "content-type": "text/html; charset=utf-8",
+    "last-modified": "Tue, 22 Sep 2026 11:32:36 GMT"
+   },
+   "fetched_at": "2026-09-22T11:32:36+00:00",
+   "file": "01.html.gz",
+   "gzip": true,
+   "bytes": 69531,
+   "sha256": "a5c8363bab43a243555460e421c3d5dc82990e61ae45462db8e5372dd9ed1759"
+  }
+ ]
+}

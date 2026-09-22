@@ -1,0 +1,68 @@
+{
+ "case": "html-list/csco-news",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:32:27+00:00",
+ "note": null,
+ "source": {
+  "id": "csco-news",
+  "name": "中国临床肿瘤学会 CSCO 动态",
+  "homepage": "https://www.csco.org.cn/cn/index.aspx",
+  "lane": "guideline",
+  "source_type": "evidence-body",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 4,
+  "safety_feed": false,
+  "owner_entity": "中国临床肿瘤学会 CSCO",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 86400,
+  "poll_ceiling_s": 259200,
+  "config": {
+   "url": "https://www.csco.org.cn/cn/nlist.aspx?cids=158",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.csco.org.cn"
+   ],
+   "selectors": {
+    "item": "ul.newlist li",
+    "title": "a i",
+    "link": "a@href",
+    "date": "span.time"
+   },
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:32:25+00:00",
+ "request_budget": 1,
+ "parse_notes": [
+  "html_list_dropped_host=4"
+ ],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.csco.org.cn/cn/nlist.aspx?cids=158",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://www.csco.org.cn/cn/nlist.aspx?cids=158",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T11:32:27+00:00",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 29483,
+   "sha256": "5b5a2f2b5d9674633d64474ff1a1f7b47d8bde24c1a6cd4e892fd0c1bdcb357a"
+  }
+ ]
+}

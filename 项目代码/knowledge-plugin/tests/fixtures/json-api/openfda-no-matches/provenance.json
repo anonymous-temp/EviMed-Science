@@ -1,0 +1,64 @@
+{
+ "case": "json-api/openfda-no-matches",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:54+00:00",
+ "note": "a window with no approvals: openFDA answers HTTP 404 NOT_FOUND",
+ "tries": 1,
+ "source": {
+  "id": "openfda-drugsfda-api",
+  "name": "openFDA Drugs@FDA 审批数据库 API",
+  "homepage": "https://open.fda.gov/apis/drug/drugsfda/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "json-api",
+  "egress": "direct",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "U.S. Food and Drug Administration",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 21600,
+  "poll_ceiling_s": 86400,
+  "config": {
+   "url": "https://api.fda.gov/drug/drugsfda.json?search=submissions.submission_status_date:%5B{since:%Y%m%d}+TO+{today:%Y%m%d}%5D&limit=100&sort=submissions.submission_status_date:desc",
+   "family": "openfda-drugsfda",
+   "date_field": "submissions.submission_status_date",
+   "date_format": "%Y%m%d",
+   "id_field": "application_number",
+   "page_size": 100,
+   "max_pages": 3,
+   "lookback_days": 30,
+   "overlap_days": 1,
+   "incremental": false,
+   "allowed_hosts": [
+    "api.fda.gov",
+    "open.fda.gov"
+   ]
+  }
+ },
+ "state": null,
+ "now": "2026-09-22T09:21:54+00:00",
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://api.fda.gov/drug/drugsfda.json?search=submissions.submission_status_date:%5B20300101+TO+20300102%5D&limit=5",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "status": 404,
+   "final_url": "https://api.fda.gov/drug/drugsfda.json?search=submissions.submission_status_date:%5B20300101+TO+20300102%5D&limit=5",
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "etag": "W/\"50-Gov3eVBQAYPDbwMSq8YtHKLjrHw\""
+   },
+   "fetched_at": "2026-09-22T09:21:54+00:00",
+   "file": "01.json",
+   "gzip": false,
+   "bytes": 80,
+   "sha256": "57b1e7534d003e4246182162fd2469cdf038de39405056f44fc006715e5496da"
+  }
+ ]
+}

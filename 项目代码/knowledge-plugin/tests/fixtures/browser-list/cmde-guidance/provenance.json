@@ -1,0 +1,95 @@
+{
+ "case": "browser-list/cmde-guidance",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T11:25:47+00:00",
+ "note": null,
+ "source": {
+  "id": "cmde-guidance",
+  "name": "器审中心 指导原则 CMDE Device Guidance",
+  "homepage": "https://www.cmde.org.cn/",
+  "lane": "regulatory",
+  "source_type": "regulator",
+  "access": "browser-list",
+  "egress": "browser",
+  "authority": 5,
+  "safety_feed": false,
+  "owner_entity": "国家药品监督管理局",
+  "launch_tier": "P1",
+  "language": "zh",
+  "region": "CN",
+  "poll_floor_s": 7200,
+  "poll_ceiling_s": 21600,
+  "config": {
+   "url": "https://www.cmde.org.cn/flfg/zdyz/index.html",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "www.cmde.org.cn"
+   ],
+   "selectors": {
+    "item": "div.list ul li",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span"
+   },
+   "max_items": 30
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T11:25:41+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://www.cmde.org.cn/flfg/zdyz/index.html",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "egress": "browser",
+   "wait_for": "div.list ul li",
+   "render": "dom",
+   "status": 200,
+   "final_url": "https://www.cmde.org.cn/flfg/zdyz/index.html",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T11:25:45+00:00",
+   "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+   "browser_version": "145.0.7632.6",
+   "file": "01.html",
+   "gzip": false,
+   "bytes": 29785,
+   "sha256": "a49a1c66c6170af383906b133f51ad41aabe11d1241786742dc7b277f6dd5e48"
+  }
+ ],
+ "robots": [
+  {
+   "method": "GET",
+   "url": "https://www.cmde.org.cn/robots.txt",
+   "api": true,
+   "conditional": false,
+   "request_body": null,
+   "request_headers": null,
+   "egress": "browser",
+   "wait_for": null,
+   "render": "text",
+   "status": 200,
+   "final_url": "https://www.cmde.org.cn/index.html",
+   "headers": {
+    "content-type": "text/html"
+   },
+   "fetched_at": "2026-09-22T11:25:41+00:00",
+   "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+   "browser_version": "145.0.7632.6",
+   "bytes": 4346,
+   "sha256": "dcb035173072cc181c0c2ba32841087afa272cf83c211e315ffd8db8981f3c93",
+   "text": "公众号 邮箱登录 内部培训系统 使用指南 网站地图\n机构概况\n信息公开\n法规文件\n审评科学\n办事大厅\n1\n2\n3\n黄果会见英国、巴西和印尼药监机构主要负责...\n2026年全国药品安全宣传周活动在京启动\n黄果在西藏调研藏药高质量发展工作\n时政要闻\n工作动态\n共同擘画中美关系新篇章——写在习近平主席对美国进行...\n2026-09-22\n中共中央政治局召开会议 讨论拟提请二十届五中全会审 ...\n2026-09-21\n习近平就发展先进制造业作出重要指示\n2026-09-17\n习近平致信祝贺吉林大学建校80周年\n2026-09-16\n习近平给福建省“漳州110”全体队员回信\n2026-09-15\n习近平出席金砖国家领导人第十八次会晤第二阶段会议并...\n2026-09-14\n习近平将赴印度出席金砖国家领导人第十八次会晤\n2026-09-11\n习近平向全国广大教师和教育工作者致以节日祝贺和诚挚...\n2026-09-10\n办事大厅\n医疗器械注册\n简明指导手册\n分类目录--指导原则\n--标准--临床路径\n检索\n咨询沟通路径指引\n注册申报流程简图\nRegistration work flow\n一类备案流程简图\n技术审评流程简图\nEvaluation work flow\n电子申报平台\n审评进度查询\n医疗器械产品查询\n产品分类查询\n工作通告\n创新优先公示\n临床试验默示许可\n审评状况\n更多..\n关于2026年9月—10月医疗器械注册受理前技术问题咨询工作安排的通告（2026年第25号）\n2026-08-12\n国家药监局器审中心关于发布心磁信号采集设备注册审查指导原则等57项指导原则的通告（...\n2026-07-21\n国家药监局器审中心关于发布《中心静脉导管注册审查指导原则（2026年修订版）》的通告...\n2026-07-15\n国家药监局器审中心关于发布《基于高通量测序法的胎儿染色体非整倍体（T21、T18、T13 ...\n2026-07-02\n国家药监局器审中心关于发布医用磁共振成像系统注册审查指导原则（2026年修订版）的通...\n2026-06-23\n器审云课堂\nCMDE Learning Online\n法规文件\n更多..\n法规部门规章规范性文件\n国家药监局关于发布《牙科学 光固化机》等46项医疗器械行业标准的公告（2026年第76号 ...\n2026-08-14\n国家药监局关于发布YY 0830—2011《浅表组织超声治疗设备》等4项医疗器械行业标准修改...\n2026-07-24\n国家药监局关于发布《脑机接口医疗器械产品分类界定指导原则》《脑机接口医疗器械通用...\n2026-06-30\n《脑机接口医疗器械通用名称命名指导原则》解读\n2026-06-30\n互动交流\n征求意见\n招聘专栏\n廉政监督\n交流园地\n美国发布ISO 10993-1医疗器械生物学评价-第1部分：风险管理过程中 ...\n2025-11-18\n牙种植体产品结构设计注册技术审评关注点\n2025-05-30\n戊型肝炎病毒抗体检测试剂的注册现状及审评概述\n2025-05-16\n以临床价值为导向探讨金属骨针类产品技术审评关注点\n2025-04-25\nFDA eSTAR系统概述\n2025-04-21\n指导原则\n更多..\n指导原则文本库征求意见稿\n关于公开征求《结核分枝杆菌复合群耐药基因突变检测试剂注册审查指导原则（2026年修订...\n2026-09-16\n关于公开征求《人工智能多病种辅助决策医疗器械临床评价注册审查指导原则（征求意见稿...\n2026-09-16\n关于公开征求《栓塞颗粒注册审查指导原则（征求意见稿）》意见的通知\n2026-09-15\n关于公开征求《人工智能医疗器械注册审查指导原则（2026年修订版）（征求意见稿）》意...\n2026-09-14\n相关链接：\n中国政府网\n国务院客户端\n国家市场监督管理总局\n国家药品监督管理局\n国家局直属单位\n国外链接：\n国际医疗器械监管者论坛（IMDRF）\n全球医疗器械法规协调会（GHWP）\n世界卫生组织（WHO）\n国际标准化组织（ISO）\n国际电工委员会（IEC）\n地址：北京经济技术开发区广德大街22号院一区6号楼    邮编：100163    \n电话：86452812、86452813（审评业务）    88331776（受理、电子申报）\n本站由国家药品监督管理局医疗器械技术审评中心主办  版权所有  未经许可禁止转载或建立镜像\nCopyright © CMDE All Rights Reserved\n备案序号：京ICP备08100530号   京公网安备11010802032264号"
+  }
+ ]
+}

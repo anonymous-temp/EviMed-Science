@@ -1,0 +1,66 @@
+{
+ "case": "html-list/pubmed-trending",
+ "recorded_by": "tests/fixtures/record.py (package P2)",
+ "user_agent": "EviMedBot/1.0 (+https://www.evimed.com; knowledge-source monitor)",
+ "recorded_at": "2026-09-22T09:21:25+00:00",
+ "note": null,
+ "source": {
+  "id": "pubmed-trending-page",
+  "name": "PubMed Trending 热门文章页",
+  "homepage": "https://pubmed.ncbi.nlm.nih.gov/trending/",
+  "lane": "research",
+  "source_type": "journal",
+  "access": "html-list",
+  "egress": "direct",
+  "authority": 3,
+  "safety_feed": false,
+  "owner_entity": "U.S. National Library of Medicine",
+  "launch_tier": "P0",
+  "language": "en",
+  "region": "US",
+  "poll_floor_s": 10800,
+  "poll_ceiling_s": 64800,
+  "config": {
+   "url": "https://pubmed.ncbi.nlm.nih.gov/trending/",
+   "max_pages": 1,
+   "allowed_hosts": [
+    "pubmed.ncbi.nlm.nih.gov"
+   ],
+   "selectors": {
+    "item": "article.full-docsum",
+    "title": "a.docsum-title",
+    "link": "a.docsum-title@href",
+    "doi": "span.docsum-journal-citation.full-journal-citation"
+   },
+   "max_items": 10
+  }
+ },
+ "state": {
+  "last_ok_at": null,
+  "cursor": {}
+ },
+ "now": "2026-09-22T09:21:23+00:00",
+ "request_budget": 1,
+ "parse_notes": [],
+ "errors": [],
+ "exchanges": [
+  {
+   "method": "GET",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/trending/",
+   "api": false,
+   "conditional": true,
+   "request_body": null,
+   "request_headers": null,
+   "status": 200,
+   "final_url": "https://pubmed.ncbi.nlm.nih.gov/trending/",
+   "headers": {
+    "content-type": "text/html; charset=utf-8"
+   },
+   "fetched_at": "2026-09-22T09:21:24+00:00",
+   "file": "01.html.gz",
+   "gzip": true,
+   "bytes": 284692,
+   "sha256": "e190c5d26895de2e66bfa41801ac34c70a6ec17ff3c11b4f07c361a815497eb4"
+  }
+ ]
+}
