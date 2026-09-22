@@ -50,7 +50,7 @@ if os.path.exists(wx_path):  # chapter 11's trial numbers come from the trial re
                                           ("guideline", "指南"), ("regulatory", "监管"), ("public-health", "公卫"), ("safety", "安全")] if k in wx["lanes"])})
 hl = os.path.join(HERE, "doc-highlights.md")
 tokens["SECTION_HIGHLIGHTS"] = open(hl, encoding="utf-8").read() if os.path.exists(hl) else "（待补）"
-parts = [open(os.path.join(HERE, f"doc-part{i}.md"), encoding="utf-8").read() for i in (1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12)]  # 8-9 chapter 10, 10 chapter 11 (WeChat), 11 chapter 12 (EviMed API), 12 chapter 13 (review); 7 is the tail after appendix A
+parts = [open(os.path.join(HERE, f"doc-part{i}.md"), encoding="utf-8").read() for i in (1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13)]  # 8-9 chapter 10, 10 chapter 11 (WeChat), 11 chapter 12 (EviMed API), 12 chapter 13 (review), 13 chapter 14 (final: the source plugin); 7 is the tail after appendix A
 appendix = open(os.path.join(ROOT, "appendix-sources.md"), encoding="utf-8").read()
 tail = open(os.path.join(HERE, "doc-part7.md"), encoding="utf-8").read() if os.path.exists(os.path.join(HERE, "doc-part7.md")) else ""
 text = "\n".join(parts) + "\n\n---\n\n# 附录 A　信源清单（" + str(stats["total"]) + " 个，2026-09-21 两地实测）\n\n" + \

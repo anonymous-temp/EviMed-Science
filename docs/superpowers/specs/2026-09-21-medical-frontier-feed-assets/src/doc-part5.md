@@ -5,7 +5,7 @@
 
 ![图 6](2026-09-21-medical-frontier-feed-assets/06-integration.png)
 
-**一句话：一个控制面功能模块，加一个页面，加一个只读工具。** 不碰内核，不碰 socket，不新增任何对话关卡。模块关掉，对话、运行、交付一切照旧。
+**一句话：一个控制面功能模块，加一个页面，加一个只读工具；信源来自一个团队维护的插件服务。** 不碰内核，不碰 socket，不新增任何对话关卡。模块关掉，对话、运行、交付一切照旧。
 
 ## 7.1 落在哪一层
 
@@ -13,12 +13,12 @@
 |---|---|---|
 | 1 浏览器 | 新页面 `/app/frontier`；导航一行；收件箱多认一种来源 | 会话界面、内核界面 |
 | 2 控制面 | 新模块 `frontier`：服务、工人、路由、库表、受保护抓取，形状与「主动科研」「知识库」一致；一个开关 `OPEN_SCIENCE_FRONTIER_ENABLED` | 鉴权、项目、运行账本、交付关卡 |
-| 3 内部网关 | 新增一条 `/internal/frontier/v1/search`，凭运行令牌访问；对外抓取复用读网页那一套受保护传输 | 不绕过任何现有网关 |
-| 4 领域包 | 信源登记表与四套词表（数据文件）；用量用途加 `frontier`；工具名与旁白各加一行 | 交付规则、契约 |
+| 3 内部网关 | 新增一条 `/internal/frontier/v1/search`，凭运行令牌访问；第三批起再加 `/internal/knowledge/v1/lookup/:capability`，把运行时的知识查询转到插件——运行时从不直接连插件 | 不绕过任何现有网关 |
+| 4 领域包 | 四套词表（数据文件；栏目与来源类型的取值同时是插件契约里的枚举）；用量用途加 `frontier`；工具名与旁白各加一行。登记表不在这里，归插件 | 交付规则、契约 |
 | 5–6 防腐层与 socket | **不动** | —— |
 | 7 运行时镜像 | MCP 服务多一个只读工具 `frontier_search` | 预设、技能根 |
 | 8 能力包 | `open-domain-answer` 的可选工具加一项；评测集加至少 3 个「最近有什么进展」类问题 | 十八个能力包的交付关卡 |
-| 10 外部服务 | Crossref、NCBI、Europe PMC、openFDA 等都是匿名开放接口，无新凭据；第二阶段复用已上线的东京代理，并加北京主机上的无头浏览器与 Wechat2RSS 两个容器 | —— |
+| 10 外部服务 | **知识信源插件** `evimed-knowledge-plugin`：团队维护的独立容器，`deps-version.json` 一条钉版、`packages/contracts/knowledge-plugin` 契约测试、一个 compose 叠加文件；Crossref、NCBI、openFDA 等上游、东京代理的凭据、无头浏览器与 Wechat2RSS 容器都在插件那一侧，平台不再直接碰任何信源 | —— |
 
 为什么不是能力包：能力包是「一次运行产出一份交付物」的单位，前沿动态是常驻的后台管线加一个页面，属于第 2 层功能模块——平台给这类东西规定的形状就是「服务 + 路由 + 租约工人 + 一个开关 + 自己的迁移」。以后要是做「围绕某个专题出一份前沿简报」这样的文件交付，那才是一个新的能力包，数据就从这个模块读。
 
@@ -30,25 +30,24 @@
 |---|---|
 | `frontierPersistence.mjs` | `evimed_frontier` 的全部 DDL 与 `migrateFrontier(database)`；咨询锁、幂等、缺扩展就跳过对应索引 |
 | `frontierService.mjs` | 查询（精选、全部、搜索、热点、事件、日报、信源）、个性化排序、收藏与关注、存入知识库的编排 |
-| `frontierWorker.mjs` | 租约式工人，与 `AutopilotWorker` 同形：`start / tick / status / close`；三个循环：采集（领到期信源）、处理（领待处理条目）、编排（聚类、热点、日报、清理），队列在模块自己的表里（10.4.4） |
-| `frontierFetch.mjs` | 组合 `webReadNetwork` 的钉扎传输、`RobotsPolicy`、`HostPacer`，返回 XML / JSON 原始字节；条件请求（平台读网页通道目前没有，这里新写）；每主机令牌桶；选择出口（直连、无头浏览器；海外那一路由边缘节点执行） |
-| `frontierAdapters.mjs` | 九种读法，每种一个纯函数：原始响应 → 归一化条目 |
+| `frontierWorker.mjs` | 租约式工人，与 `AutopilotWorker` 同形：`start / tick / status / close`；三个循环：拉取（每 60 秒按游标从插件拉条目、每小时镜像登记表）、处理（领待处理条目）、编排（聚类、热点、日报、清理），队列在模块自己的表里（10.4.4） |
+| `knowledgePluginClient.mjs` | 唯一连插件的地方：`manifest / health / sources / entries / text / lookup` 六个方法；读令牌文件、超时、一次重试、具名错误码、契约主版本核对；与 `documentParserClient.mjs` 同形 |
 | `frontierEditor.mjs` | 初筛、打分、数字复核、聚类裁决、日报；所有模型调用走 `callModelForControlPlane`，用途 `frontier` |
 | `frontierRoutes.mjs` | `createFrontierRoutes({ store, service, maxJsonBytes })`，浏览器接口 |
 | `frontierGateway.mjs` | `createFrontierGatewayHandler(config, runtimeManager, { service })`，运行时工具的内部接口 |
-| `edgeProxy.mjs`（平台已有，9 月 22 日上线） | 采集器对出口为 `relay` 的信源经它发请求：HTTPS 走东京代理的 CONNECT 隧道，端到端加密；代理不可用时只是这些信源暂停 |
+| `edgeProxy.mjs`（平台已有，9 月 22 日上线） | 平台自己的联网搜索、三个库和网页重读继续用它；采集经代理的那一路在插件里实现，两个容器挂同一份凭据文件 |
 
 **新增（其他）**
 
 | 文件 | 职责 |
 |---|---|
-| `packages/domain/src/frontier-sources.json` | 信源登记表（由本方案的 `sources.json` 裁剪而来） |
+| `packages/contracts/knowledge-plugin/contract.test.mjs` + `fixtures/` | 回放录自插件真机的样本（`provenance.json` 记录制时间与状态码），断言客户端能读；契约主版本变了这里先红 |
 | `packages/domain/src/frontierVocabulary.mjs` | 栏目、来源类型、证据类型、专科四套词表，及 PubMed 文献类型到证据类型的映射 |
 | `apps/web/src/app/routes/FrontierPage.tsx`、`FrontierEventPage.tsx` | 页面 |
 | `apps/web/src/components/frontier/*` | 卡片、与你相关、热点侧栏、日报、信源表、骨架屏 |
 | `apps/web/src/lib/frontierClient.ts` | 接口客户端 |
 | `runtime/mcp/evimed-research/frontier_search.py` | 只读工具，照 `kb_search.py` 的样子写 |
-| `deploy/web/docker-compose.frontier.yml` | 北京主机上的两个容器：Wechat2RSS 与无头浏览器 `frontier-browser`（固定版本的 Chromium，内存封顶 1 GB，不开公网端口，只准访问登记表里的监管站域名） |
+| `deploy/web/docker-compose.knowledge.yml` | 叠加文件：插件容器（按摘要钉住镜像、只在内网、无公网端口、`cap_drop: ALL`、健康检查）、它依赖的无头浏览器与 Wechat2RSS 容器（内存封顶、只准访问登记表里的域名）、给 web 追加 `OPEN_SCIENCE_KNOWLEDGE_PLUGIN_*` 五个键与令牌文件的只读挂载 |
 | `scripts/ops/seed-frontier-glossary.mjs` | 从药学基础数据生成术语表种子 |
 | 对应测试 | `frontier*.test.mjs`、`frontier*.integration.test.mjs`、`FrontierPage.test.tsx`、`test_frontier_search.py` |
 
@@ -60,13 +59,14 @@
 | `apps/server/src/server.mjs` | `createWebApiApp` 里构造与注册；`startRecurringWork` / `pauseRecurringWork` 里加工人；内部网关路径加入分发与 `routeLabel`；`/api/me` 增加 `features.frontier`；就绪检查加 `frontier` 一项 |
 | `apps/server/src/runtimeManager.mjs` | 开关打开时向容器注入 `EVIMED_FRONTIER_GATEWAY_URL` |
 | `apps/server/src/productPersistence.mjs` | 任务种类加两项（`frontier-daily`、`frontier-rebuild`），各配一个约束迁移块 |
-| `scripts/ops/postgres-backup.py` | 对 `item_vectors`、`fetches` 只导结构不导数据（10.4.6） |
+| `scripts/ops/postgres-backup.py` | 对 `item_vectors` 只导结构不导数据（10.4.6）；`fetches` 已随采集侧移入插件库 |
 | `packages/domain/src/usagePurpose.mjs` | 用途加 `frontier`（约束名随词表变化，迁移自动替换） |
 | `apps/server/src/notificationService.mjs`、`imService.mjs` | 通知开关加 `frontier` 一项；日报通知的来源类型用现成的 `digest`，推送时机走现成的简报时间与 `pushNotBefore` 分支，不新增来源类型 |
 | `apps/server/src/internalProjects.mjs` | `isInternalProject` 认 `evimed-frontier`，模型花费记在运营账户的这个内部项目下 |
 | `apps/server/src/runtimeGatewayEntry.mjs` | `RUNTIME_GATEWAY_NAMES` 与 `publicRuntimeGatewayUrls` 加 `frontier`，AgentBay 上的会话才能用 `frontier_search` |
 | `apps/server/src/server.mjs`（维护期） | 模块自己的领取语句也检查维护租约（`maintenanceAllowsClaims`），工人登记进维护期的后台活动清单（`inspectActivity`），维护窗口会等它写完 |
-| `scripts/ops/configure-production-state.mjs`、compose `secrets:` | 生成 Wechat2RSS 的服务密码文件 |
+| `scripts/ops/configure-production-state.mjs`、compose `secrets:` | 生成插件令牌文件 `knowledge-plugin.token`（0600，两个容器只读挂载）；Wechat2RSS 的服务密码归插件的 compose |
+| `deps-version.json`、`scripts/ops/check-pin-inventory*` | 新增 `knowledge-plugin` 一条：契约版本、契约目录、备注；钉版清单随之认它 |
 | `apps/server/src/sourceService.mjs` | 连接器类型加 `web`（存入知识库用，第二阶段） |
 | `apps/web/src/app/router.tsx`、`components/sidebar/Sidebar.tsx`、`app/routes/InboxPage.tsx`、`components/cards/Skeletons.tsx` | 路由、导航一行、收件箱跳转、骨架屏 |
 | `packages/domain/src/toolNames.mjs`、`narration.mjs` | 工具名与旁白「查前沿动态：……」 |
@@ -80,10 +80,10 @@
 
 ```text
 GET  /api/frontier/status                      模块状态、最近采集与日报时间、信源健康数
-GET  /api/frontier/items?view=selected|all&lane=&specialty=&topic=&window=24h|3d|7d|30d&q=&starred=1&cursor=&limit=
+GET  /api/frontier/items?view=selected|all&by=timeline|published&lane=&specialty=&topic=&window=24h|3d|7d|30d&q=&starred=1&cursor=&limit=
 GET  /api/frontier/for-you                     与你相关（条目 + 每条的理由与出处记忆）
 GET  /api/frontier/hot                         近 72 小时热点 Top 10
-GET  /api/frontier/events/:publicId            事件页
+GET  /api/frontier/events/:publicId            事件页；并过的旧编号回 308 到并入后的事件
 GET  /api/frontier/dailies?limit=              日报索引
 GET  /api/frontier/dailies/:date               某天日报
 GET  /api/frontier/sources                     信源公开页（登记信息 + 健康状态）
@@ -100,6 +100,8 @@ frontier_search(q, lane?, specialty?, window = "30d", mode = "selected", limit =
   原文链接、DOI / PMID / 注册号、标记（预印本、企业新闻稿、无摘要）、是否精选
 ```
 
+**游标契约。** 游标里编着时间轴（`timeline` 或 `published`）、视图与内容版本；换轴、或翻页期间精选集合变了，服务端回 `400 invalid_cursor`，客户端从第一页重来，不静默回退。翻页不是一致性快照——撤下与过期会改变后续页，界面用「有 N 条新的」提示，不假装稳定。
+
 工具说明只写三句：查什么、什么时候用、**结果是线索不是证据——要引用就用返回的 DOI 或链接去读原文**。参数写清必填与默认、范围与单位；结果写清事实、来源、口径和缺项。这是平台对工具的既定要求。
 
 ## 7.4 配置项
@@ -108,12 +110,14 @@ frontier_search(q, lane?, specialty?, window = "30d", mode = "selected", limit =
 |---|---|---|
 | `OPEN_SCIENCE_FRONTIER_ENABLED` | 关（第一阶段验收后改为生产默认开） | 总开关 |
 | `OPEN_SCIENCE_FRONTIER_POLL_MS` / `_LEASE_MS` | 5000 / 600000 | 工人轮询与租约 |
-| `OPEN_SCIENCE_FRONTIER_FETCH_CONCURRENCY` | 4 | 同时抓取数 |
+| `OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL` | 无（模块开着就必填） | 插件地址，compose 内网名 |
+| `OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE` | `/run/secrets/knowledge-plugin-token` | 静态令牌文件（0600） |
+| `OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS` / `_TIMEOUT_MS` | 60000 / 8000 | 拉取间隔；单次请求超时 |
+| `OPEN_SCIENCE_KNOWLEDGE_PLUGIN_MIN_CONTRACT` | `1.0` | 契约主版本不符时只拉不用，就绪检查标黄 |
 | `OPEN_SCIENCE_FRONTIER_MODEL` | `deepseek-flash` | 管线里所有模型步骤共用这一个，不设分档 |
 | `OPEN_SCIENCE_FRONTIER_DAILY_TIME` / `_TIMEZONE` | `07:30` / `Asia/Shanghai` | 日报定稿时间 |
 | `OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY` | 10 | 每日模型预算，超出只采集不打分 |
-| `OPEN_SCIENCE_FRONTIER_CONTACT` | 无（必填） | 联系邮箱，写进爬虫标识与 Crossref、NCBI 的礼貌参数 |
-| `OPEN_SCIENCE_EDGE_PROXY_*`（平台已有） | 生产已配置 | 前沿动态复用平台的东京代理；出口为 `relay` 的信源经它读，不另设海外开关与密钥 |
+| `OPEN_SCIENCE_EDGE_PROXY_*`（平台已有） | 生产已配置 | 平台自己的联网搜索与网页重读；采集侧的代理调用在插件里，凭据文件共用，不另设海外开关 |
 | `OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY` | 2 | 同时处理的条目批数 |
 | `OPEN_SCIENCE_FRONTIER_OFFPEAK` | 开 | 非紧急条目攒到模型半价时段处理 |
 
@@ -123,7 +127,7 @@ frontier_search(q, lane?, specialty?, window = "30d", mode = "selected", limit =
 
 | 现有模块 | 怎么用 | 备注 |
 |---|---|---|
-| 读网页（`webRead*`） | 订阅源和接口用它的受保护传输；公告与新闻正文用 `webReader.read()`；国内监管站点由自有无头浏览器容器渲染，和平台连 AgentBay 用的是同一个接口（`playwright-core` 的 `connectOverCDP`） | 新增 `OPEN_SCIENCE_FRONTIER_BROWSER_URL`（容器的调试口）；AgentBay 只作后备 |
+| 读网页（`webRead*`） | 只在「存入知识库」时用：网页快照走 `webReader.read()`；订阅源、接口、正文与监管站点的读取全在插件里 | 不再需要 `OPEN_SCIENCE_FRONTIER_BROWSER_URL`；AgentBay 后备是插件团队的决定 |
 | 模型网关与用量账本 | `callModelForControlPlane`，关闭思考、JSON 输出、温度 0 | 账本要求真实用户行，所以用一个不可登录的系统账户 |
 | 嵌入与重排 | `KbEmbedder.embedDocuments` 做聚类向量；`MemoryRerank.order` 做个性化精排 | 两者未配置时，聚类退回到只按 DOI 与实体，个性化退回到只按标签 |
 | 记忆 | `researchMemory.profile` 与胶囊画像，只读 | 记忆关掉则无「与你相关」 |
@@ -134,7 +138,7 @@ frontier_search(q, lane?, specialty?, window = "30d", mode = "selected", limit =
 
 ## 7.6 必须登记的地方
 
-平台有几处「不登记就等于没上线」的检查，这个模块都要过：`serverComposition.test.mjs` 的周期任务清单（否则工人写了也不会被启动）；`deploymentEnvReachesTheContainer.test.mjs` 的运维开关清单；就绪检查 `frontier`；`audit:saas-alignment` 的模块证据路径；`evimedMcp.test.mjs` 的工具清单与 `vocabulary.test.mjs`；`check:tokens-css` 与前端禁用任意值的 lint；`PROGRESS.md` 每个里程碑一行。
+平台有几处「不登记就等于没上线」的检查，这个模块都要过：`serverComposition.test.mjs` 的周期任务清单（否则工人写了也不会被启动）；`check:pin-inventory` 的钉版清单与 `packages/contracts/knowledge-plugin` 的契约测试；`deploymentEnvReachesTheContainer.test.mjs` 的运维开关清单；就绪检查 `frontier`；`audit:saas-alignment` 的模块证据路径；`evimedMcp.test.mjs` 的工具清单与 `vocabulary.test.mjs`；`check:tokens-css` 与前端禁用任意值的 lint；`PROGRESS.md` 每个里程碑一行。
 
 ## 7.7 对照开发约束
 

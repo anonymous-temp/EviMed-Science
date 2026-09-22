@@ -10,20 +10,23 @@
     <div class="lane" style="margin:0;border-color:#c3ece6;background:#f7fdfc"><h3>控制面 apps/server —— 一个新的功能模块，形状与「主动科研」「知识库」一致</h3>
       <div class="flow" style="margin-bottom:10px">
         <div class="node hl"><b>frontierService.mjs</b><span>读写、查询、个性化排序、收藏与关注</span></div><div class="arr" style="width:16px"></div>
-        <div class="node hl"><b>frontierWorker.mjs</b><span>租约式工人：采集、初筛、打分、聚类、出日报</span></div><div class="arr" style="width:16px"></div>
+        <div class="node hl"><b>frontierWorker.mjs</b><span>租约式工人：从插件拉条目、初筛、打分、聚类、出日报</span></div><div class="arr" style="width:16px"></div>
         <div class="node hl"><b>frontierRoutes.mjs</b><span>/api/frontier/*</span></div>
       </div>
       <div class="flow" style="margin-bottom:10px">
-        <div class="node"><b>frontierPersistence.mjs</b><span>独立库表 evimed_frontier（信源、原始条目、条目、事件、日报、用户状态），迁移写在模块里，与 evimed_kb 同一做法</span></div><div class="arr" style="width:16px"></div>
-        <div class="node"><b>frontierFetch.mjs</b><span>复用 webRead 的受保护传输：DNS 钉扎、拒绝内网地址、robots、每站限速；页面正文走现成的 webReader</span></div>
+        <div class="node"><b>frontierPersistence.mjs</b><span>独立库表 evimed_frontier（信源镜像、收到的条目、条目、事件、日报、用户状态），迁移写在模块里，与 evimed_kb 同一做法</span></div><div class="arr" style="width:16px"></div>
+        <div class="node"><b>knowledgePluginClient.mjs</b><span>唯一连插件的地方：读清单、按游标拉条目、按需取正文、调用查询；超时、重试、降级与 documentParserClient 同形</span></div>
       </div>
       <div class="flow">
         <div class="node"><b>开关与注册</b><span>OPEN_SCIENCE_FRONTIER_ENABLED；createWebApiApp 里一行注册；startRecurringWork 里启动；就绪检查加一项 frontier</span></div><div class="arr" style="width:16px"></div>
-        <div class="node"><b>信源登记表</b><span>packages/domain/src/frontier-sources.json，和用药安全规则一样是数据，运营可改</span></div>
+        <div class="node"><b>契约钉版</b><span>deps-version.json 一条 knowledge-plugin；packages/contracts/knowledge-plugin 回放录自插件的样本</span></div>
       </div>
       <div class="note" style="margin-top:12px">不碰内核、不碰 socket、不新增对话关卡。模块关掉，对话、运行、交付一切照旧。</div>
     </div>
-    <div class="lane" style="margin:0"><h3>只调用、不改动的现有能力</h3>
+    <div class="lane" style="margin:0"><h3>知识信源插件 —— 团队维护，独立发版</h3>
+      <div class="node hl" style="margin-bottom:8px"><b>evimed-knowledge-plugin 容器</b><span>登记表、调度、四个出口、九种读法、归一、去重、补全、健康；自己的库 evimed_knowledge；GET /v1/entries 是平台读它的唯一方式</span></div>
+      <div class="node" style="margin-bottom:8px"><b>查询面（第三批起）</b><span>POST /v1/lookups/*：EviMed 文献、指南、试验、说明书接口与 PubMed、Crossref 的按需查询，平台网关换供应商、工具不变</span></div>
+      <h3 style="margin-top:10px">只调用、不改动的现有能力</h3>
       <div class="node" style="margin-bottom:8px"><b>模型网关 + 用量账本</b><span>callModelForControlPlane，新增用途 frontier，花费单独成行</span></div>
       <div class="node" style="margin-bottom:8px"><b>向量与重排</b><span>KbEmbedder 做事件聚类；MemoryRerank 做「与你相关」</span></div>
       <div class="node" style="margin-bottom:8px"><b>记忆</b><span>researchMemory.profile 与胶囊画像，只读</span></div>
@@ -41,4 +44,4 @@
     </div>
   </div>
 </div>
-<div class="cap">图 6 · 集成位置：一个控制面模块 + 一个页面 + 一个只读工具（设计稿）</div>
+<div class="cap">图 6 · 集成位置：一个控制面模块 + 一个页面 + 一个只读工具，信源全部来自团队维护的知识信源插件（设计稿，2026-09-22 定版）</div>

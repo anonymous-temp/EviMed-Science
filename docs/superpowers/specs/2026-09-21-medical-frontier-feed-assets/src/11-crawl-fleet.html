@@ -11,17 +11,17 @@
 .wire{display:grid;grid-template-columns:1.25fr 1fr 1.25fr 1fr;gap:12px;text-align:center;color:var(--t3);font-size:12px;margin:4px 0}
 </style>
 <div id="shot" class="dg">
-  <div class="lane"><h3>调度 —— 只有一个，在北京控制面的 frontierWorker 里</h3>
+  <div class="lane"><h3>调度 —— 只有一个，在知识信源插件（团队维护的独立容器）里</h3>
     <div class="flow">
-      <div class="node"><b>信源登记表</b><span>753 行数据：读法、地址、节奏、出口、梯队。运行态（下次轮询时间、ETag、连续失败数）在库表 sources 里。</span></div><div class="arr">→</div>
+      <div class="node"><b>信源登记表</b><span>753 行数据：读法、地址、节奏、出口、梯队、运营主体。归插件团队维护；运行态在插件库的 sources 里。</span></div><div class="arr">→</div>
       <div class="node hl"><b>调度器</b><span>每 5 秒取到期的信源；安全与监管优先；每个主机一个令牌桶（Crossref、NCBI 串行）；节奏随信源的实际产出自动快慢。</span></div><div class="arr">→</div>
-      <div class="node"><b>任务账本 frontier-collect</b><span>平台现成的租约式任务：领取、续租、失败退避、至少一次。任务按出口分给下面四个采集器。</span></div>
+      <div class="node"><b>领取与租约</b><span>sources 表的到期索引就是队列：领取、续租、失败退避、至少一次。按出口分给下面四路。</span></div>
     </div>
   </div>
   <div class="wire"><div>↓ 进程内</div><div>↓ 北京主机上的浏览器容器</div><div>↓ 进程内，经东京代理发出</div><div>↓ 当成普通订阅源读</div></div>
   <div class="eg">
     <div class="node hl"><b>A · 北京直连采集器</b><div class="n">559<small>个信源 · 首发 267</small></div>
-      <span>跑在控制面进程里，不另起服务。</span>
+      <span>插件进程内。</span>
       <ul><li>Crossref、PubMed、Europe PMC、openFDA、ClinicalTrials.gov、EMA、WHO</li><li>医保局、政府网、疾控局、科学网等国内站</li><li>约 2,700 次请求/天（首发），带条件请求，多数返回 304</li></ul></div>
     <div class="node"><b>B · 无头浏览器</b><div class="n">67<small>个 · 第二阶段先上 12</small></div>
       <span>北京主机上自己的 Chromium 容器渲染，按同一套列表选择器解析；AgentBay 只作后备。</span>
@@ -34,14 +34,14 @@
       <span>北京主机上的 Wechat2RSS 容器给出「这个号发了什么」，采集器 A 当普通订阅源读；全文从北京直接读文章页（第 11 章）。</span>
       <ul><li>丁香园矩阵、医学界、监管与学会的官方号等</li><li>两个专用微信号，互为备份</li></ul></div>
   </div>
-  <div class="wire"><div>↓</div><div>↓</div><div>↓ 与 A 同一个工人入库</div><div>↓</div></div>
-  <div class="lane" style="margin-bottom:0;border-color:#c3ece6;background:#f7fdfc"><h3>入口 —— 四路进来的东西长得一样</h3>
+  <div class="wire"><div>↓</div><div>↓</div><div>↓ 与 A 同一个进程入库</div><div>↓</div></div>
+  <div class="lane" style="margin-bottom:0;border-color:#c3ece6;background:#f7fdfc"><h3>出口 —— 四路进来的东西长得一样，平台按游标拉走</h3>
     <div class="flow">
-      <div class="node hl"><b>归一化条目</b><span>信源、外部键、链接、标识号、原标题、原文摘要、发布时间、抓取时间。按「信源 + 外部键」幂等写入 entries。</span></div><div class="arr">→</div>
-      <div class="node"><b>处理与入库管线（图 12）</b><span>去残缺、去重、补全、初筛、导读与打分、复核、标签、向量、事件。全部在北京，模型调用全部记在平台用量账本上。</span></div><div class="arr">→</div>
-      <div class="node"><b>生产 PostgreSQL · evimed_frontier</b><span>唯一的数据库。页面、对话工具、日报、推送都只读它。</span></div>
+      <div class="node hl"><b>归一化条目 · GET /v1/entries?after=seq</b><span>信源、身份键、链接、标识号、标题、摘要、时间与精度、回填标记、白名单事实。插件库 evimed_knowledge 里按「信源 + 外部键」幂等。</span></div><div class="arr">→</div>
+      <div class="node"><b>平台 frontierWorker 每 60 秒拉一次</b><span>写进 evimed_frontier.entries，然后初筛、导读与打分、复核、标签、向量、事件（图 12）。模型调用全部记在平台用量账本上。</span></div><div class="arr">→</div>
+      <div class="node"><b>生产 PostgreSQL · evimed_frontier</b><span>页面、对话工具、日报、推送都只读它；插件停了它照常。</span></div>
     </div>
   </div>
-  <div class="note">全量 753 个信源、424 个主机名，一天约 7,000 次请求——单进程就够。分成四路不是为了吞吐，是为了<b>从读得到的那个网络位置去读</b>。东京代理停机，只影响它那一路；首发的 267 个信源全部走 A，不依赖任何境外设施。</div>
+  <div class="note">全量 753 个信源、424 个主机名，一天约 7,000 次请求——单进程就够。分成四路不是为了吞吐，是为了<b>从读得到的那个网络位置去读</b>。四路都在插件里，平台只认一个地址、一份契约；插件一批一批加信源、加字段，平台不发版就能用上。</div>
 </div>
-<div class="cap">图 11 · 采集：一个调度，四个出口（设计稿）</div>
+<div class="cap">图 11 · 采集：插件里一个调度、四个出口，平台按游标拉（设计稿，2026-09-22 定版）</div>

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Applies frontier-schema.sql twice (idempotence) to a scratch database on a local PostgreSQL 16 with pgvector and
+# Applies frontier-schema.sql and knowledge-plugin-schema.sql twice each (idempotence) to a scratch database on a local PostgreSQL 16 with pgvector and
 # pg_trgm, runs a few representative queries with EXPLAIN, then drops the database.
 # Usage: PGBIN=<dir with psql> PGPORT=55433 PGHOST=127.0.0.1 ./check_schema.sh
 set -euo pipefail
@@ -25,7 +25,10 @@ if [ "$(p -c "SELECT (string_to_array(default_version, '.'))[2]::int >= 7 OR (st
   smoke="$(mktemp)"; sed -e 's/halfvec(1024)/vector(1024)/' "$here/frontier-schema-smoke.sql" > "$smoke"
 fi
 p -f "$schema"; p -f "$schema"   # second run must be a no-op
-p -c "SELECT 'tables: ' || count(*) FROM information_schema.tables WHERE table_schema = 'evimed_frontier';
-      SELECT 'indexes: ' || count(*) FROM pg_indexes WHERE schemaname = 'evimed_frontier';"
+p -c "SELECT 'platform tables: ' || count(*) FROM information_schema.tables WHERE table_schema = 'evimed_frontier';
+      SELECT 'platform indexes: ' || count(*) FROM pg_indexes WHERE schemaname = 'evimed_frontier';"
+p -f "$here/knowledge-plugin-schema.sql"; p -f "$here/knowledge-plugin-schema.sql"   # the plugin's schema, same rule
+p -c "SELECT 'plugin tables: ' || count(*) FROM information_schema.tables WHERE table_schema = 'evimed_knowledge';
+      SELECT 'plugin indexes: ' || count(*) FROM pg_indexes WHERE schemaname = 'evimed_knowledge';"
 p -f "${smoke:-$here/frontier-schema-smoke.sql}"
 echo "schema ok"

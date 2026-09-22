@@ -15,13 +15,16 @@
 </style>
 <div id="shot" class="dg">
   <div class="er">
-    <div class="grp"><h3>采集侧 · 高频写、短保留</h3>
-      <div class="tb"><b>sources<small>753 行</small></b><p><span class="k">id</span> · 开关 · 出口 · 下次轮询 · ETag / Last-Modified · 连续失败数 · 健康状态 · 近 7 天条数<br><i>登记表文件的运行态镜像</i></p></div>
+    <div class="grp" style="border-color:#e6c9a8;background:#fffaf4"><h3>插件库 evimed_knowledge · 团队维护</h3>
+      <div class="tb"><b>sources<small>753 行</small></b><p><span class="k">id</span> · 开关 · 出口 · 运营主体 · 下次轮询 · ETag · 连续失败数 · 健康状态<br><i>登记表的运行态，也是采集队列</i></p></div>
       <div class="tb"><b>fetches<small>约 7,000 行/天 · 留 14 天</small></b><p>信源 · 时间 · 出口 · 状态码 · 字节数 · 内容哈希 · 条目数 · 错误<br><i>信源健康与选择器漂移的依据</i></p></div>
-      <div class="tb"><b>entries<small>约 1,000 行/天 · 落选的留 30 天</small></b><p><span class="k">(source_id, external_key)</span> 唯一 · 链接 · DOI / PMID / 注册号 · 原标题 · 原摘要 · 发布与抓取时间 · 残缺标记 · 状态 · → item<br><i>每个信源看到的每一条，原样记下</i></p></div>
+      <div class="tb"><b>entries<small>约 1,000 行/天 · 留 30–90 天</small></b><p><span class="k">seq</span> 游标 · entry_id · 身份键 · 链接 · DOI / PMID / 注册号 · 标题 · 摘要 · 时间与精度 · 回填标记 · 白名单事实<br><i>平台按 seq 拉走的就是它</i></p></div>
+      <div class="tb"><b>entry_texts<small>按需取</small></b><p>摘要 · 正文节选 · 文献类型 · MeSH · 开放获取 · 影响因子 · 核心期刊标签<br><i>只为平台问过的条目去读</i></p></div>
       <div class="tb"><b>seen_keys<small>留 400 天</small></b><p>信源 · 键的哈希 · 内容哈希 · 首末见到时间<br><i>去重的记忆：条目清掉了，旧条目也不会被当成新的</i></p></div>
     </div>
-    <div class="grp" style="border-color:#c3ece6;background:#f7fdfc"><h3>内容侧 · 长期保留，页面读的就是它</h3>
+    <div class="grp" style="border-color:#c3ece6;background:#f7fdfc"><h3>平台库 evimed_frontier · 内容侧，长期保留</h3>
+      <div class="tb"><b>sources<small>镜像 · 每小时刷新</small></b><p>插件登记表的副本 + 健康状态 · 平台侧显示开关<br><i>信源公开页读它；条目指向它</i></p></div>
+      <div class="tb"><b>entries<small>收到的 · 落选留 30 天</small></b><p>plugin_entry_id · seq · 身份键 · 原文 · 处理状态与租约 · → item<br><i>处理队列就是它的状态列</i></p></div>
       <div class="tb hl"><b>items<small>约 300 行/天 · 一年约 11 万行</small></b><p><span class="k">id</span> · 公开编号 · <span class="k">doi 唯一</span> · 规范链接唯一 · 中文标题 · 原标题 · 导读 · 为什么值得看 · 栏目 · 来源类型 · 证据类型 · 专科[] · 实体 · 标记[]（预印本、新闻稿、无摘要、已撤稿、涉华）· 四维分与总分 · 精选 · 安全通告 · 复核结果 · 时间轴时间 · 发布时间 · 状态 · 编辑版本 · 全文检索词列 · → event</p></div>
       <div class="tb"><b>item_texts<small>与 items 一对一</small></b><p>原文摘要 · 正文节选 · 中文摘要（首次打开时生成并缓存）· 送给模型的那段原文与其哈希<br><i>大字段单放，列表查询不碰它</i></p></div>
       <div class="tb"><b>item_vectors<small>派生数据 · 不进备份</small></b><p>条目 → <b style="display:inline">halfvec(1024)</b> · 模型标识<br><i>聚类、检索、个性化用；可随时清空重建，换嵌入模型只动这张表</i></p></div>
@@ -31,11 +34,13 @@
       <div class="tb"><b>glossary<small>数千行 · 数据</small></b><p>英文名 → 中文规范名（药物通用名、机构、试验缩写保留原文）<br><i>翻译一致性的来源，命中的词条随提示词送给模型</i></p></div>
     </div>
     <div class="grp"><h3>编排侧 · 由条目算出来的成品</h3>
-      <div class="tb"><b>events<small>约 30 个/天</small></b><p>公开编号 · 标题 · 事实说明 · 最新进展 · 状态（进行中 / 已收束）· 热度 · 实体 · 首末时间</p></div>
+      <div class="tb"><b>events<small>约 30 个/天</small></b><p>公开编号 · 标题 · 事实说明（可空）· 状态 · 衰减热度 · 72 小时独立主体数 / 全程报道数 · merged_into</p></div>
+      <div class="tb"><b>event_aliases · event_links</b><p>并过的旧编号永久可解析（308）· 事件之间的边：信号 → 评估 → 说明书修订 → 撤市；预印本 → 发表 → 撤稿</p></div>
       <div class="tb"><b>event_items</b><p>事件 ↔ 条目 · 角色：一手 / 报道 / 背景</p></div>
       <div class="tb"><b>event_revisions</b><p>事实说明的每次重写与原因<br><i>来了新的一手来源就重写，旧版留痕</i></p></div>
       <div class="tb"><b>hot_snapshots<small>每 10 分钟 1 行 · 留 90 天</small></b><p>近 72 小时 Top 10 的名次、来源数、升降</p></div>
-      <div class="tb"><b>dailies<small>每天 1 行 · 定稿后不变</small></b><p>日期 · 头条 · 分栏 · 安全警示 · AI 一分钟 · Markdown · 模型与花费</p></div>
+      <div class="tb"><b>dailies<small>每天 1 行 · 定稿后不变</small></b><p>日期 · 窗口起止 · 头条 · 分栏 · 安全警示 · AI 一分钟 · Markdown · 生成与定稿时间</p></div>
+      <div class="tb"><b>item_changes<small>留 90 天</small></b><p>seq · 条目 · upsert / remove · 原因<br><i>知识库副本与飞书据此知道撤稿与撤下</i></p></div>
       <div class="tb"><b>meta<small>十来行</small></b><p>各视图的版本号（304 的依据）· 当日预算状态 · 最近一次日报</p></div>
     </div>
     <div class="grp"><h3>用户侧 · 只有这四张表带用户标识</h3>
@@ -46,6 +51,6 @@
       <div class="never" style="margin-top:10px;font-size:12.5px">内容侧与编排侧没有租户列：这些是公开信息，全平台一份。个人数据只在这四张表里。</div>
     </div>
   </div>
-  <div class="note" style="margin-top:12px">全部在生产 PostgreSQL 16（已装 pgvector 0.8.6 与 pg_trgm）的独立库表 <b>evimed_frontier</b> 里，迁移内联在模块中、带咨询锁、可重复执行。现在整个生产库只有 23 MB；这个模块一年约增加 2 GB，不需要分区，不需要第二个数据库。</div>
+  <div class="note" style="margin-top:12px">两个库都在生产 PostgreSQL 16（pgvector 0.8.6 与 pg_trgm）里：插件的 <b>evimed_knowledge</b> 是另一个数据库、另一个角色，由插件团队迁移和备份；平台的 <b>evimed_frontier</b> 迁移内联在模块中、带咨询锁、可重复执行。两者之间没有外键、没有共享连接，只有 HTTP 契约。</div>
 </div>
-<div class="cap">图 13 · 数据模型：四组二十一张表（设计稿）</div>
+<div class="cap">图 13 · 数据模型：插件库 5 张表，平台库 22 张表（设计稿，2026-09-22 定版）</div>
