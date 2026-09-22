@@ -151,6 +151,15 @@ export function shellStylesheet(pin) {
     // real one.
     '[data-conversation-scroll]{overflow-x:hidden !important}',
     '[class$="_scroll"]:has(> [data-chat-flow]){overflow-x:clip !important}',
+    // The conversation's reading width is the kernel's own formula and nothing
+    // else. The kernel lets a reader widen it by dragging two invisible
+    // handles beside the composer (`--dsh-chat-user-width`, kept in local
+    // storage), and on 2026-09-22 the owner's composer spanned a 2520 px
+    // screen edge to edge (「首页进去的输入框那么宽」) — a drag nobody meant.
+    // Pinned by the conversation root's own class, because the variable is
+    // defined on that element and only an equal-specificity `!important` on
+    // it wins; the hash is this kernel's, and the pin test above holds it.
+    '.wSkVaW_root{--dsh-chat-content-width:clamp(680px,calc(var(--dsh-conversation-column-width,0px) * .64),920px) !important}',
   ].join('\n');
 }
 
