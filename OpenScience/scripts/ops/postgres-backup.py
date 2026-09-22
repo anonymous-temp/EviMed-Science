@@ -37,6 +37,29 @@ WHERE c.relkind IN ('r','p') AND n.nspname NOT LIKE 'pg\\_%' ESCAPE '\\'
 ORDER BY n.nspname,c.relname
 \\gexec
 """
+# Tables whose rows are derived from other tables of the same database, each
+# with the command that regenerates them after a restore. The dump keeps their
+# definitions and indexes and leaves their rows out (`pg_dump
+# --exclude-table-data`), so the snapshot inventory records zero rows for them
+# — the count a restore of that dump must show — and the drill still fails on
+# any other difference, including rows in one of these tables that should never
+# have reached the archive.
+#
+# `evimed_frontier.item_vectors` holds the frontier feed's embedding of every
+# published item, about 13 KB a row as `vector`: a year of the feed would put
+# some 750 MB into each of the thirty retained archives, on a host with 39 GB
+# free, for rows `pnpm rebuild:frontier-index` recomputes from the items the
+# same dump does carry (plan section 10.4.6).
+#
+# A closed list, and the readiness check that reads these receipts holds its
+# own copy (`POSTGRES_BACKUP_DERIVED_TABLES` in
+# `apps/server/src/postgresBackupReadiness.mjs`; a test keeps the two equal): a
+# receipt that left out the rows of any table not named here would certify a
+# backup that cannot restore that table.
+DERIVED_TABLE_DATA = {
+    ("evimed_frontier", "item_vectors"): "pnpm rebuild:frontier-index",
+}
+DIGITS = re.compile(r"[0-9]{1,20}")
 
 
 class BackupError(Exception):
@@ -158,6 +181,65 @@ def table_rows(lines: list[str]) -> list[dict]:
 
 def table_digest(rows: list[dict]) -> str:
     return hashlib.sha256(json.dumps(rows, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def exclude_derived_data(inventory: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Split a snapshot inventory into the counts a restore of its dump must
+    reproduce and the derived tables whose rows the dump leaves out.
+
+    Only tables the snapshot actually holds are excluded, so a database without
+    the frontier schema is dumped with exactly the arguments it was dumped with
+    before this list existed. An excluded table stays in the inventory at zero
+    rows; its source count moves into the receipt beside the command that
+    regenerates it, which is what an operator restoring the archive needs.
+    """
+    expected = []
+    excluded = []
+    for row in inventory:
+        rebuild = DERIVED_TABLE_DATA.get((row["schema"], row["table"]))
+        if rebuild is None:
+            expected.append(row)
+            continue
+        expected.append({"schema": row["schema"], "table": row["table"], "rows": "0"})
+        excluded.append({"schema": row["schema"], "table": row["table"], "sourceRows": row["rows"], "rebuild": rebuild})
+    return expected, excluded
+
+
+def exclusion_arguments(excluded: list[dict]) -> list[str]:
+    # The names come from DERIVED_TABLE_DATA: fixed lower-case identifiers with
+    # none of the characters a pg_dump pattern interprets (`*`, `?`, `"`), so
+    # each pattern matches exactly the one table it names.
+    return [f"--exclude-table-data={row['schema']}.{row['table']}" for row in excluded]
+
+
+def rebuild_commands(excluded: list[dict]) -> list[str]:
+    return sorted({row["rebuild"] for row in excluded})
+
+
+def validate_exclusions(value, tables: list[dict]) -> list[dict]:
+    """The exclusions a receipt names, or ValueError.
+
+    Only a table DERIVED_TABLE_DATA lists, once, with the rebuild command it is
+    listed with, and present in the receipt's own inventory at zero rows — the
+    count its restore is verified against. A receipt written before exclusions
+    existed carries no list and excluded nothing.
+    """
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > len(DERIVED_TABLE_DATA):
+        raise ValueError()
+    inventory = {(row["schema"], row["table"]): row["rows"] for row in tables}
+    seen = set()
+    for entry in value:
+        if not isinstance(entry, dict) or set(entry) != {"schema", "table", "sourceRows", "rebuild"}:
+            raise ValueError()
+        key = (entry["schema"], entry["table"])
+        if (key not in DERIVED_TABLE_DATA or key in seen or entry["rebuild"] != DERIVED_TABLE_DATA[key]
+                or not isinstance(entry["sourceRows"], str) or not DIGITS.fullmatch(entry["sourceRows"])
+                or inventory.get(key) != "0"):
+            raise ValueError()
+        seen.add(key)
+    return value
 
 
 def validate_restore_database(source: str, target: str) -> None:
@@ -609,10 +691,11 @@ def capture_member(output_dir: Path) -> dict:
             expected = table_rows(session.query(COUNTS_SQL))
             if not expected:
                 raise BackupError("postgres_source_application_empty")
+            expected, excluded = exclude_derived_data(expected)
             descriptor = temporary.open_file("snapshot.dump", os.O_WRONLY | os.O_CREAT | os.O_EXCL)
             with os.fdopen(descriptor, "wb") as dump:
                 command(base + ["pg_dump", "--format=custom", "--compress=9", "--no-owner", "--no-acl",
-                                "--lock-wait-timeout=30000", "--snapshot=" + snapshot,
+                                "--lock-wait-timeout=30000", *exclusion_arguments(excluded), "--snapshot=" + snapshot,
                                 "-U", role, "-d", database], target=dump)
         finally:
             session.close()
@@ -659,6 +742,7 @@ def capture_member(output_dir: Path) -> dict:
             "archiveSha256": encrypted_digest,
             "tables": expected,
             "tablesSha256": table_digest(expected),
+            "excludedTableData": excluded,
             "runnerSha256": digest(Path(__file__)),
         }
         receipt = temporary.open_file(receipt_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
@@ -678,12 +762,13 @@ def capture_member(output_dir: Path) -> dict:
 
 class CaptureBundle:
     def __init__(self, parent: PinnedDirectory, archive_descriptor: int, archive_name: str,
-                 receipt: dict, expected: list[dict]):
+                 receipt: dict, expected: list[dict], excluded: list[dict]):
         self.parent = parent
         self.archive_descriptor = archive_descriptor
         self.archive_name = archive_name
         self.receipt = receipt
         self.expected = expected
+        self.excluded = excluded
 
     def close(self) -> None:
         os.close(self.archive_descriptor)
@@ -704,6 +789,7 @@ def load_capture_receipt(root: RecoveryRoot, archive: Path, database: str) -> Ca
             receipt = json.load(input_stream)
         descriptors.remove(receipt_descriptor)
         expected = table_rows([json.dumps(row) for row in receipt["tables"]])
+        excluded = validate_exclusions(receipt.get("excludedTableData"), expected)
         archive_digest = digest_descriptor(archive_descriptor)
         with os.fdopen(checksum_descriptor, "r", encoding="utf-8") as input_stream:
             checksum_text = input_stream.read(4096)
@@ -726,7 +812,7 @@ def load_capture_receipt(root: RecoveryRoot, archive: Path, database: str) -> Ca
                 pass
         parent.close()
         raise BackupError("postgres_capture_receipt_invalid") from None
-    return CaptureBundle(parent, archive_descriptor, archive_name, receipt, expected)
+    return CaptureBundle(parent, archive_descriptor, archive_name, receipt, expected, excluded)
 
 
 def clone_marker(sql: list[str], target: str) -> str:
@@ -832,6 +918,10 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
                 "tables": restored,
                 "expectedTablesSha256": table_digest(expected),
                 "restoredTablesSha256": table_digest(restored),
+                # The clone holds these tables empty; the application reads
+                # them only after their rebuild command has run against it.
+                "excludedTableData": bundle.excluded,
+                "rebuildAfterRestore": rebuild_commands(bundle.excluded),
                 "verifiedAt": now(),
             }
             atomic_replace_receipt(receipt_parent, receipt_name, result, operation_id)
@@ -913,10 +1003,12 @@ def backup(backups: Path, state_file: Path, previous: dict) -> dict:
                 expected = table_rows(session.query(COUNTS_SQL))
                 if not expected:
                     raise BackupError("postgres_source_application_empty")
+                expected, excluded = exclude_derived_data(expected)
                 stage = "dump"
                 with plain.open("xb") as output:
                     command(base + ["pg_dump", "--format=custom", "--compress=9", "--no-owner", "--no-acl",
-                                    "--lock-wait-timeout=30000", "--snapshot=" + snapshot, "-U", role, "-d", database], target=output)
+                                    "--lock-wait-timeout=30000", *exclusion_arguments(excluded), "--snapshot=" + snapshot,
+                                    "-U", role, "-d", database], target=output)
             finally:
                 session.close()
             snapshot_finished = now()
@@ -957,6 +1049,7 @@ def backup(backups: Path, state_file: Path, previous: dict) -> dict:
                       "encryption": "aes-256-cbc-pbkdf2-sha256-250000", "archive": archive.name,
                       "archiveSha256": encrypted_digest, "tables": expected,
                       "expectedTablesSha256": table_digest(expected), "restoredTablesSha256": table_digest(restored),
+                      "excludedTableData": excluded,
                       "restoreVerified": True, "runnerSha256": digest(Path(__file__))}
     except Exception as error:
         operation_error = error if isinstance(error, BackupError) else BackupError("postgres_backup_operation_failed")
@@ -1013,8 +1106,14 @@ def main(arguments=None) -> int:
             return 0
         if mode == "restore-clone":
             result = restore_clone(values["archive"], values["target_database"], values["receipt"])
-            print(json.dumps({"status": result["status"], "targetDatabase": result["targetDatabase"],
-                              "receipt": str(values["receipt"])}, sort_keys=True, separators=(",", ":")))
+            summary = {"status": result["status"], "targetDatabase": result["targetDatabase"],
+                       "receipt": str(values["receipt"])}
+            # Said where the operator reads it, not only in the receipt: a
+            # restored database whose derived tables are still empty serves,
+            # and serves worse (the frontier search loses its vector leg).
+            if result["rebuildAfterRestore"]:
+                summary["rebuildAfterRestore"] = result["rebuildAfterRestore"]
+            print(json.dumps(summary, sort_keys=True, separators=(",", ":")))
             return 0
     backups = Path(os.environ.get("EVIMED_POSTGRES_BACKUP_DIR", str(DEFAULT_ROOT / "backups/postgres"))).absolute()
     no_symlink_path(backups)
@@ -1043,7 +1142,10 @@ def main(arguments=None) -> int:
                                         "drillDatabase": current.get("drillDatabase"),
                                         "cleanupFailed": bool(current.get("drillDatabase"))})
             raise BackupError(code) from None
-        print(json.dumps({"status": result["status"], "archive": result["archive"], "restoreVerified": True}))
+        summary = {"status": result["status"], "archive": result["archive"], "restoreVerified": True}
+        if result.get("excludedTableData"):
+            summary["rebuildAfterRestore"] = rebuild_commands(result["excludedTableData"])
+        print(json.dumps(summary))
         return 0
     finally:
         os.close(lock)

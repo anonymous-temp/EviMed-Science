@@ -10,7 +10,12 @@ export const PRODUCT_KINDS = Object.freeze([
   // be on trial in one project and absent from another at the same instant.
   "method-trial",
 ]);
-export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "memory-record-index", "plugin-apply"]);
+// `frontier-daily` and `frontier-rebuild` are the frontier feed's only kinds on
+// this shared ledger (plan §10.4.4): one daily issue per day, and the
+// operator's rebuilds. Its per-entry queue — thousands of rows a day — lives in
+// `evimed_frontier`'s own state and lease columns, where it cannot drown this.
+export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "memory-record-index", "plugin-apply",
+  "frontier-daily", "frontier-rebuild"]);
 
 /**
  * What the researcher did, as a closed vocabulary.
@@ -185,6 +190,23 @@ BEGIN
   END IF;
 END $migration$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-13-memory-record-index-v1') ON CONFLICT DO NOTHING;
+DO $migration$
+BEGIN
+  -- The frontier feed's two kinds (2026-09-22). Its own block, for the reason
+  -- the method-trial block above gives: the blocks before this one rebuild the
+  -- constraint only when it lacks *their* kind, so on a deployment that has
+  -- run them all, nothing else would ever let these two in.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_product' AND t.relname='jobs' AND c.conname='product_jobs_kind_check'
+      AND pg_get_constraintdef(c.oid) LIKE '%frontier-rebuild%'
+  ) THEN
+    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
+      CHECK (kind IN (${PRODUCT_JOB_KINDS.map((x) => `'${x}'`).join(",")}));
+  END IF;
+END $migration$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-22-frontier-job-kinds-v1') ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS evimed_product.plugin_prompt_admissions (
   id text PRIMARY KEY,
   user_id text NOT NULL,

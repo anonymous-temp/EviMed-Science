@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { defaultDeepSeekModel } from "./modelGateway.mjs";
+import { defaultDeepSeekModel, supportedDeepSeekModels } from "./modelGateway.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS } from "./dshProfilePatch.mjs";
@@ -167,6 +167,110 @@ function releaseManifestConfig(overrides) {
   }
   const file = overrides.releaseManifestFile ?? process.env.OPEN_SCIENCE_RELEASE_MANIFEST_FILE ?? "";
   return readReleaseManifestFile(file);
+}
+
+/**
+ * The frontier feed's settings (「前沿动态」, plan §7.4) and the knowledge-source
+ * plugin it reads, each checked at load.
+ *
+ * Hidden knowledge: every one of these is a lever an operator sets in `.env`,
+ * and compose passes them value-less (unset is absent, so the code's default
+ * applies). A value outside its range stops the process at start with the
+ * variable's name, rather than turning into a 0 or a NaN that quietly changes
+ * what the worker does — `Number("")` is 0, and a 0 ms poll is a busy loop.
+ * An empty value reads as unset for the same reason.
+ *
+ * - The audience is `all` or `operators`: the one-week dry run (plan §10.5.10)
+ *   shows the module to operators and the preview list only, while the whole
+ *   pipeline runs in production.
+ * - The model is one of the models the gateway certifies; the feed never names
+ *   one the gateway would refuse at the first call.
+ * - The token file is read by the plugin client on every call, so its path is
+ *   all that is configured here; readiness says whether it can be read.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function frontierSettings(overrides) {
+  /** @param {string} key @param {string} name @param {unknown} fallback */
+  const read = (key, name, fallback) => {
+    if (overrides[key] !== undefined) return overrides[key];
+    const value = process.env[name];
+    return value == null || value === "" ? fallback : value;
+  };
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const integer = (key, name, fallback, min, max) => {
+    const value = read(key, name, fallback);
+    const number = Number(value);
+    if (!Number.isSafeInteger(number) || number < min || number > max) {
+      throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(value)}.`);
+    }
+    return number;
+  };
+  const audience = String(read("frontierAudience", "OPEN_SCIENCE_FRONTIER_AUDIENCE", "all")).trim().toLowerCase();
+  if (!["all", "operators"].includes(audience)) {
+    throw new Error(`OPEN_SCIENCE_FRONTIER_AUDIENCE must be "all" or "operators", got ${JSON.stringify(audience)}.`);
+  }
+  const model = String(read("frontierModel", "OPEN_SCIENCE_FRONTIER_MODEL", defaultDeepSeekModel)).trim();
+  if (!supportedDeepSeekModels.has(model)) {
+    throw new Error(`OPEN_SCIENCE_FRONTIER_MODEL must be one of ${[...supportedDeepSeekModels].join(", ")}, got ${JSON.stringify(model)}.`);
+  }
+  const dailyTime = String(read("frontierDailyTime", "OPEN_SCIENCE_FRONTIER_DAILY_TIME", "07:30")).trim();
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(dailyTime)) {
+    throw new Error(`OPEN_SCIENCE_FRONTIER_DAILY_TIME must be HH:MM, got ${JSON.stringify(dailyTime)}.`);
+  }
+  const timeZone = String(read("frontierTimeZone", "OPEN_SCIENCE_FRONTIER_TIMEZONE", "Asia/Shanghai")).trim();
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(0);
+  } catch {
+    throw new Error(`OPEN_SCIENCE_FRONTIER_TIMEZONE must be an IANA time zone, got ${JSON.stringify(timeZone)}.`);
+  }
+  const budgetValue = read("frontierDailyBudgetCny", "OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY", 10);
+  const budget = Number(budgetValue);
+  if (!Number.isFinite(budget) || budget < 0 || budget > 10_000) {
+    throw new Error(`OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY must be a number from 0 to 10000, got ${JSON.stringify(budgetValue)}.`);
+  }
+  const pluginUrl = String(read("knowledgePluginUrl", "OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL", "")).trim().replace(/\/+$/, "");
+  if (pluginUrl) {
+    let parsed = null;
+    try { parsed = new URL(pluginUrl); } catch { parsed = null; }
+    if (!parsed || !["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+      throw new Error("OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL must be an http(s) origin with an optional path and no credentials.");
+    }
+  }
+  const tokenFile = String(read("knowledgePluginTokenFile", "OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE", "/run/secrets/knowledge-plugin-token")).trim();
+  if (tokenFile && !path.isAbsolute(tokenFile)) {
+    throw new Error("OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE must be an absolute path.");
+  }
+  const minContract = String(read("knowledgePluginMinContract", "OPEN_SCIENCE_KNOWLEDGE_PLUGIN_MIN_CONTRACT", "1.0")).trim();
+  if (!/^\d{1,4}\.\d{1,4}(?:\.\d{1,6})?$/.test(minContract)) {
+    throw new Error(`OPEN_SCIENCE_KNOWLEDGE_PLUGIN_MIN_CONTRACT must be MAJOR.MINOR, got ${JSON.stringify(minContract)}.`);
+  }
+  return {
+    // Off by default: it needs PostgreSQL, an operator account to bill its
+    // model calls to, and — to show anything — the plugin.
+    frontierEnabled: overrides.frontierEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_ENABLED", false),
+    frontierAudience: audience,
+    // Accounts that see the module under `operators` without being operators:
+    // the acceptance account verifies the dry run without operator rights.
+    frontierPreviewUsers: overrides.frontierPreviewUsers ?? listEnv("OPEN_SCIENCE_FRONTIER_PREVIEW_USERS"),
+    frontierPollMs: integer("frontierPollMs", "OPEN_SCIENCE_FRONTIER_POLL_MS", 5_000, 1_000, 3_600_000),
+    frontierLeaseMs: integer("frontierLeaseMs", "OPEN_SCIENCE_FRONTIER_LEASE_MS", 600_000, 60_000, 86_400_000),
+    frontierModel: model,
+    frontierDailyTime: dailyTime,
+    frontierTimeZone: timeZone,
+    // The pipeline's own model money per day (frontierPipeline.mjs gates on
+    // it: past 80% only urgent items are edited, past 100% none); 0 is no
+    // cap, as every spend limit on this platform reads 0.
+    frontierDailyBudgetCny: budget,
+    frontierProcessConcurrency: integer("frontierProcessConcurrency", "OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY", 2, 1, 8),
+    frontierOffpeak: overrides.frontierOffpeak ?? boolEnv("OPEN_SCIENCE_FRONTIER_OFFPEAK", true),
+    frontierSelectThreshold: integer("frontierSelectThreshold", "OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD", 70, 0, 100),
+    knowledgePluginUrl: pluginUrl,
+    knowledgePluginTokenFile: tokenFile,
+    knowledgePluginPollMs: integer("knowledgePluginPollMs", "OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS", 60_000, 5_000, 3_600_000),
+    knowledgePluginTimeoutMs: integer("knowledgePluginTimeoutMs", "OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TIMEOUT_MS", 8_000, 1_000, 60_000),
+    knowledgePluginMinContract: minContract,
+  };
 }
 
 export function loadConfig(overrides = {}) {
@@ -1341,6 +1445,8 @@ export function loadConfig(overrides = {}) {
     autopilotEnabled: overrides.autopilotEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_ENABLED", production),
     autopilotPollMs: Number(overrides.autopilotPollMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_POLL_MS ?? 1_000),
     autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),
+    // --- frontier: 「前沿动态」 and the knowledge-source plugin (2026-09-22) ---
+    ...frontierSettings(overrides),
     // The learning loop's own knobs.
     //
     // On by default since 2026-09-08, and the reason it was off is worth keeping

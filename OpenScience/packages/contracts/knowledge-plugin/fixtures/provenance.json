@@ -1,0 +1,368 @@
+{
+  "contractVersion": "1.1.0",
+  "plugin": {
+    "name": "evimed-knowledge-plugin",
+    "version": "0.1.0",
+    "build": "dev-p1-20260922T1153",
+    "started_at": "2026-09-22T11:53:04.100718Z"
+  },
+  "server": "http://127.0.0.1:18080",
+  "serverRole": "the live development instance of 项目代码/knowledge-plugin (crawler on, database evimed_knowledge_dev), not a production plugin",
+  "recordedAt": "2026-09-22T12:00:10.544Z",
+  "healthAtRecording": {
+    "latest_seq": 13733,
+    "sources": {
+      "disabled": 404,
+      "degraded": 8,
+      "healthy": 277,
+      "new": 31
+    }
+  },
+  "recorder": "packages/contracts/knowledge-plugin/fixtures/record.mjs",
+  "fixtureEvidence": "Every other *.json here except identity-keys.json is the response body the plugin sent, byte for byte. Each fixture's request (every header but Authorization; `credential` says which token was sent without naming it), status, response headers and time are recorded below. Nothing was re-indented, trimmed, renamed or invented: a hand-written wire fixture once certified a shape the wire never produced and defeated the audit that depended on it.",
+  "fixtures": {
+    "health.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/health",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "none"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "428",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:09.548Z"
+    },
+    "manifest.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/manifest",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "1553",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:09.555Z"
+    },
+    "sources-page-1.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/sources?lane=public-health&limit=10&include_retired=true",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "6296",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:09.561Z"
+    },
+    "sources-page-2.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/sources?lane=public-health&limit=10&include_retired=true&cursor=ecdc-epi-updates",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "5614",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:09.567Z"
+    },
+    "entries-page-1.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries?after=0&limit=3",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "2750",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:09.575Z"
+    },
+    "entries-page-2.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries?after=609&limit=3",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "3085",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:09.579Z"
+    },
+    "entries-tail.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries?after=13733&limit=3",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "94",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:09 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:09.590Z"
+    },
+    "identity-doi-pmid-registry.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/pubmed-rct-core-journals%3A305305de7d6850c4b373492240d4b4b6",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "3296",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:10.485Z"
+    },
+    "identity-doi.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/china-cdc-weekly%3A8f8fe5efbbc71811dde3a29f7868e40a",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "973",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:10.488Z"
+    },
+    "identity-pmid.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/pubmed-pharmacoeconomics-hta%3Ae7e1e92f0be21cd3d4b2c25669c9e1e5",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "2712",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:10.493Z"
+    },
+    "identity-reg.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/ctgov-phase3-new-registrations%3Aa3bb29afb4a6bbb44fa31145d9d1783d",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "1608",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:10.499Z"
+    },
+    "identity-fda.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/openfda-drugsfda-api%3A34de6189eea0564a9ad9c28f6a534b98",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "1030",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:10.501Z"
+    },
+    "identity-url.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/cdc-newsroom%3A24d2fe0650da2ed1028e348bd926596f",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "935",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:10.503Z"
+    },
+    "text-available.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/j-0028-4793%3A8f25dffc341b4c48d6432965f450e6e8/text",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "3127",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:10.525Z"
+    },
+    "text-pending.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/j-0028-4793%3A80ed6c51d6fbfc5120ab9eaa1c4e0460/text",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "212",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:10.530Z"
+    },
+    "lookups.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/lookups",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 200,
+      "headers": {
+        "content-length": "14",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:10.533Z"
+    },
+    "lookup-unavailable.json": {
+      "request": {
+        "method": "POST",
+        "path": "/v1/lookups/literature-search",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json"
+        },
+        "credential": "the deployment token",
+        "body": {}
+      },
+      "status": 501,
+      "headers": {
+        "content-length": "111",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:10.537Z"
+    },
+    "error-unauthorized.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries?after=0&limit=1",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "a token the plugin never issued"
+      },
+      "status": 401,
+      "headers": {
+        "content-length": "83",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT",
+        "www-authenticate": "Bearer"
+      },
+      "recordedAt": "2026-09-22T12:00:10.539Z"
+    },
+    "error-not-found.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries/no-such-source%3A00000000000000000000000000000000/text",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 404,
+      "headers": {
+        "content-length": "64",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:10.542Z"
+    },
+    "error-invalid-cursor.json": {
+      "request": {
+        "method": "GET",
+        "path": "/v1/entries?after=-1&limit=1",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credential": "the deployment token"
+      },
+      "status": 400,
+      "headers": {
+        "content-length": "120",
+        "content-type": "application/json",
+        "date": "Tue, 22 Sep 2026 12:00:10 GMT"
+      },
+      "recordedAt": "2026-09-22T12:00:10.543Z"
+    }
+  }
+}

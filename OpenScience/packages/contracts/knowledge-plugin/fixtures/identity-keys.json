@@ -1,0 +1,128 @@
+{
+  "ladder": [
+    "doi",
+    "pmid",
+    "wx",
+    "reg",
+    "fda",
+    "url"
+  ],
+  "derivedFrom": "the identity-*.json recordings beside this file, by record.mjs; contract.test.mjs derives it again and compares",
+  "samples": [
+    {
+      "rung": "doi",
+      "fixture": "identity-doi-pmid-registry.json",
+      "entry_id": "pubmed-rct-core-journals:305305de7d6850c4b373492240d4b4b6",
+      "source_id": "pubmed-rct-core-journals",
+      "inputs": {
+        "doi": "10.1056/nejmoa2604166",
+        "pmid": "42748428",
+        "registry_ids": [
+          "NCT03643276"
+        ],
+        "wx_biz": null,
+        "trial_event": null,
+        "fda_application": null,
+        "fda_supplement": null,
+        "published_at": "2026-09-16T00:00:00Z",
+        "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/42748428/"
+      },
+      "identity_key": "doi:10.1056/nejmoa2604166"
+    },
+    {
+      "rung": "doi",
+      "fixture": "identity-doi.json",
+      "entry_id": "china-cdc-weekly:8f8fe5efbbc71811dde3a29f7868e40a",
+      "source_id": "china-cdc-weekly",
+      "inputs": {
+        "doi": "10.46234/ccdcw2026.189",
+        "pmid": null,
+        "registry_ids": [],
+        "wx_biz": null,
+        "trial_event": null,
+        "fda_application": null,
+        "fda_supplement": null,
+        "published_at": "2026-09-18T00:00:00Z",
+        "canonical_url": "https://weekly.chinacdc.cn/article/doi/10.46234/ccdcw2026.189"
+      },
+      "identity_key": "doi:10.46234/ccdcw2026.189"
+    },
+    {
+      "rung": "pmid",
+      "fixture": "identity-pmid.json",
+      "entry_id": "pubmed-pharmacoeconomics-hta:e7e1e92f0be21cd3d4b2c25669c9e1e5",
+      "source_id": "pubmed-pharmacoeconomics-hta",
+      "inputs": {
+        "doi": null,
+        "pmid": "42742560",
+        "registry_ids": [],
+        "wx_biz": null,
+        "trial_event": null,
+        "fda_application": null,
+        "fda_supplement": null,
+        "published_at": "2026-09-15T00:00:00Z",
+        "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/42742560/"
+      },
+      "identity_key": "pmid:42742560"
+    },
+    {
+      "rung": "reg",
+      "fixture": "identity-reg.json",
+      "entry_id": "ctgov-phase3-new-registrations:a3bb29afb4a6bbb44fa31145d9d1783d",
+      "source_id": "ctgov-phase3-new-registrations",
+      "inputs": {
+        "doi": null,
+        "pmid": null,
+        "registry_ids": [
+          "NCT07830797"
+        ],
+        "wx_biz": null,
+        "trial_event": "registered",
+        "fda_application": null,
+        "fda_supplement": null,
+        "published_at": "2026-09-21T00:00:00Z",
+        "canonical_url": "https://clinicaltrials.gov/study/NCT07830797"
+      },
+      "identity_key": "reg:NCT07830797:registered:2026-09-21"
+    },
+    {
+      "rung": "fda",
+      "fixture": "identity-fda.json",
+      "entry_id": "openfda-drugsfda-api:34de6189eea0564a9ad9c28f6a534b98",
+      "source_id": "openfda-drugsfda-api",
+      "inputs": {
+        "doi": null,
+        "pmid": null,
+        "registry_ids": [],
+        "wx_biz": null,
+        "trial_event": null,
+        "fda_application": "ANDA203924",
+        "fda_supplement": "SUPPL-2",
+        "published_at": "2026-09-14T00:00:00Z",
+        "canonical_url": "https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?ApplNo=203924&event=overview.process"
+      },
+      "identity_key": "fda:ANDA203924:SUPPL-2"
+    },
+    {
+      "rung": "url",
+      "fixture": "identity-url.json",
+      "entry_id": "cdc-newsroom:24d2fe0650da2ed1028e348bd926596f",
+      "source_id": "cdc-newsroom",
+      "inputs": {
+        "doi": null,
+        "pmid": null,
+        "registry_ids": [],
+        "wx_biz": null,
+        "trial_event": null,
+        "fda_application": null,
+        "fda_supplement": null,
+        "published_at": "2026-09-21T16:00:00Z",
+        "canonical_url": "https://tools.cdc.gov/api/embed/downloader/download.asp?c=766493&m=132608"
+      },
+      "identity_key": "url:5259fa0cc2614680664dc0101cf8f2f0d2a0b565f4da337ed2eed3d696f0396b"
+    }
+  ],
+  "notRecorded": {
+    "identity-wx.json": "the stream held no such entry when this was recorded"
+  }
+}

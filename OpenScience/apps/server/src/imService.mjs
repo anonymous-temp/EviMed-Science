@@ -117,6 +117,10 @@ export function runFileLink(config, runId, filePath) {
 export function noticeLink(config, item) {
   const source = item?.source;
   if (source?.type === "run") return runLink(config, source.id);
+  // A digest is an autopilot briefing, or the 「前沿动态」 daily of a day, which
+  // names itself `frontier-daily:<YYYY-MM-DD>` — the key it is pushed under.
+  const frontierDay = source?.type === "digest" ? /^frontier-daily:(\d{4}-\d{2}-\d{2})$/.exec(String(source.id))?.[1] : null;
+  if (frontierDay) return appLink(config, `/app/frontier?view=daily&day=${frontierDay}`);
   if (source?.type === "digest") return appLink(config, `/app/autopilot?digest=${encodeURIComponent(source.id)}`);
   if (source?.type === "memory") return appLink(config, `/app/memory?record=${encodeURIComponent(source.id)}`);
   return appLink(config, "/app/inbox");
@@ -1141,6 +1145,9 @@ export class ImService {
       .filter((/** @type {string} */ id) => id !== IN_APP_CHANNEL && this.registry.isEnabled(id));
     if (!channels.length) return 0;
     if (preferences?.switches && preferences.switches[item.noticeType] === false) return 0;
+    // The frontier daily has its own switch: turned off after an issue was
+    // queued in the inbox, it is not pushed either.
+    if (item.source?.type === "digest" && String(item.source.id).startsWith("frontier-daily:") && preferences?.switches?.frontier === false) return 0;
     // A run a chat started reports into that chat already; the inbox item is
     // the record, not a second buzz.
     if (item.source?.type === "run" && item.projectId && await this.store.taskForRun(item.userId, item.projectId, item.source.id)) {

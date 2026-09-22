@@ -1,0 +1,584 @@
+openapi: 3.1.0
+info:
+  title: EviMed Knowledge Source Plugin
+  version: "1.1.0"
+  summary: The one interface through which the EviMed platform reads knowledge sources.
+  description: |
+    The plugin owns everything between the outside world and the platform for *knowledge*
+    sources: the source registry, scheduling, fetching (direct, headless browser, Tokyo proxy,
+    WeChat bridge), parsing, normalisation, per-source de-duplication, enrichment, source health,
+    and the on-demand lookups that wrap the team's own EviMed evidence/guideline APIs and the
+    public bibliographic APIs. Bioinformatics and real-world-data sources (GEO, GTEx, OMIM,
+    cBioPortal, MIMIC, OpenGWAS, ...) are out of scope and stay on the platform's public-source
+    gateway.
+
+    The platform consumes what the plugin returns and nothing else. Rules of the contract:
+
+    1. **Additive only within major version 1.** Fields, enum values, lookups and streams may be
+       added at any release; nothing is renamed or removed. Consumers ignore unknown fields and
+       map unknown enum values to a documented fallback (`lane` -> undecided, `source_type` ->
+       media, `health` -> degraded).
+    2. **`seq` is the cursor.** Every delivered entry carries a strictly increasing `seq`
+       (per plugin instance). `GET /v1/entries?after=<seq>` returns entries with `seq > after`
+       in ascending order. A content change re-delivers the same `entry_id` with a higher
+       `revision` and a new `seq`. Nothing is ever delivered twice with the same `(entry_id,
+       revision)`.
+    3. **Entries are per-source sightings.** The plugin de-duplicates *within* a source
+       (external key + content hash, 400-day memory) and computes `identity_key` by the
+       deterministic ladder `doi: > pmid: > wx:<biz>:<mid>:<idx> > reg:<id>:<event>:<date> >
+       fda:<application>:<supplement> > url:<sha256>`. Merging the same work seen from several
+       sources is the consumer's job; the key makes it a lookup.
+    4. **Whitelisted fields only.** An adapter may only emit the fields named in `Entry.facts`
+       and `EntryText`; personal data that an upstream carries (contact e-mails, phone numbers)
+       never exists past the adapter.
+    5. **The first sighting of an old thing is `backfill: true`.** On first contact with a
+       source only the last 7 days are delivered as new; older entries are delivered with the
+       flag, and the default listing omits them.
+    6. **The plugin never calls the platform.** It has no platform credential and no platform
+       address; every interaction is the platform pulling.
+    7. **Retention is the plugin's own**: entries 30 days after delivery (unless the consumer
+       asked for their text, then 90), fetch log 14 days, dedupe memory 400 days, registry and
+       health for ever. What the platform published, the platform snapshots itself.
+    8. **Money and models.** The plugin makes no content-generating model call. Its only model
+       use is proposing new list selectors when a page drifts (10.2.8); calls are counted in
+       `/v1/health`.
+  contact:
+    name: EviMed knowledge plugin team
+  license:
+    name: Proprietary
+servers:
+  - url: http://evimed-knowledge-plugin:8080
+    description: The container on the Beijing host's internal compose network. No public port.
+security:
+  - bearerToken: []
+tags:
+  - name: discovery
+  - name: sources
+  - name: stream
+  - name: lookups
+
+paths:
+  /v1/manifest:
+    get:
+      tags: [discovery]
+      operationId: getManifest
+      summary: What this plugin build delivers
+      description: |
+        Read once at platform start and again every hour. The platform refuses to consume a
+        plugin whose `contract.version` major differs from its own pin, and logs (does not
+        refuse) when the plugin advertises vocabulary values the platform does not know yet.
+      responses:
+        "200":
+          description: Manifest
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Manifest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/health:
+    get:
+      tags: [discovery]
+      operationId: getHealth
+      summary: Liveness, source health counts, egress state, backlog
+      description: |
+        The platform's readiness check for the feed module asserts only that this endpoint
+        answers with a parsable body and a compatible contract. Unreadable upstream sources do
+        NOT turn readiness red (the platform ships on green readiness, and FDA being down is not
+        a reason not to ship).
+      security: []
+      responses:
+        "200":
+          description: Health
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /v1/sources:
+    get:
+      tags: [sources]
+      operationId: listSources
+      summary: The registry with its runtime health
+      description: The platform mirrors this into its own `sources` table hourly and serves the public sources page from the mirror.
+      parameters:
+        - { name: lane, in: query, schema: { $ref: "#/components/schemas/Lane" } }
+        - { name: tier, in: query, schema: { $ref: "#/components/schemas/LaunchTier" } }
+        - { name: health, in: query, schema: { $ref: "#/components/schemas/Health_State" } }
+        - { name: egress, in: query, schema: { $ref: "#/components/schemas/Egress" } }
+        - { name: include_retired, in: query, schema: { type: boolean, default: false } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 500 } }
+      responses:
+        "200":
+          description: A page of sources
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourcePage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/sources/{sourceId}:
+    get:
+      tags: [sources]
+      operationId: getSource
+      parameters:
+        - { name: sourceId, in: path, required: true, schema: { type: string, maxLength: 120 } }
+      responses:
+        "200":
+          description: One source
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Source" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/entries:
+    get:
+      tags: [stream]
+      operationId: listEntries
+      summary: Normalised entries after a cursor
+      description: |
+        The platform's feed worker polls this every 60 s with the last `seq` it stored. Pages are
+        ascending by `seq`; `has_more: true` means call again immediately with `next_after`.
+        Filtering by `lane` or `source_id` is for operators and tests; the platform always
+        pulls the whole stream once.
+      parameters:
+        - { name: after, in: query, required: true, schema: { type: integer, format: int64, minimum: 0 }, description: "Deliver entries with seq greater than this. 0 for the beginning." }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 200 } }
+        - { name: lane, in: query, schema: { $ref: "#/components/schemas/Lane" } }
+        - { name: source_id, in: query, schema: { type: string } }
+        - { name: include_backfill, in: query, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: A page of entries
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntryPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/entries/{entryId}:
+    get:
+      tags: [stream]
+      operationId: getEntry
+      parameters:
+        - { name: entryId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: One entry, latest revision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Entry" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/entries/{entryId}/text:
+    get:
+      tags: [stream]
+      operationId: getEntryText
+      summary: Abstract, body excerpt and enrichment for one entry
+      description: |
+        Fetched on demand: the platform asks only for entries that passed its screening (about
+        30% of them), so the plugin does not read a web page for the 70% nobody will see.
+        `status: pending` means the plugin has scheduled the fetch (PubMed not yet indexed, a
+        page temporarily unreadable) and will retry on its own schedule for up to 5 days; the
+        platform re-asks when it sees a new `revision` of the entry in the stream, or on its own
+        12-hour hold cycle.
+      parameters:
+        - { name: entryId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Text and enrichment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntryText" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/entries/{entryId}/refresh:
+    post:
+      tags: [stream]
+      operationId: refreshEntry
+      summary: Ask for the text and enrichment to be fetched again
+      description: Optional capability (`manifest.capabilities.refresh`). Used by an operator, never by the automatic pipeline.
+      parameters:
+        - { name: entryId, in: path, required: true, schema: { type: string } }
+      responses:
+        "202":
+          description: Scheduled
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scheduled]
+                properties:
+                  scheduled: { type: boolean }
+                  not_before: { type: string, format: date-time }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "501": { $ref: "#/components/responses/CapabilityUnavailable" }
+
+  /v1/lookups:
+    get:
+      tags: [lookups]
+      operationId: listLookups
+      summary: The on-demand capabilities this build offers
+      responses:
+        "200":
+          description: Capability descriptors
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lookups]
+                properties:
+                  lookups:
+                    type: array
+                    items: { $ref: "#/components/schemas/LookupCapability" }
+
+  /v1/lookups/{capability}:
+    post:
+      tags: [lookups]
+      operationId: runLookup
+      summary: Run one on-demand lookup
+      description: |
+        The query face of the plugin: what the platform's runtime tools call *through the
+        platform's own gateway* (the runtime never reaches the plugin). Batch 3 wraps the
+        team's EviMed evidence APIs (`literature-search`, `guideline-search`,
+        `guideline-blocks`, `clinical-trial-search`, `drug-label`) so the platform gateway can
+        swap its provider from a direct EviMed call to the plugin with the consumer unchanged;
+        later batches add `pubmed-search`, `crossref-works`, `doi-open-access`. Parameters are
+        validated against the capability's `params` schema; results state fact, provider,
+        coverage and what is missing, never a guess.
+      parameters:
+        - { name: capability, in: path, required: true, schema: { type: string, pattern: "^[a-z][a-z0-9-]{1,60}$" } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Validated against `LookupCapability.params` of the named capability.
+              additionalProperties: true
+      responses:
+        "200":
+          description: Lookup result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LookupResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "501": { $ref: "#/components/responses/CapabilityUnavailable" }
+        "502": { $ref: "#/components/responses/UpstreamUnavailable" }
+
+components:
+  securitySchemes:
+    bearerToken:
+      type: http
+      scheme: bearer
+      description: |
+        A static token the operator writes into a 0600 file on the host, mounted read-only into
+        both containers (`OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE` on the platform side). The
+        plugin listens only on the compose-internal network.
+
+  responses:
+    Unauthorized:
+      description: Missing or wrong token
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Unknown id or capability
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    BadRequest:
+      description: Invalid cursor or parameters (the error names the field)
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RateLimited:
+      description: The upstream's or the plugin's own budget for this capability is spent; `Retry-After` is set
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    CapabilityUnavailable:
+      description: This build does not offer the capability (check the manifest)
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    UpstreamUnavailable:
+      description: The upstream answered with an error or not at all; `retryable` says whether trying later makes sense
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  schemas:
+    Lane:
+      type: string
+      description: The platform's eight lanes. A source's lane is a default; a `mixed` source leaves the lane to the platform's screening model per entry.
+      enum: [evidence, guideline, regulatory, safety, pipeline, public-health, research, ai, mixed]
+    SourceType:
+      type: string
+      description: Decided by the registry, never by a model.
+      enum: [journal, regulator, evidence-body, preprint, company, media]
+    Egress:
+      type: string
+      enum: [direct, browser, relay, bridge, api]
+    Access:
+      type: string
+      description: The read method (one adapter each). `evimed-api` is the team's own evidence API used as a scheduled scan.
+      enum: [crossref-issn, eutils-query, europepmc, json-api, rss, atom, html-list, browser-list, relay, wechat-bridge, evimed-api]
+    LaunchTier:
+      type: string
+      enum: [P0, P1, P2]
+    Health_State:
+      type: string
+      enum: [new, healthy, degraded, unreadable, drifted, disabled]
+    DatePrecision:
+      type: string
+      enum: [instant, day, inferred]
+
+    Manifest:
+      type: object
+      required: [plugin, contract, capabilities, vocabularies, sources, fields, limits]
+      properties:
+        plugin:
+          type: object
+          required: [name, version]
+          properties:
+            name: { type: string, examples: ["evimed-knowledge-plugin"] }
+            version: { type: string, description: "The plugin's own release version (semver)." }
+            build: { type: string, description: "Commit or image digest." }
+            started_at: { type: string, format: date-time }
+        contract:
+          type: object
+          required: [version]
+          properties:
+            version: { type: string, description: "This document's version, e.g. 1.0.0. Major must equal the platform's pin.", pattern: "^1\\.[0-9]+\\.[0-9]+$" }
+        capabilities:
+          type: object
+          required: [stream, text, refresh, lookups]
+          properties:
+            stream: { type: boolean, description: "GET /v1/entries is served." }
+            text: { type: boolean, description: "GET /v1/entries/{id}/text is served." }
+            refresh: { type: boolean }
+            lookups:
+              type: array
+              items: { type: string }
+              description: Capability ids served by POST /v1/lookups/{capability}.
+        vocabularies:
+          type: object
+          description: The values this build actually uses; the platform logs any it does not know.
+          properties:
+            lane: { type: array, items: { type: string } }
+            source_type: { type: array, items: { type: string } }
+            egress: { type: array, items: { type: string } }
+            access: { type: array, items: { type: string } }
+        sources:
+          type: object
+          required: [total, enabled]
+          properties:
+            total: { type: integer }
+            enabled: { type: integer }
+            by_lane: { type: object, additionalProperties: { type: integer } }
+            by_tier: { type: object, additionalProperties: { type: integer } }
+            by_egress: { type: object, additionalProperties: { type: integer } }
+        fields:
+          type: object
+          description: Which optional fields this build populates, so the platform can show data scope on the sources page.
+          properties:
+            entry: { type: array, items: { type: string } }
+            facts: { type: array, items: { type: string } }
+            enrichment: { type: array, items: { type: string } }
+        limits:
+          type: object
+          required: [entries_page_max, text_max_chars]
+          properties:
+            entries_page_max: { type: integer, examples: [500] }
+            text_max_chars: { type: integer, examples: [20000] }
+            summary_max_chars: { type: integer, examples: [20000] }
+            lookup_timeout_ms: { type: integer, examples: [8000] }
+        oldest_seq_available: { type: integer, format: int64, description: "Entries below this seq have been purged; a consumer cursor below it must resync from here and flag the gap." }
+
+    Health:
+      type: object
+      required: [status, contract, sources, egress]
+      properties:
+        status: { type: string, enum: [ok, degraded, down] }
+        contract: { type: string }
+        uptime_s: { type: integer }
+        sources:
+          type: object
+          description: Count of sources per health state.
+          additionalProperties: { type: integer }
+        egress:
+          type: object
+          description: Per egress, whether the last attempt through it succeeded.
+          additionalProperties: { type: string, enum: [ok, degraded, down, unconfigured] }
+        last_fetch_at: { type: [string, "null"], format: date-time }
+        last_new_entry_at: { type: [string, "null"], format: date-time }
+        backlog:
+          type: object
+          properties:
+            due_sources: { type: integer }
+            pending_texts: { type: integer }
+            oldest_due_s: { type: integer }
+        model_calls_24h: { type: integer, description: "Selector self-heal proposals in the last 24 h; the only model use the plugin makes." }
+        latest_seq: { type: integer, format: int64 }
+
+    Source:
+      type: object
+      required: [id, name, lane, source_type, access, egress, authority, launch_tier, enabled, health, owner_entity]
+      properties:
+        id: { type: string, maxLength: 120 }
+        name: { type: string }
+        homepage: { type: string, format: uri }
+        lane: { $ref: "#/components/schemas/Lane" }
+        source_type: { $ref: "#/components/schemas/SourceType" }
+        access: { $ref: "#/components/schemas/Access" }
+        egress: { $ref: "#/components/schemas/Egress" }
+        authority: { type: integer, minimum: 1, maximum: 5 }
+        safety_feed: { type: boolean, description: "An official safety-alert feed; the platform lets its entries bypass scoring." }
+        owner_entity: { type: string, description: "The operating entity (a publisher, a company, a WeChat matrix). Independent-source counts for heat are by entity, not by feed." }
+        launch_tier: { $ref: "#/components/schemas/LaunchTier" }
+        language: { type: string }
+        region: { type: string }
+        cadence_s: { type: integer, description: "Current effective poll interval." }
+        enabled: { type: boolean }
+        retired_at: { type: [string, "null"], format: date-time }
+        health: { $ref: "#/components/schemas/Health_State" }
+        last_ok_at: { type: [string, "null"], format: date-time }
+        last_new_entry_at: { type: [string, "null"], format: date-time }
+        consecutive_failures: { type: integer }
+        entries_7d: { type: integer }
+        registry_sha256: { type: string, pattern: "^[a-f0-9]{64}$", description: "Hash of the registry row; changes when the team edits the source." }
+    SourcePage:
+      type: object
+      required: [sources]
+      properties:
+        sources: { type: array, items: { $ref: "#/components/schemas/Source" } }
+        next_cursor: { type: [string, "null"] }
+        fetched_at: { type: string, format: date-time }
+
+    Entry:
+      type: object
+      required: [entry_id, seq, revision, source_id, identity_key, url, canonical_url, title, language, first_seen_at, content_sha256, backfill]
+      properties:
+        entry_id: { type: string, description: "Stable across revisions: `<source_id>:<sha256(external_key)[0:32]>`." }
+        seq: { type: integer, format: int64 }
+        revision: { type: integer, minimum: 1 }
+        source_id: { type: string }
+        external_key: { type: string, maxLength: 512, description: "The key the source itself uses (DOI, guid, url, wx mid)." }
+        identity_key: { type: string, description: "See contract rule 3." }
+        url: { type: string, maxLength: 2048 }
+        canonical_url: { type: string, maxLength: 2048 }
+        doi: { type: [string, "null"] }
+        pmid: { type: [string, "null"] }
+        registry_ids: { type: array, items: { type: string }, description: "NCT…, ChiCTR…, ISRCTN…" }
+        title: { type: string, maxLength: 1000 }
+        summary: { type: [string, "null"], maxLength: 20000, description: "Abstract or feed summary as the source gave it, cleaned; truncated feeds are flagged in `defects`." }
+        language: { type: string, description: "BCP-47 or `und`." }
+        lane_hint: { $ref: "#/components/schemas/Lane" }
+        published_at: { type: [string, "null"], format: date-time }
+        date_precision: { $ref: "#/components/schemas/DatePrecision" }
+        first_seen_at: { type: string, format: date-time }
+        content_sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        backfill: { type: boolean }
+        defects:
+          type: array
+          items:
+            type: string
+            enum: [no-date, future-date, truncated-summary, short-summary, no-summary, encoding, link-derived, oversize-truncated]
+        text_status: { type: string, enum: [none, pending, available], description: "Whether GET /text will return content now." }
+        facts:
+          type: object
+          description: Adapter facts, whitelisted. Anything not listed here does not exist past the adapter.
+          properties:
+            crossref_type: { type: string }
+            update_to: { type: array, items: { type: object, properties: { type: { type: string }, doi: { type: string }, date: { type: string } } } }
+            author_count: { type: integer }
+            journal: { type: string }
+            issn: { type: string }
+            trial_phase: { type: string }
+            trial_status: { type: string }
+            trial_event: { type: string, description: "registered | results-posted | terminated | suspended | updated" }
+            sponsor: { type: string }
+            recall_class: { type: string }
+            fda_application: { type: string }
+            fda_supplement: { type: string }
+            wx_biz: { type: string }
+            wx_author: { type: string }
+            wx_original: { type: boolean }
+            is_correction_notice: { type: boolean }
+            is_masthead: { type: boolean, description: "Editorial board / table of contents / issue information: the fixed masthead pages, matched by an exact-title list." }
+          additionalProperties: false
+    EntryPage:
+      type: object
+      required: [entries, next_after, has_more, server_time]
+      properties:
+        entries: { type: array, items: { $ref: "#/components/schemas/Entry" } }
+        next_after: { type: integer, format: int64 }
+        has_more: { type: boolean }
+        server_time: { type: string, format: date-time }
+
+    EntryText:
+      type: object
+      required: [entry_id, revision, status]
+      properties:
+        entry_id: { type: string }
+        revision: { type: integer }
+        status: { type: string, enum: [available, pending, unavailable] }
+        text_kind: { type: string, enum: [abstract, excerpt, full, none] }
+        abstract: { type: [string, "null"] }
+        body_excerpt: { type: [string, "null"], maxLength: 20000 }
+        fetched_from: { type: string, enum: [pubmed, europepmc, crossref, page, browser, relay, evimed-api, wechat] }
+        fetched_at: { type: [string, "null"], format: date-time }
+        next_attempt_at: { type: [string, "null"], format: date-time }
+        enrichment:
+          type: object
+          description: Deterministic facts from PubMed, Europe PMC, Unpaywall and the EviMed API. Optional and additive.
+          properties:
+            publication_types: { type: array, items: { type: string } }
+            mesh: { type: array, items: { type: string } }
+            journal: { type: string }
+            authors_short: { type: string }
+            open_access: { type: string, enum: [gold, green, bronze, closed, unknown] }
+            oa_pdf_url: { type: string, format: uri }
+            impact_factor: { type: number }
+            core_journal_tags: { type: array, items: { type: string } }
+            preprint_of_doi: { type: string }
+            published_version_doi: { type: string }
+            trial_facts:
+              type: object
+              properties:
+                phase: { type: string }
+                status: { type: string }
+                enrollment: { type: integer }
+                sponsor: { type: string }
+            drug_label_excerpt: { type: string, description: "Relevant section of the current NMPA label when a safety notice names a drug (EviMed instruction API)." }
+            affiliation_countries: { type: array, items: { type: string, pattern: "^[A-Z]{2}$" }, description: "Countries named in the authors' affiliations (PubMed / Europe PMC), ISO 3166-1 alpha-2, de-duplicated. Added in 1.1.0; the platform derives its deterministic China flag from it." }
+
+    LookupCapability:
+      type: object
+      required: [id, title, upstream, params]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        upstream: { type: string, description: "Which service answers (evimed-api v2/literature-guide, eutils, crossref, ...)." }
+        params: { type: object, description: "JSON Schema of the request body." }
+        result_fields: { type: array, items: { type: string } }
+        limits:
+          type: object
+          properties:
+            max_results: { type: integer }
+            daily_budget: { type: integer }
+        coverage: { type: string, description: "One sentence on what this lookup can and cannot answer (e.g. 'EviMed guideline index lags about six months for new Chinese guidelines')." }
+    LookupResult:
+      type: object
+      required: [capability, provider, fetched_at, results]
+      properties:
+        capability: { type: string }
+        provider: { type: string }
+        fetched_at: { type: string, format: date-time }
+        results: { type: array, items: { type: object, additionalProperties: true } }
+        total: { type: [integer, "null"], description: "Upstream total when known." }
+        coverage: { type: string }
+        missing: { type: array, items: { type: string }, description: "Named things the caller asked for that the upstream did not return." }
+        warnings: { type: array, items: { type: string } }
+
+    Error:
+      type: object
+      required: [code, message, retryable]
+      properties:
+        code:
+          type: string
+          enum: [unauthorized, not_found, invalid_cursor, invalid_params, capability_unavailable, upstream_unavailable, rate_limited, internal]
+        message: { type: string }
+        retryable: { type: boolean }
+        details: { type: object, additionalProperties: true }

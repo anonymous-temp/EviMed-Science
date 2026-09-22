@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, backgroundRuntimeLimit, isInternalProject } from "../src/internalProjects.mjs";
+import { FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, backgroundRuntimeLimit, isInternalProject } from "../src/internalProjects.mjs";
 import { createLearningRuntime } from "../src/learningRuntime.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
 
@@ -12,9 +12,10 @@ import { RuntimeManager } from "../src/runtimeManager.mjs";
 test("the platform's background projects are named, and nothing else is", () => {
   assert.equal(isInternalProject(LEARNING_PROJECT_ID), true);
   assert.equal(isInternalProject(SOURCES_PROJECT_ID), true, "where uploaded documents are understood");
+  assert.equal(isInternalProject(FRONTIER_PROJECT_ID), true, "where the frontier feed's model calls are billed");
   assert.equal(isInternalProject("eval-method-release"), true, "the paired evaluation's own project");
   assert.equal(isInternalProject(`methodeval-${"0a".repeat(12)}`), true, "one evaluation cell's project");
-  for (const id of ["default", "0921a", "evimed-learning-notes", "eval-methods", "my-eval-method-release", "methodeval-notes"]) {
+  for (const id of ["default", "0921a", "evimed-learning-notes", "evimed-frontier-notes", "eval-methods", "my-eval-method-release", "methodeval-notes"]) {
     assert.equal(isInternalProject(id), false, id);
   }
 });

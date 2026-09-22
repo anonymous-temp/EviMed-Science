@@ -14,6 +14,7 @@
 
 import { MCP_TOOL_PREFIX, SOCKET_TOOL_NAMES, mcpToolBaseName } from './toolNames.mjs'
 import { contractKindLabel } from './contractKinds.mjs'
+import { frontierLabel } from './frontierVocabulary.mjs'
 
 /** @param {unknown} value @param {number} [max] @returns {string} */
 function excerpt(value, max = 40) {
@@ -68,7 +69,28 @@ const MCP_NARRATION = Object.freeze({
   research_topic_selection: (args) => jobPhrase('科研选题分析', args),
   peer_review: (args) => jobPhrase('论文审稿', args),
   drug_safety_analysis: (args) => jobPhrase('药物安全分析', args),
+  frontier_search: (args, result) => withCount(`查前沿动态${frontierSubject(args)}`, result?.data ?? result),
 })
+
+/** How a feed lookup's window reads. */
+const FRONTIER_WINDOW_WORDS = Object.freeze({ '24h': '近 24 小时', '3d': '近 3 天', '7d': '近 7 天', '30d': '近 30 天' })
+
+/**
+ * What a feed lookup was about: the question when there is one, else the
+ * specialty and lane it was narrowed to, then its window when one was named.
+ * Nothing at all when the call names nothing — a result is narrated without
+ * its arguments, and a subject supplied there would describe a search that
+ * never ran.
+ * @param {Record<string, any>} args @returns {string}
+ */
+function frontierSubject(args) {
+  const query = excerpt(args?.q)
+  const filters = [frontierLabel('specialty', args?.specialty), frontierLabel('lane', args?.lane)].filter(Boolean)
+  const subject = query ? `「${query}」` : filters.join('·')
+  const window = FRONTIER_WINDOW_WORDS[/** @type {keyof typeof FRONTIER_WINDOW_WORDS} */ (args?.window)]
+  const text = subject && window ? `${subject}（${window}）` : subject || window || ''
+  return text ? `：${text}` : ''
+}
 
 /** Whether a quotation check found the passage, when the result says so.
  *  @param {any} result @returns {string} */

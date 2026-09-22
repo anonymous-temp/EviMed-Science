@@ -79,6 +79,7 @@ boundaries instead of treating authentication alone as isolation.
 | Artifacts, provenance, review | Adapted | Stable traceable project artifacts remain the product core |
 | Hosted notebooks | Out of scope | Removed on 2026-09-19: no in-browser notebook editing or server-side cell execution; a run's `.ipynb` deliverables are ordinary files |
 | Research memory | Adapted | Notes and structured records live in the control-plane PostgreSQL schema `evimed_memory`; a readiness check covers that store, and the recall index is derived and rebuildable |
+| Frontier feed (「前沿动态」) | Conditional | Ships switched off (`OPEN_SCIENCE_FRONTIER_ENABLED`) and reads only the knowledge-source plugin, a separate service on the compose network with no published port, over a pinned contract (`packages/contracts/knowledge-plugin`); one shared archive in `evimed_frontier` with per-user state; its vectors are left out of the database backup and rebuilt with `pnpm rebuild:frontier-index` |
 | Account and operator surfaces | Adapted | Project/resource/task/audit/error/security/readiness cards are available |
 | Security and isolation | Adapted | CSRF, exact CORS, scoped files, controller boundary and quotas are gated |
 | Release and observability | Adapted | Immutable manifest plus protected metrics, alerts and dashboards |

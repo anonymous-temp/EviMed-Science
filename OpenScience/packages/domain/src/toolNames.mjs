@@ -90,6 +90,9 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   // the researcher's own knowledge base, through the server's index
   // (kb_search.py, 2026-09-20)
   'kb_search',
+  // the feed of recent medical developments, 「前沿动态」, through the server's
+  // gateway (frontier_search.py, 2026-09-22): leads, never evidence
+  'frontier_search',
 ])
 
 /** Model-visible MCP tool names. */
@@ -193,6 +196,9 @@ export const ROOT_VISIBLE_MCP_BASE_NAMES = Object.freeze([
   // A question about the researcher's own documents is a plain question, and
   // the answer line must be able to look (plan §3.2; model-chosen, never forced).
   'kb_search',
+  // So is "what is new in X": the answer persona's optional feed lookup
+  // (frontier plan 2026-09-21 §4.8; model-chosen, never forced).
+  'frontier_search',
 ])
 
 /** @param {string} baseName @returns {string} */

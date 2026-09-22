@@ -5,6 +5,55 @@ import { assertNoSymlinkPath, HttpError, openScopedFileNoFollow } from "./securi
 function fail(code) { throw new HttpError(503, code, "PostgreSQL backup verification is unavailable."); }
 const sha256 = /^[a-f0-9]{64}$/;
 const identityFields = ["database", "databaseOid", "systemIdentifier"];
+
+/**
+ * The tables whose rows a dump may leave out, each with the command that
+ * regenerates them after a restore — and no others.
+ *
+ * The host script (`scripts/ops/postgres-backup.py`, `DERIVED_TABLE_DATA`)
+ * dumps these tables' definitions without their rows and records them under
+ * `excludedTableData`; its snapshot inventory holds each at zero rows, the
+ * count the restore drill verifies. This copy is what a receipt is checked
+ * against, and a test holds the two lists equal: a receipt that excluded the
+ * data of a table not named here would certify a backup that cannot restore
+ * that table, so it reads as unverified like any other broken receipt.
+ */
+export const POSTGRES_BACKUP_DERIVED_TABLES = Object.freeze([
+  // The frontier feed's item embeddings: ~13 KB a row, regenerated from the
+  // items the same dump carries (plan §10.4.6).
+  Object.freeze({ schema: "evimed_frontier", table: "item_vectors", rebuild: "pnpm rebuild:frontier-index" }),
+]);
+
+/**
+ * A receipt's exclusions against the closed list and its own inventory; the
+ * rebuild commands they call for. A receipt written before exclusions existed
+ * carries none and excluded nothing.
+ * @param {unknown} value @param {{ rows: string, schema: string, table: string }[]} inventory
+ * @returns {string[]}
+ */
+function verifiedExclusions(value, inventory) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > POSTGRES_BACKUP_DERIVED_TABLES.length) fail("postgres_backup_unverified");
+  const entries = /** @type {any[]} */ (value);
+  const seen = new Set();
+  const commands = new Set();
+  for (const entry of entries) {
+    const allowed = entry && typeof entry === "object"
+      ? POSTGRES_BACKUP_DERIVED_TABLES.find((table) => table.schema === entry.schema && table.table === entry.table) : null;
+    const key = allowed ? `${allowed.schema}.${allowed.table}` : "";
+    if (!allowed || seen.has(key) || Object.keys(entry).sort().join(",") !== "rebuild,schema,sourceRows,table"
+      || entry.rebuild !== allowed.rebuild || typeof entry.sourceRows !== "string" || !/^\d{1,20}$/.test(entry.sourceRows)
+      // Zero is the count the drill verified; anything else means the rows
+      // either were not left out or were not checked.
+      || inventory.find((row) => row.schema === allowed.schema && row.table === allowed.table)?.rows !== "0") {
+      fail("postgres_backup_unverified");
+    }
+    seen.add(key);
+    commands.add(allowed.rebuild);
+  }
+  return [...commands].sort();
+}
+
 function validIdentity(value) {
   return value && typeof value === "object" && !Array.isArray(value)
     && Object.keys(value).sort().join(",") === identityFields.join(",")
@@ -104,6 +153,7 @@ export async function postgresBackupReadiness(config, database = null) {
     return { rows: row.rows, schema: row.schema, table: row.table };
   });
   if (createHash("sha256").update(JSON.stringify(canonical)).digest("hex") !== receipt.expectedTablesSha256) fail("postgres_backup_unverified");
+  const rebuildAfterRestore = verifiedExclusions(receipt.excludedTableData, canonical);
   const [success, drill, start, finish] = [receipt.lastSuccessAt, receipt.lastDrillAt, receipt.snapshotStartedAt, receipt.snapshotFinishedAt].map(Date.parse);
   const now = Date.now();
   if ([success, drill, start, finish].some(value => !Number.isFinite(value) || value > now + 300_000)) fail("postgres_backup_state_invalid");
@@ -111,5 +161,8 @@ export async function postgresBackupReadiness(config, database = null) {
   if (start > finish || finish > drill || drill > success) fail("postgres_backup_state_invalid");
   await verifySourceIdentity(config, database, receipt);
   return { required: true, restoreVerified: true, sourceIdentityVerified: true, lastSuccessAt: receipt.lastSuccessAt, lastDrillAt: receipt.lastDrillAt,
-    snapshotStartedAt: receipt.snapshotStartedAt, snapshotFinishedAt: receipt.snapshotFinishedAt, atomicAcrossComponents: false };
+    snapshotStartedAt: receipt.snapshotStartedAt, snapshotFinishedAt: receipt.snapshotFinishedAt, atomicAcrossComponents: false,
+    // What a restore of this archive leaves to be run: commands, not table
+    // names, because this answer is public and the inventory is not.
+    ...(rebuildAfterRestore.length ? { rebuildAfterRestore } : {}) };
 }

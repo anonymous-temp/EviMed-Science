@@ -60,6 +60,13 @@ TASK_FIXTURES = {
     # answer ("read these files", with none to read) is a real answer from the
     # real gateway and the only one that needs no corpus planted first.
     "kb_search": {"query": "阿司匹林 一级预防 剂量", "limit": 3},
+    # Added 2026-09-22 with the tool, so the registry never again gains a
+    # tool this audit refuses to start over. The widest question the feed
+    # answers without a planted corpus: every item of the last thirty days, a
+    # few of them. An empty feed is a warning, which still certifies the route;
+    # a deployment that does not run 「前沿动态」 declares the tool not offered
+    # (it is in `server.OPTIONAL_TOOLS`).
+    "frontier_search": {"mode": "all", "limit": 3},
     # `op: providers` asks the probe which front-ends this deployment can reach
     # and is the only operation with no side effect: `ask` would drive real
     # browser sessions against five consumer products. The tool was declared,

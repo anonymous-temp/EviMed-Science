@@ -472,6 +472,22 @@ not sufficient containment for those events.
   index or OpenList configuration. The OpenViking volume is derived from
   PostgreSQL and is deliberately not backed up: rebuild it after a restore with
   `pnpm rebuild:memory-index --all`.
+- The dump also leaves out the rows of `evimed_frontier.item_vectors`, the
+  frontier feed's embeddings (derived from the items the dump does carry, and
+  otherwise the largest table in every retained archive). The table's
+  definition and index are kept; the snapshot inventory records it at zero
+  rows, which is the count the restore drill verifies, and the receipt names
+  it under `excludedTableData` with its source row count. `restore-clone` and
+  the timer print `rebuildAfterRestore`; after any restore of the platform
+  database run `pnpm rebuild:frontier-index` against it, or the feed's search
+  answers without its vector leg until the pipeline re-embeds, which it does
+  only for the last 30 days. The exclusion starts when this release's
+  `scripts/ops/postgres-backup.py` is installed over
+  `/usr/local/sbin/evimed-postgres-backup`; until then the previous script
+  keeps dumping the vectors, which restores correctly and only costs size, and
+  readiness accepts receipts of either kind. The knowledge-source plugin's own
+  database (`evimed_knowledge`) is not in this dump at all: it is the plugin
+  team's to back up.
 - When S3-compatible off-host backup is configured, record the uploaded object
   URI without credentials, download it with `pnpm restore:object`, verify its
   checksum, and run a disposable restore drill. Confirm bucket versioning,

@@ -94,6 +94,24 @@ function inboxProjectScope(value) {
   return productId(value, "project");
 }
 
+/**
+ * The notification switches a preferences row may be saved with: the three
+ * the inbox began with, and those three plus `frontier` — the 「前沿动态」
+ * daily (build spec D.3, on unless turned off).
+ */
+export const NOTIFICATION_SWITCH_KEY_SETS = Object.freeze(["notify,question,review", "frontier,notify,question,review"]);
+
+/**
+ * An account's switches as every reader of them sees them: a row written
+ * before `frontier` existed has none, and reads as on — the default the
+ * daily push and the Feishu push both apply.
+ * @param {unknown} value @returns {Record<string, boolean>}
+ */
+export function notificationSwitches(value) {
+  const switches = value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {};
+  return { ...switches, frontier: switches.frontier !== false };
+}
+
 function validTime(value, name) {
   if (typeof value !== "string" || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) {
     throw new HttpError(400, "notification_preferences_invalid", `Invalid ${name}.`);
@@ -645,7 +663,11 @@ export class NotificationService {
       throw new HttpError(400, "notification_preferences_invalid", "Invalid inbox preferences.");
     }
     if (!input.quietHours || Object.keys(input.quietHours).sort().join(",") !== "end,start") throw new HttpError(400, "notification_preferences_invalid", "Invalid quiet hours.");
-    if (!input.switches || Object.keys(input.switches).sort().join(",") !== "notify,question,review"
+    // `frontier` (the 「前沿动态」 daily, 2026-09-22) may be absent: a page
+    // written before it existed sends the three it knows, and the stored
+    // `frontier` stays as it was rather than being refused or reset.
+    const switchKeys = input.switches && typeof input.switches === "object" && !Array.isArray(input.switches) ? Object.keys(input.switches).sort().join(",") : "";
+    if (!NOTIFICATION_SWITCH_KEY_SETS.includes(switchKeys)
       || Object.values(input.switches).some((value) => typeof value !== "boolean")) throw new HttpError(400, "notification_preferences_invalid", "Invalid switches.");
     // In-app plus any enabled registered channel (plan §3.6). Without the IM
     // module there is no registry, and the one list that validates is the one
@@ -656,7 +678,9 @@ export class NotificationService {
     if (!channels) throw new HttpError(400, "notification_preferences_invalid", "This deployment supports in-app delivery only.");
     await migrateNotifications(this.database);
     const result = await this.database.query(`UPDATE evimed_inbox.preferences SET quiet_start=$3,quiet_end=$4,digest_time=$5,
-      switches=$6::jsonb,channels=$7::jsonb,revision=revision+1,updated_at=clock_timestamp()
+      switches=CASE WHEN $6::jsonb ? 'frontier' THEN $6::jsonb
+        ELSE $6::jsonb || jsonb_build_object('frontier', coalesce((switches->>'frontier')::boolean, true)) END,
+      channels=$7::jsonb,revision=revision+1,updated_at=clock_timestamp()
       WHERE user_id=$1 AND revision=$2 RETURNING *`, [productId(userId, "user"), expectedRevision,
       validTime(input.quietHours.start, "quiet start"), validTime(input.quietHours.end, "quiet end"),
       validTime(input.digestTime, "digest time"), JSON.stringify(input.switches), JSON.stringify(channels)]);
@@ -700,6 +724,6 @@ export class NotificationService {
 
   #preferences(row) {
     return { quietHours: { start: row.quiet_start, end: row.quiet_end }, digestTime: row.digest_time,
-      switches: row.switches, channels: row.channels, revision: Number(row.revision), updatedAt: new Date(row.updated_at).toISOString() };
+      switches: notificationSwitches(row.switches), channels: row.channels, revision: Number(row.revision), updatedAt: new Date(row.updated_at).toISOString() };
   }
 }

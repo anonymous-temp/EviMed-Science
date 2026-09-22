@@ -432,6 +432,32 @@ test("a control-plane call reserves under the purpose its caller names, and an u
   }
 });
 
+test("a control-plane call with its own budget replaces the account caps for that call only", async () => {
+  // The frontier feed is charged to an operator's internal project and
+  // governed by its own daily budget: the operator's personal caps must not
+  // refuse it. Without `limits` the deployment's caps apply as before.
+  const usage = { prompt_tokens: 20, completion_tokens: 4, prompt_cache_hit_tokens: 0, prompt_cache_miss_tokens: 20 };
+  const fetchImpl = async () => Response.json({ id: "provider-limits", choices: [{ message: { content: "{}" } }], usage });
+  const call = async (extra) => {
+    const events = [];
+    await callModelForControlPlane({ config: config("https://api.deepseek.com"), usageLedger: ledger(events), fetchImpl }, {
+      userId: "usage-owner", projectId: "evimed-frontier", purpose: "frontier", ...extra,
+      body: { model: "deepseek-v4-flash", max_tokens: 100, messages: [{ role: "user", content: "Screen." }] },
+    });
+    return events[0].input;
+  };
+  const own = await call({ limits: { daily: 0, weekly: 0 } });
+  assert.equal(own.dailyLimit, 0);
+  assert.equal(own.weeklyLimit, 0);
+  assert.equal(own.purpose, "frontier");
+  const partial = await call({ limits: { daily: 7 } });
+  assert.equal(partial.dailyLimit, 7);
+  assert.equal(partial.weeklyLimit, 5, "a limit the call does not name stays the deployment's");
+  const unchanged = await call({});
+  assert.equal(unchanged.dailyLimit, 2);
+  assert.equal(unchanged.weeklyLimit, 5);
+});
+
 test("a refused control-plane call carries the provider's own status, not only the mapped one", async () => {
   const events = [];
   await assert.rejects(

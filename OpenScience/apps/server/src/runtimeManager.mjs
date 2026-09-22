@@ -28,6 +28,9 @@ import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 // Knowledge-base search reaches the MCP server by this one variable (2026-09-20).
 import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
+// So does 「前沿动态」 search (2026-09-22), for an account the module is open to.
+import { frontierGatewayProviderUrl } from "./frontierGateway.mjs";
+import { frontierAudienceAllows } from "./frontierService.mjs";
 import { createAgentBayClient } from "./agentbay/client.mjs";
 // A cycle, on purpose and safe: the provider module reads this one's exports
 // only when a method runs, never while either module is being evaluated.
@@ -1548,6 +1551,14 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     // switch is off, so the tool says "disabled" without asking.
     const kbSearchGatewayUrl = gateways ? String(gateways.kbSearch ?? "") : kbSearchGatewayProviderUrl(config);
     if (kbSearchGatewayUrl) environment.EVIMED_KB_SEARCH_GATEWAY_URL = kbSearchGatewayUrl;
+    // So does 「前沿动态」 search, and it is absent for the same reason — and
+    // also for an account the module is not open to yet (the operators-only
+    // dry run): that runtime's tool answers `frontier_disabled` without asking
+    // rather than asking to be refused.
+    const frontierGatewayUrl = gateways ? String(gateways.frontier ?? "") : frontierGatewayProviderUrl(config);
+    if (frontierGatewayUrl && frontierAudienceAllows(config, { id: String(project.userId ?? "") })) {
+      environment.EVIMED_FRONTIER_GATEWAY_URL = frontierGatewayUrl;
+    }
   }
   // Keyless-public Unpaywall tier: when the operator configured an email, the
   // runtime MCP may query Unpaywall anonymously (email param) even without a
@@ -1668,6 +1679,15 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   // (plan §3.5): the gateway refuses the mode, and the tool is not offered.
   if (config.webReadEnabled === false) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), "web_read"])].join(",");
+  }
+  // 「前沿动态」 search is offered only where its gateway address was given
+  // above: the module on and the account in its audience. Listed anyway, its
+  // schema cost every root request about 1,400 characters (the first
+  // request's prefill pays for the whole catalogue) for a tool that could only
+  // answer `frontier_disabled`. `OPTIONAL_TOOLS` in the MCP server lets the
+  // release audit count it as not offered.
+  if (!environment.EVIMED_FRONTIER_GATEWAY_URL) {
+    environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), "frontier_search"])].join(",");
   }
   for (const [key, envName] of Object.entries(evimedAdapterEnvironment)) {
     const value = String((gateways ? gateways.adapters?.[key] : configured[key]) ?? "").trim();

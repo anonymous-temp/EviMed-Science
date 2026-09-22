@@ -1,0 +1,50 @@
+# 「最近有什么进展」 questions for the `frontier_search` tool (frontier plan 2026-09-21
+# §4.8, §7.7). Principle 11: run this file with the 前沿动态 module on and off
+# (OPEN_SCIENCE_FRONTIER_ENABLED), same model configuration, more than once, and keep
+# the tool only if the answers are visibly better with it. frontier-control-1 is a
+# plain question: it must be answered with zero tool calls in both arms (principle 12;
+# the answers file records toolCalls per case).
+#   python3 evals/open-domain-answer-quality/run_eval.py --questions evals/open-domain-answer-quality/questions-frontier-cases.yaml --rerun
+# Keep every value on one line, double-quoted (judge.py's fallback parser).
+schemaVersion: 1
+questions:
+  - id: "frontier-case-1"
+    tier: "synthesis"
+    domain: "cardiology"
+    question: "最近三个月 GLP-1 受体激动剂在心衰方面有什么新证据？"
+    expectations:
+      - "开头直接给出近期新证据的结论与方向，并写明所覆盖的时间范围"
+      - "引用指向期刊、指南或监管机构原文（DOI、PubMed 或官方链接），不引用 EviMed 前沿动态的条目页"
+      - "预印本标明「尚未经同行评议」、企业新闻稿标明数据未发表，二者都不作为确定结论"
+      - "区分近期新证据与既往已确立的证据；某一方面没有新进展时如实说明"
+  - id: "frontier-case-2"
+    tier: "synthesis"
+    domain: "pharmacy-safety"
+    question: "最近一个月国内外有没有新的药品安全警示或说明书修订？"
+    expectations:
+      - "列出具体的安全通告或说明书修订：药品、风险、发布机构与日期"
+      - "引用监管机构原文（NMPA、FDA、EMA、MHRA 等），不以二手报道代替原文"
+      - "给出对临床用药的具体提示，并如实说明检索的时间窗与覆盖范围，不把「未检到」说成「没有」"
+  - id: "frontier-case-3"
+    tier: "synthesis"
+    domain: "neurology"
+    question: "阿尔茨海默病的抗体类新药最近有什么进展？"
+    expectations:
+      - "按时间与性质区分近期进展（新结果、审批、适应证、安全性更新），每条写明日期"
+      - "引用试验注册号、论文或监管公告原文，不编造试验名称与数据"
+      - "说明证据强度与仍存在的安全性顾虑（如 ARIA），不夸大疗效"
+  - id: "frontier-case-4"
+    tier: "synthesis"
+    domain: "general"
+    question: "这一周医学界有什么值得关注的新研究或新政策？"
+    expectations:
+      - "给出少量经过筛选的条目并说明为什么值得关注，而不是罗列标题"
+      - "每条注明来源、日期与原文链接，并标明证据类型（RCT、指南、监管决定、新闻稿等）"
+      - "如实说明内容的时间窗与来源范围，不暗示已覆盖全部医学领域"
+  - id: "frontier-control-1"
+    tier: "direct"
+    domain: "clinical-pharmacology"
+    question: "华法林与维生素K相互作用的机制是什么？"
+    expectations:
+      - "直接说明华法林抑制维生素K环氧化物还原酶、维生素K摄入变化会影响INR"
+      - "回答简洁聚焦，不做文献检索叙述，也不罗列近期动态"

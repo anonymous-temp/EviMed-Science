@@ -171,6 +171,29 @@ const operatorLevers = {
   // that does not arrive leaves a broken bundle in every runtime.
   OPEN_SCIENCE_RUNTIME_ANNOTATION_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED: ["open-science-web"],
+  // 「前沿动态」 and the knowledge-source plugin (2026-09-22). The module
+  // switch, its audience and preview list are how the one-week dry run is run
+  // and ended; the budget, the model and the cadences bound what "on" costs;
+  // the plugin's address, token file and contract floor are what makes it read
+  // anything. A lever that does not arrive leaves the feed on, or off, or
+  // paying, with the operator believing otherwise.
+  OPEN_SCIENCE_FRONTIER_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_AUDIENCE: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_PREVIEW_USERS: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_POLL_MS: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_LEASE_MS: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_MODEL: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_DAILY_TIME: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_TIMEZONE: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_OFFPEAK: ["open-science-web"],
+  OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD: ["open-science-web"],
+  OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL: ["open-science-web"],
+  OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE: ["open-science-web"],
+  OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS: ["open-science-web"],
+  OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TIMEOUT_MS: ["open-science-web"],
+  OPEN_SCIENCE_KNOWLEDGE_PLUGIN_MIN_CONTRACT: ["open-science-web"],
 };
 
 async function composeFiles() {

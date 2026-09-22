@@ -35,6 +35,9 @@ import { DISTILL_TRIGGER, FeedbackEvents, deliverableSubjectId } from "../src/fe
 import { DISTILLATION_TRIGGERS, buildDistillationInput } from "../src/methodDistillationRuns.mjs";
 import { buildRuntimeLaunchPlan } from "../src/runtimeManager.mjs";
 import { createWebApiApp } from "../src/server.mjs";
+import { FrontierWorker } from "../src/frontierWorker.mjs";
+import { FRONTIER_PROJECT_ID } from "../src/internalProjects.mjs";
+import { memoryPlugin, pluginEntry, pluginSource } from "./helpers/frontierFixtures.mjs";
 
 /** One-line form of a statement, so a signature can be matched across the
  *  indentation the sources are written with. */
@@ -319,8 +322,10 @@ class FakePool extends EventEmitter {
       return values[0] === USER_ID && values[1] === PROJECT_ID ? { rows: [{ "?column?": 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
     if (/^SELECT id, name, active_workspace, quota_bytes(?:, archived_at)? FROM evimed_control\.projects/.test(sql)) {
-      return values[0] === USER_ID && values[1] === PROJECT_ID
-        ? { rows: [{ id: PROJECT_ID, name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null }], rowCount: 1 }
+      // The frontier feed's internal project, which its worker finds under
+      // the operator account before its first batch.
+      return values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1])
+        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT request_id,requested_at,expires_at FROM evimed_product\.maintenance_lease/.test(sql)) {
@@ -1489,4 +1494,116 @@ test("the memory extractor the composition root built reports a rewritten memory
   }, [{ info: { id: "message-2", role: "user" }, parts: [{ type: "text", text: "回答请用英文" }] }]);
   assert.equal([...fixture.pool.inbox.values()].filter((row) => !row.silent).length, 1, "one change is one notice, however many runs observe it");
   assert.equal([...fixture.pool.inbox.values()].length, 2, "and a change observed again is not news");
+});
+
+// 「前沿动态」. The module is off by default, so every test above composes a
+// deployment without it; these compose the one that has it — and assert what
+// the dark-feature failures of this file were about: the worker is started by
+// the recurring work, paused and resumed with it, and actually reaches both
+// of the things it exists to drive (the plugin's stream and the pipeline).
+
+/** The composition with the frontier feed on, against an in-memory plugin. */
+async function frontierComposition(t, overrides = {}) {
+  const secrets = await mkdtemp(path.join(tmpdir(), "evimed-composition-frontier-"));
+  t.after(() => rm(secrets, { recursive: true, force: true }));
+  const tokenFile = path.join(secrets, "knowledge-plugin.token");
+  await writeFile(tokenFile, "test-only-composition-token\n", { mode: 0o600 });
+  const plugin = memoryPlugin({ sources: [pluginSource("nejm")], entries: [pluginEntry("nejm", 1)] });
+  const fixture = await composedApp(t, {
+    frontierEnabled: true, frontierAudience: "all", operatorUsers: [USER_ID],
+    knowledgePluginUrl: "http://plugin.test:8080", knowledgePluginTokenFile: tokenFile, knowledgePluginFetch: plugin.fetchImpl,
+    frontierEmbedder: { configured: false, modelKey: "none@1024", counters: {} },
+    ...overrides,
+  });
+  return { ...fixture, plugin };
+}
+
+test("the frontier worker is composed, started with the recurring work, and reaches the plugin's stream and the pipeline", async (t) => {
+  const fixture = await frontierComposition(t);
+  const { app, plugin } = fixture;
+  assert.ok(app.frontierWorker instanceof FrontierWorker, "an enabled module with a product database composes its worker");
+  assert.equal(app.frontierWorker, app.frontier.worker);
+  assert.ok(app.frontierWorker.timer, "startRecurringWork never started the frontier worker");
+  assert.ok(live(fixture.armed).some((entry) => entry.delay === app.config.frontierPollMs), "no interval runs at the frontier's poll cadence");
+
+  // The producer call sites, observed where they land: the worker's pull
+  // reached the plugin's stream through the real client with the token, and
+  // its processing reached the pipeline once the owner's project was found.
+  assert.ok(await waitFor(() => plugin.requests.some((request) => request.path === "/v1/entries")), "the worker never pulled the stream");
+  assert.equal(plugin.requests.find((request) => request.path === "/v1/entries").authorization, "Bearer test-only-composition-token");
+  let batches = 0;
+  const processBatch = app.frontier.pipeline.processBatch.bind(app.frontier.pipeline);
+  app.frontier.pipeline.processBatch = async () => { batches += 1; return processBatch(); };
+  assert.ok(await waitFor(async () => { await app.frontierWorker.tick(); return batches > 0; }, 5_000), "the worker never handed the pipeline a batch");
+  assert.deepEqual(app.frontier.editor.owner, { userId: USER_ID, projectId: FRONTIER_PROJECT_ID },
+    "the editor bills its calls to the operator's internal project");
+  assert.equal(app.frontier.editor.usageLedger, app.usageLedger, "the editor's calls reach the usage ledger the composition built");
+  assert.ok(app.frontierService, "the reader's service is composed with the worker");
+});
+
+test("a maintenance pause stops the frontier worker's timer and reopening re-arms it; close leaves none", async (t) => {
+  const fixture = await frontierComposition(t);
+  const { app } = fixture;
+  assert.ok(app.frontierWorker.timer);
+  const armedAtStartup = live(fixture.armed).length;
+  await app.maintenanceService.request({ requestId: "frontier-pause", ttlSeconds: 60 });
+  assert.equal(app.frontierWorker.timer, null, "maintenance must stop the frontier worker's loops");
+  assert.equal(await app.frontierWorker.tick().then((started) => started.length), 0, "a paused worker claims nothing");
+  await app.maintenanceService.release({ requestId: "frontier-pause" });
+  // Resumed from the maintenance listener, not awaited by release: wait for
+  // the whole re-arm (see the pause test above), not only for this worker.
+  assert.ok(await waitFor(() => live(fixture.armed).length >= armedAtStartup, 10_000), "recurring work was never re-armed");
+  assert.ok(app.frontierWorker.timer, "the frontier worker was not re-armed after maintenance");
+  await fixture.close();
+  assert.equal(app.frontierWorker.timer, null);
+  assert.deepEqual(live(fixture.armed).map((entry) => entry.delay), [], "close() must clear the frontier worker's interval too");
+});
+
+test("/api/me says whether this account sees the feed, and the routes agree", async (t) => {
+  const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
+  const me = async (fixture) => {
+    const address = fixture.app.server.address();
+    const answer = await fetch(`http://127.0.0.1:${address.port}/api/me`, { headers });
+    const body = await answer.json();
+    assert.equal(answer.status, 200, JSON.stringify(body));
+    return body.data;
+  };
+  const status = async (fixture) => {
+    const address = fixture.app.server.address();
+    return fetch(`http://127.0.0.1:${address.port}/api/frontier/status`, { headers });
+  };
+
+  const off = await composedApp(t);
+  assert.deepEqual((await me(off)).features, { frontier: false });
+  assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
+  const offStatus = await status(off);
+  assert.equal(offStatus.status, 404);
+  assert.equal((await offStatus.json()).code, "frontier_not_enabled");
+
+  const dryRun = await frontierComposition(t, { frontierAudience: "operators", operatorUsers: ["someone-else"] });
+  assert.deepEqual((await me(dryRun)).features, { frontier: false }, "the dry run is operators-only");
+  assert.equal((await status(dryRun)).status, 404);
+
+  const open = await frontierComposition(t);
+  assert.deepEqual((await me(open)).features, { frontier: true });
+});
+
+// The feed's second wave (build spec D): the composer is built with the worker
+// and reached by its compose loop — wired is not fed, so the call site is
+// observed — and the reader's service holds every second-wave module.
+test("the frontier composer is composed, ticked by the worker's compose loop, and the service reads every second-wave module", async (t) => {
+  const { app } = await frontierComposition(t);
+  const composer = app.frontier.composer;
+  assert.ok(composer, "an enabled module composes its composer");
+  assert.equal(app.frontier.worker.composer, composer, "the worker ticks the composer the composition built");
+  let ticks = 0;
+  const tick = composer.tick.bind(composer);
+  composer.tick = async () => { ticks += 1; return tick(); };
+  assert.ok(await waitFor(async () => { await app.frontierWorker.tick(); return ticks > 0; }, 5_000), "the compose loop never reached the composer");
+  for (const module of ["events", "daily", "profiles", "actions"]) assert.ok(app.frontierService[module], `the service lacks its ${module}`);
+  assert.equal(composer.events, app.frontierService.events, "the hot list the page reads is the one the composer computes");
+  assert.equal(composer.daily.notifications, app.notificationService, "the daily is pushed through the platform's inbox");
+  assert.equal(typeof composer.daily.jobs?.enqueue, "function", "the daily is written through the platform's job ledger");
+  assert.ok(app.frontier.actions.library, "存入知识库 writes through the upload's own helper");
+  assert.equal(app.frontier.actions.capabilities().saveToLibrary, true);
 });

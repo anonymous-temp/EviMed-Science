@@ -36,6 +36,19 @@ export const SOURCES_PROJECT_ID = "evimed-sources";
 export const SOURCES_PROJECT_NAME = "EviMed 资料";
 
 /**
+ * Where the frontier feed's model calls are billed (「前沿动态」, plan §7.2):
+ * one project, under the first operator account, made when the feed's worker
+ * starts. The feed is the platform's own work for every reader at once — no
+ * researcher asked for it and none should see it in their spend — and the
+ * usage ledger wants a real account and project for every row, so it borrows
+ * an operator's, the way the learning loop borrows each researcher's.
+ */
+export const FRONTIER_PROJECT_ID = "evimed-frontier";
+
+/** What the frontier project is called where an operator lists everything. */
+export const FRONTIER_PROJECT_NAME = "EviMed 前沿动态";
+
+/**
  * The paired evaluation's cells, one short-lived project each
  * (`learningEvaluation.mjs`). Missing from this list until 2026-09-21, so
  * while an evaluation ran its 「Private method evaluation」 projects sat in the
@@ -46,7 +59,7 @@ const EVALUATION_CELL_PROJECT = /^methodeval-[a-f0-9]{24}$/;
 /** @param {unknown} projectId @returns {boolean} */
 export function isInternalProject(projectId) {
   const id = String(projectId ?? "");
-  return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID
+  return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === FRONTIER_PROJECT_ID
     || /^eval-method-[a-z0-9-]+$/.test(id) || EVALUATION_CELL_PROJECT.test(id);
 }
 

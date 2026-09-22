@@ -93,9 +93,11 @@ test("switching web reading off also stops offering the tool to the runtime", as
       const plan = buildRuntimeLaunchPlan(config, project, 49152);
       return dshProfileInput(config, project, plan, "deepseek-v4-pro", null).mcpEnvironment.EVIMED_DISABLED_TOOLS;
     };
-    assert.equal(disabledTools({ ...base, webReadEnabled: true }), "patent_search");
-    assert.equal(disabledTools({ ...base, webReadEnabled: false }), "patent_search,web_read");
-    assert.equal(disabledTools({ ...base, evimedDisabledTools: "", webReadEnabled: false }), "web_read");
+    // The frontier module is off in this config, so its search tool is not
+    // offered either (runtimeManager.mjs, next to the web_read switch).
+    assert.equal(disabledTools({ ...base, webReadEnabled: true }), "patent_search,frontier_search");
+    assert.equal(disabledTools({ ...base, webReadEnabled: false }), "patent_search,web_read,frontier_search");
+    assert.equal(disabledTools({ ...base, evimedDisabledTools: "", webReadEnabled: false }), "web_read,frontier_search");
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }

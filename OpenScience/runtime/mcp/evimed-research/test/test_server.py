@@ -109,6 +109,9 @@ class ToolContractTests(unittest.TestCase):
             # The researcher's own knowledge base, through the server's index
             # (`kb_search.py`, 2026-09-20).
             "kb_search",
+            # The feed of recent medical developments, 「前沿动态」, through the
+            # server's gateway (`frontier_search.py`, 2026-09-22).
+            "frontier_search",
         }
         self.assertEqual(set(by_name), expected)
         for tool in tools:

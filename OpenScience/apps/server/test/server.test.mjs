@@ -6119,6 +6119,9 @@ test("the internal gateways are labelled and ledgered like every other route", a
       "/internal/model/v1/chat/completions",
       "/internal/sources/v1/fetch",
       "/internal/search/v1/query",
+      // The two searches the runtime's tools post to (kb_search, frontier_search).
+      "/internal/kb/v1/search",
+      "/internal/frontier/v1/search",
     ];
     for (const pathname of paths) {
       const response = await fetch(`${base}${pathname}`);
