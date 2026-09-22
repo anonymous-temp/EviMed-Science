@@ -28,12 +28,14 @@ import { decodePage, extractHtmlIsolated, HTML_EXTRACTOR, renderReason, SHELL_VI
 import { ConcurrencyGate, HostPacer, KeyedConcurrencyGate } from "./webReadLimits.mjs";
 import {
   assertPublicWebHost,
+  edgeWebTransport,
   fetchWebTransport,
   headerValue,
   nodeWebTransport,
   validatedWebUrl,
   webReadError,
   WebReadError,
+  webTransportWithEdgeFallback,
 } from "./webReadNetwork.mjs";
 import { isOfficialWebSource } from "./webReadOfficial.mjs";
 import { RobotsPolicy, WEB_READ_PRODUCT_TOKEN } from "./webReadRobots.mjs";
@@ -111,11 +113,16 @@ export function webReadUserAgent(config) {
  * (`OPEN_SCIENCE_GATEWAY_FIXTURES` / `_RECORD`), in which case web reads go
  * through the same replaying fetch as every other upstream answer.
  * @param {Record<string, string | undefined>} env @param {typeof fetch} gatewayFetch
+ * @param {{ edge?: any, directTimeoutMs?: number, edgeFallback?: boolean }} [options]
  * @returns {import("./webReadNetwork.mjs").WebTransport}
  */
-export function webReadTransportFor(env, gatewayFetch) {
+export function webReadTransportFor(env, gatewayFetch, { edge = null, directTimeoutMs = 12_000, edgeFallback = true } = {}) {
   const replaying = String(env?.OPEN_SCIENCE_GATEWAY_FIXTURES ?? "").trim() || String(env?.OPEN_SCIENCE_GATEWAY_RECORD ?? "").trim();
-  return replaying ? fetchWebTransport(gatewayFetch) : nodeWebTransport();
+  if (replaying) return fetchWebTransport(gatewayFetch);
+  // A deployment with a Tokyo node reads what Beijing is refused through it
+  // (webReadNetwork.webTransportWithEdgeFallback); without one, nothing changes.
+  if (edge && edgeFallback) return webTransportWithEdgeFallback(nodeWebTransport(), edgeWebTransport(edge), { directTimeoutMs });
+  return nodeWebTransport();
 }
 
 /** @param {Buffer | Uint8Array} bytes */

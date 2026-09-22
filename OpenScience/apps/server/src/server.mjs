@@ -100,6 +100,7 @@ import { removeSourceCopies, sourceAttemptId } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { createWebRenderer } from "./agentbay/browser.mjs";
 import { createWebReader, webReadMetricFamilies, webReadTransportFor, webReadUserAgent } from "./webRead.mjs";
+import { edgeMetricFamilies, edgeProxyFromConfig, fetchWithEdge } from "./edgeProxy.mjs";
 import { pagesReadFromSessions } from "./webReadPages.mjs";
 import { createSourceUpdateLookup, sourceUpdateMetricFamilies } from "./sourceUpdates.mjs";
 import { OpenListClient } from "./openListClient.mjs";
@@ -2396,11 +2397,23 @@ export function createWebApiApp(overrides = {}) {
   // answers, so the gateway's fetch is replaceable by a fixture reader. Neither
   // knob is set in production, and setting the replay one makes a miss a named
   // failure rather than a live request.
-  const gatewayFetch = resolveGatewayFetch(process.env, overrides.publicSourceFetch ?? globalThis.fetch);
+  // The Tokyo node (edgeProxy.mjs), for what this host is refused. Never in the
+  // evaluation corpus's replay or record modes: there every upstream answer
+  // comes from the fixture set, and a live detour would make an arm partly live.
+  const gatewayReplaying = Boolean(String(process.env.OPEN_SCIENCE_GATEWAY_FIXTURES ?? "").trim() || String(process.env.OPEN_SCIENCE_GATEWAY_RECORD ?? "").trim());
+  const edgeProxy = gatewayReplaying ? null : (overrides.edgeProxy ?? edgeProxyFromConfig(config));
+  const directGatewayFetch = resolveGatewayFetch(process.env, overrides.publicSourceFetch ?? globalThis.fetch);
+  // Only the hosts the node is configured for leave through it; the rest go
+  // direct exactly as before.
+  const gatewayFetch = edgeProxy ? fetchWithEdge(edgeProxy, directGatewayFetch) : directGatewayFetch;
   // Web reading (plan §3.5): the gateway's web-read mode, AgentBay's browser
   // behind it for pages drawn in script, the parser for PDFs.
   const webReader = createWebReader(config, {
-    transport: overrides.webReadTransport ?? webReadTransportFor(process.env, gatewayFetch),
+    transport: overrides.webReadTransport ?? webReadTransportFor(process.env, gatewayFetch, {
+      edge: edgeProxy,
+      directTimeoutMs: config.webReadDirectTimeoutMs,
+      edgeFallback: config.webReadEdgeFallback !== false,
+    }),
     renderer: overrides.webRenderer ?? createWebRenderer(config),
     documentParser,
   });
@@ -2413,6 +2426,7 @@ export function createWebApiApp(overrides = {}) {
   const connectorCredentialGatewayHandler = createConnectorCredentialGatewayHandler({ runtimeManager, store: connectorCredentials });
   const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.webSearchFetch ?? globalThis.fetch,
+    edge: edgeProxy,
   });
   const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
@@ -2834,6 +2848,7 @@ export function createWebApiApp(overrides = {}) {
           imMetrics: im.service ? () => im.service.metrics() : null,
           webReader,
           sourceUpdates,
+          edgeProxy,
         });
         return;
       }
@@ -5306,7 +5321,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -5422,6 +5437,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // Web reading's outcomes and limits (webRead.mjs).
   for (const family of webReadMetricFamilies(webReader?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of sourceUpdateMetricFamilies(sourceUpdates?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of edgeMetricFamilies(edgeProxy)) addMetric(lines, family.name, family.help, family.type, family.series);
   addMetric(lines, "open_science_task_total", "Known task records in the current process.", "gauge", {
     value: taskStats.total,
   });
