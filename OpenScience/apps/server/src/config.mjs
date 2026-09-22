@@ -696,8 +696,21 @@ export function loadConfig(overrides = {}) {
     runtimeProxyRequestTimeoutMs: Number(
       overrides.runtimeProxyRequestTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS ?? 120_000,
     ),
+    // How long an idle runtime is kept warm: twelve hours since 2026-09-22, so
+    // a researcher who comes back to a conversation finds it running instead
+    // of waiting out a six-to-eight-second container start each time (it was
+    // thirty minutes, and every return after lunch paid for one). An idle
+    // runtime costs about 220 MB and holds no slot anyone needs: past
+    // `runtimeIdleYieldAfterMs` it gives way to any start that finds the
+    // deployment full (`makeRoomFor`).
     runtimeIdleTimeoutMs: Number(
-      overrides.runtimeIdleTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_IDLE_TIMEOUT_MS ?? 30 * 60_000,
+      overrides.runtimeIdleTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_IDLE_TIMEOUT_MS ?? 12 * 60 * 60_000,
+    ),
+    // Idle this long, a runtime yields its slot to another researcher's start
+    // when the deployment is at its ceiling; the same researcher's other
+    // projects may take an idle one of theirs at any age, as before.
+    runtimeIdleYieldAfterMs: Number(
+      overrides.runtimeIdleYieldAfterMs ?? process.env.OPEN_SCIENCE_RUNTIME_IDLE_YIELD_AFTER_MS ?? 30 * 60_000,
     ),
     // How long a deliberate stop may spend reading the transcripts of the runs
     // it is about to finish, before it gives up and closes the container
@@ -1113,8 +1126,12 @@ export function loadConfig(overrides = {}) {
     modelGatewayMaxMessages: Number(
       overrides.modelGatewayMaxMessages ?? process.env.OPEN_SCIENCE_MODEL_GATEWAY_MAX_MESSAGES ?? 1024,
     ),
+    // 12 MiB since 2026-09-22: an image attached in the composer reaches the
+    // provider inline (base64, up to ~1.4 MB each after the kernel normalizes
+    // it), which the 2 MiB it was refused with a 413. Text never gets near it:
+    // the token threshold compacts a conversation at about 1 MB.
     modelGatewayMaxBodyBytes: Number(
-      overrides.modelGatewayMaxBodyBytes ?? process.env.OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES ?? 2 * 1024 * 1024,
+      overrides.modelGatewayMaxBodyBytes ?? process.env.OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES ?? 12 * 1024 * 1024,
     ),
     modelGatewayMaxResponseBytes: Number(
       overrides.modelGatewayMaxResponseBytes ??

@@ -1,11 +1,11 @@
-// The research tools' entry points: the grid on a blank conversation, the page
-// of the tool a conversation runs, the chip above the composer, the `/工具`
-// command, and `@` references to the knowledge base.
+// The research tools' entry points: the page of the tool a conversation runs,
+// the chip above the composer, the `/工具` command, and `@` references to the
+// knowledge base. The blank conversation itself carries none of them.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  apply, BODY, capabilityOptions, knowledgeCandidates, knowledgeReference, knowledgeSerialization, toolGroups, toolPageModel,
+  apply, BODY, capabilityOptions, knowledgeCandidates, knowledgeReference, knowledgeSerialization, toolPageModel,
 } from '../src/runtimeUiCommands.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 
@@ -56,16 +56,10 @@ test('the slash popup lists the public tools, with category, summary and duratio
   ]);
 });
 
-test('the blank conversation offers the tools themselves, grouped by category, never an internal one', () => {
+test('a tool\'s page reads from the catalogue, and an internal capability has none', () => {
   // Through the bootstrap reader, as the frame sees it: that is what turns
-  // `visibility: internal` into the flag the grid filters on.
+  // `visibility: internal` into the flag the page filters on.
   const catalogue = /** @type {any} */ (kitFor(fakeCtx(), fakeTarget({ frame: { capabilities: CATALOGUE } })).frame).capabilities;
-  const groups = toolGroups(catalogue);
-  assert.deepEqual(groups.map((group) => [group.category, group.tools.map((/** @type {any} */ tool) => tool.title)]), [
-    ['临床证据', ['临床证据深度分析', '综合药品评价']],
-    ['研究规划', ['科研选题']],
-  ]);
-  assert.equal(groups[0].tools[0].minutes, '约 20–40 分钟');
   const page = /** @type {any} */ (toolPageModel(catalogue, 'clinical-evidence-synthesis'));
   assert.deepEqual([page.title, page.outputs, page.starters.length, page.materials], ['临床证据深度分析', ['证据综述报告', '证据表'], 1, '']);
   assert.equal(toolPageModel(catalogue, 'source-understanding'), null, 'an internal capability has no page');
@@ -89,16 +83,12 @@ test('/工具 binds the conversation it was typed in, and writes nothing into th
   assert.equal(BODY.name, 'commands');
 });
 
-test('the hero shows the grid, then that tool\'s page, and a chip above the composer says which one is on', () => {
+test('the blank conversation is the headline and the composer; a chosen tool brings its page and a chip', () => {
   const f = frame();
   const seat = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset');
   assert.equal(seat.options.priority, -1);
-  const grid = renderStatic(seat.component);
-  for (const tool of ['临床证据深度分析', '综合药品评价', '科研选题']) assert.match(grid, new RegExp(tool));
-  assert.doesNotMatch(grid, /来源理解/, 'an internal capability is not a tool');
-  // Every category is represented before any is filled: a flat budget spent in
-  // catalogue order dropped the last category entirely.
-  assert.match(grid, /研究规划/);
+  // No grid of tools on the first screen (2026-09-22): they are on 科研工具.
+  assert.equal(renderStatic(seat.component), '', 'nothing between the headline and the composer');
   const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.input.dock' && entry.options.id === 'evimed-tool');
   assert.equal(renderStatic(chip.component), '', 'no tool, no chip');
   // The shell reports what the control plane bound this conversation to.

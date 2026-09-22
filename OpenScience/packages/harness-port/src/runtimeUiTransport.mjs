@@ -237,7 +237,28 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
       if (carrier) lose(carrier, failure('Runtime frame disposed'));
     },
   };
+  // The composer's attachments. `dsh-client-file-upload` posts a file to
+  // `/api/session/uploadFileBinary` at the page's origin from a Worker of its
+  // own -- past this page's `fetch`, so without the frame prefix, which reaches
+  // no project -- unless a carrier is named before the client boots. This is
+  // that carrier: the same scoping as every other API call, for that one path.
+  // Fetch reports no upload progress, so the composer shows the file as sending
+  // until it lands rather than a percentage.
+  // Inside the function, like everything it uses: the page receives this
+  // function as source text (`runtimeUiBootstrapSource`), not the module.
+  const UPLOAD_PATH = '/api/session/uploadFileBinary'; // `dsh-client-file-upload`'s FILE_UPLOAD_PATH
+  const uploads = {
+    /** @param {string | URL} input @param {any} init */
+    async fetch(input, init) {
+      if (disposed) throw failure('Runtime frame disposed');
+      const url = new URL(String(input), `${origin}/`);
+      const path = url.pathname.startsWith(frame.prefix) ? url.pathname.slice(frame.prefix.length - 1) : url.pathname;
+      if (path !== UPLOAD_PATH) throw failure('Unscoped runtime URL');
+      return nativeFetch(scopedUrl(input, '/api/'), { ...init, credentials: 'same-origin', redirect: 'error' });
+    },
+  };
   Object.defineProperty(target, '__DSH_TRANSPORT__', { value: Object.freeze(hooks) });
+  Object.defineProperty(target, '__DSH_FILE_UPLOAD__', { value: Object.freeze(uploads) });
   target.addEventListener('pagehide', hooks.dispose, { once: true });
   return hooks;
 }

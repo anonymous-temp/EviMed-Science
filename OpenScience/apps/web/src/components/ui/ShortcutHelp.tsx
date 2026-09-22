@@ -64,7 +64,6 @@ export function ShortcutHelp() {
   const mod = isMacPlatform() ? "⌘" : "Ctrl+";
   const rows: { keys: string; description: string }[] = [
     { keys: `${mod}B`, description: "收起 / 展开侧边栏" },
-    { keys: `${mod}K`, description: "打开命令面板" },
     { keys: "?", description: "打开 / 关闭本面板" },
     { keys: "Esc", description: "关闭弹层" },
   ];

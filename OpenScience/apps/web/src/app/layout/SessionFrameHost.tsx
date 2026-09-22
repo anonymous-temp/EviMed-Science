@@ -124,13 +124,16 @@ export function SessionFrameHost() {
   }, [originAttempt]);
 
   // The runtime a conversation needs, started under the lookup above rather
-  // than behind it.
+  // than behind it — and on whatever page the shell loads, not only the
+  // conversation: someone who opens 知识库 or 科研工具 first finds the
+  // conversation already running when they get there (2026-09-22; a cold
+  // start is six to eight seconds, a warm one under half a second).
   const warmed = useRef<string | null>(null);
   useEffect(() => {
-    if (!onChat || warmed.current === currentProjectId) return;
+    if (warmed.current === currentProjectId) return;
     warmed.current = currentProjectId;
     warmWebRuntime(currentProjectId);
-  }, [onChat, currentProjectId]);
+  }, [currentProjectId]);
 
   if (!uiOrigin) {
     if (!onChat) return null;

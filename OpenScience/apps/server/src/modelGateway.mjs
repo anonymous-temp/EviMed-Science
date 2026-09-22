@@ -384,6 +384,20 @@ export function estimatePromptTokens(text) {
   return cjk + Math.ceil(other / 3);
 }
 
+/**
+ * Content parts that carry an image rather than text: the OpenAI-shaped
+ * `image_url` the DeepSeek adapter sends inline, and the file-id block it sends
+ * when the provider's Files API holds the bytes.
+ */
+const IMAGE_PART_TYPES = new Set(["image_url", "input_image", "image", "file"]);
+
+/**
+ * One image's prompt tokens, from above: DeepSeek's v4 vision accounting caps a
+ * normalized image at 384 tokens, and the adapter's descriptor text naming the
+ * attachment rides beside it.
+ */
+const IMAGE_PART_TOKENS = 1_024;
+
 /** @param {any} body @returns {number} */
 function requestPromptTokens(body) {
   let tokens = 0;
@@ -393,7 +407,14 @@ function requestPromptTokens(body) {
     const content = message?.content;
     if (typeof content === "string") tokens += estimatePromptTokens(content);
     else if (Array.isArray(content)) {
-      for (const part of content) tokens += estimatePromptTokens(typeof part?.text === "string" ? part.text : JSON.stringify(part ?? ""));
+      for (const part of content) {
+        if (typeof part?.text === "string") tokens += estimatePromptTokens(part.text);
+        // An attached image is priced by its pixels, not by the length of its
+        // base64: read as text, one normalized image was ~450,000 "tokens"
+        // and reserved a whole conversation's worth for a picture.
+        else if (IMAGE_PART_TYPES.has(String(part?.type ?? ""))) tokens += IMAGE_PART_TOKENS;
+        else tokens += estimatePromptTokens(JSON.stringify(part ?? ""));
+      }
     }
     if (typeof message?.reasoning_content === "string") tokens += estimatePromptTokens(message.reasoning_content);
     if (message?.tool_calls != null) tokens += estimatePromptTokens(JSON.stringify(message.tool_calls));

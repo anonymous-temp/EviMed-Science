@@ -404,7 +404,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   });
 
   /**
-   * The shell's three shortcuts, forwarded while focus is in this document
+   * The shell's two shortcuts, forwarded while focus is in this document
    * (2026-09-16 review, U8). The frame is another origin, so with focus here
    * the shell's own window listeners never hear a key — and the first click on
    * the chat page puts focus here. A closed set, and only keys the kernel left
@@ -417,8 +417,9 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const key = String(event.key ?? '');
     const modifier = Boolean(event.metaKey || event.ctrlKey);
     let shortcut = null;
-    if (modifier && !event.shiftKey && key.toLowerCase() === 'k') shortcut = 'command-palette';
-    else if (modifier && !event.shiftKey && key.toLowerCase() === 'b') shortcut = 'sidebar';
+    // Ctrl K opened the shell's palette until 2026-09-22; with the palette gone
+    // the key stays the kernel's own.
+    if (modifier && !event.shiftKey && key.toLowerCase() === 'b') shortcut = 'sidebar';
     else if (!modifier && key === '?') {
       const element = event.target;
       if (element && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable)) return;

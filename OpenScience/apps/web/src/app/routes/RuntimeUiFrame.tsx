@@ -572,7 +572,6 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         // same closed set the bridge forwards; anything else is dropped.
         const ui = useUiStore.getState();
         const shortcuts: Record<string, () => void> = {
-          "command-palette": () => ui.setPaletteOpen(!ui.paletteOpen),
           sidebar: () => ui.toggleSidebar(),
           shortcuts: () => window.dispatchEvent(new Event(SHORTCUT_HELP_TOGGLE_EVENT)),
         };

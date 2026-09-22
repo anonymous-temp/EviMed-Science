@@ -98,14 +98,19 @@ export function shellStylesheet(pin) {
     // seat, `conversation.hero.agentPreset` — and that is why an occupant there
     // once "registered nothing and rendered nothing".
     'button[aria-label="选择工作区"],button[aria-label="Choose workspace"]{display:none !important}',
-    // The composer's paperclip. Uploads are refused on this surface
-    // (`fileUploads`, `session/uploadFileBinary` — knowledge enters a project
-    // through the knowledge base, not a chat attachment), so the button only
-    // ever led to a refusal. It is drawn by the input bar itself, outside any
-    // slot, so it goes by its accessible name (`file.attach`); the
-    // `file-upload` row stays mounted, because the deliverables panel and the
-    // attachment presenter inject its service.
-    'button[aria-label="添加附件"],button[aria-label="Add attachment"]{display:none !important}',
+    // The composer's access-mode chip (「项目工作区」). A hosted deployment has
+    // exactly one permission preset, so the chip opened a picker with one row
+    // in it — a control that chooses nothing, beside the one input box the
+    // conversation page should be (2026-09-22). Hidden by its accessible name
+    // (`permission.trigger`, 「访问模式，当前：…」) in both shipped languages;
+    // the preset itself is enforced by the profile and the method ban, not by
+    // this chip.
+    'button[aria-label^="访问模式"],button[aria-label^="Access mode"]{display:none !important}',
+    // The composer's paperclip is the kernel's own and stays: a file attached to
+    // a message goes to the project's attachment store through the frame's
+    // upload carrier (`__DSH_FILE_UPLOAD__`, runtimeUiTransport.mjs). It was
+    // hidden here until 2026-09-22, when uploads were refused on this surface.
+
     // The left column, which `sidebar` occupies with nothing.
     //
     // Occupying the slot replaces the column's CONTENT; the frame still sizes

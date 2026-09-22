@@ -6,7 +6,6 @@ import { isChatPath } from "@/lib/runLocation";
 import { isMacPlatform } from "@/lib/platform";
 import { SessionFrameHost } from "@/app/layout/SessionFrameHost";
 import { Sidebar } from "@/components/sidebar/Sidebar";
-import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { ShortcutHelp } from "@/components/ui/ShortcutHelp";
 import { Toaster } from "@/components/ui/Toaster";
 import { useProjectStore } from "@/lib/projects";
@@ -124,9 +123,8 @@ export function AppShell() {
             * page under the new one: every other page reads the project when
             * it mounts (a header, a workspace path, a list) and none of them
             * listens for a change; the reload this replaced relied on exactly
-            * that, and so does this. What sits outside it (the sidebar, the
-            * bell, the palette) is either account-wide or follows `currentId`
-            * itself.
+            * that, and so does this. What sits outside it (the sidebar and the
+            * bell) is either account-wide or follows `currentId` itself.
             * On the conversation surface the route renders overlays only, so
             * it floats above the frame and lets pointer events through. */}
           <div className={cn(onChat && "pointer-events-none absolute inset-0 z-20", !onChat && "h-full")}>
@@ -136,9 +134,6 @@ export function AppShell() {
           </div>
         </div>
       </main>
-      {/* Every shell form gets the palette and the shortcut cheat sheet — the
-          palette trims itself to hosted-safe entries internally. */}
-      <CommandPalette />
       <ShortcutHelp />
       <Toaster />
     </div>

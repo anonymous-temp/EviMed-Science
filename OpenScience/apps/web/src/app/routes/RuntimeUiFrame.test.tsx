@@ -236,7 +236,7 @@ describe("native frame identity and readiness", () => {
     // shell's window listeners hear no key, so the bridge forwards a closed set.
     const { useUiStore } = await import("@/lib/store");
     const { SHORTCUT_HELP_TOGGLE_EVENT } = await import("@/components/ui/ShortcutHelp");
-    useUiStore.setState({ paletteOpen: false, sidebarCollapsed: false });
+    useUiStore.setState({ sidebarCollapsed: false });
     const { container } = mount();
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
     const frame = container.querySelector("iframe")!;
@@ -250,8 +250,10 @@ describe("native frame identity and readiness", () => {
 
     const help = vi.fn();
     window.addEventListener(SHORTCUT_HELP_TOGGLE_EVENT, help);
+    // The palette this used to open is gone (2026-09-22); its name is now just
+    // an unknown shortcut, dropped like any other.
     emit(frame, { type: "evimed.runtime-ui.shell-shortcut", seq: 3, shortcut: "command-palette" });
-    expect(useUiStore.getState().paletteOpen).toBe(true);
+    expect(useUiStore.getState().sidebarCollapsed).toBe(false);
     emit(frame, { type: "evimed.runtime-ui.shell-shortcut", seq: 4, shortcut: "sidebar" });
     expect(useUiStore.getState().sidebarCollapsed).toBe(true);
     emit(frame, { type: "evimed.runtime-ui.shell-shortcut", seq: 5, shortcut: "shortcuts" });
@@ -816,6 +818,15 @@ describe("opening a task", () => {
     expect(mocks.warm).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-last"));
     expect(mocks.listRuns).not.toHaveBeenCalled();
+  });
+
+  it("starts the project's runtime from any page, so the conversation is warm when it is opened", async () => {
+    // 2026-09-22: a cold start is six to eight seconds, and a researcher who
+    // lands on 知识库 or 科研工具 first used to pay it on reaching the chat.
+    mocks.warm.mockReset();
+    mount(null, "/app/files");
+    expect(screen.getByText("knowledge base")).toBeInTheDocument();
+    expect(mocks.warm).toHaveBeenCalledTimes(1);
   });
 
   it("walks the ledger when the account's answer has no usable last conversation", async () => {
