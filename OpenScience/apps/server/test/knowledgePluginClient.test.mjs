@@ -87,6 +87,13 @@ test("a token file anyone else can read is refused by name, and the token never 
   await writeFile(loose, "test-only-loose-token\n");
   await chmod(loose, 0o644);
   assert.deepEqual(await readKnowledgePluginToken(loose), { value: "", error: "token_file_permissions" });
+  // Group-readable is the production shape (root:10002 0440: the control plane
+  // and the plugin both read it); group-writable is not.
+  await chmod(loose, 0o440);
+  assert.deepEqual(await readKnowledgePluginToken(loose), { value: "test-only-loose-token", error: null });
+  await chmod(loose, 0o460);
+  assert.deepEqual(await readKnowledgePluginToken(loose), { value: "", error: "token_file_permissions" });
+  await chmod(loose, 0o644);
   assert.deepEqual(await readKnowledgePluginToken(path.join(dir, "missing")), { value: "", error: "token_file_unavailable" });
   const { plugin } = client([], { tokenFile: loose });
   const error = await plugin.manifest().catch((failure) => failure);
