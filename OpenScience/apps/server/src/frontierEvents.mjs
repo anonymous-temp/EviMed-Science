@@ -152,7 +152,8 @@ export function frontierPrimaryKind(members) {
 
 /**
  * @typedef {{ role: string, ownerEntity: string, authority: number, timelineAt: string | Date, lang?: string | null,
- *             sourceType?: string | null, evidenceType?: string | null, selected?: boolean }} FrontierEventMember
+ *             sourceType?: string | null, evidenceType?: string | null, selected?: boolean, safetyAlert?: boolean,
+ *             scoreTotal?: number | null }} FrontierEventMember
  */
 
 /**
@@ -181,8 +182,10 @@ export function frontierEventCounts({ members, now }) {
     entityCount: entities.size,
     hasPrimary: members.some((member) => member.role === "primary"),
     regulatorPrimary: members.some((member) => member.role === "primary" && member.sourceType === "regulator"),
-    // A regulator's own notice that the editors also put in 精选 (plan §6.3).
-    selectedRegulatorPrimary: members.some((member) => member.role === "primary" && member.sourceType === "regulator" && member.selected === true),
+    // A regulator's own notice that is itself major: a safety alert, or selected
+    // with a score of at least FRONTIER_HOT_SOLO_SCORE (plan §6.3, §6.4).
+    selectedRegulatorPrimary: members.some((member) => member.role === "primary" && member.sourceType === "regulator" && member.selected === true
+      && (member.safetyAlert === true || Number(member.scoreTotal ?? 0) >= FRONTIER_HOT_SOLO_SCORE)),
     bilingual: languages.has("zh") && languages.has("en"),
     firstAt: Number.isFinite(firstAt) ? new Date(firstAt) : null,
     lastAt: Number.isFinite(lastAt) ? new Date(lastAt) : null,
@@ -218,13 +221,23 @@ export function frontierEventHeat({ members, now }) {
 }
 
 /**
+ * The score a regulator's notice needs to be hot on its own, with no second
+ * source reporting it. Selection alone was not enough: in the first
+ * production hours (2026-09-22) nine of the ten hot events were single notices
+ * — an administrative-forms circular, an EPAR revision — because a feed of
+ * official sources selects many of them and few events had a second report
+ * yet. A 热点 is what several sources report; one source is enough only for a
+ * safety alert or a notice scored in the top band (9 of 1,160 items then).
+ */
+export const FRONTIER_HOT_SOLO_SCORE = 85;
+
+/**
  * Whether an event may be on the hot list (plan §6.4): two independent
  * entities reported it in the last 72 hours, or one when it holds a
- * regulator's primary source that was itself selected. The plan's "one is
- * enough for a regulator" was meant for an approval or a withdrawal; on the
- * first live run (2026-09-22) it let EMA's routine EPAR revisions — dozens a
- * day, each scored below the 精选 line — fill the whole list. Selection is
- * where "does this matter" is already decided, so it decides here too.
+ * regulator's primary source that is itself major — selected and a safety
+ * alert or scored at least FRONTIER_HOT_SOLO_SCORE. The plan's "one is enough
+ * for a regulator" was meant for an approval or a withdrawal; on the first
+ * live run it let EMA's routine EPAR revisions fill the whole list.
  * @param {{ sourceCount72h: number, selectedRegulatorPrimary?: boolean }} counts
  */
 export function frontierHotEligible({ sourceCount72h, selectedRegulatorPrimary = false }) {
@@ -652,7 +665,7 @@ export class FrontierEvents {
    */
   async #members(client, eventIds) {
     const rows = (await client.query(`SELECT ei.event_id, ei.role, i.id AS item_id, i.timeline_at, i.lang, i.lane, i.title_zh, i.title_raw,
-        i.entity_keys, i.source_type, i.evidence_type, i.selected, s.owner_entity, s.authority
+        i.entity_keys, i.source_type, i.evidence_type, i.selected, i.safety_alert, i.score_total, s.owner_entity, s.authority
       FROM evimed_frontier.event_items ei
       JOIN evimed_frontier.items i ON i.id = ei.item_id
       JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
@@ -667,7 +680,8 @@ export class FrontierEvents {
   /** @param {any[]} rows @returns {FrontierEventMember[]} */
   #asMembers(rows) {
     return rows.map((row) => ({ role: row.role, ownerEntity: row.owner_entity, authority: Number(row.authority), timelineAt: row.timeline_at,
-      lang: row.lang, sourceType: row.source_type, evidenceType: row.evidence_type, selected: row.selected === true }));
+      lang: row.lang, sourceType: row.source_type, evidenceType: row.evidence_type, selected: row.selected === true,
+      safetyAlert: row.safety_alert === true, scoreTotal: row.score_total == null ? null : Number(row.score_total) }));
   }
 
   /**

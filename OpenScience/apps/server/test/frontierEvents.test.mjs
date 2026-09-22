@@ -13,6 +13,7 @@ import {
   frontierEventCounts,
   frontierEventHeat,
   frontierEventRole,
+  FRONTIER_HOT_SOLO_SCORE,
   frontierHotEligible,
   frontierPrimaryKind,
   frontierRankHot,
@@ -149,4 +150,18 @@ test("where an item goes: the oldest of the events it is the same as survives th
   assert.equal(frontierClusterDecision({ identifier: [], strong: ["12"], yes: [], related: [], events }).joinedBy, "vector");
   assert.equal(frontierClusterDecision({ identifier: ["404"], strong: [], yes: [], related: [], events }).target, null,
     "an event that no longer exists is no match");
+});
+
+test("a regulator's notice is hot on its own only when it is major: a safety alert or a top-band score", () => {
+  // First production hours (2026-09-22): nine of ten hot events were single
+  // notices — an administrative-forms circular, an EPAR revision.
+  const now = new Date("2026-09-22T12:00:00Z");
+  const notice = (overrides) => [{ role: "primary", ownerEntity: "us-fda", authority: 5, timelineAt: "2026-09-22T10:00:00Z", sourceType: "regulator",
+    selected: true, safetyAlert: false, scoreTotal: 78, ...overrides }];
+  const eligible = (members) => frontierHotEligible(frontierEventCounts({ members, now }));
+  assert.equal(eligible(notice({})), false, "selected at 78: in 精选, not a hot topic");
+  assert.equal(eligible(notice({ scoreTotal: FRONTIER_HOT_SOLO_SCORE })), true);
+  assert.equal(eligible(notice({ safetyAlert: true, scoreTotal: 50 })), true);
+  assert.equal(eligible(notice({ selected: false, scoreTotal: 95 })), false, "unselected is never hot alone");
+  assert.equal(eligible(notice({ sourceType: "media", scoreTotal: 95 })), false, "one outlet alone is never hot");
 });

@@ -290,8 +290,13 @@ export function frontierItemFlags({ source, entry, item, text, modelFlags = [], 
   const countries = Array.isArray(text?.enrichment?.affiliation_countries) ? text.enrichment.affiliation_countries : [];
   if (["CN", "CHN", "CHINA"].includes(String(source?.region ?? "").trim().toUpperCase())
     || countries.some((/** @type {unknown} */ country) => String(country).trim().toUpperCase() === "CN")) flags.add("china");
+  // 注册，未发表结果 is a trial registration's flag: the registries that carry
+  // trial events say which event this is. A guideline registration (PREPARE)
+  // shares the `reg:` identity and has no trial event — flagged, it told
+  // readers a guideline in development had "results not published"
+  // (production, 2026-09-22).
   const event = String(entry?.facts?.trial_event ?? "");
-  if (/^reg:/.test(String(entry?.identity_key ?? item?.identity_key ?? "")) && event !== "results-posted") flags.add("registry-unpublished");
+  if (event && event !== "results-posted" && /^reg:/.test(String(entry?.identity_key ?? item?.identity_key ?? ""))) flags.add("registry-unpublished");
   if (event === "updated") flags.add("data-updated");
   if (preprint && text?.enrichment?.published_version_doi) flags.add("published-version");
   return FRONTIER_ITEM_FLAGS.filter((flag) => flags.has(flag));
