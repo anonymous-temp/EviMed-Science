@@ -48,7 +48,7 @@ from . import policy
 from .db import meta_get, meta_set
 from .fetch import ProtectedFetcher, is_empty_shell
 from .model import NEUTRAL_DETAILS, EntryTextResult, FetchError, SourceState
-from .normalize import Rejected, prepare
+from .normalize import Rejected, drop_boilerplate_summaries, prepare
 from .registry import RegistryError, load_registry, source_from_row, sync_registry
 from .settings import Settings
 from .store import StoreResult, claim_texts, insert_fetch, save_text_result, store_entries, success_rate_24h, text_failure
@@ -376,6 +376,9 @@ class Crawler:
                     notes[note.split(":", 1)[0]] += 1
             for note in output.notes:
                 notes[str(note)[:60]] += 1
+            blurbs = drop_boilerplate_summaries(prepared)
+            if blurbs:
+                notes["boilerplate_summary"] += blurbs
             if prepared:
                 async with self._pool.connection() as conn:
                     totals.add(await store_entries(conn, source.id, prepared, now=started, first_contact=first_contact))
