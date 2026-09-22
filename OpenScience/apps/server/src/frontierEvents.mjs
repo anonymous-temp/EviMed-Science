@@ -182,10 +182,10 @@ export function frontierEventCounts({ members, now }) {
     entityCount: entities.size,
     hasPrimary: members.some((member) => member.role === "primary"),
     regulatorPrimary: members.some((member) => member.role === "primary" && member.sourceType === "regulator"),
-    // A regulator's own notice that is itself major: a safety alert, or selected
-    // with a score of at least FRONTIER_HOT_SOLO_SCORE (plan §6.3, §6.4).
+    // A regulator's own notice that is itself major: selected with a score of
+    // at least FRONTIER_HOT_SOLO_SCORE (plan §6.3, §6.4).
     selectedRegulatorPrimary: members.some((member) => member.role === "primary" && member.sourceType === "regulator" && member.selected === true
-      && (member.safetyAlert === true || Number(member.scoreTotal ?? 0) >= FRONTIER_HOT_SOLO_SCORE)),
+      && Number(member.scoreTotal ?? 0) >= FRONTIER_HOT_SOLO_SCORE),
     bilingual: languages.has("zh") && languages.has("en"),
     firstAt: Number.isFinite(firstAt) ? new Date(firstAt) : null,
     lastAt: Number.isFinite(lastAt) ? new Date(lastAt) : null,
@@ -227,15 +227,18 @@ export function frontierEventHeat({ members, now }) {
  * — an administrative-forms circular, an EPAR revision — because a feed of
  * official sources selects many of them and few events had a second report
  * yet. A 热点 is what several sources report; one source is enough only for a
- * safety alert or a notice scored in the top band (9 of 1,160 items then).
+ * notice scored in the top band (9 of 1,160 items then). Not for a safety
+ * alert as such: it already has the page's own rail, and on the next hot run
+ * five single device and drug recalls filled five of nine places — a recall
+ * that many sources report is hot by the two-source rule anyway.
  */
 export const FRONTIER_HOT_SOLO_SCORE = 85;
 
 /**
  * Whether an event may be on the hot list (plan §6.4): two independent
  * entities reported it in the last 72 hours, or one when it holds a
- * regulator's primary source that is itself major — selected and a safety
- * alert or scored at least FRONTIER_HOT_SOLO_SCORE. The plan's "one is enough
+ * regulator's primary source that is itself major — selected and scored at
+ * least FRONTIER_HOT_SOLO_SCORE. The plan's "one is enough
  * for a regulator" was meant for an approval or a withdrawal; on the first
  * live run it let EMA's routine EPAR revisions fill the whole list.
  * @param {{ sourceCount72h: number, selectedRegulatorPrimary?: boolean }} counts
@@ -282,19 +285,25 @@ export function frontierClusterEntities(keys) {
 /**
  * The vector step's reading of the candidates: which events are the same by
  * cosine alone, and which pairs to ask about (the best candidate of each
- * other event in the band, at most three).
- * @param {Array<{ eventId: string, cosine: number }>} candidates
+ * other event in the band, or above it from the same publisher; at most three).
+ * @param {Array<{ eventId: string, cosine: number, samePublisher?: boolean }>} candidates
  * @returns {{ strong: string[], ask: Array<{ eventId: string, cosine: number, index: number }> }}
  */
 export function frontierVectorReading(candidates) {
   const ordered = candidates.map((candidate, index) => ({ ...candidate, index }))
     .filter((candidate) => Number.isFinite(candidate.cosine))
     .sort((left, right) => right.cosine - left.cosine || left.index - right.index);
-  const strong = [...new Set(ordered.filter((candidate) => candidate.cosine >= FRONTIER_CLUSTER_JOIN_COSINE).map((candidate) => candidate.eventId))];
+  // One publisher's templated notices — 「EMA 对 X 给出正面意见」 for seven
+  // different medicines, two biosimilars' EPAR revisions — sit above the join
+  // cosine because the template is most of the text; the vector joined them
+  // into single events in production (2026-09-22, 4 wrong merges of 25). Two
+  // notices of one publisher are the same event only if the model says so.
+  const joins = (/** @type {any} */ candidate) => candidate.cosine >= FRONTIER_CLUSTER_JOIN_COSINE && candidate.samePublisher !== true;
+  const strong = [...new Set(ordered.filter(joins).map((candidate) => candidate.eventId))];
   const ask = [];
   const seen = new Set(strong);
   for (const candidate of ordered) {
-    if (candidate.cosine >= FRONTIER_CLUSTER_JOIN_COSINE || candidate.cosine < FRONTIER_CLUSTER_ASK_COSINE || seen.has(candidate.eventId)) continue;
+    if (joins(candidate) || candidate.cosine < FRONTIER_CLUSTER_ASK_COSINE || seen.has(candidate.eventId)) continue;
     seen.add(candidate.eventId);
     ask.push(candidate);
     if (ask.length >= FRONTIER_CLUSTER_ASK_MAX) break;
@@ -414,7 +423,7 @@ export class FrontierEvents {
           OR EXISTS (SELECT 1 FROM evimed_frontier.item_vectors v WHERE v.item_id = i.id AND v.model_key = $${values.push(modelKey)}))` : "";
     const rows = (await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.lang,
         i.source_type, i.evidence_type, i.identity_key, i.registry_ids, i.entity_keys, i.published_at, i.timeline_at, i.visible_at,
-        s.name AS source_name
+        s.name AS source_name, s.owner_entity AS owner_entity
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE i.state = 'published' AND i.event_id IS NULL AND i.visible_at >= $1::timestamptz
         AND (i.verification <> 'pending' OR i.visible_at < $2::timestamptz) ${vectorWait}
@@ -448,7 +457,8 @@ export class FrontierEvents {
   async #clusterOne(item, { now, modelKey, allowModel }) {
     const identifier = await this.#identifierEvents(item);
     const candidates = modelKey ? await this.#vectorCandidates(item, modelKey, now) : [];
-    const reading = frontierVectorReading(candidates.map((candidate) => ({ eventId: candidate.eventId, cosine: candidate.cosine })));
+    const reading = frontierVectorReading(candidates.map((candidate) => ({ eventId: candidate.eventId, cosine: candidate.cosine,
+      samePublisher: candidate.samePublisher })));
     /** @type {string[]} */
     const yes = [];
     /** @type {string[]} */
@@ -495,7 +505,7 @@ export class FrontierEvents {
     if (!entities.length) return [];
     const since = new Date(new Date(item.timeline_at).getTime() - FRONTIER_CLUSTER_WINDOW_MS);
     const rows = (await this.database.query(`SELECT i.id, i.event_id, i.title_raw, i.title_zh, i.summary_zh, i.published_at, s.name AS source_name,
-        1 - (v.embedding <=> own.embedding) AS cosine
+        s.owner_entity AS owner_entity, 1 - (v.embedding <=> own.embedding) AS cosine
       FROM evimed_frontier.items i
       JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       JOIN evimed_frontier.item_vectors v ON v.item_id = i.id AND v.model_key = $2
@@ -505,6 +515,7 @@ export class FrontierEvents {
       ORDER BY i.timeline_at DESC, i.id DESC LIMIT ${VECTOR_CANDIDATES}`, [item.id, modelKey, since, now, entities])).rows ?? [];
     return rows.map((row) => ({
       itemId: String(row.id), eventId: String(row.event_id), cosine: Number(row.cosine),
+      samePublisher: Boolean(item.owner_entity) && row.owner_entity === item.owner_entity,
       sourceName: row.source_name, titleRaw: row.title_raw, titleZh: row.title_zh, summaryZh: row.summary_zh, publishedAt: iso(row.published_at),
     }));
   }

@@ -9,7 +9,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FRONTIER_EDITOR_VERSION, buildModelInput, sha256 } from "../src/frontierEditor.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
-import { FrontierPipeline } from "../src/frontierPipeline.mjs";
+import { FRONTIER_TEXT_AFTER_ATTEMPT_MS, FrontierPipeline } from "../src/frontierPipeline.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -100,19 +100,28 @@ async function deliver(values) {
   return { id: Number(result.rows[0].id), pluginEntryId: result.rows[0].plugin_entry_id };
 }
 
-/** The plugin's `/text`: what each entry answers, `pending` by default. */
-function fakePlugin() {
+/**
+ * The plugin's `/text`: what each entry answers, `pending` by default — and,
+ * like the plugin, a pending answer names its next try: the moment it was
+ * first asked (given a clock).
+ * @param {(() => Date) | null} [now]
+ */
+function fakePlugin(now = null) {
   /** @type {Map<string, any>} */
   const texts = new Map();
   /** @type {string[]} */
   const asked = [];
+  /** @type {Map<string, string>} */
+  const scheduled = new Map();
   return {
     texts, asked,
     async text(/** @type {string} */ entryId) {
       asked.push(entryId);
       const answer = texts.get(entryId);
       if (answer instanceof Error) throw answer;
-      return answer ?? { entry_id: entryId, revision: 1, status: "pending", abstract: null, body_excerpt: null, enrichment: {} };
+      if (answer) return answer;
+      if (now && !scheduled.has(entryId)) scheduled.set(entryId, now().toISOString());
+      return { entry_id: entryId, revision: 1, status: "pending", abstract: null, body_excerpt: null, next_attempt_at: scheduled.get(entryId) ?? null, enrichment: {} };
     },
   };
 }
@@ -185,7 +194,7 @@ function fakeEmbedder({ fail = 0 } = {}) {
 }
 
 /** @param {{ now: () => Date, editor?: any, plugin?: any, embedder?: any, config?: Record<string, any> }} input */
-function pipelineWith({ now, editor = fakeEditor(), plugin = fakePlugin(), embedder = fakeEmbedder(), config = {} }) {
+function pipelineWith({ now, editor = fakeEditor(), plugin = fakePlugin(now), embedder = fakeEmbedder(), config = {} }) {
   const pipeline = new FrontierPipeline({
     database, editor, plugin, embedder, now, workerId: `test-${randomUUID()}`,
     glossary: new FrontierGlossary([{ kind: "drug", termEn: "semaglutide", termZh: "司美格鲁肽", keepOriginal: false }]),
@@ -244,10 +253,11 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   const waiting = await entry(stream.id);
   assert.deepEqual([waiting.state, waiting.state_reason, waiting.item_id], ["received", "in-flight-duplicate", null]);
   assert.ok(new Date(waiting.hold_until) > clock);
-  // NEJM never waits for its abstract: published now, and asked again in twelve hours.
+  // NEJM never waits for its abstract: published now, and asked again just
+  // after the plugin's own try — which it schedules the moment it is asked.
   const nejmEntry = await entry(nejm.id);
   assert.equal(nejmEntry.state, "held");
-  assert.equal(new Date(nejmEntry.hold_until).getTime(), clock.getTime() + 12 * HOUR);
+  assert.equal(new Date(nejmEntry.hold_until).getTime(), clock.getTime() + FRONTIER_TEXT_AFTER_ATTEMPT_MS);
   const paper = await item(Number(nejmEntry.item_id));
   assert.equal(paper.state, "published");
   assert.equal(paper.verification, "passed");

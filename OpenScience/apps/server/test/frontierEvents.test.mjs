@@ -152,7 +152,7 @@ test("where an item goes: the oldest of the events it is the same as survives th
     "an event that no longer exists is no match");
 });
 
-test("a regulator's notice is hot on its own only when it is major: a safety alert or a top-band score", () => {
+test("a regulator's notice is hot on its own only when it is major: a top-band score", () => {
   // First production hours (2026-09-22): nine of ten hot events were single
   // notices — an administrative-forms circular, an EPAR revision.
   const now = new Date("2026-09-22T12:00:00Z");
@@ -161,7 +161,21 @@ test("a regulator's notice is hot on its own only when it is major: a safety ale
   const eligible = (members) => frontierHotEligible(frontierEventCounts({ members, now }));
   assert.equal(eligible(notice({})), false, "selected at 78: in 精选, not a hot topic");
   assert.equal(eligible(notice({ scoreTotal: FRONTIER_HOT_SOLO_SCORE })), true);
-  assert.equal(eligible(notice({ safetyAlert: true, scoreTotal: 50 })), true);
+  // A safety alert has its own rail; alone, it is not a 热点 (five single
+  // recalls filled five of nine places on 2026-09-22).
+  assert.equal(eligible(notice({ safetyAlert: true, scoreTotal: 70 })), false);
   assert.equal(eligible(notice({ selected: false, scoreTotal: 95 })), false, "unselected is never hot alone");
   assert.equal(eligible(notice({ sourceType: "media", scoreTotal: 95 })), false, "one outlet alone is never hot");
+});
+
+test("one publisher's notices above the join cosine are asked about, never joined by the vector alone", () => {
+  // Production, 2026-09-22: 「EMA 对 Sogroya / Anzupgo / Keytruda … 给出正面意见」
+  // were joined into one event by the template's cosine.
+  const reading = frontierVectorReading([
+    { eventId: "7", cosine: 0.93, samePublisher: true },
+    { eventId: "8", cosine: 0.9, samePublisher: false },
+    { eventId: "9", cosine: 0.76, samePublisher: false },
+  ]);
+  assert.deepEqual(reading.strong, ["8"]);
+  assert.deepEqual(reading.ask.map((pair) => pair.eventId), ["7", "9"]);
 });

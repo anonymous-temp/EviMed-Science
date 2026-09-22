@@ -198,10 +198,13 @@ test("the hot list: the eligible by decayed heat, a snapshot every run, hot_vers
   const trial = await insertComposedItem(database, { sourceId: "nejm", title: "Trial", titleZh: "试验", registryIds: ["NCT01"], visibleAt: hoursAgo(20), timelineAt: hoursAgo(20) });
   await insertComposedItem(database, { sourceId: "reuters", sourceType: "media", title: "Trial coverage", registryIds: ["NCT01"], clusterKeys: [], visibleAt: hoursAgo(10), timelineAt: hoursAgo(10) });
   const alone = await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: "One outlet", visibleAt: hoursAgo(2), timelineAt: hoursAgo(2) });
-  // A safety notice is selected by rule (safety-bypass), so a regulator's
-  // notice alone is hot; a routine regulator update below the line is not.
+  // A regulator's notice alone is hot only when it is major — selected and
+  // scored in the top band; a lone safety alert below it has the page's own
+  // rail, and a routine regulator update below the line is not hot either.
   const notice = await insertComposedItem(database, { sourceId: "fda", sourceType: "regulator", evidenceType: "safety-notice", title: "FDA warning",
-    selected: true, selectedRule: "safety-bypass", safetyAlert: true, visibleAt: hoursAgo(30), timelineAt: hoursAgo(30) });
+    selected: true, selectedRule: "safety-bypass", safetyAlert: true, scoreTotal: 88, visibleAt: hoursAgo(30), timelineAt: hoursAgo(30) });
+  const recall = await insertComposedItem(database, { sourceId: "fda", sourceType: "regulator", evidenceType: "safety-notice", title: "Class I recall of a device",
+    selected: true, selectedRule: "safety-bypass", safetyAlert: true, scoreTotal: 70, visibleAt: hoursAgo(5), timelineAt: hoursAgo(5) });
   const routine = await insertComposedItem(database, { sourceId: "ema", sourceType: "regulator", evidenceType: "regulatory-decision",
     title: "EPAR revision", visibleAt: hoursAgo(3), timelineAt: hoursAgo(3) });
   const stale = await insertComposedItem(database, { sourceId: "fda", sourceType: "regulator", evidenceType: "safety-notice", title: "Old warning", visibleAt: hoursAgo(80), timelineAt: hoursAgo(80) });
@@ -221,6 +224,8 @@ test("the hot list: the eligible by decayed heat, a snapshot every run, hot_vers
   const routineEvent = await eventOf(database, routine.id);
   assert.ok(routineEvent, "the routine update has its own event");
   assert.ok(!first.ranking.some((entry) => entry.eventId === routineEvent.public_id), "an unselected regulator update alone is not hot");
+  const recallEvent = await eventOf(database, recall.id);
+  assert.ok(!first.ranking.some((entry) => entry.eventId === recallEvent.public_id), "a lone safety alert below the top band is not hot");
   assert.equal((await eventOf(database, stale.id)).status, "settled");
   const again = await events.computeHot();
   assert.equal(again.changed, false);
