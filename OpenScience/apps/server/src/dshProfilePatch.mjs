@@ -120,6 +120,12 @@ export const COMMUNITY_CLIENT_BUNDLE_ROWS = Object.freeze({
 });
 
 /**
+ * The DeepSeek models the kernel's adapter lists as taking images
+ * (`@deepseek-ai/dsh-llm-deepseek`'s default catalog, 0.1.5-rc.2).
+ */
+export const IMAGE_INPUT_MODELS = Object.freeze(new Set(["deepseek-flash", "deepseek-v4-flash-vision-exp"]));
+
+/**
  * Renders the patch.
  *
  * @param {ProfilePatchInput} input
@@ -153,6 +159,12 @@ export function renderProfilePatch(input) {
     "    models:",
     `      - id: ${yamlScalar(input.model)}`,
     `        contextWindow: ${Number(input.contextWindow) || 1000000}`,
+    // This list replaces the adapter's own catalog wholesale, and an entry
+    // that does not say it takes images is a text-only route: every image
+    // attached in the composer was refused at send with "does not support
+    // image input" (2026-09-22). Said for the models the adapter's default
+    // catalog marks image-capable.
+    ...(IMAGE_INPUT_MODELS.has(String(input.model)) ? ["        inputModalities: [text, image]"] : []),
     "",
     "- id: agent-default-model",
     "  config:",

@@ -273,6 +273,16 @@ test("an inserted row names the plugin it inserts", () => {
   }
 });
 
+test("the image-capable model is declared as taking images, and a text-only one is not", () => {
+  // The patch's model list replaces the adapter's catalog wholesale; an entry
+  // without inputModalities is a text-only route, and every image attached in
+  // the composer was refused at send (2026-09-22).
+  const flash = YAML.parse(renderProfilePatch(input)).find((row) => row.id === "llm-deepseek");
+  assert.deepEqual(flash.config.models, [{ id: "deepseek-flash", contextWindow: 1000000, inputModalities: ["text", "image"] }]);
+  const pro = YAML.parse(renderProfilePatch({ ...input, model: "deepseek-v4-pro" })).find((row) => row.id === "llm-deepseek");
+  assert.deepEqual(pro.config.models, [{ id: "deepseek-v4-pro", contextWindow: 1000000 }]);
+});
+
 test("the build-time smoke patch has the same shape as the one the control plane sends", async () => {
   // The image's smoke boots with a fixture instead of a real patch, because a
   // build has no project to render one for. That is only worth anything while
