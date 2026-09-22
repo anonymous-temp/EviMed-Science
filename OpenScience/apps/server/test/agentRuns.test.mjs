@@ -60,7 +60,10 @@ async function withApp(fn, overrides = {}) {
     await fn({ base, dataDir });
   } finally {
     await app.close();
-    await rm(dataDir, { recursive: true, force: true });
+    // Retried: a dispatch whose browser response was dropped finishes its
+    // ledger write in the background, and a write landing mid-removal made the
+    // removal fail with ENOTEMPTY under a loaded test run (2026-09-22).
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 }
 
