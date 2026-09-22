@@ -120,8 +120,9 @@ export const COMMUNITY_CLIENT_BUNDLE_ROWS = Object.freeze({
 });
 
 /**
- * The DeepSeek models the kernel's adapter lists as taking images
- * (`@deepseek-ai/dsh-llm-deepseek`'s default catalog, 0.1.5-rc.2).
+ * The DeepSeek models the kernel's adapter lists as taking images: the
+ * default catalog of `@deepseek-ai/dsh-llm-deepseek`, confirmed against 0.1.5-rc.2
+ * (re-read it when the pin moves).
  */
 export const IMAGE_INPUT_MODELS = Object.freeze(new Set(["deepseek-flash", "deepseek-v4-flash-vision-exp"]));
 
