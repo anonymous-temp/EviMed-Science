@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   FRONTIER_TEXT_GIVE_UP_MS,
+  FRONTIER_TEXT_AFTER_ATTEMPT_MS,
   FRONTIER_TEXT_HOLD_MS,
   FRONTIER_TEXT_RETRY_MS,
   FrontierPipeline,
@@ -17,6 +18,7 @@ import {
   frontierSafetyAlert,
   frontierSelectionDecision,
   frontierTextDecision,
+  frontierTextPendingHold,
   frontierTimelineAt,
   isCorrectionNotice,
   isUrgentSource,
@@ -24,7 +26,8 @@ import {
   usableSummary,
 } from "../src/frontierPipeline.mjs";
 
-const HOUR = 3_600_000;
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
 const journal = { id: "j-nejm", source_type: "journal", authority: 5, lane: "evidence", safety_feed: false, region: "US" };
 const smallJournal = { id: "j-small", source_type: "journal", authority: 3, lane: "evidence", safety_feed: false };
 const media = { id: "m-stat", source_type: "media", authority: 2, lane: "mixed", safety_feed: false };
@@ -136,6 +139,26 @@ test("the text step: take it when it is there, wait for it when it is worth wait
   assert.deepEqual(decide("pending", fresh, safety), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS });
   assert.deepEqual(decide("pending", withSummary, smallJournal), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a whole feed summary is enough to go on");
   assert.deepEqual(decide("pending", fresh, smallJournal, true), { action: "promote-hold", holdMs: FRONTIER_TEXT_HOLD_MS }, "a published item keeps asking");
+});
+
+test("a pending text is asked for again just after the plugin's own next try, backing off while the plugin is behind", () => {
+  const now = new Date("2026-09-22T12:00:00Z");
+  const at = (/** @type {number} */ offsetMs) => new Date(now.getTime() + offsetMs).toISOString();
+  const entry = { first_seen_at: new Date(now.getTime() - HOUR).toISOString(), summary_raw: "short", defects: ["short-summary"] };
+  // The first ask: the plugin schedules the fetch now and answers pending.
+  assert.deepEqual(frontierTextDecision({ status: "pending", entry, source: smallJournal, promoted: false, now, nextAttemptAt: at(0) }),
+    { action: "hold", holdMs: FRONTIER_TEXT_AFTER_ATTEMPT_MS }, "not twelve hours: the abstract is minutes away");
+  assert.deepEqual(frontierTextDecision({ status: "pending", entry, source: journal, promoted: false, now, nextAttemptAt: at(0) }),
+    { action: "promote-hold", holdMs: FRONTIER_TEXT_AFTER_ATTEMPT_MS }, "a published item gets its abstract as soon");
+  assert.deepEqual(frontierTextDecision({ status: "error", entry, source: smallJournal, promoted: false, now, nextAttemptAt: at(0) }),
+    { action: "hold", holdMs: FRONTIER_TEXT_RETRY_MS }, "an unanswered ask keeps its own retry");
+  assert.equal(frontierTextPendingHold(at(6 * HOUR), now), 6 * HOUR + FRONTIER_TEXT_AFTER_ATTEMPT_MS, "not indexed yet: after the plugin's retry");
+  assert.equal(frontierTextPendingHold(at(20 * HOUR), now), FRONTIER_TEXT_HOLD_MS, "never longer than the plan's wait");
+  assert.equal(frontierTextPendingHold(at(-40 * MINUTE), now), 40 * MINUTE, "a plugin 40 minutes behind is asked again in 40");
+  assert.equal(frontierTextPendingHold(at(-MINUTE), now), FRONTIER_TEXT_AFTER_ATTEMPT_MS, "never sooner than the grace");
+  assert.equal(frontierTextPendingHold(at(-30 * HOUR), now), FRONTIER_TEXT_HOLD_MS);
+  assert.equal(frontierTextPendingHold(null, now), FRONTIER_TEXT_HOLD_MS, "no time named: the plan's wait");
+  assert.equal(frontierTextPendingHold("not a time", now), FRONTIER_TEXT_HOLD_MS);
 });
 
 test("evidence type decided by code: registries, FDA actions, safety feeds, newsrooms, then PubMed's research types", () => {

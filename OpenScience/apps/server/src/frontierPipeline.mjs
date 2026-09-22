@@ -76,8 +76,16 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** How long an entry waits before the plugin is asked for its text again (plan §10.3.4). */
+/**
+ * The longest an entry waits before the plugin is asked for its text again
+ * (plan §10.3.4), and the wait when a pending answer names no next try.
+ */
 export const FRONTIER_TEXT_HOLD_MS = 12 * HOUR;
+/**
+ * A pending answer is asked again this long after the plugin's own next try
+ * (`next_attempt_at`) — its usual time to finish one — and never sooner.
+ */
+export const FRONTIER_TEXT_AFTER_ATTEMPT_MS = 5 * MINUTE;
 /** After this long from first sight an entry proceeds with what it has (`no-abstract`). */
 export const FRONTIER_TEXT_GIVE_UP_MS = 5 * DAY;
 /** A plugin that did not answer is asked again sooner than one that said "pending". */
@@ -240,15 +248,34 @@ export function isCorrectionNotice(entry) {
  * `promote-hold` — go on with what there is and ask again later (a source
  *   that never waits, or a usable feed summary);
  * `hold` — wait for the text.
- * @param {{ status: "available" | "pending" | "unavailable" | "error", entry: any, source: any, promoted: boolean, now: Date }} input
+ * @param {{ status: "available" | "pending" | "unavailable" | "error", entry: any, source: any, promoted: boolean, now: Date, nextAttemptAt?: string | null }} input
  * @returns {{ action: "promote" | "promote-hold" | "hold", holdMs: number }}
  */
-export function frontierTextDecision({ status, entry, source, promoted, now }) {
+export function frontierTextDecision({ status, entry, source, promoted, now, nextAttemptAt = null }) {
   const age = now.getTime() - new Date(entry.first_seen_at).getTime();
   if (status === "available" || status === "unavailable" || age >= FRONTIER_TEXT_GIVE_UP_MS) return { action: "promote", holdMs: 0 };
-  const holdMs = status === "error" ? FRONTIER_TEXT_RETRY_MS : FRONTIER_TEXT_HOLD_MS;
+  const holdMs = status === "error" ? FRONTIER_TEXT_RETRY_MS : frontierTextPendingHold(nextAttemptAt, now);
   if (promoted || isUrgentSource(source) || usableSummary(entry)) return { action: "promote-hold", holdMs };
   return { action: "hold", holdMs };
+}
+
+/**
+ * How long a pending text answer waits (plan §14.4). The plugin fetches a
+ * text when it is first asked for one — the first answer is always pending —
+ * and says when it tries (`next_attempt_at`), so the entry is asked again
+ * shortly after that try; until 2026-09-22 every pending answer waited the
+ * full 12 hours, and an article with no feed summary stayed unpublished that
+ * long though its abstract arrived within minutes. A try already overdue
+ * means the plugin is behind: wait as long again as it is late, which doubles
+ * the wait on each ask while it catches up.
+ * @param {string | null | undefined} nextAttemptAt @param {Date} now
+ */
+export function frontierTextPendingHold(nextAttemptAt, now) {
+  const next = nextAttemptAt ? Date.parse(nextAttemptAt) : Number.NaN;
+  if (!Number.isFinite(next)) return FRONTIER_TEXT_HOLD_MS;
+  const wait = next - now.getTime();
+  const holdMs = wait >= 0 ? wait + FRONTIER_TEXT_AFTER_ATTEMPT_MS : -wait;
+  return Math.min(FRONTIER_TEXT_HOLD_MS, Math.max(FRONTIER_TEXT_AFTER_ATTEMPT_MS, holdMs));
 }
 
 /**
@@ -998,7 +1025,7 @@ export class FrontierPipeline {
     }
     const snapshot = await this.database.query("SELECT item_id FROM evimed_frontier.item_texts WHERE item_id = $1", [itemId]);
     const promoted = snapshot.rowCount > 0;
-    const decision = frontierTextDecision({ status, entry, source, promoted, now });
+    const decision = frontierTextDecision({ status, entry, source, promoted, now, nextAttemptAt: status === "pending" ? text?.next_attempt_at : null });
     if (decision.action === "hold") {
       await this.#finishEntry(entry, "held", status === "error" ? "plugin-text-unreachable" : "text-pending",
         { itemId, holdUntil: new Date(now.getTime() + decision.holdMs) });
