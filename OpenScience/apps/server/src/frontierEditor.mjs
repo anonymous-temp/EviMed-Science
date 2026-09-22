@@ -471,12 +471,15 @@ export function verifyEdit(answer, item, modelInput) {
 
   /** @type {string[]} */
   let specialties = [];
-  if (!Array.isArray(value.specialties) || value.specialties.some((key) => !FRONTIER_SPECIALTIES.includes(key))) {
-    fail("specialties", "specialties 只能使用专科词表里的键。");
+  if (!Array.isArray(value.specialties)) {
+    fail("specialties", "specialties 必须是专科键的数组。");
   } else {
-    // Ordered by relevance; a fourth is a format slip, not a claim — the three
-    // most relevant are kept.
-    specialties = [...new Set(/** @type {string[]} */ (value.specialties))].slice(0, FRONTIER_MAX_SPECIALTIES);
+    // Ordered by relevance; a fourth, or a key outside the vocabulary, is a
+    // format slip, not a claim — the three most relevant known keys are kept
+    // rather than paying a rewrite (2026-09-22: format slips were most of the
+    // first answers sent back).
+    specialties = [...new Set(/** @type {unknown[]} */ (value.specialties))]
+      .filter((key) => FRONTIER_SPECIALTIES.includes(/** @type {any} */ (key))).map(String).slice(0, FRONTIER_MAX_SPECIALTIES);
   }
 
   let evidenceType = item.evidenceFixed?.type ?? null;
@@ -495,11 +498,8 @@ export function verifyEdit(answer, item, modelInput) {
       fail("entities", `entities.${kind} 必须是不超过 ${FRONTIER_TEXT_LIMITS.entityChars} 个字的名称数组。`);
       continue;
     }
-    if (list.length > FRONTIER_TEXT_LIMITS.entitiesPerKind) {
-      fail("entities", `entities.${kind} 最多 ${FRONTIER_TEXT_LIMITS.entitiesPerKind} 个。`);
-      continue;
-    }
-    entities[kind] = [...new Set(list.map((name) => name.replace(/\s+/g, " ").trim()))];
+    // Past the limit is a format slip: the first five, as the model ordered them.
+    entities[kind] = [...new Set(list.map((name) => name.replace(/\s+/g, " ").trim()))].slice(0, FRONTIER_TEXT_LIMITS.entitiesPerKind);
   }
 
   /** @type {{ impact: number, novelty: number, relevance: number } | null} */
@@ -508,11 +508,12 @@ export function verifyEdit(answer, item, modelInput) {
   const score = (/** @type {"impact" | "novelty" | "relevance"} */ dimension) => {
     const number = rawScores[dimension];
     const max = FRONTIER_SCORE_MAXIMA[dimension];
-    if (!Number.isInteger(number) || number < 0 || number > max) {
+    if (!Number.isInteger(number)) {
       fail("scores", `scores.${dimension} 必须是 0 到 ${max} 的整数。`);
       return null;
     }
-    return number;
+    // A 25 on a 0–20 scale says "the top" in the wrong unit: the scale's end.
+    return Math.min(max, Math.max(0, number));
   };
   const impact = score("impact");
   const novelty = score("novelty");
@@ -825,7 +826,7 @@ export class FrontierEditor {
       // paid call — the fields say which instruction to sharpen).
       firstPassFailures: /** @type {Record<string, number>} */ ({}),
       verification: { passed: 0, repaired: 0, "title-only": 0, pending: 0 },
-      numbersChecked: 0, numberFailures: 0, unitMismatches: 0,
+      numbersChecked: 0, numberFailures: 0, unitMismatches: 0, numberCheck: { first: 0, firstFailed: 0 },
       // The wave-two calls: clustering's adjudication, profiles, abstracts.
       sameEventCalls: 0, sameEventFailures: 0, profileCalls: 0, profileFailures: 0, profilePhrasesDropped: 0, abstractCalls: 0,
     };
@@ -983,6 +984,10 @@ export class FrontierEditor {
     }
     const first = verifyEdit(answer, item, modelInput);
     this.#countNumbers(first.numbers);
+    // The number check's own first-pass rate (plan §10.5.8 「复核一次通过率」):
+    // a first answer with a number the source does not have.
+    this.counters.numberCheck.first += 1;
+    if (first.numbers.missing.length > 0) this.counters.numberCheck.firstFailed += 1;
     if (!first.issues.length) {
       result.verification = "passed";
       result.output = first.output;

@@ -161,6 +161,7 @@ test("an edit that passes every check is published as written, with what the mod
   const editor = new FrontierEditor(config, { owner, callModel });
   const result = await editor.edit(item());
   assert.equal(result.verification, "passed");
+  assert.deepEqual(editor.counters.numberCheck, { first: 1, firstFailed: 0 });
   assert.equal(result.attempts, 1);
   assert.equal(result.output?.titleZh, "司美格鲁肽降低非糖尿病肥胖患者心血管事件 20%");
   assert.deepEqual(result.output?.scores, { impact: 26, novelty: 15, relevance: 17 });
@@ -181,9 +182,11 @@ test("a number the source does not state is sent back once, by name; a correct r
     () => answer({ summary_zh: "司美格鲁肽使心血管事件降低 25%，覆盖 1.8 万名患者。" }),
     () => answer(),
   ]);
-  const result = await new FrontierEditor(config, { owner, callModel }).edit(item());
+  const editor = new FrontierEditor(config, { owner, callModel });
+  const result = await editor.edit(item());
   assert.equal(result.verification, "repaired");
   assert.equal(result.attempts, 2);
+  assert.deepEqual(editor.counters.numberCheck, { first: 1, firstFailed: 1 }, "the number check's own first-pass count");
   const rewrite = calls[1].body.messages;
   assert.equal(rewrite.length, 4, "the prefix, the item, the first answer, the issues");
   assert.equal(rewrite[2].role, "assistant");
@@ -256,13 +259,21 @@ test("the verification's other checks: vocabularies, lengths, links, Chinese pro
   const issues = (overrides) => verifyEdit(answer(overrides), item(), modelInput).issues;
   assert.deepEqual(issues({}), []);
   assert.ok(issues({ lane: "ai" }).some((issue) => issue.includes("lane 必须是以下之一：evidence")));
-  assert.ok(issues({ specialties: ["cardiology", "astrology"] }).some((issue) => issue.includes("specialties")));
+  assert.ok(issues({ specialties: "cardiology" }).some((issue) => issue.includes("specialties")));
+  // Format slips are put right, not sent back (2026-09-22: most rewrites were these):
+  // a key outside the vocabulary is dropped, a sixth entity cut, a score past its scale clamped.
+  assert.deepEqual(issues({ specialties: ["cardiology", "astrology"] }), []);
+  assert.deepEqual(verifyEdit(answer({ specialties: ["cardiology", "astrology"] }), item(), modelInput).output.specialties, ["cardiology"]);
   assert.ok(issues({ evidence_type: "anecdote" }).some((issue) => issue.includes("evidence_type")));
   assert.ok(issues({ summary_zh: "司".repeat(161) }).some((issue) => issue.includes("太长")));
   assert.ok(issues({ reason_zh: "见 www.nejm.org 原文" }).some((issue) => issue.includes("链接")));
   assert.ok(issues({ reason_zh: "An important randomized trial for obesity care" }).some((issue) => issue.includes("中文")));
-  assert.ok(issues({ entities: { drugs: ["a", "b", "c", "d", "e", "f"], trials: [], orgs: [], diseases: [] } }).some((issue) => issue.includes("最多 5 个")));
-  assert.ok(issues({ scores: { impact: 31, novelty: 2, relevance: 2 } }).some((issue) => issue.includes("scores.impact")));
+  const six = { drugs: ["a", "b", "c", "d", "e", "f"], trials: [], orgs: [], diseases: [] };
+  assert.deepEqual(issues({ entities: six }), []);
+  assert.deepEqual(verifyEdit(answer({ entities: six }), item(), modelInput).output.entities.drugs, ["a", "b", "c", "d", "e"]);
+  assert.deepEqual(issues({ scores: { impact: 31, novelty: 2, relevance: 2 } }), []);
+  assert.deepEqual(verifyEdit(answer({ scores: { impact: 31, novelty: -1, relevance: 25 } }), item(), modelInput).output.scores,
+    { impact: 30, novelty: 0, relevance: 20 });
   assert.ok(issues({ scores: { impact: 3.5, novelty: 2, relevance: 2 } }).some((issue) => issue.includes("整数")));
   assert.ok(issues({ flags: ["sponsored"] }).some((issue) => issue.includes("flags")));
   assert.deepEqual(verifyEdit(answer({ flags: ["preprint", "press-release"] }), item(), modelInput).output.flags, ["press-release"],

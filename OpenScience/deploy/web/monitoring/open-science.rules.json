@@ -306,14 +306,14 @@
         },
         {
           "alert": "FrontierFirstPassLow",
-          "expr": "sum(increase(open_science_frontier_edit_calls_total{kind=\"call\"}[24h])) > 20 and 1 - sum(increase(open_science_frontier_edit_calls_total{kind=\"rewrite\"}[24h])) / clamp_min(sum(increase(open_science_frontier_edit_calls_total{kind=\"call\"}[24h])), 1) < 0.85",
+          "expr": "sum(increase(open_science_frontier_edit_number_check_total[24h])) > 20 and sum(increase(open_science_frontier_edit_number_check_total{outcome=\"first-fail\"}[24h])) / clamp_min(sum(increase(open_science_frontier_edit_number_check_total[24h])), 1) > 0.15",
           "for": "1h",
           "labels": {
             "severity": "warning"
           },
           "annotations": {
             "summary": "Under 85% of the frontier edits pass the number check first time",
-            "description": "More than 15% of the day's edit answers were sent back for a rewrite; the first-pass failure counters name the field (plan 10.5.8)."
+            "description": "More than 15% of the day's first edit answers carried a number the source does not have (plan 10.5.8's 复核一次通过率); edit_first_pass_failures_total names the other fields sent back."
           }
         },
         {
