@@ -188,7 +188,7 @@
       }
     },
     "geo-content": {
-      "title": "答案引擎内容优化",
+      "title": "GEO 答案引擎优化",
       "category": "写作与传播",
       "description": "先测量各消费级答案引擎当前如何回答一组真实问题，再产出可被后续测量对照的证据绑定内容块：结论、依据、适用条件、可解析引文、作者资质与 JSON-LD。",
       "starterPrompts": [
