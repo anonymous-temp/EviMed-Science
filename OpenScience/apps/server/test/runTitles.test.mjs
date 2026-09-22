@@ -164,6 +164,66 @@ test("a researcher's title is locked against automatic ones, and a question is f
   });
 });
 
+test("a conversation is put away or removed by a flag on the ledger, and the lists leave it out", async () => {
+  await withStore(async ({ store, project, binding, states }) => {
+    const run = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "shelf_1", question: "他汀与肌病" }, async () => ({ accepted: true }));
+    const shelved = await store.recordRunLabels(project, run.id, { archived: true });
+    assert.equal(shelved.archived, true);
+    assert.equal(states.at(-1).archived, true, "putting a run away is published like any state change");
+    // Everything else about the run stays as it was.
+    assert.deepEqual([shelved.id, shelved.question, shelved.status], [run.id, "他汀与肌病", run.status]);
+    const back = await store.recordRunLabels(project, run.id, { archived: false });
+    assert.equal(back.archived, false, "archiving is undone by the same flag");
+    const removed = await store.recordRunLabels(project, run.id, { deleted: true });
+    assert.equal(removed.deleted, true);
+    // The ledger still has the run: what it spent, wrote and was told stays readable by id.
+    const listed = (await store.list(project)).find((item) => item.id === run.id);
+    assert.deepEqual([listed.deleted, listed.archived], [true, false]);
+    await assert.rejects(store.recordRunLabels(project, run.id, { archived: "yes" }), { code: "invalid_payload" });
+    await assert.rejects(store.recordRunLabels(project, run.id, { deleted: false }), { code: "invalid_payload" });
+  });
+});
+
+test("the run routes take archived or deleted one at a time, and the desk and the shelf list different runs", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-run-shelf-route-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false });
+  const address = await app.listen(0, "127.0.0.1");
+  const base = `http://127.0.0.1:${address.port}`;
+  const headers = { "X-Open-Science-Project": "default", "Content-Type": "application/json" };
+  const ids = async (query = "") => ((await (await fetch(`${base}/api/agent-runs${query}`, { headers })).json()).data).map((run) => run.id);
+  try {
+    for (const [session, dispatch] of [["ses_desk", "shelf_a"], ["ses_shelf", "shelf_b"]]) {
+      assert.equal((await fetch(`${base}/api/research-sessions/${session}`, { method: "PUT", headers, body: JSON.stringify({ mode: "open-domain" }) })).status, 200);
+      const dispatched = await fetch(`${base}/api/agent-runs/dispatch`, { method: "POST", headers, body: JSON.stringify({ sessionId: session, dispatchId: dispatch, text: `问题 ${dispatch}` }) });
+      assert.equal(dispatched.status, 202);
+    }
+    const [first, second] = await ids();
+    const archived = await fetch(`${base}/api/agent-runs/${second}`, { method: "PATCH", headers, body: JSON.stringify({ archived: true }) });
+    assert.equal(archived.status, 200);
+    assert.equal((await archived.json()).data.archived, true);
+    assert.deepEqual(await ids(), [first], "the desk no longer lists it");
+    assert.deepEqual(await ids("?archived=1"), [second], "the shelf does");
+    for (const [label, payload, status] of [
+      ["two fields at once", { title: "x", archived: true }, 400],
+      ["a non-boolean archived", { archived: "yes" }, 400],
+      ["deleted set to false", { deleted: false }, 400],
+    ]) {
+      const response = await fetch(`${base}/api/agent-runs/${second}`, { method: "PATCH", headers, body: JSON.stringify(payload) });
+      assert.equal(response.status, status, label);
+    }
+    const restored = await fetch(`${base}/api/agent-runs/${second}`, { method: "PATCH", headers, body: JSON.stringify({ archived: false }) });
+    assert.equal((await restored.json()).data.archived, false);
+    assert.deepEqual(await ids(), [first, second]);
+    const removed = await fetch(`${base}/api/agent-runs/${first}`, { method: "PATCH", headers, body: JSON.stringify({ deleted: true }) });
+    assert.equal(removed.status, 200);
+    assert.deepEqual(await ids(), [second], "a deleted run is on no list");
+    assert.deepEqual(await ids("?archived=1"), [], "not even the shelf");
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
 test("a run adopted before its first message could be read learns what it asked, from the person's message only", async () => {
   const history = [
     // Injected context is a user-role message too; the sender is what counts.

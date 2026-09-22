@@ -65,11 +65,11 @@ const WHAT_STOPS_IT = {
   // route and not a method — so the pairing is the path, and the hosted profile
   // also disables the row that mounts it.
   "ui-open-in-app": { hostRoute: "/open-in-app/" },
-  // Both read files through the `workspaceFiles` namespace: the tab lists a
-  // directory, and the preview calls read/readAll/readRelated on what the tab
-  // opened.
-  "ui-sidebar-files": { namespace: "workspaceFiles" },
-  "ui-sidebar-documentpreview": { namespace: "workspaceFiles" },
+  // `ui-sidebar-files` and `ui-sidebar-documentpreview` were paired with the
+  // `workspaceFiles` namespace until 2026-09-22. They are mounted again — the
+  // kernel's own file tree and previews — and what bounds them is not a ban
+  // but the proxy's path check (`runtimeUiWorkspacePathRefusal`), asserted in
+  // runtimeUiPolicy.test.mjs.
   // The browser half of dynamic Cordis packages: every call it makes is a
   // `dynamicCordisRunner/*` method, refused wholesale. Unmounted so it stops
   // syncing a manifest into two 403s per session open.
@@ -83,18 +83,10 @@ const WHAT_STOPS_IT = {
   // "encoded or malformed native API paths ..." and "the session-log ZIP route
   // ..." in runtimeUiPolicy.test.mjs).
   "session-log-download": { nonMethodApiRoute: "/api/session.export" },
-  // Operator-only rather than hidden, and the reason is worth stating without
-  // flattering it: this removes the affordance, not the data. The kernel
-  // streams the prompt, the reminders and the raw tool JSON to the browser over
-  // the session socket whether or not a tab draws them, so devtools still show
-  // them. Not sending them is upstream of this codebase. What this buys is that
-  // a researcher does not meet the product's English prompts by clicking a tab
-  // called 「轨迹」; what it does not buy is confidentiality.
-  "ui-trajectory": {
-    cosmetic: "the trajectory tab draws frames the client already received over the session socket, so hiding it stops "
-      + "accidental exposure and not a determined reader; the data stops flowing only if the kernel stops sending it, "
-      + "which is upstream. Operators keep it because it is how a run is diagnosed.",
-  },
+  // `ui-trajectory` was operator-only here until 2026-09-22, with the honest
+  // note that hiding it removed the affordance and not the data (the kernel
+  // streams the frames over the session socket whether or not a tab draws
+  // them). It is mounted for everyone now, as the product's 运行 tab.
 };
 
 const namespaces = new Set(RUNTIME_UI_DENIED_NAMESPACES);

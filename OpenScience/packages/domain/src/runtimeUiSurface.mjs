@@ -53,6 +53,10 @@
  *                running kernel
  * - `messageFeedback` the upstream feedback channel; nothing about a hosted
  *                run leaves this deployment except through the gateways
+ *
+ * `workspaceFiles` is not here: the kernel's file tree and previews read
+ * through it, and the proxy holds its paths to the workspace instead
+ * (`runtimeUiWorkspacePathRefusal`).
  */
 export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   "evimedPlugins",
@@ -71,23 +75,20 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   // more than one written after it ships.
   "cordis",
   "messageFeedback",
-  // Arrived together in 0.1.5 with `fileUploads`, reachable before anyone had
-  // an opinion about them, because this is a deny list and silence is consent:
+  // `sessionFeedback` arrived in 0.1.5 with `fileUploads` and `workspaceFiles`,
+  // reachable before anyone had an opinion about it, because this is a deny
+  // list and silence is consent. It is `messageFeedback` renamed for the
+  // session scope -- the same upstream channel, banned for the same reason.
   //
-  // - `workspaceFiles` reads files. Its own documentation says "absolute path
-  //   or path relative to the workspace root; files outside it are allowed",
-  //   and the code agrees: `read`, `readAll`, `readBytes` and `stat` go through
-  //   `locateFile`, which resolves with the workspace as *cwd* and never calls
-  //   the `confine` helper sitting next to it -- only `list` does. `readRelated`
-  //   then re-enters `readAll` from a resolved dirname. That is the
-  //   `directoryPicker` ban under another name, and this container's `DSH_HOME`
-  //   is a writable volume.
-  // - `sessionFeedback` is `messageFeedback` renamed for the session scope --
-  //   the same upstream channel, banned for the same reason.
-  //
-  // The row behind the first stays mounted: `dsh-client-ui-deliverables`
-  // requires `workspaceFiles`, so there is no composition-level answer and this
-  // list is the whole of the defence -- which is the case it was written for.
+  // `workspaceFiles` stood beside it until 2026-09-22. It is what the
+  // kernel's own file tree and document previews read through, and refusing
+  // it wholesale is what took the preview away (「预览也没了」). Its `list`
+  // confines the path to the workspace; `read`, `readAll`, `readBytes`,
+  // `stat` and `readRelated` resolve it with the workspace as cwd and never
+  // confine it ("files outside it are allowed", upstream's own words). So the
+  // namespace is open and those five methods are held to the workspace by
+  // the proxy instead (`runtimeUiWorkspacePathRefusal`) -- the same shape as
+  // the upload route, whose size the proxy holds.
   //
   // `fileUploads` was the third until 2026-09-22 and is the composer's
   // paperclip: a file attached to a message. It writes nowhere a browser can
@@ -99,9 +100,79 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   // where researchers type with no way to hand over a file (2026-09-22,
   // 「文件上传不了」). The raw route's size is held by the proxy
   // (`maxFileBytes`), not here.
-  "workspaceFiles",
   "sessionFeedback",
 ]);
+
+/**
+ * The file-reading methods whose `path` the kernel resolves against the
+ * workspace but never confines to it. The proxy refuses a call whose path
+ * would leave the workspace before it reaches the kernel; `list` confines
+ * itself upstream and is held here too, so the rule reads the same for the
+ * whole namespace.
+ */
+export const RUNTIME_UI_WORKSPACE_PATH_METHODS = Object.freeze([
+  "workspaceFiles/list",
+  "workspaceFiles/read",
+  "workspaceFiles/readAll",
+  "workspaceFiles/readBytes",
+  "workspaceFiles/readRelated",
+  "workspaceFiles/stat",
+]);
+
+const workspacePathMethods = new Set(RUNTIME_UI_WORKSPACE_PATH_METHODS);
+
+/** A path segment that would climb: `..`, in any of the spellings a resolver reads. */
+const CLIMBING_SEGMENT = /^(?:\.\.|%2e%2e|%2e\.|\.%2e)$/i;
+
+/**
+ * Whether a path the browser named stays inside the workspace root the
+ * runtime was started with.
+ *
+ * Absolute paths must be the root or under it; relative ones are resolved by
+ * the kernel against that root, so they only have to avoid climbing. A
+ * backslash is refused outright: no path in this container is spelt with
+ * one, and a resolver that treated it as a separator would read a different
+ * file from the one this checked.
+ *
+ * @param {unknown} value
+ * @param {string} workspaceRoot an absolute path, as the runtime reports it
+ * @param {{ relativeOnly?: boolean }} [options] `readRelated`'s second path is
+ *   documented relative to the first, so an absolute one there is a disguise
+ * @returns {boolean}
+ */
+export function isRuntimeUiWorkspacePath(value, workspaceRoot, { relativeOnly = false } = {}) {
+  if (typeof value !== "string" || !value || value.length > 4096 || value.includes("\0") || value.includes("\\")) return false;
+  const segments = value.split("/");
+  if (segments.some((segment) => CLIMBING_SEGMENT.test(segment))) return false;
+  if (!value.startsWith("/")) return true;
+  if (relativeOnly) return false;
+  const root = typeof workspaceRoot === "string" && workspaceRoot.startsWith("/") ? workspaceRoot.replace(/\/+$/, "") : "";
+  if (!root) return false;
+  return value === root || value.startsWith(`${root}/`);
+}
+
+/**
+ * Why a workspace-file call must not be forwarded, or `null` when it may.
+ *
+ * `payload` is the native RPC's payload on either transport
+ * (`{ args: { workspaceFileScopeId, path, ... } }`); a call that does not
+ * carry its path in that shape is refused rather than guessed at.
+ *
+ * @param {string | null | undefined} method
+ * @param {unknown} payload
+ * @param {string} workspaceRoot
+ * @returns {string | null}
+ */
+export function runtimeUiWorkspacePathRefusal(method, payload, workspaceRoot) {
+  if (!method || !workspacePathMethods.has(String(method))) return null;
+  const args = payload && typeof payload === "object" && !Array.isArray(payload) ? /** @type {any} */ (payload).args : null;
+  if (!args || typeof args !== "object" || Array.isArray(args)) return "a workspace-file call must carry its arguments";
+  if (!isRuntimeUiWorkspacePath(args.path, workspaceRoot)) return "the path is outside this project's workspace";
+  if (method === "workspaceFiles/readRelated" && !isRuntimeUiWorkspacePath(args.relativePath, workspaceRoot, { relativeOnly: true })) {
+    return "the related path is outside this project's workspace";
+  }
+  return null;
+}
 
 /**
  * Methods denied one by one, inside namespaces that are otherwise the product.

@@ -1,61 +1,53 @@
 /**
- * Two surfaces the kernel already has seats for, and one job each:
+ * What a finished research run hands back, said in the conversation: the
+ * delivery card above the composer, and the right column opening on the
+ * kernel's own file tree the first time a run writes a report.
  *
- *  - **运行**, an entry in the conversation's own view ring
- *    (`conversation.view`), beside 对话: what this research run is made of —
- *    how far it is, what it produced, whether each conclusion checked out
- *    against its source, and what it stands on.
- *  - **文件**, the right column's single tab: the files this conversation
- *    produced, opened in the product's reader.
+ * Until 2026-09-22 this body also drew a 运行 view of its own in the
+ * conversation's view ring and a 文件 tab of its own in the right column. Both
+ * went on the owner's ruling that the process view is the kernel's
+ * (「运行那部分咋没有用 dsh 那种有图的那种呢」, 「预览也没了」): the kernel's
+ * trajectory view — a timing overview over the per-step ledger, with a record
+ * inspector — is the 运行 tab now (relabelled by the language pack), and the
+ * kernel's file tree with its document previews is the right column. What the
+ * product still has to say about a run that the kernel cannot — that it was
+ * delivered, how many of its conclusions checked out against their sources,
+ * and where the report is — is the card.
  *
  * Hidden knowledge, read off the pinned 0.1.5-rc.2 client:
  *
- *  - `conversation.view` is a list slot whose entries ARE the tab strip in the
- *    session header (`viewTabs()` in `ui-conversation`'s client reads
- *    `options.id` and `options.label` off each entry, label falling back to the
- *    id). `ui-chat` holds `chat` at order 0 and stays the default, so an entry
- *    of ours adds a tab rather than taking one. Only the selected view renders.
- *  - The right column's default page depends on the number of registered GUIDE
- *    entries, not on tab types: exactly one opens that page directly, while
- *    zero or several open the guide — whose title is 「开始」 and whose body is
- *    a compass with one capsule per entry. Four entries are why every session
- *    opened onto a launcher that launched nothing, and why 「+ 新标签页」 read
- *    as a way to start work while a sub-task was running. One entry, and the
- *    panel is the file list.
+ *  - `conversation.input.dock` is a list seat directly above the composer
+ *    card, full width. The composer itself is `--dsh-composer-card-max-width`
+ *    wide and centred, so an occupant that does not say its own width sits at
+ *    the frame's left edge, beside a centred composer (the misaligned chip of
+ *    2026-09-22). The kernel's own queue dock holds itself to
+ *    `calc(var(--dsh-composer-card-max-width) - 2 * var(--dsh-composer-dock-inset))`
+ *    with `margin: 0 auto`; so does this.
+ *  - The right column's default page is the one registered guide entry, when
+ *    there is exactly one. The kernel's file tree (`ui-sidebar-files`) is that
+ *    entry; a second one — the product's own tab used to be it — turns the
+ *    default into the kernel's 「开始」 compass.
  *  - `ctx.sidebarRight.openTab(kind)` acts through the mounted seat and throws
  *    when none is mounted, so an automatic open is attempted and retried on the
- *    next change rather than assumed.
+ *    next change rather than assumed. The kernel's file tree is kind `files`.
  *
  * Everything drawn comes from the shell: the bound run's state (C9 `run-state`,
- * with the run's delivered files) and the claims and sources read from its
- * evidence matrix (`evidence`). The frame reads no file itself; opening one is
- * a message to the shell, whose reader goes through the control plane's own
- * file boundary.
+ * with the run's delivered files) and the claims read from its evidence matrix
+ * (`evidence`). Opening the report is a message to the shell, whose reader
+ * marks each conclusion ✓/⚠ and goes through the control plane's own file
+ * boundary.
  *
  * @module @evimed/harness-port/runtime-ui-panels
  */
 
 import { frameStyles } from './runtimeUiStyles.mjs';
-import { childLinkFor, liveRunFor, toolviewText, verdictText } from './runtimeUiToolviews.mjs';
+import { liveRunFor, toolviewText, verdictText } from './runtimeUiToolviews.mjs';
 
-/** Services this body needs outright: the slot registry and the sessions (for the child link). */
+/** Services this body needs outright: the slot registry and the sessions. */
 export const inject = ['slots', 'sessions'];
 
-/**
- * The right column's tab types. One, deliberately: a second guide entry turns
- * the column's default page into the kernel's empty compass.
- * @returns {{ id: string, title: string, description: string }[]}
- */
-export function panelTabs() {
-  return [
-    { id: 'evimed-files', title: '文件', description: '这次对话产出的报告、证据矩阵与附件' },
-  ];
-}
-
-/** The view-ring entry this body adds, beside the kernel's own 对话. */
-export function runViewTab() {
-  return { id: 'evimed-run', label: '运行', order: 5 };
-}
+/** The kernel's own file-tree tab, which the column opens on a delivered report. */
+export const KERNEL_FILES_TAB = 'files';
 
 /**
  * A run's state in the words every surface uses for it.
@@ -85,83 +77,6 @@ export function artifactKind(path) {
   if (/report.*\.(md|docx|pdf|html)$/.test(name)) return { kind: 'report', label: '报告' };
   if (/\.(md|docx|pdf|html)$/.test(name)) return { kind: 'document', label: '文档' };
   return { kind: 'file', label: '文件' };
-}
-
-/**
- * The run, its phases, its counts and each piece of work.
- *
- * The phase reads as the furthest one reached rather than the latest labelled
- * call, and a phase nothing happened in is left out: a delivered run used to
- * read 「核验」 because a verification call happened to be last, and 「筛选」 read
- * 0 on every run because two tools carry it.
- *
- * @param {any} live @param {number} now @param {any} kit
- */
-export function progressModel(live, now, kit) {
-  if (!live) return null;
-  const progress = live.progress && typeof live.progress === 'object' ? live.progress : {};
-  const vocabulary = kit.vocabulary || {};
-  const phaseLabels = vocabulary.phaseLabels || {};
-  const counts = progress.phaseCounts && typeof progress.phaseCounts === 'object' ? progress.phaseCounts : {};
-  // The control plane already decides both (`summarizeRunPhases`): which
-  // phases a run reached, in order, and the furthest of them. Deriving them a
-  // second time here is how the frame and the ledger came to disagree about
-  // what 「当前」 meant; an older control plane that sends neither still reads
-  // right, because the counts say the same thing.
-  const order = Array.isArray(vocabulary.phases) ? vocabulary.phases : [];
-  const reported = Array.isArray(progress.reachedPhases) ? progress.reachedPhases.filter((/** @type {string} */ key) => order.includes(key)) : null;
-  const reached = reported && reported.length ? reported : order.filter((/** @type {string} */ key) => Number(counts[key]) > 0);
-  const furthest = typeof progress.currentPhase === 'string' && reached.includes(progress.currentPhase)
-    ? progress.currentPhase
-    : (reached.length ? reached[reached.length - 1] : null);
-  const phases = reached.map((/** @type {string} */ key) => ({
-    key,
-    label: phaseLabels[key] ?? key,
-    count: Number(counts[key]) || 0,
-    current: key === furthest && live.state === 'running',
-  }));
-  const started = typeof progress.startedAt === 'string' ? Date.parse(progress.startedAt) : NaN;
-  const running = live.state === 'running';
-  const ended = running ? now : (typeof progress.updatedAt === 'string' ? Date.parse(progress.updatedAt) : NaN);
-  const elapsed = Number.isFinite(started) && Number.isFinite(ended) && ended >= started ? kit.formatDuration(ended - started) : null;
-  const usage = progress.usage && typeof progress.usage === 'object' ? progress.usage : live.usage;
-  const cost = usage && Number.isFinite(usage.costCny) && usage.costCny > 0 ? `约 ¥${Number(usage.costCny).toFixed(2)}` : null;
-  const sources = progress.sources && typeof progress.sources === 'object' ? progress.sources : null;
-  const claims = progress.claims && typeof progress.claims === 'object' ? progress.claims : null;
-  const statusWords = toolviewText().status;
-  const childWords = toolviewText().childState;
-  const children = Array.isArray(progress.children) ? progress.children : [];
-  const deliverables = (Array.isArray(progress.deliverables) ? progress.deliverables : [])
-    .filter((/** @type {any} */ item) => item && item.id)
-    .map((/** @type {any} */ item) => {
-      const child = children.filter((/** @type {any} */ entry) => entry && entry.deliverableId === item.id).at(-1)
-        ?? (item.childSessionId ? children.find((/** @type {any} */ entry) => entry && entry.childSessionId === item.childSessionId) : null);
-      const status = String(item.status ?? '');
-      return {
-        id: String(item.id),
-        title: String(item.title || item.id),
-        capability: kit.capabilityTitle(item.capability) ?? null,
-        status: statusWords[status] ?? null,
-        tone: ['accepted', 'delivered'].includes(status) ? 'ok' : ['rejected', 'failed'].includes(status) ? 'warn' : status === 'planned' ? 'muted' : 'active',
-        attempts: Number(item.attempts) || 0,
-        verdict: item.lastVerdict ? verdictText({ verdict: item.lastVerdict, mustFix: item.mustFixCount }) : null,
-        childSessionId: typeof (child?.childSessionId ?? item.childSessionId) === 'string' ? (child?.childSessionId ?? item.childSessionId) : null,
-        childState: child && childWords[child.state] ? childWords[child.state] : null,
-      };
-    });
-  return {
-    title: typeof live.title === 'string' && live.title.trim() ? live.title.trim() : null,
-    state: runStateText(live),
-    elapsed,
-    cost,
-    phases,
-    sources: sources && Number.isFinite(sources.included)
-      // `searched` counts search calls, not records found: 「次」, never 「篇」.
-      ? `检索 ${Number(sources.searched) || 0} 次 · 纳入 ${Number(sources.included) || 0} 篇 · 全文 ${Number(sources.fullText) || 0} 篇` : null,
-    claims: claims && Number.isFinite(claims.total) && claims.total > 0
-      ? `结论 ${claims.total} 条 · 已核对 ${Number(claims.verified) || 0} 条` : null,
-    deliverables,
-  };
 }
 
 /**
@@ -234,24 +149,6 @@ export function evidenceModel(evidence, live) {
 }
 
 /**
- * The sources the report's conclusions cite.
- * @param {any} evidence @param {any} live @param {any} kit
- */
-export function sourcesModel(evidence, live, kit) {
-  const labels = (kit.vocabulary && kit.vocabulary.sourceTypeLabels) || {};
-  const list = evidence && Array.isArray(evidence.sources) && !(live && evidence.runId && evidence.runId !== live.runId) ? evidence.sources : [];
-  return {
-    sources: list.filter((/** @type {any} */ source) => source && (source.title || source.identifier)).map((/** @type {any} */ source) => ({
-      title: String(source.title || source.identifier),
-      identifier: typeof source.identifier === 'string' && source.identifier !== source.title ? source.identifier : null,
-      url: typeof source.url === 'string' && /^https?:\/\//.test(source.url) ? source.url : null,
-      type: typeof source.sourceType === 'string' && labels[source.sourceType] ? labels[source.sourceType] : null,
-      claims: Number(source.claims) || 0,
-    })),
-  };
-}
-
-/**
  * What a finished run hands back, in the six facts a reader acts on.
  *
  * This is the card at the end of the turn that delivered: today a delivered
@@ -290,26 +187,35 @@ export function deliveryModel(live, evidence, now, kit) {
 }
 
 /**
+ * The width of anything that sits in the composer's column above or below
+ * the card: the card's own maximum, less the kernel's dock inset, centred.
+ * Read off the kernel's queue dock; an occupant without it lands at the
+ * frame's left edge beside a centred composer.
+ */
+export function composerColumnStyle() {
+  return {
+    width: '100%',
+    maxWidth: 'calc(var(--dsh-composer-card-max-width, 952px) - 2 * var(--dsh-composer-dock-inset, 8px))',
+    margin: '0 auto',
+    boxSizing: 'border-box',
+  };
+}
+
+/**
  * @param {any} ctx Native Cordis client context.
  * @param {any} [_config]
- * @param {any} target Browser global.
+ * @param {any} _target Browser global (unused: the card reads nothing off the window).
  * @param {(id: string) => any} [_require]
  * @param {any} [kit] The frame kit.
  */
-export function apply(ctx, _config, target = globalThis, _require = undefined, kit = undefined) {
+export function apply(ctx, _config, _target = globalThis, _require = undefined, kit = undefined) {
   if (!kit || !kit.ours || !kit.h || !kit.react) return;
   const h = kit.h;
   const React = kit.react;
-  const { card, line, title, quiet, pill, button, section, empty, secondary } = frameStyles();
-  const ChildLink = childLinkFor(ctx, kit, target);
-  const tabs = panelTabs();
-  const view = runViewTab();
-  const pane = { ...secondary, padding: '12px 16px 24px', overflowY: 'auto', height: '100%', boxSizing: 'border-box', color: 'var(--dsw-alias-label-secondary)' };
-  // The view fills the conversation body, which is wider than the right
-  // column; the reading column is held to the transcript's own width so the
-  // two tabs do not read as two different pages.
-  const viewPane = { ...pane, padding: '16px 24px 48px' };
-  const column = { maxWidth: '748px', margin: '0 auto' };
+  const { card, line, title, quiet, pill, button } = frameStyles();
+  // `toolviewText` and `verdictText` are what the transcript's tool cards say;
+  // the card below reads the run in the same words they do.
+  void toolviewText; void verdictText;
 
   function useLive() {
     const runState = kit.useFrameState((/** @type {any} */ state) => state.runState);
@@ -318,112 +224,10 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   }
   function useEvidence() { return kit.useFrameState((/** @type {any} */ state) => state.evidence); }
 
-  /** @param {{ text: string }} props */
-  const Empty = ({ text }) => h('div', { style: empty }, text);
-
   /** @param {string} runId @param {string} path @param {string | null} [anchor] */
   const openArtifact = (runId, path, anchor = null) => {
     kit.hub.send('open-artifact', { runId, path, ...(anchor ? { anchor } : {}) });
   };
-
-  /**
-   * The files of a run, as rows. Shared by the view and the right column; the
-   * group's own title appears only when there is more than one, because with
-   * one piece of work it just repeats the run's title.
-   */
-  /** @param {{ model: any }} props */
-  const FileGroups = ({ model }) => h('div', null, model.groups.map((/** @type {any} */ group) => h('div', { key: group.deliverableId ?? '', style: { marginBottom: '8px' } },
-    model.groups.length > 1 ? h('div', { style: section }, group.title) : null,
-    group.files.map((/** @type {any} */ file) => h('div', { key: file.path, style: card, 'data-artifact': file.path },
-      h('div', { style: line },
-        h('span', { style: { ...pill(file.kind === 'report' ? 'active' : 'muted'), fontWeight: 500 } }, file.label),
-        h('span', { style: { ...quiet, color: 'var(--dsw-alias-label-secondary)', flex: '1 1 auto' }, title: file.path }, file.name),
-        file.verified ? null : h('span', { style: pill('warn'), title: '这件文件没有通过交付核对，内容照常保留' }, '未核对'),
-        h('button', { type: 'button', style: button, onClick: () => openArtifact(model.runId, file.path) }, '打开')))))));
-
-  /**
-   * The 运行 view: everything about this conversation's research run, in the
-   * order a reader asks for it — how it is going, what it is producing,
-   * whether the conclusions check out, and what they stand on.
-   */
-  function RunView() {
-    const live = useLive();
-    const evidence = useEvidence();
-    const [now, setNow] = React.useState(() => Date.now());
-    const [onlyAttention, setOnlyAttention] = React.useState(false);
-    const running = live?.state === 'running';
-    React.useEffect(() => {
-      if (!running || typeof target.setInterval !== 'function') return undefined;
-      const timer = target.setInterval(() => setNow(Date.now()), 1000);
-      return () => target.clearInterval(timer);
-    }, [running]);
-    const model = kit.guarded('run view', () => progressModel(live, now, kit));
-    if (!model) {
-      return h('div', { style: viewPane, 'data-evimed-view': 'run' },
-        h('div', { style: column }, h(Empty, { text: '这次对话还没有研究任务。提出一个研究问题，这里会显示它的进展、产出和核对结果。' })));
-    }
-    const claims = kit.guarded('run view claims', () => evidenceModel(evidence, live));
-    const sources = kit.guarded('run view sources', () => sourcesModel(evidence, live, kit));
-    const files = kit.guarded('run view files', () => artifactModel(live));
-    const shownClaims = claims && onlyAttention ? claims.claims.filter((/** @type {any} */ claim) => claim.tone === 'warn') : claims?.claims ?? [];
-    return h('div', { style: viewPane, 'data-evimed-view': 'run' }, h('div', { style: column },
-      h('div', { style: line },
-        model.title ? h('span', { style: { ...title, flex: '1 1 auto', whiteSpace: 'normal' } }, model.title) : null,
-        h('span', { style: { ...pill(model.state.tone), marginLeft: 'auto' } }, model.state.text)),
-      h('div', { style: quiet }, [model.elapsed ? `用时 ${model.elapsed}` : null, model.cost].filter(Boolean).join(' · ')),
-      model.phases.length ? h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '4px 12px', margin: '10px 0 0' } },
-        model.phases.map((/** @type {any} */ phase) => h('span', {
-          key: phase.key, 'data-phase': phase.key, 'data-current': phase.current || undefined,
-          style: { color: phase.current ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)', fontWeight: phase.current ? 600 : 400 },
-        }, `${phase.label} ${phase.count}`))) : null,
-      model.sources || model.claims ? h('div', { style: { ...quiet, whiteSpace: 'normal', marginTop: '4px' } }, [model.sources, model.claims].filter(Boolean).join(' · ')) : null,
-
-      h('div', { style: section }, `这次要交付的 · ${model.deliverables.length} 件`),
-      model.deliverables.length
-        ? model.deliverables.map((/** @type {any} */ item) => h('div', { key: item.id, style: card, 'data-deliverable': item.id },
-          h('div', { style: line },
-            h('span', { style: { ...title, flex: '1 1 auto', whiteSpace: 'normal' } }, item.title),
-            item.status ? h('span', { style: pill(item.tone) }, item.status) : null),
-          h('div', { style: { ...line, marginTop: '2px' } },
-            h('span', { style: quiet }, [item.capability, item.childState ? `子任务${item.childState}` : null, item.attempts ? `第 ${item.attempts} 次提交` : null].filter(Boolean).join(' · ')),
-            item.verdict ? h('span', { style: pill(item.verdict.tone) }, item.verdict.text) : null,
-            item.childSessionId ? h(ChildLink, { childSessionId: item.childSessionId }) : null)))
-        : h('div', { style: quiet }, '计划写好后，要交付的东西会列在这里。'),
-
-      claims && claims.claims.length ? h('div', null,
-        h('div', { style: { ...section, display: 'flex', alignItems: 'baseline', gap: '8px' } },
-          h('span', { style: { flex: '1 1 auto' } }, claims.summary),
-          claims.attention ? h('button', { type: 'button', style: { ...button, marginLeft: 0 }, 'aria-pressed': onlyAttention, onClick: () => setOnlyAttention(!onlyAttention) }, onlyAttention ? '显示全部' : '只看待核对') : null),
-        shownClaims.map((/** @type {any} */ claim) => h('button', {
-          key: claim.claimId, type: 'button', 'data-claim': claim.claimId, title: claim.text,
-          onClick: () => { if (claims.runId && claims.reportPath) openArtifact(claims.runId, claims.reportPath, claim.claimId); },
-          style: { ...card, display: 'block', width: '100%', textAlign: 'left', cursor: claims.reportPath ? 'pointer' : 'default', font: 'inherit' },
-        },
-        h('div', { style: line },
-          h('span', { style: pill(claim.tone), 'aria-label': claim.statusText }, claim.mark),
-          h('span', { style: { color: 'var(--dsw-alias-label-primary)', minWidth: 0, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } }, claim.text)),
-        h('div', { style: { ...quiet, paddingLeft: '20px' } }, [claim.source, claim.tone !== 'ok' ? claim.statusText : null].filter(Boolean).join(' · ') || claim.claimId)))) : null,
-
-      files && files.groups.length ? h('div', null, h('div', { style: section }, '产出的文件'), h(FileGroups, { model: files })) : null,
-
-      sources && sources.sources.length ? h('div', null,
-        h('div', { style: section }, `报告引用的来源 · ${sources.sources.length} 项`),
-        sources.sources.map((/** @type {any} */ source, /** @type {number} */ index) => h('div', { key: `${source.title}:${index}`, style: card },
-          h('div', { style: line },
-            source.type ? h('span', { style: pill('active') }, source.type) : null,
-            source.url
-              ? h('a', { href: source.url, target: '_blank', rel: 'noopener noreferrer', style: { color: 'var(--dsw-alias-link)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' } }, source.title)
-              : h('span', { style: { color: 'var(--dsw-alias-label-primary)', minWidth: 0 } }, source.title)),
-          h('div', { style: quiet }, [source.identifier, source.claims ? `支撑 ${source.claims} 条结论` : null].filter(Boolean).join(' · '))))) : null));
-  }
-
-  /** The right column: this conversation's files, and nothing else. */
-  function FilesTab() {
-    const live = useLive();
-    const model = kit.guarded('files tab', () => artifactModel(live));
-    if (!model || !model.groups.length) return h(Empty, { text: '还没有产出文件。报告和证据表写成后会出现在这里。' });
-    return h('div', { style: pane, 'data-evimed-tab': 'files' }, h(FileGroups, { model }));
-  }
 
   /**
    * What a finished run hands back, said in the conversation.
@@ -441,7 +245,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const [dismissed, setDismissed] = React.useState(/** @type {string | null} */ (null));
     const model = kit.guarded('delivery card', () => deliveryModel(live, evidence, Date.now(), kit));
     if (!model || dismissed === model.runId) return null;
-    return h('div', { style: { ...card, margin: '0 0 6px' }, 'data-evimed-delivery': model.runId },
+    return h('div', { style: { ...card, ...composerColumnStyle(), margin: '0 auto 6px' }, 'data-evimed-delivery': model.runId },
       h('div', { style: line },
         h('span', { style: pill(model.state.tone) }, model.state.text),
         model.title ? h('span', { style: { ...title, flex: '1 1 auto', whiteSpace: 'normal' } }, model.title) : null,
@@ -457,26 +261,9 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   };
   kit.guarded('delivery card', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-delivery', order: 10 }, DeliveryCard));
 
-  kit.guarded('run view', () => kit.occupy({ slot: 'conversation.view', id: view.id, order: view.order, label: () => view.label }, RunView));
-  for (const tab of tabs) {
-    kit.guarded(`${tab.id} body`, () => kit.occupy({ slot: 'sidebar.right.pane.tab', key: tab.id }, FilesTab));
-  }
-
-  kit.withServices(['sidebarRightTabs'], (/** @type {any} */ scope) => {
-    tabs.forEach((tab, index) => {
-      scope.effect(() => scope.sidebarRightTabs.register({
-        id: tab.id,
-        kind: tab.id,
-        priority: 'extension',
-        title: () => tab.title,
-        guide: [{ order: 10 + index, title: () => tab.title, description: () => tab.description }],
-      }), `evimed-panels: ${tab.id} type`);
-    });
-  });
-
-  // The column opens itself once per run, when that run first produces a file
-  // while the reader is watching — never on a visit to a finished task, and
-  // never onto an empty list.
+  // The column opens itself once per run, on the kernel's file tree, when
+  // that run first produces a report while the reader is watching — never on
+  // a visit to a finished task, and never onto an empty list.
   kit.withServices(['sidebarRight'], (/** @type {any} */ scope) => {
     /** @type {Set<string>} */
     const opened = new Set();
@@ -490,7 +277,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       const produced = Boolean(artifactModel(live)?.produced);
       if (!produced) { watchedWithout.add(runId); return; }
       if (!watchedWithout.has(runId) || opened.has(runId)) return;
-      try { scope.sidebarRight.openTab(tabs[0].id); opened.add(runId); } catch { /* no seat mounted yet; the next change tries again */ }
+      try { scope.sidebarRight.openTab(KERNEL_FILES_TAB); opened.add(runId); } catch { /* no seat mounted yet; the next change tries again */ }
     };
     scope.effect(() => kit.hub.subscribe(check), 'evimed-panels: automatic open');
     check();
@@ -501,5 +288,5 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 export const BODY = Object.freeze({
   name: 'panels',
   inject,
-  parts: Object.freeze([frameStyles, toolviewText, verdictText, liveRunFor, childLinkFor, panelTabs, runViewTab, runStateText, artifactKind, progressModel, artifactModel, evidenceModel, sourcesModel, deliveryModel, apply]),
+  parts: Object.freeze([frameStyles, toolviewText, verdictText, liveRunFor, runStateText, artifactKind, artifactModel, evidenceModel, deliveryModel, composerColumnStyle, apply]),
 });

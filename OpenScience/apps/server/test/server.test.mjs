@@ -2989,6 +2989,44 @@ test("registering creates the account, signs it in, and gives it its own space",
   }, { selfRegistrationEnabled: true });
 });
 
+test("an account changes its own password with the current one, and signs in with the new one", async () => {
+  await withAuthApp(async ({ base }) => {
+    const signIn = async (password) => fetch(`${base}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "alice", password }),
+    });
+    const login = await signIn("correct horse battery staple");
+    assert.equal(login.status, 200);
+    const cookie = String(login.headers.get("set-cookie") ?? "").split(";")[0];
+    const csrfToken = (await login.json()).data.csrfToken;
+    const change = (body, headers = {}) => fetch(`${base}/api/auth/password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie, "X-Open-Science-CSRF": csrfToken, ...headers },
+      body: JSON.stringify(body),
+    });
+
+    // The wrong current password is the same refusal a wrong login gets.
+    const wrong = await change({ currentPassword: "not it", newPassword: "a new correct horse" });
+    assert.equal(wrong.status, 401);
+    assert.equal((await wrong.json()).code, "invalid_credentials");
+    // The new one clears the floor registration sets.
+    const weak = await change({ currentPassword: "correct horse battery staple", newPassword: "short" });
+    assert.equal(weak.status, 400);
+    assert.equal((await weak.json()).code, "weak_password");
+    // The shell's token, not just the cookie.
+    const forged = await change({ currentPassword: "correct horse battery staple", newPassword: "a new correct horse" }, { "X-Open-Science-CSRF": "nope" });
+    assert.equal(forged.status, 403);
+
+    const changed = await change({ currentPassword: "correct horse battery staple", newPassword: "a new correct horse" });
+    assert.equal(changed.status, 200);
+    assert.equal((await signIn("correct horse battery staple")).status, 401);
+    assert.equal((await signIn("a new correct horse")).status, 200);
+    // The session that made the change is still signed in.
+    assert.equal((await fetch(`${base}/api/me`, { headers: { Cookie: cookie } })).status, 200);
+  });
+});
+
 test("registration refuses a weak password and a name the store cannot hold", async () => {
   await withAuthApp(async ({ base }) => {
     const weak = await fetch(`${base}/api/auth/register`, {

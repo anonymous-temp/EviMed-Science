@@ -16,6 +16,7 @@ async function fixture(t, digestProjectId = "owned-project") {
     stop: async (userId, id, body) => { calls.push({ method: "stop", userId, id, body }); return agenda; },
     schedule: async (userId, id, body) => { calls.push({ method: "schedule", userId, id, body }); return { episode: { id: "episode-one" } }; },
     listDigests: async (userId, options) => { calls.push({ method: "digests", userId, options }); return { items: [digest], nextCursor: null }; },
+    listEpisodes: async (userId, options) => { calls.push({ method: "episodes", userId, options }); return { items: [], nextCursor: null }; },
     getDigest: async () => digest,
     markDigestOpened: async (userId, id) => { calls.push({ method: "opened", userId, id }); return digest; },
     decide: async (userId, id, body) => { calls.push({ method: "decide", userId, id, body }); return digest; },
@@ -67,6 +68,11 @@ test("start, stop and schedule are explicit CSRF-guarded operations", async (t) 
 test("digest decisions are scoped and accept only declared fields", async (t) => {
   const { base, headers, calls } = await fixture(t);
   assert.equal((await fetch(`${base}/api/autopilot/digests?projectId=owned-project`, { headers })).status, 200);
+  // A task's history is read per project, optionally per agenda, and only
+  // for a project the account owns.
+  assert.equal((await fetch(`${base}/api/autopilot/episodes?projectId=other`, { headers })).status, 404);
+  assert.equal((await fetch(`${base}/api/autopilot/episodes?projectId=owned-project&agendaId=agenda-one`, { headers })).status, 200);
+  assert.deepEqual(calls.find((call) => call.method === "episodes"), { method: "episodes", userId: "owner", options: { projectId: "owned-project", agendaId: "agenda-one" } });
   const response = await fetch(`${base}/api/autopilot/digests/digest-one/decisions`, { method: "POST", headers,
     body: JSON.stringify({ action: "adopt", claimId: "claim-one", note: "continue" }) });
   assert.equal(response.status, 200);

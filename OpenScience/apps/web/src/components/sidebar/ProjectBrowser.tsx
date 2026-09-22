@@ -405,7 +405,7 @@ export function ProjectBrowser() {
             </button>
             {/* Export and delete live on the account page, beside every
               * project's run count; the sidebar keeps the everyday two. */}
-            <Link to="/app/account?tab=settings" aria-label="管理项目" title="管理项目：导出、删除" className={iconButton}>
+            <Link to="/app/account?tab=projects" aria-label="管理项目" title="管理项目：导出、删除" className={iconButton}>
               <Settings2 size={14} strokeWidth={1.75} aria-hidden="true" />
             </Link>
           </>

@@ -106,7 +106,7 @@ describe("the delegation card's link to the child", () => {
   });
 });
 
-describe("the right column's tabs", () => {
+describe("the delivery card", () => {
   afterEach(() => { cleanup(); });
   const live = {
     runId: "run-1", sessionId: "session-a", state: "succeeded",
@@ -115,25 +115,25 @@ describe("the right column's tabs", () => {
     progress: { deliverables: [{ id: "evidence", title: "老年房颤抗凝证据综述", status: "accepted", attempts: 2 }], children: [] },
   };
 
-  it("opens a delivered file, or the report at a claim, through the shell", () => {
-    const f = frame([], { sidebarRightTabs: { register: () => () => {} }, sidebarRight: { openTab: vi.fn() } });
+  it("opens the report through the shell, and registers no tab or view of its own", () => {
+    const registered: string[] = [];
+    const f = frame([], { sidebarRightTabs: { register: (definition: { id: string }) => { registered.push(definition.id); return () => {}; } }, sidebarRight: { openTab: vi.fn() } });
     const sent: Array<[string, Record<string, unknown>]> = [];
     f.kit.hub.attach((type: string, fields: Record<string, unknown>) => { sent.push([type, fields]); });
     act(() => f.kit.hub.deliver("run-state", live));
     act(() => f.kit.hub.deliver("evidence", { runId: "run-1", reportPath: live.artifacts[0], claims: [
       { claimId: "CLM-002", claim: "老年患者大出血风险相近。", claimType: "direct", status: "quote_not_found", sourceTitle: "ARISTOTLE" },
     ], sources: [] }));
-    // The right column is the file list; the run view carries the conclusions.
-    const Files = f.components.get("evimed-files") as (props: Record<string, unknown>) => React.ReactElement;
-    render(<Files />);
-    const [report] = screen.getAllByRole("button", { name: "打开" });
-    fireEvent.click(report);
+    // The right column and the view ring are the kernel's (its file tree and
+    // its trajectory view); the product registers nothing there.
+    expect(registered).toEqual([]);
+    expect(f.components.has("conversation.view")).toBe(false);
+    expect(f.components.has("evimed-files")).toBe(false);
+    const Card = f.components.get("conversation.input.dock") as (props: Record<string, unknown>) => React.ReactElement;
+    render(<Card />);
+    fireEvent.click(screen.getByRole("button", { name: "打开报告" }));
     expect(sent).toEqual([["open-artifact", { runId: "run-1", path: "deliverables/evidence/clinical-evidence-report.md" }]]);
-    cleanup();
-    const RunView = f.components.get("conversation.view") as (props: Record<string, unknown>) => React.ReactElement;
-    render(<RunView />);
-    fireEvent.click(screen.getByText("老年患者大出血风险相近。"));
-    expect(sent.at(-1)).toEqual(["open-artifact", { runId: "run-1", path: "deliverables/evidence/clinical-evidence-report.md", anchor: "CLM-002" }]);
+    expect(screen.getByText(/引用前请在报告里核对带 ⚠ 的结论/)).toBeInTheDocument();
   });
 
   it("tells the kernel its left column is collapsed whenever it says it is not, and never opens it", () => {
@@ -151,11 +151,11 @@ describe("the right column's tabs", () => {
 describe("the tools on a blank conversation", () => {
   afterEach(() => { cleanup(); });
 
-  it("show nothing but the composer until a tool is chosen, then that tool's page, which can be left", () => {
+  it("show nothing but the composer until a tool is chosen, then a chip and its starters under the composer, which can be left", () => {
     const components = new Map<string, (props: Record<string, unknown>) => unknown>();
     const ctx: Record<string, unknown> = {
       slots: { inject: (_name: string, setup: () => unknown) => setup(),
-        register: (options: { name: string }, component: (props: Record<string, unknown>) => unknown) => { components.set(options.name, component); return () => {}; } },
+        register: (options: { name: string; id?: string }, component: (props: Record<string, unknown>) => unknown) => { components.set(options.id ?? options.name, component); return () => {}; } },
       sessions: { list: { getSnapshot: () => ({ current: "session-a" }), subscribe: () => () => {} }, scope: (id: string) => ({ id }) },
       conversation: { input: { for: () => ({ setDraft: () => {}, state: { getSnapshot: () => ({ draft: "老年房颤该不该抗凝？" }) } }) } },
       effect: (setup: () => unknown) => setup(),
@@ -171,20 +171,20 @@ describe("the tools on a blank conversation", () => {
     const sent: Array<[string, Record<string, unknown>]> = [];
     kit.hub.attach((type: string, fields: Record<string, unknown>) => { sent.push([type, fields]); });
     applyCommands(ctx, {}, target, undefined, kit);
-    const Hero = components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
-    const view = render(<Hero />);
-    // The blank conversation is the headline and the composer (2026-09-22): no
-    // grid of tool cards between them — the tools are on 科研工具.
-    expect(view.container).toBeEmptyDOMElement();
-    expect(screen.queryByRole("button", { name: /临床证据深度分析/ })).toBeNull();
-    // A tool chosen on 科研工具 (or with /工具) is bound by the shell, and the
-    // hero becomes that tool's page: what it does, what you get, and questions
-    // to start from — above the same composer.
-    act(() => { kit.hub.deliver("capability", { capabilityId: "clinical-evidence-synthesis", sessionId: "session-a" }); });
-    view.rerender(<Hero />);
-    expect(screen.getByText(/你会拿到：证据综述报告/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /≥70 岁人群阿司匹林一级预防/ })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "换一个工具" }));
-    expect(sent).toEqual([["bind-capability", { capabilityId: null, sessionId: "session-a", draft: "老年房颤该不该抗凝？" }]]);
+    // No page above the composer: the hero seat is left to the kernel.
+    expect(components.has("conversation.hero.agentPreset")).toBe(false);
+    const Chip = components.get("evimed-tool") as (props: Record<string, unknown>) => React.ReactElement;
+    const Starters = components.get("evimed-tool-starters") as (props: Record<string, unknown>) => React.ReactElement;
+    const view = render(<><Chip /><Starters /></>);
+    expect(view.container.textContent).toBe("");
+    act(() => kit.hub.deliver("capability", { capabilityId: "clinical-evidence-synthesis", sessionId: "session-a" }));
+    expect(screen.getByText("临床证据深度分析")).toBeInTheDocument();
+    expect(screen.getByText("约 30–70 分钟")).toBeInTheDocument();
+    expect(screen.queryByText(/你会拿到/)).toBeNull();
+    // A starter goes into the composer of the open session.
+    fireEvent.click(screen.getByRole("button", { name: "≥70 岁人群阿司匹林一级预防的获益与出血风险。" }));
+    // Leaving the tool is the chip's ×: the shell is told, with the draft.
+    fireEvent.click(screen.getByRole("button", { name: "不再用「临床证据深度分析」" }));
+    expect(sent.at(-1)).toEqual(["bind-capability", { capabilityId: null, sessionId: "session-a", draft: "老年房颤该不该抗凝？" }]);
   });
 });

@@ -3,12 +3,19 @@ import { fetchWebMe, getWebProjectId } from "@/lib/apiClient";
 import { PluginsCard } from "@/components/settings/PluginsCard";
 import { DataFlowCard } from "@/components/settings/DataFlowCard";
 import { WebProjectsCard } from "@/components/settings/WebProjectsCard";
-import { ThemeSegmentedControl } from "@/components/settings/ThemeSegmentedControl";
+import { ArchivedConversationsCard } from "@/components/settings/ArchivedConversationsCard";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/Card";
+import { WorkbenchTabBody } from "@/components/layout/WorkbenchTabs";
 
 /**
- * Settings: the researcher's project, not the deployment.
+ * 「项目」: the researcher's projects, and what each one is configured with.
+ *
+ * This was 「设置」 until 2026-09-22 — projects, plugins, data flow and a
+ * theme switch under one word — and a reader who opened 设置 for the settings
+ * every product has found a project list instead. The account page now keeps
+ * the conventional settings under their own tabs (`AccountPage`), and this is
+ * the project tab: rename, export and delete a project, its plugins, and what
+ * its workspace stores and sends.
  *
  * Everything that used to be here and is now the kernel's — the model, the
  * provider credentials, the approval mode, the MCP server list, the skill
@@ -16,10 +23,6 @@ import { Card } from "@/components/ui/Card";
  * model or hold a provider key (the gateway does, per request), and a settings
  * page that offers a control the server will refuse is worse than one that
  * does not offer it.
- *
- * The readiness board, the runtime controls and the audit, error, security and
- * task ledgers left on 2026-09-15 for `OpsPage`. They answered operational
- * questions on a page a researcher opens to rename a project.
  */
 export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [projectId, setProjectId] = useState(() => getWebProjectId());
@@ -38,22 +41,21 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) 
     return () => { active = false; };
   }, []);
 
+  const body = (
+    <>
+      <WebProjectsCard onProjectChange={(project) => { projectChanged.current = true; setProjectId(project.id); }} />
+      <ArchivedConversationsCard />
+      <PluginsCard projectId={projectId} />
+      <DataFlowCard hosted model="平台提供的模型" workspace={`/workspace/${projectId}`} />
+    </>
+  );
+
+  if (embedded) return <WorkbenchTabBody>{body}</WorkbenchTabBody>;
   return (
     <div className="h-full overflow-y-auto bg-bg">
-      {/* The account page's box and gutter (`WorkbenchTabBody`), so this tab
-          starts where the page title does; the reading measure is kept. */}
       <div className="mx-auto w-full max-w-content-wide px-6 py-6"><div className="max-w-content">
-        {!embedded && (
-          <PageHeader title="设置" description="项目、插件、数据边界与外观。" />
-        )}
-
-        <WebProjectsCard onProjectChange={(project) => { projectChanged.current = true; setProjectId(project.id); }} />
-        <PluginsCard projectId={projectId} />
-        <DataFlowCard hosted model="平台提供的模型" workspace={`/workspace/${projectId}`} />
-
-        <Card className="mt-5" title="外观" hint="主题保存在本浏览器中，跟随系统会随系统明暗自动切换。">
-          <ThemeSegmentedControl />
-        </Card>
+        <PageHeader title="项目" description="重命名、导出或删除项目；项目的插件与数据边界。" />
+        {body}
       </div></div>
     </div>
   );

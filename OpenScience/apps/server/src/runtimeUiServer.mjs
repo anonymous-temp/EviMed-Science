@@ -2,7 +2,7 @@
 import { createServer } from "node:http";
 import { SEAMS } from "@evimed/harness-port";
 
-import { CAPABILITY_DISPLAY, capabilityBrief, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, runtimeUiMethodFromPath } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, capabilityBrief, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { HttpError, readBody } from "./security.mjs";
@@ -54,6 +54,21 @@ async function authorizeMethod(config, project, method, boundWorkspace = false, 
     else await assertSpendWithinLimits(config, project.userId);
   }
 }
+
+/**
+ * A workspace-file read is held to this project's workspace before it is
+ * forwarded. The kernel resolves the path against the workspace and, for the
+ * five reading methods, never confines it (see `RUNTIME_UI_WORKSPACE_PATH_METHODS`
+ * in `@evimed/domain`); this is the confinement, on both transports, with
+ * the same refusal the method deny list gives.
+ * @param {string | null} method @param {unknown} payload @param {string} workspaceRoot
+ */
+function assertWorkspacePath(method, payload, workspaceRoot) {
+  const refusal = runtimeUiWorkspacePathRefusal(method, payload, workspaceRoot);
+  if (refusal) throw new HttpError(403, "runtime_ui_method_denied", `${method} refused: ${refusal}.`);
+}
+
+const WORKSPACE_PATH_METHODS = new Set(RUNTIME_UI_WORKSPACE_PATH_METHODS);
 
 const exactFields = (value, fields) => value !== null && typeof value === "object" && !Array.isArray(value)
   && Object.keys(value).length === fields.length && fields.every(field => Object.hasOwn(value, field));
@@ -404,6 +419,23 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       req.__openScienceProxyBody = raw;
       try { workspaceBody = JSON.parse(raw.toString("utf8")); } catch { /* Remains a denied workspace mutation. */ }
     }
+    if (method && WORKSPACE_PATH_METHODS.has(method) && req.method === "POST") {
+      // The path is in the body, so the body is read here and handed on with
+      // the request, as the prompt's is. A call this cannot parse carries no
+      // path this can check, and is refused rather than forwarded.
+      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      req.__openScienceProxyBody = raw;
+      let fileBody = null;
+      try { fileBody = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
+      const refusal = runtimeUiWorkspacePathRefusal(method, fileBody?.payload, runtimeManager.runtimeWorkspaceRoot(project));
+      if (refusal) {
+        // The same JSON refusal the deny list gives, not the notice page a
+        // thrown error becomes: the caller is the kernel's own file panel,
+        // which reads the code and says so in its own words.
+        sendDenied(res, `${method} (${refusal})`);
+        return;
+      }
+    }
     const boundWorkspace = method === "workspace/create"
       && isBoundWorkspaceRegistration(workspaceBody, runtimeManager.runtimeWorkspaceRoot(project));
     const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
@@ -510,6 +542,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
           }
           await authorizeMethod(config, project, endpoint, false, usageLedger, runtimeManager);
+          assertWorkspacePath(endpoint, payload, runtimeManager.runtimeWorkspaceRoot(project));
           if (endpoint === "session/prompt") {
             // The mux's plugin admission owns the full upstream operation. This
             // short maintenance admission serializes its start with an expiring

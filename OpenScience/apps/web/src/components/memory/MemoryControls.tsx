@@ -16,16 +16,22 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 type SwitchKey = "memory" | "project";
 
 /**
- * Two switches, and a reset behind a confirmation.
+ * The memory switches, as one row of the page header: the switch, the
+ * per-project exception, and the reset behind a confirmation.
  *
- * There were three: 「从对话中学习新记忆」, 「回答时参考记忆」 and
- * 「当前项目使用记忆」. The first two are one decision — nobody wants a
- * platform that keeps learning things it will never use, or that uses things it
- * has stopped learning — and splitting them made the page ask the researcher to
- * reason about the platform's internals to answer a question about themselves
- * (owner ruling 2026-09-20: 三个开关并成两个). They are set together now, and
- * the store still holds them apart, so a deployment or a script that paused one
- * of them keeps that state until this switch is next touched.
+ * It was a card of its own — a titled section with a paragraph under each
+ * switch — above the list it governs, and the owner's reading of it was that
+ * two switches and a reset do not earn a section (2026-09-22: 「记忆开关 重置
+ * 不就俩按钮吗，有必要单独占那么大地方吗」). ChatGPT keeps the same three
+ * controls as one line of its memory settings; Claude keeps one switch. So
+ * this renders three controls and nothing else, and what each does is its
+ * tooltip.
+ *
+ * Two switches, not three: 「从对话中学习新记忆」 and 「回答时参考记忆」 were
+ * one decision (owner ruling 2026-09-20), so they are set together, and the
+ * store still holds them apart. The per-project exception is what tells this
+ * apart from a global switch: it stops memory in this project only, which is
+ * the one thing a researcher on a confidential project asks for.
  *
  * Pause and reset stay apart, as the products people already trust keep them: a
  * pause deletes nothing and is undone by the same switch, while a reset deletes
@@ -48,7 +54,7 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
 
   if (failed) {
     return (
-      <p className="text-ui text-muted">记忆开关暂时读取不到，刷新页面后再试。记忆本身不受影响。</p>
+      <p className="text-caption text-muted" title="记忆本身不受影响">记忆开关暂时读取不到</p>
     );
   }
   if (!settings) return null;
@@ -82,64 +88,46 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
     }
   };
 
-  const rows: { key: SwitchKey; label: string; on: boolean; detail: string; toggle: () => void }[] = [
-    {
-      key: "memory",
-      label: "让 EviMed 记住并使用",
-      on: memoryOn,
-      detail: memoryOn
-        ? "对话结束后自动记下值得长期保留的内容，之后回答时按当前问题挑相关的用上。"
-        : "已暂停：不再记下新的，也不再在回答时使用已有的。已记下的都保留着。",
-      toggle: () => void change("memory", { learningPaused: memoryOn, recallPaused: memoryOn },
-        memoryOn ? "已暂停，已记下的都保留着" : "已恢复：之后会继续记下并使用"),
-    },
-    {
-      key: "project",
-      label: "本项目不使用记忆",
-      on: projectPaused,
-      detail: projectPaused
-        ? "这个项目里的对话既不记下也不使用记忆，其他项目不受影响。"
-        : "打开后，只有这个项目既不记下也不使用记忆。",
-      toggle: () => void change("project", {
-        pausedProjects: projectPaused
-          ? settings.pausedProjects.filter((id) => id !== projectId)
-          : [...settings.pausedProjects, projectId],
-      }, projectPaused ? "本项目已恢复使用记忆" : "本项目已停用记忆"),
-    },
-  ];
-
   return (
-    <section aria-labelledby="memory-controls-title" className="rounded-card border border-border bg-surface">
-      <div className="flex items-center justify-between border-b border-border px-5 py-3">
-        <h2 id="memory-controls-title" className="text-ui font-medium text-text">记忆开关</h2>
-        <Button variant="ghost" size="sm" loading={busy === "reset"} disabled={busy !== null} onClick={() => setConfirmingReset(true)}>
-          {busy !== "reset" && <RotateCcw size={13} aria-hidden="true" />}
-          重置全部记忆
-        </Button>
-      </div>
-      <ul className="divide-y divide-border">
-        {rows.map((row) => (
-          <li key={row.key} className="flex items-center justify-between gap-4 px-5 py-3">
-            <div className="min-w-0">
-              <p className="text-ui text-text">{row.label}</p>
-              <p className="mt-0.5 text-ui text-muted">{row.detail}</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              role="switch"
-              aria-checked={row.on}
-              aria-label={row.label}
-              loading={busy === row.key}
-              disabled={busy !== null}
-              onClick={row.toggle}
-              className={cn("min-w-16", row.on === (row.key === "memory") ? "text-ok" : "text-muted")}
-            >
-              {row.on ? "已开启" : "已关闭"}
-            </Button>
-          </li>
-        ))}
-      </ul>
+    <div className="flex flex-wrap items-center gap-2" data-memory-controls="">
+      <Toggle
+        label="让 EviMed 记住并使用"
+        text="记忆"
+        on={memoryOn}
+        busy={busy === "memory"}
+        disabled={busy !== null}
+        title={memoryOn
+          ? "对话结束后自动记下值得长期保留的内容，之后回答时按当前问题挑相关的用上。关掉后不再记下新的，也不再使用已有的；已记下的都保留着。"
+          : "已暂停：不再记下新的，也不再在回答时使用已有的。已记下的都保留着。"}
+        onToggle={() => void change("memory", { learningPaused: memoryOn, recallPaused: memoryOn },
+          memoryOn ? "已暂停，已记下的都保留着" : "已恢复：之后会继续记下并使用")}
+      />
+      <Toggle
+        label="本项目不使用记忆"
+        text="本项目除外"
+        on={projectPaused}
+        busy={busy === "project"}
+        disabled={busy !== null}
+        title={projectPaused
+          ? "这个项目里的对话既不记下也不使用记忆，其他项目不受影响。"
+          : "打开后，只有这个项目既不记下也不使用记忆，其他项目不受影响。"}
+        onToggle={() => void change("project", {
+          pausedProjects: projectPaused
+            ? settings.pausedProjects.filter((id) => id !== projectId)
+            : [...settings.pausedProjects, projectId],
+        }, projectPaused ? "本项目已恢复使用记忆" : "本项目已停用记忆")}
+      />
+      <Button
+        variant="ghost"
+        size="sm"
+        loading={busy === "reset"}
+        disabled={busy !== null}
+        title="永久删除这个账号的全部记忆；对话、报告、知识库和收到的胶囊都不动。"
+        onClick={() => setConfirmingReset(true)}
+      >
+        {busy !== "reset" && <RotateCcw size={13} aria-hidden="true" />}
+        重置全部记忆
+      </Button>
       {confirmingReset && (
         <ConfirmDialog
           title="重置全部记忆？"
@@ -149,6 +137,53 @@ export function MemoryControls({ onReset }: { onReset: () => void }) {
           onCancel={() => setConfirmingReset(false)}
         />
       )}
-    </section>
+    </div>
+  );
+}
+
+/**
+ * One switch, drawn as the products people know draw one: a short name and
+ * a track that slides. The accessible name is the whole sentence (`label`);
+ * the visible word is the short one.
+ */
+function Toggle({ label, text, on, busy, disabled, title, onToggle }: {
+  label: string;
+  text: string;
+  on: boolean;
+  busy: boolean;
+  disabled: boolean;
+  title: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      aria-busy={busy || undefined}
+      title={title}
+      disabled={disabled}
+      onClick={onToggle}
+      className={cn(
+        "flex h-8 items-center gap-2 rounded-full border border-border bg-surface px-3 text-ui text-text hover:border-strong disabled:opacity-60",
+      )}
+    >
+      <span>{text}</span>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "relative h-4 w-7 shrink-0 rounded-full transition-colors duration-fast",
+          on ? "bg-accent" : "bg-strong",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-[left] duration-fast",
+            on ? "left-3.5" : "left-0.5",
+          )}
+        />
+      </span>
+    </button>
   );
 }

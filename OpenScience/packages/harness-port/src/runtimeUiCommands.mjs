@@ -1,16 +1,21 @@
 /**
- * The research tools, offered where the typing happens: a page for the one you
- * picked (on 科研工具, or with `/工具`) above the composer, a `/工具` command in
- * the kernel's own slash menu, and `@` references to the researcher's
+ * The research tools, offered where the typing happens: a chip under the
+ * composer for the one you picked (on 科研工具, or with `/工具`), its example
+ * questions beside it while the conversation is still blank, a `/工具` command
+ * in the kernel's own slash menu, and `@` references to the researcher's
  * knowledge base.
  *
  * The blank conversation is the kernel's own: a headline and one composer, as
  * in DeepSeek, ChatGPT, Claude and Gemini. It carried a grid of eight tool
- * cards until 2026-09-22 — the whole first screen, with the composer pushed to
- * the bottom — and the tools live on 科研工具 instead (「就一个输入框，其余的工具
- * 都放到科研工具去」). A tool chosen there opens a conversation whose hero is
- * that tool's page, the way a GPT or a Gem opens with its own description and
- * starters, and becomes a removable chip in the same composer.
+ * cards until 2026-09-22, then a page for the chosen tool — its summary,
+ * outputs, limits and starters above the composer — until later that day,
+ * when the owner saw it on a wide screen: the page had no width of its own,
+ * so it stretched the hero and the composer under it to the frame's edge
+ * (「首页进去的输入框那么宽」, 「对话框上边一堆啥排版都是」). ChatGPT, Claude
+ * and Gemini show a chosen tool or mode as a chip attached to the composer
+ * and nothing more; the tool's description stays on the page it was chosen
+ * from. So: a chip, the starters as small pills while there is nothing to
+ * read yet, and the composer keeps the kernel's own width.
  *
  * Hidden knowledge, read off the pinned 0.1.5-rc.2 client:
  *
@@ -23,13 +28,12 @@
  *    name collides with a host command fails loud at candidate synthesis and
  *    takes the whole menu with it; host commands are ASCII identifiers, and
  *    this one's name is not.
- *  - The blank conversation's hero declares `conversation.hero.agentPreset`,
- *    a single seat whose kernel occupant (the agent-preset picker) the hosted
- *    profile disables. The grid and the tool page sit there, below the
- *    headline, and the seat renders only while the conversation is blank.
- *  - `conversation.input.dock` is a list seat directly above the composer, in
- *    every session; the chip that says which tool this conversation runs sits
- *    there beside the busy hint.
+ *  - `conversation.composer.dock` is a list seat directly under the composer
+ *    card: one centred row of 13 px pills, which the kernel's own session
+ *    statistics already occupy (`stats`, order 0). The chip and the starters
+ *    sit beside them, at the composer's own width by construction — the seat
+ *    above the card (`conversation.input.dock`) spans the frame and put the
+ *    chip at the left edge beside a centred composer.
  *  - `ctx.inputTriggers.registerSource({ trigger: '@', … })` adds a group to
  *    the `@` menu. A pick inserts a reference chip; `codec.serialize` is what
  *    the model receives for it at send time. The page cannot read the
@@ -80,9 +84,10 @@ export function capabilityOptions(capabilities) {
 }
 
 /**
- * The page of the tool this conversation runs: what it does, what it hands
- * back, how long it usually takes, what it needs from the researcher, and
- * three questions to start from.
+ * The tool this conversation runs, as the chip and the starters read it: its
+ * name, what it does, how long it usually takes, and three questions to start
+ * from. What it hands back, needs and cannot do stays on 科研工具, where the
+ * tool was chosen.
  * @param {any[]} capabilities @param {unknown} id
  */
 export function toolPageModel(capabilities, id) {
@@ -165,7 +170,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   if (!kit || !kit.ours || !kit.h) return;
   const h = kit.h;
   const React = kit.react;
-  const { card, line, title, quiet, pill, button, secondary } = frameStyles();
+  const { quiet, button, secondary } = frameStyles();
   const catalogue = kit.frame.capabilities.filter((/** @type {any} */ entry) => !entry.internal);
   const knowledgeDir = String(kit.vocabulary?.knowledgeDir || '.evimed-knowledge');
 
@@ -254,51 +259,65 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   });
 
   if (React && catalogue.length) {
-    /** The page of the chosen tool, above the same composer. */
-    /** @param {{ id: string }} props */
-    const ToolPage = ({ id }) => {
-      const model = toolPageModel(catalogue, id);
-      if (!model) return null;
-      return h('div', {
-        'data-evimed-tool-page': model.id,
-        style: { flex: '1 1 100%', margin: '12px 0 4px', display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' },
-      },
-      h('div', { style: line },
-        h('span', { style: { ...title, fontSize: '16px' } }, model.title),
-        model.minutes ? h('span', { style: pill('muted') }, model.minutes) : null,
-        h('button', { type: 'button', style: button, onClick: () => bind(null) }, '换一个工具')),
-      h('div', { style: { ...secondary, color: 'var(--dsw-alias-label-secondary)' } }, model.summary),
-      model.outputs.length ? h('div', { style: { ...secondary, color: 'var(--dsw-alias-label-tertiary)' } }, `你会拿到：${model.outputs.join('；')}`) : null,
-      model.materials ? h('div', { style: { ...secondary, color: 'var(--dsw-alias-label-tertiary)' } }, `开始前：${model.materials}`) : null,
-      model.limits.length ? h('div', { style: { ...secondary, color: 'var(--dsw-alias-label-tertiary)' } }, `做不到：${model.limits.join('；')}`) : null,
-      model.starters.length ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' } },
-        model.starters.map((/** @type {string} */ starter) => h('button', {
-          key: starter, type: 'button', onClick: () => fill(starter),
-          style: { ...card, margin: 0, display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', font: 'inherit' },
-        }, starter))) : null);
+    const { pill: pillTone } = frameStyles();
+    // One 13 px pill, as the kernel's statistics pills beside it are drawn:
+    // the same radius, the same secondary ink, on the layer-1 background.
+    const chipStyle = {
+      ...secondary,
+      display: 'inline-flex', alignItems: 'center', gap: '6px', minWidth: 0,
+      padding: '1px 8px', borderRadius: '24px',
+      border: '0.5px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-1)',
+      color: 'var(--dsw-alias-label-secondary)',
+    };
+    const starterStyle = { ...chipStyle, cursor: 'pointer', font: 'inherit', maxWidth: '100%' };
+    const starterText = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+
+    /** Which conversation is open, and whether anything has been said in it. */
+    const useBlank = () => {
+      const session = kit.useFrameState((/** @type {any} */ state) => state.session);
+      const runState = kit.useFrameState((/** @type {any} */ state) => state.runState);
+      // No session yet is the hero; a session the shell has no run for and
+      // that is not running has not been asked anything.
+      if (!session || !session.sessionId) return true;
+      return !session.running && !runState?.runId;
     };
 
-    // Nothing until a tool is chosen: the blank conversation is the headline
-    // and the composer.
-    const HeroTools = () => {
-      const id = useTool();
-      return id ? h(ToolPage, { id }) : null;
-    };
-    kit.guarded('hero tools', () => kit.occupy({ slot: 'conversation.hero.agentPreset', priority: -1 }, HeroTools));
-
-    // The chip above the composer: which tool this conversation runs, and the
-    // way out of it. In a session the hero is gone, so this is the only place
-    // that still says it.
+    /**
+     * The chip under the composer: which tool this conversation runs, and the
+     * way out of it. In a session the hero is gone, so this is the only place
+     * that says it; its tooltip is the tool's one-line summary.
+     */
     const ToolChip = () => {
       const id = useTool();
       const model = id ? toolPageModel(catalogue, id) : null;
       if (!model) return null;
-      return h('div', { 'data-evimed-tool-chip': model.id, style: { ...line, justifyContent: 'flex-start', padding: '0 4px 4px' } },
-        h('span', { style: { ...pill('active'), fontWeight: 500 } }, model.title),
-        model.minutes ? h('span', { style: quiet }, model.minutes) : null,
-        h('button', { type: 'button', 'aria-label': `不再用「${model.title}」`, style: { ...button, marginLeft: 0 }, onClick: () => bind(null) }, '移除'));
+      return h('span', { 'data-evimed-tool-chip': model.id, title: model.summary || undefined, style: chipStyle },
+        h('span', { style: { ...pillTone('active'), fontWeight: 500, ...starterText } }, model.title),
+        model.minutes ? h('span', { style: { ...quiet, flex: 'none' } }, model.minutes) : null,
+        h('button', {
+          type: 'button', 'aria-label': `不再用「${model.title}」`, title: '换一个工具，或不用工具',
+          style: { ...button, marginLeft: 0, border: 'none', padding: '0 2px', lineHeight: 1 },
+          onClick: () => bind(null),
+        }, '×'));
     };
-    kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.input.dock', id: 'evimed-tool', order: 20 }, ToolChip));
+    kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.composer.dock', id: 'evimed-tool', order: 10 }, ToolChip));
+
+    /**
+     * The tool's example questions, as pills the reader can start from, only
+     * while the conversation is blank: once something has been asked they
+     * would be three more things under every reply.
+     */
+    const Starters = () => {
+      const id = useTool();
+      const blank = useBlank();
+      const model = id && blank ? toolPageModel(catalogue, id) : null;
+      if (!model || !model.starters.length) return null;
+      return h('span', { 'data-evimed-tool-starters': model.id, style: { display: 'contents' } },
+        model.starters.slice(0, 3).map((/** @type {string} */ starter) => h('button', {
+          key: starter, type: 'button', title: starter, style: starterStyle, onClick: () => fill(starter),
+        }, h('span', { style: starterText }, starter))));
+    };
+    kit.guarded('tool starters', () => kit.occupy({ slot: 'conversation.composer.dock', id: 'evimed-tool-starters', order: 20 }, Starters));
   }
 
   // `@` knowledge-base references.

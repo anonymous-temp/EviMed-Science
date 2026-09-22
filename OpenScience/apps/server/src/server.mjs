@@ -430,6 +430,7 @@ function routePattern(pathname) {
   if (
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/logout" ||
+    pathname === "/api/auth/password" ||
     pathname === "/api/auth/dev-login" ||
     pathname === "/api/auth/methods"
   ) return pathname;
@@ -2971,6 +2972,32 @@ export function createWebApiApp(overrides = {}) {
         return;
       }
 
+      if (pathname === "/api/auth/password" && req.method === "POST") {
+        // The account's own password, changed by the account: the current
+        // one proves it is the owner asking, as deletion does, and the CSRF
+        // token proves the request is the shell's. Other browser sessions of
+        // the account stay signed in; a password change is not a sign-out.
+        const { user, session } = await store.ensureSessionUser(req, res);
+        if (session?.csrfToken && req.headers["x-open-science-csrf"] !== session.csrfToken) {
+          throw new HttpError(403, "csrf_required", "A valid CSRF token is required.");
+        }
+        const body = await readJson(req, config.maxJsonBytes);
+        const currentPassword = assertString(body.currentPassword, "currentPassword", { max: 4096 });
+        const nextPassword = assertString(body.newPassword, "newPassword", { max: 4096 });
+        try {
+          await store.changePassword(user.id, currentPassword, nextPassword);
+          await securityAudit(config, "auth.password", "completed", { userId: user.id });
+        } catch (err) {
+          await securityAudit(config, "auth.password", "failed", {
+            userId: user.id,
+            code: err instanceof HttpError ? err.code : "internal_error",
+          });
+          throw err;
+        }
+        sendJson(res, 200, { data: true });
+        return;
+      }
+
       if (pathname === "/api/auth/dev-login" && req.method === "POST") {
         if (config.authMode !== "development") {
           throw new HttpError(404, "auth_method_disabled", "Development authentication is disabled.");
@@ -3195,6 +3222,11 @@ export function createWebApiApp(overrides = {}) {
         // first live distillations appeared in 「我的研究」).
         const registry = await agentRegistry;
         runs = runs.filter((run) => registry?.get?.(String(run.effectiveAgentId ?? run.agentId ?? ""))?.visibility !== "internal");
+        // Put away or removed by the researcher: out of the lists, still in
+        // the ledger for everything that reads a run by its id. `archived=1`
+        // asks for the shelf instead of the desk.
+        const shelf = new URL(req.url ?? "/", "http://evimed.local").searchParams.get("archived") === "1";
+        runs = runs.filter((run) => !run.deleted && Boolean(run.archived) === shelf);
         // Runs adopted before their first message could be read learn it in
         // the background; this answer does not wait for that (C3).
         agentRuns.backfillQuestions(ctx.project, runs);
@@ -3218,12 +3250,30 @@ export function createWebApiApp(overrides = {}) {
         const runId = decodeRouteComponent(rawRunId, "agent run id");
         const ctx = await context(req, res);
         const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run update");
-        const unknown = Object.keys(body).filter((field) => field !== "title");
+        // Three things a researcher does to a conversation from its row:
+        // rename it, put it away, remove it (2026-09-22). One field per call.
+        const fields = Object.keys(body);
+        const unknown = fields.filter((field) => !["title", "archived", "deleted"].includes(field));
         if (unknown.length > 0) {
           throw new HttpError(400, "invalid_payload", `Unknown agent run field(s): ${unknown.sort().join(", ")}.`);
         }
-        if (typeof body.title !== "string") throw new HttpError(400, "invalid_payload", "title must be a string.");
-        sendJson(res, 200, { data: await agentRuns.recordRunLabels(ctx.project, runId, { title: body.title, titleSource: "user" }) });
+        if (fields.length !== 1) throw new HttpError(400, "invalid_payload", "One agent run field per update.");
+        if ("title" in body) {
+          if (typeof body.title !== "string") throw new HttpError(400, "invalid_payload", "title must be a string.");
+          sendJson(res, 200, { data: await agentRuns.recordRunLabels(ctx.project, runId, { title: body.title, titleSource: "user" }) });
+          return;
+        }
+        if ("archived" in body) {
+          if (typeof body.archived !== "boolean") throw new HttpError(400, "invalid_payload", "archived must be a boolean.");
+          sendJson(res, 200, { data: await agentRuns.recordRunLabels(ctx.project, runId, { archived: body.archived }) });
+          return;
+        }
+        if (body.deleted !== true) throw new HttpError(400, "invalid_payload", "deleted can only be set to true.");
+        // A conversation still working is stopped first: a hidden run that
+        // keeps spending is the one thing a reader could never find again.
+        const current = (await agentRuns.list(ctx.project)).find((run) => run.id === runId);
+        if (current && current.status === "running") await agentRuns.cancelRun(ctx.project, runId, { by: ctx.user.id });
+        sendJson(res, 200, { data: await agentRuns.recordRunLabels(ctx.project, runId, { deleted: true }) });
         return;
       }
 

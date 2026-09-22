@@ -1,10 +1,10 @@
-import { act, render as renderView, screen, waitFor } from "@testing-library/react";
+import { act, render as renderView, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AutopilotPage } from "./AutopilotPage";
 
-const mocks = vi.hoisted(() => ({ listAgendas: vi.fn(), createAgenda: vi.fn(), startAgenda: vi.fn(), stopAgenda: vi.fn(), scheduleAgenda: vi.fn(), listDigests: vi.fn(), decideDigest: vi.fn(), getDigest: vi.fn(), markDigestOpened: vi.fn() }));
+const mocks = vi.hoisted(() => ({ listAgendas: vi.fn(), createAgenda: vi.fn(), startAgenda: vi.fn(), stopAgenda: vi.fn(), scheduleAgenda: vi.fn(), listDigests: vi.fn(), listEpisodes: vi.fn(), decideDigest: vi.fn(), getDigest: vi.fn(), markDigestOpened: vi.fn() }));
 vi.mock("@/lib/autopilotClient", () => mocks);
 const inbox = vi.hoisted(() => ({ listInbox: vi.fn() }));
 vi.mock("@/lib/inboxClient", () => inbox);
@@ -36,6 +36,12 @@ describe("AutopilotPage", () => {
     mocks.createAgenda.mockResolvedValue(agenda); mocks.startAgenda.mockResolvedValue(agenda); mocks.stopAgenda.mockResolvedValue(agenda);
     mocks.scheduleAgenda.mockResolvedValue({ episode: { id: "episode-one" } }); mocks.decideDigest.mockResolvedValue(digest);
     mocks.getDigest.mockResolvedValue(digest); mocks.markDigestOpened.mockResolvedValue(digest);
+    mocks.listEpisodes.mockResolvedValue({ items: [
+      { id: "episode-one", projectId: "project-one", revision: 1, payload: { agendaId: "agenda-one", taskType: "evidence-update", date: "2026-09-06", budgetCny: 8,
+        status: "merged", runId: "run-one", sessionId: "ses-one", digestId: "digest-one", createdAt: "", updatedAt: "" } },
+      { id: "episode-two", projectId: "project-one", revision: 1, payload: { agendaId: "agenda-one", taskType: "evidence-update", date: "2026-09-05", budgetCny: 8,
+        status: "failed", runId: "run-two", sessionId: "ses-two", createdAt: "", updatedAt: "" } },
+    ], nextCursor: null });
     inbox.listInbox.mockReset();
     inbox.listInbox.mockResolvedValue({ items: [], nextCursor: null });
   });
@@ -95,6 +101,44 @@ describe("AutopilotPage", () => {
     expect(mocks.scheduleAgenda).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "现在就跑" }));
     await waitFor(() => expect(mocks.scheduleAgenda).toHaveBeenCalledWith("agenda-one", expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)));
+  });
+
+  // 2026-09-22: the core of 主动科研 is the scheduled task and its reproducible
+  // result — a finished conversation the researcher opens, as Manus's replay
+  // is. The task list leads; its history drawer lists every run.
+  it("leads with the scheduled tasks, and each run in a task's history opens as a conversation", async () => {
+    render();
+    const tasks = await screen.findByRole("region", { name: "定时研究" });
+    expect(tasks).toHaveTextContent("心衰证据追踪");
+    expect(tasks).toHaveTextContent("每天 01:00（Asia/Shanghai）");
+    expect(tasks).toHaveTextContent("运行中");
+    // The tasks come before the briefing on the page.
+    const briefing = screen.getByRole("region", { name: "简报" });
+    expect(tasks.compareDocumentPosition(briefing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "运行历史" }));
+    const dialog = await screen.findByRole("dialog", { name: "运行历史" });
+    await waitFor(() => expect(mocks.listEpisodes).toHaveBeenCalledWith("project-one", "agenda-one"));
+    expect(await within(dialog).findByText("2026-09-06")).toBeInTheDocument();
+    expect(within(dialog).getByText("已完成")).toBeInTheDocument();
+    expect(within(dialog).getByText("失败")).toBeInTheDocument();
+    const open = within(dialog).getAllByRole("link", { name: "打开这次运行" });
+    expect(open[0]).toHaveAttribute("href", "/app/chat/ses-one");
+    expect(open[1]).toHaveAttribute("href", "/app/chat/ses-two");
+    // No scrubber, no speed: the conversation's own process view is the replay.
+    expect(screen.queryByText(/回放|倍速/)).toBeNull();
+  });
+
+  it("creates a task from one sentence, in a panel, and leaves it paused", async () => {
+    render();
+    await userEvent.click(await screen.findByRole("button", { name: "新建定时研究" }));
+    const panel = await screen.findByRole("dialog", { name: "新建定时研究" });
+    await userEvent.type(screen.getByLabelText("想持续跟进什么？"), "司美格鲁肽的胰腺炎与心血管结局");
+    await userEvent.click(screen.getByRole("button", { name: "创建" }));
+    await waitFor(() => expect(mocks.createAgenda).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-one", title: "司美格鲁肽的胰腺炎与心血管结局", topics: ["司美格鲁肽的胰腺炎", "心血管结局"],
+      taskTypes: ["literature-sentinel"], scheduleHour: 7,
+    })));
+    expect(panel).not.toBeInTheDocument();
   });
 
   it("records an adopt or reject decision from the digest", async () => {

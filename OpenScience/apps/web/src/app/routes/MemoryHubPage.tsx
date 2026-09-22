@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
-import { Search } from "lucide-react";
+import { Search, Share2 } from "lucide-react";
 import {
   fetchMemoryProfile,
   getWebProjectId,
@@ -16,17 +16,16 @@ import {
   type OwnCapsuleEntry,
   type TimelineEvent,
 } from "@/lib/memoryClient";
-import { listMethods, methodTitle, type WebMethod } from "@/lib/methodsClient";
+import { listMethods, type WebMethod } from "@/lib/methodsClient";
 import type { CapsuleRecord } from "@/lib/productClient";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { MemorySkeleton } from "@/components/cards/Skeletons";
 import { Button } from "@/components/ui/Button";
-import { Disclosure } from "@/components/ui/Disclosure";
+import { Drawer } from "@/components/ui/Drawer";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { CapsuleEntryRow } from "@/components/capsule/CapsuleEntryRow";
-import { CapsulePortrait, portraitLines, type MemoryFilter } from "@/components/capsule/CapsulePortrait";
 import { MemoryRecordRow } from "@/components/capsule/MemoryRecordRow";
 import { MethodRow } from "@/components/capsule/MethodRow";
 import { ReceivedShelf } from "@/components/capsule/ReceivedShelf";
@@ -39,6 +38,9 @@ import { CapsuleTransferPanel } from "./CapsuleTransferPanel";
 /** The two nouns this product keeps apart, printed under the title (plan §3.1). */
 const DEFINITION = "EviMed 自己记下的：关于你、你的项目、你的做法。自动生效，每条看得到来处，随时能改能忘。资料本身在「知识库」。";
 
+/** The filters the list understands. One home each, so the counts add up. */
+export type MemoryFilter = "all" | "self" | "methods" | "project" | "forgotten";
+
 const FILTERS: readonly { value: MemoryFilter; label: string }[] = [
   { value: "all", label: "全部" },
   { value: "self", label: "关于我" },
@@ -47,7 +49,7 @@ const FILTERS: readonly { value: MemoryFilter; label: string }[] = [
   { value: "forgotten", label: "已忘记" },
 ];
 
-/** Which filter a memory belongs under. One home each, so the counts add up. */
+/** Which filter a memory belongs under. */
 function filterOf(record: WebStructuredMemory, projectId: string): MemoryFilter {
   if (record.status === "archived") return "forgotten";
   if (["preference", "behavior"].includes(record.kind)) return "methods";
@@ -58,22 +60,23 @@ function filterOf(record: WebStructuredMemory, projectId: string): MemoryFilter 
 }
 
 /**
- * 「记忆胶囊」 — one page.
+ * 「记忆胶囊」 — one page: the switches in the header, what changed lately,
+ * and one searchable list.
  *
- * Hidden knowledge: it was six tabs — 总览 / 对你的理解 / 项目档案 / 方法 / 资料
- * / 时间轴 — and they were the six places the implementation kept things, not
- * six things a researcher wants. The owner's words on 2026-09-20 were that he
- * could not tell what any of them was for. Every comparable product (ChatGPT,
- * Claude, 豆包, Kimi, Copilot, Perplexity) shows one page: a generated summary
- * over a searchable list. So: a portrait whose every sentence points at its own
- * rows, what changed lately with an undo on each line, and one list with one
- * search box and five filters.
+ * Hidden knowledge: it was six tabs, then one page with a card of switches
+ * and a generated portrait (「EviMed 眼中的你」) above the list. The owner's
+ * reading on 2026-09-22 was that the portrait repeated the list under it
+ * (「evimed眼中的你有啥用呢，底下不都有吗」), that two switches and a reset
+ * did not earn a section of their own, and that sharing had disappeared — it
+ * was behind a disclosure at the foot of the page. ChatGPT and Claude keep
+ * the same shape this now has: the controls on one line at the top, the
+ * memories as one list under a search box, and export beside them.
  *
- * What went with the tabs: both 「写一个方法」 forms, the 「你写下的笔记」
- * composer and its table, 「放进胶囊」 per document, the 「逐个管理胶囊」 page,
- * the count tiles, the 「还缺」 chore list, and the 资料 tab — every one of them
- * a way of asking the researcher to do work the platform had already done or
- * could do itself.
+ * What went, and stays gone: both 「写一个方法」 forms, the 「你写下的笔记」
+ * composer, 「放进胶囊」 per document, the 「逐个管理胶囊」 page, the count
+ * tiles, the 「还缺」 chore list, the 资料 tab, and the portrait — every one of
+ * them a way of asking the researcher to read or do what the platform had
+ * already done.
  */
 export function MemoryHubPage() {
   const [params, setParams] = useSearchParams();
@@ -85,6 +88,7 @@ export function MemoryHubPage() {
   const [searching, setSearching] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
   const [ownCapsule, setOwnCapsule] = useState<CapsuleRecord | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   // 「刚记住了 … 撤销」 for what changed by itself since the last visit.
   useMemoryWritePrompt();
@@ -127,11 +131,6 @@ export function MemoryHubPage() {
   const entries: OwnCapsuleEntry[] = data?.mine?.entries ?? [];
   const timeline: TimelineEvent[] = data?.timeline?.items ?? [];
 
-  const lines = useMemo(
-    () => portraitLines(data?.profile.records ?? [], methods.filter((method) => method.status === "approved").map((method) => methodTitle(method))),
-    [data, methods],
-  );
-
   const shown = records.filter((record) => {
     if (record.sensitive && filter !== "self") return false;
     if (filter === "all") return record.status !== "archived";
@@ -158,9 +157,22 @@ export function MemoryHubPage() {
     <div className="h-full overflow-y-auto bg-bg">
       <PageTitle page="记忆胶囊" />
       <div className="mx-auto w-full max-w-content-wide space-y-6 px-6 py-6">
-        <PageHeader title="记忆胶囊" description={DEFINITION} />
-
-        <MemoryControls onReset={reload} />
+        <PageHeader
+          title="记忆胶囊"
+          description={DEFINITION}
+          actions={(
+            <>
+              <MemoryControls onReset={reload} />
+              {/* Sharing is a header action, where ChatGPT and Claude keep
+                * export: it was a disclosure at the foot of the page, and the
+                * owner asked where it had gone (2026-09-22). */}
+              <Button variant="ghost" size="sm" onClick={() => setSharing(true)} title="把 EviMed 学到的做法加密导出给别人，或收下别人分享的胶囊">
+                <Share2 size={13} aria-hidden="true" />
+                分享与导入
+              </Button>
+            </>
+          )}
+        />
 
         {failed && (
           <div role="alert" className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-surface px-4 py-3 text-ui text-text">
@@ -171,7 +183,6 @@ export function MemoryHubPage() {
 
         {loading ? <MemorySkeleton /> : (
           <>
-            <CapsulePortrait lines={lines} active={filter} onSelect={setFilter} />
             <RecentChanges items={timeline} onChanged={reload} />
 
             <section aria-labelledby="capsule-list" className="space-y-3">
@@ -235,17 +246,18 @@ export function MemoryHubPage() {
             </section>
 
             <ReceivedShelf />
-
-            <footer className="border-t border-border pt-4">
-              <Disclosure summary="分享我的做法 / 导入胶囊" summaryClassName="text-ui text-text">
-                <div className="mt-3">
-                  <CapsuleTransferPanel capsule={ownCapsule} onImported={() => { announceMemoryChanged(); reload(); }} />
-                </div>
-              </Disclosure>
-            </footer>
           </>
         )}
       </div>
+      {sharing && (
+        <Drawer
+          title="分享与导入"
+          description="分享 EviMed 从你的研究里学到的做法和你说过的工作偏好；收下别人分享的胶囊。原始资料、账户标识和对话记录不会随包导出。"
+          onClose={() => setSharing(false)}
+        >
+          <CapsuleTransferPanel capsule={ownCapsule} onImported={() => { announceMemoryChanged(); reload(); }} />
+        </Drawer>
+      )}
       {/* An inbox notice names a memory (`?record=`); the row scrolls itself
           into view, and the address is cleared so a reload does not re-scroll. */}
       {highlightId && !loading && <ClearHighlight onDone={() => {

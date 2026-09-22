@@ -1,6 +1,7 @@
-// The research tools' entry points: the page of the tool a conversation runs,
-// the chip above the composer, the `/工具` command, and `@` references to the
-// knowledge base. The blank conversation itself carries none of them.
+// The research tools' entry points: the chip under the composer for the tool
+// a conversation runs, its starters while the conversation is blank, the
+// `/工具` command, and `@` references to the knowledge base. The blank
+// conversation itself carries none of them.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -83,20 +84,31 @@ test('/工具 binds the conversation it was typed in, and writes nothing into th
   assert.equal(BODY.name, 'commands');
 });
 
-test('the blank conversation is the headline and the composer; a chosen tool brings its page and a chip', () => {
+test('the blank conversation is the headline and the composer; a chosen tool is a chip under the composer, with its starters', () => {
   const f = frame();
-  const seat = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset');
-  assert.equal(seat.options.priority, -1);
-  // No grid of tools on the first screen (2026-09-22): they are on 科研工具.
-  assert.equal(renderStatic(seat.component), '', 'nothing between the headline and the composer');
-  const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.input.dock' && entry.options.id === 'evimed-tool');
+  // Nothing between the headline and the composer, and no page of the tool
+  // above it (2026-09-22: it stretched the composer to the frame's edge).
+  assert.equal(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset'), false);
+  assert.equal(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.input.dock'), false);
+  const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
+  const starters = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool-starters');
+  assert.ok(chip && starters, 'both in the pill row under the composer, beside the kernel statistics');
+  assert.ok(chip.options.order > 0 && starters.options.order > chip.options.order, "after the kernel's stats pill (order 0), starters after the chip");
   assert.equal(renderStatic(chip.component), '', 'no tool, no chip');
+  assert.equal(renderStatic(starters.component), '', 'no tool, no starters');
   // The shell reports what the control plane bound this conversation to.
   f.kit.hub.deliver('capability', { capabilityId: 'clinical-evidence-synthesis', sessionId: 'session-a' });
-  const page = renderStatic(seat.component);
-  assert.match(page, /你会拿到：证据综述报告；证据表/);
-  assert.match(page, /≥70 岁人群阿司匹林一级预防/);
-  assert.match(page, /换一个工具/);
+  const drawn = renderStatic(chip.component);
+  assert.match(drawn, /临床证据深度分析/);
+  assert.match(drawn, /约 20–40 分钟/);
+  assert.match(drawn, /围绕一个临床问题检索并综合证据/, "the summary is the chip's tooltip, not a block above the composer");
+  assert.doesNotMatch(drawn, /你会拿到|做不到/);
+  // The conversation is blank (no session on the hub yet): the starters show.
+  assert.match(renderStatic(starters.component), /≥70 岁人群阿司匹林一级预防/);
+  // Something asked: the starters go, the chip stays.
+  f.kit.hub.deliver('session', { sessionId: 'session-a', running: true });
+  f.kit.hub.deliver('capability', { capabilityId: 'clinical-evidence-synthesis', sessionId: 'session-a' });
+  assert.equal(renderStatic(starters.component), '');
   assert.match(renderStatic(chip.component), /临床证据深度分析/);
   // Moving to another conversation drops it until the shell says otherwise.
   f.kit.hub.deliver('session', { sessionId: 'session-b' });
@@ -145,6 +157,6 @@ test('without the command or trigger services the rest still stands', () => {
   const f = frame({ commandUi: false, inputTriggers: false });
   assert.equal(f.commands.length, 0);
   assert.equal(f.sources.length, 0);
-  assert.ok(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset'));
-  assert.ok(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.input.dock' && entry.options.id === 'evimed-tool'));
+  assert.ok(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool'));
+  assert.ok(f.ctx.slots.registrations.some((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool-starters'));
 });

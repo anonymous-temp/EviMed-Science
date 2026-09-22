@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, BookmarkMinus, BookmarkPlus, Cloud, Copy, Database, FilePlus2, FileSearch, Folder, FolderSync, GitBranch, Link2, Pause, Play, RefreshCw, RotateCcw, SlidersHorizontal, Trash2, XCircle } from "lucide-react";
-import { getWebProjectId } from "@/lib/apiClient";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { AlertCircle, Cloud, Copy, Database, FilePlus2, FileSearch, FileText, Folder, FolderSync, Image as ImageIcon, Link2, Loader2, MoreHorizontal, Pause, Play, RefreshCw, Sheet, Upload, XCircle } from "lucide-react";
+import { getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { addToLibrary, browseOpenList, cancelSource, decideDuplicateGroup, getSourceFamily, importOpenListSource, listDuplicateCandidates,
   listLibrary, listSourceFolders, listSources, overrideSource, registerSourceFolder, removeFromLibrary, removeSource, retrySource,
@@ -8,21 +8,33 @@ import { addToLibrary, browseOpenList, cancelSource, decideDuplicateGroup, getSo
   type SourceFolderRecord, type SourceMetadata, type SourceOmissionNotice, type SourceRecord } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { baseName } from "@/lib/format";
+import { extOf, extToKind, previewKindForName } from "@/lib/artifacts";
+import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
+import { useFileDrop } from "@/lib/useFileDrop";
+import { toast } from "@/lib/toast";
+import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Drawer } from "@/components/ui/Drawer";
 import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { MemorySkeleton } from "@/components/cards/Skeletons";
+import { FilePreviewInspector } from "@/components/inspector/FilePreviewInspector";
 import { SourceUnderstandingPanel } from "@/components/sources/SourceUnderstandingPanel";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { labelFor } from "@/lib/statusLabel";
 import { useOperator } from "@/lib/useOperator";
+import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "./FilesPage";
 
 const STATUS: Record<string, string> = {
   queued: "等待分析", parsing: "正在解析", complete: "已完成", needs_attention: "需要你看一下",
   failed: "分析失败", missing: "原始资料已移除", canceled: "已取消",
+};
+/** The tone a status badge wears: quiet for the ordinary, accent while working, warn when a person is needed. */
+const STATUS_TONE: Record<string, string> = {
+  queued: "text-muted", parsing: "text-accent", complete: "text-ok", needs_attention: "text-warn",
+  failed: "text-error", missing: "text-muted", canceled: "text-muted",
 };
 const TYPE_OPTIONS = [
   ["published-paper", "已发表论文"], ["preprint-manuscript", "手稿或预印本"], ["review-guideline", "综述或指南"],
@@ -37,6 +49,9 @@ const DEPTH_OPTIONS = [["skip", "仅保留指纹"], ["index_only", "只建索引
 const TYPE_LABEL: Record<string, string> = Object.fromEntries(TYPE_OPTIONS);
 const DEPTH_LABEL: Record<string, string> = Object.fromEntries(DEPTH_OPTIONS);
 
+/** Where an upload lands, and the folder the list is of. */
+const KNOWLEDGE_ROOT = "knowledge-base";
+
 /** A synced folder's path as the researcher typed it: the tenant namespace the
  *  gateway prefixes is the platform's, not theirs (review B, SourcesPage). */
 function displayPath(path: string) {
@@ -44,16 +59,40 @@ function displayPath(path: string) {
 }
 
 /** How much of this project's material still needs something. What 知识库
- *  says as one line at the top, in place of the 整理进度 tab. */
+ *  says as one line at the top. */
 export interface SourceProgress {
   needsAttention: number;
   working: number;
 }
 
-/** @param embedded rendered as part of 知识库 rather than as its own
+type Filter = "all" | "needs_attention" | "parsing" | "complete" | "duplicates";
+
+const FILTERS: readonly { value: Filter; label: string }[] = [
+  { value: "all", label: "全部" },
+  { value: "needs_attention", label: "需要处理" },
+  { value: "parsing", label: "分析中" },
+  { value: "complete", label: "已完成" },
+  { value: "duplicates", label: "疑似重复" },
+];
+
+/**
+ * The knowledge base: one list of the documents in it, each row carrying its
+ * own state, with upload at the top and everything else behind the row.
+ *
+ * Until 2026-09-22 this was a stack of cards — every document a card with its
+ * summary, classification reason, coverage and eight buttons — over a second
+ * component that browsed the same folder as a file tree beside a preview
+ * pane, so an empty knowledge base showed three empty states at once, and
+ * 「疑似重复」 was a button at the top that opened a third list. The owner's
+ * reading was 「乱」, and that a duplicate is a badge on the row, not a
+ * separate desk. NotebookLM, Claude Projects and ChatGPT keep sources as one
+ * list with a status per row and a single add button; so does this.
+ *
+ * @param embedded rendered as part of 知识库 rather than as its own
  *  destination, so the page above it owns the title.
- *  @param onProgress told what still needs attention, so the page above can say
- *  so once instead of keeping a tab for it. */
+ * @param onProgress told what still needs attention, so the page above can say
+ *  so once instead of keeping a tab for it.
+ */
 export function SourcesPage({ embedded = false, onProgress }: { embedded?: boolean; onProgress?: (progress: SourceProgress) => void } = {}) {
   // Store fallback repairs do not reload the document. Subscribe to those
   // repairs, while the tab's current selection still owns in-flight requests.
@@ -63,16 +102,19 @@ export function SourcesPage({ embedded = false, onProgress }: { embedded?: boole
 }
 
 function ProjectSourcesPage({ projectId, embedded, onProgress }: { projectId: string; embedded: boolean; onProgress?: (progress: SourceProgress) => void }) {
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState<Filter>("all");
   const [sources, setSources] = useState<SourceRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<SourceRecord | null>(null);
   const [deleting, setDeleting] = useState<SourceRecord | null>(null);
+  const [previewing, setPreviewing] = useState<SourceRecord | null>(null);
   const [understandingId, setUnderstandingId] = useState<string | null>(null);
+  const [chainId, setChainId] = useState<string | null>(null);
   const [showOpenList, setShowOpenList] = useState(false);
-  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [duplicatesFor, setDuplicatesFor] = useState<string | null>(null);
   const [folderRefresh, setFolderRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const generation = useRef(0);
   const loadingRequest = useRef<number | null>(null);
@@ -82,7 +124,7 @@ function ProjectSourcesPage({ projectId, embedded, onProgress }: { projectId: st
     loadingRequest.current = current;
     if (!background) { setSources(null); setError(null); }
     try {
-      const page = await listSources(projectId, { status: filter === "all" ? "" : filter });
+      const page = await listSources(projectId, { status: filter === "all" || filter === "duplicates" ? "" : filter });
       if (generation.current !== current || getWebProjectId() !== projectId) return;
       if (page.items.some(source => source.projectId !== projectId)) throw new Error("Source project changed.");
       setSources(page.items); setError(null);
@@ -118,15 +160,9 @@ function ProjectSourcesPage({ projectId, embedded, onProgress }: { projectId: st
     finally { if (getWebProjectId() === projectId) setBusy(false); }
   };
   const selectedSource = sources?.find(source => source.id === understandingId);
-  // Which of this project's documents every project of this account can read.
-  //
-  // This is the switch 「加入资料库」 used to be. Same store, same call — what
-  // changed is the word: 「资料库」 was a second noun for a thing that is just
-  // this document, readable from more than one project, and a reader had to
-  // work out how it differed from 知识库 and from 记忆胶囊 (plan §3.1: 知识库 is
-  // 项目内，可标为「所有项目可用」). Null while unknown or when the store is
-  // unavailable: the row then offers nothing rather than a switch that cannot
-  // work.
+  // Which of this project's documents every project of this account can read
+  // (「所有项目可用」). Null while unknown or when the store is unavailable:
+  // the row then offers nothing rather than a switch that cannot work.
   const [sharedSources, setSharedSources] = useState<Set<string> | null>(null);
   const loadShared = useCallback(async () => {
     try { setSharedSources(new Set((await listLibrary()).items.flatMap(item => item.sourceIds))); }
@@ -144,6 +180,23 @@ function ProjectSourcesPage({ projectId, embedded, onProgress }: { projectId: st
     } catch (operationError) { if (getWebProjectId() === projectId) setActionError(productErrorMessage(operationError)); }
     finally { if (getWebProjectId() === projectId) setBusy(false); }
   };
+  // The duplicate groups, read once per list and again after a decision: a
+  // row in an undecided group wears the badge; the filter lists only those.
+  const [groups, setGroups] = useState<DuplicateGroup[] | null>(null);
+  const loadGroups = useCallback(async () => {
+    if (getWebProjectId() !== projectId) return;
+    try { const page = await listDuplicateCandidates(projectId); if (getWebProjectId() === projectId) setGroups(page.items); }
+    catch { if (getWebProjectId() === projectId) setGroups([]); }
+  }, [projectId]);
+  useEffect(() => { void loadGroups(); }, [loadGroups, sources]);
+  const groupOf = (sourceId: string) => groups?.find(group => !group.decision && group.sourceIds.includes(sourceId)) ?? null;
+  const duplicateCount = sources?.filter(source => groupOf(source.id)).length ?? 0;
+  const decide = async (group: DuplicateGroup, decision: "linked" | "dismissed") => {
+    setBusy(true); setActionError(null);
+    try { await decideDuplicateGroup({ projectId, groupKey: group.groupKey, sourceIds: group.sourceIds, decision }); await loadGroups(); }
+    catch (operationError) { setActionError(productErrorMessage(operationError)); }
+    finally { setBusy(false); }
+  };
   // What the page above says as one line, and only when it is true.
   useEffect(() => {
     if (!onProgress) return;
@@ -153,22 +206,74 @@ function ProjectSourcesPage({ projectId, embedded, onProgress }: { projectId: st
     });
   }, [sources, onProgress]);
 
+  // Upload: the one primary action, and the whole list is its drop target.
+  const uploadFiles = async (dropped?: File[]) => {
+    setUploading(true);
+    try {
+      const { accepted, refused } = partitionKnowledgeBaseFiles(dropped ?? await pickFiles(KNOWLEDGE_BASE_ACCEPT));
+      if (refused.length > 0) {
+        toast.error(`没有上传：${refused.map((file) => `${file.name}（${file.reason}）`).join("、")}。${KNOWLEDGE_BASE_UPLOAD_HINT}`);
+      }
+      const names = accepted.length > 0 ? await uploadFilesToWorkspace(accepted, KNOWLEDGE_ROOT, "base") : [];
+      if (names.length > 0) {
+        toast.success(`已上传 ${names.length} 个文件，正在解析。`);
+        await load(true);
+      }
+    } catch (e) {
+      toast.error(`文件上传失败：${webErrorMessage(e)}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+  const { dragging, dropProps } = useFileDrop({ disabled: !hasWebApi, onDrop: (files) => void uploadFiles(files) });
+
+  const shown = (sources ?? []).filter(source => filter !== "duplicates" || groupOf(source.id));
+  const actions = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button variant="ghost" size="sm" onClick={() => setShowOpenList(true)} title="从你的网盘导入或持续同步一个文件夹"><Cloud size={14} aria-hidden="true" />连接网盘</Button>
+      <Button size="sm" disabled={!hasWebApi || uploading} loading={uploading} onClick={() => void uploadFiles()} title={KNOWLEDGE_BASE_UPLOAD_HINT}>
+        {!uploading && <Upload size={14} aria-hidden="true" />}上传资料
+      </Button>
+    </div>
+  );
+
   return (
-    <div className={embedded ? undefined : "h-full overflow-y-auto px-5 py-6"}>
-      <div className={embedded ? "space-y-5" : "mx-auto max-w-content-wide space-y-5"}>
-        {embedded
-          ? <header className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-body font-semibold text-text">资料</h2>
-            <SourcesActions onDuplicates={() => setShowDuplicates((value) => !value)} onOpenList={() => setShowOpenList((value) => !value)} />
-          </header>
-          : <PageHeader title="资料整理" description="查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。"
-            actions={<SourcesActions onDuplicates={() => setShowDuplicates((value) => !value)} onOpenList={() => setShowOpenList((value) => !value)} />} />}
-        {showDuplicates && <DuplicateDesk projectId={projectId} onError={setError} />}
-        {showOpenList && <OpenListBrowser projectId={projectId} busy={busy} setBusy={setBusy} onImported={load}
-          onFolderRegistered={() => setFolderRefresh((value) => value + 1)} onError={setError} />}
-        {showOpenList && <SyncedFolders projectId={projectId} refreshToken={folderRefresh} onError={setError} />}
-        <SegmentedControl value={filter} onChange={setFilter} aria-label="资料状态"
-          options={[{ value: "all", label: "全部" }, { value: "needs_attention", label: "需要处理" }, { value: "parsing", label: "分析中" }, { value: "complete", label: "已完成" }]} />
+    <div {...dropProps} className={cn("relative", embedded ? undefined : "h-full overflow-y-auto px-5 py-6")}>
+      {dragging && (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-bg backdrop-blur-sm">
+          <div className="flex items-center gap-2 rounded-card border-2 border-dashed border-accent bg-surface px-6 py-4 text-ui font-medium text-accent">
+            <Upload size={15} aria-hidden="true" />
+            松开以上传到知识库
+          </div>
+        </div>
+      )}
+      <div className={embedded ? "space-y-4" : "mx-auto max-w-content-wide space-y-4"}>
+        {!embedded && <PageHeader title="知识库" description="你放进来的资料：文献、方案、数据。" actions={actions} />}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div role="radiogroup" aria-label="资料状态" className="flex flex-wrap items-center gap-1">
+            {FILTERS.map((option) => {
+              const selected = filter === option.value;
+              const count = option.value === "duplicates" ? duplicateCount : null;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setFilter(option.value)}
+                  className={cn(
+                    "flex h-8 items-center gap-1.5 rounded-full border px-3 text-ui transition-colors duration-fast",
+                    selected ? "border-text bg-surface-2 font-medium text-text" : "border-border bg-surface text-muted hover:border-strong hover:text-text",
+                  )}
+                >
+                  {option.label}
+                  {count ? <span className="grid h-4 min-w-4 place-items-center rounded-full bg-warn-soft px-1 text-badge tabular-nums text-warn">{count}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+          {embedded && actions}
+        </div>
         {error && <Card><div className="flex items-center gap-2 text-ui text-error"><AlertCircle size={16} aria-hidden="true" /><span className="flex-1">{error}</span><Button size="sm" variant="ghost" onClick={() => void load()}>重试</Button></div></Card>}
         {/* A failed delete or re-analysis is not a failed read: it used to
             overwrite the page error, whose 「重试」 re-listed the page instead of
@@ -176,27 +281,196 @@ function ProjectSourcesPage({ projectId, embedded, onProgress }: { projectId: st
         {actionError && <div role="alert" className="flex items-center gap-2 rounded-card border border-danger bg-danger-soft px-3 py-2 text-ui text-danger-strong">
           <AlertCircle size={16} aria-hidden="true" /><span className="flex-1">{actionError}</span>
           <Button size="sm" variant="ghost" onClick={() => setActionError(null)}>知道了</Button></div>}
-        {sources === null ? <MemorySkeleton /> : sources.length === 0 && !error ? <EmptyState icon={Database} title="还没有进入分析流程的资料"
-          description="从知识库上传资料后，系统会先建立索引，再按价值进行结构化或深度分析。" /> : (
-          <div className="space-y-4">{sources.map((source) => <SourceCard key={source.id} source={source} busy={busy}
-            shared={sharedSources ? sharedSources.has(source.id) : null} onShare={() => void toggleShared(source)}
-            onUnderstanding={() => setUnderstandingId(source.id)}
-            onEdit={() => setEditing(source)} onRaiseDepth={() => setEditing(source)} onRetry={() => void mutate(() => retrySource(source.id, source.revision))}
-            onCancel={() => void mutate(() => cancelSource(source.id, source.revision))} onDelete={() => setDeleting(source)} />)}</div>
+        {sources === null ? <MemorySkeleton /> : shown.length === 0 && !error ? (
+          filter === "all"
+            ? <EmptyState icon={Database} title="知识库还是空的"
+              description={`把文献、方案或数据放进来，EviMed 回答和做研究时会去读。${KNOWLEDGE_BASE_UPLOAD_HINT}`}
+              action={<Button disabled={!hasWebApi || uploading} onClick={() => void uploadFiles()}><Upload size={14} aria-hidden="true" />上传资料</Button>} />
+            : <EmptyState icon={Database} title={filter === "duplicates" ? "没有疑似重复的资料" : "这一类里没有资料"} />
+        ) : (
+          <ul className="divide-y divide-border rounded-card border border-border bg-surface">
+            {shown.map((source) => <SourceRow key={source.id} source={source} busy={busy}
+              shared={sharedSources ? sharedSources.has(source.id) : null}
+              duplicate={groupOf(source.id)}
+              chainOpen={chainId === source.id}
+              onPreview={() => setPreviewing(source)}
+              onDuplicates={() => setDuplicatesFor(source.id)}
+              onShare={() => void toggleShared(source)}
+              onUnderstanding={() => setUnderstandingId(source.id)}
+              onEdit={() => setEditing(source)} onRaiseDepth={() => setEditing(source)}
+              onRetry={() => void mutate(() => retrySource(source.id, source.revision))}
+              onCancel={() => void mutate(() => cancelSource(source.id, source.revision))}
+              onChain={() => setChainId(chainId === source.id ? null : source.id)}
+              onDelete={() => setDeleting(source)} />)}
+          </ul>
         )}
-        {selectedSource && <SourceUnderstandingPanel key={selectedSource.id} projectId={projectId} sourceId={selectedSource.id}
-          sourceName={baseName(selectedSource.payload.paths[0] ?? selectedSource.id)} generation={selectedSource.payload.generation}
-          error={selectedSource.payload.error} onClose={() => setUnderstandingId(null)} />}
-        {editing && <EditSource source={editing} busy={busy} onCancel={() => setEditing(null)}
-          onSave={(input) => void mutate(() => overrideSource(editing.id, input))} />}
       </div>
+      {previewing && (
+        <Drawer title={baseName(previewing.payload.paths[0] ?? previewing.id)} onClose={() => setPreviewing(null)} widthClassName="max-w-3xl" bare>
+          <FilePreviewInspector
+            data={{
+              variant: "file",
+              path: previewing.payload.paths[0] ?? previewing.id,
+              filename: baseName(previewing.payload.paths[0] ?? previewing.id),
+              artifact: extToKind(extOf(previewing.payload.paths[0] ?? previewing.id)),
+              root: "base",
+            }}
+            onClose={() => setPreviewing(null)}
+          />
+        </Drawer>
+      )}
+      {selectedSource && (
+        <Drawer title="资料理解" onClose={() => setUnderstandingId(null)} widthClassName="max-w-3xl" bare>
+          <div className="h-full overflow-y-auto p-4">
+            <SourceUnderstandingPanel key={selectedSource.id} projectId={projectId} sourceId={selectedSource.id}
+              sourceName={baseName(selectedSource.payload.paths[0] ?? selectedSource.id)} generation={selectedSource.payload.generation}
+              error={selectedSource.payload.error} onClose={() => setUnderstandingId(null)} />
+          </div>
+        </Drawer>
+      )}
+      {editing && (
+        <Drawer title="调整分析" description={baseName(editing.payload.paths[0] ?? editing.id)} onClose={() => setEditing(null)}>
+          <EditSource source={editing} busy={busy} onCancel={() => setEditing(null)}
+            onSave={(input) => void mutate(() => overrideSource(editing.id, input))} />
+        </Drawer>
+      )}
+      {showOpenList && (
+        <Drawer title="连接网盘" description="从你自己的网盘空间导入资料，或注册一个文件夹持续同步。" onClose={() => setShowOpenList(false)} widthClassName="max-w-2xl">
+          <div className="space-y-5">
+            <OpenListBrowser projectId={projectId} busy={busy} setBusy={setBusy} onImported={load}
+              onFolderRegistered={() => setFolderRefresh((value) => value + 1)} onError={setActionError} />
+            <SyncedFolders projectId={projectId} refreshToken={folderRefresh} onError={setActionError} />
+          </div>
+        </Drawer>
+      )}
+      {duplicatesFor && (
+        <Drawer title="疑似重复" description="只按哈希、版本家族、文件大小和归一化文件名判断，不做语义比对。" onClose={() => setDuplicatesFor(null)}>
+          <DuplicateGroups groups={(groups ?? []).filter(group => !group.decision && group.sourceIds.includes(duplicatesFor))} busy={busy} onDecide={decide} />
+        </Drawer>
+      )}
       {deleting && <ConfirmDialog title="删除资料分析记录？" body="原始文件仍由知识库管理；来源索引和后续派生理解会停止使用。"
         confirmLabel="删除记录" onCancel={() => setDeleting(null)} onConfirm={() => void mutate(() => removeSource(deleting.id, deleting.revision))} />}
     </div>
   );
 }
 
-function OpenListBrowser({ projectId, busy, setBusy, onImported, onFolderRegistered, onError }: { projectId: string; busy: boolean; setBusy: (value: boolean) => void;
+function iconFor(name: string) {
+  const kind = previewKindForName(name);
+  const cls = "shrink-0 text-muted";
+  if (kind === "image") return <ImageIcon size={16} className={cls} aria-hidden="true" />;
+  if (kind === "table") return <Sheet size={16} className={cls} aria-hidden="true" />;
+  return <FileText size={16} className={cls} aria-hidden="true" />;
+}
+
+/**
+ * One document: its name, what was read about it, its state, and the badges
+ * that need a person — behind a menu, everything one can do to it.
+ */
+function SourceRow({ source, busy, shared, duplicate, chainOpen, onPreview, onDuplicates, onShare, onEdit, onRaiseDepth, onRetry, onCancel, onChain, onDelete, onUnderstanding }: {
+  source: SourceRecord; busy: boolean; shared: boolean | null; duplicate: DuplicateGroup | null; chainOpen: boolean;
+  onPreview: () => void; onDuplicates: () => void; onShare: () => void; onEdit: () => void; onRaiseDepth: () => void;
+  onRetry: () => void; onCancel: () => void; onChain: () => void; onDelete: () => void; onUnderstanding: () => void;
+}) {
+  const operator = useOperator();
+  const name = baseName(source.payload.paths[0] ?? source.id);
+  const coverage = source.payload.coverage;
+  const accountedPercent = coverage ? coverage.accountedPercent ?? Math.round((coverage.accounted / Math.max(1, coverage.total)) * 100) : 0;
+  const status = source.payload.status;
+  const statusText = status === "parsing" && source.payload.analysis?.phase === "understanding" ? "正在理解资料" : labelFor(STATUS, status);
+  const audit = source.payload.omissionAudit;
+  const failure = source.payload.error;
+  const auditLabel = !audit || audit.status === "not_run" ? "理解遗漏尚未审计"
+    : typeof audit.omissionRate === "number" ? `理解遗漏 ${Math.round(audit.omissionRate * 100)}%`
+      : labelFor({ not_run: "理解遗漏尚未审计", audited: "理解遗漏已审计" }, audit.status, "理解遗漏审计状态未登记");
+  const generationNote = operator && source.payload.generation != null ? ` · 处理第 ${source.payload.generation} 代` : "";
+  const working = ["queued", "parsing"].includes(status);
+  const menu: { label: string; onClick: () => void; danger?: boolean }[] = [
+    { label: "预览原文", onClick: onPreview },
+    { label: "查看理解", onClick: onUnderstanding },
+    ...(shared === true ? [{ label: "改为仅本项目", onClick: onShare }] : []),
+    ...(shared === false && ["complete", "needs_attention"].includes(status) ? [{ label: "所有项目可用", onClick: onShare }] : []),
+    { label: "调整分析", onClick: onEdit },
+    ...(["failed", "needs_attention", "complete", "canceled"].includes(status) ? [{ label: "重新分析", onClick: onRetry }] : []),
+    ...(working ? [{ label: "取消", onClick: onCancel }] : []),
+    { label: chainOpen ? "收起版本链" : "查看版本链", onClick: onChain },
+    { label: "删除记录", onClick: onDelete, danger: true },
+  ];
+  return (
+    <li className="px-4 py-3" data-source={source.id}>
+      <div className="flex items-start gap-3">
+        {iconFor(name)}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={onPreview} title={`预览 ${name}`} className="min-w-0 truncate text-left text-ui font-medium text-text hover:underline">{name}</button>
+            <span className={cn("text-caption font-medium", STATUS_TONE[status] ?? "text-muted")}>{working && <Loader2 size={11} className="mr-0.5 inline animate-spin motion-reduce:animate-none" aria-hidden="true" />}{statusText}</span>
+            {shared === true && <span className="rounded-full border border-border px-1.5 text-badge text-muted" title="你的每个项目都能读取和检索它">所有项目</span>}
+            {duplicate && (
+              <button type="button" onClick={onDuplicates} title={`${labelFor(DUPLICATE_KINDS, duplicate.kind, "其他相似情况")}：点开决定是不是同一份`}
+                className="flex items-center gap-1 rounded-full bg-warn-soft px-1.5 text-badge font-medium text-warn hover:opacity-80">
+                <Copy size={10} aria-hidden="true" />疑似重复
+              </button>
+            )}
+          </div>
+          <SourceMetadataLine metadata={source.payload.metadata} pageCount={source.payload.analysis?.pageCount} fileName={name} />
+          <div className="mt-0.5 flex flex-wrap gap-x-2 text-caption text-muted" title={`分类依据：${source.payload.reasons[0] ?? ""}`}>
+            <span>{labelFor(TYPE_LABEL, source.payload.docType, "其他资料")}</span><span>·</span>
+            <span>{labelFor(DEPTH_LABEL, source.payload.depth, "分析深度未登记")}</span><span>·</span>
+            <span>第 {source.payload.version} 版{generationNote}</span>
+            {coverage && <><span>·</span><span>已解析 {coverage.percent}%{coverage.failed > 0 ? ` · ${coverage.failed} 个片段未能解析` : ""}</span></>}
+            {coverage && operator && <><span>·</span><span>处理台账 {accountedPercent}% · 失败单元 {coverage.failed}/{coverage.total}</span></>}
+            <span>·</span><span>{auditLabel}</span>
+          </div>
+          {/* The failure, before anything else — keyed on the code, never on the
+              stored English `message`. The classification reason is said only
+              when a person is being asked to look. */}
+          {failure && <p className="mt-1 text-caption text-error" title={operator ? failure.code : undefined}>
+            <AlertCircle size={12} className="mr-1 inline" aria-hidden="true" />解析失败：{sourceFailureMessage(failure)}原件已保留，「重新分析」会新起一代。</p>}
+          {(failure || status === "needs_attention") && source.payload.reasons[0] && (
+            <p className="mt-0.5 text-caption text-muted"><FileSearch size={12} className="mr-1 inline" aria-hidden="true" />分类依据：{source.payload.reasons[0]}</p>
+          )}
+          <OmissionNotice notice={source.payload.omissionNotice} onRaiseDepth={onRaiseDepth} />
+          {chainOpen && <div className="mt-2"><VersionChain sourceId={source.id} /></div>}
+        </div>
+        <RowMenu name={name} items={menu} disabled={busy} />
+      </div>
+    </li>
+  );
+}
+
+/** The row's 「…」: what one can do to this document, in one menu. */
+function RowMenu({ name, items, disabled }: { name: string; items: { label: string; onClick: () => void; danger?: boolean }[]; disabled: boolean }) {
+  const menuId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    const onPointer = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node | null)) setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointer);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("pointerdown", onPointer); };
+  }, [open]);
+  const item = "flex w-full items-center rounded-input px-2 py-1.5 text-left text-ui text-text hover:bg-surface-2";
+  return (
+    <div ref={root} className="relative shrink-0">
+      <button type="button" aria-label={`「${name}」的操作`} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
+        disabled={disabled} onClick={() => setOpen((value) => !value)}
+        className="grid h-7 w-7 place-items-center rounded-input text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50">
+        <MoreHorizontal size={15} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+      {open && (
+        <div id={menuId} role="menu" aria-label={`「${name}」的操作`} className="absolute right-0 z-30 mt-1 min-w-40 rounded-card border border-border bg-surface p-1 shadow-pop">
+          {items.map((entry) => (
+            <button key={entry.label} type="button" role="menuitem" onClick={() => { setOpen(false); entry.onClick(); }}
+              className={entry.danger ? `${item} text-error` : item}>{entry.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function OpenListBrowser({ projectId, busy, setBusy, onImported, onFolderRegistered, onError }: { projectId: string; busy: boolean; setBusy: (value: boolean) => void;
   onImported: () => Promise<void>; onFolderRegistered: () => void; onError: (value: string | null) => void }) {
   const [remotePath, setRemotePath] = useState("/");
   const [entries, setEntries] = useState<OpenListEntry[] | null>(null);
@@ -269,7 +543,7 @@ const SKIP_REASONS: Record<string, string> = {
  * copied out of the server. */
 function skipReason(code: string) { return SKIP_REASONS[code] ?? "这一项无法入库"; }
 
-function SyncedFolders({ projectId, refreshToken, onError }: { projectId: string; refreshToken: number; onError: (value: string | null) => void }) {
+export function SyncedFolders({ projectId, refreshToken, onError }: { projectId: string; refreshToken: number; onError: (value: string | null) => void }) {
   const operator = useOperator();
   const [folders, setFolders] = useState<SourceFolderRecord[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -336,50 +610,28 @@ const DUPLICATE_KINDS: Record<string, string> = {
   "similar-name": "文件名归一化后相同",
 };
 
-function DuplicateDesk({ projectId, onError }: { projectId: string; onError: (value: string | null) => void }) {
-  const [groups, setGroups] = useState<DuplicateGroup[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const request = useRef(0);
-  const load = useCallback(async () => {
-    if (getWebProjectId() !== projectId) return;
-    const current = ++request.current;
-    try {
-      const page = await listDuplicateCandidates(projectId);
-      if (request.current === current && getWebProjectId() === projectId) setGroups(page.items);
-    } catch (error) {
-      if (request.current === current && getWebProjectId() === projectId) { setGroups([]); onError(productErrorMessage(error)); }
-    }
-  }, [projectId, onError]);
-  useEffect(() => { void load(); return () => { request.current += 1; }; }, [load]);
-  const decide = async (group: DuplicateGroup, decision: "linked" | "dismissed") => {
-    setBusy(true); onError(null);
-    try { await decideDuplicateGroup({ projectId, groupKey: group.groupKey, sourceIds: group.sourceIds, decision }); await load(); }
-    catch (error) { onError(productErrorMessage(error)); }
-    finally { setBusy(false); }
-  };
-  return <Card title="疑似重复" hint="只按哈希、版本家族、文件大小和归一化文件名判断，不做语义比对。">
-    {groups === null ? <MemorySkeleton /> : groups.length === 0
-      ? <p className="text-ui text-muted">没有发现疑似重复的资料。</p>
-      : <div className="space-y-3">{groups.map((group) => <div key={group.groupKey} className="space-y-2 rounded-input border border-border px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2 text-ui text-text">
-          <Copy size={15} aria-hidden="true" /><span className="flex-1 truncate">{baseName(group.label)}</span>
-          <span className="text-ui text-muted">{labelFor(DUPLICATE_KINDS, group.kind, "其他相似情况")}</span>
-        </div>
-        <ul className="space-y-1 text-ui text-muted">{group.members.map((item) => <li key={item.sourceId}>
-          第 {item.version} 版 · {item.paths.map(baseName).join("、")} · {Math.max(1, Math.round(item.size / 1024))} KB · {labelFor(STATUS, item.status)}
-        </li>)}</ul>
-        {group.decision
-          ? <p className="text-ui text-muted">已标记为{group.decision.decision === "linked" ? "同一份资料" : "不是重复"}。可重新选择。</p>
-          : null}
-        <div className="flex flex-wrap gap-2">
-          {/* Linking is a statement about two sources. A shared-content group is
-              one source under several paths, so there is nothing to link. */}
-          {group.sourceIds.length > 1 && <Button size="sm" variant="ghost" disabled={busy}
-            onClick={() => void decide(group, "linked")}><Link2 size={13} aria-hidden="true" />标记为同一份</Button>}
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void decide(group, "dismissed")}><XCircle size={13} aria-hidden="true" />不是重复</Button>
-        </div>
-      </div>)}</div>}
-  </Card>;
+/** The groups a badge opened: what each holds and the two decisions. */
+function DuplicateGroups({ groups, busy, onDecide }: { groups: DuplicateGroup[]; busy: boolean; onDecide: (group: DuplicateGroup, decision: "linked" | "dismissed") => void }) {
+  if (groups.length === 0) return <p className="text-ui text-muted">没有发现疑似重复的资料。</p>;
+  return <div className="space-y-3">{groups.map((group) => <div key={group.groupKey} className="space-y-2 rounded-input border border-border px-3 py-2">
+    <div className="flex flex-wrap items-center gap-2 text-ui text-text">
+      <Copy size={15} aria-hidden="true" /><span className="flex-1 truncate">{baseName(group.label)}</span>
+      <span className="text-ui text-muted">{labelFor(DUPLICATE_KINDS, group.kind, "其他相似情况")}</span>
+    </div>
+    <ul className="space-y-1 text-ui text-muted">{group.members.map((item) => <li key={item.sourceId}>
+      第 {item.version} 版 · {item.paths.map(baseName).join("、")} · {Math.max(1, Math.round(item.size / 1024))} KB · {labelFor(STATUS, item.status)}
+    </li>)}</ul>
+    {group.decision
+      ? <p className="text-ui text-muted">已标记为{group.decision.decision === "linked" ? "同一份资料" : "不是重复"}。可重新选择。</p>
+      : null}
+    <div className="flex flex-wrap gap-2">
+      {/* Linking is a statement about two sources. A shared-content group is
+          one source under several paths, so there is nothing to link. */}
+      {group.sourceIds.length > 1 && <Button size="sm" variant="ghost" disabled={busy}
+        onClick={() => onDecide(group, "linked")}><Link2 size={13} aria-hidden="true" />标记为同一份</Button>}
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDecide(group, "dismissed")}><XCircle size={13} aria-hidden="true" />不是重复</Button>
+    </div>
+  </div>)}</div>;
 }
 
 function VersionChain({ sourceId }: { sourceId: string }) {
@@ -412,39 +664,25 @@ function percent(value: number) { return `${Math.round(value * 1000) / 10}%`; }
  * returns `blocking:false`, appears in no issue list, and its 5%/15% targets
  * have never been checked against an observed distribution of real sources —
  * per the development principles a new check ships as a notice first. So this
- * says what was measured and says out loud that it changes nothing, rather than
- * looking like a verdict the researcher has to clear.
- *
- * `disagreements` are the control plane's own English diagnostics and are
- * capped at five lines by `boundedOmissionNotice`, so they are stated as a
- * count ("at least"), in Chinese, with the raw lines kept in `title` for
- * support. Putting English validator prose in front of a Chinese-reading
- * researcher is the defect this whole pass exists to remove, not a shortcut to
- * reuse here. */
+ * says what was measured and offers the one thing a researcher can do about
+ * it, rather than looking like a verdict they have to clear. `disagreements`
+ * are the control plane's own English diagnostics, capped at five lines; an
+ * operator gets them as a count, a researcher not at all. */
 function OmissionNotice({ notice, onRaiseDepth }: { notice?: SourceOmissionNotice | null; onRaiseDepth: () => void }) {
   const operator = useOperator();
   if (!notice) return null;
   const over = notice.withinTarget === false && typeof notice.omissionRate === "number" ? notice.omissionRate : null;
   const disagreements = notice.disagreements?.length ?? 0;
   if (over === null && !(operator && disagreements)) return null;
-  // It used to open with 「仅供参考，不影响这份资料入库，也不需要你处理」 — a
-  // notice whose own text told the reader to ignore it (review B). It is
-  // either something they can act on, or it is not shown to them.
-  return <div className="space-y-1 rounded-input bg-surface-2 px-3 py-2 text-ui text-muted">
+  return <div className="mt-1 space-y-1 text-caption text-muted">
     {over !== null && <div className="flex flex-wrap items-center gap-2">
       <p className="min-w-0 flex-1 text-text">抽查 {notice.audited} 个片段，约 {percent(over)} 的内容没有被理解进来，高于当前分析深度的参考值 {percent(notice.target)}。</p>
       <Button size="sm" variant="ghost" onClick={onRaiseDepth}>提高分析深度</Button>
     </div>}
-    {/* The run's self-reported audit disagreeing with what it delivered is
-        pipeline diagnostics — capped at five English lines by
-        `boundedOmissionNotice`. An operator can read them; a researcher has
-        nothing to do with them. */}
     {operator && disagreements > 0 && <p title={notice.disagreements.join("\n")}>
       运行自报的审计与它实际交付的引用至少有 {disagreements} 处对不上；页面上的遗漏率按交付内容重算，不采用自报值。</p>}
   </div>;
 }
-
-const AUDIT_STATUS: Record<string, string> = { not_run: "理解遗漏尚未审计", audited: "理解遗漏已审计" };
 
 /** What the parser read about the document, with the DOI said as checked as it
  *  is: confirmed against Crossref's registered title, not confirmed, or
@@ -467,69 +705,10 @@ export function SourceMetadataLine({ metadata, pageCount, fileName }: { metadata
       ? `解析出的 DOI ${check.droppedDoi} 在 Crossref 登记的是另一篇文献，已不采用`
       : null;
   if (!parts.length && !doi) return null;
-  return <div className="space-y-1 text-ui text-muted">
+  return <div className="mt-0.5 space-y-0.5 text-caption text-muted">
     {parts.length > 0 && <p>{parts.join(" · ")}</p>}
     {doi && <p>{doi}</p>}
   </div>;
-}
-
-function SourceCard({ source, busy, shared, onShare, onEdit, onRaiseDepth, onRetry, onCancel, onDelete, onUnderstanding }: {
-  source: SourceRecord; busy: boolean; shared: boolean | null; onShare: () => void; onEdit: () => void; onRaiseDepth: () => void; onRetry: () => void; onCancel: () => void; onDelete: () => void; onUnderstanding: () => void;
-}) {
-  const operator = useOperator();
-  const [showChain, setShowChain] = useState(false);
-  const coverage = source.payload.coverage;
-  const accountedPercent = coverage ? coverage.accountedPercent ?? Math.round((coverage.accounted / Math.max(1, coverage.total)) * 100) : 0;
-  const status = source.payload.status === "parsing" && source.payload.analysis?.phase === "understanding" ? "正在理解资料" : labelFor(STATUS, source.payload.status);
-  // The audit verdict comes from the understanding contract; the card states what
-  // that contract said instead of asserting a fixed "not audited".
-  const audit = source.payload.omissionAudit;
-  const failure = source.payload.error;
-  const auditLabel = !audit || audit.status === "not_run" ? AUDIT_STATUS.not_run
-    : typeof audit.omissionRate === "number" ? `理解遗漏 ${Math.round(audit.omissionRate * 100)}%`
-      : labelFor(AUDIT_STATUS, audit.status, "理解遗漏审计状态未登记");
-  // The generation counter and the parse ledger are the pipeline's
-  // bookkeeping; the version and the state are what a researcher recognises.
-  const generationNote = operator && source.payload.generation != null ? ` · 处理第 ${source.payload.generation} 代` : "";
-  return <Card title={baseName(source.payload.paths[0] ?? source.id)} hint={`第 ${source.payload.version} 版${generationNote} · ${status}`}>
-    <div className="space-y-3 text-ui text-text">
-      <SourceMetadataLine metadata={source.payload.metadata} pageCount={source.payload.analysis?.pageCount}
-        fileName={baseName(source.payload.paths[0] ?? source.id)} />
-      {source.payload.outputs.summary && <p>{source.payload.outputs.summary}</p>}
-      <div className="flex flex-wrap gap-2 text-ui text-muted">
-        <span>{labelFor(TYPE_LABEL, source.payload.docType, "其他资料")}</span><span>·</span>
-        <span>{labelFor(DEPTH_LABEL, source.payload.depth, "分析深度未登记")}</span>
-        {coverage && <><span>·</span><span>已解析 {coverage.percent}%{coverage.failed > 0 ? ` · ${coverage.failed} 个片段未能解析` : ""}</span></>}
-        {coverage && operator && <><span>·</span><span>处理台账 {accountedPercent}% · 失败单元 {coverage.failed}/{coverage.total}</span></>}
-        <span>·</span><span>{auditLabel}</span>
-      </div>
-      {/* The failure, before anything else. Until 2026-09-08 a failed source
-          showed only 「分析失败」 next to `reasons[0]`, which explains why the
-          document was *typed* the way it was and has nothing to do with why the
-          analysis died — the stored `error` was typed all the way to this
-          component and rendered by nothing. Key on the code, never on the stored
-          `message`: that is the literal English "Source analysis failed." for
-          every failure, while the code is the fact `@evimed/domain` translates. */}
-      {failure && <div className="rounded-input bg-surface-2 px-3 py-2 text-ui text-error" title={operator ? failure.code : undefined}>
-        <AlertCircle size={14} className="mr-1 inline" aria-hidden="true" />解析失败：{sourceFailureMessage(failure)}原件已保留，「重新分析」会新起一代。</div>}
-      <div className="rounded-input bg-surface-2 px-3 py-2 text-ui text-muted"><FileSearch size={14} className="mr-1 inline" aria-hidden="true" />分类依据：{source.payload.reasons[0]}</div>
-      <OmissionNotice notice={source.payload.omissionNotice} onRaiseDepth={onRaiseDepth} />
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="ghost" onClick={onUnderstanding}><FileSearch size={13} aria-hidden="true" />查看理解</Button>
-        <Button size="sm" variant="ghost" onClick={() => setShowChain((value) => !value)}><GitBranch size={13} aria-hidden="true" />查看版本链</Button>
-        {/* One document, readable from one project or from all of them. */}
-        {shared === true && <Button size="sm" variant="ghost" disabled={busy} onClick={onShare}
-          title="改回只在这个项目里可用"><BookmarkMinus size={13} aria-hidden="true" />改为仅本项目</Button>}
-        {shared === false && ["complete", "needs_attention"].includes(source.payload.status) && <Button size="sm" variant="ghost" disabled={busy}
-          onClick={onShare} title="你的每个项目都能读取和检索它"><BookmarkPlus size={13} aria-hidden="true" />所有项目可用</Button>}
-        <Button size="sm" variant="ghost" disabled={busy} onClick={onEdit}><SlidersHorizontal size={13} aria-hidden="true" />调整分析</Button>
-        {["failed", "needs_attention", "complete", "canceled"].includes(source.payload.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={onRetry}><RotateCcw size={13} aria-hidden="true" />重新分析</Button>}
-        {["queued", "parsing"].includes(source.payload.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}><XCircle size={13} aria-hidden="true" />取消</Button>}
-        <Button size="sm" variant="ghost" disabled={busy} onClick={onDelete}><Trash2 size={13} aria-hidden="true" />删除记录</Button>
-      </div>
-      {showChain && <VersionChain sourceId={source.id} />}
-    </div>
-  </Card>;
 }
 
 function EditSource({ source, busy, onSave, onCancel }: { source: SourceRecord; busy: boolean;
@@ -537,7 +716,7 @@ function EditSource({ source, busy, onSave, onCancel }: { source: SourceRecord; 
   const [docType, setDocType] = useState(source.payload.docType);
   const [depth, setDepth] = useState(source.payload.depth);
   const [reason, setReason] = useState("");
-  return <Card title="调整分析" hint={baseName(source.payload.paths[0] ?? source.id)}><form className="grid gap-3 md:grid-cols-3" onSubmit={(event) => {
+  return <form className="grid gap-3" onSubmit={(event) => {
     event.preventDefault(); onSave({ expectedRevision: source.revision, docType, depth, reason });
   }}>
     <label className="space-y-1 text-ui text-text"><span>资料类型</span><select aria-label="资料类型" value={docType} onChange={(event) => setDocType(event.target.value)}
@@ -545,14 +724,6 @@ function EditSource({ source, busy, onSave, onCancel }: { source: SourceRecord; 
     <label className="space-y-1 text-ui text-text"><span>分析深度</span><select aria-label="分析深度" value={depth} onChange={(event) => setDepth(event.target.value as SourceRecord["payload"]["depth"])}
       className="h-9 w-full rounded-input border border-strong bg-bg px-2 text-ui">{DEPTH_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
     <Input label="调整原因" value={reason} onChange={(event) => setReason(event.target.value)} required maxLength={1000} />
-    <div className="flex gap-2 md:col-span-3"><Button type="submit" loading={busy}>保存并重新分析</Button><Button variant="ghost" disabled={busy} onClick={onCancel}>取消</Button></div>
-  </form></Card>;
-}
-
-/** The page's two secondary actions; neither is the primary one, so both are quiet. */
-function SourcesActions({ onDuplicates, onOpenList }: { onDuplicates: () => void; onOpenList: () => void }) {
-  return <div className="flex flex-wrap gap-2">
-    <Button variant="ghost" onClick={onDuplicates}><Copy size={15} aria-hidden="true" />疑似重复</Button>
-    <Button variant="ghost" onClick={onOpenList}><Cloud size={15} aria-hidden="true" />连接网盘资料</Button>
-  </div>;
+    <div className="flex gap-2"><Button type="submit" loading={busy}>保存并重新分析</Button><Button variant="ghost" disabled={busy} onClick={onCancel}>取消</Button></div>
+  </form>;
 }

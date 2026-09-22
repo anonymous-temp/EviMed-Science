@@ -461,6 +461,15 @@ export class InMemoryStore {
     return this.publicUser(user);
   }
 
+  async changePassword(userId, currentPassword, nextPassword) {
+    await this.loadUsers();
+    const user = this.users.get(userId);
+    assertPasswordChange(user, currentPassword, nextPassword);
+    user.passwordHash = hashPassword(nextPassword);
+    this.users.set(userId, user);
+    await this.saveUsers();
+  }
+
   async upsertOidcUser(userId, name) {
     const id = safeId(userId, "OIDC user id");
     await this.loadUsers();
@@ -793,6 +802,29 @@ export class InMemoryStore {
   async close() {}
 }
 
+/**
+ * What both stores check before a password moves: the account signs in with
+ * one, the current one is right, and the new one clears the same floor
+ * registration sets. `invalid_credentials` and not a dedicated code, so the
+ * answer to a wrong current password is the same sentence a wrong login gets.
+ *
+ * @param {{ authType?: string, passwordHash?: string | null } | null | undefined} user
+ * @param {unknown} currentPassword
+ * @param {unknown} nextPassword
+ */
+function assertPasswordChange(user, currentPassword, nextPassword) {
+  if (!user) throw new HttpError(404, "user_not_found", "User is unavailable.");
+  if (user.authType !== "local" || !user.passwordHash) {
+    throw new HttpError(404, "auth_method_disabled", "This account does not sign in with a password.");
+  }
+  if (typeof currentPassword !== "string" || !verifyPassword(currentPassword, user.passwordHash)) {
+    throw new HttpError(401, "invalid_credentials", "Invalid username or password.");
+  }
+  if (typeof nextPassword !== "string" || nextPassword.length < 8) {
+    throw new HttpError(400, "weak_password", "Password must be at least 8 characters.");
+  }
+}
+
 function databaseUser(config, row) {
   if (!row) return null;
   return {
@@ -1046,6 +1078,15 @@ export class PostgresStore extends InMemoryStore {
     }
     const user = await this.userById(id);
     return this.publicUser(user);
+  }
+
+  async changePassword(userId, currentPassword, nextPassword) {
+    const user = await this.userById(userId);
+    assertPasswordChange(user, currentPassword, nextPassword);
+    await this.database.query(
+      `UPDATE ${CONTROL_PLANE_SCHEMA}.users SET password_hash = $2, updated_at = now() WHERE id = $1 AND auth_type = 'local'`,
+      [user.id, hashPassword(nextPassword)],
+    );
   }
 
   async upsertOidcUser(userId, name) {

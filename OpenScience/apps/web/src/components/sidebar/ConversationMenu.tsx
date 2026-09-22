@@ -1,25 +1,32 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
-import { cancelWebAgentRun, renameWebAgentRun, webErrorMessage, type WebAgentRun } from "@/lib/apiClient";
+import { useLocation, useNavigate } from "react-router";
+import { archiveWebAgentRun, cancelWebAgentRun, deleteWebAgentRun, renameWebAgentRun, webErrorMessage, type WebAgentRun } from "@/lib/apiClient";
 import { announceRunsChanged, runTitle } from "@/lib/runPresentation";
+import { chatPath } from "@/lib/runLocation";
+import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { isRunning } from "@/components/sidebar/useProjectRuns";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { inputClasses } from "@/components/ui/Input";
 import { toast } from "@/lib/toast";
 
 /**
- * What the run ledger page did for one conversation, on the conversation's own
- * row.
+ * What a conversation's row offers, as the conversation lists people already
+ * use offer it: rename, archive, delete — and, while it is still working,
+ * stop.
  *
- * The ledger was deleted on 2026-09-20 and three of its controls had nowhere
- * else to be: stopping a conversation that is still working, renaming it, and
- * reading out the identifiers support asks for. Stopping is also the composer's
- * own control inside the frame — this is the way to it from outside the
- * conversation, which is where 「我不想等了」 usually happens.
+ * The kernel's own session list has rename, fork and archive and nothing that
+ * deletes; ChatGPT and Claude have rename, archive and delete. This row has
+ * the three a researcher asks for (2026-09-22: 「项目会话，删除 归档啥的咋都
+ * 没有」) plus stop, which is the composer's own control inside the frame and
+ * the way to it from outside, which is where 「我不想等了」 usually happens.
+ * The identifiers support asks for stay behind 「复制诊断信息」, never on the
+ * row: a conversation is named by its question (§23.2 rule 11).
  *
- * Deliberately three items: everything else the ledger row carried — files,
- * cost, progress, verification — belongs to the conversation itself and is
- * drawn there, not in a sidebar menu.
+ * Archiving and deleting are flags on the control plane's ledger: the
+ * conversation leaves the lists, and what it spent, wrote and was told stays
+ * readable. Deleting is the word people use, so it is not undone; archiving
+ * is.
  */
 export function ConversationMenu({ run, onRenamed, className }: {
   run: WebAgentRun;
@@ -30,11 +37,13 @@ export function ConversationMenu({ run, onRenamed, className }: {
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const renameInput = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  const [confirmingStop, setConfirmingStop] = useState(false);
+  const [confirming, setConfirming] = useState<"stop" | "delete" | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -61,19 +70,28 @@ export function ConversationMenu({ run, onRenamed, className }: {
 
   const title = runTitle(run);
 
-  const stop = async () => {
-    setConfirmingStop(false);
+  /** Leaving a conversation that is no longer listed: the surface goes blank rather than showing a row that is gone. */
+  const leaveIfOpen = () => {
+    if (location.pathname === chatPath(run.sessionId)) navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() }, replace: true });
+  };
+
+  const perform = async (action: () => Promise<unknown>, done: string, failed: string) => {
+    setConfirming(null);
     setBusy(true);
     try {
-      await cancelWebAgentRun(run.id);
+      await action();
       announceRunsChanged();
-      toast.success("已停止这条对话的研究。");
+      toast.success(done);
     } catch (error) {
-      toast.error(webErrorMessage(error, { fallback: "没能停止，请稍后重试。" }));
+      toast.error(webErrorMessage(error, { fallback: failed }));
     } finally {
       setBusy(false);
     }
   };
+
+  const stop = () => perform(() => cancelWebAgentRun(run.id), "已停止这条对话的研究。", "没能停止，请稍后重试。");
+  const archive = () => perform(async () => { await archiveWebAgentRun(run.id, true); leaveIfOpen(); }, "已归档。", "没能归档，请稍后重试。");
+  const remove = () => perform(async () => { await deleteWebAgentRun(run.id); leaveIfOpen(); }, "已删除这条对话。", "没能删除，请稍后重试。");
 
   const submitRename = async () => {
     const next = draft.trim();
@@ -92,8 +110,7 @@ export function ConversationMenu({ run, onRenamed, className }: {
   };
 
   // Identifiers, as one block to paste into a support message rather than as
-  // four rows a reader has to copy one at a time. They are never shown on the
-  // row itself: a conversation is named by its question (§23.2 rule 11).
+  // four rows a reader has to copy one at a time.
   const copyDiagnostics = async () => {
     const lines = [
       `run: ${run.id}`,
@@ -138,6 +155,15 @@ export function ConversationMenu({ run, onRenamed, className }: {
     );
   }
 
+  const item = "flex w-full items-center rounded-input px-2 py-1.5 text-left text-ui text-text hover:bg-surface-2";
+  const items: { label: string; onClick: () => void; danger?: boolean }[] = [
+    ...(isRunning(run) ? [{ label: "停止", onClick: () => { setOpen(false); setConfirming("stop"); } }] : []),
+    { label: "重命名", onClick: () => { setOpen(false); setDraft(title); setRenaming(true); } },
+    { label: "归档", onClick: () => { setOpen(false); void archive(); } },
+    { label: "删除", onClick: () => { setOpen(false); setConfirming("delete"); }, danger: true },
+    { label: "复制诊断信息", onClick: () => void copyDiagnostics() },
+  ];
+
   return (
     <div ref={root} className={className}>
       <button
@@ -160,41 +186,37 @@ export function ConversationMenu({ run, onRenamed, className }: {
           aria-label={`「${title}」的操作`}
           className="absolute right-0 z-30 mt-1 min-w-36 rounded-card border border-border bg-surface p-1 shadow-pop"
         >
-          {isRunning(run) && (
+          {items.map((entry) => (
             <button
+              key={entry.label}
               type="button"
               role="menuitem"
-              onClick={() => { setOpen(false); setConfirmingStop(true); }}
-              className="flex w-full items-center rounded-input px-2 py-1.5 text-left text-ui text-text hover:bg-surface-2"
+              onClick={entry.onClick}
+              className={entry.danger ? `${item} text-error` : item}
             >
-              停止
+              {entry.label}
             </button>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => { setOpen(false); setDraft(title); setRenaming(true); }}
-            className="flex w-full items-center rounded-input px-2 py-1.5 text-left text-ui text-text hover:bg-surface-2"
-          >
-            重命名
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => void copyDiagnostics()}
-            className="flex w-full items-center rounded-input px-2 py-1.5 text-left text-ui text-text hover:bg-surface-2"
-          >
-            复制诊断信息
-          </button>
+          ))}
         </div>
       )}
-      {confirmingStop && (
+      {confirming === "stop" && (
         <ConfirmDialog
           title="停止这条对话的研究？"
           body="已经做完的检索和写好的文件会留在工作区，但这次研究不会再继续。"
           confirmLabel="停止"
           onConfirm={() => void stop()}
-          onCancel={() => setConfirmingStop(false)}
+          onCancel={() => setConfirming(null)}
+        />
+      )}
+      {confirming === "delete" && (
+        <ConfirmDialog
+          title={`删除「${title}」？`}
+          body={isRunning(run)
+            ? "这条对话还在运行，会先停止，然后从列表里删除。它产出的文件留在项目工作区，不会一起删除。"
+            : "会从列表里删除，不能恢复。它产出的文件留在项目工作区，不会一起删除。"}
+          confirmLabel="删除"
+          onConfirm={() => void remove()}
+          onCancel={() => setConfirming(null)}
         />
       )}
     </div>

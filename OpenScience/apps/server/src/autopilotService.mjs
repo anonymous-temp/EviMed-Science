@@ -395,6 +395,25 @@ export class AutopilotService {
   /** @param {string} userId @param {{projectId:string}} options */
   async listDigests(userId, { projectId }) { return this.documents.list(userId, "digest", { projectId, limit: 100 }); }
 
+  /**
+   * The runs an agenda has made: one episode per scheduled date, newest
+   * first, each naming the conversation it ran in (`sessionId`) and the
+   * briefing it merged into (`digestId`). What 主动科研 lists as a task's
+   * history (2026-09-22): the result of a scheduled run is a finished
+   * conversation the researcher opens, not a number on a dashboard.
+   * @param {string} userId @param {{projectId:string, agendaId?:string|null}} options
+   */
+  async listEpisodes(userId, { projectId, agendaId = null }) {
+    const page = await this.documents.list(userId, "episode", {
+      projectId, limit: 200, ...(agendaId ? { filter: { agendaId: text(agendaId, "agenda id", 160) } } : {}),
+    });
+    const items = [...page.items].sort((left, right) => String(right.payload.date ?? "").localeCompare(String(left.payload.date ?? ""))
+      || String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
+    // The prompt is the run's brief, not the researcher's: the list carries
+    // what happened, when, and where to open it.
+    return { ...page, items: items.map((item) => ({ ...item, payload: Object.fromEntries(Object.entries(item.payload).filter(([key]) => key !== "prompt")) })) };
+  }
+
   /** @param {string} userId @param {string} digestId */
   async getDigest(userId, digestId) {
     const digest = await this.documents.get(userId, "digest", text(digestId, "digest id", 160));

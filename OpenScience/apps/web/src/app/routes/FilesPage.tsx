@@ -59,7 +59,7 @@ export const KNOWLEDGE_BASE_FORMAT_FAMILIES: ReadonlyArray<readonly [string, rea
   ["纯文本与代码", ["txt", "md", "json", "yaml", "yml", "r", "py", "sql"]],
 ];
 /** The picker's default filter: what the knowledge base accepts. */
-const KNOWLEDGE_BASE_ACCEPT = KNOWLEDGE_BASE_FORMATS.map((format) => `.${format}`).join(",");
+export const KNOWLEDGE_BASE_ACCEPT = KNOWLEDGE_BASE_FORMATS.map((format) => `.${format}`).join(",");
 export const KNOWLEDGE_BASE_UPLOAD_HINT =
   `支持 ${KNOWLEDGE_BASE_FORMAT_FAMILIES.map(([label]) => label).join("、")}；音视频暂不支持。`;
 

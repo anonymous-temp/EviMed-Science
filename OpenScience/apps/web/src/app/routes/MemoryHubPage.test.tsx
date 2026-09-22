@@ -98,30 +98,23 @@ describe("记忆胶囊", () => {
     }
   });
 
-  it("merges the three switches into one, beside 「本项目不使用记忆」 and a reset", async () => {
+  it("keeps the two switches and the reset on one line in the header, not in a section", async () => {
     open();
     expect(await screen.findByRole("switch", { name: "让 EviMed 记住并使用" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("switch", { name: "本项目不使用记忆" })).toHaveAttribute("aria-checked", "false");
     expect(screen.getByRole("button", { name: /重置全部记忆/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "记忆开关" })).toBeNull();
+    expect(screen.getByRole("banner")).toContainElement(screen.getByRole("switch", { name: "让 EviMed 记住并使用" }));
     // The two halves it replaced are gone as separate controls.
     expect(screen.queryByRole("switch", { name: "从对话中学习新记忆" })).toBeNull();
     expect(screen.queryByRole("switch", { name: "回答时参考记忆" })).toBeNull();
   });
 
-  it("writes a portrait only out of sentences that have rows, and each one filters the list to them", async () => {
-    const user = userEvent.setup();
+  it("has no portrait above the list: the list is the portrait", async () => {
     open();
-    expect(await screen.findByRole("heading", { name: "EviMed 眼中的你" })).toBeInTheDocument();
-    expect(screen.getByText("你和你的研究方向")).toBeInTheDocument();
-    expect(screen.getByText("你的做法")).toBeInTheDocument();
-    // 「这个项目」 has a row, so it is said; a group with no rows never appears.
-    expect(screen.getByText("这个项目")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /临床药师，主攻抗凝治疗。/ })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Meta 分析先报 GRADE 再报效应量。/ }));
-    expect(screen.getByRole("radio", { name: "我的做法" })).toBeChecked();
-    expect(screen.getByText("Meta 分析先报 GRADE 再报效应量")).toBeInTheDocument();
-    expect(screen.queryByText("临床药师，主攻抗凝治疗")).toBeNull();
+    await screen.findByText("临床药师，主攻抗凝治疗");
+    expect(screen.queryByRole("heading", { name: "EviMed 眼中的你" })).toBeNull();
+    expect(screen.queryByText("点任意一句，下面只看它依据的那几条。")).toBeNull();
   });
 
   it("gives every row its origin, the conversation it came from, and how often it was used", async () => {
@@ -160,18 +153,21 @@ describe("记忆胶囊", () => {
     expect(screen.getByRole("button", { name: /恢复/ })).toBeInTheDocument();
   });
 
-  it("collapses sharing and importing into one action at the foot of the page", async () => {
+  it("offers sharing and importing as a header action that opens a panel", async () => {
+    const user = userEvent.setup();
     open();
     await screen.findByText("临床药师，主攻抗凝治疗");
-    expect(screen.getByText("分享我的做法 / 导入胶囊")).toBeInTheDocument();
+    expect(screen.queryByText("transfer")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /分享与导入/ }));
+    expect(await screen.findByRole("dialog", { name: "分享与导入" })).toBeInTheDocument();
+    expect(screen.getByText("transfer")).toBeInTheDocument();
   });
 
   it("says what will fill an empty page, without giving anyone a chore", async () => {
     fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0, conversations: {}, usage: {} });
     open();
-    expect(await screen.findByText(/还没有可写的内容/)).toBeInTheDocument();
-    expect(screen.getByText(/不需要你填表/)).toBeInTheDocument();
-    expect(screen.getByText(/EviMed 会在你和它做研究的过程中自己记下，不需要你填写/)).toBeInTheDocument();
+    expect(await screen.findByText(/EviMed 会在你和它做研究的过程中自己记下，不需要你填写/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "EviMed 眼中的你" })).toBeNull();
   });
 
   it("says so and offers a retry when the page cannot be read", async () => {

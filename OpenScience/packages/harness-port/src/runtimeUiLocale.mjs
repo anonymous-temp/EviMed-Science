@@ -101,6 +101,13 @@ export function evimedDictionaries() {
     'slash.menu': {
       subagent: '子任务',
     },
+    // The kernel's own process view — the timing overview over the per-step
+    // ledger — is what this product calls the run (the view ring reads 对话 ·
+    // 运行 since 2026-09-22; the product's own 运行 tab it replaced drew a
+    // summary of the same run in fewer words).
+    trajectory: {
+      'view.trajectory': '运行',
+    },
     // `common` is where every namespace's fallback pass looks last, so a key
     // here surfaces wherever a package asks for it.
     common: {
