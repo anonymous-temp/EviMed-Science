@@ -1,0 +1,371 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-09-22T16:11:10Z",
+  "mode": "live",
+  "baseUrl": "https://82.156.128.153",
+  "label": "on-2",
+  "project": "eval-frontier-on-2",
+  "answers": [
+    {
+      "id": "frontier-case-1",
+      "tier": "synthesis",
+      "question": "最近三个月 GLP-1 受体激动剂在心衰方面有什么新证据？",
+      "answer": "## 结论\n\n近三个月的证据主线很清楚：GLP-1 类治疗在**肥胖相关 HFpEF** 上已经从\"改善症状、硬终点不确定\"推进到\"事件减少可量化、起效时间可估算、并且开始被指南文件纳入\"。但要提醒一句——**这些证据几乎全部落在射血分数保留／轻度减低（HFpEF/HFmrEF）＋超重肥胖的表型里**；对 HFrEF 和急性心衰，同期证据仍以真实世界观察性为主，一篇 2026 年的汇总分析还提示\"专门的心衰 RCT 方向性偏害\"，这个分歧目前没有解决。\n\n对实际工作最有用的一条新增信息是**起效时间**：事件获益大约在 **4～6 个月**才开始稳定显现。这直接影响随访和疗效判定的时间尺度——不足 3 个月就下\"无效\"结论是不合适的。\n\n---\n\n## 一、最新、最直接的几条新证据\n\n**1. 事件获益与\"起效时间\"被量化（三个月内最实质的进展）**\n\n一项系统评价与 Meta 分析把 4 项 RCT（4,149 例，中位随访约 2.47 年）的个体数据重建后逐日计算风险比：与安慰剂相比，肠促胰素类治疗降低\"心衰恶化或心血管死亡\"（HR 0.59，95% CI 0.45–0.78，中等确定性），降低\"心衰恶化事件\"（HR 0.33，95% CI 0.20–0.54，**高确定性**）。首次达到统计学显著的中位时点约 **126 天（4.1 个月）**，从第 162 天（5.3 个月）起稳定保持；心衰恶化事件约 **183 天（6.0 个月）**后稳定显著 [1]。\n\n**2. HFpEF 的随机证据合并后方向一致**\n\n11 项研究的系统评价与 Meta 分析（随机证据＋观察性证据）显示，含 GLP-1 受体激动活性的治疗降低心衰住院与事件（RCT 汇总 HR 0.68，95% CI 0.52–0.88；复合终点 HR 0.76，95% CI 0.65–0.87），且**Meta 回归未发现 2 型糖尿病状态改变疗效**（所有交互 P > 0.05）；探索性网状 Meta 分析未发现各药之间疗效差异 [2]。\n\n**3. 但有一篇 2026 年的汇总分析给出了相反方向的信号，必须并列呈现**\n\n14 项研究、18,184 例的 Meta 分析中，主要复合终点（心血管死亡＋首次心衰住院）**未达统计学显著**（HR 0.86，95% CI 0.73–1.01；P = 0.067；I² = 47%）。全因死亡（HR 0.86）与 MACE（HR 0.80）改善，但作者明确指出**死亡获益由 CVOT 亚组驱动，而专门的心衰 RCT 方向性偏害**；KCCQ-CSS 提高 7.4 分、6 分钟步行距离增加 17.6 m。作者将总死亡获益的确定性定为低，并提醒间接证据与直接证据的分歧 [3]。\n\n这两篇的差异主要来自纳入研究构成和预估量选择，不是简单的\"谁对谁错\"。**我的判断是：症状／功能获益和心衰事件减少证据较稳，全因死亡获益在 HFpEF 人群里还不稳。**\n\n**4. 指南层面开始落位**\n\n2026 年 ACC HFpEF 专家共识决策路径（ECDP）更新了 2023 版：SGLT2 抑制与甾体类 MRA 仍为一线基础，finerenone 优先于甾体类 MRA，**肠促胰素类治疗被纳入肥胖相关 HFpEF**，ARNI 选择性用于女性及 LVEF 低于约 55%–60% 者。该文同时点出一个关键限定：几项关键试验的入选 LVEF 从 40% 或 45% 起，**获益多由\"心衰恶化事件减少\"驱动，而非心血管死亡** [4]。\n\n说明：我读到的是该路径的解读性综述全文摘要，不是 ACC 原文件；原文件条款请以 ACC 发布文本为准。\n\n---\n\n## 二、按人群看：新增证据的分布很不均匀\n\n**HFpEF＋肥胖（证据最厚）**\n- 结构／机制层面新增一项前瞻性真实世界队列（50 例，中位随访 5.8 个月）：替尔泊肽与左室质量下降（−12.4 g，95% CI −15.4 至 −9.4）、E/e′ 改善（−1.45）、KCCQ 提高 13.1 分、6 分钟步行距离增加 43 m、BMI 下降 5.8 kg/m² 相关 [5]。样本小、单中心、无对照组，只能算支持性证据。\n- 真实世界对比（TriNetX，各 7,624 例匹配）：在**房颤＋HFpEF**人群中，肠促胰素类相较 SGLT2 抑制剂与更低的全因死亡（5.3% vs 7.3%，HR 0.721）和更少住院相关，急诊就诊无差异 [6]。这是观察性设计，且对照组选择会明显影响结论。\n- 头对头方面仍无定论：一项联邦网络队列（各 1,258 例匹配，中位随访 24 周）未发现司美格鲁肽与替尔泊肽在\"全因死亡＋心衰住院\"上有差异（HR 1.14，95% CI 0.89–1.46）[7]；而一项 217,920 人的目标试验模拟提示替尔泊肽在包括心衰在内的多个终点上风险更低，且按糖尿病状态存在效应异质性 [8]。两者设计、随访时长与人群不同，**目前不宜据此排序选药**。\n\n**HFrEF（新证据刚出现，仍属观察性）**\n一项多中心回顾性队列（匹配后 2,550 例，平均 LVEF 30%）显示，GLP-1 RA 使用与更低的全因死亡（7.1% vs 10.2%；OR 0.68，95% CI 0.51–0.90）和急性失代偿性心衰住院（27.7% vs 32.8%；OR 0.79）相关，**且未见室性心律失常事件增加** [9]。这缓解了对心律失常风险的担心，但仍需前瞻性验证。同期一篇综述仍指出 HFrEF 领域缺乏改善主要临床结局的证据 [10]。\n\n**合并糖尿病／CKD**\n- SOUL 试验二次分析（9,650 例，平均随访 47.5 个月）：在有心衰病史者中，口服司美格鲁肽降低\"心衰住院／紧急就诊／心血管死亡\"复合终点（HR 0.78，95% CI 0.63–0.96），**HFpEF 亚组 HR 0.59（95% CI 0.39–0.86），HFrEF 亚组 HR 0.98（0.70–1.38）**；无严重不良事件增加 [11]。这是随机证据，是本轮 HFpEF 获益方向的重要支撑。\n- FLOW 试验心血管亚组分析：司美格鲁肽在合并 CKD 的 2 型糖尿病中改善肾脏与生存结局，无论基线是否已有心衰（有无心衰的交互 P = 0.40）[12]。\n- 真实世界（各 219,189 例匹配）：在无既往心衰的心代风险人群中起始 GLP-1 RA，与更低的心衰住院风险相关（5.4% vs 8.1%，RR 0.66）[13]。这属于一级预防信号，需前瞻性确认。\n\n**经济性（新出现，且结论不一致）**\n- 替尔泊肽在美国 HFpEF＋肥胖人群：ICER 约 70,297 美元/QALY（20 年时限），低于 10 万阈值，但概率敏感性分析中**仅约 51% 的模拟为具成本效果** [14]。\n- 替尔泊肽在德国法定医保视角：ICER 约 252,611 欧元/QALY，5 年增量支出约 19–62 亿欧元，作者结论为\"按现行价格既不具成本效果也难以大规模负担\" [15]。\n- 司美格鲁肽德国视角：ICER 约 30,443 欧元/QALY（5 年），在 10 万欧元/QALY 阈值下具成本效果的概率 0.911，但预算影响可观 [16]。\n\n同一类药物在两个国家、两种视角下结论相反，主要来自价格与支付方阈值差异——**引用经济学结论时必须写明国家、视角与时限。**\n\n---\n\n## 三、安全性与需要盯住的信号\n\n- **虚弱人群**：SELECT 试验的事后分析（17,604 例）按 31 项虚弱指数分层，司美格鲁肽的获益未因基线虚弱而减弱，生活质量改善在更虚弱者中反而更大，因不良事件永久停药的风险在更虚弱者中更低 [17]。这是针对\"虚弱老人能不能用\"的一个直接回应，但属事后亚组分析。\n- **肌肉流失**：同期文献持续把减重伴随的瘦体重下降列为需要主动管理的问题，阻力训练是目前被推荐的保留策略 [18]。这与心衰人群本就存在肌少症风险叠加，值得在随访中纳入。\n- **停药后的风险回升**：有队列报道停用后心梗、卒中与死亡风险相对持续用药者升高（媒体转述的退伍军人队列数据），这一条我只在科技新闻层面见到，**未能定位到原始论文，请勿直接引用**。\n- **不同信号收集口径会改变安全结论**：一项 FAERS 分层研究显示医务人员报告占比在替尔泊肽（5.04%）与司美格鲁肽（23.42%）间差异极大，提示自发报告信号受报告者身份影响 [19]。\n\n---\n\n## 四、不确定性与证据层级\n\n**证据层级**：本轮结论主要建立在**摘要级**证据上——多篇系统评价/Meta 分析的摘要、几项 RCT 二次分析的摘要、真实世界队列摘要。我没有阅读任何一篇的全文（仅有部分为开放获取）。真实世界证据（TriNetX 等）全部受适应证混杂、健康使用者效应与对照组选择影响，方向可信、幅度不可信。\n\n**检索局限，如实说明**：面向心衰适应证的临床指南检索本次未返回结果（该来源不可用），所以\"指南推荐\"这一层只有一篇对 2026 ACC ECDP 的解读性综述作为间接依据，我未读到 ACC 原文件。另有一项 2026 年 6 月发表于 *European Heart Journal* 的研究（肠促胰素治疗下体重下降、运动血流动力学与健康状况），**数据库未提供摘要**，因此本回答未纳入其实质内容，不排除它包含重要新数据。\n\n**什么证据会推翻上述结论**：\n1. 若有专门针对 HFpEF 的 RCT 报告心血管死亡无获益甚至不利（现有那篇 14 研究 Meta 分析的\"方向性偏害\"提示若被证实），则会削弱\"事件获益\"的表述；\n2. 若有头对头 RCT 证实替尔泊肽优于司美格鲁肽（或反之），则会推翻\"暂不宜排序选药\"；\n3. HFrEF 的观察性获益若被前瞻性 RCT 否定，则会改变当前对 HFrEF 的谨慎态度。\n\n**一句话的落地含义**：对肥胖相关 HFpEF，这类药物现在可以按\"约 6 个月见事件获益\"的时间尺度来评估；但对 HFrEF、非肥胖 HFpEF、以及虚弱合并肌少症的患者，证据还不足以支持同等力度的判断，具体到某位患者是否启用、如何与其他心衰治疗排序，需由主管医生结合个体情况决定。以上为证据综述，不构成诊疗建议。\n\n---\n\n## 参考文献\n\n1. Spiazzi BF, Zingano CP, Vest AR. Time to Benefit of Incretin-Based Therapies in Adiposity-Related Heart Failure With Mildly Reduced or Preserved Ejection Fraction: a Systematic Review and Meta-Analysis. *Journal of Cardiac Failure*, 2026. https://pubmed.ncbi.nlm.nih.gov/42401228/\n2. Shokravi A, Singh R, Sharma S, et al. Glucagon-Like Peptide-1 Receptor Agonists Improve Cardiovascular Outcomes in Heart Failure with Preserved Ejection Fraction, Independent of Diabetes: A Systematic Review and Meta-Analysis. *CJC Open*, 2026. https://pubmed.ncbi.nlm.nih.gov/42327438/\n3. Muller Ferreira V, Ayres Muller V. Glucagon-Like Peptide-1 Receptor Agonists Across the Heart Failure Spectrum: A Systematic Review and Meta-Analysis. *Cureus*, 2026. https://pubmed.ncbi.nlm.nih.gov/42292722/\n4. Ripoll JG, Herrera HR, Zaremba S, et al. The 2026 American College of Cardiology Expert Consensus Decision Pathway for Heart Failure with Preserved Ejection Fraction: Implications for Cardiothoracic and Vascular Anesthesia. *Journal of Cardiothoracic and Vascular Anesthesia*, 2026. https://pubmed.ncbi.nlm.nih.gov/42760239/\n5. Karanxha J, Guni M, Xhabija N, et al. Association of tirzepatide with reverse cardiac remodeling and improved diastolic function in obesity-related HFpEF: A prospective real-world cohort study. *International Journal of Cardiology*, 2026. https://pubmed.ncbi.nlm.nih.gov/42710812/\n6. Ahmed F, Gohar N, Shafqat M, et al. GLP-1 Receptor Agonists or Dual GLP-1/GIP Receptor Agonists vs. SGLT2 Inhibitors in Patients with Atrial Fibrillation and HFpEF: A Propensity-Matched Real-World Analysis. *Journal of Clinical Medicine*, 2026. https://pubmed.ncbi.nlm.nih.gov/42452454/\n7. Monzo L, Savarese G, Duarte K, et al. Semaglutide vs tirzepatide in patients with obesity and HFpEF: a report from a global federated research network. *ESC Heart Failure*, 2026. https://pubmed.ncbi.nlm.nih.gov/41711744/\n8. Cardiovascular and Cerebrovascular Outcomes Risk Reduction Associated With Semaglutide vs Tirzepatide: A Target Trial Emulation. *JACC: Advances*, 2026. https://pubmed.ncbi.nlm.nih.gov/42489387/\n9. Glucagon-like peptide-1 receptor agonists in patients with heart failure with reduced ejection fraction. *ESC Heart Failure*, 2026. https://pubmed.ncbi.nlm.nih.gov/41991158/\n10. Crispino SP, Nusca A, Ferro A, et al. Current and Emerging Roles of GLP1 Receptor Agonists Across the Spectrum of Left Ventricular Ejection Fraction in Heart Failure. *Biomolecules*, 2025. https://pubmed.ncbi.nlm.nih.gov/41301492/\n11. Oral Semaglutide and Heart Failure Outcomes in Persons With Type 2 Diabetes: A Secondary Analysis of the SOUL Randomized Clinical Trial. *JAMA Internal Medicine*, 2026. https://pubmed.ncbi.nlm.nih.gov/41627802/\n12. Kidney and Survival Benefits of Semaglutide in Diabetes With Chronic Kidney Disease: FLOW Trial Cardiovascular Subgroup Analyses. *Journal of the American College of Cardiology*, 2026. https://pubmed.ncbi.nlm.nih.gov/42233552/\n13. Issaka Y, Abdul-Kareem H, Meyahnwi D, et al. Glucagon-Like Peptide-1 Receptor Agonists and Heart Failure Hospitalization in a Real-World Cardiometabolic Population. *The American Journal of Cardiology*, 2026. https://pubmed.ncbi.nlm.nih.gov/41895359/\n14. Cost-Effectiveness of Tirzepatide for the Management of Heart Failure With Preserved Ejection Fraction and Obesity. *JACC: Heart Failure*, 2026. https://pubmed.ncbi.nlm.nih.gov/42012431/\n15. Estler B, Fröhlich H, Täger T, et al. Cost-effectiveness and budget-impact analysis of tirzepatide in heart failure with preserved ejection fraction and obesity in the German health-care system. *International Journal of Cardiology*, 2026. https://pubmed.ncbi.nlm.nih.gov/42155673/\n16. Cost-Effectiveness and Budget-Impact Analysis of Semaglutide in Heart Failure with Preserved Ejection Fraction and Obesity in the German Health-Care System. *PharmacoEconomics*, 2026. https://pubmed.ncbi.nlm.nih.gov/42228345/\n17. Ostrominski JW, Plutzky J, Scirica BM, et al. Efficacy and Safety of Semaglutide According to Frailty Status: A Post Hoc Analysis of the SELECT Randomized Clinical Trial. *JAMA Cardiology*, 2026. https://pubmed.ncbi.nlm.nih.gov/42747817/\n18. Khan MS, Dawood MH, Handelsman Y, et al. Fat, muscle, and anti-obesity medications in cardiovascular disease prevention. *European Heart Journal*, 2026. https://pubmed.ncbi.nlm.nih.gov/41914150/\n19. Real-World Adverse Event Reporting Patterns of Tirzepatide Versus Semaglutide: A Stratified Study of General and Healthcare Professional Cohorts in FAERS. *Diabetes, Obesity and Metabolism*, 2026. https://pubmed.ncbi.nlm.nih.gov/42768828/\n20. Roy E, Parent MC, Ducharme A. GLP1 receptor agonists in heart failure with preserved ejection fraction (HFpEF) — beyond weight loss: a condensed scientific review. *Drugs in Context*, 2026. https://pubmed.ncbi.nlm.nih.gov/42306018/\n\n另：第 21 项 *European Heart Journal* 2026 年 6 月研究（Weight loss, exercise haemodynamics, and health status with incretin therapy for heart failure with preserved ejection fraction and obesity, https://pubmed.ncbi.nlm.nih.gov/42366808/ ）本次仅获题录、无摘要，故正文未引用其内容，列此备查。",
+      "run": {
+        "runId": "run_d275ee9931ec8e10d9f70ea98a5cdd64",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 119637,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [20] is listed but never cited in the text."
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「semaglutide heart failure obesity random…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索指南：「GLP-1 receptor agonist heart failure HFp…」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 5,
+        "sessionId": "session-75511764-df46-4cde-bda3-ce4c058866ea",
+        "toolCalls": 17,
+        "tools": [
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__drug_term_normalize",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__guideline_search",
+          "cite_lookup",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search"
+        ],
+        "frontierToolCalls": 3,
+        "artifacts": [],
+        "assistantChars": 9441,
+        "reportArtifactChars": 0
+      },
+      "error": null
+    },
+    {
+      "id": "frontier-case-2",
+      "tier": "synthesis",
+      "question": "最近一个月国内外有没有新的药品安全警示或说明书修订？",
+      "answer": "## 结论\n\n有。过去一个月（2026‑08‑22 至 09‑22）国内外都有可核实的药品安全警示与说明书修订，其中**两条对临床当下最有影响**：一是注射铁剂（羧基麦芽糖铁等）的低磷血症风险，美国 FDA 已于 9 月 1 日为其加入黑框警告，EMA 于 9 月 4 日对**全部注射铁剂**启动 Article 31 类效应审查；二是国内对肌苷注射剂（含注射用、氯化钠/葡萄糖输液等多种剂型）说明书作统一修订，新增静滴致心脏骤停与过敏性休克死亡的注意事项及大量配伍禁忌。此外国内愈美制剂由非处方药转为处方药，EMA 完成依匹卡因（ipidacrine）、羟丁酸钠两项审查，英国 MHRA 发布 9 月用药安全更新，日本 PMDA 公布了 9 个品种的说明书改订（其中多数并非安全性修订）。\n\n## 一、国内（NMPA / 国家药品不良反应监测中心）\n\n| 时间 | 事项 | 要点 |\n|---|---|---|\n| 2026‑09‑02 签发，9 月上旬发布 | **肌苷注射剂说明书统一修订**（2026 年第 87 号） | 持有人须于 2026‑12‑01 前报省级药监部门备案；备案后生产的药品不得再用原说明书，9 个月内完成已出厂说明书标签更换或告知患者 [1][2] |\n| 2026‑08‑31 签发，9 月初发布 | **愈美制剂（愈创木酚甘油醚+右美沙芬）非处方药转处方药**（2026 年第 83 号） | 持有人须于 2026‑11‑30 前向药审中心提出修订说明书的补充申请，按处方药管理；医师、药师须据新说明书做获益/风险分析 [3][4] |\n| 2026‑08‑25 | **药物警戒快讯 2026 年第 8 期（总第 280 期）** | 国家中心转载加拿大卫生部警示：卡马西平、奥卡西平口服混悬液所含辅料丙二醇可在新生儿和低龄儿童体内蓄积，导致代谢性酸中毒、急性肾损伤、肝功能障碍 [5] |\n| 2026‑09‑21 | 注销八珍丸等 12 个药品注册证书（2026 年第 92 号） | 属注册证书注销，不是安全警示或说明书修订；具体品种见公告附件（该公告页正文未能直接打开，此条依据公告目录与题录信息） [6] |\n\n**肌苷注射剂本次修订的实质内容**（据公告附件）[7]：\n- 【不良反应】系统列出上市后监测到的多系统反应，包括畏寒寒战高热、胸闷胸痛、恶心呕吐、皮疹瘙痒、潮红发绀、心悸心动过速心律失常、呼吸困难窒息感、**超敏反应/类过敏反应/过敏性休克**、输液相关反应等；\n- 【禁忌】对本品过敏者禁用；\n- 【注意事项】明确「**本品静脉滴注有引起心脏骤停和过敏性休克死亡的报道**，建议应用时缓慢滴注并严密观察生命指征变化及过敏反应」；出现皮疹、瘙痒、呼吸困难、血压下降须立即停药并治疗；\n- 【药物相互作用】列出乳清酸、氯霉素、双嘧达莫、阿托品、呋塞米、维生素 B12、万古霉素、四环素、长春新碱以及**所有菌苗和疫苗**等一大批禁止配伍的注射液。\n\n**丙二醇警示的量化阈值**（加拿大卫生部，经国家中心转载）[5]：足月且出生未满 4 周的新生儿、矫正胎龄不足 44 周的早产儿，丙二醇暴露超过 1 mg/kg/日风险增加；1 个月至 5 岁儿童累积暴露达或超过 50 mg/kg/日风险增加。卡马西平口服混悬液（100 mg/5 mL）丙二醇浓度 25.0–51.2 mg/mL，奥卡西平口服混悬液（60 mg/mL）为 25 mg/mL，按新生儿常规日剂量给药即可超过阈值；医务人员应避免使用，必须使用时监测渗透压和/或阴离子间隙。\n\n## 二、国外\n\n**美国 FDA**（药品安全通讯栏目在近一个月只发布了这两条）[8][9][10]：\n- **9 月 1 日，羧基麦芽糖铁注射液（Injectafer）加入黑框警告**——症状性低磷血症。要求：重复疗程前及有风险因素者检查血磷；给药前纠正已存在的低磷血症；对慢性低磷风险者监测；出现严重症状性或持续性低磷血症时考虑永久停药。FDA 的评估依据包括不良事件数据库、文献与 Sentinel 系统，其中 Sentinel 数据显示**仅有不到 20% 的给药事件进行了血磷检测**；后果包括住院、需数周至数月的磷补充治疗、骨软化与骨折。\n- **9 月 15 日，脱氧胆酸注射液（Kybella）标签新增警示**（非黑框警告）：FDA 明确不推荐用于颏下脂肪区以外的部位；自 2015 年获批以来识别到 **129 例**颏下以外部位给药的（部分为严重）不良事件，如视力模糊或下降、面部麻痹与感觉异常；并识别到 **117 例**未消退的注射部位结节（≤3 cm）或肿块（>3 cm），报告时已平均持续 **143 天**，已纳入【警告与注意事项】。\n\n**欧洲 EMA**[11][12][13][14]：\n- **9 月 4 日，PRAC 启动 Article 31 审查（由奥地利药监局请求）**：范围覆盖**全部注射铁剂**——羧基麦芽糖铁、异麦芽糖酐铁、葡萄糖酸铁、氢氧化铁聚麦芽糖复合物、右旋糖酐铁、蔗糖铁。触发原因是有报告显示现有降低风险措施效果不足，出现严重低磷血症并致骨软化，**部分病例仅接受过一至两次给药且无已知风险因素**，且存在诊断延迟（低磷症状与缺铁症状重叠、骨软化不一定在 X 线上可见）。口服铁剂不在审查范围内。PRAC 9 月会议统计：10 项安全信号、86 项 PSUR 单次评估、73 项风险管理计划、25 项上市后安全性研究、1 项启动的转介。\n- **9 月 18 日，CHMP 完成依匹卡因（ipidacrine）审查**：限定适应症并删除脱髓鞘疾病、神经炎、多神经炎、多神经根神经病、肌无力综合征等用途；仅由有经验的医师处方；>80 mg/日副作用风险增加，肝毒性不能排除，肝功能异常者慎用。\n- **9 月 18 日，CHMP 完成含羟丁酸钠口服液（175 mg/mL，酒精依赖适应症）审查**：未发现新的安全性问题，获益仍大于风险，但因上市后研究存在方法学局限，要求企业开展新的疗效研究，完成并提交报告可能成为**维持上市许可的条件**。\n\n**英国 MHRA**[15]：9 月 2 日《Drug Safety Update》第 20 卷第 2 期发布——肠外营养给药**必须使用过滤器**，孔径不大于 1.2 μm，无脂（水性）配方宜用 0.2 μm；背景是未使用过滤器的给药已导致多起不良事件，**其中包括一例致死性栓塞**，并源于一起 Regulation 28「防止未来死亡」报告。MHRA 已要求所有肠外营养产品提供方使其产品信息与过滤器要求一致。这是本月唯一一条经该栏目发布的用药安全更新（上一条多潘立酮禁忌更新在 7 月 21 日）。\n\n**日本 PMDA**[16][17]：9 月 14–17 日公布 6 个品种基于「说明书改订咨询」的改订，包括阿贝西利（9/14）、替尔泊肽（9/15）、达雷妥尤单抗/透明质酸酶、紫杉醇、帕妥珠单抗（9/16）、褪黑素儿科制剂（9/17）。需要注意**并非全部属于安全性改订**：例如替尔泊肽本次只改【临床成绩】项，补入心血管结局试验（I8F‑MCG‑PGN，13,209 例，主要心血管事件 HR 0.92 [95.3% CI 0.83, 1.01]，非劣于度拉糖肽）结果；副作用频率数据（本品组 60.3%）也一并更新。\n\n**其他监管动作（属质量/差错类警示，不是说明书修订）**：美国近一个月有 0.9% 氯化钠注射液与 10 mEq 氯化钾注射液包装混淆召回、两批右美托咪定氯化钠注射液因纤维素或胶塞颗粒物召回、氯化钠冲管安瓿召回；英国有氯巴占口服混悬液部分批次线性条形码错误（Class 4 药品缺陷通知）；FDA 还警示某「tejocote」保健品实为**黄夹竹桃**（Thevetia peruviana），全株有毒，可致严重心脏毒性，已启动召回。\n\n## 三、对临床与药学的落地提示\n\n- **注射铁剂**：在 FDA 黑框警告与 EMA 类效应审查并行的背景下，若患者需重复疗程或属低磷风险人群，应按最新说明书/机构要求核查血磷；低磷表现为肌无力或肌痛、乏力、骨关节痛、意识模糊，**与缺铁性贫血本身的症状高度重叠**，容易漏诊 [9][11]。\n- **肌苷注射剂**：静滴须缓慢并观察生命体征与过敏反应，配伍前务必核对新说明书的配伍禁忌清单（含所有菌苗和疫苗）[7]。\n- **儿科**：新生儿、低龄儿童使用卡马西平或奥卡西平口服混悬液前，应确认辅料丙二醇含量并评估累积暴露（含其他口服、注射及部分外用含丙二醇制剂）[5]。\n- **肠外营养**：确认所有配方经 ≤1.2 μm 过滤器给药，无脂配方宜用 0.2 μm [15]。\n- **愈美制剂**：本月初起按处方药管理，零售端与患者沟通口径需同步调整 [3][4]。\n\n以上是证据与条件的综述，具体到某位患者是否调整或停用某个药，应由其主管医师或药师结合个体情况决定。\n\n## 四、不确定性与证据层级\n\n本次结论建立在**监管机构官方页面全文**之上（FDA 药品安全通讯全文、EMA 转介页与 PRAC/CHMP 公告全文、MHRA 用药安全更新全文、PMDA 改订概要 PDF 全文、国家药品不良反应监测中心转载页与广东省药监局转载件含附件全文），不是题录级推断。仍存在的局限：\n\n1. **国家药监局官网对普通客户端返回 JavaScript 校验，其「药品说明书修订公告」栏目未能直接读取**；国内条目是经国家药品不良反应监测中心「安全警示—公告通告」栏目和广东省药监局转载件核实的。该栏目对公告的转载**并不完整**（例如 2026 年 7 月 20 日的感冒灵口服制剂说明书修订公告〔2026 年第 66 号〕未出现在其中），因此「国内近一个月仅上述两项说明书类行动」的把握是**中等**，不能排除 8 月下旬至 9 月另有未被转载的公告。\n2. EMA 的 PRAC 会议议程 PDF 与 CHMP 会议纪要未逐页读取，PRAC 9 月统计数字来自会议要点页；EMA「集中授权产品安全性产品信息变更清单」（8 月 31 日更新）未逐条打开，欧盟层面可能另有条目。\n3. Health Canada 原文未直接读取，仅经国家中心转载的中文摘要；未覆盖 TGA、加拿大卫生部其它公告等更多辖区。\n4. PMDA 该列表只涵盖「基于改订咨询」路径的说明书改订，不含厚生劳动省通知路径的全部安全性改订；各国仿制药与多规格标签的实际落地时点也未逐一核对。\n5. 能推翻上述判断的证据：NMPA 官网 8 月下旬至 9 月发布的说明书修订类公告中，存在未被上述转载渠道收录的条目。\n\n**持续跟踪的可用入口**：美国看 FDA「Drug Safety Communications」列表（页面标注更新时间 09/15/2026）；欧盟看 EMA 会议要点中 PRAC 部分及「集中授权产品安全性产品信息变更清单」；英国看 MHRA《Drug Safety Update》（每月一期）；国内看国家药监局「药品说明书修订公告」栏目与国家药品不良反应监测中心的「安全警示」栏目（每月一期《药物警戒快讯》）。\n\n## 参考文献\n\n1. 国家药品监督管理局药品评价中心. 安全警示（药品）[EB/OL]. https://www.cdr-adr.org.cn/sy_aqjs1/index.html\n2. 广东省药品监督管理局. 国家药监局关于修订肌苷注射剂说明书的公告（2026年第87号）[EB/OL]. https://mpa.gd.gov.cn/gkmlpt/content/4/4951/mpost_4951758.html\n3. 广东省药品监督管理局. 国家药监局关于愈美制剂非处方药转换为处方药的公告（2026年第83号）[EB/OL]. https://mpa.gd.gov.cn/gkmlpt/content/4/4950/mpost_4950355.html\n4. 广东省药品监督管理局. 愈美制剂说明书安全性信息修订要求（附件）[EB/OL]. https://mpa.gd.gov.cn/attachment/0/624/624122/4950355.docx\n5. 国家药品监督管理局药品评价中心. 药物警戒快讯2026年第8期（总第280期）[EB/OL]. https://www.cdr-adr.org.cn/drug_1/aqjs_1/drug_aqjs_jjkx/202608/t20260825_51704.html\n6. 国家药品监督管理局. 国家药监局关于注销八珍丸等12个药品注册证书的公告（2026年第92号）[EB/OL]. https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypqtggtg/20260921111804170.html\n7. 广东省药品监督管理局. 肌苷注射剂说明书修订要求（附件）[EB/OL]. https://mpa.gd.gov.cn/attachment/0/624/624507/4951758.docx\n8. U.S. Food and Drug Administration. Drug Safety Communications [EB/OL]. https://www.fda.gov/drugs/drug-safety-and-availability/drug-safety-communications\n9. U.S. Food and Drug Administration. FDA Adds Boxed Warning to Labeling for Ferric Carboxymaltose Injection (Injectafer) to Describe Risk of Low Phosphate Levels [EB/OL]. https://www.fda.gov/drugs/drug-safety-communications/fda-adds-boxed-warning-labeling-ferric-carboxymaltose-injection-injectafer-describe-risk-low\n10. U.S. Food and Drug Administration. FDA Approves Additional Information in Labeling for Kybella (Deoxycholic Acid) Injection Warning of Adverse Reactions Associated with Unapproved Use [EB/OL]. https://www.fda.gov/drugs/drug-safety-communications/fda-approves-additional-information-labeling-kybella-deoxycholic-acid-injection-warning-adverse\n11. European Medicines Agency. Meeting highlights from the Pharmacovigilance Risk Assessment Committee (PRAC) 31 August - 3 September 2026 [EB/OL]. https://www.ema.europa.eu/en/news/meeting-highlights-pharmacovigilance-risk-assessment-committee-prac-31-august-3-september-2026\n12. European Medicines Agency. Parenteral iron-containing medicinal products - referral [EB/OL]. https://www.ema.europa.eu/en/medicines/human/referrals/parenteral-iron-containing-medicinal-products\n13. European Medicines Agency. EMA concludes review of ipidacrine-containing medicines [EB/OL]. https://www.ema.europa.eu/en/news/ema-concludes-review-ipidacrine-containing-medicines\n14. European Medicines Agency. Benefits of sodium oxybate continue to outweigh risks in people with alcohol dependency [EB/OL]. https://www.ema.europa.eu/en/news/benefits-sodium-oxybate-continue-outweigh-risks-people-alcohol-dependency\n15. Medicines and Healthcare products Regulatory Agency. Filters should be used during the administration of Parenteral Nutrition for patients in all care settings [EB/OL]. https://www.gov.uk/drug-safety-update/filters-should-be-used-during-the-administration-of-parenteral-nutrition-for-patients-in-all-care-settings\n16. 独立行政法人医薬品医療機器総合機構. 医薬品添付文書改訂相談に基づく添付文書改訂 [EB/OL]. https://www.pmda.go.jp/safety/info-services/drugs/calling-attention/revision-based-on-the-consultation/0001.html\n17. 独立行政法人医薬品医療機器総合機構. チルゼパチドの「臨床成績」の改訂について [EB/OL]. https://www.pmda.go.jp/files/000282780.pdf\n18. U.S. Food and Drug Administration. Otsuka ICU Medical LLC Issues Voluntary Nationwide Recall of 0.9% Sodium Chloride Injection, USP Due To a Product Mix-up with 10 mEq Potassium Chloride Injection [EB/OL]. https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/otsuka-icu-medical-llc-issues-voluntary-nationwide-recall-09-sodium-chloride-injection-usp-due\n19. U.S. Food and Drug Administration. Par Health Issues Voluntary Nationwide Recall of Two Lots of Dexmedetomidine HCl in 0.9% Sodium Chloride Injection Due to the Presence of Particulate Matter [EB/OL]. https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/par-health-issues-voluntary-nationwide-recall-two-lots-dexmedetomidine-hcl-09-sodium-chloride\n20. U.S. Food and Drug Administration. Global Mix Inc. Recalls Niwali Tejocote Capsules and Niwali Tejocote Pieces Because of Possible Health Risk [EB/OL]. https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/global-mix-inc-recalls-niwali-tejocote-capsules-and-niwali-tejocote-pieces-because-possible-health\n21. Medicines and Healthcare products Regulatory Agency. Class 4 Medicines Defect Notification: Martindale Pharmaceuticals Ltd, Clobazam Martindale Pharma 5 mg/5 mL and 10 mg/5 mL Oral Suspension 150ml, EL(26)A/38 [EB/OL]. https://www.gov.uk/drug-device-alerts/class-4-medicines-defect-notification-martindale-pharmaceuticals-ltd-clobazam-martindale-pharma-5-mg-slash-5-ml-and-10-mg-slash-5-ml-oral-suspension-150ml-el-26-a-slash-38\n22. European Medicines Agency. What's new [EB/OL]. https://www.ema.europa.eu/en/news-events/whats-new",
+      "run": {
+        "runId": "run_f7640c6a40b1d8d9ff608cee920070aa",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 285765,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [18] is listed but never cited in the text."
+          },
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [19] is listed but never cited in the text."
+          },
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [20] is listed but never cited in the text."
+          },
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [21] is listed but never cited in the text."
+          },
+          {
+            "code": "specialist_citation_integrity_failed",
+            "severity": "must-fix",
+            "title": "引用编号或文献条目有误",
+            "text": "Reference [22] is listed but never cited in the text."
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-14a95bf4-01da-4bc2-8a6b-c665c38f9c2d",
+        "toolCalls": 41,
+        "tools": [
+          "bash",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search"
+        ],
+        "frontierToolCalls": 6,
+        "artifacts": [],
+        "assistantChars": 9351,
+        "reportArtifactChars": 0
+      },
+      "error": null
+    },
+    {
+      "id": "frontier-case-3",
+      "tier": "synthesis",
+      "question": "阿尔茨海默病的抗体类新药最近有什么进展？",
+      "answer": "## 结论先行\n\n抗体类抗淀粉样蛋白药已经从「有没有效」走到了「怎么用得安全、用得方便」：**皮下剂型落地是这一轮最实质的临床进步**——美国 FDA 已批准仑卡奈单抗（lecanemab）皮下自动注射器（LEQEMBI IQLIK），起始剂量 500 mg 每周一次、维持剂量 360 mg 每周一次，可居家给药；多奈单抗（donanemab）通过改良滴定把 ARIA-E 发生率从约 24% 降到约 16%，且不损失清除斑块的效果。疗效本身仍属「统计学显著但幅度有限」，安全风险（ARIA）与 APOE ε4 基因型分层没有改变，而 tau 抗体、脑内递送型抗体、TREM2 通路抗体这类「下一代」目前仍是阴性或仅有早期信号 [1][2][4][5][8]。\n\n**对临床决策的直接含义**：换剂型不改变 ARIA 风险本身——美国和欧盟的标签对这两类药物都保留了针对 ARIA 的黑框警告，欧盟更窄，只批给 APOE ε4 杂合或非携带者，且接受抗凝治疗者禁用；用药前后的 MRI 监测节奏不能因为改成皮下注射而省略 [1][2][3]。具体是否用、怎么用，需由认知障碍专科医生结合个体情况判断。\n\n---\n\n## 已获批的两个药：剂型与给药方案变了什么\n\n**仑卡奈单抗（lecanemab）**\n\n- 美国处方信息（2026 年 7 月修订）已把静脉与皮下两条路径并列：起始方案为静脉 10 mg/kg 每 2 周，或皮下 500 mg 每周一次（两次 250 mg 注射）；18 个月后可继续起始方案或转入维持方案（静脉 10 mg/kg 每 4 周，或皮下 360 mg 每周一次），两种路径之间可以互换 [1]。\n- 说明书中保留了「淀粉样蛋白相关影像异常（ARIA）」黑框警告，并把 ApoE ε4 纯合子列为高危人群；建议在治疗第 1、2、3、6 个月复查 MRI [1]。\n- 欧盟侧仍只保留静脉剂型：2025 年 4 月获欧盟上市许可，限定用于 APOE ε4 单拷贝或无拷贝、且脑内确认有淀粉样斑块的早期患者，给药为每 2 周静脉输注，并须配套控制性准入项目与欧盟登记研究 [3]。\n\n**多奈单抗（donanemab）**\n\n- 欧盟 2025 年 9 月 24 日批准，同样限定 APOE ε4 单拷贝或无拷贝人群，每 4 周静脉输注，治疗不超过 18 个月；批准依据是一项 1736 例早期患者的试验，18 个月时 iADRs 恶化 11 分对安慰剂 13 分 [2]。\n- **这一轮最受关注的安全性改良**：TRAILBLAZER-ALZ 6 显示，改为更缓慢的上调剂量后，24 周 ARIA-E 从标准方案 23.7% 降到 13.7%，52 周为 24.2% 对 15.6%，影像学严重度显著更低，而药代动力学、累积暴露与淀粉样斑块清除程度相当 [4][5]。\n- 英国按 APOE ε4 非携带者/杂合子人群做的上市后分析显示，这个「窄标签」人群里 ARIA-E 为 20.8%（安慰剂 1.6%）、ARIA-H 26.7%（安慰剂 11.6%），风险被降低但没有消除；治疗组在多个量表上仍显著延缓进展，CDR-G 进入下一阶段的风险低 40.3% [6]。\n\n**真实世界数据比关键试验更温和**：一项 172 例（仑卡奈单抗 89 例、多奈单抗 83 例）的回顾性队列中，ARIA 发生率分别为 11.2% 与 13.3%，改良滴定的多奈单抗 ARIA 为 8.1%，低于原始方案 28.6%；未发生过敏性休克，结构化 MRI 随访捕获了 95.2% 的 ARIA 事件 [9]。\n\n---\n\n## 疗效的体量：别把「阳性」读成「大幅改观」\n\n- 一项纳入 4 项 III 期试验、7695 例早期 AD 患者的系统评价与 Meta 分析显示，抗淀粉样蛋白单抗组 CDR-SB 相对安慰剂平均差 −0.42 分（95% CI −0.59 至 −0.25，I²=78%），作者明确指出这一幅度接近早期 AD 中 CDR-SB 最小临床重要差异的下边界；获益主要由仑卡奈单抗与多奈单抗驱动，aducanumab 结果不一致，gantenerumab 无临床意义获益 [7]。\n- 安全性上，ARIA-E 的合并风险比为 10.1（95% CI 7.8–13.0），多数为无症状、经方案规定 MRI 发现 [7]。\n- Cochrane 2026 年系统评价（17 项研究、20 342 例）的措辞更保守：18 个月时认知功能（ADAS-Cog）与安慰剂相比「probably little to no difference」（SMD −0.11，中等确定性），痴呆严重度（CDR-SB）「may result in little to no difference」（SMD −0.12，低确定性）[10]。\n- 不同药物之间的 ARIA 风险并不相同：一项 22 项试验、最多 23 120 例的网络 Meta 分析中，ARIA-E 合并发生率 6.8%、ARIA-H 15.8%，ARIA-E 风险最高者为多奈单抗与 aducanumab，其后为 gantenerumab 与仑卡奈单抗；APOE ε4 携带显著升高 ARIA-E（OR 2.28）与 ARIA-H（OR 2.07），纯合子呈明显基因剂量效应 [11]。\n\n---\n\n## 下一代抗体：目前是「管线进展」，不是「疗效进展」\n\n- **Trontinemab（罗氏，TfR1 介导的脑内递送抗 Aβ 抗体）**：已从早期试验推进到 III 期，两项早期症状性 AD 的关键试验（TRONTIER 1/2）正在招募，另有针对认知未受损高危人群的研究在招募。尚无同行评议的疗效结果可引用——网上流传的「>90% 斑块清除」数据我只找到二次报道，没有找到可核验的一手来源，因此不作为证据列在这里 [12][13][14]。\n- **Remternetug（礼来，皮下/静脉抗 Aβ 抗体）**：III 期 TRAILRUNNER-ALZ 3（早期 AD）处于在招募但已停止入组状态，另有针对常染色体显性遗传 AD 的研究在招募；公开检索尚未见注册终点结果披露 [15]。\n- **AL002（TREM2 激动抗体）**：II 期随机试验纳入 381 例早期 AD，脑脊液可溶性 TREM2 下降、骨桥蛋白升高，说明中枢靶点结合充分，但 96 周 CDR-SB 主要终点三个剂量均未达到（各剂量 LS 均值差 −0.31 至 +0.13，均 P>0.05）；最常见的治疗中出现不良事件是影像学上类似 ARIA 的 MRI 改变。**这是该靶点首个随机试验，结论为阴性** [8]。\n- **Etalanetug（E2814，抗 tau MTBR 抗体）**：常染色体显性 AD 的开放标签 1b/2 期仅 8 例，脑脊液 p-tau217 在第 12/36/108 周分别下降 30.4%/48.6%/57.9%，MTBR-tau243 第 36 周最大降低 71.6%，3 例完成 tau PET 者 108 周未见 tau 累积；样本极小、无对照，仅可视为机制性信号 [17]。\n- **Aducanumab 已于 2024 年 11 月退出**，在此类综述中被作为历史节点而非可用选项 [18]。\n\n---\n\n## 围绕用药的配套变化（对可及性影响很大）\n\n- **诊断与入组路径**：FDA 近期批准了两款阿尔茨海默病血液检测，tau PET 也有了跨示踪剂的五分类判读框架（认知未受损者中 tau 阳性检出率较已批准的二分法提高，PR 1.89–2.73）。这会直接改变抗体治疗的筛选用药人群界定方式 [19][20]。\n- **中国真实世界证据**：一项七中心 407 例研究显示治疗相关症状 22.22%、至少一次 ARIA 12.15%（仅 4 例有症状、7 例严重），APOE ε4 状态与不良事件无关，基线微出血数目多者更易发生不良事件，6 个月生物标志物改善、认知稳定 [16]。另有 190 例浙江队列：ARIA 9.7%，输注相关反应 16.5%，血浆 p-tau217 区分早期 AD 的 AUC 达 0.9983，但短期未见可测量的认知疗效 [19]。这些是没有对照组的单臂数据，只能作为安全性参照，不能作为疗效证据。\n- **指南化**：西班牙神经病学会 2026 年发布了抗淀粉样蛋白单抗的适当使用建议，覆盖候选者筛选、不良反应、监测、停药标准与处方中心资质，并明确提出对可及性公平性的担忧 [21]；法国记忆门诊联盟此前的建议则把「疑似脑淀粉样血管病」列为暂不使用的情形 [22]。\n\n---\n\n## 不确定性与证据层级\n\n- 上述结论的证据层级不一：给药方案与黑框警告来自**监管标签原文**（最高可靠度）；ARIA 与疗效的定量结论来自**已读摘要**的系统评价与随机试验；trontinemab、remternetug 的进展**仅到试验注册层面**，没有任何疗效结果；中国真实世界数据来自**无对照的单臂/多中心观察性研究**。\n- 未解决的空白：现有证据几乎全部集中在 18 个月；停药后是否反弹、疗效是否随时间衰减尚无长期数据。一项模拟研究提示，抗淀粉样蛋白治疗的成本效果高度依赖停药后的疗效衰减假设——不衰减时 ICER 约 39 745 欧元/QALY，每年衰减 20% 时升至 151 016 欧元/QALY [23]。也就是说，「到底能不能改变病程」这个问题的答案，会直接推翻目前的成本效果判断。\n- 会被新证据改变的具体节点：TRONTIER 与 TRAILRUNNER-ALZ 3 的关键试验结果一旦公布，脑内递送型与高剂量皮下抗体的疗效-安全性权衡可能重排；TRAILBLAZER-ALZ 7 已开始把多奈单抗推向更早的认知下降人群；若有针对 APOE ε4 纯合子的有效风险管理方案出台，欧盟目前的窄标签会随之调整。\n- 一个常见误读需要点明：**把静脉改成皮下注射并不降低 ARIA 风险**，改变的只是给药便利性与医疗资源占用；MRI 监测、APOE 分型、抗凝与微出血等禁忌条件都仍然成立 [1][2][3][9]。\n\n---\n\n## 参考文献\n\n[1] LEQEMBI (lecanemab-irmb) 美国处方信息（含 LEQEMBI IQLIK 皮下自动注射器），Eisai Inc.，修订于 2026-07-21。https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=9d1ff786-e577-410a-a273-c4d7d0e4e975\n\n[2] Kisunla（donanemab）欧盟药品评估报告概述，欧洲药品管理局。https://www.ema.europa.eu/en/medicines/human/EPAR/kisunla\n\n[3] Leqembi（lecanemab）欧盟药品评估报告概述，欧洲药品管理局。https://www.ema.europa.eu/en/medicines/human/EPAR/leqembi\n\n[4] Modified titration of donanemab reduces ARIA risk and maintains amyloid reduction. Alzheimer's & Dementia, 2025. https://pubmed.ncbi.nlm.nih.gov/40172303/\n\n[5] The effect of modified donanemab titration on ARIA-E and amyloid reduction: 18-month results from TRAILBLAZER-ALZ 6. J Prev Alzheimers Dis, 2025. https://pubmed.ncbi.nlm.nih.gov/40619285/\n\n[6] Donanemab for early symptomatic AD in the UK-indicated population: safety and efficacy in APOE ε4 non-carriers or heterozygotes. Neurodegener Dis Manag, 2026. https://pubmed.ncbi.nlm.nih.gov/42644303/\n\n[7] Pharmacological and Clinical Heterogeneity of Anti-Amyloid Monoclonal Antibodies in Early Alzheimer's Disease. Med Sci (Basel), 2026. https://pubmed.ncbi.nlm.nih.gov/42506306/\n\n[8] The TREM2 agonistic antibody AL002 in early Alzheimer's disease: a phase 2 randomized trial. Nature Medicine, 2026. https://pubmed.ncbi.nlm.nih.gov/41787076/\n\n[9] Real-world evidence for amyloid-targeted therapies: lecanemab and donanemab. Alzheimers Dement (Amst), 2026. https://pubmed.ncbi.nlm.nih.gov/42661728/\n\n[10] Amyloid-beta-targeting monoclonal antibodies for people with mild cognitive impairment or mild dementia due to Alzheimer's disease. Cochrane Database Syst Rev, 2026. https://pubmed.ncbi.nlm.nih.gov/41985900/\n\n[11] Comparative risk of amyloid-related imaging abnormalities with anti-amyloid-β monoclonal antibodies: network meta-analysis. J Alzheimers Dis, 2026. https://pubmed.ncbi.nlm.nih.gov/42434897/\n\n[12] 临床研究注册：A Clinical Trial of Trontinemab in Participants With Early Symptomatic Alzheimer's Disease（NCT07170150）。https://clinicaltrials.gov/study/NCT07170150\n\n[13] 临床研究注册：A Study of Trontinemab in Participants With Early Symptomatic Alzheimer's Disease（NCT07169578）。https://clinicaltrials.gov/study/NCT07169578\n\n[14] 临床研究注册：A Study of Trontinemab in Cognitively Unimpaired Individuals at Risk for Progression to Symptomatic Alzheimer's Disease（NCT07717411）。https://clinicaltrials.gov/study/NCT07717411\n\n[15] 临床研究注册：A Study of Remternetug (LY3372993) in Early Alzheimer's Disease（TRAILRUNNER-ALZ 3，NCT06653153）。https://clinicaltrials.gov/study/NCT06653153\n\n[16] Safety and short-term outcomes of lecanemab for Alzheimer's disease in China: a multicentre study. Brain, 2026. https://pubmed.ncbi.nlm.nih.gov/41215623/\n\n[17] Etalanetug (E2814) in dominantly inherited Alzheimer's disease: an open-label phase 1b/2 study. Alzheimers Res Ther, 2026. https://europepmc.org/article/MED/41964075\n\n[18] Targeting Amyloid-β Proteins as Potential Alzheimer's Disease Therapeutics. Pharmaceuticals (Basel), 2025. https://pubmed.ncbi.nlm.nih.gov/41304975/\n\n[19] Real-world experience with baseline characteristics and safety of lecanemab in Eastern China. J Alzheimers Dis, 2026. https://pubmed.ncbi.nlm.nih.gov/41396015/\n\n[20] A Harmonized Visual Reading Framework for Tau PET Staging in Alzheimer Disease. JAMA Neurology, 2026. https://doi.org/10.1001/jamaneurol.2026.3253\n\n[21] Appropriate use recommendations of the Spanish Society of Neurology's Behavioural Neurology and Dementia Study Group on anti-amyloid antibodies. Neurologia, 2026. https://pubmed.ncbi.nlm.nih.gov/42202980/\n\n[22] Lecanemab for early Alzheimer's disease: appropriate use recommendations from the French federation of memory clinics. J Prev Alzheimers Dis, 2025. https://pubmed.ncbi.nlm.nih.gov/40011173/\n\n[23] Cost-effectiveness of amyloid-targeting therapies in a memory clinic population: a simulation study（预印本，尚未经同行评议）。https://europepmc.org/article/PPR/PPR1290534\n\n> 补充说明：TRAILBLAZER-ALZ 6 与 Cochrane 评价的关键数字我只核到摘要层级，未逐篇调取全文；trontinemab 与 remternetug 的疗效数据目前不存在可引用的已发表结果，因此上述描述限于注册信息。如果你需要，我可以把其中任一条线（例如皮下剂型的桥接证据、或 APOE ε4 分层下的获益-风险）展开成一份带逐条溯源与证据分级的完整综述。",
+      "run": {
+        "runId": "run_7089344ae3e2e1e0478665fe16c9af81",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 289418,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「remternetug trontinemab anti-tau antibod…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「trontinemab Brainshuttle phase 1b/2a amy…」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「lecanemab-irmb subcutaneous injection」——这次检索没有找到可用来源。"
+          },
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索生物医学来源：「subcutaneous lecanemab autoinjector main…」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-fa76fdce-5209-4ab6-8473-db96264508b1",
+        "toolCalls": 50,
+        "tools": [
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__clinical_trial_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__open_access_full_text",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__frontier_search"
+        ],
+        "frontierToolCalls": 6,
+        "artifacts": [],
+        "assistantChars": 8335,
+        "reportArtifactChars": 0
+      },
+      "error": null
+    },
+    {
+      "id": "frontier-case-4",
+      "tier": "synthesis",
+      "question": "这一周医学界有什么值得关注的新研究或新政策？",
+      "answer": "**一句话结论**：这一周最值得跟的不是某一条新闻，而是三股方向性变化——**监管层在改\"证据怎么产生\"（FDA 非临床术语直接终规、生物类似药比对临床研究价值被再评估）、安全信号集中在注射剂与医疗机构环节（氯化钠/氯化钾混淆召回、右美托咪定颗粒物召回）、以及若干\"可能改变处方习惯\"的高确定性证据落地（钙与维生素 D 防骨折无效、米非司酮紧急避孕优于左炔诺孕酮、肺癌指南年度更新）**。下面按\"能不能马上用上\"排序。\n\n---\n\n## 一、政策与监管：这周真正有长期影响的\n\n**1. FDA 发布直接终规：把\"动物试验\"从法规措辞中撤下**\n9 月 21 日，FDA 发布直接终规，将\"animal tests/animal studies\"改为\"nonclinical tests/studies\"，并明确在适当情况下可用人源细胞、器官芯片、计算机模型等人源方法为首次人体试验提供安全性证据；同时上线新方法学（NAMs）数据库，首批收录 25 个实例。官方强调这不禁止动物试验、不改变证据标准、不给申办方加新成本。对做非临床/申报策略的人，术语与路径都要跟着改 [1]。\n\n**2. FDA 用 Meta 分析回答\"生物类似药还要不要做比对临床研究\"**\nCDER 汇总 35 个已获批生物类似药（单抗/融合蛋白）的申报数据做随机效应 Meta 分析：抗药抗体与中和抗体风险在 PK 相似性研究与比对临床研究之间无统计学差异；不良事件、严重不良事件、停药、死亡的风险在 PK 研究中更低，仅严重不良事件达统计学显著但整体差异很小。这意味着\"以 PK 相似性研究替代比对临床研究\"有了监管科学层面的支撑，会实质影响生物类似药的研发成本与可及性 [2]。\n\n**3. EMA 拒绝 TIL 细胞治疗 Tacquell——给细胞治疗研发者的一记警钟**\n人用药品委员会认为申报的主要疗效与安全性数据不可靠：关键研究（168 例晚期黑色素瘤）GCP 检查发现严重合规问题、数据难以溯源与重现，研究设计与分析存在多项问题，安全性数据不完整；此外产品质量控制策略、关键原材料、跨场地批次与临床/商业批次可比性、GMP 文件均不完整。正式的拒绝决定日期为 2026 年 9 月 14 日，拒绝评估报告于 9 月 22 日上网 [3]。\n\n**4. 国内：医药工业\"十五五\"规划与药监通告**\n《医药工业发展\"十五五\"规划》由工信部等十部门印发，围绕产业规模、创新发展、企业培育与集群发展提出预期性指标，在八个方面部署 25 项重点任务——这是影响未来五年创新药械研发方向的顶层文件 [4]。药监口径本周另有：仿制药参比制剂目录（第 109 批）[5]、注销八珍丸等 12 个药品注册证书 [6]、北京口岸进口药品通关电子化试点（电子文书与纸质文书同等效力）[7]。后三条我未能直接打开官网原文（该站对普通客户端返回脚本验证），仅按公告发布渠道的条目陈述，**请以官网原文为准**。\n\n**5. WHO：儿童癌症生存数据首次实现跨国可比**\n9 月 22 日，WHO 全球儿童癌症倡议发布首个以统一方法学测算、覆盖 194 个国家儿童与青少年淋巴系白血病的五年生存估计，数据已在全球卫生观察站上线；高收入国家达 80–90%，卫生体系薄弱地区接近 40%，15–19 岁青少年差距更大。做卫生体系、肿瘤登记或儿童肿瘤研究的人，可以直接用它做基线对照 [8]。\n\n## 二、研究证据：可能改变处方或写入下一版指南的\n\n**6. 钙与维生素 D 补充：对多数老年人防骨折防跌倒几无临床意义（本周被广泛报道的 BMJ 系统评价）**\n69 项随机试验、153 902 名成人。任何骨折风险：钙剂 RR 0.91（0.81–1.01，中等确定性）；维生素 D RR 1.00（0.95–1.06，高确定性）；联合补充 RR 0.91（0.84–0.99，高确定性）——按作者采用的临床意义阈值，绝对获益不达阈值。多数受试者为社区居住、非骨折高危人群，因此**不能外推到高骨折风险或养老机构人群**（这些亚组证据有限）。这篇文章的在线发表早于本周，本周是媒体报道与传播高峰，我按\"新近重要证据\"列入 [9]。\n\n**7. 不可切除 III 期 EGFR 突变 NSCLC：ADVANCE 试验给出\"去化疗\"TKI+放疗方案**\nIII 期、随机、开放标签。计划入组 98 例，实际随机仅 43 例（24 vs 19），因开放标签下均衡性丧失、入组缓慢及 PFS 差异过大提前终止。中位随访 25.5 个月：PFS 34.0 vs 7.4 个月，HR 0.15（P<0.001）；中位 OS 未达到 vs 30.5 个月，HR 0.32（P=0.09，未达统计学显著）。预设真实世界队列 125 例验证 TKI+放疗优于同步化放疗。方向诱人，但样本量小、提前终止、OS 未显著，**目前只宜作为设计下一项确证性试验的依据，不是改实践的依据** [10]。\n\n**8. 中华医学会肿瘤学分会肺癌临床诊疗指南（2026 版）**\n在 2025 版基础上：细化低剂量 CT 筛查质控，新增机会性筛查与人工智能应用；按 NMPA 新批适应证补充分子病理检测建议；更新围手术期新辅助/辅助、不可切除 III 期同步或序贯化放疗后的巩固免疫治疗、晚期 EGFR 突变一线与后线策略，并新增 ALK 融合、KRAS G12C、HER-2 突变、MET 扩增等亚型治疗推荐。以国内已获批可及药物为核心，是国内肺癌筛查与诊疗的年度基准 [11]。\n\n**9. 米非司酮用于紧急避孕优于左炔诺孕酮（Cochrane 更新）**\n87 项研究、约 3.6 万受试者，其中 79 项在中国开展。中剂量（25–50 mg）对比左炔诺孕酮：妊娠 RR 0.67（0.49–0.91，中等确定性），任何副作用 RR 0.55（0.39–0.76，中等确定性），但月经延迟风险升高 RR 1.29（1.01–1.64）。低剂量（<25 mg）：妊娠 RR 0.73（0.59–0.90，高确定性），副作用 RR 0.26（0.17–0.38，中等确定性）。与铜 IUD 比较证据不足。这是该问题目前最高级别的证据更新，且证据主体来自中国人群 [12]。\n\n**10. 住院成人 CGM、胰岛素泵与自动胰岛素输注：国际立场声明**\n针对非危重住院成人，覆盖患者选择标准、血糖指标与目标、胰岛素调整与给药、围手术期管理、高/低血糖报警设置、人员培训与流程、设备数据与电子病历整合、影像检查注意事项及出院计划。国内院内血糖管理流程可直接对照自查 [13]。\n\n**11. 儿童使用 GLP-1 与营养缺乏：一周内 16.8% 被诊断营养缺乏**\n基于覆盖 1 亿余人的 2017–2022 年全国行政索赔数据，纳入 2 031 名 10–17 岁 GLP-1 使用者（无既往营养缺乏诊断），用药第一年内 16.8% 出现营养缺乏诊断，维生素 D 缺乏最常见（12.4%）；仅 5% 患者在起始 30 天内、不足 25% 在 6 个月内接受过营养咨询。属于索赔数据的观察性研究，支持\"起始即营养筛查与随访\"，不证明因果 [14]。\n\n**12. Cochrane 本周另有若干实用结论**：ICU 机械通气床头抬高可减少肺部感染（48 项研究、7 955 例，其中 37 项在中国），但 40–45° 增加压疮风险 [15]；成人单次输 1 单位 vs 2 单位红细胞在死亡、住院时长与不良事件上可能无差异（证据确定性低，儿童与新生儿数据不足）[16]。\n\n## 三、用药安全与供应：这周要落到本机构台账上的\n\n- **氯化钠/氯化钾混淆召回**：Otsuka ICU Medical 自愿全国召回 0.9% 氯化钠注射液 100 mL 单包装（NDC 0990-7984-23，批号 1042188，效期 2027-10-31），外包装标示为氯化钠而内装物可能为 10 mEq 高浓度氯化钾注射液。误输高浓度氯化钾可致神经肌肉抑制、心律失常甚至心脏骤停死亡；早产儿、长期肠外营养、心律失常史、慢性或急性肾功能不全、使用保钾利尿剂者风险最高。企业称尚未收到相关不良事件报告 [17]。\n- **右美托咪定氯化钠注射液颗粒物召回**：涉及 400 mcg/100 mL 两个批次，召回至医院层级，颗粒物鉴定为纤维素或胶塞材料 [18]。\n- **其他本周安全通告**：FDA 召回标称为 Tejocote 实为黄夹竹桃（Thevetia peruviana）的草药胶囊与切片，全株有毒、可致严重心脏毒性 [19]；婴儿鼻塞 CPAP 套件因管路与鼻塞连接可能松动（通气下降、血氧降低）被移除 [20]；英国发布无线胎心监护系统射频安全警示（信号串扰、曲线错误、信号丢失）[21]。这些条目我按监管通告条目陈述，**未逐条打开原文核实**，需核对官方页面后使用。\n\n## 四、不确定性与证据层级\n\n- **直接读过的官方原文**（本周）：FDA 直接终规新闻稿 [1]、FDA 生物类似药监管科学条目 [2]、EMA Zokovea 与 Tacquell 的评估页 [3][22]、FDA 氯化钠/氯化钾召回公告 [17]、WHO 儿童癌症生存数据新闻 [8]、FDA 可穿戴设备指标 ISTAND 受理。\n- **摘要级证据**：ADVANCE 试验 [10]、钙与维生素 D 系统评价 [9]、米非司酮 Cochrane 综述 [12]、肺癌指南与低剂量放疗共识 [11]。\n- **仅题录或媒体层级**：FDA 批准 Zanvastro（据研发机构发布的报道，含 54 例、13 个中心、1 年以上步行速度改善；我未取得 FDA 官方批件页面，**请以 FDA 原文核实**）[23]；VA/DoD 戒烟指南推荐伐尼克兰与联合 NRT（媒体源）[24]。\n- **未能核实**：药监局上述三条通告原文（站点需脚本渲染）；日本 PMDA 说明书修订清单；欧盟层面本周是否另有集中授权产品的安全性产品信息变更（PRAC 议程与 CHMP 纪要未逐页读取）。\n- **媒体转载造成的时间混淆**：部分本周热传内容（钙与维生素 D 系统评价、某中药注射液辅助治疗脓毒性休克的 RCT）在线发表时间早于本周，本周是二次传播高峰；后者我在 PubMed 上只检到 2023 年发表的一项 404 例多中心 RCT（结论为\"可能降低 28 天死亡率，需更大规模试验确认\"），本周流传的 2026 年 Frontiers 论文与 2023 年研究是否为同一批数据，我未能确认，**在确认前不要引用为独立的新证据**。\n- **什么会推翻上面的判断**：ADVANCE 的结论会被一项按原方案完成入组的确证性 III 期试验推翻或坐实；钙/维生素 D 的结论只适用于社区居住、非高危人群，针对高骨折风险或机构居住人群的试验可能给出不同结果；FDA 直接终规目前同时发布了配套提议规则并开放评论，若收到实质反对意见，终规可能被撤回并转入常规通知—评论程序 [1]。\n\n---\n\n### 参考文献\n\n1. FDA. FDA Updates Regulations to Advance Innovative Alternatives to Animal Testing. https://www.fda.gov/news-events/press-announcements/fda-updates-regulations-advance-innovative-alternatives-animal-testing\n2. FDA. Comparative Clinical Studies for Assessing the Safety and Immunogenicity of Biosimilars. https://www.fda.gov/drugs/regulatory-science-action/comparative-clinical-studies-assessing-safety-and-immunogenicity-biosimilars\n3. European Medicines Agency. Tacquell（EPAR，Refused）. https://www.ema.europa.eu/en/medicines/human/EPAR/tacquell\n4. 《医药工业发展\"十五五\"规划》解读. https://www.drugtimes.cn/2026/09/20/yiyaogongyefazhanshiwuwuguihuajiedu/\n5. 国家药监局. 仿制药参比制剂目录（第一百零九批）通告（2026 年第 32 号）. https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypqtggtg/20260920172719105.html\n6. 国家药监局. 关于注销八珍丸等 12 个药品注册证书的公告（2026 年第 92 号）. https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypqtggtg/20260921111804170.html\n7. 国家药监局、海关总署. 关于在北京口岸开展进口药品通关电子化试点的公告（2026 年第 91 号）. https://www.nmpa.gov.cn/xxgk/ggtg/ypggtg/ypqtggtg/20260921091608111.html\n8. WHO. Country-comparable childhood cancer survival data now available through WHO data portal. https://www.who.int/news/item/22-09-2026-country-comparable-childhood-cancer-survival-data-now-available-through-who-data-portal\n9. Calcium, vitamin D, or combined supplementation to prevent fractures and falls: systematic review and meta-analysis. BMJ 2026. https://pubmed.ncbi.nlm.nih.gov/42161415/\n10. Induction and concurrent aumolertinib with radiotherapy for EGFR-mutated stage III NSCLC: results of phase III ADVANCE trial and real-world validation. Signal Transduct Target Ther 2026. https://pubmed.ncbi.nlm.nih.gov/42764281/\n11. 中华医学会肿瘤学分会肺癌临床诊疗指南（2026 版）. https://pubmed.ncbi.nlm.nih.gov/42764215/\n12. Mifepristone versus other interventions for the prevention of pregnancy in reproductive-age women using emergency contraception. Cochrane Database Syst Rev 2026. https://pubmed.ncbi.nlm.nih.gov/42764179/\n13. An International Position Statement on Practical Approaches for Inpatient Continuous Glucose Monitoring, Insulin Pumps, and Automated Insulin Delivery Systems in Adults. Diabetes Care 2026. https://doi.org/10.2337/dci26-0091\n14. Nutritional deficiencies in pediatric GLP-1 receptor agonist users. Childhood Obesity 2026. https://doi.org/10.1177/21532176261486979\n15. Cochrane. 床头抬高预防 ICU 机械通气患者肺部感染. https://www.cochrane.org/evidence/CD009946_adults-breathing-machines-ventilators-intensive-care-unit-icu-does-raising-head-bed-help-prevent\n16. Cochrane. 输血量大小（1 单位 vs 2 单位）的获益与风险. https://www.cochrane.org/evidence/CD015898_what-are-benefits-and-harms-giving-larger-or-smaller-amount-red-blood-cells-during-blood-transfusion\n17. FDA. Otsuka ICU Medical LLC Issues Voluntary Nationwide Recall of 0.9% Sodium Chloride Injection, USP Due To a Product Mix-up with 10 mEq Potassium Chloride Injection. https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/otsuka-icu-medical-llc-issues-voluntary-nationwide-recall-09-sodium-chloride-injection-usp-due\n18. FDA. Par Health Issues Voluntary Nationwide Recall of Two Lots of Dexmedetomidine HCl in 0.9% Sodium Chloride Injection Due to the Presence of Particulate Matter. https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/par-health-issues-voluntary-nationwide-recall-two-lots-dexmedetomidine-hcl-09-sodium-chloride\n19. FDA. Global Mix Inc. Recalls Niwali Tejocote Capsules and Niwali Tejocote Pieces Because of Possible Health Risk. https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/global-mix-inc-recalls-niwali-tejocote-capsules-and-niwali-tejocote-pieces-because-possible-health\n20. FDA. Ventilator Recall: CooperSurgical Removes INCA Infant Nasal CPAP Sets. https://www.fda.gov/medical-devices/medical-device-recalls-and-early-alerts/ventilator-recall-coopersurgical-removes-inca-infant-nasal-cpap-sets\n21. MHRA. Radiofrequency (RF) Safety Considerations for Wireless Cardiotocography (CTG) Monitoring Systems (DSI/2026/012). https://www.gov.uk/drug-device-alerts/radiofrequency-rf-safety-considerations-for-wireless-cardiotocography-ctg-monitoring-systems-dsi-slash-2026-slash-012\n22. European Medicines Agency. Zokovea（ensitrelvir，EPAR）. https://www.ema.europa.eu/en/medicines/human/EPAR/zokovea\n23. University of Wisconsin–Madison. First drug to treat Alexander disease approved by the FDA after three decades of research. https://medicalxpress.com/news/2026-09-drug-alexander-disease-fda-decades.html\n24. VA/DoD 烟草使用治疗临床实践指南推荐伐尼克兰与联合尼古丁替代疗法（报道）. https://medicalxpress.com/news/2026-09-varenicline-combination-nicotine-therapy-deemed.html\n\n如果你要其中任何一条做深挖（例如把 ADVANCE 与真实世界队列的方法学逐条评读，或把本周药监安全通告整理成一份可对账的清单），告诉我方向，我可以做成一份带完整证据链接的交付物。",
+      "run": {
+        "runId": "run_17be1757d34c8bfc837ec8d3a1bf3709",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 232368,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「calcium vitamin D supplementation fractu…」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-c558a183-737b-4fbf-ae96-2388d28c1adb",
+        "toolCalls": 33,
+        "tools": [
+          "bash",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__open_access_full_text",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__frontal_placeholder",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__open_access_full_text",
+          "mcp__evimed__open_access_full_text",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_read",
+          "mcp__evimed__web_search",
+          "mcp__evimed__web_read",
+          "mcp__evimed__biomedical_source_search",
+          "mcp__evimed__frontier_search",
+          "mcp__evimed__web_read"
+        ],
+        "frontierToolCalls": 7,
+        "artifacts": [],
+        "assistantChars": 9264,
+        "reportArtifactChars": 0
+      },
+      "error": null
+    },
+    {
+      "id": "frontier-control-1",
+      "tier": "direct",
+      "question": "华法林与维生素K相互作用的机制是什么？",
+      "answer": "## 结论\n\n华法林与维生素 K 的相互作用本质是**同一靶点上的直接竞争性拮抗**：华法林抑制维生素 K 环氧化物还原酶（VKORC1），阻断维生素 K 的循环再生；维生素 K（叶绿醌 K1、甲萘醌 K2）是这一还原反应的底物，摄入增加就把反应底物补上、绕开阻断，使肝脏重新合成有活性的凝血因子 II、VII、IX、X 以及蛋白 C/S，华法林的抗凝强度因此下降。\n\n临床含义只有一句话，但很关键：**问题不是「维生素 K 吃多了」，而是「吃得忽多忽少」。** 华法林治疗期间应保持绿叶蔬菜等维生素 K 来源的摄入量相对稳定，而不是禁食或大幅限制；任何维生素 K 摄入的明显改变（饮食结构变化、含维生素 K 的复合维生素、肠内营养配方更换）都应主动告知随访医生并加密 INR 监测。华法林治疗窗窄，**剂量调整、出血处理、维生素 K 的用药决策都必须由医生或药师做出**，本文只解释机制，不构成个体化用药建议。\n\n## 机制\n\n**1. 靶点层面：维生素 K 循环与 γ-羧化**\n\n凝血因子 II、VII、IX、X 和抗凝蛋白 C、S 在肝细胞内合成时，必须由 γ-谷氨酰羧化酶把多个谷氨酸残基羧化成 γ-羧基谷氨酸（Gla），才能通过 Gla 结构域结合钙离子、锚定到磷脂膜上发挥凝血活性。γ-谷氨酰羧化酶每完成一次羧化，就把还原型维生素 K 氢醌（KH₂）氧化成维生素 K 环氧化物（KO）。VKORC1 再把 KO 还原回醌、进而还原为 KH₂，使维生素 K 得以循环复用。\n\n**2. 华法林的作用位点**\n\n华法林正是抑制 VKORC1，切断 KO→KH₂ 这一步 [1]。结果是没有足够的 KH₂ 供 γ-谷氨酰羧化酶使用，肝脏只能放出羧化不全的凝血因子（PIVKA），凝血活性低下——这是数量上的效应而非即刻的酶抑制，所以抗凝效应延迟出现、需要数天，停用后也需要数天恢复。\n\n**3. 维生素 K 为什么能逆转**\n\n外源维生素 K（口服或注射）进入肝脏后，可以被另一条还原途径（NAD(P)H 依赖的醌还原酶，如 NQO1）直接还原为 KH₂，这条通路**不依赖 VKORC1**，因此华法林的阻断被绕过。维生素 K 越多，被绕过的比例越大，可用的 KH₂ 越充足，γ-羧化恢复，凝血因子活性回升，INR 下降。两者是同一酶位点上的底物—抑制剂竞争关系（华法林抑制常数低、竞争性强），故表现为可滴定、可逆转的药效学（而非药代动力学）拮抗。\n\n**4. 与药代动力学机制区分**\n\n维生素 K 不改变华法林的血药浓度或 CYP2C9 介导的代谢——这是它与「CYP2C9 抑制剂/诱导剂」「影响华法林蛋白结合的药物」在机制上的根本区别。但**华法林自身的代谢中确实存在 CYP2C9 相关因素**：S-华法林主要经 CYP2C9 代谢、R-华法林经 CYP1A2/CYP3A，CYP2C9 与 VKORC1 的基因变异是华法林剂量需求个体差异的主要来源 [2]，这与维生素 K 相互作用是两个独立机制，不要混为一谈（临床上常合并考虑）。\n\n## 临床证据\n\n- **不是「限制饮食」而是「稳定摄入」。** 一项系统评价（2 项饮食干预试验 + 9 项观察性研究）结论明确：现有证据**不支持**在开始维生素 K 拮抗剂治疗时改变饮食习惯，限制膳食维生素 K 不是改善抗凝质量的有效策略，更合理的做法是维持稳定饮食习惯、避免摄入量的剧烈波动；研究中膳食维生素 K1 中位摄入 76–217 μg/日，对凝血的影响可能只在摄入量较高（>150 μg/日）时显现 [1]。\n- **摄入过低且波动大与抗凝不稳定相关。** 26 例不稳定 vs 26 例稳定对照的膳食记录显示，不稳定组平均每日维生素 K 摄入显著更低（29±17 μg vs 76±40 μg）[3]；对房颤患者的血浆维生素 K 直接测定（203 例、302 份样本）发现华法林治疗后血浆维生素 K 显著下降（1.72 → 0.59 ng/ml），且个体内与个体间波动都很大，低水平者 INR 检测更频繁 [4]。这两项提示「过度限制」本身可能有害，而非保护性。\n- **反向验证：补充维生素 K 反而提高稳定性。** 一项双盲随机对照试验中，70 例抗凝不稳定的华法林患者随机接受每日口服维生素 K 150 μg 或安慰剂 6 个月：补充组 INR 标准差下降幅度更大（−0.24±0.14 vs −0.11±0.18，P<0.001），INR 达标时间比例提升更多（28%±20% vs 15%±20%，P<0.01）[5]。作者的解释是补充降低了逐日摄入的相对波动。**注意这不等同于「常规给华法林患者补维生素 K」的临床建议**——它针对的是原因不明的抗凝不稳定人群，且属研究情境，需由医生判断。\n\n## 不确定性与证据层级\n\n- **机制部分**（VKORC1 抑制、维生素 K 循环、γ-羧化、不依赖 VKORC1 的旁路还原、华法林两对映体经 CYP2C9/1A2/3A 代谢）属**成熟药理学共识**，华法林钠片说明书亦收载相关表述 [2]；说明书引用的是公开标签库快照（文件日期 2021-05-17），**具体条目请以现行 NMPA 批准说明书为准**。\n- **维生素 K 与 INR 的定量关系**（阈值约 150 μg/日、最低需要量、不同个体的反应幅度）仍无定论，上述系统评价本身即报告证据相互矛盾、研究间 INR 目标与稳定性指标不一致 [1]，证据层级属摘要级、且以观察性研究为主。\n- **检索过程说明**：本轮文献检索有部分来源不可用，我未能取得美国标签的官方文本，也未获得任何一篇的全文，上述临床证据均限于**已发表摘要层级**（ACCOMPLISH 级全文证据未逐一核对）。机制结论不依赖这些摘要；若机制层面的问题聚焦到 VKORC1 结构学或人体验证，需要调取相应全文与综述核对。\n- 本文未涉及具体患者的剂量、停药或出血处置建议，也未涉及华法林与其他药物/食物的相互作用谱。\n\n## 参考文献\n\n1. Violi F, Lip GYH, Pignatelli P, Pastori D. Interaction Between Dietary Vitamin K Intake and Anticoagulation by Vitamin K Antagonists: Is It Really True? A Systematic Review. Medicine. 2016;95(9):e2895. https://pubmed.ncbi.nlm.nih.gov/26962786/\n2. 华法林钠片说明书（Orion Corporation，批准文号 X20000263），成份／药理毒理／药代动力学／药物相互作用部分。https://www.yaozs.com/sms34545/\n3. Sconce E, Khan T, Mason J, Noble F, Wynne H, Kamali F. Patients with unstable control have a poorer dietary intake of vitamin K compared to patients with stable control of anticoagulation. Thromb Haemost. 2005;93(5):872-875. https://pubmed.ncbi.nlm.nih.gov/15886802/\n4. Kim YE, Woo HI, On YK, Kim JS, Lee SY. High intra- and inter-individual variability of plasma vitamin K concentrations in patients with atrial fibrillation under warfarin therapy. Eur J Clin Nutr. 2015;69(6):691-696. https://pubmed.ncbi.nlm.nih.gov/25828628/\n5. Sconce E, Avery P, Wynne H, Kamali F. Vitamin K supplementation can improve stability of anticoagulation for patients with unexplained variability in response to warfarin. Blood. 2007;109(6):2419-2423. https://pubmed.ncbi.nlm.nih.gov/17110451/\n\n如果你想把这套机制（靶点竞争、旁路还原、药效学延迟）和肠内营养、含维生素 K 保健品、抗生素相关肠道菌群改变这几类具体临床场景串成一份带检索记录的机制综述，我可以按证据报告的规格做。",
+      "run": {
+        "runId": "run_48bb999c2f74c27980fb3b6582081621",
+        "status": "succeeded",
+        "dispatchStatus": "accepted",
+        "durationMs": 82316,
+        "model": "deepseek/deepseek-flash",
+        "errorCode": null,
+        "qualityNotices": [
+          {
+            "code": "run_side_notice",
+            "severity": "advice",
+            "title": "运行过程的技术提示",
+            "text": "检索文献：「vitamin K antagonism warfarin VKORC1 mec…」——这次检索没有找到可用来源。"
+          }
+        ],
+        "narrationMessages": 0,
+        "sessionId": "session-a1d5682d-c97a-43eb-9371-03b749fd7bf0",
+        "toolCalls": 6,
+        "tools": [
+          "mcp__evimed__literature_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__drug_label_search",
+          "mcp__evimed__literature_search",
+          "mcp__evimed__drug_label_search"
+        ],
+        "frontierToolCalls": 0,
+        "artifacts": [],
+        "assistantChars": 3728,
+        "reportArtifactChars": 0
+      },
+      "error": null
+    }
+  ]
+}

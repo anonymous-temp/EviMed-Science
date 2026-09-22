@@ -14,6 +14,20 @@ for the answer prose itself: direct, readable, useful, correct, honest.
   `frontier_search` tool plus one plain control that must still take zero tool
   calls (`toolCalls` in the answers file). Run it with `--questions … --rerun`
   once with the 前沿动态 module on and once off, same model, more than once.
+
+  **Measured 2026-09-22 on production** (`evimed-f586fbdc81a8-1`, labels
+  `on-1`/`on-2`/`off-1`/`off-2`, the module's audience the only difference):
+  on the three questions both arms answered twice, the judge saw no gap —
+  4.83 with the tool, 4.93 without (n=6 each, one point of judge noise) — and
+  the tool did not change how many tools a run made (32.7 vs 33.2) or how many
+  originals it cited (21.3 vs 22.0 links; neither arm ever cited a 前沿动态
+  page). What it changed is reaching an answer at all, and when: 211 s with
+  the tool against 418 s without, and 「最近一个月国内外有没有新的药品安全警示
+  或说明书修订」 finished in 5–6 minutes in both `on` runs while both `off`
+  runs were still working past twenty minutes and were abandoned. The control
+  question called `frontier_search` zero times in every run — and 4 to 13
+  other research tools, which is the open-domain persona's own behaviour, not
+  this tool's.
 - `run_eval.py` — collects answers (live mode) or normalizes pre-collected
   ones (offline mode) into `results/answers-<timestamp>.json`.
 - `judge.py` — DeepSeek judge, scores 0-5 on directness, readability,
