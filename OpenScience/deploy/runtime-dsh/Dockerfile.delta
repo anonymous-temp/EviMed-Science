@@ -92,6 +92,27 @@ RUN set -eux; \
   for module in *.py; do python3 -c "import sys; sys.path.insert(0, '.'); import ${module%.py}"; done; \
   chmod -R a-w /opt/evimed/mcp
 
+# The open-answer agent package: its SKILL.md and agent.yaml, the only two
+# files it has (the full Dockerfile copies the directory whole). Until
+# 2026-09-22 a delta kept the base's copy, so a new optional tool in agent.yaml
+# — `frontier_search` — reached the MCP server and the root session but not
+# the persona that answers an unrouted question. The preset copy below is
+# rebuilt from this tree. Any other file is a package shape the base never
+# shipped: build the full Dockerfile.
+COPY runtime/skills/evimed/open-domain-answer /tmp/evimed-open-answer-source
+RUN set -eux; \
+  live=/opt/evimed/skills/evimed/open-domain-answer; \
+  source=/tmp/evimed-open-answer-source; \
+  extra="$(cd "${source}" && find . -type f ! -name SKILL.md ! -name agent.yaml -print)"; \
+  if [ -n "${extra}" ]; then echo "open-domain-answer carries files beyond SKILL.md and agent.yaml; build the full Dockerfile:" >&2; echo "${extra}" >&2; exit 1; fi; \
+  test -d "${live}"; \
+  chmod -R u+w "${live}"; \
+  install -m 0644 "${source}/SKILL.md" "${live}/SKILL.md"; \
+  install -m 0644 "${source}/agent.yaml" "${live}/agent.yaml"; \
+  chmod -R a-w "${live}"; \
+  diff -rq "${live}" "${source}"; \
+  rm -rf "${source}"
+
 # The curated skills' instructions. The base installed this tree from its own
 # source and smoke-tested the scripts in it, so a delta may move the prose —
 # each SKILL.md, and the inventory and repin ledger that pin its digest — and
