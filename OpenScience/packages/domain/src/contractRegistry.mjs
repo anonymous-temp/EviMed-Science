@@ -18,6 +18,7 @@ import { appraisalTableFindings } from './appraisalContract.mjs'
 import { datasetScopingFindings } from './datasetScopingContract.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
 import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
+import { statConsistencyFindings } from './statConsistency.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
 import { validateSourceUnderstanding, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTANDING_INPUT_FILE } from './sourceUnderstanding.mjs'
 import { SKILL_AUTHORING_LIMITS } from './constants.mjs'
@@ -104,6 +105,12 @@ export const GATE_CHECK_IDS = Object.freeze([
   'grant-requirement-coverage',
   'geo-measurement',
   'geo-probe-host',
+  // A report's own statistics against themselves: a p value its test
+  // statistic cannot produce, an interval and a p that disagree about
+  // significance, an estimate outside its own interval. Arithmetic over
+  // notation, never prose; advisory until the ledger shows how often it is
+  // right (principle 4).
+  'stat-consistency',
 ])
 
 /**
@@ -243,6 +250,23 @@ function proseHygieneIssues(input, proseFiles) {
   return issues
 }
 
+/**
+ * Statistics that contradict themselves, in every prose file of a package.
+ * Advisory: a finding is arithmetic, but whether the source or the report
+ * holds the wrong number is the run's to look up.
+ * @param {GateInput} input @param {readonly string[]} proseFiles @returns {GateIssue[]}
+ */
+function statConsistencyIssues(input, proseFiles) {
+  /** @type {GateIssue[]} */
+  const issues = []
+  for (const path of proseFiles) {
+    for (const finding of statConsistencyFindings(text(input, path))) {
+      issues.push(issue('stat_inconsistent', `${path}: ${finding.message}`, { severity: 'advisory', path, line: finding.line, check: 'stat-consistency', rule: finding.check }))
+    }
+  }
+  return issues
+}
+
 /** @param {GateInput} input @returns {GateVerdict} */
 function validateClinicalEvidenceReport(input) {
   // A syntax error is a syntax error, not two dozen content problems.
@@ -330,6 +354,7 @@ function validateClinicalEvidenceReport(input) {
     // back if it does not.
     ...clinicalSafetyCautionHits({ reportText: text(input, 'clinical-evidence-report.md'), question: input.briefText ?? undefined })
       .map((hit) => issue('clinical_safety_caution', hit.message, { severity: 'advisory', check: 'clinical-safety-cautions', rule: hit.ruleId })),
+    ...statConsistencyIssues(input, ['clinical-evidence-report.md']),
   ]
   const required = issues.filter((entry) => entry.severity === 'required')
   return {
@@ -525,6 +550,7 @@ function validateReportShaped(input, proseFiles) {
     ...proseHygieneIssues(input, proseFiles),
     ...clinicalSafetyIssues(input, proseFiles),
     ...structuredOutputIssues(input),
+    ...statConsistencyIssues(input, proseFiles),
   ]
   return {
     ok: issues.every((item) => item.severity !== 'required'),

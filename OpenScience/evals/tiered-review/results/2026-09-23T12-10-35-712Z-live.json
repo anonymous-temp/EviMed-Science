@@ -1,0 +1,98 @@
+{
+  "live": true,
+  "model": "qwen3.8-max-0902",
+  "passed": 3,
+  "failed": 0,
+  "results": [
+    {
+      "group": "replies",
+      "id": "ukpds34-faithful#1",
+      "pass": true,
+      "tier": "L1",
+      "verdicts": [
+        {
+          "sentence": 0,
+          "verdict": "supported",
+          "reason": "来源明确指出「Patients allocated metformin, compared with the conventional group, had risk reductions of 32%... for any diabetes-related endpoint」，与回答一致。",
+          "evidence": "Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint",
+          "safety": "consistent"
+        }
+      ],
+      "raw": {
+        "verdicts": [
+          {
+            "sentence": 0,
+            "verdict": "supported",
+            "reason": "来源明确指出「Patients allocated metformin, compared with the conventional group, had risk reductions of 32%... for any diabetes-related endpoint」，与回答一致。",
+            "evidence": "Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint",
+            "safety": "consistent"
+          }
+        ]
+      },
+      "cost": 0.006948,
+      "model": "qwen3.8-max-0902",
+      "sourcesRead": 1,
+      "note": "supported / safety consistent"
+    },
+    {
+      "group": "replies",
+      "id": "ukpds34-faithful#2",
+      "pass": true,
+      "tier": "L1",
+      "verdicts": [
+        {
+          "sentence": 0,
+          "verdict": "supported",
+          "reason": "来源明确提到「Patients allocated metformin, compared with the conventional group, had risk reductions of 32%... for any diabetes-related endpoint」，与回答一致。",
+          "evidence": "Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint",
+          "safety": "consistent"
+        }
+      ],
+      "raw": {
+        "verdicts": [
+          {
+            "sentence": 0,
+            "verdict": "supported",
+            "reason": "来源明确提到「Patients allocated metformin, compared with the conventional group, had risk reductions of 32%... for any diabetes-related endpoint」，与回答一致。",
+            "evidence": "Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint",
+            "safety": "consistent"
+          }
+        ]
+      },
+      "cost": 0.006984,
+      "model": "qwen3.8-max-0902",
+      "sourcesRead": 1,
+      "note": "supported / safety consistent"
+    },
+    {
+      "group": "replies",
+      "id": "ukpds34-faithful#3",
+      "pass": true,
+      "tier": "L1",
+      "verdicts": [
+        {
+          "sentence": 0,
+          "verdict": "supported",
+          "reason": "来源明确指出「Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint」，与回答一致。",
+          "evidence": "Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint",
+          "safety": "consistent"
+        }
+      ],
+      "raw": {
+        "verdicts": [
+          {
+            "sentence": 0,
+            "verdict": "supported",
+            "reason": "来源明确指出「Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint」，与回答一致。",
+            "evidence": "Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint",
+            "safety": "consistent"
+          }
+        ]
+      },
+      "cost": 0.007632,
+      "model": "qwen3.8-max-0902",
+      "sourcesRead": 1,
+      "note": "supported / safety consistent"
+    }
+  ]
+}

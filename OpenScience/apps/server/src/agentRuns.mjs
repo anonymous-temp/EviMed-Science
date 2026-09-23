@@ -3588,6 +3588,12 @@ export class AgentRunStore {
     this.readChildSessionActivity = options.readChildSessionActivity ?? (async () => []);
     this.runtimeWorkspaceRoot = options.runtimeWorkspaceRoot ?? (async (project) => project.workspaceDir);
     this.runtimeGeneration = options.runtimeGeneration ?? (async () => null);
+    // What the independent reviewer found on this run's deliverables, as
+    // notices (reviewService.mjs). Placed first in the finished run's list:
+    // behind forty gate notices, the 2026-09-22 review's seven contradictions
+    // reached no reader. Absent, a run carries none.
+    /** @type {((project: any, runId: string) => Promise<any[]>) | null} */
+    this.reviewNotices = typeof options.reviewNotices === "function" ? options.reviewNotices : null;
     // Workflow-owned runs may retain a different workspace after a user changes
     // the active workspace. Null means its durable owner cannot authorize recovery.
     this.resolveRunProject = options.resolveRunProject ?? (async (project) => project);
@@ -4736,6 +4742,27 @@ export class AgentRunStore {
     };
   }
 
+  /**
+   * The reviewer's notices for a run that is finishing, bounded in time: the
+   * funnel every terminal path goes through must not wait on a slow query, and
+   * a review ledger that cannot be read costs the notices, never the verdict.
+   * @param {Record<string, any>} project @param {string} runId @returns {Promise<any[]>}
+   */
+  async #reviewNoticesFor(project, runId) {
+    if (!this.reviewNotices) return [];
+    try {
+      /** @type {ReturnType<typeof setTimeout> | undefined} */
+      let timer;
+      const notices = await Promise.race([
+        this.reviewNotices(project, runId),
+        new Promise((resolve) => { timer = setTimeout(() => resolve([]), 2_000); }),
+      ]).finally(() => clearTimeout(timer));
+      return Array.isArray(notices) ? notices : [];
+    } catch {
+      return [];
+    }
+  }
+
   async finishInternal(project, rawRunId, terminal) {
     const runId = safeId(rawRunId, "agent run id");
     if (!terminalStatuses.has(terminal.status)) throw new Error("Invalid internal terminal status.");
@@ -4753,7 +4780,7 @@ export class AgentRunStore {
        *  is always present so a reader never has to treat absent as unknown. */
       unverifiedArtifacts: normalizeArtifacts(terminal.unverifiedArtifacts),
       verification: normalizeVerification(terminal.verification),
-      qualityNotices: normalizeQualityNotices(terminal.qualityNotices),
+      qualityNotices: normalizeQualityNotices([...(await this.#reviewNoticesFor(project, runId)), ...(terminal.qualityNotices ?? [])]),
       ...(terminal.status === "canceled" && (terminal.canceledBy === "user" || terminal.canceledBy === "platform")
         ? { canceledBy: terminal.canceledBy } : {}),
     };

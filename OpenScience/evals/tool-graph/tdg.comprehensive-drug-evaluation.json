@@ -1,13 +1,13 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "comprehensive-drug-evaluation",
-  "version": "sha256:5ba2ba524b853841513115681298f69548ea7ee9b291f6e06ed010d8864c874e",
+  "version": "sha256:475d32d1d1c21c4c7cac62e53c5c4e12febb3deef56b84a1b65c91a474b2080b",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 28,
-    "edges": 8,
+    "nodes": 29,
+    "edges": 13,
     "byVia": {
-      "schema": 8,
+      "schema": 13,
       "model": 0,
       "executed": 0
     },
@@ -1649,6 +1649,55 @@
       "stateEffect": "none"
     },
     {
+      "name": "mcp__evimed__reference_list",
+      "source": "mcp",
+      "description": "The reference list of a paper — what it cites, in its own order — or the papers that cite it, from Europe PMC's citation network, addressed by PMID, PMCID or DOI. Use it to trace a field's landmark trials: take the newest guideline or systematic review on the question, read its references, and fetch the abstracts of the trials and reviews you choose with literature_search pmids. Bibliographic metadata only: a citation is not evidence that the cited work supports anything.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300,
+            "description": "A PMID (\"30153985\" or \"PMID: 30153985\"), a PMCID (\"PMC6143516\") or a DOI."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "references",
+              "cited_by"
+            ],
+            "description": "references (default): what the paper cites; cited_by: newer papers citing it."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 400
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "identifier"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [
+        "doi",
+        "pmid"
+      ],
+      "requiredTypeTags": [
+        "doi",
+        "pmid"
+      ],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
       "name": "read",
       "source": "kernel",
       "description": "Read a workspace file, paginated.",
@@ -1800,8 +1849,33 @@
       ]
     },
     {
+      "from": "mcp__evimed__biomedical_source_search",
+      "to": "mcp__evimed__reference_list",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
       "from": "mcp__evimed__clinical_trial_search",
       "to": "mcp__evimed__evidence_deduplicate",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__clinical_trial_search",
+      "to": "mcp__evimed__reference_list",
       "type": "parameter",
       "via": "schema",
       "confidence": 0.9,
@@ -1848,6 +1922,19 @@
       ]
     },
     {
+      "from": "mcp__evimed__evidence_deduplicate",
+      "to": "mcp__evimed__reference_list",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
       "from": "mcp__evimed__guideline_search",
       "to": "mcp__evimed__evidence_deduplicate",
       "type": "parameter",
@@ -1860,8 +1947,33 @@
       ]
     },
     {
+      "from": "mcp__evimed__guideline_search",
+      "to": "mcp__evimed__reference_list",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "doi"
+      ]
+    },
+    {
       "from": "mcp__evimed__literature_search",
       "to": "mcp__evimed__evidence_deduplicate",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__literature_search",
+      "to": "mcp__evimed__reference_list",
       "type": "parameter",
       "via": "schema",
       "confidence": 0.9,

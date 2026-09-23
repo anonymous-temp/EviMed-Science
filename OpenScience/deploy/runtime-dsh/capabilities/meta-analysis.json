@@ -1,6 +1,6 @@
 {
   "id": "meta-analysis",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "title": "Automated Meta-Analysis",
   "description": "Run a traceable systematic review and deterministic meta-analysis pipeline, with risk-of-bias, GRADE, manuscript, figures, and release gates.",
   "whenToUse": "交付物是一份 Meta 分析或系统综述稿件、需要合并效应量与异质性分析时，委派给我。",

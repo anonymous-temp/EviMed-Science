@@ -51,6 +51,18 @@
         "$ref": "#/$defs/conceptList"
       }
     },
+    "medicineVocabulariesNote": {
+      "type": "string"
+    },
+    "medicineVocabularies": {
+      "description": "Names of caution vocabularies whose concepts are medicines. Every name must be a key of cautionVocabularies.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
     "cautionRulesNote": {
       "type": "string"
     },

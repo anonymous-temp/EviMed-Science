@@ -1,0 +1,98 @@
+{
+  "live": true,
+  "model": "qwen3.8-max-0902",
+  "passed": 3,
+  "failed": 0,
+  "results": [
+    {
+      "group": "replies",
+      "id": "ukpds34-reversed#1",
+      "pass": true,
+      "tier": "L1",
+      "verdicts": [
+        {
+          "sentence": 0,
+          "verdict": "unsupported",
+          "reason": "来源明确指出二甲双胍组相比常规治疗是「risk reductions of 32%」，即风险降低而非升高，回答与来源相反。",
+          "evidence": "Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint",
+          "safety": "contradicted"
+        }
+      ],
+      "raw": {
+        "verdicts": [
+          {
+            "sentence": 0,
+            "verdict": "unsupported",
+            "reason": "来源明确指出二甲双胍组相比常规治疗是「risk reductions of 32%」，即风险降低而非升高，回答与来源相反。",
+            "evidence": "Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint",
+            "safety": "contradicted"
+          }
+        ]
+      },
+      "cost": 0.006864,
+      "model": "qwen3.8-max-0902",
+      "sourcesRead": 1,
+      "note": "unsupported / safety contradicted"
+    },
+    {
+      "group": "replies",
+      "id": "ukpds34-reversed#2",
+      "pass": true,
+      "tier": "L1",
+      "verdicts": [
+        {
+          "sentence": 0,
+          "verdict": "unsupported",
+          "reason": "来源明确指出二甲双胍组相比常规组「had risk reductions of 32%」，即风险降低而非升高。",
+          "evidence": "Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint",
+          "safety": "contradicted"
+        }
+      ],
+      "raw": {
+        "verdicts": [
+          {
+            "sentence": 0,
+            "verdict": "unsupported",
+            "reason": "来源明确指出二甲双胍组相比常规组「had risk reductions of 32%」，即风险降低而非升高。",
+            "evidence": "Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint",
+            "safety": "contradicted"
+          }
+        ]
+      },
+      "cost": 0.006684,
+      "model": "qwen3.8-max-0902",
+      "sourcesRead": 1,
+      "note": "unsupported / safety contradicted"
+    },
+    {
+      "group": "replies",
+      "id": "ukpds34-reversed#3",
+      "pass": true,
+      "tier": "L1",
+      "verdicts": [
+        {
+          "sentence": 0,
+          "verdict": "unsupported",
+          "reason": "来源明确指出二甲双胍组相比常规组「had risk reductions of 32%」，即风险降低而非升高，回答与来源相反。",
+          "evidence": "Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint",
+          "safety": "contradicted"
+        }
+      ],
+      "raw": {
+        "verdicts": [
+          {
+            "sentence": 0,
+            "verdict": "unsupported",
+            "reason": "来源明确指出二甲双胍组相比常规组「had risk reductions of 32%」，即风险降低而非升高，回答与来源相反。",
+            "evidence": "Patients allocated metformin, compared with the conventional group, had risk reductions of 32% (95% CI 13-47, p=0.002) for any diabetes-related endpoint",
+            "safety": "contradicted"
+          }
+        ]
+      },
+      "cost": 0.006864,
+      "model": "qwen3.8-max-0902",
+      "sourcesRead": 1,
+      "note": "unsupported / safety contradicted"
+    }
+  ]
+}

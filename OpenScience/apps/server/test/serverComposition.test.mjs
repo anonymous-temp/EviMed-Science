@@ -1574,18 +1574,23 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
   };
 
   const off = await composedApp(t);
-  assert.deepEqual((await me(off)).features, { frontier: false });
+  assert.deepEqual((await me(off)).features, { frontier: false, review: false });
   assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
   const offStatus = await status(off);
   assert.equal(offStatus.status, 404);
   assert.equal((await offStatus.json()).code, "frontier_not_enabled");
+  // The reviewer's flag and its route agree the same way: off is a named 404
+  // the shell reads as "nothing to show" (apps/web/src/lib/replyChecks.ts).
+  const replies = await fetch(`http://127.0.0.1:${off.app.server.address().port}/api/review/replies?projectId=${PROJECT_ID}&sessionId=s1`, { headers });
+  assert.equal(replies.status, 404);
+  assert.equal((await replies.json()).code, "review_not_enabled");
 
   const dryRun = await frontierComposition(t, { frontierAudience: "operators", operatorUsers: ["someone-else"] });
-  assert.deepEqual((await me(dryRun)).features, { frontier: false }, "the dry run is operators-only");
+  assert.equal((await me(dryRun)).features.frontier, false, "the dry run is operators-only");
   assert.equal((await status(dryRun)).status, 404);
 
   const open = await frontierComposition(t);
-  assert.deepEqual((await me(open)).features, { frontier: true });
+  assert.equal((await me(open)).features.frontier, true);
 });
 
 // The feed's second wave (build spec D): the composer is built with the worker

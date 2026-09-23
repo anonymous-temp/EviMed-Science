@@ -66,6 +66,18 @@ time. Do not claim completion until both files exist and the managed job is
 terminal. This is research evidence synthesis, not an individual treatment
 recommendation.
 
+## Method priors
+
+The statistics are the engine's; the reading of them is yours, and two shipped
+skills carry the method priors for it — load them before you write the results:
+`statistical-analysis` (the estimand, assumptions and their diagnostics, effect
+sizes with intervals, multiplicity, missing data, sensitivity analyses) and
+`stats-integrity` (report the estimate and its uncertainty as the software
+produced it; no causal reading the design does not support). The independent
+review checks the report against the reporting checklist for this design and
+traces every stated result to the job's own output files, so a number typed from
+memory, or rounded differently from the output, comes back as a finding.
+
 ## Before delivering: two fixed steps
 
 Both run on the finished deliverable, in this order, every time. They are steps

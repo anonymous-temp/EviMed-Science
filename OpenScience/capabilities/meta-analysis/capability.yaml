@@ -7,7 +7,7 @@
 # child is) and `produces` (which contract validates the result) are
 # required. `tools` uses the model-visible names.
 id: meta-analysis
-version: 1.0.0
+version: 1.1.0
 title: Automated Meta-Analysis
 category: Evidence Synthesis
 description: Run a traceable systematic review and deterministic meta-analysis pipeline, with risk-of-bias,

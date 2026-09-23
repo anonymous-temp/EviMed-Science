@@ -32,120 +32,262 @@
     {
       "id": "research-workbench",
       "status": "adapted",
-      "evidence": ["apps/web/src/app/routes/SessionRoute.tsx", "apps/web/src/app/routes/RuntimeUiFrame.tsx", "docs/PRD.md"]
+      "evidence": [
+        "apps/web/src/app/routes/SessionRoute.tsx",
+        "apps/web/src/app/routes/RuntimeUiFrame.tsx",
+        "docs/PRD.md"
+      ]
     },
     {
       "id": "identity-and-tenancy",
       "status": "adapted",
-      "evidence": ["apps/server/src/oidc.mjs", "apps/server/src/store.mjs", "apps/server/src/server.mjs"]
+      "evidence": [
+        "apps/server/src/oidc.mjs",
+        "apps/server/src/store.mjs",
+        "apps/server/src/server.mjs"
+      ]
     },
     {
       "id": "projects-and-workspaces",
       "status": "adapted",
-      "evidence": ["apps/server/src/store.mjs", "apps/server/src/runtimeManager.mjs"]
+      "evidence": [
+        "apps/server/src/store.mjs",
+        "apps/server/src/runtimeManager.mjs"
+      ]
     },
     {
       "id": "agent-runtime",
       "status": "adapted",
-      "evidence": ["apps/server/src/runtimeManager.mjs", "deploy/runtime-dsh/Dockerfile"]
+      "evidence": [
+        "apps/server/src/runtimeManager.mjs",
+        "deploy/runtime-dsh/Dockerfile"
+      ]
     },
     {
       "id": "model-gateway",
       "status": "adapted",
-      "evidence": ["apps/server/src/modelGateway.mjs", "deploy/web/docker-compose.yml"]
+      "evidence": [
+        "apps/server/src/modelGateway.mjs",
+        "deploy/web/docker-compose.yml"
+      ]
     },
     {
       "id": "curated-scientific-skills",
       "status": "adapted",
-      "evidence": ["runtime/skills/curated-scientific/inventory.json", "runtime/skills/curated-scientific/_runtime/execute_skill.py", "apps/server/test/skillPacks.test.mjs"]
+      "evidence": [
+        "runtime/skills/curated-scientific/inventory.json",
+        "runtime/skills/curated-scientific/_runtime/execute_skill.py",
+        "apps/server/test/skillPacks.test.mjs"
+      ]
     },
     {
       "id": "office-artifact-exporters",
       "status": "adapted",
-      "evidence": ["runtime/skills/office/inventory.json", "apps/server/test/skillPacks.test.mjs"]
+      "evidence": [
+        "runtime/skills/office/inventory.json",
+        "apps/server/test/skillPacks.test.mjs"
+      ]
     },
     {
       "id": "science-connectors",
       "status": "adapted",
-      "evidence": ["runtime/mcp/evimed-research/science_connectors.py", "runtime/mcp/evimed-research/test/test_science_connectors.py", "runtime/mcp/evimed-research/source_catalog.json", "evals/capability-audit/results/connector-probe-v3.json"]
+      "evidence": [
+        "runtime/mcp/evimed-research/science_connectors.py",
+        "runtime/mcp/evimed-research/test/test_science_connectors.py",
+        "runtime/mcp/evimed-research/source_catalog.json",
+        "evals/capability-audit/results/connector-probe-v3.json"
+      ]
     },
     {
       "id": "drug-evidence-decision-support",
       "status": "adapted",
-      "evidence": ["runtime/mcp/evimed-research/drug_assessment.py", "runtime/mcp/evimed-research/test/test_drug_assessment.py", "runtime/skills/evimed/drug-selection/SKILL.md", "runtime/skills/evimed/off-label-analysis/SKILL.md", "runtime/skills/evimed/comprehensive-drug-evaluation/SKILL.md", "apps/server/test/agentRegistry.test.mjs", "docs/DRUG_EVIDENCE_AGENT_ARCHITECTURE.md"]
+      "evidence": [
+        "runtime/mcp/evimed-research/drug_assessment.py",
+        "runtime/mcp/evimed-research/test/test_drug_assessment.py",
+        "runtime/skills/evimed/drug-selection/SKILL.md",
+        "runtime/skills/evimed/off-label-analysis/SKILL.md",
+        "runtime/skills/evimed/comprehensive-drug-evaluation/SKILL.md",
+        "apps/server/test/agentRegistry.test.mjs",
+        "docs/DRUG_EVIDENCE_AGENT_ARCHITECTURE.md"
+      ]
     },
     {
       "id": "artifacts-and-provenance",
       "status": "adapted",
-      "evidence": ["apps/web/src/lib/artifacts.ts", "apps/web/src/lib/provenance.ts"]
+      "evidence": [
+        "apps/web/src/lib/artifacts.ts",
+        "apps/web/src/lib/provenance.ts"
+      ]
     },
     {
       "id": "hosted-notebooks",
       "status": "out-of-scope",
-      "evidence": ["apps/web/src/app/routes/KnowledgePage.tsx", "apps/web/src/app/router.tsx"],
-      "blockers": ["in-browser notebook editing", "server-side cell execution"]
+      "evidence": [
+        "apps/web/src/app/routes/KnowledgePage.tsx",
+        "apps/web/src/app/router.tsx"
+      ],
+      "blockers": [
+        "in-browser notebook editing",
+        "server-side cell execution"
+      ]
     },
     {
       "id": "research-memory",
       "status": "adapted",
-      "evidence": ["apps/server/src/researchMemory.mjs", "deploy/web/docker-compose.yml"]
+      "evidence": [
+        "apps/server/src/researchMemory.mjs",
+        "deploy/web/docker-compose.yml"
+      ]
     },
     {
       "id": "frontier-feed",
       "status": "conditional",
-      "evidence": ["apps/server/src/frontierService.mjs", "apps/server/src/frontierRoutes.mjs", "apps/server/src/frontierWorker.mjs", "apps/server/src/frontierIngest.mjs", "apps/server/src/frontierPipeline.mjs", "apps/server/src/frontierEditor.mjs", "apps/server/src/frontierPersistence.mjs", "apps/server/src/knowledgePluginClient.mjs", "apps/server/test/frontierRoutes.test.mjs", "apps/server/test/frontierApp.integration.test.mjs", "apps/server/test/frontierService.integration.test.mjs", "apps/server/test/frontierPipeline.integration.test.mjs", "apps/web/src/app/routes/FrontierPage.tsx", "deploy/web/docker-compose.knowledge.yml", "packages/contracts/knowledge-plugin/contract.test.mjs", "scripts/ops/rebuild-frontier-index.mjs"],
-      "blockers": ["the knowledge-source plugin running beside the control plane (docker-compose.knowledge.yml: its image pinned in .env, its own database and bearer token)", "OPEN_SCIENCE_FRONTIER_ENABLED, which ships off; production opens it to operators first for the dry run"]
+      "evidence": [
+        "apps/server/src/frontierService.mjs",
+        "apps/server/src/frontierRoutes.mjs",
+        "apps/server/src/frontierWorker.mjs",
+        "apps/server/src/frontierIngest.mjs",
+        "apps/server/src/frontierPipeline.mjs",
+        "apps/server/src/frontierEditor.mjs",
+        "apps/server/src/frontierPersistence.mjs",
+        "apps/server/src/knowledgePluginClient.mjs",
+        "apps/server/test/frontierRoutes.test.mjs",
+        "apps/server/test/frontierApp.integration.test.mjs",
+        "apps/server/test/frontierService.integration.test.mjs",
+        "apps/server/test/frontierPipeline.integration.test.mjs",
+        "apps/web/src/app/routes/FrontierPage.tsx",
+        "deploy/web/docker-compose.knowledge.yml",
+        "packages/contracts/knowledge-plugin/contract.test.mjs",
+        "scripts/ops/rebuild-frontier-index.mjs"
+      ],
+      "blockers": [
+        "the knowledge-source plugin running beside the control plane (docker-compose.knowledge.yml: its image pinned in .env, its own database and bearer token)",
+        "OPEN_SCIENCE_FRONTIER_ENABLED, which ships off; production opens it to operators first for the dry run"
+      ]
+    },
+    {
+      "id": "independent-review",
+      "status": "conditional",
+      "evidence": [
+        "apps/server/src/reviewService.mjs",
+        "apps/server/src/reviewGateway.mjs",
+        "apps/server/src/reviewModel.mjs",
+        "apps/server/src/referenceResolver.mjs",
+        "apps/server/src/reviewRoutes.mjs",
+        "apps/server/src/reviewWorker.mjs",
+        "apps/server/src/reviewPersistence.mjs",
+        "apps/server/test/reviewService.integration.test.mjs",
+        "apps/server/test/reviewGateway.test.mjs",
+        "apps/server/test/reviewModel.test.mjs",
+        "packages/domain/src/reviewFindings.mjs",
+        "packages/domain/src/referenceResolution.mjs",
+        "packages/domain/src/numericTraceability.mjs",
+        "packages/domain/src/statConsistency.mjs",
+        "packages/socket/src/review.mjs",
+        "packages/harness-port/src/runtimeUiReplyChecks.mjs",
+        "packages/contracts/dashscope/contract.test.mjs"
+      ],
+      "blockers": [
+        "the operator's DashScope key file, the one the reranker and the embedder already read (the reviewer calls Qwen3.8-Max with it)",
+        "OPEN_SCIENCE_REVIEW_ENABLED, which ships off"
+      ]
     },
     {
       "id": "account-self-service-and-operations",
       "status": "adapted",
-      "evidence": ["apps/web/src/app/routes/AccountPage.tsx", "apps/web/src/components/settings/WebReadinessCard.tsx"]
+      "evidence": [
+        "apps/web/src/app/routes/AccountPage.tsx",
+        "apps/web/src/components/settings/WebReadinessCard.tsx"
+      ]
     },
     {
       "id": "security-and-isolation",
       "status": "adapted",
-      "evidence": ["apps/server/src/security.mjs", "apps/server/src/runtimeControllerServer.mjs"]
+      "evidence": [
+        "apps/server/src/security.mjs",
+        "apps/server/src/runtimeControllerServer.mjs"
+      ]
     },
     {
       "id": "release-and-observability",
       "status": "adapted",
-      "evidence": ["apps/server/src/releaseManifest.mjs", "deploy/web/docker-compose.monitoring.yml"]
+      "evidence": [
+        "apps/server/src/releaseManifest.mjs",
+        "deploy/web/docker-compose.monitoring.yml"
+      ]
     },
     {
       "id": "backup-and-disaster-recovery",
       "status": "external",
-      "evidence": ["deploy/web/docker-compose.saas.yml", "scripts/ops/object-backup.mjs"],
-      "blockers": ["operator-owned off-host backup evidence", "completed restore-drill evidence"]
+      "evidence": [
+        "deploy/web/docker-compose.saas.yml",
+        "scripts/ops/object-backup.mjs"
+      ],
+      "blockers": [
+        "operator-owned off-host backup evidence",
+        "completed restore-drill evidence"
+      ]
     },
     {
       "id": "async-work-and-capacity",
       "status": "conditional",
-      "evidence": ["apps/server/src/taskManager.mjs", "apps/server/src/runtimeControllerServer.mjs"],
-      "blockers": ["queue and rate-limit state remain node-local for horizontal scaling"]
+      "evidence": [
+        "apps/server/src/taskManager.mjs",
+        "apps/server/src/runtimeControllerServer.mjs"
+      ],
+      "blockers": [
+        "queue and rate-limit state remain node-local for horizontal scaling"
+      ]
     },
     {
       "id": "horizontal-scaling",
       "status": "not-implemented",
-      "evidence": ["apps/server/src/taskManager.mjs"],
-      "blockers": ["distributed queue", "distributed rate limiting", "shared artifact storage and runtime scheduling"]
+      "evidence": [
+        "apps/server/src/taskManager.mjs"
+      ],
+      "blockers": [
+        "distributed queue",
+        "distributed rate limiting",
+        "shared artifact storage and runtime scheduling"
+      ]
     },
     {
       "id": "organization-collaboration",
       "status": "out-of-scope",
-      "evidence": ["docs/PRD.md"],
-      "blockers": ["organization membership", "roles", "invitations", "shared project policy"]
+      "evidence": [
+        "docs/PRD.md"
+      ],
+      "blockers": [
+        "organization membership",
+        "roles",
+        "invitations",
+        "shared project policy"
+      ]
     },
     {
       "id": "commercial-billing",
       "status": "not-implemented",
-      "evidence": ["docs/WEB_DEPLOYMENT_READINESS_REPORT.md"],
-      "blockers": ["plans", "subscriptions", "metering ledger", "billing lifecycle"]
+      "evidence": [
+        "docs/WEB_DEPLOYMENT_READINESS_REPORT.md"
+      ],
+      "blockers": [
+        "plans",
+        "subscriptions",
+        "metering ledger",
+        "billing lifecycle"
+      ]
     },
     {
       "id": "institutional-compliance",
       "status": "external",
-      "evidence": ["docs/WEB_PRIVACY_AND_COMPLIANCE.md"],
-      "blockers": ["jurisdiction-specific legal review", "data residency decision", "contractual controls and external assurance"]
+      "evidence": [
+        "docs/WEB_PRIVACY_AND_COMPLIANCE.md"
+      ],
+      "blockers": [
+        "jurisdiction-specific legal review",
+        "data residency decision",
+        "contractual controls and external assurance"
+      ]
     }
   ]
 }

@@ -1,0 +1,151 @@
+{
+  "$comment": "Reporting checklists the independent reviewer checks item by item (present / absent / not applicable), by contract kind. Data, not code (principle 7): a methodologist edits an item here. Kept in the control plane only: the reviewer's inputs are not the run's to read (plan 2026-09-22 §5 rule 6). The reviewer only locates each item; it never scores the package against the list.",
+  "version": 1,
+  "byContractKind": {
+    "clinical-evidence-report": ["evidence-report", "sampl"],
+    "drug-evaluation-report": ["evidence-report"],
+    "off-label-report": ["evidence-report"],
+    "drug-selection-report": ["evidence-report"],
+    "meta-analysis-report": ["prisma-2020", "sampl"],
+    "mendelian-randomization-report": ["strobe-mr", "sampl"],
+    "adr-analysis-report": ["disproportionality", "sampl"],
+    "bibliometric-analysis-report": ["bibliometric"],
+    "dataset-scoping-package": ["sampl"],
+    "appraisal-table": ["risk-of-bias"],
+    "manuscript-section": ["sampl"],
+    "research-topic-report": [],
+    "grant-proposal-package": [],
+    "geo-content-pack": [],
+    "peer-review-report": [],
+    "research-brief": ["evidence-report"],
+    "clinical-decision-brief": ["evidence-report"]
+  },
+  "checklists": {
+    "evidence-report": {
+      "title": "临床证据报告要素",
+      "source": "EviMed 方法学要求（参照 GRADE 与 PRISMA 2020 的报告要素）",
+      "items": [
+        { "id": "E1", "text": "研究问题写明人群、干预/暴露、对照与结局（PICO）" },
+        { "id": "E2", "text": "写明检索了哪些来源及检索日期" },
+        { "id": "E3", "text": "写明纳入与排除标准" },
+        { "id": "E4", "text": "纳入了该领域的地标试验与最新指南（或说明为何没有）" },
+        { "id": "E5", "text": "主要结论给出效应量与置信区间，而不只是方向或 P 值" },
+        { "id": "E6", "text": "报告了有害结局与安全性" },
+        { "id": "E7", "text": "对证据质量或确定性分级（如 GRADE），并与结论措辞相称" },
+        { "id": "E8", "text": "处理了相互矛盾的证据" },
+        { "id": "E9", "text": "讨论了对目标人群的适用性" },
+        { "id": "E10", "text": "写明局限性" }
+      ]
+    },
+    "prisma-2020": {
+      "title": "PRISMA 2020",
+      "source": "Page MJ, et al. BMJ 2021;372:n71",
+      "items": [
+        { "id": "P1", "text": "标题标明为系统评价" },
+        { "id": "P2", "text": "摘要按 PRISMA 2020 摘要清单撰写" },
+        { "id": "P3", "text": "在已有知识背景下说明本评价的理由" },
+        { "id": "P4", "text": "明确陈述目的或要回答的问题" },
+        { "id": "P5", "text": "说明纳入与排除标准，及综合时如何分组" },
+        { "id": "P6", "text": "列出所有检索的数据库、注册库、网站等，及各自最后检索日期" },
+        { "id": "P7", "text": "给出全部数据库的完整检索策略（含限制条件）" },
+        { "id": "P8", "text": "说明筛选过程：几名评价者、是否独立、是否用自动化工具" },
+        { "id": "P9", "text": "说明数据提取过程：几名评价者、是否独立、如何向作者核实" },
+        { "id": "P10", "text": "列出并定义所提取的结局与其他变量" },
+        { "id": "P11", "text": "说明评价纳入研究偏倚风险的工具与方法" },
+        { "id": "P12", "text": "说明每个结局所用的效应指标" },
+        { "id": "P13", "text": "说明综合方法：合并模型、异质性探索、敏感性分析" },
+        { "id": "P14", "text": "说明评价缺失结果偏倚（报告偏倚）的方法" },
+        { "id": "P15", "text": "说明评价每个结局证据确定性的方法" },
+        { "id": "P16", "text": "报告检索与筛选结果（最好附流程图），列出排除的研究与原因" },
+        { "id": "P17", "text": "引用并描述每项纳入研究的特征" },
+        { "id": "P18", "text": "报告每项纳入研究的偏倚风险评价" },
+        { "id": "P19", "text": "报告每项研究每个结局的汇总统计与效应估计及其精度" },
+        { "id": "P20", "text": "报告综合结果：合并效应、置信区间、异质性，及异质性来源与敏感性分析" },
+        { "id": "P21", "text": "报告缺失结果偏倚的评价结果" },
+        { "id": "P22", "text": "报告每个结局的证据确定性" },
+        { "id": "P23", "text": "讨论：结果解释、证据与评价过程的局限、对实践/政策/研究的意义" },
+        { "id": "P24", "text": "注册信息与方案可及性，及对方案的修改" },
+        { "id": "P25", "text": "资助来源与资助者的作用" },
+        { "id": "P26", "text": "利益冲突声明" },
+        { "id": "P27", "text": "数据、代码与其他材料的可及性" }
+      ]
+    },
+    "strobe-mr": {
+      "title": "STROBE-MR",
+      "source": "Skrivankova VW, et al. JAMA 2021;326(16):1614-1621",
+      "items": [
+        { "id": "M1", "text": "标题或摘要标明为孟德尔随机化研究" },
+        { "id": "M2", "text": "说明科学背景与理由（为何用 MR 回答该问题）" },
+        { "id": "M3", "text": "明确目的，写明因果假设" },
+        { "id": "M4", "text": "说明研究设计与数据来源：暴露与结局的 GWAS、样本量、人群与祖源、样本是否重叠" },
+        { "id": "M5", "text": "说明 MR 三个核心假设（相关性、独立性、排他性）" },
+        { "id": "M6", "text": "说明主要分析：工具变量的选取与阈值、连锁不平衡处理、效应估计方法（如 IVW）、效应尺度" },
+        { "id": "M7", "text": "说明如何评估核心假设（如 F 统计量、多效性检验）" },
+        { "id": "M8", "text": "说明敏感性与附加分析（MR-Egger、加权中位数、MR-PRESSO、方向性检验等）" },
+        { "id": "M9", "text": "写明所用软件与版本，是否预注册" },
+        { "id": "M10", "text": "描述性数据：工具变量数目与强度、两样本的基本特征" },
+        { "id": "M11", "text": "主要结果：效应估计、置信区间与每单位暴露的含义" },
+        { "id": "M12", "text": "报告核心假设评估的结果（异质性、多效性、弱工具）" },
+        { "id": "M13", "text": "报告敏感性与附加分析的结果" },
+        { "id": "M14", "text": "概括关键结果" },
+        { "id": "M15", "text": "讨论局限：弱工具偏倚、样本重叠、水平多效性、人群分层等" },
+        { "id": "M16", "text": "结合其他证据解释结果，说明结果与临床/生物学意义" },
+        { "id": "M17", "text": "讨论可推广性（其他人群、祖源）" },
+        { "id": "M18", "text": "资助来源" },
+        { "id": "M19", "text": "数据与代码的可及性" },
+        { "id": "M20", "text": "利益冲突" }
+      ]
+    },
+    "sampl": {
+      "title": "SAMPL 统计报告要点",
+      "source": "Lang TA, Altman DG. Basic statistical reporting for articles published in biomedical journals: the SAMPL guidelines (2013)",
+      "items": [
+        { "id": "S1", "text": "每项分析写明所用的统计方法（检验名称）" },
+        { "id": "S2", "text": "说明方法的前提假设是否满足或如何核查" },
+        { "id": "S3", "text": "主要结果给出效应量及其置信区间，而不只给 P 值" },
+        { "id": "S4", "text": "P 值写出确切值（或 <0.001），说明单侧还是双侧及显著性水平" },
+        { "id": "S5", "text": "写明每组分析的样本量与缺失数据处理" },
+        { "id": "S6", "text": "多重比较时说明是否校正、如何校正" },
+        { "id": "S7", "text": "回归模型写明纳入的变量、变量筛选方式与模型拟合情况" },
+        { "id": "S8", "text": "写明分析所用的软件" },
+        { "id": "S9", "text": "数字的精度与单位恰当，百分比给出分子与分母" }
+      ]
+    },
+    "disproportionality": {
+      "title": "不相称性分析报告要点",
+      "source": "参照 READUS-PV（Fusaroli M, et al. Drug Saf 2024）",
+      "items": [
+        { "id": "D1", "text": "写明数据来源（如 FAERS）、数据版本或提取时间与覆盖时段" },
+        { "id": "D2", "text": "写明药物与不良事件的定义（通用名/商品名归并，MedDRA 层级）" },
+        { "id": "D3", "text": "说明重复报告的去重方法" },
+        { "id": "D4", "text": "写明不相称性指标（ROR、PRR、IC、EBGM 等）及判定信号的阈值" },
+        { "id": "D5", "text": "报告病例数与四格表计数，而不只给指标" },
+        { "id": "D6", "text": "说明是否处理掩蔽效应、适应证混杂或竞争偏倚" },
+        { "id": "D7", "text": "讨论自发报告系统的局限：漏报、刺激性报告、不能估计发生率" },
+        { "id": "D8", "text": "说明信号不等于因果，需要进一步验证" }
+      ]
+    },
+    "bibliometric": {
+      "title": "文献计量分析报告要点",
+      "source": "EviMed 方法学要求（文献计量研究的检索、清洗、分析与局限）",
+      "items": [
+        { "id": "B1", "text": "写明检索的数据库、检索式与检索日期" },
+        { "id": "B2", "text": "写明时间范围、文献类型与语种限制" },
+        { "id": "B3", "text": "说明去重与数据清洗方法" },
+        { "id": "B4", "text": "写明分析软件与关键参数（如聚类算法、阈值）" },
+        { "id": "B5", "text": "说明引文数据的来源与覆盖率，以及缺失或模拟数据的处理" },
+        { "id": "B6", "text": "讨论文献计量指标的局限（引用滞后、数据库覆盖偏倚）" }
+      ]
+    },
+    "risk-of-bias": {
+      "title": "偏倚风险评价要点",
+      "source": "参照 RoB 2、ROBINS-I、QUADAS-2",
+      "items": [
+        { "id": "R1", "text": "按研究设计写明所用的偏倚风险工具" },
+        { "id": "R2", "text": "每个偏倚领域都给出判断" },
+        { "id": "R3", "text": "每个判断都有依据（引用原文或说明理由）" },
+        { "id": "R4", "text": "给出总体偏倚风险判断及其规则" }
+      ]
+    }
+  }
+}

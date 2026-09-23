@@ -82,9 +82,9 @@
         revisionAuthorizeUrl: !!js process.env.EVIMED_REVISION_AUTHORIZE_URL
         tokenFile: !!js process.env.EVIMED_WORKLOAD_TOKEN_FILE
         revisionAuthorizeTimeoutMs: 3000
-        # Submission runs the independent review itself, so the gate has to
-        # know whether this deployment composed one. Same switch the review row
-        # and the guidance read.
+        # Submission asks the control plane for the independent review, so the
+        # run has to know whether this deployment reviews. Same switch the
+        # review row and the guidance read.
         reviewEnabled: !!js process.env.EVIMED_REVIEW_ENABLED === '1'
       name: '@evimed/dsh-socket/plugins/run-policy'
 
@@ -112,9 +112,10 @@
     maxConcurrentChildren: !!js Number(process.env.EVIMED_MAX_CONCURRENT_CHILDREN ?? 30)
   name: '@evimed/dsh-socket/plugins/screening'
 
-# Cross-deliverable semantic review. Produces notices, never a verdict: on 29
-# real deliveries the semantic judge produced 129 findings of which 3 landed on
-# a human annotation, and five runs at temperature 0 disagreed with each other.
+# The independent review on request (`evimed_review_run`): the same control-
+# plane reviewer a submission asks (another model family, every reference
+# resolved, findings located or dropped). Advice, never a verdict. On only when
+# the control plane's review module is (EVIMED_REVIEW_ENABLED).
 - id: evimed-review
   name: '@evimed/dsh-socket/plugins/review'
   disabled: !!js process.env.EVIMED_REVIEW_ENABLED !== '1'

@@ -102,8 +102,8 @@ export function createHub(target) {
   const stateListeners = new Set();
   /** @type {Map<string, { resolve: (value: any) => void, reject: (error: Error) => void, timer: any }>} */
   const pending = new Map();
-  /** @type {{ theme: any, runState: any, session: any, evidence: any }} */
-  let state = Object.freeze({ theme: null, runState: null, session: null, evidence: null });
+  /** @type {{ theme: any, runState: any, session: any, evidence: any, replyChecks: any }} */
+  let state = Object.freeze({ theme: null, runState: null, session: null, evidence: null, replyChecks: null });
   let sequence = 0;
   // Timers are looked up when a request is made, not when the hub is built:
   // the hub exists on every page the loader evaluates, including contexts
@@ -165,8 +165,8 @@ export function createHub(target) {
     },
     /**
      * What the shell sent, handed over by the bridge after it validated the
-     * envelope. `theme`, `run-state`, `session` and `evidence` are kept as state; an
-     * answer carrying a request id settles that request.
+     * envelope. `theme`, `run-state`, `session`, `evidence` and `reply-check`
+     * are kept as state; an answer carrying a request id settles that request.
      * @param {string} type @param {any} data
      */
     deliver(type, data) {
@@ -174,6 +174,7 @@ export function createHub(target) {
       else if (type === 'run-state') publish({ runState: data });
       else if (type === 'session') publish({ session: data });
       else if (type === 'evidence') publish({ evidence: data });
+      else if (type === 'reply-check') publish({ replyChecks: data });
       const requestId = data && typeof data.requestId === 'string' ? data.requestId : null;
       if (requestId && pending.has(requestId)) {
         const entry = pending.get(requestId);
@@ -213,7 +214,7 @@ export function createHub(target) {
  * nothing on a live run; the kit's tests hold the same verbatim samples.
  *
  * @param {unknown} output
- * @returns {{ ok: true, data: any } | { ok: false, code: string, issues: { severity: string, code: string, message: string }[] } | null}
+ * @returns {{ ok: true, data: any, issues?: { severity: string, code: string, message: string }[] } | { ok: false, code: string, issues: { severity: string, code: string, message: string }[] } | null}
  */
 export function parseToolText(output) {
   if (typeof output !== 'string') return null;
@@ -233,8 +234,21 @@ export function parseToolText(output) {
   const head = (newline < 0 ? text : text.slice(0, newline)).trim();
   const body = newline < 0 ? '' : text.slice(newline + 1);
   if (head === 'ok') {
-    if (!body.trim()) return { ok: true, data: null };
-    try { return { ok: true, data: JSON.parse(body) }; } catch { return { ok: true, data: body }; }
+    // An accepted result can carry issue lines after its data (a submission's
+    // notes and its review's findings); they are split off before the JSON is
+    // read, as the control plane's reader does.
+    const lines = body.split('\n');
+    /** @type {{ severity: string, code: string, message: string }[]} */
+    const trailing = [];
+    while (lines.length) {
+      const issue = /^- \(([^)]+)\) (\S+)(?: (.*))?$/.exec(String(lines[lines.length - 1]).trim());
+      if (!issue) break;
+      trailing.unshift({ severity: issue[1], code: issue[2], message: issue[3] ?? '' });
+      lines.pop();
+    }
+    const rest = lines.join('\n');
+    if (!rest.trim()) return { ok: true, data: null, ...(trailing.length ? { issues: trailing } : {}) };
+    try { return { ok: true, data: JSON.parse(rest), ...(trailing.length ? { issues: trailing } : {}) }; } catch { return { ok: true, data: body }; }
   }
   const failed = /^failed:\s*([A-Za-z0-9_.:-]+)/.exec(head);
   if (!failed) return null;

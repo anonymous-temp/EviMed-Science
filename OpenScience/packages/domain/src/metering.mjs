@@ -112,7 +112,9 @@ export function isPeak(at) {
  * @property {string} version
  * @property {string} effectiveFrom  ISO instant this list started billing
  * @property {string} [modelSource]
- * @property {Record<string, { cacheHit: number, cacheMiss: number, output: number }>} model  price per 1M tokens
+ * @property {Record<string, { cacheHit: number, cacheMiss: number, output: number, offPeak?: boolean }>} model  price per 1M tokens;
+ *   `offPeak: false` marks a provider with no night rate (DashScope), whose
+ *   row the off-peak multiplier must never touch
  * @property {number} asrPerMinute
  * @property {number} embeddingPerMillion
  * @property {Record<string, number>} specialistJob
@@ -165,11 +167,11 @@ const referencePrices20260905 = deepFreeze({
   storagePerGigabyteDay: 0.01,
 })
 
-/** Current CNY rates verified against the official DeepSeek table on 2026-09-10.
+/** CNY rates verified against the official DeepSeek table on 2026-09-10.
  * Legacy Flash aliases are served and billed as V4.1 Flash by the provider.
  * @type {PriceList}
  */
-export const REFERENCE_PRICE_LIST = deepFreeze({
+const referencePrices20260910 = deepFreeze({
   ...referencePrices20260905,
   version: 'evimed-reference-2026-09-10',
   effectiveFrom: '2026-09-10T00:00:00.000Z',
@@ -178,6 +180,28 @@ export const REFERENCE_PRICE_LIST = deepFreeze({
     'deepseek-v4-flash': { cacheHit: 0.04, cacheMiss: 2, output: 8 },
     'deepseek-v4-flash-vision-exp': { cacheHit: 0.04, cacheMiss: 2, output: 8 },
     'deepseek-v4-pro': { cacheHit: 0.3, cacheMiss: 9, output: 27 },
+  },
+})
+
+/** The 2026-09-10 DeepSeek rates plus the independent reviewer's model,
+ * Qwen3.8-Max on DashScope (Beijing), from the model's own page read on
+ * 2026-09-23 (https://help.aliyun.com/zh/model-studio/qwen3-8-max): input
+ * ¥12, output ¥36, an implicit-cache hit ¥1.5 per million tokens, no tiers by
+ * length. Reasoning tokens are part of `completion_tokens` and bill as output.
+ * DashScope has no night rate, so its rows carry `offPeak: false`.
+ * The snapshot and its parent are the same model and the same price; both are
+ * listed because the provider answers with the snapshot's id either way.
+ * @type {PriceList}
+ */
+export const REFERENCE_PRICE_LIST = deepFreeze({
+  ...referencePrices20260910,
+  version: 'evimed-reference-2026-09-23',
+  effectiveFrom: '2026-09-23T00:00:00.000Z',
+  modelSource: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ · https://help.aliyun.com/zh/model-studio/qwen3-8-max',
+  model: {
+    ...referencePrices20260910.model,
+    'qwen3.8-max-0902': { cacheHit: 1.5, cacheMiss: 12, output: 36, offPeak: false },
+    'qwen3.8-max': { cacheHit: 1.5, cacheMiss: 12, output: 36, offPeak: false },
   },
 })
 
@@ -206,7 +230,8 @@ export const REFERENCE_PRICE_LIST = deepFreeze({
  */
 const priceLists = deepFreeze({
   'evimed-reference-2026-09-05': referencePrices20260905,
-  'evimed-reference-2026-09-10': REFERENCE_PRICE_LIST,
+  'evimed-reference-2026-09-10': referencePrices20260910,
+  'evimed-reference-2026-09-23': REFERENCE_PRICE_LIST,
 })
 
 /**
@@ -296,12 +321,14 @@ export function priceListAt(instant, registry = priceLists) {
 export function priceUsage(usage, ...prices) {
   const list = prices.length === 0 ? REFERENCE_PRICE_LIST : prices[0]
   if (!list) return { cost: 0, priced: false, currency: '' }
-  const multiplier = usage.peak ? 1 : OFF_PEAK_MULTIPLIER
   const currency = list.currency
   switch (usage.resourceType) {
     case 'model': {
       const rate = list.model[String(usage.model ?? '')]
       if (!rate) return { cost: 0, priced: false, currency }
+      // The night rate is DeepSeek's. A row that says its provider has none is
+      // billed at its one price around the clock.
+      const multiplier = usage.peak || rate.offPeak === false ? 1 : OFF_PEAK_MULTIPLIER
       const millions = (/** @type {unknown} */ value) => (Number(value) || 0) / 1_000_000
       const cost = millions(usage.cacheHit) * rate.cacheHit
         + millions(usage.cacheMiss) * rate.cacheMiss

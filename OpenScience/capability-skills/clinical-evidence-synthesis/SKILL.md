@@ -327,6 +327,34 @@ Screen the returned records, deduplicate them, and inspect enough relevant sourc
 
 Do not inflate counts with duplicates, irrelevant records, editorials, or title-only results.
 
+### Trace the field's landmark trials through its own references
+
+A query finds what matches its words. A field's landmark trials are what its
+guidelines and systematic reviews cite, and a trial known by its acronym or an
+older name is missed by every query you write. On 2026-09-22 a platform review
+of home monitoring in chronic disease left out TIM-HF2 and two other trials
+that every current heart-failure guideline cites — each one in the reference
+list of a guideline the run had already retrieved.
+
+After the first round of searching, before the sufficiency audit:
+
+1. Take the newest guideline and the newest systematic review you retrieved on
+   the question (by PMID, PMCID or DOI).
+2. Call `mcp__evimed__reference_list` on each. It returns the paper's references
+   in the paper's own order, with PMIDs where Europe PMC matched them.
+3. From each list keep the randomized trials, systematic reviews and other
+   guidelines that bear on your sub-questions; fetch their abstracts with
+   `mcp__evimed__literature_search` `pmids` and screen them like any record.
+4. For a landmark trial you now hold, `direction: "cited_by"` lists the newer
+   papers citing it — follow-up analyses and later trials that a query written
+   around the original misses.
+
+A guideline Europe PMC does not index (many Chinese society guidelines and
+policy documents) has no reference list there: read its references from the
+document itself with `mcp__evimed__open_access_full_text` or
+`mcp__evimed__web_read`. Say in `资料与方法` which documents' reference lists
+were traced.
+
 ### Sufficiency audit: what the search still does not cover
 
 After a round of searching, before deciding the search is done, write down for

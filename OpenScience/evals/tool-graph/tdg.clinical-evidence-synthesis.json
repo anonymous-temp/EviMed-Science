@@ -1,13 +1,13 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "clinical-evidence-synthesis",
-  "version": "sha256:e0feb50af95249dfea2a474388610efc2565423c05447a9f022f0c43b310e086",
+  "version": "sha256:f07988f9008ab5e023f553bba1a8962ae2296609ce8c147e092917d1a6b619f9",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 27,
-    "edges": 15,
+    "nodes": 28,
+    "edges": 20,
     "byVia": {
-      "schema": 15,
+      "schema": 20,
       "model": 0,
       "executed": 0
     },
@@ -1184,6 +1184,55 @@
       "stateEffect": "none"
     },
     {
+      "name": "mcp__evimed__reference_list",
+      "source": "mcp",
+      "description": "The reference list of a paper — what it cites, in its own order — or the papers that cite it, from Europe PMC's citation network, addressed by PMID, PMCID or DOI. Use it to trace a field's landmark trials: take the newest guideline or systematic review on the question, read its references, and fetch the abstracts of the trials and reviews you choose with literature_search pmids. Bibliographic metadata only: a citation is not evidence that the cited work supports anything.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300,
+            "description": "A PMID (\"30153985\" or \"PMID: 30153985\"), a PMCID (\"PMC6143516\") or a DOI."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "references",
+              "cited_by"
+            ],
+            "description": "references (default): what the paper cites; cited_by: newer papers citing it."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 400
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "identifier"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [
+        "doi",
+        "pmid"
+      ],
+      "requiredTypeTags": [
+        "doi",
+        "pmid"
+      ],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
       "name": "mcp__evimed__web_read",
       "source": "mcp",
       "description": "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and preserve it in the workspace as a citable snapshot with a sha256 receipt. Long text comes in pages: pass page=N for the next one (nextPage says whether there is one). Pages from regulators, guideline bodies and trial registries are marked official.",
@@ -1389,6 +1438,19 @@
       ]
     },
     {
+      "from": "mcp__evimed__biomedical_source_search",
+      "to": "mcp__evimed__reference_list",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
       "from": "mcp__evimed__data_source_catalog",
       "to": "mcp__evimed__biomedical_source_search",
       "type": "parameter",
@@ -1413,6 +1475,19 @@
       ]
     },
     {
+      "from": "mcp__evimed__evidence_deduplicate",
+      "to": "mcp__evimed__reference_list",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
       "from": "mcp__evimed__guideline_search",
       "to": "mcp__evimed__evidence_deduplicate",
       "type": "parameter",
@@ -1432,6 +1507,18 @@
       "confidence": 0.9,
       "validatedBy": null,
       "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "doi"
+      ]
+    },
+    {
+      "from": "mcp__evimed__guideline_search",
+      "to": "mcp__evimed__reference_list",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
       "matchedTypes": [
         "doi"
       ]
@@ -1457,6 +1544,19 @@
       "confidence": 0.9,
       "validatedBy": null,
       "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__literature_search",
+      "to": "mcp__evimed__reference_list",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
       "matchedTypes": [
         "doi",
         "pmid"
@@ -1477,6 +1577,19 @@
     {
       "from": "mcp__evimed__open_access_full_text",
       "to": "mcp__evimed__evidence_deduplicate",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__open_access_full_text",
+      "to": "mcp__evimed__reference_list",
       "type": "parameter",
       "via": "schema",
       "confidence": 0.9,

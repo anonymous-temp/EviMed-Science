@@ -7,7 +7,7 @@
 # child is) and `produces` (which contract validates the result) are
 # required. `tools` uses the model-visible names.
 id: off-label-analysis
-version: 2.2.1
+version: 2.3.0
 title: Off-label Use Analysis
 category: Evidence Synthesis
 description: Assist item-level label comparison and evidence-support scoring for a proposed use.
@@ -25,6 +25,7 @@ tools:
 - mcp__evimed__guideline_search
 - mcp__evimed__clinical_trial_search
 - mcp__evimed__literature_search
+- mcp__evimed__reference_list
 - mcp__evimed__kb_search
 - mcp__evimed__pharmacy_reference_search
 produces:

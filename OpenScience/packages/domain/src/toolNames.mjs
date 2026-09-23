@@ -45,6 +45,9 @@ export const OPENCODE_MCP_TOOL_PREFIX = `${OPENCODE_MCP_SERVER_NAME}_`
 export const MCP_TOOL_BASE_NAMES = Object.freeze([
   // retrieval (public + private adapters)
   'literature_search',
+  // a paper's reference list, or its citing papers (Europe PMC, 2026-09-23):
+  // the deterministic half of tracing a field's landmark trials
+  'reference_list',
   'guideline_search',
   'clinical_trial_search',
   'patent_search',

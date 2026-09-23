@@ -1,6 +1,6 @@
 {
   "id": "drug-selection",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "title": "Drug Selection Evaluation",
   "description": "Compare candidate medicines across pharmaceutical properties, effectiveness, safety, economics, and other formulary attributes.",
   "whenToUse": "交付物是在若干候选药品之间做遴选比较、需要一张可解释的打分表时，委派给我。",
@@ -17,6 +17,7 @@
     "mcp__evimed__guideline_search",
     "mcp__evimed__clinical_trial_search",
     "mcp__evimed__literature_search",
+    "mcp__evimed__reference_list",
     "mcp__evimed__kb_search",
     "mcp__evimed__pharmacy_reference_search"
   ],
