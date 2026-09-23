@@ -14,7 +14,8 @@
  *
  * `--narrow` shows the editor each source as v1.1 first shipped it — ±300
  * characters around each quote — the control arm the source-window case was
- * written against.
+ * written against. `--no-date` leaves out the date line, the control arm of
+ * the search-date case.
  *
  * A model's answer is a sample, not a verdict (principle 11): `--samples`
  * asks the reviewer each live case n times and records every answer.
@@ -41,6 +42,7 @@ const { values } = parseArgs({
     live: { type: "boolean", default: false },
     samples: { type: "string", default: "1" },
     narrow: { type: "boolean", default: false },
+    "no-date": { type: "boolean", default: false },
     "key-file": { type: "string", default: resolve(here, "../../../.evimed-local/secrets/dashscope.api-key") },
     only: { type: "string" },
   },
@@ -175,6 +177,7 @@ for (const item of values.live ? (cases.editorLive ?? []).filter(wanted) : []) f
       { role: "system", content: editorSystemPrompt({ safety: true, pass: 1 }) },
       { role: "user", content: editorMessage({
         contractKind: item.contractKind, deliverableId: "eval", tier: { tier: "L2", safety: true }, files, claims, sources, checklist, acceptanceItems: [],
+        today: values["no-date"] ? "" : new Date().toISOString().slice(0, 10),
         deterministic: { references: null, referenceFindings: [], numeric: null, stats: [] }, previousFindings: [],
       }) },
     ],
@@ -201,10 +204,13 @@ for (const item of values.live ? (cases.editorLive ?? []).filter(wanted) : []) f
       .map((finding) => `${finding.kind}: ${finding.fix.slice(0, 60)}`),
   }));
   const silent = editorSaidNothing(answer.value, checklist.length);
-  record("editor-live", sampled(item.id, sample), !silent && found.every((entry) => entry.hit) && clean.every((entry) => !entry.flagged.length), {
+  // A kind of wrong advice that can land under any location.
+  const stray = item.forbidAnywhere ? findings.filter((finding) => new RegExp(item.forbidAnywhere).test(`${finding.fix} ${finding.message}`)).map((finding) => `${finding.kind}@${finding.location}: ${finding.fix.slice(0, 60)}`) : [];
+  record("editor-live", sampled(item.id, sample), !silent && !stray.length && found.every((entry) => entry.hit) && clean.every((entry) => !entry.flagged.length), {
+    stray,
     found, clean, findings, dropped, raw: answer.value, checklist: checks.checklist, usage: answer.usage, cost: answer.cost, model: answer.model, reasoningChars: answer.reasoningChars, ms: answer.ms,
     silent, checklistAnswered: checks.returned.checklist,
-    note: `${silent ? "SAID NOTHING; " : ""}${findings.length} kept, ${dropped.length} dropped; checklist ${checks.returned.checklist}/${checklist.length}; planted ${found.filter((entry) => entry.hit).length}/${found.length}; false alarms ${clean.flatMap((entry) => entry.flagged).length}; ¥${answer.cost.toFixed(3)}; ${Math.round(answer.ms / 1000)} s`,
+    note: `${silent ? "SAID NOTHING; " : ""}${findings.length} kept, ${dropped.length} dropped; checklist ${checks.returned.checklist}/${checklist.length}; planted ${found.filter((entry) => entry.hit).length}/${found.length}; false alarms ${clean.flatMap((entry) => entry.flagged).length + stray.length}; ¥${answer.cost.toFixed(3)}; ${Math.round(answer.ms / 1000)} s`,
   });
 }
 
@@ -216,7 +222,7 @@ function narrowed(text, quote) {
 
 const failed = results.filter((result) => !result.pass).length;
 await mkdir(join(here, "results"), { recursive: true });
-const file = join(here, "results", `${new Date().toISOString().replace(/[:.]/g, "-")}${values.live ? "-live" : ""}${values.narrow ? "-narrow" : ""}.json`);
+const file = join(here, "results", `${new Date().toISOString().replace(/[:.]/g, "-")}${values.live ? "-live" : ""}${values.narrow ? "-narrow" : ""}${values["no-date"] ? "-no-date" : ""}.json`);
 await writeFile(file, `${JSON.stringify({ live: values.live, narrow: values.narrow, model: values.live ? pins.dashscope.review.model : null, passed: results.length - failed, failed, results }, null, 2)}\n`);
 process.stdout.write(`\n${results.length - failed}/${results.length} passed; ${file}\n`);
 process.exitCode = failed ? 1 : 0;

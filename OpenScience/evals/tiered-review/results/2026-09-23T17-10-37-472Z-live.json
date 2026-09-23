@@ -1,0 +1,1067 @@
+{
+  "live": true,
+  "narrow": false,
+  "model": "qwen3.8-max-0902",
+  "passed": 3,
+  "failed": 0,
+  "results": [
+    {
+      "group": "editor-live",
+      "id": "search-date-this-year-is-not-a-typo#1",
+      "pass": true,
+      "stray": [],
+      "found": [],
+      "clean": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "overclaim"
+          ],
+          "forbidFix": "删除|删去|去掉",
+          "why": "the claim is faithful to its abstract; the case is about the date, and a finding that calls a 2026 search date a typo fails it wherever it is filed",
+          "flagged": []
+        }
+      ],
+      "findings": [
+        {
+          "id": "E01",
+          "kind": "weak_support",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论 1",
+          "evidence": "New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR: 4.40; 95% CI: 1.66-11.66).",
+          "fix": "在结论中补充风险差 7.3 个百分点（95% CI 2.9–11.7）及 HR 4.40（95% CI 1.66–11.66），使效应量与置信区间随结论一并呈现。",
+          "message": "证据支持偏弱（主要结论 1）：「New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95%…」。建议：在结论中补充风险差 7.3 个百分点（95% CI 2.9–11.7）及 HR 4.40（95% CI 1.66–11.66），使效应量与置信区间随结论一并呈现。"
+        },
+        {
+          "id": "E02",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论 1",
+          "evidence": "Several asymptomatic AF episodes were detected only in the intervention group, while paroxysmal AF occurred in both groups.",
+          "fix": "在结论或单独小节中报告来源摘要提及的无症状发作检出情况及不良事件/安全性信息，或明确说明来源摘要未提供安全性数据。",
+          "message": "清单条目缺失（主要结论 1）：「Several asymptomatic AF episodes were detected only in the intervention group, while paroxysmal AF occurred in both groups.」。建议：在结论或单独小节中报告来源摘要提及的无症状发作检出情况及不良事件/安全性信息，或明确说明来源摘要未提供安全性数据。"
+        },
+        {
+          "id": "E03",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "资料与方法",
+          "evidence": "This prospective multicenter randomized controlled trial included patients ≥65 years with elevated stroke risk (CHA 2 DS 2 -VASc ≥2 men, ≥3 women) from 2 secondary care centers in the Netherlands.",
+          "fix": "在「资料与方法」中补写排除标准（如不能操作智能手表、已确诊房颤等），或注明来源摘要未报告排除标准。",
+          "message": "清单条目缺失（资料与方法）：「This prospective multicenter randomized controlled trial included patients ≥65 years with elevated stroke risk (CHA 2 DS 2 -VASc ≥2 men, ≥3 women) from 2 sec…」。建议：在「资料与方法」中补写排除标准（如不能操作智能手表、已确诊房颤等），或注明来源摘要未报告排除标准。"
+        },
+        {
+          "id": "E04",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "报告整体",
+          "evidence": "This randomized controlled trial provides evidence that 6-month smartwatch-based AF screening enhances the detection rate of new onset AF compared with standard care in patients at elevated stroke risk.",
+          "fix": "增加证据质量/确定性分级（如 GRADE）段落，并使结论措辞与该分级相称。",
+          "message": "清单条目缺失（报告整体）：「This randomized controlled trial provides evidence that 6-month smartwatch-based AF screening enhances the detection rate of new onset AF compared with stand…」。建议：增加证据质量/确定性分级（如 GRADE）段落，并使结论措辞与该分级相称。"
+        },
+        {
+          "id": "E05",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "参考文献 1",
+          "evidence": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211",
+          "fix": "补充期刊名、年份、卷期页码及临床试验注册号（NCT05686330），使文献可被唯一检索。",
+          "message": "措辞（参考文献 1）：「Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211」。建议：补充期刊名、年份、卷期页码及临床试验注册号（NCT05686330），使文献可被唯一检索。"
+        }
+      ],
+      "dropped": [
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "wording",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        }
+      ],
+      "raw": {
+        "findings": [
+          {
+            "location": "主要结论 1",
+            "kind": "weak_support",
+            "evidence": "New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR: 4.40; 95% CI: 1.66-11.66).",
+            "fix": "在结论中补充风险差 7.3 个百分点（95% CI 2.9–11.7）及 HR 4.40（95% CI 1.66–11.66），使效应量与置信区间随结论一并呈现。"
+          },
+          {
+            "location": "主要结论 1",
+            "kind": "missing_item",
+            "evidence": "Several asymptomatic AF episodes were detected only in the intervention group, while paroxysmal AF occurred in both groups.",
+            "fix": "在结论或单独小节中报告来源摘要提及的无症状发作检出情况及不良事件/安全性信息，或明确说明来源摘要未提供安全性数据。"
+          },
+          {
+            "location": "资料与方法",
+            "kind": "missing_item",
+            "evidence": "This prospective multicenter randomized controlled trial included patients ≥65 years with elevated stroke risk (CHA 2 DS 2 -VASc ≥2 men, ≥3 women) from 2 secondary care centers in the Netherlands.",
+            "fix": "在「资料与方法」中补写排除标准（如不能操作智能手表、已确诊房颤等），或注明来源摘要未报告排除标准。"
+          },
+          {
+            "location": "报告整体",
+            "kind": "missing_item",
+            "evidence": "This randomized controlled trial provides evidence that 6-month smartwatch-based AF screening enhances the detection rate of new onset AF compared with standard care in patients at elevated stroke risk.",
+            "fix": "增加证据质量/确定性分级（如 GRADE）段落，并使结论措辞与该分级相称。"
+          },
+          {
+            "location": "报告整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "增加局限性小节，至少讨论单试验、仅荷兰两家中心、180 天随访等局限。"
+          },
+          {
+            "location": "报告整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "增加对目标人群适用性的讨论（如年龄 ≥65 岁、CHA₂DS₂-VASc 阈值、荷兰二级医疗中心外推性）。"
+          },
+          {
+            "location": "主要结论 1",
+            "kind": "wording",
+            "evidence": "180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+            "fix": "将百分比补写分子分母，改为「21/219（9.6%）」与「5/218（2.3%）」。"
+          },
+          {
+            "location": "报告整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "说明本简报为叙述性综合、未进行新的统计分析，故统计方法、样本量、软件等条目不适用；若引用原文统计结果，注明原文所用方法。"
+          },
+          {
+            "location": "参考文献 1",
+            "kind": "wording",
+            "evidence": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211",
+            "fix": "补充期刊名、年份、卷期页码及临床试验注册号（NCT05686330），使文献可被唯一检索。"
+          },
+          {
+            "location": "资料与方法",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "说明为何仅纳入一项试验，或声明未检索到该领域其他地标试验/最新指南；若确有相关指南（如 ESC 2024 AF 指南），应纳入或说明排除理由。"
+          },
+          {
+            "location": "报告整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "增加对相互矛盾证据的处理段落，或明确说明本次检索未发现矛盾证据。"
+          },
+          {
+            "location": "报告整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "在报告开头以 PICO 格式写明研究问题：人群（≥65 岁、CHA₂DS₂-VASc 升高）、干预（180 天智能手表 PPG+单导联 ECG 监测）、对照（常规照护）、结局（≥30 秒确诊新发房颤）。"
+          }
+        ],
+        "checklist": [
+          {
+            "item": "E1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E2",
+            "status": "present",
+            "evidence": "检索 PubMed 与 Europe PMC，检索日期 2026 年 9 月 10 日，纳入随机对照试验。"
+          },
+          {
+            "item": "E3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E7",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E9",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E10",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S1",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S2",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S4",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S6",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S7",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S8",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S9",
+            "status": "absent",
+            "evidence": ""
+          }
+        ],
+        "acceptance": []
+      },
+      "checklist": [
+        {
+          "item": "E1",
+          "status": "absent"
+        },
+        {
+          "item": "E2",
+          "status": "present"
+        },
+        {
+          "item": "E3",
+          "status": "absent"
+        },
+        {
+          "item": "E4",
+          "status": "absent"
+        },
+        {
+          "item": "E5",
+          "status": "absent"
+        },
+        {
+          "item": "E6",
+          "status": "absent"
+        },
+        {
+          "item": "E7",
+          "status": "absent"
+        },
+        {
+          "item": "E8",
+          "status": "absent"
+        },
+        {
+          "item": "E9",
+          "status": "absent"
+        },
+        {
+          "item": "E10",
+          "status": "absent"
+        },
+        {
+          "item": "S1",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S2",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S3",
+          "status": "absent"
+        },
+        {
+          "item": "S4",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S5",
+          "status": "absent"
+        },
+        {
+          "item": "S6",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S7",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S8",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S9",
+          "status": "absent"
+        }
+      ],
+      "usage": {
+        "cacheHitTokens": 0,
+        "cacheMissTokens": 1803,
+        "completionTokens": 4420,
+        "reasoningTokens": 2770
+      },
+      "cost": 0.180756,
+      "model": "qwen3.8-max-0902",
+      "reasoningChars": 9347,
+      "ms": 93135,
+      "silent": false,
+      "checklistAnswered": 19,
+      "note": "5 kept, 7 dropped; checklist 19/19; planted 0/0; false alarms 0; ¥0.181; 93 s"
+    },
+    {
+      "group": "editor-live",
+      "id": "search-date-this-year-is-not-a-typo#2",
+      "pass": true,
+      "stray": [],
+      "found": [],
+      "clean": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "overclaim"
+          ],
+          "forbidFix": "删除|删去|去掉",
+          "why": "the claim is faithful to its abstract; the case is about the date, and a finding that calls a 2026 search date a typo fails it wherever it is filed",
+          "flagged": []
+        }
+      ],
+      "findings": [
+        {
+          "id": "E01",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "report.md 整体",
+          "evidence": "## 资料与方法",
+          "fix": "补充研究问题（PICO）、纳入排除标准、证据质量分级、不良结局与安全性、证据矛盾与局限性等临床证据报告必备章节。",
+          "message": "清单条目缺失（report.md 整体）：「## 资料与方法」。建议：补充研究问题（PICO）、纳入排除标准、证据质量分级、不良结局与安全性、证据矛盾与局限性等临床证据报告必备章节。"
+        },
+        {
+          "id": "E02",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论 1",
+          "evidence": "卒中风险升高的患者",
+          "fix": "补充来源中具体阈值，改为「卒中风险升高的患者（男性 CHA₂DS₂-VASc ≥ 2，女性 ≥ 3）」。",
+          "message": "措辞（主要结论 1）：「卒中风险升高的患者」。建议：补充来源中具体阈值，改为「卒中风险升高的患者（男性 CHA₂DS₂-VASc ≥ 2，女性 ≥ 3）」。"
+        },
+        {
+          "id": "E03",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论 1",
+          "evidence": "65 岁以上",
+          "fix": "来源原文为「≥65 years」，建议改为「65 岁及以上」以准确包含 65 岁。",
+          "message": "措辞（主要结论 1）：「65 岁以上」。建议：来源原文为「≥65 years」，建议改为「65 岁及以上」以准确包含 65 岁。"
+        },
+        {
+          "id": "E04",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "参考文献 1",
+          "evidence": "PMID: 41569211",
+          "fix": "补充完整作者列表、期刊名、年份、卷期页码或 DOI，以便读者查证。",
+          "message": "措辞（参考文献 1）：「PMID: 41569211」。建议：补充完整作者列表、期刊名、年份、卷期页码或 DOI，以便读者查证。"
+        }
+      ],
+      "dropped": [
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "overclaim",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        }
+      ],
+      "raw": {
+        "findings": [
+          {
+            "location": "主要结论 1",
+            "kind": "missing_item",
+            "evidence": "180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3% [1]",
+            "fix": "补写来源中的效应量与置信区间，如「风险差 7.3 个百分点（95% CI 2.9–11.7）；HR 4.40（95% CI 1.66–11.66）；P=0.001」。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "## 资料与方法",
+            "fix": "补充研究问题（PICO）、纳入排除标准、证据质量分级、不良结局与安全性、证据矛盾与局限性等临床证据报告必备章节。"
+          },
+          {
+            "location": "主要结论 1",
+            "kind": "overclaim",
+            "evidence": "180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+            "fix": "将结论措辞改为「检出率提高」而非暗示发病率差异，如「智能手表监测组新发房颤检出率为 9.6%，常规照护组为 2.3%」。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "补充证据质量或确定性分级（如 GRADE），并与结论措辞相称。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "补充有害结局与安全性信息的讨论（如误报、焦虑、抗凝相关风险等）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "补充对目标人群的适用性讨论（如年龄、CHA₂DS₂-VASc 阈值、医疗体系差异）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "补充局限性说明（如仅两家中心、仅荷兰、仅 6 个月随访等）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "补充纳入与排除标准的具体描述。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "说明是否纳入该领域地标试验与最新指南，或说明为何没有。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "补充对相互矛盾证据的处理或说明未检索到矛盾证据。"
+          },
+          {
+            "location": "主要结论 1",
+            "kind": "wording",
+            "evidence": "卒中风险升高的患者",
+            "fix": "补充来源中具体阈值，改为「卒中风险升高的患者（男性 CHA₂DS₂-VASc ≥ 2，女性 ≥ 3）」。"
+          },
+          {
+            "location": "主要结论 1",
+            "kind": "wording",
+            "evidence": "65 岁以上",
+            "fix": "来源原文为「≥65 years」，建议改为「65 岁及以上」以准确包含 65 岁。"
+          },
+          {
+            "location": "参考文献 1",
+            "kind": "wording",
+            "evidence": "PMID: 41569211",
+            "fix": "补充完整作者列表、期刊名、年份、卷期页码或 DOI，以便读者查证。"
+          }
+        ],
+        "checklist": [
+          {
+            "item": "E1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E2",
+            "status": "present",
+            "evidence": "检索 PubMed 与 Europe PMC，检索日期 2026 年 9 月 10 日，纳入随机对照试验。"
+          },
+          {
+            "item": "E3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E7",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E9",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E10",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S7",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S9",
+            "status": "absent",
+            "evidence": ""
+          }
+        ],
+        "acceptance": []
+      },
+      "checklist": [
+        {
+          "item": "E1",
+          "status": "absent"
+        },
+        {
+          "item": "E2",
+          "status": "present"
+        },
+        {
+          "item": "E3",
+          "status": "absent"
+        },
+        {
+          "item": "E4",
+          "status": "absent"
+        },
+        {
+          "item": "E5",
+          "status": "absent"
+        },
+        {
+          "item": "E6",
+          "status": "absent"
+        },
+        {
+          "item": "E7",
+          "status": "absent"
+        },
+        {
+          "item": "E8",
+          "status": "absent"
+        },
+        {
+          "item": "E9",
+          "status": "absent"
+        },
+        {
+          "item": "E10",
+          "status": "absent"
+        },
+        {
+          "item": "S1",
+          "status": "absent"
+        },
+        {
+          "item": "S2",
+          "status": "absent"
+        },
+        {
+          "item": "S3",
+          "status": "absent"
+        },
+        {
+          "item": "S4",
+          "status": "absent"
+        },
+        {
+          "item": "S5",
+          "status": "absent"
+        },
+        {
+          "item": "S6",
+          "status": "absent"
+        },
+        {
+          "item": "S7",
+          "status": "absent"
+        },
+        {
+          "item": "S8",
+          "status": "absent"
+        },
+        {
+          "item": "S9",
+          "status": "absent"
+        }
+      ],
+      "usage": {
+        "cacheHitTokens": 1024,
+        "cacheMissTokens": 779,
+        "completionTokens": 7415,
+        "reasoningTokens": 5986
+      },
+      "cost": 0.277824,
+      "model": "qwen3.8-max-0902",
+      "reasoningChars": 22474,
+      "ms": 166328,
+      "silent": false,
+      "checklistAnswered": 19,
+      "note": "4 kept, 9 dropped; checklist 19/19; planted 0/0; false alarms 0; ¥0.278; 166 s"
+    },
+    {
+      "group": "editor-live",
+      "id": "search-date-this-year-is-not-a-typo#3",
+      "pass": true,
+      "stray": [],
+      "found": [],
+      "clean": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "overclaim"
+          ],
+          "forbidFix": "删除|删去|去掉",
+          "why": "the claim is faithful to its abstract; the case is about the date, and a finding that calls a 2026 search date a typo fails it wherever it is filed",
+          "flagged": []
+        }
+      ],
+      "findings": [
+        {
+          "id": "E01",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "资料与方法",
+          "evidence": "检索 PubMed 与 Europe PMC，检索日期 2026 年 9 月 10 日，纳入随机对照试验。",
+          "fix": "补充明确的排除标准（如排除观察性研究、非英文文献等），当前仅写了纳入标准。",
+          "message": "清单条目缺失（资料与方法）：「检索 PubMed 与 Europe PMC，检索日期 2026 年 9 月 10 日，纳入随机对照试验。」。建议：补充明确的排除标准（如排除观察性研究、非英文文献等），当前仅写了纳入标准。"
+        }
+      ],
+      "dropped": [
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "weak_support",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        }
+      ],
+      "raw": {
+        "findings": [
+          {
+            "location": "主要结论 第1条",
+            "kind": "missing_item",
+            "evidence": "180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3% [1]（CLM-001）。",
+            "fix": "补充来源中的效应量与置信区间，例如「风险差 7.3 个百分点（95% CI 2.9–11.7；P = 0.001）；HR 4.40（95% CI 1.66–11.66）」。"
+          },
+          {
+            "location": "全文",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "增加有害结局与安全性部分，来源摘要提及「Several asymptomatic AF episodes were detected only in the intervention group, while paroxysmal AF occurred in both groups」，至少应报告该信息或说明来源未提供安全性数据。"
+          },
+          {
+            "location": "全文",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "增加证据质量或确定性分级（如 GRADE）段落，并使结论措辞与分级相称。"
+          },
+          {
+            "location": "全文",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "增加局限性段落，至少说明该结论来自单项试验、随访仅 6 个月、未报告硬终点（卒中）等局限。"
+          },
+          {
+            "location": "全文",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "增加对目标人群适用性的讨论，来源限定为「patients ≥65 years with elevated stroke risk (CHA 2 DS 2 -VASc ≥2 men, ≥3 women) from 2 secondary care centers in the Netherlands」，应说明该结论向其他年龄、风险水平或医疗体系的推广限度。"
+          },
+          {
+            "location": "全文",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "说明该领域地标试验与最新指南的纳入情况，或说明为何未纳入。"
+          },
+          {
+            "location": "资料与方法",
+            "kind": "missing_item",
+            "evidence": "检索 PubMed 与 Europe PMC，检索日期 2026 年 9 月 10 日，纳入随机对照试验。",
+            "fix": "补充明确的排除标准（如排除观察性研究、非英文文献等），当前仅写了纳入标准。"
+          },
+          {
+            "location": "主要结论 第1条",
+            "kind": "weak_support",
+            "evidence": "180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+            "fix": "将主要结论从单纯检出率数字改写为带效应量与置信区间的表述，以与来源中「risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR: 4.40; 95% CI: 1.66-11.66」一致。"
+          },
+          {
+            "location": "全文",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "增加统计方法、样本量、缺失数据处理、软件等统计报告要素的说明，或明确声明本简报为定性摘要、不含原始统计分析。"
+          },
+          {
+            "location": "全文",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "增加对相互矛盾证据的处理段落，或说明本次检索仅纳入单项试验、未发现矛盾证据。"
+          }
+        ],
+        "checklist": [
+          {
+            "item": "E1",
+            "status": "present",
+            "evidence": "一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%"
+          },
+          {
+            "item": "E2",
+            "status": "present",
+            "evidence": "检索 PubMed 与 Europe PMC，检索日期 2026 年 9 月 10 日"
+          },
+          {
+            "item": "E3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E7",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E9",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E10",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S7",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S9",
+            "status": "absent",
+            "evidence": ""
+          }
+        ],
+        "acceptance": []
+      },
+      "checklist": [
+        {
+          "item": "E1",
+          "status": "present"
+        },
+        {
+          "item": "E2",
+          "status": "present"
+        },
+        {
+          "item": "E3",
+          "status": "absent"
+        },
+        {
+          "item": "E4",
+          "status": "absent"
+        },
+        {
+          "item": "E5",
+          "status": "absent"
+        },
+        {
+          "item": "E6",
+          "status": "absent"
+        },
+        {
+          "item": "E7",
+          "status": "absent"
+        },
+        {
+          "item": "E8",
+          "status": "absent"
+        },
+        {
+          "item": "E9",
+          "status": "absent"
+        },
+        {
+          "item": "E10",
+          "status": "absent"
+        },
+        {
+          "item": "S1",
+          "status": "absent"
+        },
+        {
+          "item": "S2",
+          "status": "absent"
+        },
+        {
+          "item": "S3",
+          "status": "absent"
+        },
+        {
+          "item": "S4",
+          "status": "absent"
+        },
+        {
+          "item": "S5",
+          "status": "absent"
+        },
+        {
+          "item": "S6",
+          "status": "absent"
+        },
+        {
+          "item": "S7",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S8",
+          "status": "absent"
+        },
+        {
+          "item": "S9",
+          "status": "absent"
+        }
+      ],
+      "usage": {
+        "cacheHitTokens": 1024,
+        "cacheMissTokens": 779,
+        "completionTokens": 4624,
+        "reasoningTokens": 3026
+      },
+      "cost": 0.177348,
+      "model": "qwen3.8-max-0902",
+      "reasoningChars": 10938,
+      "ms": 102185,
+      "silent": false,
+      "checklistAnswered": 19,
+      "note": "1 kept, 9 dropped; checklist 19/19; planted 0/0; false alarms 0; ¥0.177; 102 s"
+    }
+  ]
+}

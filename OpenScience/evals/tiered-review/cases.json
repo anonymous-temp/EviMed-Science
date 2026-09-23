@@ -284,6 +284,40 @@
           "why": "every detail of the claim is in the abstract; the incident was advice to delete correct details the editor had not been shown. A note that the effect size is missing is fair editing, whatever kind the model files it under."
         }
       ]
+    },
+    {
+      "id": "search-date-this-year-is-not-a-typo",
+      "incident": "2026-09-23 first submit-path review on production (rv_050cd29723ae4412b19fa38d F11): the editor, never told the date, called a 2026 search date 「明显为笔误或占位符」. Replayed on that real brief: without the date line 1 of 3 answers asked to check whether the date was a placeholder, with it 0 of 3. This small case guards the date line (no answer may call the date a typo); it does not reproduce the incident — its control arm (--no-date) passed 3/3 as well.",
+      "contractKind": "clinical-evidence-report",
+      "report": "# 证据简报\n\n## 资料与方法\n\n检索 PubMed 与 Europe PMC，检索日期 2026 年 9 月 10 日，纳入随机对照试验。\n\n## 主要结论\n\n1. 一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3% [1]（CLM-001）。\n\n## 参考文献\n\n1. Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211",
+      "claims": [
+        {
+          "claimId": "CLM-001",
+          "claimType": "direct",
+          "claim": "一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%。",
+          "sources": [
+            {
+              "artifactPath": "sources/equal-2026.txt",
+              "title": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial",
+              "quote": "Between November 2022 and December 2023, 437 patients were randomized (219 intervention, 218 control)",
+              "text": "BACKGROUND: Atrial fibrillation (AF), the most common cardiac arrhythmia, is a major cause of stroke and often remains undiagnosed due to its paroxysmal and frequently asymptomatic nature. Wearables provide a scalable, noninvasive screening tool. OBJECTIVES: This trial evaluated new onset AF detection in patients at elevated stroke risk using remote smartwatch-based screening. METHODS: This prospective multicenter randomized controlled trial included patients ≥65 years with elevated stroke risk (CHA 2 DS 2 -VASc ≥2 men, ≥3 women) from 2 secondary care centers in the Netherlands. Patients were randomized to 6-month (180-day) monitoring with a smartwatch with photoplethysmography and single-lead electrocardiogram (ECG) functions, or standard care. ECGs were reviewed remotely by an independent eHealth team within 24 hours. The primary outcome was new onset AF, defined as a confirmed episode lasting ≥30 seconds on single-lead ECG or standard ECG methods. RESULTS: Between November 2022 and December 2023, 437 patients were randomized (219 intervention, 218 control); the median age was 75 years, 46.7% were female and the median CHA 2 DS 2 -VASc score was 3.0. New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR: 4.40; 95% CI: 1.66-11.66). Several asymptomatic AF episodes were detected only in the intervention group, while paroxysmal AF occurred in both groups. CONCLUSIONS: This randomized controlled trial provides evidence that 6-month smartwatch-based AF screening enhances the detection rate of new onset AF compared with standard care in patients at elevated stroke risk. (Detection and Quantification of Atrial Fibrillation in High-risk Patients Using a Smartwatch Wearable [Apple Watch] [EQUAL]; NCT05686330)."
+            }
+          ]
+        }
+      ],
+      "expectFound": [],
+      "expectClean": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "overclaim"
+          ],
+          "forbidFix": "删除|删去|去掉",
+          "why": "the claim is faithful to its abstract; the case is about the date, and a finding that calls a 2026 search date a typo fails it wherever it is filed"
+        }
+      ],
+      "forbidAnywhere": "笔误|占位|未来|尚未|不可能"
     }
   ]
 }
