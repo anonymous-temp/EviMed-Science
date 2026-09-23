@@ -1071,6 +1071,29 @@ export class ImService {
   }
 
   /**
+   * A correction about an answer this chat already received, threaded under
+   * that answer. Reached by the independent reviewer (reviewService.mjs) when a
+   * medicine claim in a delivered reply is contradicted by the source it
+   * cites — the one reply check a person must see even if they never open the
+   * page. A run no chat started has no chat to write into, and answers false;
+   * its correction travels by the inbox, whose push reaches Feishu on its own.
+   * Idempotent per run: the adapter keys the message, so a retry is one message.
+   * @param {string} userId @param {string} projectId @param {string} runId @param {string} text
+   * @returns {Promise<boolean>}
+   */
+  async sendRunCorrection(userId, projectId, runId, text) {
+    const task = await this.store.taskForRun(userId, projectId, runId);
+    if (!task) return false;
+    const binding = await this.store.bindingById(task.bindingId);
+    const conversation = binding ? this.registry.get(binding.channel)?.conversation : null;
+    if (!binding || !conversation) return false;
+    const replyTo = Array.isArray(task.result?.answerMessageIds) && task.result.answerMessageIds[0] ? task.result.answerMessageIds[0] : task.replyTo ?? null;
+    await conversation.sendText({ binding, chatId: task.chatId, replyTo, key: `${task.id}:correction`, text: String(text ?? "").slice(0, 3_900) });
+    this.count("correction_sent");
+    return true;
+  }
+
+  /**
    * The run's last words: from the live runtime while it is still up (the
    * common case, minutes after the finish), else from the transcript the
    * run-finished hook wrote to disk. Null when neither can be read — the card

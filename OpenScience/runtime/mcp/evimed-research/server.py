@@ -495,6 +495,28 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
+        "name": "reference_list",
+        "description": (
+            "The reference list of a paper — what it cites, in its own order — or the papers that cite it, from "
+            "Europe PMC's citation network, addressed by PMID, PMCID or DOI. Use it to trace a field's landmark "
+            "trials: take the newest guideline or systematic review on the question, read its references, and "
+            "fetch the abstracts of the trials and reviews you choose with literature_search pmids. Bibliographic "
+            "metadata only: a citation is not evidence that the cited work supports anything."
+        ),
+        "inputSchema": object_schema(
+            {
+                "identifier": {
+                    "type": "string", "minLength": 3, "maxLength": 300,
+                    "description": "A PMID (\"30153985\" or \"PMID: 30153985\"), a PMCID (\"PMC6143516\") or a DOI.",
+                },
+                "direction": {"type": "string", "enum": ["references", "cited_by"],
+                              "description": "references (default): what the paper cites; cited_by: newer papers citing it."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": public_sources.MAX_REFERENCE_LIST},
+            },
+            ("identifier",),
+        ),
+    },
+    {
         "name": "guideline_search",
         "description": "Search configured clinical-guideline sources.",
         "inputSchema": object_schema(
@@ -2055,6 +2077,18 @@ def _dispatch(name, arguments):
                 False,
                 "Stop and read the records another way.",
                 ["Use open_access_full_text for records with a PMC copy, or ask an operator to enable public connectors."],
+            )
+        return _public_adapter_call(name, arguments)
+    if name == "reference_list":
+        # Europe PMC's citation network is public and has no private adapter:
+        # this goes through the gateway or is refused, never guessed.
+        if not public_sources.enabled():
+            return failure(
+                "public_source_unsupported",
+                "Reference lists need the public connectors, which are disabled in this deployment.",
+                False,
+                "Stop and read the guideline's reference list another way.",
+                ["Open the guideline with open_access_full_text or web_read and read its references."],
             )
         return _public_adapter_call(name, arguments)
     if name == "literature_search" and arguments.get("relation"):

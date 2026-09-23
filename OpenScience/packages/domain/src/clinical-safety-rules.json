@@ -1323,6 +1323,28 @@
       ]
     ]
   },
+  "medicineVocabulariesNote": "Which of the caution vocabularies name medicines (the others name scenes: an age, a condition, pregnancy). A reply that names any of these, a high-risk entity or a routing entity mentions a medicine, and the independent reviewer adds its pharmacist check to it.",
+  "medicineVocabularies": [
+    "aspirin",
+    "anticoagulants",
+    "antiplatelets",
+    "nsaids",
+    "qt-prolonging",
+    "teratogens",
+    "acei-arb",
+    "ssri-snri",
+    "serotonergic-other",
+    "opioids",
+    "benzodiazepines",
+    "digoxin",
+    "metformin",
+    "fluoroquinolones",
+    "strong-cyp3a4-inhibitors",
+    "simvastatin-lovastatin",
+    "potassium-sparing",
+    "potassium-supplements",
+    "aminoglycosides"
+  ],
   "cautionRulesNote": "Advisory cautions (check clinical-safety-cautions): when the question or report sets the scene (`when`, every group) and the report never uses a caution term (`mention`), the run is advised and the reader is shown a SAFETY notice. Never a reason to withhold a delivery (owner decision 5, 2026-09-18).",
   "cautionRules": [
     {

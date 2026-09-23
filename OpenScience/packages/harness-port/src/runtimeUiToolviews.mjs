@@ -345,32 +345,39 @@ export function verdictView(block, live, kit, known = new Map()) {
   const refusal = refusalOf(result);
   if (refusal) return { ...base, kind: 'refused', text: refusal, verdict: null, advice: 0 };
   const verdict = kit.verdictOf(result);
-  // A submission renders the numbering, runs the gate and calls the
-  // independent reviewer, and comes back with all three. The reviewer's count
-  // is worth a reader's glance — it is the half that catches what a
-  // deterministic check cannot.
+  // A submission renders the numbering, runs the gate and asks the control
+  // plane's independent reviewer, and comes back with all three. The review is
+  // worth a reader's glance — it is the half that resolves every reference and
+  // reads the package as an outside editor.
   const review = result.ok && result.data?.review && typeof result.data.review === 'object' ? result.data.review : null;
+  const references = review?.references && typeof review.references === 'object' ? review.references : null;
   return {
     ...base,
     kind: 'judged',
     verdict: verdictText(verdict),
     advice: verdict.advice,
     review: review && review.status === 'done'
-      ? { examined: Number(review.examined) || 0, mustFix: Number(review.mustFix) || 0, advice: Number(review.advice) || 0 }
-      : null,
+      ? {
+        findings: Number(review.findings) || 0,
+        answerRequired: Array.isArray(review.answerRequired) ? review.answerRequired.length : 0,
+        resolved: Number(references?.resolved) || 0,
+        withIdentifier: Number(references?.withIdentifier) || 0,
+        unresolvable: Number(references?.unresolvable) || 0,
+      }
+      : review && review.status === 'unavailable' ? { unavailable: true } : null,
   };
 }
 
 /**
  * What the reviewer found, in one phrase, or null when it did not run.
- * @param {{ examined: number, mustFix: number, advice: number } | null} review
+ * @param {{ findings?: number, answerRequired?: number, resolved?: number, withIdentifier?: number, unresolvable?: number, unavailable?: boolean } | null} review
  * @returns {string | null}
  */
 export function reviewSummaryText(review) {
-  if (!review || !review.examined) return null;
-  const parts = [`审查 ${review.examined} 条`];
-  if (review.mustFix) parts.push(`${review.mustFix} 条必须改`);
-  if (review.advice) parts.push(`${review.advice} 条建议`);
+  if (!review) return null;
+  if (review.unavailable) return '独立审查未完成';
+  const parts = [review.findings ? `审查发现 ${review.findings} 条${review.answerRequired ? `（${review.answerRequired} 条需回应）` : ''}` : '审查未发现问题'];
+  if (review.withIdentifier) parts.push(`文献核对 ${review.resolved}/${review.withIdentifier}${review.unresolvable ? `，${review.unresolvable} 条查无此条` : ''}`);
   return parts.join(' · ');
 }
 

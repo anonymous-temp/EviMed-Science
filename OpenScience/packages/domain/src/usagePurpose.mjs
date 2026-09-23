@@ -15,13 +15,16 @@
  * `other` — bookkeeping never fails a model call.
  */
 
-/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'frontier'|'other'} UsagePurpose */
+/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'frontier'|'review'|'other'} UsagePurpose */
 
 /** Every purpose, in report order. `frontier` is the frontier feed reading
  *  the literature for everyone (screening, editing, the daily issue): one
  *  line of its own, charged to the operator's internal `evimed-frontier`
  *  project and governed by the module's own daily budget, so what the feed
- *  costs is never folded into a researcher's spend. */
+ *  costs is never folded into a researcher's spend. `review` is the
+ *  independent reviewer the control plane calls on a researcher's delivery
+ *  (a model of another family, never the kernel's): charged to the run it
+ *  reviewed, so a report's price includes its review. */
 export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.freeze([
   'kernel',
   'memory-extraction',
@@ -33,6 +36,7 @@ export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.fre
   'source-understanding',
   'learning',
   'frontier',
+  'review',
   'other',
 ]))
 
@@ -48,6 +52,7 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   'source-understanding': '资料理解',
   learning: '学习做法',
   frontier: '前沿动态',
+  review: '成果审查',
   other: '其他',
 }))
 

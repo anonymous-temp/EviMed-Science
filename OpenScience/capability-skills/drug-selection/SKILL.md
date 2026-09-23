@@ -30,6 +30,13 @@ Deduplicate records and preserve the exact query, jurisdiction, source identifie
 
 Freeze the retrieval and provenance package in `evidence-snapshot.json` before assessment; the compiler input SHA-256 binds the structured assessment to the supplied inventory. Uploaded files must be marked as user-provided evidence.
 
+Trace the field's landmark trials before you assess: call `mcp__evimed__reference_list`
+on the newest guideline and the newest systematic review you retrieved, and screen
+the trials and reviews their reference lists name (`mcp__evimed__literature_search`
+`pmids` for the abstracts). A trial known by an acronym is missed by keyword queries
+and is named in every guideline's references; a guideline Europe PMC does not index
+is read with `mcp__evimed__open_access_full_text` or `mcp__evimed__web_read` instead.
+
 ## 3. Build domain assessments
 
 Use only these structured domains: `pharmaceutical_properties`, `effectiveness`, `safety`, `economics`, `appropriateness`, `accessibility`, `innovation`, and `other`. For each candidate and domain, record status, rationale, and `evidenceIds` that resolve to `evidence-snapshot.json`.

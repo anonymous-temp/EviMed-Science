@@ -100,7 +100,7 @@ import {
   unmetDependencies,
 } from '../src/runPolicy.mjs'
 import { advancePlanItem } from '../src/runMirror.mjs'
-import { REVIEW_MAX_CLAIMS, reviewFindings, reviewNoticeText, runReview } from '../src/review.mjs'
+import { answerReview, reviewIssues, reviewSummary, runReview } from '../src/review.mjs'
 import { capSkillBodies } from '../src/skillBodies.mjs'
 import { proseShape } from '../src/proseShape.mjs'
 import {
@@ -146,6 +146,8 @@ export const inject = ['tools', 'agents', 'sessions', 'subagents']
  * @property {string} [tokenFile]
  * @property {number} [revisionAuthorizeTimeoutMs]
  * @property {boolean} reviewEnabled
+ * @property {number} [reviewPollMs]
+ * @property {number} [reviewWaitMs]
  */
 
 export const Config = Schema.object({
@@ -187,7 +189,11 @@ export const Config = Schema.object({
   // composed one; asking the review plugin is not available to it (a preset row
   // may not publish a process-global service).
   reviewEnabled: Schema.boolean().default(false)
-    .description('Whether the independent reviewer is composed in this deployment. Submission runs it when it is.'),
+    .description('Whether the control plane reviews submissions (its review module is on). Submission asks for the review when it is.'),
+  reviewPollMs: Schema.number().default(3_000)
+    .description('How often a submission asks after its running review.'),
+  reviewWaitMs: Schema.number().default(16 * 60_000)
+    .description('How long a submission waits for its review before answering with the verdict alone. Above the control plane\'s own editor timeout.'),
 })
 
 /**
@@ -628,6 +634,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     scopes.set(entry.sessionId, {
       deliverableIds,
       resolveClaimIds: () => runClaimIds(entry, cwd),
+      // What `evimed_review_run` calls: the same gateway a submission asks,
+      // for a writer who wants the editor's opinion mid-draft.
+      review: (/** @type {string} */ deliverableId, /** @type {AbortSignal | undefined} */ signal) => {
+        const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === deliverableId)
+        if (!item) return Promise.resolve({ ok: false, code: 'deliverable_unknown', message: `计划里没有交付物「${deliverableId}」。` })
+        return requestReview(entry, item, { sessionId: entry.sessionId, signal })
+      },
     })
   }
 
@@ -693,6 +706,18 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         if (entry.turn !== step.turn) {
           entry.turn = step.turn
           entry.frozen = false
+          // And a new allowance of submissions. The ceiling bounds one turn's
+          // loop on one package; it is not a lifetime quota on a conversation.
+          // Kept across turns, a follow-up asking to fix the report met
+          // 「已提交 3 次，达到本部署上限」 on the first resubmission — the
+          // researcher's own request refused by a counter from the last turn.
+          // A native conversation only: a dispatched follow-up is a new run and
+          // starts from zero anyway, and a control-plane repair of the same run
+          // keeps its count (the repair grant is the one extra submission).
+          if (entry.turn > 1 && String(entry.runId).startsWith('native_')) {
+            entry.attempts = new Map()
+            entry.structuralAttempts = new Map()
+          }
         }
       }
       // Every control-plane dispatch commits a new context revision. Reading it
@@ -1075,7 +1100,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       name: 'evimed_plan',
       description: [
         '写下或读取本次运行的计划。需要产出文件的任务在开始工作前必须先写计划。',
-        'action=write：给出 clarifications（问过的问题，或你直接采用的假设——不能为空）与 deliverables（每件含 id、contractKind、capability、title、dependsOn）。',
+        'action=write：给出 clarifications（问过的问题，或你直接采用的假设——不能为空）与 deliverables（每件含 id、contractKind、capability、title、dependsOn，以及 acceptance：5–10 条按用户要求写的验收项，读者能在交付文件里逐条核对到的东西，独立审查会逐条核对）。',
         'action=status：读回每件交付物当前的状态。',
         '直接回答的问题不需要调用本工具。',
       ].join(' '),
@@ -1094,6 +1119,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
               capability: { type: 'string' },
               title: { type: 'string' },
               dependsOn: { type: 'array', items: { type: 'string' } },
+              acceptance: { type: 'array', items: { type: 'string' }, description: '5–10 条验收项：交付文件里能核对到的具体内容。' },
             },
           },
         },
@@ -1642,12 +1668,26 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     return defineTool({
       name: 'evimed_submit_deliverable',
       description: [
-        '提交一件交付物，当场得到裁定：先把引用编号与参考文献表渲染整齐，再跑门禁，再叫独立审查者，三者的结果一次返回。',
+        '提交一件交付物，当场得到裁定：先把引用编号与参考文献表渲染整齐，再跑门禁，再请独立审查（另一家族的模型逐条核对参考文献、数字与论断，发现带编号与原文），三者的结果一次返回。',
         '第一次不通过是常态：按 issues 修好，再提交，直到 ok。契约种类由计划派生，不需要你传。',
+        '审查发现里标了「需回应」的，下次提交时在 responses 里逐条回应：改了回 fixed，不改回 declined 并写一句理由。',
         '本轮对话结束前文件都还能改；回执与冻结在本轮结束时才发生。',
       ].join(' '),
       parameters: {
         deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
+        responses: {
+          type: 'array',
+          description: '对上一次审查发现的回应（可选）。每条：id（如 F03）、response（fixed 或 declined）、reason（declined 时必填，一句话）。',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string' },
+              response: { type: 'string', enum: ['fixed', 'declined'] },
+              reason: { type: 'string' },
+            },
+          },
+        },
       },
       async execute(args, call) {
         // Under the run lock from the attempt count to the persisted verdict:
@@ -1738,10 +1778,21 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             entry,
           }
         })
+        // The writer's answers to the last review go first, so the ledger has
+        // them whatever this submission's verdict is, and the next editor pass
+        // reads them.
+        const owner = ownedSessionState(call.sessionId).entry
+        const answeredItem = owner.items.find((/** @type {any} */ candidate) => candidate.id === String(args.deliverableId ?? ''))
+        const answered = answeredItem ? await answerLastReview(answeredItem, args.responses, call.signal) : null
+        const withAnswers = answered
+          ? { ...judged.envelope, data: { ...(judged.envelope.data ?? {}), responses: answered } }
+          : judged.envelope
         // A submission the gate could read is a version that could be
         // delivered, so it is the version worth an independent opinion.
-        if (!judged.entry) return judged.envelope
-        return withReview(judged.envelope, await reviewSubmission(judged.entry, call))
+        if (!judged.entry) return withAnswers
+        const item = judged.entry.items.find((/** @type {any} */ candidate) => candidate.id === String(args.deliverableId ?? ''))
+        if (!item) return withAnswers
+        return withReview(withAnswers, await requestReview(judged.entry, item, call))
       },
     })
   }
@@ -2032,54 +2083,67 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   }
 
   /**
-   * The independent review of what this run has written, run as part of a
-   * submission.
+   * The independent review of one deliverable, asked of the control plane.
    *
    * 「审查完再提交」 lived in a 1,839-line method body and was skipped on the
    * run it was written for; submission froze the package before anybody had
    * looked at it. A step another step depends on is a data dependency, not a
-   * sentence (principle 12). Scoped to this run's own deliverables and claims,
-   * because one project's workspace holds every conversation that ran in it.
+   * sentence (principle 12), so submission asks for it. Since 2026-09-23 the
+   * reviewer is the control plane's (`../src/review.mjs`): another model
+   * family, every reference resolved, an engine report's numbers traced to
+   * the engine's output, findings located in the package or dropped.
    *
-   * @param {Record<string, any>} entry @param {Record<string, any>} call
-   * @returns {Promise<{ ok: true, verdicts: any[], outOfScope: number } | { ok: false, code: string, message: string } | null>}
+   * Background work is not reviewed: a method candidate, a relations verdict
+   * or a source digest is the platform's own bookkeeping, and a reviewer set
+   * on one raised four 「contradictions」 against a SKILL.md and cost the run
+   * twelve minutes (2026-09-21).
+   *
+   * @param {Record<string, any>} entry @param {Record<string, any>} item
+   * @param {{ sessionId: string, signal?: AbortSignal }} call
    */
-  const reviewSubmission = async (entry, call) => {
+  const requestReview = async (entry, item, call) => {
     if (!config.reviewEnabled) return null
-    // A report's claims are what the reviewer reads. A method candidate, a
-    // relations verdict or a source digest is the platform's own bookkeeping
-    // for its background work, and a reviewer set on one reads it as a report:
-    // on the first live distillation it raised four 「contradictions」 against
-    // a SKILL.md and the run spent twelve minutes searching the literature to
-    // answer them, then delivered nothing (2026-09-21).
     const capabilities = ctx.get('evimedCapabilities') ?? []
-    const internal = entry.items.length > 0 && entry.items.every((/** @type {any} */ item) =>
-      capabilities.find((/** @type {any} */ manifest) => manifest.id === String(item.capability ?? ''))?.visibility === 'internal')
-    if (internal) return null
-    const parent = ctx.get('agents')?.get?.(call.agentId)
-    const cwd = entry.cwd || call.cwd
-    const result = await runReview(ctx, {
-      parent,
+    if (capabilities.find((/** @type {any} */ manifest) => manifest.id === String(item.capability ?? ''))?.visibility === 'internal') return null
+    const result = await runReview(ctx, config, {
+      runId: entry.runId,
+      sessionId: call.sessionId,
+      deliverableId: String(item.id),
+      contractKind: String(item.contractKind),
+      capability: String(item.capability ?? ''),
+      attempt: Number(entry.attempts.get(item.id) ?? 1) || 1,
+      acceptance: Array.isArray(item.acceptance) ? item.acceptance : [],
       signal: call.signal,
-      deliverableIds: entry.items.map((/** @type {any} */ item) => String(item.id)).filter(Boolean),
-      claimIds: await runClaimIds(entry, cwd),
-      maxClaims: REVIEW_MAX_CLAIMS,
+      ...(config.reviewPollMs ? { pollMs: config.reviewPollMs } : {}),
+      ...(config.reviewWaitMs ? { waitMs: config.reviewWaitMs } : {}),
     })
-    if (result.ok) {
-      const session = diagnostics(entry.sessionId)
-      for (const verdict of result.verdicts) {
-        if (verdict?.verdict === 'stands') continue
-        session?.notice?.(reviewNoticeText(verdict))
+    if (result.ok && 'review' in result) {
+      item.lastReview = {
+        reviewId: result.review.reviewId,
+        findings: result.review.findings.map((/** @type {any} */ finding) => ({ id: finding.id, kind: finding.kind, answerRequired: Boolean(finding.answerRequired) })),
       }
     }
     return result
   }
 
   /**
-   * One envelope carrying the gate's verdict and the reviewer's findings.
-   * `contradicted` is something to fix while the files are still editable;
-   * `weakened` is advice. Neither withholds the delivery — a gate verdict never
-   * does (2026-09-17).
+   * The writer's answers to the last review of this deliverable, sent before
+   * its next review so the editor reads them (and the ledger counts them per
+   * kind: a kind declined more often than it is fixed is a kind to demote).
+   * @param {Record<string, any>} item @param {unknown} responses @param {AbortSignal | undefined} signal
+   * @returns {Promise<{ recorded: number, refused: any[] } | null>}
+   */
+  const answerLastReview = async (item, responses, signal) => {
+    if (!config.reviewEnabled || !item.lastReview?.reviewId || !Array.isArray(responses) || !responses.length) return null
+    const answered = await answerReview(ctx, config, { reviewId: item.lastReview.reviewId, answers: /** @type {any[]} */ (responses), signal })
+    return answered.ok ? { recorded: answered.recorded, refused: answered.refused } : null
+  }
+
+  /**
+   * One envelope carrying the gate's verdict and the reviewer's findings. The
+   * findings are lines the run acts on — each with its id, place, the words it
+   * rests on and the edit — and advice by construction: a gate verdict never
+   * withholds a delivery (2026-09-17), and a reviewer's is a judgment.
    * @param {{ ok: boolean, code?: string, data?: any, issues?: any[] }} envelope @param {any} review
    * @returns {{ ok: boolean, code?: string, data?: any, issues?: any[] }}
    */
@@ -2088,27 +2152,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (!review.ok) {
       return { ...envelope, data: { ...(envelope.data ?? {}), review: { status: 'unavailable', reason: review.message } } }
     }
-    const { mustFix, advice } = reviewFindings(review.verdicts)
+    if ('skipped' in review) return { ...envelope, data: { ...(envelope.data ?? {}), review: { status: 'skipped', reason: review.skipped } } }
     return {
       ...envelope,
-      data: {
-        ...(envelope.data ?? {}),
-        review: {
-          status: 'done',
-          examined: review.verdicts.length,
-          mustFix: mustFix.length,
-          advice: advice.length,
-          ...(review.outOfScope ? { outOfScope: review.outOfScope } : {}),
-        },
-      },
-      issues: [
-        ...(envelope.issues ?? []),
-        ...mustFix.map((/** @type {any} */ verdict) => ({ code: 'review_contradicted', severity: 'required', message: reviewNoticeText(verdict) })),
-        ...boundedSuggestions(
-          advice.map((/** @type {any} */ verdict) => ({ code: 'review_weakened', severity: 'advisory', message: reviewNoticeText(verdict) })),
-          (count) => ({ code: 'review_weakened', severity: 'advisory', message: `另有 ${count} 条审查建议没有列出。` }),
-        ),
-      ],
+      data: { ...(envelope.data ?? {}), review: reviewSummary(review.review) },
+      issues: [...(envelope.issues ?? []), ...reviewIssues(review.review)],
     }
   }
 

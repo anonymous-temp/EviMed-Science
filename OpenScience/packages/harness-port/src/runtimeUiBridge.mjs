@@ -13,7 +13,7 @@ export const inject = ['sessions', 'conversation', 'connection', 'workspaces'];
  * The vocabulary, both ways (`evimed.runtime-ui.<type>`, every message carrying
  * `version`, `frameId`, `projectId` and `seq`):
  *
- *   shell → frame  navigate · resume · theme · run-state · evidence · kb-result ·
+ *   shell → frame  navigate · resume · theme · run-state · evidence · kb-result · reply-check ·
  *                  search
  *   frame → shell  booted · ready · connecting · error · ack · session ·
  *                  shell-navigate · shell-shortcut · open-artifact · kb-query ·
@@ -280,6 +280,41 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     capability(data) {
       const id = typeof data.capabilityId === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(data.capabilityId) ? data.capabilityId : null;
       return { capabilityId: id, sessionId: validId(data.sessionId) ? data.sessionId : null };
+    },
+    /**
+     * The reply checks of the open conversation (L1), polled by the shell from
+     * the control plane: one per checked answer, keyed by the closing
+     * message's sequence. Every field is rebuilt from a closed shape — this is
+     * another origin's payload — and a link is kept only when it is https.
+     * @param {any} data
+     */
+    'reply-check'(data) {
+      if (!validId(data.sessionId)) return null;
+      const verdictWords = ['supported', 'partial', 'unsupported', 'unresolvable', 'uncertain'];
+      const statuses = ['queued', 'running', 'done', 'failed'];
+      const text = (/** @type {unknown} */ value, /** @type {number} */ max) => String(value ?? '').slice(0, max);
+      const checks = (Array.isArray(data.checks) ? data.checks : []).slice(0, 100)
+        .filter((/** @type {any} */ check) => check && typeof check === 'object' && (check.turnSeq === null || Number.isInteger(check.turnSeq)))
+        .map((/** @type {any} */ check) => ({
+          turnSeq: check.turnSeq,
+          status: statuses.includes(check.status) ? check.status : 'done',
+          verdicts: (Array.isArray(check.verdicts) ? check.verdicts : []).slice(0, 40).map((/** @type {any} */ verdict) => ({
+            sentence: text(verdict?.sentence, 400),
+            verdict: verdictWords.includes(verdict?.verdict) ? verdict.verdict : 'uncertain',
+            reason: text(verdict?.reason, 400),
+            safety: ['none', 'consistent', 'contradicted'].includes(verdict?.safety) ? verdict.safety : 'none',
+            source: verdict?.source && typeof verdict.source === 'object' ? {
+              number: Number.isInteger(verdict.source.number) ? verdict.source.number : null,
+              title: text(verdict.source.title, 240),
+              url: /^https:\/\/[^\s]{1,500}$/.test(String(verdict.source.url ?? '')) ? String(verdict.source.url) : '',
+            } : null,
+          })),
+          cautions: (Array.isArray(check.cautions) ? check.cautions : []).slice(0, 10).map((/** @type {any} */ caution) => ({
+            title: text(caution?.title, 120),
+            message: text(caution?.message, 600),
+          })),
+        }));
+      return { sessionId: data.sessionId, checks };
     },
     /** @param {any} data */
     'kb-result'(data) {

@@ -34,6 +34,13 @@ import { kernelToolText } from "./helpers/kernelToolText.mjs";
 import { noticeTexts } from "./helpers/noticeTexts.mjs";
 
 /**
+ * The version a capability ships at, read from its generated manifest: a
+ * capability's version bump is a release fact, not a test edit.
+ * @param {string} id
+ */
+const shippedVersion = (id) => JSON.parse(readFileSync(new URL(`../../../deploy/runtime-dsh/capabilities/${id}.json`, import.meta.url), "utf8")).version;
+
+/**
  * A completed `skill` tool call as the kernel reports one: the result is the
  * rendered `<skill_content>` block for the name that was asked for. The
  * block's first line is the shape `dsh-skill` renders on every successful path.
@@ -215,7 +222,7 @@ test("starts immutable open-domain and specialist run identities from research-s
     assert.equal((await bind(base, "ses_adr", {
       mode: "specialist",
       agentId: "adr-analysis",
-      agentVersion: "1.2.2",
+      agentVersion: shippedVersion("adr-analysis"),
     })).status, 200);
 
     const open = await startRun(base, "ses_open");
@@ -263,10 +270,10 @@ test("starts immutable open-domain and specialist run identities from research-s
       {
         sessionId: "ses_adr",
         agentId: "adr-analysis",
-        agentVersion: "1.2.2",
+        agentVersion: shippedVersion("adr-analysis"),
         runtimeAgent: "evimed-adr-analysis",
         effectiveAgentId: "adr-analysis",
-        effectiveAgentVersion: "1.2.2",
+        effectiveAgentVersion: shippedVersion("adr-analysis"),
         effectiveRuntimeAgent: "evimed-adr-analysis",
       },
     );
@@ -326,7 +333,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "2.13.0",
+      effectiveAgentVersion: shippedVersion("clinical-evidence-synthesis"),
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
     const workspace = path.join(dataDir, "users", "dev", "projects", "default", "workspace");

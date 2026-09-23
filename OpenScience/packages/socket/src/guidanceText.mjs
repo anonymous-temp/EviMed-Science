@@ -50,7 +50,7 @@ export function buildGuidanceText(capabilities, options) {
     '3. **默认就在这次对话里把活干完。**只有两种情况才委派：同时有多件互相独立的活可以并行；或者一段附带工作会带回大量你不会再用的内容（一次大范围检索、一堆日志、一次全库扫描）。一件交付物就是一次对话，在这里交付。'
       + '要委派时用 `evimed_delegate`（指明交付物 id），它启动子代理后立即返回句柄，用 `evimed_await` 取回结果；子代理带着这件能力的技能正文、工具集与人设启动。'
       + '自己做时，这件能力的方法正文与工具已经在本会话里了——文件同样写进 `deliverables/<交付物 id>/`。',
-    `4. **逐件提交**：\`evimed_submit_deliverable\` 会先把编号与参考文献表渲染整齐，再跑门禁${options.reviewEnabled ? '，再叫独立审查者，一次返回三者的结果' : '，一次返回裁定'}。首次不通过是常态，不是异常——按 issues 修好再提交，直到 \`ok\`。返回 \`ok\` 时附带的 \`notices\`${options.reviewEnabled ? ' 与 `review`' : ''} 是提醒而不是驳回；本轮对话结束前文件都还能改，改完再提交一次即可。`,
+    `4. **逐件提交**：\`evimed_submit_deliverable\` 会先把编号与参考文献表渲染整齐，再跑门禁${options.reviewEnabled ? '，再请独立审查，一次返回三者的结果' : '，一次返回裁定'}。首次不通过是常态，不是异常——按 issues 修好再提交，直到 \`ok\`。返回 \`ok\` 时附带的 \`notices\`${options.reviewEnabled ? ' 与 `review`' : ''} 是提醒而不是驳回；本轮对话结束前文件都还能改，改完再提交一次即可。${options.reviewEnabled ? '审查发现标了「需回应」的，下次提交时在 `responses` 里逐条回：改了回 fixed，不改回 declined 并写一句理由。' : ''}`,
     '',
     '没有「模式」可切换。一次会话里想组合几个能力就组合几个：五篇证据综述加一份汇总简报是一次运行，不是六次。',
     '',
@@ -71,7 +71,7 @@ export function buildGuidanceText(capabilities, options) {
       ? '## 追问\n\n可以用 `ask_user_question` 追问，但只在答案会改变计划时追问；否则把假设写进计划的澄清里。'
       : '## 追问\n\n本部署不接受运行中追问。把你所做的假设写进 `evimed_plan` 的澄清里——一个没写下来的假设，等于没有假设。',
     '',
-    options.reviewEnabled ? '## 审查\n\n跨交付物冲突与科研事实审查由 `evimed_submit_deliverable` 自己发起，结果与门禁裁定一起返回，不需要你记得先调用它。想在写作中途听一次意见，可以直接调用 `evimed_review_run`。它提供有依据的建议，不替代确定性门禁。' : null,
+    options.reviewEnabled ? '## 审查\n\n独立审查由 `evimed_submit_deliverable` 自己发起：另一家族的模型逐条核对参考文献、结果数字与论断，每条发现带编号、位置、依据原文与改法，与门禁裁定一起返回，不需要你记得先调用它。想在写作中途听一次意见，可以直接调用 `evimed_review_run`。它提供有依据的建议，不替代确定性门禁；你比审查者更了解用户的要求，不认同的发现写明理由即可。' : null,
     '',
     // The one place a deployment path is stated to a run. Skill bodies carry
     // relative references, which is what makes them portable; without this

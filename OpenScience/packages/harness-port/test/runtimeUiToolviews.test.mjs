@@ -282,10 +282,15 @@ test('the cards render Chinese markup, and a call of an unknown shape draws a pl
   assert.deepEqual(target.warnings.filter((/** @type {any[]} */ entry) => String(entry[0]).includes('did not start')), []);
 });
 
-test('a submission says what the reviewer looked at, once it has looked', () => {
+test('a submission says what the reviewer found, and how many references it checked', () => {
   const summary = reviewSummaryText;
-  assert.equal(summary(null), null);
-  assert.equal(summary({ examined: 0, mustFix: 0, advice: 0 }), null, 'a reviewer that examined nothing says nothing');
-  assert.equal(summary({ examined: 20, mustFix: 0, advice: 9 }), '审查 20 条 · 9 条建议');
-  assert.equal(summary({ examined: 20, mustFix: 3, advice: 9 }), '审查 20 条 · 3 条必须改 · 9 条建议');
+  assert.equal(summary(null), null, 'no review, no phrase');
+  assert.equal(summary({ unavailable: true }), '独立审查未完成');
+  assert.equal(summary({ findings: 0, answerRequired: 0, resolved: 0, withIdentifier: 0, unresolvable: 0 }), '审查未发现问题');
+  assert.equal(summary({ findings: 5, answerRequired: 2, resolved: 30, withIdentifier: 31, unresolvable: 1 }), '审查发现 5 条（2 条需回应） · 文献核对 30/31，1 条查无此条');
+  // The view reads it off the submission's own answer, issue lines and all.
+  const text = `ok\n${JSON.stringify({ deliverableId: 'evidence', notices: [], review: { status: 'done', findings: 3, answerRequired: ['F01'], references: { resolved: 9, withIdentifier: 10, unresolvable: 1 } } }, null, 2)}\n- (advisory) review_contradiction [F01]（需回应） 与来源矛盾（CLM-001）`;
+  const model = /** @type {any} */ (verdictView(settled('evimed_submit_deliverable', { deliverableId: 'evidence' }, text), null, kit()));
+  assert.equal(model.kind, 'judged');
+  assert.deepEqual(model.review, { findings: 3, answerRequired: 1, resolved: 9, withIdentifier: 10, unresolvable: 1 });
 });

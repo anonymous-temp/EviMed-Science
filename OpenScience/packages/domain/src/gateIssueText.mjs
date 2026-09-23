@@ -138,6 +138,7 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'grant-requirement-coverage': '申报要求未全部覆盖',
   'geo-measurement': '可见度测量记录不完整',
   'geo-probe-host': '正文含探测主机信息',
+  'stat-consistency': '统计量与 P 值或区间自相矛盾',
 })
 
 /**
@@ -285,6 +286,25 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   memory_extraction_empty: '本次对话没有抽取到记忆',
   memory_pending: '新记忆暂缓生效',
   memory_conflicts: '对话改写了你确认过的记忆',
+  // The independent reviewer's findings, by kind (`reviewFindings.mjs`). Until
+  // 2026-09-23 the reviewer's two codes had no title and reached a reader as
+  // 「运行过程的技术提示」, a contradiction filed as advice about the machinery.
+  review_contradicted: '与独立审查查到的证据矛盾',
+  review_weakened: '证据支持弱于结论写法',
+  review_contradiction: '与来源矛盾',
+  review_weak_support: '证据支持偏弱',
+  review_overclaim: '结论写过头',
+  review_missing_item: '报告清单条目缺失',
+  review_interpretation: '统计或结果解读有误',
+  review_wording: '措辞建议',
+  review_structure: '结构建议',
+  review_safety: '用药安全',
+  review_reference_unresolvable: '参考文献查无此条',
+  review_reference_mismatch: '参考文献与标识符不符',
+  review_number_untraced: '结果数字溯源不到计算输出',
+  review_stat_inconsistent: '统计量自相矛盾',
+  stat_inconsistent: '统计量与 P 值或区间自相矛盾',
+  review_unanswered: '审查意见没有回应',
 })
 
 /**

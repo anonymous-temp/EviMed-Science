@@ -35,6 +35,7 @@ export const RUN_ACTIVITY_PHASE_LABELS_ZH = Object.freeze({
 /** @type {ReadonlySet<string>} */
 const SEARCH_TOOLS = new Set([
   'literature_search',
+  'reference_list',
   'guideline_search',
   'clinical_trial_search',
   'biomedical_source_search',

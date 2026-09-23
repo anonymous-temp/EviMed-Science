@@ -359,3 +359,54 @@ export function clinicalSafetyCautionHits({ reportText, question, rules = CLINIC
   }
   return hits
 }
+
+/**
+ * The medicine concepts, compiled once: every concept of the vocabularies
+ * `medicineVocabularies` names. A load-time refusal for a name that is not a
+ * vocabulary, like every other malformed entry in the pharmacist's file.
+ * @type {readonly CautionConcept[]}
+ */
+const MEDICINE_CONCEPTS = (() => {
+  const vocabularies = clinicalSafetyRulesData?.cautionVocabularies && typeof clinicalSafetyRulesData.cautionVocabularies === 'object'
+    ? /** @type {Record<string, unknown>} */ (clinicalSafetyRulesData.cautionVocabularies)
+    : {}
+  const names = Array.isArray(/** @type {any} */ (clinicalSafetyRulesData)?.medicineVocabularies)
+    ? /** @type {any} */ (clinicalSafetyRulesData).medicineVocabularies
+    : []
+  /** @type {CautionConcept[]} */
+  const concepts = []
+  for (const name of names) {
+    if (typeof name !== 'string' || !Array.isArray(vocabularies[name])) {
+      throw new Error(`clinical-safety-rules.json: medicineVocabularies names unknown vocabulary ${String(name)}.`)
+    }
+    concepts.push(...cautionConcepts(vocabularies[name], {}, `medicineVocabularies ${name}`))
+  }
+  return Object.freeze(concepts)
+})()
+
+/**
+ * The medicines a text names: the trigger and high-alert entities, and every
+ * concept of the caution vocabularies the pharmacist marked as medicines —
+ * each concept once, by its first name, longest name matched first so
+ * 艾司西酞普兰 is not also 西酞普兰. A closed vocabulary of proper nouns
+ * (principle 5), the decidable half of "does this reply talk about a drug":
+ * the independent reviewer adds its pharmacist check to a reply that does.
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function mentionedMedicines(text) {
+  const value = String(text ?? '')
+  if (!value.trim()) return []
+  const lower = value.toLowerCase()
+  const { concepts } = namedConcepts({ concepts: MEDICINE_CONCEPTS, minDistinct: 1, minMentions: 1 }, lower)
+  const found = new Set(concepts.map((concept) => concept.names[0]))
+  // A high-alert name that is also one of a concept's names is that concept,
+  // said once: 「Metformin」 and 「二甲双胍」 are one medicine.
+  for (const entity of [...matchedClinicalTriggers(value), ...matchedHighRiskEntities(value)]) {
+    found.add(MEDICINE_NAME_TO_CONCEPT.get(entity.toLowerCase()) ?? entity)
+  }
+  return [...found]
+}
+
+/** Every medicine concept's names, lower-case, to the name the concept is reported by. */
+const MEDICINE_NAME_TO_CONCEPT = new Map(MEDICINE_CONCEPTS.flatMap((concept) => concept.names.map((name) => [name.toLowerCase(), concept.names[0]])))

@@ -2436,6 +2436,108 @@ def _europe_pmc(query, limit):
     return _metadata_result("europe-pmc", items, sources)
 
 
+MAX_REFERENCE_LIST = 400
+REFERENCE_PAGE_SIZE = 1000
+_PMID_IDENTIFIER = re.compile(r"^\s*(?:PMID\s*:?\s*)?(\d{1,9})\s*$", re.I)
+_PMCID_IDENTIFIER = re.compile(r"^\s*(PMC\d{3,10})\s*$", re.I)
+_DOI_IDENTIFIER = re.compile(r"^\s*(?:doi\s*:?\s*|https?://(?:dx\.)?doi\.org/)?(10\.\d{4,9}/\S+)\s*$", re.I)
+
+
+def _europe_pmc_address(identifier):
+    """The (source, id) Europe PMC files a work under, from a PMID, a PMCID or a DOI.
+
+    A DOI is looked up once: Europe PMC's citation network is addressed by its
+    own record ids, not by DOI.
+    """
+    pmid = _PMID_IDENTIFIER.match(identifier)
+    if pmid:
+        return "MED", pmid.group(1)
+    pmcid = _PMCID_IDENTIFIER.match(identifier)
+    if pmcid:
+        return "PMC", pmcid.group(1).upper()
+    doi = _DOI_IDENTIFIER.match(identifier)
+    if not doi:
+        raise PublicSourceError("invalid_input", "identifier must be a PMID, a PMCID or a DOI.")
+    base = _base("EVIMED_EUROPE_PMC_BASE_URL", "https://www.ebi.ac.uk/europepmc/webservices/rest")
+    url = _url(base, "search", {"query": 'DOI:"%s"' % doi.group(1).rstrip(".,;"), "format": "json", "pageSize": 1, "resultType": "lite"})
+    records = _list(_dict(_get_json(url).get("resultList")).get("result"))
+    if not records:
+        raise PublicSourceError("public_source_not_found", "Europe PMC has no record for this DOI.")
+    record = _dict(records[0])
+    if record.get("pmid"):
+        return "MED", str(record["pmid"])
+    return _first_text(record.get("source"), "MED"), _first_text(record.get("id"))
+
+
+def reference_list(arguments):
+    """What a paper cites, or what cites it, from Europe PMC's citation network.
+
+    The deterministic half of tracing a field's landmark trials: a guideline's
+    or a systematic review's reference list is where the trials a synthesis
+    must not miss are named, and reading it out of a PDF by hand is the kind of
+    bookkeeping a model does badly. The model picks from the list; this only
+    reports it, in the paper's own citation order. A reference Europe PMC could
+    not match to a record has no id and is kept, because it is still in the list.
+    """
+    identifier = str(arguments.get("identifier") or "").strip()
+    direction = arguments.get("direction") or "references"
+    if direction not in ("references", "cited_by"):
+        raise PublicSourceError("invalid_input", "direction must be references or cited_by.")
+    limit = max(1, min(MAX_REFERENCE_LIST, int(arguments.get("limit") or 200)))
+    source, record_id = _europe_pmc_address(identifier)
+    base = _base("EVIMED_EUROPE_PMC_BASE_URL", "https://www.ebi.ac.uk/europepmc/webservices/rest")
+    endpoint, list_key, item_key = ("references", "referenceList", "reference") if direction == "references" else ("citations", "citationList", "citation")
+    items, sources, total = [], [], None
+    page = 1
+    while len(items) < limit and page <= 5:
+        url = _url(base, "%s/%s/%s" % (urllib.parse.quote(source), urllib.parse.quote(record_id), endpoint),
+                   {"page": page, "pageSize": REFERENCE_PAGE_SIZE, "format": "json"})
+        body = _get_json(url, allow_not_found=True)
+        if total is None and body.get("hitCount") is not None:
+            total = body.get("hitCount")
+        records = _list(_dict(body.get(list_key)).get(item_key))
+        for record in records:
+            if len(items) >= limit:
+                break
+            record = _dict(record)
+            record_source = _first_text(record.get("source"))
+            pmid = str(record.get("id")) if record_source == "MED" and record.get("id") else None
+            title = _first_text(record.get("title"))
+            record_url = "https://pubmed.ncbi.nlm.nih.gov/%s/" % pmid if pmid else (
+                "https://europepmc.org/article/%s/%s" % (urllib.parse.quote(record_source), urllib.parse.quote(str(record.get("id"))))
+                if record_source and record.get("id") else None)
+            item = {
+                "order": record.get("citedOrder") if direction == "references" else len(items) + 1,
+                "pmid": pmid,
+                "id": None if pmid else (str(record.get("id")) if record.get("id") else None),
+                "source": record_source or None,
+                "title": title or None,
+                "authors": _first_text(record.get("authorString")) or None,
+                "journal": _first_text(record.get("journalAbbreviation")) or None,
+                "year": record.get("pubYear"),
+                "type": _first_text(record.get("citationType")) or None,
+                "url": record_url,
+            }
+            if direction == "cited_by" and record.get("citedByCount") is not None:
+                item["citedByCount"] = record.get("citedByCount")
+            items.append({key: value for key, value in item.items() if value is not None})
+            if pmid or record_url:
+                sources.append(_source(pmid or record.get("id"), title, record_url, "europe-pmc"))
+        if len(records) < REFERENCE_PAGE_SIZE:
+            break
+        page += 1
+    result = _metadata_result(
+        "europe-pmc-references" if direction == "references" else "europe-pmc-citations",
+        items,
+        sources,
+        "Bibliographic metadata from Europe PMC's citation network. A reference list says what a paper cites, "
+        "not that the cited work supports anything; fetch the abstracts you choose with literature_search pmids.",
+    )
+    result.setdefault("data", {})
+    result["data"]["work"] = {"source": source, "id": record_id, "direction": direction, "total": total, "returned": len(items)}
+    return result
+
+
 def _openalex_abstract_text(inverted_index):
     if not isinstance(inverted_index, dict):
         return None
@@ -3911,4 +4013,6 @@ def call(name, arguments):
         return _composite(arguments, "comprehensive-drug-evaluation")
     if name == "drug_selection_evaluation":
         return drug_selection(arguments)
+    if name == "reference_list":
+        return reference_list(arguments)
     raise PublicSourceError("public_source_unsupported", "No public connector is available for %s." % name)

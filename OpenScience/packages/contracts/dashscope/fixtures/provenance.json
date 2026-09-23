@@ -1,0 +1,228 @@
+{
+  "dependency": "dashscope",
+  "model": "qwen3.8-max-0902",
+  "apiBase": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "observedAt": "2026-09-23T11:24:59.247Z",
+  "observedOn": "the dev box, 2026-09-23",
+  "fixtures": {
+    "chat-stream.sse": {
+      "request": {
+        "method": "POST",
+        "path": "/chat/completions",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "text/event-stream"
+        },
+        "body": {
+          "model": "qwen3.8-max-0902",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You check whether a source supports a sentence. Copy evidence verbatim from the source. Answer only in the JSON schema."
+            },
+            {
+              "role": "user",
+              "content": "<sources>\n[1]\nMetformin lowered HbA1c by 0.9 percentage points compared with placebo (95% CI 0.7 to 1.1).\n</sources>\n<sentences>\nS0 cites [1]: Metformin reduced HbA1c by 1.5% versus placebo.\n</sentences>"
+            }
+          ],
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          },
+          "enable_thinking": false,
+          "max_tokens": 400,
+          "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "reply_check",
+              "strict": true,
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "verdicts"
+                ],
+                "properties": {
+                  "verdicts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "sentence",
+                        "verdict",
+                        "reason",
+                        "evidence"
+                      ],
+                      "properties": {
+                        "sentence": {
+                          "type": "integer"
+                        },
+                        "verdict": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "partial",
+                            "unsupported",
+                            "uncertain"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "status": 200,
+      "responseHeaders": {
+        "content-type": "text/event-stream;charset=utf-8",
+        "x-request-id": "e5cd7a78-a362-99c6-bb37-5cc17881dbec"
+      }
+    },
+    "chat-stream-thinking.sse": {
+      "request": {
+        "method": "POST",
+        "path": "/chat/completions",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "text/event-stream"
+        },
+        "body": {
+          "model": "qwen3.8-max-0902",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You check whether a source supports a sentence. Copy evidence verbatim from the source. Answer only in the JSON schema."
+            },
+            {
+              "role": "user",
+              "content": "<sources>\n[1]\nMetformin lowered HbA1c by 0.9 percentage points compared with placebo (95% CI 0.7 to 1.1).\n</sources>\n<sentences>\nS0 cites [1]: Metformin reduced HbA1c by 1.5% versus placebo.\n</sentences>"
+            }
+          ],
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          },
+          "enable_thinking": true,
+          "thinking_budget": 400,
+          "max_tokens": 800,
+          "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "reply_check",
+              "strict": true,
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "verdicts"
+                ],
+                "properties": {
+                  "verdicts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "sentence",
+                        "verdict",
+                        "reason",
+                        "evidence"
+                      ],
+                      "properties": {
+                        "sentence": {
+                          "type": "integer"
+                        },
+                        "verdict": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "partial",
+                            "unsupported",
+                            "uncertain"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "status": 200,
+      "responseHeaders": {
+        "content-type": "text/event-stream;charset=utf-8",
+        "x-request-id": "05cd96ba-e97b-9ed0-b4ae-dcc8af6b9633"
+      }
+    },
+    "model-not-found.json": {
+      "request": {
+        "method": "POST",
+        "path": "/chat/completions",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "model": "qwen3.8-max-0999",
+          "messages": [
+            {
+              "role": "user",
+              "content": "<sources>\n[1]\nMetformin lowered HbA1c by 0.9 percentage points compared with placebo (95% CI 0.7 to 1.1).\n</sources>\n<sentences>\nS0 cites [1]: Metformin reduced HbA1c by 1.5% versus placebo.\n</sentences>"
+            }
+          ],
+          "stream": false,
+          "max_tokens": 10
+        }
+      },
+      "status": 404,
+      "responseHeaders": {
+        "content-type": "application/json",
+        "x-request-id": "5ffa1ac6-8696-9525-af11-032b89caf907"
+      }
+    },
+    "unauthorized.json": {
+      "request": {
+        "method": "POST",
+        "path": "/chat/completions",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "model": "qwen3.8-max-0902",
+          "messages": [
+            {
+              "role": "user",
+              "content": "<sources>\n[1]\nMetformin lowered HbA1c by 0.9 percentage points compared with placebo (95% CI 0.7 to 1.1).\n</sources>\n<sentences>\nS0 cites [1]: Metformin reduced HbA1c by 1.5% versus placebo.\n</sentences>"
+            }
+          ],
+          "stream": false,
+          "max_tokens": 10
+        }
+      },
+      "status": 401,
+      "responseHeaders": {
+        "content-type": "application/json",
+        "x-request-id": "7643d3e6-4e22-9e37-b8cc-89fdc437f4be"
+      }
+    }
+  }
+}

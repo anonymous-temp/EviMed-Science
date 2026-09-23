@@ -30,6 +30,13 @@ Preserve source identifier, URL, jurisdiction, product scope, version/effective 
 
 Deduplicate records and freeze the source and query package in `evidence-snapshot.json` before assessment; the compiler input SHA-256 binds the structured assessment to the supplied inventory. Mark uploaded files as user-provided evidence. If a material licensed source such as Micromedex is unavailable, ask once for a user-provided excerpt or export and record the gap when it is not supplied. Never infer a licensed-database rating from public literature.
 
+Trace the field's landmark trials before you assess: call `mcp__evimed__reference_list`
+on the newest guideline and the newest systematic review you retrieved, and screen
+the trials and reviews their reference lists name (`mcp__evimed__literature_search`
+`pmids` for the abstracts). A trial known by an acronym is missed by keyword queries
+and is named in every guideline's references; a guideline Europe PMC does not index
+is read with `mcp__evimed__open_access_full_text` or `mcp__evimed__web_read` instead.
+
 ## 3. Compare label dimensions
 
 Compare `indication`, `population`, `dose`, `route`, `frequency`, `duration`, and `formulation` independently when supplied. For each dimension use only `match`, `mismatch`, `unclear`, or `not_assessed`, with a rationale and exact label `evidenceIds`. Do not infer a label mismatch from guidelines or literature.

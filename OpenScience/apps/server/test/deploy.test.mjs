@@ -1784,19 +1784,24 @@ test("a capability's two skill copies never drift apart by more than their known
   // the freeze moved from acceptance to the end of the conversation turn, so
   // the 「先审查再提交」 paragraph in clinical-evidence-synthesis and
   // research-topic-selection was rewritten around what submission does.
+  // Raised on 2026-09-23, same direction (tiered review plan, generation
+  // side): the landmark-tracing section in clinical-evidence-synthesis (+23)
+  // and its paragraph in the three drug-evaluation skills (+6 each), and the
+  // "Method priors" section in the four engine skills (+10 each).
   const knownDivergence = {
-    "adr-analysis": 18,
-    "bibliometric-analysis": 18,
-    "clinical-evidence-synthesis": 223,
-    "comprehensive-drug-evaluation": 18,
+    "adr-analysis": 28,
+    "bibliometric-analysis": 28,
+    "clinical-evidence-synthesis": 246,
+    "comprehensive-drug-evaluation": 24,
     "dataset-research-scoping": 41,
-    "drug-selection": 18,
+    "drug-selection": 24,
     // The hosted-input/replay changes propagated all 18 pre-delivery and
-    // revision-notes lines into the retained copy; none was removed. All three
-    // MR skill bodies now intentionally agree after the DSH-only kernel flip.
-    "mendelian-randomization": 0,
-    "meta-analysis": 18,
-    "off-label-analysis": 18,
+    // revision-notes lines into the retained copy; none was removed, and the
+    // MR bodies agreed after the DSH-only kernel flip — until the method
+    // priors of 2026-09-23, its first DSH-only lines.
+    "mendelian-randomization": 10,
+    "meta-analysis": 28,
+    "off-label-analysis": 24,
     "peer-review": 18,
     "research-topic-selection": 44,
   };

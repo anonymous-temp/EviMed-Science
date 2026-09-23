@@ -163,8 +163,9 @@ export {
   TOOL_RESULT_PRUNER,
 } from './src/constants.mjs'
 
-// plan — 2 exports
+// plan — 3 exports
 export {
+  PLAN_ACCEPTANCE_LIMIT,
   readyDeliverables,
   validateTaskPlan,
 } from './src/plan.mjs'
@@ -235,7 +236,7 @@ export {
   skillRootGuidance,
 } from './src/skillRoots.mjs'
 
-// safetyRules — 10 exports
+// safetyRules — 11 exports
 export {
   CLINICAL_CONTENT_TRIGGER_ENTITIES,
   CLINICAL_HIGH_RISK_ENTITIES,
@@ -247,7 +248,76 @@ export {
   compileCautionRules,
   matchedClinicalTriggers,
   matchedHighRiskEntities,
+  mentionedMedicines,
 } from './src/safetyRules.mjs'
+
+// reviewFindings — 17 exports
+export {
+  REVIEW_ANSWER_REQUIRED_KINDS,
+  REVIEW_DECIDABLE_KINDS,
+  REVIEW_EDITOR_OUTPUT_SCHEMA,
+  REVIEW_FINDINGS_MAX,
+  REVIEW_FINDING_KINDS,
+  REVIEW_FINDING_KIND_LABELS_ZH,
+  REVIEW_JUDGMENT_KINDS,
+  REVIEW_RESPONSES,
+  REVIEW_RESPONSE_REASON_MAX,
+  acceptEditorChecks,
+  acceptEditorFindings,
+  acceptReviewResponses,
+  evidenceLocated,
+  findingMessage,
+  isReviewFindingKind,
+  reviewSeverity,
+  unansweredFindings,
+} from './src/reviewFindings.mjs'
+
+// reviewTier — 5 exports
+export {
+  COMPUTED_CONTRACT_KINDS,
+  REVIEW_TIERS,
+  UNREVIEWED_CONTRACT_KINDS,
+  deliverableReviewTier,
+  replyReviewTier,
+} from './src/reviewTier.mjs'
+
+// referenceResolution — 6 exports
+export {
+  REFERENCE_RESOLUTION_LIMIT,
+  referenceEntries,
+  referenceLookups,
+  referenceResolutionFindings,
+  titleCoverage,
+  titleTokens,
+} from './src/referenceResolution.mjs'
+
+// numericTraceability — 3 exports
+export {
+  numericTraceFindings,
+  outputNumbers,
+  traceNumber,
+} from './src/numericTraceability.mjs'
+
+// statConsistency — 5 exports
+export {
+  incompleteBeta,
+  logGamma,
+  statConsistencyFindings,
+  twoSidedP,
+  upperGamma,
+} from './src/statConsistency.mjs'
+
+// replyCheck — 8 exports
+export {
+  REPLY_CHECK_OUTPUT_SCHEMA,
+  REPLY_CHECK_SENTENCE_LIMIT,
+  REPLY_CHECK_VERDICTS,
+  REPLY_CHECK_VERDICT_LABELS_ZH,
+  REPLY_CHECK_WARNING_VERDICTS,
+  acceptReplyVerdicts,
+  replyCheckCounts,
+  replyCitedSentences,
+} from './src/replyCheck.mjs'
 
 // capsule — 19 exports
 export {

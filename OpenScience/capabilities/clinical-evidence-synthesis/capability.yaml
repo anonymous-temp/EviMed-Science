@@ -7,7 +7,7 @@
 # child is) and `produces` (which contract validates the result) are
 # required. `tools` uses the model-visible names.
 id: clinical-evidence-synthesis
-version: 2.13.0
+version: 2.14.0
 title: Clinical Evidence Synthesis
 category: Clinical Evidence
 description: Transform an open-domain clinical question into a publication-grade deep evidence analysis
@@ -26,6 +26,7 @@ skills:
 tools:
 - mcp__evimed__data_source_catalog
 - mcp__evimed__literature_search
+- mcp__evimed__reference_list
 - mcp__evimed__web_read
 - mcp__evimed__open_access_full_text
 - mcp__evimed__locate_quote

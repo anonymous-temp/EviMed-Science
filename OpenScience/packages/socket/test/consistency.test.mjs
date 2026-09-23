@@ -780,7 +780,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     listDir: async (/** @type {string} */ target) => (target === `/workspace/${workspaceLayout.knowledgeDir}` && knowledge ? knowledge.map((/** @type {string} */ name) => ({ name })) : []),
   });
   if (registered) /** @type {any} */ (ctx.tools).schemas = () => registered.map((name) => ({ name }));
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000, skillsDir: "/skills", reviewEnabled });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxChildrenTotal: 3, maxConcurrentChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000, skillsDir: "/skills", reviewEnabled, reviewPollMs: 10, reviewWaitMs: 3000 });
   const start = () => { for (const handler of ctx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent, source: "startup" }); };
   const step = async (/** @type {number} */ turn) => {
     for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) {
@@ -1454,66 +1454,145 @@ test("submission renders the numbering before it judges anything", async () => {
   assert.match(rewritten, /1\. Beta et al/, "and the reference list follows the body, not the other way round");
 });
 
+/**
+ * A stand-in for the control plane's review gateway (reviewGateway.mjs): it
+ * records what the run asked, answers a start with an id, the first poll with
+ * `running` and the next with the review.
+ * @param {Record<string, any>} review
+ */
+async function reviewGatewayStub(review) {
+  /** @type {{ method: string, path: string, authorization: string|undefined, body: any }[]} */
+  const requests = [];
+  let polls = 0;
+  const server = createServer((req, res) => {
+    /** @type {Buffer[]} */
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      const text = Buffer.concat(chunks).toString("utf8");
+      requests.push({ method: String(req.method), path: String(req.url), authorization: req.headers.authorization, body: text ? JSON.parse(text) : null });
+      const send = (/** @type {number} */ status, /** @type {any} */ value) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(value)); };
+      if (req.method === "POST" && req.url === "/internal/review/v1/deliverables") return send(202, { reviewId: "rv_0123456789abcdef01234567", status: "running" });
+      if (req.method === "GET" && req.url === "/internal/review/v1/deliverables/rv_0123456789abcdef01234567") {
+        polls += 1;
+        return send(200, polls === 1 ? { reviewId: "rv_0123456789abcdef01234567", status: "running" } : { reviewId: "rv_0123456789abcdef01234567", status: "done", ...review });
+      }
+      if (req.method === "POST" && req.url === "/internal/review/v1/responses") return send(200, { recorded: 1, refused: [] });
+      return send(404, { error: { code: "not_found" } });
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  return {
+    requests,
+    revisionAuthorizeUrl: `http://127.0.0.1:${port}/internal/revisions/v1/authorize`,
+    close: () => new Promise((resolve) => server.close(() => resolve(undefined))),
+  };
+}
+
+const sampleReview = {
+  tier: "L2", model: "qwen3.8-max-0902", editor: "done", editorError: null,
+  findings: [
+    { id: "F01", kind: "contradiction", label: "与来源矛盾", severity: "advisory", origin: "editor", location: "CLM-001",
+      evidence: "lowered HbA1c by 0.9 percentage points", fix: "把 1.5% 改为 0.9 个百分点。",
+      message: "与来源矛盾（CLM-001）：「lowered HbA1c by 0.9 percentage points」。建议：把 1.5% 改为 0.9 个百分点。", answerRequired: true },
+    { id: "F02", kind: "wording", label: "措辞", severity: "advisory", origin: "editor", location: "结论",
+      evidence: "显著改善", fix: "写成「改善，但未达统计学显著」。", message: "措辞（结论）：「显著改善」。建议：写成「改善，但未达统计学显著」。", answerRequired: false },
+  ],
+  checklist: { present: 8, absent: ["E4"], unlocated: [] },
+  acceptance: { met: ["A1"], unmet: ["A2"], unlocated: [] },
+  deterministic: { references: { references: 2, withIdentifier: 2, resolved: 2, unresolvable: 0, mismatched: 0, undecided: 0, truncated: 0 }, numeric: null, jobs: [], previous: { open: [], resolved: [] } },
+  dropped: 1,
+};
+
 test("a submission brings back the gate's verdict and the independent review in one value", async () => {
   // 「审查完再提交」 was a sentence in a 1,839-line method body, and the run
   // that mattered skipped it: submission froze the package before anybody had
-  // looked at it. `contradicted` comes back as something to fix while the files
-  // are still editable; `weakened` comes back as advice; neither withholds the
-  // delivery (2026-09-17).
-  /** @type {any[]} */
-  const started = [];
-  const f = await nativePolicyFixture({
-    briefId: "review-owner",
-    reviewEnabled: true,
-    subagentStart: (/** @type {string} */ _provider, /** @type {any} */ options) => {
-      started.push(options);
-      return {
-        id: "review-child",
-        result: Promise.resolve({
-          stopReason: "completed",
-          structured: {
-            verdicts: [
-              { claimId: "CLM-001", verdict: "contradicted", grounds: "来源说的是相反方向。" },
-              { claimId: "CLM-002", verdict: "weakened", grounds: "样本量不支持这个强度。" },
-              { claimId: "CLM-003", verdict: "stands", grounds: "核对无误。" },
-            ],
-          },
-        }),
-      };
-    },
-  });
-  await f.step(1);
-  await f.execute("evimed_plan", {
-    action: "write",
-    clarifications: ["A bounded report"],
-    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }],
-  });
-  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA synthetic summary.\n");
+  // looked at it. Since 2026-09-23 the reviewer is the control plane's — another
+  // model family behind the review gateway — and its findings come back as
+  // numbered lines the run answers, never as a verdict (2026-09-17).
+  const gateway = await reviewGatewayStub(sampleReview);
+  const f = await nativePolicyFixture({ briefId: "review-owner", reviewEnabled: true, revisionAuthorizeUrl: gateway.revisionAuthorizeUrl });
+  try {
+    await f.step(1);
+    await f.execute("evimed_plan", {
+      action: "write",
+      clarifications: ["A bounded report"],
+      deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [],
+        acceptance: ["结论写明效应量与置信区间", "说明检索日期"] }],
+    });
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA synthetic summary.\n");
 
-  const submitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
-  assert.equal(submitted.value.ok, true, JSON.stringify(submitted.value));
-  assert.equal(submitted.value.data.review.status, "done");
-  assert.equal(submitted.value.data.review.mustFix, 1);
-  assert.equal(submitted.value.data.review.advice, 1);
-  const severities = submitted.value.issues.map((/** @type {any} */ issue) => [issue.code, issue.severity]);
-  assert.deepEqual(severities, [["review_contradicted", "required"], ["review_weakened", "advisory"]]);
-  assert.match(submitted.value.issues[0].message, /结论 CLM-001 与独立审查者查到的证据相矛盾：来源说的是相反方向。/, "the finding is a sentence a researcher reads");
+    const submitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(submitted.value.ok, true, JSON.stringify(submitted.value));
+    const review = submitted.value.data.review;
+    assert.equal(review.status, "done");
+    assert.equal(review.findings, 2);
+    assert.deepEqual(review.answerRequired, ["F01"]);
+    assert.equal(review.byKind["与来源矛盾"], 1);
+    assert.match(review.how, /responses/);
+    const lines = submitted.value.issues.map((/** @type {any} */ issue) => [issue.code, issue.severity]);
+    assert.deepEqual(lines, [
+      ["review_contradiction", "advisory"],
+      ["review_wording", "advisory"],
+      ["review_missing_item", "advisory"],
+      ["review_missing_item", "advisory"],
+    ], "a judgment is advice, however it is phrased");
+    assert.match(submitted.value.issues[0].message, /^\[F01\]（需回应） 与来源矛盾（CLM-001）/);
+    assert.match(submitted.value.issues[2].message, /E4/);
+    assert.match(submitted.value.issues[3].message, /A2/);
 
-  // And the reviewer was pointed at this conversation's deliverables. One
-  // project's workspace holds every conversation that ran in it: a GEO run's
-  // review came back carrying another conversation's aspirin claims.
-  assert.equal(started.length, 1, "one review per submission that could be delivered");
-  const prompt = Array.isArray(started[0].prompt)
-    ? started[0].prompt.map((/** @type {any} */ part) => String(part?.text ?? "")).join("\n")
-    : String(started[0].prompt);
-  assert.match(prompt, /`deliverables\/d1\/`/);
-  assert.match(prompt, /这几个目录之外的文件不属于本次对话/);
+    // What the run sent: its own deliverable, the session it works in, the
+    // plan's acceptance items — and the workload token, never a key.
+    const start = gateway.requests.find((request) => request.method === "POST" && request.path === "/internal/review/v1/deliverables");
+    assert.ok(start);
+    assert.equal(start.authorization, "Bearer test-workload-token");
+    assert.deepEqual(Object.keys(start.body).sort(), ["acceptance", "attempt", "capability", "contractKind", "deliverableId", "runId", "sessionId"]);
+    assert.equal(start.body.deliverableId, "d1");
+    assert.equal(start.body.contractKind, "research-brief");
+    assert.equal(start.body.runId, "review-owner");
+    assert.equal(start.body.sessionId, "native-session");
+    assert.deepEqual(start.body.acceptance, ["结论写明效应量与置信区间", "说明检索日期"]);
 
-  // A rejected package is repaired first; nothing is reviewed until there is a
-  // version that could be delivered.
-  const rejected = await f.execute("evimed_submit_deliverable", { deliverableId: "nope" });
-  assert.equal(rejected.value.ok, false);
-  assert.equal(started.length, 1);
+    // The next submission carries the answers to the last review, first.
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA corrected summary.\n");
+    const again = await f.execute("evimed_submit_deliverable", { deliverableId: "d1", responses: [{ id: "F01", response: "fixed" }] });
+    assert.equal(again.value.ok, true);
+    assert.deepEqual(again.value.data.responses, { recorded: 1, refused: [] });
+    const answered = gateway.requests.find((request) => request.path === "/internal/review/v1/responses");
+    assert.deepEqual(answered?.body, { reviewId: "rv_0123456789abcdef01234567", answers: [{ id: "F01", response: "fixed", reason: "" }] });
+
+    // A rejected package is repaired first; nothing is reviewed until there is a
+    // version that could be delivered.
+    const starts = gateway.requests.filter((request) => request.path === "/internal/review/v1/deliverables").length;
+    const rejected = await f.execute("evimed_submit_deliverable", { deliverableId: "nope" });
+    assert.equal(rejected.value.ok, false);
+    assert.equal(gateway.requests.filter((request) => request.path === "/internal/review/v1/deliverables").length, starts);
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("a review that is not there costs the submission nothing but a line saying so", async () => {
+  // The control plane with its review module off answers `review_disabled`;
+  // the verdict is delivered as it is.
+  const server = createServer((_req, res) => { res.writeHead(503, { "content-type": "application/json" }); res.end(JSON.stringify({ error: { code: "review_disabled" } })); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
+  const address = server.address();
+  const f = await nativePolicyFixture({ briefId: "review-off", reviewEnabled: true,
+    revisionAuthorizeUrl: `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}/internal/revisions/v1/authorize` });
+  try {
+    await f.step(1);
+    await f.execute("evimed_plan", { action: "write", clarifications: ["x"], deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }] });
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA synthetic summary.\n");
+    const submitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(submitted.value.ok, true);
+    assert.equal(submitted.value.data.review.status, "unavailable");
+    assert.match(submitted.value.data.review.reason, /没有启用独立审查/);
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+  }
 });
 
 test("a completed native workflow may plan again and its receipt names actual workspace files", async () => {
@@ -2292,14 +2371,35 @@ test("submitting internal background work does not call the report reviewer", as
   // The reviewer reads a report's claims; set on a method candidate it raised
   // four contradictions against a SKILL.md and the run spent twelve minutes
   // answering them (2026-09-21).
-  let reviews = 0;
-  const f = await nativePolicyFixture({ reviewEnabled: true,
+  const gateway = await reviewGatewayStub(sampleReview);
+  const f = await nativePolicyFixture({ reviewEnabled: true, revisionAuthorizeUrl: gateway.revisionAuthorizeUrl,
     capabilities: [{ id: "source-understanding", visibility: "internal", skills: [], tools: [], persona: "Source analyst",
-      produces: [{ contractKind: "source-understanding", outputs: [{ path: "source-understanding.json", required: true }] }] }],
-    subagentStart: () => { reviews++; return { id: "review-child", result: Promise.resolve({ stopReason: "completed", output: "[]" }) }; } });
+      produces: [{ contractKind: "source-understanding", outputs: [{ path: "source-understanding.json", required: true }] }] }] });
+  try {
+    await f.step(1);
+    await f.execute("evimed_plan", { action: "write", clarifications: ["Frozen source"],
+      deliverables: [{ id: "source-result", contractKind: "source-understanding", capability: "source-understanding", title: "Source", dependsOn: [] }] });
+    await f.execute("evimed_submit_deliverable", { deliverableId: "source-result" });
+    assert.equal(gateway.requests.length, 0);
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("a follow-up turn in the same conversation gets a fresh allowance of submissions", async () => {
+  // Kept across turns, the ceiling refused the researcher's own follow-up —
+  // 「已提交 3 次，达到本部署上限」 on the first resubmission of a report they
+  // had just asked to be fixed. The ceiling bounds one turn's loop.
+  const f = await nativePolicyFixture({ deliveryAttemptLimit: 2, structuralAttemptAllowance: 0 });
   await f.step(1);
-  await f.execute("evimed_plan", { action: "write", clarifications: ["Frozen source"],
-    deliverables: [{ id: "source-result", contractKind: "source-understanding", capability: "source-understanding", title: "Source", dependsOn: [] }] });
-  await f.execute("evimed_submit_deliverable", { deliverableId: "source-result" });
-  assert.equal(reviews, 0);
+  await f.execute("evimed_plan", { action: "write", clarifications: ["x"], deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }] });
+  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nFirst.\n");
+  assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+  assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+  assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).error?.code, "GUARDED", "the ceiling holds inside a turn");
+  await f.endTurn();
+  await f.step(2);
+  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nFixed as asked.\n");
+  const followUp = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+  assert.equal(followUp.value?.ok, true, JSON.stringify(followUp));
 });

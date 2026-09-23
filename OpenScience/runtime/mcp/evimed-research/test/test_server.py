@@ -112,6 +112,9 @@ class ToolContractTests(unittest.TestCase):
             # The feed of recent medical developments, 「前沿动态」, through the
             # server's gateway (`frontier_search.py`, 2026-09-22).
             "frontier_search",
+            # A paper's reference list or its citing papers, from Europe PMC's
+            # citation network (2026-09-23): landmark-trial tracing.
+            "reference_list",
         }
         self.assertEqual(set(by_name), expected)
         for tool in tools:

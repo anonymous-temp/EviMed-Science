@@ -495,10 +495,14 @@ test("the two runtime capability settings reach the container, and the default d
   // in one case leaving in-run clarification permanently off and in the other
   // leaving semantic review permanently on.
   //
-  // The default for review is `true` for a reason: it is what every hosted run
-  // has actually been getting. Wiring these up against the old `false` default
+  // The default for review was `true` for a reason: it is what every hosted run
+  // had actually been getting. Wiring these up against the old `false` default
   // would have turned cross-deliverable review off everywhere — a capability
-  // removal wearing a bug fix's clothes.
+  // removal wearing a bug fix's clothes. On 2026-09-23 (tiered review plan) the
+  // default became the reviewer's own switch: the review it used to turn on
+  // was the kernel's model reviewing its own work, retired; review is now the
+  // control plane's cross-family reviewer, which needs the operator's DashScope
+  // key and PostgreSQL, so a run asks for it where the deployment turned it on.
   const { rootDir, project } = await dshFixture();
   t.after(() => rm(rootDir, { recursive: true, force: true }));
 
@@ -546,8 +550,10 @@ test("the two runtime capability settings reach the container, and the default d
   assert.ok(capsuleOff.includes("EVIMED_REVISION_AUTHORIZE_URL="));
   assert.ok(capsuleOff.includes("EVIMED_CAPSULE_ACTIVE=0"));
 
-  // The shipped defaults must be the behaviour that was already shipping.
+  // The shipped defaults: clarification as it was hardcoded; review as the
+  // reviewer is, one switch for both ends.
   const defaults = loadConfig({});
   assert.equal(defaults.runtimeAskUserEnabled, false, "clarification stays off by default, as it was hardcoded");
-  assert.equal(defaults.runtimeReviewEnabled, true, "review stays on by default, as it was hardcoded");
+  assert.equal(defaults.runtimeReviewEnabled, false, "review follows the reviewer, which is off until a deployment turns it on");
+  assert.equal(loadConfig({ reviewEnabled: true }).runtimeReviewEnabled, true, "turning the reviewer on turns the runtime's review on");
 });

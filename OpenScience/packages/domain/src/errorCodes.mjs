@@ -79,6 +79,10 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "public_source_gateway_rate_limited",
   "public_source_gateway_response_invalid",
   "public_source_gateway_response_too_large",
+  // `reference_list` asked Europe PMC about a DOI it holds no record of. The
+  // run tracing a guideline's references has learned that one list is not
+  // there and goes on to the next source (2026-09-23).
+  "public_source_not_found",
   // The specialist adapter boundary — the Python agents this platform fronts.
   // These mean the downstream service was unreachable, erroring, or absent from
   // this deployment, which is the same fact as an unreachable public source: a

@@ -1,0 +1,1031 @@
+{
+  "live": true,
+  "model": "qwen3.8-max-0902",
+  "passed": 3,
+  "failed": 0,
+  "results": [
+    {
+      "group": "editor-live",
+      "id": "planted-contradiction-and-overclaim#1",
+      "pass": true,
+      "found": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "weak_support",
+            "interpretation"
+          ],
+          "hit": true
+        },
+        {
+          "claimId": "CLM-002",
+          "kinds": [
+            "overclaim",
+            "weak_support"
+          ],
+          "hit": true
+        }
+      ],
+      "clean": [
+        {
+          "claimId": "CLM-003",
+          "kinds": [
+            "contradiction",
+            "overclaim"
+          ],
+          "why": "CLM-003 says what its source says, so a contradiction or an overclaim there is a false alarm. A weak_support note is tolerated: the ratio's interval reaches 1.00 (p=0.046) and the report leaves it out, which two of three samples on 2026-09-23 pointed out — fair editing, not an invented defect.",
+          "flagged": []
+        }
+      ],
+      "findings": [
+        {
+          "id": "E01",
+          "kind": "contradiction",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-001（主要结论第 1 条）",
+          "evidence": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 来源摘录：In trials comparing metformin monotherapy with placebo, metformin monotherapy lowered HbA1c by 1.12% (95% CI 0.92-1.32) versus placebo.",
+          "fix": "将「约 1.5 个百分点」改为「1.12 个百分点（95% CI 0.92–1.32）」，与来源数值一致。",
+          "message": "与来源矛盾（CLM-001（主要结论第 1 条））：「二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 来源摘录：In trials comparing metformin monotherapy with placebo, metformin monotherapy lowered HbA1c by 1.12% (95% CI…」。建议：将「约 1.5 个百分点」改为「1.12 个百分点（95% CI 0.92–1.32）」，与来源数值一致。"
+        },
+        {
+          "id": "E02",
+          "kind": "overclaim",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-002（主要结论第 2 条）",
+          "evidence": "每日饮用咖啡可以预防 2 型糖尿病 [2] 来源摘录：This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner. Observational data cannot establish causality.",
+          "fix": "将「可以预防」改为「与 2 型糖尿病风险呈剂量-反应性负相关」，并注明观察性研究不能确立因果。",
+          "message": "结论写过头（CLM-002（主要结论第 2 条））：「每日饮用咖啡可以预防 2 型糖尿病 [2] 来源摘录：This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 diabet…」。建议：将「可以预防」改为「与 2 型糖尿病风险呈剂量-反应性负相关」，并注明观察性研究不能确立因果。"
+        },
+        {
+          "id": "E03",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-002（主要结论第 2 条）",
+          "evidence": "This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner.",
+          "fix": "补充该 Meta 分析的效应量（如每增加一杯咖啡的相对风险及 95% CI），使结论有量化支撑。",
+          "message": "清单条目缺失（CLM-002（主要结论第 2 条））：「This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner.」。建议：补充该 Meta 分析的效应量（如每增加一杯咖啡的相对风险及 95% CI），使结论有量化支撑。"
+        },
+        {
+          "id": "E04",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-003（主要结论第 3 条）",
+          "evidence": "在 TIM-HF2 试验中，远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%） 来源摘录：The percentage of days lost due to unplanned cardiovascular hospital admissions and all-cause death was 4.88% (95% CI 4.55-5.23) in the remote patient management group and 6.64% (6.19-7.13) in the usual care group (ratio 0.80, 95% CI 0.65-1.00; p=0.0460).",
+          "fix": "在结论中补入比率 0.80（95% CI 0.65–1.00）及 p=0.0460，并注明该比值置信区间上限恰好触及 1，效应边界。",
+          "message": "清单条目缺失（CLM-003（主要结论第 3 条））：「在 TIM-HF2 试验中，远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%） 来源摘录：The percentage of days lost due to unplanned cardiovascular hospital admissions and al…」。建议：在结论中补入比率 0.80（95% CI 0.65–1.00）及 p=0.0460，并注明该比值置信区间上限恰好触及 1，效应边界。"
+        },
+        {
+          "id": "E05",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "报告整体——主要结论第 1 条",
+          "evidence": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]",
+          "fix": "在结论处直接给出来源报告的效应量与 95% CI（1.12%；95% CI 0.92–1.32），而非仅给一个偏离的近似值。",
+          "message": "清单条目缺失（报告整体——主要结论第 1 条）：「二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]」。建议：在结论处直接给出来源报告的效应量与 95% CI（1.12%；95% CI 0.92–1.32），而非仅给一个偏离的近似值。"
+        }
+      ],
+      "dropped": [
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        }
+      ],
+      "raw": {
+        "findings": [
+          {
+            "location": "CLM-001（主要结论第 1 条）",
+            "kind": "contradiction",
+            "evidence": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点\n来源摘录：In trials comparing metformin monotherapy with placebo, metformin monotherapy lowered HbA1c by 1.12% (95% CI 0.92-1.32) versus placebo.",
+            "fix": "将「约 1.5 个百分点」改为「1.12 个百分点（95% CI 0.92–1.32）」，与来源数值一致。"
+          },
+          {
+            "location": "CLM-002（主要结论第 2 条）",
+            "kind": "overclaim",
+            "evidence": "每日饮用咖啡可以预防 2 型糖尿病 [2]\n来源摘录：This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner. Observational data cannot establish causality.",
+            "fix": "将「可以预防」改为「与 2 型糖尿病风险呈剂量-反应性负相关」，并注明观察性研究不能确立因果。"
+          },
+          {
+            "location": "CLM-002（主要结论第 2 条）",
+            "kind": "missing_item",
+            "evidence": "This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner.",
+            "fix": "补充该 Meta 分析的效应量（如每增加一杯咖啡的相对风险及 95% CI），使结论有量化支撑。"
+          },
+          {
+            "location": "CLM-003（主要结论第 3 条）",
+            "kind": "missing_item",
+            "evidence": "在 TIM-HF2 试验中，远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）\n来源摘录：The percentage of days lost due to unplanned cardiovascular hospital admissions and all-cause death was 4.88% (95% CI 4.55-5.23) in the remote patient management group and 6.64% (6.19-7.13) in the usual care group (ratio 0.80, 95% CI 0.65-1.00; p=0.0460).",
+            "fix": "在结论中补入比率 0.80（95% CI 0.65–1.00）及 p=0.0460，并注明该比值置信区间上限恰好触及 1，效应边界。"
+          },
+          {
+            "location": "报告整体——主要结论第 1 条",
+            "kind": "missing_item",
+            "evidence": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]",
+            "fix": "在结论处直接给出来源报告的效应量与 95% CI（1.12%；95% CI 0.92–1.32），而非仅给一个偏离的近似值。"
+          },
+          {
+            "location": "报告整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未包含检索策略、纳入/排除标准、证据质量分级（GRADE）、有害结局与安全性、局限性、矛盾证据讨论及目标人群适用性讨论，亦无任何统计方法、样本量、软件或前提假设说明；若定位为临床证据报告，须按 E1–E10、S1–S9 补齐或说明不适用理由。"
+          }
+        ],
+        "checklist": [
+          {
+            "item": "E1（临床证据报告要素）研究问题写明人群、干预/暴露、对照与结局（PICO）",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E2（临床证据报告要素）写明检索了哪些来源及检索日期",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E3（临床证据报告要素）写明纳入与排除标准",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E4（临床证据报告要素）纳入了该领域的地标试验与最新指南（或说明为何没有）",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E5（临床证据报告要素）主要结论给出效应量与置信区间，而不只是方向或 P 值",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E6（临床证据报告要素）报告了有害结局与安全性",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E7（临床证据报告要素）对证据质量或确定性分级（如 GRADE），并与结论措辞相称",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E8（临床证据报告要素）处理了相互矛盾的证据",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E9（临床证据报告要素）讨论了对目标人群的适用性",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E10（临床证据报告要素）写明局限性",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S1（SAMPL 统计报告要点）每项分析写明所用的统计方法（检验名称）",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S2（SAMPL 统计报告要点）说明方法的前提假设是否满足或如何核查",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S3（SAMPL 统计报告要点）主要结果给出效应量及其置信区间，而不只给 P 值",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S4（SAMPL 统计报告要点）P 值写出确切值（或 <0.001），说明单侧还是双侧及显著性水平",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S5（SAMPL 统计报告要点）写明每组分析的样本量与缺失数据处理",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S6（SAMPL 统计报告要点）多重比较时说明是否校正、如何校正",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S7（SAMPL 统计报告要点）回归模型写明纳入的变量、变量筛选方式与模型拟合情况",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S8（SAMPL 统计报告要点）写明分析所用的软件",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S9（SAMPL 统计报告要点）数字的精度与单位恰当，百分比给出分子与分母",
+            "status": "absent",
+            "evidence": ""
+          }
+        ],
+        "acceptance": []
+      },
+      "checklist": [],
+      "usage": {
+        "cacheHitTokens": 1024,
+        "cacheMissTokens": 675,
+        "completionTokens": 3777,
+        "reasoningTokens": 2077
+      },
+      "cost": 0.145608,
+      "model": "qwen3.8-max-0902",
+      "reasoningChars": 7042,
+      "note": "5 kept, 1 dropped; planted 2/2; false alarms 0; ¥0.146"
+    },
+    {
+      "group": "editor-live",
+      "id": "planted-contradiction-and-overclaim#2",
+      "pass": true,
+      "found": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "weak_support",
+            "interpretation"
+          ],
+          "hit": true
+        },
+        {
+          "claimId": "CLM-002",
+          "kinds": [
+            "overclaim",
+            "weak_support"
+          ],
+          "hit": true
+        }
+      ],
+      "clean": [
+        {
+          "claimId": "CLM-003",
+          "kinds": [
+            "contradiction",
+            "overclaim"
+          ],
+          "why": "CLM-003 says what its source says, so a contradiction or an overclaim there is a false alarm. A weak_support note is tolerated: the ratio's interval reaches 1.00 (p=0.046) and the report leaves it out, which two of three samples on 2026-09-23 pointed out — fair editing, not an invented defect.",
+          "flagged": []
+        }
+      ],
+      "findings": [
+        {
+          "id": "E01",
+          "kind": "contradiction",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-001",
+          "evidence": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。 来源摘录：In trials comparing metformin monotherapy with placebo, metformin monotherapy lowered HbA1c by 1.12% (95% CI 0.92-1.32) versus placebo.",
+          "fix": "将「约 1.5 个百分点」改为「约 1.12 个百分点（95% CI 0.92–1.32）」，与来源数据一致。",
+          "message": "与来源矛盾（CLM-001）：「二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。 来源摘录：In trials comparing metformin monotherapy with placebo, metformin monotherapy lowered HbA1c by…」。建议：将「约 1.5 个百分点」改为「约 1.12 个百分点（95% CI 0.92–1.32）」，与来源数据一致。"
+        },
+        {
+          "id": "E02",
+          "kind": "overclaim",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-002",
+          "evidence": "每日饮用咖啡可以预防 2 型糖尿病 [2]（CLM-002）。 来源摘录：This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner. Observational data cannot establish causality.",
+          "fix": "将「可以预防」改为「与 2 型糖尿病风险呈剂量-反应性负相关」，并注明为观察性证据、不能确立因果。",
+          "message": "结论写过头（CLM-002）：「每日饮用咖啡可以预防 2 型糖尿病 [2]（CLM-002）。 来源摘录：This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of typ…」。建议：将「可以预防」改为「与 2 型糖尿病风险呈剂量-反应性负相关」，并注明为观察性证据、不能确立因果。"
+        },
+        {
+          "id": "E03",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-001（主要结论第 1 条）",
+          "evidence": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。",
+          "fix": "在结论中补充来源给出的效应量与置信区间「1.12%（95% CI 0.92–1.32）」。",
+          "message": "清单条目缺失（CLM-001（主要结论第 1 条））：「二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。」。建议：在结论中补充来源给出的效应量与置信区间「1.12%（95% CI 0.92–1.32）」。"
+        },
+        {
+          "id": "E04",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-003（主要结论第 3 条）",
+          "evidence": "在 TIM-HF2 试验中，远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）[3]（CLM-003）。",
+          "fix": "补充来源中的比值与置信区间「ratio 0.80, 95% CI 0.65–1.00; p=0.0460」，以满足效应量与置信区间的报告要求。",
+          "message": "清单条目缺失（CLM-003（主要结论第 3 条））：「在 TIM-HF2 试验中，远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）[3]（CLM-003）。」。建议：补充来源中的比值与置信区间「ratio 0.80, 95% CI 0.65–1.00; p=0.0460」，以满足效应量与置信区间的报告要求。"
+        },
+        {
+          "id": "E05",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "报告整体（## 主要结论）",
+          "evidence": "# 证据简报 ## 主要结论",
+          "fix": "补充检索来源与检索日期、纳入/排除标准、证据质量分级（如 GRADE）、有害结局与安全性、局限性、适用性讨论及统计方法等临床证据报告必需章节。",
+          "message": "清单条目缺失（报告整体（## 主要结论））：「# 证据简报 ## 主要结论」。建议：补充检索来源与检索日期、纳入/排除标准、证据质量分级（如 GRADE）、有害结局与安全性、局限性、适用性讨论及统计方法等临床证据报告必需章节。"
+        },
+        {
+          "id": "E06",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "参考文献 [3]",
+          "evidence": "Koehler F, et al. Efficacy of telemedical interventional management in patients with heart failure (TIM-HF2). Lancet. 2018.",
+          "fix": "TIM-HF2 发表于 The Lancet，但应核实卷期页码并补全完整引用格式；当前缺少卷、期、页码与 DOI。",
+          "message": "措辞（参考文献 [3]）：「Koehler F, et al. Efficacy of telemedical interventional management in patients with heart failure (TIM-HF2). Lancet. 2018.」。建议：TIM-HF2 发表于 The Lancet，但应核实卷期页码并补全完整引用格式；当前缺少卷、期、页码与 DOI。"
+        }
+      ],
+      "dropped": [],
+      "raw": {
+        "findings": [
+          {
+            "location": "CLM-001",
+            "kind": "contradiction",
+            "evidence": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。\n来源摘录：In trials comparing metformin monotherapy with placebo, metformin monotherapy lowered HbA1c by 1.12% (95% CI 0.92-1.32) versus placebo.",
+            "fix": "将「约 1.5 个百分点」改为「约 1.12 个百分点（95% CI 0.92–1.32）」，与来源数据一致。"
+          },
+          {
+            "location": "CLM-002",
+            "kind": "overclaim",
+            "evidence": "每日饮用咖啡可以预防 2 型糖尿病 [2]（CLM-002）。\n来源摘录：This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner. Observational data cannot establish causality.",
+            "fix": "将「可以预防」改为「与 2 型糖尿病风险呈剂量-反应性负相关」，并注明为观察性证据、不能确立因果。"
+          },
+          {
+            "location": "CLM-001（主要结论第 1 条）",
+            "kind": "missing_item",
+            "evidence": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。",
+            "fix": "在结论中补充来源给出的效应量与置信区间「1.12%（95% CI 0.92–1.32）」。"
+          },
+          {
+            "location": "CLM-003（主要结论第 3 条）",
+            "kind": "missing_item",
+            "evidence": "在 TIM-HF2 试验中，远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）[3]（CLM-003）。",
+            "fix": "补充来源中的比值与置信区间「ratio 0.80, 95% CI 0.65–1.00; p=0.0460」，以满足效应量与置信区间的报告要求。"
+          },
+          {
+            "location": "报告整体（## 主要结论）",
+            "kind": "missing_item",
+            "evidence": "# 证据简报\n\n## 主要结论",
+            "fix": "补充检索来源与检索日期、纳入/排除标准、证据质量分级（如 GRADE）、有害结局与安全性、局限性、适用性讨论及统计方法等临床证据报告必需章节。"
+          },
+          {
+            "location": "参考文献 [3]",
+            "kind": "wording",
+            "evidence": "Koehler F, et al. Efficacy of telemedical interventional management in patients with heart failure (TIM-HF2). Lancet. 2018.",
+            "fix": "TIM-HF2 发表于 The Lancet，但应核实卷期页码并补全完整引用格式；当前缺少卷、期、页码与 DOI。"
+          }
+        ],
+        "checklist": [
+          {
+            "item": "E1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E7",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E9",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E10",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S1",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S2",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S4",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S5",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S6",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S7",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S8",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S9",
+            "status": "not_applicable",
+            "evidence": ""
+          }
+        ],
+        "acceptance": []
+      },
+      "checklist": [
+        {
+          "item": "E1",
+          "status": "absent"
+        },
+        {
+          "item": "E2",
+          "status": "absent"
+        },
+        {
+          "item": "E3",
+          "status": "absent"
+        },
+        {
+          "item": "E4",
+          "status": "absent"
+        },
+        {
+          "item": "E5",
+          "status": "absent"
+        },
+        {
+          "item": "E6",
+          "status": "absent"
+        },
+        {
+          "item": "E7",
+          "status": "absent"
+        },
+        {
+          "item": "E8",
+          "status": "absent"
+        },
+        {
+          "item": "E9",
+          "status": "absent"
+        },
+        {
+          "item": "E10",
+          "status": "absent"
+        },
+        {
+          "item": "S1",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S2",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S3",
+          "status": "absent"
+        },
+        {
+          "item": "S4",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S5",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S6",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S7",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S8",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S9",
+          "status": "not_applicable"
+        }
+      ],
+      "usage": {
+        "cacheHitTokens": 1024,
+        "cacheMissTokens": 675,
+        "completionTokens": 3199,
+        "reasoningTokens": 1935
+      },
+      "cost": 0.1248,
+      "model": "qwen3.8-max-0902",
+      "reasoningChars": 6721,
+      "note": "6 kept, 0 dropped; planted 2/2; false alarms 0; ¥0.125"
+    },
+    {
+      "group": "editor-live",
+      "id": "planted-contradiction-and-overclaim#3",
+      "pass": true,
+      "found": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "weak_support",
+            "interpretation"
+          ],
+          "hit": true
+        },
+        {
+          "claimId": "CLM-002",
+          "kinds": [
+            "overclaim",
+            "weak_support"
+          ],
+          "hit": true
+        }
+      ],
+      "clean": [
+        {
+          "claimId": "CLM-003",
+          "kinds": [
+            "contradiction",
+            "overclaim"
+          ],
+          "why": "CLM-003 says what its source says, so a contradiction or an overclaim there is a false alarm. A weak_support note is tolerated: the ratio's interval reaches 1.00 (p=0.046) and the report leaves it out, which two of three samples on 2026-09-23 pointed out — fair editing, not an invented defect.",
+          "flagged": []
+        }
+      ],
+      "findings": [
+        {
+          "id": "E01",
+          "kind": "contradiction",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-001（主要结论 1）",
+          "evidence": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。 In trials comparing metformin monotherapy with placebo, metformin monotherapy lowered HbA1c by 1.12% (95% CI 0.92-1.32) versus placebo.",
+          "fix": "把「约 1.5 个百分点」改为来源所报的「1.12%（95% CI 0.92–1.32）」。",
+          "message": "与来源矛盾（CLM-001（主要结论 1））：「二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。 In trials comparing metformin monotherapy with placebo, metformin monotherapy lowered HbA1c by 1.12…」。建议：把「约 1.5 个百分点」改为来源所报的「1.12%（95% CI 0.92–1.32）」。"
+        },
+        {
+          "id": "E02",
+          "kind": "overclaim",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-002（主要结论 2）",
+          "evidence": "每日饮用咖啡可以预防 2 型糖尿病 [2]（CLM-002）。 This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner. Observational data cannot establish causality.",
+          "fix": "把「可以预防」改为「与 2 型糖尿病风险呈剂量–反应性负相关」，并注明观察性数据不能确立因果。",
+          "message": "结论写过头（CLM-002（主要结论 2））：「每日饮用咖啡可以预防 2 型糖尿病 [2]（CLM-002）。 This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 d…」。建议：把「可以预防」改为「与 2 型糖尿病风险呈剂量–反应性负相关」，并注明观察性数据不能确立因果。"
+        },
+        {
+          "id": "E03",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-002（主要结论 2）",
+          "evidence": "Coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner",
+          "fix": "将引文中的「inversely associated」按关联而非预防的措辞转述，避免「预防」这一因果暗示。",
+          "message": "措辞（CLM-002（主要结论 2））：「Coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner」。建议：将引文中的「inversely associated」按关联而非预防的措辞转述，避免「预防」这一因果暗示。"
+        },
+        {
+          "id": "E04",
+          "kind": "weak_support",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-003（主要结论 3）",
+          "evidence": "远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）[3]（CLM-003）。 The percentage of days lost due to unplanned cardiovascular hospital admissions and all-cause death was 4.88% (95% CI 4.55-5.23) in the remote patient management group and 6.64% (6.19-7.13) in the usual care group (ratio 0.80, 95% CI 0.65-1.00; p=0.0460).",
+          "fix": "补写效应量与置信区间及 P 值，如「比值 0.80（95% CI 0.65–1.00；P=0.0460）」，并注明置信区间上限恰达 1.00。",
+          "message": "证据支持偏弱（CLM-003（主要结论 3））：「远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）[3]（CLM-003）。 The percentage of days lost due to unplanned cardiovascular hospital admissions and all-caus…」。建议：补写效应量与置信区间及 P 值，如「比值 0.80（95% CI 0.65–1.00；P=0.0460）」，并注明置信区间上限恰达 1.00。"
+        },
+        {
+          "id": "E05",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论 1",
+          "evidence": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。",
+          "fix": "按来源补写效应量及 95% CI：「1.12%（95% CI 0.92–1.32）」。",
+          "message": "清单条目缺失（主要结论 1）：「二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。」。建议：按来源补写效应量及 95% CI：「1.12%（95% CI 0.92–1.32）」。"
+        },
+        {
+          "id": "E06",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论 2",
+          "evidence": "每日饮用咖啡可以预防 2 型糖尿病 [2]（CLM-002）。",
+          "fix": "补写来源中的研究设计限定：「前瞻性队列研究的荟萃分析」及「观察性数据不能确立因果」。",
+          "message": "清单条目缺失（主要结论 2）：「每日饮用咖啡可以预防 2 型糖尿病 [2]（CLM-002）。」。建议：补写来源中的研究设计限定：「前瞻性队列研究的荟萃分析」及「观察性数据不能确立因果」。"
+        },
+        {
+          "id": "E07",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论 3",
+          "evidence": "远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）[3]（CLM-003）。",
+          "fix": "补写两组 95% CI（4.55–5.23；6.19–7.13）、比值 0.80（95% CI 0.65–1.00）与 P=0.0460。",
+          "message": "清单条目缺失（主要结论 3）：「远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）[3]（CLM-003）。」。建议：补写两组 95% CI（4.55–5.23；6.19–7.13）、比值 0.80（95% CI 0.65–1.00）与 P=0.0460。"
+        },
+        {
+          "id": "E08",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "参考文献 [3]",
+          "evidence": "Koehler F, et al. Efficacy of telemedical interventional management in patients with heart failure (TIM-HF2). Lancet. 2018.",
+          "fix": "核对期刊名：TIM-HF2 发表于 The Lancet，建议写全「The Lancet」并补卷期页码。",
+          "message": "措辞（参考文献 [3]）：「Koehler F, et al. Efficacy of telemedical interventional management in patients with heart failure (TIM-HF2). Lancet. 2018.」。建议：核对期刊名：TIM-HF2 发表于 The Lancet，建议写全「The Lancet」并补卷期页码。"
+        },
+        {
+          "id": "E09",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "参考文献 [1]",
+          "evidence": "Hirst JA, et al. Quantifying the effect of metformin treatment and dose on glycemic control. Diabetes Care. 2012.",
+          "fix": "补全卷、期、页码或 DOI，使引文可检索。",
+          "message": "措辞（参考文献 [1]）：「Hirst JA, et al. Quantifying the effect of metformin treatment and dose on glycemic control. Diabetes Care. 2012.」。建议：补全卷、期、页码或 DOI，使引文可检索。"
+        },
+        {
+          "id": "E10",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "参考文献 [2]",
+          "evidence": "Ding M, et al. Caffeinated and decaffeinated coffee consumption and risk of type 2 diabetes. Diabetes Care. 2014.",
+          "fix": "补全卷、期、页码或 DOI，使引文可检索。",
+          "message": "措辞（参考文献 [2]）：「Ding M, et al. Caffeinated and decaffeinated coffee consumption and risk of type 2 diabetes. Diabetes Care. 2014.」。建议：补全卷、期、页码或 DOI，使引文可检索。"
+        },
+        {
+          "id": "E11",
+          "kind": "structure",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "报告整体",
+          "evidence": "# 证据简报",
+          "fix": "报告仅含「主要结论」与「参考文献」两节，缺少方法、检索、证据质量分级、安全性、局限性等章节；按临床证据报告结构补齐。",
+          "message": "结构（报告整体）：「# 证据简报」。建议：报告仅含「主要结论」与「参考文献」两节，缺少方法、检索、证据质量分级、安全性、局限性等章节；按临床证据报告结构补齐。"
+        },
+        {
+          "id": "E12",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "报告整体",
+          "evidence": "# 证据简报 ## 主要结论 ## 参考文献",
+          "fix": "报告未包含任何安全性或有害结局内容（如二甲双胍的胃肠道反应、乳酸酸中毒风险），需按要素补写。",
+          "message": "清单条目缺失（报告整体）：「# 证据简报 ## 主要结论 ## 参考文献」。建议：报告未包含任何安全性或有害结局内容（如二甲双胍的胃肠道反应、乳酸酸中毒风险），需按要素补写。"
+        },
+        {
+          "id": "E13",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "报告整体",
+          "evidence": "# 证据简报",
+          "fix": "报告未对证据质量或确定性进行分级（如 GRADE），需补写并与结论措辞相称。",
+          "message": "清单条目缺失（报告整体）：「# 证据简报」。建议：报告未对证据质量或确定性进行分级（如 GRADE），需补写并与结论措辞相称。"
+        }
+      ],
+      "dropped": [
+        {
+          "kind": "missing_item",
+          "reason": "duplicate"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "duplicate"
+        }
+      ],
+      "raw": {
+        "findings": [
+          {
+            "location": "CLM-001（主要结论 1）",
+            "kind": "contradiction",
+            "evidence": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。\nIn trials comparing metformin monotherapy with placebo, metformin monotherapy lowered HbA1c by 1.12% (95% CI 0.92-1.32) versus placebo.",
+            "fix": "把「约 1.5 个百分点」改为来源所报的「1.12%（95% CI 0.92–1.32）」。"
+          },
+          {
+            "location": "CLM-002（主要结论 2）",
+            "kind": "overclaim",
+            "evidence": "每日饮用咖啡可以预防 2 型糖尿病 [2]（CLM-002）。\nThis meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner. Observational data cannot establish causality.",
+            "fix": "把「可以预防」改为「与 2 型糖尿病风险呈剂量–反应性负相关」，并注明观察性数据不能确立因果。"
+          },
+          {
+            "location": "CLM-002（主要结论 2）",
+            "kind": "wording",
+            "evidence": "Coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner",
+            "fix": "将引文中的「inversely associated」按关联而非预防的措辞转述，避免「预防」这一因果暗示。"
+          },
+          {
+            "location": "CLM-003（主要结论 3）",
+            "kind": "weak_support",
+            "evidence": "远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）[3]（CLM-003）。\nThe percentage of days lost due to unplanned cardiovascular hospital admissions and all-cause death was 4.88% (95% CI 4.55-5.23) in the remote patient management group and 6.64% (6.19-7.13) in the usual care group (ratio 0.80, 95% CI 0.65-1.00; p=0.0460).",
+            "fix": "补写效应量与置信区间及 P 值，如「比值 0.80（95% CI 0.65–1.00；P=0.0460）」，并注明置信区间上限恰达 1.00。"
+          },
+          {
+            "location": "主要结论 1",
+            "kind": "missing_item",
+            "evidence": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。",
+            "fix": "按来源补写效应量及 95% CI：「1.12%（95% CI 0.92–1.32）」。"
+          },
+          {
+            "location": "主要结论 2",
+            "kind": "missing_item",
+            "evidence": "每日饮用咖啡可以预防 2 型糖尿病 [2]（CLM-002）。",
+            "fix": "补写来源中的研究设计限定：「前瞻性队列研究的荟萃分析」及「观察性数据不能确立因果」。"
+          },
+          {
+            "location": "主要结论 3",
+            "kind": "missing_item",
+            "evidence": "远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）[3]（CLM-003）。",
+            "fix": "补写两组 95% CI（4.55–5.23；6.19–7.13）、比值 0.80（95% CI 0.65–1.00）与 P=0.0460。"
+          },
+          {
+            "location": "参考文献 [3]",
+            "kind": "wording",
+            "evidence": "Koehler F, et al. Efficacy of telemedical interventional management in patients with heart failure (TIM-HF2). Lancet. 2018.",
+            "fix": "核对期刊名：TIM-HF2 发表于 The Lancet，建议写全「The Lancet」并补卷期页码。"
+          },
+          {
+            "location": "参考文献 [1]",
+            "kind": "wording",
+            "evidence": "Hirst JA, et al. Quantifying the effect of metformin treatment and dose on glycemic control. Diabetes Care. 2012.",
+            "fix": "补全卷、期、页码或 DOI，使引文可检索。"
+          },
+          {
+            "location": "参考文献 [2]",
+            "kind": "wording",
+            "evidence": "Ding M, et al. Caffeinated and decaffeinated coffee consumption and risk of type 2 diabetes. Diabetes Care. 2014.",
+            "fix": "补全卷、期、页码或 DOI，使引文可检索。"
+          },
+          {
+            "location": "报告整体",
+            "kind": "structure",
+            "evidence": "# 证据简报",
+            "fix": "报告仅含「主要结论」与「参考文献」两节，缺少方法、检索、证据质量分级、安全性、局限性等章节；按临床证据报告结构补齐。"
+          },
+          {
+            "location": "报告整体",
+            "kind": "missing_item",
+            "evidence": "# 证据简报\n## 主要结论\n## 参考文献",
+            "fix": "报告未包含任何安全性或有害结局内容（如二甲双胍的胃肠道反应、乳酸酸中毒风险），需按要素补写。"
+          },
+          {
+            "location": "报告整体",
+            "kind": "missing_item",
+            "evidence": "# 证据简报",
+            "fix": "报告未对证据质量或确定性进行分级（如 GRADE），需补写并与结论措辞相称。"
+          },
+          {
+            "location": "报告整体",
+            "kind": "missing_item",
+            "evidence": "# 证据简报",
+            "fix": "报告未讨论目标人群适用性，需补写。"
+          },
+          {
+            "location": "报告整体",
+            "kind": "missing_item",
+            "evidence": "# 证据简报",
+            "fix": "报告未写明局限性，需补写。"
+          }
+        ],
+        "checklist": [
+          {
+            "item": "E1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E7",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E9",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E10",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S1",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S2",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S6",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S7",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S8",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S9",
+            "status": "absent",
+            "evidence": ""
+          }
+        ],
+        "acceptance": []
+      },
+      "checklist": [
+        {
+          "item": "E1",
+          "status": "absent"
+        },
+        {
+          "item": "E2",
+          "status": "absent"
+        },
+        {
+          "item": "E3",
+          "status": "absent"
+        },
+        {
+          "item": "E4",
+          "status": "absent"
+        },
+        {
+          "item": "E5",
+          "status": "absent"
+        },
+        {
+          "item": "E6",
+          "status": "absent"
+        },
+        {
+          "item": "E7",
+          "status": "absent"
+        },
+        {
+          "item": "E8",
+          "status": "absent"
+        },
+        {
+          "item": "E9",
+          "status": "absent"
+        },
+        {
+          "item": "E10",
+          "status": "absent"
+        },
+        {
+          "item": "S1",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S2",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S3",
+          "status": "absent"
+        },
+        {
+          "item": "S4",
+          "status": "absent"
+        },
+        {
+          "item": "S5",
+          "status": "absent"
+        },
+        {
+          "item": "S6",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S7",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S8",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S9",
+          "status": "absent"
+        }
+      ],
+      "usage": {
+        "cacheHitTokens": 1024,
+        "cacheMissTokens": 675,
+        "completionTokens": 3357,
+        "reasoningTokens": 1640
+      },
+      "cost": 0.130488,
+      "model": "qwen3.8-max-0902",
+      "reasoningChars": 5462,
+      "note": "13 kept, 2 dropped; planted 2/2; false alarms 0; ¥0.130"
+    }
+  ]
+}

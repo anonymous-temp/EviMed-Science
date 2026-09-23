@@ -7,7 +7,7 @@
 # child is) and `produces` (which contract validates the result) are
 # required. `tools` uses the model-visible names.
 id: comprehensive-drug-evaluation
-version: 2.2.1
+version: 2.3.0
 title: Comprehensive Drug Evaluation
 category: Evidence Evaluation
 description: Synthesize labels, guidelines, trials, literature, HTA, effectiveness, safety, and economic
@@ -26,6 +26,7 @@ tools:
 - mcp__evimed__guideline_search
 - mcp__evimed__clinical_trial_search
 - mcp__evimed__literature_search
+- mcp__evimed__reference_list
 - mcp__evimed__kb_search
 - mcp__evimed__patent_search
 - mcp__evimed__pharmacy_reference_search

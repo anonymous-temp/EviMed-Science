@@ -16,7 +16,7 @@ import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mjs";
-import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
+import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
 import { LearningTriggers } from "./learningTriggers.mjs";
@@ -92,6 +92,12 @@ import { KbEmbedder } from "./kbEmbedding.mjs";
 import { KB_SEARCH_GATEWAY_PATH, createKbSearchGatewayHandler } from "./kbSearchGateway.mjs";
 // 「前沿动态」 search for the runtime's `frontier_search` tool (2026-09-22).
 import { FRONTIER_GATEWAY_PATH, createFrontierGatewayHandler } from "./frontierGateway.mjs";
+// The independent reviewer (plan 2026-09-22, tiered review): the gateway a
+// run's submission asks, the module that reviews, and its reply-check worker.
+import { REVIEW_GATEWAY_PREFIX, createReviewGatewayHandler } from "./reviewGateway.mjs";
+import { ReviewService, replyOfRun, reviewMetricFamilies } from "./reviewService.mjs";
+import { ReviewWorker } from "./reviewWorker.mjs";
+import { createReviewRoutes, reviewRoutePattern } from "./reviewRoutes.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
@@ -477,6 +483,7 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/files/download/")) return "/api/files/download/:path";
   if (pathname === "/api/files/upload") return pathname;
   if (pathname === "/api/frontier" || pathname.startsWith("/api/frontier/")) return frontierRoutePattern(pathname);
+  if (pathname === "/api/review" || pathname.startsWith("/api/review/")) return reviewRoutePattern(pathname);
   if (pathname.startsWith("/api/")) return "/api/:route";
   // The internal gateways carry the runtime's entire outbound traffic —
   // every model call, every source fetch, every search, every probe. They used
@@ -495,6 +502,7 @@ function routePattern(pathname) {
     pathname === KB_SEARCH_GATEWAY_PATH ||
     pathname === FRONTIER_GATEWAY_PATH
   ) return pathname;
+  if (pathname.startsWith(REVIEW_GATEWAY_PREFIX)) return pathname.startsWith(`${REVIEW_GATEWAY_PREFIX}deliverables/`) ? `${REVIEW_GATEWAY_PREFIX}deliverables/:id` : pathname;
   return pathname === "/" ? "/" : "/static";
 }
 
@@ -1612,6 +1620,32 @@ export function createWebApiApp(overrides = {}) {
     resolveProject: sourceProject,
     ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
   }) : null;
+  // The independent reviewer (reviewService.mjs): composed when switched on and
+  // a product database exists; otherwise the gateway answers `review_disabled`,
+  // the routes `review_not_enabled`, and runtimes are not told to ask. Later
+  // collaborators (run attribution, the web reader, the IM module) are reached
+  // through closures because they are built further down this function.
+  /** @type {{ service: ReviewService, worker: ReviewWorker } | null} */
+  let review = null;
+  if (config.reviewEnabled && productDatabase) {
+    const service = new ReviewService({
+      config, database: productDatabase, usageLedger, runtimeManager, store, agentRegistry,
+      attributeRun: (input) => attributeRun(input),
+      notifications: notificationService,
+      imService: { sendRunCorrection: (userId, projectId, runId, text) => im?.service?.sendRunCorrection?.(userId, projectId, runId, text) },
+      webReader: { read: (url, options) => webReader.read(url, options) },
+      fetchImpl: overrides.reviewFetch ?? globalThis.fetch,
+      ...(overrides.reviewReferenceResolver ? { referenceResolver: overrides.reviewReferenceResolver } : {}),
+      report: (code) => process.stderr.write(`review: ${code}\n`),
+    });
+    const worker = new ReviewWorker({
+      service, pollMs: config.reviewPollMs,
+      canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
+      report: (code) => process.stderr.write(`review worker: ${code}\n`),
+    });
+    review = { service, worker };
+  }
+  const reviewRoutes = createReviewRoutes({ store, service: review?.service ?? null, config });
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
     maxClinicalRepairAttempts: config.gateRepairRounds,
@@ -1636,6 +1670,8 @@ export function createWebApiApp(overrides = {}) {
     // rt: asked right before the delivery gate reads a run's files, so a
     // remote runtime's host copy is brought up to date first (plan §3.1 #4).
     runtimeWorkspaceRoot: (project) => runtimeManager.workspaceRootForDelivery(project),
+    // The independent reviewer's findings, first in a finished run's notices.
+    ...(review ? { reviewNotices: (project, runId) => review.service.reviewNoticesForRun(project.userId, project.id, runId) } : {}),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     // Which workspace a run belongs to, re-derived rather than remembered. It
     // is asked on recovery, so a verification in flight when the control plane
@@ -1911,6 +1947,17 @@ export function createWebApiApp(overrides = {}) {
       // 2026-09-21: 206 messages read, an empty-extraction notice on the run).
       const agentId = String(run.effectiveAgentId ?? run.agentId ?? "");
       if (agentId && (await agentRegistry)?.get?.(agentId)?.visibility === "internal") return;
+      // The reply check (L1, reviewService.mjs): a finished answer that cites or
+      // names a medicine is checked after it was shown — never held, never
+      // rewritten — off the transcript persisted above. Queued, not awaited: a
+      // check that fails is a row that says so, never a reason this hook stops.
+      if (review && run.status === "succeeded") {
+        void (async () => {
+          const stored = await readRunTranscript(project, run.id);
+          const reply = stored ? replyOfRun(stored.messages.filter((/** @type {any} */ message) => message.sessionId === run.sessionId), run) : null;
+          if (reply) await review.service.considerReply({ userId: project.userId, projectId: project.id }, run, reply);
+        })().catch((error) => process.stderr.write(`review reply check not queued: ${typeof error?.code === "string" ? error.code : error?.name ?? "error"}\n`));
+      }
       // Queue the lessons this run is evidence for — a finished delivery, a
       // correction, a repeated routine (learningTriggers.mjs). After the
       // memory write when there is one, because the extractor is what says the
@@ -2558,6 +2605,12 @@ export function createWebApiApp(overrides = {}) {
     service: frontier?.service ?? null,
     report: (code) => process.stderr.write(`frontier search: ${code}\n`),
   });
+  // A submission's independent review: started, asked after, answered
+  // (reviewGateway.mjs); off, it answers `review_disabled`.
+  const reviewGatewayHandler = createReviewGatewayHandler({
+    runtimeManager, service: review?.service ?? null, config,
+    report: (code) => process.stderr.write(`review gateway: ${code}\n`),
+  });
   const commands =createCommandRegistry({ config, runtimeManager, sourceUpdates, knowledgeBaseUploads });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx), {
     claimAllowed: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
@@ -2606,6 +2659,7 @@ export function createWebApiApp(overrides = {}) {
           autopilotWorker?.status?.().running,
           learningWorker?.status?.().running,
           frontier?.worker.status().running,
+          review?.worker.status().running,
         ].filter(Boolean).length;
         return {
           activeCommands,
@@ -2854,7 +2908,9 @@ export function createWebApiApp(overrides = {}) {
               ? kbSearchGatewayHandler
               : pathname === FRONTIER_GATEWAY_PATH
                 ? frontierGatewayHandler
-                : null;
+                : pathname.startsWith(REVIEW_GATEWAY_PREFIX)
+                  ? reviewGatewayHandler
+                  : null;
     if (gateway) {
       try {
         await gateway(req, res, recordGatewayFailure);
@@ -2925,6 +2981,7 @@ export function createWebApiApp(overrides = {}) {
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
+      if (await reviewRoutes(req, res)) return;
       if (await im.routes(req, res)) return;
 
       if (pathname === "/api/health") {
@@ -2943,7 +3000,7 @@ export function createWebApiApp(overrides = {}) {
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier);
+        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -2970,6 +3027,7 @@ export function createWebApiApp(overrides = {}) {
           sourceUpdates,
           edgeProxy,
           frontier,
+          review,
         });
         return;
       }
@@ -3169,7 +3227,7 @@ export function createWebApiApp(overrides = {}) {
             operator: config.operatorUsers.includes(user.id),
             // Which optional modules this account sees. Presentation too: the
             // module's own routes answer 404 to anyone it does not.
-            features: { frontier: Boolean(frontier) && frontierAudienceAllows(config, user) },
+            features: { frontier: Boolean(frontier) && frontierAudienceAllows(config, user), review: Boolean(review) },
             runtime: {
               kernel: RUNTIME_KERNEL_NAME,
               // Where the kernel's own browser application is served. Empty
@@ -4546,7 +4604,7 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker]) {
+    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -4580,6 +4638,7 @@ export function createWebApiApp(overrides = {}) {
       learningWorker?.start();
       im.worker?.start();
       frontier?.worker.start();
+      review?.worker.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
       if (capsuleTransferService && !capsuleCleanupTimer) {
@@ -4664,6 +4723,10 @@ export function createWebApiApp(overrides = {}) {
     frontier,
     frontierService: frontier?.service ?? null,
     frontierWorker: frontier?.worker ?? null,
+    // The independent reviewer: null when the module is off or there is no product database.
+    review,
+    reviewService: review?.service ?? null,
+    reviewWorker: review?.worker ?? null,
     capsuleService,
     pluginService,
     pluginApplyWorker,
@@ -4685,6 +4748,12 @@ export function createWebApiApp(overrides = {}) {
       if (frontier) {
         await frontier.service.ready().catch((error) => {
           process.stderr.write(`frontier migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "frontier_migration_failed"}\n`);
+        });
+      }
+      // The same for the reviewer: a failed migration turns `review` red.
+      if (review) {
+        await review.service.ready().catch((error) => {
+          process.stderr.write(`review migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "review_migration_failed"}\n`);
         });
       }
       await connectorCredentials?.migrate();
@@ -4718,6 +4787,7 @@ export function createWebApiApp(overrides = {}) {
       await learningWorker?.close();
       await im.worker?.close();
       await frontier?.worker.close();
+      await review?.worker.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;
       if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
@@ -5492,8 +5562,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier);
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -5719,6 +5789,9 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // contract (frontierService.mjs `frontierMetricFamilies`).
   const frontierSnapshot = frontier ? await frontierMetricsSnapshot(frontier) : null;
   for (const family of frontierMetricFamilies(Boolean(frontier), frontierSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The independent reviewer: reviews, findings by kind, answers, reply
+  // checks and safety alerts (reviewService.mjs `reviewMetricFamilies`).
+  for (const family of reviewMetricFamilies(Boolean(review), review ? review.service.stats() : null)) addMetric(lines, family.name, family.help, family.type, family.series);
 
   return `${lines.join("\n")}\n`;
 }
@@ -5825,7 +5898,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null) {
+async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -5858,6 +5931,10 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     // 「前沿动态」: red only for the module's own invariants; a plugin outside
     // the platform that cannot be reached is a warning on a green check.
     frontier: await readinessCheck(async () => frontierReadiness({ config, frontier, database: productDatabase })),
+    // The independent reviewer: red only for its own invariants (reviewService.mjs).
+    review: await readinessCheck(async () => (review ? review.service.readiness() : config.reviewEnabled
+      ? Promise.reject(readinessFailure("review_unavailable", { reason: productDatabase ? "not_composed" : "no_product_database" }))
+      : { required: false, enabled: false })),
   };
   checks.saasProfile = await readinessCheck(() => readinessSaasProfile(config, checks));
   return {

@@ -23,6 +23,7 @@ const requiredModules = new Set([
   "hosted-notebooks",
   "research-memory",
   "frontier-feed",
+  "independent-review",
   "account-self-service-and-operations",
   "security-and-isolation",
   "release-and-observability",
@@ -172,6 +173,10 @@ const knowledgeOverlay = await read("deploy/web/docker-compose.knowledge.yml");
 requireBoundary(/boolEnv\("OPEN_SCIENCE_FRONTIER_ENABLED", false\)/.test(config), "frontier_default_off", "The frontier feed must ship switched off.");
 requireBoundary(/^ {2}evimed-knowledge-plugin:$/m.test(knowledgeOverlay) && !/^\s+ports:/m.test(knowledgeOverlay), "frontier_plugin_internal",
   "The knowledge-source plugin must publish no port: the control plane is its only caller.");
+// The independent reviewer is conditional on the same terms: it ships switched
+// off, and its model key never leaves the control plane — the runtime reaches
+// it only through the review gateway, and no runtime environment names a key.
+requireBoundary(/boolEnv\("OPEN_SCIENCE_REVIEW_ENABLED", false\)/.test(config), "review_default_off", "The independent reviewer must ship switched off.");
 requireBoundary(rootPackage.scripts?.["audit:saas-alignment"]?.includes("audit-saas-alignment.mjs"), "audit_script", "Root package lacks the SaaS alignment audit.");
 requireBoundary(rootPackage.scripts?.["ci:web"]?.includes("audit:saas-alignment"), "audit_ci", "SaaS alignment audit is not release-gated.");
 requireBoundary(Object.keys(curated.policy?.delivery?.executable ?? {}).length === 38, "curated_38", "All 38 curated skills must have executable delivery contracts.");

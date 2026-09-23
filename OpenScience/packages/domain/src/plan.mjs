@@ -25,6 +25,9 @@ import { PLAN_ITEM_STATES } from './states.mjs'
  * @property {string} title
  * @property {readonly string[]} dependsOn
  * @property {string} [status]
+ * @property {readonly string[]} acceptance  what a reader will be able to check in
+ *   the finished file, written at plan time from the brief: the independent
+ *   reviewer checks each one (an instance rubric beats a generic list — RaR)
  */
 
 /**
@@ -38,6 +41,12 @@ import { PLAN_ITEM_STATES } from './states.mjs'
 /** @typedef {{ code: string, message: string, deliverableId?: string }} PlanIssue */
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
+
+/** Acceptance items one deliverable keeps, and the length of one. Beyond them
+ *  the plan is not refused — the items are the run's own guidance to the
+ *  reviewer, and a long list is cut, not an error. */
+export const PLAN_ACCEPTANCE_LIMIT = 10
+const PLAN_ACCEPTANCE_ITEM_MAX = 240
 
 /**
  * Validates a parsed plan. Returns issues rather than throwing: a plan the
@@ -101,6 +110,9 @@ export function validateTaskPlan(value) {
     if (!PLAN_ITEM_STATES.includes(/** @type {any} */ (status))) {
       issues.push({ code: 'plan_invalid', message: `unknown deliverable status "${status}".`, deliverableId: id })
     }
+    const acceptance = Array.isArray(item.acceptance)
+      ? item.acceptance.map((line) => String(line ?? '').replace(/\s+/g, ' ').trim().slice(0, PLAN_ACCEPTANCE_ITEM_MAX)).filter(Boolean).slice(0, PLAN_ACCEPTANCE_LIMIT)
+      : []
     deliverables.push({
       id,
       contractKind,
@@ -108,6 +120,7 @@ export function validateTaskPlan(value) {
       title: String(item.title ?? id).trim(),
       dependsOn: Object.freeze(dependsOn),
       status,
+      acceptance: Object.freeze(acceptance),
     })
   }
   for (const item of deliverables) {

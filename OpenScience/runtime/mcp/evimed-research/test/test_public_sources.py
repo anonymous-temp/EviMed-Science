@@ -716,6 +716,42 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertEqual(second["evidenceLevel"], "metadata")
         self.assertEqual(len(result["sources"]), 2)
 
+    def test_reference_list_reads_a_papers_references_in_its_own_order(self):
+        # Recorded shape: Europe PMC MED/30153985/references (TIM-HF2), 2026-09-23.
+        payload = {"hitCount": 3, "referenceList": {"reference": [
+            {"source": "MED", "id": "26303835", "citationType": "JOURNAL ARTICLE", "title": "e-Health: a position statement.",
+             "authorString": "Cowie MR, Bax J.", "journalAbbreviation": "Eur Heart J", "pubYear": 2015, "citedOrder": 1, "match": "Y"},
+            {"citationType": "OTHER", "title": "An unmatched report", "pubYear": 2016, "citedOrder": 2},
+            {"source": "MED", "id": "28834628", "title": "Improving care for patients with acute heart failure.",
+             "journalAbbreviation": "ESC Heart Fail", "pubYear": 2014, "citedOrder": 3},
+        ]}}
+        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+            result = sources.reference_list({"identifier": "PMID: 30153985"})
+        self.assertIn("/MED/30153985/references", request.call_args.args[0])
+        items = result["data"]["items"]
+        self.assertEqual([item.get("pmid") for item in items], ["26303835", None, "28834628"])
+        self.assertEqual([item["order"] for item in items], [1, 2, 3])
+        self.assertEqual(items[0]["url"], "https://pubmed.ncbi.nlm.nih.gov/26303835/")
+        self.assertEqual(items[1]["title"], "An unmatched report", "an unmatched reference stays in the list")
+        self.assertEqual(result["data"]["work"], {"source": "MED", "id": "30153985", "direction": "references", "total": 3, "returned": 3})
+        self.assertEqual(len(result["sources"]), 2)
+
+    def test_reference_list_finds_a_doi_first_and_can_read_forward(self):
+        search = {"resultList": {"result": [{"pmid": "30153985", "source": "MED", "id": "30153985"}]}}
+        citations = {"hitCount": 1, "citationList": {"citation": [
+            {"source": "MED", "id": "40000001", "title": "A newer trial", "pubYear": 2025, "citedByCount": 7},
+        ]}}
+        with mock.patch.object(sources, "_get_json", side_effect=[search, citations]) as request:
+            result = sources.reference_list({"identifier": "https://doi.org/10.1016/S0140-6736(18)31880-4", "direction": "cited_by"})
+        self.assertIn('DOI%3A%2210.1016%2FS0140-6736%2818%2931880-4%22', request.call_args_list[0].args[0])
+        self.assertIn("/MED/30153985/citations", request.call_args_list[1].args[0])
+        self.assertEqual(result["data"]["items"][0]["citedByCount"], 7)
+
+    def test_reference_list_refuses_what_is_not_an_identifier(self):
+        with self.assertRaises(sources.PublicSourceError) as raised:
+            sources.reference_list({"identifier": "heart failure telemonitoring"})
+        self.assertEqual(raised.exception.code, "invalid_input")
+
     def test_openalex_reconstructs_abstracts_from_the_inverted_index(self):
         payload = {"results": [
             {"id": "https://openalex.org/W1", "doi": "https://doi.org/10.1/observed", "title": "Observed",

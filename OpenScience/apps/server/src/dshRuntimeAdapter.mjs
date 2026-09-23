@@ -211,9 +211,14 @@ export function socketToolResult(output) {
   const head = (newline < 0 ? text : text.slice(0, newline)).trim();
   const body = newline < 0 ? "" : text.slice(newline + 1);
   if (head === "ok") {
-    if (!body.trim()) return { ok: true, data: null };
+    // An accepted result can carry issue lines after its data — a submission's
+    // advisory notes and its independent review's findings. Read as one JSON
+    // body they made the whole data a string, and the frame's card said
+    // 「✓ 通过」 exactly when the reviewer had found something (2026-09-23).
+    const { rest, issues } = trailingIssueLines(body);
+    if (!rest.trim()) return { ok: true, data: null, ...(issues.length ? { issues } : {}) };
     try {
-      return { ok: true, data: JSON.parse(body) };
+      return { ok: true, data: JSON.parse(rest), ...(issues.length ? { issues } : {}) };
     } catch {
       return { ok: true, data: body };
     }
@@ -227,6 +232,24 @@ export function socketToolResult(output) {
     if (issue) issues.push({ severity: issue[1], code: issue[2], message: issue[3] ?? "" });
   }
   return { ok: false, code: failed[1], issues };
+}
+
+/**
+ * The issue lines at the end of a rendered envelope, and what precedes them.
+ * @param {string} body
+ * @returns {{ rest: string, issues: { severity: string, code: string, message: string }[] }}
+ */
+function trailingIssueLines(body) {
+  const lines = body.split("\n");
+  /** @type {{ severity: string, code: string, message: string }[]} */
+  const issues = [];
+  while (lines.length) {
+    const issue = /^- \(([^)]+)\) (\S+)(?: (.*))?$/.exec(String(lines.at(-1)).trim());
+    if (!issue) break;
+    issues.unshift({ severity: issue[1], code: issue[2], message: issue[3] ?? "" });
+    lines.pop();
+  }
+  return { rest: lines.join("\n"), issues };
 }
 
 // The socket's collecting tool (C6, 2026-09-18). Named here rather than read

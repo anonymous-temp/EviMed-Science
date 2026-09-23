@@ -2165,8 +2165,14 @@ function quoteFailure(artifact, quote) {
     : "was not found in its preserved source artifact";
 }
 
-/** @param {unknown} artifact @param {unknown} quote @returns {boolean} */
-function quoteIsPresent(artifact, quote) {
+/**
+ * Whether a quote is in a text, by the one comparison every quote check in
+ * the platform uses — the gate's, the reader's ✓/⚠, and the independent
+ * reviewer's evidence (an editor finding whose evidence is not in the package
+ * or its sources is dropped, principle 5). Exported so there stays one.
+ * @param {unknown} artifact @param {unknown} quote @returns {boolean}
+ */
+export function quoteIsPresent(artifact, quote) {
   const source = String(artifact ?? "");
   const segments = String(quote ?? "").split(quoteElision).map((part) => part.trim()).filter(Boolean);
   if (!source || !segments.length) return false;
@@ -2405,8 +2411,14 @@ function canonicalNumbers(text) {
   return value == null ? [] : [String(value)];
 }
 
-/** @param {unknown} text @returns {Set<string>} */
-function conclusoryQuantities(text) {
+/**
+ * The numbers in a text that state a measured quantity — a number carrying a
+ * unit or a statistical label — in the canonical spelling the numeric checks
+ * compare. Exported for the reviewer's traceability of an engine report's
+ * numbers to the engine's own output (one extractor, not two that disagree).
+ * @param {unknown} text @returns {Set<string>}
+ */
+export function conclusoryQuantities(text) {
   // A confidence interval is one quantity however its endpoints are punctuated.
   // numericTokens already drops the percent sign that sits inside a range, so
   // "98.5%-99.7%" and "98.5–99.7%" are the same interval to it; without the
@@ -2466,8 +2478,14 @@ const referenceEntryPattern = /^\s*(?:\[(\d{1,3})\]|(\d{1,3})[.、])\s+(\S.*)$/;
  *  @param {string} text @returns {Set<string>} */
 export function referenceIdentifiers(text) {
   const found = new Set();
-  for (const [, doi] of text.matchAll(/\b(10\.\d{4,9}\/[^\s)\],;"']+)/gi)) {
-    found.add(`doi:${doi.toLowerCase().replace(/[.,;)]+$/, "")}`);
+  // A DOI may hold parentheses — the Lancet's are `10.1016/S0140-6736(18)31880-4`
+  // — so a closing bracket ends one only when it closes nothing the DOI opened.
+  // Stopping at the first `)` cut that DOI to `…(18`, a string no registry
+  // holds and no other spelling of the same work matches.
+  for (const [, raw] of text.matchAll(/\b(10\.\d{4,9}\/[^\s\],;"'<>]+)/gi)) {
+    let doi = raw.replace(/[.,;]+$/, "");
+    while (doi.endsWith(")") && (doi.match(/\)/g) ?? []).length > (doi.match(/\(/g) ?? []).length) doi = doi.slice(0, -1).replace(/[.,;]+$/, "");
+    found.add(`doi:${doi.toLowerCase()}`);
   }
   for (const [, pmid] of text.matchAll(/\bpmid:?\s*(\d{5,9})\b/gi)) found.add(`pmid:${pmid}`);
   for (const [, pmid] of text.matchAll(/pubmed\.ncbi\.nlm\.nih\.gov\/(\d{5,9})/gi)) found.add(`pmid:${pmid}`);

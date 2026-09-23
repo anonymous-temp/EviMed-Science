@@ -273,6 +273,73 @@ function frontierSettings(overrides) {
   };
 }
 
+/**
+ * The independent reviewer (plan 2026-09-22, tiered review): a model of
+ * another family than the kernel's, called by the control plane on a
+ * submitted deliverable (L2/L3) and on a cited or medicine-naming reply (L1).
+ *
+ * - Off by default, like every module that calls a paid model: it needs
+ *   PostgreSQL for its ledger of findings and answers, and the operator's
+ *   DashScope key.
+ * - The model and endpoint default to the pin in `deps-version.json`
+ *   (`dashscope.review`), recorded off the live wire; a deployment may name
+ *   another model, and the price list decides whether it can be billed.
+ * - The editor's timeout is long because the work is: a 64 KB report with its
+ *   sources is ~70k input tokens and thinks for minutes. The runtime polls; no
+ *   request is held open that long.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function reviewSettings(overrides) {
+  /** @param {string} key @param {string} name @param {unknown} fallback */
+  const read = (key, name, fallback) => {
+    if (overrides[key] !== undefined) return overrides[key];
+    const value = process.env[name];
+    return value == null || value === "" ? fallback : value;
+  };
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const integer = (key, name, fallback, min, max) => {
+    const value = read(key, name, fallback);
+    const number = Number(value);
+    if (!Number.isSafeInteger(number) || number < min || number > max) {
+      throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(value)}.`);
+    }
+    return number;
+  };
+  const pin = depsVersions.dashscope?.review ?? {};
+  const model = String(read("reviewModel", "OPEN_SCIENCE_REVIEW_MODEL", pin.model ?? "")).trim();
+  if (!/^[a-z0-9][a-z0-9.-]{1,63}$/.test(model)) {
+    throw new Error(`OPEN_SCIENCE_REVIEW_MODEL must be a model id, got ${JSON.stringify(model)}.`);
+  }
+  const apiBase = String(read("reviewApiBase", "OPEN_SCIENCE_REVIEW_API_BASE", pin.apiBase ?? "")).trim().replace(/\/+$/, "");
+  let parsed = null;
+  try { parsed = new URL(apiBase); } catch { parsed = null; }
+  if (!parsed || parsed.protocol !== "https:" && !(parsed.protocol === "http:" && ["127.0.0.1", "localhost"].includes(parsed.hostname)) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error("OPEN_SCIENCE_REVIEW_API_BASE must be an https URL with no credentials.");
+  }
+  return {
+    reviewEnabled: reviewConfigured(overrides),
+    reviewModel: model,
+    reviewApiBase: apiBase,
+    reviewEditorTimeoutMs: integer("reviewEditorTimeoutMs", "OPEN_SCIENCE_REVIEW_EDITOR_TIMEOUT_MS", 900_000, 60_000, 3_600_000),
+    reviewThinkingBudget: integer("reviewThinkingBudget", "OPEN_SCIENCE_REVIEW_THINKING_BUDGET", Number(pin.thinkingBudget ?? 8_000), 0, 65_536),
+    reviewMaxOutputTokens: integer("reviewMaxOutputTokens", "OPEN_SCIENCE_REVIEW_MAX_OUTPUT_TOKENS", 24_000, 1_000, 131_072),
+    // Editor passes one deliverable may have in one turn: the first, and one
+    // after the writer's repair. Deterministic checks are not counted.
+    reviewEditorPasses: integer("reviewEditorPasses", "OPEN_SCIENCE_REVIEW_EDITOR_PASSES", 2, 1, 5),
+    reviewRepliesEnabled: overrides.reviewRepliesEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_REPLIES_ENABLED", true),
+    reviewReplyTimeoutMs: integer("reviewReplyTimeoutMs", "OPEN_SCIENCE_REVIEW_REPLY_TIMEOUT_MS", 90_000, 5_000, 600_000),
+    reviewReplyConcurrency: integer("reviewReplyConcurrency", "OPEN_SCIENCE_REVIEW_REPLY_CONCURRENCY", 2, 1, 8),
+    reviewPollMs: integer("reviewPollMs", "OPEN_SCIENCE_REVIEW_POLL_MS", 3_000, 500, 60_000),
+    reviewReferenceTimeoutMs: integer("reviewReferenceTimeoutMs", "OPEN_SCIENCE_REVIEW_REFERENCE_TIMEOUT_MS", 8_000, 1_000, 60_000),
+  };
+}
+
+/** @param {Record<string, any>} overrides */
+function reviewConfigured(overrides) {
+  return overrides.reviewEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_ENABLED", false);
+}
+
 export function loadConfig(overrides = {}) {
   const rootDir = overrides.rootDir ?? process.cwd();
   const port = Number(overrides.port ?? process.env.OPEN_SCIENCE_PORT ?? 8787);
@@ -976,12 +1043,14 @@ export function loadConfig(overrides = {}) {
       overrides.runtimeSandboxEnforcement ?? process.env.OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT ?? (production ? "full" : "partial"),
     ).trim().toLowerCase(),
     runtimeAskUserEnabled: overrides.runtimeAskUserEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ASK_USER", false),
-    // Defaults to on, because that is what every hosted run has actually been
-    // getting: both sites that build the container's flags wrote `review: true`
-    // as a literal and read nothing. Wiring them to this setting while it
-    // defaulted to `false` would have turned cross-deliverable semantic review
-    // off everywhere — a silent capability removal disguised as a bug fix.
-    runtimeReviewEnabled: overrides.runtimeReviewEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_REVIEW_ENABLED", true),
+    // Whether a runtime's submission asks for the independent review. Since
+    // 2026-09-23 the reviewer is the control plane's (`reviewService.mjs`,
+    // Qwen3.8-Max behind the review gateway), so the runtime is told to ask
+    // exactly when the module is on and has a key to call it with. It used to
+    // be `OPEN_SCIENCE_RUNTIME_REVIEW_ENABLED`, default on, for the in-kernel
+    // reviewer — a lever no compose file forwarded, so production could never
+    // turn it off. One switch now, and it is the module's.
+    runtimeReviewEnabled: overrides.runtimeReviewEnabled ?? reviewConfigured(overrides),
     runtimeRequireImageLocal:
       overrides.runtimeRequireImageLocal ?? boolEnv("OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL", production),
     runtimeDataVolume,
@@ -1447,6 +1516,7 @@ export function loadConfig(overrides = {}) {
     autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),
     // --- frontier: 「前沿动态」 and the knowledge-source plugin (2026-09-22) ---
     ...frontierSettings(overrides),
+    ...reviewSettings(overrides),
     // The learning loop's own knobs.
     //
     // On by default since 2026-09-08, and the reason it was off is worth keeping

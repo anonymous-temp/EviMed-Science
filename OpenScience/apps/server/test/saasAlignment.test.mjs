@@ -9,7 +9,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 
 test("SaaS product alignment contract covers every module without overstating launch readiness", async () => {
   const contract = JSON.parse(await readFile(path.join(repoRoot, "deploy/web/saas-capability-contract.json"), "utf8"));
-  assert.equal(contract.modules.length, 22);
+  assert.equal(contract.modules.length, 23);
   assert.equal(contract.claims.coreResearchWorkflowAdapted, true);
   assert.equal(contract.claims.individualAccountSaasProfileImplemented, true);
   assert.equal(contract.claims.publicDeploymentExternallyVerified, false);
@@ -30,6 +30,13 @@ test("SaaS product alignment contract covers every module without overstating la
   assert.ok(frontier.blockers.some((blocker) => /knowledge-source plugin/.test(blocker)));
   assert.ok(frontier.blockers.some((blocker) => /OPEN_SCIENCE_FRONTIER_ENABLED/.test(blocker)));
   assert.ok(frontier.evidence.includes("packages/contracts/knowledge-plugin/contract.test.mjs"), "its contract test is part of the evidence");
+  // The independent reviewer joined on 2026-09-23 on the same terms: another
+  // model family behind a control-plane gateway, on the operator's key, off
+  // until switched on.
+  const review = contract.modules.find((module) => module.id === "independent-review");
+  assert.equal(review?.status, "conditional");
+  assert.ok(review.blockers.some((blocker) => /OPEN_SCIENCE_REVIEW_ENABLED/.test(blocker)));
+  assert.ok(review.evidence.includes("packages/contracts/dashscope/contract.test.mjs"));
 });
 
 test("SaaS product alignment audit is executable and release-gated", () => {
@@ -40,7 +47,7 @@ test("SaaS product alignment audit is executable and release-gated", () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const report = JSON.parse(result.stdout);
   assert.equal(report.ok, true);
-  assert.equal(report.modules, 22);
+  assert.equal(report.modules, 23);
   assert.equal(report.profile, "individual-saas");
   assert.equal(report.tenantModel, "individual-account");
   assert.ok(report.adapted >= 14);

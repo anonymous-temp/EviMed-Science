@@ -36,6 +36,13 @@ an unavailable jurisdiction as unavailable and do not invent an HTTP status.
 
 Freeze the retrieval and provenance package in `evidence-snapshot.json` before assessment; the compiler input SHA-256 binds the structured assessment to the supplied inventory.
 
+Trace the field's landmark trials before you assess: call `mcp__evimed__reference_list`
+on the newest guideline and the newest systematic review you retrieved, and screen
+the trials and reviews their reference lists name (`mcp__evimed__literature_search`
+`pmids` for the abstracts). A trial known by an acronym is missed by keyword queries
+and is named in every guideline's references; a guideline Europe PMC does not index
+is read with `mcp__evimed__open_access_full_text` or `mcp__evimed__web_read` instead.
+
 ## 3. Assess domains without shortcuts
 
 Assess `effectiveness`, `safety`, and `applicability` as mandatory core domains. Add `economics`, `hta`, `evidence_certainty`, `innovation`, `accessibility`, `equity`, or `other` only when supported and relevant. Each row must contain status, rationale, and `evidenceIds` that resolve to the snapshot.

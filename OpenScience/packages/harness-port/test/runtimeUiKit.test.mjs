@@ -14,6 +14,19 @@ const LIVE_OK = 'ok\n{\n  "verdicts": [\n    {\n      "claimId": "CLM-095",\n   
 const LIVE_FAILED = 'failed: specialist_evidence_traceability_failed\n- (required) specialist_evidence_traceability_failed Evidence matrix claim CLM-S01 is not cited by the report.\n- (required) specialist_evidence_traceability_failed Evidence matrix claim CLM-S02 is not cited by the report.';
 const LIVE_DELEGATE_HEAD = 'ok\n{\n  "deliverableId": "mimic-sepsis-prognosis-scoping",\n  "childSessionId": "8765be77-2ac4-4655-bd9a-7c16c266a70e",\n  "report": {\n    "deliverableId": "mimic-sepsis-prognosis-scoping",\n    "submitted": true\n  }\n}';
 
+// An accepted submission carrying its review's findings as issue lines after
+// the data — production, 2026-09-22 (project review-ai-chronic-home). The data
+// block is trimmed to three fields; the two issue lines are verbatim.
+const LIVE_OK_WITH_REVIEW = "ok\n{\n  \"deliverableId\": \"ai-chronic-home-pharmacy-review\",\n  \"contractKind\": \"clinical-evidence-report\",\n  \"label\": \"临床证据综述\"\n}\n- (required) review_contradicted 结论 CLM-073 与独立审查者查到的证据相矛盾：同一实体(随机风险差的95%CI)在包内两处不能同真:报告结果节P47写\"风险差 7.3 个百分点(95%CI 2.9 至 11.7…;HR 4.40,95%CI 1.66 至 11.66)\",而报告摘要P9写\"新发心房颤动…9.6%(21例)与 2.3%(5例)\"所省略的同一区间;矩阵CLM-073 supportQuote 与报告P47一致,取 11.7。来源 PMID:41569211(摘要级)逐字为 \"risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR: 4.40; 95% CI: 1.66-11.66\",即\"个百分点\"区间的上界是 11.\n- (advisory) review_weakened 结论 CLM-062 证据强度弱于结论写法：报告摘要P11与结论P183 + 矩阵CLM-062(synthesized, confidence=moderate)。其被引来源的原文只支持较窄的结论:PMID:42520248 摘要逐字为 \"No statistically significant pooled effects were observed for glycated hemoglobin, blood pressure, mortality, hospitalization, or readmission…\" 与 \"Certainty was low or very low for all 7 GRADE-assessed outcomes\",即该来源自身对七个结局的确定性均为低或极低,而包内的整体判定写为\"按 GRA";
+
+test('an accepted result keeps the issue lines that follow its data', () => {
+  const read = /** @type {any} */ (parseToolText(LIVE_OK_WITH_REVIEW));
+  assert.equal(read.ok, true);
+  assert.equal(read.data.deliverableId, 'ai-chronic-home-pharmacy-review', 'the data is the JSON, not the whole text as a string');
+  assert.deepEqual(read.issues.map((/** @type {any} */ issue) => [issue.severity, issue.code]), [['required', 'review_contradicted'], ['advisory', 'review_weakened']]);
+  assert.match(read.issues[0].message, /^结论 CLM-073 与独立审查者查到的证据相矛盾/);
+});
+
 test('a socket tool result is read in the form the kernel records it', () => {
   assert.deepEqual(parseToolText(LIVE_OK), { ok: true, data: { verdicts: [{ claimId: 'CLM-095', verdict: 'stands', grounds: 'placeholder' }], blocking: false } });
   assert.equal(/** @type {any} */ (parseToolText(LIVE_DELEGATE_HEAD))?.data.childSessionId, '8765be77-2ac4-4655-bd9a-7c16c266a70e');

@@ -194,6 +194,22 @@ const operatorLevers = {
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TIMEOUT_MS: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_MIN_CONTRACT: ["open-science-web"],
+  // The independent reviewer (2026-09-23): the module switch, the model and
+  // endpoint it calls, and the bounds on what one review may cost and take. A
+  // lever that does not arrive leaves the reviewer off while the operator
+  // believes it is on — or on, and paying, while they believe it is off.
+  OPEN_SCIENCE_REVIEW_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_REVIEW_MODEL: ["open-science-web"],
+  OPEN_SCIENCE_REVIEW_API_BASE: ["open-science-web"],
+  OPEN_SCIENCE_REVIEW_EDITOR_TIMEOUT_MS: ["open-science-web"],
+  OPEN_SCIENCE_REVIEW_THINKING_BUDGET: ["open-science-web"],
+  OPEN_SCIENCE_REVIEW_MAX_OUTPUT_TOKENS: ["open-science-web"],
+  OPEN_SCIENCE_REVIEW_EDITOR_PASSES: ["open-science-web"],
+  OPEN_SCIENCE_REVIEW_REPLIES_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_REVIEW_REPLY_TIMEOUT_MS: ["open-science-web"],
+  OPEN_SCIENCE_REVIEW_REPLY_CONCURRENCY: ["open-science-web"],
+  OPEN_SCIENCE_REVIEW_POLL_MS: ["open-science-web"],
+  OPEN_SCIENCE_REVIEW_REFERENCE_TIMEOUT_MS: ["open-science-web"],
 };
 
 async function composeFiles() {

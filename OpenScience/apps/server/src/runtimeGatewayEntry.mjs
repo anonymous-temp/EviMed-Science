@@ -13,7 +13,7 @@
  * adds is the mapping and a per-runtime rate limit, because an address on the
  * internet can be called by anything that learns it:
  *
- *   /runtime-gateway/<model|sources|search|capsules|revisions|geo-probe|kb|frontier>/…
+ *   /runtime-gateway/<model|sources|search|capsules|revisions|geo-probe|kb|frontier|review>/…
  *       → the same request at /internal/<name>/…, handled by the same gateway
  *   /runtime-gateway/specialist/<adapter>[/…]
  *       → relayed to that specialist adapter's configured URL, token included
@@ -46,7 +46,7 @@ export const RUNTIME_GATEWAY_PREFIX = "/runtime-gateway/";
  * runtime, and a credential endpoint reachable from the internet with a token
  * the run can print is what the 2026-09-20 security review found here.
  */
-export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb", "frontier"]);
+export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb", "frontier", "review"]);
 
 export const RUNTIME_GATEWAY_SPECIALIST = "specialist";
 
@@ -77,6 +77,9 @@ export function publicRuntimeGatewayUrls(config) {
     geoProbe: String(config.geoProbeUrl ?? "").trim() ? `${base}/geo-probe/v1` : "",
     kbSearch: kbSearchGatewayProviderUrl(config) ? `${base}/kb/v1/search` : "",
     frontier: frontierGatewayProviderUrl(config) ? `${base}/frontier/v1/search` : "",
+    // The review gateway has no address of its own in a runtime's environment:
+    // the socket derives it from the revision gateway's (`../socket/src/review.mjs`).
+    review: config.reviewEnabled && revisionGatewayProviderUrl(config) ? `${base}/review/v1` : "",
     adapters,
   };
 }

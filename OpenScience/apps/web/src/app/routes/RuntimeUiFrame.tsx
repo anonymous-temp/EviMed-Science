@@ -5,6 +5,7 @@ import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebResearchAgents, 
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
 import { provideFrameSessionSearch, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
+import { useFrameReplyChecks } from "@/lib/replyChecks";
 import { Button } from "@/components/ui/Button";
 import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
 import { useUiStore } from "@/lib/store";
@@ -769,6 +770,10 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   const postRunState = useCallback((state: object) => postToFrame("run-state", state), [postToFrame]);
   const postEvidence = useCallback((evidence: object | null) => postToFrame("evidence", evidence ?? { runId: null }), [postToFrame]);
   useFrameRunBinding({ sessionId: frameTask, enabled: booted > 0 && !error && Boolean(frameId), postRunState, postEvidence });
+  // The independent reviewer's checks of this conversation's answers (L1): a
+  // row under each checked answer, drawn by the frame from what the shell reads.
+  const postReplyChecks = useCallback((payload: object) => postToFrame("reply-check", payload), [postToFrame]);
+  useFrameReplyChecks({ projectId, sessionId: frameTask, enabled: booted > 0 && !error && Boolean(frameId), post: postReplyChecks });
 
   // Focus goes where the next keystroke belongs (U8): into the conversation
   // once it is open — unless the reader already put focus somewhere else in the

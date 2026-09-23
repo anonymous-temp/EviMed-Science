@@ -425,6 +425,47 @@
           }
         }
       ]
+    },
+    {
+      "name": "evimed-review",
+      "rules": [
+        {
+          "alert": "ReviewEditorFailing",
+          "expr": "increase(open_science_review_editor_calls_total{outcome=\"called\"}[1h]) >= 3 and increase(open_science_review_editor_calls_total{outcome=\"failed\"}[1h]) / clamp_min(increase(open_science_review_editor_calls_total{outcome=\"called\"}[1h]), 1) > 0.5",
+          "for": "15m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "More than half of the reviewer's editor passes failed in the last hour",
+            "description": "Deliverables are still delivered and still get the deterministic checks, but no editor findings. /api/ready's review check names the last error (the key, the model, a timeout); see the runbook's reviewer section."
+          }
+        },
+        {
+          "alert": "ReviewReplyChecksFailing",
+          "expr": "increase(open_science_review_reply_checks_total{outcome=\"failed\"}[1h]) >= 3 and increase(open_science_review_reply_checks_total{outcome=\"failed\"}[1h]) > increase(open_science_review_reply_checks_total{outcome=\"done\"}[1h])",
+          "for": "15m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Reply checks are failing more often than they finish",
+            "description": "Cited answers are shown without their check row. The registries (Crossref, PubMed) or the reviewer model are the usual cause."
+          }
+        },
+        {
+          "alert": "ReviewMedicineClaimContradicted",
+          "expr": "increase(open_science_review_safety_alerts_total[15m]) > 0",
+          "for": "0m",
+          "labels": {
+            "severity": "info"
+          },
+          "annotations": {
+            "summary": "An answer's medicine claim was contradicted by its own cited source",
+            "description": "The researcher has been told in the inbox and, for a chat-started run, in the chat. Worth a look at the conversation: the reply check is in evimed_review.reply_checks."
+          }
+        }
+      ]
     }
   ]
 }
