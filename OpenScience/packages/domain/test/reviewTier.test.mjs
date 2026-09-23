@@ -67,6 +67,22 @@ test('the cited sentences of a reply and the entries they cite are read, uncited
   ])
 })
 
+test('a reply\'s reference list is found under a plain label line as under a heading, and the list is never prose', () => {
+  // The first cited reply on production (2026-09-23) wrote 「参考文献：」 on its
+  // own line; read with the report's `##` finder it had no list, and its
+  // check judged nothing.
+  const body = '在 UKPDS 34 中，任何糖尿病相关终点的风险下降 32%（95% CI 13–47）[1]。\n\n中位随访 10.7 年 [1]。'
+  const entry = '[1] UKPDS Group. Metformin in overweight patients (UKPDS 34). Lancet. 1998. PMID: 9742977.'
+  for (const heading of ['参考文献：', '参考文献', '**参考文献**', '**参考文献：**', 'References:', '## 参考文献', '### References', '来源：']) {
+    const { sentences, references } = replyCitedSentences(`${body}\n\n${heading}\n\n${entry}`)
+    assert.deepEqual(references.map((reference) => [reference.number, reference.pmids]), [[1, ['9742977']]], heading)
+    assert.equal(sentences.length, 2, `${heading}: the two cited sentences, and not the list`)
+  }
+  // A sentence that merely mentions references is not a list heading.
+  const inline = replyCitedSentences(`${body}\n\n参考文献见下方 [1]。\n${entry}`)
+  assert.equal(inline.references.length, 0, 'no label line, no list')
+})
+
 test('a reviewer verdict stands only on words of the source; an unreadable source is unresolvable whatever the model said', () => {
   const { sentences } = replyCitedSentences(reply)
   const readable = new Map([

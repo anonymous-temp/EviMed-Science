@@ -157,6 +157,8 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     }
     let content = "";
     let reasoningChars = 0;
+    /** Why the provider stopped: `stop`, or `length` at the output ceiling. @type {string | null} */
+    let finish = null;
     /** @type {any} */
     let usage = null;
     let model = body.model;
@@ -181,6 +183,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
           if (event?.id && !requestId) requestId = String(event.id).slice(0, 200);
           if (event?.model) model = String(event.model);
           if (event?.usage) usage = event.usage;
+          if (event?.choices?.[0]?.finish_reason) finish = String(event.choices[0].finish_reason);
           const delta = event?.choices?.[0]?.delta ?? {};
           if (typeof delta.content === "string") content += delta.content;
           if (typeof delta.reasoning_content === "string") reasoningChars += delta.reasoning_content.length;
@@ -218,6 +221,9 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     try {
       value = JSON.parse(content);
     } catch {
+      // Cut off at the ceiling is not malformed: it says the ceiling is where
+      // to look, and the provider billed every token of it.
+      if (finish === "length") throw new ReviewModelError("review_model_truncated", `The reviewer's answer reached its ${body.max_tokens}-token ceiling before it closed.`);
       throw new ReviewModelError("review_model_response_invalid", "The reviewer's answer was not the JSON its schema requires.");
     }
     return { value, model, usage: counted, cost: price.cost, requestId, reasoningChars };

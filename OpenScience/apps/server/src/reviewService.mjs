@@ -49,7 +49,7 @@ import {
   REPLY_CHECK_OUTPUT_SCHEMA,
   REPLY_CHECK_WARNING_VERDICTS,
   REVIEW_ANSWER_REQUIRED_KINDS,
-  REVIEW_EDITOR_OUTPUT_SCHEMA,
+  REVIEW_EDITOR_FINDINGS_LIMIT,
   REVIEW_FINDING_KIND_LABELS_ZH,
   acceptEditorChecks,
   acceptEditorFindings,
@@ -57,6 +57,7 @@ import {
   acceptReviewResponses,
   clinicalSafetyCautionHits,
   deliverableReviewTier,
+  editorSaidNothing,
   evidenceLocated,
   numericTraceFindings,
   outputNumbers,
@@ -66,6 +67,7 @@ import {
   replyCheckCounts,
   replyCitedSentences,
   replyReviewTier,
+  reviewEditorSchema,
   reviewSeverity,
   statConsistencyFindings,
 } from "@evimed/domain";
@@ -164,6 +166,11 @@ function semaphore(limit) {
   };
 }
 
+/** Two model calls' token counts, added. @param {Record<string, number>} left @param {Record<string, number>} right */
+function addUsage(left, right) {
+  return Object.fromEntries(Object.keys(left).map((key) => [key, (Number(left[key]) || 0) + (Number(right[key]) || 0)]));
+}
+
 /**
  * Where a quote starts in a source, found by its opening words, or -1.
  * @param {string} lower  the source, lower-cased @param {string} quote
@@ -231,7 +238,8 @@ export function editorSystemPrompt({ safety, pass }) {
     "按给定 JSON 结构回答：",
     "- findings：每条是一个具体缺陷。location 写论断编号（CLM-012）、参考文献编号（[7]）、章节标题或清单条目号；evidence 是你依据的原文，必须从提交内容或来源原文里逐字复制——不改字、不翻译、不概括、不拼接；给不出原文的问题不要写。fix 用中文写一句可执行的最小改法，不要重写整段。",
     "- kind：contradiction（论断与其来源相反）、weak_support（来源对论断的支持弱于写法）、overclaim（结论强于证据，如相关写成因果、不显著写成有效、单项研究写成定论）、interpretation（统计或结果解读错误：效应方向、置信区间与 P 值、指标尺度、检验适用性）、missing_item（缺少清单或验收项要求的内容）、structure（结构问题）、wording（易误导的措辞）" + (safety ? "、safety（剂量、禁忌、相互作用、监测等用药安全方面的错误或遗漏）" : "") + "。",
-    "- 只报告有原文依据的问题，宁缺毋滥，最多 25 条，按严重程度排序。确定性核验已经报告的问题不要重复。",
+    "- findings 至少写一条：通读后确实没有有原文依据的问题时，写一条 kind 为 none、其余字段留空的条目。",
+    `- 只报告有原文依据的问题，宁缺毋滥，最多 ${REVIEW_EDITOR_FINDINGS_LIMIT} 条，按严重程度排序。确定性核验已经报告的问题不要重复。`,
     "- fix 里引用词句用「」，不要用英文双引号——它会提前结束 JSON 字符串，后面写的内容会丢失。evidence 只放原文本身，不加引号、不加「报告原文：」之类的标签；要把报告和来源对照着给，就各占一行。原文里本身带英文双引号时，按 JSON 规则写成 \\\"。",
     "- checklist：对给出的每个清单条目回答 present / absent / not_applicable；present 时在 evidence 里逐字复制报告中对应的原文，其余留空。缺的条目在这里答 absent 就够了，不要再写成 findings。",
     "- acceptance：对每条验收项回答 met；met 为 true 时在 evidence 里逐字复制满足它的原文。",
@@ -280,7 +288,7 @@ export class ReviewService {
     /** @type {Map<string, Promise<void>>} */
     this.running = new Map();
     this.counts = {
-      reviewsStarted: 0, reviewsDone: 0, reviewsFailed: 0, editorCalls: 0, editorRetries: 0, editorFailures: 0,
+      reviewsStarted: 0, reviewsDone: 0, reviewsFailed: 0, editorCalls: 0, editorRetries: 0, editorEmpty: 0, editorFailures: 0,
       /** @type {Record<string, number>} */ findings: {}, /** @type {Record<string, number>} */ dropped: {},
       /** @type {Record<string, number>} */ responses: {}, replyChecks: 0, replyFailures: 0,
       /** @type {Record<string, number>} */ replyVerdicts: {}, safetyAlerts: 0,
@@ -475,7 +483,7 @@ export class ReviewService {
       const edit = () => this.editors.run(() => callReviewModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
         userId: identity.userId, projectId: identity.projectId, runId,
         messages: [{ role: "system", content: editorSystemPrompt({ safety: tier.safety, pass }) }, { role: "user", content: message }],
-        schema: REVIEW_EDITOR_OUTPUT_SCHEMA, schemaName: "review_findings",
+        schema: reviewEditorSchema({ checklistIds: checklist.map((item) => item.id), acceptanceCount: acceptanceItems.length }), schemaName: "review_findings",
         thinking: { enabled: true, budget: Number(this.config.reviewThinkingBudget ?? 8_000) },
         maxTokens: Number(this.config.reviewMaxOutputTokens ?? 24_000),
         timeoutMs: Number(this.config.reviewEditorTimeoutMs ?? 900_000),
@@ -487,13 +495,39 @@ export class ReviewService {
         // pause: on 2026-09-23 the dev box lost DashScope for a stretch of
         // five calls, and an immediate retry lands in the same stretch. A
         // timeout or a refusal is not retried: it would fail the same way.
-        const answer = await edit().catch(async (error) => {
+        const ask = () => edit().catch(async (error) => {
           if (!(error instanceof ReviewModelError) || !error.retryable) throw error;
           this.counts.editorRetries += 1;
           this.report("review_editor_retry", String(error.message));
           await new Promise((done) => setTimeout(done, this.retryDelayMs));
           return edit();
         });
+        let answer = await ask();
+        usage = answer.usage;
+        cost = answer.cost;
+        model = answer.model;
+        // An answer that says nothing at all is no review, and read as a pass
+        // that found nothing (editorSaidNothing, 2026-09-23). The schema now
+        // rules it out (reviewEditorSchema); this holds for the day a provider
+        // stops honouring minItems. It is asked once more; if it says nothing
+        // again, the editor failed by name.
+        const asked = checklist.length + acceptanceItems.length;
+        let emptyAnswers = 0;
+        if (editorSaidNothing(answer.value, asked)) {
+          emptyAnswers += 1;
+          this.counts.editorEmpty += 1;
+          this.report("review_editor_empty", `reasoning tokens ${answer.usage.reasoningTokens}`);
+          answer = await ask();
+          usage = addUsage(usage, answer.usage);
+          cost += answer.cost;
+          model = answer.model;
+          if (editorSaidNothing(answer.value, asked)) {
+            emptyAnswers += 1;
+            this.counts.editorFailures += 1;
+            editorError = "review_editor_empty";
+            this.lastError = editorError;
+          }
+        }
         const accepted = acceptEditorFindings(answer.value, { haystacks, idPrefix: "E" });
         editorFindings = accepted.findings;
         dropped = accepted.dropped;
@@ -503,11 +537,8 @@ export class ReviewService {
           findings: Array.isArray(answer.value?.findings) ? answer.value.findings.length : 0,
           checklistAsked: checklist.length, checklistAnswered: answeredChecks.returned.checklist, checklistKept: answeredChecks.checklist.length,
           acceptanceAsked: acceptanceItems.length, acceptanceAnswered: answeredChecks.returned.acceptance, acceptanceKept: answeredChecks.acceptance.length,
-          reasoningTokens: answer.usage.reasoningTokens, thinkingBudget: Number(this.config.reviewThinkingBudget ?? 8_000),
+          reasoningTokens: answer.usage.reasoningTokens, thinkingBudget: Number(this.config.reviewThinkingBudget ?? 8_000), emptyAnswers,
         };
-        usage = answer.usage;
-        cost = answer.cost;
-        model = answer.model;
       } catch (error) {
         this.counts.editorFailures += 1;
         editorError = error instanceof ReviewModelError ? error.code : "review_editor_failed";
@@ -1148,9 +1179,10 @@ export function reviewMetricFamilies(enabled, stats) {
       { value: stats.reviewsDone, labels: { outcome: "done" } },
       { value: stats.reviewsFailed, labels: { outcome: "failed" } },
     ] },
-    { name: "open_science_review_editor_calls_total", help: "Editor model calls, those retried once after a transient failure, and those that failed.", type: "counter", series: [
+    { name: "open_science_review_editor_calls_total", help: "Editor model calls, those retried once after a transient failure, answers that said nothing and were asked again, and calls that failed.", type: "counter", series: [
       { value: stats.editorCalls, labels: { outcome: "called" } },
       { value: stats.editorRetries, labels: { outcome: "retried" } },
+      { value: stats.editorEmpty, labels: { outcome: "empty" } },
       { value: stats.editorFailures, labels: { outcome: "failed" } },
     ] },
     { name: "open_science_review_findings_total", help: "Findings kept, by origin (code or editor) and kind.", type: "counter", series: split(stats.findings, "origin", "kind") },

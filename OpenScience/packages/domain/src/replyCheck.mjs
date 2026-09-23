@@ -22,7 +22,7 @@
  * @module @evimed/domain/replyCheck
  */
 
-import { citationSpans, quoteIsPresent, referenceListBounds } from './clinicalEvidence.mjs'
+import { citationSpans, quoteIsPresent } from './clinicalEvidence.mjs'
 import { referenceEntries } from './referenceResolution.mjs'
 import { mentionedMedicines } from './safetyRules.mjs'
 
@@ -69,7 +69,31 @@ export const REPLY_CHECK_WARNING_VERDICTS = Object.freeze(/** @type {readonly Re
  */
 
 const SENTENCE_END = /(?<=[。！？!?；;])|(?<=\.)(?=\s)|\n+/u
+/**
+ * Where a reply's reference list starts: a markdown heading that names it
+ * (`## 参考文献`, `### References`), or a line that is nothing but the label,
+ * bold or not, with or without a colon (`参考文献：`, `**References**`). A
+ * report is held to the `##` form; a reply is not — the persona asks only for
+ * the list 「under 参考文献 / References」 — and reading replies with the
+ * report's finder found no list in the first cited reply on production
+ * (2026-09-23, `参考文献：`), so its check judged nothing and said so as done.
+ */
+const REPLY_REFERENCE_HEADING = /^[ \t]*(?:#{1,6}[ \t]+[^\n]*(?:参考文献|参考来源|参考资料|References?|Sources?)[^\n]*|(?:\*\*|__)?[ \t]*(?:参考文献|参考来源|参考资料|来源|References?|Sources?)[ \t]*(?:\*\*|__)?[ \t]*[:：]?[ \t]*(?:\*\*|__)?[ \t]*)$/gimu
 const URL = /https?:\/\/[^\s)>\]，。]+/g
+
+/**
+ * The span of a reply's reference list: from its last heading to the next
+ * markdown heading or the end.
+ * @param {string} text @returns {{ headingStart: number, headingEnd: number, end: number } | null}
+ */
+function replyReferenceListBounds(text) {
+  const last = [...String(text ?? '').matchAll(REPLY_REFERENCE_HEADING)].at(-1)
+  if (!last || last.index == null) return null
+  const headingStart = last.index
+  const headingEnd = last.index + last[0].length
+  const next = text.slice(headingEnd).search(/\n#{1,6}\s/)
+  return { headingStart, headingEnd, end: next < 0 ? text.length : headingEnd + next + 1 }
+}
 
 /**
  * The reply's cited sentences and the entries they cite.
@@ -78,9 +102,9 @@ const URL = /https?:\/\/[^\s)>\]，。]+/g
  */
 export function replyCitedSentences(replyText) {
   const text = String(replyText ?? '')
-  const bounds = referenceListBounds(text)
+  const bounds = replyReferenceListBounds(text)
   const prose = bounds ? text.slice(0, bounds.headingStart) : text
-  const references = referenceEntries(text).map((entry) => ({
+  const references = referenceEntries(text, bounds).map((entry) => ({
     number: entry.number,
     text: entry.text,
     dois: entry.dois,

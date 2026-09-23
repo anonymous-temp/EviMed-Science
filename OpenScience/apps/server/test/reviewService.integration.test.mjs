@@ -81,6 +81,11 @@ function modelAnswer(value) {
   return new Response(`${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`, { status: 200, headers: { "content-type": "text/event-stream" } });
 }
 
+/** An editor that answered and found nothing: one checklist item, absent. */
+const QUIET = Object.freeze({ findings: [], checklist: [{ item: "E2", status: "absent", evidence: "" }], acceptance: [] });
+/** An editor that said nothing at all. */
+const SILENT = Object.freeze({ findings: [], checklist: [], acceptance: [] });
+
 /** @param {{ modelAnswers: any[], notifications?: any, imService?: any, runtimeManager?: any }} input */
 function service({ modelAnswers, notifications = null, imService = null, runtimeManager = null }) {
   /** @type {any[]} */
@@ -99,7 +104,7 @@ function service({ modelAnswers, notifications = null, imService = null, runtime
       fetchImpl: /** @type {any} */ (async (/** @type {string} */ _url, /** @type {any} */ init) => {
         prompts.push(JSON.parse(init.body));
         const next = answers.shift();
-        return next instanceof Response ? next : modelAnswer(next ?? { findings: [], checklist: [], acceptance: [] });
+        return next instanceof Response ? next : modelAnswer(next ?? QUIET);
       }),
       referenceResolver: {
         resolve: async () => ({
@@ -151,7 +156,7 @@ test("a package is reviewed whole: references resolved, located findings kept, t
   const stored = await database.query("SELECT deterministic->'editorAnswer' AS answer FROM evimed_review.reviews WHERE id=$1", [/** @type {any} */ (started).reviewId]);
   assert.deepEqual(stored.rows[0].answer, {
     findings: 3, checklistAsked: 19, checklistAnswered: 2, checklistKept: 2, acceptanceAsked: 1, acceptanceAnswered: 1, acceptanceKept: 1,
-    reasoningTokens: 0, thinkingBudget: 800,
+    reasoningTokens: 0, thinkingBudget: 800, emptyAnswers: 0,
   }, "what the editor answered at all is kept beside what survived");
   assert.deepEqual(done.acceptance, { met: [], unmet: ["A1"], unlocated: [] });
   assert.equal(done.deterministic.references.unresolvable, 1);
@@ -168,6 +173,8 @@ test("a package is reviewed whole: references resolved, located findings kept, t
   assert.match(message, /查无此条 1 条/);
   assert.ok(message.indexOf("<claims>") < message.indexOf('<file name="clinical-evidence-report.md">'), "stable parts first, for the provider's prefix cache");
   assert.equal(prompts[0].enable_thinking, true);
+  const schema = prompts[0].response_format.json_schema.schema;
+  assert.deepEqual([schema.properties.checklist.minItems, schema.properties.acceptance.maxItems, schema.properties.findings.minItems], [19, 1, 1], "this package's items, exactly, and one finding entry at least");
   assert.match(prompts[0].messages[0].content, /safety（剂量/, "a clinical kind is reviewed for medicine safety too");
 
   // The writer answers; a decline without a reason is refused.
@@ -188,7 +195,7 @@ test("a package is reviewed whole: references resolved, located findings kept, t
 });
 
 test("a second pass reads the repaired package with the last findings and their answers; a third is deterministic only", options, async () => {
-  const { review, prompts } = service({ modelAnswers: [{ findings: [], checklist: [], acceptance: [] }, { findings: [], checklist: [], acceptance: [] }] });
+  const { review, prompts } = service({ modelAnswers: [QUIET, QUIET] });
   const identity = { userId, projectId };
   const input = { runId: "native_second", sessionId: "s2", deliverableId: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", attempt: 1 };
   const first = await review.startDeliverableReview(identity, input);
@@ -229,7 +236,7 @@ test("a transient provider failure is retried once; a second leaves the determin
   assert.ok(recovered.findings.some((/** @type {any} */ finding) => finding.origin === "editor" && finding.kind === "contradiction"));
   assert.equal(once.review.stats().editorRetries, 1);
 
-  const twice = service({ modelAnswers: [unavailable(), unavailable(), { findings: [], checklist: [], acceptance: [] }] });
+  const twice = service({ modelAnswers: [unavailable(), unavailable(), QUIET] });
   const failed = await settled(twice.review, /** @type {any} */ (await twice.review.startDeliverableReview(identity, { ...input, runId: "native_retry_twice" })).reviewId);
   assert.equal(failed.status, "done", "the deterministic half stands");
   assert.equal(failed.editor, "failed");
@@ -239,12 +246,41 @@ test("a transient provider failure is retried once; a second leaves the determin
   assert.deepEqual([twice.review.stats().editorRetries, twice.review.stats().editorFailures], [1, 1]);
 });
 
+test("an editor that says nothing at all is asked once more, and saying nothing twice is a failure by name, never a clean pass", options, async () => {
+  const identity = { userId, projectId };
+  const input = { sessionId: "s-empty", deliverableId: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", attempt: 1 };
+  const once = service({ modelAnswers: [SILENT, {
+    findings: [{ location: "CLM-001", kind: "contradiction", evidence: "lowered HbA1c by 0.9 percentage points", fix: "把 1.5% 改为 0.9 个百分点。" }],
+    checklist: [{ item: "E2", status: "absent", evidence: "" }], acceptance: [],
+  }] });
+  const started = await once.review.startDeliverableReview(identity, { ...input, runId: "native_empty_once" });
+  const recovered = await settled(once.review, /** @type {any} */ (started).reviewId);
+  assert.equal(recovered.editor, "done");
+  assert.equal(recovered.pass, 1);
+  assert.equal(once.prompts.length, 2, "asked once more");
+  assert.ok(recovered.findings.some((/** @type {any} */ finding) => finding.origin === "editor" && finding.kind === "contradiction"));
+  const stored = await database.query("SELECT deterministic->'editorAnswer' AS answer, usage, cost FROM evimed_review.reviews WHERE id=$1", [/** @type {any} */ (started).reviewId]);
+  assert.equal(stored.rows[0].answer.emptyAnswers, 1);
+  assert.equal(stored.rows[0].usage.completionTokens, 600, "both answers were paid for, and both are counted");
+  assert.deepEqual([once.review.stats().editorEmpty, once.review.stats().editorFailures], [1, 0]);
+
+  const twice = service({ modelAnswers: [SILENT, SILENT, QUIET] });
+  const failed = await settled(twice.review, /** @type {any} */ (await twice.review.startDeliverableReview(identity, { ...input, runId: "native_empty_twice" })).reviewId);
+  assert.equal(failed.status, "done", "the deterministic half stands");
+  assert.equal(failed.editor, "failed");
+  assert.equal(failed.editorError, "review_editor_empty");
+  assert.equal(failed.pass, 0, "a next submission may still have an editor pass");
+  assert.equal(twice.prompts.length, 2, "never a third call");
+  assert.ok(failed.findings.every((/** @type {any} */ finding) => finding.origin === "code"));
+  assert.deepEqual([twice.review.stats().editorEmpty, twice.review.stats().editorFailures], [1, 1]);
+});
+
 test("a docker runtime's own root is not where this process reads: the package comes from the host copy", options, async () => {
   // The first live review (2026-09-23) read nothing: under docker the delivery
   // root is `/workspace`, the path inside the runtime container.
   const synced = [];
   const runtimeManager = { workspaceRootForDelivery: async (/** @type {any} */ project) => { synced.push(project.id); return "/workspace"; } };
-  const { review, prompts } = service({ modelAnswers: [{ findings: [], checklist: [], acceptance: [] }], runtimeManager });
+  const { review, prompts } = service({ modelAnswers: [QUIET], runtimeManager });
   const started = await review.startDeliverableReview({ userId, projectId }, {
     runId: "native_docker_root", sessionId: "s-docker", deliverableId: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", attempt: 1,
   });

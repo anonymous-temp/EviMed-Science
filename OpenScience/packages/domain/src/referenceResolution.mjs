@@ -49,12 +49,13 @@ const TITLE_STOPWORDS = new Set([
 
 /**
  * The numbered entries of a report's reference list, continuation lines
- * joined to their entry.
- * @param {unknown} reportText @returns {ReferenceEntry[]}
+ * joined to their entry. `bounds` is where the list is, when the caller reads
+ * a text that is not held to the report's `## 参考文献` heading (a chat reply).
+ * @param {unknown} reportText @param {{ headingEnd: number, end: number } | null} [bounds]
+ * @returns {ReferenceEntry[]}
  */
-export function referenceEntries(reportText) {
+export function referenceEntries(reportText, bounds = referenceListBounds(String(reportText ?? ''))) {
   const text = String(reportText ?? '')
-  const bounds = referenceListBounds(text)
   if (!bounds) return []
   /** @type {{ number: number, lines: string[] }[]} */
   const entries = []
