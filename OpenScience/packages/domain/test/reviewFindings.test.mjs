@@ -4,13 +4,17 @@ import test from 'node:test'
 import {
   REVIEW_ANSWER_REQUIRED_KINDS,
   REVIEW_DECIDABLE_KINDS,
+  REVIEW_EDITOR_FINDINGS_LIMIT,
   REVIEW_EDITOR_OUTPUT_SCHEMA,
   REVIEW_FINDING_KINDS,
   REVIEW_FINDING_KIND_LABELS_ZH,
   REVIEW_JUDGMENT_KINDS,
+  REVIEW_NO_FINDING,
   acceptEditorChecks,
   acceptEditorFindings,
   acceptReviewResponses,
+  editorSaidNothing,
+  reviewEditorSchema,
   reviewSeverity,
   unansweredFindings,
 } from '../index.mjs'
@@ -122,6 +126,38 @@ test('a checklist answer that copies the whole label still names its item, never
   assert.deepEqual(checklist, [{ item: 'E1', status: 'absent' }, { item: 'E10', status: 'not_applicable' }], 'the first answer for E1 stands; X9 was never asked')
   assert.deepEqual(acceptance, [{ item: 'A1', met: false }])
   assert.deepEqual(returned, { checklist: 4, acceptance: 1 })
+})
+
+test('an answer with no finding and no checklist or acceptance entry says nothing, where something was asked', () => {
+  // The live answer of 2026-09-23, after 10,592 tokens of thinking over a 64 KB package.
+  assert.equal(editorSaidNothing({ findings: [], checklist: [], acceptance: [] }, 21), true)
+  assert.equal(editorSaidNothing(null, 21), true, 'no answer at all')
+  // One absent item is an answer: the editor looked and found it missing.
+  assert.equal(editorSaidNothing({ findings: [], checklist: [{ item: 'E2', status: 'absent', evidence: '' }], acceptance: [] }, 21), false)
+  assert.equal(editorSaidNothing({ findings: [{ location: 'CLM-001' }], checklist: [], acceptance: [] }, 21), false)
+  // Asked nothing, found nothing: a clean answer.
+  assert.equal(editorSaidNothing({ findings: [], checklist: [], acceptance: [] }, 0), false)
+})
+
+test('the schema one package is reviewed under asks exactly its items by id, and one finding entry at least', () => {
+  const schema = /** @type {any} */ (reviewEditorSchema({ checklistIds: ['E1', 'E2', 'E1'], acceptanceCount: 2 }))
+  assert.deepEqual([schema.properties.checklist.minItems, schema.properties.checklist.maxItems], [2, 2])
+  assert.deepEqual(schema.properties.checklist.items.properties.item.enum, ['E1', 'E2'])
+  assert.deepEqual(schema.properties.acceptance.items.properties.item.enum, ['A1', 'A2'])
+  assert.deepEqual([schema.properties.findings.minItems, schema.properties.findings.maxItems], [1, REVIEW_EDITOR_FINDINGS_LIMIT])
+  assert.deepEqual(schema.properties.findings.items.properties.kind.enum, [...REVIEW_JUDGMENT_KINDS, REVIEW_NO_FINDING])
+  assert.deepEqual(schema.required, ['findings', 'checklist', 'acceptance'])
+  // Nothing asked: the list must stay empty rather than be invented.
+  const bare = /** @type {any} */ (reviewEditorSchema({ checklistIds: [], acceptanceCount: 0 }))
+  assert.equal(bare.properties.acceptance.maxItems, 0)
+  assert.equal(bare.properties.checklist.maxItems, 0)
+  // The shared schema is untouched.
+  assert.equal(/** @type {any} */ (REVIEW_EDITOR_OUTPUT_SCHEMA).properties.findings.minItems, undefined)
+})
+
+test('the entry an editor with nothing to report writes is neither a finding nor a dropped one', () => {
+  const { findings, dropped } = acceptEditorFindings({ findings: [{ location: '', kind: REVIEW_NO_FINDING, evidence: '', fix: '' }] }, { haystacks: [source] })
+  assert.deepEqual([findings.length, dropped.length], [0, 0])
 })
 
 test('a writer answers a finding by id: fixed, or declined with a reason; anything else is refused and still owed', () => {

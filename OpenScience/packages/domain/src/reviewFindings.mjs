@@ -156,6 +156,56 @@ export const REVIEW_EDITOR_OUTPUT_SCHEMA = Object.freeze({
   },
 })
 
+/** The kind of the one entry an editor with nothing to report writes. Never a finding. */
+export const REVIEW_NO_FINDING = 'none'
+
+/**
+ * Findings one editor answer may hold. Said in the prompt and enforced by the
+ * schema: asked in prose only, one answer on 2026-09-23 wrote 119 findings at
+ * 800–960 characters of evidence each and was cut off at the 32,000-token
+ * output ceiling before its JSON closed — paid for, and unreadable.
+ */
+export const REVIEW_EDITOR_FINDINGS_LIMIT = 25
+
+/**
+ * The editor's output schema for one package: the checklist and the
+ * acceptance list hold exactly the items asked, by id, and the findings hold
+ * one entry at least — kind `none` when there is nothing to report.
+ *
+ * Why the counts are in the schema, not only in the prompt: on 2026-09-23 the
+ * editor, having thought through every checklist item and settled on its
+ * findings, closed the arrays empty in two of six answers over a real 64 KB
+ * package — a sampled `]` where `{` belonged — and the review read as a pass
+ * that found nothing. The provider's constrained decoder honours minItems and
+ * maxItems. Forcing the checklist alone still left the findings skipped in
+ * two of five answers; forcing the findings too, none of fourteen were, and
+ * none of them used `none`. The findings are bounded above for the other
+ * failure the same runs showed (REVIEW_EDITOR_FINDINGS_LIMIT).
+ * @param {{ checklistIds: readonly string[], acceptanceCount: number }} input
+ */
+export function reviewEditorSchema({ checklistIds, acceptanceCount }) {
+  const base = /** @type {any} */ (REVIEW_EDITOR_OUTPUT_SCHEMA).properties
+  const ids = [...new Set(checklistIds.map(String))]
+  const labels = Array.from({ length: Math.max(0, Math.floor(Number(acceptanceCount) || 0)) }, (_, index) => `A${index + 1}`)
+  /** Exactly these items, each named by one of them; none when none were asked. @param {any} list @param {string[]} names */
+  const exactly = (list, names) => (names.length
+    ? { ...list, minItems: names.length, maxItems: names.length, items: { ...list.items, properties: { ...list.items.properties, item: { ...list.items.properties.item, enum: names } } } }
+    : { ...list, maxItems: 0 })
+  return {
+    ...REVIEW_EDITOR_OUTPUT_SCHEMA,
+    properties: {
+      findings: {
+        ...base.findings,
+        minItems: 1,
+        maxItems: REVIEW_EDITOR_FINDINGS_LIMIT,
+        items: { ...base.findings.items, properties: { ...base.findings.items.properties, kind: { type: 'string', enum: [...REVIEW_JUDGMENT_KINDS, REVIEW_NO_FINDING] } } },
+      },
+      checklist: exactly(base.checklist, ids),
+      acceptance: exactly(base.acceptance, labels),
+    },
+  }
+}
+
 /**
  * @typedef {object} ReviewFinding
  * @property {string} id              stable within one review: `F01`…
@@ -242,6 +292,8 @@ export function acceptEditorFindings(raw, { haystacks, promoted = [], idPrefix =
   const seen = new Set()
   for (const entry of list) {
     const kind = String(entry?.kind ?? '')
+    // The entry an editor with nothing to report writes (reviewEditorSchema).
+    if (kind === REVIEW_NO_FINDING) continue
     if (!REVIEW_JUDGMENT_KINDS.includes(/** @type {any} */ (kind))) {
       dropped.push({ kind, reason: 'kind' })
       continue
@@ -323,6 +375,24 @@ export function acceptEditorChecks(raw, { haystacks, checklistItems, acceptanceI
     }
   }
   return { checklist, acceptance, returned: { checklist: rawChecklist.length, acceptance: rawAcceptance.length } }
+}
+
+/**
+ * Whether an editor's answer said nothing at all where it was asked
+ * something: no finding, and not one checklist or acceptance entry. That is
+ * no review, not the review of a clean package — on 2026-09-23 the editor,
+ * after 10,592 tokens of thinking over a real 64 KB package, wrote
+ * `{"findings":[],"checklist":[],"acceptance":[]}`, and four other passes over
+ * the same package answered all nineteen checklist items.
+ * @param {unknown} raw  the editor's parsed answer
+ * @param {number} asked  checklist and acceptance items it was asked
+ */
+export function editorSaidNothing(raw, asked) {
+  const count = (/** @type {string} */ key) => {
+    const list = /** @type {any} */ (raw)?.[key]
+    return Array.isArray(list) ? list.length : 0
+  }
+  return asked > 0 && count('findings') + count('checklist') + count('acceptance') === 0
 }
 
 /**

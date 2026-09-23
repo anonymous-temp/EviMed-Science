@@ -29,6 +29,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
+import { loadConfig } from "../src/config.mjs";
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const deployDir = path.join(repoRoot, "deploy/web");
 
@@ -198,7 +200,9 @@ const operatorLevers = {
   // endpoint it calls, and the bounds on what one review may cost and take. A
   // lever that does not arrive leaves the reviewer off while the operator
   // believes it is on — or on, and paying, while they believe it is off.
-  OPEN_SCIENCE_REVIEW_ENABLED: ["open-science-web"],
+  // The controller writes EVIMED_REVIEW_ENABLED into every runtime it
+  // launches; without the switch there, no submission ever asked (2026-09-23).
+  OPEN_SCIENCE_REVIEW_ENABLED: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_REVIEW_MODEL: ["open-science-web"],
   OPEN_SCIENCE_REVIEW_API_BASE: ["open-science-web"],
   OPEN_SCIENCE_REVIEW_EDITOR_TIMEOUT_MS: ["open-science-web"],
@@ -279,5 +283,90 @@ test("no compose file pins an operator lever to a literal", async () => {
         );
       }
     }
+  }
+});
+
+/** Settings the launch plan reads that the controller does not need, and why.
+ *  Each must still be true: read by the plan, received by the web API, absent
+ *  from the controller. */
+const controllerNeedsNot = {
+  // The controller takes the capsule and revision gateway addresses from the
+  // web API's request and checks them against its own fixed endpoints
+  // (runtimeControllerServer.mjs); the store decides only the default address
+  // it never computes.
+  OPEN_SCIENCE_STATE_STORE: "the capsule and revision addresses arrive in the request",
+  // The port only makes up the web-search gateway address when none is given,
+  // and the controller is given one.
+  OPEN_SCIENCE_PORT: "the web-search gateway address is passed whole",
+  // The API owns token issuance; this privileged process deliberately holds
+  // no signing key (runtimeManager.mjs), and the two gateway addresses the key
+  // would unlock arrive in the request.
+  OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET: "the controller holds no signing key, by design",
+};
+
+test("every setting the controller's launch plan reads reaches the controller wherever it reaches the web API", async () => {
+  // The controller builds each runtime's launch arguments from its own
+  // environment. A setting the web API receives and the controller does not
+  // is one the deployment believes it made and no runtime ever sees: until
+  // 2026-09-23 every runtime started with EVIMED_REVIEW_ENABLED=0 while
+  // readiness and /api/me said the reviewer was on.
+  const source = await readFile(path.join(repoRoot, "apps/server/src/runtimeManager.mjs"), "utf8");
+  /** @type {Map<string, string>} */
+  const bodies = new Map([...source.matchAll(/^(?:export )?(?:async )?function (\w+)\([\s\S]*?^\}\n/gm)].map((match) => [match[1], match[0]]));
+  /** @type {Set<string>} */
+  const read = new Set();
+  const seen = new Set();
+  const queue = ["buildRuntimeLaunchPlan"];
+  while (queue.length) {
+    const name = String(queue.shift());
+    if (seen.has(name) || !bodies.has(name)) continue;
+    seen.add(name);
+    const body = String(bodies.get(name));
+    for (const match of body.matchAll(/\bconfig\.(\w+)/g)) read.add(match[1]);
+    for (const match of body.matchAll(/\b(\w+)\(config\b/g)) queue.push(match[1]);
+  }
+  assert.ok(read.has("runtimeReviewEnabled") && read.has("runtimeMemoryLimit") && read.has("webSearchUrl") && read.size >= 25,
+    `the walk read ${read.size} settings from the launch plan; it did not walk`);
+
+  // Which variables move each of those settings, asked of loadConfig itself,
+  // so an indirection (reviewConfigured, a fallback name) is followed.
+  const configSource = await readFile(path.join(repoRoot, "apps/server/src/config.mjs"), "utf8");
+  const names = [...new Set(configSource.match(/OPEN_SCIENCE_[A-Z0-9_]+/g) ?? [])];
+  const saved = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith("OPEN_SCIENCE_")));
+  /** @type {Map<string, Set<string>>} */
+  const moves = new Map();
+  try {
+    for (const key of Object.keys(saved)) delete process.env[key];
+    const base = /** @type {Record<string, unknown>} */ (loadConfig({ rootDir: repoRoot }));
+    for (const name of names) {
+      for (const value of ["true", "7", "probe-value", "http://probe.invalid/x"]) {
+        process.env[name] = value;
+        let probed;
+        try { probed = /** @type {Record<string, unknown>} */ (loadConfig({ rootDir: repoRoot })); } catch { probed = null; }
+        delete process.env[name];
+        if (!probed) continue;
+        for (const key of read) {
+          if (JSON.stringify(probed[key]) !== JSON.stringify(base[key])) moves.set(name, (moves.get(name) ?? new Set()).add(key));
+        }
+      }
+    }
+  } finally {
+    for (const name of names) delete process.env[name];
+    Object.assign(process.env, saved);
+  }
+  assert.ok(moves.get("OPEN_SCIENCE_REVIEW_ENABLED")?.has("runtimeReviewEnabled"), "loadConfig was not probed; the mapping is empty");
+
+  const files = await composeFiles();
+  /** @param {string} service */
+  const received = (service) => new Set(files.flatMap(({ text }) => Object.keys(YAML.parse(text, { merge: true })?.services?.[service]?.environment ?? {})));
+  const web = received("open-science-web");
+  const controller = received("open-science-runtime-controller");
+  assert.ok(web.size >= 100 && controller.size >= 20, "the compose files were not read");
+
+  const gaps = [...moves.keys()].filter((name) => web.has(name) && !controller.has(name)).sort();
+  const unexplained = gaps.filter((name) => !Object.hasOwn(controllerNeedsNot, name));
+  assert.deepEqual(unexplained, [], `the web API receives ${unexplained.join(", ")} and the controller, which launches the runtimes, does not: ${unexplained.map((name) => `${name} → ${[...(moves.get(name) ?? [])].join("/")}`).join("; ")}`);
+  for (const name of Object.keys(controllerNeedsNot)) {
+    assert.ok(gaps.includes(name), `${name} no longer needs an exemption from the controller's environment; drop it from the list`);
   }
 });

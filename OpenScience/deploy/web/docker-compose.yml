@@ -1348,6 +1348,17 @@ services:
       OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_TOKENS:
       OPEN_SCIENCE_RUNTIME_COMPACTION_MAX_REQUEST_BYTES:
       OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: ${OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES:-12582912}
+      # And every other setting the launch plan reads, as the web API has it.
+      # Until 2026-09-23 these four reached only the web API, so every runtime
+      # started with EVIMED_REVIEW_ENABLED=0 — a submission never asked for the
+      # independent review, while readiness and /api/me said it was on — and
+      # the kernel's web registry had no search provider. The test in
+      # deploymentEnvReachesTheContainer.test.mjs derives this list from the
+      # launch plan's own reads.
+      OPEN_SCIENCE_REVIEW_ENABLED:
+      OPEN_SCIENCE_OPERATOR_USERS:
+      OPEN_SCIENCE_WEB_SEARCH_URL: ${OPEN_SCIENCE_WEB_SEARCH_URL:-}
+      OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/search/v1/query}
       <<: *runtime-caps
     volumes:
       - open-science-data:/data:ro

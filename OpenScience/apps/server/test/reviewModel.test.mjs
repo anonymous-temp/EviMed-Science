@@ -15,9 +15,10 @@ const config = {
 };
 
 /** An SSE response the way DashScope streams one (recorded shape, 2026-09-23). @param {string[]} contents @param {any} usage */
-function streamed(contents, usage) {
+function streamed(contents, usage, finish = "stop") {
   const events = [
     ...contents.map((content, index) => ({ id: "chatcmpl-test", model: "qwen3.8-max-0902", object: "chat.completion.chunk", choices: [{ index: 0, delta: index === 0 ? { role: "assistant", content, reasoning_content: "思考。" } : { content } }] })),
+    { id: "chatcmpl-test", model: "qwen3.8-max-0902", object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: finish }] },
     { id: "chatcmpl-test", model: "qwen3.8-max-0902", object: "chat.completion.chunk", choices: [], usage },
   ];
   const text = `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`;
@@ -100,13 +101,15 @@ test("every failure is a named code, and the reservation is closed the way the c
     [answering(503, {}), "review_model_upstream_error"],
     [/** @type {any} */ (async () => { throw new TypeError("fetch failed"); }), "review_model_unreachable"],
     [/** @type {any} */ (async () => streamed(["not json"], { prompt_tokens: 1, completion_tokens: 1 })), "review_model_response_invalid"],
+    // Cut off at the ceiling mid-string: the ceiling is what to look at, not the model's JSON.
+    [/** @type {any} */ (async () => streamed(['{"findings":[{"location":"CLM-0'], { prompt_tokens: 1, completion_tokens: 32_000 }, "length")), "review_model_truncated"],
   ];
   for (const [fetchImpl, code] of cases) {
     const ledger = fakeLedger();
     await assert.rejects(callReviewModel({ config, usageLedger: ledger, fetchImpl }, call), (error) => error instanceof ReviewModelError && error.code === code, String(code));
     const last = ledger.calls.at(-1);
     if (code === "review_model_unreachable") assert.equal(last[0], "release", "never dispatched is released");
-    else if (code === "review_model_response_invalid") assert.equal(last[0], "settle", "a bad answer was still billed");
+    else if (code === "review_model_response_invalid" || code === "review_model_truncated") assert.equal(last[0], "settle", "a bad answer was still billed");
     else assert.equal(last[0], "uncertain", `${code}: dispatched and answered without usage is uncertain`);
   }
 });

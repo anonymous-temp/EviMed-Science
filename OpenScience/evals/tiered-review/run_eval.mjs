@@ -28,8 +28,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
-  REPLY_CHECK_OUTPUT_SCHEMA, REVIEW_EDITOR_OUTPUT_SCHEMA, acceptEditorChecks, acceptEditorFindings, acceptReplyVerdicts, numericTraceFindings,
-  referenceEntries, referenceLookups, referenceResolutionFindings, replyCitedSentences, replyReviewTier, statConsistencyFindings,
+  REPLY_CHECK_OUTPUT_SCHEMA, acceptEditorChecks, acceptEditorFindings, acceptReplyVerdicts, editorSaidNothing, numericTraceFindings,
+  referenceEntries, referenceLookups, referenceResolutionFindings, replyCitedSentences, replyReviewTier, reviewEditorSchema, statConsistencyFindings,
 } from "../../packages/domain/index.mjs";
 import { createReferenceResolver } from "../../apps/server/src/referenceResolver.mjs";
 import { callReviewModel } from "../../apps/server/src/reviewModel.mjs";
@@ -90,8 +90,9 @@ for (const item of cases.numeric.filter(wanted)) {
 
 for (const item of cases.editor.filter(wanted)) {
   const { findings, dropped } = acceptEditorFindings(item.raw, { haystacks: [item.haystack] });
-  record("editor", item.id, findings.length === item.expectKept && same(dropped.map((entry) => entry.reason), item.expectDropped), {
-    kept: findings.length, dropped: dropped.map((entry) => entry.reason),
+  const silent = editorSaidNothing(item.raw, Number(item.asked ?? 0));
+  record("editor", item.id, findings.length === item.expectKept && same(dropped.map((entry) => entry.reason), item.expectDropped) && silent === Boolean(item.expectSilent), {
+    kept: findings.length, dropped: dropped.map((entry) => entry.reason), silent,
   });
 }
 
@@ -119,12 +120,13 @@ const failure = (error) => ({ error: error?.code ?? String(error), note: `model 
 // The reply check, with the control plane's own prompt, sources and schema.
 for (const item of cases.replies.filter(wanted)) {
   const tier = replyReviewTier(item.reply);
-  const tierOk = tier.tier === item.expectTier;
+  const { sentences, references } = replyCitedSentences(item.reply);
+  // A cited reply whose sentences are not read is a check that judged nothing.
+  const tierOk = tier.tier === item.expectTier && (item.expectCitedSentences == null || sentences.length === item.expectCitedSentences);
   if (!values.live || !item.expectLiveVerdict) {
-    record("replies", item.id, tierOk, { tier: tier.tier, medicines: tier.medicines });
+    record("replies", item.id, tierOk, { tier: tier.tier, medicines: tier.medicines, citedSentences: sentences.length });
     continue;
   }
-  const { sentences, references } = replyCitedSentences(item.reply);
   const cited = references.filter((reference) => sentences.some((sentence) => sentence.numbers.includes(reference.number)));
   const readable = await /** @type {any} */ (resolver).sourceTexts(cited);
   for (let sample = 1; sample <= samples; sample += 1) {
@@ -176,7 +178,7 @@ for (const item of values.live ? (cases.editorLive ?? []).filter(wanted) : []) f
         deterministic: { references: null, referenceFindings: [], numeric: null, stats: [] }, previousFindings: [],
       }) },
     ],
-    schema: REVIEW_EDITOR_OUTPUT_SCHEMA, schemaName: "review_findings",
+    schema: reviewEditorSchema({ checklistIds: checklist.map((entry) => entry.id), acceptanceCount: 0 }), schemaName: "review_findings",
     thinking: { enabled: true, budget: Number(review.thinkingBudget) }, maxTokens: 24_000, timeoutMs: 900_000,
   });
   if ("error" in answer) {
@@ -198,9 +200,11 @@ for (const item of values.live ? (cases.editorLive ?? []).filter(wanted) : []) f
       .filter((finding) => want.kinds.includes(finding.kind) || (want.forbidFix && new RegExp(want.forbidFix).test(finding.fix)))
       .map((finding) => `${finding.kind}: ${finding.fix.slice(0, 60)}`),
   }));
-  record("editor-live", sampled(item.id, sample), found.every((entry) => entry.hit) && clean.every((entry) => !entry.flagged.length), {
+  const silent = editorSaidNothing(answer.value, checklist.length);
+  record("editor-live", sampled(item.id, sample), !silent && found.every((entry) => entry.hit) && clean.every((entry) => !entry.flagged.length), {
     found, clean, findings, dropped, raw: answer.value, checklist: checks.checklist, usage: answer.usage, cost: answer.cost, model: answer.model, reasoningChars: answer.reasoningChars, ms: answer.ms,
-    note: `${findings.length} kept, ${dropped.length} dropped; planted ${found.filter((entry) => entry.hit).length}/${found.length}; false alarms ${clean.flatMap((entry) => entry.flagged).length}; ¥${answer.cost.toFixed(3)}; ${Math.round(answer.ms / 1000)} s`,
+    silent, checklistAnswered: checks.returned.checklist,
+    note: `${silent ? "SAID NOTHING; " : ""}${findings.length} kept, ${dropped.length} dropped; checklist ${checks.returned.checklist}/${checklist.length}; planted ${found.filter((entry) => entry.hit).length}/${found.length}; false alarms ${clean.flatMap((entry) => entry.flagged).length}; ¥${answer.cost.toFixed(3)}; ${Math.round(answer.ms / 1000)} s`,
   });
 }
 
