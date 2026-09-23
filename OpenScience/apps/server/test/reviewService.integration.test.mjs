@@ -81,8 +81,8 @@ function modelAnswer(value) {
   return new Response(`${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`, { status: 200, headers: { "content-type": "text/event-stream" } });
 }
 
-/** @param {{ modelAnswers: any[], notifications?: any, imService?: any }} input */
-function service({ modelAnswers, notifications = null, imService = null }) {
+/** @param {{ modelAnswers: any[], notifications?: any, imService?: any, runtimeManager?: any }} input */
+function service({ modelAnswers, notifications = null, imService = null, runtimeManager = null }) {
   /** @type {any[]} */
   const prompts = [];
   const answers = [...modelAnswers];
@@ -95,7 +95,7 @@ function service({ modelAnswers, notifications = null, imService = null }) {
       },
       agentRegistry: Promise.resolve({ get: () => ({ outputs: [{ path: "clinical-evidence-report.md" }, { path: "clinical-evidence-matrix.json" }] }) }),
       attributeRun: async () => "run_review_1",
-      notifications, imService, retryDelayMs: 0,
+      notifications, imService, runtimeManager, retryDelayMs: 0,
       fetchImpl: /** @type {any} */ (async (/** @type {string} */ _url, /** @type {any} */ init) => {
         prompts.push(JSON.parse(init.body));
         const next = answers.shift();
@@ -230,6 +230,32 @@ test("a transient provider failure is retried once; a second leaves the determin
   assert.equal(twice.prompts.length, 2, "never a third call");
   assert.ok(failed.findings.some((/** @type {any} */ finding) => finding.kind === "reference_unresolvable"));
   assert.deepEqual([twice.review.stats().editorRetries, twice.review.stats().editorFailures], [1, 1]);
+});
+
+test("a docker runtime's own root is not where this process reads: the package comes from the host copy", options, async () => {
+  // The first live review (2026-09-23) read nothing: under docker the delivery
+  // root is `/workspace`, the path inside the runtime container.
+  const synced = [];
+  const runtimeManager = { workspaceRootForDelivery: async (/** @type {any} */ project) => { synced.push(project.id); return "/workspace"; } };
+  const { review, prompts } = service({ modelAnswers: [{ findings: [], checklist: [], acceptance: [] }], runtimeManager });
+  const started = await review.startDeliverableReview({ userId, projectId }, {
+    runId: "native_docker_root", sessionId: "s-docker", deliverableId: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", attempt: 1,
+  });
+  const done = await settled(review, /** @type {any} */ (started).reviewId);
+  assert.equal(done.status, "done", JSON.stringify(done));
+  assert.equal(done.deterministic.references.references, 2, "the report's reference list was read");
+  assert.deepEqual(synced, [projectId], "the provider was still asked to bring the host copy up to date");
+  assert.match(prompts[0].messages[1].content, /Ghost A\. A trial that does not exist/, "the editor saw the report");
+});
+
+test("a deliverable with no readable file fails by name and never reaches the model", options, async () => {
+  const { review, prompts } = service({ modelAnswers: [{ findings: [{ location: "E1", kind: "missing_item", evidence: "", fix: "guess" }], checklist: [], acceptance: [] }] });
+  const started = await review.startDeliverableReview({ userId, projectId }, {
+    runId: "native_nothing", sessionId: "s-nothing", deliverableId: "d-absent", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", attempt: 1,
+  });
+  const failed = await settled(review, /** @type {any} */ (started).reviewId);
+  assert.deepEqual(failed, { reviewId: /** @type {any} */ (started).reviewId, status: "failed", code: "review_package_unreadable" });
+  assert.equal(prompts.length, 0, "no editor is paid to judge a package it was not shown");
 });
 
 test("a reply that cites or names a medicine is checked after it was shown; a contradicted medicine claim reaches a person", options, async () => {

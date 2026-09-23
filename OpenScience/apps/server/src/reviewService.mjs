@@ -358,11 +358,21 @@ export class ReviewService {
    * @param {{ id: string, identity: ReviewIdentity, project: any, runId: string | null, tier: { tier: 'L2'|'L3', safety: boolean }, input: Record<string, any>, previous: any[] }} job
    */
   async #review({ id, identity, project, runId, tier, input, previous }) {
-    const root = this.runtimeManager?.workspaceRootForDelivery
-      ? await this.runtimeManager.workspaceRootForDelivery(project)
-      : project.workspaceDir;
+    // Read from the host copy, which is where this process opens files.
+    // `workspaceRootForDelivery` answers a different question — the root the
+    // model's own paths are relative to, `/workspace` inside a docker runtime —
+    // and reading from it found nothing: the first live review (2026-09-23) had
+    // an empty package digest, and the editor, shown only the checklist, wrote
+    // fourteen findings the evidence rule then dropped. It is still asked, for
+    // its side effect: a remote provider brings the host copy up to date first
+    // (readRunSideActivity in agentRuns.mjs draws the same line).
+    await this.runtimeManager?.workspaceRootForDelivery?.(project)?.catch?.(() => {});
+    const root = project.workspaceDir;
     const outputs = await this.#declaredOutputs(input.capability);
     const files = await readDeliverable(root, input.deliverableId, outputs);
+    // Nothing to read is a named failure, never a review: an editor shown no
+    // package has nothing to judge and is paid to guess.
+    if (!files.size) throw Object.assign(new Error(`No file of deliverable ${input.deliverableId} could be read.`), { code: "review_package_unreadable" });
     const prose = [...files.entries()].filter(([name]) => name.endsWith(".md"));
     const report = prose.find(([name]) => /report|报告/i.test(name))?.[1] ?? prose[0]?.[1] ?? "";
     const packageText = [...files.entries()].map(([name, text]) => `${name}\n${text}`).join("\n\n");
