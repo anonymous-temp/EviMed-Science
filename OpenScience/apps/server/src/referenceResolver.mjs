@@ -54,6 +54,13 @@ export const SOURCE_TEXT_LIMIT = 4_000;
 function stripMarkup(value) {
   return String(value ?? "")
     .replace(/<[^>]+>/g, " ")
+    // Numeric references too: PubMed writes a Lancet decimal point as `&#xb7;`,
+    // and on 2026-09-23 a reader was shown `4&#xb7;88%` as a verbatim quote.
+    // `&amp;` last, so an escaped reference stays one.
+    .replace(/&#x([0-9a-f]{1,6});|&#(\d{1,7});/gi, (entity, hex, decimal) => {
+      const point = hex ? Number.parseInt(hex, 16) : Number(decimal);
+      return point > 0x1f && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff) ? String.fromCodePoint(point) : entity;
+    })
     .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
     .trim();
