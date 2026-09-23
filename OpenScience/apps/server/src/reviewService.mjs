@@ -478,6 +478,7 @@ export class ReviewService {
       const haystacks = [packageText, ...sources.map((source) => source.text)];
       const message = editorMessage({
         contractKind: input.contractKind, deliverableId: input.deliverableId, tier, files, claims, sources, checklist, acceptanceItems,
+        today: this.now().toISOString().slice(0, 10),
         deterministic: { references: references.metrics, referenceFindings: references.findings, numeric, stats }, previousFindings,
       });
       const edit = () => this.editors.run(() => callReviewModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
@@ -642,12 +643,13 @@ export class ReviewService {
     /** @type {{ code: string, severity: string, text: string, detail?: string }[]} */
     const notices = [];
     for (const review of latest.rows) {
-      const findings = (await this.database.query(`SELECT * FROM evimed_review.findings WHERE review_id=$1 ORDER BY finding_id`, [review.id])).rows;
-      const fixed = findings.filter((/** @type {any} */ row) => row.response === "fixed").length;
+      const findings = await this.#readerFindings(review);
+      const fixed = findings.filter((/** @type {any} */ row) => row.response === "fixed" || row.response === "resolved").length;
       const declined = findings.filter((/** @type {any} */ row) => row.response === "declined").length;
       const owed = findings.filter((/** @type {any} */ row) => REVIEW_ANSWER_REQUIRED_KINDS.includes(row.kind) && !row.response);
+      const advice = findings.length - fixed - declined - owed.length;
       const text = findings.length
-        ? `独立审查：交付物「${review.deliverable_id}」有 ${findings.length} 条审查发现（已修 ${fixed}，不改并说明 ${declined}，未回应 ${owed.length}）。`
+        ? `独立审查：交付物「${review.deliverable_id}」有 ${findings.length} 条审查发现（已修 ${fixed}，不改并说明 ${declined}，未回应 ${owed.length}${advice ? `，其余 ${advice} 条建议未处理` : ""}）。`
         : `独立审查：交付物「${review.deliverable_id}」没有发现需要处理的问题。`;
       notices.push({ code: "review_summary", severity: "advice", text, detail: text });
       for (const row of owed.slice(0, 8)) {
@@ -673,10 +675,38 @@ export class ReviewService {
     [identity.userId, identity.projectId, runId]);
     const out = [];
     for (const review of reviews.rows) {
-      const findings = await this.database.query(`SELECT * FROM evimed_review.findings WHERE review_id=$1 ORDER BY finding_id`, [review.id]);
-      out.push({ deliverableId: review.deliverable_id, contractKind: review.contract_kind, ...publicResult(review, findings.rows) });
+      out.push({ deliverableId: review.deliverable_id, contractKind: review.contract_kind, ...publicResult(review, await this.#readerFindings(review)) });
     }
     return out;
+  }
+
+  /**
+   * What a reader is shown for a deliverable's latest review: its own
+   * findings and, when it had no editor pass (the editor is spent after two
+   * passes, or the package did not change), the last editor pass's findings
+   * too. Each carried finding keeps its standing — the writer's answer, or
+   * `resolved` when its words are gone from the package the latest review
+   * read (`previous.resolved`, computed against that pass) — and its pass in
+   * its id (`2.F07`). Read from the latest review alone, a third,
+   * deterministic-only pass reported 「没有发现需要处理的问题」 over eleven
+   * findings the second pass had left in the report (2026-09-23).
+   * @param {any} review @returns {Promise<any[]>}
+   */
+  async #readerFindings(review) {
+    const own = (await this.database.query(`SELECT * FROM evimed_review.findings WHERE review_id=$1 ORDER BY finding_id`, [review.id])).rows;
+    if (Number(review.pass) > 0) return own;
+    const editorPass = (await this.database.query(`SELECT id, pass FROM evimed_review.reviews
+      WHERE user_id=$1 AND project_id=$2 AND socket_run_id=$3 AND deliverable_id=$4 AND status='done' AND pass > 0 AND created_at < $5
+      ORDER BY created_at DESC LIMIT 1`, [review.user_id, review.project_id, review.socket_run_id, review.deliverable_id, review.created_at])).rows[0];
+    if (!editorPass) return own;
+    const resolved = new Set(review.deterministic?.previous?.resolved ?? []);
+    const carried = (await this.database.query(`SELECT * FROM evimed_review.findings WHERE review_id=$1 AND origin='editor' ORDER BY finding_id`, [editorPass.id])).rows
+      .map((/** @type {any} */ row) => ({
+        ...row,
+        finding_id: `${editorPass.pass}.${row.finding_id}`,
+        response: row.response || (resolved.has(row.finding_id) ? "resolved" : null),
+      }));
+    return [...own, ...carried];
   }
 
   /* ------------------------------------------------------------------ L1 */
@@ -1059,9 +1089,14 @@ async function readJobOutputs(root, jobIds) {
  * repaired report shares the provider's cached prefix; the report last.
  * @param {Record<string, any>} input
  */
-export function editorMessage({ contractKind, deliverableId, tier, files, claims, sources = [], checklist, acceptanceItems, deterministic, previousFindings }) {
+export function editorMessage({ contractKind, deliverableId, tier, files, claims, sources = [], checklist, acceptanceItems, deterministic, previousFindings, today = "" }) {
   const parts = [];
   parts.push(`<submission contract="${contractKind}" deliverable="${deliverableId}" tier="${tier.tier}"${tier.safety ? " clinical=\"true\"" : ""}>`);
+  // The editor's own sense of "now" is its training data's: on 2026-09-23 it
+  // called a search date in 2026 「明显为笔误或占位符」. One date, from the
+  // service's clock (principle 17), in the message rather than the system
+  // prompt, so the prompt stays byte-stable for the provider's cache.
+  if (today) parts.push(`今天是 ${today}（UTC）。`);
   if (checklist.length) {
     parts.push("<checklist>", ...checklist.map((/** @type {any} */ item) => `${item.id}（${item.list}）${item.text}`), "</checklist>");
   }

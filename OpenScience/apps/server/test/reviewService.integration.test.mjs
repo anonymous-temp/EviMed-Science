@@ -165,6 +165,8 @@ test("a package is reviewed whole: references resolved, located findings kept, t
   // What the editor was shown: the checklist for the kind, the acceptance
   // item, the claim with its source excerpt, the resolution, the report last.
   const message = prompts[0].messages[1].content;
+  assert.match(message, /^<submission [^\n]*>\n今天是 \d{4}-\d{2}-\d{2}（UTC）。/, "the editor is told the date, not left to its training data's");
+  assert.equal(/\d{4}-\d{2}-\d{2}/.test(prompts[0].messages[0].content), false, "and the system prompt carries none, so it stays cacheable");
   assert.match(message, /E1（临床证据报告要素）/);
   assert.match(message, /A1 写明检索日期/);
   assert.match(message, /<sources>\n\[S1\] \.evimed-sources\/pubmed\/PMID1\/abc\/abstract\.md《Metformin versus placebo》\nMetformin versus placebo in type 2 diabetes\. Metformin lowered HbA1c by 0\.9 percentage points/, "the source once, whole");
@@ -273,6 +275,47 @@ test("an editor that says nothing at all is asked once more, and saying nothing 
   assert.equal(twice.prompts.length, 2, "never a third call");
   assert.ok(failed.findings.every((/** @type {any} */ finding) => finding.origin === "code"));
   assert.deepEqual([twice.review.stats().editorEmpty, twice.review.stats().editorFailures], [1, 1]);
+});
+
+test("after the editor is spent, the reader still sees what its last pass left in the report, never 「nothing to handle」", options, async () => {
+  // 2026-09-23, the first submit-path review on production: a third,
+  // deterministic-only pass said 「没有发现需要处理的问题」 over eleven findings
+  // the second pass had left in the report.
+  await fs.mkdir(path.join(workspace, "deliverables/d2"), { recursive: true });
+  const reportPath = path.join(workspace, "deliverables/d2/clinical-evidence-report.md");
+  await fs.writeFile(reportPath, REPORT);
+  await fs.writeFile(path.join(workspace, "deliverables/d2/clinical-evidence-matrix.json"), JSON.stringify(MATRIX));
+  const { review } = service({ modelAnswers: [
+    { findings: [{ location: "结论", kind: "wording", evidence: "该结论适用于所有成人。", fix: "限定人群。" }], checklist: [{ item: "E2", status: "absent", evidence: "" }], acceptance: [] },
+    { findings: [
+      { location: "结论", kind: "overclaim", evidence: "该结论适用于所有成人。", fix: "限定为试验人群。" },
+      { location: "CLM-001", kind: "wording", evidence: "二甲双胍使 HbA1c 较安慰剂降低 1.5%", fix: "改用来源的数字。" },
+    ], checklist: [{ item: "E2", status: "absent", evidence: "" }], acceptance: [] },
+  ] });
+  const identity = { userId, projectId };
+  const input = { runId: "native_carry", sessionId: "s-carry", deliverableId: "d2", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis" };
+  await settled(review, /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 1 })).reviewId);
+  await fs.writeFile(reportPath, `${REPORT}补充。\n`);
+  const second = await settled(review, /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 2 })).reviewId);
+  assert.deepEqual(second.findings.map((/** @type {any} */ finding) => [finding.id, finding.kind]), [["F01", "reference_unresolvable"], ["F02", "overclaim"], ["F03", "wording"]]);
+  // The writer fixes the number, in the report and its matrix, and leaves the
+  // overclaim; the editor is spent.
+  await fs.writeFile(reportPath, `${REPORT.replace("降低 1.5% [1]", "降低 0.9 个百分点 [1]")}补充。\n`);
+  await fs.writeFile(path.join(workspace, "deliverables/d2/clinical-evidence-matrix.json"),
+    JSON.stringify({ claims: [{ ...MATRIX.claims[0], claim: "二甲双胍使 HbA1c 较安慰剂降低 0.9 个百分点" }] }));
+  const third = await settled(review, /** @type {any} */ (await review.startDeliverableReview(identity, { ...input, attempt: 3 })).reviewId);
+  assert.equal(third.editor, "skipped");
+
+  const [view] = (await review.reviewsForRun(identity, "native_carry"));
+  assert.deepEqual(view.findings.map((/** @type {any} */ finding) => [finding.id, finding.kind, finding.response ?? null]), [
+    ["F01", "reference_unresolvable", null],
+    ["2.F02", "overclaim", null],
+    ["2.F03", "wording", "resolved"],
+  ], "the second pass's findings, the one whose words are gone marked resolved");
+  const notices = await review.reviewNoticesForRun(userId, projectId, "run_review_1");
+  const summary = notices.find((notice) => notice.code === "review_summary" && notice.text.includes("「d2」"));
+  assert.match(String(summary?.text), /3 条审查发现（已修 1，不改并说明 0，未回应 2）/);
+  assert.ok(notices.some((notice) => notice.code === "review_overclaim"), "the overclaim it left still owes an answer");
 });
 
 test("a docker runtime's own root is not where this process reads: the package comes from the host copy", options, async () => {
