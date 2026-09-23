@@ -322,8 +322,10 @@ function reviewSettings(overrides) {
     reviewModel: model,
     reviewApiBase: apiBase,
     reviewEditorTimeoutMs: integer("reviewEditorTimeoutMs", "OPEN_SCIENCE_REVIEW_EDITOR_TIMEOUT_MS", 900_000, 60_000, 3_600_000),
-    reviewThinkingBudget: integer("reviewThinkingBudget", "OPEN_SCIENCE_REVIEW_THINKING_BUDGET", Number(pin.thinkingBudget ?? 8_000), 0, 65_536),
-    reviewMaxOutputTokens: integer("reviewMaxOutputTokens", "OPEN_SCIENCE_REVIEW_MAX_OUTPUT_TOKENS", 24_000, 1_000, 131_072),
+    reviewThinkingBudget: integer("reviewThinkingBudget", "OPEN_SCIENCE_REVIEW_THINKING_BUDGET", Number(pin.thinkingBudget ?? 16_000), 0, 65_536),
+    // Room for the thinking budget and a full answer (a 64 KB package's pass
+    // answered in ~3k tokens after 8k of reasoning).
+    reviewMaxOutputTokens: integer("reviewMaxOutputTokens", "OPEN_SCIENCE_REVIEW_MAX_OUTPUT_TOKENS", 32_000, 1_000, 131_072),
     // Editor passes one deliverable may have in one turn: the first, and one
     // after the writer's repair. Deterministic checks are not counted.
     reviewEditorPasses: integer("reviewEditorPasses", "OPEN_SCIENCE_REVIEW_EDITOR_PASSES", 2, 1, 5),

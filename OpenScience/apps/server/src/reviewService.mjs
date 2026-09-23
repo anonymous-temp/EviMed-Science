@@ -86,9 +86,21 @@ const FILE_LIMIT_BYTES = 4 * 1024 * 1024;
 const PACKAGE_CHAR_LIMIT = 160_000;
 /** Claims the editor is shown with their sources. */
 const CLAIM_LIMIT = 160;
-/** Preserved sources read for the claims' excerpts. */
+/** Preserved sources read for the claims. */
 const SOURCE_FILE_LIMIT = 80;
-/** Characters of source on either side of a quote. */
+/**
+ * How much of each source the editor reads. A source is shown once, whole
+ * when it is short (an abstract is 2–4k characters); a longer one as the
+ * passages around the quotes cited from it. The first live pass over a real
+ * package (2026-09-23) was shown ±300 characters around each quote, and two of
+ * its four findings called a claim unsupported for details its own abstract
+ * states 400–550 characters away (2 secondary care centers in the Netherlands;
+ * a randomized controlled trial) — advice to delete correct text.
+ */
+const SOURCE_TEXT_FULL_LIMIT = 8_000;
+const SOURCE_WINDOW_RADIUS = 1_500;
+/** All sources together; past it, a source is shown as the narrow passage around its quotes. */
+const SOURCE_TEXT_TOTAL_LIMIT = 320_000;
 const EXCERPT_RADIUS = 300;
 /** Files of an engine job's output read for numbers, and their total bytes. */
 const JOB_FILE_LIMIT = 80;
@@ -153,26 +165,47 @@ function semaphore(limit) {
 }
 
 /**
- * The excerpt of a preserved source around the quote a claim cites, or the
- * source's opening when the quote cannot be found (the gate says so on its own).
- * @param {string} source @param {string} quote
+ * Where a quote starts in a source, found by its opening words, or -1.
+ * @param {string} lower  the source, lower-cased @param {string} quote
  */
-function excerptAround(source, quote) {
-  const text = String(source ?? "");
+function quoteOffset(lower, quote) {
   const wanted = String(quote ?? "").trim();
-  if (!text) return "";
-  const lower = text.toLowerCase();
   for (const probe of [wanted.slice(0, 60), wanted.slice(0, 30), wanted.slice(0, 15)]) {
     const needle = probe.trim().toLowerCase();
     if (needle.length < 8) continue;
     const at = lower.indexOf(needle);
-    if (at >= 0) {
-      const start = Math.max(0, at - EXCERPT_RADIUS);
-      const end = Math.min(text.length, at + wanted.length + EXCERPT_RADIUS);
-      return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
-    }
+    if (at >= 0) return at;
   }
-  return `${text.slice(0, EXCERPT_RADIUS * 2)}${text.length > EXCERPT_RADIUS * 2 ? "…" : ""}`;
+  return -1;
+}
+
+/**
+ * A source as the editor reads it: whole when short; otherwise the passages
+ * `radius` characters either side of each quote cited from it, merged, or the
+ * opening when no quote can be found (the gate reports that on its own).
+ * @param {string} source @param {readonly string[]} quotes @param {number} radius
+ */
+function sourceForEditor(source, quotes, radius) {
+  const text = String(source ?? "");
+  if (text.length <= SOURCE_TEXT_FULL_LIMIT && radius >= SOURCE_WINDOW_RADIUS) return text;
+  const lower = text.toLowerCase();
+  /** @type {[number, number][]} */
+  const spans = [];
+  for (const quote of quotes) {
+    const at = quoteOffset(lower, quote);
+    if (at >= 0) spans.push([Math.max(0, at - radius), Math.min(text.length, at + String(quote).length + radius)]);
+  }
+  if (!spans.length) spans.push([0, Math.min(text.length, radius * 2)]);
+  spans.sort((left, right) => left[0] - right[0]);
+  /** @type {[number, number][]} */
+  const merged = [];
+  for (const span of spans) {
+    const last = merged.at(-1);
+    if (last && span[0] <= last[1]) last[1] = Math.max(last[1], span[1]);
+    else merged.push([...span]);
+  }
+  const passages = merged.map(([start, end]) => `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`).join("\n");
+  return passages.length > SOURCE_TEXT_FULL_LIMIT ? `${passages.slice(0, SOURCE_TEXT_FULL_LIMIT - 1)}…` : passages;
 }
 
 /** The checklist items for a contract kind. @param {string} contractKind */
@@ -193,10 +226,10 @@ export function checklistFor(contractKind) {
  */
 export function editorSystemPrompt({ safety, pass }) {
   return [
-    "你是独立的同行编辑，审阅一份外部提交的研究交付物。你没有看过产出它的过程；不要重建它，也不要替它辩护。只依据提交的文件、给你的来源摘录和确定性核验结果判断。",
+    "你是独立的同行编辑，审阅一份外部提交的研究交付物。你没有看过产出它的过程；不要重建它，也不要替它辩护。只依据提交的文件、给你的来源原文和确定性核验结果判断；判断支持时看整篇来源原文，不只看引文那一句。",
     "",
     "按给定 JSON 结构回答：",
-    "- findings：每条是一个具体缺陷。location 写论断编号（CLM-012）、参考文献编号（[7]）、章节标题或清单条目号；evidence 是你依据的原文，必须从提交内容或来源摘录里逐字复制——不改字、不翻译、不概括、不拼接；给不出原文的问题不要写。fix 用中文写一句可执行的最小改法，不要重写整段。",
+    "- findings：每条是一个具体缺陷。location 写论断编号（CLM-012）、参考文献编号（[7]）、章节标题或清单条目号；evidence 是你依据的原文，必须从提交内容或来源原文里逐字复制——不改字、不翻译、不概括、不拼接；给不出原文的问题不要写。fix 用中文写一句可执行的最小改法，不要重写整段。",
     "- kind：contradiction（论断与其来源相反）、weak_support（来源对论断的支持弱于写法）、overclaim（结论强于证据，如相关写成因果、不显著写成有效、单项研究写成定论）、interpretation（统计或结果解读错误：效应方向、置信区间与 P 值、指标尺度、检验适用性）、missing_item（缺少清单或验收项要求的内容）、structure（结构问题）、wording（易误导的措辞）" + (safety ? "、safety（剂量、禁忌、相互作用、监测等用药安全方面的错误或遗漏）" : "") + "。",
     "- 只报告有原文依据的问题，宁缺毋滥，最多 25 条，按严重程度排序。确定性核验已经报告的问题不要重复。",
     "- fix 里引用词句用「」，不要用英文双引号——它会提前结束 JSON 字符串，后面写的内容会丢失。evidence 只放原文本身，不加引号、不加「报告原文：」之类的标签；要把报告和来源对照着给，就各占一行。原文里本身带英文双引号时，按 JSON 规则写成 \\\"。",
@@ -404,7 +437,7 @@ export class ReviewService {
 
     // The claims and what their sources say around each quote (the
     // clinical evidence report is the one kind with a claim matrix).
-    const claims = await claimsWithExcerpts(root, files.get(MATRIX_FILE));
+    const { claims, sources } = await claimsWithSources(root, files.get(MATRIX_FILE));
     const checklist = checklistFor(input.contractKind);
     const acceptanceItems = (Array.isArray(input.acceptance) ? input.acceptance : []).map((item) => clip(item, 240)).filter(Boolean).slice(0, 10);
 
@@ -434,9 +467,9 @@ export class ReviewService {
     if (lastEditor) carried = await this.#carriedFindings(lastEditor.id, packageText);
     if (editorAllowed) {
       const previousFindings = lastEditor ? await this.#findingsWithResponses(lastEditor.id) : [];
-      const haystacks = [packageText, ...claims.flatMap((claim) => claim.sources.map((/** @type {any} */ source) => source.excerpt))];
+      const haystacks = [packageText, ...sources.map((source) => source.text)];
       const message = editorMessage({
-        contractKind: input.contractKind, deliverableId: input.deliverableId, tier, files, claims, checklist, acceptanceItems,
+        contractKind: input.contractKind, deliverableId: input.deliverableId, tier, files, claims, sources, checklist, acceptanceItems,
         deterministic: { references: references.metrics, referenceFindings: references.findings, numeric, stats }, previousFindings,
       });
       const edit = () => this.editors.run(() => callReviewModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
@@ -898,36 +931,55 @@ async function readWorkspaceText(root, relative) {
 }
 
 /**
- * The claims of a clinical evidence matrix with an excerpt of each source
- * around the quote it cites.
+ * The claims of a clinical evidence matrix, and the sources they cite, each
+ * source once (S1, S2… in order of first citation) as `sourceForEditor` reads it.
  * @param {string} root @param {string | undefined} matrixText
+ * @returns {Promise<{ claims: { claimId: string, claimType: string, claim: string, sources: { sourceId: string | null, artifactPath: string, quote: string, title: string }[] }[], sources: { id: string, artifactPath: string, title: string, text: string }[] }>}
  */
-async function claimsWithExcerpts(root, matrixText) {
-  if (!matrixText) return [];
+export async function claimsWithSources(root, matrixText) {
+  if (!matrixText) return { claims: [], sources: [] };
   let matrix;
-  try { matrix = JSON.parse(matrixText); } catch { return []; }
-  const claims = Array.isArray(matrix?.claims) ? matrix.claims.slice(0, CLAIM_LIMIT) : [];
-  /** @type {Map<string, string | null>} */
-  const sources = new Map();
-  const out = [];
-  for (const claim of claims) {
+  try { matrix = JSON.parse(matrixText); } catch { return { claims: [], sources: [] }; }
+  const raw = Array.isArray(matrix?.claims) ? matrix.claims.slice(0, CLAIM_LIMIT) : [];
+  /** @type {Map<string, { id: string, title: string, quotes: string[] }>} */
+  const cited = new Map();
+  const claims = raw.map((/** @type {any} */ claim) => {
     const entries = claim?.claimType === "synthesized" && Array.isArray(claim?.supportingSources)
       ? claim.supportingSources
       : [{ artifactPath: claim?.artifactPath, supportQuote: claim?.supportQuote, sourceTitle: claim?.sourceTitle }];
-    const withExcerpts = [];
-    for (const entry of entries.slice(0, 6)) {
-      const artifactPath = String(entry?.artifactPath ?? "");
-      if (!artifactPath.startsWith(`${SOURCES_DIR}/`) || artifactPath.includes("..")) {
-        withExcerpts.push({ artifactPath, quote: clip(entry?.supportQuote, 600), title: clip(entry?.sourceTitle, 200), excerpt: "" });
-        continue;
-      }
-      if (!sources.has(artifactPath) && sources.size < SOURCE_FILE_LIMIT) sources.set(artifactPath, await readWorkspaceText(root, artifactPath));
-      const source = sources.get(artifactPath) ?? null;
-      withExcerpts.push({ artifactPath, quote: clip(entry?.supportQuote, 600), title: clip(entry?.sourceTitle, 200), excerpt: source ? excerptAround(source, String(entry?.supportQuote ?? "")) : "" });
-    }
-    out.push({ claimId: String(claim?.claimId ?? ""), claimType: String(claim?.claimType ?? ""), claim: clip(claim?.claim, 800), sources: withExcerpts });
+    return {
+      claimId: String(claim?.claimId ?? ""),
+      claimType: String(claim?.claimType ?? ""),
+      claim: clip(claim?.claim, 800),
+      sources: entries.slice(0, 6).map((/** @type {any} */ entry) => {
+        const artifactPath = String(entry?.artifactPath ?? "");
+        const quote = clip(entry?.supportQuote, 600);
+        const title = clip(entry?.sourceTitle, 200);
+        const readable = artifactPath.startsWith(`${SOURCES_DIR}/`) && !artifactPath.includes("..");
+        if (!readable) return { sourceId: null, artifactPath, quote, title };
+        if (!cited.has(artifactPath) && cited.size < SOURCE_FILE_LIMIT) cited.set(artifactPath, { id: `S${cited.size + 1}`, title, quotes: [] });
+        const source = cited.get(artifactPath);
+        if (!source) return { sourceId: null, artifactPath, quote, title };
+        source.quotes.push(String(entry?.supportQuote ?? ""));
+        return { sourceId: source.id, artifactPath, quote, title };
+      }),
+    };
+  });
+  /** @type {{ id: string, artifactPath: string, title: string, text: string }[]} */
+  const sources = [];
+  let total = 0;
+  for (const [artifactPath, source] of cited) {
+    const text = await readWorkspaceText(root, artifactPath);
+    if (text == null) continue;
+    const shown = sourceForEditor(text, source.quotes, total < SOURCE_TEXT_TOTAL_LIMIT ? SOURCE_WINDOW_RADIUS : EXCERPT_RADIUS);
+    total += shown.length;
+    sources.push({ id: source.id, artifactPath, title: source.title, text: shown });
   }
-  return out;
+  const shownIds = new Set(sources.map((source) => source.id));
+  for (const claim of claims) {
+    for (const source of claim.sources) if (source.sourceId && !shownIds.has(source.sourceId)) source.sourceId = null;
+  }
+  return { claims, sources };
 }
 
 /**
@@ -976,7 +1028,7 @@ async function readJobOutputs(root, jobIds) {
  * repaired report shares the provider's cached prefix; the report last.
  * @param {Record<string, any>} input
  */
-export function editorMessage({ contractKind, deliverableId, tier, files, claims, checklist, acceptanceItems, deterministic, previousFindings }) {
+export function editorMessage({ contractKind, deliverableId, tier, files, claims, sources = [], checklist, acceptanceItems, deterministic, previousFindings }) {
   const parts = [];
   parts.push(`<submission contract="${contractKind}" deliverable="${deliverableId}" tier="${tier.tier}"${tier.safety ? " clinical=\"true\"" : ""}>`);
   if (checklist.length) {
@@ -985,14 +1037,18 @@ export function editorMessage({ contractKind, deliverableId, tier, files, claims
   if (acceptanceItems.length) {
     parts.push("<acceptance>", ...acceptanceItems.map((/** @type {string} */ item, /** @type {number} */ index) => `A${index + 1} ${item}`), "</acceptance>");
   }
+  if (sources.length) {
+    parts.push("<sources>");
+    for (const source of sources) parts.push(`[${source.id}] ${source.artifactPath}${source.title ? `《${source.title}》` : ""}`, source.text, "");
+    parts.push("</sources>");
+  }
   if (claims.length) {
     parts.push("<claims>");
     for (const claim of claims) {
       parts.push(`${claim.claimId} [${claim.claimType}] ${claim.claim}`);
       for (const source of claim.sources) {
-        parts.push(`  来源 ${source.artifactPath}${source.title ? `《${source.title}》` : ""}`);
+        parts.push(source.sourceId ? `  来源 ${source.sourceId}` : `  来源 ${source.artifactPath}${source.title ? `《${source.title}》` : ""}（原文未提供）`);
         if (source.quote) parts.push(`  引文：${source.quote}`);
-        if (source.excerpt) parts.push(`  来源摘录：${source.excerpt}`);
       }
     }
     parts.push("</claims>");
