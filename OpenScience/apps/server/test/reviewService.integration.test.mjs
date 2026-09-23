@@ -148,6 +148,11 @@ test("a package is reviewed whole: references resolved, located findings kept, t
   assert.match(done.findings[0].message, /10\.9999\/fabricated/);
   assert.equal(done.dropped, 1);
   assert.deepEqual(done.checklist, { present: 1, absent: ["E2"], unlocated: [] });
+  const stored = await database.query("SELECT deterministic->'editorAnswer' AS answer FROM evimed_review.reviews WHERE id=$1", [/** @type {any} */ (started).reviewId]);
+  assert.deepEqual(stored.rows[0].answer, {
+    findings: 3, checklistAsked: 19, checklistAnswered: 2, checklistKept: 2, acceptanceAsked: 1, acceptanceAnswered: 1, acceptanceKept: 1,
+    reasoningTokens: 0, thinkingBudget: 800,
+  }, "what the editor answered at all is kept beside what survived");
   assert.deepEqual(done.acceptance, { met: [], unmet: ["A1"], unlocated: [] });
   assert.equal(done.deterministic.references.unresolvable, 1);
   assert.equal(done.model, "qwen3.8-max-0902");

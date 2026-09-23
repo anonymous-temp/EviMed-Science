@@ -421,6 +421,8 @@ export class ReviewService {
     let dropped = [];
     /** @type {{ checklist: any[], acceptance: any[] }} */
     let checks = { checklist: [], acceptance: [] };
+    /** What the editor answered at all, against what it was asked and how much of its thinking it spent. @type {Record<string, number> | null} */
+    let editorAnswer = null;
     /** @type {Record<string, any>} */
     let usage = {};
     let cost = 0;
@@ -462,7 +464,14 @@ export class ReviewService {
         const accepted = acceptEditorFindings(answer.value, { haystacks, idPrefix: "E" });
         editorFindings = accepted.findings;
         dropped = accepted.dropped;
-        checks = acceptEditorChecks(answer.value, { haystacks, checklistItems: checklist, acceptanceItems });
+        const answeredChecks = acceptEditorChecks(answer.value, { haystacks, checklistItems: checklist, acceptanceItems });
+        checks = { checklist: answeredChecks.checklist, acceptance: answeredChecks.acceptance };
+        editorAnswer = {
+          findings: Array.isArray(answer.value?.findings) ? answer.value.findings.length : 0,
+          checklistAsked: checklist.length, checklistAnswered: answeredChecks.returned.checklist, checklistKept: answeredChecks.checklist.length,
+          acceptanceAsked: acceptanceItems.length, acceptanceAnswered: answeredChecks.returned.acceptance, acceptanceKept: answeredChecks.acceptance.length,
+          reasoningTokens: answer.usage.reasoningTokens, thinkingBudget: Number(this.config.reviewThinkingBudget ?? 8_000),
+        };
         usage = answer.usage;
         cost = answer.cost;
         model = answer.model;
@@ -507,6 +516,7 @@ export class ReviewService {
           stats: stats.length,
           previous: carried,
           editor: editorAllowed ? (editorError ? "failed" : "done") : (changed ? "skipped" : "unchanged"),
+          editorAnswer,
           acceptanceItems,
         }),
         JSON.stringify(checks.checklist), JSON.stringify(checks.acceptance), JSON.stringify(dropped), JSON.stringify(usage), cost, editorError]);

@@ -286,16 +286,20 @@ export function acceptEditorFindings(raw, { haystacks, promoted = [], idPrefix =
  *
  * @param {unknown} raw
  * @param {{ haystacks: readonly string[], checklistItems: readonly { id: string }[], acceptanceItems: readonly string[] }} input
- * @returns {{ checklist: { item: string, status: 'present'|'absent'|'not_applicable'|'unlocated' }[], acceptance: { item: string, met: boolean | null }[] }}
+ * @returns {{ checklist: { item: string, status: 'present'|'absent'|'not_applicable'|'unlocated' }[], acceptance: { item: string, met: boolean | null }[], returned: { checklist: number, acceptance: number } }}
+ *   `returned` counts what the reviewer answered at all, so an empty checklist
+ *   says whether it was skipped or answered under ids nobody gave it
  */
 export function acceptEditorChecks(raw, { haystacks, checklistItems, acceptanceItems }) {
   const known = new Set(checklistItems.map((item) => String(item.id)))
+  const rawChecklist = Array.isArray(/** @type {any} */ (raw)?.checklist) ? /** @type {any} */ (raw).checklist : []
+  const rawAcceptance = Array.isArray(/** @type {any} */ (raw)?.acceptance) ? /** @type {any} */ (raw).acceptance : []
   /** @type {{ item: string, status: 'present'|'absent'|'not_applicable'|'unlocated' }[]} */
   const checklist = []
   const answered = new Set()
-  for (const entry of Array.isArray(/** @type {any} */ (raw)?.checklist) ? /** @type {any} */ (raw).checklist : []) {
-    const item = String(entry?.item ?? '')
-    if (!known.has(item) || answered.has(item)) continue
+  for (const entry of rawChecklist) {
+    const item = answeredItem(entry?.item, known)
+    if (!item || answered.has(item)) continue
     answered.add(item)
     const status = String(entry?.status ?? '')
     if (status === 'present') {
@@ -306,11 +310,11 @@ export function acceptEditorChecks(raw, { haystacks, checklistItems, acceptanceI
   }
   /** @type {{ item: string, met: boolean | null }[]} */
   const acceptance = []
-  const labels = acceptanceItems.map((_, index) => `A${index + 1}`)
+  const labels = new Set(acceptanceItems.map((_, index) => `A${index + 1}`))
   const done = new Set()
-  for (const entry of Array.isArray(/** @type {any} */ (raw)?.acceptance) ? /** @type {any} */ (raw).acceptance : []) {
-    const item = String(entry?.item ?? '')
-    if (!labels.includes(item) || done.has(item)) continue
+  for (const entry of rawAcceptance) {
+    const item = answeredItem(entry?.item, labels)
+    if (!item || done.has(item)) continue
     done.add(item)
     if (entry?.met === true) {
       acceptance.push({ item, met: evidenceLocated(lines(entry?.evidence, EVIDENCE_MAX), haystacks) ? true : null })
@@ -318,7 +322,20 @@ export function acceptEditorChecks(raw, { haystacks, checklistItems, acceptanceI
       acceptance.push({ item, met: false })
     }
   }
-  return { checklist, acceptance }
+  return { checklist, acceptance, returned: { checklist: rawChecklist.length, acceptance: rawAcceptance.length } }
+}
+
+/**
+ * The item an answer names: its id as given, or the id it opens with — the
+ * prompt lists `E1（临床证据报告要素）…`, and an answer that copies the whole
+ * label still means E1 (never E10).
+ * @param {unknown} value @param {ReadonlySet<string>} known
+ */
+function answeredItem(value, known) {
+  const named = String(value ?? '').trim()
+  if (known.has(named)) return named
+  const lead = /^([A-Za-z]{1,4}\d{1,3})(?![A-Za-z0-9])/.exec(named)?.[1] ?? ''
+  return known.has(lead) ? lead : ''
 }
 
 /**
