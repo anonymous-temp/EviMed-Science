@@ -1,0 +1,1057 @@
+{
+  "live": true,
+  "narrow": true,
+  "model": "qwen3.8-max-0902",
+  "passed": 1,
+  "failed": 2,
+  "results": [
+    {
+      "group": "editor-live",
+      "id": "detail-far-from-its-quote-is-supported#1",
+      "pass": true,
+      "found": [],
+      "clean": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "overclaim"
+          ],
+          "forbidFix": "删除|删去|去掉",
+          "why": "every detail of the claim is in the abstract; the incident was advice to delete correct details the editor had not been shown. A note that the effect size is missing is fair editing, whatever kind the model files it under.",
+          "flagged": []
+        }
+      ],
+      "findings": [
+        {
+          "id": "E01",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论第 1 条（CLM-001）",
+          "evidence": "一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+          "fix": "补充来源中给出的基线特征（中位年龄 75 岁、女性 46.7%、中位 CHA₂DS₂-VASc 3.0）及主要结局定义（≥30 秒确认的房颤发作），以明确适用人群与终点。",
+          "message": "清单条目缺失（主要结论第 1 条（CLM-001））：「一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%」。建议：补充来源中给出的基线特征（中位年龄 75 岁、女性 46.7%、中位 CHA₂DS₂-VASc 3.0）及主要结局定义（≥30 秒确认的房颤发作），以明确适用人群与终点。"
+        },
+        {
+          "id": "E02",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论第 1 条（CLM-001）",
+          "evidence": "智能手表监测组新发房颤 9.6%",
+          "fix": "在检出率旁注明分子分母，改为「21/219（9.6%）对 5/218（2.3%）」，使读者无需查阅原文即可核对。",
+          "message": "措辞（主要结论第 1 条（CLM-001））：「智能手表监测组新发房颤 9.6%」。建议：在检出率旁注明分子分母，改为「21/219（9.6%）对 5/218（2.3%）」，使读者无需查阅原文即可核对。"
+        },
+        {
+          "id": "E03",
+          "kind": "structure",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "参考文献第 1 条",
+          "evidence": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211",
+          "fix": "补全作者列表、期刊名、卷期页码及发表年份，使文献可被完整定位。",
+          "message": "结构（参考文献第 1 条）：「Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211」。建议：补全作者列表、期刊名、卷期页码及发表年份，使文献可被完整定位。"
+        },
+        {
+          "id": "E04",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "全篇",
+          "evidence": "# 证据简报 ## 主要结论",
+          "fix": "作为临床证据报告，至少应包含检索来源与日期、纳入/排除标准、证据质量评级、安全性结局、局限性等章节，当前文件仅有单条主要结论与参考文献，结构不完整。",
+          "message": "清单条目缺失（全篇）：「# 证据简报 ## 主要结论」。建议：作为临床证据报告，至少应包含检索来源与日期、纳入/排除标准、证据质量评级、安全性结局、局限性等章节，当前文件仅有单条主要结论与参考文献，结构不完整。"
+        }
+      ],
+      "dropped": [
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        }
+      ],
+      "raw": {
+        "findings": [
+          {
+            "location": "主要结论第 1 条（CLM-001）",
+            "kind": "missing_item",
+            "evidence": "180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+            "fix": "补充来源中给出的效应量及置信区间，即「risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001」。"
+          },
+          {
+            "location": "主要结论第 1 条（CLM-001）",
+            "kind": "missing_item",
+            "evidence": "一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+            "fix": "补充来源中给出的基线特征（中位年龄 75 岁、女性 46.7%、中位 CHA₂DS₂-VASc 3.0）及主要结局定义（≥30 秒确认的房颤发作），以明确适用人群与终点。"
+          },
+          {
+            "location": "主要结论第 1 条（CLM-001）",
+            "kind": "wording",
+            "evidence": "智能手表监测组新发房颤 9.6%",
+            "fix": "在检出率旁注明分子分母，改为「21/219（9.6%）对 5/218（2.3%）」，使读者无需查阅原文即可核对。"
+          },
+          {
+            "location": "参考文献第 1 条",
+            "kind": "structure",
+            "evidence": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211",
+            "fix": "补全作者列表、期刊名、卷期页码及发表年份，使文献可被完整定位。"
+          },
+          {
+            "location": "全篇",
+            "kind": "missing_item",
+            "evidence": "# 证据简报\n\n## 主要结论",
+            "fix": "作为临床证据报告，至少应包含检索来源与日期、纳入/排除标准、证据质量评级、安全性结局、局限性等章节，当前文件仅有单条主要结论与参考文献，结构不完整。"
+          }
+        ],
+        "checklist": [
+          {
+            "item": "E1",
+            "status": "present",
+            "evidence": "一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%"
+          },
+          {
+            "item": "E2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E7",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E9",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E10",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S6",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S7",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S9",
+            "status": "absent",
+            "evidence": ""
+          }
+        ],
+        "acceptance": [
+          {
+            "item": "主要结论有至少一条带引文的论断",
+            "met": true,
+            "evidence": "一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3% [1]（CLM-001）"
+          },
+          {
+            "item": "参考文献列表非空",
+            "met": true,
+            "evidence": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211"
+          },
+          {
+            "item": "包含效应量与置信区间",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "包含证据质量/确定性评级",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "包含安全性/有害结局讨论",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "包含局限性说明",
+            "met": false,
+            "evidence": ""
+          }
+        ]
+      },
+      "checklist": [
+        {
+          "item": "E1",
+          "status": "present"
+        },
+        {
+          "item": "E2",
+          "status": "absent"
+        },
+        {
+          "item": "E3",
+          "status": "absent"
+        },
+        {
+          "item": "E4",
+          "status": "absent"
+        },
+        {
+          "item": "E5",
+          "status": "absent"
+        },
+        {
+          "item": "E6",
+          "status": "absent"
+        },
+        {
+          "item": "E7",
+          "status": "absent"
+        },
+        {
+          "item": "E8",
+          "status": "absent"
+        },
+        {
+          "item": "E9",
+          "status": "absent"
+        },
+        {
+          "item": "E10",
+          "status": "absent"
+        },
+        {
+          "item": "S1",
+          "status": "absent"
+        },
+        {
+          "item": "S2",
+          "status": "absent"
+        },
+        {
+          "item": "S3",
+          "status": "absent"
+        },
+        {
+          "item": "S4",
+          "status": "absent"
+        },
+        {
+          "item": "S5",
+          "status": "absent"
+        },
+        {
+          "item": "S6",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S7",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S8",
+          "status": "absent"
+        },
+        {
+          "item": "S9",
+          "status": "absent"
+        }
+      ],
+      "usage": {
+        "cacheHitTokens": 0,
+        "cacheMissTokens": 1447,
+        "completionTokens": 4751,
+        "reasoningTokens": 3397
+      },
+      "cost": 0.1884,
+      "model": "qwen3.8-max-0902",
+      "reasoningChars": 12178,
+      "ms": 112437,
+      "note": "4 kept, 1 dropped; planted 0/0; false alarms 0; ¥0.188; 112 s"
+    },
+    {
+      "group": "editor-live",
+      "id": "detail-far-from-its-quote-is-supported#2",
+      "pass": false,
+      "found": [],
+      "clean": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "overclaim"
+          ],
+          "forbidFix": "删除|删去|去掉",
+          "why": "every detail of the claim is in the abstract; the incident was advice to delete correct details the editor had not been shown. A note that the effect size is missing is fair editing, whatever kind the model files it under.",
+          "flagged": [
+            "overclaim: 来源仅给出中位年龄 75 岁，未载明纳入年龄下限为 65 岁；将「65 岁以上」改为与来源一致的描述（如「中位年龄 75",
+            "weak_support: 来源摘要未出现 180 天随访时长；若原文方法部分确有此数据，应补充引文，否则删除「180 天」或改为「随访期间」。",
+            "overclaim: 智能手表组检出率更高可能反映监测强度带来的检出偏倚而非真实发病率差异；应在结论中注明该试验为筛查/检测研究，避免读者将检"
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "id": "E01",
+          "kind": "overclaim",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-001",
+          "evidence": "437 patients were randomized (219 intervention, 218 control); the median age was 75 years, 46.7% were female and the median CHA 2 DS 2 -VASc score was 3.0.",
+          "fix": "来源仅给出中位年龄 75 岁，未载明纳入年龄下限为 65 岁；将「65 岁以上」改为与来源一致的描述（如「中位年龄 75 岁」），或补充来源中确实存在的纳入标准原文。",
+          "message": "结论写过头（CLM-001）：「437 patients were randomized (219 intervention, 218 control); the median age was 75 years, 46.7% were female and the median CHA 2 DS 2 -VASc score was 3.0.」。建议：来源仅给出中位年龄 75 岁，未载明纳入年龄下限为 65 岁；将「65 岁以上」改为与来源一致的描述（如「中位年龄 75 岁」），或补充来源中确实存在的纳入标准原文。"
+        },
+        {
+          "id": "E02",
+          "kind": "weak_support",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-001",
+          "evidence": "The primary outcome was new onset AF, defined as a confirmed episode lasting ≥30 seconds on single-lead ECG or standard ECG methods.",
+          "fix": "来源摘要未出现 180 天随访时长；若原文方法部分确有此数据，应补充引文，否则删除「180 天」或改为「随访期间」。",
+          "message": "证据支持偏弱（CLM-001）：「The primary outcome was new onset AF, defined as a confirmed episode lasting ≥30 seconds on single-lead ECG or standard ECG methods.」。建议：来源摘要未出现 180 天随访时长；若原文方法部分确有此数据，应补充引文，否则删除「180 天」或改为「随访期间」。"
+        },
+        {
+          "id": "E03",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-001",
+          "evidence": "risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR:",
+          "fix": "来源已提供风险差 7.3 个百分点（95% CI: 2.9–11.7）及 P = 0.001，主要结论应一并报告该效应量与置信区间，而非仅列两组百分比。",
+          "message": "清单条目缺失（CLM-001）：「risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR:」。建议：来源已提供风险差 7.3 个百分点（95% CI: 2.9–11.7）及 P = 0.001，主要结论应一并报告该效应量与置信区间，而非仅列两组百分比。"
+        },
+        {
+          "id": "E04",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "参考文献",
+          "evidence": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211",
+          "fix": "参考文献缺少作者、期刊名、年份与卷期页码，建议按 Vancouver 或 APA 格式补全，以便读者核实。",
+          "message": "措辞（参考文献）：「Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211」。建议：参考文献缺少作者、期刊名、年份与卷期页码，建议按 Vancouver 或 APA 格式补全，以便读者核实。"
+        },
+        {
+          "id": "E05",
+          "kind": "overclaim",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论",
+          "evidence": "New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group",
+          "fix": "智能手表组检出率更高可能反映监测强度带来的检出偏倚而非真实发病率差异；应在结论中注明该试验为筛查/检测研究，避免读者将检出率等同于发病率。",
+          "message": "结论写过头（主要结论）：「New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group」。建议：智能手表组检出率更高可能反映监测强度带来的检出偏倚而非真实发病率差异；应在结论中注明该试验为筛查/检测研究，避免读者将检出率等同于发病率。"
+        }
+      ],
+      "dropped": [],
+      "raw": {
+        "findings": [
+          {
+            "location": "CLM-001",
+            "kind": "overclaim",
+            "evidence": "437 patients were randomized (219 intervention, 218 control); the median age was 75 years, 46.7% were female and the median CHA 2 DS 2 -VASc score was 3.0.",
+            "fix": "来源仅给出中位年龄 75 岁，未载明纳入年龄下限为 65 岁；将「65 岁以上」改为与来源一致的描述（如「中位年龄 75 岁」），或补充来源中确实存在的纳入标准原文。"
+          },
+          {
+            "location": "CLM-001",
+            "kind": "weak_support",
+            "evidence": "The primary outcome was new onset AF, defined as a confirmed episode lasting ≥30 seconds on single-lead ECG or standard ECG methods.",
+            "fix": "来源摘要未出现 180 天随访时长；若原文方法部分确有此数据，应补充引文，否则删除「180 天」或改为「随访期间」。"
+          },
+          {
+            "location": "CLM-001",
+            "kind": "missing_item",
+            "evidence": "risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR:",
+            "fix": "来源已提供风险差 7.3 个百分点（95% CI: 2.9–11.7）及 P = 0.001，主要结论应一并报告该效应量与置信区间，而非仅列两组百分比。"
+          },
+          {
+            "location": "参考文献",
+            "kind": "wording",
+            "evidence": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211",
+            "fix": "参考文献缺少作者、期刊名、年份与卷期页码，建议按 Vancouver 或 APA 格式补全，以便读者核实。"
+          },
+          {
+            "location": "主要结论",
+            "kind": "overclaim",
+            "evidence": "New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group",
+            "fix": "智能手表组检出率更高可能反映监测强度带来的检出偏倚而非真实发病率差异；应在结论中注明该试验为筛查/检测研究，避免读者将检出率等同于发病率。"
+          }
+        ],
+        "checklist": [
+          {
+            "item": "E1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E7",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E8",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "E9",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E10",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S6",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S7",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S8",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S9",
+            "status": "present",
+            "evidence": "智能手表监测组新发房颤 9.6%，常规照护组 2.3%"
+          }
+        ],
+        "acceptance": []
+      },
+      "checklist": [
+        {
+          "item": "E1",
+          "status": "absent"
+        },
+        {
+          "item": "E2",
+          "status": "absent"
+        },
+        {
+          "item": "E3",
+          "status": "absent"
+        },
+        {
+          "item": "E4",
+          "status": "absent"
+        },
+        {
+          "item": "E5",
+          "status": "absent"
+        },
+        {
+          "item": "E6",
+          "status": "absent"
+        },
+        {
+          "item": "E7",
+          "status": "absent"
+        },
+        {
+          "item": "E8",
+          "status": "not_applicable"
+        },
+        {
+          "item": "E9",
+          "status": "absent"
+        },
+        {
+          "item": "E10",
+          "status": "absent"
+        },
+        {
+          "item": "S1",
+          "status": "absent"
+        },
+        {
+          "item": "S2",
+          "status": "absent"
+        },
+        {
+          "item": "S3",
+          "status": "absent"
+        },
+        {
+          "item": "S4",
+          "status": "absent"
+        },
+        {
+          "item": "S5",
+          "status": "absent"
+        },
+        {
+          "item": "S6",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S7",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S8",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S9",
+          "status": "present"
+        }
+      ],
+      "usage": {
+        "cacheHitTokens": 1024,
+        "cacheMissTokens": 423,
+        "completionTokens": 3666,
+        "reasoningTokens": 2576
+      },
+      "cost": 0.138588,
+      "model": "qwen3.8-max-0902",
+      "reasoningChars": 9224,
+      "ms": 86163,
+      "note": "5 kept, 0 dropped; planted 0/0; false alarms 3; ¥0.139; 86 s"
+    },
+    {
+      "group": "editor-live",
+      "id": "detail-far-from-its-quote-is-supported#3",
+      "pass": false,
+      "found": [],
+      "clean": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "overclaim"
+          ],
+          "forbidFix": "删除|删去|去掉",
+          "why": "every detail of the claim is in the abstract; the incident was advice to delete correct details the editor had not been shown. A note that the effect size is missing is fair editing, whatever kind the model files it under.",
+          "flagged": [
+            "overclaim: 来源片段仅写明样本量、中位年龄 75 岁及中位 CHA₂DS₂-VASc 3.0，未出现「65 岁以上」这一入选标准表述",
+            "weak_support: 来源片段未提及「荷兰」或「两家二级医疗中心」，若无全文依据应删除该限定，或补充能支持该信息的原文位置。"
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "id": "E01",
+          "kind": "overclaim",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-001 / 主要结论第 1 条",
+          "evidence": "437 patients were randomized (219 intervention, 218 control) 65 岁以上、卒中风险升高的患者",
+          "fix": "来源片段仅写明样本量、中位年龄 75 岁及中位 CHA₂DS₂-VASc 3.0，未出现「65 岁以上」这一入选标准表述；若无完整原文支持，删去「65 岁以上」或改为「中位年龄 75 岁、中位 CHA₂DS₂-VASc 3.0」。",
+          "message": "结论写过头（CLM-001 / 主要结论第 1 条）：「437 patients were randomized (219 intervention, 218 control) 65 岁以上、卒中风险升高的患者」。建议：来源片段仅写明样本量、中位年龄 75 岁及中位 CHA₂DS₂-VASc 3.0，未出现「65 岁以上」这一入选标准表述；若无完整原文支持，删去「65 岁以上」或改为「中位年龄 75 岁、中位 CHA₂DS₂-VASc 3.0」。"
+        },
+        {
+          "id": "E02",
+          "kind": "weak_support",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "CLM-001 / 主要结论第 1 条",
+          "evidence": "Between November 2022 and December 2023, 437 patients were randomized (219 intervention, 218 control) 在荷兰两家二级医疗中心开展的多中心随机对照试验",
+          "fix": "来源片段未提及「荷兰」或「两家二级医疗中心」，若无全文依据应删除该限定，或补充能支持该信息的原文位置。",
+          "message": "证据支持偏弱（CLM-001 / 主要结论第 1 条）：「Between November 2022 and December 2023, 437 patients were randomized (219 intervention, 218 control) 在荷兰两家二级医疗中心开展的多中心随机对照试验」。建议：来源片段未提及「荷兰」或「两家二级医疗中心」，若无全文依据应删除该限定，或补充能支持该信息的原文位置。"
+        },
+        {
+          "id": "E03",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论",
+          "evidence": "New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR: 一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+          "fix": "来源已给出风险差 7.3 个百分点（95% CI 2.9–11.7）与 P=0.001，报告应补充该效应量及置信区间，而非仅报告两组发生率。",
+          "message": "清单条目缺失（主要结论）：「New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95%…」。建议：来源已给出风险差 7.3 个百分点（95% CI 2.9–11.7）与 P=0.001，报告应补充该效应量及置信区间，而非仅报告两组发生率。"
+        }
+      ],
+      "dropped": [
+        {
+          "kind": "weak_support",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "wording",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        }
+      ],
+      "raw": {
+        "findings": [
+          {
+            "location": "CLM-001 / 主要结论第 1 条",
+            "kind": "overclaim",
+            "evidence": "437 patients were randomized (219 intervention, 218 control)\n65 岁以上、卒中风险升高的患者",
+            "fix": "来源片段仅写明样本量、中位年龄 75 岁及中位 CHA₂DS₂-VASc 3.0，未出现「65 岁以上」这一入选标准表述；若无完整原文支持，删去「65 岁以上」或改为「中位年龄 75 岁、中位 CHA₂DS₂-VASc 3.0」。"
+          },
+          {
+            "location": "CLM-001 / 主要结论第 1 条",
+            "kind": "weak_support",
+            "evidence": "New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR:\n180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+            "fix": "来源片段未出现「180 天」随访时长，若无法从全文核实，删去「180 天」或注明随访期出处。"
+          },
+          {
+            "location": "CLM-001 / 主要结论第 1 条",
+            "kind": "weak_support",
+            "evidence": "Between November 2022 and December 2023, 437 patients were randomized (219 intervention, 218 control)\n在荷兰两家二级医疗中心开展的多中心随机对照试验",
+            "fix": "来源片段未提及「荷兰」或「两家二级医疗中心」，若无全文依据应删除该限定，或补充能支持该信息的原文位置。"
+          },
+          {
+            "location": "主要结论",
+            "kind": "missing_item",
+            "evidence": "New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR:\n一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+            "fix": "来源已给出风险差 7.3 个百分点（95% CI 2.9–11.7）与 P=0.001，报告应补充该效应量及置信区间，而非仅报告两组发生率。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告缺少检索来源与检索日期说明（E2）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告缺少纳入与排除标准说明（E3）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未纳入或未说明为何未纳入该领域地标试验与最新指南（E4）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未报告有害结局与安全性（E6）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未对证据质量或确定性进行分级（如 GRADE）（E7）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未讨论对目标人群的适用性（E9）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未写明局限性（E10）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未写明分析所用统计方法（S1）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未说明前提假设是否满足（S2）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未给出确切 P 值及单侧/双侧与显著性水平说明（S4）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未写明每组样本量与缺失数据处理（S5）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未写明分析软件（S8）。"
+          },
+          {
+            "location": "主要结论第 1 条",
+            "kind": "wording",
+            "evidence": "180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+            "fix": "来源给出的百分比已附带分子分母（21/219 与 5/218），报告仅写百分比而未给出分子分母，按 S9 应补为「21/219（9.6%）」与「5/218（2.3%）」。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未处理或说明是否存在相互矛盾的证据（E8）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未说明是否存在多重比较及校正方法（S6）。"
+          },
+          {
+            "location": "report.md 整体",
+            "kind": "missing_item",
+            "evidence": "",
+            "fix": "报告未涉及回归模型，若确实无回归分析应注明「未进行回归建模」（S7）。"
+          }
+        ],
+        "checklist": [
+          {
+            "item": "E1",
+            "status": "present",
+            "evidence": "一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%"
+          },
+          {
+            "item": "E2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E7",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E9",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E10",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S7",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S9",
+            "status": "absent",
+            "evidence": ""
+          }
+        ],
+        "acceptance": []
+      },
+      "checklist": [
+        {
+          "item": "E1",
+          "status": "present"
+        },
+        {
+          "item": "E2",
+          "status": "absent"
+        },
+        {
+          "item": "E3",
+          "status": "absent"
+        },
+        {
+          "item": "E4",
+          "status": "absent"
+        },
+        {
+          "item": "E5",
+          "status": "absent"
+        },
+        {
+          "item": "E6",
+          "status": "absent"
+        },
+        {
+          "item": "E7",
+          "status": "absent"
+        },
+        {
+          "item": "E8",
+          "status": "absent"
+        },
+        {
+          "item": "E9",
+          "status": "absent"
+        },
+        {
+          "item": "E10",
+          "status": "absent"
+        },
+        {
+          "item": "S1",
+          "status": "absent"
+        },
+        {
+          "item": "S2",
+          "status": "absent"
+        },
+        {
+          "item": "S3",
+          "status": "absent"
+        },
+        {
+          "item": "S4",
+          "status": "absent"
+        },
+        {
+          "item": "S5",
+          "status": "absent"
+        },
+        {
+          "item": "S6",
+          "status": "absent"
+        },
+        {
+          "item": "S7",
+          "status": "absent"
+        },
+        {
+          "item": "S8",
+          "status": "absent"
+        },
+        {
+          "item": "S9",
+          "status": "absent"
+        }
+      ],
+      "usage": {
+        "cacheHitTokens": 1024,
+        "cacheMissTokens": 423,
+        "completionTokens": 6784,
+        "reasoningTokens": 4463
+      },
+      "cost": 0.250836,
+      "model": "qwen3.8-max-0902",
+      "reasoningChars": 16886,
+      "ms": 159962,
+      "note": "3 kept, 17 dropped; planted 0/0; false alarms 2; ¥0.251; 160 s"
+    }
+  ]
+}

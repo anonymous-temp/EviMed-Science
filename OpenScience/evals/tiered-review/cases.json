@@ -1,73 +1,247 @@
 {
   "$comment": "The independent reviewer's incidents and controls as eval cases (principle 6). Deterministic cases run offline and must pass; live cases call the registries and the reviewer model through the platform's own modules and record what they said. Each case names the incident it comes from.",
   "stat": [
-    { "id": "log-odds-ratio-not-crossing-null", "incident": "2026-09-22 AI chronic-disease review: the in-kernel reviewer called a log odds ratio of 0.73 (0.46–1.00) 「跨越无效线」",
-      "text": "AI applications significantly improved diagnostic accuracy and clinical decision-making, with a pooled log odds ratio of 0.73 (95% CI: 0.46-1.00).", "expect": [] },
-    { "id": "interval-and-p-disagree", "incident": "control: a transcription error the check exists for",
-      "text": "远程监测降低心衰再住院（HR 0.75，95% CI 0.60–0.94；P = 0.21）。", "expect": ["ci-p-inconsistent"] },
-    { "id": "estimate-outside-interval", "incident": "outputs/audit paper-060: β reported beside an exp(β) interval",
-      "text": "The association was β=-0.025, 95% CI: 0.954-0.998.", "expect": ["estimate-outside-ci"] },
-    { "id": "consistent-apa", "incident": "control",
-      "text": "The groups differed, t(28) = 2.20, p = .036; F(2, 57) = 4.11, p < .05.", "expect": [] }
+    {
+      "id": "log-odds-ratio-not-crossing-null",
+      "incident": "2026-09-22 AI chronic-disease review: the in-kernel reviewer called a log odds ratio of 0.73 (0.46–1.00) 「跨越无效线」",
+      "text": "AI applications significantly improved diagnostic accuracy and clinical decision-making, with a pooled log odds ratio of 0.73 (95% CI: 0.46-1.00).",
+      "expect": []
+    },
+    {
+      "id": "interval-and-p-disagree",
+      "incident": "control: a transcription error the check exists for",
+      "text": "远程监测降低心衰再住院（HR 0.75，95% CI 0.60–0.94；P = 0.21）。",
+      "expect": [
+        "ci-p-inconsistent"
+      ]
+    },
+    {
+      "id": "estimate-outside-interval",
+      "incident": "outputs/audit paper-060: β reported beside an exp(β) interval",
+      "text": "The association was β=-0.025, 95% CI: 0.954-0.998.",
+      "expect": [
+        "estimate-outside-ci"
+      ]
+    },
+    {
+      "id": "consistent-apa",
+      "incident": "control",
+      "text": "The groups differed, t(28) = 2.20, p = .036; F(2, 57) = 4.11, p < .05.",
+      "expect": []
+    }
   ],
   "references": [
-    { "id": "lancet-doi-with-parentheses", "incident": "2026-09-23: a DOI's closing bracket ended it — 10.1016/S0140-6736(18 — and no registry holds that",
+    {
+      "id": "lancet-doi-with-parentheses",
+      "incident": "2026-09-23: a DOI's closing bracket ended it — 10.1016/S0140-6736(18 — and no registry holds that",
       "report": "## 参考文献\n1. Koehler F, et al. Efficacy of telemedical interventional management in patients with heart failure (TIM-HF2): a randomised, controlled, parallel-group, unmasked trial. Lancet. 2018;392:1047-1057. doi:10.1016/S0140-6736(18)31880-4",
-      "expectDois": ["10.1016/s0140-6736(18)31880-4"], "expectLive": [] },
-    { "id": "fabricated-doi", "incident": "control: the reference hallucination the lookup exists for",
+      "expectDois": [
+        "10.1016/s0140-6736(18)31880-4"
+      ],
+      "expectLive": []
+    },
+    {
+      "id": "fabricated-doi",
+      "incident": "control: the reference hallucination the lookup exists for",
       "report": "## 参考文献\n1. Ghost A. Remote monitoring halves mortality. J Imaginary Med. 2025. doi:10.9999/evimed-fabricated-2026",
-      "expectDois": ["10.9999/evimed-fabricated-2026"], "expectLive": ["reference_unresolvable"] },
-    { "id": "pmid-and-doi-name-two-works", "incident": "control: an entry that pastes TIM-HF2's PMID beside DAPA-HF's DOI",
+      "expectDois": [
+        "10.9999/evimed-fabricated-2026"
+      ],
+      "expectLive": [
+        "reference_unresolvable"
+      ]
+    },
+    {
+      "id": "pmid-and-doi-name-two-works",
+      "incident": "control: an entry that pastes TIM-HF2's PMID beside DAPA-HF's DOI",
       "report": "## 参考文献\n1. Koehler F, et al. Efficacy of telemedical interventional management in patients with heart failure (TIM-HF2). Lancet. 2018. PMID: 30153985 doi:10.1056/NEJMoa1911303",
-      "expectDois": ["10.1056/nejmoa1911303"], "expectLive": ["reference_mismatch"] }
+      "expectDois": [
+        "10.1056/nejmoa1911303"
+      ],
+      "expectLive": [
+        "reference_mismatch"
+      ]
+    }
   ],
   "numeric": [
-    { "id": "mr-number-not-in-output", "incident": "control: a Mendelian randomization estimate typed rather than rendered",
+    {
+      "id": "mr-number-not-in-output",
+      "incident": "control: a Mendelian randomization estimate typed rather than rendered",
       "report": "IVW 法显示 OR = 0.88（95% CI 0.80–0.97），P = 0.0068。\n敏感性分析：MR-Egger OR 0.61。",
-      "outputs": [0.8816, 0.8006, 0.9702, 0.0068, 24], "expectUnsupported": ["0.61"] }
+      "outputs": [
+        0.8816,
+        0.8006,
+        0.9702,
+        0.0068,
+        24
+      ],
+      "expectUnsupported": [
+        "0.61"
+      ]
+    }
   ],
   "editor": [
-    { "id": "paraphrased-evidence-dropped", "incident": "2026-09-23 probe: with thinking off the reviewer paraphrased its evidence",
+    {
+      "id": "paraphrased-evidence-dropped",
+      "incident": "2026-09-23 probe: with thinking off the reviewer paraphrased its evidence",
       "haystack": "Metformin lowered HbA1c by 0.9 percentage points compared with placebo (95% CI 0.7 to 1.1).",
-      "raw": { "findings": [
-        { "location": "CLM-001", "kind": "contradiction", "evidence": "Source states 0.9 percentage points; claim states 1.5%.", "fix": "改。" },
-        { "location": "CLM-001", "kind": "contradiction", "evidence": "lowered HbA1c by 0.9 percentage points", "fix": "把 1.5% 改为 0.9 个百分点。" }
-      ] },
-      "expectKept": 1, "expectDropped": ["evidence"] }
+      "raw": {
+        "findings": [
+          {
+            "location": "CLM-001",
+            "kind": "contradiction",
+            "evidence": "Source states 0.9 percentage points; claim states 1.5%.",
+            "fix": "改。"
+          },
+          {
+            "location": "CLM-001",
+            "kind": "contradiction",
+            "evidence": "lowered HbA1c by 0.9 percentage points",
+            "fix": "把 1.5% 改为 0.9 个百分点。"
+          }
+        ]
+      },
+      "expectKept": 1,
+      "expectDropped": [
+        "evidence"
+      ]
+    }
   ],
   "replies": [
-    { "id": "greeting-is-L0", "incident": "control: principle 12", "reply": "你好！有什么可以帮你？", "expectTier": "L0" },
-    { "id": "medicine-without-citation-is-L1", "incident": "control", "reply": "服用华法林期间避免合用布洛芬等非甾体抗炎药。", "expectTier": "L1" },
-    { "id": "ukpds34-reversed", "incident": "control: a cited sentence that reverses its source's main comparison",
+    {
+      "id": "greeting-is-L0",
+      "incident": "control: principle 12",
+      "reply": "你好！有什么可以帮你？",
+      "expectTier": "L0"
+    },
+    {
+      "id": "medicine-without-citation-is-L1",
+      "incident": "control",
+      "reply": "服用华法林期间避免合用布洛芬等非甾体抗炎药。",
+      "expectTier": "L1"
+    },
+    {
+      "id": "ukpds34-reversed",
+      "incident": "control: a cited sentence that reverses its source's main comparison",
       "reply": "UKPDS 34 中，与常规治疗相比，二甲双胍组任何糖尿病相关终点的风险升高 [1]。\n\n## 参考文献\n1. UK Prospective Diabetes Study (UKPDS) Group. Effect of intensive blood-glucose control with metformin on complications in overweight patients with type 2 diabetes (UKPDS 34). Lancet. 1998. PMID: 9742977",
-      "expectTier": "L1", "expectLiveVerdict": "unsupported" },
-    { "id": "ukpds34-faithful", "incident": "control: the same sentence stated as the source states it — a check that flags this is noise",
+      "expectTier": "L1",
+      "expectLiveVerdict": "unsupported"
+    },
+    {
+      "id": "ukpds34-faithful",
+      "incident": "control: the same sentence stated as the source states it — a check that flags this is noise",
       "reply": "UKPDS 34 中，与常规治疗相比，二甲双胍组任何糖尿病相关终点的风险降低 32% [1]。\n\n## 参考文献\n1. UK Prospective Diabetes Study (UKPDS) Group. Effect of intensive blood-glucose control with metformin on complications in overweight patients with type 2 diabetes (UKPDS 34). Lancet. 1998. PMID: 9742977",
-      "expectTier": "L1", "expectLiveVerdict": "supported" }
+      "expectTier": "L1",
+      "expectLiveVerdict": "supported"
+    }
   ],
   "editorLive": [
-    { "id": "planted-contradiction-and-overclaim", "incident": "control: two planted defects and one faithful claim; the editor must find both and leave the third alone",
+    {
+      "id": "planted-contradiction-and-overclaim",
+      "incident": "control: two planted defects and one faithful claim; the editor must find both and leave the third alone",
       "contractKind": "clinical-evidence-report",
       "report": "# 证据简报\n\n## 主要结论\n\n1. 二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点 [1]（CLM-001）。\n2. 每日饮用咖啡可以预防 2 型糖尿病 [2]（CLM-002）。\n3. 在 TIM-HF2 试验中，远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）[3]（CLM-003）。\n\n## 参考文献\n\n1. Hirst JA, et al. Quantifying the effect of metformin treatment and dose on glycemic control. Diabetes Care. 2012.\n2. Ding M, et al. Caffeinated and decaffeinated coffee consumption and risk of type 2 diabetes. Diabetes Care. 2014.\n3. Koehler F, et al. Efficacy of telemedical interventional management in patients with heart failure (TIM-HF2). Lancet. 2018.",
       "claims": [
-        { "claimId": "CLM-001", "claimType": "direct", "claim": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点。",
-          "sources": [{ "artifactPath": "sources/hirst-2012.txt", "title": "Quantifying the effect of metformin treatment and dose on glycemic control",
-            "quote": "Metformin monotherapy lowered HbA1c by 1.12% (95% CI 0.92-1.32) versus placebo",
-            "excerpt": "In trials comparing metformin monotherapy with placebo, metformin monotherapy lowered HbA1c by 1.12% (95% CI 0.92-1.32) versus placebo." }] },
-        { "claimId": "CLM-002", "claimType": "direct", "claim": "每日饮用咖啡可以预防 2 型糖尿病。",
-          "sources": [{ "artifactPath": "sources/ding-2014.txt", "title": "Caffeinated and decaffeinated coffee consumption and risk of type 2 diabetes",
-            "quote": "Coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner",
-            "excerpt": "This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner. Observational data cannot establish causality." }] },
-        { "claimId": "CLM-003", "claimType": "direct", "claim": "在 TIM-HF2 试验中，远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）。",
-          "sources": [{ "artifactPath": "sources/koehler-2018.txt", "title": "Efficacy of telemedical interventional management in patients with heart failure (TIM-HF2)",
-            "quote": "The percentage of days lost due to unplanned cardiovascular hospital admissions and all-cause death was 4.88%",
-            "excerpt": "The percentage of days lost due to unplanned cardiovascular hospital admissions and all-cause death was 4.88% (95% CI 4.55-5.23) in the remote patient management group and 6.64% (6.19-7.13) in the usual care group (ratio 0.80, 95% CI 0.65-1.00; p=0.0460)." }] }
+        {
+          "claimId": "CLM-001",
+          "claimType": "direct",
+          "claim": "二甲双胍单药治疗可使 2 型糖尿病患者的 HbA1c 较安慰剂降低约 1.5 个百分点。",
+          "sources": [
+            {
+              "artifactPath": "sources/hirst-2012.txt",
+              "title": "Quantifying the effect of metformin treatment and dose on glycemic control",
+              "quote": "Metformin monotherapy lowered HbA1c by 1.12% (95% CI 0.92-1.32) versus placebo",
+              "text": "In trials comparing metformin monotherapy with placebo, metformin monotherapy lowered HbA1c by 1.12% (95% CI 0.92-1.32) versus placebo."
+            }
+          ]
+        },
+        {
+          "claimId": "CLM-002",
+          "claimType": "direct",
+          "claim": "每日饮用咖啡可以预防 2 型糖尿病。",
+          "sources": [
+            {
+              "artifactPath": "sources/ding-2014.txt",
+              "title": "Caffeinated and decaffeinated coffee consumption and risk of type 2 diabetes",
+              "quote": "Coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner",
+              "text": "This meta-analysis of prospective cohort studies found that coffee consumption was inversely associated with risk of type 2 diabetes in a dose-response manner. Observational data cannot establish causality."
+            }
+          ]
+        },
+        {
+          "claimId": "CLM-003",
+          "claimType": "direct",
+          "claim": "在 TIM-HF2 试验中，远程患者管理组因计划外心血管住院或全因死亡损失的天数百分比低于常规治疗组（4.88% 对 6.64%）。",
+          "sources": [
+            {
+              "artifactPath": "sources/koehler-2018.txt",
+              "title": "Efficacy of telemedical interventional management in patients with heart failure (TIM-HF2)",
+              "quote": "The percentage of days lost due to unplanned cardiovascular hospital admissions and all-cause death was 4.88%",
+              "text": "The percentage of days lost due to unplanned cardiovascular hospital admissions and all-cause death was 4.88% (95% CI 4.55-5.23) in the remote patient management group and 6.64% (6.19-7.13) in the usual care group (ratio 0.80, 95% CI 0.65-1.00; p=0.0460)."
+            }
+          ]
+        }
       ],
       "expectFound": [
-        { "claimId": "CLM-001", "kinds": ["contradiction", "weak_support", "interpretation"] },
-        { "claimId": "CLM-002", "kinds": ["overclaim", "weak_support"] }
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "weak_support",
+            "interpretation"
+          ]
+        },
+        {
+          "claimId": "CLM-002",
+          "kinds": [
+            "overclaim",
+            "weak_support"
+          ]
+        }
       ],
-      "expectClean": [{ "claimId": "CLM-003", "kinds": ["contradiction", "overclaim"],
-        "why": "CLM-003 says what its source says, so a contradiction or an overclaim there is a false alarm. A weak_support note is tolerated: the ratio's interval reaches 1.00 (p=0.046) and the report leaves it out, which two of three samples on 2026-09-23 pointed out — fair editing, not an invented defect." }] }
+      "expectClean": [
+        {
+          "claimId": "CLM-003",
+          "kinds": [
+            "contradiction",
+            "overclaim"
+          ],
+          "why": "CLM-003 says what its source says, so a contradiction or an overclaim there is a false alarm. A weak_support note is tolerated: the ratio's interval reaches 1.00 (p=0.046) and the report leaves it out, which two of three samples on 2026-09-23 pointed out — fair editing, not an invented defect."
+        }
+      ]
+    },
+    {
+      "id": "detail-far-from-its-quote-is-supported",
+      "incident": "2026-09-23 first live reviews of review-ai-chronic-home (rv_fe1a944d5cff498792372e13 F03): shown ±300 characters around the quote, the editor called 「荷兰两家二级医疗机构」 unsupported although the abstract states it ~500 characters before the quote, and advised deleting it",
+      "contractKind": "clinical-evidence-report",
+      "report": "# 证据简报\n\n## 主要结论\n\n1. 一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3% [1]（CLM-001）。\n\n## 参考文献\n\n1. Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211",
+      "claims": [
+        {
+          "claimId": "CLM-001",
+          "claimType": "direct",
+          "claim": "一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%。",
+          "sources": [
+            {
+              "artifactPath": "sources/equal-2026.txt",
+              "title": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial",
+              "quote": "Between November 2022 and December 2023, 437 patients were randomized (219 intervention, 218 control)",
+              "text": "BACKGROUND: Atrial fibrillation (AF), the most common cardiac arrhythmia, is a major cause of stroke and often remains undiagnosed due to its paroxysmal and frequently asymptomatic nature. Wearables provide a scalable, noninvasive screening tool. OBJECTIVES: This trial evaluated new onset AF detection in patients at elevated stroke risk using remote smartwatch-based screening. METHODS: This prospective multicenter randomized controlled trial included patients ≥65 years with elevated stroke risk (CHA 2 DS 2 -VASc ≥2 men, ≥3 women) from 2 secondary care centers in the Netherlands. Patients were randomized to 6-month (180-day) monitoring with a smartwatch with photoplethysmography and single-lead electrocardiogram (ECG) functions, or standard care. ECGs were reviewed remotely by an independent eHealth team within 24 hours. The primary outcome was new onset AF, defined as a confirmed episode lasting ≥30 seconds on single-lead ECG or standard ECG methods. RESULTS: Between November 2022 and December 2023, 437 patients were randomized (219 intervention, 218 control); the median age was 75 years, 46.7% were female and the median CHA 2 DS 2 -VASc score was 3.0. New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR: 4.40; 95% CI: 1.66-11.66). Several asymptomatic AF episodes were detected only in the intervention group, while paroxysmal AF occurred in both groups. CONCLUSIONS: This randomized controlled trial provides evidence that 6-month smartwatch-based AF screening enhances the detection rate of new onset AF compared with standard care in patients at elevated stroke risk. (Detection and Quantification of Atrial Fibrillation in High-risk Patients Using a Smartwatch Wearable [Apple Watch] [EQUAL]; NCT05686330)."
+            }
+          ]
+        }
+      ],
+      "expectFound": [],
+      "expectClean": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "overclaim"
+          ],
+          "forbidFix": "删除|删去|去掉",
+          "why": "every detail of the claim is in the abstract; the incident was advice to delete correct details the editor had not been shown. A note that the effect size is missing is fair editing, whatever kind the model files it under."
+        }
+      ]
+    }
   ]
 }

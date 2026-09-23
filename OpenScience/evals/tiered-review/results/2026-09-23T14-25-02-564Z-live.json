@@ -1,0 +1,1005 @@
+{
+  "live": true,
+  "model": "qwen3.8-max-0902",
+  "passed": 1,
+  "failed": 2,
+  "results": [
+    {
+      "group": "editor-live",
+      "id": "detail-far-from-its-quote-is-supported#1",
+      "pass": false,
+      "found": [],
+      "clean": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "weak_support",
+            "overclaim"
+          ],
+          "why": "every detail of the claim is in the abstract; flagging it takes reading no further than the quote",
+          "flagged": [
+            "weak_support"
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "id": "E01",
+          "kind": "weak_support",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论",
+          "evidence": "New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR: 4.40; 95% CI: 1.66-11.66).",
+          "fix": "在结论中同时给出来源中的风险差及其 95% CI、HR 及其 95% CI，而非只写两组发生率。",
+          "message": "证据支持偏弱（主要结论）：「New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95%…」。建议：在结论中同时给出来源中的风险差及其 95% CI、HR 及其 95% CI，而非只写两组发生率。"
+        },
+        {
+          "id": "E02",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论",
+          "evidence": "Several asymptomatic AF episodes were detected only in the intervention group, while paroxysmal AF occurred in both groups.",
+          "fix": "补充来源中关于无症状房颤检出及两组阵发性房颤分布的有害/安全性相关描述，或说明本报告不展开安全性讨论的理由。",
+          "message": "清单条目缺失（主要结论）：「Several asymptomatic AF episodes were detected only in the intervention group, while paroxysmal AF occurred in both groups.」。建议：补充来源中关于无症状房颤检出及两组阵发性房颤分布的有害/安全性相关描述，或说明本报告不展开安全性讨论的理由。"
+        },
+        {
+          "id": "E03",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论",
+          "evidence": "The primary outcome was new onset AF, defined as a confirmed episode lasting ≥30 seconds on single-lead ECG or standard ECG methods.",
+          "fix": "补充主要结局定义，说明新发房颤需单导联或标准 ECG 确认且持续 ≥30 秒。",
+          "message": "清单条目缺失（主要结论）：「The primary outcome was new onset AF, defined as a confirmed episode lasting ≥30 seconds on single-lead ECG or standard ECG methods.」。建议：补充主要结局定义，说明新发房颤需单导联或标准 ECG 确认且持续 ≥30 秒。"
+        },
+        {
+          "id": "E04",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论",
+          "evidence": "This prospective multicenter randomized controlled trial included patients ≥65 years with elevated stroke risk (CHA 2 DS 2 -VASc ≥2 men, ≥3 women) from 2 secondary care centers in the Netherlands. Patients were randomized to 6-month (180-day) monitoring with a smartwatch with photoplethysmography and single-lead electrocardiogram (ECG) functions, or standard care.",
+          "fix": "按 PICO 写明人群、干预、对照与结局，包括 CHA2DS2-VASc 阈值、智能手表功能及标准照护对照。",
+          "message": "清单条目缺失（主要结论）：「This prospective multicenter randomized controlled trial included patients ≥65 years with elevated stroke risk (CHA 2 DS 2 -VASc ≥2 men, ≥3 women) from 2 sec…」。建议：按 PICO 写明人群、干预、对照与结局，包括 CHA2DS2-VASc 阈值、智能手表功能及标准照护对照。"
+        },
+        {
+          "id": "E05",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "参考文献",
+          "evidence": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211",
+          "fix": "参考文献补充期刊名、年份、卷期页码及 NCT05686330 等可核验信息，避免仅列标题与 PMID。",
+          "message": "措辞（参考文献）：「Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211」。建议：参考文献补充期刊名、年份、卷期页码及 NCT05686330 等可核验信息，避免仅列标题与 PMID。"
+        }
+      ],
+      "dropped": [
+        {
+          "kind": "overclaim",
+          "reason": "evidence"
+        }
+      ],
+      "raw": {
+        "findings": [
+          {
+            "location": "主要结论",
+            "kind": "overclaim",
+            "evidence": "180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3% [1]",
+            "fix": "补充来源给出的效应量与置信区间，如「风险差 7.3 个百分点（95% CI: 2.9–11.7）；HR 4.40（95% CI: 1.66–11.66）」，避免仅呈现两组百分比。"
+          },
+          {
+            "location": "主要结论",
+            "kind": "weak_support",
+            "evidence": "New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR: 4.40; 95% CI: 1.66-11.66).",
+            "fix": "在结论中同时给出来源中的风险差及其 95% CI、HR 及其 95% CI，而非只写两组发生率。"
+          },
+          {
+            "location": "主要结论",
+            "kind": "missing_item",
+            "evidence": "Several asymptomatic AF episodes were detected only in the intervention group, while paroxysmal AF occurred in both groups.",
+            "fix": "补充来源中关于无症状房颤检出及两组阵发性房颤分布的有害/安全性相关描述，或说明本报告不展开安全性讨论的理由。"
+          },
+          {
+            "location": "主要结论",
+            "kind": "missing_item",
+            "evidence": "The primary outcome was new onset AF, defined as a confirmed episode lasting ≥30 seconds on single-lead ECG or standard ECG methods.",
+            "fix": "补充主要结局定义，说明新发房颤需单导联或标准 ECG 确认且持续 ≥30 秒。"
+          },
+          {
+            "location": "主要结论",
+            "kind": "missing_item",
+            "evidence": "This prospective multicenter randomized controlled trial included patients ≥65 years with elevated stroke risk (CHA 2 DS 2 -VASc ≥2 men, ≥3 women) from 2 secondary care centers in the Netherlands. Patients were randomized to 6-month (180-day) monitoring with a smartwatch with photoplethysmography and single-lead electrocardiogram (ECG) functions, or standard care.",
+            "fix": "按 PICO 写明人群、干预、对照与结局，包括 CHA2DS2-VASc 阈值、智能手表功能及标准照护对照。"
+          },
+          {
+            "location": "参考文献",
+            "kind": "wording",
+            "evidence": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211",
+            "fix": "参考文献补充期刊名、年份、卷期页码及 NCT05686330 等可核验信息，避免仅列标题与 PMID。"
+          }
+        ],
+        "checklist": [
+          {
+            "item": "E1（临床证据报告要素）研究问题写明人群、干预/对照与结局（PICO）",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E2（临床证据报告要素）写明检索了哪些来源及检索日期",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E3（临床证据报告要素）写明纳入与排除标准",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E4（临床证据报告要素）纳入了该领域的地标试验与最新指南（或说明为何没有）",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E5（临床证据报告要素）主要结论给出效应量与置信区间，而不只是方向或 P 值",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E6（临床证据报告要素）报告了有害结局与安全性",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E7（临床证据报告要素）对证据质量或确定性分级（如 GRADE），并与结论措辞相称",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E8（临床证据报告要素）处理了相互矛盾的证据",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "E9（临床证据报告要素）讨论了对目标人群的适用性",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E10（临床证据报告要素）写明局限性",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S1（SAMPL 统计报告要点）每项分析写明所用的统计方法（检验名称）",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S2（SAMPL 统计报告要点）说明方法的前提假设是否满足或如何核查",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S3（SAMPL 统计报告要点）主要结果给出效应量及其置信区间，而不只给 P 值",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S4（SAMPL 统计报告要点）P 值写出确切值（或 <0.001），说明单侧还是双侧及显著性水平",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S5（SAMPL 统计报告要点）写明每组分析的样本量与缺失数据处理",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S6（SAMPL 统计报告要点）多重比较时说明是否校正、如何校正",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S7（SAMPL 统计报告要点）回归模型写明纳入的变量、变量筛选方式与模型拟合情况",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S8（SAMPL 统计报告要点）写明分析所用的软件",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S9（SAMPL 统计报告要点）数字的精度与单位恰当，百分比给出分子与分母",
+            "status": "absent",
+            "evidence": ""
+          }
+        ],
+        "acceptance": [
+          {
+            "item": "临床证据报告需包含 PICO、检索来源与日期、纳入排除标准、地标试验与最新指南、效应量与置信区间、安全性、证据质量分级、矛盾证据处理、适用性与局限性",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "统计报告需写明统计方法、假设、效应量与置信区间、确切 P 值、样本量与缺失数据、多重比较、回归模型、软件及数字精度",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "主要结论需与来源证据相称",
+            "met": false,
+            "evidence": ""
+          }
+        ]
+      },
+      "checklist": [
+        {
+          "item": "E1",
+          "status": "absent"
+        },
+        {
+          "item": "E2",
+          "status": "absent"
+        },
+        {
+          "item": "E3",
+          "status": "absent"
+        },
+        {
+          "item": "E4",
+          "status": "absent"
+        },
+        {
+          "item": "E5",
+          "status": "absent"
+        },
+        {
+          "item": "E6",
+          "status": "absent"
+        },
+        {
+          "item": "E7",
+          "status": "absent"
+        },
+        {
+          "item": "E8",
+          "status": "not_applicable"
+        },
+        {
+          "item": "E9",
+          "status": "absent"
+        },
+        {
+          "item": "E10",
+          "status": "absent"
+        },
+        {
+          "item": "S1",
+          "status": "absent"
+        },
+        {
+          "item": "S2",
+          "status": "absent"
+        },
+        {
+          "item": "S3",
+          "status": "absent"
+        },
+        {
+          "item": "S4",
+          "status": "absent"
+        },
+        {
+          "item": "S5",
+          "status": "absent"
+        },
+        {
+          "item": "S6",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S7",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S8",
+          "status": "absent"
+        },
+        {
+          "item": "S9",
+          "status": "absent"
+        }
+      ],
+      "usage": {
+        "cacheHitTokens": 0,
+        "cacheMissTokens": 1718,
+        "completionTokens": 6842,
+        "reasoningTokens": 5165
+      },
+      "cost": 0.266928,
+      "model": "qwen3.8-max-0902",
+      "reasoningChars": 19739,
+      "ms": 157066,
+      "note": "5 kept, 1 dropped; planted 0/0; false alarms 1; ¥0.267; 157 s"
+    },
+    {
+      "group": "editor-live",
+      "id": "detail-far-from-its-quote-is-supported#2",
+      "pass": true,
+      "found": [],
+      "clean": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "weak_support",
+            "overclaim"
+          ],
+          "why": "every detail of the claim is in the abstract; flagging it takes reading no further than the quote",
+          "flagged": []
+        }
+      ],
+      "findings": [
+        {
+          "id": "E01",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "整篇报告",
+          "evidence": "# 证据简报 ## 主要结论",
+          "fix": "增加方法学段落，写明检索来源与检索日期、纳入/排除标准、是否纳入地标试验与最新指南、证据质量分级（如 GRADE）及局限性，以满足 E2–E10。",
+          "message": "清单条目缺失（整篇报告）：「# 证据简报 ## 主要结论」。建议：增加方法学段落，写明检索来源与检索日期、纳入/排除标准、是否纳入地标试验与最新指南、证据质量分级（如 GRADE）及局限性，以满足 E2–E10。"
+        },
+        {
+          "id": "E02",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "整篇报告",
+          "evidence": "## 主要结论 1. 一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者",
+          "fix": "在报告开头或专门段落中用 PICO 格式明确写出人群、干预、对照与结局，以满足 E1。",
+          "message": "清单条目缺失（整篇报告）：「## 主要结论 1. 一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者」。建议：在报告开头或专门段落中用 PICO 格式明确写出人群、干预、对照与结局，以满足 E1。"
+        }
+      ],
+      "dropped": [
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "evidence"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "duplicate"
+        },
+        {
+          "kind": "missing_item",
+          "reason": "duplicate"
+        }
+      ],
+      "raw": {
+        "findings": [
+          {
+            "location": "主要结论 第1条（CLM-001）",
+            "kind": "missing_item",
+            "evidence": "180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3% [1]",
+            "fix": "补充来源中的效应量与置信区间，例如「风险差 7.3 个百分点，95% CI 2.9–11.7；HR 4.40，95% CI 1.66–11.66；P = 0.001」，以满足 E5 与 S3 的要求。"
+          },
+          {
+            "location": "整篇报告",
+            "kind": "missing_item",
+            "evidence": "# 证据简报\n\n## 主要结论",
+            "fix": "增加方法学段落，写明检索来源与检索日期、纳入/排除标准、是否纳入地标试验与最新指南、证据质量分级（如 GRADE）及局限性，以满足 E2–E10。"
+          },
+          {
+            "location": "整篇报告",
+            "kind": "missing_item",
+            "evidence": "## 主要结论\n\n1. 一项在荷兰两家二级医疗中心开展的多中心随机对照试验纳入 437 例 65 岁以上、卒中风险升高的患者",
+            "fix": "在报告开头或专门段落中用 PICO 格式明确写出人群、干预、对照与结局，以满足 E1。"
+          },
+          {
+            "location": "整篇报告",
+            "kind": "missing_item",
+            "evidence": "180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+            "fix": "增加有害结局与安全性信息（如来源文献中若报告的不良事件、依从性问题等），或明确说明来源未报告安全性数据，以满足 E6。"
+          },
+          {
+            "location": "整篇报告",
+            "kind": "missing_item",
+            "evidence": "# 证据简报\n\n## 主要结论",
+            "fix": "增加适用性讨论段落，说明该试验结果（荷兰≥65岁、CHA₂DS₂-VASc≥2/3 人群）对目标人群的推广性，以满足 E9。"
+          },
+          {
+            "location": "整篇报告",
+            "kind": "missing_item",
+            "evidence": "# 证据简报\n\n## 主要结论",
+            "fix": "增加局限性段落（如仅两家中心、180天随访、检测偏倚等），以满足 E10。"
+          }
+        ],
+        "checklist": [
+          {
+            "item": "E1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E7",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E9",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E10",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S7",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S9",
+            "status": "absent",
+            "evidence": ""
+          }
+        ],
+        "acceptance": [
+          {
+            "item": "E1（临床证据报告要素）研究问题写明人群、干预/暴露、对照与结局（PICO）",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "E2（临床证据报告要素）写明检索了哪些来源及检索日期",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "E3（临床证据报告要素）写明纳入与排除标准",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "E4（临床证据报告要素）纳入了该领域的地标试验与最新指南（或说明为何没有）",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "E5（临床证据报告要素）主要结论给出效应量与置信区间，而不只是方向或 P 值",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "E6（临床证据报告要素）报告了有害结局与安全性",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "E7（临床证据报告要素）对证据质量或确定性分级（如 GRADE），并与结论措辞相称",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "E8（临床证据报告要素）处理了相互矛盾的证据",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "E9（临床证据报告要素）讨论了对目标人群的适用性",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "E10（临床证据报告要素）写明局限性",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "S1（SAMPL 统计报告要点）每项分析写明所用的统计方法（检验名称）",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "S2（SAMPL 统计报告要点）说明方法的前提假设是否满足或如何核查",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "S3（SAMPL 统计报告要点）主要结果给出效应量及其置信区间，而不只给 P 值",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "S4（SAMPL 统计报告要点）P 值写出确切值（或 <0.001），说明单侧还是双侧及显著性水平",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "S5（SAMPL 统计报告要点）写明每组分析的样本量与缺失数据处理",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "S6（SAMPL 统计报告要点）多重比较时说明是否校正、如何校正",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "S7（SAMPL 统计报告要点）回归模型写明纳入的变量、变量筛选方式与模型拟合情况",
+            "met": true,
+            "evidence": ""
+          },
+          {
+            "item": "S8（SAMPL 统计报告要点）写明分析所用的软件",
+            "met": false,
+            "evidence": ""
+          },
+          {
+            "item": "S9（SAMPL 统计报告要点）数字的精度与单位恰当，百分比给出分子与分母",
+            "met": false,
+            "evidence": ""
+          }
+        ]
+      },
+      "checklist": [
+        {
+          "item": "E1",
+          "status": "absent"
+        },
+        {
+          "item": "E2",
+          "status": "absent"
+        },
+        {
+          "item": "E3",
+          "status": "absent"
+        },
+        {
+          "item": "E4",
+          "status": "absent"
+        },
+        {
+          "item": "E5",
+          "status": "absent"
+        },
+        {
+          "item": "E6",
+          "status": "absent"
+        },
+        {
+          "item": "E7",
+          "status": "absent"
+        },
+        {
+          "item": "E8",
+          "status": "absent"
+        },
+        {
+          "item": "E9",
+          "status": "absent"
+        },
+        {
+          "item": "E10",
+          "status": "absent"
+        },
+        {
+          "item": "S1",
+          "status": "absent"
+        },
+        {
+          "item": "S2",
+          "status": "absent"
+        },
+        {
+          "item": "S3",
+          "status": "absent"
+        },
+        {
+          "item": "S4",
+          "status": "absent"
+        },
+        {
+          "item": "S5",
+          "status": "absent"
+        },
+        {
+          "item": "S6",
+          "status": "absent"
+        },
+        {
+          "item": "S7",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S8",
+          "status": "absent"
+        },
+        {
+          "item": "S9",
+          "status": "absent"
+        }
+      ],
+      "usage": {
+        "cacheHitTokens": 1024,
+        "cacheMissTokens": 694,
+        "completionTokens": 7070,
+        "reasoningTokens": 5020
+      },
+      "cost": 0.264384,
+      "model": "qwen3.8-max-0902",
+      "reasoningChars": 19779,
+      "ms": 156510,
+      "note": "2 kept, 4 dropped; planted 0/0; false alarms 0; ¥0.264; 157 s"
+    },
+    {
+      "group": "editor-live",
+      "id": "detail-far-from-its-quote-is-supported#3",
+      "pass": false,
+      "found": [],
+      "clean": [
+        {
+          "claimId": "CLM-001",
+          "kinds": [
+            "contradiction",
+            "weak_support",
+            "overclaim"
+          ],
+          "why": "every detail of the claim is in the abstract; flagging it takes reading no further than the quote",
+          "flagged": [
+            "weak_support"
+          ]
+        }
+      ],
+      "findings": [
+        {
+          "id": "E01",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "整篇报告",
+          "evidence": "# 证据简报 ## 主要结论",
+          "fix": "增加「研究问题与 PICO」「检索来源与日期」「纳入/排除标准」「有害结局与安全性」「证据质量分级」「局限性」「适用性」等章节，或将文档明确标注为单条论断核验片段而非完整临床证据报告。",
+          "message": "清单条目缺失（整篇报告）：「# 证据简报 ## 主要结论」。建议：增加「研究问题与 PICO」「检索来源与日期」「纳入/排除标准」「有害结局与安全性」「证据质量分级」「局限性」「适用性」等章节，或将文档明确标注为单条论断核验片段而非完整临床证据报告。"
+        },
+        {
+          "id": "E02",
+          "kind": "weak_support",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "主要结论 第1条（CLM-001）",
+          "evidence": "437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+          "fix": "补充来源原文中已给出的风险差（7.3 percentage points; 95% CI: 2.9–11.7）与 HR（4.40; 95% CI: 1.66–11.66），或明确说明本条仅转述检出率而不作效应推断。",
+          "message": "证据支持偏弱（主要结论 第1条（CLM-001））：「437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%」。建议：补充来源原文中已给出的风险差（7.3 percentage points; 95% CI: 2.9–11.7）与 HR（4.40; 95% CI: 1.66–11.66），或明确说明本条仅转述检出率而不作效应推断。"
+        },
+        {
+          "id": "E03",
+          "kind": "wording",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "参考文献 [1]",
+          "evidence": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211",
+          "fix": "补充期刊名、年份、卷期页码及 DOI 或临床试验注册号（NCT05686330），使读者可定位原文。",
+          "message": "措辞（参考文献 [1]）：「Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211」。建议：补充期刊名、年份、卷期页码及 DOI 或临床试验注册号（NCT05686330），使读者可定位原文。"
+        },
+        {
+          "id": "E04",
+          "kind": "missing_item",
+          "severity": "advisory",
+          "origin": "editor",
+          "location": "整篇报告",
+          "evidence": "New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR: 4.40; 95% CI: 1.66-11.66)",
+          "fix": "若报告定位为完整临床证据简报，应纳入来源中的有害结局与安全性信息（若原文未报告则注明「未报告」），并讨论证据确定性。",
+          "message": "清单条目缺失（整篇报告）：「New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95%…」。建议：若报告定位为完整临床证据简报，应纳入来源中的有害结局与安全性信息（若原文未报告则注明「未报告」），并讨论证据确定性。"
+        }
+      ],
+      "dropped": [
+        {
+          "kind": "overclaim",
+          "reason": "evidence"
+        }
+      ],
+      "raw": {
+        "findings": [
+          {
+            "location": "主要结论 第1条（CLM-001）",
+            "kind": "overclaim",
+            "evidence": "180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+            "fix": "在百分比后补充风险差与置信区间（7.3 percentage points; 95% CI: 2.9–11.7）及 HR 4.40（95% CI: 1.66–11.66），使效应量完整。"
+          },
+          {
+            "location": "整篇报告",
+            "kind": "missing_item",
+            "evidence": "# 证据简报\n\n## 主要结论",
+            "fix": "增加「研究问题与 PICO」「检索来源与日期」「纳入/排除标准」「有害结局与安全性」「证据质量分级」「局限性」「适用性」等章节，或将文档明确标注为单条论断核验片段而非完整临床证据报告。"
+          },
+          {
+            "location": "主要结论 第1条（CLM-001）",
+            "kind": "weak_support",
+            "evidence": "437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%",
+            "fix": "补充来源原文中已给出的风险差（7.3 percentage points; 95% CI: 2.9–11.7）与 HR（4.40; 95% CI: 1.66–11.66），或明确说明本条仅转述检出率而不作效应推断。"
+          },
+          {
+            "location": "参考文献 [1]",
+            "kind": "wording",
+            "evidence": "Enhanced Detection and Prompt Diagnosis of Atrial Fibrillation Using Apple Watch: A Randomized Controlled Trial. PMID: 41569211",
+            "fix": "补充期刊名、年份、卷期页码及 DOI 或临床试验注册号（NCT05686330），使读者可定位原文。"
+          },
+          {
+            "location": "整篇报告",
+            "kind": "missing_item",
+            "evidence": "New onset AF occurred in 21 (9.6%) patients of the intervention group and 5 (2.3%) patients of the control group (risk difference: 7.3 percentage points; 95% CI: 2.9-11.7 percentage points; P = 0.001; HR: 4.40; 95% CI: 1.66-11.66)",
+            "fix": "若报告定位为完整临床证据简报，应纳入来源中的有害结局与安全性信息（若原文未报告则注明「未报告」），并讨论证据确定性。"
+          }
+        ],
+        "checklist": [
+          {
+            "item": "E1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E7",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E9",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "E10",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S1",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S2",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S3",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S4",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S5",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S6",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S7",
+            "status": "not_applicable",
+            "evidence": ""
+          },
+          {
+            "item": "S8",
+            "status": "absent",
+            "evidence": ""
+          },
+          {
+            "item": "S9",
+            "status": "absent",
+            "evidence": ""
+          }
+        ],
+        "acceptance": [
+          {
+            "item": "CLM-001 与来源 S1 一致",
+            "met": true,
+            "evidence": "437 例 65 岁以上、卒中风险升高的患者，180 天智能手表监测组新发房颤 9.6%，常规照护组 2.3%"
+          }
+        ]
+      },
+      "checklist": [
+        {
+          "item": "E1",
+          "status": "absent"
+        },
+        {
+          "item": "E2",
+          "status": "absent"
+        },
+        {
+          "item": "E3",
+          "status": "absent"
+        },
+        {
+          "item": "E4",
+          "status": "absent"
+        },
+        {
+          "item": "E5",
+          "status": "absent"
+        },
+        {
+          "item": "E6",
+          "status": "absent"
+        },
+        {
+          "item": "E7",
+          "status": "absent"
+        },
+        {
+          "item": "E8",
+          "status": "absent"
+        },
+        {
+          "item": "E9",
+          "status": "absent"
+        },
+        {
+          "item": "E10",
+          "status": "absent"
+        },
+        {
+          "item": "S1",
+          "status": "absent"
+        },
+        {
+          "item": "S2",
+          "status": "absent"
+        },
+        {
+          "item": "S3",
+          "status": "absent"
+        },
+        {
+          "item": "S4",
+          "status": "absent"
+        },
+        {
+          "item": "S5",
+          "status": "absent"
+        },
+        {
+          "item": "S6",
+          "status": "absent"
+        },
+        {
+          "item": "S7",
+          "status": "not_applicable"
+        },
+        {
+          "item": "S8",
+          "status": "absent"
+        },
+        {
+          "item": "S9",
+          "status": "absent"
+        }
+      ],
+      "usage": {
+        "cacheHitTokens": 1024,
+        "cacheMissTokens": 694,
+        "completionTokens": 2703,
+        "reasoningTokens": 1494
+      },
+      "cost": 0.107172,
+      "model": "qwen3.8-max-0902",
+      "reasoningChars": 5432,
+      "ms": 204274,
+      "note": "4 kept, 1 dropped; planted 0/0; false alarms 1; ¥0.107; 204 s"
+    }
+  ]
+}

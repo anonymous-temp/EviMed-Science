@@ -162,7 +162,9 @@ test("a package is reviewed whole: references resolved, located findings kept, t
   const message = prompts[0].messages[1].content;
   assert.match(message, /E1（临床证据报告要素）/);
   assert.match(message, /A1 写明检索日期/);
-  assert.match(message, /来源摘录：.*lowered HbA1c by 0\.9 percentage points/);
+  assert.match(message, /<sources>\n\[S1\] \.evimed-sources\/pubmed\/PMID1\/abc\/abstract\.md《Metformin versus placebo》\nMetformin versus placebo in type 2 diabetes\. Metformin lowered HbA1c by 0\.9 percentage points/, "the source once, whole");
+  assert.match(message, /CLM-001 \[direct\] [^\n]*\n  来源 S1\n  引文：Metformin lowered HbA1c/);
+  assert.ok(message.indexOf("<sources>") < message.indexOf("<claims>"));
   assert.match(message, /查无此条 1 条/);
   assert.ok(message.indexOf("<claims>") < message.indexOf('<file name="clinical-evidence-report.md">'), "stable parts first, for the provider's prefix cache");
   assert.equal(prompts[0].enable_thinking, true);
