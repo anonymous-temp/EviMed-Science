@@ -109,6 +109,21 @@ test('a checklist item said to be present must be located, or it is unlocated ra
   assert.deepEqual(acceptance, [{ item: 'A1', met: true }, { item: 'A2', met: null }, { item: 'A3', met: false }])
 })
 
+test('a checklist answer that copies the whole label still names its item, never a longer id; what was answered at all is counted', () => {
+  const { checklist, acceptance, returned } = acceptEditorChecks({
+    checklist: [
+      { item: 'E1（临床证据报告要素）写明研究问题', status: 'absent', evidence: '' },
+      { item: 'E10（临床证据报告要素）', status: 'not_applicable', evidence: '' },
+      { item: 'E1', status: 'present', evidence: 'lowered HbA1c' },
+      { item: 'X9', status: 'absent', evidence: '' },
+    ],
+    acceptance: [{ item: 'A1 写明检索日期', met: false, evidence: '' }],
+  }, { haystacks: [source], checklistItems: [{ id: 'E1' }, { id: 'E10' }], acceptanceItems: ['写明检索日期'] })
+  assert.deepEqual(checklist, [{ item: 'E1', status: 'absent' }, { item: 'E10', status: 'not_applicable' }], 'the first answer for E1 stands; X9 was never asked')
+  assert.deepEqual(acceptance, [{ item: 'A1', met: false }])
+  assert.deepEqual(returned, { checklist: 4, acceptance: 1 })
+})
+
 test('a writer answers a finding by id: fixed, or declined with a reason; anything else is refused and still owed', () => {
   const findings = [
     { id: 'F01', kind: /** @type {const} */ ('contradiction') },
