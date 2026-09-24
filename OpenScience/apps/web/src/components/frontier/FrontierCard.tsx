@@ -25,8 +25,12 @@ import {
 
 const eventPath = (id: string) => `/app/frontier/events/${encodeURIComponent(id)}`;
 
-/** The editorial score's colour by band: the accent at the selection line, grey below it (plan §6.2). */
-const BAND_TONE = { high: "text-accent", medium: "text-text-2", low: "text-text-3" } as const;
+/**
+ * The editorial score's dot by band (plan §6.2): the accent at or above the
+ * selection line, the secondary grey from 60 to it, the faint grey below 60.
+ * The number itself stays grey, as every number on the card does.
+ */
+const BAND_DOT = { high: "bg-accent", medium: "bg-text-2", low: "bg-text-3" } as const;
 
 export interface FrontierCardProps {
   item: FrontierItem;
@@ -120,8 +124,8 @@ export function FrontierCard({ item, grouped = true, markSelected = false, onSta
             : <span key={flag.key} className="shrink-0">· {flag.label}</span>))}
           <span className="ml-auto flex shrink-0 items-center gap-1 text-ui">
             {band && (
-              <span title="编辑评分 · 满分 100" className={cn("inline-flex items-center gap-1 text-caption font-semibold tabular-nums", BAND_TONE[band])}>
-                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+              <span title="编辑评分 · 满分 100" className="inline-flex items-center gap-1 text-caption font-semibold tabular-nums text-text-3">
+                <span aria-hidden="true" data-band={band} className={cn("h-1.5 w-1.5 rounded-full", BAND_DOT[band])} />
                 <span className="sr-only">编辑评分</span>
                 {item.score}
               </span>

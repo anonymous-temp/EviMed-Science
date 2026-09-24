@@ -1,9 +1,9 @@
 import type { FrontierFact, FrontierItem } from "@/lib/frontierClient";
 
 /**
- * The enrichment keys this build names, in the order a card lists them. Any
+ * The enrichment keys this build names, in the order 「⋯ › 详情」 lists them. Any
  * other key a later plugin sends is listed after them by its own name (plan
- * §14.6: new fields reach the card without a platform release).
+ * §14.6: new fields reach the reader without a platform release).
  */
 const FACT_LABELS: ReadonlyArray<readonly [string, string]> = Object.freeze([
   ["journal", "期刊"],
@@ -60,7 +60,7 @@ function factText(key: string, value: FrontierFact): string {
 }
 
 /**
- * An item's facts as the card lists them: the named ones first, then any
+ * An item's facts as 「⋯ › 详情」 lists them: the named ones first, then any
  * other in the order it came. The journal is left out where the source is
  * the journal itself; a fact with nothing to show is dropped.
  */
