@@ -39,13 +39,12 @@ export function projectErrorMessage(error: unknown, projectCount: number, fallba
   });
 }
 
-/** 「12 次运行 · 最近活动 3 小时前」, from what the project list carries. */
+/**
+ * 「最近活动 3 小时前」, from what the project list carries, or nothing. How
+ * many runs a project holds (「12 次运行」) was the back office's count and
+ * went with the 2026-09-23 settings page (inventory §1.10).
+ */
 export function projectMetaLine(project: WebProject, now = Date.now()): string {
-  const parts: string[] = [];
-  if (typeof project.runCount === "number") {
-    parts.push(project.runCount > 0 ? `${project.runCount} 次运行` : "还没有运行");
-  }
   const last = project.lastActivityAt ? Date.parse(project.lastActivityAt) : Number.NaN;
-  if (Number.isFinite(last)) parts.push(`最近活动 ${relativeTime(last, now)}`);
-  return parts.join(" · ");
+  return Number.isFinite(last) ? `最近活动 ${relativeTime(last, now)}` : "";
 }

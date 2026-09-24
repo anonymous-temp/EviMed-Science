@@ -1,246 +1,161 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useUiStore } from "@/lib/store";
 import { AccountPage } from "./AccountPage";
 
 const mocks = vi.hoisted(() => ({
   fetchWebMe: vi.fn(),
-  lastWebUsageBudgetRefusal: vi.fn(),
   fetchImStatus: vi.fn(),
 }));
 
-// The refusal source is mocked; the sentence the page prints is the real one,
-// so a change to how a ceiling is worded is caught here.
 vi.mock("@/lib/apiClient", async () => {
   const actual = await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient");
-  return {
-    describeWebUsageBudget: actual.describeWebUsageBudget,
-    fetchWebMe: mocks.fetchWebMe,
-    lastWebUsageBudgetRefusal: mocks.lastWebUsageBudgetRefusal,
-    hasWebApi: true,
-    WEB_SESSION_ENDED_EVENT: "open-science:web-session-ended",
-  };
+  return { ...actual, fetchWebMe: mocks.fetchWebMe, hasWebApi: true };
+});
+vi.mock("@/lib/imClient", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/imClient")>("@/lib/imClient");
+  return { ...actual, fetchImStatus: mocks.fetchImStatus };
 });
 
-vi.mock("@/components/settings/WebAccountCard", () => ({
-  WebAccountCard: () => <div>托管账户自助管理</div>,
+// Each section has its own test; here they are the slots the section column
+// opens. 项目 is the real section's shape as far as this page cares: it holds
+// no plugins card any more.
+vi.mock("@/components/settings/AccountSection", () => ({
+  AccountSection: ({ imEnabled }: { imEnabled: boolean }) => <div>账户分区{imEnabled ? "（含飞书）" : ""}</div>,
 }));
-// Usage has its own test; here it is only a slot on the page.
-vi.mock("@/components/settings/UsageCard", () => ({
-  UsageCard: () => <div>本月用量</div>,
-}));
-// So do the connector credentials.
-vi.mock("@/components/settings/ConnectorsCard", () => ({
-  ConnectorsCard: () => <div>数据源凭据</div>,
-}));
-// The other two tabs are whole pages with their own tests. Mocked so this file
-// tests the account destination, not everything reachable from it.
-vi.mock("./SettingsPage", () => ({ SettingsPage: () => <div>项目与插件设置</div> }));
-vi.mock("@/components/settings/PasswordCard", () => ({ PasswordCard: () => <div>登录密码</div> }));
-// The Feishu card has its own test; here only whether its tab exists.
-vi.mock("@/components/settings/FeishuCard", () => ({ FeishuCard: () => <div>飞书机器人</div> }));
-// The daily's switch decides for itself whether it is shown (its own test); here only its place.
-vi.mock("@/components/settings/FrontierDigestCard", () => ({ FrontierDigestCard: () => <div>前沿动态日报</div> }));
-vi.mock("@/lib/imClient", () => ({ fetchImStatus: mocks.fetchImStatus }));
-vi.mock("./OpsPage", () => ({ OpsPage: () => <div>部署运维台</div> }));
+vi.mock("@/components/settings/NotificationsSection", () => ({ NotificationsSection: () => <div>通知分区</div> }));
+vi.mock("@/components/settings/UsageSection", () => ({ UsageSection: () => <div>用量分区</div> }));
+vi.mock("@/components/settings/ConnectorsSection", () => ({ ConnectorsSection: () => <div>数据源分区</div> }));
+vi.mock("@/components/settings/ProjectsSection", () => ({ ProjectsSection: () => <div>项目分区</div> }));
+vi.mock("./OpsPage", () => ({ OpsPage: () => <div>运维分区<p>项目插件</p></div> }));
 
-describe("AccountPage", () => {
+const me = (operator = false) => ({
+  user: { id: "alice", name: "Alice", tenantId: "alice" },
+  tenant: { id: "alice", model: "individual-account", role: "owner" },
+  ...(operator ? { operator: true } : {}),
+  project: { id: "default", name: "我的研究" },
+  projects: [{ id: "default", name: "我的研究" }],
+});
+
+function open(path = "/app/account") {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes><Route path="/app/account" element={<AccountPage />} /></Routes>
+    </MemoryRouter>,
+  );
+}
+
+const nav = () => screen.getByRole("navigation", { name: "设置分区" });
+
+describe("设置", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.localStorage.clear();
     useUiStore.setState({ theme: "system" });
-    mocks.lastWebUsageBudgetRefusal.mockReturnValue(null);
     mocks.fetchImStatus.mockResolvedValue({ enabled: false, available: true, channels: [], feishu: null, registration: null });
-    mocks.fetchWebMe.mockResolvedValue({
-      user: { id: "alice", name: "Alice", tenantId: "alice" },
-      tenant: { id: "alice", model: "individual-account", role: "owner" },
-      project: { id: "default", name: "Default Project" },
-      projects: [{ id: "default", name: "Default Project" }],
-    });
+    mocks.fetchWebMe.mockResolvedValue(me());
   });
 
-  it("names the account and offers self-service", async () => {
-    render(
-      <MemoryRouter>
-        <AccountPage />
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findAllByText("Alice")).not.toHaveLength(0);
-    expect(screen.queryByText(/^tenant:/)).not.toBeInTheDocument();
-    // The account id belongs to 「账户」 below — the card export and deletion
-    // act through — and is printed there once. This page used to print it too,
-    // which made four printings of a string nobody types (WP8, 2026-09-20).
-    expect(screen.queryByText(/alice/)).toBeNull();
-    expect(screen.getByText("托管账户自助管理")).toBeInTheDocument();
-    // The password is the account's, so it is on the account tab.
-    expect(screen.getByText("登录密码")).toBeInTheDocument();
+  it("is 「设置」 in the one page column, a title and nothing under it", async () => {
+    const { container } = open();
+    const heading = await screen.findByRole("heading", { level: 1, name: "设置" });
+    expect(container.querySelector(".max-w-page")).toContainElement(heading);
+    expect(screen.queryByText(/你的账号、外观、通知/)).not.toBeInTheDocument();
+    expect(screen.queryByText("账户与设置")).not.toBeInTheDocument();
+    // A section column, not a strip of tabs.
+    expect(screen.queryAllByRole("tab")).toEqual([]);
   });
 
-  // One destination, the tabs every product's settings have (2026-09-22:
-  // 「该有的常规的设置项咋一个都没有」): account, appearance, notifications,
-  // usage, data sources, projects.
-  it("keeps the conventional settings as tabs of one destination", async () => {
-    render(
-      <MemoryRouter>
-        <AccountPage />
-      </MemoryRouter>,
-    );
-
-    await screen.findAllByText("Alice");
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["账户", "外观", "通知", "用量与额度", "数据源", "项目"]);
-    fireEvent.click(screen.getByRole("tab", { name: "外观" }));
-    expect(screen.getByRole("radiogroup", { name: "外观主题" })).toBeInTheDocument();
-    expect(screen.getByText("简体中文")).toBeInTheDocument();
-    expect(screen.getByText("键盘快捷键")).toBeInTheDocument();
-    expect(screen.getByText("收起 / 展开侧边栏")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "通知" }));
-    expect(screen.getByText("站内通知")).toBeInTheDocument();
-    // No IM module: the phone card says so instead of offering a scan.
-    expect(screen.getByText("手机通知")).toBeInTheDocument();
-    expect(screen.queryByText("飞书机器人")).not.toBeInTheDocument();
-    // The 「前沿动态」 daily's own switch lives with the other notifications.
-    expect(screen.getByText("前沿动态日报")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "用量与额度" }));
-    expect(screen.getByText("本月用量")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "数据源" }));
-    expect(screen.getByText("数据源凭据")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "项目" }));
-    expect(screen.getByText("项目与插件设置")).toBeInTheDocument();
+  it("lists the conventional sections in a column on the left, and opens on 账户", async () => {
+    open();
+    expect(await screen.findByText("账户分区")).toBeInTheDocument();
+    const links = within(nav()).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目"]);
+    expect(within(nav()).getByRole("link", { name: "账户" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav()).getByRole("link", { name: "用量" })).toHaveAttribute("href", "/app/account?tab=usage");
   });
 
-  // A page for a switched-off subsystem would offer a scan that cannot work.
-  it("offers the Feishu binding under 通知 only where the deployment runs the IM module", async () => {
-    mocks.fetchImStatus.mockResolvedValue({ enabled: true, available: true, channels: [], feishu: { bound: false }, registration: null });
-    render(
-      <MemoryRouter>
-        <AccountPage />
-      </MemoryRouter>,
-    );
-    await screen.findAllByText("Alice");
-    fireEvent.click(screen.getByRole("tab", { name: "通知" }));
-    expect(await screen.findByText("飞书机器人")).toBeInTheDocument();
-    expect(screen.queryByText("手机通知")).not.toBeInTheDocument();
-  });
-
-  // Presentation only — every route the page calls authorizes itself — but an
-  // account the deployment did not name as an operator is not offered it.
-  it("offers the operations board only to an operator account", async () => {
-    render(
-      <MemoryRouter>
-        <AccountPage />
-      </MemoryRouter>,
-    );
-
-    await screen.findAllByText("Alice");
-    expect(screen.queryByRole("tab", { name: "运维台" })).not.toBeInTheDocument();
-  });
-
-  it("offers the operations board when the control plane says this account is one", async () => {
-    mocks.fetchWebMe.mockResolvedValue({
-      user: { id: "alice", name: "Alice", tenantId: "alice" },
-      tenant: { id: "alice", model: "individual-account", role: "owner" },
-      operator: true,
-      project: { id: "default", name: "Default Project" },
-      projects: [{ id: "default", name: "Default Project" }],
-    });
-    render(
-      <MemoryRouter>
-        <AccountPage />
-      </MemoryRouter>,
-    );
-
-    fireEvent.click(await screen.findByRole("tab", { name: "运维台" }));
-    expect(screen.getByText("部署运维台")).toBeInTheDocument();
-  });
-});
-
-describe("AccountPage budget ceilings", () => {
-  const refusal = {
-    window: "week" as const,
-    limit: 12,
-    committed: 12.4,
-    requested: 0.3,
-    currency: "CNY",
-    observedAt: "2026-09-07T02:30:00.000Z",
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useUiStore.setState({ theme: "system" });
-    mocks.fetchWebMe.mockResolvedValue({
-      user: { id: "alice", name: "Alice", tenantId: "alice" },
-      tenant: { id: "alice", model: "individual-account", role: "owner" },
-      project: { id: "default", name: "Default Project" },
-      projects: [{ id: "default", name: "Default Project" }],
-    });
-    mocks.lastWebUsageBudgetRefusal.mockReturnValue(refusal);
-  });
-
-  // The three ceilings lead to different actions — the two account ceilings
-  // are rolling windows that free spend as it ages, a run ceiling is about
-  // this one task — so the page never renders them as one word. Only the
-  // 24-hour and 7-day refusals reach a browser today (the reservation refusal
-  // is answered by the model gateway's own envelope); `run` is rendered here
-  // because the page must not go blank the day that path is routed through the
-  // shared boundary.
   it.each([
-    ["day", "近 24 小时额度已达上限：上限 12.00 CNY，已占用 12.40 CNY，本次请求还需 0.30 CNY。"],
-    ["week", "近 7 天额度已达上限：上限 12.00 CNY，已占用 12.40 CNY，本次请求还需 0.30 CNY。"],
-    ["run", "单次任务额度已达上限：上限 12.00 CNY，已占用 12.40 CNY，本次请求还需 0.30 CNY。"],
-  ] as const)("names the %s ceiling and the amounts behind it", async (window, sentence) => {
-    mocks.lastWebUsageBudgetRefusal.mockReturnValue({ ...refusal, window });
-    render(
-      <MemoryRouter initialEntries={["/app/account?tab=usage"]}>
-        <AccountPage />
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByText("额度已达上限")).toBeInTheDocument();
-    expect(screen.getByText(sentence)).toBeInTheDocument();
+    ["usage", "用量", "用量分区"],
+    ["connectors", "数据源", "数据源分区"],
+    ["notifications", "通知", "通知分区"],
+    ["projects", "项目", "项目分区"],
+    ["account", "账户", "账户分区"],
+  ])("keeps ?tab=%s: it opens %s", async (tab, label, body) => {
+    open(`/app/account?tab=${tab}`);
+    expect(await screen.findByText(body)).toBeInTheDocument();
+    expect(within(nav()).getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
   });
 
-  // The ledger measures spend over rolling 24-hour and 7-day windows
-  // (`openCostWindows`, applied in SQL as `created_at >= now - interval`), so
-  // nothing resets at midnight or on Monday. The card's hint is pinned as text
-  // because it is the one sentence telling the researcher when the ceiling
-  // frees up, and a rule the ledger does not implement is worse than none.
-  it("never promises a calendar reset", async () => {
-    render(
-      <MemoryRouter initialEntries={["/app/account?tab=usage"]}>
-        <AccountPage />
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByText("额度已达上限")).toBeInTheDocument();
-    expect(screen.queryByText(/次日重置|明天|每周一|本周额度|今日额度/)).not.toBeInTheDocument();
+  it("opens 账户 for a value it does not know", async () => {
+    open("/app/account?tab=nonsense");
+    expect(await screen.findByText("账户分区")).toBeInTheDocument();
   });
 
-  // The admission check refuses before it prices anything, so there is no
-  // "this request needs" amount to invent.
-  it("leaves out the requested amount when the refusal named none", async () => {
-    mocks.lastWebUsageBudgetRefusal.mockReturnValue({ ...refusal, requested: undefined });
-    render(
-      <MemoryRouter initialEntries={["/app/account?tab=usage"]}>
-        <AccountPage />
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByText("近 7 天额度已达上限：上限 12.00 CNY，已占用 12.40 CNY。")).toBeInTheDocument();
+  it("moves between sections from the column", async () => {
+    const user = userEvent.setup();
+    open();
+    await screen.findByText("账户分区");
+    await user.click(within(nav()).getByRole("link", { name: "数据源" }));
+    expect(await screen.findByText("数据源分区")).toBeInTheDocument();
+    expect(within(nav()).getByRole("link", { name: "数据源" })).toHaveAttribute("aria-current", "page");
+    await user.click(within(nav()).getByRole("link", { name: "账户" }));
+    expect(await screen.findByText("账户分区")).toBeInTheDocument();
   });
 
-  it("says nothing about ceilings when no request has been refused", async () => {
-    mocks.lastWebUsageBudgetRefusal.mockReturnValue(null);
-    mocks.fetchImStatus.mockResolvedValue({ enabled: false, available: true, channels: [], feishu: null, registration: null });
-    render(
-      <MemoryRouter initialEntries={["/app/account?tab=usage"]}>
-        <AccountPage />
-      </MemoryRouter>,
-    );
+  it("offers Feishu under 账户 only where the deployment runs the IM module", async () => {
+    mocks.fetchImStatus.mockResolvedValue({ enabled: true, available: true, channels: [], feishu: { bound: false }, registration: null });
+    open();
+    expect(await screen.findByText("账户分区（含飞书）")).toBeInTheDocument();
+  });
 
-    await screen.findByText("本月用量");
-    expect(screen.queryByText("额度已达上限")).not.toBeInTheDocument();
-    expect(screen.queryByText(/已占用/)).not.toBeInTheDocument();
+  // 「项目插件」 is an operator's: a researcher has nothing to configure in it.
+  it("offers 运维, and the project plugins in it, only to an operator account", async () => {
+    open("/app/account?tab=projects");
+    expect(await screen.findByText("项目分区")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
+    expect(within(nav()).queryByRole("link", { name: "运维" })).not.toBeInTheDocument();
+    expect(screen.queryByText("项目插件")).not.toBeInTheDocument();
+  });
+
+  it("offers 运维 when the control plane says this account is one", async () => {
+    const user = userEvent.setup();
+    mocks.fetchWebMe.mockResolvedValue(me(true));
+    open();
+    await user.click(await within(nav()).findByRole("link", { name: "运维" }));
+    expect(await screen.findByText("运维分区")).toBeInTheDocument();
+    expect(screen.getByText("项目插件")).toBeInTheDocument();
+  });
+
+  // A hosted account does not pick a model and does not hold a provider key —
+  // the gateway resolves both per request — and approval is the deployment's.
+  // A section for any of them would offer a control the server refuses.
+  it("offers no model, credential or approval control", async () => {
+    const user = userEvent.setup();
+    mocks.fetchWebMe.mockResolvedValue(me(true));
+    open();
+    await within(nav()).findByRole("link", { name: "运维" });
+    const labels = within(nav()).getAllByRole("link").map((link) => link.textContent);
+    expect(labels).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目", "运维"]);
+    for (const label of labels) {
+      await user.click(within(nav()).getByRole("link", { name: label ?? "" }));
+      for (const gone of [/API Key/i, /审批模式/, /选择模型/, /添加 MCP/]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
+      expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    }
+  });
+
+  it("keeps 外观 to a theme, a language and the shortcuts, with no hint under any group", async () => {
+    const user = userEvent.setup();
+    open("/app/account?tab=appearance");
+    expect(await screen.findByRole("heading", { name: "外观" })).toBeInTheDocument();
+    expect(screen.getByText("简体中文")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "快捷键" })).toBeInTheDocument();
+    expect(screen.getByText("收起 / 展开侧边栏")).toBeInTheDocument();
+    for (const gone of [/保存在本浏览器中/, /界面语言随部署/, /按 \? 随时打开/]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
+    // The theme is a choice in a menu at the row's end.
+    await user.click(screen.getByRole("button", { name: "主题：跟随系统" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "深色" }));
+    expect(useUiStore.getState().theme).toBe("dark");
   });
 });
