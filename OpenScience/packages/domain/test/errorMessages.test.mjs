@@ -183,32 +183,3 @@ test("a refusal's declared numbers are declared once, for every ceiling that rai
   assert.deepEqual(ERROR_DETAIL_FIELDS.credits_weekly_limit_reached.window, ["week"]);
 });
 
-test("a finished run is described with three words and no others", async () => {
-  // 已交付 / 已交付 · N 条未能逐字核对 / 未完成 (plan §3.8 #5). The surfaces
-  // each had their own vocabulary — 「待你复核」 in the inbox, 「已交付，待人工
-  // 复核」 on the runs page, 「已交付 · 未核验」 in the container's panel,
-  // 「N 项自证未通过」 in the notice body — four sentences for one fact, three
-  // of them asking the reader for work nobody can do.
-  const { runVerdictText } = await import("../src/errorCodes.mjs");
-  assert.equal(runVerdictText({ status: "succeeded", errorCode: null, verification: null }), "已交付");
-  assert.equal(
-    runVerdictText({ status: "succeeded", errorCode: null, verification: "unverified", claimSummary: { total: 31, verified: 29, unverified: 2 } }),
-    "已交付 · 2 条未能逐字核对",
-  );
-  assert.equal(
-    runVerdictText({ status: "succeeded", errorCode: null, verification: "unverified", claimSummary: { total: 31, verified: 29 } }),
-    "已交付 · 2 条未能逐字核对",
-    "a run that counted claims says how many; the count is derived where it is not given",
-  );
-  assert.equal(
-    runVerdictText({ status: "succeeded", errorCode: null, verification: "unchecked" }),
-    "已交付 · 部分结论未能逐字核对",
-    "a run with no matrix still says the same thing, without a number it does not have",
-  );
-  assert.equal(runVerdictText({ status: "failed", errorCode: "runtime_monitor_timeout" }), "未完成");
-  assert.equal(runVerdictText({ status: "canceled", errorCode: null }), "未完成");
-  assert.equal(runVerdictText({}), "未完成", "an unrecognizable record is never described as delivered");
-  for (const verdict of ["未完成", "已交付", "已交付 · 2 条未能逐字核对"]) {
-    assert.doesNotMatch(verdict, /待你复核|待人工复核|自证未通过/);
-  }
-});

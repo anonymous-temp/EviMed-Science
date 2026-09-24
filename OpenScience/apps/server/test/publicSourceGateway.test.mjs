@@ -770,7 +770,7 @@ test("a researcher's own credential fills a profile the deployment has not confi
   assert.equal(refused.status, 503);
   const body = await refused.json();
   assert.equal(body.error.code, "public_source_opengwas_credential_missing");
-  assert.match(body.error.message, /账户与额度/, "the refusal says where a credential can be added");
+  assert.match(body.error.message, /设置 → 数据源/, "the refusal says where a credential can be added");
 
   const umls = { url: "https://uts-ws.nlm.nih.gov/rest/search/current?string=TP53", accept: ["application/json"], credentialProfile: "umls" };
   assert.equal((await gatewayRequest(base, umls, "alice-token")).status, 200);
