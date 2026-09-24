@@ -165,19 +165,6 @@ module.exports = {
       },
     },
     {
-      // Pages that still hand-make a bordered chip or button, until the page
-      // rewrites of the 2026-09-23 plan (WP2, WP4) replace them with the
-      // primitives. The list only shrinks: a file leaves it when its last
-      // bordered pill or button goes.
-      files: [
-        "src/app/routes/FrontierPage.tsx",
-        "src/components/frontier/FrontierFilters.tsx",
-      ],
-      rules: {
-        "no-restricted-syntax": ["error", ...tokenRules, ...retiredTypeRules, ...iconRules, ...errorTextRules],
-      },
-    },
-    {
       // Surfaces whose colors are content, not chrome: the canvas / WebGL
       // viewers hand hex values to a renderer rather than to CSS. (The report
       // viewer used to be here with its own palette; it reads the tokens now.)
