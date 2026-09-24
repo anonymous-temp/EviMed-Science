@@ -1,13 +1,12 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { FilesSkeleton, FrontierSkeleton, MemorySkeleton, RunsSkeleton } from "./Skeletons";
+import { FilesSkeleton, MemorySkeleton, RunsSkeleton } from "./Skeletons";
 
 const cases = [
   ["files", <FilesSkeleton key="files" />],
   ["runs", <RunsSkeleton key="runs" />],
   ["runs without the filter bar", <RunsSkeleton key="runs-plain" filter={false} />],
   ["memory", <MemorySkeleton key="memory" />],
-  ["frontier", <FrontierSkeleton key="frontier" />],
 ] as const;
 
 describe("page skeletons", () => {

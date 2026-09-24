@@ -79,37 +79,3 @@ export function MemorySkeleton() {
     </div>
   );
 }
-
-/**
- * 前沿动态 — the feed's cards: the source line with its chips, the title and
- * the original title under it, two lines of summary, the 「为什么值得看」 box
- * and the action row. Three cards, one fold of a laptop screen.
- */
-export function FrontierSkeleton() {
-  return (
-    <div className="animate-pulse space-y-3" aria-hidden>
-      {["w-4/5", "w-3/5", "w-2/3"].map((w, i) => (
-        <div key={i} className="rounded-card border border-border bg-surface p-4">
-          <div className="flex items-center gap-2">
-            <Bar className="h-5 w-10 rounded-full" />
-            <Bar className="h-3.5 w-20" />
-            <Bar className="h-5 w-16 rounded-full" />
-          </div>
-          <Bar className={cn("mt-3 h-4", w)} />
-          <Bar className="mt-2 h-3 w-1/2" />
-          <div className="mt-3 space-y-2">
-            <Bar className="h-3.5 w-full" />
-            <Bar className="h-3.5 w-11/12" />
-          </div>
-          <Bar className="mt-3 h-9 w-full" />
-          <div className="mt-3 flex gap-4">
-            <Bar className="h-3.5 w-10" />
-            <Bar className="h-3.5 w-16" />
-            <Bar className="h-3.5 w-10" />
-            <Bar className="h-3.5 w-14" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { CalendarDays, Copy, RefreshCw, ShieldAlert } from "lucide-react";
+import { CalendarDays, Copy } from "lucide-react";
 import {
   fetchFrontierDaily,
   frontierErrorMessage,
@@ -12,11 +12,15 @@ import {
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
-import { FrontierSkeleton } from "@/components/cards/Skeletons";
+import { LoadError } from "@/components/cards/LoadError";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { FrontierChip } from "./FrontierChip";
-import { clockOrDate, longDate, shortDate, sourceTypeTone } from "./frontierText";
+import { FilterChip } from "@/components/ui/FilterChips";
+import { Menu } from "@/components/ui/Menu";
+import { FrontierSkeleton } from "./FrontierSkeleton";
+import { EXTERNAL, INLINE_ACTION, dailyMeta, rankLabel, shortDate } from "./frontierText";
+
+/** 往期 lists this many issues: two weeks, a menu that fits a laptop screen. */
+const ARCHIVE_SHOWN = 14;
 
 /** The daily's archive and the issue on screen, read together. */
 export interface DailyState {
@@ -31,7 +35,7 @@ export interface DailyState {
 /**
  * The archive, then the issue asked for (`?day=`) or the newest one. The
  * archive answering 404 is the whole daily not existing yet, and the view says
- * 「还在准备」 instead of failing.
+ * so instead of failing.
  */
 export function useFrontierDaily(day: string | null, enabled: boolean): DailyState {
   const [index, setIndex] = useState<FrontierDailySummary[] | null>(null);
@@ -58,132 +62,134 @@ export function useFrontierDaily(day: string | null, enabled: boolean): DailySta
   return { index, issue, loading, error, retry: () => setAttempt((value) => value + 1) };
 }
 
-/** 「复制为 Markdown」: the issue exactly as the server composed it, for a department chat. */
+/**
+ * The issues on either side of this one: the server's, or — from a server
+ * that does not name them — the archive's neighbours. A quiet day has no
+ * issue, so these are the nearest issues, not the calendar's days.
+ */
+function neighbours(issue: FrontierDaily, index: readonly FrontierDailySummary[]): { previous: string | null; next: string | null } {
+  const at = index.findIndex((entry) => entry.day === issue.day);
+  return {
+    previous: issue.previousDay ?? (at >= 0 ? index[at + 1]?.day ?? null : null),
+    next: issue.nextDay ?? (at > 0 ? index[at - 1]?.day ?? null : null),
+  };
+}
+
+/** 「复制」: the issue exactly as the server composed it, for a department chat. */
 async function copyMarkdown(markdown: string) {
   try {
     await navigator.clipboard.writeText(markdown);
-    toast.success("已复制为 Markdown，可以直接粘贴到科室群或周会材料里。");
+    toast.success("已复制");
   } catch {
-    toast.error("没有复制成功，请稍后再试。");
+    toast.error("没有复制成功");
   }
 }
 
 /**
- * 日报 (plan §4.5): 07:00-to-07:00, finalised at 07:30, only items with a
- * verified summary; a lead, safety, one section per lane that has anything,
- * and 「AI 一分钟」. A quiet day has fewer sections, never padding.
+ * 日报 (plan 2026-09-23 §6.2; research B §8 #28): the day, how many items and
+ * how long they take to read, 「复制」 and 「往期 ▾」; the lead story; the
+ * safety alerts first, in red; one section per lane that has anything; the AI
+ * minute; 「前一日 / 后一日」. Every row is a fixed number column and then its
+ * title, so all the titles of the issue start on one line — the source's name
+ * is the grey line under the summary, never a block before the title.
  */
-export function DailyIssue({ state }: { state: DailyState }) {
+export function DailyIssue({ state, onDay }: { state: DailyState; onDay: (day: string) => void }) {
   if (state.loading && !state.issue) return <FrontierSkeleton />;
-  if (state.error) {
-    return (
-      <div role="alert" className="flex flex-wrap items-center gap-3 rounded-card border border-danger bg-danger-soft px-4 py-3 text-ui text-danger-strong">
-        <span className="min-w-0 flex-1">{state.error}</span>
-        <Button size="sm" variant="ghost" onClick={state.retry}><RefreshCw size={16} aria-hidden="true" />重试</Button>
-      </div>
-    );
-  }
-  if (state.index === null) {
-    return <EmptyState icon={CalendarDays} title="日报还在准备" className="rounded-card border border-dashed border-border"
-      description="每天 07:30 定稿，覆盖前一天 07:00 到当天 07:00，只收已经写好导读的条目。" />;
-  }
-  if (!state.issue) {
-    return <EmptyState icon={CalendarDays} title="第一期日报还没有出" className="rounded-card border border-dashed border-border"
-      description="每天 07:30 定稿；在那之前，「精选」里就是今天读到的。" />;
-  }
+  if (state.error) return <LoadError message={state.error} onRetry={state.retry} />;
+  if (state.index === null) return <EmptyState icon={CalendarDays} title="暂无日报" />;
+  if (!state.issue) return <EmptyState icon={CalendarDays} title="今日日报 07:30 发布" />;
   const issue = state.issue;
-  const covers = issue.windowStart && issue.windowEnd
-    ? `覆盖 ${clockOrDate(issue.windowStart)} 至 ${clockOrDate(issue.windowEnd)}` : null;
+  const { previous, next } = neighbours(issue, state.index);
+  const archive = state.index.slice(0, ARCHIVE_SHOWN);
+  const leadText = issue.lead ? issue.lead.text ?? issue.lead.item.summary : null;
   return (
-    <article aria-labelledby="frontier-daily-title" className="space-y-6 rounded-card border border-border bg-surface p-4">
-      <header className="space-y-1">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <p className="min-w-0 flex-1 text-caption text-muted">
-            EviMed 医学前沿日报 · {longDate(issue.day)}
-            {issue.generatedAt && <> · {clockOrDate(issue.generatedAt)} 生成</>}
-            {covers && <> · {covers}</>}
-          </p>
-          <Button size="sm" variant="ghost" disabled={!issue.markdown} onClick={() => void copyMarkdown(issue.markdown)}>
-            <Copy size={16} aria-hidden="true" />复制为 Markdown
+    <article aria-labelledby="frontier-daily-title">
+      <header className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <h2 id="frontier-daily-title" className="text-body font-semibold leading-6 text-text">{shortDate(issue.day)}</h2>
+        <span className="text-caption tabular-nums text-text-3">{dailyMeta(issue)}</span>
+        <span className="ml-auto flex items-center gap-1">
+          <Button variant="text" disabled={!issue.markdown} onClick={() => void copyMarkdown(issue.markdown)}>
+            <Copy size={16} aria-hidden="true" />复制
           </Button>
-        </div>
-        <h2 id="frontier-daily-title" className="text-title font-semibold text-text">
-          {issue.lead ? `头条：${issue.lead.item.title}` : `${shortDate(issue.day)}的日报`}
-        </h2>
-        {issue.lead && (issue.lead.text || issue.lead.item.summary) && (
-          <p className="text-ui text-text-2">
-            {issue.lead.text ?? issue.lead.item.summary}
-            {issue.lead.event && <> <Link to={`/app/frontier/events/${encodeURIComponent(issue.lead.event.id)}`} className="text-link hover:underline">事件页 →</Link></>}
-          </p>
-        )}
+          {archive.length > 0 && (
+            <Menu label="往期" items={archive.map((entry) => ({ label: shortDate(entry.day), checked: entry.day === issue.day, onSelect: () => onDay(entry.day) }))}>
+              <FilterChip menu>往期</FilterChip>
+            </Menu>
+          )}
+        </span>
       </header>
 
-      {issue.safety.length > 0 && (
-        <section aria-label="安全警示" className="rounded-card border border-danger bg-danger-soft px-4 py-3">
-          <h3 className="flex items-center gap-1.5 text-ui font-semibold text-danger-strong"><ShieldAlert size={16} aria-hidden="true" />安全警示 {issue.safety.length} 条</h3>
-          <ul className="mt-1 space-y-1">
-            {issue.safety.map((item) => (
-              <li key={item.id} className="text-ui text-text">
-                <a href={item.url} target="_blank" rel="noopener noreferrer" className="hover:underline">{item.title}</a>
-                <span className="text-caption text-muted">（{item.source.name}）</span>
-              </li>
-            ))}
-          </ul>
+      {issue.lead && (
+        <section aria-label="头条" className="mt-5">
+          <h3 className="max-w-measure-body text-title font-semibold text-text">{issue.lead.item.title}</h3>
+          {(leadText || issue.lead.event) && (
+            <p className="mt-2 max-w-measure text-ui text-text-2">
+              {leadText}
+              {issue.lead.event && (
+                <Link to={`/app/frontier/events/${encodeURIComponent(issue.lead.event.id)}`} className={cn(INLINE_ACTION, "ml-1 px-1 align-middle text-accent")}>
+                  事件页 ›
+                </Link>
+              )}
+            </p>
+          )}
         </section>
       )}
 
-      {issue.sections.map((section) => (
-        <section key={section.lane} aria-labelledby={`daily-${section.lane}`}>
-          <h3 id={`daily-${section.lane}`} className="border-b border-border pb-1.5 text-ui font-semibold text-text">
-            {section.laneLabel || "其他"} · {section.items.length} 条
-          </h3>
-          <ul className="divide-y divide-faint">
-            {section.items.map((item) => <DailyRow key={item.id} item={item} />)}
-          </ul>
-        </section>
-      ))}
+      {issue.safety.length > 0 && <DailySection id="safety" title="安全警示" items={issue.safety} safety />}
+      {issue.sections.map((section) => <DailySection key={section.lane} id={section.lane} title={section.laneLabel || "其他"} items={section.items} />)}
 
       {issue.aiMinute && (
-        <section aria-labelledby="daily-ai-minute">
+        <section aria-labelledby="daily-ai-minute" className="mt-8">
           <h3 id="daily-ai-minute" className="text-ui font-semibold text-text">AI 一分钟</h3>
-          <p className="mt-1 text-ui text-text-2">{issue.aiMinute}</p>
+          <p className="mt-1 max-w-measure text-ui text-text-2">{issue.aiMinute}</p>
         </section>
+      )}
+
+      {(previous || next) && (
+        <nav aria-label="日报翻页" className="mt-8 flex items-center justify-between">
+          {previous ? <Button variant="text" onClick={() => onDay(previous)}>‹ 前一日</Button> : <span />}
+          {next ? <Button variant="text" onClick={() => onDay(next)}>后一日 ›</Button> : <span />}
+        </nav>
       )}
     </article>
   );
 }
 
-function DailyRow({ item }: { item: FrontierItem }) {
+/** One lane of the issue, or its safety alerts: a heading and its count, then numbered rows. */
+function DailySection({ id, title, items, safety = false }: { id: string; title: string; items: FrontierItem[]; safety?: boolean }) {
   return (
-    <li className="flex gap-3 py-2">
-      <FrontierChip tone={sourceTypeTone(item.sourceType)} className="mt-0.5">{item.source.name}</FrontierChip>
-      <div className="min-w-0">
-        <p className="text-ui font-medium text-text">{item.title}</p>
-        <p className="text-caption text-muted">
-          {item.summary && <>{item.summary} · </>}
-          <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-link hover:underline">原文<span aria-hidden="true"> ↗</span></a>
-        </p>
-      </div>
-    </li>
+    <section aria-labelledby={`daily-${id}`} className="mt-8">
+      <h3 id={`daily-${id}`} className="flex items-baseline gap-2">
+        <span className={cn("text-ui font-semibold", safety ? "text-danger-strong" : "text-text")}>{title}</span>
+        <span className="text-caption tabular-nums text-text-3">{items.length}</span>
+      </h3>
+      <ol aria-label={title} className="mt-1">
+        {items.map((item, index) => <DailyRow key={item.id} item={item} number={index + 1} safety={safety} />)}
+      </ol>
+    </section>
   );
 }
 
-/** 往期, in the rail: each issue by its day, its lead and how many items it held. */
-export function DailyArchive({ index, current, onOpen }: { index: FrontierDailySummary[]; current: string | null; onOpen: (day: string) => void }) {
-  if (index.length === 0) return null;
+/**
+ * A row: 「01」, the title, the summary in at most three lines (a safety notice has its title
+ * and no more), and a grey line naming the institution — FDA, 英国 MHRA, never
+ * the interface it was read through — with 「原文 ↗」.
+ */
+function DailyRow({ item, number, safety }: { item: FrontierItem; number: number; safety: boolean }) {
   return (
-    <Card title="往期" padding="p-3">
-      <ul className="divide-y divide-faint">
-        {index.slice(0, 14).map((entry) => (
-          <li key={entry.day} className="py-1.5 first:pt-0">
-            <button type="button" onClick={() => onOpen(entry.day)} aria-current={entry.day === current ? "true" : undefined}
-              className={cn("w-full text-left text-ui hover:underline", entry.day === current ? "font-medium text-text" : "text-text-2")}>
-              {entry.title ?? `${shortDate(entry.day)}的日报`}
-            </button>
-            <p className="text-caption text-muted">{shortDate(entry.day)} · {entry.itemCount} 条</p>
-          </li>
-        ))}
-      </ul>
-    </Card>
+    <li className="flex gap-2 border-b border-border py-3">
+      <span className="w-8 shrink-0 text-caption leading-6 tabular-nums text-text-3">{rankLabel(number)}</span>
+      <div className="min-w-0 flex-1">
+        <p data-row-title className="text-body font-semibold leading-6 text-text">{item.title}</p>
+        {!safety && item.summary && <p className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
+        <div className="mt-1 flex items-center gap-1.5 text-caption text-text-3">
+          <span className="min-w-0 truncate">{item.source.name}</span>
+          <span aria-hidden="true">·</span>
+          <a href={item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "-ml-1 px-1 text-accent")}>
+            <span className="text-caption">原文<span aria-hidden="true"> ↗</span></span>
+          </a>
+        </div>
+      </div>
+    </li>
   );
 }
