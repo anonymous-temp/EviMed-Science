@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { ArrowUp, Clock3, Filter, Newspaper, Search } from "lucide-react";
 import { getWebProjectId } from "@/lib/apiClient";
 import {
   fetchFrontierForYou,
-  fetchFrontierHot,
+  fetchFrontierHotBoard,
   fetchFrontierStatus,
   frontierAbsence,
   frontierErrorMessage,
@@ -20,7 +19,7 @@ import {
   unstarFrontierItem,
   useFrontierFeature,
   type FrontierForYou,
-  type FrontierHotEvent,
+  type FrontierHotWindow,
   type FrontierItem,
   type FrontierItemState,
   type FrontierItemsQuery,
@@ -28,40 +27,39 @@ import {
   type FrontierWindow,
 } from "@/lib/frontierClient";
 import { toast } from "@/lib/toast";
-import { EmptyState } from "@/components/cards/EmptyState";
-import { LoadError } from "@/components/cards/LoadError";
-import { FrontierSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { DailyArchive, DailyIssue, useFrontierDaily } from "@/components/frontier/DailyView";
-import { ForYouBlock } from "@/components/frontier/ForYouBlock";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { Tabs, type TabItem } from "@/components/ui/Tabs";
+import { DailyIssue, useFrontierDaily } from "@/components/frontier/DailyView";
+import { FeedList, FEED_PAGE_SIZE, type Listing } from "@/components/frontier/FrontierFeed";
 import { FrontierCard } from "@/components/frontier/FrontierCard";
 import { FrontierFilters, type FrontierFilterValue } from "@/components/frontier/FrontierFilters";
-import { AiMinuteCard, HotList, HotRailCard, SafetyRailCard, type SafetyRail } from "@/components/frontier/FrontierRail";
+import { HotBoard, HotCard, isHotWindow, type HotState } from "@/components/frontier/FrontierHot";
+import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { FrontierOffPage } from "@/components/frontier/FrontierStates";
-import { SourcesDisclosure } from "@/components/frontier/SourcesDisclosure";
-import { clockOrDate, groupByDay } from "@/components/frontier/frontierText";
+import { ForYouView, type ForYouState } from "@/components/frontier/ForYouView";
+import { SafetyStrip, recentAlerts, type SafetyAlerts } from "@/components/frontier/SafetyStrip";
+import { SourcesLink } from "@/components/frontier/SourcesList";
+import { stamp, type CardTag } from "@/components/frontier/frontierText";
 
-type PageView = "selected" | "hot" | "daily" | "all";
+type PageView = "selected" | "hot" | "daily" | "all" | "foryou";
 
-const VIEWS: { value: PageView; label: string }[] = [
+const VIEWS: readonly TabItem<PageView>[] = [
   { value: "selected", label: "精选" },
-  { value: "hot", label: "热点" },
+  { value: "hot", label: "热榜" },
   { value: "daily", label: "日报" },
   { value: "all", label: "全部" },
+  { value: "foryou", label: "与我相关" },
 ];
 
-/** One page of the feed; the server caps it at 50 and defaults to 30. */
-const PAGE_SIZE = 30;
 /** 「有 N 条新的」 asks this often (plan §10.5.2): almost every answer is an empty 304. */
 const STATUS_POLL_MS = 120_000;
 /** A plugin in one of these states means the list is the last one read. */
 const STALE_PLUGIN = new Set(["unreachable", "degraded", "incompatible"]);
 
+/** The view a link names. Every older address — `?view=hot` (the 热点 of before), `daily`, `all` — still lands where it did. */
 function readView(value: string | null): PageView {
-  return value === "hot" || value === "daily" || value === "all" ? value : "selected";
+  return value === "hot" || value === "daily" || value === "all" || value === "foryou" ? value : "selected";
 }
 function readKey(value: string | null, table: readonly { key: string }[]): string {
   return value && table.some((entry) => entry.key === value) ? value : "";
@@ -73,42 +71,38 @@ function readDay(value: string | null): string | null {
   return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 }
 
-/** A page of the feed as it is on screen, with the query it answers and when it was read. */
-interface Listing {
-  key: string;
-  items: FrontierItem[];
-  nextCursor: string | null;
-  version: string | null;
-  loadedAt: number;
-}
-
 /**
- * 「前沿动态」 (plan ch.4): one page, four views on one control — 精选, 热点,
- * 日报, 全部 — with a server-side search box, the filter row, 「与你相关」, the
- * day-grouped feed and a rail of 今日热点, 安全警示 and 「AI 一分钟」, and the
- * public list of sources folded at the foot.
+ * 「前沿动态」 (plan 2026-09-23 §6): one page, five views on one row of tabs —
+ * 精选, 热榜, 日报, 全部, 与我相关 — with a server-side search at the right of
+ * the title. 精选 opens with the safety strip and 当前热点 above the feed by
+ * day; 全部 ends with the list of sources; there is no right rail any more
+ * (its hot list is the card, its safety list the strip, its AI minute lives
+ * in the daily).
  *
  * Hidden knowledge:
  *
  *  - Everything that describes the reader's position lives in the URL
- *    (`?view=&q=&lane=&specialty=&window=&starred=&day=`), so a notification's
- *    link (`?view=daily&day=…`), Back and a shared address all land on the
- *    same screen.
- *  - Searching widens to 全部 (plan §4.2) and says which results are 精选; the
- *    view the reader searched from comes back when the box is cleared.
+ *    (`?view=&q=&lane=&specialty=&window=&starred=&sort=&day=`), so a
+ *    notification's link (`?view=daily&day=…`), Back and a shared address all
+ *    land on the same screen. `window` is the 全部 view's time range there and
+ *    the 热榜's ranking (`week`, `month`) here; a view change clears it.
+ *  - Searching widens to 全部 (plan §4.2); the dot marks which results are
+ *    精选, and the view the reader searched from comes back when the box is
+ *    cleared.
  *  - The list is a keyset page, not a snapshot. `/status` is polled every two
  *    minutes; when its content version moves past the list's, page one is read
  *    again quietly and 「有 N 条新的」 counts only what is new above the top of
  *    the list — the same filters, so the number is the reader's, not the
- *    site's. A stale cursor restarts from page one (`restarted`).
+ *    site's. A stale cursor restarts from page one, silently.
  *  - The last page read for each query is kept for this visit. A refresh that
- *    fails leaves it on screen under 「暂时读不到，下面是上次读到的内容」
- *    rather than replacing it with an error, and coming back to a filter shows
- *    its last page at once while the fresh one is read.
- *  - Nothing of wave two is assumed to exist: 与你相关, 热点, 日报, the event
- *    page, 存入知识库 and 中文摘要 each hide or say 「还在准备」 on the server's
- *    404, and the rest of the page is unaffected. 存入知识库 is not even shown
- *    until `/status` names it among the deployment's `capabilities`.
+ *    fails leaves it on screen under 「未能刷新」 rather than replacing it with
+ *    an error, and coming back to a filter shows its last page at once while
+ *    the fresh one is read.
+ *  - Nothing of the second wave is assumed to exist: 热榜, 日报, 与我相关, the
+ *    event page, 存入知识库 and the abstract each hide or say so on the
+ *    server's 404, and the rest of the page is unaffected. A field the server
+ *    does not send yet (a heat, a score, a trend) hides the element that
+ *    would show it.
  */
 export function FrontierPage() {
   const feature = useFrontierFeature();
@@ -127,6 +121,9 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const specialty = readKey(params.get("specialty"), FRONTIER_SPECIALTIES);
   const starred = params.get("starred") === "1";
   const windowFilter = view === "all" ? readWindow(params.get("window")) : "";
+  const hotWindowParam = params.get("window");
+  const hotWindow: FrontierHotWindow = view === "hot" && isHotWindow(hotWindowParam) ? hotWindowParam : "current";
+  const byTime = Boolean(q) && params.get("sort") === "time";
   const day = readDay(params.get("day"));
   const filtered = Boolean(lane || specialty || starred || windowFilter);
 
@@ -137,7 +134,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     window: windowFilter || null,
     q: q || null,
     starred,
-  }), [view, lane, specialty, windowFilter, q, starred]);
+    ...(byTime ? { sort: "time" as const } : {}),
+  }), [view, lane, specialty, windowFilter, q, starred, byTime]);
   const key = JSON.stringify(query);
 
   /* ------------------------------------------------------------- status */
@@ -185,7 +183,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     setListError(null);
     setFresh(null);
     try {
-      const page = await listFrontierItems({ ...query, limit: PAGE_SIZE });
+      const page = await listFrontierItems({ ...query, limit: FEED_PAGE_SIZE });
       if (current !== generation.current) return;
       show({ key, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now() });
     } catch (error) {
@@ -215,11 +213,11 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     const current = generation.current;
     setLoadingMore(true);
     try {
-      const page = await listFrontierItems({ ...query, cursor: listing.nextCursor, limit: PAGE_SIZE });
+      const page = await listFrontierItems({ ...query, cursor: listing.nextCursor, limit: FEED_PAGE_SIZE });
       if (current !== generation.current) return;
       if (page.restarted) {
+        // The list changed under the cursor: page one again, in place.
         show({ key, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now() });
-        toast.success("列表有更新，已从第一页重新加载。");
         scrollToListTop();
         return;
       }
@@ -241,7 +239,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     if (!listing || listing.key !== key || q || !contentVersion || contentVersion === seenVersion.current) return;
     let active = true;
     const current = generation.current;
-    listFrontierItems({ ...query, limit: PAGE_SIZE }).then((page) => {
+    listFrontierItems({ ...query, limit: FEED_PAGE_SIZE }).then((page) => {
       if (!active || current !== generation.current) return;
       seenVersion.current = contentVersion;
       const known = new Set(listing.items.map((item) => item.id));
@@ -254,11 +252,32 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     return () => { active = false; };
   }, [contentVersion, listing, key, q, query]);
 
+  /* ------------------------------------------------------------ 与我相关 */
+
+  const [forYou, setForYou] = useState<ForYouState>({ kind: "loading" });
+  const [forYouAttempt, setForYouAttempt] = useState(0);
+  useEffect(() => {
+    if (!ready || view !== "foryou") return;
+    let active = true;
+    fetchFrontierForYou().then(
+      (answer: FrontierForYou | null) => { if (active) setForYou({ kind: "ready", forYou: answer }); },
+      (error: unknown) => { if (active) setForYou({ kind: "failed", message: frontierErrorMessage(error) }); },
+    );
+    return () => { active = false; };
+  }, [ready, view, forYouAttempt]);
+
+  const patchForYou = useCallback((change: (items: FrontierForYou["items"]) => FrontierForYou["items"]) => {
+    setForYou((current) => (current.kind === "ready" && current.forYou
+      ? { kind: "ready", forYou: { ...current.forYou, items: change(current.forYou.items) } } : current));
+  }, []);
+
   /* ----------------------------------------------------- item actions */
 
   const setItemState = useCallback((itemId: string, state: Partial<FrontierItemState>) => {
-    patchListing((list) => ({ ...list, items: list.items.map((item) => (item.id === itemId ? { ...item, state: { ...item.state, ...state } } : item)) }));
-  }, [patchListing]);
+    const patch = (item: FrontierItem) => (item.id === itemId ? { ...item, state: { ...item.state, ...state } } : item);
+    patchListing((list) => ({ ...list, items: list.items.map(patch) }));
+    patchForYou((items) => items.map((entry) => ({ ...entry, item: patch(entry.item) })));
+  }, [patchListing, patchForYou]);
 
   const toggleStar = async (item: FrontierItem) => {
     const next = !item.state.starred;
@@ -272,13 +291,23 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   };
 
   const hide = (item: FrontierItem) => {
-    const index = listing?.items.findIndex((entry) => entry.id === item.id) ?? -1;
-    if (index < 0) return;
-    const restore = () => patchListing((list) => (list.items.some((entry) => entry.id === item.id) ? list : {
-      ...list,
-      items: [...list.items.slice(0, index), { ...item, state: { ...item.state, hidden: false } }, ...list.items.slice(index)],
-    }));
+    const listIndex = listing?.items.findIndex((entry) => entry.id === item.id) ?? -1;
+    const forYouItems = forYou.kind === "ready" ? forYou.forYou?.items ?? [] : [];
+    const forYouIndex = forYouItems.findIndex((entry) => entry.item.id === item.id);
+    const restored = { ...item, state: { ...item.state, hidden: false } };
+    const restore = () => {
+      if (listIndex >= 0) {
+        patchListing((list) => (list.items.some((entry) => entry.id === item.id) ? list
+          : { ...list, items: [...list.items.slice(0, listIndex), restored, ...list.items.slice(listIndex)] }));
+      }
+      if (forYouIndex >= 0) {
+        const entry = { ...forYouItems[forYouIndex], item: restored };
+        patchForYou((items) => (items.some((existing) => existing.item.id === item.id) ? items
+          : [...items.slice(0, forYouIndex), entry, ...items.slice(forYouIndex)]));
+      }
+    };
     patchListing((list) => ({ ...list, items: list.items.filter((entry) => entry.id !== item.id) }));
+    patchForYou((items) => items.filter((entry) => entry.item.id !== item.id));
     const hidden = hideFrontierItem(item.id).then(() => true, (error: unknown) => {
       restore();
       toast.error(frontierErrorMessage(error));
@@ -310,13 +339,10 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       const saved = await saveFrontierItemToLibrary(item.id, getWebProjectId());
       if (!saved) {
         setSaveRefused(true);
-        toast.error("存入知识库还在准备，暂时用不了。");
+        toast.error("暂时不能存入知识库");
         return;
       }
-      // What was saved, said as it is (plan §4.7: 「并如实告知」).
-      toast.success(saved.kind === "pdf"
-        ? "已存入知识库：开放获取的全文 PDF，正在解析。"
-        : saved.note ? `已存入知识库：${saved.note}` : "已存入知识库：这篇没有开放获取的全文，存的是题录和链接。");
+      toast.success("已存入知识库");
     } catch (error) {
       toast.error(frontierErrorMessage(error));
     } finally {
@@ -334,52 +360,44 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
 
   /* --------------------------------------------- the blocks around it */
 
-  // 「与你相关」 is asked for once, in 精选, and only when `/status` says
-  // personalisation is not off for this deployment (memory off, or the second
-  // wave not there yet): with it off the block does not exist, so there is
-  // nothing to ask.
-  const personalization = status?.personalization ?? null;
-  const [forYou, setForYou] = useState<FrontierForYou | null>(null);
-  const forYouAsked = useRef(false);
-  useEffect(() => {
-    if (!ready || view !== "selected" || forYouAsked.current || personalization === null || personalization === "off") return;
-    forYouAsked.current = true;
-    fetchFrontierForYou().then(setForYou, () => { /* a block that cannot be read is a block not shown */ });
-  }, [ready, view, personalization]);
-
-  // Read once for the rail and the 热点 view alike, and again when the hot
-  // list's own version moves. `events: null` is a server without the route.
+  // 当前热点 in 精选 and the 热榜 view read the same route; each ranking is
+  // read again when the hot list's own version moves. `board: null` is a
+  // server without the route.
   const hotVersion = status?.versions.hot ?? null;
-  const needHot = view !== "daily";
-  const [hot, setHot] = useState<{ events: FrontierHotEvent[] | null; error: string | null } | null>(null);
+  const hotNeeded = view === "hot" || (view === "selected" && !q && !filtered);
+  const hotAsked: FrontierHotWindow = view === "hot" ? hotWindow : "current";
+  const [hot, setHot] = useState<Partial<Record<FrontierHotWindow, HotState>>>({});
   const [hotAttempt, setHotAttempt] = useState(0);
   useEffect(() => {
-    if (!ready || !needHot) return;
+    if (!ready || !hotNeeded) return;
     let active = true;
-    fetchFrontierHot().then(
-      (events) => { if (active) setHot({ events, error: null }); },
-      (error: unknown) => { if (active) setHot((current) => ({ events: current?.events ?? null, error: frontierErrorMessage(error) })); },
+    fetchFrontierHotBoard(hotAsked).then(
+      (board) => { if (active) setHot((current) => ({ ...current, [hotAsked]: { board, error: null } })); },
+      (error: unknown) => {
+        if (active) setHot((current) => ({ ...current, [hotAsked]: { board: current[hotAsked]?.board ?? null, error: frontierErrorMessage(error) } }));
+      },
     );
     return () => { active = false; };
-  }, [ready, needHot, hotVersion, hotAttempt]);
+  }, [ready, hotNeeded, hotAsked, hotVersion, hotAttempt]);
 
-  const [safety, setSafety] = useState<SafetyRail>("loading");
+  // The strip's alerts: the last three days of official safety notices from
+  // every lane — an alert's lane is the screening model's pick among its
+  // source's lanes, so the strip asks for alerts, not for a lane — cut to its
+  // 48 hours here.
+  const [safety, setSafety] = useState<SafetyAlerts>("loading");
+  const [safetyAttempt, setSafetyAttempt] = useState(0);
+  const safetyNeeded = view === "selected";
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !safetyNeeded) return;
     let active = true;
-    // Official safety notices from every lane: an alert is selected whatever
-    // its score, but its lane is the screening model's pick among its
-    // source's lanes, so the rail asks for alerts, not for a lane.
-    listFrontierItems({ view: "all", safety: true, window: "7d", limit: 50 }).then(
-      (page) => { if (active) setSafety(page.items.filter((item) => item.safetyAlert)); },
+    listFrontierItems({ view: "all", safety: true, window: "3d", limit: 50 }).then(
+      (page) => { if (active) setSafety(recentAlerts(page.items)); },
       () => { if (active) setSafety("failed"); },
     );
     return () => { active = false; };
-  }, [ready]);
+  }, [ready, safetyNeeded, safetyAttempt]);
 
-  // The daily view always asks, so it can tell 「还在准备」 from 「还没有出」;
-  // the rail's 「AI 一分钟」 asks only once `/status` names a finished issue.
-  const daily = useFrontierDaily(view === "daily" ? day : null, ready && (view === "daily" || Boolean(status?.lastDailyDay)));
+  const daily = useFrontierDaily(view === "daily" ? day : null, ready && view === "daily");
 
   /* ------------------------------------------------------ navigation */
 
@@ -395,10 +413,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const setView = (next: PageView) => {
     const updated = new URLSearchParams(params);
     if (next === "selected") updated.delete("view"); else updated.set("view", next);
-    // A view is a fresh look: the search belongs to the view it was typed in.
-    updated.delete("q");
-    updated.delete("day");
-    if (next !== "all") updated.delete("window");
+    // A view is a fresh look: the search, the day and the time range belong to the view they were chosen in.
+    for (const name of ["q", "day", "window", "sort"]) updated.delete(name);
     searchOrigin.current = null;
     setParams(updated);
   };
@@ -414,7 +430,29 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     assign("specialty", change.specialty);
     assign("starred", change.starred);
     assign("window", change.window);
+    if (change.byTime !== undefined) {
+      if (change.byTime) updated.set("sort", "time"); else updated.delete("sort");
+    }
     setParams(updated, { replace: true });
+  };
+
+  const setHotWindow = (next: FrontierHotWindow) => {
+    const updated = new URLSearchParams(params);
+    if (next === "current") updated.delete("window"); else updated.set("window", next);
+    setParams(updated, { replace: true });
+  };
+
+  const openDay = (next: string) => {
+    const updated = new URLSearchParams(params);
+    updated.set("view", "daily");
+    updated.set("day", next);
+    setParams(updated);
+  };
+
+  // A #tag narrows the feed: a specialty is a filter, a disease is a search.
+  const onTag = (tag: CardTag) => {
+    if (tag.kind === "specialty") setFilters({ specialty: tag.key });
+    else setDraft(tag.label);
   };
 
   useEffect(() => { setDraft(q); }, [q]);
@@ -430,6 +468,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         updated.delete("day");
       } else {
         updated.delete("q");
+        updated.delete("sort");
         const origin = searchOrigin.current;
         searchOrigin.current = null;
         if (origin && origin !== "all") {
@@ -444,186 +483,112 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
 
   /* ---------------------------------------------------------- render */
 
-  const enabledSources = status?.sources.enabled ?? 0;
-  const definition = `EviMed 每天替你读${enabledSources > 0 ? ` ${enabledSources} 个` : ""}医学与 AI 信源，只留下值得看的。每条都标明来源和证据类型，点开就是原文。`;
   const staleAt = status && STALE_PLUGIN.has(status.plugin.state) ? status.plugin.lastPullAt ?? status.lastPublishedAt : null;
 
+  const card = (item: FrontierItem, grouped: boolean) => (
+    <FrontierCard
+      key={item.id}
+      item={item}
+      grouped={grouped}
+      markSelected={view !== "selected"}
+      onStar={(target) => void toggleStar(target)}
+      onHide={hide}
+      onSave={saveOffered ? (target) => void save(target) : undefined}
+      saving={savingId === item.id}
+      onOpened={opened}
+      onTag={onTag}
+    />
+  );
+
+  const feed = (
+    <FeedList
+      view={view === "all" ? "all" : "selected"}
+      q={q}
+      filtered={filtered}
+      listing={listing && listing.key === key ? listing : null}
+      error={listError}
+      fresh={fresh?.count ?? 0}
+      firstRun={status ? status.lastPublishedAt === null : true}
+      loadingMore={loadingMore}
+      renderItem={card}
+      onRetry={() => void loadList(true)}
+      onFresh={() => { if (fresh) { show(fresh.listing); scrollToListTop(); } }}
+      onMore={() => void loadMore()}
+      onAll={() => setView("all")}
+    />
+  );
+
+  const filters = (
+    <FrontierFilters
+      value={{ lane, specialty, starred, window: windowFilter, byTime }}
+      showWindow={view === "all"}
+      searching={Boolean(q)}
+      onChange={setFilters}
+    />
+  );
+
   const main = (() => {
-    if (view === "hot") {
-      if (!hot) return <FrontierSkeleton />;
-      if (hot.error && !hot.events) return <LoadError message={hot.error} onRetry={() => setHotAttempt((value) => value + 1)} />;
-      return <HotList events={hot.events} />;
+    switch (view) {
+      case "hot":
+        return (
+          <HotBoard
+            state={hot[hotWindow] ?? null}
+            window={hotWindow}
+            windows={Object.values(hot).some((entry) => Boolean(entry?.board?.takenAt))}
+            onWindow={setHotWindow}
+            onRetry={() => setHotAttempt((value) => value + 1)}
+          />
+        );
+      case "daily":
+        return <DailyIssue state={daily} onDay={openDay} />;
+      case "foryou":
+        return <ForYouView state={forYou} renderItem={(item) => card(item, false)} onRetry={() => setForYouAttempt((value) => value + 1)} />;
+      case "all":
+        return (
+          <>
+            {filters}
+            <div className="mt-6">{feed}</div>
+            <div className="mt-8"><SourcesLink count={status?.sources.enabled ?? 0} /></div>
+          </>
+        );
+      default:
+        return (
+          <>
+            <div className="space-y-4">
+              {filters}
+              <SafetyStrip alerts={safety} onRetry={() => setSafetyAttempt((value) => value + 1)} onOpened={opened} />
+              {!q && !filtered && <HotCard events={hot.current?.board?.events ?? []} onOpenAll={() => setView("hot")} />}
+            </div>
+            <div className="mt-8">{feed}</div>
+          </>
+        );
     }
-    if (view === "daily") return <DailyIssue state={daily} />;
-    return (
-      <>
-        {view === "selected" && !q && !filtered && <ForYouBlock forYou={forYou} />}
-        <FeedList
-          view={view}
-          q={q}
-          filtered={filtered}
-          listing={listing && listing.key === key ? listing : null}
-          error={listError}
-          fresh={fresh?.count ?? 0}
-          firstRun={status ? status.lastPublishedAt === null : true}
-          loadingMore={loadingMore}
-          saveOffered={saveOffered}
-          savingId={savingId}
-          onRetry={() => void loadList(true)}
-          onFresh={() => { if (fresh) { show(fresh.listing); scrollToListTop(); } }}
-          onMore={() => void loadMore()}
-          onAll={() => setView("all")}
-          onStar={(item) => void toggleStar(item)}
-          onHide={hide}
-          onSave={(item) => void save(item)}
-          onOpened={opened}
-        />
-      </>
-    );
   })();
 
-  const rail = view === "daily" && daily.index && daily.index.length > 0
-    ? <DailyArchive index={daily.index} current={daily.issue?.day ?? null} onOpen={(next) => {
-      const updated = new URLSearchParams(params);
-      updated.set("view", "daily");
-      updated.set("day", next);
-      setParams(updated);
-    }} />
-    : (
-      <>
-        {view !== "hot" && <HotRailCard events={hot?.events ?? null} onOpenAll={() => setView("hot")} />}
-        <SafetyRailCard items={safety} />
-        {view !== "daily" && <AiMinuteCard text={daily.issue?.aiMinute ?? null} onOpenDaily={() => setView("daily")} />}
-      </>
-    );
-
   return (
-    <PageShell title="前沿动态" description={definition} width="wide" contentClassName="space-y-6">
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <SegmentedControl aria-label="视图" value={view} onChange={setView} options={VIEWS} />
-          {staleAt && (
-            <span className="inline-flex items-center gap-1 text-caption text-muted">
-              <Clock3 size={16} aria-hidden="true" />最近更新于 {clockOrDate(staleAt)}
-            </span>
-          )}
-          <div className="relative w-full sm:ml-auto sm:w-72">
-            <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-            <Input
-              type="search"
-              aria-label="搜索前沿动态"
-              placeholder="搜标题、药名、疾病或机构"
-              value={draft}
-              maxLength={200}
-              className="pl-9"
-              onChange={(event) => setDraft(event.target.value)}
-              onCompositionStart={() => { composing.current = true; }}
-              onCompositionEnd={(event) => { composing.current = false; setDraft(event.currentTarget.value); setComposed((value) => value + 1); }}
-            />
-          </div>
-        </div>
-        {listingView && (
-          <FrontierFilters
-            value={{ lane, specialty, starred, window: windowFilter }}
-            showWindow={view === "all"}
-            onChange={setFilters}
-          />
-        )}
+    <PageShell
+      title="前沿动态"
+      meta={staleAt ? `${stamp(staleAt)} 更新` : undefined}
+      contentClassName="mt-2"
+      actions={(
+        <SearchInput
+          label="搜索"
+          value={draft}
+          maxLength={200}
+          onChange={(event) => setDraft(event.target.value)}
+          onCompositionStart={() => { composing.current = true; }}
+          onCompositionEnd={(event) => { composing.current = false; setDraft(event.currentTarget.value); setComposed((value) => value + 1); }}
+        />
+      )}
+    >
+      <Tabs label="视图" items={VIEWS} value={view} onChange={setView} panelId="frontier-view" />
+      <div role="tabpanel" id="frontier-view" aria-labelledby={`frontier-view-tab-${view}`} className="mt-5">
+        {ready ? main : <FrontierSkeleton />}
       </div>
-
-      <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
-        <div className="min-w-0 flex-1 space-y-4">{ready ? main : <FrontierSkeleton />}</div>
-        <aside aria-label="侧栏" className="space-y-4 xl:w-72 xl:shrink-0">{ready ? rail : null}</aside>
-      </div>
-
-      <SourcesDisclosure />
     </PageShell>
   );
 }
 
 function scrollToListTop() {
   document.getElementById("frontier-list-top")?.scrollIntoView({ block: "start" });
-}
-
-/**
- * The feed itself: its four states (plan §4.11), the day groups, 「有 N 条新的」
- * and 「加载更多」. Search results are one list in relevance order, so they are
- * not cut into days.
- */
-function FeedList({
-  view, q, filtered, listing, error, fresh, firstRun, loadingMore, saveOffered, savingId,
-  onRetry, onFresh, onMore, onAll, onStar, onHide, onSave, onOpened,
-}: {
-  view: "selected" | "all";
-  q: string;
-  filtered: boolean;
-  listing: Listing | null;
-  error: string | null;
-  fresh: number;
-  firstRun: boolean;
-  loadingMore: boolean;
-  saveOffered: boolean;
-  savingId: string | null;
-  onRetry: () => void;
-  onFresh: () => void;
-  onMore: () => void;
-  onAll: () => void;
-  onStar: (item: FrontierItem) => void;
-  onHide: (item: FrontierItem) => void;
-  onSave: (item: FrontierItem) => void;
-  onOpened: (item: FrontierItem) => void;
-}) {
-  if (!listing) {
-    return error ? <LoadError message={error} onRetry={onRetry} /> : <FrontierSkeleton />;
-  }
-  const markSelected = view === "all" || Boolean(q);
-  const card = (item: FrontierItem) => (
-    <li key={item.id}>
-      <FrontierCard item={item} markSelected={markSelected} onStar={onStar} onHide={onHide}
-        onSave={saveOffered ? onSave : undefined} saving={savingId === item.id} onOpened={onOpened} />
-    </li>
-  );
-  const days = q ? [] : groupByDay(listing.items);
-  return (
-    <div id="frontier-list-top" className="space-y-4">
-      {error && (
-        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-surface px-4 py-3 text-ui text-text">
-          <span className="min-w-0 flex-1">暂时读不到，下面是上次读到的内容（更新于 {clockOrDate(new Date(listing.loadedAt).toISOString())}）。</span>
-          <Button size="sm" variant="ghost" onClick={onRetry}>重试</Button>
-        </div>
-      )}
-      {fresh > 0 && (
-        <button type="button" onClick={onFresh}
-          className="flex w-full items-center justify-center gap-1.5 rounded-card border border-border bg-surface-1 py-2 text-ui text-link transition-colors duration-fast hover:bg-surface-2">
-          <ArrowUp size={16} aria-hidden="true" />有 {fresh >= PAGE_SIZE ? `${fresh}+` : fresh} 条新的
-        </button>
-      )}
-      {listing.items.length === 0 ? (
-        q ? <EmptyState icon={Search} title={`没有找到和「${q}」相关的动态`} description="换个药名、疾病或机构试试。" className="rounded-card border border-dashed border-border" />
-          : filtered ? <EmptyState icon={Filter} title="这个条件下暂时没有，换个栏目或时间范围。" className="rounded-card border border-dashed border-border" />
-            : firstRun || view === "all" ? <EmptyState icon={Newspaper} title="正在读第一批信源，大约 20 分钟后这里会有内容。" className="rounded-card border border-dashed border-border" />
-              : <EmptyState icon={Newspaper} title="精选还在编" description="已经读到的动态都在「全部」里。" className="rounded-card border border-dashed border-border"
-                action={<Button variant="ghost" onClick={onAll}>看全部</Button>} />
-      ) : q ? (
-        <section aria-label="搜索结果" className="space-y-2">
-          <p className="text-caption text-muted">在全部动态里搜「{q}」，精选的已标出。</p>
-          <ul className="space-y-3">{listing.items.map(card)}</ul>
-        </section>
-      ) : days.map((group, index) => {
-        // The last day may continue on the next page; its count waits until it is whole.
-        const whole = index < days.length - 1 || !listing.nextCursor;
-        return (
-          <section key={group.key} aria-labelledby={`frontier-day-${group.key}`}>
-            <h2 id={`frontier-day-${group.key}`} className="mb-2 text-caption font-medium text-muted">
-              {group.label}{whole && ` · ${group.items.length} 条${view === "selected" ? "精选" : ""}`}
-            </h2>
-            <ul className="space-y-3">{group.items.map(card)}</ul>
-          </section>
-        );
-      })}
-      {listing.nextCursor && (
-        <Button variant="ghost" loading={loadingMore} onClick={onMore}>加载更多</Button>
-      )}
-    </div>
-  );
 }
