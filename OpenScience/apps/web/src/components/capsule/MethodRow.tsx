@@ -10,7 +10,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
-import { InferredMark, RowDetail, RowOrigin } from "./rowParts";
+import { RowDetail, RowOrigin, RowSentence } from "./rowParts";
 
 function day(value: string | null | undefined) {
   if (!value) return "";
@@ -96,7 +96,7 @@ export function MethodRow({ method, onChanged }: { method: WebMethod; onChanged:
   return (
     <ListRow
       leading={<RowOrigin label="做法" />}
-      title={<>{methodLine(method)}{method.origin !== "explicit" && <InferredMark />}</>}
+      title={<RowSentence text={methodLine(method)} inferred={method.origin !== "explicit"} clamp={!retired && detail === null} />}
       onOpen={retired ? undefined : () => setDetail((current) => (current ? null : firstView))}
       expanded={retired ? undefined : detail !== null}
       muted={retired}

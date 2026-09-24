@@ -19,7 +19,23 @@ export function RowOrigin({ label }: { label: string }) {
 
 /** EviMed inferred it: the researcher did not say it (principle 18). */
 export function InferredMark() {
-  return <span className="ml-1.5 whitespace-nowrap text-meta font-normal text-text-3">推断</span>;
+  return <span className="shrink-0 whitespace-nowrap text-meta font-normal text-text-3">推断</span>;
+}
+
+/**
+ * A row's one sentence: at most 40 CJK characters a line (`max-w-measure`),
+ * and 「推断」 after its last visible line, never clipped off with the words.
+ * `clamp` is for a row that opens: closed, it shows one line — two on a phone,
+ * where a line holds a dozen characters — and opening it shows the rest. A
+ * row with nothing to open shows its whole sentence.
+ */
+export function RowSentence({ text, inferred = false, clamp = false }: { text: string; inferred?: boolean; clamp?: boolean }) {
+  return (
+    <span className="flex max-w-measure items-end gap-1.5">
+      <span className={clamp ? "line-clamp-2 sm:line-clamp-1" : undefined}>{text}</span>
+      {inferred && <InferredMark />}
+    </span>
+  );
 }
 
 /** One memory's words in a box, with 取消 and 保存, in the row's own place. */
