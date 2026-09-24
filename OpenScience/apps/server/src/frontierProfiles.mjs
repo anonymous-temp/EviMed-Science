@@ -420,7 +420,7 @@ export class FrontierProfiles {
    * own state), hidden ones left out.
    * @param {{ id: string }} user
    * @param {(user: { id: string }, publicIds: string[]) => Promise<Map<string, any>>} hydrate
-   * @returns {Promise<{ state: "available" | "unavailable" | "off", basis: "vector" | "tags" | null, items: Array<{ item: any, reason: { text: string, memoryId: string } }> }>}
+   * @returns {Promise<{ state: "available" | "unavailable" | "off", basis: "vector" | "tags" | null, items: Array<{ item: any, reason: { text: string, topic: string, memoryId: string } }> }>}
    */
   async forYou(user, hydrate) {
     this.counters.reads += 1;
@@ -464,7 +464,10 @@ export class FrontierProfiles {
       items: kept.flatMap((entry) => {
         const item = items.get(String(entry.itemId));
         if (!item || item.state?.hidden) return [];
-        return [{ item, reason: { text: frontierReasonText({ text: String(entry.text), kind: entry.kind }), memoryId: String(entry.memoryId) } }];
+        // `topic` is the phrase alone — what 「与我相关」 groups by and heads a
+        // group with (plan 2026-09-23 §6.2), without the 「因为你在做」 before it.
+        return [{ item, reason: { text: frontierReasonText({ text: String(entry.text), kind: entry.kind }), topic: String(entry.text),
+          memoryId: String(entry.memoryId) } }];
       }).slice(0, FRONTIER_FOR_YOU_SIZE),
     };
   }
