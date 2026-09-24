@@ -170,6 +170,19 @@ export {
   validateTaskPlan,
 } from './src/plan.mjs'
 
+// studyTypes — 8 exports: the design a planned deliverable reports or designs,
+// and the reporting guideline each design is written to (2026-09-24)
+export {
+  REPORTING_CHECKLIST_FILE,
+  REPORTING_GUIDELINES,
+  REPORTING_GUIDELINE_TEMPLATE_DIR,
+  STUDY_TYPES,
+  STUDY_TYPE_LABELS_ZH,
+  isStudyType,
+  reportingGuidelineFor,
+  studyTypeLabel,
+} from './src/studyTypes.mjs'
+
 // receipt — 3 exports
 export {
   RECEIPT_FORMAT_VERSION,
@@ -447,6 +460,7 @@ export {
 /** @typedef {import('./src/runTranscript.mjs').TranscriptPart} TranscriptPart */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptTextPart} TranscriptTextPart */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptToolCall} TranscriptToolCall */
+/** @typedef {import('./src/studyTypes.mjs').ReportingGuideline} ReportingGuideline */
 
 // sensitiveText — 3 exports
 export {
