@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { knownErrorCodeMessage } from "@evimed/domain";
@@ -29,21 +29,37 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal
   // account `/api/me` marks as one.
   fetchWebMe: async () => ({ user: { id: "u", name: "u" }, operator: context.operator, project: { id: context.projectId, name: "p" }, projects: [] }),
 }));
+// The preview is the file viewer's own business; the row only has to open it.
+vi.mock("@/components/inspector/FilePreviewInspector", () => ({
+  FilePreviewInspector: ({ data }: { data: { path: string } }) => <p>预览：{data.path}</p>,
+}));
+
+/** A day this year, so the row dates it without a year. */
+const arrived = `${new Date().getFullYear()}-03-05T08:00:00`;
 
 const source = {
-  id: "source-one", projectId: "project-one", revision: 3,
+  id: "source-one", projectId: "project-one", revision: 3, createdAt: arrived, updatedAt: arrived, deletedAt: null,
   payload: {
     paths: ["knowledge-base/研究方案.docx"], status: "needs_attention", docType: "research-protocol", depth: "deep",
-    version: 2, generation: 3, reasons: ["The file name identifies a protocol, SOP or checklist."],
+    version: 2, generation: 3, reasons: ["The file name identifies a protocol, SOP or checklist."], fingerprint: { size: 4096 },
     valueVector: { profileValue: 0.7, methodValue: 0.9, knowledgeValue: 0.6, evidenceValue: 0.4, dataValue: 0.1 },
     coverage: { total: 20, accounted: 20, accountedPercent: 100, extracted: 18, indexedOnly: 0, noContent: 0, failed: 2, percent: 90, omissionRate: 0.1 },
+    omissionAudit: { status: "audited", reason: "Question-based audit ran.", omissionRate: 0.12 },
     outputs: { summary: "A randomized research protocol.", facts: 8, methods: 2, artifactPath: "knowledge-base/.evimed-derived/source-one/index.md" },
   },
 };
+const complete = { ...source, payload: { ...source.payload, status: "complete", coverage: null } };
 
-/** The row's 「…」 menu, opened; every action on a document is behind it. */
+/** The row's 「⋯」 menu, opened; every action on a document is behind it. */
 async function openMenu(name = "研究方案.docx") {
   await userEvent.click(await screen.findByRole("button", { name: `「${name}」的操作` }));
+}
+
+/** 「查看理解」: the drawer named by the document. */
+async function openDetails(name = "研究方案.docx") {
+  await openMenu(name);
+  await userEvent.click(await screen.findByRole("menuitem", { name: "查看理解" }));
+  return screen.findByRole("dialog", { name });
 }
 
 describe("SourcesPage", () => {
@@ -72,27 +88,55 @@ describe("SourcesPage", () => {
   });
   afterEach(() => { vi.useRealTimers(); });
 
-  it("is one list: each row carries its name, what was read, its state — and nothing the reader did not ask for", async () => {
+  // 2026-09-23 plan §5.5, mockup m07: a row is the file, its format and length,
+  // and the day it came — the pipeline's accounting, the classifier's English
+  // note to itself and the audit stay off the page.
+  it("is one list: a row is the file, its format and length — and a state only when something went wrong", async () => {
     render(<SourcesPage />);
-    expect(await screen.findByRole("heading", { name: "知识库" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "知识库" })).toBeInTheDocument();
     expect(await screen.findByText("研究方案.docx")).toBeInTheDocument();
-    // The one primary action, and the cloud drive beside it; no second view
-    // of the folder, no separate duplicates desk (2026-09-22).
-    expect(screen.getByRole("button", { name: "上传资料" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "上传" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "连接网盘" })).toBeInTheDocument();
-    expect(screen.queryByText("上传与浏览原始文件")).toBeNull();
-    expect(screen.queryByText("A randomized research protocol.")).toBeNull();
-    // What was read, in the researcher's terms; the parse ledger is the
-    // pipeline's bookkeeping and stays with the operator.
-    expect(screen.getByText("已解析 90% · 2 个片段未能解析")).toBeInTheDocument();
-    expect(screen.queryByText(/处理台账/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/处理第 3 代/)).not.toBeInTheDocument();
-    expect(screen.getByText("理解遗漏尚未审计")).toBeInTheDocument();
-    expect(screen.queryByText(/遗漏 10%/)).not.toBeInTheDocument();
-    expect(screen.queryByText("事实 8 · 方法线索 2")).not.toBeInTheDocument();
-    // Why it was classified is said when a person is being asked to look.
-    expect(screen.getByText(/protocol, SOP or checklist/)).toBeInTheDocument();
-    expect(screen.getByText(/需要你看一下/)).toBeInTheDocument();
+    expect(screen.getByText("Word · 4 KB")).toBeInTheDocument();
+    // Parts of this document did not parse: the one state it says, with the way out.
+    expect(screen.getByText("部分未能解析")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "重新分析「研究方案.docx」" }));
+    await waitFor(() => expect(mocks.retrySource).toHaveBeenCalledWith("source-one", 3));
+    const page = document.body.textContent ?? "";
+    for (const bookkeeping of [/已解析/, /处理台账/, /处理第/, /理解遗漏/, /第 2 版/, /深度分析/, /protocol, SOP or checklist/, /A randomized research protocol/, /上传与浏览原始文件/]) {
+      expect(page).not.toMatch(bookkeeping);
+    }
+  });
+
+  it("says nothing about a document that was read, but the day it arrived", async () => {
+    mocks.listSources.mockResolvedValue({ items: [complete], nextCursor: null });
+    render(<SourcesPage />);
+    expect(await screen.findByText("3月5日")).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "资料" });
+    expect(within(list).queryByText("已完成")).not.toBeInTheDocument();
+    expect(within(list).queryByRole("button", { name: /重新分析「/ })).not.toBeInTheDocument();
+  });
+
+  it("opens the document's preview from its row", async () => {
+    render(<SourcesPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "研究方案.docx" }));
+    const preview = await screen.findByRole("dialog", { name: "研究方案.docx" });
+    expect(preview).toHaveTextContent("预览：knowledge-base/研究方案.docx");
+  });
+
+  it("finds a document by its file name or the title read from it", async () => {
+    const other = { ...complete, id: "source-two", payload: { ...complete.payload, paths: ["knowledge-base/1-s2.0-main.pdf"],
+      metadata: { title: "Aspirin in older adults" } } };
+    mocks.listSources.mockResolvedValue({ items: [complete, other], nextCursor: null });
+    render(<SourcesPage />);
+    await screen.findByText("研究方案.docx");
+    // The title the parser read is what names a download called 1-s2.0-main.pdf.
+    expect(screen.getByText("PDF · 4 KB · 《Aspirin in older adults》")).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索资料" }), "aspirin");
+    expect(screen.getByText("1-s2.0-main.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("研究方案.docx")).not.toBeInTheDocument();
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索资料" }), " 不存在");
+    expect(screen.getByText("没有找到相关资料")).toBeInTheDocument();
   });
 
   it("lets the researcher override type and depth with a reason", async () => {
@@ -108,22 +152,30 @@ describe("SourcesPage", () => {
     }));
   });
 
-  it("filters attention items and exposes retry and cancel actions", async () => {
+  it("filters attention items from one row of chips, and keeps retry and cancel in the menu", async () => {
     render(<SourcesPage />);
     await screen.findByText("研究方案.docx");
-    await userEvent.click(screen.getByRole("radio", { name: "需要处理" }));
+    const filters = screen.getByRole("group", { name: "资料状态" });
+    await userEvent.click(within(filters).getByRole("button", { name: "需要处理" }));
     await waitFor(() => expect(mocks.listSources).toHaveBeenLastCalledWith("project-one", { status: "needs_attention" }));
+    expect(within(filters).getByRole("button", { name: "需要处理" })).toHaveAttribute("aria-pressed", "true");
     await openMenu();
     await userEvent.click(screen.getByRole("menuitem", { name: "重新分析" }));
     await waitFor(() => expect(mocks.retrySource).toHaveBeenCalledWith("source-one", 3));
+
+    mocks.listSources.mockResolvedValue({ items: [{ ...source, payload: { ...source.payload, status: "parsing" } }], nextCursor: null });
+    await userEvent.click(within(filters).getByRole("button", { name: "全部" }));
+    await openMenu();
+    await userEvent.click(await screen.findByRole("menuitem", { name: "取消分析" }));
+    await waitFor(() => expect(mocks.cancelSource).toHaveBeenCalledWith("source-one", 3));
   });
 
-  it("shows an actionable empty and error state", async () => {
+  it("shows an empty library as one sentence, and a failed read with 重试", async () => {
     mocks.listSources.mockResolvedValueOnce({ items: [], nextCursor: null });
     const { unmount } = render(<SourcesPage />);
-    // One empty state, with the one thing to do about it.
-    expect(await screen.findByText("知识库还是空的")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "上传资料" }).length).toBeGreaterThan(1);
+    expect(await screen.findByText("还没有资料。拖进来，或点右上角上传。")).toBeInTheDocument();
+    // The header's 上传 is the only one.
+    expect(screen.getAllByRole("button", { name: "上传" })).toHaveLength(1);
     unmount();
     mocks.listSources.mockRejectedValueOnce(new Error("offline"));
     render(<SourcesPage />);
@@ -131,15 +183,16 @@ describe("SourcesPage", () => {
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 
-  it("opens the actual understanding and history endpoints from the row", async () => {
+  it("opens the understanding and its history in a drawer named by the document", async () => {
     render(<SourcesPage />);
-    await openMenu();
-    await userEvent.click(await screen.findByRole("menuitem", { name: "查看理解" }));
-    expect(await screen.findByText("这一次分析尚无可用理解")).toBeInTheDocument();
+    const drawer = await openDetails();
+    expect(await within(drawer).findByText("这一次分析尚无可用理解")).toBeInTheDocument();
     expect(mocks.getSourceUnderstanding).toHaveBeenCalledWith("source-one");
-    await userEvent.click(screen.getByRole("button", { name: "查看历史" }));
-    expect(await screen.findByText("暂无历史理解")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "关闭理解详情" }));
+    await userEvent.click(within(drawer).getByRole("button", { name: "查看历史" }));
+    expect(await within(drawer).findByText("暂无历史理解")).toBeInTheDocument();
+    // The drawer has one close control; the panel no longer adds its own.
+    expect(within(drawer).queryByRole("button", { name: "关闭理解详情" })).not.toBeInTheDocument();
+    await userEvent.click(within(drawer).getByRole("button", { name: "关闭" }));
     expect(screen.queryByText("这一次分析尚无可用理解")).not.toBeInTheDocument();
   });
 
@@ -148,6 +201,8 @@ describe("SourcesPage", () => {
     mocks.listSources.mockResolvedValueOnce({ items: [pending], nextCursor: null })
       .mockResolvedValue({ items: [{ ...source, revision: 4 }], nextCursor: null });
     render(<SourcesPage />);
+    // A document being read wears a spinner, not a sentence.
+    expect(await screen.findByTitle("分析中")).toBeInTheDocument();
     await openMenu();
     await userEvent.click(await screen.findByRole("menuitem", { name: "调整分析" }));
     await userEvent.type(screen.getByLabelText("调整原因"), "保留我的调整说明");
@@ -163,20 +218,29 @@ describe("SourcesPage", () => {
     expect(mocks.listSources).toHaveBeenCalledTimes(2);
   });
 
+  it("asks before deleting, in one short sentence", async () => {
+    render(<SourcesPage />);
+    await openMenu();
+    await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "删除这份资料？" });
+    expect(dialog).toHaveTextContent("删除后不再用于回答。");
+    await userEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    await waitFor(() => expect(mocks.removeSource).toHaveBeenCalledWith("source-one", 3));
+  });
 
-  it("no longer offers a local analysis agent this deployment does not ship", async () => {
+  it("connects the drive without product names, server paths or hash algorithms", async () => {
     render(<SourcesPage />);
     await userEvent.click(await screen.findByRole("button", { name: "连接网盘" }));
-    // No product names, server paths or hash algorithms on a researcher's page.
-    expect(await screen.findByText("网盘资料")).toBeInTheDocument();
-    expect(screen.queryByText(/OpenList|SHA-256|\/tenants/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/本地分析代理/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/本地代理/)).not.toBeInTheDocument();
+    const drawer = await screen.findByRole("dialog", { name: "连接网盘" });
+    expect(within(drawer).getByRole("heading", { name: "网盘资料" })).toBeInTheDocument();
+    expect(await within(drawer).findByText("暂无同步文件夹")).toBeInTheDocument();
+    expect(drawer.textContent).not.toMatch(/OpenList|SHA-256|\/tenants|本地分析代理|本地代理|不会自动定时轮询/);
   });
 
   it("registers an explicitly chosen folder for sync and shows what the last run did", async () => {
     mocks.browseOpenList.mockResolvedValue({ entries: [
       { path: "/papers", name: "papers", size: 0, mtime: null, entryType: "dir", providerHash: null },
+      { path: "/legacy.pdf", name: "legacy.pdf", size: 10, mtime: null, entryType: "file", providerHash: null },
     ], nextCursor: null });
     mocks.listSourceFolders.mockResolvedValue({ items: [{
       id: "srcdir_one", projectId: "project-one", revision: 5, createdAt: "", updatedAt: "", deletedAt: null,
@@ -190,20 +254,25 @@ describe("SourcesPage", () => {
     render(<SourcesPage />);
     await userEvent.click(await screen.findByRole("button", { name: "连接网盘" }));
     await userEvent.click(await screen.findByRole("button", { name: "浏览" }));
+    // A file the drive cannot fingerprint says so in two words.
+    expect(await screen.findByText("不支持此文件")).toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "同步" }));
     await waitFor(() => expect(mocks.registerSourceFolder).toHaveBeenCalledWith("project-one", "/papers"));
-    expect(await screen.findByText(/新增 2 · 更新 1 · 未变化 9/)).toBeInTheDocument();
+    expect(await screen.findByText(/新增 2/)).toBeInTheDocument();
     expect(screen.getByText(/网盘无法提供内容指纹/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "立即同步" }));
     await waitFor(() => expect(mocks.syncSourceFolder).toHaveBeenCalledWith("srcdir_one", 5));
-    await userEvent.click(screen.getByRole("button", { name: "暂停同步" }));
+    // Pausing is the folder's switch, not a button reading 「暂停同步」.
+    const toggle = screen.getByRole("switch", { name: "同步「papers」" });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(toggle);
     await waitFor(() => expect(mocks.setSourceFolderStatus).toHaveBeenCalledWith("srcdir_one", 5, "paused"));
   });
 
-  it("reports how many entries a run skipped and lost, not how many it named", async () => {
-    // The service caps both lists at twenty examples and records the totals
-    // separately. The card must state the totals, or a folder that skipped five
-    // hundred files tells the researcher it skipped twenty.
+  it("reports how many entries a run skipped, folded under its count, and not the files it no longer sees", async () => {
+    // The service caps the example list at twenty and records the total
+    // separately. The count is the total, or a folder that skipped five
+    // hundred files says it skipped twenty.
     mocks.listSourceFolders.mockResolvedValue({ items: [{
       id: "srcdir_one", projectId: "project-one", revision: 5, createdAt: "", updatedAt: "", deletedAt: null,
       payload: { recordType: "source-folder", connector: { type: "openlist", id: "/papers" }, status: "active", recursive: false,
@@ -218,13 +287,12 @@ describe("SourcesPage", () => {
     }], nextCursor: null });
     render(<SourcesPage />);
     await userEvent.click(await screen.findByRole("button", { name: "连接网盘" }));
-    expect(await screen.findByText(/跳过 500 项/)).toBeInTheDocument();
+    expect(await screen.findByText("跳过 500 项")).toBeInTheDocument();
     expect(screen.queryByText(/跳过 20 项/)).not.toBeInTheDocument();
-    expect(await screen.findByText(/网盘里已不见 137 个文件/)).toBeInTheDocument();
-    expect(screen.queryByText(/网盘里已不见 20 个文件/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/网盘里已不见/)).not.toBeInTheDocument();
   });
 
-  it("states a skip reason in Chinese and says syncing is something the researcher triggers", async () => {
+  it("states a skip reason in Chinese, and a folder's state by its switch", async () => {
     mocks.listSourceFolders.mockResolvedValue({ items: [{
       id: "srcdir_one", projectId: "project-one", revision: 5, createdAt: "", updatedAt: "", deletedAt: null,
       payload: { recordType: "source-folder", connector: { type: "openlist", id: "/papers" }, status: "active", recursive: false,
@@ -244,12 +312,13 @@ describe("SourcesPage", () => {
     expect(screen.getByText(/这一项无法入库/)).toBeInTheDocument();
     expect(screen.queryByText(/source_payload_invalid/)).not.toBeInTheDocument();
     expect(screen.queryByText(/source_teleported_away/)).not.toBeInTheDocument();
-    // An active folder syncs when a researcher asks it to; nothing polls it.
-    expect(screen.getByText("已启用同步")).toBeInTheDocument();
-    expect(screen.queryByText("同步中")).not.toBeInTheDocument();
+    // An active folder syncs when a researcher asks it to; nothing polls it,
+    // and the switch says it is on without a word beside it.
+    expect(screen.getByRole("switch", { name: "同步「papers」" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByText(/已启用同步|同步中/)).not.toBeInTheDocument();
   });
 
-  it("offers no merge on a group that names a single source", async () => {
+  it("wears a duplicate as a tag on its row, resolved from the row's menu — no merge for a single source", async () => {
     mocks.listDuplicateCandidates.mockResolvedValue({ scanned: 2, truncated: false, items: [{
       kind: "shared-content", groupKey: "shared-content:abc", label: "knowledge-base/研究方案.docx",
       sourceIds: ["source-one"], decision: null,
@@ -257,97 +326,94 @@ describe("SourcesPage", () => {
         paths: ["knowledge-base/研究方案.docx", "openlist/papers/研究方案.docx"], size: 4096, sha256: "a", connectorType: "openlist", updatedAt: "" }],
     }] });
     render(<SourcesPage />);
-    // The badge is on the row, and a filter counts them; no separate desk.
-    await userEvent.click(await screen.findByRole("button", { name: /^疑似重复$/ }));
-    expect(await screen.findByText("同样内容出现在多个路径")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /疑似重复/ })).toHaveTextContent("1");
+    // A tag, not a button; and a filter counts them.
+    expect(await screen.findByText("疑似重复", { selector: "span" })).toBeInTheDocument();
+    const filters = screen.getByRole("group", { name: "资料状态" });
+    expect(within(filters).getByRole("button", { name: /疑似重复/ })).toHaveTextContent("1");
+    await openMenu();
+    await userEvent.click(await screen.findByRole("menuitem", { name: "处理疑似重复" }));
+    const drawer = await screen.findByRole("dialog", { name: "疑似重复" });
+    expect(within(drawer).getByText("同样内容出现在多个路径")).toBeInTheDocument();
     // One source under two paths is already one source. There is nothing to merge.
-    expect(screen.queryByRole("button", { name: "标记为同一份" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "不是重复" })).toBeInTheDocument();
+    expect(within(drawer).queryByRole("button", { name: "标记为同一份" })).not.toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "不是重复" })).toBeInTheDocument();
   });
 
-  it("shows the version chain a source belongs to instead of only its own version number", async () => {
+  it("lists a document's versions inside 查看理解, when it has more than one", async () => {
     mocks.getSourceFamily.mockResolvedValue({ sourceId: "source-one", familyId: "fam_one", currentVersion: 2, nextCursor: null, items: [
-      { id: "source-one", projectId: "project-one", revision: 3, createdAt: "", updatedAt: "", deletedAt: null,
+      { id: "source-one", projectId: "project-one", revision: 3, createdAt: "", updatedAt: arrived, deletedAt: null,
         payload: { ...source.payload, version: 2, status: "complete" } },
-      { id: "source-old", projectId: "project-one", revision: 1, createdAt: "", updatedAt: "", deletedAt: null,
+      { id: "source-old", projectId: "project-one", revision: 1, createdAt: "", updatedAt: arrived, deletedAt: null,
         payload: { ...source.payload, version: 1, status: "complete", paths: ["knowledge-base/研究方案.docx"] } },
     ] });
     render(<SourcesPage />);
-    await openMenu();
-    await userEvent.click(await screen.findByRole("menuitem", { name: "查看版本链" }));
+    const drawer = await openDetails();
     await waitFor(() => expect(mocks.getSourceFamily).toHaveBeenCalledWith("source-one"));
-    expect(await screen.findByText(/第 2 版 .* 当前查看/)).toBeInTheDocument();
-    expect(screen.getByText(/第 1 版/)).toBeInTheDocument();
+    const versions = await within(drawer).findByRole("region", { name: "版本" });
+    expect(within(versions).getByText("第 2 版").closest("li")).toHaveTextContent("当前");
+    expect(within(versions).getByText("第 1 版")).toBeInTheDocument();
   });
 
-  it("lists deterministic duplicate candidates and records an explicit decision", async () => {
+  it("lists deterministic duplicate candidates without version numbers or sizes, and records an explicit decision", async () => {
     mocks.listDuplicateCandidates.mockResolvedValue({ scanned: 4, truncated: false, items: [{
       kind: "version-family", groupKey: "version-family:abc", label: "knowledge-base/研究方案.docx",
       sourceIds: ["source-one", "source-old"], decision: null,
       members: [
         { sourceId: "source-one", version: 2, familyId: "fam_one", status: "complete", docType: "research-protocol",
-          paths: ["knowledge-base/研究方案.docx"], size: 4096, sha256: "a", connectorType: "openlist", updatedAt: "" },
+          paths: ["knowledge-base/研究方案.docx"], size: 4096, sha256: "a", connectorType: "openlist", updatedAt: arrived },
         { sourceId: "source-old", version: 1, familyId: "fam_one", status: "complete", docType: "research-protocol",
-          paths: ["knowledge-base/研究方案.docx"], size: 2048, sha256: "b", connectorType: "openlist", updatedAt: "" },
+          paths: ["knowledge-base/研究方案.docx"], size: 2048, sha256: "b", connectorType: "openlist", updatedAt: arrived },
       ],
     }] });
     render(<SourcesPage />);
-    await userEvent.click(await screen.findByRole("button", { name: /^疑似重复$/ }));
-    expect(await screen.findByText("同一路径的多个版本")).toBeInTheDocument();
-    expect(screen.getByText(/第 2 版 · 研究方案.docx · 4 KB/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "标记为同一份" }));
+    await openMenu();
+    await userEvent.click(await screen.findByRole("menuitem", { name: "处理疑似重复" }));
+    const drawer = await screen.findByRole("dialog", { name: "疑似重复" });
+    expect(within(drawer).getByText("同一路径的多个版本")).toBeInTheDocument();
+    expect(within(drawer).getAllByText("研究方案.docx · 3月5日")).toHaveLength(2);
+    expect(drawer.textContent).not.toMatch(/KB|第 \d 版/);
+    await userEvent.click(within(drawer).getByRole("button", { name: "标记为同一份" }));
     await waitFor(() => expect(mocks.decideDuplicateGroup).toHaveBeenCalledWith({
       projectId: "project-one", groupKey: "version-family:abc", sourceIds: ["source-one", "source-old"], decision: "linked",
     }));
   });
 
-  it("states the omission verdict the understanding contract actually returned", async () => {
-    mocks.listSources.mockResolvedValue({ items: [{ ...source, payload: { ...source.payload,
-      omissionAudit: { status: "audited", reason: "Question-based audit ran.", omissionRate: 0.12 } } }], nextCursor: null });
-    render(<SourcesPage />);
-    expect(await screen.findByText("理解遗漏 12%")).toBeInTheDocument();
-    expect(screen.queryByText("理解遗漏尚未审计")).not.toBeInTheDocument();
-  });
-
-  it("names why the analysis failed, from the one dictionary, not the reason the file was classified", async () => {
-    // `payload.error` was stored, served and typed all the way to this component
-    // and rendered by nothing, so a failed source showed 「分析失败」 next to
-    // `reasons[0]` — a classification rationale with nothing to do with the
-    // failure. The code is the fact; the sentence comes from `@evimed/domain`.
+  it("names why the analysis failed from the one dictionary, as the words' tooltip, and gives an operator the code", async () => {
+    // `payload.error` is the fact: the code, turned into a sentence by
+    // `@evimed/domain`. The stored English message is the same literal for
+    // every failure and is never shown.
     const failed = { ...source, payload: { ...source.payload, status: "failed",
       error: { code: "source_unreadable", message: "Source analysis failed." } } };
     mocks.listSources.mockResolvedValue({ items: [failed], nextCursor: null });
     const view = render(<SourcesPage />);
     const known = knownErrorCodeMessage("source_unreadable") as string;
     expect(known).toBeTruthy();
-    expect(await screen.findByText(new RegExp("^解析失败："))).toHaveTextContent(`解析失败：${known}`);
-    // The stored message is the same English literal for every failure.
+    const words = await screen.findByText("解析失败");
+    expect(words).toHaveAttribute("title", known);
+    expect(screen.getByRole("button", { name: "重新分析「研究方案.docx」" })).toBeInTheDocument();
     expect(view.container.textContent).not.toMatch(/Source analysis failed/);
-    // The classification reason survives, labelled as what it is.
-    expect(screen.getByText(/分类依据：/)).toBeInTheDocument();
     view.unmount();
 
     // A code the registry has no sentence for is still a Chinese sentence —
-    // never a bare English identifier standing alone in a Chinese interface.
-    // The code itself is the handle support searches on, so an operator keeps
-    // it as a tooltip; a researcher does not get it at all.
+    // never a bare English identifier standing alone.
     mocks.listSources.mockResolvedValue({ items: [{ ...failed, payload: { ...failed.payload,
-      error: { code: "source_parser_timeout", message: "Source analysis failed." } } }], nextCursor: null });
-    const researcher = render(<SourcesPage />);
-    const row = await screen.findByText(/^解析失败：/);
-    expect(row.textContent).not.toBe("source_parser_timeout");
-    expect(row).not.toHaveAttribute("title");
-    researcher.unmount();
+      error: { code: "source_teleported_away", message: "Source analysis failed." } } }], nextCursor: null });
+    const unmapped = render(<SourcesPage />);
+    expect((await screen.findByText("解析失败")).getAttribute("title")).toMatch(/^本版本还没有为这个原因准备说明/);
+    unmapped.unmount();
+
+    // The code is the handle support searches on, so an operator gets it after
+    // the sentence.
+    mocks.listSources.mockResolvedValue({ items: [failed], nextCursor: null });
     context.operator = true;
     render(<SourcesPage />);
-    await waitFor(async () => expect(await screen.findByText(/^解析失败：/)).toHaveAttribute("title", "source_parser_timeout"));
+    await waitFor(async () => expect((await screen.findByText("解析失败")).getAttribute("title")).toBe(`${known}（source_unreadable）`));
   });
 
-  it("states the omission notice as an observation, in Chinese, and stays silent when it has nothing to say", async () => {
+  it("states the omission notice inside 查看理解, with the one thing to do about it", async () => {
     // `sourceUnderstandingOmissionNotice` returns blocking:false and its targets
-    // have never been checked against an observed distribution, so the card says
-    // out loud that nothing is being asked of the researcher.
+    // have never been checked against an observed distribution, so it is an
+    // observation offered where the understanding is read — not a row state.
     const noticed = { ...source, payload: { ...source.payload,
       omissionAudit: { status: "audited", reason: "", omissionRate: 0.32 },
       omissionNotice: { status: "audited", omissionRate: 0.32, reportedRate: 0.1, target: 0.15,
@@ -355,28 +421,26 @@ describe("SourcesPage", () => {
         disagreements: ["The audit reports an omission rate of 0.1; the anchors this output carries imply 0.32."] } } };
     mocks.listSources.mockResolvedValue({ items: [noticed], nextCursor: null });
     const view = render(<SourcesPage />);
-    // Something the researcher can act on, with the action beside it — not a
-    // notice whose own text says it can be ignored.
-    expect(await screen.findByText(/约 32% 的内容没有被理解进来，高于当前分析深度的参考值 15%/)).toBeInTheDocument();
-    expect(screen.queryByText(/仅供参考/)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "提高分析深度" }));
-    expect(await screen.findByRole("combobox", { name: "分析深度" })).toBeInTheDocument();
+    await screen.findByText("研究方案.docx");
+    expect(screen.queryByText(/没有被理解进来/)).not.toBeInTheDocument();
+    const drawer = await openDetails();
+    expect(within(drawer).getByText(/约 32% 的内容没有被理解进来，高于当前分析深度的参考值 15%/)).toBeInTheDocument();
     // The run's self-audit disagreeing with itself is pipeline diagnostics.
-    expect(screen.queryByText(/至少有 1 处对不上/)).not.toBeInTheDocument();
-    expect(view.container.textContent).not.toMatch(/The audit reports an omission rate/);
+    expect(drawer.textContent).not.toMatch(/至少有 1 处对不上|The audit reports an omission rate/);
+    await userEvent.click(within(drawer).getByRole("button", { name: "提高分析深度" }));
+    expect(await screen.findByRole("combobox", { name: "分析深度" })).toBeInTheDocument();
     view.unmount();
 
     mocks.listSources.mockResolvedValue({ items: [{ ...noticed, payload: { ...noticed.payload,
       omissionNotice: { ...noticed.payload.omissionNotice, withinTarget: true, disagreements: [] } } }], nextCursor: null });
     render(<SourcesPage />);
-    await screen.findByText("研究方案.docx");
-    expect(screen.queryByText(/遗漏审计提示/)).not.toBeInTheDocument();
+    const quiet = await openDetails();
+    expect(quiet.textContent).not.toMatch(/没有被理解进来/);
   });
 
   it("says why a folder's sync is failing instead of showing only its last good run", async () => {
     // `lastSync` is written only on the success path, so on its own it reports a
-    // folder that has been failing for a week as healthy, and a paused folder as
-    // a bare 「已暂停」 with no reason.
+    // folder that has been failing for a week as healthy.
     mocks.listSourceFolders.mockResolvedValue({ items: [{
       id: "srcdir_one", projectId: "project-one", revision: 5, createdAt: "", updatedAt: "", deletedAt: null,
       payload: { recordType: "source-folder", connector: { type: "openlist", id: "/papers" }, status: "paused", recursive: false,
@@ -389,14 +453,14 @@ describe("SourcesPage", () => {
     const view = render(<SourcesPage />);
     await userEvent.click(await screen.findByRole("button", { name: "连接网盘" }));
     const failure = await screen.findByText(/上次同步失败/);
-    expect(failure.textContent).toContain(knownErrorCodeMessage("connector_unauthorized") as string);
+    expect(failure).toHaveTextContent(`上次同步失败：${knownErrorCodeMessage("connector_unauthorized") as string}`);
     expect(failure).not.toHaveAttribute("title");
-    expect(failure.textContent).toContain("同步已暂停");
-    // The successful run is still shown, but no longer as "the last sync".
-    expect(view.container.textContent).toContain("上次成功同步：");
+    // Paused is the switch's position; the last good run is not dressed up as the last sync.
+    expect(screen.getByRole("switch", { name: "同步「papers」" })).toHaveAttribute("aria-checked", "false");
+    expect(view.container.ownerDocument.body.textContent).not.toMatch(/新增 2/);
     view.unmount();
 
-    // A folder that has never failed reads exactly as it did before.
+    // A folder that has never synced says so, and nothing else.
     mocks.listSourceFolders.mockResolvedValue({ items: [{
       id: "srcdir_two", projectId: "project-one", revision: 5, createdAt: "", updatedAt: "", deletedAt: null,
       payload: { recordType: "source-folder", connector: { type: "openlist", id: "/papers" }, status: "active", recursive: false,
@@ -404,38 +468,28 @@ describe("SourcesPage", () => {
     }], nextCursor: null });
     render(<SourcesPage />);
     await userEvent.click(await screen.findByRole("button", { name: "连接网盘" }));
-    expect(await screen.findByText("尚未完成第一次同步。")).toBeInTheDocument();
+    expect(await screen.findByText("尚未同步")).toBeInTheDocument();
     expect(screen.queryByText(/上次同步失败/)).not.toBeInTheDocument();
   });
 
-  it("shows what the parser read about the document, with the DOI said as checked as it is", async () => {
-    const withMetadata = (doiCheck: Record<string, unknown>, doi?: string) => ({ ...source, payload: { ...source.payload,
-      analysis: { pageCount: 12 },
+  it("shows what the parser read about the document in 查看理解, and no DOI bookkeeping", async () => {
+    const withMetadata = { ...source, payload: { ...source.payload, analysis: { pageCount: 12 },
       metadata: { title: "房颤抗凝治疗指南", authors: ["张三", "李四", "王五", "赵六"], source: "中华心血管病杂志", publicationDate: "2024-03",
-        ...(doi ? { doi } : {}), doiCheck } } });
-    mocks.listSources.mockResolvedValueOnce({ items: [withMetadata({ status: "verified", similarity: 0.97 }, "10.1000/afib.2024")], nextCursor: null });
-    const view = render(<SourcesPage />);
-    expect(await screen.findByText("《房颤抗凝治疗指南》 · 张三、李四、王五 等 · 中华心血管病杂志，2024-03 · 共 12 页")).toBeInTheDocument();
-    expect(screen.getByText("DOI 10.1000/afib.2024（已与 Crossref 登记的题名核对）")).toBeInTheDocument();
-    view.unmount();
-
-    mocks.listSources.mockResolvedValueOnce({ items: [withMetadata({ status: "unconfirmed", reason: "crossref_unreachable" }, "10.1000/afib.2024")], nextCursor: null });
-    const unconfirmed = render(<SourcesPage />);
-    expect(await screen.findByText("DOI 10.1000/afib.2024（未经 Crossref 确认）")).toBeInTheDocument();
-    unconfirmed.unmount();
-
-    // Crossref registered the parsed DOI for another work: it is dropped, and said so.
-    mocks.listSources.mockResolvedValueOnce({ items: [withMetadata({ status: "mismatch", droppedDoi: "10.9999/other", crossrefTitle: "Another paper" })], nextCursor: null });
+        doi: "10.1000/afib.2024", doiCheck: { status: "verified", similarity: 0.97 } } } };
+    mocks.listSources.mockResolvedValue({ items: [withMetadata], nextCursor: null });
     render(<SourcesPage />);
-    expect(await screen.findByText("解析出的 DOI 10.9999/other 在 Crossref 登记的是另一篇文献，已不采用")).toBeInTheDocument();
-    expect(screen.queryByText(/已与 Crossref/)).not.toBeInTheDocument();
+    // The row: the format, the length, and the title read from the file.
+    expect(await screen.findByText("Word · 12 页 · 《房颤抗凝治疗指南》")).toBeInTheDocument();
+    const drawer = await openDetails();
+    expect(within(drawer).getByText("《房颤抗凝治疗指南》 · 张三、李四、王五 等 · 中华心血管病杂志，2024-03 · 共 12 页")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Crossref|DOI 10\./);
   });
 
   it("marks a parsed document available to every project, and takes it back", async () => {
     // 「加入资料库」 was a second noun for a thing that is just this document,
     // readable from more than one project (plan §3.1). The store is unchanged
     // and names a document by every source holding it, so an entry added from
-    // another project is still this card's document.
+    // another project is still this row's document.
     const held = { items: [{ sourceId: "source-zero", title: "研究方案", kind: "research-protocol", addedAt: "2026-09-19T00:00:00Z",
       projects: ["project-one", "project-zero"], sourceIds: ["source-one", "source-zero"], status: "ready" }], maxItems: 1000 };
     mocks.listLibrary.mockResolvedValueOnce({ items: [], maxItems: 1000 }).mockResolvedValue(held);
@@ -475,7 +529,7 @@ describe("SourcesPage", () => {
     const view = render(<SourcesPage />);
     context.projectId = "project-two";
     view.rerender(<SourcesPage />);
-    expect(await screen.findByText("知识库还是空的")).toBeInTheDocument();
+    expect(await screen.findByText("还没有资料。拖进来，或点右上角上传。")).toBeInTheDocument();
     await act(async () => { resolveOld({ items: [source], nextCursor: null }); });
     expect(screen.queryByText("研究方案.docx")).not.toBeInTheDocument();
     expect(mocks.listSources).toHaveBeenLastCalledWith("project-two", { status: "" });
