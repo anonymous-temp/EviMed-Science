@@ -400,12 +400,14 @@ export class AutopilotService {
    * first, each naming the conversation it ran in (`sessionId`) and the
    * briefing it merged into (`digestId`). What 主动科研 lists as a task's
    * history (2026-09-22): the result of a scheduled run is a finished
-   * conversation the researcher opens, not a number on a dashboard.
+   * conversation the researcher opens, not a number on a dashboard. One
+   * page of the store's, which is at most 100: a limit of 200 was a 400 on
+   * every read, and 主动科研 read this on opening (2026-09-24).
    * @param {string} userId @param {{projectId:string, agendaId?:string|null}} options
    */
   async listEpisodes(userId, { projectId, agendaId = null }) {
     const page = await this.documents.list(userId, "episode", {
-      projectId, limit: 200, ...(agendaId ? { filter: { agendaId: text(agendaId, "agenda id", 160) } } : {}),
+      projectId, limit: 100, ...(agendaId ? { filter: { agendaId: text(agendaId, "agenda id", 160) } } : {}),
     });
     const items = [...page.items].sort((left, right) => String(right.payload.date ?? "").localeCompare(String(left.payload.date ?? ""))
       || String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));

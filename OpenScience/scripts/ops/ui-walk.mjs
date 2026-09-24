@@ -24,10 +24,11 @@
  *     (`[data-row-title]`) starts on one left edge;
  *   - no page is replaced by the router's English error page, and a lazy page
  *     whose chunk is gone (the state an open tab is in after a release) keeps
- *     the sidebar and says so in Chinese.
+ *     the sidebar and says so in Chinese;
+ *   - no call a page makes to the control plane's API is refused (4xx/5xx).
  * It also records, without failing on them, small click targets, decorative
- * SVGs without aria-hidden, console errors and HTTP errors — the things that
- * need a person to judge.
+ * SVGs without aria-hidden, console errors and other HTTP errors — the things
+ * that need a person to judge.
  *
  * Read-only: it logs in, reads pages and logs out. It opens the chat page only
  * when asked (`OPEN_SCIENCE_WALK_CHAT=1`), because a frame bound to a live
@@ -292,6 +293,11 @@ async function main() {
           await page.screenshot({ path: path.join(out, `${current}.png`) });
           const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags])]);
           report.pages[current] = { route, ...measured, consoleErrors: consoleErrors[current] ?? [], httpErrors: httpErrors[current] ?? [] };
+          // A page whose own API call is refused shows an error state and
+          // otherwise measures clean: the 主动科研 page answered every load with
+          // a 400 through two walks that passed (2026-09-24).
+          const refused = (httpErrors[current] ?? []).filter((entry) => / \/api\//.test(entry));
+          if (refused.length) failures.push(`${current}: the page's API refused it: ${refused.join(", ")}`);
           if (measured.leakHits.length) failures.push(`${current}: runtime vocabulary on the page: ${measured.leakHits.join(", ")}`);
           if (measured.backOfficeHits.length) failures.push(`${current}: the back office on the page: ${measured.backOfficeHits.join(", ")}`);
           if (measured.unnamedControls.length) failures.push(`${current}: ${measured.unnamedControls.length} control(s) without a name`);
