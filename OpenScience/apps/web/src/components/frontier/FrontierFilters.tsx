@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Star } from "lucide-react";
 import { FilterChip, FilterChips, FilterSelect, type FilterOption } from "@/components/ui/FilterChips";
 import { FRONTIER_LANES, FRONTIER_SPECIALTIES, FRONTIER_WINDOWS, type FrontierWindow } from "@/lib/frontierClient";
@@ -23,6 +24,22 @@ function rank(lane: string): number {
   return index === -1 ? LANE_ORDER.length : index;
 }
 
+/** Below Tailwind's `sm`: a phone, where six lane chips and the row's end do not fit on one line. */
+const NARROW = "(max-width: 639px)";
+
+function useNarrow(): boolean {
+  const supported = typeof window !== "undefined" && typeof window.matchMedia === "function";
+  const [narrow, setNarrow] = useState(() => supported && window.matchMedia(NARROW).matches);
+  useEffect(() => {
+    if (!supported) return;
+    const media = window.matchMedia(NARROW);
+    const onChange = () => setNarrow(media.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, [supported]);
+  return narrow;
+}
+
 export interface FrontierFilterValue {
   lane: string;
   specialty: string;
@@ -37,7 +54,9 @@ export interface FrontierFilterValue {
  * the rest in 「更多 ▾」 — and at its end 「专科 ▾」, in 全部 「时间 ▾」, and
  * 「☆ 收藏」. While searching, 「按时间」 orders the results newest first
  * instead of by relevance. One dimension, one control; nothing wraps into a
- * second row.
+ * second row — on a phone the lanes fold into one chip that names the lane
+ * chosen (「全部 ▾」), since six chips clipped at the screen's edge would
+ * hide 「更多」 and every lane behind it.
  */
 export function FrontierFilters({ value, showWindow, searching, onChange }: {
   value: FrontierFilterValue;
@@ -45,11 +64,13 @@ export function FrontierFilters({ value, showWindow, searching, onChange }: {
   searching: boolean;
   onChange: (next: Partial<FrontierFilterValue>) => void;
 }) {
+  const narrow = useNarrow();
   return (
     <FilterChips
       label="栏目"
       options={LANE_OPTIONS}
       value={value.lane}
+      maxVisible={narrow ? 0 : 6}
       onChange={(lane) => onChange({ lane })}
       trailing={(
         <>
