@@ -80,14 +80,16 @@ export function ListRow({
     "min-w-0 text-left text-ui",
     unread ? "font-medium text-text" : muted ? "text-text-2" : "text-text",
   );
+  // `data-row-title` is what the release walk measures: every title in a
+  // list must start on one left edge (scripts/ops/ui-walk.mjs).
   const heading = to ? (
-    <Link to={to} className={cn(titleClass, stretched)}>{title}</Link>
+    <Link to={to} data-row-title className={cn(titleClass, stretched)}>{title}</Link>
   ) : href ? (
-    <a href={href} target="_blank" rel="noreferrer" className={cn(titleClass, stretched)}>{title}</a>
+    <a href={href} target="_blank" rel="noreferrer" data-row-title className={cn(titleClass, stretched)}>{title}</a>
   ) : onOpen ? (
-    <button type="button" onClick={onOpen} className={cn(titleClass, stretched)}>{title}</button>
+    <button type="button" onClick={onOpen} data-row-title className={cn(titleClass, stretched)}>{title}</button>
   ) : (
-    <span className={titleClass}>{title}</span>
+    <span data-row-title className={titleClass}>{title}</span>
   );
   const interactive = Boolean(to || href || onOpen);
   return (
