@@ -220,6 +220,22 @@ describe("the filter row", () => {
     expect(screen.getByRole("button", { name: "专科：心血管" })).toHaveAttribute("aria-haspopup", "menu");
   });
 
+  it("folds the lanes into one chip naming the chosen lane on a phone, where six would be cut off", async () => {
+    const matchMedia = vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+      matches: query === "(max-width: 639px)", media: query, onchange: null,
+      addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+    }) as MediaQueryList);
+    renderPage();
+    await screen.findByText("今天的一条 RCT");
+    const lanes = screen.getByRole("group", { name: "栏目" });
+    expect(within(lanes).getAllByRole("button").map((chip) => chip.textContent)).toEqual(["全部"]);
+    await userEvent.click(within(lanes).getByRole("button", { name: "全部" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "药物安全" }));
+    await waitFor(() => expect(lastFeedQuery()).toMatchObject({ lane: "safety" }));
+    expect(within(screen.getByRole("group", { name: "栏目" })).getByRole("button", { name: "药物安全" })).toHaveAttribute("aria-haspopup", "menu");
+    matchMedia.mockRestore();
+  });
+
   it("offers the time range in 全部", async () => {
     renderPage("/app/frontier?view=all");
     await screen.findByText("今天的一条 RCT");
